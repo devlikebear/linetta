@@ -10,11 +10,7 @@ struct WorkspaceView: View {
                 .tabItem {
                     Label("Overview", systemImage: "text.book.closed")
                 }
-            PlaceholderPane(
-                title: "Canon Memory",
-                systemImage: "brain",
-                detail: "Characters, world facts, timeline, threads, style, and sources will live here."
-            )
+            CanonMemoryView(work: work)
             .tabItem {
                 Label("Memory", systemImage: "brain")
             }

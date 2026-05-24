@@ -26,10 +26,60 @@ public struct APIClient: Sendable {
         try await send(path: "/api/works", method: "POST", body: request)
     }
 
+    public func listMemory(
+        workID: String,
+        kind: MemoryKind? = nil,
+        status: MemoryStatus? = nil,
+        query: String? = nil
+    ) async throws -> [MemoryItem] {
+        let path: String
+        var queryItems: [URLQueryItem] = []
+        if let query, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            path = "/api/works/\(workID)/memory/search"
+            queryItems.append(URLQueryItem(name: "q", value: query))
+        } else {
+            path = "/api/works/\(workID)/memory"
+            if let kind {
+                queryItems.append(URLQueryItem(name: "kind", value: kind.rawValue))
+            }
+            if let status {
+                queryItems.append(URLQueryItem(name: "status", value: status.rawValue))
+            }
+        }
+        var request = URLRequest(url: url(path: path, queryItems: queryItems))
+        request.httpMethod = "GET"
+        return try await perform(request)
+    }
+
+    public func createMemory(workID: String, request: CreateMemoryRequest) async throws -> MemoryItem {
+        try await send(path: "/api/works/\(workID)/memory", method: "POST", body: request)
+    }
+
+    public func updateMemory(workID: String, itemID: String, request: UpdateMemoryRequest) async throws -> MemoryItem {
+        try await send(path: "/api/works/\(workID)/memory/\(itemID)", method: "PATCH", body: request)
+    }
+
+    public func archiveMemory(workID: String, itemID: String, request: ArchiveMemoryRequest) async throws -> MemoryItem {
+        try await send(path: "/api/works/\(workID)/memory/\(itemID)/archive", method: "POST", body: request)
+    }
+
+    public func listMemoryDecisions(workID: String) async throws -> [MemoryDecision] {
+        try await get(path: "/api/works/\(workID)/memory/decisions")
+    }
+
     private func get<T: Decodable>(path: String) async throws -> T {
         var request = URLRequest(url: url(path: path))
         request.httpMethod = "GET"
         return try await perform(request)
+    }
+
+    private func url(path: String, queryItems: [URLQueryItem]) -> URL {
+        guard !queryItems.isEmpty else {
+            return url(path: path)
+        }
+        var components = URLComponents(url: url(path: path), resolvingAgainstBaseURL: false)!
+        components.queryItems = queryItems
+        return components.url!
     }
 
     private func send<Body: Encodable, Response: Decodable>(

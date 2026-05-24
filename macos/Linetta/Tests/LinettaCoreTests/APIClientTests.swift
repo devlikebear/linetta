@@ -44,4 +44,47 @@ final class APIClientTests: XCTestCase {
         XCTAssertTrue(json.contains(#""genre":"mystery""#))
         XCTAssertTrue(json.contains(#""premise":"A lighthouse keeps answering storms.""#))
     }
+
+    func testMemoryItemDecodesFromEngineJSON() throws {
+        let json = Data("""
+        {
+          "id": "canon_1",
+          "work_id": "work_1",
+          "kind": "character",
+          "title": "Mira",
+          "body": "A tide-garden caretaker.",
+          "status": "canon",
+          "importance": "high",
+          "created_at": "2026-05-24T09:00:00Z",
+          "updated_at": "2026-05-24T09:01:00Z"
+        }
+        """.utf8)
+
+        let item = try JSONDecoder.linetta.decode(MemoryItem.self, from: json)
+
+        XCTAssertEqual(item.id, "canon_1")
+        XCTAssertEqual(item.workID, "work_1")
+        XCTAssertEqual(item.kind, .character)
+        XCTAssertEqual(item.status, .canon)
+        XCTAssertEqual(item.importance, .high)
+    }
+
+    func testCreateMemoryRequestEncodesExpectedPayload() throws {
+        let request = CreateMemoryRequest(
+            kind: .worldFact,
+            title: "Tide Gardens",
+            body: "Public infrastructure that protects the harbor.",
+            status: .draft,
+            importance: .medium,
+            reason: "Initial worldbuilding",
+            actor: "human"
+        )
+
+        let data = try JSONEncoder.linetta.encode(request)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+        XCTAssertTrue(json.contains(#""kind":"world_fact""#))
+        XCTAssertTrue(json.contains(#""status":"draft""#))
+        XCTAssertTrue(json.contains(#""importance":"medium""#))
+    }
 }
