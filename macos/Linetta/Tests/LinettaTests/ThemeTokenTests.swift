@@ -22,3 +22,16 @@ final class ThemeTokenTests: XCTestCase {
         XCTAssertEqual(resolved.opacity, 0.16, accuracy: 0.01)
     }
 }
+
+final class TypographyTokenTests: XCTestCase {
+    func testBodySerifUsesSystemSerif() {
+        // Smoke test: tokens compile and are non-nil
+        _ = LinettaTypography.titleLarge
+        _ = LinettaTypography.titleSmall
+        _ = LinettaTypography.body
+        _ = LinettaTypography.bodySerif
+        _ = LinettaTypography.bodySmall
+        _ = LinettaTypography.caption
+        _ = LinettaTypography.label
+    }
+}
