@@ -4,12 +4,20 @@
 
 ## 읽는 순서
 
+### MVP (완료)
 1. [linetta-pro-writer-roadmap.md](./linetta-pro-writer-roadmap.md)
 2. [phase-1-work-library-and-engine.md](./phase-1-work-library-and-engine.md)
 3. [phase-2-canon-memory-core.md](./phase-2-canon-memory-core.md)
 4. [phase-3-episode-workbench.md](./phase-3-episode-workbench.md)
 5. [phase-4-continuity-review-loop.md](./phase-4-continuity-review-loop.md)
 6. [phase-5-publication-polish.md](./phase-5-publication-polish.md)
+
+### macOS App Completion (Phase 6~9)
+7. [linetta-macos-app-completion-roadmap.md](./linetta-macos-app-completion-roadmap.md)
+8. [phase-6-embedded-engine-lifecycle.md](./phase-6-embedded-engine-lifecycle.md)
+9. [phase-7-settings-studio.md](./phase-7-settings-studio.md)
+10. [phase-8-app-polish-workflow.md](./phase-8-app-polish-workflow.md)
+11. [phase-9-live-run-and-editor.md](./phase-9-live-run-and-editor.md)
 
 ## 진행 규칙
 
