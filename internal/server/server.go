@@ -98,6 +98,10 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 		s.handleWorkDetail(w, r, workID)
 		return
 	}
+	if len(parts) == 3 && parts[1] == "export" && parts[2] == "markdown" {
+		s.handleWorkMarkdownExport(w, r, workID)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "episodes" {
 		s.handleEpisodes(w, r, workID)
 		return
@@ -112,6 +116,10 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "versions" {
 		s.handleEpisodeVersions(w, r, workID, parts[2])
+		return
+	}
+	if len(parts) == 5 && parts[1] == "episodes" && parts[3] == "export" && parts[4] == "txt" {
+		s.handleEpisodeTextExport(w, r, workID, parts[2])
 		return
 	}
 	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "runs" {
@@ -378,6 +386,82 @@ func (s *Server) handleEpisodeVersions(w http.ResponseWriter, r *http.Request, w
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (s *Server) handleWorkMarkdownExport(w http.ResponseWriter, r *http.Request, workID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	workItem, err := s.repo.GetWork(r.Context(), workID)
+	if err != nil {
+		writeRepositoryError(w, err)
+		return
+	}
+	episodes, err := s.repo.ListEpisodes(r.Context(), workID)
+	if err != nil {
+		writeRepositoryError(w, err)
+		return
+	}
+
+	var builder strings.Builder
+	builder.WriteString("# " + workItem.Title + "\n\n")
+	if workItem.Genre != "" {
+		builder.WriteString("Genre: " + workItem.Genre + "\n\n")
+	}
+	if workItem.Premise != "" {
+		builder.WriteString(workItem.Premise + "\n\n")
+	}
+	builder.WriteString("## Episodes\n\n")
+	for _, episode := range episodes {
+		builder.WriteString("## " + episode.Title + "\n\n")
+		versions, err := s.repo.ListEpisodeVersions(r.Context(), workID, episode.ID)
+		if err != nil {
+			writeRepositoryError(w, err)
+			return
+		}
+		if len(versions) == 0 {
+			builder.WriteString("_No manuscript version._\n\n")
+			continue
+		}
+		builder.WriteString(strings.TrimSpace(versions[0].Body) + "\n\n")
+	}
+
+	if s.memory != nil {
+		items, err := s.memory.ListItems(r.Context(), workID, memory.ListFilter{Status: memory.StatusCanon})
+		if err != nil {
+			writeMemoryError(w, err)
+			return
+		}
+		if len(items) > 0 {
+			builder.WriteString("## Canon Memory\n\n")
+			for _, item := range items {
+				builder.WriteString("- " + item.Title)
+				if item.Body != "" {
+					builder.WriteString(": " + item.Body)
+				}
+				builder.WriteString("\n")
+			}
+		}
+	}
+	writeText(w, http.StatusOK, "text/markdown; charset=utf-8", builder.String())
+}
+
+func (s *Server) handleEpisodeTextExport(w http.ResponseWriter, r *http.Request, workID, episodeID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	versions, err := s.repo.ListEpisodeVersions(r.Context(), workID, episodeID)
+	if err != nil {
+		writeRepositoryError(w, err)
+		return
+	}
+	if len(versions) == 0 {
+		writeError(w, http.StatusNotFound, "episode has no manuscript version")
+		return
+	}
+	writeText(w, http.StatusOK, "text/plain; charset=utf-8", strings.TrimSpace(versions[0].Body)+"\n")
 }
 
 func (s *Server) handleRunPath(w http.ResponseWriter, r *http.Request) {
@@ -660,6 +744,12 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func writeText(w http.ResponseWriter, status int, contentType string, value string) {
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(status)
+	_, _ = w.Write([]byte(value))
 }
 
 func writeSSEEvent(w http.ResponseWriter, event tesserarun.Event) error {

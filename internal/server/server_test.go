@@ -162,6 +162,52 @@ func TestEpisodeVersionRoutesCreateAndList(t *testing.T) {
 	}
 }
 
+func TestExportRoutesReturnMarkdownAndEpisodeText(t *testing.T) {
+	handler := newTestHandler(t)
+	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{
+		"title":   "Export Work",
+		"genre":   "serial fantasy",
+		"premise": "A keeper remembers impossible doors.",
+	}, http.StatusCreated)
+	episode := postJSON[work.Episode](t, handler, "/api/works/"+createdWork.ID+"/episodes", map[string]string{
+		"title": "Episode 1",
+	}, http.StatusCreated)
+	_ = postJSON[work.EpisodeVersion](t, handler, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/versions", map[string]string{
+		"body": "The keeper opened the seventh door.",
+		"note": "manual save",
+	}, http.StatusCreated)
+	_ = postJSON[memory.Item](t, handler, "/api/works/"+createdWork.ID+"/memory", map[string]string{
+		"kind":   string(memory.KindCharacter),
+		"title":  "Mira",
+		"body":   "A keeper of impossible doors.",
+		"status": string(memory.StatusCanon),
+	}, http.StatusCreated)
+
+	markdown := requestJSON(t, handler, http.MethodGet, "/api/works/"+createdWork.ID+"/export/markdown", nil)
+	if markdown.Code != http.StatusOK {
+		t.Fatalf("markdown status = %d, want 200; body=%s", markdown.Code, markdown.Body.String())
+	}
+	if got := markdown.Header().Get("Content-Type"); !strings.Contains(got, "text/markdown") {
+		t.Fatalf("markdown content-type = %q, want text/markdown", got)
+	}
+	for _, want := range []string{"# Export Work", "## Episode 1", "The keeper opened the seventh door.", "## Canon Memory", "Mira"} {
+		if !strings.Contains(markdown.Body.String(), want) {
+			t.Fatalf("markdown missing %q:\n%s", want, markdown.Body.String())
+		}
+	}
+
+	text := requestJSON(t, handler, http.MethodGet, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/export/txt", nil)
+	if text.Code != http.StatusOK {
+		t.Fatalf("txt status = %d, want 200; body=%s", text.Code, text.Body.String())
+	}
+	if got := text.Header().Get("Content-Type"); !strings.Contains(got, "text/plain") {
+		t.Fatalf("txt content-type = %q, want text/plain", got)
+	}
+	if text.Body.String() != "The keeper opened the seventh door.\n" {
+		t.Fatalf("txt body = %q", text.Body.String())
+	}
+}
+
 func TestBlueprintRoutesRejectWrongWork(t *testing.T) {
 	handler := newTestHandler(t)
 	first := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "First"}, http.StatusCreated)
