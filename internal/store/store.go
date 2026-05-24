@@ -197,4 +197,21 @@ var migrationStatements = []string{
 		FOREIGN KEY (run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_canon_change_proposals_work_status ON canon_change_proposals(work_id, status, created_at)`,
+	`CREATE TABLE IF NOT EXISTS continuity_issues (
+		id TEXT PRIMARY KEY,
+		work_id TEXT NOT NULL,
+		episode_id TEXT NOT NULL,
+		run_id TEXT NOT NULL,
+		severity TEXT NOT NULL,
+		title TEXT NOT NULL,
+		body TEXT NOT NULL DEFAULT '',
+		related_item_ids TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+		FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE,
+		FOREIGN KEY (run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_continuity_issues_episode_status ON continuity_issues(work_id, episode_id, status, created_at)`,
 }

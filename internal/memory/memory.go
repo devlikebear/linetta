@@ -139,6 +139,47 @@ type Proposal struct {
 	DecidedAt    *time.Time         `json:"decided_at,omitempty"`
 }
 
+type IssueSeverity string
+
+const (
+	IssueInfo    IssueSeverity = "info"
+	IssueWarning IssueSeverity = "warning"
+	IssueBlocker IssueSeverity = "blocker"
+)
+
+type IssueStatus string
+
+const (
+	IssueOpen     IssueStatus = "open"
+	IssueAccepted IssueStatus = "accepted"
+	IssueResolved IssueStatus = "resolved"
+	IssueIgnored  IssueStatus = "ignored"
+)
+
+type ContinuityIssue struct {
+	ID             string        `json:"id"`
+	WorkID         string        `json:"work_id"`
+	EpisodeID      string        `json:"episode_id"`
+	RunID          string        `json:"run_id"`
+	Severity       IssueSeverity `json:"severity"`
+	Title          string        `json:"title"`
+	Body           string        `json:"body"`
+	RelatedItemIDs string        `json:"related_item_ids"`
+	Status         IssueStatus   `json:"status"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
+}
+
+type CreateIssueInput struct {
+	WorkID         string        `json:"work_id"`
+	EpisodeID      string        `json:"episode_id"`
+	RunID          string        `json:"run_id"`
+	Severity       IssueSeverity `json:"severity"`
+	Title          string        `json:"title"`
+	Body           string        `json:"body"`
+	RelatedItemIDs string        `json:"related_item_ids"`
+}
+
 type CreateProposalInput struct {
 	WorkID       string             `json:"work_id"`
 	EpisodeID    string             `json:"episode_id"`
@@ -541,6 +582,110 @@ func (r *Repository) DeferProposal(ctx context.Context, id, _ string) (Proposal,
 	return r.updateProposalStatus(ctx, proposal.ID, ProposalDeferred, proposal.TargetItemID)
 }
 
+func (r *Repository) CreateIssue(ctx context.Context, input CreateIssueInput) (ContinuityIssue, error) {
+	input = normalizeIssueInput(input)
+	if input.WorkID == "" || input.EpisodeID == "" || input.RunID == "" || input.Severity == "" || input.Title == "" {
+		return ContinuityIssue{}, fmt.Errorf("%w: work id, episode id, run id, severity, and title are required", ErrInvalidInput)
+	}
+	if err := r.requireWork(ctx, input.WorkID); err != nil {
+		return ContinuityIssue{}, err
+	}
+	now := time.Now().UTC()
+	issue := ContinuityIssue{
+		ID:             newID("issue"),
+		WorkID:         input.WorkID,
+		EpisodeID:      input.EpisodeID,
+		RunID:          input.RunID,
+		Severity:       input.Severity,
+		Title:          input.Title,
+		Body:           input.Body,
+		RelatedItemIDs: input.RelatedItemIDs,
+		Status:         IssueOpen,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	_, err := r.conn().ExecContext(ctx, `
+		INSERT INTO continuity_issues (
+			id, work_id, episode_id, run_id, severity, title, body, related_item_ids, status, created_at, updated_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, issue.ID, issue.WorkID, issue.EpisodeID, issue.RunID, issue.Severity, issue.Title, issue.Body, issue.RelatedItemIDs, issue.Status, formatTime(issue.CreatedAt), formatTime(issue.UpdatedAt))
+	if err != nil {
+		return ContinuityIssue{}, err
+	}
+	return issue, nil
+}
+
+func (r *Repository) ListIssues(ctx context.Context, workID, episodeID string) ([]ContinuityIssue, error) {
+	workID = strings.TrimSpace(workID)
+	episodeID = strings.TrimSpace(episodeID)
+	if err := r.requireWork(ctx, workID); err != nil {
+		return nil, err
+	}
+	rows, err := r.conn().QueryContext(ctx, `
+		SELECT id, work_id, episode_id, run_id, severity, title, body, related_item_ids, status, created_at, updated_at
+		FROM continuity_issues
+		WHERE work_id = ? AND episode_id = ?
+		ORDER BY created_at DESC, id DESC
+	`, workID, episodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var issues []ContinuityIssue
+	for rows.Next() {
+		issue, err := scanIssue(rows)
+		if err != nil {
+			return nil, err
+		}
+		issues = append(issues, issue)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return issues, nil
+}
+
+func (r *Repository) UpdateIssueStatus(ctx context.Context, id string, status IssueStatus) (ContinuityIssue, error) {
+	id = strings.TrimSpace(id)
+	if id == "" || status == "" {
+		return ContinuityIssue{}, fmt.Errorf("%w: issue id and status are required", ErrInvalidInput)
+	}
+	now := time.Now().UTC()
+	res, err := r.conn().ExecContext(ctx, `
+		UPDATE continuity_issues
+		SET status = ?, updated_at = ?
+		WHERE id = ?
+	`, status, formatTime(now), id)
+	if err != nil {
+		return ContinuityIssue{}, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return ContinuityIssue{}, err
+	}
+	if affected == 0 {
+		return ContinuityIssue{}, ErrNotFound
+	}
+	return r.GetIssue(ctx, id)
+}
+
+func (r *Repository) GetIssue(ctx context.Context, id string) (ContinuityIssue, error) {
+	row := r.conn().QueryRowContext(ctx, `
+		SELECT id, work_id, episode_id, run_id, severity, title, body, related_item_ids, status, created_at, updated_at
+		FROM continuity_issues
+		WHERE id = ?
+	`, strings.TrimSpace(id))
+	issue, err := scanIssue(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ContinuityIssue{}, ErrNotFound
+	}
+	if err != nil {
+		return ContinuityIssue{}, err
+	}
+	return issue, nil
+}
+
 func (r *Repository) updateProposalStatus(ctx context.Context, id string, status ProposalStatus, targetItemID string) (Proposal, error) {
 	now := time.Now().UTC()
 	_, err := r.conn().ExecContext(ctx, `
@@ -651,6 +796,36 @@ func scanProposal(row scanner) (Proposal, error) {
 	return proposal, nil
 }
 
+func scanIssue(row scanner) (ContinuityIssue, error) {
+	var issue ContinuityIssue
+	var createdAt, updatedAt string
+	if err := row.Scan(
+		&issue.ID,
+		&issue.WorkID,
+		&issue.EpisodeID,
+		&issue.RunID,
+		&issue.Severity,
+		&issue.Title,
+		&issue.Body,
+		&issue.RelatedItemIDs,
+		&issue.Status,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return ContinuityIssue{}, err
+	}
+	var err error
+	issue.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return ContinuityIssue{}, err
+	}
+	issue.UpdatedAt, err = parseTime(updatedAt)
+	if err != nil {
+		return ContinuityIssue{}, err
+	}
+	return issue, nil
+}
+
 func normalizeCreateInput(input CreateItemInput) CreateItemInput {
 	input.WorkID = strings.TrimSpace(input.WorkID)
 	input.Title = strings.TrimSpace(input.Title)
@@ -700,6 +875,19 @@ func normalizeProposalInput(input CreateProposalInput) CreateProposalInput {
 	input.BeforeBody = strings.TrimSpace(input.BeforeBody)
 	input.AfterBody = strings.TrimSpace(input.AfterBody)
 	input.Reason = strings.TrimSpace(input.Reason)
+	return input
+}
+
+func normalizeIssueInput(input CreateIssueInput) CreateIssueInput {
+	input.WorkID = strings.TrimSpace(input.WorkID)
+	input.EpisodeID = strings.TrimSpace(input.EpisodeID)
+	input.RunID = strings.TrimSpace(input.RunID)
+	input.Title = strings.TrimSpace(input.Title)
+	input.Body = strings.TrimSpace(input.Body)
+	input.RelatedItemIDs = strings.TrimSpace(input.RelatedItemIDs)
+	if input.Severity == "" {
+		input.Severity = IssueInfo
+	}
 	return input
 }
 
