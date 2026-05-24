@@ -45,6 +45,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/works", s.handleWorks)
 	s.mux.HandleFunc("/api/works/", s.handleWorkPath)
 	s.mux.HandleFunc("/api/runs/", s.handleRunPath)
+	s.mux.HandleFunc("/api/proposals/", s.handleProposalActionPath)
+	s.mux.HandleFunc("/api/continuity/", s.handleContinuityPath)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +110,14 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 		s.handleEpisodeRun(w, r, workID, parts[2])
 		return
 	}
+	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "continuity" {
+		s.handleEpisodeContinuity(w, r, workID, parts[2])
+		return
+	}
+	if len(parts) == 2 && parts[1] == "proposals" {
+		s.handleWorkProposals(w, r, workID)
+		return
+	}
 	if len(parts) >= 2 && parts[1] == "memory" {
 		s.handleMemoryPath(w, r, workID, parts[2:])
 		return
@@ -154,6 +164,112 @@ func (s *Server) handleEpisodes(w http.ResponseWriter, r *http.Request, workID s
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (s *Server) handleWorkProposals(w http.ResponseWriter, r *http.Request, workID string) {
+	if s.memory == nil {
+		writeError(w, http.StatusNotFound, "memory repository not configured")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	proposals, err := s.memory.ListProposals(r.Context(), workID, memory.ProposalStatus(r.URL.Query().Get("status")))
+	if err != nil {
+		writeMemoryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, proposals)
+}
+
+func (s *Server) handleEpisodeContinuity(w http.ResponseWriter, r *http.Request, workID, episodeID string) {
+	if s.memory == nil {
+		writeError(w, http.StatusNotFound, "memory repository not configured")
+		return
+	}
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	issues, err := s.memory.ListIssues(r.Context(), workID, episodeID)
+	if err != nil {
+		writeMemoryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, issues)
+}
+
+func (s *Server) handleProposalActionPath(w http.ResponseWriter, r *http.Request) {
+	if s.memory == nil {
+		writeError(w, http.StatusNotFound, "memory repository not configured")
+		return
+	}
+	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/proposals/"))
+	if len(parts) != 2 {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var input struct {
+		Actor string `json:"actor"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var (
+		proposal memory.Proposal
+		err      error
+	)
+	switch parts[1] {
+	case "approve":
+		proposal, err = s.memory.ApproveProposal(r.Context(), parts[0], input.Actor)
+	case "reject":
+		proposal, err = s.memory.RejectProposal(r.Context(), parts[0], input.Actor)
+	case "defer":
+		proposal, err = s.memory.DeferProposal(r.Context(), parts[0], input.Actor)
+	default:
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if err != nil {
+		writeMemoryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, proposal)
+}
+
+func (s *Server) handleContinuityPath(w http.ResponseWriter, r *http.Request) {
+	if s.memory == nil {
+		writeError(w, http.StatusNotFound, "memory repository not configured")
+		return
+	}
+	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/continuity/"))
+	if len(parts) != 1 {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	if r.Method != http.MethodPatch {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var input struct {
+		Status memory.IssueStatus `json:"status"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	issue, err := s.memory.UpdateIssueStatus(r.Context(), parts[0], input.Status)
+	if err != nil {
+		writeMemoryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, issue)
 }
 
 func (s *Server) handleEpisodeRun(w http.ResponseWriter, r *http.Request, workID, episodeID string) {

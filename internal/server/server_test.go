@@ -178,6 +178,67 @@ func TestRunRoutesCreateRunAndReturnArtifactsEventsAndStream(t *testing.T) {
 	}
 }
 
+func TestProposalAndContinuityRoutes(t *testing.T) {
+	env := newTestEnvironment(t)
+	ctx := context.Background()
+	workItem, err := env.Work.CreateWork(ctx, work.CreateWorkInput{Title: "Proposal API Work"})
+	if err != nil {
+		t.Fatalf("CreateWork() error = %v", err)
+	}
+	episode, err := env.Work.CreateEpisode(ctx, workItem.ID, "Episode 1")
+	if err != nil {
+		t.Fatalf("CreateEpisode() error = %v", err)
+	}
+	runID := insertServerTestRun(t, env.DB, workItem.ID, episode.ID)
+	proposal, err := env.Memory.CreateProposal(ctx, memory.CreateProposalInput{
+		WorkID:     workItem.ID,
+		EpisodeID:  episode.ID,
+		RunID:      runID,
+		ChangeType: memory.ProposalChangeCreate,
+		Kind:       memory.KindCharacter,
+		Title:      "Proposed Character",
+		AfterBody:  "A person extracted from the draft.",
+		Reason:     "Detected recurring figure.",
+	})
+	if err != nil {
+		t.Fatalf("CreateProposal() error = %v", err)
+	}
+	issue, err := env.Memory.CreateIssue(ctx, memory.CreateIssueInput{
+		WorkID:    workItem.ID,
+		EpisodeID: episode.ID,
+		RunID:     runID,
+		Severity:  memory.IssueWarning,
+		Title:     "Ambiguous timeline",
+		Body:      "Needs an anchored date.",
+	})
+	if err != nil {
+		t.Fatalf("CreateIssue() error = %v", err)
+	}
+
+	proposals := getJSON[[]memory.Proposal](t, env.Handler, "/api/works/"+workItem.ID+"/proposals?status=pending", http.StatusOK)
+	if len(proposals) != 1 || proposals[0].ID != proposal.ID {
+		t.Fatalf("proposals = %+v, want pending proposal %+v", proposals, proposal)
+	}
+
+	approved := postJSON[memory.Proposal](t, env.Handler, "/api/proposals/"+proposal.ID+"/approve", map[string]string{
+		"actor": "human",
+	}, http.StatusOK)
+	if approved.Status != memory.ProposalApproved || approved.TargetItemID == "" {
+		t.Fatalf("approved = %+v, want approved proposal", approved)
+	}
+
+	issues := getJSON[[]memory.ContinuityIssue](t, env.Handler, "/api/works/"+workItem.ID+"/episodes/"+episode.ID+"/continuity", http.StatusOK)
+	if len(issues) != 1 || issues[0].ID != issue.ID {
+		t.Fatalf("issues = %+v, want issue %+v", issues, issue)
+	}
+	resolved := patchJSON[memory.ContinuityIssue](t, env.Handler, "/api/continuity/"+issue.ID, map[string]string{
+		"status": string(memory.IssueResolved),
+	}, http.StatusOK)
+	if resolved.Status != memory.IssueResolved {
+		t.Fatalf("resolved status = %q, want resolved", resolved.Status)
+	}
+}
+
 func TestMemoryRoutesCreateUpdateArchiveAndListDecisions(t *testing.T) {
 	handler := newTestHandler(t)
 	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Canon Work"}, http.StatusCreated)
@@ -261,7 +322,18 @@ func TestMemorySearchRoute(t *testing.T) {
 	}
 }
 
+type testEnvironment struct {
+	DB      *store.DB
+	Work    *work.Repository
+	Memory  *memory.Repository
+	Handler http.Handler
+}
+
 func newTestHandler(t *testing.T) http.Handler {
+	return newTestEnvironment(t).Handler
+}
+
+func newTestEnvironment(t *testing.T) testEnvironment {
 	t.Helper()
 	db, err := store.Open(filepath.Join(t.TempDir(), "linetta.db"))
 	if err != nil {
@@ -273,10 +345,23 @@ func newTestHandler(t *testing.T) http.Handler {
 	}
 	workRepo := work.NewRepository(db)
 	memoryRepo := memory.NewRepository(db, workRepo)
-	return New(workRepo, Options{
+	handler := New(workRepo, Options{
 		Memory: memoryRepo,
 		Agent:  agent.NewRunner(db, workRepo, memoryRepo),
 	})
+	return testEnvironment{DB: db, Work: workRepo, Memory: memoryRepo, Handler: handler}
+}
+
+func insertServerTestRun(t *testing.T, db *store.DB, workID, episodeID string) string {
+	t.Helper()
+	runID := "run_server_test"
+	if _, err := db.Conn().ExecContext(context.Background(), `
+		INSERT INTO agent_runs (id, work_id, episode_id, status, tessera_run_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, runID, workID, episodeID, "closed", runID, "2026-05-24T09:00:00Z"); err != nil {
+		t.Fatalf("insert run error = %v", err)
+	}
+	return runID
 }
 
 func postJSON[T any](t *testing.T, handler http.Handler, path string, payload any, wantStatus int) T {
