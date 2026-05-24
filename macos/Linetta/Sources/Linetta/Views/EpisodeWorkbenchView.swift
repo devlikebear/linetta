@@ -15,6 +15,10 @@ struct EpisodeWorkbenchView: View {
     @State private var artifacts: [Artifact] = []
     @State private var events: [RunEvent] = []
     @State private var selectedArtifact: Artifact?
+    @State private var proposals: [CanonProposal] = []
+    @State private var selectedProposal: CanonProposal?
+    @State private var continuityIssues: [ContinuityIssue] = []
+    @State private var selectedIssue: ContinuityIssue?
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -86,6 +90,7 @@ struct EpisodeWorkbenchView: View {
                 }
                 .task(id: selectedEpisode.id) {
                     await loadBlueprint(for: selectedEpisode)
+                    await loadReview(for: selectedEpisode)
                 }
             } else {
                 VStack(spacing: 12) {
@@ -126,22 +131,67 @@ struct EpisodeWorkbenchView: View {
     }
 
     private var runPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Agent Artifacts")
-                .font(.headline)
-            List(selection: $selectedArtifact) {
-                ForEach(artifacts) { artifact in
-                    Text(artifact.title)
-                        .tag(artifact)
+        TabView {
+            artifactTimelinePanel
+                .tabItem {
+                    Label("Artifacts", systemImage: "doc.text")
                 }
+            MemoryDiffView(
+                proposals: proposals,
+                selectedProposal: $selectedProposal,
+                issues: continuityIssues,
+                selectedIssue: $selectedIssue,
+                approveProposal: { proposal in
+                    Task { await approve(proposal: proposal) }
+                },
+                rejectProposal: { proposal in
+                    Task { await reject(proposal: proposal) }
+                },
+                deferProposal: { proposal in
+                    Task { await deferDecision(proposal: proposal) }
+                },
+                acceptIssue: { issue in
+                    Task { await update(issue: issue, status: .accepted) }
+                },
+                resolveIssue: { issue in
+                    Task { await update(issue: issue, status: .resolved) }
+                },
+                ignoreIssue: { issue in
+                    Task { await update(issue: issue, status: .ignored) }
+                }
+            )
+            .tabItem {
+                Label("Review", systemImage: "checkmark.seal")
             }
-            if let selectedArtifact {
-                ScrollView {
-                    Text(selectedArtifact.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
+        }
+    }
+
+    private var artifactTimelinePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HSplitView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Agent Artifacts")
+                        .font(.headline)
+                    List(selection: $selectedArtifact) {
+                        ForEach(artifacts) { artifact in
+                            Text(artifact.title)
+                                .tag(artifact)
+                        }
+                    }
                 }
-                .frame(minHeight: 180)
+                .frame(minWidth: 160)
+
+                if let selectedArtifact {
+                    ScrollView {
+                        Text(selectedArtifact.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(minWidth: 260)
+                } else {
+                    ContentUnavailableView("No Artifact", systemImage: "doc.text")
+                        .frame(minWidth: 260)
+                }
             }
             Text("Run Timeline")
                 .font(.headline)
@@ -184,6 +234,10 @@ struct EpisodeWorkbenchView: View {
             )
             episodes.append(episode)
             selectedEpisode = episode
+            proposals = []
+            selectedProposal = nil
+            continuityIssues = []
+            selectedIssue = nil
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -260,6 +314,68 @@ struct EpisodeWorkbenchView: View {
             artifacts = result.artifacts
             events = result.events
             selectedArtifact = artifacts.first(where: { $0.kind == .draft }) ?? artifacts.first
+            await loadReview(for: selectedEpisode)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadReview(for episode: Episode) async {
+        do {
+            async let proposalResult = client.listProposals(workID: work.id, status: .pending)
+            async let issueResult = client.listContinuityIssues(workID: work.id, episodeID: episode.id)
+            let loadedProposals = try await proposalResult
+            let loadedIssues = try await issueResult
+            proposals = loadedProposals.filter { $0.episodeID == episode.id }
+            continuityIssues = loadedIssues
+            selectedProposal = proposals.first
+            selectedIssue = continuityIssues.first
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func approve(proposal: CanonProposal) async {
+        await decide(proposal: proposal) {
+            try await client.approveProposal(proposalID: proposal.id)
+        }
+    }
+
+    private func reject(proposal: CanonProposal) async {
+        await decide(proposal: proposal) {
+            try await client.rejectProposal(proposalID: proposal.id)
+        }
+    }
+
+    private func deferDecision(proposal: CanonProposal) async {
+        await decide(proposal: proposal) {
+            try await client.deferProposal(proposalID: proposal.id)
+        }
+    }
+
+    private func decide(proposal: CanonProposal, action: () async throws -> CanonProposal) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            _ = try await action()
+            if let selectedEpisode {
+                await loadReview(for: selectedEpisode)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func update(issue: ContinuityIssue, status: ContinuityIssueStatus) async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            _ = try await client.updateContinuityIssue(issueID: issue.id, status: status)
+            if let selectedEpisode {
+                await loadReview(for: selectedEpisode)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

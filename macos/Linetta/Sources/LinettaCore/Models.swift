@@ -271,6 +271,121 @@ public struct MemoryDecision: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+public enum ProposalChangeType: String, Codable, CaseIterable, Identifiable, Sendable {
+    case create
+    case update
+    case archive
+    case link
+
+    public var id: String { rawValue }
+}
+
+public enum ProposalStatus: String, Codable, CaseIterable, Identifiable, Sendable {
+    case pending
+    case approved
+    case rejected
+    case deferred
+
+    public var id: String { rawValue }
+}
+
+public struct CanonProposal: Codable, Equatable, Identifiable, Hashable, Sendable {
+    public var id: String
+    public var workID: String
+    public var episodeID: String
+    public var runID: String
+    public var targetItemID: String
+    public var changeType: ProposalChangeType
+    public var kind: MemoryKind
+    public var title: String
+    public var beforeBody: String
+    public var afterBody: String
+    public var reason: String
+    public var confidence: Double
+    public var status: ProposalStatus
+    public var createdAt: String
+    public var decidedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workID = "work_id"
+        case episodeID = "episode_id"
+        case runID = "run_id"
+        case targetItemID = "target_item_id"
+        case changeType = "change_type"
+        case kind
+        case title
+        case beforeBody = "before_body"
+        case afterBody = "after_body"
+        case reason
+        case confidence
+        case status
+        case createdAt = "created_at"
+        case decidedAt = "decided_at"
+    }
+}
+
+public struct ProposalDecisionRequest: Codable, Equatable, Sendable {
+    public var actor: String
+
+    public init(actor: String = "human") {
+        self.actor = actor
+    }
+}
+
+public enum ContinuityIssueSeverity: String, Codable, CaseIterable, Identifiable, Sendable {
+    case info
+    case warning
+    case blocker
+
+    public var id: String { rawValue }
+}
+
+public enum ContinuityIssueStatus: String, Codable, CaseIterable, Identifiable, Sendable {
+    case open
+    case accepted
+    case resolved
+    case ignored
+
+    public var id: String { rawValue }
+}
+
+public struct ContinuityIssue: Codable, Equatable, Identifiable, Hashable, Sendable {
+    public var id: String
+    public var workID: String
+    public var episodeID: String
+    public var runID: String
+    public var severity: ContinuityIssueSeverity
+    public var title: String
+    public var body: String
+    public var relatedItemIDs: String
+    public var status: ContinuityIssueStatus
+    public var createdAt: String
+    public var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workID = "work_id"
+        case episodeID = "episode_id"
+        case runID = "run_id"
+        case severity
+        case title
+        case body
+        case relatedItemIDs = "related_item_ids"
+        case status
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+public struct UpdateContinuityIssueRequest: Codable, Equatable, Sendable {
+    public var status: ContinuityIssueStatus
+
+    public init(status: ContinuityIssueStatus) {
+        self.status = status
+    }
+}
+
 public enum ArtifactKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case museNotes = "muse-notes"
     case plotOutline = "plot-outline"

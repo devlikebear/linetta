@@ -95,6 +95,36 @@ public struct APIClient: Sendable {
         try await get(path: "/api/works/\(workID)/memory/decisions")
     }
 
+    public func listProposals(workID: String, status: ProposalStatus? = nil) async throws -> [CanonProposal] {
+        var queryItems: [URLQueryItem] = []
+        if let status {
+            queryItems.append(URLQueryItem(name: "status", value: status.rawValue))
+        }
+        var request = URLRequest(url: url(path: "/api/works/\(workID)/proposals", queryItems: queryItems))
+        request.httpMethod = "GET"
+        return try await perform(request)
+    }
+
+    public func approveProposal(proposalID: String, actor: String = "human") async throws -> CanonProposal {
+        try await send(path: "/api/proposals/\(proposalID)/approve", method: "POST", body: ProposalDecisionRequest(actor: actor))
+    }
+
+    public func rejectProposal(proposalID: String, actor: String = "human") async throws -> CanonProposal {
+        try await send(path: "/api/proposals/\(proposalID)/reject", method: "POST", body: ProposalDecisionRequest(actor: actor))
+    }
+
+    public func deferProposal(proposalID: String, actor: String = "human") async throws -> CanonProposal {
+        try await send(path: "/api/proposals/\(proposalID)/defer", method: "POST", body: ProposalDecisionRequest(actor: actor))
+    }
+
+    public func listContinuityIssues(workID: String, episodeID: String) async throws -> [ContinuityIssue] {
+        try await get(path: "/api/works/\(workID)/episodes/\(episodeID)/continuity")
+    }
+
+    public func updateContinuityIssue(issueID: String, status: ContinuityIssueStatus) async throws -> ContinuityIssue {
+        try await send(path: "/api/continuity/\(issueID)", method: "PATCH", body: UpdateContinuityIssueRequest(status: status))
+    }
+
     private func get<T: Decodable>(path: String) async throws -> T {
         var request = URLRequest(url: url(path: path))
         request.httpMethod = "GET"
