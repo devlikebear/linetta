@@ -22,7 +22,7 @@ struct LinettaApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WorkGalleryView()
+            AppShell()
                 .environment(appState)
                 .environmentObject(engine)
                 .environment(sharedSidebarState)
