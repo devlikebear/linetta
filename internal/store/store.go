@@ -126,6 +126,20 @@ var migrationStatements = []string{
 		FOREIGN KEY (run_id) REFERENCES agent_runs(id) ON DELETE CASCADE,
 		UNIQUE(run_id, seq)
 	)`,
+	`CREATE TABLE IF NOT EXISTS artifacts (
+		id TEXT PRIMARY KEY,
+		work_id TEXT NOT NULL,
+		episode_id TEXT NOT NULL,
+		run_id TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		title TEXT NOT NULL,
+		body TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+		FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE,
+		FOREIGN KEY (run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_artifacts_run_kind ON artifacts(run_id, kind, created_at)`,
 	`CREATE TABLE IF NOT EXISTS canon_items (
 		id TEXT PRIMARY KEY,
 		work_id TEXT NOT NULL,
