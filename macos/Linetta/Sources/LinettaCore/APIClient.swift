@@ -26,6 +26,16 @@ public struct APIClient: Sendable {
         try await send(path: "/api/works", method: "POST", body: request)
     }
 
+    func workStatsURL(workID: String) -> URL {
+        url(path: "/api/works/\(workID)/stats")
+    }
+
+    public func workStats(workID: String) async throws -> WorkStats {
+        var request = URLRequest(url: workStatsURL(workID: workID))
+        request.httpMethod = "GET"
+        return try await perform(request)
+    }
+
     public func listEpisodes(workID: String) async throws -> [Episode] {
         try await get(path: "/api/works/\(workID)/episodes")
     }

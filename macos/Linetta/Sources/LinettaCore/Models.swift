@@ -36,6 +36,24 @@ public struct CreateWorkRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct WorkStats: Codable, Equatable, Sendable {
+    public var workID: String
+    public var episodeCount: Int
+    public var readyCount: Int
+    public var wordCount: Int
+    public var openContinuityIssueCount: Int
+    public var pendingCanonProposalCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case workID = "work_id"
+        case episodeCount = "episode_count"
+        case readyCount = "ready_count"
+        case wordCount = "word_count"
+        case openContinuityIssueCount = "open_continuity_issue_count"
+        case pendingCanonProposalCount = "pending_canon_proposal_count"
+    }
+}
+
 public enum EpisodeStatus: String, Codable, CaseIterable, Identifiable, Sendable {
     case idea
     case outlined

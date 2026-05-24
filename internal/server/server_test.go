@@ -208,6 +208,50 @@ func TestExportRoutesReturnMarkdownAndEpisodeText(t *testing.T) {
 	}
 }
 
+func TestWorkStatsRouteReturnsProgressCounts(t *testing.T) {
+	env := newTestEnvironment(t)
+	ctx := context.Background()
+	workItem, err := env.Work.CreateWork(ctx, work.CreateWorkInput{Title: "Stats Work"})
+	if err != nil {
+		t.Fatalf("CreateWork() error = %v", err)
+	}
+	episode, err := env.Work.CreateEpisode(ctx, workItem.ID, "Episode 1")
+	if err != nil {
+		t.Fatalf("CreateEpisode() error = %v", err)
+	}
+	if _, err := env.Work.UpdateEpisodeStatus(ctx, workItem.ID, episode.ID, work.EpisodeStatusReady); err != nil {
+		t.Fatalf("UpdateEpisodeStatus() error = %v", err)
+	}
+	if _, err := env.Work.CreateEpisodeVersion(ctx, workItem.ID, episode.ID, work.CreateEpisodeVersionInput{Body: "one two three"}); err != nil {
+		t.Fatalf("CreateEpisodeVersion() error = %v", err)
+	}
+	runID := insertServerTestRun(t, env.DB, workItem.ID, episode.ID)
+	if _, err := env.Memory.CreateProposal(ctx, memory.CreateProposalInput{
+		WorkID:     workItem.ID,
+		EpisodeID:  episode.ID,
+		RunID:      runID,
+		ChangeType: memory.ProposalChangeCreate,
+		Kind:       memory.KindPlotThread,
+		Title:      "Pending Thread",
+	}); err != nil {
+		t.Fatalf("CreateProposal() error = %v", err)
+	}
+	if _, err := env.Memory.CreateIssue(ctx, memory.CreateIssueInput{
+		WorkID:    workItem.ID,
+		EpisodeID: episode.ID,
+		RunID:     runID,
+		Severity:  memory.IssueWarning,
+		Title:     "Open issue",
+	}); err != nil {
+		t.Fatalf("CreateIssue() error = %v", err)
+	}
+
+	stats := getJSON[WorkStats](t, env.Handler, "/api/works/"+workItem.ID+"/stats", http.StatusOK)
+	if stats.EpisodeCount != 1 || stats.ReadyCount != 1 || stats.WordCount != 3 || stats.OpenContinuityIssueCount != 1 || stats.PendingCanonProposalCount != 1 {
+		t.Fatalf("stats = %+v, want counts populated", stats)
+	}
+}
+
 func TestBlueprintRoutesRejectWrongWork(t *testing.T) {
 	handler := newTestHandler(t)
 	first := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "First"}, http.StatusCreated)

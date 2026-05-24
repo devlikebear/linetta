@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,15 @@ import (
 type Options struct {
 	Memory *memory.Repository
 	Agent  *agent.Runner
+}
+
+type WorkStats struct {
+	WorkID                    string `json:"work_id"`
+	EpisodeCount              int    `json:"episode_count"`
+	ReadyCount                int    `json:"ready_count"`
+	WordCount                 int    `json:"word_count"`
+	OpenContinuityIssueCount  int    `json:"open_continuity_issue_count"`
+	PendingCanonProposalCount int    `json:"pending_canon_proposal_count"`
 }
 
 type Server struct {
@@ -98,6 +108,10 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 		s.handleWorkDetail(w, r, workID)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "stats" {
+		s.handleWorkStats(w, r, workID)
+		return
+	}
 	if len(parts) == 3 && parts[1] == "export" && parts[2] == "markdown" {
 		s.handleWorkMarkdownExport(w, r, workID)
 		return
@@ -154,6 +168,19 @@ func (s *Server) handleWorkDetail(w http.ResponseWriter, r *http.Request, workID
 	writeJSON(w, http.StatusOK, item)
 }
 
+func (s *Server) handleWorkStats(w http.ResponseWriter, r *http.Request, workID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	stats, err := s.workStats(r.Context(), workID)
+	if err != nil {
+		writeRepositoryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
 func (s *Server) handleEpisodes(w http.ResponseWriter, r *http.Request, workID string) {
 	switch r.Method {
 	case http.MethodGet:
@@ -180,6 +207,51 @@ func (s *Server) handleEpisodes(w http.ResponseWriter, r *http.Request, workID s
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (s *Server) workStats(ctx context.Context, workID string) (WorkStats, error) {
+	if _, err := s.repo.GetWork(ctx, workID); err != nil {
+		return WorkStats{}, err
+	}
+	episodes, err := s.repo.ListEpisodes(ctx, workID)
+	if err != nil {
+		return WorkStats{}, err
+	}
+	stats := WorkStats{
+		WorkID:       workID,
+		EpisodeCount: len(episodes),
+	}
+	for _, episode := range episodes {
+		if episode.Status == work.EpisodeStatusReady || episode.Status == work.EpisodeStatusPublished {
+			stats.ReadyCount++
+		}
+		versions, err := s.repo.ListEpisodeVersions(ctx, workID, episode.ID)
+		if err != nil {
+			return WorkStats{}, err
+		}
+		if len(versions) > 0 {
+			stats.WordCount += len(strings.Fields(versions[0].Body))
+		}
+		if s.memory != nil {
+			issues, err := s.memory.ListIssues(ctx, workID, episode.ID)
+			if err != nil {
+				return WorkStats{}, err
+			}
+			for _, issue := range issues {
+				if issue.Status == memory.IssueOpen {
+					stats.OpenContinuityIssueCount++
+				}
+			}
+		}
+	}
+	if s.memory != nil {
+		proposals, err := s.memory.ListProposals(ctx, workID, memory.ProposalPending)
+		if err != nil {
+			return WorkStats{}, err
+		}
+		stats.PendingCanonProposalCount = len(proposals)
+	}
+	return stats, nil
 }
 
 func (s *Server) handleEpisodeStatus(w http.ResponseWriter, r *http.Request, workID, episodeID string) {

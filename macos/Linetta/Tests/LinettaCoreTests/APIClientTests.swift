@@ -22,6 +22,15 @@ final class APIClientTests: XCTestCase {
         )
     }
 
+    func testBuildsWorkStatsURL() throws {
+        let client = APIClient(baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:43190")))
+
+        XCTAssertEqual(
+            client.workStatsURL(workID: "work_1").absoluteString,
+            "http://127.0.0.1:43190/api/works/work_1/stats"
+        )
+    }
+
     func testWorkDecodesFromEngineJSON() throws {
         let json = Data("""
         {
@@ -41,6 +50,27 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(work.title, "Green Harbor")
         XCTAssertEqual(work.genre, "climate fiction")
         XCTAssertEqual(work.status, "active")
+    }
+
+    func testWorkStatsDecodesFromEngineJSON() throws {
+        let json = Data("""
+        {
+          "work_id": "work_1",
+          "episode_count": 12,
+          "ready_count": 8,
+          "word_count": 42000,
+          "open_continuity_issue_count": 2,
+          "pending_canon_proposal_count": 5
+        }
+        """.utf8)
+
+        let stats = try JSONDecoder.linetta.decode(WorkStats.self, from: json)
+
+        XCTAssertEqual(stats.workID, "work_1")
+        XCTAssertEqual(stats.episodeCount, 12)
+        XCTAssertEqual(stats.wordCount, 42000)
+        XCTAssertEqual(stats.openContinuityIssueCount, 2)
+        XCTAssertEqual(stats.pendingCanonProposalCount, 5)
     }
 
     func testEpisodeDecodesTypedStatusFromEngineJSON() throws {

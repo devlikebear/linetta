@@ -54,6 +54,10 @@ struct WorkGalleryView: View {
 private struct WorkRow: View {
     var work: Work
 
+    @State private var stats: WorkStats?
+
+    private let client = APIClient()
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(work.title)
@@ -71,8 +75,30 @@ private struct WorkRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
+            if let stats {
+                HStack(spacing: 10) {
+                    Label("\(stats.episodeCount)", systemImage: "list.number")
+                    Label("\(stats.readyCount)", systemImage: "checkmark.circle")
+                    Label("\(stats.wordCount)", systemImage: "text.word.spacing")
+                    if stats.openContinuityIssueCount > 0 {
+                        Label("\(stats.openContinuityIssueCount)", systemImage: "exclamationmark.triangle")
+                    }
+                    if stats.pendingCanonProposalCount > 0 {
+                        Label("\(stats.pendingCanonProposalCount)", systemImage: "sparkles")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 6)
+        .task(id: work.id) {
+            await loadStats()
+        }
+    }
+
+    private func loadStats() async {
+        stats = try? await client.workStats(workID: work.id)
     }
 }
 
