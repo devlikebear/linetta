@@ -13,10 +13,8 @@ struct AppShell: View {
         } detail: {
             MainPaneRouter()
                 .inspector(isPresented: inspectorBinding) {
-                    Color.clear
+                    ManuscriptInspector()
                         .frame(minWidth: 280, idealWidth: manuscript.width, maxWidth: 480)
-                        .background(LinettaTheme.background)
-                        .overlay { Text("Inspector").foregroundStyle(LinettaTheme.textTertiary) }
                 }
         }
         .frame(minWidth: 1080, minHeight: 720)
