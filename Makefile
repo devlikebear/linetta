@@ -42,8 +42,8 @@ serve: ## Start the local engine with DB and ADDR variables.
 	mkdir -p .linetta
 	go run ./cmd/linetta serve --db "$(DB)" --addr "$(ADDR)"
 
-macos-run: ## Run the SwiftUI macOS app.
-	cd $(MACOS_DIR) && swift run Linetta
+macos-run: build-go ## Run the SwiftUI macOS app with the embedded engine.
+	cd $(MACOS_DIR) && LINETTA_BIN=$(PWD)/$(BIN) swift run Linetta
 
 vet: ## Run Go vet.
 	go vet ./...

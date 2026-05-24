@@ -58,12 +58,20 @@ go run ./cmd/linetta \
 
 ## Local Engine
 
-Start the local library engine before opening the Mac app:
+In typical use the Mac app spawns and supervises the engine for you — just
+`make macos-run` (see [Mac App](#mac-app)). Start the engine manually only when
+you need to run it standalone (CLI testing, "Use external engine" toggle, etc.):
 
 ```sh
 go run ./cmd/linetta serve \
   --db .linetta/dev.db \
   --addr 127.0.0.1:43190
+```
+
+On startup the engine emits a machine-readable line on stdout:
+
+```
+LINETTA_READY addr=127.0.0.1:43190 pid=12345
 ```
 
 The local engine API exposes:
@@ -98,13 +106,26 @@ The local engine API exposes:
 
 ## Mac App
 
-The SwiftUI scaffold lives in `macos/Linetta`:
+The SwiftUI app lives in `macos/Linetta`. One command runs the whole stack:
 
 ```sh
-cd macos/Linetta
-swift test
-swift run Linetta
+make macos-run
 ```
+
+This builds `bin/linetta`, launches the SwiftUI app, and lets the app spawn
+the Go engine in the background on a dynamic port. The toolbar shows an engine
+status badge (● green = healthy, yellow = starting, red = failed, blue =
+external) and engine logs are captured for the Settings inspector.
+
+Power-user options:
+
+```sh
+cd macos/Linetta && swift test      # run Swift package tests
+cd macos/Linetta && swift run Linetta  # run without rebuilding bin/linetta
+```
+
+To use a separately-managed engine (e.g. one started by `make serve`), enable
+**Settings → Engine → Use external engine** and restart the app.
 
 The app opens to a searchable work gallery, creates works through the local
 engine, manages canon memory, runs Tessera episode agents, reviews canon diffs,

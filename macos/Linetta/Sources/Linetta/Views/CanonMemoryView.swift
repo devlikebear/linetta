@@ -15,7 +15,8 @@ struct CanonMemoryView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
 
-    private let client = APIClient()
+    @EnvironmentObject private var appState: AppState
+    private var client: APIClient { appState.client }
 
     var body: some View {
         NavigationSplitView {

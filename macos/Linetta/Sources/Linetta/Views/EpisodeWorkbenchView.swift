@@ -29,7 +29,8 @@ struct EpisodeWorkbenchView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
 
-    private let client = APIClient()
+    @EnvironmentObject private var appState: AppState
+    private var client: APIClient { appState.client }
 
     var body: some View {
         NavigationSplitView {
@@ -62,50 +63,65 @@ struct EpisodeWorkbenchView: View {
         } detail: {
             if let selectedEpisode {
                 VStack(spacing: 0) {
-                    HStack {
+                    HStack(spacing: 10) {
                         Text(selectedEpisode.title)
-                            .font(.title2)
+                            .font(.title3)
                             .fontWeight(.semibold)
-                        Spacer()
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(0)
+                        Spacer(minLength: 8)
                         if isLoading {
                             ProgressView()
+                                .controlSize(.small)
                         }
                         Picker("Status", selection: $episodeStatus) {
                             ForEach(EpisodeStatus.allCases) { status in
                                 Text(status.label).tag(status)
                             }
                         }
-                        .frame(width: 150)
+                        .labelsHidden()
+                        .frame(width: 120)
                         Button {
                             Task { await updateSelectedEpisodeStatus() }
                         } label: {
-                            Label("Update Status", systemImage: "checkmark.circle")
+                            Image(systemName: "checkmark.circle")
                         }
+                        .help("Update status")
                         .disabled(episodeStatus == selectedEpisode.status)
                         Button {
                             Task { await exportSelectedEpisodeText() }
                         } label: {
-                            Label("Export TXT", systemImage: "square.and.arrow.up")
+                            Image(systemName: "square.and.arrow.up")
                         }
+                        .help("Export episode as TXT")
                         .disabled(versions.isEmpty)
-                        Button("Save Blueprint") {
+                        Button {
                             Task { await saveBlueprint() }
+                        } label: {
+                            Image(systemName: "tray.and.arrow.down")
                         }
+                        .help("Save blueprint (⌘S)")
                         .keyboardShortcut("s", modifiers: [.command])
-                        Button("Run Agents") {
+                        Button {
                             Task { await runAgents() }
+                        } label: {
+                            Label("Run Agents", systemImage: "play.fill")
+                                .labelStyle(.titleAndIcon)
                         }
+                        .help("Run agents (⇧⌘R)")
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut("r", modifiers: [.command, .shift])
                         .disabled(premise.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .layoutPriority(1)
                     }
                     .padding([.horizontal, .top], 18)
 
                     HSplitView {
                         blueprintEditor
-                            .frame(minWidth: 360)
+                            .frame(minWidth: 280)
                         runPanel
-                            .frame(minWidth: 360)
+                            .frame(minWidth: 280)
                     }
                     .padding(18)
 
@@ -230,6 +246,8 @@ struct EpisodeWorkbenchView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Agent Artifacts")
                         .font(.headline)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                     List(selection: $selectedArtifact) {
                         ForEach(artifacts) { artifact in
                             Text(artifact.title)
@@ -237,7 +255,7 @@ struct EpisodeWorkbenchView: View {
                         }
                     }
                 }
-                .frame(minWidth: 160)
+                .frame(minWidth: 140)
 
                 if let selectedArtifact {
                     ScrollView {
@@ -245,14 +263,16 @@ struct EpisodeWorkbenchView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .textSelection(.enabled)
                     }
-                    .frame(minWidth: 260)
+                    .frame(minWidth: 200)
                 } else {
                     ContentUnavailableView("No Artifact", systemImage: "doc.text")
-                        .frame(minWidth: 260)
+                        .frame(minWidth: 200)
                 }
             }
             Text("Run Timeline")
                 .font(.headline)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             List(events) { event in
                 HStack {
                     Text("#\(event.seq)")

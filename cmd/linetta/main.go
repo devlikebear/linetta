@@ -40,7 +40,7 @@ func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 		if err != nil {
 			return err
 		}
-		return runServe(ctx, opts, stderr)
+		return runServe(ctx, opts, stdout, stderr)
 	}
 	if len(args) > 0 && args[0] == "export-library" {
 		opts, err := parseExportLibraryOptions(args[1:], stderr)
@@ -154,7 +154,7 @@ func parseServeOptions(args []string, stderr io.Writer) (serveOptions, error) {
 	return opts, nil
 }
 
-func runServe(ctx context.Context, opts serveOptions, stderr io.Writer) error {
+func runServe(ctx context.Context, opts serveOptions, stdout, stderr io.Writer) error {
 	db, err := store.Open(opts.DBPath)
 	if err != nil {
 		return err
@@ -186,6 +186,10 @@ func runServe(ctx context.Context, opts serveOptions, stderr io.Writer) error {
 	addr := listener.Addr().String()
 	if opts.ready != nil {
 		opts.ready <- addr
+	}
+	fmt.Fprintf(stdout, "LINETTA_READY addr=%s pid=%d\n", addr, os.Getpid())
+	if flusher, ok := stdout.(interface{ Sync() error }); ok {
+		_ = flusher.Sync()
 	}
 	fmt.Fprintf(stderr, "linetta serve listening on http://%s\n", addr)
 	err = httpServer.Serve(listener)

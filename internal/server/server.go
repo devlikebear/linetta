@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/devlikebear/linetta/internal/agent"
@@ -811,7 +812,22 @@ func readJSON(r *http.Request, target any) error {
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	_ = json.NewEncoder(w).Encode(normalizeNilSlices(value))
+}
+
+// normalizeNilSlices replaces a top-level nil slice with an empty slice of the
+// same element type so the encoded JSON is `[]` instead of `null`. JSON clients
+// (notably Swift's JSONDecoder) reject `null` when decoding into a non-optional
+// array; this keeps list endpoints predictable.
+func normalizeNilSlices(value any) any {
+	if value == nil {
+		return value
+	}
+	v := reflect.ValueOf(value)
+	if v.Kind() == reflect.Slice && v.IsNil() {
+		return reflect.MakeSlice(v.Type(), 0, 0).Interface()
+	}
+	return value
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {

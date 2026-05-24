@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -233,16 +235,21 @@ func TestRunServeMigratesDatabaseAndServesHealth(t *testing.T) {
 
 	ready := make(chan string, 1)
 	done := make(chan error, 1)
+	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	go func() {
 		done <- runServe(ctx, serveOptions{
 			DBPath: filepath.Join(t.TempDir(), "linetta.db"),
 			Addr:   "127.0.0.1:0",
 			ready:  ready,
-		}, &stderr)
+		}, &stdout, &stderr)
 	}()
 
 	addr := waitForServeReady(t, ready)
+	readyPattern := regexp.MustCompile(`^LINETTA_READY addr=127\.0\.0\.1:\d+ pid=\d+$`)
+	if err := waitForReadyLine(&stdout, readyPattern, 2*time.Second); err != nil {
+		t.Fatalf("stdout ready line: %v; stdout=%q", err, stdout.String())
+	}
 	res, err := http.Get("http://" + addr + "/health")
 	if err != nil {
 		t.Fatalf("GET /health error = %v; stderr=%s", err, stderr.String())
@@ -376,6 +383,21 @@ func assertImportedLibrary(t *testing.T, dbPath string) {
 	if len(works) != 1 || works[0].Title != "Backup Work" {
 		t.Fatalf("works = %+v, want Backup Work", works)
 	}
+}
+
+func waitForReadyLine(buf *bytes.Buffer, pattern *regexp.Regexp, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		text := buf.String()
+		for line := range strings.SplitSeq(text, "\n") {
+			line = strings.TrimRight(line, "\r")
+			if pattern.MatchString(line) {
+				return nil
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return errors.New("timed out waiting for ready line")
 }
 
 func waitForServeReady(t *testing.T, ready <-chan string) string {

@@ -62,18 +62,39 @@ struct WorkGalleryView: View {
                 GalleryEmptyState(showingNewWork: $showingNewWork)
             }
         }
-        .frame(minWidth: 920, minHeight: 620)
+        .frame(minWidth: 1080, minHeight: 680)
         .sheet(isPresented: $showingNewWork) {
             NewWorkSheet()
         }
-        .overlay(alignment: .bottom) {
-            if let errorMessage = appState.errorMessage {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            StatusFooter(errorMessage: appState.errorMessage)
+        }
+    }
+}
+
+private struct StatusFooter: View {
+    var errorMessage: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            EngineStatusBadge()
+            if let errorMessage {
+                Divider().frame(height: 14)
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
                 Text(errorMessage)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-                    .padding()
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(.bar)
+        .overlay(alignment: .top) {
+            Divider()
         }
     }
 }
@@ -81,9 +102,10 @@ struct WorkGalleryView: View {
 private struct WorkRow: View {
     var work: Work
 
+    @EnvironmentObject private var appState: AppState
     @State private var stats: WorkStats?
 
-    private let client = APIClient()
+    private var client: APIClient { appState.client }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {

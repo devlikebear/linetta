@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import LinettaCore
 
@@ -7,11 +8,27 @@ final class AppState: ObservableObject {
     @Published var selectedWork: Work?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published private(set) var client: APIClient
 
-    private let client: APIClient
+    private let engine: EngineController
+    private var cancellables: Set<AnyCancellable> = []
 
-    init(client: APIClient = APIClient()) {
-        self.client = client
+    init(engine: EngineController) {
+        self.engine = engine
+        self.client = APIClient(baseURL: engine.address ?? APIClient.defaultBaseURL)
+        engine.$address
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] address in
+                guard let self else { return }
+                self.client = APIClient(baseURL: address ?? APIClient.defaultBaseURL)
+                if address != nil {
+                    Task { @MainActor [weak self] in
+                        await self?.refreshWorks()
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func refreshWorks() async {

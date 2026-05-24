@@ -27,11 +27,12 @@ struct WorkspaceView: View {
 private struct WorkOverview: View {
     var work: Work
 
+    @EnvironmentObject private var appState: AppState
     @State private var exportDocument = TextExportDocument()
     @State private var isExporting = false
     @State private var errorMessage: String?
 
-    private let client = APIClient()
+    private var client: APIClient { appState.client }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {

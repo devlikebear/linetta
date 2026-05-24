@@ -1,18 +1,24 @@
-import SwiftUI
 import AppKit
+import LinettaCore
+import SwiftUI
+
+@MainActor
+private let sharedEngine = EngineController()
+
+@MainActor
+private let sharedAppState = AppState(engine: sharedEngine)
 
 @main
 struct LinettaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var appState = AppState()
+    @StateObject private var engine = sharedEngine
+    @StateObject private var appState = sharedAppState
 
     var body: some Scene {
         WindowGroup {
             WorkGalleryView()
                 .environmentObject(appState)
-                .task {
-                    await appState.refreshWorks()
-                }
+                .environmentObject(engine)
         }
         .commands {
             CommandGroup(after: .newItem) {
@@ -24,6 +30,8 @@ struct LinettaApp: App {
         }
         Settings {
             SettingsView()
+                .environmentObject(appState)
+                .environmentObject(engine)
         }
     }
 }
@@ -31,10 +39,80 @@ struct LinettaApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        NSApp.applicationIconImage = Self.makeAppIcon()
         NSApp.activate(ignoringOtherApps: true)
+        Task { @MainActor in
+            await Self.bootEngine()
+        }
+    }
+
+    private static func makeAppIcon() -> NSImage {
+        let size = NSSize(width: 512, height: 512)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        let rect = NSRect(origin: .zero, size: size).insetBy(dx: 36, dy: 36)
+        let gradient = NSGradient(starting: NSColor(calibratedRed: 0.22, green: 0.28, blue: 0.50, alpha: 1),
+                                  ending: NSColor(calibratedRed: 0.10, green: 0.13, blue: 0.28, alpha: 1))
+        let bg = NSBezierPath(roundedRect: rect, xRadius: 96, yRadius: 96)
+        bg.addClip()
+        gradient?.draw(in: rect, angle: 270)
+
+        // Letter "L" centered
+        let glyph = "L"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 300, weight: .heavy),
+            .foregroundColor: NSColor.white,
+        ]
+        let glyphSize = (glyph as NSString).size(withAttributes: attrs)
+        let origin = NSPoint(
+            x: rect.midX - glyphSize.width / 2,
+            y: rect.midY - glyphSize.height / 2 - 12
+        )
+        (glyph as NSString).draw(at: origin, withAttributes: attrs)
+
+        // Underline tick to evoke a writer's mark
+        let tick = NSBezierPath()
+        let tickY = rect.midY - glyphSize.height / 2 - 24
+        tick.move(to: NSPoint(x: rect.midX - 56, y: tickY))
+        tick.line(to: NSPoint(x: rect.midX + 80, y: tickY))
+        tick.lineWidth = 14
+        NSColor(calibratedRed: 0.95, green: 0.80, blue: 0.55, alpha: 1).setStroke()
+        tick.stroke()
+
+        return image
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated {
+            sharedEngine.stopSync()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+
+    @MainActor
+    private static func bootEngine() async {
+        let engine = sharedEngine
+        let useExternal = UserDefaults.standard.bool(forKey: "linetta.useExternalEngine")
+        if useExternal {
+            engine.attachExternal(address: APIClient.defaultBaseURL)
+            await sharedAppState.refreshWorks()
+            return
+        }
+        guard let binary = EngineController.resolveBinaryPath(override: nil) else {
+            engine.attachExternal(address: APIClient.defaultBaseURL)
+            return
+        }
+        do {
+            try StoragePaths.ensureDataDirectory()
+            try await engine.startEmbedded(binaryPath: binary, dbPath: StoragePaths.defaultDB)
+            await sharedAppState.refreshWorks()
+        } catch {
+            NSLog("Linetta engine failed to start: %@", error.localizedDescription)
+        }
     }
 }
