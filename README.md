@@ -34,6 +34,52 @@ go run ./cmd/linetta \
   --output draft.md
 ```
 
+## Tessera Config
+
+Linetta can load Tessera YAML or JSON config files:
+
+```sh
+go run ./cmd/linetta \
+  --config examples/tessera.yaml \
+  --goal "Draft a hopeful climate fiction opening" \
+  --title "Harbor of Glass"
+```
+
+The app currently applies these config fields:
+
+- `run.id`
+- `run.workers`
+- `run.max_attempts`
+- `run.role_limits`
+- `queue.lease_timeout`
+- `observe.events_jsonl`
+- `observe.report_json`
+- `observe.html_report`
+
+`llm` and `roles` are validated by Tessera's config loader and kept in the file
+so the app can later swap the deterministic authoring handlers for real
+provider-backed agents without changing the config shape.
+
+## Run Visualization
+
+When `observe.events_jsonl` or `observe.html_report` is set, Linetta records
+Tessera run events and writes a static HTML run report:
+
+```sh
+go run ./cmd/linetta \
+  --config examples/tessera.yaml \
+  --goal "Draft a lighthouse mystery" \
+  --title "Signal Rain"
+```
+
+You can also visualize an existing events file:
+
+```sh
+go run ./cmd/linetta visualize \
+  .tessera/runs/linetta/events.jsonl \
+  --out .tessera/runs/linetta/report.html
+```
+
 ## Architecture
 
 Linetta uses Tessera's novel-team planner flow:
@@ -43,6 +89,8 @@ Linetta uses Tessera's novel-team planner flow:
 3. `mandate.New(...).Approve(...)` creates the approval gate.
 4. `run.NewTaskGraphFromPlan(...)` builds the task graph.
 5. `run.ExecuteTaskGraph(...)` dispatches the tasks through in-memory queue workers.
+6. `observe.JSONLinesSink` and `visualize.WriteHTMLReport` turn run events into
+   inspectable execution artifacts.
 
 The current authoring backend is deterministic so the app is testable without
 provider credentials. The executor boundary is isolated in `internal/novel`, so

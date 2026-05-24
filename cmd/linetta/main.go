@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/internal/novel"
+	"github.com/devlikebear/tessera/pkg/visualize"
 )
 
 func main() {
@@ -22,21 +23,40 @@ func main() {
 }
 
 func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer) error {
-	var cfg novel.Config
+	if len(args) > 0 && args[0] == "visualize" {
+		return runVisualize(args[1:])
+	}
+
 	var format string
 	var outputPath string
+	var configPath string
+	var goal string
+	var title string
+	var approvedBy string
 
 	flags := flag.NewFlagSet("linetta", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	flags.StringVar(&cfg.Goal, "goal", "", "novel-writing goal")
-	flags.StringVar(&cfg.Title, "title", "", "novel title")
-	flags.StringVar(&cfg.ApprovedBy, "approved-by", "operator", "mandate approver")
+	flags.StringVar(&configPath, "config", "", "Tessera YAML or JSON config path")
+	flags.StringVar(&goal, "goal", "", "novel-writing goal")
+	flags.StringVar(&title, "title", "", "novel title")
+	flags.StringVar(&approvedBy, "approved-by", "operator", "mandate approver")
 	flags.StringVar(&format, "format", "markdown", "output format: markdown or json")
 	flags.StringVar(&outputPath, "output", "", "write output to a file")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 
+	cfg := novel.Config{}
+	if configPath != "" {
+		loaded, err := novel.LoadTesseraConfig(configPath)
+		if err != nil {
+			return err
+		}
+		cfg = loaded
+	}
+	cfg.Goal = goal
+	cfg.Title = title
+	cfg.ApprovedBy = approvedBy
 	if strings.TrimSpace(cfg.Goal) == "" && flags.NArg() > 0 {
 		cfg.Goal = strings.Join(flags.Args(), " ")
 	}
@@ -62,6 +82,45 @@ func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	}
 	_, err = stdout.Write(data)
 	return err
+}
+
+func runVisualize(args []string) error {
+	eventsPath, outPath, err := parseVisualizeArgs(args)
+	if err != nil {
+		return err
+	}
+	return visualize.WriteHTMLReportFile(eventsPath, outPath)
+}
+
+func parseVisualizeArgs(args []string) (string, string, error) {
+	var eventsPath string
+	var outPath string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "--out":
+			i++
+			if i >= len(args) {
+				return "", "", errors.New("missing value for --out")
+			}
+			outPath = args[i]
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return "", "", fmt.Errorf("unsupported visualize flag: %s", arg)
+			}
+			if eventsPath != "" {
+				return "", "", fmt.Errorf("unexpected visualize argument: %s", arg)
+			}
+			eventsPath = arg
+		}
+	}
+	if eventsPath == "" {
+		return "", "", errors.New("visualize requires an events JSONL path")
+	}
+	if outPath == "" {
+		return "", "", errors.New("visualize requires --out <report.html>")
+	}
+	return eventsPath, outPath, nil
 }
 
 func encodeReport(report novel.Report, format string) ([]byte, error) {

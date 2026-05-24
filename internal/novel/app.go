@@ -2,19 +2,25 @@ package novel
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	tesseraconfig "github.com/devlikebear/tessera/pkg/config"
 	"github.com/devlikebear/tessera/pkg/council"
 	"github.com/devlikebear/tessera/pkg/executor"
 	"github.com/devlikebear/tessera/pkg/leader"
 	"github.com/devlikebear/tessera/pkg/mandate"
+	"github.com/devlikebear/tessera/pkg/observe"
 	"github.com/devlikebear/tessera/pkg/queue"
 	"github.com/devlikebear/tessera/pkg/run"
+	"github.com/devlikebear/tessera/pkg/visualize"
 )
 
 const appName = "linetta"
@@ -22,12 +28,19 @@ const appName = "linetta"
 var ErrBlankGoal = errors.New("novel goal is required")
 
 type Config struct {
-	Goal        string
-	Title       string
-	ApprovedBy  string
-	ApprovedAt  time.Time
-	Workers     int
-	MaxAttempts int
+	Goal           string
+	Title          string
+	ApprovedBy     string
+	ApprovedAt     time.Time
+	RunID          string
+	Workers        int
+	MaxAttempts    int
+	RoleLimits     map[string]int
+	LeaseTimeout   time.Duration
+	EventsPath     string
+	ReportPath     string
+	HTMLReportPath string
+	EventSink      run.EventSink
 }
 
 type Review struct {
@@ -37,16 +50,41 @@ type Review struct {
 }
 
 type Report struct {
-	App        string            `json:"app"`
-	Title      string            `json:"title"`
-	Goal       string            `json:"goal"`
-	PlanID     string            `json:"plan_id"`
-	RunID      string            `json:"run_id"`
-	Closure    string            `json:"closure"`
-	Succeeded  int               `json:"succeeded"`
-	EventCount int               `json:"event_count"`
-	Reviews    []Review          `json:"reviews"`
-	Artifacts  map[string]string `json:"artifacts"`
+	App            string            `json:"app"`
+	Title          string            `json:"title"`
+	Goal           string            `json:"goal"`
+	PlanID         string            `json:"plan_id"`
+	RunID          string            `json:"run_id"`
+	Closure        string            `json:"closure"`
+	Succeeded      int               `json:"succeeded"`
+	EventCount     int               `json:"event_count"`
+	EventsPath     string            `json:"events_path,omitempty"`
+	ReportPath     string            `json:"report_path,omitempty"`
+	HTMLReportPath string            `json:"html_report_path,omitempty"`
+	Reviews        []Review          `json:"reviews"`
+	Artifacts      map[string]string `json:"artifacts"`
+}
+
+func LoadTesseraConfig(path string) (Config, error) {
+	cfg, err := tesseraconfig.LoadFile(path)
+	if err != nil {
+		return Config{}, err
+	}
+	return ConfigFromTessera(cfg), nil
+}
+
+func ConfigFromTessera(cfg tesseraconfig.Config) Config {
+	opts := cfg.RunOptions()
+	return Config{
+		RunID:          opts.RunID,
+		Workers:        opts.Workers,
+		MaxAttempts:    opts.MaxAttempts,
+		RoleLimits:     opts.RoleLimits,
+		LeaseTimeout:   opts.LeaseTimeout,
+		EventsPath:     cfg.Observe.EventsJSONL,
+		ReportPath:     cfg.Observe.ReportJSON,
+		HTMLReportPath: cfg.Observe.HTMLReport,
+	}
 }
 
 func Run(ctx context.Context, cfg Config) (Report, error) {
@@ -82,37 +120,54 @@ func Run(ctx context.Context, cfg Config) (Report, error) {
 	}
 
 	artifacts := newArtifactStore()
+	eventSink, memorySink, closeSink, err := cfg.buildEventSink()
+	if err != nil {
+		return Report{}, err
+	}
 	result, err := run.ExecuteTaskGraph(ctx, run.ExecutionConfig{
-		RunID:       "linetta-run",
+		RunID:       cfg.RunID,
 		Mandate:     m,
 		Graph:       graph,
-		Queue:       queue.NewInMemory(),
+		Queue:       queue.NewInMemory(queue.WithLeaseTimeout(cfg.LeaseTimeout)),
+		EventSink:   eventSink,
 		Workers:     cfg.Workers,
 		MaxAttempts: cfg.MaxAttempts,
-		RoleLimits: map[string]int{
-			"researcher": 1,
-			"leader":     1,
-			"writer":     1,
-			"editor":     1,
-		},
-		Executor: newNovelExecutor(cfg, artifacts),
+		RoleLimits:  cfg.RoleLimits,
+		Executor:    newNovelExecutor(cfg, artifacts),
 	})
+	if closeErr := closeSink(); closeErr != nil && err == nil {
+		err = closeErr
+	}
 	if err != nil {
 		return Report{}, err
 	}
 
-	return Report{
-		App:        appName,
-		Title:      cfg.Title,
-		Goal:       cfg.Goal,
-		PlanID:     plan.ID,
-		RunID:      result.Report.RunID,
-		Closure:    string(result.Report.Closure),
-		Succeeded:  result.Report.Succeeded,
-		EventCount: len(result.Report.Events),
-		Reviews:    reviewsFromCouncil(councilReport),
-		Artifacts:  artifacts.snapshot(),
-	}, nil
+	report := Report{
+		App:            appName,
+		Title:          cfg.Title,
+		Goal:           cfg.Goal,
+		PlanID:         plan.ID,
+		RunID:          result.Report.RunID,
+		Closure:        string(result.Report.Closure),
+		Succeeded:      result.Report.Succeeded,
+		EventCount:     len(result.Report.Events),
+		EventsPath:     cfg.EventsPath,
+		ReportPath:     cfg.ReportPath,
+		HTMLReportPath: cfg.HTMLReportPath,
+		Reviews:        reviewsFromCouncil(councilReport),
+		Artifacts:      artifacts.snapshot(),
+	}
+	if cfg.HTMLReportPath != "" {
+		if err := writeHTMLReportFile(cfg.HTMLReportPath, memorySink.Events()); err != nil {
+			return Report{}, err
+		}
+	}
+	if cfg.ReportPath != "" {
+		if err := writeJSONFile(cfg.ReportPath, report); err != nil {
+			return Report{}, err
+		}
+	}
+	return report, nil
 }
 
 func (c Config) withDefaults() Config {
@@ -121,6 +176,9 @@ func (c Config) withDefaults() Config {
 	c.ApprovedBy = strings.TrimSpace(c.ApprovedBy)
 	if c.Title == "" {
 		c.Title = "Linetta Novel"
+	}
+	if c.RunID == "" {
+		c.RunID = "linetta-run"
 	}
 	if c.ApprovedBy == "" {
 		c.ApprovedBy = "operator"
@@ -134,7 +192,56 @@ func (c Config) withDefaults() Config {
 	if c.MaxAttempts <= 0 {
 		c.MaxAttempts = 2
 	}
+	if len(c.RoleLimits) == 0 {
+		c.RoleLimits = map[string]int{
+			"researcher": 1,
+			"leader":     1,
+			"writer":     1,
+			"editor":     1,
+		}
+	} else {
+		c.RoleLimits = cloneRoleLimits(c.RoleLimits)
+	}
+	if c.LeaseTimeout <= 0 {
+		c.LeaseTimeout = 30 * time.Second
+	}
 	return c
+}
+
+func (c Config) buildEventSink() (run.EventSink, *observe.MemorySink, func() error, error) {
+	var sinks []observe.Sink
+	memorySink := &observe.MemorySink{}
+	if c.HTMLReportPath != "" {
+		sinks = append(sinks, memorySink)
+	}
+
+	var eventsFile *observe.JSONLinesSink
+	if c.EventsPath != "" {
+		fileSink, err := observe.NewJSONLinesFile(c.EventsPath)
+		if err != nil {
+			return nil, memorySink, func() error { return nil }, err
+		}
+		eventsFile = fileSink
+		sinks = append(sinks, fileSink)
+	}
+	if c.EventSink != nil {
+		sinks = append(sinks, c.EventSink)
+	}
+
+	closeSink := func() error {
+		if eventsFile == nil {
+			return nil
+		}
+		return eventsFile.Close()
+	}
+	switch len(sinks) {
+	case 0:
+		return nil, memorySink, closeSink, nil
+	case 1:
+		return sinks[0], memorySink, closeSink, nil
+	default:
+		return observe.MultiSink(sinks), memorySink, closeSink, nil
+	}
 }
 
 func reviewsFromCouncil(report council.Report) []Review {
@@ -147,6 +254,14 @@ func reviewsFromCouncil(report council.Report) []Review {
 		}
 	}
 	return reviews
+}
+
+func cloneRoleLimits(in map[string]int) map[string]int {
+	out := make(map[string]int, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
 
 func newNovelExecutor(cfg Config, artifacts *artifactStore) executor.TaskExecutor {
@@ -263,6 +378,34 @@ func RenderMarkdown(report Report) string {
 		fmt.Fprintln(&b)
 	}
 	return strings.TrimRight(b.String(), "\n") + "\n"
+}
+
+func writeJSONFile(path string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if err := ensureParentDir(path); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+func writeHTMLReportFile(path string, events []run.Event) error {
+	if err := ensureParentDir(path); err != nil {
+		return err
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return visualize.WriteHTMLReport(file, visualize.Project(events))
+}
+
+func ensureParentDir(path string) error {
+	return os.MkdirAll(filepath.Dir(path), 0o755)
 }
 
 type artifactStore struct {
