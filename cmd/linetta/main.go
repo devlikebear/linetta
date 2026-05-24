@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -40,6 +41,20 @@ func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 			return err
 		}
 		return runServe(ctx, opts, stderr)
+	}
+	if len(args) > 0 && args[0] == "export-library" {
+		opts, err := parseExportLibraryOptions(args[1:], stderr)
+		if err != nil {
+			return err
+		}
+		return runExportLibrary(opts)
+	}
+	if len(args) > 0 && args[0] == "import-library" {
+		opts, err := parseImportLibraryOptions(args[1:], stderr)
+		if err != nil {
+			return err
+		}
+		return runImportLibrary(opts)
 	}
 
 	var format string
@@ -105,6 +120,19 @@ type serveOptions struct {
 	ready  chan<- string
 }
 
+type exportLibraryOptions struct {
+	DBPath     string
+	ConfigPath string
+	OutPath    string
+}
+
+type importLibraryOptions struct {
+	InPath    string
+	DBPath    string
+	ConfigOut string
+	Force     bool
+}
+
 func parseServeOptions(args []string, stderr io.Writer) (serveOptions, error) {
 	opts := serveOptions{
 		DBPath: defaultDBPath(),
@@ -165,6 +193,133 @@ func runServe(ctx context.Context, opts serveOptions, stderr io.Writer) error {
 		return nil
 	}
 	return err
+}
+
+func parseExportLibraryOptions(args []string, stderr io.Writer) (exportLibraryOptions, error) {
+	opts := exportLibraryOptions{DBPath: defaultDBPath()}
+	flags := flag.NewFlagSet("linetta export-library", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.StringVar(&opts.DBPath, "db", opts.DBPath, "SQLite database path")
+	flags.StringVar(&opts.ConfigPath, "config", "", "optional Tessera config path to snapshot")
+	flags.StringVar(&opts.OutPath, "out", "", "backup zip output path")
+	if err := flags.Parse(args); err != nil {
+		return exportLibraryOptions{}, err
+	}
+	if strings.TrimSpace(opts.DBPath) == "" {
+		return exportLibraryOptions{}, errors.New("missing --db")
+	}
+	if strings.TrimSpace(opts.OutPath) == "" {
+		return exportLibraryOptions{}, errors.New("missing --out")
+	}
+	return opts, nil
+}
+
+func parseImportLibraryOptions(args []string, stderr io.Writer) (importLibraryOptions, error) {
+	opts := importLibraryOptions{DBPath: defaultDBPath()}
+	flags := flag.NewFlagSet("linetta import-library", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.StringVar(&opts.InPath, "in", "", "backup zip input path")
+	flags.StringVar(&opts.DBPath, "db", opts.DBPath, "SQLite database restore path")
+	flags.StringVar(&opts.ConfigOut, "config-out", "", "optional path to restore Tessera config snapshot")
+	flags.BoolVar(&opts.Force, "force", false, "overwrite an existing database path")
+	if err := flags.Parse(args); err != nil {
+		return importLibraryOptions{}, err
+	}
+	if strings.TrimSpace(opts.InPath) == "" {
+		return importLibraryOptions{}, errors.New("missing --in")
+	}
+	if strings.TrimSpace(opts.DBPath) == "" {
+		return importLibraryOptions{}, errors.New("missing --db")
+	}
+	return opts, nil
+}
+
+func runExportLibrary(opts exportLibraryOptions) error {
+	if _, err := os.Stat(opts.DBPath); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(opts.OutPath), 0o755); err != nil {
+		return err
+	}
+	file, err := os.Create(opts.OutPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	archive := zip.NewWriter(file)
+	if err := addZipFile(archive, "library.db", opts.DBPath); err != nil {
+		_ = archive.Close()
+		return err
+	}
+	if strings.TrimSpace(opts.ConfigPath) != "" {
+		if err := addZipFile(archive, "tessera-config.yaml", opts.ConfigPath); err != nil {
+			_ = archive.Close()
+			return err
+		}
+	}
+	return archive.Close()
+}
+
+func runImportLibrary(opts importLibraryOptions) error {
+	if !opts.Force {
+		if _, err := os.Stat(opts.DBPath); err == nil {
+			return fmt.Errorf("database already exists at %s; pass --force to overwrite", opts.DBPath)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	reader, err := zip.OpenReader(opts.InPath)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	if err := extractZipFile(reader.File, "library.db", opts.DBPath); err != nil {
+		return err
+	}
+	if strings.TrimSpace(opts.ConfigOut) != "" {
+		if err := extractZipFile(reader.File, "tessera-config.yaml", opts.ConfigOut); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addZipFile(archive *zip.Writer, name, path string) error {
+	source, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	target, err := archive.Create(name)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(target, source)
+	return err
+}
+
+func extractZipFile(files []*zip.File, name, outPath string) error {
+	for _, file := range files {
+		if file.Name != name {
+			continue
+		}
+		source, err := file.Open()
+		if err != nil {
+			return err
+		}
+		defer source.Close()
+		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+			return err
+		}
+		target, err := os.Create(outPath)
+		if err != nil {
+			return err
+		}
+		defer target.Close()
+		_, err = io.Copy(target, source)
+		return err
+	}
+	return fmt.Errorf("backup missing %s", name)
 }
 
 func defaultDBPath() string {

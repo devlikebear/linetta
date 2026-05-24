@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,6 +11,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/devlikebear/linetta/internal/memory"
+	"github.com/devlikebear/linetta/internal/store"
+	"github.com/devlikebear/linetta/internal/work"
 )
 
 func TestRunCLIWritesMarkdownByDefault(t *testing.T) {
@@ -160,6 +165,50 @@ observe:
 	}
 }
 
+func TestRunCLIExportsAndImportsLibraryBackup(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "library.db")
+	configPath := filepath.Join(dir, "tessera.yaml")
+	backupPath := filepath.Join(dir, "backup.zip")
+	importedPath := filepath.Join(dir, "imported.db")
+	seedLibrary(t, dbPath)
+	if err := os.WriteFile(configPath, []byte("run:\n  id: backup-run\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(config) error = %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if err := runCLI(context.Background(), []string{
+		"export-library",
+		"--db", dbPath,
+		"--config", configPath,
+		"--out", backupPath,
+	}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI(export-library) error = %v", err)
+	}
+	assertZipContains(t, backupPath, "library.db", "tessera-config.yaml")
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := runCLI(context.Background(), []string{
+		"import-library",
+		"--in", backupPath,
+		"--db", importedPath,
+	}, &stdout, &stderr); err != nil {
+		t.Fatalf("runCLI(import-library) error = %v", err)
+	}
+	assertImportedLibrary(t, importedPath)
+
+	err := runCLI(context.Background(), []string{
+		"import-library",
+		"--in", backupPath,
+		"--db", importedPath,
+	}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runCLI(import-library existing db) error = nil, want overwrite protection")
+	}
+}
+
 func TestParseServeOptionsUsesCustomValues(t *testing.T) {
 	var stderr bytes.Buffer
 
@@ -257,6 +306,76 @@ func writeConfig(t *testing.T, dir, body string) string {
 		t.Fatalf("WriteFile(config) error = %v", err)
 	}
 	return path
+}
+
+func seedLibrary(t *testing.T, dbPath string) {
+	t.Helper()
+	ctx := context.Background()
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open() error = %v", err)
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate() error = %v", err)
+	}
+	workRepo := work.NewRepository(db)
+	memoryRepo := memory.NewRepository(db, workRepo)
+	workItem, err := workRepo.CreateWork(ctx, work.CreateWorkInput{Title: "Backup Work"})
+	if err != nil {
+		t.Fatalf("CreateWork() error = %v", err)
+	}
+	episode, err := workRepo.CreateEpisode(ctx, workItem.ID, "Episode 1")
+	if err != nil {
+		t.Fatalf("CreateEpisode() error = %v", err)
+	}
+	if _, err := workRepo.CreateEpisodeVersion(ctx, workItem.ID, episode.ID, work.CreateEpisodeVersionInput{Body: "backup manuscript"}); err != nil {
+		t.Fatalf("CreateEpisodeVersion() error = %v", err)
+	}
+	if _, err := memoryRepo.CreateItem(ctx, memory.CreateItemInput{
+		WorkID: workItem.ID,
+		Kind:   memory.KindCharacter,
+		Title:  "Mira",
+		Status: memory.StatusCanon,
+	}); err != nil {
+		t.Fatalf("CreateItem() error = %v", err)
+	}
+}
+
+func assertZipContains(t *testing.T, zipPath string, names ...string) {
+	t.Helper()
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		t.Fatalf("zip.OpenReader() error = %v", err)
+	}
+	defer reader.Close()
+	found := make(map[string]bool)
+	for _, file := range reader.File {
+		found[file.Name] = true
+	}
+	for _, name := range names {
+		if !found[name] {
+			t.Fatalf("backup missing %q; entries=%+v", name, found)
+		}
+	}
+}
+
+func assertImportedLibrary(t *testing.T, dbPath string) {
+	t.Helper()
+	ctx := context.Background()
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("store.Open(imported) error = %v", err)
+	}
+	defer db.Close()
+	repo := work.NewRepository(db)
+	works, err := repo.ListWorks(ctx)
+	if err != nil {
+		t.Fatalf("ListWorks(imported) error = %v", err)
+	}
+	if len(works) != 1 || works[0].Title != "Backup Work" {
+		t.Fatalf("works = %+v, want Backup Work", works)
+	}
 }
 
 func waitForServeReady(t *testing.T, ready <-chan string) string {
