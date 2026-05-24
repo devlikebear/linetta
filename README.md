@@ -34,6 +34,38 @@ go run ./cmd/linetta \
   --output draft.md
 ```
 
+## Local Engine
+
+Start the local library engine before opening the Mac app:
+
+```sh
+go run ./cmd/linetta serve \
+  --db .linetta/dev.db \
+  --addr 127.0.0.1:43190
+```
+
+The Phase 1 API exposes:
+
+- `GET /health`
+- `GET /api/works`
+- `POST /api/works`
+- `GET /api/works/{workID}`
+- `GET /api/works/{workID}/episodes`
+- `POST /api/works/{workID}/episodes`
+
+## Mac App
+
+The SwiftUI scaffold lives in `macos/Linetta`:
+
+```sh
+cd macos/Linetta
+swift test
+swift run Linetta
+```
+
+The app opens to a work gallery, can create a new work through the local engine,
+and shows a first workspace shell for the selected work.
+
 ## Tessera Config
 
 Linetta can load Tessera YAML or JSON config files:

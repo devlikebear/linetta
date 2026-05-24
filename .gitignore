@@ -2,5 +2,8 @@
 /dist/
 /.tessera/
 /.linetta/
+.build/
+.swiftpm/
+DerivedData/
 *.out
 *.test
