@@ -8,6 +8,12 @@ private let sharedEngine = EngineController()
 @MainActor
 private let sharedAppState = AppState(engine: sharedEngine)
 
+@MainActor private let sharedSidebarState = SidebarState()
+@MainActor private let sharedEpisodeState = EpisodeState()
+@MainActor private let sharedManuscriptState = ManuscriptState()
+@MainActor private let sharedCommandPalette = CommandPaletteState()
+@MainActor private let sharedToastCenter = ToastCenter()
+
 @main
 struct LinettaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -19,6 +25,11 @@ struct LinettaApp: App {
             WorkGalleryView()
                 .environment(appState)
                 .environmentObject(engine)
+                .environment(sharedSidebarState)
+                .environment(sharedEpisodeState)
+                .environment(sharedManuscriptState)
+                .environment(sharedCommandPalette)
+                .environment(sharedToastCenter)
         }
         .commands {
             CommandGroup(after: .newItem) {
@@ -32,6 +43,11 @@ struct LinettaApp: App {
             SettingsView()
                 .environment(appState)
                 .environmentObject(engine)
+                .environment(sharedSidebarState)
+                .environment(sharedEpisodeState)
+                .environment(sharedManuscriptState)
+                .environment(sharedCommandPalette)
+                .environment(sharedToastCenter)
         }
     }
 }
