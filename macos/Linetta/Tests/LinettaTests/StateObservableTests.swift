@@ -73,3 +73,23 @@ final class ManuscriptStateTests: XCTestCase {
         XCTAssertEqual(s.width, 480)
     }
 }
+
+@MainActor
+final class CommandPaletteStateTests: XCTestCase {
+    func testOpenClearsQuery() {
+        let s = CommandPaletteState()
+        s.query = "foo"
+        s.isOpen = false
+        s.isOpen = true
+        XCTAssertEqual(s.query, "")
+    }
+}
+
+@MainActor
+final class ToastCenterTests: XCTestCase {
+    func testEnqueueAppendsToast() {
+        let center = ToastCenter()
+        center.enqueue(.init(title: "Hello", kind: .info))
+        XCTAssertEqual(center.toasts.count, 1)
+    }
+}
