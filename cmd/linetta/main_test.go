@@ -203,6 +203,9 @@ func TestRunServeMigratesDatabaseAndServesHealth(t *testing.T) {
 		t.Fatalf("status = %d, want 200", res.StatusCode)
 	}
 
+	workID := createWorkThroughServer(t, addr)
+	createMemoryThroughServer(t, addr, workID)
+
 	cancel()
 	select {
 	case err := <-done:
@@ -211,6 +214,39 @@ func TestRunServeMigratesDatabaseAndServesHealth(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("runServe() did not stop after context cancellation")
+	}
+}
+
+func createWorkThroughServer(t *testing.T, addr string) string {
+	t.Helper()
+	body := strings.NewReader(`{"title":"Serve Smoke"}`)
+	res, err := http.Post("http://"+addr+"/api/works", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/works error = %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/works status = %d, want 201", res.StatusCode)
+	}
+	var payload struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode(work) error = %v", err)
+	}
+	return payload.ID
+}
+
+func createMemoryThroughServer(t *testing.T, addr, workID string) {
+	t.Helper()
+	body := strings.NewReader(`{"kind":"character","title":"Mira"}`)
+	res, err := http.Post("http://"+addr+"/api/works/"+workID+"/memory", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /memory error = %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /memory status = %d, want 201", res.StatusCode)
 	}
 }
 
