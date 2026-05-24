@@ -110,4 +110,40 @@ var migrationStatements = []string{
 		FOREIGN KEY (run_id) REFERENCES agent_runs(id) ON DELETE CASCADE,
 		UNIQUE(run_id, seq)
 	)`,
+	`CREATE TABLE IF NOT EXISTS canon_items (
+		id TEXT PRIMARY KEY,
+		work_id TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		title TEXT NOT NULL,
+		body TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL,
+		importance TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_canon_items_work_kind_status ON canon_items(work_id, kind, status, updated_at)`,
+	`CREATE TABLE IF NOT EXISTS canon_decisions (
+		id TEXT PRIMARY KEY,
+		work_id TEXT NOT NULL,
+		canon_item_id TEXT NOT NULL,
+		decision_type TEXT NOT NULL,
+		reason TEXT NOT NULL DEFAULT '',
+		actor TEXT NOT NULL DEFAULT 'human',
+		created_at TEXT NOT NULL,
+		FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+		FOREIGN KEY (canon_item_id) REFERENCES canon_items(id) ON DELETE CASCADE
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_canon_decisions_work_created ON canon_decisions(work_id, created_at)`,
+	`CREATE TABLE IF NOT EXISTS memory_links (
+		id TEXT PRIMARY KEY,
+		work_id TEXT NOT NULL,
+		from_item_id TEXT NOT NULL,
+		to_item_id TEXT NOT NULL,
+		relation TEXT NOT NULL,
+		created_at TEXT NOT NULL,
+		FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+		FOREIGN KEY (from_item_id) REFERENCES canon_items(id) ON DELETE CASCADE,
+		FOREIGN KEY (to_item_id) REFERENCES canon_items(id) ON DELETE CASCADE
+	)`,
 }
