@@ -11,11 +11,7 @@ struct AppShell: View {
             SidebarView()
                 .frame(minWidth: 220, idealWidth: 230, maxWidth: 320)
         } detail: {
-            // MainPaneRouter() — wired in Task E1
-            Color.clear
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(LinettaTheme.background)
-                .overlay { Text("Main").foregroundStyle(LinettaTheme.textTertiary) }
+            MainPaneRouter()
                 .inspector(isPresented: inspectorBinding) {
                     Color.clear
                         .frame(minWidth: 280, idealWidth: manuscript.width, maxWidth: 480)
