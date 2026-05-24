@@ -29,20 +29,18 @@ struct SidebarView: View {
 }
 
 private struct SidebarHeader: View {
+    @State private var showingNewWork = false
     var body: some View {
         HStack {
-            Text("Linetta")
-                .font(LinettaTypography.titleSmall)
-                .foregroundStyle(LinettaTheme.text)
+            Text("Linetta").font(LinettaTypography.titleSmall).foregroundStyle(LinettaTheme.text)
             Spacer()
-            Button { /* new work — wired in Task D4 */ } label: {
-                Image(systemName: "plus")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(LinettaTheme.textSecondary)
+            Button { showingNewWork = true } label: { Image(systemName: "plus") }
+                .buttonStyle(.plain)
+                .keyboardShortcut("n", modifiers: [.command])
+                .foregroundStyle(LinettaTheme.textSecondary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .sheet(isPresented: $showingNewWork) { NewWorkSheet() }
     }
 }
 

@@ -57,11 +57,25 @@ struct SidebarWorkRow: View {
 
 private struct NewEpisodePlaceholder: View {
     let workID: String
+    @Environment(AppState.self) private var appState
+    @State private var pending = false
+
     var body: some View {
-        Text("＋ New episode")
-            .font(LinettaTypography.bodySmall)
-            .foregroundStyle(LinettaTheme.textTertiary)
-            .padding(.leading, 24)
-            .padding(.vertical, 4)
+        Button {
+            Task { await create() }
+        } label: {
+            Text(pending ? "Creating…" : "＋ New episode")
+                .font(LinettaTypography.bodySmall)
+                .foregroundStyle(LinettaTheme.textTertiary)
+                .padding(.leading, 24).padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("n", modifiers: [.command, .shift])
+    }
+
+    private func create() async {
+        pending = true
+        defer { pending = false }
+        _ = try? await appState.client.createEpisode(workID: workID, request: .init(title: "New Episode"))
     }
 }
