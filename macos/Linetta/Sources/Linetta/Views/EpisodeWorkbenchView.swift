@@ -52,6 +52,7 @@ struct EpisodeWorkbenchView: View {
                     Label("New Episode", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut("n", modifiers: [.command, .shift])
             }
             .padding(16)
             .navigationTitle("Episodes")
@@ -90,10 +91,12 @@ struct EpisodeWorkbenchView: View {
                         Button("Save Blueprint") {
                             Task { await saveBlueprint() }
                         }
+                        .keyboardShortcut("s", modifiers: [.command])
                         Button("Run Agents") {
                             Task { await runAgents() }
                         }
                         .buttonStyle(.borderedProminent)
+                        .keyboardShortcut("r", modifiers: [.command, .shift])
                         .disabled(premise.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding([.horizontal, .top], 18)
@@ -129,6 +132,7 @@ struct EpisodeWorkbenchView: View {
                     Button("New Episode") {
                         Task { await createEpisode() }
                     }
+                    .keyboardShortcut("n", modifiers: [.command, .shift])
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

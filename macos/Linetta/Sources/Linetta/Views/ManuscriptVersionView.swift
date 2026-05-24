@@ -35,6 +35,7 @@ struct ManuscriptVersionView: View {
                         Label("Save Version", systemImage: "square.and.pencil")
                     }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("s", modifiers: [.command, .option])
                     .disabled(bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     Button {

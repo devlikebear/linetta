@@ -59,6 +59,7 @@ struct CanonMemoryView: View {
                     Label("New Memory", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut("m", modifiers: [.command, .shift])
             }
             .padding(16)
             .navigationTitle("Canon Memory")
@@ -115,6 +116,7 @@ struct CanonMemoryView: View {
                         Task { await save() }
                     }
                     .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut("s", modifiers: [.command])
                     .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

@@ -4,15 +4,41 @@ import SwiftUI
 struct WorkGalleryView: View {
     @EnvironmentObject private var appState: AppState
     @State private var showingNewWork = false
+    @State private var query = ""
+    @State private var statusFilter = "all"
+
+    private var filteredWorks: [Work] {
+        appState.works.filter { work in
+            let matchesStatus = statusFilter == "all" || work.status == statusFilter
+            let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedQuery.isEmpty else {
+                return matchesStatus
+            }
+            let haystack = (work.title + " " + work.genre + " " + work.premise).localizedCaseInsensitiveContains(trimmedQuery)
+            return matchesStatus && haystack
+        }
+    }
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $appState.selectedWork) {
-                ForEach(appState.works) { work in
-                    WorkRow(work: work)
-                        .tag(work)
+            VStack(spacing: 10) {
+                TextField("Search works", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                Picker("Status", selection: $statusFilter) {
+                    Text("All").tag("all")
+                    Text("Active").tag("active")
+                    Text("Archived").tag("archived")
+                }
+                .pickerStyle(.segmented)
+                List(selection: $appState.selectedWork) {
+                    ForEach(filteredWorks) { work in
+                        WorkRow(work: work)
+                            .tag(work)
+                    }
                 }
             }
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
             .navigationTitle("Works")
             .toolbar {
                 ToolbarItemGroup {
@@ -26,6 +52,7 @@ struct WorkGalleryView: View {
                     } label: {
                         Image(systemName: "plus")
                     }
+                    .keyboardShortcut("n", modifiers: [.command])
                 }
             }
         } detail: {
