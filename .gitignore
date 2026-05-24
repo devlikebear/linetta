@@ -1,5 +1,6 @@
 /linetta
 /dist/
 /.tessera/
+/.linetta/
 *.out
 *.test

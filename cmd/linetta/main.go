@@ -7,11 +7,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/devlikebear/linetta/internal/novel"
+	"github.com/devlikebear/linetta/internal/server"
+	"github.com/devlikebear/linetta/internal/store"
+	"github.com/devlikebear/linetta/internal/work"
 	"github.com/devlikebear/tessera/pkg/visualize"
 )
 
@@ -25,6 +31,13 @@ func main() {
 func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 && args[0] == "visualize" {
 		return runVisualize(args[1:])
+	}
+	if len(args) > 0 && args[0] == "serve" {
+		opts, err := parseServeOptions(args[1:], stderr)
+		if err != nil {
+			return err
+		}
+		return runServe(ctx, opts, stderr)
 	}
 
 	var format string
@@ -82,6 +95,77 @@ func runCLI(ctx context.Context, args []string, stdout, stderr io.Writer) error 
 	}
 	_, err = stdout.Write(data)
 	return err
+}
+
+type serveOptions struct {
+	DBPath string
+	Addr   string
+	ready  chan<- string
+}
+
+func parseServeOptions(args []string, stderr io.Writer) (serveOptions, error) {
+	opts := serveOptions{
+		DBPath: defaultDBPath(),
+		Addr:   "127.0.0.1:43190",
+	}
+	flags := flag.NewFlagSet("linetta serve", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.StringVar(&opts.DBPath, "db", opts.DBPath, "SQLite database path")
+	flags.StringVar(&opts.Addr, "addr", opts.Addr, "HTTP listen address")
+	if err := flags.Parse(args); err != nil {
+		return serveOptions{}, err
+	}
+	if strings.TrimSpace(opts.DBPath) == "" {
+		return serveOptions{}, errors.New("missing --db")
+	}
+	if strings.TrimSpace(opts.Addr) == "" {
+		return serveOptions{}, errors.New("missing --addr")
+	}
+	return opts, nil
+}
+
+func runServe(ctx context.Context, opts serveOptions, stderr io.Writer) error {
+	db, err := store.Open(opts.DBPath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if err := db.Migrate(ctx); err != nil {
+		return err
+	}
+
+	listener, err := net.Listen("tcp", opts.Addr)
+	if err != nil {
+		return err
+	}
+	httpServer := &http.Server{
+		Handler: server.New(work.NewRepository(db), server.Options{}),
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(shutdownCtx)
+	}()
+
+	addr := listener.Addr().String()
+	if opts.ready != nil {
+		opts.ready <- addr
+	}
+	fmt.Fprintf(stderr, "linetta serve listening on http://%s\n", addr)
+	err = httpServer.Serve(listener)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func defaultDBPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return filepath.Join(".linetta", "linetta.db")
+	}
+	return filepath.Join(home, ".linetta", "linetta.db")
 }
 
 func runVisualize(args []string) error {
