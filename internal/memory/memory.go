@@ -103,6 +103,56 @@ type Decision struct {
 	CreatedAt   time.Time    `json:"created_at"`
 }
 
+type ProposalChangeType string
+
+const (
+	ProposalChangeCreate  ProposalChangeType = "create"
+	ProposalChangeUpdate  ProposalChangeType = "update"
+	ProposalChangeArchive ProposalChangeType = "archive"
+	ProposalChangeLink    ProposalChangeType = "link"
+)
+
+type ProposalStatus string
+
+const (
+	ProposalPending  ProposalStatus = "pending"
+	ProposalApproved ProposalStatus = "approved"
+	ProposalRejected ProposalStatus = "rejected"
+	ProposalDeferred ProposalStatus = "deferred"
+)
+
+type Proposal struct {
+	ID           string             `json:"id"`
+	WorkID       string             `json:"work_id"`
+	EpisodeID    string             `json:"episode_id"`
+	RunID        string             `json:"run_id"`
+	TargetItemID string             `json:"target_item_id"`
+	ChangeType   ProposalChangeType `json:"change_type"`
+	Kind         Kind               `json:"kind"`
+	Title        string             `json:"title"`
+	BeforeBody   string             `json:"before_body"`
+	AfterBody    string             `json:"after_body"`
+	Reason       string             `json:"reason"`
+	Confidence   float64            `json:"confidence"`
+	Status       ProposalStatus     `json:"status"`
+	CreatedAt    time.Time          `json:"created_at"`
+	DecidedAt    *time.Time         `json:"decided_at,omitempty"`
+}
+
+type CreateProposalInput struct {
+	WorkID       string             `json:"work_id"`
+	EpisodeID    string             `json:"episode_id"`
+	RunID        string             `json:"run_id"`
+	TargetItemID string             `json:"target_item_id"`
+	ChangeType   ProposalChangeType `json:"change_type"`
+	Kind         Kind               `json:"kind"`
+	Title        string             `json:"title"`
+	BeforeBody   string             `json:"before_body"`
+	AfterBody    string             `json:"after_body"`
+	Reason       string             `json:"reason"`
+	Confidence   float64            `json:"confidence"`
+}
+
 type Repository struct {
 	db       *store.DB
 	workRepo *work.Repository
@@ -319,6 +369,191 @@ func (r *Repository) ListDecisions(ctx context.Context, workID string) ([]Decisi
 	return decisions, nil
 }
 
+func (r *Repository) CreateProposal(ctx context.Context, input CreateProposalInput) (Proposal, error) {
+	input = normalizeProposalInput(input)
+	if input.WorkID == "" || input.EpisodeID == "" || input.RunID == "" || input.ChangeType == "" || input.Kind == "" || input.Title == "" {
+		return Proposal{}, fmt.Errorf("%w: work id, episode id, run id, change type, kind, and title are required", ErrInvalidInput)
+	}
+	if err := r.requireWork(ctx, input.WorkID); err != nil {
+		return Proposal{}, err
+	}
+	now := time.Now().UTC()
+	proposal := Proposal{
+		ID:           newID("proposal"),
+		WorkID:       input.WorkID,
+		EpisodeID:    input.EpisodeID,
+		RunID:        input.RunID,
+		TargetItemID: input.TargetItemID,
+		ChangeType:   input.ChangeType,
+		Kind:         input.Kind,
+		Title:        input.Title,
+		BeforeBody:   input.BeforeBody,
+		AfterBody:    input.AfterBody,
+		Reason:       input.Reason,
+		Confidence:   input.Confidence,
+		Status:       ProposalPending,
+		CreatedAt:    now,
+	}
+	_, err := r.conn().ExecContext(ctx, `
+		INSERT INTO canon_change_proposals (
+			id, work_id, episode_id, run_id, target_item_id, change_type, kind, title, before_body, after_body, reason, confidence, status, created_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, proposal.ID, proposal.WorkID, proposal.EpisodeID, proposal.RunID, proposal.TargetItemID, proposal.ChangeType, proposal.Kind, proposal.Title, proposal.BeforeBody, proposal.AfterBody, proposal.Reason, proposal.Confidence, proposal.Status, formatTime(proposal.CreatedAt))
+	if err != nil {
+		return Proposal{}, err
+	}
+	return proposal, nil
+}
+
+func (r *Repository) GetProposal(ctx context.Context, id string) (Proposal, error) {
+	row := r.conn().QueryRowContext(ctx, `
+		SELECT id, work_id, episode_id, run_id, target_item_id, change_type, kind, title, before_body, after_body, reason, confidence, status, created_at, decided_at
+		FROM canon_change_proposals
+		WHERE id = ?
+	`, strings.TrimSpace(id))
+	proposal, err := scanProposal(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Proposal{}, ErrNotFound
+	}
+	if err != nil {
+		return Proposal{}, err
+	}
+	return proposal, nil
+}
+
+func (r *Repository) ListProposals(ctx context.Context, workID string, status ProposalStatus) ([]Proposal, error) {
+	workID = strings.TrimSpace(workID)
+	if err := r.requireWork(ctx, workID); err != nil {
+		return nil, err
+	}
+	query := `
+		SELECT id, work_id, episode_id, run_id, target_item_id, change_type, kind, title, before_body, after_body, reason, confidence, status, created_at, decided_at
+		FROM canon_change_proposals
+		WHERE work_id = ?`
+	args := []any{workID}
+	if status != "" {
+		query += ` AND status = ?`
+		args = append(args, status)
+	}
+	query += ` ORDER BY created_at DESC, id DESC`
+	rows, err := r.conn().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var proposals []Proposal
+	for rows.Next() {
+		proposal, err := scanProposal(rows)
+		if err != nil {
+			return nil, err
+		}
+		proposals = append(proposals, proposal)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return proposals, nil
+}
+
+func (r *Repository) ApproveProposal(ctx context.Context, id, actor string) (Proposal, error) {
+	proposal, err := r.GetProposal(ctx, id)
+	if err != nil {
+		return Proposal{}, err
+	}
+	if proposal.Status != ProposalPending && proposal.Status != ProposalDeferred {
+		return Proposal{}, fmt.Errorf("%w: proposal is not pending", ErrInvalidInput)
+	}
+	actor = normalizeActor(actor)
+	targetID := proposal.TargetItemID
+	switch proposal.ChangeType {
+	case ProposalChangeCreate:
+		item, err := r.CreateItem(ctx, CreateItemInput{
+			WorkID:     proposal.WorkID,
+			Kind:       proposal.Kind,
+			Title:      proposal.Title,
+			Body:       proposal.AfterBody,
+			Status:     StatusCanon,
+			Importance: ImportanceMedium,
+			Reason:     proposal.Reason,
+			Actor:      actor,
+		})
+		if err != nil {
+			return Proposal{}, err
+		}
+		targetID = item.ID
+	case ProposalChangeUpdate:
+		if targetID == "" {
+			return Proposal{}, fmt.Errorf("%w: update proposal requires target item", ErrInvalidInput)
+		}
+		item, err := r.UpdateItem(ctx, targetID, UpdateItemInput{
+			Title:  proposal.Title,
+			Body:   proposal.AfterBody,
+			Status: StatusCanon,
+			Reason: proposal.Reason,
+			Actor:  actor,
+		})
+		if err != nil {
+			return Proposal{}, err
+		}
+		targetID = item.ID
+	case ProposalChangeArchive:
+		if targetID == "" {
+			return Proposal{}, fmt.Errorf("%w: archive proposal requires target item", ErrInvalidInput)
+		}
+		item, err := r.ArchiveItem(ctx, targetID, proposal.Reason, actor)
+		if err != nil {
+			return Proposal{}, err
+		}
+		targetID = item.ID
+	case ProposalChangeLink:
+		// Link proposals are reserved for a later richer graph UI. Approval still records the human decision.
+	default:
+		return Proposal{}, fmt.Errorf("%w: unsupported proposal change type", ErrInvalidInput)
+	}
+	if targetID != "" {
+		if err := r.RecordDecision(ctx, Decision{
+			WorkID:      proposal.WorkID,
+			CanonItemID: targetID,
+			Type:        DecisionApprove,
+			Reason:      proposal.Reason,
+			Actor:       actor,
+		}); err != nil {
+			return Proposal{}, err
+		}
+	}
+	return r.updateProposalStatus(ctx, proposal.ID, ProposalApproved, targetID)
+}
+
+func (r *Repository) RejectProposal(ctx context.Context, id, _ string) (Proposal, error) {
+	proposal, err := r.GetProposal(ctx, id)
+	if err != nil {
+		return Proposal{}, err
+	}
+	return r.updateProposalStatus(ctx, proposal.ID, ProposalRejected, proposal.TargetItemID)
+}
+
+func (r *Repository) DeferProposal(ctx context.Context, id, _ string) (Proposal, error) {
+	proposal, err := r.GetProposal(ctx, id)
+	if err != nil {
+		return Proposal{}, err
+	}
+	return r.updateProposalStatus(ctx, proposal.ID, ProposalDeferred, proposal.TargetItemID)
+}
+
+func (r *Repository) updateProposalStatus(ctx context.Context, id string, status ProposalStatus, targetItemID string) (Proposal, error) {
+	now := time.Now().UTC()
+	_, err := r.conn().ExecContext(ctx, `
+		UPDATE canon_change_proposals
+		SET status = ?, target_item_id = ?, decided_at = ?
+		WHERE id = ?
+	`, status, strings.TrimSpace(targetItemID), formatTime(now), id)
+	if err != nil {
+		return Proposal{}, err
+	}
+	return r.GetProposal(ctx, id)
+}
+
 func (r *Repository) requireWork(ctx context.Context, workID string) error {
 	if workID == "" {
 		return fmt.Errorf("%w: work id is required", ErrInvalidInput)
@@ -378,6 +613,44 @@ func scanDecision(row scanner) (Decision, error) {
 	return decision, nil
 }
 
+func scanProposal(row scanner) (Proposal, error) {
+	var proposal Proposal
+	var createdAt string
+	var decidedAt sql.NullString
+	if err := row.Scan(
+		&proposal.ID,
+		&proposal.WorkID,
+		&proposal.EpisodeID,
+		&proposal.RunID,
+		&proposal.TargetItemID,
+		&proposal.ChangeType,
+		&proposal.Kind,
+		&proposal.Title,
+		&proposal.BeforeBody,
+		&proposal.AfterBody,
+		&proposal.Reason,
+		&proposal.Confidence,
+		&proposal.Status,
+		&createdAt,
+		&decidedAt,
+	); err != nil {
+		return Proposal{}, err
+	}
+	var err error
+	proposal.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return Proposal{}, err
+	}
+	if decidedAt.Valid {
+		parsed, err := parseTime(decidedAt.String)
+		if err != nil {
+			return Proposal{}, err
+		}
+		proposal.DecidedAt = &parsed
+	}
+	return proposal, nil
+}
+
 func normalizeCreateInput(input CreateItemInput) CreateItemInput {
 	input.WorkID = strings.TrimSpace(input.WorkID)
 	input.Title = strings.TrimSpace(input.Title)
@@ -416,6 +689,18 @@ func normalizeActor(actor string) string {
 		return "human"
 	}
 	return actor
+}
+
+func normalizeProposalInput(input CreateProposalInput) CreateProposalInput {
+	input.WorkID = strings.TrimSpace(input.WorkID)
+	input.EpisodeID = strings.TrimSpace(input.EpisodeID)
+	input.RunID = strings.TrimSpace(input.RunID)
+	input.TargetItemID = strings.TrimSpace(input.TargetItemID)
+	input.Title = strings.TrimSpace(input.Title)
+	input.BeforeBody = strings.TrimSpace(input.BeforeBody)
+	input.AfterBody = strings.TrimSpace(input.AfterBody)
+	input.Reason = strings.TrimSpace(input.Reason)
+	return input
 }
 
 func newID(prefix string) string {
