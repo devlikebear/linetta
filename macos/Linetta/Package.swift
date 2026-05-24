@@ -20,6 +20,10 @@ let package = Package(
         .testTarget(
             name: "LinettaCoreTests",
             dependencies: ["LinettaCore"]
+        ),
+        .testTarget(
+            name: "LinettaTests",
+            dependencies: ["Linetta", "LinettaCore"]
         )
     ]
 )
