@@ -140,6 +140,28 @@ func TestBlueprintRoutesSaveAndGetEpisodeBlueprint(t *testing.T) {
 	}
 }
 
+func TestEpisodeVersionRoutesCreateAndList(t *testing.T) {
+	handler := newTestHandler(t)
+	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Version API Work"}, http.StatusCreated)
+	episode := postJSON[work.Episode](t, handler, "/api/works/"+createdWork.ID+"/episodes", map[string]string{
+		"title": "Episode 1",
+	}, http.StatusCreated)
+
+	created := postJSON[work.EpisodeVersion](t, handler, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/versions", map[string]string{
+		"source_artifact_id": "artifact_1",
+		"body":               "Adopted manuscript body.",
+		"note":               "adopt edited draft",
+	}, http.StatusCreated)
+	if created.ID == "" || created.SourceArtifactID != "artifact_1" {
+		t.Fatalf("created version = %+v, want id and source artifact", created)
+	}
+
+	versions := getJSON[[]work.EpisodeVersion](t, handler, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/versions", http.StatusOK)
+	if len(versions) != 1 || versions[0].ID != created.ID {
+		t.Fatalf("versions = %+v, want created version %+v", versions, created)
+	}
+}
+
 func TestBlueprintRoutesRejectWrongWork(t *testing.T) {
 	handler := newTestHandler(t)
 	first := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "First"}, http.StatusCreated)

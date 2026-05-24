@@ -85,6 +85,22 @@ type SaveBlueprintInput struct {
 	StructureNotes string `json:"structure_notes"`
 }
 
+type EpisodeVersion struct {
+	ID               string    `json:"id"`
+	WorkID           string    `json:"work_id"`
+	EpisodeID        string    `json:"episode_id"`
+	SourceArtifactID string    `json:"source_artifact_id"`
+	Body             string    `json:"body"`
+	Note             string    `json:"note"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+type CreateEpisodeVersionInput struct {
+	SourceArtifactID string `json:"source_artifact_id"`
+	Body             string `json:"body"`
+	Note             string `json:"note"`
+}
+
 type Repository struct {
 	db *store.DB
 }
@@ -338,6 +354,66 @@ func (r *Repository) GetBlueprint(ctx context.Context, workID, episodeID string)
 	return blueprint, nil
 }
 
+func (r *Repository) CreateEpisodeVersion(ctx context.Context, workID, episodeID string, input CreateEpisodeVersionInput) (EpisodeVersion, error) {
+	workID = strings.TrimSpace(workID)
+	episodeID = strings.TrimSpace(episodeID)
+	input = normalizeEpisodeVersionInput(input)
+	if workID == "" || episodeID == "" || strings.TrimSpace(input.Body) == "" {
+		return EpisodeVersion{}, fmt.Errorf("%w: work id, episode id, and body are required", ErrInvalidInput)
+	}
+	if _, err := r.GetEpisode(ctx, workID, episodeID); err != nil {
+		return EpisodeVersion{}, err
+	}
+
+	now := time.Now().UTC()
+	version := EpisodeVersion{
+		ID:               newID("version"),
+		WorkID:           workID,
+		EpisodeID:        episodeID,
+		SourceArtifactID: input.SourceArtifactID,
+		Body:             input.Body,
+		Note:             input.Note,
+		CreatedAt:        now,
+	}
+	_, err := r.conn().ExecContext(ctx, `
+		INSERT INTO episode_versions (id, work_id, episode_id, source_artifact_id, body, note, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, version.ID, version.WorkID, version.EpisodeID, version.SourceArtifactID, version.Body, version.Note, formatTime(version.CreatedAt))
+	if err != nil {
+		return EpisodeVersion{}, err
+	}
+	return version, nil
+}
+
+func (r *Repository) ListEpisodeVersions(ctx context.Context, workID, episodeID string) ([]EpisodeVersion, error) {
+	if _, err := r.GetEpisode(ctx, workID, episodeID); err != nil {
+		return nil, err
+	}
+	rows, err := r.conn().QueryContext(ctx, `
+		SELECT id, work_id, episode_id, source_artifact_id, body, note, created_at
+		FROM episode_versions
+		WHERE work_id = ? AND episode_id = ?
+		ORDER BY created_at DESC, id DESC
+	`, strings.TrimSpace(workID), strings.TrimSpace(episodeID))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var versions []EpisodeVersion
+	for rows.Next() {
+		version, err := scanEpisodeVersion(rows)
+		if err != nil {
+			return nil, err
+		}
+		versions = append(versions, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return versions, nil
+}
+
 func (r *Repository) nextEpisodePosition(ctx context.Context, workID string) (int, error) {
 	var position sql.NullInt64
 	if err := r.conn().QueryRowContext(ctx, `SELECT MAX(position) FROM episodes WHERE work_id = ?`, workID).Scan(&position); err != nil {
@@ -426,6 +502,20 @@ func scanBlueprint(row scanner) (EpisodeBlueprint, error) {
 	return item, nil
 }
 
+func scanEpisodeVersion(row scanner) (EpisodeVersion, error) {
+	var item EpisodeVersion
+	var createdAt string
+	if err := row.Scan(&item.ID, &item.WorkID, &item.EpisodeID, &item.SourceArtifactID, &item.Body, &item.Note, &createdAt); err != nil {
+		return EpisodeVersion{}, err
+	}
+	var err error
+	item.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return EpisodeVersion{}, err
+	}
+	return item, nil
+}
+
 func normalizeBlueprintInput(input SaveBlueprintInput) SaveBlueprintInput {
 	input.Premise = strings.TrimSpace(input.Premise)
 	input.Theme = strings.TrimSpace(input.Theme)
@@ -433,6 +523,12 @@ func normalizeBlueprintInput(input SaveBlueprintInput) SaveBlueprintInput {
 	input.MustInclude = strings.TrimSpace(input.MustInclude)
 	input.MustAvoid = strings.TrimSpace(input.MustAvoid)
 	input.StructureNotes = strings.TrimSpace(input.StructureNotes)
+	return input
+}
+
+func normalizeEpisodeVersionInput(input CreateEpisodeVersionInput) CreateEpisodeVersionInput {
+	input.SourceArtifactID = strings.TrimSpace(input.SourceArtifactID)
+	input.Note = strings.TrimSpace(input.Note)
 	return input
 }
 

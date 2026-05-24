@@ -138,6 +138,54 @@ func TestRepositoryUpdatesEpisodeStatus(t *testing.T) {
 	}
 }
 
+func TestRepositoryCreatesAndListsEpisodeVersions(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository(t)
+	workItem, err := repo.CreateWork(ctx, CreateWorkInput{Title: "Version Work"})
+	if err != nil {
+		t.Fatalf("CreateWork() error = %v", err)
+	}
+	episode, err := repo.CreateEpisode(ctx, workItem.ID, "Episode 1")
+	if err != nil {
+		t.Fatalf("CreateEpisode() error = %v", err)
+	}
+
+	first, err := repo.CreateEpisodeVersion(ctx, workItem.ID, episode.ID, CreateEpisodeVersionInput{
+		Body: "First manuscript body.",
+		Note: "manual save",
+	})
+	if err != nil {
+		t.Fatalf("CreateEpisodeVersion(first) error = %v", err)
+	}
+	second, err := repo.CreateEpisodeVersion(ctx, workItem.ID, episode.ID, CreateEpisodeVersionInput{
+		SourceArtifactID: "artifact_1",
+		Body:             "AI edited draft body.",
+		Note:             "adopt edited draft",
+	})
+	if err != nil {
+		t.Fatalf("CreateEpisodeVersion(second) error = %v", err)
+	}
+	if second.SourceArtifactID != "artifact_1" {
+		t.Fatalf("SourceArtifactID = %q, want artifact_1", second.SourceArtifactID)
+	}
+
+	versions, err := repo.ListEpisodeVersions(ctx, workItem.ID, episode.ID)
+	if err != nil {
+		t.Fatalf("ListEpisodeVersions() error = %v", err)
+	}
+	if len(versions) != 2 {
+		t.Fatalf("versions len = %d, want 2", len(versions))
+	}
+	if versions[0].ID != second.ID || versions[1].ID != first.ID {
+		t.Fatalf("versions order = [%s %s], want newest first [%s %s]", versions[0].ID, versions[1].ID, second.ID, first.ID)
+	}
+
+	_, err = repo.CreateEpisodeVersion(ctx, workItem.ID, episode.ID, CreateEpisodeVersionInput{Body: "   "})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("CreateEpisodeVersion(blank) error = %v, want ErrInvalidInput", err)
+	}
+}
+
 func TestRepositoryRejectsEpisodeForMissingWork(t *testing.T) {
 	repo := newTestRepository(t)
 
