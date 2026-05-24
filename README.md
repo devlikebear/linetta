@@ -1,12 +1,34 @@
 # Linetta
 
-Linetta is a Tessera-based novel-writing agent app. It turns a writing goal into
-a mandate-gated agent run, then produces a small novel packet:
+Linetta is a Tessera-powered novel-writing agent app. It turns a writing goal
+into a mandate-gated agent run, then produces a small novel packet:
 
 - world notes
 - plot outline
 - first chapter draft
 - editorial review
+
+## What is Tessera?
+
+Tessera is a separate Go library and CLI maintained at
+[devlikebear/tessera](https://github.com/devlikebear/tessera). Linetta depends
+on that repository as the `github.com/devlikebear/tessera` Go module and embeds
+its packages as the orchestration layer for agent work.
+
+In this app, Tessera turns a writing goal into an auditable task graph: it
+creates role-based tasks, reviews the plan before execution, wraps the approved
+plan in a mandate, runs the tasks through queue workers, and emits run events
+that can be saved or visualized.
+
+Linetta owns the product surface around works, episodes, canon memory,
+manuscript versions, backups, and the Mac UI. Tessera owns the reusable workflow
+primitives behind that surface: config loading, planner/council review,
+mandates, queues, task execution, retries, role limits, and observability.
+
+The current authoring backend uses deterministic task handlers so local runs and
+tests do not require provider credentials. The Tessera config still keeps `llm`
+and `roles` fields validated so Linetta can later swap in provider-backed agents
+without changing the app-level workflow.
 
 ## Usage
 
