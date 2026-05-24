@@ -52,6 +52,16 @@ type EpisodeRunResult struct {
 	Events       []tesserarun.Event
 }
 
+type RunRecord struct {
+	ID           string     `json:"id"`
+	WorkID       string     `json:"work_id"`
+	EpisodeID    string     `json:"episode_id"`
+	Status       string     `json:"status"`
+	TesseraRunID string     `json:"tessera_run_id"`
+	CreatedAt    time.Time  `json:"created_at"`
+	ClosedAt     *time.Time `json:"closed_at,omitempty"`
+}
+
 type Artifact struct {
 	ID        string       `json:"id"`
 	WorkID    string       `json:"work_id"`
@@ -197,6 +207,33 @@ func (r *Runner) ListArtifacts(ctx context.Context, runID string) ([]Artifact, e
 		return nil, err
 	}
 	return artifacts, nil
+}
+
+func (r *Runner) GetRun(ctx context.Context, runID string) (RunRecord, error) {
+	row := r.conn().QueryRowContext(ctx, `
+		SELECT id, work_id, episode_id, status, tessera_run_id, created_at, closed_at
+		FROM agent_runs
+		WHERE id = ?
+	`, strings.TrimSpace(runID))
+	var record RunRecord
+	var createdAt string
+	var closedAt sql.NullString
+	if err := row.Scan(&record.ID, &record.WorkID, &record.EpisodeID, &record.Status, &record.TesseraRunID, &createdAt, &closedAt); err != nil {
+		return RunRecord{}, err
+	}
+	var err error
+	record.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return RunRecord{}, err
+	}
+	if closedAt.Valid {
+		parsed, err := parseTime(closedAt.String)
+		if err != nil {
+			return RunRecord{}, err
+		}
+		record.ClosedAt = &parsed
+	}
+	return record, nil
 }
 
 func (r *Runner) ListEvents(ctx context.Context, runID string) ([]tesserarun.Event, error) {

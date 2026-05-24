@@ -10,9 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devlikebear/linetta/internal/agent"
 	"github.com/devlikebear/linetta/internal/memory"
 	"github.com/devlikebear/linetta/internal/store"
 	"github.com/devlikebear/linetta/internal/work"
+	tesserarun "github.com/devlikebear/tessera/pkg/run"
 )
 
 func TestHealth(t *testing.T) {
@@ -132,6 +134,50 @@ func TestBlueprintRoutesRejectWrongWork(t *testing.T) {
 	}
 }
 
+func TestRunRoutesCreateRunAndReturnArtifactsEventsAndStream(t *testing.T) {
+	handler := newTestHandler(t)
+	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Run Work"}, http.StatusCreated)
+	episode := postJSON[work.Episode](t, handler, "/api/works/"+createdWork.ID+"/episodes", map[string]string{
+		"title": "Episode 1",
+	}, http.StatusCreated)
+	_ = putJSON[work.EpisodeBlueprint](t, handler, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/blueprint", map[string]string{
+		"premise":         "Mira hears the harbor singing.",
+		"theme":           "Memory as infrastructure",
+		"situation":       "A pump changes rhythm before sunset.",
+		"must_include":    "lullaby clue",
+		"must_avoid":      "exposition dump",
+		"structure_notes": "Open with ritual, end with a message.",
+	}, http.StatusOK)
+
+	result := postJSON[agent.EpisodeRunResult](t, handler, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/runs", map[string]string{
+		"approved_by": "tester",
+	}, http.StatusCreated)
+	if result.RunID == "" || result.Closure != string(tesserarun.ClosureNormal) {
+		t.Fatalf("run result = %+v, want run id and normal closure", result)
+	}
+
+	artifacts := getJSON[[]agent.Artifact](t, handler, "/api/runs/"+result.RunID+"/artifacts", http.StatusOK)
+	if len(artifacts) != 7 {
+		t.Fatalf("artifacts len = %d, want 7", len(artifacts))
+	}
+
+	events := getJSON[[]tesserarun.Event](t, handler, "/api/runs/"+result.RunID+"/events", http.StatusOK)
+	if len(events) == 0 {
+		t.Fatal("expected stored events")
+	}
+
+	stream := requestJSON(t, handler, http.MethodGet, "/api/runs/"+result.RunID+"/events/stream", nil)
+	if stream.Code != http.StatusOK {
+		t.Fatalf("stream status = %d, want 200; body=%s", stream.Code, stream.Body.String())
+	}
+	if got := stream.Header().Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
+		t.Fatalf("stream content-type = %q, want text/event-stream", got)
+	}
+	if !strings.Contains(stream.Body.String(), "task.succeeded") {
+		t.Fatalf("stream body missing task.succeeded:\n%s", stream.Body.String())
+	}
+}
+
 func TestMemoryRoutesCreateUpdateArchiveAndListDecisions(t *testing.T) {
 	handler := newTestHandler(t)
 	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Canon Work"}, http.StatusCreated)
@@ -226,7 +272,11 @@ func newTestHandler(t *testing.T) http.Handler {
 		t.Fatalf("Migrate() error = %v", err)
 	}
 	workRepo := work.NewRepository(db)
-	return New(workRepo, Options{Memory: memory.NewRepository(db, workRepo)})
+	memoryRepo := memory.NewRepository(db, workRepo)
+	return New(workRepo, Options{
+		Memory: memoryRepo,
+		Agent:  agent.NewRunner(db, workRepo, memoryRepo),
+	})
 }
 
 func postJSON[T any](t *testing.T, handler http.Handler, path string, payload any, wantStatus int) T {

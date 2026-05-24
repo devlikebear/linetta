@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devlikebear/linetta/internal/agent"
 	"github.com/devlikebear/linetta/internal/memory"
 	"github.com/devlikebear/linetta/internal/novel"
 	"github.com/devlikebear/linetta/internal/server"
@@ -140,9 +141,11 @@ func runServe(ctx context.Context, opts serveOptions, stderr io.Writer) error {
 		return err
 	}
 	workRepo := work.NewRepository(db)
+	memoryRepo := memory.NewRepository(db, workRepo)
 	httpServer := &http.Server{
 		Handler: server.New(workRepo, server.Options{
-			Memory: memory.NewRepository(db, workRepo),
+			Memory: memoryRepo,
+			Agent:  agent.NewRunner(db, workRepo, memoryRepo),
 		}),
 	}
 	go func() {

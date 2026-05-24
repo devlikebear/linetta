@@ -3,20 +3,25 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/devlikebear/linetta/internal/agent"
 	"github.com/devlikebear/linetta/internal/memory"
 	"github.com/devlikebear/linetta/internal/work"
+	tesserarun "github.com/devlikebear/tessera/pkg/run"
 )
 
 type Options struct {
 	Memory *memory.Repository
+	Agent  *agent.Runner
 }
 
 type Server struct {
 	repo   *work.Repository
 	memory *memory.Repository
+	agent  *agent.Runner
 	mux    *http.ServeMux
 }
 
@@ -24,6 +29,7 @@ func New(repo *work.Repository, opts Options) http.Handler {
 	s := &Server{
 		repo:   repo,
 		memory: opts.Memory,
+		agent:  opts.Agent,
 		mux:    http.NewServeMux(),
 	}
 	s.routes()
@@ -38,6 +44,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/health", s.handleHealth)
 	s.mux.HandleFunc("/api/works", s.handleWorks)
 	s.mux.HandleFunc("/api/works/", s.handleWorkPath)
+	s.mux.HandleFunc("/api/runs/", s.handleRunPath)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +104,10 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 		s.handleEpisodeBlueprint(w, r, workID, parts[2])
 		return
 	}
+	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "runs" {
+		s.handleEpisodeRun(w, r, workID, parts[2])
+		return
+	}
 	if len(parts) >= 2 && parts[1] == "memory" {
 		s.handleMemoryPath(w, r, workID, parts[2:])
 		return
@@ -145,6 +156,34 @@ func (s *Server) handleEpisodes(w http.ResponseWriter, r *http.Request, workID s
 	}
 }
 
+func (s *Server) handleEpisodeRun(w http.ResponseWriter, r *http.Request, workID, episodeID string) {
+	if s.agent == nil {
+		writeError(w, http.StatusNotFound, "agent runner not configured")
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var input struct {
+		ApprovedBy string `json:"approved_by"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	result, err := s.agent.RunEpisode(r.Context(), agent.EpisodeRunInput{
+		WorkID:     workID,
+		EpisodeID:  episodeID,
+		ApprovedBy: input.ApprovedBy,
+	})
+	if err != nil {
+		writeRepositoryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, result)
+}
+
 func (s *Server) handleEpisodeBlueprint(w http.ResponseWriter, r *http.Request, workID, episodeID string) {
 	switch r.Method {
 	case http.MethodGet:
@@ -168,6 +207,95 @@ func (s *Server) handleEpisodeBlueprint(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusOK, blueprint)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleRunPath(w http.ResponseWriter, r *http.Request) {
+	if s.agent == nil {
+		writeError(w, http.StatusNotFound, "agent runner not configured")
+		return
+	}
+	parts := splitPath(strings.TrimPrefix(r.URL.Path, "/api/runs/"))
+	if len(parts) == 0 {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	runID := parts[0]
+	if len(parts) == 1 {
+		s.handleRunDetail(w, r, runID)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "artifacts" {
+		s.handleRunArtifacts(w, r, runID)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "events" {
+		s.handleRunEvents(w, r, runID)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "events" && parts[2] == "stream" {
+		s.handleRunEventsStream(w, r, runID)
+		return
+	}
+	writeError(w, http.StatusNotFound, "not found")
+}
+
+func (s *Server) handleRunDetail(w http.ResponseWriter, r *http.Request, runID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	record, err := s.agent.GetRun(r.Context(), runID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, record)
+}
+
+func (s *Server) handleRunArtifacts(w http.ResponseWriter, r *http.Request, runID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	artifacts, err := s.agent.ListArtifacts(r.Context(), runID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, artifacts)
+}
+
+func (s *Server) handleRunEvents(w http.ResponseWriter, r *http.Request, runID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	events, err := s.agent.ListEvents(r.Context(), runID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
+func (s *Server) handleRunEventsStream(w http.ResponseWriter, r *http.Request, runID string) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	events, err := s.agent.ListEvents(r.Context(), runID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+	for _, event := range events {
+		if err := writeSSEEvent(w, event); err != nil {
+			return
+		}
 	}
 }
 
@@ -362,6 +490,23 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func writeSSEEvent(w http.ResponseWriter, event tesserarun.Event) error {
+	data, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "event: %s\n", event.Type); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
+		return err
+	}
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return nil
 }
 
 func splitPath(path string) []string {
