@@ -27,3 +27,24 @@ final class SidebarStateTests: XCTestCase {
         XCTAssertEqual(state.query, "")
     }
 }
+
+@MainActor
+final class EpisodeStateTests: XCTestCase {
+    func testBlueprintDirtyFlagTrips() {
+        let state = EpisodeState()
+        state.loadBlueprint(premise: "a", theme: "b", situation: "c", mustInclude: "d", mustAvoid: "e", structureNotes: "f")
+        XCTAssertFalse(state.isDirty)
+        state.premise = "changed"
+        XCTAssertTrue(state.isDirty)
+    }
+
+    func testExpandedRunIDDefaultsToNil() {
+        XCTAssertNil(EpisodeState().expandedRunID)
+    }
+
+    func testBlueprintCardCollapseDefaultsToFalse() {
+        UserDefaults.standard.removeObject(forKey: "linetta.ui.blueprint.expanded.ep-X")
+        let state = EpisodeState()
+        XCTAssertTrue(state.isBlueprintExpanded(episodeID: "ep-X"))
+    }
+}
