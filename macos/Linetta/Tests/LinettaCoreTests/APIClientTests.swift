@@ -30,6 +30,24 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(work.status, "active")
     }
 
+    func testEpisodeDecodesTypedStatusFromEngineJSON() throws {
+        let json = Data("""
+        {
+          "id": "episode_1",
+          "work_id": "work_1",
+          "title": "Episode 1",
+          "status": "ready",
+          "position": 1,
+          "created_at": "2026-05-24T09:00:00Z",
+          "updated_at": "2026-05-24T09:01:00Z"
+        }
+        """.utf8)
+
+        let episode = try JSONDecoder.linetta.decode(Episode.self, from: json)
+
+        XCTAssertEqual(episode.status, .ready)
+    }
+
     func testCreateWorkRequestEncodesExpectedPayload() throws {
         let request = CreateWorkRequest(
             title: "Signal Rain",
@@ -217,5 +235,13 @@ final class APIClientTests: XCTestCase {
         let update = UpdateContinuityIssueRequest(status: .resolved)
         let updateJSON = try XCTUnwrap(String(data: JSONEncoder.linetta.encode(update), encoding: .utf8))
         XCTAssertTrue(updateJSON.contains(#""status":"resolved""#))
+    }
+
+    func testEpisodeStatusRequestEncodesExpectedPayload() throws {
+        let request = UpdateEpisodeStatusRequest(status: .published)
+
+        let json = try XCTUnwrap(String(data: JSONEncoder.linetta.encode(request), encoding: .utf8))
+
+        XCTAssertTrue(json.contains(#""status":"published""#))
     }
 }

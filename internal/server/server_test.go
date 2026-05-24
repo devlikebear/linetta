@@ -93,6 +93,28 @@ func TestEpisodeRoutesAreScopedToWork(t *testing.T) {
 	}
 }
 
+func TestEpisodeStatusRouteUpdatesStatus(t *testing.T) {
+	handler := newTestHandler(t)
+	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Status API Work"}, http.StatusCreated)
+	episode := postJSON[work.Episode](t, handler, "/api/works/"+createdWork.ID+"/episodes", map[string]string{
+		"title": "Episode 1",
+	}, http.StatusCreated)
+
+	updated := patchJSON[work.Episode](t, handler, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/status", map[string]string{
+		"status": string(work.EpisodeStatusReady),
+	}, http.StatusOK)
+	if updated.Status != work.EpisodeStatusReady {
+		t.Fatalf("status = %q, want %q", updated.Status, work.EpisodeStatusReady)
+	}
+
+	res := requestJSON(t, handler, http.MethodPatch, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/status", map[string]string{
+		"status": "unknown",
+	})
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestBlueprintRoutesSaveAndGetEpisodeBlueprint(t *testing.T) {
 	handler := newTestHandler(t)
 	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Blueprint Work"}, http.StatusCreated)

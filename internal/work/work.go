@@ -28,7 +28,12 @@ const (
 type EpisodeStatus string
 
 const (
-	EpisodeStatusIdea EpisodeStatus = "idea"
+	EpisodeStatusIdea      EpisodeStatus = "idea"
+	EpisodeStatusOutlined  EpisodeStatus = "outlined"
+	EpisodeStatusDrafting  EpisodeStatus = "drafting"
+	EpisodeStatusReviewing EpisodeStatus = "reviewing"
+	EpisodeStatusReady     EpisodeStatus = "ready"
+	EpisodeStatusPublished EpisodeStatus = "published"
 )
 
 type Work struct {
@@ -233,6 +238,37 @@ func (r *Repository) GetEpisode(ctx context.Context, workID, episodeID string) (
 	return item, nil
 }
 
+func (r *Repository) UpdateEpisodeStatus(ctx context.Context, workID, episodeID string, status EpisodeStatus) (Episode, error) {
+	workID = strings.TrimSpace(workID)
+	episodeID = strings.TrimSpace(episodeID)
+	if workID == "" || episodeID == "" {
+		return Episode{}, fmt.Errorf("%w: work id and episode id are required", ErrInvalidInput)
+	}
+	if !validEpisodeStatus(status) {
+		return Episode{}, fmt.Errorf("%w: unsupported episode status", ErrInvalidInput)
+	}
+	if _, err := r.GetEpisode(ctx, workID, episodeID); err != nil {
+		return Episode{}, err
+	}
+	now := time.Now().UTC()
+	res, err := r.conn().ExecContext(ctx, `
+		UPDATE episodes
+		SET status = ?, updated_at = ?
+		WHERE work_id = ? AND id = ?
+	`, status, formatTime(now), workID, episodeID)
+	if err != nil {
+		return Episode{}, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return Episode{}, err
+	}
+	if affected == 0 {
+		return Episode{}, ErrNotFound
+	}
+	return r.GetEpisode(ctx, workID, episodeID)
+}
+
 func (r *Repository) SaveBlueprint(ctx context.Context, workID, episodeID string, input SaveBlueprintInput) (EpisodeBlueprint, error) {
 	workID = strings.TrimSpace(workID)
 	episodeID = strings.TrimSpace(episodeID)
@@ -398,6 +434,15 @@ func normalizeBlueprintInput(input SaveBlueprintInput) SaveBlueprintInput {
 	input.MustAvoid = strings.TrimSpace(input.MustAvoid)
 	input.StructureNotes = strings.TrimSpace(input.StructureNotes)
 	return input
+}
+
+func validEpisodeStatus(status EpisodeStatus) bool {
+	switch status {
+	case EpisodeStatusIdea, EpisodeStatusOutlined, EpisodeStatusDrafting, EpisodeStatusReviewing, EpisodeStatusReady, EpisodeStatusPublished:
+		return true
+	default:
+		return false
+	}
 }
 
 func newID(prefix string) string {

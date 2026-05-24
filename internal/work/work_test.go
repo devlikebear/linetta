@@ -112,6 +112,32 @@ func TestRepositoryKeepsEpisodesScopedToWork(t *testing.T) {
 	}
 }
 
+func TestRepositoryUpdatesEpisodeStatus(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository(t)
+	workItem, err := repo.CreateWork(ctx, CreateWorkInput{Title: "Status Work"})
+	if err != nil {
+		t.Fatalf("CreateWork() error = %v", err)
+	}
+	episode, err := repo.CreateEpisode(ctx, workItem.ID, "Episode 1")
+	if err != nil {
+		t.Fatalf("CreateEpisode() error = %v", err)
+	}
+
+	updated, err := repo.UpdateEpisodeStatus(ctx, workItem.ID, episode.ID, EpisodeStatusReady)
+	if err != nil {
+		t.Fatalf("UpdateEpisodeStatus() error = %v", err)
+	}
+	if updated.Status != EpisodeStatusReady {
+		t.Fatalf("status = %q, want %q", updated.Status, EpisodeStatusReady)
+	}
+
+	_, err = repo.UpdateEpisodeStatus(ctx, workItem.ID, episode.ID, EpisodeStatus("unknown"))
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("UpdateEpisodeStatus(unknown) error = %v, want ErrInvalidInput", err)
+	}
+}
+
 func TestRepositoryRejectsEpisodeForMissingWork(t *testing.T) {
 	repo := newTestRepository(t)
 

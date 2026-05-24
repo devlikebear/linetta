@@ -36,11 +36,33 @@ public struct CreateWorkRequest: Codable, Equatable, Sendable {
     }
 }
 
+public enum EpisodeStatus: String, Codable, CaseIterable, Identifiable, Sendable {
+    case idea
+    case outlined
+    case drafting
+    case reviewing
+    case ready
+    case published
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .idea: "Idea"
+        case .outlined: "Outlined"
+        case .drafting: "Drafting"
+        case .reviewing: "Reviewing"
+        case .ready: "Ready"
+        case .published: "Published"
+        }
+    }
+}
+
 public struct Episode: Codable, Equatable, Identifiable, Hashable, Sendable {
     public var id: String
     public var workID: String
     public var title: String
-    public var status: String
+    public var status: EpisodeStatus
     public var position: Int
     public var createdAt: String
     public var updatedAt: String
@@ -61,6 +83,14 @@ public struct CreateEpisodeRequest: Codable, Equatable, Sendable {
 
     public init(title: String) {
         self.title = title
+    }
+}
+
+public struct UpdateEpisodeStatusRequest: Codable, Equatable, Sendable {
+    public var status: EpisodeStatus
+
+    public init(status: EpisodeStatus) {
+        self.status = status
     }
 }
 

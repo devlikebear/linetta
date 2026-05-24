@@ -34,6 +34,14 @@ public struct APIClient: Sendable {
         try await send(path: "/api/works/\(workID)/episodes", method: "POST", body: request)
     }
 
+    public func updateEpisodeStatus(workID: String, episodeID: String, status: EpisodeStatus) async throws -> Episode {
+        try await send(
+            path: "/api/works/\(workID)/episodes/\(episodeID)/status",
+            method: "PATCH",
+            body: UpdateEpisodeStatusRequest(status: status)
+        )
+    }
+
     public func getBlueprint(workID: String, episodeID: String) async throws -> EpisodeBlueprint {
         try await get(path: "/api/works/\(workID)/episodes/\(episodeID)/blueprint")
     }

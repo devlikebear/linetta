@@ -102,6 +102,10 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 		s.handleEpisodes(w, r, workID)
 		return
 	}
+	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "status" {
+		s.handleEpisodeStatus(w, r, workID, parts[2])
+		return
+	}
 	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "blueprint" {
 		s.handleEpisodeBlueprint(w, r, workID, parts[2])
 		return
@@ -164,6 +168,26 @@ func (s *Server) handleEpisodes(w http.ResponseWriter, r *http.Request, workID s
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (s *Server) handleEpisodeStatus(w http.ResponseWriter, r *http.Request, workID, episodeID string) {
+	if r.Method != http.MethodPatch {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var input struct {
+		Status work.EpisodeStatus `json:"status"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	updated, err := s.repo.UpdateEpisodeStatus(r.Context(), workID, episodeID, input.Status)
+	if err != nil {
+		writeRepositoryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
 
 func (s *Server) handleWorkProposals(w http.ResponseWriter, r *http.Request, workID string) {

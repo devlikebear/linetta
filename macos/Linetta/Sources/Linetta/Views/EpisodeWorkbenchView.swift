@@ -12,6 +12,7 @@ struct EpisodeWorkbenchView: View {
     @State private var mustInclude = ""
     @State private var mustAvoid = ""
     @State private var structureNotes = ""
+    @State private var episodeStatus: EpisodeStatus = .idea
     @State private var artifacts: [Artifact] = []
     @State private var events: [RunEvent] = []
     @State private var selectedArtifact: Artifact?
@@ -32,7 +33,7 @@ struct EpisodeWorkbenchView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(episode.title)
                                 .font(.headline)
-                            Text(episode.status.capitalized)
+                            Text(episode.status.label)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -62,6 +63,18 @@ struct EpisodeWorkbenchView: View {
                         if isLoading {
                             ProgressView()
                         }
+                        Picker("Status", selection: $episodeStatus) {
+                            ForEach(EpisodeStatus.allCases) { status in
+                                Text(status.label).tag(status)
+                            }
+                        }
+                        .frame(width: 150)
+                        Button {
+                            Task { await updateSelectedEpisodeStatus() }
+                        } label: {
+                            Label("Update Status", systemImage: "checkmark.circle")
+                        }
+                        .disabled(episodeStatus == selectedEpisode.status)
                         Button("Save Blueprint") {
                             Task { await saveBlueprint() }
                         }
@@ -218,6 +231,7 @@ struct EpisodeWorkbenchView: View {
         do {
             episodes = try await client.listEpisodes(workID: work.id)
             selectedEpisode = selectedEpisode ?? episodes.first
+            episodeStatus = selectedEpisode?.status ?? .idea
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -234,6 +248,7 @@ struct EpisodeWorkbenchView: View {
             )
             episodes.append(episode)
             selectedEpisode = episode
+            episodeStatus = episode.status
             proposals = []
             selectedProposal = nil
             continuityIssues = []
@@ -248,6 +263,7 @@ struct EpisodeWorkbenchView: View {
         errorMessage = nil
         defer { isLoading = false }
         do {
+            episodeStatus = episode.status
             let blueprint = try await client.getBlueprint(workID: work.id, episodeID: episode.id)
             premise = blueprint.premise
             theme = blueprint.theme
@@ -375,6 +391,29 @@ struct EpisodeWorkbenchView: View {
             _ = try await client.updateContinuityIssue(issueID: issue.id, status: status)
             if let selectedEpisode {
                 await loadReview(for: selectedEpisode)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func updateSelectedEpisodeStatus() async {
+        guard let selectedEpisode else {
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let updated = try await client.updateEpisodeStatus(
+                workID: work.id,
+                episodeID: selectedEpisode.id,
+                status: episodeStatus
+            )
+            self.selectedEpisode = updated
+            episodeStatus = updated.status
+            if let index = episodes.firstIndex(where: { $0.id == updated.id }) {
+                episodes[index] = updated
             }
         } catch {
             errorMessage = error.localizedDescription
