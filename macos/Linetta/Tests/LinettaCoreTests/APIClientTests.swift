@@ -131,6 +131,26 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(blueprint.mustAvoid, "exposition dump")
     }
 
+    func testEpisodeVersionDecodesFromEngineJSON() throws {
+        let json = Data("""
+        {
+          "id": "version_1",
+          "work_id": "work_1",
+          "episode_id": "episode_1",
+          "source_artifact_id": "artifact_1",
+          "body": "Edited manuscript body.",
+          "note": "adopt edited draft",
+          "created_at": "2026-05-24T09:00:00Z"
+        }
+        """.utf8)
+
+        let version = try JSONDecoder.linetta.decode(EpisodeVersion.self, from: json)
+
+        XCTAssertEqual(version.id, "version_1")
+        XCTAssertEqual(version.sourceArtifactID, "artifact_1")
+        XCTAssertEqual(version.body, "Edited manuscript body.")
+    }
+
     func testEpisodeRunResultDecodesArtifactsAndEvents() throws {
         let json = Data("""
         {
@@ -243,5 +263,19 @@ final class APIClientTests: XCTestCase {
         let json = try XCTUnwrap(String(data: JSONEncoder.linetta.encode(request), encoding: .utf8))
 
         XCTAssertTrue(json.contains(#""status":"published""#))
+    }
+
+    func testCreateEpisodeVersionRequestEncodesExpectedPayload() throws {
+        let request = CreateEpisodeVersionRequest(
+            sourceArtifactID: "artifact_1",
+            body: "Manuscript body",
+            note: "adopted artifact"
+        )
+
+        let json = try XCTUnwrap(String(data: JSONEncoder.linetta.encode(request), encoding: .utf8))
+
+        XCTAssertTrue(json.contains(#""source_artifact_id":"artifact_1""#))
+        XCTAssertTrue(json.contains(#""body":"Manuscript body""#))
+        XCTAssertTrue(json.contains(#""note":"adopted artifact""#))
     }
 }

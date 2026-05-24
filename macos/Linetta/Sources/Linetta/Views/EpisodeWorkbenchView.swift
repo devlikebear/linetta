@@ -16,6 +16,9 @@ struct EpisodeWorkbenchView: View {
     @State private var artifacts: [Artifact] = []
     @State private var events: [RunEvent] = []
     @State private var selectedArtifact: Artifact?
+    @State private var versions: [EpisodeVersion] = []
+    @State private var selectedVersion: EpisodeVersion?
+    @State private var manuscriptBody = ""
     @State private var proposals: [CanonProposal] = []
     @State private var selectedProposal: CanonProposal?
     @State private var continuityIssues: [ContinuityIssue] = []
@@ -104,6 +107,7 @@ struct EpisodeWorkbenchView: View {
                 .task(id: selectedEpisode.id) {
                     await loadBlueprint(for: selectedEpisode)
                     await loadReview(for: selectedEpisode)
+                    await loadVersions(for: selectedEpisode)
                 }
             } else {
                 VStack(spacing: 12) {
@@ -149,6 +153,24 @@ struct EpisodeWorkbenchView: View {
                 .tabItem {
                     Label("Artifacts", systemImage: "doc.text")
                 }
+            ManuscriptVersionView(
+                bodyText: $manuscriptBody,
+                versions: versions,
+                selectedVersion: $selectedVersion,
+                selectedArtifact: selectedArtifact,
+                saveVersion: {
+                    Task { await saveManuscriptVersion() }
+                },
+                adoptArtifact: { artifact in
+                    Task { await adopt(artifact: artifact) }
+                },
+                restoreVersion: { version in
+                    Task { await restore(version: version) }
+                }
+            )
+            .tabItem {
+                Label("Manuscript", systemImage: "doc.plaintext")
+            }
             MemoryDiffView(
                 proposals: proposals,
                 selectedProposal: $selectedProposal,
@@ -253,6 +275,9 @@ struct EpisodeWorkbenchView: View {
             selectedProposal = nil
             continuityIssues = []
             selectedIssue = nil
+            versions = []
+            selectedVersion = nil
+            manuscriptBody = ""
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -331,6 +356,88 @@ struct EpisodeWorkbenchView: View {
             events = result.events
             selectedArtifact = artifacts.first(where: { $0.kind == .draft }) ?? artifacts.first
             await loadReview(for: selectedEpisode)
+            await loadVersions(for: selectedEpisode)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadVersions(for episode: Episode) async {
+        do {
+            versions = try await client.listEpisodeVersions(workID: work.id, episodeID: episode.id)
+            selectedVersion = versions.first
+            manuscriptBody = versions.first?.body ?? ""
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func saveManuscriptVersion() async {
+        guard let selectedEpisode else {
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let saved = try await client.createEpisodeVersion(
+                workID: work.id,
+                episodeID: selectedEpisode.id,
+                request: CreateEpisodeVersionRequest(body: manuscriptBody, note: "manual save")
+            )
+            manuscriptBody = saved.body
+            await loadVersions(for: selectedEpisode)
+            selectedVersion = saved
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func adopt(artifact: Artifact) async {
+        guard let selectedEpisode else {
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let saved = try await client.createEpisodeVersion(
+                workID: work.id,
+                episodeID: selectedEpisode.id,
+                request: CreateEpisodeVersionRequest(
+                    sourceArtifactID: artifact.id,
+                    body: artifact.body,
+                    note: "adopt \(artifact.title)"
+                )
+            )
+            manuscriptBody = saved.body
+            await loadVersions(for: selectedEpisode)
+            selectedVersion = saved
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func restore(version: EpisodeVersion) async {
+        guard let selectedEpisode else {
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let saved = try await client.createEpisodeVersion(
+                workID: work.id,
+                episodeID: selectedEpisode.id,
+                request: CreateEpisodeVersionRequest(
+                    sourceArtifactID: version.sourceArtifactID,
+                    body: version.body,
+                    note: "restore \(version.id)"
+                )
+            )
+            manuscriptBody = saved.body
+            await loadVersions(for: selectedEpisode)
+            selectedVersion = saved
         } catch {
             errorMessage = error.localizedDescription
         }

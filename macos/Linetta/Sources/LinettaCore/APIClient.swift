@@ -50,6 +50,14 @@ public struct APIClient: Sendable {
         try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/blueprint", method: "PUT", body: request)
     }
 
+    public func listEpisodeVersions(workID: String, episodeID: String) async throws -> [EpisodeVersion] {
+        try await get(path: "/api/works/\(workID)/episodes/\(episodeID)/versions")
+    }
+
+    public func createEpisodeVersion(workID: String, episodeID: String, request: CreateEpisodeVersionRequest) async throws -> EpisodeVersion {
+        try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/versions", method: "POST", body: request)
+    }
+
     public func runEpisode(workID: String, episodeID: String, request: RunEpisodeRequest = RunEpisodeRequest()) async throws -> EpisodeRunResult {
         try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/runs", method: "POST", body: request)
     }

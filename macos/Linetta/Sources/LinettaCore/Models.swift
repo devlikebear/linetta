@@ -122,6 +122,44 @@ public struct EpisodeBlueprint: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+public struct EpisodeVersion: Codable, Equatable, Identifiable, Hashable, Sendable {
+    public var id: String
+    public var workID: String
+    public var episodeID: String
+    public var sourceArtifactID: String
+    public var body: String
+    public var note: String
+    public var createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workID = "work_id"
+        case episodeID = "episode_id"
+        case sourceArtifactID = "source_artifact_id"
+        case body
+        case note
+        case createdAt = "created_at"
+    }
+}
+
+public struct CreateEpisodeVersionRequest: Codable, Equatable, Sendable {
+    public var sourceArtifactID: String
+    public var body: String
+    public var note: String
+
+    public init(sourceArtifactID: String = "", body: String, note: String = "") {
+        self.sourceArtifactID = sourceArtifactID
+        self.body = body
+        self.note = note
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case sourceArtifactID = "source_artifact_id"
+        case body
+        case note
+    }
+}
+
 public struct SaveBlueprintRequest: Codable, Equatable, Sendable {
     public var premise: String
     public var theme: String
