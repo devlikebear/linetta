@@ -26,6 +26,34 @@ public struct APIClient: Sendable {
         try await send(path: "/api/works", method: "POST", body: request)
     }
 
+    public func listEpisodes(workID: String) async throws -> [Episode] {
+        try await get(path: "/api/works/\(workID)/episodes")
+    }
+
+    public func createEpisode(workID: String, request: CreateEpisodeRequest) async throws -> Episode {
+        try await send(path: "/api/works/\(workID)/episodes", method: "POST", body: request)
+    }
+
+    public func getBlueprint(workID: String, episodeID: String) async throws -> EpisodeBlueprint {
+        try await get(path: "/api/works/\(workID)/episodes/\(episodeID)/blueprint")
+    }
+
+    public func saveBlueprint(workID: String, episodeID: String, request: SaveBlueprintRequest) async throws -> EpisodeBlueprint {
+        try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/blueprint", method: "PUT", body: request)
+    }
+
+    public func runEpisode(workID: String, episodeID: String, request: RunEpisodeRequest = RunEpisodeRequest()) async throws -> EpisodeRunResult {
+        try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/runs", method: "POST", body: request)
+    }
+
+    public func listRunArtifacts(runID: String) async throws -> [Artifact] {
+        try await get(path: "/api/runs/\(runID)/artifacts")
+    }
+
+    public func listRunEvents(runID: String) async throws -> [RunEvent] {
+        try await get(path: "/api/runs/\(runID)/events")
+    }
+
     public func listMemory(
         workID: String,
         kind: MemoryKind? = nil,

@@ -87,4 +87,70 @@ final class APIClientTests: XCTestCase {
         XCTAssertTrue(json.contains(#""status":"draft""#))
         XCTAssertTrue(json.contains(#""importance":"medium""#))
     }
+
+    func testEpisodeBlueprintDecodesFromEngineJSON() throws {
+        let json = Data("""
+        {
+          "id": "blueprint_1",
+          "work_id": "work_1",
+          "episode_id": "episode_1",
+          "premise": "Mira hears the harbor singing.",
+          "theme": "Memory as infrastructure",
+          "situation": "A pump changes rhythm.",
+          "must_include": "lullaby clue",
+          "must_avoid": "exposition dump",
+          "structure_notes": "Open with ritual.",
+          "created_at": "2026-05-24T09:00:00Z",
+          "updated_at": "2026-05-24T09:01:00Z"
+        }
+        """.utf8)
+
+        let blueprint = try JSONDecoder.linetta.decode(EpisodeBlueprint.self, from: json)
+
+        XCTAssertEqual(blueprint.id, "blueprint_1")
+        XCTAssertEqual(blueprint.workID, "work_1")
+        XCTAssertEqual(blueprint.episodeID, "episode_1")
+        XCTAssertEqual(blueprint.mustAvoid, "exposition dump")
+    }
+
+    func testEpisodeRunResultDecodesArtifactsAndEvents() throws {
+        let json = Data("""
+        {
+          "RunID": "run_1",
+          "TesseraRunID": "run_1",
+          "Status": "closed",
+          "Closure": "normal",
+          "Artifacts": [
+            {
+              "id": "artifact_1",
+              "work_id": "work_1",
+              "episode_id": "episode_1",
+              "run_id": "run_1",
+              "kind": "draft",
+              "title": "Draft",
+              "body": "Draft body",
+              "created_at": "2026-05-24T09:00:00Z"
+            }
+          ],
+          "Events": [
+            {
+              "schema_version": 1,
+              "seq": 1,
+              "at": "2026-05-24T09:00:00Z",
+              "type": "task.succeeded",
+              "run_id": "run_1",
+              "task_id": "draft",
+              "role": "writer"
+            }
+          ]
+        }
+        """.utf8)
+
+        let result = try JSONDecoder.linetta.decode(EpisodeRunResult.self, from: json)
+
+        XCTAssertEqual(result.runID, "run_1")
+        XCTAssertEqual(result.closure, "normal")
+        XCTAssertEqual(result.artifacts.first?.kind, .draft)
+        XCTAssertEqual(result.events.first?.type, "task.succeeded")
+    }
 }

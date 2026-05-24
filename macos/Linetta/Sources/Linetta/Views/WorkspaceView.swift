@@ -11,17 +11,13 @@ struct WorkspaceView: View {
                     Label("Overview", systemImage: "text.book.closed")
                 }
             CanonMemoryView(work: work)
-            .tabItem {
-                Label("Memory", systemImage: "brain")
-            }
-            PlaceholderPane(
-                title: "Episode Workbench",
-                systemImage: "wand.and.stars",
-                detail: "Human blueprints and Tessera agent runs will be coordinated here."
-            )
-            .tabItem {
-                Label("Workbench", systemImage: "wand.and.stars")
-            }
+                .tabItem {
+                    Label("Memory", systemImage: "brain")
+                }
+            EpisodeWorkbenchView(work: work)
+                .tabItem {
+                    Label("Workbench", systemImage: "wand.and.stars")
+                }
         }
         .navigationTitle(work.title)
     }
@@ -50,28 +46,5 @@ private struct WorkOverview: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-private struct PlaceholderPane: View {
-    var title: String
-    var systemImage: String
-    var detail: String
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 38))
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.title2)
-                .fontWeight(.semibold)
-            Text(detail)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(28)
     }
 }

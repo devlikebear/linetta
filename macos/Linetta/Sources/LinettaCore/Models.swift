@@ -36,6 +36,96 @@ public struct CreateWorkRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct Episode: Codable, Equatable, Identifiable, Hashable, Sendable {
+    public var id: String
+    public var workID: String
+    public var title: String
+    public var status: String
+    public var position: Int
+    public var createdAt: String
+    public var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workID = "work_id"
+        case title
+        case status
+        case position
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+public struct CreateEpisodeRequest: Codable, Equatable, Sendable {
+    public var title: String
+
+    public init(title: String) {
+        self.title = title
+    }
+}
+
+public struct EpisodeBlueprint: Codable, Equatable, Identifiable, Sendable {
+    public var id: String
+    public var workID: String
+    public var episodeID: String
+    public var premise: String
+    public var theme: String
+    public var situation: String
+    public var mustInclude: String
+    public var mustAvoid: String
+    public var structureNotes: String
+    public var createdAt: String
+    public var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workID = "work_id"
+        case episodeID = "episode_id"
+        case premise
+        case theme
+        case situation
+        case mustInclude = "must_include"
+        case mustAvoid = "must_avoid"
+        case structureNotes = "structure_notes"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+public struct SaveBlueprintRequest: Codable, Equatable, Sendable {
+    public var premise: String
+    public var theme: String
+    public var situation: String
+    public var mustInclude: String
+    public var mustAvoid: String
+    public var structureNotes: String
+
+    public init(
+        premise: String = "",
+        theme: String = "",
+        situation: String = "",
+        mustInclude: String = "",
+        mustAvoid: String = "",
+        structureNotes: String = ""
+    ) {
+        self.premise = premise
+        self.theme = theme
+        self.situation = situation
+        self.mustInclude = mustInclude
+        self.mustAvoid = mustAvoid
+        self.structureNotes = structureNotes
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case premise
+        case theme
+        case situation
+        case mustInclude = "must_include"
+        case mustAvoid = "must_avoid"
+        case structureNotes = "structure_notes"
+    }
+}
+
 public enum MemoryKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case character
     case worldFact = "world_fact"
@@ -178,6 +268,96 @@ public struct MemoryDecision: Codable, Equatable, Identifiable, Sendable {
         case reason
         case actor
         case createdAt = "created_at"
+    }
+}
+
+public enum ArtifactKind: String, Codable, CaseIterable, Identifiable, Sendable {
+    case museNotes = "muse-notes"
+    case plotOutline = "plot-outline"
+    case canonReview = "canon-review"
+    case researchNotes = "research-notes"
+    case draft
+    case critique
+    case editedDraft = "edited-draft"
+
+    public var id: String { rawValue }
+}
+
+public struct Artifact: Codable, Equatable, Identifiable, Hashable, Sendable {
+    public var id: String
+    public var workID: String
+    public var episodeID: String
+    public var runID: String
+    public var kind: ArtifactKind
+    public var title: String
+    public var body: String
+    public var createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case workID = "work_id"
+        case episodeID = "episode_id"
+        case runID = "run_id"
+        case kind
+        case title
+        case body
+        case createdAt = "created_at"
+    }
+}
+
+public struct RunEvent: Codable, Equatable, Identifiable, Sendable {
+    public var schemaVersion: Int
+    public var seq: Int
+    public var at: String
+    public var type: String
+    public var runID: String
+    public var taskID: String?
+    public var role: String?
+    public var stage: String?
+    public var message: String?
+
+    public var id: Int { seq }
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion = "schema_version"
+        case seq
+        case at
+        case type
+        case runID = "run_id"
+        case taskID = "task_id"
+        case role
+        case stage
+        case message
+    }
+}
+
+public struct EpisodeRunResult: Codable, Equatable, Sendable {
+    public var runID: String
+    public var tesseraRunID: String
+    public var status: String
+    public var closure: String
+    public var artifacts: [Artifact]
+    public var events: [RunEvent]
+
+    enum CodingKeys: String, CodingKey {
+        case runID = "RunID"
+        case tesseraRunID = "TesseraRunID"
+        case status = "Status"
+        case closure = "Closure"
+        case artifacts = "Artifacts"
+        case events = "Events"
+    }
+}
+
+public struct RunEpisodeRequest: Codable, Equatable, Sendable {
+    public var approvedBy: String
+
+    public init(approvedBy: String = "human") {
+        self.approvedBy = approvedBy
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case approvedBy = "approved_by"
     }
 }
 
