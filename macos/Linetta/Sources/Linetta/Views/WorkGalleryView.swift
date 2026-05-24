@@ -2,7 +2,7 @@ import LinettaCore
 import SwiftUI
 
 struct WorkGalleryView: View {
-    @EnvironmentObject private var appState: AppState
+    @Environment(AppState.self) private var appState
     @State private var showingNewWork = false
     @State private var query = ""
     @State private var statusFilter = "all"
@@ -20,6 +20,7 @@ struct WorkGalleryView: View {
     }
 
     var body: some View {
+        @Bindable var appState = appState
         NavigationSplitView {
             VStack(spacing: 10) {
                 TextField("Search works", text: $query)
@@ -102,7 +103,7 @@ private struct StatusFooter: View {
 private struct WorkRow: View {
     var work: Work
 
-    @EnvironmentObject private var appState: AppState
+    @Environment(AppState.self) private var appState
     @State private var stats: WorkStats?
 
     private var client: APIClient { appState.client }

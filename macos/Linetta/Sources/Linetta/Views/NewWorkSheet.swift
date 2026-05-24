@@ -2,7 +2,7 @@ import SwiftUI
 
 struct NewWorkSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @EnvironmentObject private var appState: AppState
+    @Environment(AppState.self) private var appState
 
     @State private var title = ""
     @State private var genre = ""

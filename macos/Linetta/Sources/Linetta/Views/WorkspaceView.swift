@@ -27,7 +27,7 @@ struct WorkspaceView: View {
 private struct WorkOverview: View {
     var work: Work
 
-    @EnvironmentObject private var appState: AppState
+    @Environment(AppState.self) private var appState
     @State private var exportDocument = TextExportDocument()
     @State private var isExporting = false
     @State private var errorMessage: String?

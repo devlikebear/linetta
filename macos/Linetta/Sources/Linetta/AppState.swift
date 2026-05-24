@@ -1,17 +1,19 @@
 import Combine
 import Foundation
 import LinettaCore
+import Observation
 
 @MainActor
-final class AppState: ObservableObject {
-    @Published private(set) var works: [Work] = []
-    @Published var selectedWork: Work?
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    @Published private(set) var client: APIClient
+@Observable
+final class AppState {
+    private(set) var works: [Work] = []
+    var selectedWork: Work?
+    var isLoading = false
+    var errorMessage: String?
+    private(set) var client: APIClient
 
     private let engine: EngineController
-    private var cancellables: Set<AnyCancellable> = []
+    @ObservationIgnored private var cancellables: Set<AnyCancellable> = []
 
     init(engine: EngineController) {
         self.engine = engine
@@ -23,9 +25,7 @@ final class AppState: ObservableObject {
                 guard let self else { return }
                 self.client = APIClient(baseURL: address ?? APIClient.defaultBaseURL)
                 if address != nil {
-                    Task { @MainActor [weak self] in
-                        await self?.refreshWorks()
-                    }
+                    Task { @MainActor [weak self] in await self?.refreshWorks() }
                 }
             }
             .store(in: &cancellables)

@@ -15,7 +15,7 @@ struct CanonMemoryView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
 
-    @EnvironmentObject private var appState: AppState
+    @Environment(AppState.self) private var appState
     private var client: APIClient { appState.client }
 
     var body: some View {

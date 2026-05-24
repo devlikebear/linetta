@@ -12,12 +12,12 @@ private let sharedAppState = AppState(engine: sharedEngine)
 struct LinettaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var engine = sharedEngine
-    @StateObject private var appState = sharedAppState
+    @State private var appState = sharedAppState
 
     var body: some Scene {
         WindowGroup {
             WorkGalleryView()
-                .environmentObject(appState)
+                .environment(appState)
                 .environmentObject(engine)
         }
         .commands {
@@ -30,7 +30,7 @@ struct LinettaApp: App {
         }
         Settings {
             SettingsView()
-                .environmentObject(appState)
+                .environment(appState)
                 .environmentObject(engine)
         }
     }
