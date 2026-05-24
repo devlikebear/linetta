@@ -93,6 +93,10 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 		s.handleEpisodes(w, r, workID)
 		return
 	}
+	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "blueprint" {
+		s.handleEpisodeBlueprint(w, r, workID, parts[2])
+		return
+	}
 	if len(parts) >= 2 && parts[1] == "memory" {
 		s.handleMemoryPath(w, r, workID, parts[2:])
 		return
@@ -136,6 +140,32 @@ func (s *Server) handleEpisodes(w http.ResponseWriter, r *http.Request, workID s
 			return
 		}
 		writeJSON(w, http.StatusCreated, created)
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) handleEpisodeBlueprint(w http.ResponseWriter, r *http.Request, workID, episodeID string) {
+	switch r.Method {
+	case http.MethodGet:
+		blueprint, err := s.repo.GetBlueprint(r.Context(), workID, episodeID)
+		if err != nil {
+			writeRepositoryError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, blueprint)
+	case http.MethodPut:
+		var input work.SaveBlueprintInput
+		if err := readJSON(r, &input); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		blueprint, err := s.repo.SaveBlueprint(r.Context(), workID, episodeID, input)
+		if err != nil {
+			writeRepositoryError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, blueprint)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}

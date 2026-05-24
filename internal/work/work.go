@@ -57,6 +57,29 @@ type Episode struct {
 	UpdatedAt time.Time     `json:"updated_at"`
 }
 
+type EpisodeBlueprint struct {
+	ID             string    `json:"id"`
+	WorkID         string    `json:"work_id"`
+	EpisodeID      string    `json:"episode_id"`
+	Premise        string    `json:"premise"`
+	Theme          string    `json:"theme"`
+	Situation      string    `json:"situation"`
+	MustInclude    string    `json:"must_include"`
+	MustAvoid      string    `json:"must_avoid"`
+	StructureNotes string    `json:"structure_notes"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type SaveBlueprintInput struct {
+	Premise        string `json:"premise"`
+	Theme          string `json:"theme"`
+	Situation      string `json:"situation"`
+	MustInclude    string `json:"must_include"`
+	MustAvoid      string `json:"must_avoid"`
+	StructureNotes string `json:"structure_notes"`
+}
+
 type Repository struct {
 	db *store.DB
 }
@@ -194,6 +217,91 @@ func (r *Repository) ListEpisodes(ctx context.Context, workID string) ([]Episode
 	return episodes, nil
 }
 
+func (r *Repository) GetEpisode(ctx context.Context, workID, episodeID string) (Episode, error) {
+	row := r.conn().QueryRowContext(ctx, `
+		SELECT id, work_id, title, status, position, created_at, updated_at
+		FROM episodes
+		WHERE work_id = ? AND id = ?
+	`, strings.TrimSpace(workID), strings.TrimSpace(episodeID))
+	item, err := scanEpisode(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Episode{}, ErrNotFound
+	}
+	if err != nil {
+		return Episode{}, err
+	}
+	return item, nil
+}
+
+func (r *Repository) SaveBlueprint(ctx context.Context, workID, episodeID string, input SaveBlueprintInput) (EpisodeBlueprint, error) {
+	workID = strings.TrimSpace(workID)
+	episodeID = strings.TrimSpace(episodeID)
+	if _, err := r.GetEpisode(ctx, workID, episodeID); err != nil {
+		return EpisodeBlueprint{}, err
+	}
+	input = normalizeBlueprintInput(input)
+	now := time.Now().UTC()
+
+	existing, err := r.GetBlueprint(ctx, workID, episodeID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return EpisodeBlueprint{}, err
+	}
+	if errors.Is(err, ErrNotFound) {
+		blueprint := EpisodeBlueprint{
+			ID:             newID("blueprint"),
+			WorkID:         workID,
+			EpisodeID:      episodeID,
+			Premise:        input.Premise,
+			Theme:          input.Theme,
+			Situation:      input.Situation,
+			MustInclude:    input.MustInclude,
+			MustAvoid:      input.MustAvoid,
+			StructureNotes: input.StructureNotes,
+			CreatedAt:      now,
+			UpdatedAt:      now,
+		}
+		_, err := r.conn().ExecContext(ctx, `
+			INSERT INTO episode_blueprints (
+				id, work_id, episode_id, premise, theme, situation, must_include, must_avoid, structure_notes, created_at, updated_at
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, blueprint.ID, blueprint.WorkID, blueprint.EpisodeID, blueprint.Premise, blueprint.Theme, blueprint.Situation, blueprint.MustInclude, blueprint.MustAvoid, blueprint.StructureNotes, formatTime(blueprint.CreatedAt), formatTime(blueprint.UpdatedAt))
+		if err != nil {
+			return EpisodeBlueprint{}, err
+		}
+		return blueprint, nil
+	}
+
+	_, err = r.conn().ExecContext(ctx, `
+		UPDATE episode_blueprints
+		SET premise = ?, theme = ?, situation = ?, must_include = ?, must_avoid = ?, structure_notes = ?, updated_at = ?
+		WHERE id = ?
+	`, input.Premise, input.Theme, input.Situation, input.MustInclude, input.MustAvoid, input.StructureNotes, formatTime(now), existing.ID)
+	if err != nil {
+		return EpisodeBlueprint{}, err
+	}
+	return r.GetBlueprint(ctx, workID, episodeID)
+}
+
+func (r *Repository) GetBlueprint(ctx context.Context, workID, episodeID string) (EpisodeBlueprint, error) {
+	if _, err := r.GetEpisode(ctx, workID, episodeID); err != nil {
+		return EpisodeBlueprint{}, err
+	}
+	row := r.conn().QueryRowContext(ctx, `
+		SELECT id, work_id, episode_id, premise, theme, situation, must_include, must_avoid, structure_notes, created_at, updated_at
+		FROM episode_blueprints
+		WHERE work_id = ? AND episode_id = ?
+	`, strings.TrimSpace(workID), strings.TrimSpace(episodeID))
+	blueprint, err := scanBlueprint(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return EpisodeBlueprint{}, ErrNotFound
+	}
+	if err != nil {
+		return EpisodeBlueprint{}, err
+	}
+	return blueprint, nil
+}
+
 func (r *Repository) nextEpisodePosition(ctx context.Context, workID string) (int, error) {
 	var position sql.NullInt64
 	if err := r.conn().QueryRowContext(ctx, `SELECT MAX(position) FROM episodes WHERE work_id = ?`, workID).Scan(&position); err != nil {
@@ -250,6 +358,46 @@ func scanEpisode(row scanner) (Episode, error) {
 		return Episode{}, err
 	}
 	return item, nil
+}
+
+func scanBlueprint(row scanner) (EpisodeBlueprint, error) {
+	var item EpisodeBlueprint
+	var createdAt, updatedAt string
+	if err := row.Scan(
+		&item.ID,
+		&item.WorkID,
+		&item.EpisodeID,
+		&item.Premise,
+		&item.Theme,
+		&item.Situation,
+		&item.MustInclude,
+		&item.MustAvoid,
+		&item.StructureNotes,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
+		return EpisodeBlueprint{}, err
+	}
+	var err error
+	item.CreatedAt, err = parseTime(createdAt)
+	if err != nil {
+		return EpisodeBlueprint{}, err
+	}
+	item.UpdatedAt, err = parseTime(updatedAt)
+	if err != nil {
+		return EpisodeBlueprint{}, err
+	}
+	return item, nil
+}
+
+func normalizeBlueprintInput(input SaveBlueprintInput) SaveBlueprintInput {
+	input.Premise = strings.TrimSpace(input.Premise)
+	input.Theme = strings.TrimSpace(input.Theme)
+	input.Situation = strings.TrimSpace(input.Situation)
+	input.MustInclude = strings.TrimSpace(input.MustInclude)
+	input.MustAvoid = strings.TrimSpace(input.MustAvoid)
+	input.StructureNotes = strings.TrimSpace(input.StructureNotes)
+	return input
 }
 
 func newID(prefix string) string {

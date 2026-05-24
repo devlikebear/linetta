@@ -89,6 +89,22 @@ var migrationStatements = []string{
 		FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_episodes_work_position ON episodes(work_id, position, created_at)`,
+	`CREATE TABLE IF NOT EXISTS episode_blueprints (
+		id TEXT PRIMARY KEY,
+		work_id TEXT NOT NULL,
+		episode_id TEXT NOT NULL,
+		premise TEXT NOT NULL DEFAULT '',
+		theme TEXT NOT NULL DEFAULT '',
+		situation TEXT NOT NULL DEFAULT '',
+		must_include TEXT NOT NULL DEFAULT '',
+		must_avoid TEXT NOT NULL DEFAULT '',
+		structure_notes TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		FOREIGN KEY (work_id) REFERENCES works(id) ON DELETE CASCADE,
+		FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE,
+		UNIQUE(work_id, episode_id)
+	)`,
 	`CREATE TABLE IF NOT EXISTS agent_runs (
 		id TEXT PRIMARY KEY,
 		work_id TEXT NOT NULL,

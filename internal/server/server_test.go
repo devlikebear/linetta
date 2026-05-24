@@ -91,6 +91,47 @@ func TestEpisodeRoutesAreScopedToWork(t *testing.T) {
 	}
 }
 
+func TestBlueprintRoutesSaveAndGetEpisodeBlueprint(t *testing.T) {
+	handler := newTestHandler(t)
+	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Blueprint Work"}, http.StatusCreated)
+	episode := postJSON[work.Episode](t, handler, "/api/works/"+createdWork.ID+"/episodes", map[string]string{
+		"title": "Episode 1",
+	}, http.StatusCreated)
+
+	saved := putJSON[work.EpisodeBlueprint](t, handler, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/blueprint", map[string]string{
+		"premise":         "Mira hears the harbor singing.",
+		"theme":           "Memory as civic infrastructure",
+		"situation":       "A pump changes rhythm before sunset.",
+		"must_include":    "The lullaby clue",
+		"must_avoid":      "No exposition dump",
+		"structure_notes": "Open with ritual, end with a message.",
+	}, http.StatusOK)
+	if saved.WorkID != createdWork.ID || saved.EpisodeID != episode.ID {
+		t.Fatalf("saved blueprint = %+v", saved)
+	}
+
+	got := getJSON[work.EpisodeBlueprint](t, handler, "/api/works/"+createdWork.ID+"/episodes/"+episode.ID+"/blueprint", http.StatusOK)
+	if got.ID != saved.ID || got.Premise != saved.Premise {
+		t.Fatalf("got = %+v, want saved %+v", got, saved)
+	}
+}
+
+func TestBlueprintRoutesRejectWrongWork(t *testing.T) {
+	handler := newTestHandler(t)
+	first := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "First"}, http.StatusCreated)
+	second := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Second"}, http.StatusCreated)
+	episode := postJSON[work.Episode](t, handler, "/api/works/"+first.ID+"/episodes", map[string]string{
+		"title": "Episode 1",
+	}, http.StatusCreated)
+
+	res := requestJSON(t, handler, http.MethodPut, "/api/works/"+second.ID+"/episodes/"+episode.ID+"/blueprint", map[string]string{
+		"premise": "Wrong owner",
+	})
+	if res.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body=%s", res.Code, res.Body.String())
+	}
+}
+
 func TestMemoryRoutesCreateUpdateArchiveAndListDecisions(t *testing.T) {
 	handler := newTestHandler(t)
 	createdWork := postJSON[work.Work](t, handler, "/api/works", map[string]string{"title": "Canon Work"}, http.StatusCreated)
@@ -206,6 +247,19 @@ func patchJSON[T any](t *testing.T, handler http.Handler, path string, payload a
 	res := requestJSON(t, handler, http.MethodPatch, path, payload)
 	if res.Code != wantStatus {
 		t.Fatalf("PATCH %s status = %d, want %d; body=%s", path, res.Code, wantStatus, res.Body.String())
+	}
+	var decoded T
+	if err := json.Unmarshal(res.Body.Bytes(), &decoded); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\n%s", err, res.Body.String())
+	}
+	return decoded
+}
+
+func putJSON[T any](t *testing.T, handler http.Handler, path string, payload any, wantStatus int) T {
+	t.Helper()
+	res := requestJSON(t, handler, http.MethodPut, path, payload)
+	if res.Code != wantStatus {
+		t.Fatalf("PUT %s status = %d, want %d; body=%s", path, res.Code, wantStatus, res.Body.String())
 	}
 	var decoded T
 	if err := json.Unmarshal(res.Body.Bytes(), &decoded); err != nil {
