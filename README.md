@@ -44,14 +44,35 @@ go run ./cmd/linetta serve \
   --addr 127.0.0.1:43190
 ```
 
-The Phase 1 API exposes:
+The local engine API exposes:
 
 - `GET /health`
 - `GET /api/works`
 - `POST /api/works`
 - `GET /api/works/{workID}`
+- `GET /api/works/{workID}/stats`
+- `GET /api/works/{workID}/export/markdown`
 - `GET /api/works/{workID}/episodes`
 - `POST /api/works/{workID}/episodes`
+- `PATCH /api/works/{workID}/episodes/{episodeID}/status`
+- `GET /api/works/{workID}/episodes/{episodeID}/blueprint`
+- `PUT /api/works/{workID}/episodes/{episodeID}/blueprint`
+- `GET /api/works/{workID}/episodes/{episodeID}/versions`
+- `POST /api/works/{workID}/episodes/{episodeID}/versions`
+- `GET /api/works/{workID}/episodes/{episodeID}/export/txt`
+- `POST /api/works/{workID}/episodes/{episodeID}/runs`
+- `GET /api/works/{workID}/memory`
+- `POST /api/works/{workID}/memory`
+- `GET /api/works/{workID}/memory/search?q=...`
+- `GET /api/works/{workID}/proposals?status=pending`
+- `GET /api/works/{workID}/episodes/{episodeID}/continuity`
+- `POST /api/proposals/{proposalID}/approve`
+- `POST /api/proposals/{proposalID}/reject`
+- `POST /api/proposals/{proposalID}/defer`
+- `PATCH /api/continuity/{issueID}`
+- `GET /api/runs/{runID}/artifacts`
+- `GET /api/runs/{runID}/events`
+- `GET /api/runs/{runID}/events/stream`
 
 ## Mac App
 
@@ -63,8 +84,31 @@ swift test
 swift run Linetta
 ```
 
-The app opens to a work gallery, can create a new work through the local engine,
-and shows a first workspace shell for the selected work.
+The app opens to a searchable work gallery, creates works through the local
+engine, manages canon memory, runs Tessera episode agents, reviews canon diffs,
+stores manuscript versions, and exports Markdown/TXT files.
+
+## Backup
+
+Create a portable backup with the SQLite library and an optional Tessera config
+snapshot:
+
+```sh
+go run ./cmd/linetta export-library \
+  --db .linetta/dev.db \
+  --config .linetta/tessera.yaml \
+  --out backup.zip
+```
+
+Restore into a new database path:
+
+```sh
+go run ./cmd/linetta import-library \
+  --in backup.zip \
+  --db .linetta/restored.db
+```
+
+Use `--force` only when intentionally overwriting an existing restore path.
 
 ## Tessera Config
 

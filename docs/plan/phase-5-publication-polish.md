@@ -18,17 +18,17 @@ Linetta를 매일 쓰는 작업 도구로 다듬는다. 이 phase는 출판 가�
 
 ### 1. 에피소드 상태 관리
 
-- [ ] `episodes.status` 추가
+- [x] `episodes.status` 추가
   - idea
   - outlined
   - drafting
   - reviewing
   - ready
   - published
-- [ ] API 추가
+- [x] API 추가
   - `PATCH /api/works/{workID}/episodes/{episodeID}/status`
-- [ ] SwiftUI episode list에 상태 표시
-- [ ] 갤러리 카드에 최근 에피소드 상태 요약 표시
+- [x] SwiftUI episode list에 상태 표시
+- [x] 갤러리 카드에 최근 에피소드 상태 요약 표시
 
 검증:
 
@@ -38,7 +38,7 @@ go test ./internal/work/... ./internal/server/...
 
 ### 2. 원고 버전 히스토리
 
-- [ ] `episode_versions` 구현
+- [x] `episode_versions` 구현
   - id
   - work_id
   - episode_id
@@ -46,10 +46,10 @@ go test ./internal/work/... ./internal/server/...
   - body
   - note
   - created_at
-- [ ] 현재 원고 저장 시 version 생성
-- [ ] artifact 채택 시 version 생성
-- [ ] SwiftUI에서 version list와 restore 액션 제공
-- [ ] 덮어쓰기 전에 항상 version을 남긴다.
+- [x] 현재 원고 저장 시 version 생성
+- [x] artifact 채택 시 version 생성
+- [x] SwiftUI에서 version list와 restore 액션 제공
+- [x] 덮어쓰기 전에 항상 version을 남긴다.
 
 검증:
 
@@ -65,16 +65,16 @@ go test ./internal/work/... ./internal/server/...
 
 ### 3. 내보내기
 
-- [ ] Markdown export
+- [x] Markdown export
   - 작품 전체
   - 특정 에피소드
   - Canon memory 요약
-- [ ] TXT export
+- [x] TXT export
   - 특정 에피소드 원고
-- [ ] API 추가
+- [x] API 추가
   - `GET /api/works/{workID}/export/markdown`
   - `GET /api/works/{workID}/episodes/{episodeID}/export/txt`
-- [ ] SwiftUI export sheet 추가
+- [x] SwiftUI export sheet 추가
 
 검증:
 
@@ -89,15 +89,15 @@ go test ./internal/server/...
 
 ### 4. 작업 통계와 갤러리 polish
 
-- [ ] 작품 갤러리에 표시할 통계 API 추가
+- [x] 작품 갤러리에 표시할 통계 API 추가
   - episode count
   - ready count
   - word count
   - open continuity issue count
   - pending Canon proposal count
-- [ ] 작품 카드에 진행 상태 표시
-- [ ] 최근 작업 순 정렬
-- [ ] 검색/필터 추가
+- [x] 작품 카드에 진행 상태 표시
+- [x] 최근 작업 순 정렬
+- [x] 검색/필터 추가
   - title
   - genre
   - status
@@ -110,14 +110,14 @@ go test ./internal/work/... ./internal/server/...
 
 ### 5. Settings와 Tessera config 관리
 
-- [ ] SwiftUI Settings 화면 추가
+- [x] SwiftUI Settings 화면 추가
   - engine address
   - default DB path
   - default Tessera config path
   - provider config status
-- [ ] `examples/tessera.yaml` 기반으로 앱 기본 config 생성 기능 추가
-- [ ] 설정 화면에서 config path를 바꾸고 저장할 수 있게 한다.
-- [ ] provider secret은 config 파일에 직접 저장하지 않고 env/keychain 전략을 별도 phase 후보로 남긴다.
+- [x] `examples/tessera.yaml` 기반으로 앱 기본 config 생성 기능 추가
+- [x] 설정 화면에서 config path를 바꾸고 저장할 수 있게 한다.
+- [x] provider secret은 config 파일에 직접 저장하지 않고 env/keychain 전략을 별도 phase 후보로 남긴다.
 
 검증:
 
@@ -128,11 +128,11 @@ xcodebuild -project macos/Linetta/Linetta.xcodeproj -scheme Linetta -destination
 
 ### 6. 백업/복구 최소 기능
 
-- [ ] `linetta export-library --db ... --out backup.zip` CLI 추가
-- [ ] backup에는 SQLite DB와 config snapshot을 포함한다.
-- [ ] `linetta import-library --in backup.zip --db ...` CLI 추가
-- [ ] import는 기존 DB를 덮어쓰기 전에 확인 또는 별도 경로를 요구한다.
-- [ ] 테스트 추가
+- [x] `linetta export-library --db ... --out backup.zip` CLI 추가
+- [x] backup에는 SQLite DB와 config snapshot을 포함한다.
+- [x] `linetta import-library --in backup.zip --db ...` CLI 추가
+- [x] import는 기존 DB를 덮어쓰기 전에 확인 또는 별도 경로를 요구한다.
+- [x] 테스트 추가
   - export 후 import하면 works/memory/episodes가 복원되는지
 
 검증:
@@ -148,7 +148,7 @@ go test ./...
   - Open Work
   - Export
   - Settings
-- [ ] 주요 단축키
+- [x] 주요 단축키
   - 새 작품
   - 새 에피소드
   - 저장
@@ -159,7 +159,7 @@ go test ./...
   - undo/redo
   - find
   - word count
-- [ ] 빈 상태/에러 상태 다듬기
+- [x] 빈 상태/에러 상태 다듬기
   - engine offline
   - no works
   - no memory
@@ -176,14 +176,16 @@ go test ./...
 ### Checkpoint: Phase 5 완료 확인
 
 **구현 확인:**
-- [ ] 작품 갤러리, 작업실, Canon memory, 에피소드 협업, 내보내기가 하나의 흐름으로 연결된다.
-- [ ] 원고 version history와 backup/export가 동작한다.
-- [ ] Settings에서 Tessera config를 관리할 수 있다.
+- [x] 작품 갤러리, 작업실, Canon memory, 에피소드 협업, 내보내기가 하나의 흐름으로 연결된다.
+- [x] 원고 version history와 backup/export가 동작한다.
+- [x] Settings에서 Tessera config를 관리할 수 있다.
 
 **실행 확인:**
-- [ ] `go test ./...` 통과
+- [x] `go test ./...` 통과
 - [ ] `xcodebuild ... test` 통과
-- [ ] `linetta export-library` 후 `linetta import-library` smoke 통과
+- [x] `linetta export-library` 후 `linetta import-library` smoke 통과
+
+메모: 현재 로컬 Xcode 도구가 `IDESimulatorFoundation` 심볼 로딩 문제로 `xcodebuild` 실행 단계에서 막힌다. Swift Package 기준 `swift test`는 통과한다.
 
 **사용자 확인:**
 - [ ] 실제 장편 웹소설 프로젝트 하나를 만들어 1화 기획부터 Canon 반영까지 끝까지 진행해본다.
