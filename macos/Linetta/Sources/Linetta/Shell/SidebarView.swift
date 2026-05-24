@@ -45,16 +45,18 @@ private struct SidebarHeader: View {
 }
 
 private struct SidebarOnboardingHint: View {
+    @State private var showSheet = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("No works yet")
-                .font(LinettaTypography.body)
-                .foregroundStyle(LinettaTheme.text)
-            Text("Create your first work to begin.")
-                .font(LinettaTypography.bodySmall)
-                .foregroundStyle(LinettaTheme.textTertiary)
+        VStack(alignment: .center, spacing: 10) {
+            Image(systemName: "books.vertical").font(.system(size: 28)).foregroundStyle(LinettaTheme.textTertiary)
+            Text("No works yet").font(LinettaTypography.body).foregroundStyle(LinettaTheme.text)
+            Button("Create your first work") { showSheet = true }
+                .buttonStyle(.borderedProminent)
+                .tint(LinettaTheme.accent)
+                .controlSize(.small)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 18)
+        .padding(.horizontal, 8).padding(.vertical, 30)
+        .frame(maxWidth: .infinity)
+        .sheet(isPresented: $showSheet) { NewWorkSheet() }
     }
 }
