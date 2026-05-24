@@ -8,6 +8,7 @@ struct SidebarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SidebarHeader()
+            SidebarSearchField()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     Text("Works").linettaLabelStyle().padding(.horizontal, 8).padding(.top, 6)
