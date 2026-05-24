@@ -65,6 +65,21 @@ func TestRunnerRunsEpisodeThroughTesseraAndStoresArtifacts(t *testing.T) {
 	if len(storedEvents) != len(events) {
 		t.Fatalf("stored events len = %d, want %d", len(storedEvents), len(events))
 	}
+
+	proposals, err := memoryRepo.ListProposals(ctx, workID, memory.ProposalPending)
+	if err != nil {
+		t.Fatalf("ListProposals() error = %v", err)
+	}
+	if len(proposals) == 0 {
+		t.Fatal("expected at least one pending canon proposal")
+	}
+	issues, err := memoryRepo.ListIssues(ctx, workID, episodeID)
+	if err != nil {
+		t.Fatalf("ListIssues() error = %v", err)
+	}
+	if len(issues) == 0 {
+		t.Fatal("expected at least one continuity issue")
+	}
 }
 
 func newRunnerFixture(t *testing.T) (*store.DB, *work.Repository, *memory.Repository, string, string) {
