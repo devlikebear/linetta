@@ -9,6 +9,19 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(client.url(path: "health").absoluteString, "http://127.0.0.1:43190/health")
     }
 
+    func testBuildsExportURLs() throws {
+        let client = APIClient(baseURL: try XCTUnwrap(URL(string: "http://127.0.0.1:43190")))
+
+        XCTAssertEqual(
+            client.exportWorkMarkdownURL(workID: "work_1").absoluteString,
+            "http://127.0.0.1:43190/api/works/work_1/export/markdown"
+        )
+        XCTAssertEqual(
+            client.exportEpisodeTextURL(workID: "work_1", episodeID: "episode_1").absoluteString,
+            "http://127.0.0.1:43190/api/works/work_1/episodes/episode_1/export/txt"
+        )
+    }
+
     func testWorkDecodesFromEngineJSON() throws {
         let json = Data("""
         {

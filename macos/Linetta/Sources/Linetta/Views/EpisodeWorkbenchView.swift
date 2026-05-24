@@ -1,5 +1,6 @@
 import LinettaCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct EpisodeWorkbenchView: View {
     var work: Work
@@ -19,6 +20,8 @@ struct EpisodeWorkbenchView: View {
     @State private var versions: [EpisodeVersion] = []
     @State private var selectedVersion: EpisodeVersion?
     @State private var manuscriptBody = ""
+    @State private var episodeExportDocument = TextExportDocument()
+    @State private var isExportingEpisodeText = false
     @State private var proposals: [CanonProposal] = []
     @State private var selectedProposal: CanonProposal?
     @State private var continuityIssues: [ContinuityIssue] = []
@@ -78,6 +81,12 @@ struct EpisodeWorkbenchView: View {
                             Label("Update Status", systemImage: "checkmark.circle")
                         }
                         .disabled(episodeStatus == selectedEpisode.status)
+                        Button {
+                            Task { await exportSelectedEpisodeText() }
+                        } label: {
+                            Label("Export TXT", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(versions.isEmpty)
                         Button("Save Blueprint") {
                             Task { await saveBlueprint() }
                         }
@@ -122,6 +131,16 @@ struct EpisodeWorkbenchView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .fileExporter(
+            isPresented: $isExportingEpisodeText,
+            document: episodeExportDocument,
+            contentType: .plainText,
+            defaultFilename: safeExportFilename(selectedEpisode?.title ?? "episode", fallback: "episode") + ".txt"
+        ) { result in
+            if case .failure(let error) = result {
+                errorMessage = error.localizedDescription
             }
         }
     }
@@ -438,6 +457,22 @@ struct EpisodeWorkbenchView: View {
             manuscriptBody = saved.body
             await loadVersions(for: selectedEpisode)
             selectedVersion = saved
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func exportSelectedEpisodeText() async {
+        guard let selectedEpisode else {
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            let text = try await client.exportEpisodeText(workID: work.id, episodeID: selectedEpisode.id)
+            episodeExportDocument = TextExportDocument(text: text)
+            isExportingEpisodeText = true
         } catch {
             errorMessage = error.localizedDescription
         }

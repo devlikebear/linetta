@@ -58,6 +58,26 @@ public struct APIClient: Sendable {
         try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/versions", method: "POST", body: request)
     }
 
+    func exportWorkMarkdownURL(workID: String) -> URL {
+        url(path: "/api/works/\(workID)/export/markdown")
+    }
+
+    func exportEpisodeTextURL(workID: String, episodeID: String) -> URL {
+        url(path: "/api/works/\(workID)/episodes/\(episodeID)/export/txt")
+    }
+
+    public func exportWorkMarkdown(workID: String) async throws -> String {
+        var request = URLRequest(url: exportWorkMarkdownURL(workID: workID))
+        request.httpMethod = "GET"
+        return try await performText(request)
+    }
+
+    public func exportEpisodeText(workID: String, episodeID: String) async throws -> String {
+        var request = URLRequest(url: exportEpisodeTextURL(workID: workID, episodeID: episodeID))
+        request.httpMethod = "GET"
+        return try await performText(request)
+    }
+
     public func runEpisode(workID: String, episodeID: String, request: RunEpisodeRequest = RunEpisodeRequest()) async throws -> EpisodeRunResult {
         try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/runs", method: "POST", body: request)
     }
@@ -178,6 +198,18 @@ public struct APIClient: Sendable {
             throw APIError.server(message)
         }
         return try JSONDecoder.linetta.decode(T.self, from: data)
+    }
+
+    private func performText(_ request: URLRequest) async throws -> String {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (try? JSONDecoder.linetta.decode(ErrorResponse.self, from: data).error) ?? "HTTP \(http.statusCode)"
+            throw APIError.server(message)
+        }
+        return String(decoding: data, as: UTF8.self)
     }
 }
 
