@@ -1,10 +1,20 @@
 import Foundation
 
 public struct APIClient: Sendable {
+    public static let engineAddressDefaultsKey = "linetta.engineAddress"
+
+    public static var defaultBaseURL: URL {
+        if let value = UserDefaults.standard.string(forKey: engineAddressDefaultsKey),
+           let url = URL(string: value) {
+            return url
+        }
+        return URL(string: "http://127.0.0.1:43190")!
+    }
+
     public var baseURL: URL
     public var session: URLSession
 
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:43190")!, session: URLSession = .shared) {
+    public init(baseURL: URL = APIClient.defaultBaseURL, session: URLSession = .shared) {
         self.baseURL = baseURL
         self.session = session
     }

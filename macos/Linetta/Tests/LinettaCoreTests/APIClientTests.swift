@@ -31,6 +31,20 @@ final class APIClientTests: XCTestCase {
         )
     }
 
+    func testDefaultBaseURLReadsEngineAddressPreference() throws {
+        let oldValue = UserDefaults.standard.string(forKey: APIClient.engineAddressDefaultsKey)
+        defer {
+            if let oldValue {
+                UserDefaults.standard.set(oldValue, forKey: APIClient.engineAddressDefaultsKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: APIClient.engineAddressDefaultsKey)
+            }
+        }
+        UserDefaults.standard.set("http://127.0.0.1:49999", forKey: APIClient.engineAddressDefaultsKey)
+
+        XCTAssertEqual(APIClient.defaultBaseURL.absoluteString, "http://127.0.0.1:49999")
+    }
+
     func testWorkDecodesFromEngineJSON() throws {
         let json = Data("""
         {
