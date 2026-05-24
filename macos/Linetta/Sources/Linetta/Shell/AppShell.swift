@@ -8,11 +8,8 @@ struct AppShell: View {
 
     var body: some View {
         NavigationSplitView {
-            // SidebarView() — wired in Task D1
-            Color.clear
+            SidebarView()
                 .frame(minWidth: 220, idealWidth: 230, maxWidth: 320)
-                .background(LinettaTheme.surfaceElevated)
-                .overlay { Text("Sidebar").foregroundStyle(LinettaTheme.textTertiary) }
         } detail: {
             // MainPaneRouter() — wired in Task E1
             Color.clear
