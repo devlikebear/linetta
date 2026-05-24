@@ -1,7 +1,9 @@
 import SwiftUI
+import AppKit
 
 @main
 struct LinettaApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var appState = AppState()
 
     var body: some Scene {
@@ -23,5 +25,16 @@ struct LinettaApp: App {
         Settings {
             SettingsView()
         }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
     }
 }
