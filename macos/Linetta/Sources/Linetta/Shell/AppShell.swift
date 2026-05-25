@@ -20,6 +20,7 @@ struct AppShell: View {
         .frame(minWidth: 1080, minHeight: 720)
         .background(LinettaTheme.background)
         .preferredColorScheme(.dark)
+        .safeAreaInset(edge: .bottom) { EngineStatusFooter() }
     }
 
     private var inspectorBinding: Binding<Bool> {
