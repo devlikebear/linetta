@@ -13,6 +13,9 @@
 node_modules/
 apps/desktop/dist/
 apps/desktop/.vite/
+apps/desktop/*.tsbuildinfo
+apps/desktop/vite.config.d.ts
+apps/desktop/vite.config.js
 
 # Rust / Tauri
 apps/desktop/src-tauri/target/
