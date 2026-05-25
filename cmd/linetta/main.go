@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/internal/agent"
+	"github.com/devlikebear/linetta/internal/library"
 	"github.com/devlikebear/linetta/internal/memory"
 	"github.com/devlikebear/linetta/internal/novel"
 	"github.com/devlikebear/linetta/internal/server"
@@ -172,8 +172,10 @@ func runServe(ctx context.Context, opts serveOptions, stdout, stderr io.Writer) 
 	memoryRepo := memory.NewRepository(db, workRepo)
 	httpServer := &http.Server{
 		Handler: server.New(workRepo, server.Options{
-			Memory: memoryRepo,
-			Agent:  agent.NewRunner(db, workRepo, memoryRepo),
+			Memory:     memoryRepo,
+			Agent:      agent.NewRunner(db, workRepo, memoryRepo),
+			DBPath:     opts.DBPath,
+			ConfigPath: defaultConfigPathIfPresent(),
 		}),
 	}
 	go func() {
@@ -239,91 +241,35 @@ func parseImportLibraryOptions(args []string, stderr io.Writer) (importLibraryOp
 }
 
 func runExportLibrary(opts exportLibraryOptions) error {
-	if _, err := os.Stat(opts.DBPath); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(opts.OutPath), 0o755); err != nil {
-		return err
-	}
-	file, err := os.Create(opts.OutPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	archive := zip.NewWriter(file)
-	if err := addZipFile(archive, "library.db", opts.DBPath); err != nil {
-		_ = archive.Close()
-		return err
-	}
-	if strings.TrimSpace(opts.ConfigPath) != "" {
-		if err := addZipFile(archive, "tessera-config.yaml", opts.ConfigPath); err != nil {
-			_ = archive.Close()
-			return err
-		}
-	}
-	return archive.Close()
+	return library.Export(library.ExportOptions{
+		DBPath:     opts.DBPath,
+		ConfigPath: opts.ConfigPath,
+		OutPath:    opts.OutPath,
+	})
 }
 
 func runImportLibrary(opts importLibraryOptions) error {
-	if !opts.Force {
-		if _, err := os.Stat(opts.DBPath); err == nil {
-			return fmt.Errorf("database already exists at %s; pass --force to overwrite", opts.DBPath)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	reader, err := zip.OpenReader(opts.InPath)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-	if err := extractZipFile(reader.File, "library.db", opts.DBPath); err != nil {
-		return err
-	}
-	if strings.TrimSpace(opts.ConfigOut) != "" {
-		if err := extractZipFile(reader.File, "tessera-config.yaml", opts.ConfigOut); err != nil {
-			return err
-		}
-	}
-	return nil
+	return library.Import(library.ImportOptions{
+		InPath:    opts.InPath,
+		DBPath:    opts.DBPath,
+		ConfigOut: opts.ConfigOut,
+		Force:     opts.Force,
+	})
 }
 
-func addZipFile(archive *zip.Writer, name, path string) error {
-	source, err := os.Open(path)
-	if err != nil {
-		return err
+// defaultConfigPathIfPresent returns ~/.linetta/tessera.yaml if it exists, or
+// empty string. The server only includes Tessera config in backups when it
+// can find one on disk.
+func defaultConfigPathIfPresent() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
 	}
-	defer source.Close()
-	target, err := archive.Create(name)
-	if err != nil {
-		return err
+	candidate := filepath.Join(home, ".linetta", "tessera.yaml")
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
 	}
-	_, err = io.Copy(target, source)
-	return err
-}
-
-func extractZipFile(files []*zip.File, name, outPath string) error {
-	for _, file := range files {
-		if file.Name != name {
-			continue
-		}
-		source, err := file.Open()
-		if err != nil {
-			return err
-		}
-		defer source.Close()
-		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-			return err
-		}
-		target, err := os.Create(outPath)
-		if err != nil {
-			return err
-		}
-		defer target.Close()
-		_, err = io.Copy(target, source)
-		return err
-	}
-	return fmt.Errorf("backup missing %s", name)
+	return ""
 }
 
 func defaultDBPath() string {

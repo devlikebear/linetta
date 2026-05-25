@@ -181,6 +181,22 @@ public struct APIClient: Sendable {
         try await send(path: "/api/continuity/\(issueID)", method: "PATCH", body: UpdateContinuityIssueRequest(status: status))
     }
 
+    public func libraryInfo() async throws -> LibraryInfo {
+        try await get(path: "/api/library/info")
+    }
+
+    public func libraryBackup(outPath: String) async throws -> LibraryBackupResult {
+        try await send(path: "/api/library/backup", method: "POST", body: LibraryBackupRequest(outPath: outPath))
+    }
+
+    public func libraryRestore(inPath: String, dbOut: String, configOut: String? = nil, force: Bool = false) async throws -> LibraryRestoreResult {
+        try await send(
+            path: "/api/library/restore",
+            method: "POST",
+            body: LibraryRestoreRequest(inPath: inPath, dbOut: dbOut, configOut: configOut ?? "", force: force)
+        )
+    }
+
     private func get<T: Decodable>(path: String) async throws -> T {
         var request = URLRequest(url: url(path: path))
         request.httpMethod = "GET"

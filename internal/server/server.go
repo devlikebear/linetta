@@ -18,6 +18,12 @@ import (
 type Options struct {
 	Memory *memory.Repository
 	Agent  *agent.Runner
+	// DBPath is the path to the live SQLite database; required for library
+	// backup/restore endpoints. Leave empty to disable those routes.
+	DBPath string
+	// ConfigPath is the optional Tessera config snapshotted alongside the DB
+	// in backups. Empty disables config inclusion.
+	ConfigPath string
 }
 
 type WorkStats struct {
@@ -30,18 +36,22 @@ type WorkStats struct {
 }
 
 type Server struct {
-	repo   *work.Repository
-	memory *memory.Repository
-	agent  *agent.Runner
-	mux    *http.ServeMux
+	repo       *work.Repository
+	memory     *memory.Repository
+	agent      *agent.Runner
+	dbPath     string
+	configPath string
+	mux        *http.ServeMux
 }
 
 func New(repo *work.Repository, opts Options) http.Handler {
 	s := &Server{
-		repo:   repo,
-		memory: opts.Memory,
-		agent:  opts.Agent,
-		mux:    http.NewServeMux(),
+		repo:       repo,
+		memory:     opts.Memory,
+		agent:      opts.Agent,
+		dbPath:     opts.DBPath,
+		configPath: opts.ConfigPath,
+		mux:        http.NewServeMux(),
 	}
 	s.routes()
 	return s
@@ -58,6 +68,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/runs/", s.handleRunPath)
 	s.mux.HandleFunc("/api/proposals/", s.handleProposalActionPath)
 	s.mux.HandleFunc("/api/continuity/", s.handleContinuityPath)
+	s.mux.HandleFunc("/api/library/backup", s.handleLibraryBackup)
+	s.mux.HandleFunc("/api/library/restore", s.handleLibraryRestore)
+	s.mux.HandleFunc("/api/library/info", s.handleLibraryInfo)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

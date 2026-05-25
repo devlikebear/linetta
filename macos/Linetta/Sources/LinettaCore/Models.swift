@@ -562,6 +562,52 @@ public struct RunEpisodeRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct LibraryInfo: Codable, Equatable, Sendable {
+    public var dbPath: String
+    public var configPath: String
+
+    enum CodingKeys: String, CodingKey {
+        case dbPath = "db_path"
+        case configPath = "config_path"
+    }
+}
+
+public struct LibraryBackupRequest: Codable, Equatable, Sendable {
+    public var outPath: String
+    enum CodingKeys: String, CodingKey { case outPath = "out_path" }
+}
+
+public struct LibraryBackupResult: Codable, Equatable, Sendable {
+    public var outPath: String
+    public var sizeBytes: Int64
+    enum CodingKeys: String, CodingKey {
+        case outPath = "out_path"
+        case sizeBytes = "size_bytes"
+    }
+}
+
+public struct LibraryRestoreRequest: Codable, Equatable, Sendable {
+    public var inPath: String
+    public var dbOut: String
+    public var configOut: String
+    public var force: Bool
+    enum CodingKeys: String, CodingKey {
+        case inPath = "in_path"
+        case dbOut = "db_out"
+        case configOut = "config_out"
+        case force
+    }
+}
+
+public struct LibraryRestoreResult: Codable, Equatable, Sendable {
+    public var dbPath: String
+    public var configPath: String
+    enum CodingKeys: String, CodingKey {
+        case dbPath = "db_path"
+        case configPath = "config_path"
+    }
+}
+
 public extension JSONDecoder {
     static var linetta: JSONDecoder {
         JSONDecoder()
