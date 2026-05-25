@@ -13,6 +13,8 @@ import (
 
 	_ "github.com/devlikebear/tars/pkg/llm" // pin
 
+	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -51,6 +53,14 @@ func main() {
 	projects := project.NewRepo(st)
 	nodes := node.NewRepo(st)
 	snaps := snapshot.NewRepo(st)
+	entities := entity.NewRepo(st)
+	mentions := mention.NewRepo(st)
+
+	// Keep the mentions table in sync with each saved Tiptap doc.
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mentions.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
 	clock := func() int64 { return time.Now().UnixMilli() }
 
 	s := rpc.NewServer()
@@ -70,6 +80,11 @@ func main() {
 	s.Handle("nodes.delete", handlers.DeleteNode(nodes, clock))
 	s.Handle("nodes.move_up", handlers.MoveUp(nodes, clock))
 	s.Handle("nodes.move_down", handlers.MoveDown(nodes, clock))
+	s.Handle("entities.search", handlers.SearchEntities(entities))
+	s.Handle("entities.get", handlers.GetEntity(entities))
+	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
+	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
+	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
 
 	if err := s.Serve(ctx, os.Stdin, os.Stdout); err != nil && !errors.Is(err, io.EOF) {
 		fail("serve: %v", err)
