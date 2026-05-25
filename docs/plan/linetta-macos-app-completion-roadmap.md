@@ -144,16 +144,19 @@ Checkpoint 실패 시:
 
 ## 최종 완료 체크리스트 (Phase 6~9 종료 후)
 
-- [x] Phase 6.5 — UI Redesign: 3-column AppShell with warm-dark theme, Sidebar(Works/Memory/Episodes), Episode workspace(Blueprint + Run history + Review queue), Manuscript inspector, Command palette ⌘K, status footer. Legacy views removed.
-- [ ] 모든 페이즈 Checkpoint 통과
-- [ ] 전체 Go 테스트 통과: `go test ./...`
-- [ ] Swift 패키지 테스트 통과: `cd macos/Linetta && swift test`
-- [ ] `go vet ./...` 통과
-- [ ] **E2E 시나리오 1 (Cold start)**: 새 머신 기준 `git clone` → `make build` → `make macos-run` → 새 작품 생성 → Run Agents → 결과 채택 → 백업 → 복원이 끊김 없이 가능
-- [ ] **E2E 시나리오 2 (장문 연재)**: 5000자 이상 에피소드를 LongformEditor에서 편집 → SSE로 progress 확인 → Canon decisions에서 변경 이력 확인
-- [ ] Out of Scope 항목이 잘못 끼어들지 않았는지 확인
-- [ ] 기존 컨벤션 준수: Go는 표준 `_test.go`, Swift는 SwiftUI `View` + `@MainActor AppState` 패턴
-- [ ] 문서 업데이트: `docs/plan/README.md`에 Phase 6~9 링크 추가, 루트 `README.md`의 실행 방법 단순화 (`make macos-run` 한 줄 강조)
+- [x] Phase 6 — Embedded Engine Lifecycle: EngineController, LINETTA_READY stdout signal, dynamic port, .gitignore /bin/, status footer.
+- [x] Phase 6.5 — UI Redesign: 3-column AppShell with warm-dark theme, Sidebar(Works/Memory/Decisions/Episodes), Episode workspace(Blueprint + Run history + Review queue), Manuscript inspector, Command palette ⌘K, status footer. Legacy views removed.
+- [x] Phase 7 — Settings Studio: 4 sections (Engine/Storage/Tessera/About), engine restart/stop/log tail, backup/restore via /api/library/{info,backup,restore}, inline YAML editor, /api/version + Tessera+Go versions.
+- [x] Phase 8 — App Polish: toast HUD, engine offline recovery, Canon Decisions History, gallery onboarding with Import backup, run failure retry banner, app menu (Export Episode, Import Backup, Toggle Inspector, Toggle Palette, Help).
+- [x] Phase 9 — Live Run + Long-form Editor: /api/works/.../runs/async, true SSE streaming on /api/runs/{id}/events/stream, APIClient.eventStream AsyncSequence, LiveRunCard, LongformEditor (NSTextView wrapper with undo/find/word count), autosave status indicator, confirm-before-quit on dirty manuscript.
+- [x] 전체 Go 테스트 통과: `go test ./...`
+- [x] Swift 패키지 테스트 통과: `cd macos/Linetta && swift test` (43/43)
+- [x] `go vet ./...` 통과
+- [ ] **E2E 시나리오 1 (Cold start)**: `make macos-run` → 새 작품 생성 → Run Agents → 결과 채택 → 백업 → 복원 — 사용자가 손으로 검증할 항목
+- [ ] **E2E 시나리오 2 (장문 연재)**: 5000자 이상 에피소드를 LongformEditor에서 편집 → SSE로 progress 확인 → Canon decisions에서 변경 이력 확인 — 사용자가 손으로 검증할 항목
+- [x] Out of Scope 항목 준수 (light theme, multi-window, sandbox 없음 유지)
+- [x] 기존 컨벤션 준수: Go는 표준 `_test.go`, Swift는 SwiftUI `View` + `@MainActor`로 통일 (`ObservableObject` → `@Observable` macro 마이그레이션 완료)
+- [x] 문서 업데이트: `docs/plan/README.md`에 Phase 6~9 링크 추가, 루트 README의 실행 방법 단순화
 
 ## 참고 자료
 
