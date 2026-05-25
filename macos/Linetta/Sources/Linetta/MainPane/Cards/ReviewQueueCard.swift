@@ -5,6 +5,7 @@ struct ReviewQueueCard: View {
     let workID: String
     let proposals: [CanonProposal]
     let issues: [ContinuityIssue]
+    var onDecision: () async -> Void = {}
 
     @Environment(AppState.self) private var appState
 
@@ -25,9 +26,9 @@ struct ReviewQueueCard: View {
                     kind: .canon,
                     title: p.title,
                     source: "Run #\(String(p.runID.prefix(6)))",
-                    onApprove: { Task { _ = try? await appState.client.approveProposal(proposalID: p.id) } },
-                    onReject: { Task { _ = try? await appState.client.rejectProposal(proposalID: p.id) } },
-                    onDefer: { Task { _ = try? await appState.client.deferProposal(proposalID: p.id) } }
+                    onApprove: { Task { _ = try? await appState.client.approveProposal(proposalID: p.id); await onDecision() } },
+                    onReject: { Task { _ = try? await appState.client.rejectProposal(proposalID: p.id); await onDecision() } },
+                    onDefer: { Task { _ = try? await appState.client.deferProposal(proposalID: p.id); await onDecision() } }
                 )
             }
             ForEach(issues) { i in
@@ -35,9 +36,9 @@ struct ReviewQueueCard: View {
                     kind: .continuity,
                     title: i.title,
                     source: "Ep \(String(i.episodeID.prefix(6)))",
-                    onApprove: { Task { _ = try? await appState.client.updateContinuityIssue(issueID: i.id, status: .accepted) } },
-                    onReject: { Task { _ = try? await appState.client.updateContinuityIssue(issueID: i.id, status: .ignored) } },
-                    onDefer: { Task { _ = try? await appState.client.updateContinuityIssue(issueID: i.id, status: .resolved) } }
+                    onApprove: { Task { _ = try? await appState.client.updateContinuityIssue(issueID: i.id, status: .accepted); await onDecision() } },
+                    onReject: { Task { _ = try? await appState.client.updateContinuityIssue(issueID: i.id, status: .ignored); await onDecision() } },
+                    onDefer: { Task { _ = try? await appState.client.updateContinuityIssue(issueID: i.id, status: .resolved); await onDecision() } }
                 )
             }
         }

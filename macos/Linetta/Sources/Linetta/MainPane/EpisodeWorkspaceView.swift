@@ -27,7 +27,7 @@ struct EpisodeWorkspaceView: View {
                     BlueprintCard(work: work, episodeID: episodeID, onSave: { await reload() }, onRun: { await runAgents() })
                     RunHistoryCard(runs: runs)
                     if !proposals.isEmpty || !issues.isEmpty {
-                        ReviewQueueCard(workID: work.id, proposals: proposals, issues: issues)
+                        ReviewQueueCard(workID: work.id, proposals: proposals, issues: issues, onDecision: { await reload() })
                     }
                 }
                 .padding(LinettaShape.mainContentPadding)
