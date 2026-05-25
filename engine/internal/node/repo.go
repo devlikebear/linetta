@@ -13,13 +13,25 @@ import (
 // ErrNotFound is returned when a node id does not exist.
 var ErrNotFound = errors.New("node not found")
 
+// MentionResyncer is called after a successful UpdateContent. Typical impl:
+// mention.Repo.ResyncForNode + mention.Collect. The callback returning an error
+// surfaces as an UpdateContent failure.
+type MentionResyncer func(ctx context.Context, nodeID, doc string) error
+
 // Repo persists Nodes in SQLite and keeps derived counts on projects in sync.
 type Repo struct {
-	s *store.Store
+	s      *store.Store
+	resync MentionResyncer
 }
 
 // NewRepo returns a Repo backed by the given Store.
 func NewRepo(s *store.Store) *Repo { return &Repo{s: s} }
+
+// SetMentionResyncer wires the optional callback. If unset, UpdateContent skips
+// the resync (used in tests that don't care about mentions).
+func (r *Repo) SetMentionResyncer(fn MentionResyncer) {
+	r.resync = fn
+}
 
 // Get returns a single node by id.
 func (r *Repo) Get(ctx context.Context, id string) (Node, error) {
@@ -66,7 +78,15 @@ UPDATE projects
 		return fmt.Errorf("update project totals: %w", err)
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if r.resync != nil {
+		if err := r.resync(ctx, id, doc); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // SetLastOpened updates projects.last_opened_node_id and projects.updated_at.

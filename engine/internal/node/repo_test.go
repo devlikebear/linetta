@@ -263,3 +263,28 @@ func TestRepo_MoveUp_andMoveDown(t *testing.T) {
 		t.Errorf("MoveUp on first: %v", err)
 	}
 }
+
+func TestRepo_UpdateContent_callsResyncer(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	called := 0
+	var gotDoc, gotID string
+	r.SetMentionResyncer(func(_ context.Context, nodeID, doc string) error {
+		called++
+		gotID = nodeID
+		gotDoc = doc
+		return nil
+	})
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"hi"}]}]}`
+	if err := r.UpdateContent(ctx, *p.LastOpenedNodeID, doc, 9999); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	if called != 1 {
+		t.Errorf("resyncer called %d times, want 1", called)
+	}
+	if gotID != *p.LastOpenedNodeID || gotDoc != doc {
+		t.Errorf("resyncer args wrong: id=%q docLen=%d", gotID, len(gotDoc))
+	}
+}
