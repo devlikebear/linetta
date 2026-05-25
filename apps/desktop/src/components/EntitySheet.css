@@ -1,16 +1,13 @@
+/* EntitySheet sits inside the workspace grid (replaces ContextPanel column
+   when open). Width comes from the grid template, not from here. */
 .entity-sheet {
-  position: fixed;
-  top: 50px;
-  right: 0;
-  bottom: 0;
-  width: 340px;
   background: #faf9f6;
   border-left: 1px solid #ece9e0;
-  box-shadow: -6px 0 24px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
-  z-index: 15;
+  height: 100%;
   overflow: hidden;
+  min-width: 0; /* let inputs inside shrink within the grid column */
 }
 
 .entity-head {

@@ -434,7 +434,7 @@ export function Workspace() {
         <span className="ws-zen">ZEN</span>
       </header>
 
-      <div className="ws-body">
+      <div className={`ws-body${entitySheetId ? " with-sheet" : ""}`}>
         <div className="ws-editor">
           <TiptapEditor
             key={load.node.id}
@@ -451,16 +451,30 @@ export function Workspace() {
             onMentionDoubleClick={(id) => setEntitySheetId(id)}
           />
         </div>
-        <ContextPanel
-          project={load.project}
-          node={load.node}
-          charCount={charCount}
-          typewriter={typewriter}
-          onToggleTypewriter={() => setTypewriter((v) => !v)}
-          saveStatus={saveStatus}
-          mentionedEntities={mentioned}
-          onMentionClick={(id) => setEntitySheetId(id)}
-        />
+        {entitySheetId ? (
+          <EntitySheet
+            entityId={entitySheetId}
+            onClose={() => {
+              setEntitySheetId(null);
+              if (load) refreshMentioned(load.node.id);
+              focusEditor();
+            }}
+            onSaved={() => {
+              if (load) refreshMentioned(load.node.id);
+            }}
+          />
+        ) : (
+          <ContextPanel
+            project={load.project}
+            node={load.node}
+            charCount={charCount}
+            typewriter={typewriter}
+            onToggleTypewriter={() => setTypewriter((v) => !v)}
+            saveStatus={saveStatus}
+            mentionedEntities={mentioned}
+            onMentionClick={(id) => setEntitySheetId(id)}
+          />
+        )}
       </div>
 
       <OutlinePanel
@@ -477,17 +491,6 @@ export function Workspace() {
       />
 
       <MentionPicker state={mentionState} />
-      <EntitySheet
-        entityId={entitySheetId}
-        onClose={() => {
-          setEntitySheetId(null);
-          if (load) refreshMentioned(load.node.id);
-          focusEditor();
-        }}
-        onSaved={() => {
-          if (load) refreshMentioned(load.node.id);
-        }}
-      />
 
       {dialog && (
         <DialogModal

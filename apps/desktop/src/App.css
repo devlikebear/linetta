@@ -17,6 +17,7 @@ body {
   margin: 0;
   background: #faf9f6;
   color: #1a1a1a;
+  overflow-x: hidden; /* never show a horizontal scrollbar at the page level */
 }
 
 .shell {
@@ -350,6 +351,11 @@ body {
   gap: 0;
   height: calc(100vh - 50px);
   overflow: hidden;
+}
+
+/* When the Entity Sheet is open, it takes the right column (wider than ctx-panel). */
+.ws-body.with-sheet {
+  grid-template-columns: 1fr 360px;
 }
 
 .ws-editor {
