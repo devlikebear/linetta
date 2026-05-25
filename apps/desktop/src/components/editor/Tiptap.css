@@ -1,0 +1,46 @@
+.tiptap-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 4rem 2rem;
+}
+
+.tiptap-wrap.typewriter {
+  padding-top: 40vh;
+  padding-bottom: 40vh;
+}
+
+.tiptap-editor {
+  width: min(65ch, 100%);
+}
+
+.tiptap-editor .ProseMirror {
+  outline: none;
+  font-family: ui-serif, Georgia, "Apple SD Gothic Neo", serif;
+  font-size: 1.1rem;
+  line-height: 1.85;
+  color: #1a1a1a;
+}
+
+.tiptap-editor .ProseMirror p {
+  margin: 0 0 1.25rem;
+}
+
+.tiptap-editor .ProseMirror blockquote {
+  border-left: 3px solid #c8c5bd;
+  padding-left: 1rem;
+  margin: 0 0 1.25rem;
+  color: #555;
+}
+
+.tiptap-editor .ProseMirror h1,
+.tiptap-editor .ProseMirror h2,
+.tiptap-editor .ProseMirror h3 {
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.tiptap-editor .ProseMirror hr {
+  border: none;
+  border-top: 1px solid #d8d6cf;
+  margin: 2rem 0;
+}
