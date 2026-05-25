@@ -549,3 +549,13 @@ body {
 }
 .ctx-entity-name { flex: 1; }
 .ctx-entity-role { color: #9a9a9a; font-size: 0.75rem; }
+
+.ai-context-checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
