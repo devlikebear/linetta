@@ -1,0 +1,33 @@
+// Package ai owns prompt assembly and run management for AI mode.
+package ai
+
+// Options is the per-call user-selected options.
+type Options struct {
+	TonePreset bool `json:"tone_preset"` // include style_notes prominently
+	ShortForm  bool `json:"short_form"`  // ask for one-paragraph length
+}
+
+// Context is the structured payload that prompts.go renders into the
+// final prompt. Stored as ai_runs.context_json so the user can later see
+// exactly what was sent.
+type Context struct {
+	ProjectID   string        `json:"project_id"`
+	NodeID      string        `json:"node_id"`
+	SceneLabel  string        `json:"scene_label"`
+	SceneText   string        `json:"scene_text"`
+	PrevSummary string        `json:"prev_summary"`
+	Entities    []EntityBrief `json:"entities"`
+	StyleNotes  string        `json:"style_notes"`
+	UserPrompt  string        `json:"user_prompt"`
+	Options     Options       `json:"options"`
+}
+
+// EntityBrief is the entity slice we send to the LLM. Just enough to ground
+// dialogue / description without flooding the context.
+type EntityBrief struct {
+	Name       string            `json:"name"`
+	Kind       string            `json:"kind"`
+	Role       string            `json:"role"`
+	Summary    string            `json:"summary"`
+	Attributes map[string]string `json:"attributes"`
+}
