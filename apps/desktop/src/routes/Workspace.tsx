@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { nodes, projects, snapshots } from "../lib/rpc";
 import type { NodeRow, Project } from "../lib/types";
@@ -26,6 +26,10 @@ interface LoadState {
   tree: TreeNode[];
 }
 
+type DialogState =
+  | { kind: "prompt"; title: string; initial: string; resolve: (v: string | null) => void }
+  | { kind: "confirm"; title: string; resolve: (v: boolean) => void };
+
 export function Workspace() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -36,11 +40,24 @@ export function Workspace() {
   const [typewriter, setTypewriter] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 1800);
   };
+
+  // --- Dialog helpers (replace window.prompt / window.confirm, which Tauri 2 blocks). ---
+  const promptDialog = useCallback(
+    (title: string, initial = ""): Promise<string | null> =>
+      new Promise((resolve) => setDialog({ kind: "prompt", title, initial, resolve })),
+    [],
+  );
+  const confirmDialog = useCallback(
+    (title: string): Promise<boolean> =>
+      new Promise((resolve) => setDialog({ kind: "confirm", title, resolve })),
+    [],
+  );
 
   const fetchTree = useCallback(
     async (pId: string, nId: string): Promise<LoadState> => {
@@ -49,7 +66,6 @@ export function Workspace() {
       const tree = buildTree(flat);
       const node = flat.find((x) => x.id === nId);
       if (!node) {
-        // Current node no longer exists — fall back to first leaf.
         const firstLeaf = tree.length > 0 ? findFirstLeaf(tree[0]) : null;
         if (!firstLeaf) throw new Error("project has no leaf");
         const n = await nodes.get(firstLeaf.id);
@@ -62,15 +78,34 @@ export function Workspace() {
     [],
   );
 
-  const refreshTree = useCallback(async () => {
-    if (!load) return;
-    const next = await fetchTree(load.project.id, load.node.id);
-    setLoad(next);
-  }, [load, fetchTree]);
+  // Refresh the entire tree AND jump to the given node id, all in one setLoad —
+  // avoids the stale-closure race where a subsequent navigateToNode overwrites
+  // the freshly fetched tree.
+  const refreshTreeAndNavigateTo = useCallback(
+    async (targetNodeId: string) => {
+      if (!projectId) return;
+      const fresh = await fetchTree(projectId, targetNodeId);
+      setLoad(fresh);
+      setCharCount(fresh.node.word_count);
+      nodes.setLastOpened(projectId, targetNodeId).catch(() => { /* benign */ });
+    },
+    [projectId, fetchTree],
+  );
 
+  // Refresh the tree only (keep the active node where it is). Used by Move/Rename.
+  const refreshTreeKeepNode = useCallback(
+    async (currentNodeId: string) => {
+      if (!projectId) return;
+      const fresh = await fetchTree(projectId, currentNodeId);
+      setLoad(fresh);
+    },
+    [projectId, fetchTree],
+  );
+
+  // Navigate without re-fetching the tree (used by outline click + leaf neighbor cmds).
   const navigateToNode = useCallback(
     async (target: TreeNode | NodeRow) => {
-      if (!load) return;
+      if (!projectId) return;
       const leaf = "children" in target ? findFirstLeaf(target as TreeNode) : (target as NodeRow);
       if (!leaf) {
         showToast("이동할 씬이 없습니다");
@@ -78,11 +113,12 @@ export function Workspace() {
       }
       const n = await nodes.get(leaf.id);
       const initialDoc = JSON.parse(n.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`);
-      setLoad({ ...load, node: n, initialDoc });
+      // Functional setLoad so we don't clobber the latest tree.
+      setLoad((prev) => (prev ? { ...prev, node: n, initialDoc } : prev));
       setCharCount(n.word_count);
-      nodes.setLastOpened(load.project.id, n.id).catch(() => { /* benign */ });
+      nodes.setLastOpened(projectId, n.id).catch(() => { /* benign */ });
     },
-    [load],
+    [projectId],
   );
 
   // Initial load.
@@ -216,8 +252,7 @@ export function Workspace() {
       label: `여기 옆에 새 씬 (${nextSceneLabel})`,
       run: async () => {
         const created = await nodes.createSibling(load.node.id, "leaf", nextSceneLabel, "");
-        await refreshTree();
-        navigateToNode(created);
+        await refreshTreeAndNavigateTo(created.id);
       },
     });
     cmds.push({
@@ -226,10 +261,8 @@ export function Workspace() {
       label: `여기 옆에 새 장 (${nextChapterLabel})`,
       run: async () => {
         const chapter = await nodes.createSibling(load.node.id, "container", nextChapterLabel, "");
-        // Seed it with one leaf so it's navigable.
         const seeded = await nodes.createChild(chapter.id, "leaf", "씬 1", "");
-        await refreshTree();
-        navigateToNode(seeded);
+        await refreshTreeAndNavigateTo(seeded.id);
       },
     });
     cmds.push({
@@ -237,11 +270,13 @@ export function Workspace() {
       section: "노드",
       label: "이름 바꾸기",
       run: async () => {
-        const nextLabel = window.prompt("새 이름 (label)", load.node.label) ?? "";
-        if (!nextLabel.trim()) return;
-        const nextTitle = window.prompt("부제 (title, 비워두려면 취소)", load.node.title) ?? "";
-        await nodes.rename(load.node.id, nextLabel.trim(), nextTitle);
-        await refreshTree();
+        const nextLabel = await promptDialog("새 이름 (label)", load.node.label);
+        if (nextLabel === null) return;
+        const trimmed = nextLabel.trim();
+        if (!trimmed) return;
+        const nextTitle = await promptDialog("부제 (title, 비울 수 있음)", load.node.title);
+        await nodes.rename(load.node.id, trimmed, nextTitle ?? "");
+        await refreshTreeKeepNode(load.node.id);
         showToast("이름이 변경되었습니다");
       },
     });
@@ -251,14 +286,13 @@ export function Workspace() {
       label: "삭제",
       hint: load.node.label,
       run: async () => {
-        if (!window.confirm(`"${load.node.label}"을(를) 삭제하시겠습니까?`)) return;
-        // Find a fallback target before deleting.
+        const ok = await confirmDialog(`"${load.node.label}"을(를) 삭제하시겠습니까?`);
+        if (!ok) return;
         const fallback = prev ?? next ?? null;
         await nodes.delete(load.node.id);
         if (fallback) {
-          navigateToNode(fallback);
+          await refreshTreeAndNavigateTo(fallback.id);
         } else {
-          // No other leaf — bounce to Library.
           navigate("/");
         }
       },
@@ -269,7 +303,7 @@ export function Workspace() {
       label: "이 씬 위로",
       run: async () => {
         await nodes.moveUp(load.node.id);
-        await refreshTree();
+        await refreshTreeKeepNode(load.node.id);
       },
     });
     cmds.push({
@@ -278,7 +312,7 @@ export function Workspace() {
       label: "이 씬 아래로",
       run: async () => {
         await nodes.moveDown(load.node.id);
-        await refreshTree();
+        await refreshTreeKeepNode(load.node.id);
       },
     });
     cmds.push({
@@ -306,11 +340,10 @@ export function Workspace() {
       run: () => {},
     });
     return cmds;
-  }, [load, navigateToNode, refreshTree, navigate]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog]);
 
   const breadcrumb = useMemo(() => {
     if (!load) return "";
-    // Build an ancestor chain by walking parent_id pointers.
     const byId = new Map(flatten(load.tree).map((n) => [n.id, n] as const));
     const chain: string[] = [];
     let cur: TreeNode | undefined = byId.get(load.node.id);
@@ -351,6 +384,7 @@ export function Workspace() {
       <div className="ws-body">
         <div className="ws-editor">
           <TiptapEditor
+            key={load.node.id}
             initialDoc={load.initialDoc}
             onChange={(doc) => {
               debouncedSave(doc);
@@ -383,7 +417,62 @@ export function Workspace() {
         commands={commands}
       />
 
+      {dialog && <DialogModal dialog={dialog} onClose={() => setDialog(null)} />}
+
       {toast && <div className="ws-toast">{toast}</div>}
     </main>
+  );
+}
+
+function DialogModal({ dialog, onClose }: { dialog: DialogState; onClose: () => void }) {
+  const [value, setValue] = useState(dialog.kind === "prompt" ? dialog.initial : "");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (dialog.kind === "prompt") {
+      setValue(dialog.initial);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [dialog]);
+
+  const handleConfirm = () => {
+    if (dialog.kind === "prompt") dialog.resolve(value);
+    else dialog.resolve(true);
+    onClose();
+  };
+
+  const handleCancel = () => {
+    if (dialog.kind === "prompt") dialog.resolve(null);
+    else dialog.resolve(false);
+    onClose();
+  };
+
+  return (
+    <div className="dialog-backdrop" onClick={handleCancel}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+        <p className="dialog-title">{dialog.title}</p>
+        {dialog.kind === "prompt" && (
+          <input
+            ref={inputRef}
+            className="dialog-input"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleConfirm();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                handleCancel();
+              }
+            }}
+          />
+        )}
+        <div className="dialog-actions">
+          <button type="button" onClick={handleCancel}>취소</button>
+          <button type="button" className="primary" onClick={handleConfirm}>확인</button>
+        </div>
+      </div>
+    </div>
   );
 }
