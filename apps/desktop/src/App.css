@@ -12,6 +12,27 @@
   box-sizing: border-box;
 }
 
+/* Thin, unobtrusive scrollbars everywhere — match the immersive aesthetic.
+   WebKit (used by Tauri/WKWebView) honors these even when macOS is set to
+   "always show scrollbars". */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* Lock all form controls to the light palette so the modal and chip buttons
    stay legible when the OS is in dark mode. */
 button,
@@ -369,7 +390,6 @@ body {
 .ws-editor {
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-gutter: stable;
   height: 100%;
 }
 
@@ -382,7 +402,6 @@ body {
   background: #f6f4ee;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-gutter: stable;
   height: 100%;
 }
 
