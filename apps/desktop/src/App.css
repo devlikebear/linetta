@@ -4,6 +4,14 @@
   font-size: 16px;
 }
 
+/* Modern default: width includes padding + border. Without this, inputs with
+   width:100% + padding overflow their containers and cause horizontal scroll. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 /* Lock all form controls to the light palette so the modal and chip buttons
    stay legible when the OS is in dark mode. */
 button,
@@ -360,6 +368,8 @@ body {
 
 .ws-editor {
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   height: 100%;
 }
 
@@ -371,6 +381,8 @@ body {
   gap: 1.5rem;
   background: #f6f4ee;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   height: 100%;
 }
 

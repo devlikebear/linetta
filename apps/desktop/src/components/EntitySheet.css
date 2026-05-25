@@ -36,6 +36,8 @@
 .entity-body {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable; /* reserve scrollbar space so content never reflows */
   padding: 1rem;
   display: flex;
   flex-direction: column;
