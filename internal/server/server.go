@@ -71,6 +71,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/library/backup", s.handleLibraryBackup)
 	s.mux.HandleFunc("/api/library/restore", s.handleLibraryRestore)
 	s.mux.HandleFunc("/api/library/info", s.handleLibraryInfo)
+	s.mux.HandleFunc("/api/version", s.handleVersion)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

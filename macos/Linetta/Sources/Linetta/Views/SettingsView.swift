@@ -407,6 +407,9 @@ struct SettingsTesseraSection: View {
 // MARK: - About
 
 struct SettingsAboutSection: View {
+    @Environment(AppState.self) private var appState
+    @State private var versionInfo: VersionInfo?
+
     var body: some View {
         Section("About") {
             LabeledContent("Linetta") {
@@ -414,6 +417,16 @@ struct SettingsAboutSection: View {
             }
             LabeledContent("Build") {
                 Text(buildNumber).foregroundStyle(LinettaTheme.textSecondary)
+            }
+            LabeledContent("Engine (Go)") {
+                Text(versionInfo?.linetta ?? "—").foregroundStyle(LinettaTheme.textSecondary)
+            }
+            LabeledContent("Tessera") {
+                Text(versionInfo?.tessera.isEmpty == false ? versionInfo!.tessera : "—")
+                    .foregroundStyle(LinettaTheme.textSecondary)
+            }
+            LabeledContent("Go runtime") {
+                Text(versionInfo?.go ?? "—").foregroundStyle(LinettaTheme.textSecondary)
             }
             LabeledContent("Data directory") {
                 HStack {
@@ -426,11 +439,21 @@ struct SettingsAboutSection: View {
                     }
                 }
             }
+            LabeledContent("Provider secrets") {
+                HStack(spacing: 8) {
+                    Text("Environment or Keychain")
+                        .foregroundStyle(LinettaTheme.textSecondary)
+                    Link("(guide)", destination: URL(string: "https://github.com/devlikebear/linetta#provider-secrets")!)
+                        .foregroundStyle(LinettaTheme.accent)
+                        .font(LinettaTypography.caption)
+                }
+            }
             LabeledContent("GitHub") {
                 Link("devlikebear/linetta", destination: URL(string: "https://github.com/devlikebear/linetta")!)
                     .foregroundStyle(LinettaTheme.accent)
             }
         }
+        .task { await loadVersion() }
     }
 
     private var appVersion: String {
@@ -439,6 +462,10 @@ struct SettingsAboutSection: View {
 
     private var buildNumber: String {
         Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—"
+    }
+
+    private func loadVersion() async {
+        versionInfo = try? await appState.client.version()
     }
 }
 

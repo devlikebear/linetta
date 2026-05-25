@@ -185,6 +185,10 @@ public struct APIClient: Sendable {
         try await get(path: "/api/library/info")
     }
 
+    public func version() async throws -> VersionInfo {
+        try await get(path: "/api/version")
+    }
+
     public func libraryBackup(outPath: String) async throws -> LibraryBackupResult {
         try await send(path: "/api/library/backup", method: "POST", body: LibraryBackupRequest(outPath: outPath))
     }

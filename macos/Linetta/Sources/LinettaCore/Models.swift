@@ -562,6 +562,12 @@ public struct RunEpisodeRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct VersionInfo: Codable, Equatable, Sendable {
+    public var linetta: String
+    public var tessera: String
+    public var go: String
+}
+
 public struct LibraryInfo: Codable, Equatable, Sendable {
     public var dbPath: String
     public var configPath: String
