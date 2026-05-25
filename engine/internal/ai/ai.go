@@ -31,3 +31,26 @@ type EntityBrief struct {
 	Summary    string            `json:"summary"`
 	Attributes map[string]string `json:"attributes"`
 }
+
+// DeltaPayload is the body of an "ai.delta" notification.
+type DeltaPayload struct {
+	RunID string `json:"run_id"`
+	Text  string `json:"text"`
+}
+
+// DonePayload is the body of an "ai.done" notification.
+type DonePayload struct {
+	RunID    string `json:"run_id"`
+	FullText string `json:"full_text"`
+}
+
+// ErrorPayload is the body of an "ai.error" notification.
+type ErrorPayload struct {
+	RunID   string `json:"run_id"`
+	Message string `json:"message"`
+}
+
+// CancelledPayload is the body of an "ai.cancelled" notification.
+type CancelledPayload struct {
+	RunID string `json:"run_id"`
+}
