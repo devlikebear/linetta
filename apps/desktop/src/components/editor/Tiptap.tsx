@@ -64,21 +64,26 @@ export function TiptapEditor({ initialDoc, onChange, onCharCount, typewriter, on
   );
 }
 
-/** Scrolls the editor so the current cursor line stays near viewport center. */
+/** Scrolls the editor so the current cursor line stays near the column's center.
+ *  Scrolls only the editor's nearest scrollable ancestor (never the page),
+ *  so the right context panel is unaffected. */
 function TypewriterScroll({ editor, enabled }: { editor: Editor | null; enabled: boolean }) {
-  const lastTop = useRef<number>(-1);
+  const lastDelta = useRef<number>(-1);
   useEffect(() => {
     if (!editor || !enabled) return;
     const handler = () => {
       const view = editor.view;
       const pos = view.state.selection.head;
       const coords = view.coordsAtPos(pos);
-      const target = window.innerHeight / 2;
+      const scroller = findScrollableParent(view.dom);
+      if (!scroller) return;
+      const rect = scroller.getBoundingClientRect();
+      const target = rect.top + rect.height / 2;
       const delta = coords.top - target;
       if (Math.abs(delta) < 4) return;
-      if (delta === lastTop.current) return;
-      lastTop.current = delta;
-      window.scrollBy({ top: delta, behavior: "smooth" });
+      if (delta === lastDelta.current) return;
+      lastDelta.current = delta;
+      scroller.scrollBy({ top: delta, behavior: "smooth" });
     };
     editor.on("selectionUpdate", handler);
     editor.on("update", handler);
@@ -87,6 +92,17 @@ function TypewriterScroll({ editor, enabled }: { editor: Editor | null; enabled:
       editor.off("update", handler);
     };
   }, [editor, enabled]);
+  return null;
+}
+
+function findScrollableParent(el: HTMLElement | null): HTMLElement | null {
+  while (el && el !== document.body) {
+    const style = window.getComputedStyle(el);
+    if (style.overflowY === "auto" || style.overflowY === "scroll") {
+      return el;
+    }
+    el = el.parentElement;
+  }
   return null;
 }
 

@@ -1,4 +1,11 @@
+import { useEffect, useState } from "react";
 import type { NodeRow, Project } from "../lib/types";
+
+export type SaveStatus =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "saved"; at: number }
+  | { kind: "error"; message: string };
 
 interface Props {
   project: Project;
@@ -6,6 +13,7 @@ interface Props {
   charCount: number;
   typewriter: boolean;
   onToggleTypewriter: () => void;
+  saveStatus: SaveStatus;
 }
 
 const STATUS_LABEL: Record<NodeRow["status"], string> = {
@@ -14,7 +22,7 @@ const STATUS_LABEL: Record<NodeRow["status"], string> = {
   final: "완성",
 };
 
-export function ContextPanel({ node, charCount, typewriter, onToggleTypewriter }: Props) {
+export function ContextPanel({ node, charCount, typewriter, onToggleTypewriter, saveStatus }: Props) {
   return (
     <aside className="ctx-panel">
       <section className="ctx-section">
@@ -32,6 +40,7 @@ export function ContextPanel({ node, charCount, typewriter, onToggleTypewriter }
         <p className="ctx-line">
           ● {STATUS_LABEL[node.status]} · {charCount.toLocaleString("ko-KR")}자
         </p>
+        <SaveStatusLine status={saveStatus} />
       </section>
 
       <section className="ctx-section">
@@ -43,4 +52,28 @@ export function ContextPanel({ node, charCount, typewriter, onToggleTypewriter }
       </section>
     </aside>
   );
+}
+
+function SaveStatusLine({ status }: { status: SaveStatus }) {
+  // Re-render every second when in "saved" state so "X초 전" updates.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (status.kind !== "saved") return;
+    const id = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [status]);
+
+  switch (status.kind) {
+    case "idle":
+      return null;
+    case "saving":
+      return <p className="ctx-save saving">저장 중…</p>;
+    case "saved": {
+      const seconds = Math.max(0, Math.floor((Date.now() - status.at) / 1000));
+      const label = seconds < 1 ? "방금 저장됨" : `${seconds}초 전 저장됨`;
+      return <p className="ctx-save saved">{label}</p>;
+    }
+    case "error":
+      return <p className="ctx-save error">저장 실패: {status.message}</p>;
+  }
 }

@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { nodes, projects, snapshots } from "../lib/rpc";
 import type { NodeRow, Project } from "../lib/types";
 import { TiptapEditor } from "../components/editor/Tiptap";
-import { ContextPanel } from "../components/ContextPanel";
+import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 
@@ -23,6 +23,7 @@ export function Workspace() {
   const [toast, setToast] = useState<string | null>(null);
   const [charCount, setCharCount] = useState(0);
   const [typewriter, setTypewriter] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
 
   // Initial load: project → first leaf node → parse content_doc.
   useEffect(() => {
@@ -48,12 +49,28 @@ export function Workspace() {
     return () => { cancelled = true; };
   }, [projectId]);
 
+  // Cmd+R / Ctrl+R → reload (Tauri 2 doesn't bind this by default).
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      const isReload = (isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === "r";
+      if (!isReload) return;
+      e.preventDefault();
+      window.location.reload();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const saveNow = useCallback(
     async (doc: object) => {
       if (!load) return;
+      setSaveStatus({ kind: "saving" });
       try {
         await nodes.updateContent(load.node.id, JSON.stringify(doc));
+        setSaveStatus({ kind: "saved", at: Date.now() });
       } catch (e) {
+        setSaveStatus({ kind: "error", message: String(e) });
         setError(String(e));
       }
     },
@@ -79,12 +96,15 @@ export function Workspace() {
   const handleManualSave = useCallback(
     async (doc: object) => {
       if (!load) return;
+      setSaveStatus({ kind: "saving" });
       try {
         // Flush latest content first so the snapshot is in sync.
         await nodes.updateContent(load.node.id, JSON.stringify(doc));
         await snapshots.createManual(load.node.id, JSON.stringify(doc));
+        setSaveStatus({ kind: "saved", at: Date.now() });
         showToast("스냅샷 저장됨");
       } catch (e) {
+        setSaveStatus({ kind: "error", message: String(e) });
         setError(String(e));
       }
     },
@@ -147,6 +167,7 @@ export function Workspace() {
           charCount={charCount}
           typewriter={typewriter}
           onToggleTypewriter={() => setTypewriter((v) => !v)}
+          saveStatus={saveStatus}
         />
       </div>
 

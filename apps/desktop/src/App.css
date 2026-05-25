@@ -339,10 +339,13 @@ body {
   display: grid;
   grid-template-columns: 1fr 220px;
   gap: 0;
+  height: calc(100vh - 50px);
+  overflow: hidden;
 }
 
 .ws-editor {
-  min-height: calc(100vh - 50px);
+  overflow-y: auto;
+  height: 100%;
 }
 
 .ctx-panel {
@@ -352,6 +355,8 @@ body {
   flex-direction: column;
   gap: 1.5rem;
   background: #f6f4ee;
+  overflow-y: auto;
+  height: 100%;
 }
 
 .ctx-section h4 {
@@ -379,6 +384,24 @@ body {
   gap: 0.5rem;
   font-size: 0.9rem;
   cursor: pointer;
+}
+
+.ctx-save {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: #6b6b6b;
+}
+
+.ctx-save.saving {
+  color: #5a5a5a;
+}
+
+.ctx-save.saved {
+  color: #2d8050;
+}
+
+.ctx-save.error {
+  color: #a8312f;
 }
 
 .ws-toast {
