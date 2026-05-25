@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AIOptions,
   Entity,
   ListProjectsParams,
   NewEntityInput,
@@ -62,4 +63,10 @@ export const entities = {
 export const mentions = {
   listForNode: (nodeId: string) =>
     rpcCall<Entity[]>("mentions.list_for_node", { node_id: nodeId }),
+};
+
+export const ai = {
+  run: (nodeId: string, prompt: string, options: AIOptions) =>
+    rpcCall<{ run_id: string }>("ai.run", { node_id: nodeId, prompt, options }),
+  cancel: (runId: string) => rpcCall<{ ok: true }>("ai.cancel", { run_id: runId }),
 };

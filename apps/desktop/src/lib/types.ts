@@ -89,3 +89,27 @@ export interface UpdateEntityInput {
   summary?: string;
   attributes?: Record<string, string>;
 }
+
+export interface AIOptions {
+  tone_preset: boolean;
+  short_form: boolean;
+}
+
+export interface AIDelta {
+  run_id: string;
+  text: string;
+}
+
+export interface AIDone {
+  run_id: string;
+  full_text: string;
+}
+
+export interface AIError {
+  run_id: string;
+  message: string;
+}
+
+export interface AICancelled {
+  run_id: string;
+}
