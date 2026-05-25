@@ -10,6 +10,10 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout};
 use tokio::sync::{oneshot, Mutex};
 
+/// Callback invoked for every JSONRPC notification received on the read side.
+/// Method is the JSONRPC method name (e.g. "ai.delta"); params is the raw JSON.
+pub type NotificationHandler = std::sync::Arc<dyn Fn(String, serde_json::Value) + Send + Sync>;
+
 #[derive(Serialize)]
 struct Request<'a> {
     jsonrpc: &'a str,
@@ -49,9 +53,13 @@ pub struct Client {
 }
 
 impl Client {
-    /// Spawn the reader task and return a Client. Notifications (no id) are
-    /// dropped in Plan 0; the AI streaming work in Plan 5 will replace this.
-    pub fn new(stdin: ChildStdin, stdout: ChildStdout) -> Arc<Self> {
+    /// Spawn the reader task and return a Client. `on_notification` is called for
+    /// each incoming JSONRPC notification (no id, has method).
+    pub fn new(
+        stdin: ChildStdin,
+        stdout: ChildStdout,
+        on_notification: NotificationHandler,
+    ) -> Arc<Self> {
         let pending: Pending = Arc::new(Mutex::new(Default::default()));
         let client = Arc::new(Client {
             next_id: AtomicI64::new(1),
@@ -66,10 +74,13 @@ impl Client {
                     Ok(r) => r,
                     Err(_) => continue, // drop malformed lines
                 };
-                // Notifications (no id, has method) are ignored in Plan 0.
-                if resp.method.is_some() && resp.id.is_none() {
-                    let _ = resp.params; // touch field
-                    continue;
+                // Notifications: forward to the handler.
+                if let Some(method) = resp.method.clone() {
+                    if resp.id.is_none() {
+                        let params = resp.params.clone().unwrap_or(Value::Null);
+                        (on_notification)(method, params);
+                        continue;
+                    }
                 }
                 let id = match resp.id.as_ref().and_then(|v| v.as_i64()) {
                     Some(n) => n,

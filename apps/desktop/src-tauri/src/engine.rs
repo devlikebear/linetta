@@ -1,11 +1,12 @@
 //! Engine lifecycle: locate the bundled `linetta-engine` binary, spawn it with
 //! `--stdio`, and surface a `Client` for the rest of the app to use.
 
-use crate::jsonrpc::Client;
+use crate::jsonrpc::{Client, NotificationHandler};
 use anyhow::{anyhow, Result};
+use serde_json::Value;
 use std::process::Stdio;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::process::Command;
 
 pub struct EngineHandle {
@@ -28,7 +29,19 @@ pub async fn spawn(app: &tauri::AppHandle) -> Result<EngineHandle> {
     let stdin = child.stdin.take().ok_or_else(|| anyhow!("child has no stdin"))?;
     let stdout = child.stdout.take().ok_or_else(|| anyhow!("child has no stdout"))?;
 
-    let client = Client::new(stdin, stdout);
+    let handle_clone = app.clone();
+    let on_notification: NotificationHandler = std::sync::Arc::new(move |method: String, params: Value| {
+        // Route ai.* notifications to Tauri events with the same name (with `.` → `-`).
+        let event = match method.as_str() {
+            "ai.delta" => "ai-delta",
+            "ai.done" => "ai-done",
+            "ai.error" => "ai-error",
+            "ai.cancelled" => "ai-cancelled",
+            _ => return, // ignore unknown
+        };
+        let _ = handle_clone.emit(event, params);
+    });
+    let client = Client::new(stdin, stdout, on_notification);
     Ok(EngineHandle { client, _child: child })
 }
 
