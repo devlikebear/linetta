@@ -33,16 +33,19 @@ struct ManuscriptEditor: View {
 
     private func scheduleSave() {
         saveTask?.cancel()
-        let currentDraft = manuscript.draft
         let currentSelection = sidebar.selection
         let client = appState.client
         saveTask = Task { @MainActor [weak manuscript] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             guard !Task.isCancelled, let manuscript else { return }
+            // Skip if not dirty — e.g., draft changed because loadAdopted() set
+            // draft+loadedSnapshot to the same value, so no real user edit.
+            guard manuscript.isDirty else { return }
             guard case .episode(let wid, let eid) = currentSelection else { return }
+            let bodyToSave = manuscript.draft
             _ = try? await client.createEpisodeVersion(
                 workID: wid, episodeID: eid,
-                request: CreateEpisodeVersionRequest(body: currentDraft, note: "auto-save")
+                request: CreateEpisodeVersionRequest(body: bodyToSave, note: "auto-save")
             )
             manuscript.markSaved()
         }

@@ -12,25 +12,35 @@ struct SidebarWorkRow: View {
     var body: some View {
         @Bindable var sidebar = sidebar
         VStack(alignment: .leading, spacing: 2) {
-            Button {
-                sidebar.setExpanded(work.id, expanded: !sidebar.isExpanded(work.id))
-            } label: {
-                HStack(spacing: 4) {
+            HStack(spacing: 4) {
+                Button {
+                    sidebar.setExpanded(work.id, expanded: !sidebar.isExpanded(work.id))
+                } label: {
                     Image(systemName: sidebar.isExpanded(work.id) ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9))
-                        .frame(width: 12)
+                        .frame(width: 14, height: 18)
+                        .contentShape(Rectangle())
                         .foregroundStyle(LinettaTheme.textTertiary)
-                    Text(work.title)
-                        .font(LinettaTypography.body)
-                        .foregroundStyle(LinettaTheme.text)
-                        .lineLimit(1)
-                    Spacer()
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(rowBackground)
+                .buttonStyle(.plain)
+
+                Button {
+                    selectWork()
+                } label: {
+                    HStack {
+                        Text(work.title)
+                            .font(LinettaTypography.body)
+                            .foregroundStyle(LinettaTheme.text)
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(rowBackground)
 
             if sidebar.isExpanded(work.id) {
                 SidebarMemoryRow(workID: work.id)
@@ -41,6 +51,14 @@ struct SidebarWorkRow: View {
             }
         }
         .task(id: work.id) { await loadEpisodes() }
+    }
+
+    private func selectWork() {
+        sidebar.selection = .work(workID: work.id)
+        // Auto-expand on selection so the user immediately sees Memory + Episodes.
+        if !sidebar.isExpanded(work.id) {
+            sidebar.setExpanded(work.id, expanded: true)
+        }
     }
 
     private var rowBackground: some View {
@@ -58,6 +76,7 @@ struct SidebarWorkRow: View {
 private struct NewEpisodePlaceholder: View {
     let workID: String
     @Environment(AppState.self) private var appState
+    @Environment(SidebarState.self) private var sidebar
     @State private var pending = false
 
     var body: some View {
@@ -76,6 +95,11 @@ private struct NewEpisodePlaceholder: View {
     private func create() async {
         pending = true
         defer { pending = false }
-        _ = try? await appState.client.createEpisode(workID: workID, request: .init(title: "New Episode"))
+        let count = (try? await appState.client.listEpisodes(workID: workID).count) ?? 0
+        guard let created = try? await appState.client.createEpisode(
+            workID: workID,
+            request: .init(title: "Episode \(count + 1)")
+        ) else { return }
+        sidebar.selection = .episode(workID: workID, episodeID: created.id)
     }
 }

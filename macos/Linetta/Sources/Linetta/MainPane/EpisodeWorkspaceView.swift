@@ -47,7 +47,15 @@ struct EpisodeWorkspaceView: View {
             episode = episodes.first { $0.id == episodeID }
             proposals = (try? await appState.client.listProposals(workID: work.id, status: .pending)) ?? []
             issues = (try? await appState.client.listContinuityIssues(workID: work.id, episodeID: episodeID)) ?? []
+            await loadLatestManuscript()
         } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func loadLatestManuscript() async {
+        let versions = (try? await appState.client.listEpisodeVersions(workID: work.id, episodeID: episodeID)) ?? []
+        // Versions returned newest-first by server convention; pick the first as the adopted view.
+        let latestBody = versions.first?.body ?? ""
+        manuscript.loadAdopted(body: latestBody)
     }
 
     private func runAgents() async {

@@ -3,6 +3,7 @@ import SwiftUI
 struct NewWorkSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
+    @Environment(SidebarState.self) private var sidebar
 
     @State private var title = ""
     @State private var genre = ""
@@ -33,6 +34,10 @@ struct NewWorkSheet: View {
                 Button("Create") {
                     Task {
                         await appState.createWork(title: title, genre: genre, premise: premise)
+                        if let created = appState.selectedWork {
+                            sidebar.selection = .work(workID: created.id)
+                            sidebar.setExpanded(created.id, expanded: true)
+                        }
                         dismiss()
                     }
                 }
