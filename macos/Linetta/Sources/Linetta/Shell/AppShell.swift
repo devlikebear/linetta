@@ -21,6 +21,7 @@ struct AppShell: View {
         .frame(minWidth: 1080, minHeight: 720)
         .background(LinettaTheme.background)
         .preferredColorScheme(.dark)
+        .linettaTitleBar()
         .safeAreaInset(edge: .bottom) { EngineStatusFooter() }
         .overlay { CommandPalette() }
         .background {
