@@ -241,3 +241,43 @@ body {
   background: #1a1a1a;
   color: #faf9f6;
 }
+
+.library-all {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.all-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.all-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #e3e1d9;
+}
+
+.all-row-link {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  text-decoration: none;
+  color: inherit;
+  gap: 1rem;
+}
+
+.all-row-meta {
+  color: #6b6b6b;
+  font-size: 0.875rem;
+}
