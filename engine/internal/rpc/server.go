@@ -13,6 +13,31 @@ import (
 // either a JSON-encoded result or an error.
 type Handler func(ctx context.Context, params json.RawMessage) (json.RawMessage, error)
 
+// Notifier sends JSONRPC notifications on the active stdio connection.
+// Returns an error if the server is not currently serving.
+type Notifier interface {
+	Notify(method string, params any) error
+}
+
+type serverNotifier struct{ s *Server }
+
+func (n *serverNotifier) Notify(method string, params any) error {
+	var raw json.RawMessage
+	if params != nil {
+		b, err := json.Marshal(params)
+		if err != nil {
+			return err
+		}
+		raw = b
+	}
+	n.s.writeMu.Lock()
+	defer n.s.writeMu.Unlock()
+	if n.s.codec == nil {
+		return errors.New("rpc: server is not serving")
+	}
+	return n.s.codec.Write(Message{Method: method, Params: raw})
+}
+
 // Standard JSONRPC error codes (subset).
 const (
 	CodeParseError     = -32700
@@ -36,10 +61,16 @@ func (e *MethodError) Error() string { return e.Message }
 type Server struct {
 	mu       sync.RWMutex
 	handlers map[string]Handler
+	writeMu  sync.Mutex
+	codec    *Codec // set during Serve; nil otherwise
 }
 
 // NewServer returns a Server with no handlers registered.
 func NewServer() *Server { return &Server{handlers: map[string]Handler{}} }
+
+// Notifier returns a handle for sending notifications on the active connection.
+// The same handle is valid across multiple Serve calls.
+func (s *Server) Notifier() Notifier { return &serverNotifier{s: s} }
 
 // Handle registers a handler for a method. Overwrites previous registrations
 // silently — registration happens once at boot.
@@ -55,17 +86,28 @@ func (s *Server) Handle(method string, h Handler) {
 // is the writer's responsibility to add later if needed.
 func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	codec := NewCodec(r, w)
+	s.writeMu.Lock()
+	s.codec = codec
+	s.writeMu.Unlock()
+	defer func() {
+		s.writeMu.Lock()
+		s.codec = nil
+		s.writeMu.Unlock()
+	}()
+
+	write := func(m Message) {
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
+		_ = codec.Write(m)
+	}
+
 	for {
 		msg, err := codec.Read()
 		if errors.Is(err, io.EOF) {
 			return io.EOF
 		}
 		if err != nil {
-			// Best-effort parse-error response with null id.
-			_ = codec.Write(Message{
-				ID:    json.RawMessage(`null`),
-				Error: &Error{Code: CodeParseError, Message: err.Error()},
-			})
+			write(Message{ID: json.RawMessage(`null`), Error: &Error{Code: CodeParseError, Message: err.Error()}})
 			continue
 		}
 
@@ -76,10 +118,7 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 
 		if !ok {
 			if !isNotification {
-				_ = codec.Write(Message{
-					ID:    msg.ID,
-					Error: &Error{Code: CodeMethodNotFound, Message: "method not found: " + msg.Method},
-				})
+				write(Message{ID: msg.ID, Error: &Error{Code: CodeMethodNotFound, Message: "method not found: " + msg.Method}})
 			}
 			continue
 		}
@@ -91,12 +130,12 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 		if herr != nil {
 			var me *MethodError
 			if errors.As(herr, &me) {
-				_ = codec.Write(Message{ID: msg.ID, Error: &Error{Code: me.Code, Message: me.Message, Data: me.Data}})
+				write(Message{ID: msg.ID, Error: &Error{Code: me.Code, Message: me.Message, Data: me.Data}})
 			} else {
-				_ = codec.Write(Message{ID: msg.ID, Error: &Error{Code: CodeInternalError, Message: herr.Error()}})
+				write(Message{ID: msg.ID, Error: &Error{Code: CodeInternalError, Message: herr.Error()}})
 			}
 			continue
 		}
-		_ = codec.Write(Message{ID: msg.ID, Result: result})
+		write(Message{ID: msg.ID, Result: result})
 	}
 }
