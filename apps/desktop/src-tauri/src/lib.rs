@@ -2,6 +2,7 @@ mod engine;
 mod jsonrpc;
 
 use std::sync::Arc;
+use serde_json::Value;
 use tauri::Manager;
 
 pub fn run() {
@@ -24,7 +25,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![engine_ping])
+        .invoke_handler(tauri::generate_handler![engine_ping, engine_call])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -45,4 +46,17 @@ async fn engine_ping(state: tauri::State<'_, EngineState>) -> Result<String, Str
         .as_str()
         .map(|s| s.to_string())
         .ok_or_else(|| format!("ping result is not a string: {result}"))
+}
+
+#[tauri::command]
+async fn engine_call(
+    state: tauri::State<'_, EngineState>,
+    method: String,
+    params: Option<Value>,
+) -> Result<Value, String> {
+    state
+        .client
+        .call(&method, params)
+        .await
+        .map_err(|e| e.to_string())
 }
