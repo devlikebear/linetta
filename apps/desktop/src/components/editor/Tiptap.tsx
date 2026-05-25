@@ -20,10 +20,14 @@ interface Props {
   typewriter?: boolean;
   /** Manual-save hotkey handler — receives the current doc; consumer issues the RPC. */
   onManualSave?: (doc: object) => void;
+  /** Extra Tiptap extensions to merge with StarterKit (e.g., MentionExtension). */
+  extensions?: any[];
+  /** Fired when a `.mention` atom inside the doc is double-clicked. */
+  onMentionDoubleClick?: (entityId: string) => void;
 }
 
 export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEditor(
-  { initialDoc, onChange, onCharCount, typewriter, onManualSave },
+  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick },
   ref,
 ) {
   // Stable reference for the initial doc to avoid resetting on every render.
@@ -31,7 +35,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
 
   const editor = useEditor(
     {
-      extensions: [StarterKit.configure({})],
+      extensions: [StarterKit.configure({}), ...(extensions ?? [])],
       content: initialDoc,
       autofocus: "end",
       onUpdate: ({ editor }) => {
@@ -89,6 +93,13 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
     <div
       className={`tiptap-wrap${typewriter ? " typewriter" : ""}`}
       onMouseDown={onWrapMouseDown}
+      onDoubleClick={(e) => {
+        const t = (e.target as HTMLElement).closest(".mention");
+        if (t && onMentionDoubleClick) {
+          const id = t.getAttribute("data-entity-id") || t.getAttribute("data-id");
+          if (id) onMentionDoubleClick(id);
+        }
+      }}
     >
       <EditorContent editor={editor} className="tiptap-editor" />
       <TypewriterScroll editor={editor} enabled={!!typewriter} />

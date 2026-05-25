@@ -68,3 +68,17 @@
   border-top: 1px solid #d8d6cf;
   margin: 2rem 0;
 }
+
+.tiptap-editor .ProseMirror .mention {
+  color: #1f3b8c;
+  text-decoration: underline;
+  text-decoration-color: rgba(31, 59, 140, 0.4);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tiptap-editor .ProseMirror .mention:hover {
+  background: rgba(31, 59, 140, 0.06);
+  border-radius: 3px;
+}
