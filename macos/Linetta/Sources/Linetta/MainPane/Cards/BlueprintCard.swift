@@ -9,8 +9,10 @@ struct BlueprintCard: View {
 
     @Environment(AppState.self) private var appState
     @Environment(EpisodeState.self) private var episodeState
+    @Environment(ToastCenter.self) private var toast
 
     @State private var loaded = false
+    @State private var suggesting = false
 
     var body: some View {
         @Bindable var episodeState = episodeState
@@ -36,6 +38,14 @@ struct BlueprintCard: View {
                     field("Must include", text: $episodeState.mustInclude)
                     field("Must avoid", text: $episodeState.mustAvoid)
                     HStack {
+                        Button { Task { await suggest() } } label: {
+                            Label(suggesting ? "Suggesting…" : "Suggest", systemImage: "sparkles")
+                        }
+                        .buttonStyle(.bordered)
+                        .help("Auto-fill empty fields using Canon memory + LLM (preserves whatever you've already typed). ⌥⌘S")
+                        .keyboardShortcut("s", modifiers: [.command, .option])
+                        .disabled(suggesting)
+
                         Button { Task { await save() } } label: { Label("Save", systemImage: "tray.and.arrow.down") }
                             .keyboardShortcut("s", modifiers: [.command])
                             .disabled(!episodeState.isDirty)
@@ -91,6 +101,40 @@ struct BlueprintCard: View {
         } catch {
             episodeState.loadBlueprint(premise: "", theme: "", situation: "", mustInclude: "", mustAvoid: "", structureNotes: "")
             loaded = true
+        }
+    }
+
+    private func suggest() async {
+        suggesting = true
+        defer { suggesting = false }
+        let partial = BlueprintSuggestRequest(
+            premise: episodeState.premise,
+            theme: episodeState.theme,
+            situation: episodeState.situation,
+            mustInclude: episodeState.mustInclude,
+            mustAvoid: episodeState.mustAvoid,
+            structureNotes: episodeState.structureNotes
+        )
+        do {
+            let s = try await appState.client.suggestBlueprint(workID: work.id, episodeID: episodeID, partial: partial)
+            episodeState.loadBlueprint(
+                premise: s.premise,
+                theme: s.theme,
+                situation: s.situation,
+                mustInclude: s.mustInclude,
+                mustAvoid: s.mustAvoid,
+                structureNotes: s.structureNotes
+            )
+            // loadBlueprint resets isDirty — but the user almost certainly
+            // wants to save the suggestion, so make it dirty by toggling
+            // premise to itself. Cheap workaround.
+            let p = episodeState.premise
+            episodeState.premise = p + " "
+            episodeState.premise = p
+            let label = s.source == "llm" ? "Suggested via LLM" : "Suggested (no API key — fallback)"
+            toast.enqueue(.init(title: label, kind: .success))
+        } catch {
+            toast.enqueue(.init(title: "Suggest failed: \(error.localizedDescription)", kind: .error))
         }
     }
 

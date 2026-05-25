@@ -139,6 +139,10 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 		s.handleEpisodeStatus(w, r, workID, parts[2])
 		return
 	}
+	if len(parts) == 5 && parts[1] == "episodes" && parts[3] == "blueprint" && parts[4] == "suggest" {
+		s.handleBlueprintSuggest(w, r, workID, parts[2])
+		return
+	}
 	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "blueprint" {
 		s.handleEpisodeBlueprint(w, r, workID, parts[2])
 		return

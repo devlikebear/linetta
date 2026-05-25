@@ -571,6 +571,53 @@ public struct RunEpisodeRequest: Codable, Equatable, Sendable {
     }
 }
 
+public struct BlueprintSuggestRequest: Codable, Equatable, Sendable {
+    public var premise: String
+    public var theme: String
+    public var situation: String
+    public var mustInclude: String
+    public var mustAvoid: String
+    public var structureNotes: String
+
+    public init(premise: String = "", theme: String = "", situation: String = "", mustInclude: String = "", mustAvoid: String = "", structureNotes: String = "") {
+        self.premise = premise
+        self.theme = theme
+        self.situation = situation
+        self.mustInclude = mustInclude
+        self.mustAvoid = mustAvoid
+        self.structureNotes = structureNotes
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case premise
+        case theme
+        case situation
+        case mustInclude = "must_include"
+        case mustAvoid = "must_avoid"
+        case structureNotes = "structure_notes"
+    }
+}
+
+public struct BlueprintSuggestion: Codable, Equatable, Sendable {
+    public var premise: String
+    public var theme: String
+    public var situation: String
+    public var mustInclude: String
+    public var mustAvoid: String
+    public var structureNotes: String
+    public var source: String // "llm" or "fallback"
+
+    enum CodingKeys: String, CodingKey {
+        case premise
+        case theme
+        case situation
+        case mustInclude = "must_include"
+        case mustAvoid = "must_avoid"
+        case structureNotes = "structure_notes"
+        case source
+    }
+}
+
 public struct AsyncRunStart: Codable, Equatable, Sendable {
     public var runID: String
     enum CodingKeys: String, CodingKey { case runID = "run_id" }

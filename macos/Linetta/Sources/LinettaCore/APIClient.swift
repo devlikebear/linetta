@@ -70,6 +70,13 @@ public struct APIClient: Sendable {
         try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/blueprint", method: "PUT", body: request)
     }
 
+    /// Generates a suggested blueprint via LLM (with deterministic fallback if
+    /// the engine has no OPENAI_API_KEY). Preserves any non-empty fields in
+    /// the partial input — only fills empties.
+    public func suggestBlueprint(workID: String, episodeID: String, partial: BlueprintSuggestRequest) async throws -> BlueprintSuggestion {
+        try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/blueprint/suggest", method: "POST", body: partial)
+    }
+
     public func listEpisodeVersions(workID: String, episodeID: String) async throws -> [EpisodeVersion] {
         try await get(path: "/api/works/\(workID)/episodes/\(episodeID)/versions")
     }
