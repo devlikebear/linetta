@@ -369,6 +369,12 @@ body {
   color: #faf9f6;
 }
 
+.mode-toggle {
+  background: none;
+  border: none;
+  font: inherit;
+}
+
 .ws-zen {
   font-size: 0.85rem;
   color: #6b6b6b;

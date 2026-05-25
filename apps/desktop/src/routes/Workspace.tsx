@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi } from "../lib/rpc";
-import type { NodeRow, Project, Entity } from "../lib/types";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, ai as aiApi } from "../lib/rpc";
+import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIDone, AIError, AICancelled } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -11,6 +11,9 @@ import { OutlinePanel } from "../components/OutlinePanel";
 import { CommandPalette, type Command } from "../components/CommandPalette";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
+import { useEngineEvent } from "../hooks/useEngineEvent";
+import { AIMode, type AIRunStatus } from "../components/ai/AIMode";
+import { AIContextPanel } from "../components/ai/AIContextPanel";
 import {
   buildTree,
   findFirstLeaf,
@@ -47,11 +50,39 @@ export function Workspace() {
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
+  const [mode, setMode] = useState<"edit" | "ai">("edit");
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiOptions, setAiOptions] = useState<AIOptions>({ tone_preset: false, short_form: false });
+  const [aiStatus, setAiStatus] = useState<AIRunStatus>({ kind: "idle" });
+  const aiRunIdRef = useRef<string | null>(null);
   const editorRef = useRef<TiptapHandle>(null);
 
   const focusEditor = useCallback(() => {
     window.setTimeout(() => editorRef.current?.focus(), 0);
   }, []);
+
+  useEngineEvent<AIDelta>("ai-delta", (p) => {
+    if (p.run_id !== aiRunIdRef.current) return;
+    setAiStatus((s) => {
+      const prev = s.kind === "running" ? s.text : "";
+      return { kind: "running", runId: p.run_id, text: prev + p.text };
+    });
+  });
+  useEngineEvent<AIDone>("ai-done", (p) => {
+    if (p.run_id !== aiRunIdRef.current) return;
+    setAiStatus({ kind: "done", text: p.full_text });
+    aiRunIdRef.current = null;
+  });
+  useEngineEvent<AIError>("ai-error", (p) => {
+    if (p.run_id !== aiRunIdRef.current) return;
+    setAiStatus((s) => ({ kind: "error", message: p.message, text: s.kind === "running" ? s.text : "" }));
+    aiRunIdRef.current = null;
+  });
+  useEngineEvent<AICancelled>("ai-cancelled", (p) => {
+    if (p.run_id !== aiRunIdRef.current) return;
+    setAiStatus({ kind: "idle" });
+    aiRunIdRef.current = null;
+  });
 
   const mentionExtension = useMemo(() => {
     if (!projectId) return null;
@@ -257,6 +288,67 @@ export function Workspace() {
     [load],
   );
 
+  // --- AI handlers ---
+
+  const handlePreset = (preset: "rewrite" | "expand" | "compact") => {
+    const seeds: Record<typeof preset, string> = {
+      rewrite: "이 문단을 다른 톤으로 다시 써줘.",
+      expand: "이 장면을 더 감각적으로 확장해줘.",
+      compact: "이 씬을 한 문단으로 요약해줘.",
+    };
+    setAiPrompt(seeds[preset]);
+  };
+
+  const startAIRun = async () => {
+    if (!load || !aiPrompt.trim()) return;
+    setAiStatus({ kind: "running", runId: "pending", text: "" });
+    try {
+      const { run_id } = await aiApi.run(load.node.id, aiPrompt, aiOptions);
+      aiRunIdRef.current = run_id;
+      setAiStatus({ kind: "running", runId: run_id, text: "" });
+    } catch (e) {
+      setAiStatus({ kind: "error", message: String(e), text: "" });
+    }
+  };
+
+  const cancelAIRun = async () => {
+    if (!aiRunIdRef.current) return;
+    try { await aiApi.cancel(aiRunIdRef.current); } catch { /* benign */ }
+  };
+
+  const insertResult = (text: string) => {
+    if (!load || !text) return;
+    const docStr = JSON.stringify({
+      type: "doc",
+      content: [
+        ...((load.initialDoc as any).content ?? []),
+        { type: "paragraph", content: [{ type: "text", text }] },
+      ],
+    });
+    nodes.updateContent(load.node.id, docStr).then(() => {
+      setMode("edit");
+      setAiStatus({ kind: "idle" });
+      refreshTreeKeepNode(load.node.id);
+      setTimeout(() => focusEditor(), 0);
+    });
+  };
+
+  const replaceWithResult = (text: string) => {
+    if (!load || !text) return;
+    const docStr = JSON.stringify({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+    });
+    // Snapshot the old body first.
+    snapshots.createManual(load.node.id, JSON.stringify(load.initialDoc)).catch(() => {});
+    nodes.updateContent(load.node.id, docStr).then(() => {
+      setMode("edit");
+      setAiStatus({ kind: "idle" });
+      refreshTreeKeepNode(load.node.id);
+      setTimeout(() => focusEditor(), 0);
+    });
+  };
+
   // --- Commands ---
 
   const commands: Command[] = useMemo(() => {
@@ -407,6 +499,13 @@ export function Workspace() {
     return `← 작품 · ${chain.join(" › ")}${load.node.title ? ` — ${load.node.title}` : ""}`;
   }, [load]);
 
+  const aiContextSummary = useMemo(() => {
+    const parts: string[] = ["현재 씬 + 직전 씬"];
+    if (mentioned.length > 0) parts.push("@" + mentioned.map((e) => e.name).join(", @"));
+    if (load?.project.style_notes) parts.push("style notes");
+    return parts.join(" · ");
+  }, [mentioned, load]);
+
   if (error) {
     return (
       <main className="shell">
@@ -428,29 +527,59 @@ export function Workspace() {
       <header className="ws-top">
         <Link to="/" className="ws-breadcrumb">{breadcrumb}</Link>
         <span className="ws-modes">
-          <span className="mode-toggle on">편집</span>
-          <span className="mode-toggle">AI</span>
+          <button
+            type="button"
+            className={`mode-toggle${mode === "edit" ? " on" : ""}`}
+            onClick={() => setMode("edit")}
+          >
+            편집
+          </button>
+          <button
+            type="button"
+            className={`mode-toggle${mode === "ai" ? " on" : ""}`}
+            onClick={() => setMode("ai")}
+          >
+            AI
+          </button>
         </span>
         <span className="ws-zen">ZEN</span>
       </header>
 
       <div className={`ws-body${entitySheetId ? " with-sheet" : ""}`}>
-        <div className="ws-editor">
-          <TiptapEditor
-            key={load.node.id}
-            ref={editorRef}
-            initialDoc={load.initialDoc}
-            onChange={(doc) => {
-              debouncedSave(doc);
-              throttledLastOpened();
-            }}
-            onCharCount={setCharCount}
-            typewriter={typewriter}
-            onManualSave={handleManualSave}
-            extensions={mentionExtension ? [mentionExtension] : []}
-            onMentionDoubleClick={(id) => setEntitySheetId(id)}
+        {mode === "edit" ? (
+          <div className="ws-editor">
+            <TiptapEditor
+              key={load.node.id}
+              ref={editorRef}
+              initialDoc={load.initialDoc}
+              onChange={(doc) => {
+                debouncedSave(doc);
+                throttledLastOpened();
+              }}
+              onCharCount={setCharCount}
+              typewriter={typewriter}
+              onManualSave={handleManualSave}
+              extensions={mentionExtension ? [mentionExtension] : []}
+              onMentionDoubleClick={(id) => setEntitySheetId(id)}
+            />
+          </div>
+        ) : (
+          <AIMode
+            status={aiStatus}
+            prompt={aiPrompt}
+            onPromptChange={setAiPrompt}
+            options={aiOptions}
+            onOptionsChange={setAiOptions}
+            onPresetClick={handlePreset}
+            onRun={startAIRun}
+            onCancel={cancelAIRun}
+            onInsert={insertResult}
+            onReplace={replaceWithResult}
+            onRegenerate={startAIRun}
+            onDiscard={() => setAiStatus({ kind: "idle" })}
+            contextSummary={aiContextSummary}
           />
-        </div>
+        )}
         {entitySheetId ? (
           <EntitySheet
             entityId={entitySheetId}
@@ -462,6 +591,13 @@ export function Workspace() {
             onSaved={() => {
               if (load) refreshMentioned(load.node.id);
             }}
+          />
+        ) : mode === "ai" ? (
+          <AIContextPanel
+            project={load.project}
+            mentioned={mentioned}
+            options={aiOptions}
+            onOptionsChange={setAiOptions}
           />
         ) : (
           <ContextPanel
