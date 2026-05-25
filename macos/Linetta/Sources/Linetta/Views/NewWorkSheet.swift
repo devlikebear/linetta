@@ -11,16 +11,18 @@ struct NewWorkSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("New Work")
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(LinettaTypography.titleSmall)
+                .foregroundStyle(LinettaTheme.text)
 
             TextField("Title", text: $title)
             TextField("Genre", text: $genre)
             TextEditor(text: $premise)
                 .frame(minHeight: 120)
+                .scrollContentBackground(.hidden)
+                .background(LinettaTheme.surface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.secondary.opacity(0.25))
+                        .stroke(LinettaTheme.borderSoft)
                 }
 
             HStack {
@@ -34,11 +36,15 @@ struct NewWorkSheet: View {
                         dismiss()
                     }
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(LinettaTheme.accent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(20)
         .frame(width: 460)
+        .background(LinettaTheme.background)
+        .preferredColorScheme(.dark)
     }
 }
