@@ -5,6 +5,7 @@ struct AppShell: View {
     @Environment(AppState.self) private var appState
     @Environment(SidebarState.self) private var sidebar
     @Environment(ManuscriptState.self) private var manuscript
+    @Environment(CommandPaletteState.self) private var commandPalette
 
     var body: some View {
         NavigationSplitView {
@@ -21,6 +22,14 @@ struct AppShell: View {
         .background(LinettaTheme.background)
         .preferredColorScheme(.dark)
         .safeAreaInset(edge: .bottom) { EngineStatusFooter() }
+        .overlay { CommandPalette() }
+        .background {
+            Button("") {
+                commandPalette.isOpen.toggle()
+            }
+            .keyboardShortcut("k", modifiers: [.command])
+            .opacity(0)
+        }
     }
 
     private var inspectorBinding: Binding<Bool> {
