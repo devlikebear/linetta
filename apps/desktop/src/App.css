@@ -42,3 +42,202 @@ body {
   font-family: ui-monospace, SFMono-Regular, monospace;
   color: #1a1a1a;
 }
+
+/* Library */
+.library {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.library-top {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: #6b6b6b;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.library-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 6vh 2rem 4vh;
+}
+
+.library-heading {
+  font-size: 2.5rem;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.new-button {
+  padding: 0.65rem 1.5rem;
+  font: inherit;
+  background: transparent;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.library-label {
+  margin: 1.5rem 0 0;
+  color: #6b6b6b;
+  font-size: 0.875rem;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 200px));
+  gap: 1rem;
+  width: min(900px, 90%);
+}
+
+.card {
+  display: block;
+  padding: 1rem;
+  border: 1px solid #d8d6cf;
+  border-radius: 6px;
+  background: #fffefb;
+  text-decoration: none;
+  color: inherit;
+}
+
+.card:hover {
+  background: #f6f4ee;
+}
+
+.card-title {
+  margin: 0 0 0.5rem;
+  font-weight: 500;
+  min-height: 2.5em;
+}
+
+.card-meta {
+  margin: 0;
+  color: #6b6b6b;
+  font-size: 0.875rem;
+}
+
+.library-all-link {
+  margin-top: 1rem;
+  color: #6b6b6b;
+  text-decoration: none;
+}
+
+.library-all-link:hover {
+  color: #1a1a1a;
+}
+
+.error {
+  color: #a8312f;
+}
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 20, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  z-index: 10;
+}
+
+.modal {
+  background: #faf9f6;
+  border-radius: 6px;
+  padding: 2rem;
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.modal h2 {
+  margin: 0 0 0.5rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field > span {
+  color: #6b6b6b;
+  font-size: 0.875rem;
+}
+
+.field input {
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d8d6cf;
+  border-radius: 4px;
+  background: #fffefb;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.chip {
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid #c8c5bd;
+  background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip.on {
+  background: #1a1a1a;
+  color: #faf9f6;
+  border-color: #1a1a1a;
+}
+
+.chip-input {
+  width: 4ch;
+  padding: 0.25rem 0.5rem;
+  border: 1px dashed #c8c5bd;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.modal-actions button {
+  padding: 0.5rem 1.25rem;
+  font: inherit;
+  background: white;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.modal-actions button[type="submit"] {
+  background: #1a1a1a;
+  color: #faf9f6;
+}
