@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { NodeRow, Project } from "../lib/types";
+import type { NodeRow, Project, Entity } from "../lib/types";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -14,6 +14,8 @@ interface Props {
   typewriter: boolean;
   onToggleTypewriter: () => void;
   saveStatus: SaveStatus;
+  mentionedEntities: Entity[];
+  onMentionClick: (entityId: string) => void;
 }
 
 const STATUS_LABEL: Record<NodeRow["status"], string> = {
@@ -22,12 +24,26 @@ const STATUS_LABEL: Record<NodeRow["status"], string> = {
   final: "완성",
 };
 
-export function ContextPanel({ node, charCount, typewriter, onToggleTypewriter, saveStatus }: Props) {
+export function ContextPanel({ node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick }: Props) {
   return (
     <aside className="ctx-panel">
       <section className="ctx-section">
         <h4>인물 · 장소</h4>
-        <p className="ctx-empty">(곧 추가됨 — Plan 4)</p>
+        {mentionedEntities.length === 0 && (
+          <p className="ctx-empty">아직 @멘션 없음</p>
+        )}
+        {mentionedEntities.map((e) => (
+          <button
+            key={e.id}
+            type="button"
+            className="ctx-entity"
+            onClick={() => onMentionClick(e.id)}
+          >
+            <span className="ctx-entity-avatar">{e.name.slice(0, 1)}</span>
+            <span className="ctx-entity-name">{e.name}</span>
+            {e.role && <span className="ctx-entity-role">{e.role}</span>}
+          </button>
+        ))}
       </section>
 
       <section className="ctx-section">

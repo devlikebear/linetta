@@ -484,3 +484,31 @@ body {
   background: #1a1a1a;
   color: #faf9f6;
 }
+
+.ctx-entity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+.ctx-entity:hover { color: #1a1a1a; }
+.ctx-entity-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #d8d6cf;
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+.ctx-entity-name { flex: 1; }
+.ctx-entity-role { color: #9a9a9a; font-size: 0.75rem; }

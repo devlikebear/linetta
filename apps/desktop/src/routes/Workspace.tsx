@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots } from "../lib/rpc";
-import type { NodeRow, Project } from "../lib/types";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi } from "../lib/rpc";
+import type { NodeRow, Project, Entity } from "../lib/types";
+import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
+import { MentionPicker } from "../components/editor/MentionPicker";
+import { EntitySheet } from "../components/EntitySheet";
 import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
@@ -41,10 +44,29 @@ export function Workspace() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
+  const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
+  const [mentioned, setMentioned] = useState<Entity[]>([]);
   const editorRef = useRef<TiptapHandle>(null);
 
   const focusEditor = useCallback(() => {
     window.setTimeout(() => editorRef.current?.focus(), 0);
+  }, []);
+
+  const mentionExtension = useMemo(() => {
+    if (!projectId) return null;
+    return buildMentionExtension({
+      search: async (query) => {
+        const results = await entitiesApi.search(projectId, query);
+        return results.map((e) => ({ id: e.id, name: e.name, role: e.role }));
+      },
+      onStateChange: setMentionState,
+    });
+  }, [projectId]);
+
+  const refreshMentioned = useCallback(async (nodeId: string) => {
+    try { setMentioned(await mentionsApi.listForNode(nodeId)); }
+    catch { /* benign */ }
   }, []);
 
   const showToast = (msg: string) => {
@@ -146,6 +168,31 @@ export function Workspace() {
     return () => { cancelled = true; };
   }, [projectId, fetchTree]);
 
+  // Refresh mentioned entities when the active node changes.
+  useEffect(() => {
+    if (load) refreshMentioned(load.node.id);
+  }, [load?.node.id, refreshMentioned]);
+
+  // Listen for "new entity" event dispatched by MentionExtension.
+  useEffect(() => {
+    if (!projectId) return;
+    const handler = async (e: Event) => {
+      const detail = (e as CustomEvent).detail as { query: string; range: { from: number; to: number }; editor: any };
+      try {
+        const created = await entitiesApi.create({ project_id: projectId, kind: "character", name: detail.query });
+        detail.editor.chain().focus().deleteRange(detail.range).insertContent([
+          { type: "mention", attrs: { id: created.id, label: created.name } },
+          { type: "text", text: " " },
+        ]).run();
+        setEntitySheetId(created.id);
+      } catch (err) {
+        showToast("엔티티 생성 실패: " + String(err));
+      }
+    };
+    window.addEventListener("linetta:mention-pick-new", handler);
+    return () => window.removeEventListener("linetta:mention-pick-new", handler);
+  }, [projectId]);
+
   // Global Cmd+R reload + Cmd+K palette toggle.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -171,12 +218,13 @@ export function Workspace() {
       try {
         await nodes.updateContent(load.node.id, JSON.stringify(doc));
         setSaveStatus({ kind: "saved", at: Date.now() });
+        refreshMentioned(load.node.id);
       } catch (e) {
         setSaveStatus({ kind: "error", message: String(e) });
         setError(String(e));
       }
     },
-    [load],
+    [load, refreshMentioned],
   );
   const debouncedSave = useDebouncedCallback(saveNow, SAVE_DEBOUNCE_MS);
   const throttledLastOpened = useThrottledCallback(
@@ -399,6 +447,8 @@ export function Workspace() {
             onCharCount={setCharCount}
             typewriter={typewriter}
             onManualSave={handleManualSave}
+            extensions={mentionExtension ? [mentionExtension] : []}
+            onMentionDoubleClick={(id) => setEntitySheetId(id)}
           />
         </div>
         <ContextPanel
@@ -408,6 +458,8 @@ export function Workspace() {
           typewriter={typewriter}
           onToggleTypewriter={() => setTypewriter((v) => !v)}
           saveStatus={saveStatus}
+          mentionedEntities={mentioned}
+          onMentionClick={(id) => setEntitySheetId(id)}
         />
       </div>
 
@@ -422,6 +474,19 @@ export function Workspace() {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         commands={commands}
+      />
+
+      <MentionPicker state={mentionState} />
+      <EntitySheet
+        entityId={entitySheetId}
+        onClose={() => {
+          setEntitySheetId(null);
+          if (load) refreshMentioned(load.node.id);
+          focusEditor();
+        }}
+        onSaved={() => {
+          if (load) refreshMentioned(load.node.id);
+        }}
       />
 
       {dialog && (
