@@ -27,3 +27,33 @@ export interface ListProjectsParams {
   include_archived?: boolean;
   limit?: number;
 }
+
+// Mirrors engine/internal/node Node struct.
+export type NodeKind = "container" | "leaf";
+export type NodeStatus = "draft" | "revision" | "final";
+
+export interface NodeRow {
+  id: string;
+  project_id: string;
+  parent_id?: string;
+  ordinal: number;
+  kind: NodeKind;
+  label: string;
+  title: string;
+  content_doc?: string; // raw JSON string for leaves
+  status: NodeStatus;
+  word_count: number;
+  created_at: number;
+  updated_at: number;
+}
+
+// Mirrors engine/internal/snapshot Snapshot struct.
+export type SnapshotReason = "manual" | "autosave" | "ai-replace";
+
+export interface Snapshot {
+  id: string;
+  node_id: string;
+  content_doc: string;
+  reason: SnapshotReason;
+  created_at: number;
+}

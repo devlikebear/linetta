@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ListProjectsParams,
   NewProjectInput,
+  NodeRow,
   Project,
+  Snapshot,
 } from "./types";
 
 // Tauri commands defined in src-tauri.
@@ -20,4 +22,17 @@ export const projects = {
   list: (params: ListProjectsParams = {}) => rpcCall<Project[]>("projects.list", params),
   get: (id: string) => rpcCall<Project>("projects.get", { id }),
   archive: (id: string) => rpcCall<{ ok: true }>("projects.archive", { id }),
+};
+
+export const nodes = {
+  get: (id: string) => rpcCall<NodeRow>("nodes.get", { id }),
+  updateContent: (id: string, doc: string) =>
+    rpcCall<NodeRow>("nodes.update_content", { id, doc }),
+  setLastOpened: (projectId: string, nodeId: string) =>
+    rpcCall<{ ok: true }>("nodes.set_last_opened", { project_id: projectId, node_id: nodeId }),
+};
+
+export const snapshots = {
+  createManual: (nodeId: string, doc: string) =>
+    rpcCall<Snapshot>("snapshots.create_manual", { node_id: nodeId, doc }),
 };
