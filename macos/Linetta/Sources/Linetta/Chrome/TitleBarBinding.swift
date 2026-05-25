@@ -16,6 +16,8 @@ struct TitleBarBinding: ViewModifier {
             return appState.works.first { $0.id == wid }.map { "Linetta — \($0.title)" } ?? "Linetta"
         case .memory(let wid):
             return appState.works.first { $0.id == wid }.map { "Linetta — \($0.title) · Memory" } ?? "Linetta"
+        case .decisions(let wid):
+            return appState.works.first { $0.id == wid }.map { "Linetta — \($0.title) · Decisions" } ?? "Linetta"
         case .episode(let wid, let eid):
             let work = appState.works.first { $0.id == wid }?.title ?? ""
             return "Linetta — \(work) · \(eid.prefix(8))"

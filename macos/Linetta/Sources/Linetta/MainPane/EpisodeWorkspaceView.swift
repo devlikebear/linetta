@@ -8,13 +8,15 @@ struct EpisodeWorkspaceView: View {
     @Environment(AppState.self) private var appState
     @Environment(EpisodeState.self) private var episodeState
     @Environment(ManuscriptState.self) private var manuscript
+    @Environment(ToastCenter.self) private var toast
 
     @State private var episode: Episode?
     @State private var runs: [EpisodeRunResult] = []
     @State private var proposals: [CanonProposal] = []
     @State private var issues: [ContinuityIssue] = []
     @State private var isLoading = false
-    @State private var errorMessage: String?
+    @State private var lastRunError: String?
+    @State private var showRunErrorDetail = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,6 +27,9 @@ struct EpisodeWorkspaceView: View {
             ScrollView {
                 VStack(spacing: LinettaShape.sectionGap) {
                     BlueprintCard(work: work, episodeID: episodeID, onSave: { await reload() }, onRun: { await runAgents() })
+                    if let lastRunError {
+                        RunErrorBanner(error: lastRunError, isExpanded: $showRunErrorDetail, onRetry: { Task { await runAgents() } }, onDismiss: { self.lastRunError = nil })
+                    }
                     RunHistoryCard(runs: runs)
                     if !proposals.isEmpty || !issues.isEmpty {
                         ReviewQueueCard(workID: work.id, proposals: proposals, issues: issues, onDecision: { await reload() })
@@ -48,23 +53,81 @@ struct EpisodeWorkspaceView: View {
             proposals = (try? await appState.client.listProposals(workID: work.id, status: .pending)) ?? []
             issues = (try? await appState.client.listContinuityIssues(workID: work.id, episodeID: episodeID)) ?? []
             await loadLatestManuscript()
-        } catch { errorMessage = error.localizedDescription }
+        } catch {
+            toast.enqueue(.init(title: "Failed to reload episode: \(error.localizedDescription)", kind: .error))
+        }
     }
 
     private func loadLatestManuscript() async {
         let versions = (try? await appState.client.listEpisodeVersions(workID: work.id, episodeID: episodeID)) ?? []
-        // Versions returned newest-first by server convention; pick the first as the adopted view.
         let latestBody = versions.first?.body ?? ""
         manuscript.loadAdopted(body: latestBody)
     }
 
     private func runAgents() async {
-        episodeState.isRunning = true; defer { episodeState.isRunning = false }
+        episodeState.isRunning = true
+        lastRunError = nil
+        defer { episodeState.isRunning = false }
         do {
             let result = try await appState.client.runEpisode(workID: work.id, episodeID: episodeID)
             runs.insert(result, at: 0)
+            toast.enqueue(.init(title: "Run completed · \(result.artifacts.count) artifacts", kind: .success))
             await reload()
-        } catch { errorMessage = error.localizedDescription }
+        } catch {
+            lastRunError = error.localizedDescription
+            toast.enqueue(.init(title: "Run failed — see banner for retry", kind: .error))
+        }
+    }
+}
+
+private struct RunErrorBanner: View {
+    let error: String
+    @Binding var isExpanded: Bool
+    let onRetry: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(LinettaTheme.danger)
+                Text("Run Agents failed").font(LinettaTypography.titleSmall).foregroundStyle(LinettaTheme.text)
+                Spacer()
+                Button(isExpanded ? "Hide details" : "Show details") { isExpanded.toggle() }
+                    .buttonStyle(.plain)
+                    .font(LinettaTypography.caption)
+                    .foregroundStyle(LinettaTheme.accent)
+                Button("Retry", action: onRetry)
+                    .buttonStyle(.borderedProminent)
+                    .tint(LinettaTheme.accent)
+                    .controlSize(.small)
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(LinettaTheme.textTertiary)
+            }
+            if isExpanded {
+                ScrollView {
+                    Text(error)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(LinettaTheme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .padding(8)
+                }
+                .frame(maxHeight: 120)
+                .background(LinettaTheme.surfaceElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(.horizontal, LinettaShape.cardPaddingH)
+        .padding(.vertical, LinettaShape.cardPaddingV)
+        .background(LinettaTheme.surface)
+        .overlay(RoundedRectangle(cornerRadius: LinettaShape.cardCornerRadius).stroke(LinettaTheme.danger.opacity(0.4)))
+        .clipShape(RoundedRectangle(cornerRadius: LinettaShape.cardCornerRadius))
     }
 }
 

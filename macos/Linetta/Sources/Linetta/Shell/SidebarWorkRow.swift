@@ -44,6 +44,7 @@ struct SidebarWorkRow: View {
 
             if sidebar.isExpanded(work.id) {
                 SidebarMemoryRow(workID: work.id)
+                SidebarDecisionsRow(workID: work.id)
                 ForEach(episodes) { episode in
                     SidebarEpisodeRow(workID: work.id, episode: episode)
                 }

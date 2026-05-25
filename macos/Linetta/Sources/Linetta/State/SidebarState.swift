@@ -6,6 +6,7 @@ enum SidebarSelection: Equatable {
     case work(workID: String)
     case episode(workID: String, episodeID: String)
     case memory(workID: String)
+    case decisions(workID: String)
 }
 
 @MainActor
