@@ -99,6 +99,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let isDirty = MainActor.assumeIsolated { sharedManuscriptState.isDirty }
+        guard isDirty else { return .terminateNow }
+
+        let alert = NSAlert()
+        alert.messageText = "Manuscript has unsaved changes"
+        alert.informativeText = "Your manuscript draft has not been autosaved yet. Quit anyway, save first, or cancel?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Save and Quit")
+        alert.addButton(withTitle: "Discard and Quit")
+        alert.addButton(withTitle: "Cancel")
+
+        let response = alert.runModal()
+        switch response {
+        case .alertFirstButtonReturn:
+            // Save and quit — fire the save synchronously by triggering a save
+            // task and waiting briefly. We can't fully await on the main thread
+            // without deadlocking, so we run a short blocking pump.
+            Task { @MainActor in
+                await saveBeforeQuit()
+                sender.reply(toApplicationShouldTerminate: true)
+            }
+            return .terminateLater
+        case .alertSecondButtonReturn:
+            return .terminateNow
+        default:
+            return .terminateCancel
+        }
+    }
+
+    @MainActor
+    private func saveBeforeQuit() async {
+        // Best-effort: try to push the latest manuscript draft to the server.
+        guard case .episode(let wid, let eid) = sharedSidebarState.selection else { return }
+        let body = sharedManuscriptState.draft
+        _ = try? await sharedAppState.client.createEpisodeVersion(
+            workID: wid, episodeID: eid,
+            request: CreateEpisodeVersionRequest(body: body, note: "save-before-quit")
+        )
+        sharedManuscriptState.markSaved(as: body)
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
