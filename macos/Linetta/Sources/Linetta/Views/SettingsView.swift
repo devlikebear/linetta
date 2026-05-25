@@ -74,9 +74,10 @@ struct SettingsView: View {
                 }
             }
         }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .background(LinettaTheme.background)
-        .padding(20)
-        .frame(width: 560)
+        .frame(minWidth: 560, idealWidth: 620, minHeight: 460)
     }
 
     private var currentStatusText: String {
