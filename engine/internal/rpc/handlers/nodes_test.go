@@ -128,3 +128,106 @@ func TestSetLastOpenedHandler(t *testing.T) {
 		t.Errorf("last_opened = %v", got.LastOpenedNodeID)
 	}
 }
+
+func TestListTreeHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	chapter, _ := f.nodes.CreateSibling(context.Background(), f.nID, "container", "1장", "", 2000)
+	_, _ = f.nodes.CreateChild(context.Background(), chapter.ID, "leaf", "씬 A", "", 3000)
+
+	h := ListTree(f.nodes)
+	res, err := h(context.Background(), json.RawMessage(`{"project_id":"`+f.pID+`"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got []node.Node
+	if err := json.Unmarshal(res, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("len = %d, want 3", len(got))
+	}
+}
+
+func TestCreateSiblingHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	h := CreateSibling(f.nodes, func() int64 { return 1234 })
+	params := json.RawMessage(`{"reference_id":"` + f.nID + `","kind":"leaf","label":"씬 2","title":""}`)
+	res, err := h(context.Background(), params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var n node.Node
+	_ = json.Unmarshal(res, &n)
+	if n.Label != "씬 2" || n.Kind != "leaf" {
+		t.Errorf("got %+v", n)
+	}
+	if n.CreatedAt != 1234 {
+		t.Errorf("clock not injected: %d", n.CreatedAt)
+	}
+}
+
+func TestCreateChildHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	chapter, _ := f.nodes.CreateSibling(context.Background(), f.nID, "container", "1장", "", 2000)
+	h := CreateChild(f.nodes, func() int64 { return 5000 })
+	params := json.RawMessage(`{"parent_id":"` + chapter.ID + `","kind":"leaf","label":"씬 A","title":""}`)
+	res, err := h(context.Background(), params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var n node.Node
+	_ = json.Unmarshal(res, &n)
+	if n.ParentID == nil || *n.ParentID != chapter.ID {
+		t.Errorf("parent mismatch: %v", n.ParentID)
+	}
+}
+
+func TestRenameHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	h := RenameNode(f.nodes, func() int64 { return 9999 })
+	if _, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","label":"프롤로그","title":"별이 떨어지는 밤"}`)); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	got, _ := f.nodes.Get(context.Background(), f.nID)
+	if got.Label != "프롤로그" || got.Title != "별이 떨어지는 밤" {
+		t.Errorf("rename failed: %+v", got)
+	}
+}
+
+func TestDeleteHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	// Create a second leaf so the project still has a node after the delete.
+	other, _ := f.nodes.CreateSibling(context.Background(), f.nID, "leaf", "씬 2", "", 2000)
+	_ = other
+
+	h := DeleteNode(f.nodes, func() int64 { return 1 })
+	if _, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`"}`)); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	if _, err := f.nodes.Get(context.Background(), f.nID); err != node.ErrNotFound {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestMoveHandlers(t *testing.T) {
+	f := newNodeFixture(t)
+	second, _ := f.nodes.CreateSibling(context.Background(), f.nID, "leaf", "씬 2", "", 2000)
+
+	up := MoveUp(f.nodes, func() int64 { return 3000 })
+	if _, err := up(context.Background(), json.RawMessage(`{"id":"`+second.ID+`"}`)); err != nil {
+		t.Fatalf("MoveUp handler: %v", err)
+	}
+	tree, _ := f.nodes.ListByProject(context.Background(), f.pID)
+	if tree[0].Label != "씬 2" || tree[1].Label != "씬 1" {
+		t.Errorf("order after MoveUp: %q,%q", tree[0].Label, tree[1].Label)
+	}
+
+	down := MoveDown(f.nodes, func() int64 { return 4000 })
+	if _, err := down(context.Background(), json.RawMessage(`{"id":"`+second.ID+`"}`)); err != nil {
+		t.Fatalf("MoveDown handler: %v", err)
+	}
+	tree, _ = f.nodes.ListByProject(context.Background(), f.pID)
+	if tree[0].Label != "씬 1" || tree[1].Label != "씬 2" {
+		t.Errorf("order after MoveDown: %q,%q", tree[0].Label, tree[1].Label)
+	}
+}

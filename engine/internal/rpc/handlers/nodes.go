@@ -89,3 +89,144 @@ func SetLastOpened(nodes *node.Repo, now Clock) rpc.Handler {
 		return json.RawMessage(`{"ok":true}`), nil
 	}
 }
+
+// --- Tree ops ---
+
+type projectIDParam struct {
+	ProjectID string `json:"project_id"`
+}
+
+func ListTree(nodes *node.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p projectIDParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		list, err := nodes.ListByProject(ctx, p.ProjectID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		if list == nil {
+			list = []node.Node{}
+		}
+		return json.Marshal(list)
+	}
+}
+
+type createSiblingParams struct {
+	ReferenceID string `json:"reference_id"`
+	Kind        string `json:"kind"`
+	Label       string `json:"label"`
+	Title       string `json:"title"`
+}
+
+func CreateSibling(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p createSiblingParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ReferenceID == "" || p.Kind == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "reference_id and kind required"}
+		}
+		n, err := nodes.CreateSibling(ctx, p.ReferenceID, p.Kind, p.Label, p.Title, now())
+		if err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "reference not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(n)
+	}
+}
+
+type createChildParams struct {
+	ParentID string `json:"parent_id"`
+	Kind     string `json:"kind"`
+	Label    string `json:"label"`
+	Title    string `json:"title"`
+}
+
+func CreateChild(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p createChildParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ParentID == "" || p.Kind == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "parent_id and kind required"}
+		}
+		n, err := nodes.CreateChild(ctx, p.ParentID, p.Kind, p.Label, p.Title, now())
+		if err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "parent not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(n)
+	}
+}
+
+type renameParams struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Title string `json:"title"`
+}
+
+func RenameNode(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p renameParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := nodes.Rename(ctx, p.ID, p.Label, p.Title, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+func DeleteNode(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := nodes.Delete(ctx, p.ID, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+func MoveUp(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := nodes.MoveUp(ctx, p.ID, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+func MoveDown(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := nodes.MoveDown(ctx, p.ID, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
