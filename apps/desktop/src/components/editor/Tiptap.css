@@ -2,6 +2,8 @@
   display: flex;
   justify-content: center;
   padding: 4rem 2rem;
+  cursor: text;       /* signal "click anywhere to start typing" */
+  min-height: 100%;
 }
 
 .tiptap-wrap.typewriter {
@@ -19,6 +21,28 @@
   font-size: 1.1rem;
   line-height: 1.85;
   color: #1a1a1a;
+  min-height: 4em;    /* always click-able even when doc is empty */
+}
+
+/* Subtle visual cue: when the editable area has focus, the cursor caret blinks
+   inside it. When unfocused, show a faint left-edge indicator on the column
+   so the writer can tell where to click. */
+.tiptap-editor .ProseMirror:not(:focus) {
+  border-left: 2px solid transparent;
+  transition: border-color 200ms ease;
+}
+
+.tiptap-wrap:hover .tiptap-editor .ProseMirror:not(:focus) {
+  border-left-color: #d8d6cf;
+}
+
+/* Placeholder hint for empty docs so the click target is obvious. */
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: "여기에 글을 쓰세요…";
+  color: #b8b6ad;
+  float: left;
+  height: 0;
+  pointer-events: none;
 }
 
 .tiptap-editor .ProseMirror p {

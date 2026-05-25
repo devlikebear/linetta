@@ -1,7 +1,12 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
 import "./Tiptap.css";
+
+export interface TiptapHandle {
+  /** Move keyboard focus into the editor (end of current document). */
+  focus: () => void;
+}
 
 interface Props {
   /** Tiptap JSON doc — controls the editor's initial state. The component is
@@ -17,7 +22,10 @@ interface Props {
   onManualSave?: (doc: object) => void;
 }
 
-export function TiptapEditor({ initialDoc, onChange, onCharCount, typewriter, onManualSave }: Props) {
+export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEditor(
+  { initialDoc, onChange, onCharCount, typewriter, onManualSave },
+  ref,
+) {
   // Stable reference for the initial doc to avoid resetting on every render.
   const initialKey = useMemo(() => JSON.stringify(initialDoc).length, [initialDoc]);
 
@@ -56,13 +64,37 @@ export function TiptapEditor({ initialDoc, onChange, onCharCount, typewriter, on
     return () => window.removeEventListener("keydown", handler);
   }, [editor, onManualSave]);
 
+  // Expose a tiny imperative API so parents can refocus the editor (e.g. after
+  // the outline auto-retracts or a dialog closes).
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => {
+        editor?.commands.focus("end");
+      },
+    }),
+    [editor],
+  );
+
+  // Clicking anywhere in the wrap (including the generous margins / typewriter
+  // padding) should focus the editor — otherwise the writer can't tell where
+  // the editable area starts.
+  const onWrapMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(".ProseMirror")) return;
+    e.preventDefault(); // keep focus from jumping to the wrap itself
+    editor?.commands.focus("end");
+  };
+
   return (
-    <div className={`tiptap-wrap${typewriter ? " typewriter" : ""}`}>
+    <div
+      className={`tiptap-wrap${typewriter ? " typewriter" : ""}`}
+      onMouseDown={onWrapMouseDown}
+    >
       <EditorContent editor={editor} className="tiptap-editor" />
       <TypewriterScroll editor={editor} enabled={!!typewriter} />
     </div>
   );
-}
+});
 
 /** Scrolls the editor so the current cursor line stays near the column's center.
  *  Scrolls only the editor's nearest scrollable ancestor (never the page),

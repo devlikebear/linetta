@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { nodes, projects, snapshots } from "../lib/rpc";
 import type { NodeRow, Project } from "../lib/types";
-import { TiptapEditor } from "../components/editor/Tiptap";
+import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { CommandPalette, type Command } from "../components/CommandPalette";
@@ -41,6 +41,11 @@ export function Workspace() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const editorRef = useRef<TiptapHandle>(null);
+
+  const focusEditor = useCallback(() => {
+    window.setTimeout(() => editorRef.current?.focus(), 0);
+  }, []);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -385,6 +390,7 @@ export function Workspace() {
         <div className="ws-editor">
           <TiptapEditor
             key={load.node.id}
+            ref={editorRef}
             initialDoc={load.initialDoc}
             onChange={(doc) => {
               debouncedSave(doc);
@@ -409,6 +415,7 @@ export function Workspace() {
         tree={load.tree}
         currentId={load.node.id}
         onSelect={(n) => navigateToNode(n)}
+        onClose={focusEditor}
       />
 
       <CommandPalette
@@ -417,7 +424,15 @@ export function Workspace() {
         commands={commands}
       />
 
-      {dialog && <DialogModal dialog={dialog} onClose={() => setDialog(null)} />}
+      {dialog && (
+        <DialogModal
+          dialog={dialog}
+          onClose={() => {
+            setDialog(null);
+            focusEditor();
+          }}
+        />
+      )}
 
       {toast && <div className="ws-toast">{toast}</div>}
     </main>
