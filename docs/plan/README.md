@@ -15,6 +15,8 @@
 ### macOS App Completion (Phase 6~9)
 7. [linetta-macos-app-completion-roadmap.md](./linetta-macos-app-completion-roadmap.md)
 8. [phase-6-embedded-engine-lifecycle.md](./phase-6-embedded-engine-lifecycle.md)
+- [Phase 6.5 — UI Redesign Spec](./phase-6.5-ui-redesign.md)
+- [Phase 6.5 — UI Redesign Plan](./phase-6.5-ui-redesign-plan.md)
 9. [phase-7-settings-studio.md](./phase-7-settings-studio.md)
 10. [phase-8-app-polish-workflow.md](./phase-8-app-polish-workflow.md)
 11. [phase-9-live-run-and-editor.md](./phase-9-live-run-and-editor.md)

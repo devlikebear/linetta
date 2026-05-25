@@ -118,9 +118,10 @@ Linetta MVP(Phase 1~5)는 Go engine과 SwiftUI macOS 앱이 분리된 채로 완
 ```
 Phase 5 (MVP 완료, 기존)
   └─→ Phase 6 (Embedded Engine)
-        └─→ Phase 7 (Settings Studio)
-              └─→ Phase 8 (App Polish)
-                    └─→ Phase 9 (Live + Editor)
+        └─→ Phase 6.5 (UI Redesign)
+              └─→ Phase 7 (Settings Studio)
+                    └─→ Phase 8 (App Polish)
+                          └─→ Phase 9 (Live + Editor)
 ```
 
 **병렬 가능성**: 거의 없음. Phase 7은 Phase 6의 APIClient 공유 구조와 engine 제어 인터페이스에 의존. Phase 8은 Phase 7의 Settings 구조와 새 HTTP API에 의존. Phase 9는 Phase 6 APIClient 공유 구조가 있어야 EventStream 주입이 깔끔.
