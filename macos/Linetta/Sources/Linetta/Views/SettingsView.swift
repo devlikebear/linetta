@@ -18,16 +18,16 @@ struct SettingsView: View {
                 Toggle("Use external engine", isOn: $useExternalEngine)
                 Text("When enabled, Linetta will not spawn its own engine. Run `make serve` separately. Toggle takes effect on next app launch.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(LinettaTheme.textSecondary)
                 LabeledContent("Status") {
                     Text(currentStatusText)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(LinettaTheme.textSecondary)
                 }
                 LabeledContent("Current address") {
                     if let addr = engine.address?.absoluteString {
-                        Text(addr).textSelection(.enabled).foregroundStyle(.secondary)
+                        Text(addr).textSelection(.enabled).foregroundStyle(LinettaTheme.textSecondary)
                     } else {
-                        Text("—").foregroundStyle(.tertiary)
+                        Text("—").foregroundStyle(LinettaTheme.textTertiary)
                     }
                 }
                 HStack {
@@ -44,7 +44,7 @@ struct SettingsView: View {
                 }
                 TextField("External address override", text: $engineAddress)
                     .disabled(!useExternalEngine)
-                    .foregroundStyle(useExternalEngine ? .primary : .secondary)
+                    .foregroundStyle(useExternalEngine ? .primary : LinettaTheme.textSecondary)
                 HStack {
                     TextField("Default DB path", text: $defaultDBPath)
                     Button("Choose…") { pickFile(into: $defaultDBPath, kinds: [.database]) }
@@ -70,10 +70,11 @@ struct SettingsView: View {
                 Section {
                     Text(message)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(LinettaTheme.textSecondary)
                 }
             }
         }
+        .background(LinettaTheme.background)
         .padding(20)
         .frame(width: 560)
     }
