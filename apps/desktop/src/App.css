@@ -1,7 +1,16 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: ui-serif, Georgia, "Apple SD Gothic Neo", serif;
   font-size: 16px;
+}
+
+/* Lock all form controls to the light palette so the modal and chip buttons
+   stay legible when the OS is in dark mode. */
+button,
+input,
+select,
+textarea {
+  color: #1a1a1a;
 }
 
 body {
