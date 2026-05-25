@@ -152,6 +152,26 @@ FROM entities`
 
 type scanner interface{ Scan(...any) error }
 
+// ScanAll consumes a *sql.Rows (or compatible) whose columns match baseSelect
+// and returns the full slice. Exposed for cross-package callers (e.g. mention.Repo).
+func ScanAll(rows interface {
+	Next() bool
+	Scan(...any) error
+	Close() error
+	Err() error
+}) ([]Entity, error) {
+	defer rows.Close()
+	var out []Entity
+	for rows.Next() {
+		e, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func scan(row scanner) (Entity, error) {
 	var (
 		e        Entity
