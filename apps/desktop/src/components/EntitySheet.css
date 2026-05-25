@@ -65,9 +65,16 @@
   flex-shrink: 0;
 }
 
-.entity-id-text { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
+.entity-id-text {
+  flex: 1;
+  min-width: 0; /* let inputs shrink instead of overflowing the parent row */
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
 
 .entity-name {
+  width: 100%; /* fill the column instead of using the browser default 20em */
   font: inherit;
   font-size: 1rem;
   padding: 0.35rem 0.5rem;
@@ -76,7 +83,7 @@
   background: white;
 }
 
-.entity-kind-row { display: flex; gap: 0.4rem; }
+.entity-kind-row { display: flex; gap: 0.4rem; min-width: 0; }
 .entity-kind-row select,
 .entity-kind-row .entity-role {
   font: inherit;
@@ -85,6 +92,7 @@
   border: 1px solid #d8d6cf;
   border-radius: 4px;
   background: white;
+  min-width: 0; /* allow flex children to shrink below intrinsic size */
 }
 .entity-kind-row .entity-role { flex: 1; }
 
@@ -116,6 +124,8 @@
   border: 1px solid #d8d6cf;
   border-radius: 4px;
   background: white;
+  min-width: 0; /* let 1fr grid columns actually shrink to their share */
+  width: 100%;
 }
 .attr-del {
   background: none;
