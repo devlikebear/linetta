@@ -41,29 +41,56 @@ fn resolve_binary(app: &tauri::AppHandle) -> Result<std::path::PathBuf> {
         .map_err(|e| anyhow!("resolve target triple: {}", e))?;
     let resource_name = format!("linetta-engine-{}{}", triple, std::env::consts::EXE_SUFFIX);
 
+    // 1. Production: Tauri resource dir.
     if let Ok(path) = app.path().resolve(&resource_name, tauri::path::BaseDirectory::Resource) {
         if path.exists() {
             return Ok(path);
         }
     }
-    // Dev fallback: alongside the running binary or in src-tauri/binaries/.
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()));
-    if let Some(dir) = exe_dir {
-        let dev_path = dir.join(&resource_name);
-        if dev_path.exists() {
-            return Ok(dev_path);
+
+    let mut tried: Vec<std::path::PathBuf> = Vec::new();
+
+    // 2. Dev: walk up from the running exe and look for `binaries/{resource_name}`.
+    // In `cargo run` / `pnpm tauri dev`, the exe lives at
+    // apps/desktop/src-tauri/target/debug/linetta-desktop, so the engine binary
+    // sits two directories above the exe's parent.
+    if let Ok(exe) = std::env::current_exe() {
+        let mut cursor = exe.parent().map(|p| p.to_path_buf());
+        for _ in 0..4 {
+            let Some(dir) = cursor else { break };
+            let candidate = dir.join("binaries").join(&resource_name);
+            if candidate.exists() {
+                return Ok(candidate);
+            }
+            tried.push(candidate);
+            cursor = dir.parent().map(|p| p.to_path_buf());
         }
     }
-    let cwd_path = std::env::current_dir()?
-        .join("src-tauri")
-        .join("binaries")
-        .join(&resource_name);
-    if cwd_path.exists() {
-        return Ok(cwd_path);
+
+    // 3. Dev: try common cwd locations relative to where the dev script may run.
+    if let Ok(cwd) = std::env::current_dir() {
+        let candidates = [
+            cwd.join("binaries").join(&resource_name),
+            cwd.join("src-tauri").join("binaries").join(&resource_name),
+            cwd.join("apps").join("desktop").join("src-tauri").join("binaries").join(&resource_name),
+        ];
+        for candidate in candidates {
+            if candidate.exists() {
+                return Ok(candidate);
+            }
+            tried.push(candidate);
+        }
     }
-    Err(anyhow!("engine binary not found: {}", resource_name))
+
+    Err(anyhow!(
+        "engine binary not found: {} (tried: {})",
+        resource_name,
+        tried
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
 }
 
 fn current_target_triple() -> std::result::Result<String, std::env::VarError> {
