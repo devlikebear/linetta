@@ -69,34 +69,61 @@ type ChatRequest struct {
 	} `json:"response_format,omitempty"`
 }
 
+// ChatText sends messages and returns the model's reply as plain text. Used by
+// agents whose output is prose (drafts, critiques) rather than structured JSON.
+// Returns an error if the API call fails or the response is non-2xx.
+func (c *Client) ChatText(ctx context.Context, messages []Message, temperature float64) (string, error) {
+	content, err := c.callChat(ctx, messages, temperature, false)
+	if err != nil {
+		return "", err
+	}
+	return content, nil
+}
+
 // ChatJSON sends messages and decodes the model's reply (assumed JSON) into out.
 // Returns an error if the API call fails, the response is non-2xx, or the body
 // is not valid JSON of the expected shape.
 func (c *Client) ChatJSON(ctx context.Context, messages []Message, temperature float64, out any) error {
+	content, err := c.callChat(ctx, messages, temperature, true)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal([]byte(content), out); err != nil {
+		return fmt.Errorf("llm.ChatJSON: decode model JSON: %w (body=%q)", err, content)
+	}
+	return nil
+}
+
+// callChat is the shared Chat Completions caller used by ChatText and ChatJSON.
+// jsonMode forces the model into response_format=json_object so the body is
+// guaranteed parseable.
+func (c *Client) callChat(ctx context.Context, messages []Message, temperature float64, jsonMode bool) (string, error) {
 	if c == nil || c.APIKey == "" {
-		return ErrNoAPIKey
+		return "", ErrNoAPIKey
 	}
 	req := ChatRequest{
 		Model:       c.Model,
 		Messages:    messages,
 		Temperature: temperature,
-		ResponseFormat: &struct {
+	}
+	if jsonMode {
+		req.ResponseFormat = &struct {
 			Type string `json:"type"`
-		}{Type: "json_object"},
+		}{Type: "json_object"}
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("llm.ChatJSON: marshal request: %w", err)
+		return "", fmt.Errorf("llm.callChat: marshal request: %w", err)
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("llm.ChatJSON: build request: %w", err)
+		return "", fmt.Errorf("llm.callChat: build request: %w", err)
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	resp, err := c.HTTP.Do(httpReq)
 	if err != nil {
-		return fmt.Errorf("llm.ChatJSON: http: %w", err)
+		return "", fmt.Errorf("llm.callChat: http: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -112,19 +139,16 @@ func (c *Client) ChatJSON(ctx context.Context, messages []Message, temperature f
 		} `json:"error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
-		return fmt.Errorf("llm.ChatJSON: decode response: %w", err)
+		return "", fmt.Errorf("llm.callChat: decode response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		if raw.Error != nil {
-			return fmt.Errorf("llm.ChatJSON: %s (%s)", raw.Error.Message, raw.Error.Type)
+			return "", fmt.Errorf("llm.callChat: %s (%s)", raw.Error.Message, raw.Error.Type)
 		}
-		return fmt.Errorf("llm.ChatJSON: HTTP %d", resp.StatusCode)
+		return "", fmt.Errorf("llm.callChat: HTTP %d", resp.StatusCode)
 	}
 	if len(raw.Choices) == 0 {
-		return errors.New("llm.ChatJSON: no choices in response")
+		return "", errors.New("llm.callChat: no choices in response")
 	}
-	if err := json.Unmarshal([]byte(raw.Choices[0].Message.Content), out); err != nil {
-		return fmt.Errorf("llm.ChatJSON: decode model JSON: %w (body=%q)", err, raw.Choices[0].Message.Content)
-	}
-	return nil
+	return raw.Choices[0].Message.Content, nil
 }

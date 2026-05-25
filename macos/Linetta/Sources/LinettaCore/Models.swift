@@ -627,6 +627,16 @@ public struct VersionInfo: Codable, Equatable, Sendable {
     public var linetta: String
     public var tessera: String
     public var go: String
+    public var llmEnabled: Bool
+    public var llmModel: String
+
+    enum CodingKeys: String, CodingKey {
+        case linetta
+        case tessera
+        case go
+        case llmEnabled = "llm_enabled"
+        case llmModel = "llm_model"
+    }
 }
 
 public struct LibraryInfo: Codable, Equatable, Sendable {

@@ -428,6 +428,20 @@ struct SettingsAboutSection: View {
             LabeledContent("Go runtime") {
                 Text(versionInfo?.go ?? "—").foregroundStyle(LinettaTheme.textSecondary)
             }
+            LabeledContent("LLM agents") {
+                if let v = versionInfo {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(v.llmEnabled ? LinettaTheme.success : LinettaTheme.textTertiary)
+                            .frame(width: 7, height: 7)
+                        Text(v.llmEnabled ? v.llmModel : "fallback (no API key)")
+                            .foregroundStyle(LinettaTheme.textSecondary)
+                            .textSelection(.enabled)
+                    }
+                } else {
+                    Text("—").foregroundStyle(LinettaTheme.textTertiary)
+                }
+            }
             LabeledContent("Data directory") {
                 HStack {
                     Text(StoragePaths.dataDir.path)

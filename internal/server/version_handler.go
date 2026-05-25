@@ -2,15 +2,18 @@ package server
 
 import (
 	"net/http"
+	"os"
 	"runtime/debug"
 	"strings"
 )
 
 // VersionResponse is the body of GET /api/version.
 type VersionResponse struct {
-	Linetta string `json:"linetta"`
-	Tessera string `json:"tessera"`
-	Go      string `json:"go"`
+	Linetta    string `json:"linetta"`
+	Tessera    string `json:"tessera"`
+	Go         string `json:"go"`
+	LLMEnabled bool   `json:"llm_enabled"`
+	LLMModel   string `json:"llm_model"`
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
@@ -19,10 +22,22 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, VersionResponse{
-		Linetta: linettaVersion(),
-		Tessera: tesseraVersion(),
-		Go:      goRuntimeVersion(),
+		Linetta:    linettaVersion(),
+		Tessera:    tesseraVersion(),
+		Go:         goRuntimeVersion(),
+		LLMEnabled: os.Getenv("OPENAI_API_KEY") != "",
+		LLMModel:   llmModelLabel(),
 	})
+}
+
+func llmModelLabel() string {
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		return "fallback (no API key — set OPENAI_API_KEY)"
+	}
+	if m := os.Getenv("LINETTA_LLM_MODEL"); m != "" {
+		return m
+	}
+	return "gpt-4o-mini"
 }
 
 // linettaVersion returns the build version if available, falling back to "dev".

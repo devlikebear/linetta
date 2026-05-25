@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devlikebear/linetta/internal/llm"
 	"github.com/devlikebear/linetta/internal/memory"
 	"github.com/devlikebear/linetta/internal/store"
 	"github.com/devlikebear/linetta/internal/work"
@@ -162,6 +163,11 @@ func (r *Runner) runEpisodeCore(ctx context.Context, input EpisodeRunInput, runI
 	events := &broadcastingSink{inner: innerSink, broadcaster: r.broadcaster}
 	artifacts := newArtifactCollector()
 
+	// Build the LLM client once per run. nil is a normal state — the agents
+	// silently fall back to deterministic stubs so dev environments without
+	// OPENAI_API_KEY still produce artifacts.
+	llmClient, _ := llm.NewFromEnv()
+
 	plan, err := episodePlan(ctx, blueprint)
 	if err != nil {
 		return EpisodeRunResult{}, err
@@ -198,7 +204,19 @@ func (r *Runner) runEpisodeCore(ctx context.Context, input EpisodeRunInput, runI
 			"critic":       1,
 			"editor":       1,
 		},
-		Executor: executor.TaskHandler(func(_ context.Context, task queue.Task) (executor.Result, error) {
+		Executor: executor.TaskHandler(func(taskCtx context.Context, task queue.Task) (executor.Result, error) {
+			ac := agentContext{
+				Work:      workItem,
+				Episode:   episode,
+				Blueprint: blueprint,
+				Canon:     canonItems,
+			}
+			// Try LLM first; on any failure (no API key, network, parse) fall
+			// back to the deterministic stub so the run still produces output.
+			if out, ok := runAgentLLM(taskCtx, llmClient, task.ID, ac, artifacts.snapshot()); ok {
+				artifacts.set(ArtifactKind(task.ID), out)
+				return executor.Result{Output: out}, nil
+			}
 			output := buildOutput(task.ID, workItem, episode, blueprint, canonItems, artifacts.snapshot())
 			artifacts.set(ArtifactKind(task.ID), output)
 			return executor.Result{Output: output}, nil
@@ -453,6 +471,19 @@ func (r *Runner) storeReviewOutputs(ctx context.Context, runID string, workItem 
 
 	canonReview := strings.TrimSpace(artifactByKind[ArtifactKindCanonReview].Body)
 	editedDraft := strings.TrimSpace(artifactByKind[ArtifactKindEditedDraft].Body)
+
+	// Try LLM-driven extraction first. The Canon Keeper agent already
+	// produced a textual review; this second pass turns it (plus the draft)
+	// into structured proposals/issues the user can approve/reject.
+	if client, err := llm.NewFromEnv(); err == nil {
+		props, issues, ok := extractReviewWithLLM(ctx, client, workItem, episode, blueprint, canonItems, canonReview, editedDraft)
+		if ok && (len(props) > 0 || len(issues) > 0) {
+			return r.persistReview(ctx, runID, workItem, episode, props, issues, canonItems)
+		}
+	}
+
+	// Fallback: produce a single coarse proposal + issue so the UI is never
+	// empty after a run, matching the prior deterministic behavior.
 	proposalBody := strings.Join(nonEmptyLines(
 		"Work: "+workItem.Title,
 		"Episode: "+episode.Title,
@@ -464,7 +495,6 @@ func (r *Runner) storeReviewOutputs(ctx context.Context, runID string, workItem 
 	if proposalBody == "" {
 		proposalBody = "Episode premise: " + blueprint.Premise
 	}
-
 	if _, err := r.memoryRepo.CreateProposal(ctx, memory.CreateProposalInput{
 		WorkID:     workItem.ID,
 		EpisodeID:  episode.ID,
@@ -478,7 +508,6 @@ func (r *Runner) storeReviewOutputs(ctx context.Context, runID string, workItem 
 	}); err != nil {
 		return err
 	}
-
 	issueBody := strings.Join(nonEmptyLines(
 		fmt.Sprintf("Confirm the proposed episode memory before it becomes canon for %q.", workItem.Title),
 		"Premise: "+blueprint.Premise,
@@ -496,6 +525,41 @@ func (r *Runner) storeReviewOutputs(ctx context.Context, runID string, workItem 
 		RelatedItemIDs: relatedItemIDs(canonItems),
 	})
 	return err
+}
+
+// persistReview writes the LLM-extracted proposals and issues to the DB.
+func (r *Runner) persistReview(ctx context.Context, runID string, workItem work.Work, episode work.Episode, proposals []extractedProposal, issues []extractedIssue, canonItems []memory.Item) error {
+	for _, p := range proposals {
+		kind := mapProposalKind(p.Kind)
+		if _, err := r.memoryRepo.CreateProposal(ctx, memory.CreateProposalInput{
+			WorkID:     workItem.ID,
+			EpisodeID:  episode.ID,
+			RunID:      runID,
+			ChangeType: memory.ProposalChangeCreate,
+			Kind:       kind,
+			Title:      p.Title,
+			AfterBody:  p.Body,
+			Reason:     firstNonEmpty(p.Reason, "Extracted by Canon Keeper LLM."),
+			Confidence: clamp01(p.Confidence, 0.7),
+		}); err != nil {
+			return err
+		}
+	}
+	for _, i := range issues {
+		sev := mapIssueSeverity(i.Severity)
+		if _, err := r.memoryRepo.CreateIssue(ctx, memory.CreateIssueInput{
+			WorkID:         workItem.ID,
+			EpisodeID:      episode.ID,
+			RunID:          runID,
+			Severity:       sev,
+			Title:          firstNonEmpty(i.Title, "Continuity flag"),
+			Body:           i.Body,
+			RelatedItemIDs: relatedItemIDs(canonItems),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func scanArtifact(row scanner) (Artifact, error) {
