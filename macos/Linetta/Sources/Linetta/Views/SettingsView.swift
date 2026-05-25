@@ -78,6 +78,7 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .background(LinettaTheme.background)
         .frame(minWidth: 560, idealWidth: 620, minHeight: 460)
+        .preferredColorScheme(.dark)
     }
 
     private var currentStatusText: String {
