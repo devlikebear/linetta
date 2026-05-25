@@ -13,6 +13,7 @@ import (
 
 	_ "github.com/devlikebear/tars/pkg/llm" // pin
 
+	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -50,6 +51,8 @@ func main() {
 	}
 	defer st.Close()
 
+	s := rpc.NewServer()
+
 	projects := project.NewRepo(st)
 	nodes := node.NewRepo(st)
 	snaps := snapshot.NewRepo(st)
@@ -61,9 +64,11 @@ func main() {
 		return mentions.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
 	})
 
-	clock := func() int64 { return time.Now().UnixMilli() }
+	aiRuns := store.NewAIRunsRepo(st)
+	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions)
+	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, "claude-code-cli")
 
-	s := rpc.NewServer()
+	clock := func() int64 { return time.Now().UnixMilli() }
 	s.Handle("ping", handlers.Ping)
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
 	s.Handle("projects.list", handlers.ListProjects(projects))
@@ -85,6 +90,8 @@ func main() {
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
+	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
+	s.Handle("ai.cancel", handlers.CancelAI(runner))
 
 	if err := s.Serve(ctx, os.Stdin, os.Stdout); err != nil && !errors.Is(err, io.EOF) {
 		fail("serve: %v", err)
