@@ -144,6 +144,7 @@ Checkpoint 실패 시:
 
 ## 최종 완료 체크리스트 (Phase 6~9 종료 후)
 
+- [x] Phase 6.5 — UI Redesign: 3-column AppShell with warm-dark theme, Sidebar(Works/Memory/Episodes), Episode workspace(Blueprint + Run history + Review queue), Manuscript inspector, Command palette ⌘K, status footer. Legacy views removed.
 - [ ] 모든 페이즈 Checkpoint 통과
 - [ ] 전체 Go 테스트 통과: `go test ./...`
 - [ ] Swift 패키지 테스트 통과: `cd macos/Linetta && swift test`
