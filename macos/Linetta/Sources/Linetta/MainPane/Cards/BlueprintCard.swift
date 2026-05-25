@@ -117,7 +117,10 @@ struct BlueprintCard: View {
         )
         do {
             let s = try await appState.client.suggestBlueprint(workID: work.id, episodeID: episodeID, partial: partial)
-            episodeState.loadBlueprint(
+            // applySuggestion (not loadBlueprint) so the form is marked dirty
+            // and the Save button enables — the suggestion only lives in
+            // memory until the writer accepts it.
+            episodeState.applySuggestion(
                 premise: s.premise,
                 theme: s.theme,
                 situation: s.situation,
@@ -125,12 +128,6 @@ struct BlueprintCard: View {
                 mustAvoid: s.mustAvoid,
                 structureNotes: s.structureNotes
             )
-            // loadBlueprint resets isDirty — but the user almost certainly
-            // wants to save the suggestion, so make it dirty by toggling
-            // premise to itself. Cheap workaround.
-            let p = episodeState.premise
-            episodeState.premise = p + " "
-            episodeState.premise = p
             let label = s.source == "llm" ? "Suggested via LLM" : "Suggested (no API key — fallback)"
             toast.enqueue(.init(title: label, kind: .success))
         } catch {

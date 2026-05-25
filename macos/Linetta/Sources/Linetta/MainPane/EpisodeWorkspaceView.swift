@@ -97,6 +97,11 @@ struct EpisodeWorkspaceView: View {
         lastRunError = nil
         liveEvents = []
         liveLastEvent = nil
+        // Server reads the persisted blueprint when running. If the user just
+        // applied a suggestion (or typed new values) and hit Run without
+        // saving, the server would see an empty/missing blueprint and bail.
+        // Always push the current form state before kicking off the run.
+        await persistCurrentBlueprint()
         do {
             let start = try await appState.client.runEpisodeAsync(workID: work.id, episodeID: episodeID)
             liveRunID = start.runID
@@ -105,6 +110,27 @@ struct EpisodeWorkspaceView: View {
             episodeState.isRunning = false
             lastRunError = error.localizedDescription
             toast.enqueue(.init(title: "Run failed to start — see banner for retry", kind: .error))
+        }
+    }
+
+    private func persistCurrentBlueprint() async {
+        do {
+            _ = try await appState.client.saveBlueprint(
+                workID: work.id,
+                episodeID: episodeID,
+                request: SaveBlueprintRequest(
+                    premise: episodeState.premise,
+                    theme: episodeState.theme,
+                    situation: episodeState.situation,
+                    mustInclude: episodeState.mustInclude,
+                    mustAvoid: episodeState.mustAvoid,
+                    structureNotes: episodeState.structureNotes
+                )
+            )
+            episodeState.markSaved()
+        } catch {
+            // Best-effort: don't block the run on save failure; surface as toast.
+            toast.enqueue(.init(title: "Blueprint pre-save failed: \(error.localizedDescription)", kind: .warn))
         }
     }
 

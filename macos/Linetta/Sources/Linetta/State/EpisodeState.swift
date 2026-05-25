@@ -22,6 +22,8 @@ final class EpisodeState {
         [premise, theme, situation, mustInclude, mustAvoid, structureNotes].joined(separator: "|")
     }
 
+    /// Loads a blueprint that came from the server (or initial empty state).
+    /// Resets the dirty flag because the fields now match what's persisted.
     func loadBlueprint(premise: String, theme: String, situation: String, mustInclude: String, mustAvoid: String, structureNotes: String) {
         self.premise = premise
         self.theme = theme
@@ -30,6 +32,21 @@ final class EpisodeState {
         self.mustAvoid = mustAvoid
         self.structureNotes = structureNotes
         self.loadedSnapshot = currentSnapshot
+    }
+
+    /// Applies a *suggested* blueprint without resetting the dirty flag — the
+    /// suggestion is in memory only, so the user still needs to Save to push
+    /// it to the server. Without this, loadBlueprint would mark the form
+    /// clean immediately and the Save button would stay disabled.
+    func applySuggestion(premise: String, theme: String, situation: String, mustInclude: String, mustAvoid: String, structureNotes: String) {
+        self.premise = premise
+        self.theme = theme
+        self.situation = situation
+        self.mustInclude = mustInclude
+        self.mustAvoid = mustAvoid
+        self.structureNotes = structureNotes
+        // Deliberately do NOT touch loadedSnapshot so isDirty stays true
+        // until the user explicitly saves.
     }
 
     func markSaved() {
