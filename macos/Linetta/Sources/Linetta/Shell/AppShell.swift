@@ -10,19 +10,19 @@ struct AppShell: View {
     var body: some View {
         NavigationSplitView {
             SidebarView()
-                .frame(minWidth: 220, idealWidth: 230, maxWidth: 320)
+                .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 360)
         } detail: {
             MainPaneRouter()
+                .safeAreaInset(edge: .bottom, spacing: 0) { EngineStatusFooter() }
                 .inspector(isPresented: inspectorBinding) {
                     ManuscriptInspector()
-                        .frame(minWidth: 280, idealWidth: manuscript.width, maxWidth: 480)
+                        .inspectorColumnWidth(min: 280, ideal: 320, max: 480)
                 }
         }
         .frame(minWidth: 1080, minHeight: 720)
         .background(LinettaTheme.background)
         .preferredColorScheme(.dark)
         .linettaTitleBar()
-        .safeAreaInset(edge: .bottom) { EngineStatusFooter() }
         .overlay { CommandPalette() }
         .background {
             Button("") {

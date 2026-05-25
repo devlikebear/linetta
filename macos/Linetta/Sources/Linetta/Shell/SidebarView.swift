@@ -20,10 +20,12 @@ struct SidebarView: View {
                     }
                 }
                 .padding(.horizontal, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             SidebarFooterView()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(LinettaTheme.surfaceElevated)
     }
 }
