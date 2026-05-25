@@ -47,7 +47,7 @@ struct ManuscriptEditor: View {
                 workID: wid, episodeID: eid,
                 request: CreateEpisodeVersionRequest(body: bodyToSave, note: "auto-save")
             )
-            manuscript.markSaved()
+            manuscript.markSaved(as: bodyToSave)
         }
     }
 }

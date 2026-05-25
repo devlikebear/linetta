@@ -19,6 +19,11 @@ struct AppCommands: Commands {
 
             Divider()
 
+            Button("Export Episode (TXT)…") {
+                NotificationCenter.default.post(name: .linettaExportEpisode, object: nil)
+            }
+            .keyboardShortcut("e", modifiers: [.command])
+
             Button("Import Backup…") {
                 NotificationCenter.default.post(name: .linettaImportBackup, object: nil)
             }
@@ -55,6 +60,7 @@ extension Notification.Name {
     static let linettaNewWork = Notification.Name("linetta.newWork")
     static let linettaNewEpisode = Notification.Name("linetta.newEpisode")
     static let linettaImportBackup = Notification.Name("linetta.importBackup")
+    static let linettaExportEpisode = Notification.Name("linetta.exportEpisode")
     static let linettaToggleInspector = Notification.Name("linetta.toggleInspector")
     static let linettaToggleCommandPalette = Notification.Name("linetta.toggleCommandPalette")
 }

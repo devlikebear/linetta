@@ -34,8 +34,12 @@ final class ManuscriptState {
         loadedSnapshot = body
     }
 
-    func markSaved() {
-        loadedSnapshot = draft
+    /// Sets `loadedSnapshot` to the body the autosave just wrote to the server.
+    /// Pass the exact body that was sent — using `draft` here is wrong because
+    /// the user may have typed more during the network call, and the next
+    /// keystroke would then be considered "clean".
+    func markSaved(as savedBody: String) {
+        loadedSnapshot = savedBody
     }
 
     func isOpen(episodeID: String) -> Bool {

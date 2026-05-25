@@ -1,5 +1,7 @@
+import AppKit
 import LinettaCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct EpisodeWorkspaceView: View {
     let work: Work
@@ -42,6 +44,24 @@ struct EpisodeWorkspaceView: View {
         .task(id: episodeID) {
             episodeState.expandedRunID = nil
             await reload()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .linettaExportEpisode)) { _ in
+            Task { await exportEpisode() }
+        }
+    }
+
+    private func exportEpisode() async {
+        do {
+            let text = try await appState.client.exportEpisodeText(workID: work.id, episodeID: episodeID)
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [UTType.plainText]
+            panel.nameFieldStringValue = "\(episode?.title ?? "episode").txt"
+            panel.canCreateDirectories = true
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            toast.enqueue(.init(title: "Exported to \(url.lastPathComponent)", kind: .success))
+        } catch {
+            toast.enqueue(.init(title: "Export failed: \(error.localizedDescription)", kind: .error))
         }
     }
 
