@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { nodes, projects, snapshots } from "../lib/rpc";
 import type { NodeRow, Project } from "../lib/types";
 import { TiptapEditor } from "../components/editor/Tiptap";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
+import { OutlinePanel } from "../components/OutlinePanel";
+import { CommandPalette, type Command } from "../components/CommandPalette";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
+import {
+  buildTree,
+  findFirstLeaf,
+  flatten,
+  leafNeighbors,
+  type TreeNode,
+} from "../hooks/useFirstLeaf";
 
 const SAVE_DEBOUNCE_MS = 800;
 const LAST_OPENED_THROTTLE_MS = 5000;
@@ -14,49 +23,101 @@ interface LoadState {
   project: Project;
   node: NodeRow;
   initialDoc: object;
+  tree: TreeNode[];
 }
 
 export function Workspace() {
   const { projectId } = useParams();
+  const navigate = useNavigate();
   const [load, setLoad] = useState<LoadState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [charCount, setCharCount] = useState(0);
   const [typewriter, setTypewriter] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
-  // Initial load: project → first leaf node → parse content_doc.
+  const showToast = (msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 1800);
+  };
+
+  const fetchTree = useCallback(
+    async (pId: string, nId: string): Promise<LoadState> => {
+      const p = await projects.get(pId);
+      const flat = await nodes.listTree(pId);
+      const tree = buildTree(flat);
+      const node = flat.find((x) => x.id === nId);
+      if (!node) {
+        // Current node no longer exists — fall back to first leaf.
+        const firstLeaf = tree.length > 0 ? findFirstLeaf(tree[0]) : null;
+        if (!firstLeaf) throw new Error("project has no leaf");
+        const n = await nodes.get(firstLeaf.id);
+        const initialDoc = JSON.parse(n.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`);
+        return { project: p, node: n, initialDoc, tree };
+      }
+      const initialDoc = JSON.parse(node.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`);
+      return { project: p, node, initialDoc, tree };
+    },
+    [],
+  );
+
+  const refreshTree = useCallback(async () => {
+    if (!load) return;
+    const next = await fetchTree(load.project.id, load.node.id);
+    setLoad(next);
+  }, [load, fetchTree]);
+
+  const navigateToNode = useCallback(
+    async (target: TreeNode | NodeRow) => {
+      if (!load) return;
+      const leaf = "children" in target ? findFirstLeaf(target as TreeNode) : (target as NodeRow);
+      if (!leaf) {
+        showToast("이동할 씬이 없습니다");
+        return;
+      }
+      const n = await nodes.get(leaf.id);
+      const initialDoc = JSON.parse(n.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`);
+      setLoad({ ...load, node: n, initialDoc });
+      setCharCount(n.word_count);
+      nodes.setLastOpened(load.project.id, n.id).catch(() => { /* benign */ });
+    },
+    [load],
+  );
+
+  // Initial load.
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
     (async () => {
       try {
         const p = await projects.get(projectId);
-        if (!p.last_opened_node_id) {
-          throw new Error("project has no opened node");
-        }
-        const n = await nodes.get(p.last_opened_node_id);
-        const docStr = n.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`;
-        const initialDoc = JSON.parse(docStr);
+        if (!p.last_opened_node_id) throw new Error("project has no opened node");
+        const next = await fetchTree(projectId, p.last_opened_node_id);
         if (!cancelled) {
-          setLoad({ project: p, node: n, initialDoc });
-          setCharCount(n.word_count);
+          setLoad(next);
+          setCharCount(next.node.word_count);
         }
       } catch (e) {
         if (!cancelled) setError(String(e));
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId]);
+  }, [projectId, fetchTree]);
 
-  // Cmd+R / Ctrl+R → reload (Tauri 2 doesn't bind this by default).
+  // Global Cmd+R reload + Cmd+K palette toggle.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
-      const isReload = (isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === "r";
-      if (!isReload) return;
-      e.preventDefault();
-      window.location.reload();
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (!mod) return;
+      if (e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        window.location.reload();
+      } else if (e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -76,9 +137,7 @@ export function Workspace() {
     },
     [load],
   );
-
   const debouncedSave = useDebouncedCallback(saveNow, SAVE_DEBOUNCE_MS);
-
   const throttledLastOpened = useThrottledCallback(
     useCallback(() => {
       if (!load) return;
@@ -87,7 +146,6 @@ export function Workspace() {
     LAST_OPENED_THROTTLE_MS,
   );
 
-  // Touch last_opened periodically while the editor is active.
   useEffect(() => {
     if (!load) return;
     throttledLastOpened();
@@ -98,7 +156,6 @@ export function Workspace() {
       if (!load) return;
       setSaveStatus({ kind: "saving" });
       try {
-        // Flush latest content first so the snapshot is in sync.
         await nodes.updateContent(load.node.id, JSON.stringify(doc));
         await snapshots.createManual(load.node.id, JSON.stringify(doc));
         setSaveStatus({ kind: "saved", at: Date.now() });
@@ -111,14 +168,157 @@ export function Workspace() {
     [load],
   );
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 1800);
-  };
+  // --- Commands ---
+
+  const commands: Command[] = useMemo(() => {
+    if (!load) return [];
+    const { prev, next } = leafNeighbors(load.tree, load.node.id);
+    const allNodes = flatten(load.tree);
+    const siblingsOfCurrent = allNodes.filter(
+      (n) => (n.parent_id ?? null) === (load.node.parent_id ?? null),
+    );
+    const leafSiblings = siblingsOfCurrent.filter((n) => n.kind === "leaf");
+    const containerSiblings = siblingsOfCurrent.filter((n) => n.kind === "container");
+    const nextSceneLabel = `씬 ${leafSiblings.length + 1}`;
+    const nextChapterLabel = `${containerSiblings.length + 1}장`;
+
+    const cmds: Command[] = [];
+    cmds.push({
+      id: "go-prev",
+      section: "이동",
+      label: "이전 씬",
+      hint: prev ? prev.label : "(없음)",
+      disabled: !prev,
+      run: async () => { if (prev) await navigateToNode(prev); },
+    });
+    cmds.push({
+      id: "go-next",
+      section: "이동",
+      label: "다음 씬",
+      hint: next ? next.label : "(없음)",
+      disabled: !next,
+      run: async () => { if (next) await navigateToNode(next); },
+    });
+    for (const leaf of allNodes.filter((n) => n.kind === "leaf").slice(0, 20)) {
+      cmds.push({
+        id: `go-${leaf.id}`,
+        section: "이동",
+        label: `씬으로 이동: ${leaf.label}`,
+        hint: leaf.title || undefined,
+        disabled: leaf.id === load.node.id,
+        run: async () => navigateToNode(leaf),
+      });
+    }
+
+    cmds.push({
+      id: "new-scene",
+      section: "노드",
+      label: `여기 옆에 새 씬 (${nextSceneLabel})`,
+      run: async () => {
+        const created = await nodes.createSibling(load.node.id, "leaf", nextSceneLabel, "");
+        await refreshTree();
+        navigateToNode(created);
+      },
+    });
+    cmds.push({
+      id: "new-chapter",
+      section: "노드",
+      label: `여기 옆에 새 장 (${nextChapterLabel})`,
+      run: async () => {
+        const chapter = await nodes.createSibling(load.node.id, "container", nextChapterLabel, "");
+        // Seed it with one leaf so it's navigable.
+        const seeded = await nodes.createChild(chapter.id, "leaf", "씬 1", "");
+        await refreshTree();
+        navigateToNode(seeded);
+      },
+    });
+    cmds.push({
+      id: "rename",
+      section: "노드",
+      label: "이름 바꾸기",
+      run: async () => {
+        const nextLabel = window.prompt("새 이름 (label)", load.node.label) ?? "";
+        if (!nextLabel.trim()) return;
+        const nextTitle = window.prompt("부제 (title, 비워두려면 취소)", load.node.title) ?? "";
+        await nodes.rename(load.node.id, nextLabel.trim(), nextTitle);
+        await refreshTree();
+        showToast("이름이 변경되었습니다");
+      },
+    });
+    cmds.push({
+      id: "delete",
+      section: "노드",
+      label: "삭제",
+      hint: load.node.label,
+      run: async () => {
+        if (!window.confirm(`"${load.node.label}"을(를) 삭제하시겠습니까?`)) return;
+        // Find a fallback target before deleting.
+        const fallback = prev ?? next ?? null;
+        await nodes.delete(load.node.id);
+        if (fallback) {
+          navigateToNode(fallback);
+        } else {
+          // No other leaf — bounce to Library.
+          navigate("/");
+        }
+      },
+    });
+    cmds.push({
+      id: "move-up",
+      section: "노드",
+      label: "이 씬 위로",
+      run: async () => {
+        await nodes.moveUp(load.node.id);
+        await refreshTree();
+      },
+    });
+    cmds.push({
+      id: "move-down",
+      section: "노드",
+      label: "이 씬 아래로",
+      run: async () => {
+        await nodes.moveDown(load.node.id);
+        await refreshTree();
+      },
+    });
+    cmds.push({
+      id: "view-outline",
+      section: "보기",
+      label: "아웃라인 (왼쪽 가장자리 호버)",
+      disabled: true,
+      hint: "↤",
+      run: () => {},
+    });
+    cmds.push({
+      id: "view-character",
+      section: "보기",
+      label: "캐릭터 시트",
+      hint: "(곧 추가됨 — Plan 4)",
+      disabled: true,
+      run: () => {},
+    });
+    cmds.push({
+      id: "view-threads",
+      section: "보기",
+      label: "흐름(Thread)",
+      hint: "(곧 추가됨 — post-MVP)",
+      disabled: true,
+      run: () => {},
+    });
+    return cmds;
+  }, [load, navigateToNode, refreshTree, navigate]);
 
   const breadcrumb = useMemo(() => {
     if (!load) return "";
-    return `← 작품 · ${load.node.label}${load.node.title ? ` — ${load.node.title}` : ""}`;
+    // Build an ancestor chain by walking parent_id pointers.
+    const byId = new Map(flatten(load.tree).map((n) => [n.id, n] as const));
+    const chain: string[] = [];
+    let cur: TreeNode | undefined = byId.get(load.node.id);
+    while (cur) {
+      chain.unshift(cur.label);
+      cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
+    }
+    return `← 작품 · ${chain.join(" › ")}${load.node.title ? ` — ${load.node.title}` : ""}`;
   }, [load]);
 
   if (error) {
@@ -170,6 +370,18 @@ export function Workspace() {
           saveStatus={saveStatus}
         />
       </div>
+
+      <OutlinePanel
+        tree={load.tree}
+        currentId={load.node.id}
+        onSelect={(n) => navigateToNode(n)}
+      />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
 
       {toast && <div className="ws-toast">{toast}</div>}
     </main>
