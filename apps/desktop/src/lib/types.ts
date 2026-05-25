@@ -57,3 +57,35 @@ export interface Snapshot {
   reason: SnapshotReason;
   created_at: number;
 }
+
+// Mirrors engine/internal/entity Entity struct.
+export type EntityKind = "character" | "place" | "item" | "concept";
+
+export interface Entity {
+  id: string;
+  project_id: string;
+  kind: EntityKind;
+  name: string;
+  aliases: string[];
+  role: string;
+  summary: string;
+  attributes: Record<string, string>;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface NewEntityInput {
+  project_id: string;
+  kind: EntityKind;
+  name: string;
+  role?: string;
+}
+
+export interface UpdateEntityInput {
+  id: string;
+  kind?: EntityKind;
+  name?: string;
+  role?: string;
+  summary?: string;
+  attributes?: Record<string, string>;
+}

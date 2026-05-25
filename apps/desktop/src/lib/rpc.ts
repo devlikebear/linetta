@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  Entity,
   ListProjectsParams,
+  NewEntityInput,
   NewProjectInput,
   NodeRow,
   Project,
   Snapshot,
+  UpdateEntityInput,
 } from "./types";
 
 // Tauri commands defined in src-tauri.
@@ -46,4 +49,17 @@ export const nodes = {
 export const snapshots = {
   createManual: (nodeId: string, doc: string) =>
     rpcCall<Snapshot>("snapshots.create_manual", { node_id: nodeId, doc }),
+};
+
+export const entities = {
+  search: (projectId: string, query: string, limit = 20) =>
+    rpcCall<Entity[]>("entities.search", { project_id: projectId, query, limit }),
+  get: (id: string) => rpcCall<Entity>("entities.get", { id }),
+  create: (input: NewEntityInput) => rpcCall<Entity>("entities.create", input),
+  update: (input: UpdateEntityInput) => rpcCall<Entity>("entities.update", input),
+};
+
+export const mentions = {
+  listForNode: (nodeId: string) =>
+    rpcCall<Entity[]>("mentions.list_for_node", { node_id: nodeId }),
 };
