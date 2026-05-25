@@ -30,6 +30,17 @@ export const nodes = {
     rpcCall<NodeRow>("nodes.update_content", { id, doc }),
   setLastOpened: (projectId: string, nodeId: string) =>
     rpcCall<{ ok: true }>("nodes.set_last_opened", { project_id: projectId, node_id: nodeId }),
+  listTree: (projectId: string) =>
+    rpcCall<NodeRow[]>("nodes.list_tree", { project_id: projectId }),
+  createSibling: (referenceId: string, kind: "leaf" | "container", label: string, title: string) =>
+    rpcCall<NodeRow>("nodes.create_sibling", { reference_id: referenceId, kind, label, title }),
+  createChild: (parentId: string, kind: "leaf" | "container", label: string, title: string) =>
+    rpcCall<NodeRow>("nodes.create_child", { parent_id: parentId, kind, label, title }),
+  rename: (id: string, label: string, title: string) =>
+    rpcCall<{ ok: true }>("nodes.rename", { id, label, title }),
+  delete: (id: string) => rpcCall<{ ok: true }>("nodes.delete", { id }),
+  moveUp: (id: string) => rpcCall<{ ok: true }>("nodes.move_up", { id }),
+  moveDown: (id: string) => rpcCall<{ ok: true }>("nodes.move_down", { id }),
 };
 
 export const snapshots = {
