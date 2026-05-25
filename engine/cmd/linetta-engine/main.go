@@ -63,6 +63,13 @@ func main() {
 	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, snaps, clock))
 	s.Handle("nodes.set_last_opened", handlers.SetLastOpened(nodes, clock))
 	s.Handle("snapshots.create_manual", handlers.CreateManualSnapshot(snaps, clock))
+	s.Handle("nodes.list_tree", handlers.ListTree(nodes))
+	s.Handle("nodes.create_sibling", handlers.CreateSibling(nodes, clock))
+	s.Handle("nodes.create_child", handlers.CreateChild(nodes, clock))
+	s.Handle("nodes.rename", handlers.RenameNode(nodes, clock))
+	s.Handle("nodes.delete", handlers.DeleteNode(nodes, clock))
+	s.Handle("nodes.move_up", handlers.MoveUp(nodes, clock))
+	s.Handle("nodes.move_down", handlers.MoveDown(nodes, clock))
 
 	if err := s.Serve(ctx, os.Stdin, os.Stdout); err != nil && !errors.Is(err, io.EOF) {
 		fail("serve: %v", err)
