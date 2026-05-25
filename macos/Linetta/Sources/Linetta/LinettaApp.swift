@@ -31,14 +31,7 @@ struct LinettaApp: App {
                 .environment(sharedCommandPalette)
                 .environment(sharedToastCenter)
         }
-        .commands {
-            CommandGroup(after: .newItem) {
-                Button("Refresh Works") {
-                    Task { await appState.refreshWorks() }
-                }
-                .keyboardShortcut("r", modifiers: [.command])
-            }
-        }
+        .commands { AppCommands() }
         Settings {
             SettingsView()
                 .environment(appState)
