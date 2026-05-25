@@ -120,6 +120,10 @@ func (r *Runner) StartAsync(input EpisodeRunInput) (string, error) {
 	return runID, nil
 }
 
+// resolveLLMProvider is overridden in tests via the agent package's test
+// helpers to avoid shelling out to a real codex CLI during go test.
+var resolveLLMProvider = func() (llm.Provider, error) { return llm.NewProvider() }
+
 func (r *Runner) RunEpisode(ctx context.Context, input EpisodeRunInput) (EpisodeRunResult, error) {
 	input = normalizeInput(input)
 	runID := newID("run")
@@ -163,10 +167,15 @@ func (r *Runner) runEpisodeCore(ctx context.Context, input EpisodeRunInput, runI
 	events := &broadcastingSink{inner: innerSink, broadcaster: r.broadcaster}
 	artifacts := newArtifactCollector()
 
-	// Build the LLM client once per run. nil is a normal state — the agents
+	// Build the LLM provider once per run. nil is a normal state — the agents
 	// silently fall back to deterministic stubs so dev environments without
-	// OPENAI_API_KEY still produce artifacts.
-	llmClient, _ := llm.NewFromEnv()
+	// any LLM backend still produce artifacts. The provider can be either
+	// the direct OpenAI HTTP client (OPENAI_API_KEY) or the codex CLI shim
+	// (~/.linetta/tessera.yaml with provider: openai-codex).
+	//
+	// resolveLLMProvider is a package-level hook so tests can disable LLM
+	// (otherwise unit tests would shell out to real codex CLI and stall).
+	llmProvider, _ := resolveLLMProvider()
 
 	plan, err := episodePlan(ctx, blueprint)
 	if err != nil {
@@ -213,7 +222,7 @@ func (r *Runner) runEpisodeCore(ctx context.Context, input EpisodeRunInput, runI
 			}
 			// Try LLM first; on any failure (no API key, network, parse) fall
 			// back to the deterministic stub so the run still produces output.
-			if out, ok := runAgentLLM(taskCtx, llmClient, task.ID, ac, artifacts.snapshot()); ok {
+			if out, ok := runAgentLLM(taskCtx, llmProvider, task.ID, ac, artifacts.snapshot()); ok {
 				artifacts.set(ArtifactKind(task.ID), out)
 				return executor.Result{Output: out}, nil
 			}
@@ -475,8 +484,8 @@ func (r *Runner) storeReviewOutputs(ctx context.Context, runID string, workItem 
 	// Try LLM-driven extraction first. The Canon Keeper agent already
 	// produced a textual review; this second pass turns it (plus the draft)
 	// into structured proposals/issues the user can approve/reject.
-	if client, err := llm.NewFromEnv(); err == nil {
-		props, issues, ok := extractReviewWithLLM(ctx, client, workItem, episode, blueprint, canonItems, canonReview, editedDraft)
+	if provider, err := resolveLLMProvider(); err == nil {
+		props, issues, ok := extractReviewWithLLM(ctx, provider, workItem, episode, blueprint, canonItems, canonReview, editedDraft)
 		if ok && (len(props) > 0 || len(issues) > 0) {
 			return r.persistReview(ctx, runID, workItem, episode, props, issues, canonItems)
 		}

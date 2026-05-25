@@ -14,13 +14,16 @@ import (
 	"time"
 )
 
-// Client is a minimal Chat Completions caller. Zero-value is unusable; build
-// via NewFromEnv.
-type Client struct {
-	APIKey    string
-	BaseURL   string // default https://api.openai.com/v1
-	Model     string // default gpt-4o-mini
-	HTTP      *http.Client
+// Client is a backwards-compatible alias for the OpenAI HTTP backend.
+// New code should depend on the Provider interface instead.
+type Client = OpenAIChatClient
+
+// OpenAIChatClient is a direct OpenAI Chat Completions caller.
+type OpenAIChatClient struct {
+	APIKey  string
+	BaseURL string // default https://api.openai.com/v1
+	Model   string // default gpt-4o-mini
+	HTTP    *http.Client
 }
 
 // NewFromEnv constructs a Client using OPENAI_API_KEY (required), with
@@ -46,6 +49,22 @@ func NewFromEnv() (*Client, error) {
 		Model:   model,
 		HTTP:    &http.Client{Timeout: 60 * time.Second},
 	}, nil
+}
+
+// Label implements Provider for /api/version diagnostics.
+func (c *OpenAIChatClient) Label() string {
+	if c == nil || c.Model == "" {
+		return "openai"
+	}
+	return "openai · " + c.Model
+}
+
+// ensure HTTP defaults when constructed via factory (not NewFromEnv).
+func (c *OpenAIChatClient) http() *http.Client {
+	if c.HTTP != nil {
+		return c.HTTP
+	}
+	return &http.Client{Timeout: 60 * time.Second}
 }
 
 // ErrNoAPIKey signals that the caller should use a non-LLM fallback path.
@@ -121,7 +140,7 @@ func (c *Client) callChat(ctx context.Context, messages []Message, temperature f
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
 	httpReq.Header.Set("Content-Type", "application/json")
-	resp, err := c.HTTP.Do(httpReq)
+	resp, err := c.http().Do(httpReq)
 	if err != nil {
 		return "", fmt.Errorf("llm.callChat: http: %w", err)
 	}

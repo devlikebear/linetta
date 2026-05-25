@@ -43,16 +43,16 @@ type Suggestion struct {
 // is generated from a structured prompt; otherwise a deterministic templater
 // produces something usable from Canon items + simple heuristics.
 func Suggest(ctx context.Context, in Input) (Suggestion, error) {
-	client, err := llm.NewFromEnv()
+	provider, err := llm.NewProvider()
 	if err != nil {
-		if !errors.Is(err, llm.ErrNoAPIKey) {
+		if !errors.Is(err, llm.ErrNoProvider) && !errors.Is(err, llm.ErrNoAPIKey) {
 			return Suggestion{}, err
 		}
 		s := fallback(in)
 		s.Source = "fallback"
 		return s, nil
 	}
-	suggestion, err := llmSuggest(ctx, client, in)
+	suggestion, err := llmSuggest(ctx, provider, in)
 	if err != nil {
 		// On LLM failure (timeout, network, malformed reply), degrade
 		// gracefully to fallback rather than propagating to the user — the
@@ -65,7 +65,7 @@ func Suggest(ctx context.Context, in Input) (Suggestion, error) {
 	return suggestion, nil
 }
 
-func llmSuggest(ctx context.Context, client *llm.Client, in Input) (Suggestion, error) {
+func llmSuggest(ctx context.Context, provider llm.Provider, in Input) (Suggestion, error) {
 	sys := `You are a creative writing assistant for serial fiction.
 Given a work's premise + Canon memory + any partial blueprint the writer has typed, produce a coherent EpisodeBlueprint.
 Reply ONLY with JSON of this exact shape:
@@ -123,7 +123,7 @@ Rules:
 		temperature = 1.0
 	}
 	var out Suggestion
-	if err := client.ChatJSON(ctx, messages, temperature, &out); err != nil {
+	if err := provider.ChatJSON(ctx, messages, temperature, &out); err != nil {
 		return Suggestion{}, err
 	}
 	// Safety: if the model dropped a non-empty user field, restore it.

@@ -2,18 +2,21 @@ package server
 
 import (
 	"net/http"
-	"os"
 	"runtime/debug"
 	"strings"
+
+	"github.com/devlikebear/linetta/internal/llm"
 )
 
 // VersionResponse is the body of GET /api/version.
 type VersionResponse struct {
-	Linetta    string `json:"linetta"`
-	Tessera    string `json:"tessera"`
-	Go         string `json:"go"`
-	LLMEnabled bool   `json:"llm_enabled"`
-	LLMModel   string `json:"llm_model"`
+	Linetta     string `json:"linetta"`
+	Tessera     string `json:"tessera"`
+	Go          string `json:"go"`
+	LLMEnabled  bool   `json:"llm_enabled"`
+	LLMProvider string `json:"llm_provider"`
+	LLMModel    string `json:"llm_model"`
+	LLMReason   string `json:"llm_reason"`
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
@@ -21,23 +24,16 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+	info := llm.DescribeProvider()
 	writeJSON(w, http.StatusOK, VersionResponse{
-		Linetta:    linettaVersion(),
-		Tessera:    tesseraVersion(),
-		Go:         goRuntimeVersion(),
-		LLMEnabled: os.Getenv("OPENAI_API_KEY") != "",
-		LLMModel:   llmModelLabel(),
+		Linetta:     linettaVersion(),
+		Tessera:     tesseraVersion(),
+		Go:          goRuntimeVersion(),
+		LLMEnabled:  info.Enabled,
+		LLMProvider: info.Provider,
+		LLMModel:    info.Model,
+		LLMReason:   info.Reason,
 	})
-}
-
-func llmModelLabel() string {
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		return "fallback (no API key — set OPENAI_API_KEY)"
-	}
-	if m := os.Getenv("LINETTA_LLM_MODEL"); m != "" {
-		return m
-	}
-	return "gpt-4o-mini"
 }
 
 // linettaVersion returns the build version if available, falling back to "dev".

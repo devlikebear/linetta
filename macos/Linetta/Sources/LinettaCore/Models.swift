@@ -628,14 +628,18 @@ public struct VersionInfo: Codable, Equatable, Sendable {
     public var tessera: String
     public var go: String
     public var llmEnabled: Bool
+    public var llmProvider: String
     public var llmModel: String
+    public var llmReason: String
 
     enum CodingKeys: String, CodingKey {
         case linetta
         case tessera
         case go
         case llmEnabled = "llm_enabled"
+        case llmProvider = "llm_provider"
         case llmModel = "llm_model"
+        case llmReason = "llm_reason"
     }
 }
 

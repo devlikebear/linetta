@@ -38,7 +38,7 @@ type reviewExtraction struct {
 // or returns malformed output. Caller falls back to the deterministic stub.
 func extractReviewWithLLM(
 	ctx context.Context,
-	client *llm.Client,
+	provider llm.Provider,
 	workItem work.Work,
 	episode work.Episode,
 	blueprint work.EpisodeBlueprint,
@@ -46,7 +46,7 @@ func extractReviewWithLLM(
 	canonReview string,
 	editedDraft string,
 ) ([]extractedProposal, []extractedIssue, bool) {
-	if client == nil {
+	if provider == nil {
 		return nil, nil, false
 	}
 	if strings.TrimSpace(editedDraft) == "" && strings.TrimSpace(canonReview) == "" {
@@ -115,7 +115,7 @@ Edited draft:
 	)
 
 	var out reviewExtraction
-	if err := client.ChatJSON(ctx, []llm.Message{
+	if err := provider.ChatJSON(ctx, []llm.Message{
 		{Role: "system", Content: sys},
 		{Role: "user", Content: user},
 	}, 0.3, &out); err != nil {

@@ -434,9 +434,21 @@ struct SettingsAboutSection: View {
                         Circle()
                             .fill(v.llmEnabled ? LinettaTheme.success : LinettaTheme.textTertiary)
                             .frame(width: 7, height: 7)
-                        Text(v.llmEnabled ? v.llmModel : "fallback (no API key)")
-                            .foregroundStyle(LinettaTheme.textSecondary)
-                            .textSelection(.enabled)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            if v.llmEnabled {
+                                Text("\(v.llmProvider) · \(v.llmModel.isEmpty ? "default" : v.llmModel)")
+                                    .foregroundStyle(LinettaTheme.textSecondary)
+                                    .textSelection(.enabled)
+                            } else {
+                                Text("fallback")
+                                    .foregroundStyle(LinettaTheme.textSecondary)
+                            }
+                            if !v.llmReason.isEmpty {
+                                Text(v.llmReason)
+                                    .font(LinettaTypography.caption)
+                                    .foregroundStyle(LinettaTheme.textTertiary)
+                            }
+                        }
                     }
                 } else {
                     Text("—").foregroundStyle(LinettaTheme.textTertiary)

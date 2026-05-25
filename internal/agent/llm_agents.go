@@ -20,10 +20,10 @@ type agentContext struct {
 }
 
 // runAgentLLM invokes the LLM for a given task with a role-specific system
-// prompt. Returns ("", false) if no LLM client is available or the call fails —
-// the caller should fall back to the deterministic stub.
-func runAgentLLM(ctx context.Context, client *llm.Client, taskID string, ac agentContext, prior map[ArtifactKind]string) (string, bool) {
-	if client == nil {
+// prompt. Returns ("", false) if no LLM provider is available or the call
+// fails — the caller should fall back to the deterministic stub.
+func runAgentLLM(ctx context.Context, provider llm.Provider, taskID string, ac agentContext, prior map[ArtifactKind]string) (string, bool) {
+	if provider == nil {
 		return "", false
 	}
 	sys, temp := agentPrompt(ArtifactKind(taskID))
@@ -31,7 +31,7 @@ func runAgentLLM(ctx context.Context, client *llm.Client, taskID string, ac agen
 		return "", false
 	}
 	user := agentUserPrompt(ArtifactKind(taskID), ac, prior)
-	text, err := client.ChatText(ctx, []llm.Message{
+	text, err := provider.ChatText(ctx, []llm.Message{
 		{Role: "system", Content: sys},
 		{Role: "user", Content: user},
 	}, temp)
