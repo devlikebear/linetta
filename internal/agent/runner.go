@@ -74,44 +74,92 @@ type Artifact struct {
 }
 
 type Runner struct {
-	db         *store.DB
-	workRepo   *work.Repository
-	memoryRepo *memory.Repository
+	db          *store.DB
+	workRepo    *work.Repository
+	memoryRepo  *memory.Repository
+	broadcaster *Broadcaster
 }
 
 func NewRunner(db *store.DB, workRepo *work.Repository, memoryRepo *memory.Repository) *Runner {
-	return &Runner{db: db, workRepo: workRepo, memoryRepo: memoryRepo}
+	return &Runner{
+		db:          db,
+		workRepo:    workRepo,
+		memoryRepo:  memoryRepo,
+		broadcaster: NewBroadcaster(),
+	}
+}
+
+// Broadcaster exposes the live-event broadcaster so the HTTP layer can stream
+// run progress as it happens.
+func (r *Runner) Broadcaster() *Broadcaster { return r.broadcaster }
+
+// StartAsync kicks off RunEpisode in a goroutine and returns the new run_id
+// immediately. The actual run continues in the background; subscribers to
+// Broadcaster.Subscribe(runID) receive events as they fire. After completion
+// Broadcaster.Close(runID) fires so SSE streams terminate cleanly.
+func (r *Runner) StartAsync(input EpisodeRunInput) (string, error) {
+	input = normalizeInput(input)
+	// Pre-flight: validate that the work/episode/blueprint exist BEFORE
+	// returning a run_id, so callers get a synchronous error on bad input.
+	ctx := context.Background()
+	if _, err := r.workRepo.GetWork(ctx, input.WorkID); err != nil {
+		return "", err
+	}
+	if _, err := r.workRepo.GetEpisode(ctx, input.WorkID, input.EpisodeID); err != nil {
+		return "", err
+	}
+	runID := newID("run")
+	if err := r.insertRun(ctx, runID, input.WorkID, input.EpisodeID, "running"); err != nil {
+		return "", err
+	}
+	go func() {
+		defer r.broadcaster.Close(runID)
+		_, _ = r.runEpisodeCore(context.Background(), input, runID)
+	}()
+	return runID, nil
 }
 
 func (r *Runner) RunEpisode(ctx context.Context, input EpisodeRunInput) (EpisodeRunResult, error) {
 	input = normalizeInput(input)
-	workItem, err := r.workRepo.GetWork(ctx, input.WorkID)
-	if err != nil {
-		return EpisodeRunResult{}, err
-	}
-	episode, err := r.workRepo.GetEpisode(ctx, input.WorkID, input.EpisodeID)
-	if err != nil {
-		return EpisodeRunResult{}, err
-	}
-	blueprint, err := r.workRepo.GetBlueprint(ctx, input.WorkID, input.EpisodeID)
-	if err != nil {
-		return EpisodeRunResult{}, err
-	}
-	canonItems, err := r.memoryRepo.ListItems(ctx, input.WorkID, memory.ListFilter{Status: memory.StatusCanon})
-	if err != nil && !errors.Is(err, memory.ErrNotFound) {
-		return EpisodeRunResult{}, err
-	}
-
 	runID := newID("run")
 	if err := r.insertRun(ctx, runID, input.WorkID, input.EpisodeID, "running"); err != nil {
 		return EpisodeRunResult{}, err
 	}
+	defer r.broadcaster.Close(runID)
+	return r.runEpisodeCore(ctx, input, runID)
+}
 
-	events := &eventRecorder{
+// runEpisodeCore performs the actual run with the runID already inserted into
+// the DB. Used by both the synchronous RunEpisode and the StartAsync goroutine
+// path so they share one implementation.
+func (r *Runner) runEpisodeCore(ctx context.Context, input EpisodeRunInput, runID string) (EpisodeRunResult, error) {
+	workItem, err := r.workRepo.GetWork(ctx, input.WorkID)
+	if err != nil {
+		_ = r.closeRun(ctx, runID, "failed")
+		return EpisodeRunResult{}, err
+	}
+	episode, err := r.workRepo.GetEpisode(ctx, input.WorkID, input.EpisodeID)
+	if err != nil {
+		_ = r.closeRun(ctx, runID, "failed")
+		return EpisodeRunResult{}, err
+	}
+	blueprint, err := r.workRepo.GetBlueprint(ctx, input.WorkID, input.EpisodeID)
+	if err != nil {
+		_ = r.closeRun(ctx, runID, "failed")
+		return EpisodeRunResult{}, err
+	}
+	canonItems, err := r.memoryRepo.ListItems(ctx, input.WorkID, memory.ListFilter{Status: memory.StatusCanon})
+	if err != nil && !errors.Is(err, memory.ErrNotFound) {
+		_ = r.closeRun(ctx, runID, "failed")
+		return EpisodeRunResult{}, err
+	}
+
+	innerSink := &eventRecorder{
 		db:       r.db,
 		runID:    runID,
 		external: input.EventSink,
 	}
+	events := &broadcastingSink{inner: innerSink, broadcaster: r.broadcaster}
 	artifacts := newArtifactCollector()
 
 	plan, err := episodePlan(ctx, blueprint)
@@ -185,7 +233,7 @@ func (r *Runner) RunEpisode(ctx context.Context, input EpisodeRunInput) (Episode
 		Status:       status,
 		Closure:      string(execution.Report.Closure),
 		Artifacts:    storedArtifacts,
-		Events:       events.Events(),
+		Events:       innerSink.Events(),
 	}, nil
 }
 

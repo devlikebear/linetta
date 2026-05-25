@@ -102,6 +102,59 @@ public struct APIClient: Sendable {
         try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/runs", method: "POST", body: request)
     }
 
+    /// Starts a run in the background and returns the new run_id immediately.
+    /// Subscribe to `eventStream(runID:)` to see live progress.
+    public func runEpisodeAsync(workID: String, episodeID: String, request: RunEpisodeRequest = RunEpisodeRequest()) async throws -> AsyncRunStart {
+        try await send(path: "/api/works/\(workID)/episodes/\(episodeID)/runs/async", method: "POST", body: request)
+    }
+
+    /// Returns an AsyncThrowingStream of `RunEvent`s as the server publishes them
+    /// via SSE. The stream ends naturally when the run completes (the server
+    /// emits an `event: stream.close` heartbeat then closes the connection).
+    public func eventStream(runID: String) -> AsyncThrowingStream<RunEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                var request = URLRequest(url: url(path: "/api/runs/\(runID)/events/stream"))
+                request.httpMethod = "GET"
+                request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+                request.timeoutInterval = 0 // unlimited
+                do {
+                    let (bytes, response) = try await session.bytes(for: request)
+                    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                        throw APIError.invalidResponse
+                    }
+                    var currentEventName: String?
+                    for try await line in bytes.lines {
+                        if Task.isCancelled { break }
+                        if line.isEmpty {
+                            currentEventName = nil
+                            continue
+                        }
+                        if line.hasPrefix("event:") {
+                            currentEventName = line.dropFirst("event:".count).trimmingCharacters(in: .whitespaces)
+                            continue
+                        }
+                        if line.hasPrefix("data:") {
+                            let payload = line.dropFirst("data:".count).trimmingCharacters(in: .whitespaces)
+                            if currentEventName == "stream.close" {
+                                continuation.finish()
+                                return
+                            }
+                            guard let data = payload.data(using: .utf8) else { continue }
+                            if let event = try? JSONDecoder.linetta.decode(RunEvent.self, from: data) {
+                                continuation.yield(event)
+                            }
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     public func listRunArtifacts(runID: String) async throws -> [Artifact] {
         try await get(path: "/api/runs/\(runID)/artifacts")
     }

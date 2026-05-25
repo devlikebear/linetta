@@ -155,6 +155,10 @@ func (s *Server) handleWorkPath(w http.ResponseWriter, r *http.Request) {
 		s.handleEpisodeRun(w, r, workID, parts[2])
 		return
 	}
+	if len(parts) == 5 && parts[1] == "episodes" && parts[3] == "runs" && parts[4] == "async" {
+		s.handleEpisodeRunAsync(w, r, workID, parts[2])
+		return
+	}
 	if len(parts) == 4 && parts[1] == "episodes" && parts[3] == "continuity" {
 		s.handleEpisodeContinuity(w, r, workID, parts[2])
 		return
@@ -395,6 +399,37 @@ func (s *Server) handleContinuityPath(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, issue)
 }
 
+// handleEpisodeRunAsync kicks off a run in a background goroutine and returns
+// the new run_id immediately. Clients subscribe to live events via
+// GET /api/runs/{id}/events/stream.
+func (s *Server) handleEpisodeRunAsync(w http.ResponseWriter, r *http.Request, workID, episodeID string) {
+	if s.agent == nil {
+		writeError(w, http.StatusNotFound, "agent runner not configured")
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var input struct {
+		ApprovedBy string `json:"approved_by"`
+	}
+	if err := readJSON(r, &input); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	runID, err := s.agent.StartAsync(agent.EpisodeRunInput{
+		WorkID:     workID,
+		EpisodeID:  episodeID,
+		ApprovedBy: input.ApprovedBy,
+	})
+	if err != nil {
+		writeRepositoryError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"run_id": runID})
+}
+
 func (s *Server) handleEpisodeRun(w http.ResponseWriter, r *http.Request, workID, episodeID string) {
 	if s.agent == nil {
 		writeError(w, http.StatusNotFound, "agent runner not configured")
@@ -625,19 +660,62 @@ func (s *Server) handleRunEventsStream(w http.ResponseWriter, r *http.Request, r
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	events, err := s.agent.ListEvents(r.Context(), runID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming unsupported by this ResponseWriter")
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	for _, event := range events {
-		if err := writeSSEEvent(w, event); err != nil {
+
+	// Replay any events already stored for the run so late subscribers see
+	// the prelude. Then subscribe to the live broadcaster for new events.
+	pastEvents, err := s.agent.ListEvents(r.Context(), runID)
+	if err == nil {
+		for _, event := range pastEvents {
+			if err := writeSSEEvent(w, event); err != nil {
+				return
+			}
+		}
+		flusher.Flush()
+	}
+
+	ch, unsub := s.agent.Broadcaster().Subscribe(runID)
+	defer unsub()
+	for {
+		select {
+		case <-r.Context().Done():
 			return
+		case event, ok := <-ch:
+			if !ok {
+				// Broadcaster closed the run. Send a terminating heartbeat
+				// so clients know the stream is done before EOF.
+				_, _ = fmt.Fprint(w, "event: stream.close\ndata: {}\n\n")
+				flusher.Flush()
+				return
+			}
+			// Skip events we've already replayed by sequence number.
+			if isAlreadyReplayed(pastEvents, event) {
+				continue
+			}
+			if err := writeSSEEvent(w, event); err != nil {
+				return
+			}
+			flusher.Flush()
 		}
 	}
+}
+
+func isAlreadyReplayed(past []tesserarun.Event, event tesserarun.Event) bool {
+	for _, p := range past {
+		if p.Seq == event.Seq && p.RunID == event.RunID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleMemoryPath(w http.ResponseWriter, r *http.Request, workID string, parts []string) {

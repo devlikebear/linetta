@@ -540,6 +540,15 @@ public struct EpisodeRunResult: Codable, Equatable, Sendable {
     public var artifacts: [Artifact]
     public var events: [RunEvent]
 
+    public init(runID: String, tesseraRunID: String, status: String, closure: String, artifacts: [Artifact], events: [RunEvent]) {
+        self.runID = runID
+        self.tesseraRunID = tesseraRunID
+        self.status = status
+        self.closure = closure
+        self.artifacts = artifacts
+        self.events = events
+    }
+
     enum CodingKeys: String, CodingKey {
         case runID = "RunID"
         case tesseraRunID = "TesseraRunID"
@@ -560,6 +569,11 @@ public struct RunEpisodeRequest: Codable, Equatable, Sendable {
     enum CodingKeys: String, CodingKey {
         case approvedBy = "approved_by"
     }
+}
+
+public struct AsyncRunStart: Codable, Equatable, Sendable {
+    public var runID: String
+    enum CodingKeys: String, CodingKey { case runID = "run_id" }
 }
 
 public struct VersionInfo: Codable, Equatable, Sendable {

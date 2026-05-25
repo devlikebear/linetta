@@ -19,6 +19,10 @@ struct EpisodeWorkspaceView: View {
     @State private var isLoading = false
     @State private var lastRunError: String?
     @State private var showRunErrorDetail = false
+    @State private var liveRunID: String?
+    @State private var liveEvents: [RunEvent] = []
+    @State private var liveLastEvent: RunEvent?
+    @State private var streamTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,6 +33,9 @@ struct EpisodeWorkspaceView: View {
             ScrollView {
                 VStack(spacing: LinettaShape.sectionGap) {
                     BlueprintCard(work: work, episodeID: episodeID, onSave: { await reload() }, onRun: { await runAgents() })
+                    if liveRunID != nil {
+                        LiveRunCard(runID: liveRunID ?? "", events: liveEvents, lastEvent: liveLastEvent, onCancel: cancelStream)
+                    }
                     if let lastRunError {
                         RunErrorBanner(error: lastRunError, isExpanded: $showRunErrorDetail, onRetry: { Task { await runAgents() } }, onDismiss: { self.lastRunError = nil })
                     }
@@ -85,18 +92,151 @@ struct EpisodeWorkspaceView: View {
     }
 
     private func runAgents() async {
+        cancelStream() // any prior subscription is invalid now
         episodeState.isRunning = true
         lastRunError = nil
-        defer { episodeState.isRunning = false }
+        liveEvents = []
+        liveLastEvent = nil
         do {
-            let result = try await appState.client.runEpisode(workID: work.id, episodeID: episodeID)
-            runs.insert(result, at: 0)
-            toast.enqueue(.init(title: "Run completed · \(result.artifacts.count) artifacts", kind: .success))
-            await reload()
+            let start = try await appState.client.runEpisodeAsync(workID: work.id, episodeID: episodeID)
+            liveRunID = start.runID
+            subscribeToStream(runID: start.runID)
         } catch {
+            episodeState.isRunning = false
             lastRunError = error.localizedDescription
-            toast.enqueue(.init(title: "Run failed — see banner for retry", kind: .error))
+            toast.enqueue(.init(title: "Run failed to start — see banner for retry", kind: .error))
         }
+    }
+
+    private func subscribeToStream(runID: String) {
+        streamTask?.cancel()
+        let client = appState.client
+        streamTask = Task { @MainActor in
+            do {
+                for try await event in client.eventStream(runID: runID) {
+                    if Task.isCancelled { break }
+                    liveEvents.append(event)
+                    liveLastEvent = event
+                }
+            } catch {
+                lastRunError = error.localizedDescription
+            }
+            // Stream ended (run completed or stream closed). Refresh + clear live state.
+            await onStreamFinished()
+        }
+    }
+
+    private func onStreamFinished() async {
+        let runID = liveRunID
+        episodeState.isRunning = false
+        // Fetch run artifacts so they appear in Run History card.
+        if let runID, let artifacts = try? await appState.client.listRunArtifacts(runID: runID) {
+            let events = (try? await appState.client.listRunEvents(runID: runID)) ?? []
+            let synthesized = EpisodeRunResult(
+                runID: runID,
+                tesseraRunID: runID,
+                status: "closed",
+                closure: "normal",
+                artifacts: artifacts,
+                events: events
+            )
+            runs.insert(synthesized, at: 0)
+            toast.enqueue(.init(title: "Run completed · \(artifacts.count) artifacts", kind: .success))
+        } else if liveLastEvent != nil {
+            toast.enqueue(.init(title: "Run finished", kind: .info))
+        }
+        liveRunID = nil
+        liveEvents = []
+        liveLastEvent = nil
+        await reload()
+    }
+
+    private func cancelStream() {
+        streamTask?.cancel()
+        streamTask = nil
+        liveRunID = nil
+        liveEvents = []
+        liveLastEvent = nil
+        episodeState.isRunning = false
+    }
+}
+
+private struct LiveRunCard: View {
+    let runID: String
+    let events: [RunEvent]
+    let lastEvent: RunEvent?
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                ProgressView().controlSize(.small)
+                Text("Run in progress")
+                    .font(LinettaTypography.titleSmall)
+                    .foregroundStyle(LinettaTheme.text)
+                Text("\(events.count) events")
+                    .font(LinettaTypography.caption)
+                    .foregroundStyle(LinettaTheme.textTertiary)
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(LinettaTheme.surfaceElevated).clipShape(Capsule())
+                Spacer()
+                Button("Stop watching", action: onCancel)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+            if let last = lastEvent {
+                HStack(spacing: 8) {
+                    Text(last.type)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(LinettaTheme.accent)
+                    if let role = last.role, !role.isEmpty {
+                        Text(role)
+                            .font(LinettaTypography.caption)
+                            .foregroundStyle(LinettaTheme.textSecondary)
+                    }
+                    if let stage = last.stage, !stage.isEmpty {
+                        Text("· \(stage)")
+                            .font(LinettaTypography.caption)
+                            .foregroundStyle(LinettaTheme.textTertiary)
+                    }
+                    Spacer()
+                }
+            }
+            if events.count > 1 {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 2) {
+                            ForEach(events.suffix(20)) { event in
+                                HStack(spacing: 6) {
+                                    Text("#\(event.seq)")
+                                        .frame(width: 32, alignment: .trailing)
+                                        .foregroundStyle(LinettaTheme.textTertiary)
+                                    Text(event.type)
+                                        .foregroundStyle(LinettaTheme.text)
+                                    Spacer()
+                                    if let role = event.role { Text(role).foregroundStyle(LinettaTheme.textSecondary) }
+                                }
+                                .font(.system(.caption2, design: .monospaced))
+                                .id(event.id)
+                            }
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                    }
+                    .frame(maxHeight: 120)
+                    .background(LinettaTheme.surfaceElevated)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .onChange(of: events.count) { _, _ in
+                        if let last = events.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, LinettaShape.cardPaddingH)
+        .padding(.vertical, LinettaShape.cardPaddingV)
+        .background(LinettaTheme.surface)
+        .overlay(RoundedRectangle(cornerRadius: LinettaShape.cardCornerRadius).stroke(LinettaTheme.accent.opacity(0.5)))
+        .clipShape(RoundedRectangle(cornerRadius: LinettaShape.cardCornerRadius))
     }
 }
 
