@@ -17,6 +17,10 @@ import (
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
+type fixedProvider string
+
+func (p fixedProvider) Provider() string { return string(p) }
+
 type capNotif struct {
 	mu sync.Mutex
 	es []string
@@ -64,7 +68,7 @@ func newAIFixture(t *testing.T) (*ai.Runner, *ai.ContextBuilder, string, string)
 	mr := mention.NewRepo(s)
 	runs := store.NewAIRunsRepo(s)
 	notif := &capNotif{}
-	runner := ai.NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return streamingFake{}, nil }, "claude-code-cli")
+	runner := ai.NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return streamingFake{}, nil }, fixedProvider("claude-code-cli"))
 	builder := ai.NewContextBuilder(pr, nodes, mr)
 	return runner, builder, p.ID, *p.LastOpenedNodeID
 }

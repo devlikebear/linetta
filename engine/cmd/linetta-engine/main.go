@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
@@ -64,9 +65,14 @@ func main() {
 		return mentions.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
 	})
 
+	settingsStore, err := settings.New()
+	if err != nil {
+		fail("settings: %v", err)
+	}
+
 	aiRuns := store.NewAIRunsRepo(st)
 	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions)
-	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, "claude-code-cli")
+	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, settingsStore)
 
 	clock := func() int64 { return time.Now().UnixMilli() }
 	s.Handle("ping", handlers.Ping)

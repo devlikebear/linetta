@@ -15,27 +15,34 @@ import (
 // Clock matches handlers.Clock.
 type Clock func() int64
 
+// ProviderSource yields the current provider id; consulted on every Start so
+// settings changes take effect on the next AI call without an engine restart.
+type ProviderSource interface {
+	Provider() string
+}
+
 // Runner manages active AI runs.
 type Runner struct {
-	notify   rpc.Notifier
-	runs     *store.AIRunsRepo
-	factory  ClientFactory
-	provider string
-	workDir  string
+	notify  rpc.Notifier
+	runs    *store.AIRunsRepo
+	factory ClientFactory
+	src     ProviderSource
+	workDir string
 
 	mu     sync.Mutex
 	active map[string]context.CancelFunc
 }
 
 // NewRunner constructs a Runner. workDir is passed to claude-code-cli; can be
-// the empty string (current working dir).
-func NewRunner(notify rpc.Notifier, runs *store.AIRunsRepo, factory ClientFactory, provider string) *Runner {
+// the empty string (current working dir). The provider id is read from src on
+// every Start call.
+func NewRunner(notify rpc.Notifier, runs *store.AIRunsRepo, factory ClientFactory, src ProviderSource) *Runner {
 	return &Runner{
-		notify:   notify,
-		runs:     runs,
-		factory:  factory,
-		provider: provider,
-		active:   map[string]context.CancelFunc{},
+		notify:  notify,
+		runs:    runs,
+		factory: factory,
+		src:     src,
+		active:  map[string]context.CancelFunc{},
 	}
 }
 
@@ -46,6 +53,10 @@ func (r *Runner) Start(ctx context.Context, c Context, now Clock) (string, error
 	startedAt := now()
 	ctxJSON, _ := json.Marshal(c)
 
+	// Resolve provider once per Start so settings updates apply to the very
+	// next run without restarting the engine.
+	provider := r.src.Provider()
+
 	var nodeID *string
 	if c.NodeID != "" {
 		v := c.NodeID
@@ -53,7 +64,7 @@ func (r *Runner) Start(ctx context.Context, c Context, now Clock) (string, error
 	}
 	if err := r.runs.Insert(ctx, store.AIRun{
 		ID: runID, ProjectID: c.ProjectID, NodeID: nodeID,
-		Provider:    r.provider,
+		Provider:    provider,
 		Prompt:      c.UserPrompt,
 		ContextJSON: ctxJSON,
 		Status:      store.AIRunStreaming,
@@ -62,7 +73,7 @@ func (r *Runner) Start(ctx context.Context, c Context, now Clock) (string, error
 		return "", err
 	}
 
-	client, err := r.factory(r.provider, r.workDir)
+	client, err := r.factory(provider, r.workDir)
 	if err != nil {
 		_ = r.runs.UpdateStatus(ctx, runID, store.AIRunError, "", err.Error(), now())
 		return "", err

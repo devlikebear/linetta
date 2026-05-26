@@ -15,6 +15,11 @@ import (
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
+// fixedProvider is a tiny ProviderSource stub returning a constant id.
+type fixedProvider string
+
+func (p fixedProvider) Provider() string { return string(p) }
+
 // fakeClient streams a fixed set of chunks. Implements llm.Client.
 type fakeClient struct {
 	chunks []string
@@ -84,7 +89,7 @@ func TestRunner_streams_thenEmitsDone(t *testing.T) {
 	notif := &fakeNotifier{}
 
 	runs := store.NewAIRunsRepo(s)
-	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, "claude-code-cli")
+	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
 	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
@@ -133,7 +138,7 @@ func TestRunner_cancel_emitsCancelled_andPersistsCancelled(t *testing.T) {
 	fake := &fakeClient{chunks: []string{"한", "두"}, failAt: -1, hold: make(chan struct{})}
 	notif := &fakeNotifier{}
 	runs := store.NewAIRunsRepo(s)
-	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, "claude-code-cli")
+	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
 	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
@@ -171,12 +176,93 @@ func TestRunner_cancel_emitsCancelled_andPersistsCancelled(t *testing.T) {
 	}
 }
 
+type mutableProvider struct {
+	mu sync.Mutex
+	v  string
+}
+
+func (m *mutableProvider) Provider() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.v
+}
+
+func (m *mutableProvider) set(v string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.v = v
+}
+
+type recordingFactory struct {
+	mu           sync.Mutex
+	lastProvider string
+	delegate     ClientFactory
+}
+
+func (rf *recordingFactory) build(provider, workDir string) (llm.Client, error) {
+	rf.mu.Lock()
+	rf.lastProvider = provider
+	rf.mu.Unlock()
+	return rf.delegate(provider, workDir)
+}
+
+func (rf *recordingFactory) last() string {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	return rf.lastProvider
+}
+
+func TestRunner_readsProviderOnEachStart(t *testing.T) {
+	s, p := newRunnerFixture(t)
+	notif := &fakeNotifier{}
+	runs := store.NewAIRunsRepo(s)
+
+	rf := &recordingFactory{delegate: func(_, _ string) (llm.Client, error) {
+		return &fakeClient{chunks: []string{"x"}, failAt: -1}, nil
+	}}
+	src := &mutableProvider{v: "claude-code-cli"}
+	r := NewRunner(notif, runs, rf.build, src)
+	now := func() int64 { return 1 }
+
+	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
+	if _, err := r.Start(context.Background(), c, now); err != nil {
+		t.Fatalf("first start: %v", err)
+	}
+	// Wait for first run to land.
+	deadline := time.Now().Add(1 * time.Second)
+	for {
+		if got := rf.last(); got == "claude-code-cli" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("factory never observed first provider; got %q", rf.last())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	src.set("openai-codex")
+	if _, err := r.Start(context.Background(), c, now); err != nil {
+		t.Fatalf("second start: %v", err)
+	}
+	deadline = time.Now().Add(1 * time.Second)
+	for {
+		if got := rf.last(); got == "openai-codex" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("factory called with %q on second start, want openai-codex", rf.last())
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestRunner_providerError_emitsError(t *testing.T) {
 	s, p := newRunnerFixture(t)
 	fake := &fakeClient{chunks: []string{"한", "두"}, failAt: 1} // error after first chunk
 	notif := &fakeNotifier{}
 	runs := store.NewAIRunsRepo(s)
-	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, "claude-code-cli")
+	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
 	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
