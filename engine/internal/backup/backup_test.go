@@ -96,3 +96,45 @@ func TestPrune_removesDirsOlderThan14Days(t *testing.T) {
 		t.Error("non-date dir incorrectly removed")
 	}
 }
+
+func TestStart_runsImmediatelyAndCallsRetention(t *testing.T) {
+	s, home := openSeededStore(t)
+	calls := make(chan struct{}, 4)
+	retentionRan := make(chan struct{}, 4)
+	retention := func(ctx context.Context) error {
+		select {
+		case retentionRan <- struct{}{}:
+		default:
+		}
+		return nil
+	}
+	onTick := func() {
+		select {
+		case calls <- struct{}{}:
+		default:
+		}
+	}
+	sleepFn := func(d time.Duration) { time.Sleep(10 * time.Millisecond) }
+	stop := Start(context.Background(), s.DB(), home, retention,
+		func() time.Time { return time.Date(2026, 5, 26, 23, 59, 59, 0, time.Local) },
+		sleepFn,
+		onTick)
+	defer stop()
+
+	select {
+	case <-calls:
+	case <-time.After(2 * time.Second):
+		t.Fatal("immediate run did not invoke onTick")
+	}
+	select {
+	case <-retentionRan:
+	case <-time.After(2 * time.Second):
+		t.Fatal("retention callback not invoked")
+	}
+	// Confirm backup file actually landed.
+	root := filepath.Join(home, "backups", "2026-05-26")
+	matches, _ := filepath.Glob(filepath.Join(root, "library-*.db"))
+	if len(matches) != 1 {
+		t.Errorf("expected 1 backup file, got %d", len(matches))
+	}
+}
