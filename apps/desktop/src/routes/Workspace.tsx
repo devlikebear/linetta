@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, ai as aiApi, settings as settingsApi, exportApi } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, ai as aiApi, settings as settingsApi, exportApi } from "../lib/rpc";
 import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIDone, AIError, AICancelled } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
@@ -57,7 +57,6 @@ export function Workspace() {
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
-  const [threadSheetSeedNodeId, setThreadSheetSeedNodeId] = useState<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [mode, setMode] = useState<"edit" | "ai">("edit");
   const [aiPrompt, setAiPrompt] = useState("");
@@ -474,7 +473,11 @@ export function Workspace() {
         if (!trimmed) return;
         try {
           const t = await threadsApi.create({ project_id: load.project.id, name: trimmed, color: "#666" });
-          setThreadSheetSeedNodeId(load.node.id);
+          // 곧바로 현재 씬에 바인딩된 첫 마디를 만들어두지 않으면, 사용자가
+          // ThreadSheet 안에서 직접 "+ 새 마디 추가"로 만든 마디는 unbound라
+          // 이 씬의 활성 Thread 패널에 표시되지 않는다. seed 책임을 시트에서
+          // 명령으로 옮겨 이 함정을 제거한다.
+          await beatsApi.create({ thread_id: t.id, node_id: load.node.id, label: "" });
           setThreadSheetId(t.id);
         } catch (e) {
           showToast("스토리라인 생성 실패: " + String(e));
@@ -714,10 +717,8 @@ export function Workspace() {
         ) : threadSheetId ? (
           <ThreadSheet
             threadId={threadSheetId}
-            seedNodeId={threadSheetSeedNodeId ?? undefined}
             onClose={() => {
               setThreadSheetId(null);
-              setThreadSheetSeedNodeId(null);
               focusEditor();
             }}
             onSaved={() => {

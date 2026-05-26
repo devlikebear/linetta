@@ -7,12 +7,11 @@ const PALETTE = ["#c0392b", "#c08a3e", "#b58a00", "#3e8e41", "#2980b9", "#7e57c2
 
 interface Props {
   threadId: string | null;
-  seedNodeId?: string;            // when set, the first save creates a beat bound to this node
   onClose: () => void;
   onSaved?: (thread: Thread) => void;
 }
 
-export function ThreadSheet({ threadId, seedNodeId, onClose, onSaved }: Props) {
+export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
   const [thread, setThread] = useState<Thread | null>(null);
   const [draft, setDraft] = useState<UpdateThreadInput | null>(null);
   const [beatList, setBeatList] = useState<Beat[]>([]);
@@ -40,11 +39,6 @@ export function ThreadSheet({ threadId, seedNodeId, onClose, onSaved }: Props) {
     setError(null);
     try {
       const saved = await threadsApi.update(draft);
-      // Seed-node-on-first-save: if the thread has no beats and the caller asked
-      // to bind one to seedNodeId, do that now.
-      if (seedNodeId && beatList.length === 0) {
-        await beatsApi.create({ thread_id: saved.id, node_id: seedNodeId, label: "" });
-      }
       setThread(saved);
       onSaved?.(saved);
       onClose();
