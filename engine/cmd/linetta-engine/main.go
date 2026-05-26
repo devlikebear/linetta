@@ -14,6 +14,7 @@ import (
 	_ "github.com/devlikebear/tars/pkg/llm" // pin
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
+	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -74,6 +75,18 @@ func main() {
 	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions)
 	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, settingsStore)
 
+	// Backup + retention scheduler. Runs once at boot, then daily at midnight+1m.
+	home, err := paths.Home()
+	if err != nil {
+		fail("home: %v", err)
+	}
+	retentionFn := func(ctx context.Context) error {
+		return snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli())
+	}
+	stopBackup := backup.Start(ctx, st.DB(), home, retentionFn,
+		time.Now, time.Sleep, nil /* onTick */)
+	defer stopBackup()
+
 	clock := func() int64 { return time.Now().UnixMilli() }
 	s.Handle("ping", handlers.Ping)
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
@@ -98,6 +111,12 @@ func main() {
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
 	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
 	s.Handle("ai.cancel", handlers.CancelAI(runner))
+	s.Handle("settings.get", handlers.GetSettings(settingsStore))
+	s.Handle("settings.set", handlers.SetSettings(settingsStore))
+	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
+	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
+	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities))
+	s.Handle("export.node", handlers.ExportNode(nodes))
 
 	if err := s.Serve(ctx, os.Stdin, os.Stdout); err != nil && !errors.Is(err, io.EOF) {
 		fail("serve: %v", err)
