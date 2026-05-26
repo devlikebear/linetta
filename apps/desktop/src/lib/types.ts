@@ -138,3 +138,62 @@ export interface ExportPayload {
   markdown: string;
   suggested_filename: string;
 }
+
+// Mirrors engine/internal/thread Thread struct.
+export interface Thread {
+  id: string;
+  project_id: string;
+  name: string;
+  color: string;
+  summary: string;
+  closed_at?: number;
+}
+
+export interface NewThreadInput {
+  project_id: string;
+  name: string;
+  color?: string;
+}
+
+export interface UpdateThreadInput {
+  id: string;
+  name?: string;
+  color?: string;
+  summary?: string;
+}
+
+// Mirrors engine/internal/beat Beat struct.
+export interface Beat {
+  id: string;
+  thread_id: string;
+  node_id?: string;
+  ordinal: number;
+  label: string;
+  intensity: number;
+}
+
+export interface NewBeatInput {
+  thread_id: string;
+  node_id?: string;
+  label?: string;
+  intensity?: number;
+}
+
+export interface UpdateBeatInput {
+  id: string;
+  label?: string;
+  intensity?: number;
+}
+
+// Mirrors engine/internal/ai ActiveThread / BeatBrief (used in ai_runs.context_json).
+export interface BeatBrief {
+  label: string;
+  ordinal: number;
+}
+
+export interface ActiveThread {
+  name: string;
+  color: string;
+  summary: string;
+  recent_beats: BeatBrief[];
+}

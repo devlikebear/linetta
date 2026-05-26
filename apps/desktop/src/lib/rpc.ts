@@ -1,18 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AIOptions,
+  Beat,
   Entity,
   ExportPayload,
   ListProjectsParams,
+  NewBeatInput,
   NewEntityInput,
   NewProjectInput,
+  NewThreadInput,
   NodeRow,
   Project,
   Settings,
   SettingsPatch,
   Snapshot,
   SnapshotEntry,
+  Thread,
+  UpdateBeatInput,
   UpdateEntityInput,
+  UpdateThreadInput,
 } from "./types";
 
 // Tauri commands defined in src-tauri.
@@ -89,4 +95,26 @@ export const ai = {
   run: (nodeId: string, prompt: string, options: AIOptions) =>
     rpcCall<{ run_id: string }>("ai.run", { node_id: nodeId, prompt, options }),
   cancel: (runId: string) => rpcCall<{ ok: true }>("ai.cancel", { run_id: runId }),
+};
+
+export const threads = {
+  create: (input: NewThreadInput) => rpcCall<Thread>("threads.create", input),
+  list: (projectId: string, includeClosed = false) =>
+    rpcCall<Thread[]>("threads.list", { project_id: projectId, include_closed: includeClosed }),
+  get: (id: string) => rpcCall<Thread>("threads.get", { id }),
+  update: (input: UpdateThreadInput) => rpcCall<Thread>("threads.update", input),
+  close: (id: string) => rpcCall<Thread>("threads.close", { id }),
+  reopen: (id: string) => rpcCall<Thread>("threads.reopen", { id }),
+};
+
+export const beats = {
+  create: (input: NewBeatInput) => rpcCall<Beat>("beats.create", input),
+  listByThread: (threadId: string) =>
+    rpcCall<Beat[]>("beats.list_by_thread", { thread_id: threadId }),
+  listByNode: (nodeId: string) =>
+    rpcCall<Beat[]>("beats.list_by_node", { node_id: nodeId }),
+  update: (input: UpdateBeatInput) => rpcCall<Beat>("beats.update", input),
+  reorder: (threadId: string, ids: string[]) =>
+    rpcCall<{ ok: true }>("beats.reorder", { thread_id: threadId, ids }),
+  delete: (id: string) => rpcCall<{ ok: true }>("beats.delete", { id }),
 };
