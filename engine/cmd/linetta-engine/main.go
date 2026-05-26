@@ -25,6 +25,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
 func main() {
@@ -60,6 +61,7 @@ func main() {
 	snaps := snapshot.NewRepo(st)
 	entities := entity.NewRepo(st)
 	mentions := mention.NewRepo(st)
+	threads := thread.NewRepo(st)
 
 	// Keep the mentions table in sync with each saved Tiptap doc.
 	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
@@ -108,6 +110,12 @@ func main() {
 	s.Handle("entities.get", handlers.GetEntity(entities))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
+	s.Handle("threads.create", handlers.CreateThread(threads))
+	s.Handle("threads.list", handlers.ListThreads(threads))
+	s.Handle("threads.get", handlers.GetThread(threads))
+	s.Handle("threads.update", handlers.UpdateThread(threads))
+	s.Handle("threads.close", handlers.CloseThread(threads, clock))
+	s.Handle("threads.reopen", handlers.ReopenThread(threads))
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
 	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
 	s.Handle("ai.cancel", handlers.CancelAI(runner))
