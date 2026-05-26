@@ -94,3 +94,37 @@ func TestLatestAutosaveTime(t *testing.T) {
 		t.Fatalf("LatestAutosaveTime empty: %v", err)
 	}
 }
+
+func TestListForNode_orderedDesc(t *testing.T) {
+	r, nodeID := newRepoWithNode(t)
+	ctx := context.Background()
+	_, _ = r.Create(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"오래된"}]}]}`, ReasonAutosave, 1000)
+	_, _ = r.Create(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"중간"}]}]}`, ReasonManual, 2000)
+	_, _ = r.Create(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"새 거"}]}]}`, ReasonAIReplace, 3000)
+
+	got, err := r.ListForNode(context.Background(), nodeID)
+	if err != nil {
+		t.Fatalf("ListForNode: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("len = %d", len(got))
+	}
+	if got[0].Reason != ReasonAIReplace || got[2].Reason != ReasonAutosave {
+		t.Errorf("ordering wrong: %+v", got)
+	}
+	if got[0].DocPreview != "새 거\n" {
+		t.Errorf("preview = %q", got[0].DocPreview)
+	}
+}
+
+func TestGetByID(t *testing.T) {
+	r, nodeID := newRepoWithNode(t)
+	created, _ := r.Create(context.Background(), nodeID, `{"v":1}`, ReasonManual, 1000)
+	got, err := r.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if got.ID != created.ID {
+		t.Errorf("id mismatch: %q vs %q", got.ID, created.ID)
+	}
+}
