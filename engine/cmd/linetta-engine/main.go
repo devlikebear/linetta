@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
@@ -64,6 +65,7 @@ func main() {
 	mentions := mention.NewRepo(st)
 	threads := thread.NewRepo(st)
 	beats := beat.NewRepo(st)
+	relationships := relationship.NewRepo(st)
 
 	// Keep the mentions table in sync with each saved Tiptap doc.
 	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
@@ -124,6 +126,11 @@ func main() {
 	s.Handle("beats.update", handlers.UpdateBeat(beats))
 	s.Handle("beats.reorder", handlers.ReorderBeats(beats))
 	s.Handle("beats.delete", handlers.DeleteBeat(beats))
+	s.Handle("relationships.create_one", handlers.CreateOneRelationship(relationships))
+	s.Handle("relationships.create_pair", handlers.CreatePairRelationship(relationships))
+	s.Handle("relationships.list_by_entity", handlers.ListRelationshipsByEntity(relationships))
+	s.Handle("relationships.update", handlers.UpdateRelationship(relationships))
+	s.Handle("relationships.delete", handlers.DeleteRelationship(relationships))
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
 	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
 	s.Handle("ai.cancel", handlers.CancelAI(runner))
