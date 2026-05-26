@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { NodeRow, Project, Entity } from "../lib/types";
+import { ActiveThreadsPanel } from "./ActiveThreadsPanel";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -16,6 +17,8 @@ interface Props {
   saveStatus: SaveStatus;
   mentionedEntities: Entity[];
   onMentionClick: (entityId: string) => void;
+  onOpenThread: (threadId: string) => void;
+  onThreadDataChanged?: () => void;
 }
 
 const STATUS_LABEL: Record<NodeRow["status"], string> = {
@@ -24,7 +27,7 @@ const STATUS_LABEL: Record<NodeRow["status"], string> = {
   final: "완성",
 };
 
-export function ContextPanel({ node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick }: Props) {
+export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onOpenThread, onThreadDataChanged }: Props) {
   return (
     <aside className="ctx-panel">
       <section className="ctx-section">
@@ -46,10 +49,12 @@ export function ContextPanel({ node, charCount, typewriter, onToggleTypewriter, 
         ))}
       </section>
 
-      <section className="ctx-section">
-        <h4>활성 Thread</h4>
-        <p className="ctx-empty">(곧 추가됨 — post-MVP)</p>
-      </section>
+      <ActiveThreadsPanel
+        projectId={project.id}
+        nodeId={node.id}
+        onOpenThread={onOpenThread}
+        onChanged={onThreadDataChanged}
+      />
 
       <section className="ctx-section">
         <h4>씬 상태</h4>

@@ -5,6 +5,7 @@ import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIDone, AIError, AIC
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
+import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
@@ -54,6 +55,7 @@ export function Workspace() {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
+  const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [mode, setMode] = useState<"edit" | "ai">("edit");
   const [aiPrompt, setAiPrompt] = useState("");
@@ -641,7 +643,7 @@ export function Workspace() {
         </button>
       </header>
 
-      <div className={`ws-body${entitySheetId ? " with-sheet" : ""}`}>
+      <div className={`ws-body${(entitySheetId || threadSheetId) ? " with-sheet" : ""}`}>
         {mode === "edit" ? (
           <div className="ws-editor">
             <TiptapEditor
@@ -688,6 +690,17 @@ export function Workspace() {
               if (load) refreshMentioned(load.node.id);
             }}
           />
+        ) : threadSheetId ? (
+          <ThreadSheet
+            threadId={threadSheetId}
+            onClose={() => {
+              setThreadSheetId(null);
+              focusEditor();
+            }}
+            onSaved={() => {
+              /* ActiveThreadsPanel self-reloads */
+            }}
+          />
         ) : mode === "ai" ? (
           <AIContextPanel
             project={load.project}
@@ -705,6 +718,10 @@ export function Workspace() {
             saveStatus={saveStatus}
             mentionedEntities={mentioned}
             onMentionClick={(id) => setEntitySheetId(id)}
+            onOpenThread={setThreadSheetId}
+            onThreadDataChanged={() => {
+              /* no-op; panel auto-reloads */
+            }}
           />
         )}
       </div>
