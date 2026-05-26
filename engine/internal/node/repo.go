@@ -57,7 +57,8 @@ func (r *Repo) UpdateContent(ctx context.Context, id string, doc string, now int
 
 	res, err := tx.ExecContext(ctx, `
 UPDATE nodes
-   SET content_doc = ?, word_count = ?, updated_at = ?
+   SET content_doc = ?, word_count = ?, updated_at = ?,
+       content_version = content_version + 1
  WHERE id = ?`, doc, count, now, id)
 	if err != nil {
 		return err
@@ -89,6 +90,22 @@ UPDATE projects
 	return nil
 }
 
+// SetSummary writes the LLM-generated summary and the version it was generated
+// for. Does NOT touch updated_at — derived field, not user content.
+func (r *Repo) SetSummary(ctx context.Context, id string, summary string, forVersion int) error {
+	res, err := r.s.DB().ExecContext(ctx, `
+UPDATE nodes SET summary = ?, summary_for_version = ? WHERE id = ?`,
+		summary, forVersion, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetLastOpened updates projects.last_opened_node_id and projects.updated_at.
 func (r *Repo) SetLastOpened(ctx context.Context, projectID, nodeID string, now int64) error {
 	res, err := r.s.DB().ExecContext(ctx, `
@@ -106,7 +123,8 @@ UPDATE projects SET last_opened_node_id = ?, updated_at = ?
 
 const baseSelect = `
 SELECT id, project_id, parent_id, ordinal, kind, label, title,
-       content_doc, status, word_count, created_at, updated_at
+       content_doc, status, word_count, summary, content_version,
+       summary_for_version, created_at, updated_at
 FROM nodes`
 
 type scanner interface{ Scan(...any) error }
@@ -118,7 +136,8 @@ func scan(row scanner) (Node, error) {
 		contentDoc sql.NullString
 	)
 	if err := row.Scan(&n.ID, &n.ProjectID, &parentID, &n.Ordinal, &n.Kind, &n.Label, &n.Title,
-		&contentDoc, &n.Status, &n.WordCount, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		&contentDoc, &n.Status, &n.WordCount, &n.Summary, &n.ContentVersion,
+		&n.SummaryForVersion, &n.CreatedAt, &n.UpdatedAt); err != nil {
 		return Node{}, err
 	}
 	if parentID.Valid {

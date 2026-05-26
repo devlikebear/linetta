@@ -264,6 +264,52 @@ func TestRepo_MoveUp_andMoveDown(t *testing.T) {
 	}
 }
 
+func TestRepo_UpdateContent_bumpsContentVersion(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	before, _ := r.Get(ctx, *p.LastOpenedNodeID)
+	if before.ContentVersion != 0 {
+		t.Fatalf("seeded content_version = %d, want 0", before.ContentVersion)
+	}
+
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"한"}]}]}`
+	_ = r.UpdateContent(ctx, *p.LastOpenedNodeID, doc, 9999)
+	_ = r.UpdateContent(ctx, *p.LastOpenedNodeID, doc, 10000)
+
+	after, _ := r.Get(ctx, *p.LastOpenedNodeID)
+	if after.ContentVersion != 2 {
+		t.Errorf("content_version = %d, want 2", after.ContentVersion)
+	}
+}
+
+func TestRepo_SetSummary_writesBothFields(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"a"}]}]}`
+	for i := 0; i < 3; i++ {
+		_ = r.UpdateContent(ctx, *p.LastOpenedNodeID, doc, int64(1000+i))
+	}
+	if err := r.SetSummary(ctx, *p.LastOpenedNodeID, "요약된 본문.", 3); err != nil {
+		t.Fatalf("SetSummary: %v", err)
+	}
+	got, _ := r.Get(ctx, *p.LastOpenedNodeID)
+	if got.Summary != "요약된 본문." || got.SummaryForVersion != 3 || got.ContentVersion != 3 {
+		t.Errorf("got = %+v", got)
+	}
+}
+
+func TestRepo_SetSummary_unknownID_returnsErrNotFound(t *testing.T) {
+	s, _ := newStoreAndProject(t)
+	r := NewRepo(s)
+	if err := r.SetSummary(context.Background(), "no-such", "x", 1); err != ErrNotFound {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
 func TestRepo_UpdateContent_callsResyncer(t *testing.T) {
 	s, p := newStoreAndProject(t)
 	r := NewRepo(s)
