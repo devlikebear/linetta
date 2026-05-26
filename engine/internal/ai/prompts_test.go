@@ -35,14 +35,14 @@ func TestBuildMessages_shapesSystemAndUser(t *testing.T) {
 	if msgs[0].Role != "system" || msgs[1].Role != "user" {
 		t.Errorf("roles = %q, %q", msgs[0].Role, msgs[1].Role)
 	}
-	sys := msgs[0].ContentBlocks[0].Text
+	sys := msgs[0].Content
 	if !strings.Contains(sys, "단문 위주") {
 		t.Errorf("style notes not in system: %q", sys)
 	}
 	if !strings.Contains(sys, "한 문단 이내") {
 		t.Errorf("short_form not in system: %q", sys)
 	}
-	usr := msgs[1].ContentBlocks[0].Text
+	usr := msgs[1].Content
 	if !strings.Contains(usr, "씬 1") || !strings.Contains(usr, "파도 소리") {
 		t.Errorf("scene missing from user: %q", usr)
 	}

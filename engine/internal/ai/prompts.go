@@ -34,12 +34,19 @@ func PresetSeed(p PresetID) string {
 // BuildMessages converts a Context into the two-message system+user pair the
 // engine sends to tars. The system message governs tone and length; the user
 // message contains the structured context.
+//
+// Why msg.Content (string) and not msg.ContentBlocks: both claude-code-cli and
+// openai-codex providers in tars/pkg/llm read the plain `Content` field; the
+// openai-codex provider only puts system messages into the Responses API's
+// `instructions` field when `msg.Content` is non-empty, and claude-code-cli's
+// system-prompt assembler ignores ContentBlocks entirely. ContentBlocks is for
+// multimodal inputs (images, PDFs) which we don't send.
 func BuildMessages(c Context) []llm.ChatMessage {
 	system := buildSystem(c)
 	user := buildUser(c)
 	return []llm.ChatMessage{
-		{Role: "system", ContentBlocks: []llm.ContentBlock{{Type: "text", Text: system}}},
-		{Role: "user", ContentBlocks: []llm.ContentBlock{{Type: "text", Text: user}}},
+		{Role: "system", Content: system},
+		{Role: "user", Content: user},
 	}
 }
 
