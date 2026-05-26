@@ -72,6 +72,13 @@ export function Workspace() {
   const exitZen = useCallback(() => {
     savedSelectionRef.current =
       zenEditorRef.current?.getSelection() ?? savedSelectionRef.current;
+    // ZEN의 Tiptap은 Edit의 Tiptap과 별도 인스턴스라 ZEN에서 친 글자는
+    // Edit editor의 메모리에 반영되지 않는다. ZEN의 최신 doc을 가져와
+    // load.initialDoc을 갱신하면 Edit editor가 새 길이로 remount되어 보존된다.
+    const zenDoc = zenEditorRef.current?.getDoc();
+    if (zenDoc) {
+      setLoad((prev) => (prev ? { ...prev, initialDoc: zenDoc } : prev));
+    }
     setZenOpen(false);
   }, []);
 
