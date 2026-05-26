@@ -27,6 +27,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/summarizer"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -81,6 +82,10 @@ func main() {
 	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats)
 	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, settingsStore)
 
+	summ := summarizer.New(nodes, settingsStore, ai.DefaultClientFactory)
+	stopSummarizer := summ.Start(ctx)
+	defer stopSummarizer()
+
 	// Backup + retention scheduler. Runs once at boot, then daily at midnight+1m.
 	home, err := paths.Home()
 	if err != nil {
@@ -100,7 +105,7 @@ func main() {
 	s.Handle("projects.get", handlers.GetProject(projects))
 	s.Handle("projects.archive", handlers.ArchiveProject(projects, clock))
 	s.Handle("nodes.get", handlers.GetNode(nodes))
-	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, snaps, clock))
+	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, snaps, clock, summ.Enqueue))
 	s.Handle("nodes.set_last_opened", handlers.SetLastOpened(nodes, clock))
 	s.Handle("snapshots.create_manual", handlers.CreateManualSnapshot(snaps, clock))
 	s.Handle("nodes.list_tree", handlers.ListTree(nodes))

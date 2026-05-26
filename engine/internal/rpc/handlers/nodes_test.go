@@ -61,7 +61,7 @@ func TestGetNodeHandler(t *testing.T) {
 func TestUpdateNodeContentHandler_createsAutosaveSnapshotOnFirstSave(t *testing.T) {
 	f := newNodeFixture(t)
 	clock := int64(10_000)
-	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return clock })
+	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return clock }, nil)
 
 	res, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"파도 소리\"}]}]}"}`))
 	if err != nil {
@@ -88,7 +88,7 @@ func TestUpdateNodeContentHandler_createsAutosaveSnapshotOnFirstSave(t *testing.
 func TestUpdateNodeContentHandler_noSnapshotWithin60s(t *testing.T) {
 	f := newNodeFixture(t)
 	clock := int64(10_000)
-	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return clock })
+	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return clock }, nil)
 
 	if _, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{}"}`)); err != nil {
 		t.Fatalf("save 1: %v", err)
@@ -229,5 +229,31 @@ func TestMoveHandlers(t *testing.T) {
 	tree, _ = f.nodes.ListByProject(context.Background(), f.pID)
 	if tree[0].Label != "씬 1" || tree[1].Label != "씬 2" {
 		t.Errorf("order after MoveDown: %q,%q", tree[0].Label, tree[1].Label)
+	}
+}
+
+func TestUpdateNodeContentHandler_callsPostUpdateAfterSuccess(t *testing.T) {
+	f := newNodeFixture(t)
+	var got []string
+	hook := func(id string) { got = append(got, id) }
+	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return 10_000 }, hook)
+	if _, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{\"type\":\"doc\"}"}`)); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	if len(got) != 1 || got[0] != f.nID {
+		t.Errorf("postUpdate calls = %v, want [%q]", got, f.nID)
+	}
+}
+
+func TestUpdateNodeContentHandler_doesNotCallPostUpdateOnError(t *testing.T) {
+	f := newNodeFixture(t)
+	called := 0
+	hook := func(id string) { called++ }
+	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return 10_000 }, hook)
+	if _, err := h(context.Background(), json.RawMessage(`{"id":"no-such","doc":"{}"}`)); err == nil {
+		t.Fatal("expected error")
+	}
+	if called != 0 {
+		t.Errorf("postUpdate called %d times on error", called)
 	}
 }

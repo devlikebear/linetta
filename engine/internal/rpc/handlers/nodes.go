@@ -40,7 +40,7 @@ func GetNode(nodes *node.Repo) rpc.Handler {
 // UpdateNodeContent returns a handler for nodes.update_content. After saving,
 // if more than AutosaveIntervalMillis have elapsed since the last autosave for
 // this node, a fresh autosave snapshot is inserted.
-func UpdateNodeContent(nodes *node.Repo, snaps *snapshot.Repo, now Clock) rpc.Handler {
+func UpdateNodeContent(nodes *node.Repo, snaps *snapshot.Repo, now Clock, postUpdate func(nodeID string)) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p updateContentParams
 		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
@@ -63,6 +63,9 @@ func UpdateNodeContent(nodes *node.Repo, snaps *snapshot.Repo, now Clock) rpc.Ha
 		got, err := nodes.Get(ctx, p.ID)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		if postUpdate != nil {
+			postUpdate(p.ID)
 		}
 		return json.Marshal(got)
 	}
