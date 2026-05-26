@@ -8,9 +8,12 @@ import type {
   NewBeatInput,
   NewEntityInput,
   NewProjectInput,
+  NewRelationshipInput,
+  NewRelationshipPairInput,
   NewThreadInput,
   NodeRow,
   Project,
+  Relationship,
   Settings,
   SettingsPatch,
   Snapshot,
@@ -18,6 +21,7 @@ import type {
   Thread,
   UpdateBeatInput,
   UpdateEntityInput,
+  UpdateRelationshipInput,
   UpdateThreadInput,
 } from "./types";
 
@@ -117,4 +121,16 @@ export const beats = {
   reorder: (threadId: string, ids: string[]) =>
     rpcCall<{ ok: true }>("beats.reorder", { thread_id: threadId, ids }),
   delete: (id: string) => rpcCall<{ ok: true }>("beats.delete", { id }),
+};
+
+export const relationships = {
+  createOne: (input: NewRelationshipInput) =>
+    rpcCall<Relationship>("relationships.create_one", input),
+  createPair: (input: NewRelationshipPairInput) =>
+    rpcCall<Relationship[]>("relationships.create_pair", input),
+  listByEntity: (entityId: string) =>
+    rpcCall<Relationship[]>("relationships.list_by_entity", { entity_id: entityId }),
+  update: (input: UpdateRelationshipInput) =>
+    rpcCall<Relationship>("relationships.update", input),
+  delete: (id: string) => rpcCall<{ ok: true }>("relationships.delete", { id }),
 };

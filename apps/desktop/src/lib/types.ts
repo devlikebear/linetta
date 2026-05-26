@@ -197,3 +197,37 @@ export interface ActiveThread {
   summary: string;
   recent_beats: BeatBrief[];
 }
+
+// Mirrors engine/internal/relationship Relationship struct.
+export interface Relationship {
+  id: string;
+  project_id: string;
+  from_id: string;
+  to_id: string;
+  label: string;
+  notes: string;
+  pair_id?: string;
+}
+
+export interface NewRelationshipInput {
+  project_id: string;
+  from_id: string;
+  to_id: string;
+  label: string;
+  notes?: string;
+}
+
+export interface NewRelationshipPairInput {
+  project_id: string;
+  from_id: string;
+  to_id: string;
+  label: string;
+  inverse_label: string;
+  notes?: string;
+}
+
+export interface UpdateRelationshipInput {
+  id: string;
+  label: string;
+  notes: string;
+}
