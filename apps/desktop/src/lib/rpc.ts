@@ -2,12 +2,16 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AIOptions,
   Entity,
+  ExportPayload,
   ListProjectsParams,
   NewEntityInput,
   NewProjectInput,
   NodeRow,
   Project,
+  Settings,
+  SettingsPatch,
   Snapshot,
+  SnapshotEntry,
   UpdateEntityInput,
 } from "./types";
 
@@ -50,6 +54,22 @@ export const nodes = {
 export const snapshots = {
   createManual: (nodeId: string, doc: string) =>
     rpcCall<Snapshot>("snapshots.create_manual", { node_id: nodeId, doc }),
+  listForNode: (nodeId: string) =>
+    rpcCall<SnapshotEntry[]>("snapshots.list_for_node", { node_id: nodeId }),
+  restore: (snapshotId: string) =>
+    rpcCall<NodeRow>("snapshots.restore", { snapshot_id: snapshotId }),
+};
+
+export const settings = {
+  get: () => rpcCall<Settings>("settings.get"),
+  set: (patch: SettingsPatch) => rpcCall<Settings>("settings.set", patch),
+};
+
+export const exportApi = {
+  project: (projectId: string) =>
+    rpcCall<ExportPayload>("export.project", { project_id: projectId }),
+  node: (nodeId: string) =>
+    rpcCall<ExportPayload>("export.node", { node_id: nodeId }),
 };
 
 export const entities = {

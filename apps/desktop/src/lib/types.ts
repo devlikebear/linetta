@@ -113,3 +113,28 @@ export interface AIError {
 export interface AICancelled {
   run_id: string;
 }
+
+export type ProviderID = "claude-code-cli" | "openai-codex";
+
+export interface Settings {
+  provider: ProviderID;
+  typewriter_default: boolean;
+  backup_dir: string;
+}
+
+export interface SettingsPatch {
+  provider?: ProviderID;
+  typewriter_default?: boolean;
+}
+
+export interface SnapshotEntry {
+  id: string;
+  reason: "manual" | "autosave" | "ai-replace";
+  created_at: number;
+  doc_preview: string;
+}
+
+export interface ExportPayload {
+  markdown: string;
+  suggested_filename: string;
+}
