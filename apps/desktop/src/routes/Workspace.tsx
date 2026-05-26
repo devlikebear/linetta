@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, ai as aiApi } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, ai as aiApi, settings as settingsApi, exportApi } from "../lib/rpc";
 import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIDone, AIError, AICancelled } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
+import { VersionSheet } from "../components/VersionSheet";
+import { saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
@@ -46,6 +48,10 @@ export function Workspace() {
   const [typewriter, setTypewriter] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [versionSheetNodeId, setVersionSheetNodeId] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [zenOpen, setZenOpen] = useState(false);
+  void zenOpen; void setZenOpen; // reserved for Task 14 (ZenMode)
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
@@ -59,6 +65,15 @@ export function Workspace() {
 
   const focusEditor = useCallback(() => {
     window.setTimeout(() => editorRef.current?.focus(), 0);
+  }, []);
+
+  // Apply typewriter default from settings exactly once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi.get()
+      .then((s) => { if (!cancelled) setTypewriter(s.typewriter_default); })
+      .catch(() => { /* benign */ });
+    return () => { cancelled = true; };
   }, []);
 
   useEngineEvent<AIDelta>("ai-delta", (p) => {
@@ -484,6 +499,47 @@ export function Workspace() {
       disabled: true,
       run: () => {},
     });
+    cmds.push({
+      id: "version-restore",
+      section: "프로젝트",
+      label: "이 씬의 이전 버전",
+      hint: "복원",
+      run: () => setVersionSheetNodeId(load.node.id),
+    });
+    cmds.push({
+      id: "export-project",
+      section: "내보내기",
+      label: "프로젝트 (.md)",
+      run: async () => {
+        try {
+          const payload = await exportApi.project(load.project.id);
+          const path = await saveExportedMarkdown(payload);
+          if (path) showToast("내보내기 완료");
+        } catch (e) {
+          showToast("내보내기 실패: " + String(e));
+        }
+      },
+    });
+    cmds.push({
+      id: "export-node",
+      section: "내보내기",
+      label: "이 씬 (.md)",
+      run: async () => {
+        try {
+          const payload = await exportApi.node(load.node.id);
+          const path = await saveExportedMarkdown(payload);
+          if (path) showToast("내보내기 완료");
+        } catch (e) {
+          showToast("내보내기 실패: " + String(e));
+        }
+      },
+    });
+    cmds.push({
+      id: "go-settings",
+      section: "프로젝트",
+      label: "설정 열기",
+      run: () => navigate("/settings"),
+    });
     return cmds;
   }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog]);
 
@@ -634,6 +690,22 @@ export function Workspace() {
           onClose={() => {
             setDialog(null);
             focusEditor();
+          }}
+        />
+      )}
+
+      {versionSheetNodeId && (
+        <VersionSheet
+          nodeId={versionSheetNodeId}
+          onClose={() => {
+            setVersionSheetNodeId(null);
+            focusEditor();
+          }}
+          onRestored={(updatedNode) => {
+            const docStr = updatedNode.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`;
+            setLoad((prev) => prev ? { ...prev, node: updatedNode, initialDoc: JSON.parse(docStr) } : prev);
+            setCharCount(updatedNode.word_count);
+            showToast("이전 버전으로 복원되었습니다");
           }}
         />
       )}
