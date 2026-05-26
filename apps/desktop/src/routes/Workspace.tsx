@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, ai as aiApi, settings as settingsApi, exportApi } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, ai as aiApi, settings as settingsApi, exportApi } from "../lib/rpc";
 import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIDone, AIError, AICancelled } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
@@ -57,6 +57,7 @@ export function Workspace() {
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
+  const [threadSheetSeedNodeId, setThreadSheetSeedNodeId] = useState<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [mode, setMode] = useState<"edit" | "ai">("edit");
   const [aiPrompt, setAiPrompt] = useState("");
@@ -463,6 +464,24 @@ export function Workspace() {
       },
     });
     cmds.push({
+      id: "mark-thread",
+      section: "노드",
+      label: "이 씬을 새 Thread로 표시",
+      run: async () => {
+        const name = await promptDialog("새 스토리라인 이름", load.node.title || load.node.label);
+        if (name === null) return;
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        try {
+          const t = await threadsApi.create({ project_id: load.project.id, name: trimmed, color: "#666" });
+          setThreadSheetSeedNodeId(load.node.id);
+          setThreadSheetId(t.id);
+        } catch (e) {
+          showToast("스토리라인 생성 실패: " + String(e));
+        }
+      },
+    });
+    cmds.push({
       id: "rename",
       section: "노드",
       label: "이름 바꾸기",
@@ -695,8 +714,10 @@ export function Workspace() {
         ) : threadSheetId ? (
           <ThreadSheet
             threadId={threadSheetId}
+            seedNodeId={threadSheetSeedNodeId ?? undefined}
             onClose={() => {
               setThreadSheetId(null);
+              setThreadSheetSeedNodeId(null);
               focusEditor();
             }}
             onSaved={() => {
