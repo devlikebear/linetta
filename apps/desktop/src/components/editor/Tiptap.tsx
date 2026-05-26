@@ -6,6 +6,12 @@ import "./Tiptap.css";
 export interface TiptapHandle {
   /** Move keyboard focus into the editor (end of current document). */
   focus: () => void;
+  /** Return the current Tiptap JSON doc. */
+  getDoc: () => object;
+  /** Return the current ProseMirror selection range, or null if no editor view. */
+  getSelection: () => { from: number; to: number } | null;
+  /** Set the ProseMirror selection (clamped to doc size) and focus the view. */
+  setSelection: (sel: { from: number; to: number }) => void;
 }
 
 interface Props {
@@ -73,8 +79,20 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
   useImperativeHandle(
     ref,
     () => ({
-      focus: () => {
-        editor?.commands.focus("end");
+      focus: () => editor?.commands.focus("end"),
+      getDoc: () => editor?.getJSON() ?? {},
+      getSelection: () => {
+        if (!editor) return null;
+        const { from, to } = editor.state.selection;
+        return { from, to };
+      },
+      setSelection: (sel) => {
+        if (!editor) return;
+        const size = editor.state.doc.content.size;
+        const from = Math.min(Math.max(0, sel.from), size);
+        const to = Math.min(Math.max(from, sel.to), size);
+        editor.commands.setTextSelection({ from, to });
+        editor.view.focus();
       },
     }),
     [editor],
