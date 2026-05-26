@@ -165,3 +165,84 @@ func TestBuildContext_activeThreadsForCurrentNode(t *testing.T) {
 		t.Errorf("beats = %+v", at.RecentBeats)
 	}
 }
+
+// setupPrevSummaryFixture seeds two leaves and returns the project, repos, and
+// the second leaf's id — shared by the three cache-path tests below.
+func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.Repo, *thread.Repo, *beat.Repo, string, string) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+	var long strings.Builder
+	for i := 0; i < 400; i++ {
+		long.WriteString("가")
+	}
+	docFirst := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + long.String() + `"}]}]}`
+	_ = nodes.UpdateContent(context.Background(), *p.LastOpenedNodeID, docFirst, 1100)
+	second, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "leaf", "씬 2", "", 1200)
+	return pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), *p.LastOpenedNodeID, second.ID
+}
+
+func TestBuildContext_prevSummary_usesFreshCache(t *testing.T) {
+	pr, nodes, mr, tr, br, prevID, secondID := setupPrevSummaryFixture(t)
+
+	prevN, _ := nodes.Get(context.Background(), prevID)
+	if err := nodes.SetSummary(context.Background(), prevID, "캐시된 요약", prevN.ContentVersion); err != nil {
+		t.Fatalf("SetSummary: %v", err)
+	}
+
+	builder := NewContextBuilder(pr, nodes, mr, tr, br)
+	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got.PrevSummary != "캐시된 요약" {
+		t.Errorf("prev_summary = %q, want cached %q", got.PrevSummary, "캐시된 요약")
+	}
+}
+
+func TestBuildContext_prevSummary_fallsBackWhenStale(t *testing.T) {
+	pr, nodes, mr, tr, br, prevID, secondID := setupPrevSummaryFixture(t)
+
+	// Seed a summary stamped for an older content_version (0 — the doc has been
+	// updated once, so content_version is 1).
+	_ = nodes.SetSummary(context.Background(), prevID, "오래된 요약", 0)
+
+	builder := NewContextBuilder(pr, nodes, mr, tr, br)
+	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got.PrevSummary == "오래된 요약" {
+		t.Errorf("stale cache used: %q", got.PrevSummary)
+	}
+	if got.PrevSummary == "" {
+		t.Errorf("fallback trim did not run")
+	}
+}
+
+func TestBuildContext_prevSummary_fallsBackWhenEmpty(t *testing.T) {
+	pr, nodes, mr, tr, br, _, secondID := setupPrevSummaryFixture(t)
+
+	builder := NewContextBuilder(pr, nodes, mr, tr, br)
+	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got.PrevSummary == "" {
+		t.Errorf("empty cache should have fallen back to trim, got empty")
+	}
+}

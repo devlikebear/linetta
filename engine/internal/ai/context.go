@@ -46,9 +46,14 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 	if err != nil {
 		return Context{}, err
 	}
+	// Prefer the LLM-cached summary when fresh; fall back to the 300-rune trim.
 	prevSummary := ""
 	if prev != nil {
-		prevSummary = trimRunes(docToPlainText(prev.ContentDoc), prevSummaryMaxRunes)
+		if prev.Summary != "" && prev.SummaryForVersion == prev.ContentVersion {
+			prevSummary = prev.Summary
+		} else {
+			prevSummary = trimRunes(docToPlainText(prev.ContentDoc), prevSummaryMaxRunes)
+		}
 	}
 
 	ents, err := b.mentions.ListEntitiesForNode(ctx, nodeID)
