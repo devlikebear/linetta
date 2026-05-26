@@ -1,0 +1,29 @@
+.thread-view { padding: 2rem 3rem; max-width: 1100px; margin: 0 auto; }
+.thread-view-top { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 2rem; }
+.thread-view-back { text-decoration: none; color: #6b6b6b; font-size: 0.9rem; }
+.thread-view h1 { font-family: serif; font-weight: 400; font-size: 1.6rem; margin: 0; }
+
+.thread-lanes { display: flex; flex-direction: column; gap: 1.6rem; }
+.thread-lane { display: flex; flex-direction: column; gap: 0.5rem; }
+.thread-lane-head { display: flex; align-items: center; gap: 0.5rem; }
+.thread-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
+.thread-lane-name { font-size: 0.95rem; }
+.thread-lane-summary { color: #9a9a9a; font-size: 0.85rem; margin-left: 0.5rem; }
+
+.thread-lane-track {
+  position: relative;
+  height: 38px;
+  background: linear-gradient(to bottom, transparent calc(50% - 1px), #ece9e0 calc(50% - 1px), #ece9e0 calc(50% + 1px), transparent calc(50% + 1px));
+}
+.beat-disc {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  padding: 0;
+}
+.beat-disc.orphan { border-style: dashed; cursor: not-allowed; opacity: 0.6; }
+.beat-disc:hover:not(.orphan) { transform: translate(-50%, -50%) scale(1.15); }

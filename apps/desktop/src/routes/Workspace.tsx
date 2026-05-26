@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, ai as aiApi, settings as settingsApi, exportApi } from "../lib/rpc";
 import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIDone, AIError, AICancelled } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
@@ -43,6 +43,7 @@ type DialogState =
 export function Workspace() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [load, setLoad] = useState<LoadState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -234,11 +235,14 @@ export function Workspace() {
     (async () => {
       try {
         const p = await projects.get(projectId);
-        if (!p.last_opened_node_id) throw new Error("project has no opened node");
-        const next = await fetchTree(projectId, p.last_opened_node_id);
+        const jumpTo = (location.state as { jumpToNodeId?: string } | null)?.jumpToNodeId;
+        const target = jumpTo ?? p.last_opened_node_id;
+        if (!target) throw new Error("project has no opened node");
+        const next = await fetchTree(projectId, target);
         if (!cancelled) {
           setLoad(next);
           setCharCount(next.node.word_count);
+          if (jumpTo) navigate(location.pathname, { replace: true, state: null });
         }
       } catch (e) {
         if (!cancelled) setError(String(e));
@@ -527,10 +531,8 @@ export function Workspace() {
     cmds.push({
       id: "view-threads",
       section: "보기",
-      label: "흐름(Thread)",
-      hint: "(곧 추가됨 — post-MVP)",
-      disabled: true,
-      run: () => {},
+      label: "흐름 (Thread View)",
+      run: () => navigate(`/workspace/${load.project.id}/threads`),
     });
     cmds.push({
       id: "version-restore",
