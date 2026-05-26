@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/devlikebear/linetta/engine/internal/paths"
@@ -39,9 +41,10 @@ type Patch struct {
 
 // Store reads and writes the settings file with internal locking.
 type Store struct {
-	mu  sync.RWMutex
-	cfg Config
-	dir string
+	mu      sync.RWMutex // protects cfg reads
+	writeMu sync.Mutex   // serializes Set: validation → cfg update → disk write
+	cfg     Config
+	dir     string
 }
 
 // New constructs a Store, ensuring $LINETTA_HOME exists and loading the file.
@@ -78,6 +81,7 @@ func (s *Store) load() error {
 	}
 	var disk Config
 	if err := json.Unmarshal(data, &disk); err != nil {
+		log.Printf("settings: ignoring corrupt %s; falling back to defaults: %v", path, err)
 		return nil // ignore corrupt file; defaults stand
 	}
 	s.mu.Lock()
@@ -108,11 +112,15 @@ func (s *Store) Provider() string {
 
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
 func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
-	s.mu.Lock()
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+
+	s.mu.RLock()
 	next := s.cfg
+	s.mu.RUnlock()
+
 	if p.Provider != nil {
-		if !contains(validProviders(), *p.Provider) {
-			s.mu.Unlock()
+		if !slices.Contains(validProviders(), *p.Provider) {
 			return Config{}, fmt.Errorf("settings: unknown provider %q", *p.Provider)
 		}
 		next.Provider = *p.Provider
@@ -120,8 +128,6 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.TypewriterDefault != nil {
 		next.TypewriterDefault = *p.TypewriterDefault
 	}
-	s.cfg = next
-	s.mu.Unlock()
 
 	// Persist (no backup_dir on disk).
 	persistable := Config{Provider: next.Provider, TypewriterDefault: next.TypewriterDefault}
@@ -137,14 +143,10 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if err := os.Rename(tmp, target); err != nil {
 		return Config{}, err
 	}
-	return s.Get(ctx)
-}
 
-func contains(xs []string, v string) bool {
-	for _, x := range xs {
-		if x == v {
-			return true
-		}
-	}
-	return false
+	s.mu.Lock()
+	s.cfg = next
+	s.mu.Unlock()
+
+	return s.Get(ctx)
 }

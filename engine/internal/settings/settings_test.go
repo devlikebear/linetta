@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -88,5 +89,30 @@ func TestLoad_corruptFileReturnsDefaults(t *testing.T) {
 	}
 }
 
-func boolPtr(v bool) *bool     { return &v }
-func strPtr(v string) *string  { return &v }
+func TestSet_concurrentSerialized(t *testing.T) {
+	s := newStoreOnTemp(t)
+	const N = 20
+	var wg sync.WaitGroup
+	wg.Add(N)
+	for i := 0; i < N; i++ {
+		go func(i int) {
+			defer wg.Done()
+			tw := i%2 == 0
+			_, _ = s.Set(context.Background(), Patch{TypewriterDefault: &tw})
+		}(i)
+	}
+	wg.Wait()
+	// Reload from disk and verify it equals the in-memory state.
+	s2, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	onDisk, _ := s2.Get(context.Background())
+	inMem, _ := s.Get(context.Background())
+	if onDisk.TypewriterDefault != inMem.TypewriterDefault {
+		t.Fatalf("disk/memory mismatch after concurrent Set: disk=%v mem=%v", onDisk.TypewriterDefault, inMem.TypewriterDefault)
+	}
+}
+
+func boolPtr(v bool) *bool    { return &v }
+func strPtr(v string) *string { return &v }
