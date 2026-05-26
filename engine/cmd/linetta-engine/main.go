@@ -76,7 +76,7 @@ func main() {
 	}
 
 	aiRuns := store.NewAIRunsRepo(st)
-	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions)
+	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats)
 	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, settingsStore)
 
 	// Backup + retention scheduler. Runs once at boot, then daily at midnight+1m.

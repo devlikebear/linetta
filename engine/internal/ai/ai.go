@@ -16,10 +16,11 @@ type Context struct {
 	SceneLabel  string        `json:"scene_label"`
 	SceneText   string        `json:"scene_text"`
 	PrevSummary string        `json:"prev_summary"`
-	Entities    []EntityBrief `json:"entities"`
-	StyleNotes  string        `json:"style_notes"`
-	UserPrompt  string        `json:"user_prompt"`
-	Options     Options       `json:"options"`
+	Entities      []EntityBrief  `json:"entities"`
+	ActiveThreads []ActiveThread `json:"active_threads"`
+	StyleNotes    string         `json:"style_notes"`
+	UserPrompt    string         `json:"user_prompt"`
+	Options       Options        `json:"options"`
 }
 
 // EntityBrief is the entity slice we send to the LLM. Just enough to ground
@@ -30,6 +31,20 @@ type EntityBrief struct {
 	Role       string            `json:"role"`
 	Summary    string            `json:"summary"`
 	Attributes map[string]string `json:"attributes"`
+}
+
+// ActiveThread is an open storyline thread that touches the current node.
+type ActiveThread struct {
+	Name        string      `json:"name"`
+	Color       string      `json:"color"`
+	Summary     string      `json:"summary"`
+	RecentBeats []BeatBrief `json:"recent_beats"`
+}
+
+// BeatBrief is a minimal beat representation sent to the LLM.
+type BeatBrief struct {
+	Label   string `json:"label"`
+	Ordinal int    `json:"ordinal"`
 }
 
 // DeltaPayload is the body of an "ai.delta" notification.

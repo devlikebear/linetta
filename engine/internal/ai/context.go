@@ -4,23 +4,29 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
 const prevSummaryMaxRunes = 300
+const activeThreadsMaxChars = 1500
+const recentBeatsPerThread = 5
 
 // ContextBuilder gathers the Context payload from the repos.
 type ContextBuilder struct {
 	projects *project.Repo
 	nodes    *node.Repo
 	mentions *mention.Repo
+	threads  *thread.Repo
+	beats    *beat.Repo
 }
 
 // NewContextBuilder returns a builder that reads from the supplied repos.
-func NewContextBuilder(projects *project.Repo, nodes *node.Repo, mentions *mention.Repo) *ContextBuilder {
-	return &ContextBuilder{projects: projects, nodes: nodes, mentions: mentions}
+func NewContextBuilder(projects *project.Repo, nodes *node.Repo, mentions *mention.Repo, threads *thread.Repo, beats *beat.Repo) *ContextBuilder {
+	return &ContextBuilder{projects: projects, nodes: nodes, mentions: mentions, threads: threads, beats: beats}
 }
 
 // Build assembles the context for the given leaf node + user prompt + options.
@@ -56,17 +62,83 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 		})
 	}
 
+	active, err := b.loadActiveThreads(ctx, nodeID)
+	if err != nil {
+		return Context{}, err
+	}
+
 	return Context{
-		ProjectID:   proj.ID,
-		NodeID:      n.ID,
-		SceneLabel:  n.Label,
-		SceneText:   sceneText,
-		PrevSummary: prevSummary,
-		Entities:    briefs,
-		StyleNotes:  proj.StyleNotes,
-		UserPrompt:  prompt,
-		Options:     opts,
+		ProjectID:     proj.ID,
+		NodeID:        n.ID,
+		SceneLabel:    n.Label,
+		SceneText:     sceneText,
+		PrevSummary:   prevSummary,
+		Entities:      briefs,
+		ActiveThreads: active,
+		StyleNotes:    proj.StyleNotes,
+		UserPrompt:    prompt,
+		Options:       opts,
 	}, nil
+}
+
+func (b *ContextBuilder) loadActiveThreads(ctx context.Context, nodeID string) ([]ActiveThread, error) {
+	bs, err := b.beats.ListByNode(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	// Collect unique thread ids preserving first-seen order.
+	seen := map[string]bool{}
+	var threadIDs []string
+	for _, bt := range bs {
+		if !seen[bt.ThreadID] {
+			seen[bt.ThreadID] = true
+			threadIDs = append(threadIDs, bt.ThreadID)
+		}
+	}
+	out := make([]ActiveThread, 0, len(threadIDs))
+	for _, tid := range threadIDs {
+		th, err := b.threads.Get(ctx, tid)
+		if err != nil {
+			continue // benign: stale row
+		}
+		if th.ClosedAt != nil {
+			continue
+		}
+		all, err := b.beats.ListByThread(ctx, tid)
+		if err != nil {
+			return nil, err
+		}
+		// Take last N by ordinal.
+		start := 0
+		if len(all) > recentBeatsPerThread {
+			start = len(all) - recentBeatsPerThread
+		}
+		recents := make([]BeatBrief, 0, len(all)-start)
+		for _, x := range all[start:] {
+			recents = append(recents, BeatBrief{Label: x.Label, Ordinal: x.Ordinal})
+		}
+		out = append(out, ActiveThread{
+			Name: th.Name, Color: th.Color, Summary: th.Summary, RecentBeats: recents,
+		})
+	}
+	return capActiveThreads(out, activeThreadsMaxChars), nil
+}
+
+// capActiveThreads drops trailing entries (whole) until the rough rendered
+// size is under maxChars. Cheap approximation: name + summary + each beat label.
+func capActiveThreads(in []ActiveThread, maxChars int) []ActiveThread {
+	total := 0
+	for i, t := range in {
+		size := len(t.Name) + len(t.Summary) + 8
+		for _, b := range t.RecentBeats {
+			size += len(b.Label) + 8
+		}
+		if total+size > maxChars && i > 0 {
+			return in[:i]
+		}
+		total += size
+	}
+	return in
 }
 
 // findPreviousLeaf returns the previous leaf in DFS order (within the project),

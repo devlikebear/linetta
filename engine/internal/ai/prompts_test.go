@@ -50,3 +50,41 @@ func TestBuildMessages_shapesSystemAndUser(t *testing.T) {
 		t.Errorf("entities missing from user: %q", usr)
 	}
 }
+
+func TestBuildUser_includesActiveThreads(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		ActiveThreads: []ActiveThread{
+			{
+				Name:    "잃어버린 시간",
+				Color:   "#c08a3e",
+				Summary: "여름 한 철의 기억",
+				RecentBeats: []BeatBrief{
+					{Label: "사진을 찍는 손", Ordinal: 3},
+					{Label: "사라진 자전거", Ordinal: 4},
+				},
+			},
+		},
+		UserPrompt: "확장",
+	}
+	msgs := BuildMessages(c)
+	usr := msgs[1].Content
+	if !strings.Contains(usr, "## 활성 스토리라인") {
+		t.Errorf("missing header: %q", usr)
+	}
+	if !strings.Contains(usr, "잃어버린 시간") || !strings.Contains(usr, "여름 한 철의 기억") {
+		t.Errorf("thread metadata missing: %q", usr)
+	}
+	if !strings.Contains(usr, "#3 사진을 찍는 손") || !strings.Contains(usr, "#4 사라진 자전거") {
+		t.Errorf("beats missing: %q", usr)
+	}
+}
+
+func TestBuildUser_omitsActiveThreadsHeaderWhenEmpty(t *testing.T) {
+	c := Context{SceneLabel: "씬 1", SceneText: "본문", UserPrompt: "재작성"}
+	usr := BuildMessages(c)[1].Content
+	if strings.Contains(usr, "활성 스토리라인") {
+		t.Errorf("header should not appear when empty: %q", usr)
+	}
+}

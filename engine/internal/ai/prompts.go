@@ -102,6 +102,21 @@ func buildUser(c Context) string {
 		}
 		b.WriteString("\n")
 	}
+	if len(c.ActiveThreads) > 0 {
+		b.WriteString("## 활성 스토리라인\n")
+		for _, t := range c.ActiveThreads {
+			line := fmt.Sprintf("- [%s] %s", t.Color, t.Name)
+			if t.Summary != "" {
+				line += " — " + t.Summary
+			}
+			b.WriteString(line)
+			b.WriteString("\n")
+			for _, bt := range t.RecentBeats {
+				b.WriteString(fmt.Sprintf("  · #%d %s\n", bt.Ordinal, bt.Label))
+			}
+		}
+		b.WriteString("\n")
+	}
 	if !c.Options.TonePreset && strings.TrimSpace(c.StyleNotes) != "" {
 		b.WriteString("## 작가 메모\n")
 		b.WriteString(c.StyleNotes)
