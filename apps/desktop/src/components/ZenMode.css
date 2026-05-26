@@ -1,0 +1,22 @@
+.zen-root {
+  position: fixed; inset: 0;
+  background: #000;
+  color: #f4f1ea;
+  z-index: 100;
+  display: flex; flex-direction: column;
+  font-family: "New York", "Times New Roman", serif;
+}
+.zen-progress {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 60%; height: 2px; background: rgba(255,255,255,0.08);
+  transition: opacity 0.4s ease;
+}
+.zen-progress-fill { height: 100%; background: rgba(255,255,255,0.45); transition: width 0.4s ease; }
+.zen-canvas { flex: 1; display: flex; justify-content: center; padding-top: 8vh; overflow-y: auto; }
+.zen-canvas .tiptap-wrap { background: transparent; max-width: 65ch; width: 100%; }
+.zen-canvas .ProseMirror { color: #f4f1ea; background: transparent; font-size: 1.15rem; line-height: 1.85; outline: none; }
+.zen-canvas .ProseMirror::selection { background: rgba(255,255,255,0.18); }
+.zen-meta {
+  position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+  font-size: 0.8rem; color: rgba(244,241,234,0.4); letter-spacing: 0.04em;
+}

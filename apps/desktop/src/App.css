@@ -573,3 +573,5 @@ body {
 .radio-row, .check-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
 .backup-path { font-size: 0.85rem; word-break: break-all; }
 .settings-saved { font-size: 0.85rem; color: #5d8; }
+
+.ws-zen-btn { font-weight: 500; }

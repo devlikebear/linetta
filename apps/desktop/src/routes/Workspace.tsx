@@ -8,6 +8,7 @@ import { EntitySheet } from "../components/EntitySheet";
 import { VersionSheet } from "../components/VersionSheet";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
+import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { CommandPalette, type Command } from "../components/CommandPalette";
@@ -49,9 +50,7 @@ export function Workspace() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [versionSheetNodeId, setVersionSheetNodeId] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [zenOpen, setZenOpen] = useState(false);
-  void zenOpen; void setZenOpen; // reserved for Task 14 (ZenMode)
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
@@ -62,6 +61,31 @@ export function Workspace() {
   const [aiStatus, setAiStatus] = useState<AIRunStatus>({ kind: "idle" });
   const aiRunIdRef = useRef<string | null>(null);
   const editorRef = useRef<TiptapHandle>(null);
+  const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
+  const zenEditorRef = useRef<TiptapHandle | null>(null);
+
+  const enterZen = useCallback(() => {
+    savedSelectionRef.current = editorRef.current?.getSelection() ?? null;
+    setZenOpen(true);
+  }, []);
+
+  const exitZen = useCallback(() => {
+    savedSelectionRef.current =
+      zenEditorRef.current?.getSelection() ?? savedSelectionRef.current;
+    setZenOpen(false);
+  }, []);
+
+  // Restore the saved selection in the Edit-mode editor once ZEN closes.
+  useEffect(() => {
+    if (!zenOpen && savedSelectionRef.current) {
+      const id = window.requestAnimationFrame(() => {
+        const sel = savedSelectionRef.current;
+        if (sel) editorRef.current?.setSelection(sel);
+      });
+      return () => window.cancelAnimationFrame(id);
+    }
+    return undefined;
+  }, [zenOpen]);
 
   const focusEditor = useCallback(() => {
     window.setTimeout(() => editorRef.current?.focus(), 0);
@@ -540,8 +564,15 @@ export function Workspace() {
       label: "설정 열기",
       run: () => navigate("/settings"),
     });
+    cmds.push({
+      id: "enter-zen",
+      section: "보기",
+      label: "ZEN 모드 열기",
+      hint: "ESC로 종료",
+      run: enterZen,
+    });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen]);
 
   const breadcrumb = useMemo(() => {
     if (!load) return "";
@@ -598,7 +629,9 @@ export function Workspace() {
             AI
           </button>
         </span>
-        <span className="ws-zen">ZEN</span>
+        <button type="button" className="mode-toggle ws-zen-btn" onClick={enterZen}>
+          ZEN
+        </button>
       </header>
 
       <div className={`ws-body${entitySheetId ? " with-sheet" : ""}`}>
@@ -707,6 +740,20 @@ export function Workspace() {
             setCharCount(updatedNode.word_count);
             showToast("이전 버전으로 복원되었습니다");
           }}
+        />
+      )}
+
+      {zenOpen && (
+        <ZenMode
+          initialDoc={load.initialDoc}
+          initialSelection={savedSelectionRef.current}
+          charCount={charCount}
+          sceneLabel={load.node.label}
+          onChange={(doc) => { debouncedSave(doc); }}
+          onCharCount={setCharCount}
+          onManualSave={handleManualSave}
+          onMountEditor={(h) => { zenEditorRef.current = h; }}
+          onExit={exitZen}
         />
       )}
 
