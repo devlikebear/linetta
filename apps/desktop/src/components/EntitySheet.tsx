@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import type { Entity, EntityKind, UpdateEntityInput } from "../lib/types";
-import { entities } from "../lib/rpc";
+import { useCallback, useEffect, useState } from "react";
+import type { Entity, EntityKind, Relationship, UpdateEntityInput } from "../lib/types";
+import { entities, relationships } from "../lib/rpc";
+import { RelationshipPicker } from "./RelationshipPicker";
 import "./EntitySheet.css";
 
 interface Props {
@@ -22,11 +23,35 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
   const [attrRows, setAttrRows] = useState<{ key: string; value: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rels, setRels] = useState<Relationship[]>([]);
+  const [relTargets, setRelTargets] = useState<Record<string, Entity>>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const refreshRels = useCallback(async (eid: string) => {
+    const list = await relationships.listByEntity(eid);
+    setRels(list);
+    const ids = Array.from(new Set(list.map((r) => r.to_id)));
+    setRelTargets((cur) => {
+      // skip ids we already have
+      const need = ids.filter((id) => !cur[id]);
+      if (need.length === 0) return cur;
+      // fire-and-forget fetch the missing ones; functional updater wraps the merge
+      Promise.all(need.map((id) => entities.get(id))).then((fetched) => {
+        setRelTargets((cur2) => {
+          const next = { ...cur2 };
+          for (const e of fetched) next[e.id] = e;
+          return next;
+        });
+      });
+      return cur;
+    });
+  }, []);
 
   useEffect(() => {
     if (!entityId) return;
     setEntity(null);
     setError(null);
+    setRels([]);
     entities.get(entityId).then((e) => {
       setEntity(e);
       setDraft({
@@ -39,7 +64,8 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
       });
       setAttrRows(Object.entries(e.attributes).map(([key, value]) => ({ key, value })));
     }).catch((e) => setError(String(e)));
-  }, [entityId]);
+    refreshRels(entityId).catch((e) => setError(String(e)));
+  }, [entityId, refreshRels]);
 
   if (!entityId) return null;
 
@@ -155,7 +181,49 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
 
           <section className="entity-section relations">
             <h5>관계</h5>
-            <p className="entity-empty">(post-MVP)</p>
+            {rels.length === 0 && (
+              <p className="entity-empty">아직 관계가 없습니다.</p>
+            )}
+            {rels.length > 0 && (
+              <ul className="relation-list">
+                {rels.map((r) => {
+                  const target = relTargets[r.to_id];
+                  return (
+                    <li className="relation-row" key={r.id}>
+                      <span className="relation-target">
+                        {target ? target.name : r.to_id.slice(0, 6)}
+                      </span>
+                      <span className="relation-dash"> — </span>
+                      <span className="relation-label">{r.label}</span>
+                      <button
+                        type="button"
+                        className="relation-del"
+                        aria-label="삭제"
+                        onClick={async () => {
+                          await relationships.delete(r.id);
+                          if (entity) await refreshRels(entity.id);
+                        }}
+                      >×</button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <button
+              type="button"
+              className="relation-add"
+              onClick={() => setPickerOpen(true)}
+            >+ 관계 추가</button>
+            {pickerOpen && entity && (
+              <RelationshipPicker
+                projectId={entity.project_id}
+                fromEntityId={entity.id}
+                onClose={() => setPickerOpen(false)}
+                onCreated={() => {
+                  if (entity) refreshRels(entity.id);
+                }}
+              />
+            )}
           </section>
 
           <div className="entity-actions">

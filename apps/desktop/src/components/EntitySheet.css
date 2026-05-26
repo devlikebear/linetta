@@ -162,3 +162,46 @@
   cursor: pointer;
 }
 .entity-actions button.primary { background: #1a1a1a; color: #faf9f6; }
+
+.relation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.relation-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  background: white;
+  border: 1px solid #ece9e0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.relation-target { font-weight: 500; }
+.relation-dash { color: #9a9a9a; }
+.relation-label { color: #333; flex: 1; }
+.relation-del {
+  background: none;
+  border: 1px solid #d8d6cf;
+  border-radius: 4px;
+  color: #9a9a9a;
+  cursor: pointer;
+  padding: 0 0.4rem;
+}
+.relation-del:hover { color: #1a1a1a; }
+.relation-add {
+  font: inherit;
+  font-size: 0.85rem;
+  align-self: flex-start;
+  border: 1px dashed #c8c5bd;
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  background: transparent;
+  cursor: pointer;
+  color: #555;
+  margin-top: 0.4rem;
+}
