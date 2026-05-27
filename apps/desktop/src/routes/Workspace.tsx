@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, ai as aiApi, settings as settingsApi, exportApi } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, ai as aiApi, settings as settingsApi, exportApi, notes as notesApi } from "../lib/rpc";
+import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
+import { NotePopover } from "../components/NotePopover";
 import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIDone, AIError, AICancelled } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
@@ -66,6 +68,42 @@ export function Workspace() {
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);
+  const [notePopover, setNotePopover] = useState<{
+    noteId: string;
+    targetEl: HTMLElement;
+    mode: "read" | "edit";
+  } | null>(null);
+
+  useEffect(() => {
+    const onHover = (e: Event) => {
+      const ce = e as CustomEvent<{ noteId: string; target: HTMLElement }>;
+      setNotePopover((cur) => {
+        if (cur && cur.mode === "edit" && cur.noteId === ce.detail.noteId) return cur;
+        return { noteId: ce.detail.noteId, targetEl: ce.detail.target, mode: "read" };
+      });
+    };
+    const onHoverEnd = (e: Event) => {
+      const ce = e as CustomEvent<{ noteId: string }>;
+      setNotePopover((cur) => {
+        if (!cur) return null;
+        if (cur.mode === "edit") return cur;
+        if (cur.noteId !== ce.detail.noteId) return cur;
+        return null;
+      });
+    };
+    const onClick = (e: Event) => {
+      const ce = e as CustomEvent<{ noteId: string; target: HTMLElement }>;
+      setNotePopover({ noteId: ce.detail.noteId, targetEl: ce.detail.target, mode: "edit" });
+    };
+    window.addEventListener("linetta:note-hover", onHover);
+    window.addEventListener("linetta:note-hover-end", onHoverEnd);
+    window.addEventListener("linetta:note-click", onClick);
+    return () => {
+      window.removeEventListener("linetta:note-hover", onHover);
+      window.removeEventListener("linetta:note-hover-end", onHoverEnd);
+      window.removeEventListener("linetta:note-click", onClick);
+    };
+  }, []);
 
   const enterZen = useCallback(() => {
     savedSelectionRef.current = editorRef.current?.getSelection() ?? null;
@@ -485,6 +523,30 @@ export function Workspace() {
       },
     });
     cmds.push({
+      id: "add-note",
+      section: "노드",
+      label: "여백 주석 추가",
+      run: async () => {
+        const body = await promptDialog("여백 주석 본문", "");
+        if (body === null) return;
+        const trimmed = body.trim();
+        if (!trimmed) return;
+        const sel = editorRef.current?.getSelection();
+        const anchor = sel?.from ?? 0;
+        try {
+          const created = await notesApi.create({
+            node_id: load.node.id,
+            anchor,
+            body: trimmed,
+          });
+          if (sel) editorRef.current?.setSelection(sel);
+          editorRef.current?.addNoteMarker(created.id);
+        } catch (e) {
+          showToast("주석 추가 실패: " + String(e));
+        }
+      },
+    });
+    cmds.push({
       id: "rename",
       section: "노드",
       label: "이름 바꾸기",
@@ -681,7 +743,10 @@ export function Workspace() {
               onCharCount={setCharCount}
               typewriter={typewriter}
               onManualSave={handleManualSave}
-              extensions={mentionExtension ? [mentionExtension] : []}
+              extensions={[
+                ...(mentionExtension ? [mentionExtension] : []),
+                NoteMarkerExtension,
+              ]}
               onMentionDoubleClick={(id) => setEntitySheetId(id)}
             />
           </div>
@@ -806,6 +871,16 @@ export function Workspace() {
       )}
 
       {toast && <div className="ws-toast">{toast}</div>}
+
+      {notePopover && (
+        <NotePopover
+          noteId={notePopover.noteId}
+          targetEl={notePopover.targetEl}
+          mode={notePopover.mode}
+          onClose={() => setNotePopover(null)}
+          onDeleted={(id) => { editorRef.current?.removeNoteMarker(id); }}
+        />
+      )}
     </main>
   );
 }

@@ -12,6 +12,10 @@ export interface TiptapHandle {
   getSelection: () => { from: number; to: number } | null;
   /** Set the ProseMirror selection (clamped to doc size) and focus the view. */
   setSelection: (sel: { from: number; to: number }) => void;
+  /** Insert a note-marker atom at the current selection. */
+  addNoteMarker: (noteId: string) => void;
+  /** Remove the first note-marker atom with the given noteId. */
+  removeNoteMarker: (noteId: string) => void;
 }
 
 interface Props {
@@ -93,6 +97,12 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         const to = Math.min(Math.max(from, sel.to), size);
         editor.commands.setTextSelection({ from, to });
         editor.view.focus();
+      },
+      addNoteMarker: (noteId: string) => {
+        (editor?.commands as any)?.addNoteMarker?.(noteId);
+      },
+      removeNoteMarker: (noteId: string) => {
+        (editor?.commands as any)?.removeNoteMarker?.(noteId);
       },
     }),
     [editor],
