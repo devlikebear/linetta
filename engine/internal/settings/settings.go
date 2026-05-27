@@ -30,6 +30,7 @@ func validProviders() []string { return []string{ProviderClaudeCodeCLI, Provider
 type Config struct {
 	Provider          string `json:"provider"`
 	TypewriterDefault bool   `json:"typewriter_default"`
+	FocusDefault      bool   `json:"focus_default"`
 	BackupDir         string `json:"backup_dir,omitempty"`
 }
 
@@ -37,6 +38,7 @@ type Config struct {
 type Patch struct {
 	Provider          *string `json:"provider,omitempty"`
 	TypewriterDefault *bool   `json:"typewriter_default,omitempty"`
+	FocusDefault      *bool   `json:"focus_default,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -89,6 +91,7 @@ func (s *Store) load() error {
 		s.cfg.Provider = disk.Provider
 	}
 	s.cfg.TypewriterDefault = disk.TypewriterDefault
+	s.cfg.FocusDefault = disk.FocusDefault
 	s.mu.Unlock()
 	return nil
 }
@@ -128,9 +131,16 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.TypewriterDefault != nil {
 		next.TypewriterDefault = *p.TypewriterDefault
 	}
+	if p.FocusDefault != nil {
+		next.FocusDefault = *p.FocusDefault
+	}
 
 	// Persist (no backup_dir on disk).
-	persistable := Config{Provider: next.Provider, TypewriterDefault: next.TypewriterDefault}
+	persistable := Config{
+		Provider:          next.Provider,
+		TypewriterDefault: next.TypewriterDefault,
+		FocusDefault:      next.FocusDefault,
+	}
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {
 		return Config{}, err
