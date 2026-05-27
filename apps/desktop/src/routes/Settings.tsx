@@ -10,10 +10,21 @@ export function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
 
+  // Local draft for text-input fields so the cursor doesn't bounce while
+  // typing. We commit to the engine on blur (or when the folder picker
+  // returns), not on every keystroke.
+  const [gitDirDraft, setGitDirDraft] = useState("");
+  const [gitTmplDraft, setGitTmplDraft] = useState("");
+
   useEffect(() => {
     let cancelled = false;
     settingsApi.get()
-      .then((s) => { if (!cancelled) setCurrent(s); })
+      .then((s) => {
+        if (cancelled) return;
+        setCurrent(s);
+        setGitDirDraft(s.git_sync_dir);
+        setGitTmplDraft(s.git_sync_commit_template);
+      })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
   }, []);
@@ -102,10 +113,14 @@ export function Settings() {
               <div style={{ display: "flex", gap: "0.4rem" }}>
                 <input
                   type="text"
-                  value={current.git_sync_dir}
-                  onChange={(e) => apply({ git_sync_dir: e.target.value })}
+                  value={gitDirDraft}
+                  onChange={(e) => setGitDirDraft(e.target.value)}
+                  onBlur={() => {
+                    if (gitDirDraft !== current.git_sync_dir) {
+                      apply({ git_sync_dir: gitDirDraft });
+                    }
+                  }}
                   placeholder="예: /Users/me/notes/linetta"
-                  disabled={saving}
                   style={{ flex: 1 }}
                 />
                 <button
@@ -113,6 +128,7 @@ export function Settings() {
                   onClick={async () => {
                     const picked = await openDialog({ directory: true, multiple: false });
                     if (typeof picked === "string") {
+                      setGitDirDraft(picked);
                       await apply({ git_sync_dir: picked });
                     }
                   }}
@@ -126,10 +142,14 @@ export function Settings() {
               <span>커밋 메시지</span>
               <input
                 type="text"
-                value={current.git_sync_commit_template}
-                onChange={(e) => apply({ git_sync_commit_template: e.target.value })}
+                value={gitTmplDraft}
+                onChange={(e) => setGitTmplDraft(e.target.value)}
+                onBlur={() => {
+                  if (gitTmplDraft !== current.git_sync_commit_template) {
+                    apply({ git_sync_commit_template: gitTmplDraft });
+                  }
+                }}
                 placeholder="Linetta sync {date}"
-                disabled={saving}
               />
             </label>
             <p className="hint">
