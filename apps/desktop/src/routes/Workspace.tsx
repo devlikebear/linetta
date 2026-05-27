@@ -448,6 +448,12 @@ export function Workspace() {
 
   // --- Commands ---
 
+  // Cmd+K palette uses a fixed 8-section vocabulary. Every `cmds.push({ section })`
+  // call below MUST use one of these exact strings — adding a 9th label fractures
+  // the palette's mental model and reverts the Phase-15 cleanup. The labels are:
+  //   이동 · 보기 · 노드 · 엔티티 · 프로젝트 · AI · 내보내기 · 도움말
+  // Hints should be either a keyboard shortcut (e.g. "Cmd+S", "ESC") or a brief
+  // status note (e.g. "복원", "ESC로 종료"). Omit `hint` rather than putting noise.
   const commands: Command[] = useMemo(() => {
     if (!load) return [];
     const { prev, next } = leafNeighbors(load.tree, load.node.id);
@@ -572,7 +578,6 @@ export function Workspace() {
       id: "delete",
       section: "노드",
       label: "삭제",
-      hint: load.node.label,
       run: async () => {
         const ok = await confirmDialog(`"${load.node.label}"을(를) 삭제하시겠습니까?`);
         if (!ok) return;
