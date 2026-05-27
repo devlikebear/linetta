@@ -130,12 +130,23 @@ export interface AICancelled {
   run_id: string;
 }
 
+export interface GitSyncResult {
+  skipped: boolean;
+  files_written: number;
+  committed: boolean;
+  pushed: boolean;
+  message: string;
+  error: string;
+}
+
 export type ProviderID = "claude-code-cli" | "openai-codex";
 
 export interface Settings {
   provider: ProviderID;
   typewriter_default: boolean;
   focus_default: boolean;
+  git_sync_dir: string;
+  git_sync_commit_template: string;
   backup_dir: string;
 }
 
@@ -143,6 +154,8 @@ export interface SettingsPatch {
   provider?: ProviderID;
   typewriter_default?: boolean;
   focus_default?: boolean;
+  git_sync_dir?: string;
+  git_sync_commit_template?: string;
 }
 
 export interface SnapshotEntry {

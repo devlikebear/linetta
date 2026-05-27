@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { settings as settingsApi } from "../lib/rpc";
 import type { ProviderID, Settings as SettingsRow } from "../lib/types";
 
@@ -88,6 +89,52 @@ export function Settings() {
               />
               <span>새 씬을 열 때 Focus 모드(현재 단락 외 디밍) 켜기</span>
             </label>
+          </section>
+
+          <section className="settings-section">
+            <h3>GitHub 동기화</h3>
+            <p className="hint">
+              하루 한 번 모든 작품을 마크다운으로 내보내 지정한 git 폴더에 커밋·푸시합니다.
+              경로를 비워두면 비활성화됩니다. 인증은 시스템 git 설정(SSH 키, 자격 증명 도우미)을 그대로 사용합니다.
+            </p>
+            <label className="field">
+              <span>git 폴더</span>
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                <input
+                  type="text"
+                  value={current.git_sync_dir}
+                  onChange={(e) => apply({ git_sync_dir: e.target.value })}
+                  placeholder="예: /Users/me/notes/linetta"
+                  disabled={saving}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const picked = await openDialog({ directory: true, multiple: false });
+                    if (typeof picked === "string") {
+                      await apply({ git_sync_dir: picked });
+                    }
+                  }}
+                  disabled={saving}
+                >
+                  폴더 선택…
+                </button>
+              </div>
+            </label>
+            <label className="field">
+              <span>커밋 메시지</span>
+              <input
+                type="text"
+                value={current.git_sync_commit_template}
+                onChange={(e) => apply({ git_sync_commit_template: e.target.value })}
+                placeholder="Linetta sync {date}"
+                disabled={saving}
+              />
+            </label>
+            <p className="hint">
+              <code>{"{date}"}</code> 자리표시자만 지원됩니다 (YYYY-MM-DD HH:MM 으로 치환).
+            </p>
           </section>
 
           <section className="settings-section">

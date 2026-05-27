@@ -4,6 +4,7 @@ import type {
   Beat,
   Entity,
   ExportPayload,
+  GitSyncResult,
   ListProjectsParams,
   NewBeatInput,
   NewEntityInput,
@@ -83,6 +84,10 @@ export const exportApi = {
     rpcCall<ExportPayload>("export.project", { project_id: projectId }),
   node: (nodeId: string) =>
     rpcCall<ExportPayload>("export.node", { node_id: nodeId }),
+};
+
+export const gitSync = {
+  run: () => rpcCall<GitSyncResult>("git_sync.run"),
 };
 
 export const entities = {
