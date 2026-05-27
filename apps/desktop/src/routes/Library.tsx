@@ -6,6 +6,7 @@ import { ProjectCard } from "../components/ProjectCard";
 import { NewProjectModal } from "../components/NewProjectModal";
 import { pickAndReadMarkdown } from "../lib/importLoad";
 import { MoreHorizontal, Settings, Plus, Upload } from "../lib/icons";
+import { useToast } from "../components/ToastProvider";
 
 const RECENT_LIMIT = 5;
 
@@ -17,6 +18,7 @@ export function Library() {
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   const refresh = async () => {
     setLoading(true);
@@ -51,7 +53,7 @@ export function Library() {
       const res = await importsApi.markdown(picked.fileName, picked.content);
       navigate(`/workspace/${res.project_id}`);
     } catch (err) {
-      alert(`가져오기 실패: ${err}`);
+      showToast(`가져오기 실패: ${err}`);
     } finally {
       setImporting(false);
     }
