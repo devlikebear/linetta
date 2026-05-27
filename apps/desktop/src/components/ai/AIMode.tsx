@@ -1,4 +1,6 @@
 import { type FormEvent } from "react";
+import type { AIOptions } from "../../lib/types";
+import { TONE_PRESETS } from "../../lib/tonePresets";
 import "./AIMode.css";
 
 export type AIRunStatus =
@@ -12,8 +14,8 @@ interface Props {
   /** Initial prompt (populated by preset chips). */
   prompt: string;
   onPromptChange: (v: string) => void;
-  options: { tone_preset: boolean; short_form: boolean };
-  onOptionsChange: (o: { tone_preset: boolean; short_form: boolean }) => void;
+  options: AIOptions;
+  onOptionsChange: (o: AIOptions) => void;
   onPresetClick: (preset: "rewrite" | "expand" | "compact") => void;
   onRun: () => void;
   onCancel: () => void;
@@ -56,14 +58,22 @@ export function AIMode(props: Props) {
           placeholder="작가의 지시를 입력하세요…"
           rows={4}
         />
+        <div className="aimode-tone-row">
+          <span className="aimode-tone-label">톤</span>
+          <div className="aimode-tone-chips">
+            {TONE_PRESETS.map((t) => (
+              <button
+                type="button"
+                key={t.id}
+                className={`aimode-tone-chip${props.options.tone === t.id ? " active" : ""}`}
+                onClick={() => props.onOptionsChange({ ...props.options, tone: t.id })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="aimode-toolbar">
-          <label className="aimode-check">
-            <input
-              type="checkbox"
-              checked={props.options.tone_preset}
-              onChange={(e) => props.onOptionsChange({ ...props.options, tone_preset: e.target.checked })}
-            /> 톤 프리셋 "내 톤"
-          </label>
           <label className="aimode-check">
             <input
               type="checkbox"

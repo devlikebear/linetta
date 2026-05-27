@@ -62,7 +62,7 @@ export function Workspace() {
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [mode, setMode] = useState<"edit" | "ai">("edit");
   const [aiPrompt, setAiPrompt] = useState("");
-  const [aiOptions, setAiOptions] = useState<AIOptions>({ tone_preset: false, short_form: false });
+  const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: false });
   const [aiStatus, setAiStatus] = useState<AIRunStatus>({ kind: "idle" });
   const aiRunIdRef = useRef<string | null>(null);
   const editorRef = useRef<TiptapHandle>(null);

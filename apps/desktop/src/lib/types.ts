@@ -90,8 +90,17 @@ export interface UpdateEntityInput {
   attributes?: Record<string, string>;
 }
 
+export type ToneID =
+  | "my"
+  | "cool"
+  | "sensory"
+  | "dry"
+  | "tense"
+  | "lyrical"
+  | "humor";
+
 export interface AIOptions {
-  tone_preset: boolean;
+  tone: ToneID;
   short_form: boolean;
 }
 

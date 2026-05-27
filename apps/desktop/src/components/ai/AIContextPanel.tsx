@@ -1,10 +1,11 @@
-import type { Entity, Project } from "../../lib/types";
+import type { AIOptions, Entity, Project } from "../../lib/types";
+import { TONE_PRESETS } from "../../lib/tonePresets";
 
 interface Props {
   project: Project;
   mentioned: Entity[];
-  options: { tone_preset: boolean; short_form: boolean };
-  onOptionsChange: (o: { tone_preset: boolean; short_form: boolean }) => void;
+  options: AIOptions;
+  onOptionsChange: (o: AIOptions) => void;
 }
 
 export function AIContextPanel({ project, mentioned, options, onOptionsChange }: Props) {
@@ -24,15 +25,22 @@ export function AIContextPanel({ project, mentioned, options, onOptionsChange }:
         </ul>
       </section>
       <section className="ctx-section">
+        <h4>톤</h4>
+        <div className="aimode-tone-chips">
+          {TONE_PRESETS.map((t) => (
+            <button
+              type="button"
+              key={t.id}
+              className={`aimode-tone-chip${options.tone === t.id ? " active" : ""}`}
+              onClick={() => onOptionsChange({ ...options, tone: t.id })}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="ctx-section">
         <h4>옵션</h4>
-        <label className="ctx-check">
-          <input
-            type="checkbox"
-            checked={options.tone_preset}
-            onChange={(e) => onOptionsChange({ ...options, tone_preset: e.target.checked })}
-          />
-          톤 프리셋 "내 톤"
-        </label>
         <label className="ctx-check">
           <input
             type="checkbox"
