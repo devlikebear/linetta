@@ -52,7 +52,7 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 	}
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "재작성", Options{TonePreset: true})
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "재작성", Options{Tone: TonePresetMy})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -71,8 +71,8 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 	if got.UserPrompt != "재작성" {
 		t.Errorf("prompt = %q", got.UserPrompt)
 	}
-	if !got.Options.TonePreset {
-		t.Errorf("options not propagated")
+	if got.Options.Tone != TonePresetMy {
+		t.Errorf("options not propagated: tone=%q", got.Options.Tone)
 	}
 }
 

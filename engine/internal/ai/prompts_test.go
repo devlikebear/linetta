@@ -14,6 +14,45 @@ func TestPresetSeed(t *testing.T) {
 	}
 }
 
+func TestBuildSystem_myToneEmphasizesStyleNotes(t *testing.T) {
+	c := Context{
+		StyleNotes: "단문 위주, 한자어 자제.",
+		Options:    Options{Tone: TonePresetMy},
+		UserPrompt: "재작성",
+	}
+	sys := BuildMessages(c)[0].Content
+	if !strings.Contains(sys, "단문 위주, 한자어 자제.") {
+		t.Errorf("my tone should inject style_notes: %q", sys)
+	}
+}
+
+func TestBuildSystem_coolToneAppendsPhrase(t *testing.T) {
+	c := Context{Options: Options{Tone: TonePresetCool}, UserPrompt: "확장"}
+	sys := BuildMessages(c)[0].Content
+	if !strings.Contains(sys, "차갑고 거리감") {
+		t.Errorf("cool tone phrase missing: %q", sys)
+	}
+}
+
+func TestBuildSystem_emptyToneNoExtra(t *testing.T) {
+	c := Context{Options: Options{Tone: ""}, UserPrompt: "재작성"}
+	sys := BuildMessages(c)[0].Content
+	if strings.Contains(sys, "톤으로 유지하라") || strings.Contains(sys, "스타일 노트") {
+		t.Errorf("empty tone leaked fragment: %q", sys)
+	}
+}
+
+func TestBuildSystem_shortFormStillWorks(t *testing.T) {
+	c := Context{Options: Options{Tone: TonePresetSensory, ShortForm: true}, UserPrompt: "확장"}
+	sys := BuildMessages(c)[0].Content
+	if !strings.Contains(sys, "한 문단 이내") {
+		t.Errorf("short_form clause dropped: %q", sys)
+	}
+	if !strings.Contains(sys, "감각적 톤") {
+		t.Errorf("tone fragment missing alongside short_form: %q", sys)
+	}
+}
+
 func TestBuildMessages_shapesSystemAndUser(t *testing.T) {
 	c := Context{
 		ProjectID:   "p1",
@@ -26,7 +65,7 @@ func TestBuildMessages_shapesSystemAndUser(t *testing.T) {
 		},
 		StyleNotes: "단문 위주",
 		UserPrompt: "재작성",
-		Options:    Options{TonePreset: true, ShortForm: true},
+		Options:    Options{Tone: TonePresetMy, ShortForm: true},
 	}
 	msgs := BuildMessages(c)
 	if len(msgs) != 2 {

@@ -1,10 +1,23 @@
 // Package ai owns prompt assembly and run management for AI mode.
 package ai
 
+// Tone preset identifiers. `my` keeps the existing style_notes-driven behavior;
+// the others append a fixed tone instruction to the system prompt. Empty string
+// means no tone fragment at all.
+const (
+	TonePresetMy      = "my"
+	TonePresetCool    = "cool"
+	TonePresetSensory = "sensory"
+	TonePresetDry     = "dry"
+	TonePresetTense   = "tense"
+	TonePresetLyrical = "lyrical"
+	TonePresetHumor   = "humor"
+)
+
 // Options is the per-call user-selected options.
 type Options struct {
-	TonePreset bool `json:"tone_preset"` // include style_notes prominently
-	ShortForm  bool `json:"short_form"`  // ask for one-paragraph length
+	Tone      string `json:"tone"`       // tone preset id; see TonePreset* constants
+	ShortForm bool   `json:"short_form"` // ask for one-paragraph length
 }
 
 // Context is the structured payload that prompts.go renders into the

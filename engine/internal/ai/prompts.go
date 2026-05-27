@@ -55,10 +55,25 @@ func buildSystem(c Context) string {
 	b.WriteString("당신은 한국어 소설 작가의 인라인 편집기입니다. ")
 	b.WriteString("작가가 요청한 작업을 본문 흐름에 맞게 수행하세요. ")
 	b.WriteString("출력은 마크다운 헤더 없이 순수 본문만 작성합니다.\n\n")
-	if c.Options.TonePreset && strings.TrimSpace(c.StyleNotes) != "" {
-		b.WriteString("작가의 스타일 노트(반드시 따를 것):\n")
-		b.WriteString(c.StyleNotes)
-		b.WriteString("\n\n")
+	switch c.Options.Tone {
+	case TonePresetMy:
+		if strings.TrimSpace(c.StyleNotes) != "" {
+			b.WriteString("작가의 스타일 노트(반드시 따를 것):\n")
+			b.WriteString(c.StyleNotes)
+			b.WriteString("\n\n")
+		}
+	case TonePresetCool:
+		b.WriteString("이번 출력은 차갑고 거리감 있는 톤으로 유지하라.\n\n")
+	case TonePresetSensory:
+		b.WriteString("이번 출력은 시각·청각·촉각 묘사를 적극 활용한 감각적 톤으로 유지하라.\n\n")
+	case TonePresetDry:
+		b.WriteString("이번 출력은 형용사를 줄이고 사실 위주의 건조한 톤으로 유지하라.\n\n")
+	case TonePresetTense:
+		b.WriteString("이번 출력은 짧은 문장과 끊김으로 긴장감을 살린 톤으로 유지하라.\n\n")
+	case TonePresetLyrical:
+		b.WriteString("이번 출력은 율격이 살아있는 서정적인 톤으로 유지하라.\n\n")
+	case TonePresetHumor:
+		b.WriteString("이번 출력은 가볍고 위트 있는 톤으로 유지하라.\n\n")
 	}
 	if c.Options.ShortForm {
 		b.WriteString("출력은 한 문단 이내로 짧게 작성하세요.\n")
@@ -126,7 +141,7 @@ func buildUser(c Context) string {
 		}
 		b.WriteString("\n")
 	}
-	if !c.Options.TonePreset && strings.TrimSpace(c.StyleNotes) != "" {
+	if c.Options.Tone != TonePresetMy && strings.TrimSpace(c.StyleNotes) != "" {
 		b.WriteString("## 작가 메모\n")
 		b.WriteString(c.StyleNotes)
 		b.WriteString("\n\n")
