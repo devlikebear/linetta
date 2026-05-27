@@ -135,12 +135,14 @@ export type ProviderID = "claude-code-cli" | "openai-codex";
 export interface Settings {
   provider: ProviderID;
   typewriter_default: boolean;
+  focus_default: boolean;
   backup_dir: string;
 }
 
 export interface SettingsPatch {
   provider?: ProviderID;
   typewriter_default?: boolean;
+  focus_default?: boolean;
 }
 
 export interface SnapshotEntry {

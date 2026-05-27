@@ -79,6 +79,15 @@ export function Settings() {
               />
               <span>새 씬을 열 때 타이프라이터 스크롤 켜기</span>
             </label>
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={current.focus_default}
+                onChange={(e) => apply({ focus_default: e.target.checked })}
+                disabled={saving}
+              />
+              <span>새 씬을 열 때 Focus 모드(현재 단락 외 디밍) 켜기</span>
+            </label>
           </section>
 
           <section className="settings-section">
