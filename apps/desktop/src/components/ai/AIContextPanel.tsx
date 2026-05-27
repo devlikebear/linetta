@@ -25,30 +25,27 @@ export function AIContextPanel({ project, mentioned, options, onOptionsChange }:
         </ul>
       </section>
       <section className="ctx-section">
-        <h4>톤</h4>
-        <div className="aimode-tone-chips">
+        <h4>톤 · 길이</h4>
+        <div className="ai-chip-row">
           {TONE_PRESETS.map((t) => (
             <button
               type="button"
               key={t.id}
-              className={`aimode-tone-chip${options.tone === t.id ? " active" : ""}`}
+              className={`ai-chip${options.tone === t.id ? " active" : ""}`}
               onClick={() => onOptionsChange({ ...options, tone: t.id })}
             >
               {t.label}
             </button>
           ))}
+          <button
+            type="button"
+            className={`ai-chip${options.short_form ? " active" : ""}`}
+            onClick={() => onOptionsChange({ ...options, short_form: !options.short_form })}
+            aria-pressed={options.short_form}
+          >
+            한 문단
+          </button>
         </div>
-      </section>
-      <section className="ctx-section">
-        <h4>옵션</h4>
-        <label className="ctx-check">
-          <input
-            type="checkbox"
-            checked={options.short_form}
-            onChange={(e) => onOptionsChange({ ...options, short_form: e.target.checked })}
-          />
-          길이: 한 문단
-        </label>
       </section>
     </aside>
   );

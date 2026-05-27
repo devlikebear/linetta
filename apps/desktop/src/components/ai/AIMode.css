@@ -51,12 +51,6 @@
   gap: 0.6rem;
   flex-wrap: wrap;
 }
-.aimode-check {
-  font-size: 0.85rem;
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-}
 .aimode-spacer { flex: 1; }
 .aimode-run {
   font: inherit;
@@ -117,10 +111,19 @@
   color: #faf9f6;
 }
 
-.aimode-tone-row { display: flex; align-items: center; gap: 0.6rem; margin: 0.4rem 0 0.6rem; }
-.aimode-tone-label { font-size: 0.85rem; color: #6b6b6b; min-width: 1.6rem; }
-.aimode-tone-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-.aimode-tone-chip {
+.ai-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.ai-chip-label {
+  font-size: 0.78rem;
+  color: #6b6b6b;
+  margin-right: 0.15rem;
+}
+.ai-chip {
   font: inherit;
   font-size: 0.82rem;
   padding: 0.2rem 0.7rem;
@@ -129,6 +132,7 @@
   background: white;
   color: #333;
   cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.25rem;
 }
-.aimode-tone-chip:hover { background: #f3f1ea; }
-.aimode-tone-chip.active { background: #1a1a1a; color: #faf9f6; border-color: #1a1a1a; }
+.ai-chip:hover { background: #f3f1ea; }
+.ai-chip.active { background: #1a1a1a; color: #faf9f6; border-color: #1a1a1a; }

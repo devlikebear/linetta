@@ -58,29 +58,29 @@ export function AIMode(props: Props) {
           placeholder="작가의 지시를 입력하세요…"
           rows={4}
         />
-        <div className="aimode-tone-row">
-          <span className="aimode-tone-label">톤</span>
-          <div className="aimode-tone-chips">
-            {TONE_PRESETS.map((t) => (
-              <button
-                type="button"
-                key={t.id}
-                className={`aimode-tone-chip${props.options.tone === t.id ? " active" : ""}`}
-                onClick={() => props.onOptionsChange({ ...props.options, tone: t.id })}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+        <div className="ai-chip-row">
+          <span className="ai-chip-label">톤</span>
+          {TONE_PRESETS.map((t) => (
+            <button
+              type="button"
+              key={t.id}
+              className={`ai-chip${props.options.tone === t.id ? " active" : ""}`}
+              onClick={() => props.onOptionsChange({ ...props.options, tone: t.id })}
+            >
+              {t.label}
+            </button>
+          ))}
+          <span className="ai-chip-label" style={{ marginLeft: "0.6rem" }}>길이</span>
+          <button
+            type="button"
+            className={`ai-chip${props.options.short_form ? " active" : ""}`}
+            onClick={() => props.onOptionsChange({ ...props.options, short_form: !props.options.short_form })}
+            aria-pressed={props.options.short_form}
+          >
+            한 문단
+          </button>
         </div>
         <div className="aimode-toolbar">
-          <label className="aimode-check">
-            <input
-              type="checkbox"
-              checked={props.options.short_form}
-              onChange={(e) => props.onOptionsChange({ ...props.options, short_form: e.target.checked })}
-            /> 길이: 한 문단
-          </label>
           <span className="aimode-spacer" />
           <button type="submit" className="aimode-run">
             {props.status.kind === "running" ? "취소" : "생성"}
