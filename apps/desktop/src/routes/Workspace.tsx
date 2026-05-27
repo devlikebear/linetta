@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, ai as aiApi, settings as settingsApi, exportApi, notes as notesApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIDone, AIError, AICancelled } from "../lib/types";
+import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIReset, AIDone, AIError, AICancelled } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -154,6 +154,12 @@ export function Workspace() {
       const prev = s.kind === "running" ? s.text : "";
       return { kind: "running", runId: p.run_id, text: prev + p.text };
     });
+  });
+  useEngineEvent<AIReset>("ai-reset", (p) => {
+    // Engine's dedup observed a divergent retry — REPLACE the running text
+    // with the authoritative reconciled buffer.
+    if (p.run_id !== aiRunIdRef.current) return;
+    setAiStatus({ kind: "running", runId: p.run_id, text: p.text });
   });
   useEngineEvent<AIDone>("ai-done", (p) => {
     if (p.run_id !== aiRunIdRef.current) return;

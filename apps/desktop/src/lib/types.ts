@@ -109,6 +109,13 @@ export interface AIDelta {
   text: string;
 }
 
+// Sent when the running text must be REPLACED (not appended) — emitted by the
+// engine's dedup when an upstream retry diverges from the first attempt.
+export interface AIReset {
+  run_id: string;
+  text: string;
+}
+
 export interface AIDone {
   run_id: string;
   full_text: string;

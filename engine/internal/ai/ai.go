@@ -90,3 +90,12 @@ type ErrorPayload struct {
 type CancelledPayload struct {
 	RunID string `json:"run_id"`
 }
+
+// ResetPayload is the body of an "ai.reset" notification. Sent when the
+// streaming text needs to be REPLACED (not appended) — used when the upstream
+// provider's transparent retry produces deltas that diverge from earlier ones
+// and we need to reconcile the frontend's view to the deduplicated buffer.
+type ResetPayload struct {
+	RunID string `json:"run_id"`
+	Text  string `json:"text"`
+}

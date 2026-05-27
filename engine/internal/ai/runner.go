@@ -95,44 +95,37 @@ func (r *Runner) run(ctx context.Context, runID string, c Context, client llm.Cl
 		r.mu.Unlock()
 	}()
 
-	var full struct {
-		mu  sync.Mutex
-		buf string
-	}
+	dedup := newStreamDedup()
 	msgs := BuildMessages(c)
 
 	resp, err := client.Chat(ctx, msgs, llm.ChatOptions{
 		OnDelta: func(text string) {
-			full.mu.Lock()
-			full.buf += text
-			full.mu.Unlock()
-			_ = r.notify.Notify("ai.delta", DeltaPayload{RunID: runID, Text: text})
+			switch action, payload := dedup.Observe(text); action {
+			case dedupEmit:
+				_ = r.notify.Notify("ai.delta", DeltaPayload{RunID: runID, Text: payload})
+			case dedupReset:
+				_ = r.notify.Notify("ai.reset", ResetPayload{RunID: runID, Text: payload})
+			case dedupSkip:
+				// suppressed (retry replay or back-to-back duplicate)
+			}
 		},
 	})
 
 	endedAt := now()
 	if errors.Is(err, context.Canceled) {
 		_ = r.notify.Notify("ai.cancelled", CancelledPayload{RunID: runID})
-		full.mu.Lock()
-		out := full.buf
-		full.mu.Unlock()
-		_ = r.runs.UpdateStatus(context.Background(), runID, store.AIRunCancelled, out, "", endedAt)
+		_ = r.runs.UpdateStatus(context.Background(), runID, store.AIRunCancelled, dedup.Final(), "", endedAt)
 		return
 	}
 	if err != nil {
 		_ = r.notify.Notify("ai.error", ErrorPayload{RunID: runID, Message: err.Error()})
-		full.mu.Lock()
-		out := full.buf
-		full.mu.Unlock()
-		_ = r.runs.UpdateStatus(context.Background(), runID, store.AIRunError, out, err.Error(), endedAt)
+		_ = r.runs.UpdateStatus(context.Background(), runID, store.AIRunError, dedup.Final(), err.Error(), endedAt)
 		return
 	}
 
 	finalText := resp.Message.Content
 	if finalText == "" {
-		full.mu.Lock()
-		finalText = full.buf
-		full.mu.Unlock()
+		finalText = dedup.Final()
 	}
 	_ = r.notify.Notify("ai.done", DonePayload{RunID: runID, FullText: finalText})
 	_ = r.runs.UpdateStatus(context.Background(), runID, store.AIRunDone, finalText, "", endedAt)

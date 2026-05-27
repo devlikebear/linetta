@@ -34,6 +34,7 @@ pub async fn spawn(app: &tauri::AppHandle) -> Result<EngineHandle> {
         // Route ai.* notifications to Tauri events with the same name (with `.` → `-`).
         let event = match method.as_str() {
             "ai.delta" => "ai-delta",
+            "ai.reset" => "ai-reset",
             "ai.done" => "ai-done",
             "ai.error" => "ai-error",
             "ai.cancelled" => "ai-cancelled",
