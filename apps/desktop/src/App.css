@@ -453,15 +453,18 @@ body {
 
 .ctx-panel {
   border-left: 1px solid #ece9e0;
-  padding: 1.5rem 1rem;
+  padding: 1.25rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
   background: #f6f4ee;
   overflow-y: auto;
   overflow-x: hidden;
   height: 100%;
+  scrollbar-gutter: stable;
 }
+.ctx-panel::-webkit-scrollbar { width: 8px; }
+.ctx-panel::-webkit-scrollbar-thumb { background: #d8d6cf; border-radius: 4px; }
 
 .ctx-section h4 {
   margin: 0 0 0.5rem;
