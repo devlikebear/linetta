@@ -42,7 +42,7 @@ type streamDedup struct {
 
 	// Back-to-back duplicate detection.
 	lastDelta  string
-	lastEmitAt time.Time
+	lastSeenAt time.Time
 	nowFn      func() time.Time
 
 	// Configurable in tests; default 100ms.
@@ -76,11 +76,14 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 	switch d.state {
 	case 0:
 		now := d.nowFn()
-		withinWindow := now.Sub(d.lastEmitAt) < d.backToBackWindow
-		// Back-to-back duplicate: same content as the most recent emission,
-		// arriving within the tight window. Catches the codex provider's quirk
-		// of emitting the same `delta` content in consecutive SSE events.
+		withinWindow := now.Sub(d.lastSeenAt) < d.backToBackWindow
+		// Back-to-back duplicate: same content as the most recent observation
+		// (emit OR suppress), arriving within the tight window. Catches the
+		// codex provider's quirk of emitting the same delta content in
+		// consecutive SSE events. lastSeenAt extends on each suppress so a
+		// rapid run of identical chunks all gets folded.
 		if text == d.lastDelta && d.lastDelta != "" && withinWindow {
+			d.lastSeenAt = now
 			return dedupSkip, ""
 		}
 		// Plausible retry-from-start: incoming delta is a prefix of buf AND
@@ -91,12 +94,13 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 			d.state = 1
 			d.cursor = len(text)
 			d.pending = text
+			d.lastSeenAt = now
 			return dedupSkip, ""
 		}
 		// Genuine incremental delta.
 		d.buf += text
 		d.lastDelta = text
-		d.lastEmitAt = now
+		d.lastSeenAt = now
 		return dedupEmit, text
 
 	case 1:
@@ -120,7 +124,7 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 		d.pending = ""
 		now := d.nowFn()
 		d.lastDelta = text
-		d.lastEmitAt = now
+		d.lastSeenAt = now
 		return dedupEmit, combined
 
 	case 2:
@@ -141,7 +145,7 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 		d.cursor = 0
 		now := d.nowFn()
 		d.lastDelta = text
-		d.lastEmitAt = now
+		d.lastSeenAt = now
 		return dedupReset, d.buf
 	}
 	return dedupSkip, ""

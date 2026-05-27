@@ -74,16 +74,19 @@ func TestStreamDedup_genuineIncremental(t *testing.T) {
 }
 
 func TestStreamDedup_backToBackDup_isSuppressed(t *testing.T) {
-	// The user's actual bug: codex SSE emits two events with the same delta
-	// back-to-back. Within the 100ms window, the second is suppressed.
+	// The user's actual bug: codex SSE emits identical delta events back-to-
+	// back. With lastSeenAt extending on each suppress, an arbitrary run of
+	// identical chunks folds even when each pair is just under the window
+	// (which together would exceed the window from the first emit).
 	d, fc := newDedupForTest()
-	fc.tick = 10 * time.Millisecond // tight succession
-	assertEmit(t, d, "그리고", "그리고")
-	assertSkip(t, d, "그리고") // back-to-back dup
-	assertSkip(t, d, "그리고") // still dup
-	assertSkip(t, d, "그리고") // still dup
-	if d.Final() != "그리고" {
-		t.Errorf("Final = %q, want '그리고'", d.Final())
+	fc.tick = 70 * time.Millisecond // each step within 100ms but total >> 100ms
+	assertEmit(t, d, "복", "복")
+	assertSkip(t, d, "복") // back-to-back; 70ms since emit
+	assertSkip(t, d, "복") // 70ms since prev skip — still within window
+	assertSkip(t, d, "복") // 70ms since prev skip
+	assertSkip(t, d, "복") // 70ms since prev skip
+	if d.Final() != "복" {
+		t.Errorf("Final = %q, want '복'", d.Final())
 	}
 }
 
