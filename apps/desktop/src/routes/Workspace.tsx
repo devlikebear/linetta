@@ -20,6 +20,7 @@ import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import { AIMode, type AIRunStatus } from "../components/ai/AIMode";
 import { AIContextPanel } from "../components/ai/AIContextPanel";
+import { useToast } from "../components/ToastProvider";
 import {
   buildTree,
   findFirstLeaf,
@@ -48,7 +49,7 @@ export function Workspace() {
   const location = useLocation();
   const [load, setLoad] = useState<LoadState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const { showToast } = useToast();
   const [charCount, setCharCount] = useState(0);
   const [typewriter, setTypewriter] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -197,11 +198,6 @@ export function Workspace() {
     try { setMentioned(await mentionsApi.listForNode(nodeId)); }
     catch { /* benign */ }
   }, []);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 1800);
-  };
 
   // --- Dialog helpers (replace window.prompt / window.confirm, which Tauri 2 blocks). ---
   const promptDialog = useCallback(
@@ -916,8 +912,6 @@ export function Workspace() {
           onExit={exitZen}
         />
       )}
-
-      {toast && <div className="ws-toast">{toast}</div>}
 
       {notePopover && (
         <NotePopover
