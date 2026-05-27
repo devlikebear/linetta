@@ -5,6 +5,7 @@ import type { Project, NewProjectInput } from "../lib/types";
 import { ProjectCard } from "../components/ProjectCard";
 import { NewProjectModal } from "../components/NewProjectModal";
 import { pickAndReadMarkdown } from "../lib/importLoad";
+import { MoreHorizontal, Settings, Plus, Upload } from "../lib/icons";
 
 const RECENT_LIMIT = 5;
 
@@ -59,15 +60,20 @@ export function Library() {
   return (
     <main className="library">
       <header className="library-top">
-        <button className="icon-btn" aria-label="라이브러리 옵션" disabled>···</button>
-        <Link to="/settings" className="icon-btn">설정</Link>
+        <button className="icon-btn" aria-label="라이브러리 옵션" disabled>
+          <MoreHorizontal size={16} />
+        </button>
+        <Link to="/settings" className="icon-btn" aria-label="설정">
+          <Settings size={16} />
+        </Link>
       </header>
 
       <section className="library-center">
         <h1 className="library-heading">Linetta</h1>
 
         <button className="new-button" onClick={() => setModalOpen(true)}>
-          + 새 작품
+          <Plus size={16} />
+          <span>새 작품</span>
         </button>
         <button
           className="new-button"
@@ -75,7 +81,8 @@ export function Library() {
           disabled={importing}
           style={{ marginTop: "0.4rem" }}
         >
-          {importing ? "가져오는 중…" : "가져오기 (.md)"}
+          <Upload size={16} />
+          <span>{importing ? "가져오는 중…" : "가져오기 (.md)"}</span>
         </button>
 
         {loading ? (

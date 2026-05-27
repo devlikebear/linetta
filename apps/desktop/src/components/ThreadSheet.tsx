@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Beat, Thread, UpdateThreadInput } from "../lib/types";
 import { beats as beatsApi, threads as threadsApi } from "../lib/rpc";
+import { X, Plus } from "../lib/icons";
 import "./ThreadSheet.css";
 
 const PALETTE = ["#c0392b", "#c08a3e", "#b58a00", "#3e8e41", "#2980b9", "#7e57c2", "#d35d6e", "#666"];
@@ -90,7 +91,9 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
     <aside className="thread-sheet" onMouseDown={(e) => e.stopPropagation()}>
       <header className="thread-head">
         <span>스토리라인 편집</span>
-        <button type="button" className="thread-close" onClick={onClose} aria-label="닫기">×</button>
+        <button type="button" className="thread-close" onClick={onClose} aria-label="닫기">
+          <X size={16} />
+        </button>
       </header>
 
       {error && <p className="thread-error">{error}</p>}
@@ -154,10 +157,15 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
                     >{lvl}</button>
                   ))}
                 </div>
-                <button type="button" className="attr-del" onClick={() => deleteBeat(b)} aria-label="삭제">×</button>
+                <button type="button" className="attr-del" onClick={() => deleteBeat(b)} aria-label="삭제">
+                  <X size={14} />
+                </button>
               </div>
             ))}
-            <button type="button" className="attr-add" onClick={addBeat}>+ 새 마디 추가</button>
+            <button type="button" className="attr-add" onClick={addBeat}>
+              <Plus size={14} />
+              <span>새 마디 추가</span>
+            </button>
           </section>
 
           <div className="thread-actions">

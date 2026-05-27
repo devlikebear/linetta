@@ -103,6 +103,9 @@ body {
   color: #6b6b6b;
   cursor: pointer;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .library-center {
@@ -126,6 +129,16 @@ body {
   border: 1px solid #1a1a1a;
   border-radius: 4px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.attr-add,
+.relation-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .library-label {

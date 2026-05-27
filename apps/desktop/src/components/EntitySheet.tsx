@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Entity, EntityKind, Relationship, UpdateEntityInput } from "../lib/types";
 import { entities, relationships } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
+import { X, Plus } from "../lib/icons";
 import "./EntitySheet.css";
 
 interface Props {
@@ -93,7 +94,9 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
     <aside className="entity-sheet" onMouseDown={(e) => e.stopPropagation()}>
       <header className="entity-head">
         <span>엔티티 편집</span>
-        <button type="button" className="entity-close" onClick={onClose} aria-label="닫기">×</button>
+        <button type="button" className="entity-close" onClick={onClose} aria-label="닫기">
+          <X size={16} />
+        </button>
       </header>
 
       {error && <p className="entity-error">{error}</p>}
@@ -168,14 +171,19 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
                     className="attr-del"
                     onClick={() => setAttrRows(attrRows.filter((_, j) => j !== i))}
                     aria-label="삭제"
-                  >×</button>
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
               ))}
               <button
                 type="button"
                 className="attr-add"
                 onClick={() => setAttrRows([...attrRows, { key: "", value: "" }])}
-              >+ 속성 추가</button>
+              >
+                <Plus size={14} />
+                <span>속성 추가</span>
+              </button>
             </div>
           </section>
 
@@ -203,7 +211,9 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
                           await relationships.delete(r.id);
                           if (entity) await refreshRels(entity.id);
                         }}
-                      >×</button>
+                      >
+                        <X size={14} />
+                      </button>
                     </li>
                   );
                 })}
@@ -213,7 +223,10 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
               type="button"
               className="relation-add"
               onClick={() => setPickerOpen(true)}
-            >+ 관계 추가</button>
+            >
+              <Plus size={14} />
+              <span>관계 추가</span>
+            </button>
             {pickerOpen && entity && (
               <RelationshipPicker
                 projectId={entity.project_id}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { NodeRow, Project, Entity } from "../lib/types";
 import { ActiveThreadsPanel } from "./ActiveThreadsPanel";
+import { User } from "../lib/icons";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -42,7 +43,9 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
             className="ctx-entity"
             onClick={() => onMentionClick(e.id)}
           >
-            <span className="ctx-entity-avatar">{e.name.slice(0, 1)}</span>
+            <span className="ctx-entity-avatar" aria-hidden>
+              <User size={12} />
+            </span>
             <span className="ctx-entity-name">{e.name}</span>
             {e.role && <span className="ctx-entity-role">{e.role}</span>}
           </button>

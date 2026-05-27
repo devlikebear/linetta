@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Thread } from "../lib/types";
 import { beats as beatsApi, threads as threadsApi } from "../lib/rpc";
+import { Plus } from "../lib/icons";
 
 interface Props {
   projectId: string;
@@ -72,8 +73,10 @@ export function ActiveThreadsPanel({ projectId, nodeId, onOpenThread, onChanged 
             type="button"
             aria-label="이 씬에 마디 추가"
             onClick={() => { setAdding(thread.id); setDraftLabel(""); }}
-            style={{ background: "none", border: "1px solid #d8d6cf", borderRadius: 4, cursor: "pointer", padding: "0 0.35rem" }}
-          >+</button>
+            style={{ background: "none", border: "1px solid #d8d6cf", borderRadius: 4, cursor: "pointer", padding: "0 0.35rem", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <Plus size={12} />
+          </button>
         </div>
       ))}
       {adding && (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { snapshots } from "../lib/rpc";
 import type { NodeRow, SnapshotEntry } from "../lib/types";
+import { X } from "../lib/icons";
 import "./VersionSheet.css";
 
 interface Props {
@@ -80,7 +81,9 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
     <aside className="version-sheet" onMouseDown={(e) => e.stopPropagation()}>
       <header className="version-head">
         <span>이전 버전</span>
-        <button type="button" className="version-close" onClick={onClose} aria-label="닫기">×</button>
+        <button type="button" className="version-close" onClick={onClose} aria-label="닫기">
+          <X size={16} />
+        </button>
       </header>
       {error && <p className="version-error">{error}</p>}
       {!entries && !error && <p className="version-loading">불러오는 중…</p>}
