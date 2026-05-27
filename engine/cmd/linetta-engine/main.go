@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/gitsync"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
@@ -93,8 +94,20 @@ func main() {
 	if err != nil {
 		fail("home: %v", err)
 	}
+	syncer := gitsync.New(settingsStore, projects, nodes, entities)
 	retentionFn := func(ctx context.Context) error {
-		return snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli())
+		if err := snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli()); err != nil {
+			return err
+		}
+		res, err := syncer.RunOnce(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "gitsync (daily): %v\n", err)
+			return nil // never block the scheduler
+		}
+		if res.Error != "" {
+			fmt.Fprintf(os.Stderr, "gitsync (daily): %s\n", res.Error)
+		}
+		return nil
 	}
 	stopBackup := backup.Start(ctx, st.DB(), home, retentionFn,
 		time.Now, time.Sleep, nil /* onTick */)
@@ -152,6 +165,7 @@ func main() {
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities))
 	s.Handle("export.node", handlers.ExportNode(nodes))
+	s.Handle("git_sync.run", handlers.RunGitSync(syncer))
 
 	if err := s.Serve(ctx, os.Stdin, os.Stdout); err != nil && !errors.Is(err, io.EOF) {
 		fail("serve: %v", err)
