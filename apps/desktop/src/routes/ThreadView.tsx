@@ -54,7 +54,7 @@ export function ThreadView() {
         <h1>흐름</h1>
       </header>
 
-      {lanes.length === 0 && <p className="hint">아직 스토리라인이 없습니다. Cmd+K → "이 씬을 새 Thread로 표시"로 시작해보세요.</p>}
+      {lanes.length === 0 && <p className="hint">아직 스토리라인이 없어요. Cmd+K → "이 씬을 새 Thread로 표시"로 시작하세요.</p>}
 
       <div className="thread-lanes">
         {lanes.map(({ thread, beats }) => (

@@ -137,7 +137,7 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
 
           <section className="thread-section">
             <h5>마디</h5>
-            {beatList.length === 0 && <p className="thread-empty">아직 마디 없음</p>}
+            {beatList.length === 0 && <p className="thread-empty">아직 마디가 없어요</p>}
             {beatList.map((b) => (
               <div className="beat-row" key={b.id}>
                 <span className="beat-ordinal">#{b.ordinal}</span>

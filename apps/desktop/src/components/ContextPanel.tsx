@@ -34,7 +34,7 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
       <section className="ctx-section">
         <h4>인물 · 장소</h4>
         {mentionedEntities.length === 0 && (
-          <p className="ctx-empty">아직 @멘션 없음</p>
+          <p className="ctx-empty">아직 @멘션이 없어요</p>
         )}
         {mentionedEntities.map((e) => (
           <button

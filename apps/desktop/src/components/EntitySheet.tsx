@@ -190,7 +190,7 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
           <section className="entity-section relations">
             <h5>관계</h5>
             {rels.length === 0 && (
-              <p className="entity-empty">아직 관계가 없습니다.</p>
+              <p className="entity-empty">아직 관계가 없어요</p>
             )}
             {rels.length > 0 && (
               <ul className="relation-list">

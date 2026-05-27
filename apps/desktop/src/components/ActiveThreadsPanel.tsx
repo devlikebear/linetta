@@ -51,7 +51,7 @@ export function ActiveThreadsPanel({ projectId, nodeId, onOpenThread, onChanged 
   return (
     <section className="ctx-section">
       <h4>활성 Thread</h4>
-      {rows && rows.length === 0 && <p className="ctx-empty">이 씬에 연결된 스토리라인 없음</p>}
+      {rows && rows.length === 0 && <p className="ctx-empty">아직 활성 스토리라인이 없어요</p>}
       {rows && rows.map(({ thread }) => (
         <div key={thread.id} className="ctx-entity-row" style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
           <button

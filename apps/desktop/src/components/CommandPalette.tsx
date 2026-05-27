@@ -5,7 +5,7 @@ export interface Command {
   id: string;
   section: string;
   label: string;
-  hint?: string;          // right-side text (shortcut, "(곧 추가됨)", etc.)
+  hint?: string;          // right-side text (shortcut hint, etc.)
   disabled?: boolean;
   run: () => void | Promise<void>;
 }

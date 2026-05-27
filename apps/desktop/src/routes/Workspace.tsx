@@ -612,14 +612,6 @@ export function Workspace() {
       run: () => {},
     });
     cmds.push({
-      id: "view-character",
-      section: "보기",
-      label: "캐릭터 시트",
-      hint: "(곧 추가됨 — Plan 4)",
-      disabled: true,
-      run: () => {},
-    });
-    cmds.push({
       id: "view-threads",
       section: "보기",
       label: "흐름 (Thread View)",
