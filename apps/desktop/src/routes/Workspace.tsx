@@ -51,6 +51,7 @@ export function Workspace() {
   const [toast, setToast] = useState<string | null>(null);
   const [charCount, setCharCount] = useState(0);
   const [typewriter, setTypewriter] = useState(false);
+  const [focus, setFocus] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [versionSheetNodeId, setVersionSheetNodeId] = useState<string | null>(null);
@@ -139,11 +140,15 @@ export function Workspace() {
     window.setTimeout(() => editorRef.current?.focus(), 0);
   }, []);
 
-  // Apply typewriter default from settings exactly once on mount.
+  // Apply typewriter + focus defaults from settings exactly once on mount.
   useEffect(() => {
     let cancelled = false;
     settingsApi.get()
-      .then((s) => { if (!cancelled) setTypewriter(s.typewriter_default); })
+      .then((s) => {
+        if (cancelled) return;
+        setTypewriter(s.typewriter_default);
+        setFocus(s.focus_default);
+      })
       .catch(() => { /* benign */ });
     return () => { cancelled = true; };
   }, []);
@@ -672,8 +677,14 @@ export function Workspace() {
       hint: "ESC로 종료",
       run: enterZen,
     });
+    cmds.push({
+      id: "toggle-focus",
+      section: "보기",
+      label: focus ? "Focus 모드 끄기" : "Focus 모드 켜기",
+      run: () => setFocus((v) => !v),
+    });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen, focus]);
 
   const breadcrumb = useMemo(() => {
     if (!load) return "";
@@ -748,6 +759,7 @@ export function Workspace() {
               }}
               onCharCount={setCharCount}
               typewriter={typewriter}
+              focus={focus}
               onManualSave={handleManualSave}
               extensions={[
                 ...(mentionExtension ? [mentionExtension] : []),
