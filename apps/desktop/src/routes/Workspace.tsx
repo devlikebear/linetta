@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, ai as aiApi, settings as settingsApi, exportApi, notes as notesApi } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, ai as aiApi, settings as settingsApi, exportApi, notes as notesApi, gitSync } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { NotePopover } from "../components/NotePopover";
 import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIReset, AIDone, AIError, AICancelled } from "../lib/types";
@@ -669,6 +669,35 @@ export function Workspace() {
       section: "프로젝트",
       label: "설정 열기",
       run: () => navigate("/settings"),
+    });
+    cmds.push({
+      id: "git-sync-now",
+      section: "프로젝트",
+      label: "지금 GitHub로 동기화",
+      run: async () => {
+        try {
+          const res = await gitSync.run();
+          if (res.skipped) {
+            showToast("동기화 비활성화 — 설정에서 git 폴더를 지정하세요");
+            return;
+          }
+          if (res.error) {
+            showToast(`동기화 오류: ${res.error}`);
+            return;
+          }
+          if (!res.committed) {
+            showToast(`변경 없음 (${res.files_written}개 파일 점검 완료)`);
+            return;
+          }
+          if (res.pushed) {
+            showToast(`${res.files_written}개 파일 동기화 완료 (push OK)`);
+          } else {
+            showToast(`${res.files_written}개 파일 커밋됨 — push 실패`);
+          }
+        } catch (e) {
+          showToast("동기화 실패: " + String(e));
+        }
+      },
     });
     cmds.push({
       id: "enter-zen",
