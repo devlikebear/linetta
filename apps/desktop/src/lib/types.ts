@@ -231,3 +231,29 @@ export interface UpdateRelationshipInput {
   label: string;
   notes: string;
 }
+
+// Mirrors engine/internal/note Note struct.
+export interface Note {
+  id: string;
+  node_id: string;
+  anchor: number;
+  body: string;
+  created_at: number;
+}
+
+export interface NewNoteInput {
+  node_id: string;
+  anchor: number;
+  body: string;
+}
+
+export interface UpdateNoteInput {
+  id: string;
+  body: string;
+}
+
+// Mirrors engine/internal/ai NoteBrief (used in ai_runs.context_json).
+export interface NoteBrief {
+  anchor: number;
+  body: string;
+}
