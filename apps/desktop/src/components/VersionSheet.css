@@ -1,28 +1,90 @@
 .version-sheet {
   position: fixed; top: 0; right: 0; bottom: 0;
   width: 360px; max-width: 90vw;
-  background: #111; color: #eee;
-  border-left: 1px solid #2a2a2a;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+  background: #faf9f6;
+  color: #1a1a1a;
+  border-left: 1px solid #ece9e0;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
   z-index: 80;
   display: flex; flex-direction: column;
   font-size: 14px;
 }
-.version-head { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid #2a2a2a; font-weight: 500; }
-.version-close { background: none; border: none; color: #ccc; font-size: 1.4rem; cursor: pointer; }
+.version-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #ece9e0;
+  font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: #6b6b6b;
+}
+.version-close {
+  background: none; border: none; color: #9a9a9a; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0.2rem;
+}
+.version-close:hover { color: #1a1a1a; }
 .version-body { display: flex; flex: 1; min-height: 0; }
-.version-timeline { width: 180px; padding: 0.5rem; overflow-y: auto; border-right: 1px solid #2a2a2a; }
-.version-group-head { font-size: 0.75rem; color: #888; margin: 0.6rem 0 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.version-row { display: flex; flex-direction: column; align-items: flex-start; width: 100%; padding: 0.4rem 0.5rem; background: none; border: none; color: inherit; text-align: left; cursor: pointer; border-radius: 4px; }
-.version-row:hover { background: #1a1a1a; }
-.version-row.sel { background: #233; }
-.version-reason { font-size: 0.85rem; color: #cdd; }
-.version-time { font-size: 0.78rem; color: #888; }
-.version-preview { flex: 1; padding: 0.75rem 1rem; display: flex; flex-direction: column; min-width: 0; }
-.version-preview h5 { margin: 0 0 0.5rem; font-weight: 500; color: #aaa; font-size: 0.85rem; }
-.version-preview pre { flex: 1; white-space: pre-wrap; font-family: serif; font-size: 0.95rem; color: #ddd; background: #0c0c0c; padding: 0.6rem; border-radius: 6px; overflow-y: auto; }
+.version-timeline {
+  width: 180px; padding: 0.5rem; overflow-y: auto;
+  border-right: 1px solid #ece9e0;
+}
+.version-group-head {
+  font-size: 0.7rem; color: #9a9a9a;
+  margin: 0.6rem 0 0.25rem;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.version-row {
+  display: flex; flex-direction: column; align-items: flex-start;
+  width: 100%; padding: 0.4rem 0.5rem;
+  background: none; border: none; color: inherit; text-align: left;
+  cursor: pointer; border-radius: 4px;
+}
+.version-row:hover { background: #f0ede5; }
+.version-row.sel { background: #ece9e0; }
+.version-reason { font-size: 0.85rem; color: #333; }
+.version-time { font-size: 0.78rem; color: #6b6b6b; }
+.version-preview {
+  flex: 1; padding: 0.85rem 1rem;
+  display: flex; flex-direction: column; min-width: 0;
+}
+.version-preview h5 {
+  margin: 0 0 0.5rem; font-weight: 500;
+  color: #6b6b6b; font-size: 0.75rem;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.version-preview pre {
+  flex: 1;
+  white-space: pre-wrap;
+  font-family: ui-serif, Georgia, "Apple SD Gothic Neo", serif;
+  font-size: 0.95rem;
+  color: #1a1a1a;
+  background: #fffefb;
+  border: 1px solid #ece9e0;
+  padding: 0.7rem;
+  border-radius: 6px;
+  overflow-y: auto;
+}
 .version-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem; }
-.version-actions .primary { background: #345; color: #fff; border: none; border-radius: 4px; padding: 0.4rem 0.9rem; cursor: pointer; }
-.version-actions button:not(.primary) { background: none; border: 1px solid #444; color: #ccc; border-radius: 4px; padding: 0.4rem 0.9rem; cursor: pointer; }
-.version-empty, .version-loading, .version-error { padding: 1rem; color: #999; font-size: 0.9rem; }
-.version-error { color: #f88; }
+.version-actions .primary {
+  background: #1a1a1a; color: #faf9f6;
+  border: 1px solid #1a1a1a; border-radius: 4px;
+  padding: 0.4rem 0.95rem; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+}
+.version-actions button:not(.primary) {
+  background: white; color: #1a1a1a;
+  border: 1px solid #1a1a1a; border-radius: 4px;
+  padding: 0.4rem 0.95rem; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+}
+.version-actions button.danger {
+  color: #a8312f; border-color: #a8312f; background: white;
+}
+.version-empty, .version-loading, .version-error {
+  padding: 1rem; color: #6b6b6b; font-size: 0.9rem;
+}
+.version-error { color: #a8312f; }
+
+/* Thin scrollbar matching the rest of the app. */
+.version-timeline::-webkit-scrollbar,
+.version-preview pre::-webkit-scrollbar { width: 8px; }
+.version-timeline::-webkit-scrollbar-thumb,
+.version-preview pre::-webkit-scrollbar-thumb { background: #d8d6cf; border-radius: 4px; }
