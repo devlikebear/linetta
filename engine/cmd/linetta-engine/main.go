@@ -165,6 +165,7 @@ func main() {
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities))
 	s.Handle("export.node", handlers.ExportNode(nodes))
+	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, clock))
 	s.Handle("git_sync.run", handlers.RunGitSync(syncer))
 	s.Handle("git_sync.init", handlers.InitGitSync(syncer))
 
