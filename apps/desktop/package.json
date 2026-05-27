@@ -13,6 +13,7 @@
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-fs": "^2.5.1",
+    "@tiptap/core": "^3.23.6",
     "@tiptap/extension-mention": "^3.23.6",
     "@tiptap/pm": "^3.23.6",
     "@tiptap/react": "^3.23.6",

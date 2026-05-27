@@ -1,0 +1,56 @@
+.note-marker {
+  display: inline-block;
+  font-size: 0.9em;
+  color: #c08a3e;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 1px;
+  border-radius: 2px;
+  transition: background 0.12s ease;
+}
+.note-marker:hover { background: rgba(192, 138, 62, 0.18); }
+
+.note-popover {
+  position: absolute;
+  width: 280px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  padding: 12px;
+  z-index: 80;
+  font-size: 14px;
+  color: #222;
+}
+.note-popover .note-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+}
+.note-popover textarea {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  font: inherit;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  padding: 6px 8px;
+  box-sizing: border-box;
+}
+.note-popover .note-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.note-popover button {
+  padding: 4px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  background: #f7f7f7;
+  cursor: pointer;
+  font-size: 13px;
+}
+.note-popover button.primary { background: #c08a3e; color: #fff; border-color: #a87530; }
+.note-popover button.danger { color: #c0392b; border-color: rgba(192, 57, 43, 0.4); }
+.note-popover button:hover { filter: brightness(0.96); }
