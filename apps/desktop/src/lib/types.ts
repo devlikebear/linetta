@@ -139,6 +139,14 @@ export interface GitSyncResult {
   error: string;
 }
 
+export interface GitSyncInitResult {
+  skipped: boolean;
+  already_repo: boolean;
+  created: boolean;
+  dir: string;
+  error: string;
+}
+
 export type ProviderID = "claude-code-cli" | "openai-codex";
 
 export interface Settings {

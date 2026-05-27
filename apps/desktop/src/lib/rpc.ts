@@ -4,6 +4,7 @@ import type {
   Beat,
   Entity,
   ExportPayload,
+  GitSyncInitResult,
   GitSyncResult,
   ListProjectsParams,
   NewBeatInput,
@@ -88,6 +89,7 @@ export const exportApi = {
 
 export const gitSync = {
   run: () => rpcCall<GitSyncResult>("git_sync.run"),
+  init: () => rpcCall<GitSyncInitResult>("git_sync.init"),
 };
 
 export const entities = {

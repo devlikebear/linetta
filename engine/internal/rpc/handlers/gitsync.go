@@ -22,3 +22,16 @@ func RunGitSync(s *gitsync.Syncer) rpc.Handler {
 		return json.Marshal(res)
 	}
 }
+
+// InitGitSync returns a handler for git_sync.init. Creates GitSyncDir if
+// missing and runs `git init` there if not already a repo. Safe to call
+// repeatedly. Returns InitResult so the UI can show a differentiated toast.
+func InitGitSync(s *gitsync.Syncer) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		res, err := s.Init(ctx)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(res)
+	}
+}

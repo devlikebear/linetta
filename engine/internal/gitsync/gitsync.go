@@ -62,6 +62,54 @@ func New(s *settings.Store, p *project.Repo, n *node.Repo, e *entity.Repo) *Sync
 	}
 }
 
+// InitResult is the structured outcome of one Init call.
+type InitResult struct {
+	Skipped     bool   `json:"skipped"`      // GitSyncDir was empty
+	AlreadyRepo bool   `json:"already_repo"` // dir was already a git repo
+	Created     bool   `json:"created"`      // we ran `git init`
+	Dir         string `json:"dir"`          // resolved path
+	Error       string `json:"error"`
+}
+
+// Init creates GitSyncDir if missing and runs `git init -b main` there if it
+// is not already a repo. Safe to call repeatedly. Does NOT add a remote — the
+// user adds that with `git remote add origin <url>` or `gh repo create`.
+func (s *Syncer) Init(ctx context.Context) (InitResult, error) {
+	cfg, err := s.Settings.Get(ctx)
+	if err != nil {
+		return InitResult{}, fmt.Errorf("settings.Get: %w", err)
+	}
+	dir := strings.TrimSpace(cfg.GitSyncDir)
+	if dir == "" {
+		return InitResult{Skipped: true}, nil
+	}
+	res := InitResult{Dir: dir}
+	if _, err := os.Stat(dir); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			res.Error = fmt.Sprintf("stat dir: %v", err)
+			return res, nil
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			res.Error = fmt.Sprintf("mkdir dir: %v", err)
+			return res, nil
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+		res.AlreadyRepo = true
+		return res, nil
+	}
+	run := s.Run
+	if run == nil {
+		run = runGitProd
+	}
+	if _, err := run(ctx, dir, "init", "-b", "main"); err != nil {
+		res.Error = "git init: " + err.Error()
+		return res, nil
+	}
+	res.Created = true
+	return res, nil
+}
+
 // RunOnce performs one end-to-end sync cycle: read settings → write each
 // non-archived project's markdown into GitSyncDir → git add/status/commit/push.
 // A hard Go error is only returned for unrecoverable configuration/IO failures

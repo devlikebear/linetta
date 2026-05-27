@@ -166,6 +166,7 @@ func main() {
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities))
 	s.Handle("export.node", handlers.ExportNode(nodes))
 	s.Handle("git_sync.run", handlers.RunGitSync(syncer))
+	s.Handle("git_sync.init", handlers.InitGitSync(syncer))
 
 	if err := s.Serve(ctx, os.Stdin, os.Stdout); err != nil && !errors.Is(err, io.EOF) {
 		fail("serve: %v", err)

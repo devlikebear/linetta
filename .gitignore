@@ -28,3 +28,6 @@ apps/desktop/src-tauri/gen/
 # IDE
 .idea/
 .vscode/
+
+# Engine binary built into the repo root by accident
+/engine/linetta-engine

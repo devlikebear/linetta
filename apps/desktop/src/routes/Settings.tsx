@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { settings as settingsApi } from "../lib/rpc";
+import { settings as settingsApi, gitSync } from "../lib/rpc";
 import type { ProviderID, Settings as SettingsRow } from "../lib/types";
 
 export function Settings() {
@@ -155,6 +155,40 @@ export function Settings() {
             <p className="hint">
               <code>{"{date}"}</code> 자리표시자만 지원됩니다 (YYYY-MM-DD HH:MM 으로 치환).
             </p>
+            <p className="hint" style={{ marginTop: "0.8rem" }}>
+              지정한 폴더가 아직 git 저장소가 아닐 때 아래 버튼으로 초기화할 수 있습니다.
+              초기화 후 <code>git remote add origin &lt;URL&gt;</code> 로 GitHub remote를 추가하세요.
+            </p>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const res = await gitSync.init();
+                  if (res.skipped) {
+                    setError("git 폴더를 먼저 지정하세요");
+                    return;
+                  }
+                  if (res.error) {
+                    setError(`초기화 실패: ${res.error}`);
+                    return;
+                  }
+                  if (res.already_repo) {
+                    setSavedAt(Date.now());
+                    setError("이미 git 저장소입니다");
+                    return;
+                  }
+                  if (res.created) {
+                    setError(null);
+                    setSavedAt(Date.now());
+                  }
+                } catch (e) {
+                  setError(String(e));
+                }
+              }}
+              disabled={saving}
+            >
+              이 폴더를 git 저장소로 초기화
+            </button>
           </section>
 
           <section className="settings-section">
