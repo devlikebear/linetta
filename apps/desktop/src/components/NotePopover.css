@@ -13,44 +13,53 @@
 .note-popover {
   position: absolute;
   width: 280px;
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #faf9f6;
+  border: 1px solid #ece9e0;
   border-radius: 6px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
-  padding: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  padding: 0.85rem;
   z-index: 80;
   font-size: 14px;
-  color: #222;
+  color: #1a1a1a;
 }
 .note-popover .note-body {
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 .note-popover textarea {
   width: 100%;
   min-height: 80px;
   resize: vertical;
   font: inherit;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid #d8d6cf;
   border-radius: 4px;
-  padding: 6px 8px;
+  padding: 0.4rem 0.55rem;
+  background: white;
   box-sizing: border-box;
 }
 .note-popover .note-actions {
   display: flex;
-  gap: 8px;
+  gap: 0.4rem;
   justify-content: flex-end;
-  margin-top: 8px;
+  margin-top: 0.55rem;
 }
 .note-popover button {
-  padding: 4px 10px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.85rem;
+  background: white;
+  border: 1px solid #1a1a1a;
   border-radius: 4px;
-  background: #f7f7f7;
   cursor: pointer;
-  font-size: 13px;
+  display: inline-flex; align-items: center; gap: 0.3rem;
 }
-.note-popover button.primary { background: #c08a3e; color: #fff; border-color: #a87530; }
-.note-popover button.danger { color: #c0392b; border-color: rgba(192, 57, 43, 0.4); }
-.note-popover button:hover { filter: brightness(0.96); }
+.note-popover button.primary {
+  background: #1a1a1a;
+  color: #faf9f6;
+}
+.note-popover button.danger {
+  color: #a8312f;
+  border-color: #a8312f;
+}
+.note-popover button:hover { filter: brightness(0.98); }
