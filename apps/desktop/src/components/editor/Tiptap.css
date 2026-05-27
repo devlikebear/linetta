@@ -82,3 +82,8 @@
   background: rgba(31, 59, 140, 0.06);
   border-radius: 3px;
 }
+
+.tiptap-wrap .ProseMirror .tiptap-dim {
+  opacity: 0.22;
+  transition: opacity 0.18s ease-out;
+}

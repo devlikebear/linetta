@@ -1,6 +1,7 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import { FocusExtension } from "./FocusExtension";
 import "./Tiptap.css";
 
 export interface TiptapHandle {
@@ -34,10 +35,12 @@ interface Props {
   extensions?: any[];
   /** Fired when a `.mention` atom inside the doc is double-clicked. */
   onMentionDoubleClick?: (entityId: string) => void;
+  /** Focus mode: dim every paragraph except the one containing the cursor. */
+  focus?: boolean;
 }
 
 export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEditor(
-  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick },
+  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick, focus },
   ref,
 ) {
   // Stable reference for the initial doc to avoid resetting on every render.
@@ -45,7 +48,11 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
 
   const editor = useEditor(
     {
-      extensions: [StarterKit.configure({}), ...(extensions ?? [])],
+      extensions: [
+        StarterKit.configure({}),
+        ...(extensions ?? []),
+        ...(focus ? [FocusExtension] : []),
+      ],
       content: initialDoc,
       autofocus: "end",
       onUpdate: ({ editor }) => {
@@ -55,8 +62,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
       },
     },
     // Re-create the editor only when the initial doc actually changes id/length —
-    // avoids cursor jumps from upstream re-renders.
-    [initialKey],
+    // avoids cursor jumps from upstream re-renders. Toggling `focus` is rare,
+    // so an editor re-init (with cursor loss) is acceptable.
+    [initialKey, focus],
   );
 
   useEffect(() => {
