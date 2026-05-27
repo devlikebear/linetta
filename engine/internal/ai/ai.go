@@ -18,9 +18,17 @@ type Context struct {
 	PrevSummary string        `json:"prev_summary"`
 	Entities      []EntityBrief  `json:"entities"`
 	ActiveThreads []ActiveThread `json:"active_threads"`
+	Notes         []NoteBrief    `json:"notes"`
 	StyleNotes    string         `json:"style_notes"`
 	UserPrompt    string         `json:"user_prompt"`
 	Options       Options        `json:"options"`
+}
+
+// NoteBrief is a margin-note line sent to the LLM. Anchor stays in the JSON
+// payload (for ai_runs inspection) but is omitted from the prompt text.
+type NoteBrief struct {
+	Anchor int    `json:"anchor"`
+	Body   string `json:"body"`
 }
 
 // EntityBrief is the entity slice we send to the LLM. Just enough to ground

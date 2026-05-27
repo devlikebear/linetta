@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -71,7 +72,7 @@ func newAIFixture(t *testing.T) (*ai.Runner, *ai.ContextBuilder, string, string)
 	runs := store.NewAIRunsRepo(s)
 	notif := &capNotif{}
 	runner := ai.NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return streamingFake{}, nil }, fixedProvider("claude-code-cli"))
-	builder := ai.NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s))
+	builder := ai.NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
 	return runner, builder, p.ID, *p.LastOpenedNodeID
 }
 

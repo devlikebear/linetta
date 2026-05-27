@@ -88,3 +88,26 @@ func TestBuildUser_omitsActiveThreadsHeaderWhenEmpty(t *testing.T) {
 		t.Errorf("header should not appear when empty: %q", usr)
 	}
 }
+
+func TestBuildUser_includesNotesSection(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		Notes: []NoteBrief{
+			{Anchor: 5, Body: "여기 톤을 더 차갑게"},
+			{Anchor: 22, Body: "@해진의 대사로 받기"},
+		},
+		UserPrompt: "확장",
+	}
+	msgs := BuildMessages(c)
+	user := msgs[1].Content
+	if !strings.Contains(user, "## 작가 주석") {
+		t.Fatalf("missing 작가 주석 header: %q", user)
+	}
+	if !strings.Contains(user, "- 여기 톤을 더 차갑게") || !strings.Contains(user, "- @해진의 대사로 받기") {
+		t.Errorf("missing note bodies: %q", user)
+	}
+	if strings.Contains(user, "anchor") {
+		t.Errorf("anchor key leaked: %q", user)
+	}
+}

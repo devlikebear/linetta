@@ -117,6 +117,15 @@ func buildUser(c Context) string {
 		}
 		b.WriteString("\n")
 	}
+	if len(c.Notes) > 0 {
+		b.WriteString("## 작가 주석\n")
+		for _, n := range c.Notes {
+			b.WriteString("- ")
+			b.WriteString(n.Body)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
 	if !c.Options.TonePreset && strings.TrimSpace(c.StyleNotes) != "" {
 		b.WriteString("## 작가 메모\n")
 		b.WriteString(c.StyleNotes)

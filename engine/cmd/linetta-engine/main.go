@@ -81,7 +81,7 @@ func main() {
 	}
 
 	aiRuns := store.NewAIRunsRepo(st)
-	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats)
+	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats, notes)
 	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, settingsStore)
 
 	summ := summarizer.New(nodes, settingsStore, ai.DefaultClientFactory)

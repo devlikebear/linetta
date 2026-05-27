@@ -10,6 +10,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -50,7 +51,7 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 		t.Fatalf("UpdateContent: %v", err)
 	}
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
 	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "재작성", Options{TonePreset: true})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -104,7 +105,7 @@ func TestBuildContext_prevSummary_trims300chars(t *testing.T) {
 
 	second, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "leaf", "씬 2", "", 1200)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
 	got, err := builder.Build(context.Background(), second.ID, "확장", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -149,7 +150,7 @@ func TestBuildContext_activeThreadsForCurrentNode(t *testing.T) {
 	_, _ = br.Create(context.Background(), beat.NewInput{ThreadID: closed.ID, NodeID: &nID, Label: "닫힌 마디"})
 	_ = tr.Close(context.Background(), closed.ID, 2000)
 
-	builder := NewContextBuilder(pr, nodes, mr, tr, br)
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, note.NewRepo(s))
 	got, err := builder.Build(context.Background(), nID, "재작성", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -168,7 +169,7 @@ func TestBuildContext_activeThreadsForCurrentNode(t *testing.T) {
 
 // setupPrevSummaryFixture seeds two leaves and returns the project, repos, and
 // the second leaf's id — shared by the three cache-path tests below.
-func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.Repo, *thread.Repo, *beat.Repo, string, string) {
+func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.Repo, *thread.Repo, *beat.Repo, *note.Repo, string, string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
@@ -193,18 +194,18 @@ func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.
 	docFirst := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + long.String() + `"}]}]}`
 	_ = nodes.UpdateContent(context.Background(), *p.LastOpenedNodeID, docFirst, 1100)
 	second, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "leaf", "씬 2", "", 1200)
-	return pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), *p.LastOpenedNodeID, second.ID
+	return pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), *p.LastOpenedNodeID, second.ID
 }
 
 func TestBuildContext_prevSummary_usesFreshCache(t *testing.T) {
-	pr, nodes, mr, tr, br, prevID, secondID := setupPrevSummaryFixture(t)
+	pr, nodes, mr, tr, br, nr, prevID, secondID := setupPrevSummaryFixture(t)
 
 	prevN, _ := nodes.Get(context.Background(), prevID)
 	if err := nodes.SetSummary(context.Background(), prevID, "캐시된 요약", prevN.ContentVersion); err != nil {
 		t.Fatalf("SetSummary: %v", err)
 	}
 
-	builder := NewContextBuilder(pr, nodes, mr, tr, br)
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
 	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -215,13 +216,13 @@ func TestBuildContext_prevSummary_usesFreshCache(t *testing.T) {
 }
 
 func TestBuildContext_prevSummary_fallsBackWhenStale(t *testing.T) {
-	pr, nodes, mr, tr, br, prevID, secondID := setupPrevSummaryFixture(t)
+	pr, nodes, mr, tr, br, nr, prevID, secondID := setupPrevSummaryFixture(t)
 
 	// Seed a summary stamped for an older content_version (0 — the doc has been
 	// updated once, so content_version is 1).
 	_ = nodes.SetSummary(context.Background(), prevID, "오래된 요약", 0)
 
-	builder := NewContextBuilder(pr, nodes, mr, tr, br)
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
 	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -235,14 +236,44 @@ func TestBuildContext_prevSummary_fallsBackWhenStale(t *testing.T) {
 }
 
 func TestBuildContext_prevSummary_fallsBackWhenEmpty(t *testing.T) {
-	pr, nodes, mr, tr, br, _, secondID := setupPrevSummaryFixture(t)
+	pr, nodes, mr, tr, br, nr, _, secondID := setupPrevSummaryFixture(t)
 
-	builder := NewContextBuilder(pr, nodes, mr, tr, br)
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
 	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 	if got.PrevSummary == "" {
 		t.Errorf("empty cache should have fallen back to trim, got empty")
+	}
+}
+
+func TestBuildContext_includesNotesForNode(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+	nr := note.NewRepo(s)
+	_, _ = nr.Create(context.Background(), note.NewInput{NodeID: *p.LastOpenedNodeID, Anchor: 7, Body: "톤 바꾸기"}, 1000)
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), nr)
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(got.Notes) != 1 || got.Notes[0].Body != "톤 바꾸기" || got.Notes[0].Anchor != 7 {
+		t.Errorf("notes = %+v", got.Notes)
 	}
 }

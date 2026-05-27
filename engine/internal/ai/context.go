@@ -7,6 +7,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -22,11 +23,12 @@ type ContextBuilder struct {
 	mentions *mention.Repo
 	threads  *thread.Repo
 	beats    *beat.Repo
+	notes    *note.Repo
 }
 
 // NewContextBuilder returns a builder that reads from the supplied repos.
-func NewContextBuilder(projects *project.Repo, nodes *node.Repo, mentions *mention.Repo, threads *thread.Repo, beats *beat.Repo) *ContextBuilder {
-	return &ContextBuilder{projects: projects, nodes: nodes, mentions: mentions, threads: threads, beats: beats}
+func NewContextBuilder(projects *project.Repo, nodes *node.Repo, mentions *mention.Repo, threads *thread.Repo, beats *beat.Repo, notes *note.Repo) *ContextBuilder {
+	return &ContextBuilder{projects: projects, nodes: nodes, mentions: mentions, threads: threads, beats: beats, notes: notes}
 }
 
 // Build assembles the context for the given leaf node + user prompt + options.
@@ -72,6 +74,18 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 		return Context{}, err
 	}
 
+	var noteBriefs []NoteBrief
+	if b.notes != nil {
+		ns, err := b.notes.ListForNode(ctx, nodeID)
+		if err != nil {
+			return Context{}, err
+		}
+		noteBriefs = make([]NoteBrief, 0, len(ns))
+		for _, n := range ns {
+			noteBriefs = append(noteBriefs, NoteBrief{Anchor: n.Anchor, Body: n.Body})
+		}
+	}
+
 	return Context{
 		ProjectID:     proj.ID,
 		NodeID:        n.ID,
@@ -80,6 +94,7 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 		PrevSummary:   prevSummary,
 		Entities:      briefs,
 		ActiveThreads: active,
+		Notes:         noteBriefs,
 		StyleNotes:    proj.StyleNotes,
 		UserPrompt:    prompt,
 		Options:       opts,
