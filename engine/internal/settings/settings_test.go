@@ -134,5 +134,47 @@ func TestSet_focusDefault_persists(t *testing.T) {
 	}
 }
 
+func TestSet_gitSync_persists(t *testing.T) {
+	s := newStoreOnTemp(t)
+	dir := "/tmp/linetta-test-repo"
+	tmpl := "Synced {date}"
+	if _, err := s.Set(context.Background(), Patch{
+		GitSyncDir:            strPtr(dir),
+		GitSyncCommitTemplate: strPtr(tmpl),
+	}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, _ := s.Get(context.Background())
+	if got.GitSyncDir != dir {
+		t.Errorf("git_sync_dir in-memory = %q, want %q", got.GitSyncDir, dir)
+	}
+	if got.GitSyncCommitTemplate != tmpl {
+		t.Errorf("git_sync_commit_template in-memory = %q, want %q", got.GitSyncCommitTemplate, tmpl)
+	}
+	// Reload from disk and verify it survived.
+	s2, err := New()
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	reloaded, _ := s2.Get(context.Background())
+	if reloaded.GitSyncDir != dir {
+		t.Errorf("git_sync_dir not persisted across reload: %q", reloaded.GitSyncDir)
+	}
+	if reloaded.GitSyncCommitTemplate != tmpl {
+		t.Errorf("git_sync_commit_template not persisted across reload: %q", reloaded.GitSyncCommitTemplate)
+	}
+}
+
+func TestSet_gitSync_emptyMeansDisabled(t *testing.T) {
+	s := newStoreOnTemp(t)
+	got, err := s.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.GitSyncDir != "" {
+		t.Errorf("default git_sync_dir = %q, want empty", got.GitSyncDir)
+	}
+}
+
 func boolPtr(v bool) *bool    { return &v }
 func strPtr(v string) *string { return &v }
