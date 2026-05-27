@@ -73,19 +73,20 @@ export function Library() {
       <section className="library-center">
         <h1 className="library-heading">Linetta</h1>
 
-        <button className="new-button" onClick={() => setModalOpen(true)}>
-          <Plus size={16} />
-          <span>새 작품</span>
-        </button>
-        <button
-          className="new-button"
-          onClick={handleImport}
-          disabled={importing}
-          style={{ marginTop: "0.4rem" }}
-        >
-          <Upload size={16} />
-          <span>{importing ? "가져오는 중…" : "가져오기 (.md)"}</span>
-        </button>
+        <div className="library-actions">
+          <button className="new-button" onClick={() => setModalOpen(true)}>
+            <Plus size={16} />
+            <span>새 작품</span>
+          </button>
+          <button
+            className="new-button"
+            onClick={handleImport}
+            disabled={importing}
+          >
+            <Upload size={16} />
+            <span>{importing ? "가져오는 중…" : "가져오기 (.md)"}</span>
+          </button>
+        </div>
 
         {loading ? (
           <p className="hint">불러오는 중…</p>

@@ -134,6 +134,18 @@ body {
   gap: 0.4rem;
 }
 
+.library-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.library-actions .new-button {
+  min-width: 220px;
+  justify-content: center;
+}
+
 .attr-add,
 .relation-add {
   display: inline-flex;
