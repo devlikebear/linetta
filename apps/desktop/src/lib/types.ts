@@ -178,6 +178,10 @@ export interface ExportPayload {
   suggested_filename: string;
 }
 
+export interface ImportMarkdownResult {
+  project_id: string;
+}
+
 // Mirrors engine/internal/thread Thread struct.
 export interface Thread {
   id: string;

@@ -6,6 +6,7 @@ import type {
   ExportPayload,
   GitSyncInitResult,
   GitSyncResult,
+  ImportMarkdownResult,
   ListProjectsParams,
   NewBeatInput,
   NewEntityInput,
@@ -85,6 +86,14 @@ export const exportApi = {
     rpcCall<ExportPayload>("export.project", { project_id: projectId }),
   node: (nodeId: string) =>
     rpcCall<ExportPayload>("export.node", { node_id: nodeId }),
+};
+
+export const imports = {
+  markdown: (fileName: string, content: string) =>
+    rpcCall<ImportMarkdownResult>("imports.markdown", {
+      file_name: fileName,
+      content,
+    }),
 };
 
 export const gitSync = {

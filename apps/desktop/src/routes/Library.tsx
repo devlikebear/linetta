@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { projects as projectsApi } from "../lib/rpc";
+import { projects as projectsApi, imports as importsApi } from "../lib/rpc";
 import type { Project, NewProjectInput } from "../lib/types";
 import { ProjectCard } from "../components/ProjectCard";
 import { NewProjectModal } from "../components/NewProjectModal";
+import { pickAndReadMarkdown } from "../lib/importLoad";
 
 const RECENT_LIMIT = 5;
 
@@ -13,6 +14,7 @@ export function Library() {
   const [modalOpen, setModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const navigate = useNavigate();
 
   const refresh = async () => {
@@ -40,6 +42,20 @@ export function Library() {
     navigate(`/workspace/${created.id}`);
   };
 
+  const handleImport = async () => {
+    setImporting(true);
+    try {
+      const picked = await pickAndReadMarkdown();
+      if (!picked) return;
+      const res = await importsApi.markdown(picked.fileName, picked.content);
+      navigate(`/workspace/${res.project_id}`);
+    } catch (err) {
+      alert(`가져오기 실패: ${err}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <main className="library">
       <header className="library-top">
@@ -52,6 +68,14 @@ export function Library() {
 
         <button className="new-button" onClick={() => setModalOpen(true)}>
           + 새 작품
+        </button>
+        <button
+          className="new-button"
+          onClick={handleImport}
+          disabled={importing}
+          style={{ marginTop: "0.4rem" }}
+        >
+          {importing ? "가져오는 중…" : "가져오기 (.md)"}
         </button>
 
         {loading ? (
