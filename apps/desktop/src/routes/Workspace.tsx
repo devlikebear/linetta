@@ -15,6 +15,7 @@ import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { CommandPalette, type Command } from "../components/CommandPalette";
+import { ShortcutsModal } from "../components/ShortcutsModal";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useEngineEvent } from "../hooks/useEngineEvent";
@@ -55,6 +56,7 @@ export function Workspace() {
   const [focus, setFocus] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [versionSheetNodeId, setVersionSheetNodeId] = useState<string | null>(null);
   const [zenOpen, setZenOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
@@ -705,6 +707,12 @@ export function Workspace() {
       label: focus ? "Focus 모드 끄기" : "Focus 모드 켜기",
       run: () => setFocus((v) => !v),
     });
+    cmds.push({
+      id: "show-shortcuts",
+      section: "도움말",
+      label: "단축키 도움말",
+      run: () => setShortcutsOpen(true),
+    });
     return cmds;
   }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen, focus]);
 
@@ -919,6 +927,8 @@ export function Workspace() {
           onDeleted={(id) => { editorRef.current?.removeNoteMarker(id); }}
         />
       )}
+
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </main>
   );
 }
