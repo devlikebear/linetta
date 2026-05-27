@@ -190,10 +190,6 @@ body {
   color: #1a1a1a;
 }
 
-.error {
-  color: #a8312f;
-}
-
 /* Modal */
 .modal-backdrop {
   position: fixed;
@@ -224,20 +220,63 @@ body {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
 }
-
 .field > span {
   color: #6b6b6b;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
 }
-
-.field input {
+.field input,
+.field textarea,
+.field select {
   font: inherit;
-  padding: 0.5rem 0.75rem;
+  padding: 0.45rem 0.7rem;
   border: 1px solid #d8d6cf;
   border-radius: 4px;
   background: #fffefb;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.field-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: stretch;
+}
+.field-row input,
+.field-row select {
+  flex: 1;
+  min-width: 0;
+}
+.field-row button {
+  font: inherit;
+  padding: 0.45rem 0.85rem;
+  background: white;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.radio-row, .check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+}
+
+.field .hint,
+.settings-section .hint {
+  font-size: 0.8rem;
+  color: #6b6b6b;
+  margin: 0.1rem 0 0;
+}
+
+.error {
+  color: #a8312f;
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
 }
 
 .chips {
@@ -582,8 +621,6 @@ body {
 .settings-form { max-width: 560px; margin: 1.5rem 0; }
 .settings-section { margin-bottom: 2rem; }
 .settings-section h3 { margin: 0 0 0.5rem; font-weight: 500; }
-.settings-section .hint { font-size: 0.85rem; color: #999; margin: 0 0 0.5rem; }
-.radio-row, .check-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
 .backup-path { font-size: 0.85rem; word-break: break-all; }
 .settings-saved { font-size: 0.85rem; color: #5d8; }
 

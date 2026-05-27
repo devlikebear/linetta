@@ -110,7 +110,7 @@ export function Settings() {
             </p>
             <label className="field">
               <span>git 폴더</span>
-              <div style={{ display: "flex", gap: "0.4rem" }}>
+              <div className="field-row">
                 <input
                   type="text"
                   value={gitDirDraft}
@@ -121,7 +121,6 @@ export function Settings() {
                     }
                   }}
                   placeholder="예: /Users/me/notes/linetta"
-                  style={{ flex: 1 }}
                 />
                 <button
                   type="button"
@@ -155,7 +154,7 @@ export function Settings() {
             <p className="hint">
               <code>{"{date}"}</code> 자리표시자만 지원됩니다 (YYYY-MM-DD HH:MM 으로 치환).
             </p>
-            <p className="hint" style={{ marginTop: "0.8rem" }}>
+            <p className="hint">
               지정한 폴더가 아직 git 저장소가 아닐 때 아래 버튼으로 초기화할 수 있습니다.
               초기화 후 <code>git remote add origin &lt;URL&gt;</code> 로 GitHub remote를 추가하세요.
             </p>
@@ -195,11 +194,6 @@ export function Settings() {
             <h3>백업</h3>
             <p className="hint">하루 한 번 자동 백업이 다음 경로에 저장됩니다 (14일 보관).</p>
             <p className="backup-path"><code>{current.backup_dir}</code></p>
-          </section>
-
-          <section className="settings-section">
-            <h3>엔진 로그</h3>
-            <p className="hint">(post-MVP — 다음 단계에서 추가됨)</p>
           </section>
 
           {savedAt && <p className="settings-saved">저장됨</p>}
