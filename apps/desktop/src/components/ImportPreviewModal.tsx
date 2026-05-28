@@ -12,7 +12,7 @@ interface Props {
 export function ImportPreviewModal({ preview, fileName, busy, onConfirm, onCancel }: Props) {
   const total = preview.container_count + preview.leaf_count;
   return (
-    <div className="import-preview-backdrop" onMouseDown={onCancel}>
+    <div className="import-preview-backdrop" onMouseDown={busy ? undefined : onCancel}>
       <div className="import-preview-modal" onMouseDown={(e) => e.stopPropagation()}>
         <h3 className="import-preview-title">가져오기 미리보기</h3>
         <p className="import-preview-meta">

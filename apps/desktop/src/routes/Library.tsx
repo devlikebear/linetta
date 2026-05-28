@@ -108,7 +108,7 @@ export function Library() {
           <button
             className="new-button"
             onClick={handleImport}
-            disabled={importing}
+            disabled={importing || pending !== null}
           >
             <Upload size={16} />
             <span>{importing ? "가져오는 중…" : "가져오기 (.md)"}</span>
