@@ -52,6 +52,27 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, now Clock) rpc.Handler {
 	}
 }
 
+// ImportPreview returns a handler for imports.preview. It parses the markdown
+// and returns the would-be tree (label, kind, children) plus counts and
+// warnings — without creating any project or node rows.
+func ImportPreview() rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p importMarkdownParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		outline := importmd.ParseOutline(p.Content)
+		pv := importmd.Preview(outline, p.FileName)
+		if pv.Warnings == nil {
+			pv.Warnings = []string{}
+		}
+		if pv.Roots == nil {
+			pv.Roots = []*importmd.PreviewNode{}
+		}
+		return json.Marshal(pv)
+	}
+}
+
 // fallbackTitleFromFileName strips the .md or .markdown suffix.
 // Empty result is fine — BuildProject defaults to "가져온 작품".
 func fallbackTitleFromFileName(name string) string {

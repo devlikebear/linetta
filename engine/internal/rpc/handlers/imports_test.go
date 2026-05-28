@@ -116,3 +116,57 @@ func TestImportMarkdownHandler_fallbackTitleFromFileName(t *testing.T) {
 		t.Errorf("title: %q", p.Title)
 	}
 }
+
+func TestImportPreview_returnsTreeNoDBWrite(t *testing.T) {
+	ctx := context.Background()
+	pr, _ := setupImportFixture(t)
+
+	h := ImportPreview()
+
+	md := "# 작품\n## 1부\n### 1장\n#### 씬 1\n본문\n"
+	params, _ := json.Marshal(map[string]any{
+		"file_name": "novel.md",
+		"content":   md,
+	})
+	raw, err := h(ctx, params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got struct {
+		Title          string   `json:"title"`
+		ContainerCount int      `json:"container_count"`
+		LeafCount      int      `json:"leaf_count"`
+		Warnings       []string `json:"warnings"`
+		Roots          []any    `json:"roots"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Title != "작품" {
+		t.Fatalf("title=%q", got.Title)
+	}
+	if got.ContainerCount != 2 || got.LeafCount != 1 {
+		t.Fatalf("counts: c=%d l=%d", got.ContainerCount, got.LeafCount)
+	}
+	if len(got.Roots) != 1 {
+		t.Fatalf("roots len=%d", len(got.Roots))
+	}
+
+	// Confirm no project rows created — Preview must be read-only.
+	projects, err := pr.List(ctx, project.ListFilter{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 0 {
+		t.Fatalf("preview must not write DB, found %d projects", len(projects))
+	}
+
+	// JSON shape stability: warnings should be [] not null, roots should be [...] not null.
+	rawStr := string(raw)
+	if strings.Contains(rawStr, `"warnings":null`) {
+		t.Fatalf("warnings should be [] not null, got %s", rawStr)
+	}
+	if strings.Contains(rawStr, `"roots":null`) {
+		t.Fatalf("roots should be [...] not null, got %s", rawStr)
+	}
+}
