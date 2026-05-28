@@ -83,14 +83,55 @@ func buildSystem(c Context) string {
 
 func buildUser(c Context) string {
 	var b strings.Builder
+
+	// Plan 16 layer-1 hierarchical sections (project synopsis → nearby parts/
+	// chapters → same-chapter peers → directly-adjacent leaves) precede the
+	// current scene so the model sees coarse-to-fine context.
+	if strings.TrimSpace(c.Hierarchical.ProjectSynopsis) != "" {
+		b.WriteString("## 작품 전반\n")
+		b.WriteString(c.Hierarchical.ProjectSynopsis)
+		b.WriteString("\n\n")
+	}
+
+	if len(c.Hierarchical.OtherPartSummaries) > 0 || len(c.Hierarchical.OtherChapterSummaries) > 0 {
+		b.WriteString("## 인근 줄거리\n")
+		for _, pt := range c.Hierarchical.OtherPartSummaries {
+			b.WriteString(fmt.Sprintf("- [%s] %s\n", pt.Label, pt.Body))
+		}
+		for _, ch := range c.Hierarchical.OtherChapterSummaries {
+			b.WriteString(fmt.Sprintf("- [%s] %s\n", ch.Label, ch.Body))
+		}
+		b.WriteString("\n")
+	}
+
+	if len(c.Hierarchical.SameChapterSummaries) > 0 {
+		b.WriteString("## 같은 장 다른 씬\n")
+		for _, ss := range c.Hierarchical.SameChapterSummaries {
+			b.WriteString(fmt.Sprintf("- [%s] %s\n", ss.Label, ss.Body))
+		}
+		b.WriteString("\n")
+	}
+
+	if len(c.Hierarchical.NearbyLeafSummaries) > 0 {
+		b.WriteString("## 직전·직후 씬 발췌\n")
+		for _, ss := range c.Hierarchical.NearbyLeafSummaries {
+			b.WriteString(fmt.Sprintf("- [%s] %s\n", ss.Label, ss.Body))
+		}
+		b.WriteString("\n")
+	}
+
+	if len(c.RelatedScenes) > 0 {
+		b.WriteString("## 관련 과거 씬\n")
+		for _, ss := range c.RelatedScenes {
+			b.WriteString(fmt.Sprintf("- [%s] %s\n", ss.Label, ss.Body))
+		}
+		b.WriteString("\n")
+	}
+
 	b.WriteString(fmt.Sprintf("## 현재 씬: %s\n", c.SceneLabel))
 	b.WriteString(c.SceneText)
 	b.WriteString("\n\n")
-	if strings.TrimSpace(c.PrevSummary) != "" {
-		b.WriteString("## 직전 씬 발췌\n")
-		b.WriteString(c.PrevSummary)
-		b.WriteString("\n\n")
-	}
+
 	if len(c.Entities) > 0 {
 		b.WriteString("## 등장 인물·장소\n")
 		for _, e := range c.Entities {
@@ -114,6 +155,13 @@ func buildUser(c Context) string {
 				b.WriteString(")")
 			}
 			b.WriteString("\n")
+			// Plan 16 layer-2 entity dossier: indented one-line summaries of the
+			// most recent scenes where the entity appeared elsewhere.
+			for _, line := range e.Recent {
+				b.WriteString("  · ")
+				b.WriteString(line)
+				b.WriteString("\n")
+			}
 		}
 		b.WriteString("\n")
 	}

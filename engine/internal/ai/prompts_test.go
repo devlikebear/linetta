@@ -128,6 +128,138 @@ func TestBuildUser_omitsActiveThreadsHeaderWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestBuildUser_emitsHierarchicalSections(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 3",
+		SceneText:  "씬 3 본문",
+		Hierarchical: HierarchicalContext{
+			ProjectSynopsis: "작품 시놉시스",
+			OtherPartSummaries: []PartSummary{
+				{Label: "2부", Body: "2부 요약"},
+			},
+			OtherChapterSummaries: []ChapterSummary{
+				{Label: "1부 / 2장", Body: "2장 요약"},
+				{Label: "1부 / 3장", Body: "3장 요약"},
+			},
+			SameChapterSummaries: []SceneSummary{
+				{Label: "1부 / 1장 / 씬 5", Body: "씬 5 요약"},
+				{Label: "1부 / 1장 / 씬 6", Body: "씬 6 요약"},
+			},
+			NearbyLeafSummaries: []SceneSummary{
+				{Label: "1부 / 1장 / 씬 1", Body: "씬 1 요약"},
+				{Label: "1부 / 1장 / 씬 2", Body: "씬 2 요약"},
+				{Label: "1부 / 1장 / 씬 4", Body: "씬 4 요약"},
+			},
+		},
+		RelatedScenes: []SceneSummary{
+			{Label: "1부 / 1장 / 씬 9", Body: "관련 씬 요약"},
+		},
+		Entities: []EntityBrief{
+			{Name: "해진", Kind: "character"},
+			{Name: "민호", Kind: "character", Recent: []string{"민호 dossier line"}},
+		},
+		UserPrompt: "확장",
+	}
+	usr := BuildMessages(c)[1].Content
+
+	want := []string{
+		"## 작품 전반",
+		"## 인근 줄거리",
+		"## 같은 장 다른 씬",
+		"## 직전·직후 씬 발췌",
+		"## 관련 과거 씬",
+		"## 현재 씬: 씬 3",
+		"## 등장 인물·장소",
+		"## 작가의 지시",
+	}
+	last := -1
+	for _, s := range want {
+		idx := strings.Index(usr, s)
+		if idx < 0 {
+			t.Errorf("missing %q in prompt; got:\n%s", s, usr)
+			continue
+		}
+		if idx < last {
+			t.Errorf("section %q at %d came before previous (last=%d); got:\n%s", s, idx, last, usr)
+		}
+		last = idx
+	}
+
+	// Bullet formatting sanity checks.
+	if !strings.Contains(usr, "- [2부] 2부 요약") {
+		t.Errorf("missing other-part bullet: %s", usr)
+	}
+	if !strings.Contains(usr, "- [1부 / 2장] 2장 요약") {
+		t.Errorf("missing other-chapter bullet: %s", usr)
+	}
+	if !strings.Contains(usr, "- [1부 / 1장 / 씬 5] 씬 5 요약") {
+		t.Errorf("missing same-chapter bullet: %s", usr)
+	}
+	if !strings.Contains(usr, "- [1부 / 1장 / 씬 1] 씬 1 요약") {
+		t.Errorf("missing nearby bullet: %s", usr)
+	}
+	if !strings.Contains(usr, "- [1부 / 1장 / 씬 9] 관련 씬 요약") {
+		t.Errorf("missing related-scene bullet: %s", usr)
+	}
+	// Within 인근 줄거리, parts come before chapters per the spec.
+	nearIdx := strings.Index(usr, "## 인근 줄거리")
+	partIdx := strings.Index(usr, "- [2부] 2부 요약")
+	chapIdx := strings.Index(usr, "- [1부 / 2장] 2장 요약")
+	if nearIdx < 0 || partIdx < 0 || chapIdx < 0 || !(nearIdx < partIdx && partIdx < chapIdx) {
+		t.Errorf("ordering within 인근 줄거리 wrong (parts-before-chapters): near=%d part=%d chap=%d", nearIdx, partIdx, chapIdx)
+	}
+}
+
+func TestBuildUser_dossierIndentedUnderEntity(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		Entities: []EntityBrief{
+			{
+				Name:   "해진",
+				Kind:   "character",
+				Recent: []string{"첫 등장", "두 번째"},
+			},
+		},
+		UserPrompt: "확장",
+	}
+	usr := BuildMessages(c)[1].Content
+	if !strings.Contains(usr, "\n  · 첫 등장\n") {
+		t.Errorf("missing indented dossier line 1: %q", usr)
+	}
+	if !strings.Contains(usr, "\n  · 두 번째\n") {
+		t.Errorf("missing indented dossier line 2: %q", usr)
+	}
+	// Dossier lines should appear after the entity bullet itself.
+	entIdx := strings.Index(usr, "- @해진")
+	dossIdx := strings.Index(usr, "  · 첫 등장")
+	if entIdx < 0 || dossIdx < 0 || dossIdx < entIdx {
+		t.Errorf("dossier order wrong: entIdx=%d dossIdx=%d", entIdx, dossIdx)
+	}
+}
+
+func TestBuildUser_skipsEmptyHierarchicalSections(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		UserPrompt: "재작성",
+	}
+	usr := BuildMessages(c)[1].Content
+	forbidden := []string{
+		"## 작품 전반",
+		"## 인근 줄거리",
+		"## 같은 장 다른 씬",
+		"## 직전·직후 씬 발췌",
+		"## 관련 과거 씬",
+		"## 직전 씬 발췌", // legacy header removed entirely
+	}
+	for _, s := range forbidden {
+		if strings.Contains(usr, s) {
+			t.Errorf("header %q should not appear when hierarchical is empty; got:\n%s", s, usr)
+		}
+	}
+}
+
 func TestBuildUser_includesNotesSection(t *testing.T) {
 	c := Context{
 		SceneLabel: "씬 1",
