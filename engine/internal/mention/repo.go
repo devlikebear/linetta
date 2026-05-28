@@ -2,6 +2,7 @@ package mention
 
 import (
 	"context"
+	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -60,6 +61,37 @@ SELECT id, node_id, entity_id, position, surface
 			return nil, err
 		}
 		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// RecentSummariesForEntity returns up to `limit` first-lines of the most
+// recently updated leaf summaries that mention entityID, excluding
+// excludeNodeID. Used by Plan 16's layer-2 entity dossier.
+func (r *Repo) RecentSummariesForEntity(ctx context.Context, entityID, excludeNodeID string, limit int) ([]string, error) {
+	rows, err := r.s.DB().QueryContext(ctx, `
+SELECT n.summary
+  FROM mentions m
+  JOIN nodes n ON n.id = m.node_id
+ WHERE m.entity_id = ?
+   AND m.node_id != ?
+   AND n.summary != ''
+ ORDER BY n.updated_at DESC
+ LIMIT ?`, entityID, excludeNodeID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		first := strings.TrimSpace(strings.SplitN(s, "\n", 2)[0])
+		if first != "" {
+			out = append(out, first)
+		}
 	}
 	return out, rows.Err()
 }

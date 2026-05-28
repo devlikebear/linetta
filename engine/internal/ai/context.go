@@ -94,8 +94,13 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 	}
 	briefs := make([]EntityBrief, 0, len(ents))
 	for _, e := range ents {
+		recent, err := b.mentions.RecentSummariesForEntity(ctx, e.ID, nodeID, 5)
+		if err != nil {
+			return Context{}, err
+		}
 		briefs = append(briefs, EntityBrief{
 			Name: e.Name, Kind: e.Kind, Role: e.Role, Summary: e.Summary, Attributes: e.Attributes,
+			Recent: recent,
 		})
 	}
 

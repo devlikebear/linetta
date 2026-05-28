@@ -342,6 +342,54 @@ func TestBuildContext_hierarchical_populatesNearbySameChapterAndPart(t *testing.
 	}
 }
 
+func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	er := entity.NewRepo(s)
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
+	e, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
+
+	first := *p.LastOpenedNodeID
+	doc := func(text string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[
+			{"type":"text","text":"` + text + ` "},
+			{"type":"mention","attrs":{"id":"` + e.ID + `","label":"해진"}}
+		]}]}`
+	}
+	_ = nodes.UpdateContent(context.Background(), first, doc("씬 1에서"), 1100)
+	gotFirst, _ := nodes.Get(context.Background(), first)
+	_ = nodes.SetSummary(context.Background(), first, "해진은 모래에 처음 도착했다.\n계속 ...", gotFirst.ContentVersion)
+
+	second, _ := nodes.CreateSibling(context.Background(), first, "leaf", "씬 2", "", 1200)
+	_ = nodes.UpdateContent(context.Background(), second.ID, doc("씬 2의 현재"), 1300)
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	got, err := builder.Build(context.Background(), second.ID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(got.Entities) != 1 {
+		t.Fatalf("entities = %d", len(got.Entities))
+	}
+	if len(got.Entities[0].Recent) != 1 || got.Entities[0].Recent[0] != "해진은 모래에 처음 도착했다." {
+		t.Errorf("dossier = %+v, want one line", got.Entities[0].Recent)
+	}
+}
+
 func TestBuildContext_includesNotesForNode(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
