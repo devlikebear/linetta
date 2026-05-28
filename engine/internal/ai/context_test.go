@@ -248,6 +248,100 @@ func TestBuildContext_prevSummary_fallsBackWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestBuildContext_hierarchical_populatesNearbySameChapterAndPart(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
+	// 1부 → 1장 → {씬 1, 씬 2, 씬 3 (current), 씬 4}, plus 2부 → 2장 → 씬 5.
+	part1, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "container", "1부", "", 1100)
+	chap1, _ := nodes.CreateChild(context.Background(), part1.ID, "container", "1장", "", 1110)
+	s1, _ := nodes.CreateChild(context.Background(), chap1.ID, "leaf", "씬 1", "", 1120)
+	s2, _ := nodes.CreateChild(context.Background(), chap1.ID, "leaf", "씬 2", "", 1130)
+	s3, _ := nodes.CreateChild(context.Background(), chap1.ID, "leaf", "씬 3", "", 1140)
+	s4, _ := nodes.CreateChild(context.Background(), chap1.ID, "leaf", "씬 4", "", 1150)
+	part2, _ := nodes.CreateSibling(context.Background(), part1.ID, "container", "2부", "", 1160)
+	chap2, _ := nodes.CreateChild(context.Background(), part2.ID, "container", "2장", "", 1170)
+	_, _ = nodes.CreateChild(context.Background(), chap2.ID, "leaf", "씬 5", "", 1180)
+
+	// Also delete the project's seeded default leaf so we have a clean
+	// two-part tree at the root (otherwise the synopsis branch sees > 1
+	// root container — still fine, but the assertion is cleaner this way).
+	docOf := func(text string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + text + `"}]}]}`
+	}
+	_ = nodes.UpdateContent(context.Background(), s1.ID, docOf("씬1 본문"), 1200)
+	_ = nodes.UpdateContent(context.Background(), s2.ID, docOf("씬2 본문"), 1210)
+	_ = nodes.UpdateContent(context.Background(), s3.ID, docOf("씬3 본문 — 현재 씬"), 1220)
+	_ = nodes.UpdateContent(context.Background(), s4.ID, docOf("씬4 본문"), 1230)
+
+	// Seed fresh summaries on leaves we want layered into the result, and on
+	// every container so the builder reads them without invoking the refresher.
+	seedFresh := func(id, body string) {
+		got, _ := nodes.Get(context.Background(), id)
+		_ = nodes.SetSummary(context.Background(), id, body, got.ContentVersion)
+	}
+	seedFresh(s1.ID, "씬1 요약")
+	seedFresh(s2.ID, "씬2 요약")
+	seedFresh(s4.ID, "씬4 요약")
+	seedFresh(chap1.ID, "1장 요약")
+	seedFresh(part1.ID, "1부 요약")
+	seedFresh(chap2.ID, "2장 요약")
+	seedFresh(part2.ID, "2부 요약")
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	got, err := builder.Build(context.Background(), s3.ID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	gotNearby := map[string]bool{}
+	for _, ss := range got.Hierarchical.NearbyLeafSummaries {
+		gotNearby[ss.NodeID] = true
+	}
+	for _, want := range []string{s1.ID, s2.ID, s4.ID} {
+		if !gotNearby[want] {
+			t.Errorf("nearby missing %s; got %+v", want, got.Hierarchical.NearbyLeafSummaries)
+		}
+	}
+	for _, ss := range got.Hierarchical.SameChapterSummaries {
+		if gotNearby[ss.NodeID] || ss.NodeID == s3.ID {
+			t.Errorf("same_chapter leaked nearby/self: %s", ss.NodeID)
+		}
+	}
+	foundPart := false
+	for _, ps := range got.Hierarchical.OtherPartSummaries {
+		if ps.NodeID == part2.ID && ps.Body == "2부 요약" {
+			foundPart = true
+		}
+	}
+	if !foundPart {
+		t.Errorf("other_part_summaries missing 2부: %+v", got.Hierarchical.OtherPartSummaries)
+	}
+	if !strings.Contains(got.Hierarchical.ProjectSynopsis, "1부") {
+		t.Errorf("project_synopsis = %q, want to mention 1부", got.Hierarchical.ProjectSynopsis)
+	}
+	// Breadcrumb sanity check on one nearby entry.
+	for _, ss := range got.Hierarchical.NearbyLeafSummaries {
+		if ss.NodeID == s2.ID && !strings.Contains(ss.Label, " / ") {
+			t.Errorf("nearby s2 label missing breadcrumb separator: %q", ss.Label)
+		}
+	}
+}
+
 func TestBuildContext_includesNotesForNode(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)

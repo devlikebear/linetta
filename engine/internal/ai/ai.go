@@ -24,17 +24,51 @@ type Options struct {
 // final prompt. Stored as ai_runs.context_json so the user can later see
 // exactly what was sent.
 type Context struct {
-	ProjectID   string        `json:"project_id"`
-	NodeID      string        `json:"node_id"`
-	SceneLabel  string        `json:"scene_label"`
-	SceneText   string        `json:"scene_text"`
-	PrevSummary string        `json:"prev_summary"`
-	Entities      []EntityBrief  `json:"entities"`
-	ActiveThreads []ActiveThread `json:"active_threads"`
-	Notes         []NoteBrief    `json:"notes"`
-	StyleNotes    string         `json:"style_notes"`
-	UserPrompt    string         `json:"user_prompt"`
-	Options       Options        `json:"options"`
+	ProjectID     string              `json:"project_id"`
+	NodeID        string              `json:"node_id"`
+	SceneLabel    string              `json:"scene_label"`
+	SceneText     string              `json:"scene_text"`
+	PrevSummary   string              `json:"prev_summary"`
+	Hierarchical  HierarchicalContext `json:"hierarchical"`
+	RelatedScenes []SceneSummary      `json:"related_scenes"`
+	Entities      []EntityBrief       `json:"entities"`
+	ActiveThreads []ActiveThread      `json:"active_threads"`
+	Notes         []NoteBrief         `json:"notes"`
+	StyleNotes    string              `json:"style_notes"`
+	UserPrompt    string              `json:"user_prompt"`
+	Options       Options             `json:"options"`
+}
+
+// SceneSummary is one rendered leaf/scene rollup (label + body). Used by both
+// hierarchical layer 1 (nearby + same chapter) and topology RAG layer 3.
+type SceneSummary struct {
+	NodeID string `json:"node_id"`
+	Label  string `json:"label"` // breadcrumb path, e.g. "1부 / 1장 / 씬 3"
+	Body   string `json:"body"`
+}
+
+// ChapterSummary is the 장-level rollup body + its breadcrumb label.
+type ChapterSummary struct {
+	NodeID string `json:"node_id"`
+	Label  string `json:"label"`
+	Body   string `json:"body"`
+}
+
+// PartSummary is the 부-level rollup.
+type PartSummary struct {
+	NodeID string `json:"node_id"`
+	Label  string `json:"label"`
+	Body   string `json:"body"`
+}
+
+// HierarchicalContext is layer 1 of Plan 16's hierarchical context. Each slice
+// may be empty; renderer skips empty sections.
+type HierarchicalContext struct {
+	NearbyLeafSummaries   []SceneSummary   `json:"nearby_leaf_summaries"`
+	SameChapterSummaries  []SceneSummary   `json:"same_chapter_summaries"`
+	OtherChapterSummaries []ChapterSummary `json:"other_chapter_summaries"`
+	OtherPartSummaries    []PartSummary    `json:"other_part_summaries"`
+	ProjectSynopsis       string           `json:"project_synopsis"`
 }
 
 // NoteBrief is a margin-note line sent to the LLM. Anchor stays in the JSON
@@ -52,6 +86,7 @@ type EntityBrief struct {
 	Role       string            `json:"role"`
 	Summary    string            `json:"summary"`
 	Attributes map[string]string `json:"attributes"`
+	Recent     []string          `json:"recent"` // Plan 16 layer 2 dossier — first lines of latest 5 leaf summaries
 }
 
 // ActiveThread is an open storyline thread that touches the current node.

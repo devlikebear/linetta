@@ -82,12 +82,17 @@ func main() {
 	}
 
 	aiRuns := store.NewAIRunsRepo(st)
-	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats, notes)
 	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, settingsStore)
 
 	summ := summarizer.New(nodes, settingsStore, ai.DefaultClientFactory)
 	stopSummarizer := summ.Start(ctx)
 	defer stopSummarizer()
+
+	// Plan 16: ContextBuilder needs a SummaryRefresher so stale container
+	// summaries can be filled on-demand. *summarizer.Summarizer satisfies
+	// ai.SummaryRefresher via RefreshNow.
+	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats, notes).
+		WithSummaryRefresher(summ)
 
 	// Backup + retention scheduler. Runs once at boot, then daily at midnight+1m.
 	home, err := paths.Home()

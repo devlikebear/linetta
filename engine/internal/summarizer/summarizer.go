@@ -76,6 +76,13 @@ func (s *Summarizer) summarizeOne(ctx context.Context, nodeID string) {
 	s.summarizeOneDepth(ctx, nodeID, 0)
 }
 
+// RefreshNow synchronously summarizes the node (and any stale descendants).
+// Implements ai.SummaryRefresher so ContextBuilder can populate the
+// hierarchical layer without waiting on the background queue.
+func (s *Summarizer) RefreshNow(ctx context.Context, nodeID string) {
+	s.summarizeOneDepth(ctx, nodeID, 0)
+}
+
 // summarizeOneDepth dispatches on node.Kind. Container nodes recurse into
 // their children with depth+1; the depth cap prevents runaway recursion if
 // the parent_id graph were ever to become cyclic.
