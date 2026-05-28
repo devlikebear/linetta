@@ -23,7 +23,7 @@ type OutlineNode struct {
 	Children []*OutlineNode
 }
 
-var headingRe = regexp.MustCompile(`^(#{1,6})\s+(.+?)\s*$`)
+var headingRe = regexp.MustCompile(`^[ \t]*(#{1,6})\s+(.+?)\s*$`)
 
 // ParseOutline walks the markdown line by line, building the heading tree.
 //

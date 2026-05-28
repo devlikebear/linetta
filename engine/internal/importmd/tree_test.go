@@ -126,3 +126,36 @@ func TestParseOutline_empty(t *testing.T) {
 		t.Errorf("non-empty outline: %+v", o)
 	}
 }
+
+func TestParseOutline_leadingWhitespaceOnHeading(t *testing.T) {
+	md := "# Title\n" +
+		"   ## 1부 어둠\n" +
+		"\t### 1장 시작\n" +
+		"#### 씬 1\n" +
+		"본문이다."
+	out := ParseOutline(md)
+	if out.Title != "Title" {
+		t.Fatalf("title=%q", out.Title)
+	}
+	if len(out.Roots) != 1 {
+		t.Fatalf("want 1 root, got %d", len(out.Roots))
+	}
+	bu := out.Roots[0]
+	if bu.Label != "1부 어둠" || bu.Level != 2 {
+		t.Fatalf("part=%+v", bu)
+	}
+	if len(bu.Children) != 1 || bu.Children[0].Label != "1장 시작" {
+		t.Fatalf("chapter mismatch: %+v", bu.Children)
+	}
+	ch := bu.Children[0]
+	if len(ch.Children) != 1 || ch.Children[0].Label != "씬 1" {
+		t.Fatalf("scene mismatch: %+v", ch.Children)
+	}
+}
+
+func TestParseOutline_hashWithoutSpaceIsNotHeading(t *testing.T) {
+	out := ParseOutline("##nospace text")
+	if len(out.Roots) != 0 {
+		t.Fatalf("want no headings, got %d", len(out.Roots))
+	}
+}
