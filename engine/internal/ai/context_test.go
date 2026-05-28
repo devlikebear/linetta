@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -489,5 +490,307 @@ func TestBuildContext_includesNotesForNode(t *testing.T) {
 	}
 	if len(got.Notes) != 1 || got.Notes[0].Body != "톤 바꾸기" || got.Notes[0].Anchor != 7 {
 		t.Errorf("notes = %+v", got.Notes)
+	}
+}
+
+// fakeRefresher is a stand-in for *summarizer.Summarizer used by the Plan 16
+// integration tests. It bypasses the LLM by writing a deterministic body back
+// into nodes.summary at the current content_version.
+type fakeRefresher struct {
+	nodes *node.Repo
+	body  func(n node.Node) string
+}
+
+func (f *fakeRefresher) RefreshNow(ctx context.Context, nodeID string) {
+	n, err := f.nodes.Get(ctx, nodeID)
+	if err != nil {
+		return
+	}
+	if n.Summary != "" && n.SummaryForVersion == n.ContentVersion {
+		return
+	}
+	_ = f.nodes.SetSummary(ctx, nodeID, f.body(n), n.ContentVersion)
+}
+
+// TestBuildContext_hierarchicalRetrieval — Test 7-1.
+//
+// Builds a 2부 / 2장 / 2씬 tree. Seeds leaf summaries directly via SetSummary but
+// leaves every container summary empty. The injected fakeRefresher fills the
+// stale container rollups synchronously, simulating the summarizer.
+func TestBuildContext_hierarchicalRetrieval(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
+	// 1부 → {1장 → [씬1, 씬2-current], 2장 → [씬3, 씬4]}
+	// 2부 → {3장 → [씬5, 씬6]}
+	part1, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "container", "1부", "", 1100)
+	chap1, _ := nodes.CreateChild(context.Background(), part1.ID, "container", "1장", "", 1110)
+	s1, _ := nodes.CreateChild(context.Background(), chap1.ID, "leaf", "씬 1", "", 1120)
+	cur, _ := nodes.CreateChild(context.Background(), chap1.ID, "leaf", "씬 2", "", 1130) // current
+	chap2, _ := nodes.CreateChild(context.Background(), part1.ID, "container", "2장", "", 1140)
+	s3, _ := nodes.CreateChild(context.Background(), chap2.ID, "leaf", "씬 3", "", 1150)
+	s4, _ := nodes.CreateChild(context.Background(), chap2.ID, "leaf", "씬 4", "", 1160)
+	part2, _ := nodes.CreateSibling(context.Background(), part1.ID, "container", "2부", "", 1170)
+	chap3, _ := nodes.CreateChild(context.Background(), part2.ID, "container", "3장", "", 1180)
+	s5, _ := nodes.CreateChild(context.Background(), chap3.ID, "leaf", "씬 5", "", 1190)
+	s6, _ := nodes.CreateChild(context.Background(), chap3.ID, "leaf", "씬 6", "", 1200)
+
+	docOf := func(text string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + text + `"}]}]}`
+	}
+	// Write bodies on all leaves so ancestor content_versions bump.
+	for _, id := range []string{s1.ID, cur.ID, s3.ID, s4.ID, s5.ID, s6.ID} {
+		_ = nodes.UpdateContent(context.Background(), id, docOf("body of "+id), 1300)
+	}
+
+	// Seed leaf summaries directly (no LLM needed).
+	seedLeaf := func(id, body string) {
+		got, _ := nodes.Get(context.Background(), id)
+		_ = nodes.SetSummary(context.Background(), id, body, got.ContentVersion)
+	}
+	seedLeaf(s1.ID, "씬1 요약")
+	seedLeaf(s3.ID, "씬3 요약")
+	seedLeaf(s4.ID, "씬4 요약")
+	seedLeaf(s5.ID, "씬5 요약")
+	seedLeaf(s6.ID, "씬6 요약")
+	// Note: container summaries (chap1/chap2/chap3/part1/part2) are deliberately
+	// NOT seeded. The fakeRefresher fills them on demand.
+
+	calls := map[string]int{}
+	ref := &fakeRefresher{
+		nodes: nodes,
+		body: func(n node.Node) string {
+			calls[n.ID]++
+			return fmt.Sprintf("ROLLUP[%s]", n.Label)
+		},
+	}
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s)).
+		WithSummaryRefresher(ref)
+	got, err := builder.Build(context.Background(), cur.ID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	// NearbyLeafSummaries: cur is at index 1 in DFS order [s1, cur, s3, s4, s5, s6].
+	// 2 prior would be (curIdx-2 = -1, skipped) and (curIdx-1 = s1), plus 1 next (s3).
+	// At edge → expect 2 entries: s1 and s3.
+	nearbyIDs := map[string]bool{}
+	for _, ss := range got.Hierarchical.NearbyLeafSummaries {
+		nearbyIDs[ss.NodeID] = true
+	}
+	if !nearbyIDs[s1.ID] || !nearbyIDs[s3.ID] {
+		t.Errorf("nearby missing s1/s3: got %+v", got.Hierarchical.NearbyLeafSummaries)
+	}
+	if nearbyIDs[cur.ID] {
+		t.Errorf("nearby leaked current: %+v", got.Hierarchical.NearbyLeafSummaries)
+	}
+
+	// SameChapterSummaries excludes current + nearby. cur's parent is chap1; the
+	// only other chap1 leaf is s1, which is in nearby — so SameChapter should be
+	// empty here.
+	for _, ss := range got.Hierarchical.SameChapterSummaries {
+		if nearbyIDs[ss.NodeID] || ss.NodeID == cur.ID {
+			t.Errorf("same_chapter leaked nearby/self: %s", ss.NodeID)
+		}
+	}
+
+	// OtherChapterSummaries should include chap2 (sibling of chap1 under part1).
+	foundChap2 := false
+	for _, ch := range got.Hierarchical.OtherChapterSummaries {
+		if ch.NodeID == chap2.ID && strings.Contains(ch.Body, "ROLLUP[2장]") {
+			foundChap2 = true
+		}
+	}
+	if !foundChap2 {
+		t.Errorf("other_chapter_summaries missing 2장 rollup: %+v", got.Hierarchical.OtherChapterSummaries)
+	}
+
+	// OtherPartSummaries should include part2.
+	foundPart2 := false
+	for _, ps := range got.Hierarchical.OtherPartSummaries {
+		if ps.NodeID == part2.ID && strings.Contains(ps.Body, "ROLLUP[2부]") {
+			foundPart2 = true
+		}
+	}
+	if !foundPart2 {
+		t.Errorf("other_part_summaries missing 2부 rollup: %+v", got.Hierarchical.OtherPartSummaries)
+	}
+
+	// ProjectSynopsis non-empty (there's the seeded default leaf at root plus
+	// 1부 and 2부 containers → multi-root branch concatenates 부 rollups).
+	if got.Hierarchical.ProjectSynopsis == "" {
+		t.Errorf("project_synopsis empty; tree has 부 containers")
+	}
+
+	// fakeRefresher was actually invoked for at least one container.
+	if calls[chap2.ID] == 0 && calls[part2.ID] == 0 {
+		t.Errorf("refresher was never invoked on a container: %+v", calls)
+	}
+}
+
+// TestBuildContext_entityDossier — Test 7-2.
+//
+// Three past leaves all mention 해진; build context against a 4th leaf that also
+// mentions 해진. Recent should hold the 3 prior first-lines, most-recent first.
+func TestBuildContext_entityDossier(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	er := entity.NewRepo(s)
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
+	e, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
+
+	doc := func(text string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[
+			{"type":"text","text":"` + text + ` "},
+			{"type":"mention","attrs":{"id":"` + e.ID + `","label":"해진"}}
+		]}]}`
+	}
+
+	// Three past leaves, each mentions 해진. Updated in ascending time order so
+	// the LAST (third) one has the highest updated_at and should top Recent[0].
+	leaf1 := *p.LastOpenedNodeID
+	_ = nodes.UpdateContent(context.Background(), leaf1, doc("씬 1"), 1100)
+	got1, _ := nodes.Get(context.Background(), leaf1)
+	_ = nodes.SetSummary(context.Background(), leaf1, "첫 등장.\n계속", got1.ContentVersion)
+
+	leaf2, _ := nodes.CreateSibling(context.Background(), leaf1, "leaf", "씬 2", "", 1110)
+	_ = nodes.UpdateContent(context.Background(), leaf2.ID, doc("씬 2"), 1200)
+	got2, _ := nodes.Get(context.Background(), leaf2.ID)
+	_ = nodes.SetSummary(context.Background(), leaf2.ID, "두 번째 만남.\n계속", got2.ContentVersion)
+
+	leaf3, _ := nodes.CreateSibling(context.Background(), leaf2.ID, "leaf", "씬 3", "", 1120)
+	_ = nodes.UpdateContent(context.Background(), leaf3.ID, doc("씬 3"), 1300)
+	got3, _ := nodes.Get(context.Background(), leaf3.ID)
+	_ = nodes.SetSummary(context.Background(), leaf3.ID, "세 번째 사건.\n계속", got3.ContentVersion)
+
+	// Current (4th) leaf — also mentions 해진.
+	leaf4, _ := nodes.CreateSibling(context.Background(), leaf3.ID, "leaf", "씬 4", "", 1130)
+	_ = nodes.UpdateContent(context.Background(), leaf4.ID, doc("현재"), 1400)
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	got, err := builder.Build(context.Background(), leaf4.ID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(got.Entities) != 1 || got.Entities[0].Name != "해진" {
+		t.Fatalf("entities = %+v", got.Entities)
+	}
+	recent := got.Entities[0].Recent
+	if len(recent) != 3 {
+		t.Fatalf("Recent len = %d, want 3: %+v", len(recent), recent)
+	}
+	// Most recently-updated leaf (leaf3) should be first.
+	if recent[0] != "세 번째 사건." {
+		t.Errorf("Recent[0] = %q, want %q", recent[0], "세 번째 사건.")
+	}
+}
+
+// TestBuildContext_topologyRAG — Test 7-3.
+//
+// Two entities. Past leaf A mentions both. Current leaf mentions both. Other
+// past leaves mention only one (should NOT surface — k < 2).
+func TestBuildContext_topologyRAG(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	er := entity.NewRepo(s)
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
+	e1, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
+	e2, _ := er.Create(context.Background(), 1060, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "민호"})
+
+	withBoth := func(text string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[
+			{"type":"text","text":"` + text + `"},
+			{"type":"mention","attrs":{"id":"` + e1.ID + `","label":"해진"}},
+			{"type":"mention","attrs":{"id":"` + e2.ID + `","label":"민호"}}
+		]}]}`
+	}
+	withOne := func(text, eid, lbl string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[
+			{"type":"text","text":"` + text + `"},
+			{"type":"mention","attrs":{"id":"` + eid + `","label":"` + lbl + `"}}
+		]}]}`
+	}
+
+	// Past leaf A (the seeded root leaf): mentions BOTH entities.
+	leafA := *p.LastOpenedNodeID
+	_ = nodes.UpdateContent(context.Background(), leafA, withBoth("A — "), 1100)
+	gotA, _ := nodes.Get(context.Background(), leafA)
+	_ = nodes.SetSummary(context.Background(), leafA, "A 요약", gotA.ContentVersion)
+
+	// Single-entity leaves — must NOT surface.
+	soloHae, _ := nodes.CreateSibling(context.Background(), leafA, "leaf", "씬 해진only", "", 1200)
+	_ = nodes.UpdateContent(context.Background(), soloHae.ID, withOne("hae — ", e1.ID, "해진"), 1210)
+	gotSH, _ := nodes.Get(context.Background(), soloHae.ID)
+	_ = nodes.SetSummary(context.Background(), soloHae.ID, "해진only 요약", gotSH.ContentVersion)
+
+	soloMin, _ := nodes.CreateSibling(context.Background(), soloHae.ID, "leaf", "씬 민호only", "", 1220)
+	_ = nodes.UpdateContent(context.Background(), soloMin.ID, withOne("min — ", e2.ID, "민호"), 1230)
+	gotSM, _ := nodes.Get(context.Background(), soloMin.ID)
+	_ = nodes.SetSummary(context.Background(), soloMin.ID, "민호only 요약", gotSM.ContentVersion)
+
+	// Filler so the current leaf's nearby window (2 prior + 1 next) does not
+	// sweep leafA in — without this, leafA would be filtered out as "nearby".
+	filler1, _ := nodes.CreateSibling(context.Background(), soloMin.ID, "leaf", "f1", "", 1240)
+	_ = nodes.UpdateContent(context.Background(), filler1.ID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"f1"}]}]}`, 1245)
+	filler2, _ := nodes.CreateSibling(context.Background(), filler1.ID, "leaf", "f2", "", 1250)
+	_ = nodes.UpdateContent(context.Background(), filler2.ID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"f2"}]}]}`, 1255)
+
+	// Current leaf — mentions BOTH entities.
+	curN, _ := nodes.CreateSibling(context.Background(), filler2.ID, "leaf", "현재", "", 1300)
+	_ = nodes.UpdateContent(context.Background(), curN.ID, withBoth("cur — "), 1310)
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	got, err := builder.Build(context.Background(), curN.ID, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(got.RelatedScenes) != 1 {
+		t.Fatalf("related = %+v, want exactly [leafA]", got.RelatedScenes)
+	}
+	if got.RelatedScenes[0].NodeID != leafA {
+		t.Errorf("related[0] = %s, want leafA=%s", got.RelatedScenes[0].NodeID, leafA)
 	}
 }
