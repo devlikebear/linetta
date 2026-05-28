@@ -180,6 +180,23 @@ export interface ExportPayload {
 
 export interface ImportMarkdownResult {
   project_id: string;
+  container_count: number;
+  leaf_count: number;
+  warnings: string[];
+}
+
+export interface ImportPreviewNode {
+  label: string;
+  kind: "container" | "leaf";
+  children?: ImportPreviewNode[];
+}
+
+export interface ImportPreviewResult {
+  title: string;
+  container_count: number;
+  leaf_count: number;
+  warnings: string[];
+  roots: ImportPreviewNode[];
 }
 
 // Mirrors engine/internal/thread Thread struct.

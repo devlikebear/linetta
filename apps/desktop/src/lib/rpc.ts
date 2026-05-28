@@ -7,6 +7,7 @@ import type {
   GitSyncInitResult,
   GitSyncResult,
   ImportMarkdownResult,
+  ImportPreviewResult,
   ListProjectsParams,
   NewBeatInput,
   NewEntityInput,
@@ -91,6 +92,11 @@ export const exportApi = {
 export const imports = {
   markdown: (fileName: string, content: string) =>
     rpcCall<ImportMarkdownResult>("imports.markdown", {
+      file_name: fileName,
+      content,
+    }),
+  preview: (fileName: string, content: string) =>
+    rpcCall<ImportPreviewResult>("imports.preview", {
       file_name: fileName,
       content,
     }),
