@@ -53,6 +53,43 @@ func TestImportMarkdownHandler_createsProjectFromContent(t *testing.T) {
 	}
 }
 
+func TestImportMarkdown_resultIncludesCountsAndWarnings(t *testing.T) {
+	pr, nr := setupImportFixture(t)
+	h := ImportMarkdown(pr, nr, func() int64 { return 7000 })
+	ctx := context.Background()
+
+	md := "# 작품\n## 1부\n### 1장\n#### 씬 1\n본문\n"
+	params, _ := json.Marshal(map[string]any{
+		"file_name": "x.md",
+		"content":   md,
+	})
+	raw, err := h(ctx, params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got struct {
+		ProjectID      string   `json:"project_id"`
+		ContainerCount int      `json:"container_count"`
+		LeafCount      int      `json:"leaf_count"`
+		Warnings       []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.ProjectID == "" {
+		t.Fatal("project_id empty")
+	}
+	if got.ContainerCount != 2 { // 1부, 1장
+		t.Fatalf("ContainerCount=%d want 2", got.ContainerCount)
+	}
+	if got.LeafCount != 1 { // 씬 1
+		t.Fatalf("LeafCount=%d want 1", got.LeafCount)
+	}
+	if len(got.Warnings) != 0 {
+		t.Fatalf("warnings=%v want none", got.Warnings)
+	}
+}
+
 func TestImportMarkdownHandler_fallbackTitleFromFileName(t *testing.T) {
 	pr, nr := setupImportFixture(t)
 	h := ImportMarkdown(pr, nr, func() int64 { return 6000 })

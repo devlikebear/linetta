@@ -17,7 +17,10 @@ type importMarkdownParams struct {
 }
 
 type importMarkdownResult struct {
-	ProjectID string `json:"project_id"`
+	ProjectID      string   `json:"project_id"`
+	ContainerCount int      `json:"container_count"`
+	LeafCount      int      `json:"leaf_count"`
+	Warnings       []string `json:"warnings"`
 }
 
 // ImportMarkdown returns a handler for imports.markdown.
@@ -36,7 +39,16 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, now Clock) rpc.Handler {
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		return json.Marshal(importMarkdownResult{ProjectID: built.Project.ID})
+		out := importMarkdownResult{
+			ProjectID:      built.Project.ID,
+			ContainerCount: built.ContainerCount,
+			LeafCount:      built.LeafCount,
+			Warnings:       built.Warnings,
+		}
+		if out.Warnings == nil {
+			out.Warnings = []string{}
+		}
+		return json.Marshal(out)
 	}
 }
 
