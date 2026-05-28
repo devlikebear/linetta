@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -87,6 +88,9 @@ func TestImportMarkdown_resultIncludesCountsAndWarnings(t *testing.T) {
 	}
 	if len(got.Warnings) != 0 {
 		t.Fatalf("warnings=%v want none", got.Warnings)
+	}
+	if strings.Contains(string(raw), `"warnings":null`) {
+		t.Fatalf("warnings should serialize as [] not null, got %s", raw)
 	}
 }
 
