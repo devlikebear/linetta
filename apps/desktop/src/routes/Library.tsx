@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { projects as projectsApi, imports as importsApi } from "../lib/rpc";
-import type { Project, NewProjectInput } from "../lib/types";
+import type { ImportPreviewResult, NewProjectInput, Project } from "../lib/types";
 import { ProjectCard } from "../components/ProjectCard";
 import { NewProjectModal } from "../components/NewProjectModal";
+import { ImportPreviewModal } from "../components/ImportPreviewModal";
 import { pickAndReadMarkdown } from "../lib/importLoad";
 import { MoreHorizontal, Settings, Plus, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
 
 const RECENT_LIMIT = 5;
+
+interface PendingImport {
+  fileName: string;
+  content: string;
+  preview: ImportPreviewResult;
+}
 
 export function Library() {
   const [recent, setRecent] = useState<Project[]>([]);
@@ -17,6 +24,7 @@ export function Library() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [pending, setPending] = useState<PendingImport | null>(null);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -50,7 +58,26 @@ export function Library() {
     try {
       const picked = await pickAndReadMarkdown();
       if (!picked) return;
-      const res = await importsApi.markdown(picked.fileName, picked.content);
+      const preview = await importsApi.preview(picked.fileName, picked.content);
+      setPending({ fileName: picked.fileName, content: picked.content, preview });
+    } catch (err) {
+      showToast(`가져오기 실패: ${err}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!pending) return;
+    setImporting(true);
+    try {
+      const res = await importsApi.markdown(pending.fileName, pending.content);
+      const total = res.container_count + res.leaf_count;
+      let msg = `가져오기 완료 · 컨테이너 ${res.container_count}개 · 씬 ${res.leaf_count}개`;
+      if (total === 0) msg = "가져오기 완료 · 빈 작품 (헤딩 없음)";
+      if (res.warnings.length > 0) msg += ` · 경고 ${res.warnings.length}개`;
+      showToast(msg);
+      setPending(null);
       navigate(`/workspace/${res.project_id}`);
     } catch (err) {
       showToast(`가져오기 실패: ${err}`);
@@ -114,6 +141,16 @@ export function Library() {
         onClose={() => setModalOpen(false)}
         onSubmit={handleCreate}
       />
+
+      {pending && (
+        <ImportPreviewModal
+          preview={pending.preview}
+          fileName={pending.fileName}
+          busy={importing}
+          onConfirm={confirmImport}
+          onCancel={() => setPending(null)}
+        />
+      )}
     </main>
   );
 }
