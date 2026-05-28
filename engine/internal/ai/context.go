@@ -109,11 +109,15 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 		return Context{}, err
 	}
 
+	related, err := b.loadRelatedScenes(ctx, n, nearbyIDs)
+	if err != nil {
+		return Context{}, err
+	}
+
 	active, err := b.loadActiveThreads(ctx, nodeID)
 	if err != nil {
 		return Context{}, err
 	}
-	_ = nearbyIDs // consumed by Task 5
 
 	var noteBriefs []NoteBrief
 	if b.notes != nil {
@@ -134,6 +138,7 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 		SceneText:     sceneText,
 		PrevSummary:   prevSummary,
 		Hierarchical:  hierarchical,
+		RelatedScenes: related,
 		Entities:      briefs,
 		ActiveThreads: active,
 		Notes:         noteBriefs,
@@ -287,6 +292,53 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 	trimToBudget(&out, hierarchicalMaxChars)
 
 	return out, nearbyIDs, nil
+}
+
+// loadRelatedScenes runs the co-mention topology-RAG query and post-filters
+// the result set against excludeIDs (typically Nearby IDs + cur.ID). Returns
+// up to 3 SceneSummary entries with breadcrumb labels.
+func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, excludeIDs []string) ([]SceneSummary, error) {
+	// Fetch top-K + small buffer so the post-filter can still yield 3.
+	results, err := b.mentions.CoMentionLeaves(ctx, cur.ID, 3+len(excludeIDs))
+	if err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, nil
+	}
+	excl := make(map[string]bool, len(excludeIDs)+1)
+	excl[cur.ID] = true
+	for _, id := range excludeIDs {
+		excl[id] = true
+	}
+	all, err := b.nodes.ListByProject(ctx, cur.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]node.Node, len(all))
+	for _, n := range all {
+		byID[n.ID] = n
+	}
+	out := make([]SceneSummary, 0, 3)
+	for _, r := range results {
+		if excl[r.NodeID] {
+			continue
+		}
+		n, ok := byID[r.NodeID]
+		if !ok {
+			continue
+		}
+		if n.Summary == "" {
+			continue
+		}
+		out = append(out, SceneSummary{
+			NodeID: n.ID, Label: breadcrumbLabel(byID, n), Body: n.Summary,
+		})
+		if len(out) >= 3 {
+			break
+		}
+	}
+	return out, nil
 }
 
 // freshLeafSummary returns the cached summary if the version matches; otherwise

@@ -96,6 +96,47 @@ SELECT n.summary
 	return out, rows.Err()
 }
 
+// CoMentionResult is one row of the topology-RAG result set.
+type CoMentionResult struct {
+	NodeID   string
+	K        int   // distinct entities from the current node that appear here
+	LastSeen int64 // nodes.updated_at
+}
+
+// CoMentionLeaves returns up to `limit` nodes that share at least 2 entities
+// with currentNodeID, ranked by (shared-count desc, updated_at desc). Excludes
+// currentNodeID itself. Callers post-filter for additional exclusions
+// (e.g. ids already shown in the nearby set).
+func (r *Repo) CoMentionLeaves(ctx context.Context, currentNodeID string, limit int) ([]CoMentionResult, error) {
+	rows, err := r.s.DB().QueryContext(ctx, `
+WITH cur_ents AS (
+  SELECT entity_id FROM mentions WHERE node_id = ?
+)
+SELECT m.node_id, COUNT(DISTINCT m.entity_id) AS k, MAX(n.updated_at) AS last_seen
+  FROM mentions m
+  JOIN nodes n ON n.id = m.node_id
+ WHERE m.entity_id IN (SELECT entity_id FROM cur_ents)
+   AND m.node_id != ?
+   AND n.summary != ''
+ GROUP BY m.node_id
+HAVING k >= 2
+ ORDER BY k DESC, last_seen DESC
+ LIMIT ?`, currentNodeID, currentNodeID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CoMentionResult
+	for rows.Next() {
+		var rec CoMentionResult
+		if err := rows.Scan(&rec.NodeID, &rec.K, &rec.LastSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
 // ListEntitiesForNode returns the distinct entities mentioned in the node,
 // hydrated with their full fields, in first-appearance order.
 func (r *Repo) ListEntitiesForNode(ctx context.Context, nodeID string) ([]entity.Entity, error) {

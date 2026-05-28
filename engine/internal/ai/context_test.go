@@ -390,6 +390,78 @@ func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T)
 	}
 }
 
+func TestBuildContext_relatedScenes_returnsCoMentionTop3(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	er := entity.NewRepo(s)
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
+	e1, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
+	e2, _ := er.Create(context.Background(), 1060, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "민호"})
+
+	withBoth := func(text string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[
+			{"type":"text","text":"` + text + `"},
+			{"type":"mention","attrs":{"id":"` + e1.ID + `","label":"해진"}},
+			{"type":"mention","attrs":{"id":"` + e2.ID + `","label":"민호"}}
+		]}]}`
+	}
+	withOne := func(text, eid, lbl string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[
+			{"type":"text","text":"` + text + `"},
+			{"type":"mention","attrs":{"id":"` + eid + `","label":"` + lbl + `"}}
+		]}]}`
+	}
+
+	// Co-mention leaf: both entities together. Placed FIRST so the current
+	// node's nearby window (2 prior + 1 next in DFS order) doesn't sweep it
+	// in — `co` ends up 3+ leaves before `cur` once we insert filler.
+	first := *p.LastOpenedNodeID
+	_ = nodes.UpdateContent(context.Background(), first, withBoth("co — "), 1100)
+	gotCo, _ := nodes.Get(context.Background(), first)
+	_ = nodes.SetSummary(context.Background(), first, "co 요약", gotCo.ContentVersion)
+	co := first
+
+	// Single-entity leaf: should NOT appear (only 1 shared entity).
+	solo, _ := nodes.CreateSibling(context.Background(), co, "leaf", "씬 solo", "", 1200)
+	_ = nodes.UpdateContent(context.Background(), solo.ID, withOne("solo — ", e1.ID, "해진"), 1210)
+	gotSolo, _ := nodes.Get(context.Background(), solo.ID)
+	_ = nodes.SetSummary(context.Background(), solo.ID, "solo 요약", gotSolo.ContentVersion)
+
+	// Filler leaves so `co` is not in cur's nearby (2 prior + 1 next) window.
+	filler1, _ := nodes.CreateSibling(context.Background(), solo.ID, "leaf", "씬 f1", "", 1220)
+	_ = nodes.UpdateContent(context.Background(), filler1.ID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"f1"}]}]}`, 1225)
+	filler2, _ := nodes.CreateSibling(context.Background(), filler1.ID, "leaf", "씬 f2", "", 1230)
+	_ = nodes.UpdateContent(context.Background(), filler2.ID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"f2"}]}]}`, 1235)
+
+	// Current node: also mentions both entities.
+	curN, _ := nodes.CreateSibling(context.Background(), filler2.ID, "leaf", "현재", "", 1300)
+	cur := curN.ID
+	_ = nodes.UpdateContent(context.Background(), cur, withBoth("현재 — "), 1310)
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	got, err := builder.Build(context.Background(), cur, "확장", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(got.RelatedScenes) != 1 || got.RelatedScenes[0].NodeID != co {
+		t.Errorf("related = %+v, want [co]", got.RelatedScenes)
+	}
+}
+
 func TestBuildContext_includesNotesForNode(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
