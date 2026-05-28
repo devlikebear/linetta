@@ -64,6 +64,9 @@ func BuildProject(ctx context.Context, pr *project.Repo, nr *node.Repo, now int6
 		if err != nil {
 			return BuildResult{}, err
 		}
+		// Chain off the most-recently-inserted root so outline order is preserved
+		// (CreateSibling inserts immediately after refID; without chaining, roots
+		// would come out in reverse order relative to the seed).
 		refID = created.ID
 	}
 	if err := nr.Delete(ctx, seedID, now); err != nil {

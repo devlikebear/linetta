@@ -174,6 +174,12 @@ func TestBuildProject_H2WithBodyAndChildren_syntheticScene(t *testing.T) {
 	if chapter.ContentDoc == nil || !strings.Contains(*chapter.ContentDoc, "chapter body") {
 		t.Errorf("chapter body: %v", chapter.ContentDoc)
 	}
+	if res.ContainerCount != 1 {
+		t.Fatalf("ContainerCount=%d want 1", res.ContainerCount)
+	}
+	if res.LeafCount != 2 { // synthetic 씬 1 + Chapter 1
+		t.Fatalf("LeafCount=%d want 2", res.LeafCount)
+	}
 }
 
 func TestBuildProject_returnsCountsAndWarnings(t *testing.T) {
