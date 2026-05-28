@@ -36,7 +36,7 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, now Clock) rpc.Handler {
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		return json.Marshal(importMarkdownResult{ProjectID: built.ID})
+		return json.Marshal(importMarkdownResult{ProjectID: built.Project.ID})
 	}
 }
 

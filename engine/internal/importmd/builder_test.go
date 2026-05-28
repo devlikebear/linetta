@@ -26,10 +26,11 @@ func TestBuildProject_emptyMarkdownKeepsSeed(t *testing.T) {
 	pr, nr := setupRepos(t)
 	ctx := context.Background()
 	o := ParseOutline("")
-	p, err := BuildProject(ctx, pr, nr, 1000, o, "Fallback")
+	res, err := BuildProject(ctx, pr, nr, 1000, o, "Fallback")
 	if err != nil {
 		t.Fatalf("BuildProject: %v", err)
 	}
+	p := res.Project
 	if p.Title != "Fallback" {
 		t.Errorf("title: %q", p.Title)
 	}
@@ -50,10 +51,11 @@ func TestBuildProject_fullTree(t *testing.T) {
 	ctx := context.Background()
 	src := "# Title\n## Part A\n### Chapter 1\n#### Scene 1\nbody one\n#### Scene 2\nbody two\n## Part B\n### Chapter 2\n#### Scene 3\nbody three\n"
 	o := ParseOutline(src)
-	p, err := BuildProject(ctx, pr, nr, 2000, o, "ignored")
+	res, err := BuildProject(ctx, pr, nr, 2000, o, "ignored")
 	if err != nil {
 		t.Fatalf("BuildProject: %v", err)
 	}
+	p := res.Project
 	if p.Title != "Title" {
 		t.Errorf("title: %q", p.Title)
 	}
@@ -95,10 +97,11 @@ func TestBuildProject_H3BodyNoH4_leaf(t *testing.T) {
 	ctx := context.Background()
 	src := "# T\n## P\n### Chapter only\nbody body body\n"
 	o := ParseOutline(src)
-	p, err := BuildProject(ctx, pr, nr, 3000, o, "x")
+	res, err := BuildProject(ctx, pr, nr, 3000, o, "x")
 	if err != nil {
 		t.Fatalf("BuildProject: %v", err)
 	}
+	p := res.Project
 	nodes, _ := nr.ListByProject(ctx, p.ID)
 	// Expect 2 nodes: Part P (container), Chapter only (leaf with body).
 	if len(nodes) != 2 {
@@ -130,10 +133,11 @@ func TestBuildProject_H2WithBodyAndChildren_syntheticScene(t *testing.T) {
 	// under the H2 container with the body text.
 	src := "# T\n## P\nintro body for part\n### Chapter 1\nchapter body\n"
 	o := ParseOutline(src)
-	p, err := BuildProject(ctx, pr, nr, 4000, o, "x")
+	res, err := BuildProject(ctx, pr, nr, 4000, o, "x")
 	if err != nil {
 		t.Fatalf("BuildProject: %v", err)
 	}
+	p := res.Project
 	nodes, _ := nr.ListByProject(ctx, p.ID)
 	// Expect: P (container), synthetic 씬 1 leaf under P (with intro), Chapter 1 leaf.
 	var partP node.Node
@@ -169,5 +173,49 @@ func TestBuildProject_H2WithBodyAndChildren_syntheticScene(t *testing.T) {
 	}
 	if chapter.ContentDoc == nil || !strings.Contains(*chapter.ContentDoc, "chapter body") {
 		t.Errorf("chapter body: %v", chapter.ContentDoc)
+	}
+}
+
+func TestBuildProject_returnsCountsAndWarnings(t *testing.T) {
+	pr, nr := setupRepos(t)
+	ctx := context.Background()
+
+	md := "# 작품\n" +
+		"## 1부\n" +
+		"### 1장\n" +
+		"#### 씬 1\n본문 1\n" +
+		"#### 씬 2\n본문 2\n" +
+		"### 2장\n" +
+		"#### 씬 1\n본문 3\n"
+	out := ParseOutline(md)
+	res, err := BuildProject(ctx, pr, nr, 1000, out, "fallback")
+	if err != nil {
+		t.Fatalf("BuildProject: %v", err)
+	}
+	if res.ContainerCount != 3 { // 1부, 1장, 2장
+		t.Fatalf("ContainerCount=%d want 3", res.ContainerCount)
+	}
+	if res.LeafCount != 3 { // 씬 1, 씬 2, 씬 1
+		t.Fatalf("LeafCount=%d want 3", res.LeafCount)
+	}
+	if len(res.Warnings) != 0 {
+		t.Fatalf("Warnings=%v want empty", res.Warnings)
+	}
+}
+
+func TestBuildProject_warnsWhenNoHeadings(t *testing.T) {
+	pr, nr := setupRepos(t)
+	ctx := context.Background()
+
+	out := ParseOutline("그냥 본문만 있고 헤딩이 없음.")
+	res, err := BuildProject(ctx, pr, nr, 1000, out, "fallback")
+	if err != nil {
+		t.Fatalf("BuildProject: %v", err)
+	}
+	if res.LeafCount != 0 || res.ContainerCount != 0 {
+		t.Fatalf("counts: c=%d l=%d want both 0", res.ContainerCount, res.LeafCount)
+	}
+	if len(res.Warnings) == 0 {
+		t.Fatal("want warning for no headings")
 	}
 }
