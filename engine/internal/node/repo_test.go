@@ -284,6 +284,79 @@ func TestRepo_UpdateContent_bumpsContentVersion(t *testing.T) {
 	}
 }
 
+func TestRepo_UpdateContent_bumpsAncestorContentVersion(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	// 부 → 장 → 씬 tree built off the seeded first leaf.
+	part, err := r.CreateSibling(ctx, *p.LastOpenedNodeID, "container", "1부", "", 1100)
+	if err != nil {
+		t.Fatalf("part: %v", err)
+	}
+	chapter, err := r.CreateChild(ctx, part.ID, "container", "1장", "", 1110)
+	if err != nil {
+		t.Fatalf("chapter: %v", err)
+	}
+	scene, err := r.CreateChild(ctx, chapter.ID, "leaf", "씬 1", "", 1120)
+	if err != nil {
+		t.Fatalf("scene: %v", err)
+	}
+
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"한"}]}]}`
+	if err := r.UpdateContent(ctx, scene.ID, doc, 1200); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+
+	gotScene, _ := r.Get(ctx, scene.ID)
+	gotChap, _ := r.Get(ctx, chapter.ID)
+	gotPart, _ := r.Get(ctx, part.ID)
+	if gotScene.ContentVersion != 1 {
+		t.Errorf("scene.content_version = %d, want 1", gotScene.ContentVersion)
+	}
+	if gotChap.ContentVersion != 1 {
+		t.Errorf("chapter.content_version = %d, want 1 (ancestor bumped)", gotChap.ContentVersion)
+	}
+	if gotPart.ContentVersion != 1 {
+		t.Errorf("part.content_version = %d, want 1 (ancestor bumped)", gotPart.ContentVersion)
+	}
+	if gotChap.SummaryForVersion != 0 || gotPart.SummaryForVersion != 0 {
+		t.Errorf("ancestor summary_for_version should still be 0 (stale): chap=%d part=%d",
+			gotChap.SummaryForVersion, gotPart.SummaryForVersion)
+	}
+
+	// Second write bumps all three again.
+	if err := r.UpdateContent(ctx, scene.ID, doc, 1300); err != nil {
+		t.Fatalf("UpdateContent#2: %v", err)
+	}
+	gotChap2, _ := r.Get(ctx, chapter.ID)
+	if gotChap2.ContentVersion != 2 {
+		t.Errorf("after second write, chapter.content_version = %d, want 2", gotChap2.ContentVersion)
+	}
+}
+
+func TestRepo_ListChildren_returnsChildrenInOrdinalOrder(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	chap, _ := r.CreateSibling(ctx, *p.LastOpenedNodeID, "container", "1장", "", 2000)
+	a, _ := r.CreateChild(ctx, chap.ID, "leaf", "씬 A", "", 2100)
+	b, _ := r.CreateChild(ctx, chap.ID, "leaf", "씬 B", "", 2200)
+
+	children, err := r.ListChildren(ctx, chap.ID)
+	if err != nil {
+		t.Fatalf("ListChildren: %v", err)
+	}
+	if len(children) != 2 {
+		t.Fatalf("len = %d, want 2", len(children))
+	}
+	if children[0].ID != a.ID || children[1].ID != b.ID {
+		t.Errorf("order = %q,%q; want %q,%q",
+			children[0].Label, children[1].Label, a.Label, b.Label)
+	}
+}
+
 func TestRepo_SetSummary_writesBothFields(t *testing.T) {
 	s, p := newStoreAndProject(t)
 	r := NewRepo(s)

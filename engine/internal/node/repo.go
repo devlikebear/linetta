@@ -68,6 +68,25 @@ UPDATE nodes
 		return ErrNotFound
 	}
 
+	// Plan 16: every ancestor's content_version is bumped so the descendant's
+	// edit invalidates ancestor container summaries (summary_for_version <
+	// content_version → stale). updated_at is also bumped so topology-RAG can
+	// rank by recency.
+	if _, err := tx.ExecContext(ctx, `
+WITH RECURSIVE ancestors(id) AS (
+  SELECT parent_id FROM nodes WHERE id = ? AND parent_id IS NOT NULL
+  UNION ALL
+  SELECT n.parent_id FROM nodes n
+    JOIN ancestors a ON n.id = a.id
+   WHERE n.parent_id IS NOT NULL
+)
+UPDATE nodes
+   SET content_version = content_version + 1,
+       updated_at = ?
+ WHERE id IN (SELECT id FROM ancestors)`, id, now); err != nil {
+		return fmt.Errorf("bump ancestor content_version: %w", err)
+	}
+
 	// Recompute project total + touch its updated_at.
 	if _, err := tx.ExecContext(ctx, `
 UPDATE projects
@@ -149,6 +168,26 @@ func scan(row scanner) (Node, error) {
 		n.ContentDoc = &v
 	}
 	return n, nil
+}
+
+// ListChildren returns the direct children of parentID in ordinal order.
+func (r *Repo) ListChildren(ctx context.Context, parentID string) ([]Node, error) {
+	rows, err := r.s.DB().QueryContext(ctx, baseSelect+`
+WHERE parent_id = ?
+ORDER BY ordinal`, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Node
+	for rows.Next() {
+		n, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
 }
 
 // ListByProject returns every node belonging to the project, sorted by
