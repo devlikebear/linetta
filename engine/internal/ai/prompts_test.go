@@ -282,3 +282,81 @@ func TestBuildUser_includesNotesSection(t *testing.T) {
 		t.Errorf("anchor key leaked: %q", user)
 	}
 }
+
+func TestBuildUser_projectMetaSection_fullyPopulated(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		Project: ProjectMeta{
+			Genres:       []string{"판타지", "미스터리"},
+			LengthTarget: "novel",
+			DefaultPOV:   "first",
+		},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "## 작품 설정") {
+		t.Fatalf("missing header. got:\n%s", got)
+	}
+	if !strings.Contains(got, "장르: 판타지, 미스터리") {
+		t.Fatalf("missing genres. got:\n%s", got)
+	}
+	if !strings.Contains(got, "분량: 장편") {
+		t.Fatalf("missing length. got:\n%s", got)
+	}
+	if !strings.Contains(got, "시점: 1인칭") {
+		t.Fatalf("missing POV. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_projectMetaSection_partial(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		Project: ProjectMeta{
+			LengthTarget: "short",
+		},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "## 작품 설정") {
+		t.Fatalf("missing header. got:\n%s", got)
+	}
+	if !strings.Contains(got, "분량: 단편") {
+		t.Fatalf("missing length. got:\n%s", got)
+	}
+	if strings.Contains(got, "장르:") {
+		t.Fatalf("genres should be omitted. got:\n%s", got)
+	}
+	if strings.Contains(got, "시점:") {
+		t.Fatalf("POV should be omitted. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_projectMetaSection_allEmptyOmitsSection(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		Project:    ProjectMeta{},
+	}
+	got := buildUser(c)
+	if strings.Contains(got, "## 작품 설정") {
+		t.Fatalf("section should be omitted entirely. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_projectMeta_unmappedValuesPassThrough(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		Project: ProjectMeta{
+			LengthTarget: "epic",
+			DefaultPOV:   "second",
+		},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "분량: epic") {
+		t.Fatalf("unmapped length should pass through. got:\n%s", got)
+	}
+	if !strings.Contains(got, "시점: second") {
+		t.Fatalf("unmapped POV should pass through. got:\n%s", got)
+	}
+}

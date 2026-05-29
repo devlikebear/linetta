@@ -84,6 +84,15 @@ func buildSystem(c Context) string {
 func buildUser(c Context) string {
 	var b strings.Builder
 
+	// Plan 18 project meta: a one-line summary of the user-configured genres,
+	// length target, and default POV. Sits above everything else so the model
+	// frames the entire context within the writer's stated intent.
+	if meta := renderProjectMeta(c.Project); meta != "" {
+		b.WriteString("## 작품 설정\n")
+		b.WriteString(meta)
+		b.WriteString("\n\n")
+	}
+
 	// Plan 16 layer-1 hierarchical sections (project synopsis → nearby parts/
 	// chapters → same-chapter peers → directly-adjacent leaves) precede the
 	// current scene so the model sees coarse-to-fine context.
@@ -197,6 +206,49 @@ func buildUser(c Context) string {
 	b.WriteString("## 작가의 지시\n")
 	b.WriteString(strings.TrimSpace(c.UserPrompt))
 	return b.String()
+}
+
+// renderProjectMeta returns a one-line "장르: X, Y · 분량: Z · 시점: W"
+// with empty pieces omitted. Returns empty string if all three are empty.
+// Unmapped LengthTarget / DefaultPOV values pass through as-is.
+func renderProjectMeta(m ProjectMeta) string {
+	parts := []string{}
+	if len(m.Genres) > 0 {
+		parts = append(parts, "장르: "+strings.Join(m.Genres, ", "))
+	}
+	if m.LengthTarget != "" {
+		parts = append(parts, "분량: "+mapLengthTarget(m.LengthTarget))
+	}
+	if m.DefaultPOV != "" {
+		parts = append(parts, "시점: "+mapDefaultPOV(m.DefaultPOV))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func mapLengthTarget(v string) string {
+	switch v {
+	case "short":
+		return "단편"
+	case "novella":
+		return "중편"
+	case "novel":
+		return "장편"
+	default:
+		return v
+	}
+}
+
+func mapDefaultPOV(v string) string {
+	switch v {
+	case "first":
+		return "1인칭"
+	case "third":
+		return "3인칭"
+	case "omniscient":
+		return "전지적"
+	default:
+		return v
+	}
 }
 
 func kindLabel(k string) string {
