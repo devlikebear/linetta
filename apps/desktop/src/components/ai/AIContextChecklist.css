@@ -1,0 +1,40 @@
+.ai-context-checklist {
+  position: absolute;
+  background: var(--surface, #1d1d1f);
+  color: var(--text, #e8e8ea);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  width: 320px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  font-size: 0.82rem;
+  z-index: 60;
+}
+
+.ai-context-checklist h5 {
+  margin: 0 0 0.4rem 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.ai-context-checklist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-context-checklist li {
+  padding: 0.18rem 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ai-context-checklist .item-disabled {
+  opacity: 0.4;
+}
+
+.ai-context-checklist .item-count {
+  opacity: 0.6;
+  font-size: 0.78rem;
+}
