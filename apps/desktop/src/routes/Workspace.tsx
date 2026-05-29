@@ -11,9 +11,9 @@ import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
-import { GhostExtension } from "../components/editor/GhostExtension";
-import { useGhostText } from "../lib/editor/useGhostText";
-import { AIPromptBar } from "../components/ai/AIPromptBar";
+import { useAIGeneration } from "../lib/editor/useAIGeneration";
+import { AIModal } from "../components/ai/AIModal";
+import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated";
 import {
   AIContextChecklist,
   totalContextItems,
@@ -83,10 +83,14 @@ export function Workspace() {
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: false });
-  const [aiPromptAnchor, setAiPromptAnchor] = useState<{ top: number; left: number } | null>(null);
-  const aiPromptAnchorRef = useRef(aiPromptAnchor);
-  useEffect(() => { aiPromptAnchorRef.current = aiPromptAnchor; }, [aiPromptAnchor]);
-  const closeAIBarRef = useRef<(() => void) | null>(null);
+  const [aiModal, setAiModal] = useState<{
+    mode: CommitMode;
+    canChooseMode: boolean;
+    sel: { from: number; to: number };
+  } | null>(null);
+  const aiModalOpenRef = useRef(false);
+  useEffect(() => { aiModalOpenRef.current = aiModal !== null; }, [aiModal]);
+  const closeAIModalRef = useRef<(() => void) | null>(null);
   const [aiCtxChecklistOpen, setAiCtxChecklistOpen] = useState(false);
   const [contextCounts, setContextCounts] = useState<ContextCounts | null>(null);
   const previewReqIdRef = useRef(0);
@@ -319,7 +323,7 @@ export function Workspace() {
     return () => window.removeEventListener("linetta:mention-pick-new", handler);
   }, [projectId]);
 
-  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+I AI prompt bar.
+  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+I AI modal.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -333,36 +337,30 @@ export function Workspace() {
         setPaletteOpen((v) => !v);
       } else if (e.key.toLowerCase() === "i") {
         e.preventDefault();
-        const wasOpen = aiPromptAnchorRef.current !== null;
-        if (wasOpen) {
-          // toggle off — skip preview fetch entirely
-          closeAIBarRef.current?.();
+        if (aiModalOpenRef.current) {
+          closeAIModalRef.current?.();
           return;
         }
-        // toggle on — compute anchor and fetch context counts
         const ed = editorRef.current?.editor;
-        if (!ed) return;
-        const view = ed.view;
-        const coords = view.coordsAtPos(view.state.selection.head);
-        const flip = window.innerHeight - coords.bottom < 200;
-        setAiPromptAnchor({
-          top: flip ? coords.top - 160 : coords.bottom + 4,
-          left: Math.min(coords.left, window.innerWidth - 500),
-        });
-        // Plan 19: fetch real context counts for the current node.
         const currentLoad = loadRef.current;
-        if (currentLoad) {
-          const reqId = ++previewReqIdRef.current;
-          aiApi.previewContext(currentLoad.node.id)
-            .then((counts) => {
-              if (reqId !== previewReqIdRef.current) return; // stale
-              setContextCounts(counts);
-            })
-            .catch((err) => {
-              if (reqId !== previewReqIdRef.current) return;
-              showToast(`컨텍스트 정보를 가져오지 못했습니다: ${err}`);
-            });
-        }
+        if (!ed || !currentLoad) return;
+        const { from, to, empty } = ed.state.selection;
+        ed.setEditable(false);
+        setAiModal({
+          mode: empty ? "insert" : "replace",
+          canChooseMode: empty,
+          sel: { from, to },
+        });
+        const reqId = ++previewReqIdRef.current;
+        aiApi.previewContext(currentLoad.node.id)
+          .then((counts) => {
+            if (reqId !== previewReqIdRef.current) return;
+            setContextCounts(counts);
+          })
+          .catch((err) => {
+            if (reqId !== previewReqIdRef.current) return;
+            showToast(`컨텍스트 정보를 가져오지 못했습니다: ${err}`);
+          });
       }
     };
     window.addEventListener("keydown", handler);
@@ -415,30 +413,40 @@ export function Workspace() {
     [load],
   );
 
-  // --- Ghost-text AI (Cmd+I prompt bar) ---
+  // --- AI generation (Cmd+I modal) ---
 
   const tiptapEditor = editorRef.current?.editor ?? null;
-  const ghost = useGhostText(tiptapEditor);
+  const gen = useAIGeneration();
 
-  // Plan 19 polish: centralized close for the AI prompt bar. All three close
-  // paths (X button, Cmd+I toggle-off, ghost-done auto-close) funnel through
-  // here so contextCounts is cleared and any in-flight previewContext request
-  // is invalidated, preventing stale counts from flashing on next open.
-  const closeAIBar = useCallback(() => {
-    ghost.drop();
-    setAiPromptAnchor(null);
+  const closeAIModal = useCallback(() => {
+    gen.cancel();
+    if (tiptapEditor) tiptapEditor.setEditable(true);
+    setAiModal(null);
     setContextCounts(null);
+    setAiCtxChecklistOpen(false);
     previewReqIdRef.current++;
-  }, [ghost]);
-  useEffect(() => { closeAIBarRef.current = closeAIBar; }, [closeAIBar]);
+  }, [gen, tiptapEditor]);
+  useEffect(() => { closeAIModalRef.current = closeAIModal; }, [closeAIModal]);
 
-  // Plan 18 post-smoke: auto-close the AI prompt bar when the ghost run finishes
-  // (ai-done auto-commits the ghost; UX expectation is the bar disappears too).
+  const acceptAIModal = useCallback(() => {
+    if (!aiModal || !tiptapEditor) return;
+    const v = gen.variations[gen.currentIdx];
+    if (!v || v.error) return;
+    commitGenerated(tiptapEditor, aiModal.mode, aiModal.sel, v.text);
+    gen.cancel();
+    tiptapEditor.setEditable(true);
+    setAiModal(null);
+    setContextCounts(null);
+    setAiCtxChecklistOpen(false);
+    previewReqIdRef.current++;
+  }, [aiModal, gen, tiptapEditor]);
+
+  // Safety: if the modal closes for any reason, re-enable editing.
   useEffect(() => {
-    if (ghost.status.kind === "done") {
-      closeAIBar();
+    if (aiModal === null && tiptapEditor && !tiptapEditor.isEditable) {
+      tiptapEditor.setEditable(true);
     }
-  }, [ghost.status.kind, closeAIBar]);
+  }, [aiModal, tiptapEditor]);
 
   // --- Commands ---
 
@@ -762,7 +770,6 @@ export function Workspace() {
             extensions={[
               ...(mentionExtension ? [mentionExtension] : []),
               NoteMarkerExtension,
-              GhostExtension,
             ]}
             onMentionDoubleClick={(id) => setEntitySheetId(id)}
           />
@@ -808,60 +815,40 @@ export function Workspace() {
         )}
       </div>
 
-      {aiPromptAnchor && (
-        <AIPromptBar
-          anchor={aiPromptAnchor}
-          hasSelection={!!tiptapEditor && !tiptapEditor.state.selection.empty}
-          busy={ghost.status.kind === "running"}
+      {aiModal && load && (
+        <AIModal
+          mode={aiModal.mode}
+          canChooseMode={aiModal.canChooseMode}
           options={aiOptions}
           contextItemCount={totalContextItems(contextCounts ?? FALLBACK_COUNTS)}
-          errorMessage={ghost.status.kind === "error" ? ghost.status.message : undefined}
+          variations={gen.variations}
+          currentIdx={gen.currentIdx}
+          status={gen.status}
+          onModeChange={(m) => setAiModal((s) => (s ? { ...s, mode: m } : s))}
           onOptionsChange={setAiOptions}
-          onRun={(preset, promptText, variationsOn) => {
-            const isReplacePreset = preset === "rewrite" || preset === "compact";
-            const hasSel = !!tiptapEditor && !tiptapEditor.state.selection.empty;
-            const selectionText = hasSel
-              ? tiptapEditor!.state.doc.textBetween(
-                  tiptapEditor!.state.selection.from,
-                  tiptapEditor!.state.selection.to,
-                  "\n",
-                )
-              : "";
-            const replaceRange =
-              isReplacePreset && hasSel
-                ? {
-                    from: tiptapEditor!.state.selection.from,
-                    to: tiptapEditor!.state.selection.to,
-                  }
-                : undefined;
+          onRun={(promptText, variationsOn) => {
+            const selectionText =
+              aiModal.mode === "replace"
+                ? tiptapEditor!.state.doc.textBetween(aiModal.sel.from, aiModal.sel.to, "\n")
+                : "";
             const args = {
               nodeId: load.node.id,
               prompt: promptText,
               options: aiOptions,
               selectionText,
-              replaceRange,
             };
-            if (variationsOn) {
-              ghost.startVariations(args, 3);
-              // Variation mode is driven from the editor (◀▶ switch, Tab accept, Esc drop),
-              // so close the prompt bar WITHOUT dropping the ghost and hand focus back to
-              // the editor. (Do NOT call closeAIBar() here — that drops the ghost.)
-              setAiPromptAnchor(null);
-              setContextCounts(null);
-              previewReqIdRef.current++;
-              requestAnimationFrame(() => tiptapEditor?.commands.focus());
-            } else {
-              ghost.start(args);
-            }
+            if (variationsOn) gen.startVariations(args, 3);
+            else gen.start(args);
           }}
-          onCancel={() => ghost.cancel()}
-          onClose={closeAIBar}
+          onSwitch={gen.switchVariation}
+          onAccept={acceptAIModal}
+          onCancel={closeAIModal}
           onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
         />
       )}
-      {aiCtxChecklistOpen && aiPromptAnchor && (
+      {aiCtxChecklistOpen && aiModal && (
         <AIContextChecklist
-          anchor={{ top: aiPromptAnchor.top + 180, left: aiPromptAnchor.left }}
+          anchor={{ top: 120, left: window.innerWidth / 2 - 160 }}
           counts={contextCounts ?? FALLBACK_COUNTS}
           onClose={() => setAiCtxChecklistOpen(false)}
         />
