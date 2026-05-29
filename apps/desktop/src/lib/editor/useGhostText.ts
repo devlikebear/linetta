@@ -22,24 +22,37 @@ interface RunArgs {
 
 /**
  * useGhostText wires ai.run RPC + ai-delta/done/error/reset/cancelled
- * notifications to a Tiptap editor's GhostExtension commands. The hook keeps
- * a single active run; starting a new one cancels the previous.
+ * notifications to a Tiptap editor's GhostExtension commands.
+ *
+ * Single-mode: start() — one run, auto-commit on done.
+ * Variation-mode: startVariations(args, n) — N parallel runs, user picks via ◀▶+Tab.
  */
 export function useGhostText(editor: Editor | null) {
   const [status, setStatus] = useState<GhostStatus>({ kind: "idle" });
+  // Single-mode active run.
   const runIdRef = useRef<string | null>(null);
   const accumulatedRef = useRef<string>("");
+  // Variation-mode active runs.
+  const activeRunIdsRef = useRef<string[]>([]);
+  const runIdToVariationRef = useRef<Map<string, number>>(new Map());
+
+  // Helper: cancel every in-flight run (single + variations).
+  const cancelAllInFlight = useCallback(() => {
+    for (const id of activeRunIdsRef.current) {
+      aiApi.cancel(id).catch(() => {});
+    }
+    if (runIdRef.current) {
+      aiApi.cancel(runIdRef.current).catch(() => {});
+    }
+    activeRunIdsRef.current = [];
+    runIdToVariationRef.current.clear();
+    runIdRef.current = null;
+  }, []);
 
   const start = useCallback(
     async ({ nodeId, prompt, options, selectionText = "", replaceRange }: RunArgs) => {
       if (!editor) return;
-      if (runIdRef.current) {
-        try {
-          await aiApi.cancel(runIdRef.current);
-        } catch {
-          /* benign */
-        }
-      }
+      cancelAllInFlight();
       editor.commands.dropGhostText();
       accumulatedRef.current = "";
       try {
@@ -54,42 +67,75 @@ export function useGhostText(editor: Editor | null) {
         setStatus({ kind: "error", message: String(e) });
       }
     },
-    [editor],
+    [editor, cancelAllInFlight],
+  );
+
+  const startVariations = useCallback(
+    async (
+      { nodeId, prompt, options, selectionText = "", replaceRange }: RunArgs,
+      n: number,
+    ) => {
+      if (!editor) return;
+      cancelAllInFlight();
+      editor.commands.dropGhostText();
+
+      const mode: GhostMode = replaceRange
+        ? { kind: "replace", from: replaceRange.from, to: replaceRange.to }
+        : { kind: "insert", pos: editor.state.selection.head };
+      editor.commands.setGhostVariations(n, mode);
+      setStatus({ kind: "running", runId: "(variations)", text: "" });
+
+      for (let i = 0; i < n; i++) {
+        const idx = i;
+        aiApi
+          .run(nodeId, prompt, options, selectionText)
+          .then(({ run_id }) => {
+            activeRunIdsRef.current.push(run_id);
+            runIdToVariationRef.current.set(run_id, idx);
+          })
+          .catch((e) => {
+            editor.commands.setGhostVariationDone(idx, String(e));
+          });
+      }
+    },
+    [editor, cancelAllInFlight],
   );
 
   const cancel = useCallback(async () => {
-    if (!runIdRef.current) return;
-    try {
-      await aiApi.cancel(runIdRef.current);
-    } catch {
-      /* benign */
-    }
-    runIdRef.current = null;
+    cancelAllInFlight();
     if (editor) editor.commands.dropGhostText();
     setStatus({ kind: "idle" });
-  }, [editor]);
+  }, [editor, cancelAllInFlight]);
 
   const accept = useCallback(() => {
     if (!editor) return;
+    // Cancel any remaining in-flight runs (token saving) before commit.
+    cancelAllInFlight();
     editor.commands.acceptGhostText();
-    runIdRef.current = null;
     accumulatedRef.current = "";
     setStatus({ kind: "idle" });
-  }, [editor]);
+  }, [editor, cancelAllInFlight]);
 
   const drop = useCallback(() => {
     if (!editor) return;
-    if (runIdRef.current) {
-      aiApi.cancel(runIdRef.current).catch(() => {});
-    }
+    cancelAllInFlight();
     editor.commands.dropGhostText();
-    runIdRef.current = null;
     accumulatedRef.current = "";
     setStatus({ kind: "idle" });
-  }, [editor]);
+  }, [editor, cancelAllInFlight]);
 
   useEngineEvent<AIDelta>("ai-delta", (p) => {
-    if (p.run_id !== runIdRef.current || !editor) return;
+    if (!editor) return;
+    // Variation-mode first.
+    const vIdx = runIdToVariationRef.current.get(p.run_id);
+    if (vIdx !== undefined) {
+      const existing = ghostPluginKey.getState(editor.state);
+      const current = existing?.variations[vIdx]?.text ?? "";
+      editor.commands.setGhostVariationText(vIdx, current + p.text);
+      return;
+    }
+    // Single-mode fallback.
+    if (p.run_id !== runIdRef.current) return;
     accumulatedRef.current += p.text;
     const existing = ghostPluginKey.getState(editor.state);
     editor.commands.setGhostText(accumulatedRef.current, existing?.mode);
@@ -97,7 +143,13 @@ export function useGhostText(editor: Editor | null) {
   });
 
   useEngineEvent<AIReset>("ai-reset", (p) => {
-    if (p.run_id !== runIdRef.current || !editor) return;
+    if (!editor) return;
+    const vIdx = runIdToVariationRef.current.get(p.run_id);
+    if (vIdx !== undefined) {
+      editor.commands.setGhostVariationText(vIdx, p.text);
+      return;
+    }
+    if (p.run_id !== runIdRef.current) return;
     accumulatedRef.current = p.text;
     const existing = ghostPluginKey.getState(editor.state);
     editor.commands.setGhostText(p.text, existing?.mode);
@@ -105,9 +157,18 @@ export function useGhostText(editor: Editor | null) {
   });
 
   useEngineEvent<AIDone>("ai-done", (p) => {
-    if (p.run_id !== runIdRef.current || !editor) return;
-    // Plan 18 post-smoke: auto-commit ghost on done. The done meta + blinking-
-    // off path is no longer needed because the ghost never lingers in done state.
+    if (!editor) return;
+    const vIdx = runIdToVariationRef.current.get(p.run_id);
+    if (vIdx !== undefined) {
+      // Variation-mode: mark this variation done, do NOT auto-commit.
+      editor.commands.setGhostVariationText(vIdx, p.full_text);
+      editor.commands.setGhostVariationDone(vIdx);
+      // Remove from active runs (already done).
+      activeRunIdsRef.current = activeRunIdsRef.current.filter((id) => id !== p.run_id);
+      return;
+    }
+    // Single-mode: auto-commit (Plan 18 fixup).
+    if (p.run_id !== runIdRef.current) return;
     const existing = ghostPluginKey.getState(editor.state);
     editor.commands.setGhostText(p.full_text, existing?.mode);
     editor.commands.acceptGhostText();
@@ -117,27 +178,40 @@ export function useGhostText(editor: Editor | null) {
   });
 
   useEngineEvent<AIError>("ai-error", (p) => {
-    if (p.run_id !== runIdRef.current || !editor) return;
+    if (!editor) return;
+    const vIdx = runIdToVariationRef.current.get(p.run_id);
+    if (vIdx !== undefined) {
+      editor.commands.setGhostVariationDone(vIdx, p.message);
+      activeRunIdsRef.current = activeRunIdsRef.current.filter((id) => id !== p.run_id);
+      return;
+    }
+    if (p.run_id !== runIdRef.current) return;
     editor.commands.dropGhostText();
     runIdRef.current = null;
     setStatus({ kind: "error", message: p.message });
   });
 
   useEngineEvent<AICancelled>("ai-cancelled", (p) => {
-    if (p.run_id !== runIdRef.current || !editor) return;
+    if (!editor) return;
+    const vIdx = runIdToVariationRef.current.get(p.run_id);
+    if (vIdx !== undefined) {
+      // Just clean up the mapping; do NOT touch ghost decoration (might be other variations alive or already accepted).
+      runIdToVariationRef.current.delete(p.run_id);
+      activeRunIdsRef.current = activeRunIdsRef.current.filter((id) => id !== p.run_id);
+      return;
+    }
+    if (p.run_id !== runIdRef.current) return;
     runIdRef.current = null;
     editor.commands.dropGhostText();
     setStatus({ kind: "idle" });
   });
 
-  // Cleanup on editor change/unmount — cancel any in-flight run.
+  // Cleanup on editor change/unmount — cancel any in-flight runs.
   useEffect(() => {
     return () => {
-      if (runIdRef.current) {
-        aiApi.cancel(runIdRef.current).catch(() => {});
-      }
+      cancelAllInFlight();
     };
-  }, [editor]);
+  }, [editor, cancelAllInFlight]);
 
-  return { status, start, cancel, accept, drop };
+  return { status, start, startVariations, cancel, accept, drop };
 }
