@@ -124,15 +124,18 @@ export const GhostExtension = Extension.create({
           const ghost = ghostPluginKey.getState(state);
           if (!ghost) return false;
           if (dispatch) {
-            let insertTr;
+            // Force plain-text commit (no mark inheritance from surrounding
+            // selection). schema.text(text) constructs a text node with no marks;
+            // replaceWith replaces the target range with that node.
+            const node = state.schema.text(ghost.text);
+            let nextTr;
             if (ghost.mode.kind === "insert") {
-              insertTr = tr.insertText(ghost.text, ghost.mode.pos);
+              nextTr = tr.replaceWith(ghost.mode.pos, ghost.mode.pos, node);
             } else {
-              // replace mode: substitute the selection range with the ghost text
-              insertTr = tr.insertText(ghost.text, ghost.mode.from, ghost.mode.to);
+              nextTr = tr.replaceWith(ghost.mode.from, ghost.mode.to, node);
             }
-            insertTr.setMeta(ghostPluginKey, { kind: "drop" });
-            dispatch(insertTr);
+            nextTr.setMeta(ghostPluginKey, { kind: "drop" });
+            dispatch(nextTr);
           }
           return true;
         },

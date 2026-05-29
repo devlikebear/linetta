@@ -106,12 +106,13 @@ export function useGhostText(editor: Editor | null) {
 
   useEngineEvent<AIDone>("ai-done", (p) => {
     if (p.run_id !== runIdRef.current || !editor) return;
-    accumulatedRef.current = p.full_text;
+    // Plan 18 post-smoke: auto-commit ghost on done. The done meta + blinking-
+    // off path is no longer needed because the ghost never lingers in done state.
     const existing = ghostPluginKey.getState(editor.state);
     editor.commands.setGhostText(p.full_text, existing?.mode);
-    // Mark ghost as done (stops blinking) via the GhostExtension's "done" meta.
-    const tr = editor.state.tr.setMeta(ghostPluginKey, { kind: "done" });
-    editor.view.dispatch(tr);
+    editor.commands.acceptGhostText();
+    runIdRef.current = null;
+    accumulatedRef.current = "";
     setStatus({ kind: "done", text: p.full_text });
   });
 

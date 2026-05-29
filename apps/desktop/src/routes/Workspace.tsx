@@ -380,6 +380,14 @@ export function Workspace() {
   const tiptapEditor = editorRef.current?.editor ?? null;
   const ghost = useGhostText(tiptapEditor);
 
+  // Plan 18 post-smoke: auto-close the AI prompt bar when the ghost run finishes
+  // (ai-done auto-commits the ghost; UX expectation is the bar disappears too).
+  useEffect(() => {
+    if (ghost.status.kind === "done") {
+      setAiPromptAnchor(null);
+    }
+  }, [ghost.status.kind]);
+
   const currentContextCounts: ContextCounts = useMemo(() => {
     const proj = load?.project;
     return {
