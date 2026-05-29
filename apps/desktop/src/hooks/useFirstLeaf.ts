@@ -32,7 +32,7 @@ export function findFirstLeaf(root: TreeNode): TreeNode | null {
   return null;
 }
 
-/** Flatten a tree to a list in DFS order (used by Cmd+K's "search node"). */
+/** Flatten a tree to a list in DFS order (used by Cmd+P's "search node"). */
 export function flatten(roots: TreeNode[]): TreeNode[] {
   const out: TreeNode[] = [];
   const walk = (n: TreeNode) => {

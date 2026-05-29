@@ -8,7 +8,7 @@ interface Shortcut {
 }
 
 const SHORTCUTS: Shortcut[] = [
-  { keys: "Cmd+K", label: "명령 팔레트 열기" },
+  { keys: "Cmd+P", label: "명령 팔레트 열기" },
   { keys: "Cmd+S", label: "수동 스냅샷 저장" },
   { keys: "Cmd+.", label: "ZEN 모드 종료 / 다이얼로그 취소" },
   { keys: "ESC", label: "다이얼로그 닫기 · ZEN 종료 · 선택 해제" },

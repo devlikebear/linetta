@@ -323,7 +323,7 @@ export function Workspace() {
     return () => window.removeEventListener("linetta:mention-pick-new", handler);
   }, [projectId]);
 
-  // Global Cmd+R reload + Cmd+K palette toggle.
+  // Global Cmd+R reload + Cmd+P palette toggle.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -332,7 +332,7 @@ export function Workspace() {
       if (e.key.toLowerCase() === "r") {
         e.preventDefault();
         window.location.reload();
-      } else if (e.key.toLowerCase() === "k") {
+      } else if (e.key.toLowerCase() === "p") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
       }
@@ -450,7 +450,7 @@ export function Workspace() {
 
   // --- Commands ---
 
-  // Cmd+K palette uses a fixed 8-section vocabulary. Every `cmds.push({ section })`
+  // Cmd+P palette uses a fixed 8-section vocabulary. Every `cmds.push({ section })`
   // call below MUST use one of these exact strings — adding a 9th label fractures
   // the palette's mental model and reverts the Phase-15 cleanup. The labels are:
   //   이동 · 보기 · 노드 · 엔티티 · 프로젝트 · AI · 내보내기 · 도움말
