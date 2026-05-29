@@ -294,17 +294,35 @@ func TestBuildUser_projectMetaSection_fullyPopulated(t *testing.T) {
 		},
 	}
 	got := buildUser(c)
-	if !strings.Contains(got, "## 작품 설정") {
-		t.Fatalf("missing header. got:\n%s", got)
+	want := "## 작품 설정\n장르: 판타지, 미스터리 · 분량: 장편 · 시점: 1인칭\n\n"
+	if !strings.HasPrefix(got, want) {
+		t.Fatalf("expected prefix %q, got:\n%s", want, got)
 	}
-	if !strings.Contains(got, "장르: 판타지, 미스터리") {
-		t.Fatalf("missing genres. got:\n%s", got)
+}
+
+func TestBuildUser_projectMeta_canonicalSchemaValues(t *testing.T) {
+	cases := []struct {
+		name       string
+		project    ProjectMeta
+		wantSubstr string
+	}{
+		{"third_limited POV", ProjectMeta{DefaultPOV: "third_limited"}, "시점: 3인칭 제한"},
+		{"flash length", ProjectMeta{LengthTarget: "flash"}, "분량: 플래시"},
+		{"series length", ProjectMeta{LengthTarget: "series"}, "분량: 시리즈"},
+		{"omniscient POV", ProjectMeta{DefaultPOV: "omniscient"}, "시점: 전지적"},
 	}
-	if !strings.Contains(got, "분량: 장편") {
-		t.Fatalf("missing length. got:\n%s", got)
-	}
-	if !strings.Contains(got, "시점: 1인칭") {
-		t.Fatalf("missing POV. got:\n%s", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Context{
+				SceneLabel: "씬 1",
+				SceneText:  "본문",
+				Project:    tc.project,
+			}
+			got := buildUser(c)
+			if !strings.Contains(got, tc.wantSubstr) {
+				t.Fatalf("missing %q in:\n%s", tc.wantSubstr, got)
+			}
+		})
 	}
 }
 

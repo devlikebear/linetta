@@ -227,12 +227,16 @@ func renderProjectMeta(m ProjectMeta) string {
 
 func mapLengthTarget(v string) string {
 	switch v {
+	case "flash":
+		return "플래시"
 	case "short":
 		return "단편"
 	case "novella":
 		return "중편"
 	case "novel":
 		return "장편"
+	case "series":
+		return "시리즈"
 	default:
 		return v
 	}
@@ -242,8 +246,8 @@ func mapDefaultPOV(v string) string {
 	switch v {
 	case "first":
 		return "1인칭"
-	case "third":
-		return "3인칭"
+	case "third_limited":
+		return "3인칭 제한"
 	case "omniscient":
 		return "전지적"
 	default:
