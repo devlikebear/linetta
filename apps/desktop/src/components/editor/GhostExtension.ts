@@ -7,14 +7,21 @@ declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     ghost: {
       /**
-       * Set or replace the ghost text. mode defaults to "insert" at the current
-       * selection's head; pass {kind: "replace", from, to} to commit by replacing
-       * a range when accepted.
+       * Backward-compat single-variation init. Equivalent to
+       * setGhostVariations(1, mode) + setGhostVariationText(0, text).
        */
       setGhostText: (text: string, mode?: GhostMode) => ReturnType;
-      /** Accept the ghost text — insert into (or replace) the document. */
+      /** Plan 20: init N empty variation slots. currentIdx resets to 0. */
+      setGhostVariations: (count: number, mode: GhostMode) => ReturnType;
+      /** Plan 20: replace text on a specific variation. */
+      setGhostVariationText: (idx: number, text: string) => ReturnType;
+      /** Plan 20: mark a variation done (with optional error message). */
+      setGhostVariationDone: (idx: number, error?: string) => ReturnType;
+      /** Plan 20: switch the currently visible variation. Wraps modulo N. No-op when N===1. */
+      switchGhostVariation: (direction: -1 | 1) => ReturnType;
+      /** Accept the currently visible variation — insert into (or replace) the document. */
       acceptGhostText: () => ReturnType;
-      /** Drop the ghost text — clear decoration without inserting. */
+      /** Drop the ghost — clear decoration without inserting. */
       dropGhostText: () => ReturnType;
     };
   }
@@ -24,16 +31,29 @@ export type GhostMode =
   | { kind: "insert"; pos: number }
   | { kind: "replace"; from: number; to: number };
 
-export interface GhostState {
-  /** Where the ghost text will be committed: at a single position, or replacing a range. */
-  mode: GhostMode;
-  /** Accumulated text streamed so far. */
+export interface GhostVariation {
   text: string;
-  /** True once the stream has completed (cursor stops blinking). */
   done: boolean;
+  /** Optional per-variation error message; if set, also treated as done. */
+  error?: string;
+}
+
+export interface GhostState {
+  mode: GhostMode;
+  variations: GhostVariation[];
+  currentIdx: number;
 }
 
 export const ghostPluginKey = new PluginKey<GhostState | null>("linetta-ghost");
+
+type GhostMeta =
+  | { kind: "set"; mode: GhostMode; text: string }
+  | { kind: "setVariations"; mode: GhostMode; count: number }
+  | { kind: "setVariationText"; idx: number; text: string }
+  | { kind: "setVariationDone"; idx: number; error?: string }
+  | { kind: "switchVariation"; direction: -1 | 1 }
+  | { kind: "drop" }
+  | { kind: "done" };
 
 export const GhostExtension = Extension.create({
   name: "linettaGhost",
@@ -45,20 +65,50 @@ export const GhostExtension = Extension.create({
         state: {
           init: () => null,
           apply(tr, prev) {
-            const meta = tr.getMeta(ghostPluginKey) as
-              | { kind: "set"; mode: GhostMode; text: string }
-              | { kind: "drop" }
-              | { kind: "done" }
-              | undefined;
+            const meta = tr.getMeta(ghostPluginKey) as GhostMeta | undefined;
 
             if (meta?.kind === "set") {
-              return { mode: meta.mode, text: meta.text, done: false };
+              // Backward-compat single-variation init.
+              return {
+                mode: meta.mode,
+                variations: [{ text: meta.text, done: false }],
+                currentIdx: 0,
+              };
+            }
+            if (meta?.kind === "setVariations") {
+              const variations: GhostVariation[] = [];
+              for (let i = 0; i < meta.count; i++) {
+                variations.push({ text: "", done: false });
+              }
+              return { mode: meta.mode, variations, currentIdx: 0 };
+            }
+            if (meta?.kind === "setVariationText" && prev) {
+              if (meta.idx < 0 || meta.idx >= prev.variations.length) return prev;
+              const next = prev.variations.slice();
+              next[meta.idx] = { ...next[meta.idx], text: meta.text };
+              return { ...prev, variations: next };
+            }
+            if (meta?.kind === "setVariationDone" && prev) {
+              if (meta.idx < 0 || meta.idx >= prev.variations.length) return prev;
+              const next = prev.variations.slice();
+              next[meta.idx] = { ...next[meta.idx], done: true, error: meta.error };
+              return { ...prev, variations: next };
+            }
+            if (meta?.kind === "switchVariation" && prev) {
+              const n = prev.variations.length;
+              if (n <= 1) return prev;
+              const nextIdx = ((prev.currentIdx + meta.direction) % n + n) % n;
+              return { ...prev, currentIdx: nextIdx };
             }
             if (meta?.kind === "drop") {
               return null;
             }
             if (meta?.kind === "done" && prev) {
-              return { ...prev, done: true };
+              // Legacy single-mode "done" — marks current (only) variation done.
+              if (prev.variations.length === 0) return prev;
+              const next = prev.variations.slice();
+              next[prev.currentIdx] = { ...next[prev.currentIdx], done: true };
+              return { ...prev, variations: next };
             }
             // Plan 18 design 2.7: auto-drop on doc edit.
             if (prev && tr.docChanged) {
@@ -75,10 +125,27 @@ export const GhostExtension = Extension.create({
             const widget = Decoration.widget(
               pos,
               () => {
-                const span = document.createElement("span");
-                span.className = "ai-ghost" + (ghost.done ? " done" : "");
-                span.textContent = ghost.text;
-                return span;
+                const wrap = document.createElement("span");
+                wrap.className = "ai-ghost-wrap";
+
+                const current = ghost.variations[ghost.currentIdx];
+                const textSpan = document.createElement("span");
+                textSpan.className = "ai-ghost" + (current.done ? " done" : "");
+                if (current.error) {
+                  textSpan.className += " ai-ghost-error";
+                  textSpan.textContent = `(오류: ${current.error})`;
+                } else {
+                  textSpan.textContent = current.text;
+                }
+                wrap.appendChild(textSpan);
+
+                if (ghost.variations.length > 1) {
+                  const indicator = document.createElement("div");
+                  indicator.className = "ai-ghost-indicator";
+                  indicator.textContent = `[${ghost.currentIdx + 1}/${ghost.variations.length}] ◀ ▶  Tab 수락`;
+                  wrap.appendChild(indicator);
+                }
+                return wrap;
               },
               { side: 1 },
             );
@@ -93,7 +160,7 @@ export const GhostExtension = Extension.create({
     return {
       Tab: ({ editor }) => {
         const ghost = ghostPluginKey.getState(editor.state);
-        if (!ghost) return false; // Let Tab fall through to other handlers.
+        if (!ghost) return false;
         return editor.commands.acceptGhostText();
       },
       Escape: ({ editor }) => {
@@ -113,7 +180,67 @@ export const GhostExtension = Extension.create({
             mode ?? { kind: "insert", pos: state.selection.head };
           if (dispatch) {
             dispatch(
-              tr.setMeta(ghostPluginKey, { kind: "set", mode: effectiveMode, text }),
+              tr.setMeta(ghostPluginKey, {
+                kind: "set",
+                mode: effectiveMode,
+                text,
+              } satisfies GhostMeta),
+            );
+          }
+          return true;
+        },
+      setGhostVariations:
+        (count: number, mode: GhostMode) =>
+        ({ tr, dispatch }) => {
+          if (count < 1) return false;
+          if (dispatch) {
+            dispatch(
+              tr.setMeta(ghostPluginKey, {
+                kind: "setVariations",
+                mode,
+                count,
+              } satisfies GhostMeta),
+            );
+          }
+          return true;
+        },
+      setGhostVariationText:
+        (idx: number, text: string) =>
+        ({ tr, dispatch }) => {
+          if (dispatch) {
+            dispatch(
+              tr.setMeta(ghostPluginKey, {
+                kind: "setVariationText",
+                idx,
+                text,
+              } satisfies GhostMeta),
+            );
+          }
+          return true;
+        },
+      setGhostVariationDone:
+        (idx: number, error?: string) =>
+        ({ tr, dispatch }) => {
+          if (dispatch) {
+            dispatch(
+              tr.setMeta(ghostPluginKey, {
+                kind: "setVariationDone",
+                idx,
+                error,
+              } satisfies GhostMeta),
+            );
+          }
+          return true;
+        },
+      switchGhostVariation:
+        (direction: -1 | 1) =>
+        ({ tr, dispatch }) => {
+          if (dispatch) {
+            dispatch(
+              tr.setMeta(ghostPluginKey, {
+                kind: "switchVariation",
+                direction,
+              } satisfies GhostMeta),
             );
           }
           return true;
@@ -123,18 +250,20 @@ export const GhostExtension = Extension.create({
         ({ tr, state, dispatch }) => {
           const ghost = ghostPluginKey.getState(state);
           if (!ghost) return false;
+          const current = ghost.variations[ghost.currentIdx];
+          if (current.error) return false; // accept on error variation = no-op
           if (dispatch) {
             // Force plain-text commit (no mark inheritance from surrounding
             // selection). schema.text(text) constructs a text node with no marks;
             // replaceWith replaces the target range with that node.
-            const node = state.schema.text(ghost.text);
+            const node = state.schema.text(current.text);
             let nextTr;
             if (ghost.mode.kind === "insert") {
               nextTr = tr.replaceWith(ghost.mode.pos, ghost.mode.pos, node);
             } else {
               nextTr = tr.replaceWith(ghost.mode.from, ghost.mode.to, node);
             }
-            nextTr.setMeta(ghostPluginKey, { kind: "drop" });
+            nextTr.setMeta(ghostPluginKey, { kind: "drop" } satisfies GhostMeta);
             dispatch(nextTr);
           }
           return true;
@@ -145,7 +274,7 @@ export const GhostExtension = Extension.create({
           const ghost = ghostPluginKey.getState(state);
           if (!ghost) return false;
           if (dispatch) {
-            dispatch(tr.setMeta(ghostPluginKey, { kind: "drop" }));
+            dispatch(tr.setMeta(ghostPluginKey, { kind: "drop" } satisfies GhostMeta));
           }
           return true;
         },
