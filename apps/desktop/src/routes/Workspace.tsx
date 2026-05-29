@@ -84,6 +84,9 @@ export function Workspace() {
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: false });
   const [aiPromptAnchor, setAiPromptAnchor] = useState<{ top: number; left: number } | null>(null);
+  const aiPromptAnchorRef = useRef(aiPromptAnchor);
+  useEffect(() => { aiPromptAnchorRef.current = aiPromptAnchor; }, [aiPromptAnchor]);
+  const closeAIBarRef = useRef<(() => void) | null>(null);
   const [aiCtxChecklistOpen, setAiCtxChecklistOpen] = useState(false);
   const [contextCounts, setContextCounts] = useState<ContextCounts | null>(null);
   const previewReqIdRef = useRef(0);
@@ -330,17 +333,21 @@ export function Workspace() {
         setPaletteOpen((v) => !v);
       } else if (e.key.toLowerCase() === "i") {
         e.preventDefault();
-        setAiPromptAnchor((cur) => {
-          if (cur) return null; // toggle off if already open
-          const ed = editorRef.current?.editor;
-          if (!ed) return null;
-          const view = ed.view;
-          const coords = view.coordsAtPos(view.state.selection.head);
-          const flip = window.innerHeight - coords.bottom < 200;
-          return {
-            top: flip ? coords.top - 160 : coords.bottom + 4,
-            left: Math.min(coords.left, window.innerWidth - 500),
-          };
+        const wasOpen = aiPromptAnchorRef.current !== null;
+        if (wasOpen) {
+          // toggle off — skip preview fetch entirely
+          closeAIBarRef.current?.();
+          return;
+        }
+        // toggle on — compute anchor and fetch context counts
+        const ed = editorRef.current?.editor;
+        if (!ed) return;
+        const view = ed.view;
+        const coords = view.coordsAtPos(view.state.selection.head);
+        const flip = window.innerHeight - coords.bottom < 200;
+        setAiPromptAnchor({
+          top: flip ? coords.top - 160 : coords.bottom + 4,
+          left: Math.min(coords.left, window.innerWidth - 500),
         });
         // Plan 19: fetch real context counts for the current node.
         const currentLoad = loadRef.current;
@@ -413,13 +420,25 @@ export function Workspace() {
   const tiptapEditor = editorRef.current?.editor ?? null;
   const ghost = useGhostText(tiptapEditor);
 
+  // Plan 19 polish: centralized close for the AI prompt bar. All three close
+  // paths (X button, Cmd+I toggle-off, ghost-done auto-close) funnel through
+  // here so contextCounts is cleared and any in-flight previewContext request
+  // is invalidated, preventing stale counts from flashing on next open.
+  const closeAIBar = useCallback(() => {
+    ghost.drop();
+    setAiPromptAnchor(null);
+    setContextCounts(null);
+    previewReqIdRef.current++;
+  }, [ghost]);
+  useEffect(() => { closeAIBarRef.current = closeAIBar; }, [closeAIBar]);
+
   // Plan 18 post-smoke: auto-close the AI prompt bar when the ghost run finishes
   // (ai-done auto-commits the ghost; UX expectation is the bar disappears too).
   useEffect(() => {
     if (ghost.status.kind === "done") {
-      setAiPromptAnchor(null);
+      closeAIBar();
     }
-  }, [ghost.status.kind]);
+  }, [ghost.status.kind, closeAIBar]);
 
   // --- Commands ---
 
@@ -824,12 +843,7 @@ export function Workspace() {
             });
           }}
           onCancel={() => ghost.cancel()}
-          onClose={() => {
-            ghost.drop();
-            setAiPromptAnchor(null);
-            setContextCounts(null);
-            previewReqIdRef.current++;
-          }}
+          onClose={closeAIBar}
           onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
         />
       )}
