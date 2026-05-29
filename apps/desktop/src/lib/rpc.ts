@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AIOptions,
   Beat,
+  ContextPreviewResponse,
   Entity,
   ExportPayload,
   GitSyncInitResult,
@@ -31,6 +32,7 @@ import type {
   UpdateRelationshipInput,
   UpdateThreadInput,
 } from "./types";
+import type { ContextCounts } from "../components/ai/AIContextChecklist";
 
 // Tauri commands defined in src-tauri.
 
@@ -124,6 +126,21 @@ export const ai = {
   run: (nodeId: string, prompt: string, options: AIOptions, selectionText: string = "") =>
     rpcCall<{ run_id: string }>("ai.run", { node_id: nodeId, prompt, selection_text: selectionText, options }),
   cancel: (runId: string) => rpcCall<{ ok: true }>("ai.cancel", { run_id: runId }),
+  previewContext: (nodeId: string): Promise<ContextCounts> =>
+    rpcCall<ContextPreviewResponse>("ai.preview_context", { node_id: nodeId })
+      .then((r) => ({
+        nearbyScenes: r.nearby_scenes,
+        sameChapter: r.same_chapter,
+        otherChapter: r.other_chapter,
+        otherPart: r.other_part,
+        hasSynopsis: r.has_synopsis,
+        relatedScenes: r.related_scenes,
+        entities: r.entities,
+        activeThreads: r.active_threads,
+        notes: r.notes,
+        projectMetaFields: r.project_meta_fields,
+        hasStyleNotes: r.has_style_notes,
+      })),
 };
 
 export const threads = {

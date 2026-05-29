@@ -130,6 +130,22 @@ export interface AICancelled {
   run_id: string;
 }
 
+// Wire shape from ai.preview_context RPC. Mirrors engine PreviewCounts JSON.
+// Mapped to ContextCounts (camelCase) inside the rpc client.
+export interface ContextPreviewResponse {
+  nearby_scenes: number;
+  same_chapter: number;
+  other_chapter: number;
+  other_part: number;
+  has_synopsis: boolean;
+  related_scenes: number;
+  entities: number;
+  active_threads: number;
+  notes: number;
+  project_meta_fields: number;
+  has_style_notes: boolean;
+}
+
 export interface GitSyncResult {
   skipped: boolean;
   files_written: number;
