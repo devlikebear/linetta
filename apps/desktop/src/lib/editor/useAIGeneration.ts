@@ -44,14 +44,15 @@ export function useAIGeneration() {
     runIdToVariationRef.current.clear();
   }, []);
 
-  // Recompute status from the variations array: done when every slot is done.
-  const recomputeStatus = useCallback((vs: GenVariation[]) => {
-    if (vs.length === 0) {
+  // Derive status from variations: running while any slot is incomplete, done
+  // once every slot is done (or errored), idle when there are no variations.
+  useEffect(() => {
+    if (variations.length === 0) {
       setStatus({ kind: "idle" });
       return;
     }
-    setStatus(vs.every((v) => v.done) ? { kind: "done" } : { kind: "running" });
-  }, []);
+    setStatus(variations.every((v) => v.done) ? { kind: "done" } : { kind: "running" });
+  }, [variations]);
 
   const launch = useCallback(
     ({ nodeId, prompt, options, selectionText = "" }: GenRunArgs, n: number) => {
@@ -72,13 +73,12 @@ export function useAIGeneration() {
             setVariations((prev) => {
               const next = prev.slice();
               if (next[idx]) next[idx] = { ...next[idx], done: true, error: String(e) };
-              recomputeStatus(next);
               return next;
             });
           });
       }
     },
-    [cancelAllInFlight, recomputeStatus],
+    [cancelAllInFlight],
   );
 
   const start = useCallback((args: GenRunArgs) => launch(args, 1), [launch]);
@@ -131,7 +131,6 @@ export function useAIGeneration() {
       // full_text is the authoritative backstop for any deltas dropped by the
       // early-delta race (delta arriving before run_id → idx mapping is set).
       if (next[idx]) next[idx] = { ...next[idx], text: p.full_text, done: true };
-      recomputeStatus(next);
       return next;
     });
   });
@@ -143,7 +142,6 @@ export function useAIGeneration() {
     setVariations((prev) => {
       const next = prev.slice();
       if (next[idx]) next[idx] = { ...next[idx], done: true, error: p.message };
-      recomputeStatus(next);
       return next;
     });
   });
