@@ -23,3 +23,23 @@
     opacity: 0;
   }
 }
+
+.ai-ghost-wrap {
+  display: inline-block;
+}
+
+.ai-ghost-indicator {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  opacity: 0.55;
+  font-style: normal;
+  user-select: none;
+  pointer-events: none;
+}
+
+.ai-ghost-error {
+  color: #e07a7a;
+  font-style: normal;
+  opacity: 0.7;
+}

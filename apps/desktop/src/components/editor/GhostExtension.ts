@@ -168,6 +168,16 @@ export const GhostExtension = Extension.create({
         if (!ghost) return false;
         return editor.commands.dropGhostText();
       },
+      ArrowLeft: ({ editor }) => {
+        const ghost = ghostPluginKey.getState(editor.state);
+        if (!ghost || ghost.variations.length <= 1) return false;
+        return editor.commands.switchGhostVariation(-1);
+      },
+      ArrowRight: ({ editor }) => {
+        const ghost = ghostPluginKey.getState(editor.state);
+        if (!ghost || ghost.variations.length <= 1) return false;
+        return editor.commands.switchGhostVariation(1);
+      },
     };
   },
 
