@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIOptions } from "../lib/types";
+import type { NodeRow, Project, Entity, AIOptions, ContextCounts } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -17,7 +17,6 @@ import { AIPromptBar } from "../components/ai/AIPromptBar";
 import {
   AIContextChecklist,
   totalContextItems,
-  type ContextCounts,
 } from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
@@ -37,6 +36,20 @@ import {
 
 const SAVE_DEBOUNCE_MS = 800;
 const LAST_OPENED_THROTTLE_MS = 5000;
+
+const FALLBACK_COUNTS: ContextCounts = {
+  nearbyScenes: 0,
+  sameChapter: 0,
+  otherChapter: 0,
+  otherPart: 0,
+  hasSynopsis: false,
+  relatedScenes: 0,
+  entities: 0,
+  activeThreads: 0,
+  notes: 0,
+  projectMetaFields: 0,
+  hasStyleNotes: false,
+};
 
 interface LoadState {
   project: Project;
@@ -72,6 +85,12 @@ export function Workspace() {
   const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: false });
   const [aiPromptAnchor, setAiPromptAnchor] = useState<{ top: number; left: number } | null>(null);
   const [aiCtxChecklistOpen, setAiCtxChecklistOpen] = useState(false);
+  const [contextCounts, setContextCounts] = useState<ContextCounts | null>(null);
+  const previewReqIdRef = useRef(0);
+  const loadRef = useRef<LoadState | null>(null);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);
@@ -323,6 +342,20 @@ export function Workspace() {
             left: Math.min(coords.left, window.innerWidth - 500),
           };
         });
+        // Plan 19: fetch real context counts for the current node.
+        const currentLoad = loadRef.current;
+        if (currentLoad) {
+          const reqId = ++previewReqIdRef.current;
+          aiApi.previewContext(currentLoad.node.id)
+            .then((counts) => {
+              if (reqId !== previewReqIdRef.current) return; // stale
+              setContextCounts(counts);
+            })
+            .catch((err) => {
+              if (reqId !== previewReqIdRef.current) return;
+              showToast(`컨텍스트 정보를 가져오지 못했습니다: ${err}`);
+            });
+        }
       }
     };
     window.addEventListener("keydown", handler);
@@ -387,26 +420,6 @@ export function Workspace() {
       setAiPromptAnchor(null);
     }
   }, [ghost.status.kind]);
-
-  const currentContextCounts: ContextCounts = useMemo(() => {
-    const proj = load?.project;
-    return {
-      nearbyScenes: 3, // best-guess; engine will expose real counts via ai.preview-context in a future PR.
-      sameChapter: 0,
-      otherChapter: 0,
-      otherPart: 0,
-      hasSynopsis: true,
-      relatedScenes: 0,
-      entities: mentioned.length,
-      activeThreads: 0,
-      notes: 0,
-      projectMetaFields:
-        ((proj?.genres?.length ?? 0) > 0 ? 1 : 0) +
-        (proj?.length_target ? 1 : 0) +
-        (proj?.default_pov ? 1 : 0),
-      hasStyleNotes: !!proj?.style_notes,
-    };
-  }, [load, mentioned]);
 
   // --- Commands ---
 
@@ -782,7 +795,7 @@ export function Workspace() {
           hasSelection={!!tiptapEditor && !tiptapEditor.state.selection.empty}
           busy={ghost.status.kind === "running"}
           options={aiOptions}
-          contextItemCount={totalContextItems(currentContextCounts)}
+          contextItemCount={totalContextItems(contextCounts ?? FALLBACK_COUNTS)}
           errorMessage={ghost.status.kind === "error" ? ghost.status.message : undefined}
           onOptionsChange={setAiOptions}
           onRun={(preset, promptText) => {
@@ -814,6 +827,8 @@ export function Workspace() {
           onClose={() => {
             ghost.drop();
             setAiPromptAnchor(null);
+            setContextCounts(null);
+            previewReqIdRef.current++;
           }}
           onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
         />
@@ -821,7 +836,7 @@ export function Workspace() {
       {aiCtxChecklistOpen && aiPromptAnchor && (
         <AIContextChecklist
           anchor={{ top: aiPromptAnchor.top + 180, left: aiPromptAnchor.left }}
-          counts={currentContextCounts}
+          counts={contextCounts ?? FALLBACK_COUNTS}
           onClose={() => setAiCtxChecklistOpen(false)}
         />
       )}
