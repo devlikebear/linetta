@@ -163,6 +163,7 @@ func main() {
 	s.Handle("notes.delete", handlers.DeleteNote(notes))
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
 	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
+	s.Handle("ai.preview_context", handlers.PreviewContext(contextBuilder))
 	s.Handle("ai.cancel", handlers.CancelAI(runner))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))

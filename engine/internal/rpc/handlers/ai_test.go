@@ -15,6 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -98,5 +99,58 @@ func TestCancelAIHandler_unknownRunID(t *testing.T) {
 	h := CancelAI(runner)
 	if _, err := h(context.Background(), json.RawMessage(`{"run_id":"nope"}`)); err == nil {
 		t.Error("expected error for unknown run_id")
+	}
+}
+
+func TestPreviewContext_returnsCountsForValidNode(t *testing.T) {
+	ctx := context.Background()
+	_, builder, _, leafID := newAIFixture(t)
+
+	h := PreviewContext(builder)
+
+	params, _ := json.Marshal(map[string]any{
+		"node_id": leafID,
+	})
+	raw, err := h(ctx, params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got struct {
+		NearbyScenes      int  `json:"nearby_scenes"`
+		SameChapter       int  `json:"same_chapter"`
+		OtherChapter      int  `json:"other_chapter"`
+		OtherPart         int  `json:"other_part"`
+		HasSynopsis       bool `json:"has_synopsis"`
+		RelatedScenes     int  `json:"related_scenes"`
+		Entities          int  `json:"entities"`
+		ActiveThreads     int  `json:"active_threads"`
+		Notes             int  `json:"notes"`
+		ProjectMetaFields int  `json:"project_meta_fields"`
+		HasStyleNotes     bool `json:"has_style_notes"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.ProjectMetaFields != 3 {
+		t.Fatalf("ProjectMetaFields=%d want 3 (fixture has all three set)", got.ProjectMetaFields)
+	}
+}
+
+func TestPreviewContext_rejectsEmptyNodeID(t *testing.T) {
+	ctx := context.Background()
+	_, builder, _, _ := newAIFixture(t)
+
+	h := PreviewContext(builder)
+
+	params, _ := json.Marshal(map[string]any{
+		"node_id": "",
+	})
+	_, err := h(ctx, params)
+	if err == nil {
+		t.Fatal("expected InvalidParams error for empty node_id")
+	}
+	var mErr *rpc.MethodError
+	if !errors.As(err, &mErr) || mErr.Code != rpc.CodeInvalidParams {
+		t.Fatalf("expected rpc.MethodError CodeInvalidParams, got %T %v", err, err)
 	}
 }

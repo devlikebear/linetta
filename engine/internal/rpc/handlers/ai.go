@@ -52,3 +52,25 @@ func CancelAI(runner *ai.Runner) rpc.Handler {
 		return json.RawMessage(`{"ok":true}`), nil
 	}
 }
+
+type previewContextParams struct {
+	NodeID string `json:"node_id"`
+}
+
+// PreviewContext returns a handler for ai.preview_context. It builds the full
+// Context for the given node and returns just the PreviewCounts JSON — used by
+// the frontend's AIContextChecklist to display honest counts before the user
+// runs a generation.
+func PreviewContext(builder *ai.ContextBuilder) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p previewContextParams
+		if err := json.Unmarshal(params, &p); err != nil || p.NodeID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node_id required"}
+		}
+		c, err := builder.Build(ctx, p.NodeID, "", "", ai.Options{})
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(ai.CountsFromContext(c))
+	}
+}
