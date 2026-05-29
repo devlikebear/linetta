@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
+import type { Transaction } from "@tiptap/pm/state";
 import { ai as aiApi } from "../rpc";
 import type { AICancelled, AIDelta, AIDone, AIError, AIOptions, AIReset } from "../types";
 import { useEngineEvent } from "../../hooks/useEngineEvent";
@@ -209,6 +210,41 @@ export function useGhostText(editor: Editor | null) {
     editor.commands.dropGhostText();
     setStatus({ kind: "idle" });
   });
+
+  // Plan 20: the GhostExtension Tab/Esc shortcuts (editor-focused, variation mode)
+  // dispatch a "drop" plugin meta directly — bypassing this hook's accept()/drop().
+  // Observe those transactions so we still cancel the losing variation runs and
+  // reset status. Single-mode is unaffected: activeRunIdsRef is empty, and the
+  // ai-done handler's explicit setStatus("done") runs after this listener (same
+  // tick) so auto-close still fires.
+  useEffect(() => {
+    if (!editor) return;
+    const handler = ({
+      transaction,
+      appendedTransactions,
+    }: {
+      transaction: Transaction;
+      appendedTransactions: Transaction[];
+    }) => {
+      for (const tr of [transaction, ...appendedTransactions]) {
+        const meta = tr.getMeta(ghostPluginKey) as { kind?: string } | undefined;
+        if (meta?.kind === "drop") {
+          if (activeRunIdsRef.current.length > 0) {
+            for (const id of activeRunIdsRef.current) {
+              aiApi.cancel(id).catch(() => {});
+            }
+            activeRunIdsRef.current = [];
+            runIdToVariationRef.current.clear();
+            setStatus({ kind: "idle" });
+          }
+        }
+      }
+    };
+    editor.on("transaction", handler);
+    return () => {
+      editor.off("transaction", handler);
+    };
+  }, [editor]);
 
   // Cleanup on editor change/unmount — cancel any in-flight runs.
   useEffect(() => {

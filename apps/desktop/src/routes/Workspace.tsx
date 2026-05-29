@@ -843,6 +843,13 @@ export function Workspace() {
             };
             if (variationsOn) {
               ghost.startVariations(args, 3);
+              // Variation mode is driven from the editor (◀▶ switch, Tab accept, Esc drop),
+              // so close the prompt bar WITHOUT dropping the ghost and hand focus back to
+              // the editor. (Do NOT call closeAIBar() here — that drops the ghost.)
+              setAiPromptAnchor(null);
+              setContextCounts(null);
+              previewReqIdRef.current++;
+              requestAnimationFrame(() => tiptapEditor?.commands.focus());
             } else {
               ghost.start(args);
             }
