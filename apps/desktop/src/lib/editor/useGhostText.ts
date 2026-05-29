@@ -126,7 +126,11 @@ export function useGhostText(editor: Editor | null) {
 
   useEngineEvent<AIDelta>("ai-delta", (p) => {
     if (!editor) return;
-    // Variation-mode first.
+    // Variation-mode first. NOTE: an early delta can race ahead of the
+    // aiApi.run().then() that registers this run_id → idx mapping; such a
+    // delta finds no mapping and is dropped here. That's benign — the ai-done
+    // handler overwrites the variation with full_text, so the final text is
+    // always complete.
     const vIdx = runIdToVariationRef.current.get(p.run_id);
     if (vIdx !== undefined) {
       const existing = ghostPluginKey.getState(editor.state);
