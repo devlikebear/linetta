@@ -80,6 +80,21 @@ export const GhostExtension = Extension.create({
     ];
   },
 
+  addKeyboardShortcuts() {
+    return {
+      Tab: ({ editor }) => {
+        const ghost = ghostPluginKey.getState(editor.state);
+        if (!ghost) return false; // Let Tab fall through to other handlers.
+        return editor.commands.acceptGhostText();
+      },
+      Escape: ({ editor }) => {
+        const ghost = ghostPluginKey.getState(editor.state);
+        if (!ghost) return false;
+        return editor.commands.dropGhostText();
+      },
+    };
+  },
+
   addCommands() {
     return {
       setGhostText:
