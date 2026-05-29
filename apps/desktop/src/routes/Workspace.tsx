@@ -777,20 +777,29 @@ export function Workspace() {
           contextItemCount={totalContextItems(currentContextCounts)}
           errorMessage={ghost.status.kind === "error" ? ghost.status.message : undefined}
           onOptionsChange={setAiOptions}
-          onRun={(_preset, promptText) => {
-            const selectionText =
-              tiptapEditor && !tiptapEditor.state.selection.empty
-                ? tiptapEditor.state.doc.textBetween(
-                    tiptapEditor.state.selection.from,
-                    tiptapEditor.state.selection.to,
-                    "\n",
-                  )
-                : "";
+          onRun={(preset, promptText) => {
+            const isReplacePreset = preset === "rewrite" || preset === "compact";
+            const hasSel = !!tiptapEditor && !tiptapEditor.state.selection.empty;
+            const selectionText = hasSel
+              ? tiptapEditor!.state.doc.textBetween(
+                  tiptapEditor!.state.selection.from,
+                  tiptapEditor!.state.selection.to,
+                  "\n",
+                )
+              : "";
+            const replaceRange =
+              isReplacePreset && hasSel
+                ? {
+                    from: tiptapEditor!.state.selection.from,
+                    to: tiptapEditor!.state.selection.to,
+                  }
+                : undefined;
             ghost.start({
               nodeId: load.node.id,
               prompt: promptText,
               options: aiOptions,
               selectionText,
+              replaceRange,
             });
           }}
           onCancel={() => ghost.cancel()}

@@ -6,9 +6,13 @@ import "./GhostExtension.css";
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     ghost: {
-      /** Set or replace the ghost text at the current selection's head. */
-      setGhostText: (text: string) => ReturnType;
-      /** Accept the ghost text — insert into the document. */
+      /**
+       * Set or replace the ghost text. mode defaults to "insert" at the current
+       * selection's head; pass {kind: "replace", from, to} to commit by replacing
+       * a range when accepted.
+       */
+      setGhostText: (text: string, mode?: GhostMode) => ReturnType;
+      /** Accept the ghost text — insert into (or replace) the document. */
       acceptGhostText: () => ReturnType;
       /** Drop the ghost text — clear decoration without inserting. */
       dropGhostText: () => ReturnType;
@@ -16,9 +20,13 @@ declare module "@tiptap/core" {
   }
 }
 
+export type GhostMode =
+  | { kind: "insert"; pos: number }
+  | { kind: "replace"; from: number; to: number };
+
 export interface GhostState {
-  /** Position the ghost is anchored to (head of selection when setGhostText was called). */
-  pos: number;
+  /** Where the ghost text will be committed: at a single position, or replacing a range. */
+  mode: GhostMode;
   /** Accumulated text streamed so far. */
   text: string;
   /** True once the stream has completed (cursor stops blinking). */
@@ -38,13 +46,13 @@ export const GhostExtension = Extension.create({
           init: () => null,
           apply(tr, prev) {
             const meta = tr.getMeta(ghostPluginKey) as
-              | { kind: "set"; pos: number; text: string }
+              | { kind: "set"; mode: GhostMode; text: string }
               | { kind: "drop" }
               | { kind: "done" }
               | undefined;
 
             if (meta?.kind === "set") {
-              return { pos: meta.pos, text: meta.text, done: false };
+              return { mode: meta.mode, text: meta.text, done: false };
             }
             if (meta?.kind === "drop") {
               return null;
@@ -63,8 +71,9 @@ export const GhostExtension = Extension.create({
           decorations(state) {
             const ghost = this.getState(state);
             if (!ghost) return DecorationSet.empty;
+            const pos = ghost.mode.kind === "insert" ? ghost.mode.pos : ghost.mode.to;
             const widget = Decoration.widget(
-              ghost.pos,
+              pos,
               () => {
                 const span = document.createElement("span");
                 span.className = "ai-ghost" + (ghost.done ? " done" : "");
@@ -98,11 +107,14 @@ export const GhostExtension = Extension.create({
   addCommands() {
     return {
       setGhostText:
-        (text: string) =>
+        (text: string, mode?: GhostMode) =>
         ({ tr, state, dispatch }) => {
-          const pos = state.selection.head;
+          const effectiveMode: GhostMode =
+            mode ?? { kind: "insert", pos: state.selection.head };
           if (dispatch) {
-            dispatch(tr.setMeta(ghostPluginKey, { kind: "set", pos, text }));
+            dispatch(
+              tr.setMeta(ghostPluginKey, { kind: "set", mode: effectiveMode, text }),
+            );
           }
           return true;
         },
@@ -112,7 +124,13 @@ export const GhostExtension = Extension.create({
           const ghost = ghostPluginKey.getState(state);
           if (!ghost) return false;
           if (dispatch) {
-            const insertTr = tr.insertText(ghost.text, ghost.pos);
+            let insertTr;
+            if (ghost.mode.kind === "insert") {
+              insertTr = tr.insertText(ghost.text, ghost.mode.pos);
+            } else {
+              // replace mode: substitute the selection range with the ghost text
+              insertTr = tr.insertText(ghost.text, ghost.mode.from, ghost.mode.to);
+            }
             insertTr.setMeta(ghostPluginKey, { kind: "drop" });
             dispatch(insertTr);
           }
