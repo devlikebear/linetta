@@ -121,8 +121,8 @@ export const mentions = {
 };
 
 export const ai = {
-  run: (nodeId: string, prompt: string, options: AIOptions) =>
-    rpcCall<{ run_id: string }>("ai.run", { node_id: nodeId, prompt, options }),
+  run: (nodeId: string, prompt: string, options: AIOptions, selectionText: string = "") =>
+    rpcCall<{ run_id: string }>("ai.run", { node_id: nodeId, prompt, selection_text: selectionText, options }),
   cancel: (runId: string) => rpcCall<{ ok: true }>("ai.cancel", { run_id: runId }),
 };
 
