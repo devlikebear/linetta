@@ -132,11 +132,11 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 	}
 
 	return Context{
-		ProjectID:     proj.ID,
-		NodeID:        n.ID,
-		SceneLabel:    n.Label,
-		SceneText:     sceneText,
-		PrevSummary:   prevSummary,
+		ProjectID:   proj.ID,
+		NodeID:      n.ID,
+		SceneLabel:  n.Label,
+		SceneText:   sceneText,
+		PrevSummary: prevSummary,
 		Project: ProjectMeta{
 			Genres:       proj.Genres,
 			LengthTarget: proj.LengthTarget,
