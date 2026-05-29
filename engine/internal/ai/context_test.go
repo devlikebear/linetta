@@ -857,3 +857,80 @@ func TestBuildContext_selectionTextPassesThrough(t *testing.T) {
 		t.Fatalf("SelectionText=%q want %q", c.SelectionText, selectionText)
 	}
 }
+
+func TestCountsFromContext_fullyPopulated(t *testing.T) {
+	c := Context{
+		Project: ProjectMeta{
+			Genres:       []string{"판타지"},
+			LengthTarget: "novel",
+			DefaultPOV:   "first",
+		},
+		Hierarchical: HierarchicalContext{
+			NearbyLeafSummaries:   []SceneSummary{{}, {}, {}},
+			SameChapterSummaries:  []SceneSummary{{}, {}},
+			OtherChapterSummaries: []ChapterSummary{{}},
+			OtherPartSummaries:    []PartSummary{{}, {}},
+			ProjectSynopsis:       "이 작품은…",
+		},
+		RelatedScenes: []SceneSummary{{}, {}, {}},
+		Entities:      []EntityBrief{{}, {}, {}, {}},
+		ActiveThreads: []ActiveThread{{}, {}},
+		Notes:         []NoteBrief{{}},
+		StyleNotes:    "내 톤은…",
+	}
+	got := CountsFromContext(c)
+	if got.NearbyScenes != 3 || got.SameChapter != 2 || got.OtherChapter != 1 || got.OtherPart != 2 {
+		t.Fatalf("hierarchical counts mismatch: %+v", got)
+	}
+	if !got.HasSynopsis {
+		t.Fatalf("HasSynopsis should be true: %+v", got)
+	}
+	if got.RelatedScenes != 3 || got.Entities != 4 || got.ActiveThreads != 2 || got.Notes != 1 {
+		t.Fatalf("collection counts mismatch: %+v", got)
+	}
+	if got.ProjectMetaFields != 3 {
+		t.Fatalf("ProjectMetaFields=%d want 3", got.ProjectMetaFields)
+	}
+	if !got.HasStyleNotes {
+		t.Fatalf("HasStyleNotes should be true: %+v", got)
+	}
+}
+
+func TestCountsFromContext_emptyContext(t *testing.T) {
+	got := CountsFromContext(Context{})
+	if got.NearbyScenes != 0 || got.SameChapter != 0 || got.OtherChapter != 0 || got.OtherPart != 0 {
+		t.Fatalf("counts should be zero: %+v", got)
+	}
+	if got.HasSynopsis || got.HasStyleNotes {
+		t.Fatalf("booleans should be false: %+v", got)
+	}
+	if got.RelatedScenes != 0 || got.Entities != 0 || got.ActiveThreads != 0 || got.Notes != 0 {
+		t.Fatalf("collection counts should be zero: %+v", got)
+	}
+	if got.ProjectMetaFields != 0 {
+		t.Fatalf("ProjectMetaFields=%d want 0", got.ProjectMetaFields)
+	}
+}
+
+func TestCountsFromContext_partialProjectMeta(t *testing.T) {
+	c := Context{
+		Project: ProjectMeta{
+			Genres: []string{"판타지"},
+			// LengthTarget, DefaultPOV 비어있음
+		},
+		Hierarchical: HierarchicalContext{
+			ProjectSynopsis: "   ", // whitespace-only — should be treated as empty
+		},
+		StyleNotes: "  \n  ", // whitespace-only
+	}
+	got := CountsFromContext(c)
+	if got.ProjectMetaFields != 1 {
+		t.Fatalf("ProjectMetaFields=%d want 1 (Genres only)", got.ProjectMetaFields)
+	}
+	if got.HasSynopsis {
+		t.Fatalf("HasSynopsis should be false (whitespace-only)")
+	}
+	if got.HasStyleNotes {
+		t.Fatalf("HasStyleNotes should be false (whitespace-only)")
+	}
+}

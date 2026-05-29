@@ -596,3 +596,31 @@ func trimRunes(s string, max int) string {
 	}
 	return string(r[:max]) + "…"
 }
+
+// CountsFromContext extracts a PreviewCounts from a fully-built Context.
+// Pure function — no I/O. Whitespace-only strings are treated as empty.
+func CountsFromContext(c Context) PreviewCounts {
+	projectMeta := 0
+	if len(c.Project.Genres) > 0 {
+		projectMeta++
+	}
+	if c.Project.LengthTarget != "" {
+		projectMeta++
+	}
+	if c.Project.DefaultPOV != "" {
+		projectMeta++
+	}
+	return PreviewCounts{
+		NearbyScenes:      len(c.Hierarchical.NearbyLeafSummaries),
+		SameChapter:       len(c.Hierarchical.SameChapterSummaries),
+		OtherChapter:      len(c.Hierarchical.OtherChapterSummaries),
+		OtherPart:         len(c.Hierarchical.OtherPartSummaries),
+		HasSynopsis:       strings.TrimSpace(c.Hierarchical.ProjectSynopsis) != "",
+		RelatedScenes:     len(c.RelatedScenes),
+		Entities:          len(c.Entities),
+		ActiveThreads:     len(c.ActiveThreads),
+		Notes:             len(c.Notes),
+		ProjectMetaFields: projectMeta,
+		HasStyleNotes:     strings.TrimSpace(c.StyleNotes) != "",
+	}
+}

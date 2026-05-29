@@ -30,6 +30,23 @@ type ProjectMeta struct {
 	DefaultPOV   string   `json:"default_pov"`
 }
 
+// PreviewCounts is the structural summary of a built Context, used by the
+// frontend's AIContextChecklist to honestly display what will be sent to the
+// LLM before the user runs a generation.
+type PreviewCounts struct {
+	NearbyScenes      int  `json:"nearby_scenes"`
+	SameChapter       int  `json:"same_chapter"`
+	OtherChapter      int  `json:"other_chapter"`
+	OtherPart         int  `json:"other_part"`
+	HasSynopsis       bool `json:"has_synopsis"`
+	RelatedScenes     int  `json:"related_scenes"`
+	Entities          int  `json:"entities"`
+	ActiveThreads     int  `json:"active_threads"`
+	Notes             int  `json:"notes"`
+	ProjectMetaFields int  `json:"project_meta_fields"`
+	HasStyleNotes     bool `json:"has_style_notes"`
+}
+
 // Context is the structured payload that prompts.go renders into the
 // final prompt. Stored as ai_runs.context_json so the user can later see
 // exactly what was sent.
