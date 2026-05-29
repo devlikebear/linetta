@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { AIOptions } from "../../lib/types";
+import type { AIOptions, ContextCounts } from "../../lib/types";
 import type { CommitMode } from "../../lib/editor/commitGenerated";
 import type { GenStatus, GenVariation } from "../../lib/editor/useAIGeneration";
 import { TONE_PRESETS } from "../../lib/tonePresets";
+import { AIContextChecklistList } from "./AIContextChecklist";
 import "./AIModal.css";
 
 interface Props {
@@ -20,6 +21,8 @@ interface Props {
   onAccept: () => void;
   onCancel: () => void;
   onContextClick: () => void;
+  showChecklist: boolean;
+  checklistCounts: ContextCounts;
 }
 
 const MODE_LABEL: Record<CommitMode, string> = {
@@ -163,6 +166,10 @@ export function AIModal(props: Props) {
             ⓘ ctx: {props.contextItemCount}개
           </button>
         </div>
+
+        {props.showChecklist && (
+          <AIContextChecklistList counts={props.checklistCounts} />
+        )}
 
         {hasResult && (
           <div className="ai-modal-result">

@@ -38,3 +38,41 @@
   opacity: 0.6;
   font-size: 0.78rem;
 }
+
+.ai-context-checklist-inline {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.8rem;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.ai-context-checklist-inline h5 {
+  margin: 0 0 0.4rem 0;
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+.ai-context-checklist-inline ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ai-context-checklist-inline li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.12rem 0;
+}
+
+.ai-context-checklist-inline .item-disabled {
+  opacity: 0.4;
+}
+
+.ai-context-checklist-inline .item-count {
+  opacity: 0.6;
+  font-size: 0.78rem;
+}

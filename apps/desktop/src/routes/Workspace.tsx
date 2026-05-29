@@ -14,10 +14,7 @@ import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
 import { useAIGeneration } from "../lib/editor/useAIGeneration";
 import { AIModal } from "../components/ai/AIModal";
 import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated";
-import {
-  AIContextChecklist,
-  totalContextItems,
-} from "../components/ai/AIContextChecklist";
+import { totalContextItems } from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
@@ -854,13 +851,8 @@ export function Workspace() {
           onAccept={acceptAIModal}
           onCancel={closeAIModal}
           onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
-        />
-      )}
-      {aiCtxChecklistOpen && aiModal && (
-        <AIContextChecklist
-          anchor={{ top: 120, left: window.innerWidth / 2 - 160 }}
-          counts={contextCounts ?? FALLBACK_COUNTS}
-          onClose={() => setAiCtxChecklistOpen(false)}
+          showChecklist={aiCtxChecklistOpen}
+          checklistCounts={contextCounts ?? FALLBACK_COUNTS}
         />
       )}
 

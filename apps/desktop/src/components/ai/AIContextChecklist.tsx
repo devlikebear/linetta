@@ -11,7 +11,7 @@ interface Props {
   onClose: () => void;
 }
 
-export function AIContextChecklist({ anchor, counts, onClose }: Props) {
+export function AIContextChecklistList({ counts }: { counts: ContextCounts }) {
   const items: { label: string; present: boolean; caption?: string }[] = [
     { label: "현재 씬 본문", present: true },
     {
@@ -64,21 +64,29 @@ export function AIContextChecklist({ anchor, counts, onClose }: Props) {
   ];
 
   return (
+    <div className="ai-context-checklist-inline">
+      <h5>AI에게 전달되는 컨텍스트</h5>
+      <ul>
+        {items.map((it, i) => (
+          <li key={i} className={it.present ? "" : "item-disabled"}>
+            <span>{it.present ? "✓" : "—"} {it.label}</span>
+            {it.caption && <span className="item-count">{it.caption}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function AIContextChecklist({ anchor, counts, onClose }: Props) {
+  return (
     <>
       <div
         className="ai-context-checklist"
         style={{ top: anchor.top, left: anchor.left }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h5>AI에게 전달되는 컨텍스트</h5>
-        <ul>
-          {items.map((it, i) => (
-            <li key={i} className={it.present ? "" : "item-disabled"}>
-              <span>{it.present ? "✓" : "—"} {it.label}</span>
-              {it.caption && <span className="item-count">{it.caption}</span>}
-            </li>
-          ))}
-        </ul>
+        <AIContextChecklistList counts={counts} />
       </div>
       {/* invisible backdrop to capture outside click */}
       <div
