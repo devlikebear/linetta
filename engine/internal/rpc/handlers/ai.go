@@ -9,9 +9,10 @@ import (
 )
 
 type runAIParams struct {
-	NodeID  string     `json:"node_id"`
-	Prompt  string     `json:"prompt"`
-	Options ai.Options `json:"options"`
+	NodeID        string     `json:"node_id"`
+	Prompt        string     `json:"prompt"`
+	SelectionText string     `json:"selection_text"`
+	Options       ai.Options `json:"options"`
 }
 
 // RunAI returns a handler for ai.run. It builds the Context via the supplied
@@ -22,7 +23,7 @@ func RunAI(builder *ai.ContextBuilder, runner *ai.Runner, now Clock) rpc.Handler
 		if err := json.Unmarshal(params, &p); err != nil || p.NodeID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node_id required"}
 		}
-		c, err := builder.Build(ctx, p.NodeID, p.Prompt, p.Options)
+		c, err := builder.Build(ctx, p.NodeID, p.Prompt, p.SelectionText, p.Options)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

@@ -36,7 +36,7 @@ func TestBuildContext_projectMetaPopulated(t *testing.T) {
 	})
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	c, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "user prompt", Options{})
+	c, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "user prompt", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 	}
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "재작성", Options{Tone: TonePresetMy})
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "재작성", "", Options{Tone: TonePresetMy})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestBuildContext_prevSummary_trims300chars(t *testing.T) {
 	second, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "leaf", "씬 2", "", 1200)
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	got, err := builder.Build(context.Background(), second.ID, "확장", Options{})
+	got, err := builder.Build(context.Background(), second.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestBuildContext_activeThreadsForCurrentNode(t *testing.T) {
 	_ = tr.Close(context.Background(), closed.ID, 2000)
 
 	builder := NewContextBuilder(pr, nodes, mr, tr, br, note.NewRepo(s))
-	got, err := builder.Build(context.Background(), nID, "재작성", Options{})
+	got, err := builder.Build(context.Background(), nID, "재작성", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestBuildContext_prevSummary_usesFreshCache(t *testing.T) {
 	}
 
 	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
-	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
+	got, err := builder.Build(context.Background(), secondID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestBuildContext_prevSummary_fallsBackWhenStale(t *testing.T) {
 	_ = nodes.SetSummary(context.Background(), prevID, "오래된 요약", 0)
 
 	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
-	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
+	got, err := builder.Build(context.Background(), secondID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -274,7 +274,7 @@ func TestBuildContext_prevSummary_fallsBackWhenEmpty(t *testing.T) {
 	pr, nodes, mr, tr, br, nr, _, secondID := setupPrevSummaryFixture(t)
 
 	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
-	got, err := builder.Build(context.Background(), secondID, "확장", Options{})
+	got, err := builder.Build(context.Background(), secondID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestBuildContext_hierarchical_populatesNearbySameChapterAndPart(t *testing.
 	seedFresh(part2.ID, "2부 요약")
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	got, err := builder.Build(context.Background(), s3.ID, "확장", Options{})
+	got, err := builder.Build(context.Background(), s3.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -413,7 +413,7 @@ func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T)
 	_ = nodes.UpdateContent(context.Background(), second.ID, doc("씬 2의 현재"), 1300)
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	got, err := builder.Build(context.Background(), second.ID, "확장", Options{})
+	got, err := builder.Build(context.Background(), second.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -488,7 +488,7 @@ func TestBuildContext_relatedScenes_returnsCoMentionTop3(t *testing.T) {
 	_ = nodes.UpdateContent(context.Background(), cur, withBoth("현재 — "), 1310)
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	got, err := builder.Build(context.Background(), cur, "확장", Options{})
+	got, err := builder.Build(context.Background(), cur, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -518,7 +518,7 @@ func TestBuildContext_includesNotesForNode(t *testing.T) {
 	_, _ = nr.Create(context.Background(), note.NewInput{NodeID: *p.LastOpenedNodeID, Anchor: 7, Body: "톤 바꾸기"}, 1000)
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), nr)
-	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "확장", Options{})
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -615,7 +615,7 @@ func TestBuildContext_hierarchicalRetrieval(t *testing.T) {
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s)).
 		WithSummaryRefresher(ref)
-	got, err := builder.Build(context.Background(), cur.ID, "확장", Options{})
+	got, err := builder.Build(context.Background(), cur.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -731,7 +731,7 @@ func TestBuildContext_entityDossier(t *testing.T) {
 	_ = nodes.UpdateContent(context.Background(), leaf4.ID, doc("현재"), 1400)
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	got, err := builder.Build(context.Background(), leaf4.ID, "확장", Options{})
+	got, err := builder.Build(context.Background(), leaf4.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -817,7 +817,7 @@ func TestBuildContext_topologyRAG(t *testing.T) {
 	_ = nodes.UpdateContent(context.Background(), curN.ID, withBoth("cur — "), 1310)
 
 	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
-	got, err := builder.Build(context.Background(), curN.ID, "확장", Options{})
+	got, err := builder.Build(context.Background(), curN.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -826,5 +826,34 @@ func TestBuildContext_topologyRAG(t *testing.T) {
 	}
 	if got.RelatedScenes[0].NodeID != leafA {
 		t.Errorf("related[0] = %s, want leafA=%s", got.RelatedScenes[0].NodeID, leafA)
+	}
+}
+
+func TestBuildContext_selectionTextPassesThrough(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	selectionText := "그녀는 천천히 고개를 들었다."
+	c, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "더 감각적으로 다시 써줘", selectionText, Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if c.SelectionText != selectionText {
+		t.Fatalf("SelectionText=%q want %q", c.SelectionText, selectionText)
 	}
 }

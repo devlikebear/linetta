@@ -62,7 +62,7 @@ func (b *ContextBuilder) WithSummaryRefresher(r SummaryRefresher) *ContextBuilde
 }
 
 // Build assembles the context for the given leaf node + user prompt + options.
-func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts Options) (Context, error) {
+func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt, selectionText string, opts Options) (Context, error) {
 	n, err := b.nodes.Get(ctx, nodeID)
 	if err != nil {
 		return Context{}, err
@@ -148,6 +148,7 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 		ActiveThreads: active,
 		Notes:         noteBriefs,
 		StyleNotes:    proj.StyleNotes,
+		SelectionText: selectionText,
 		UserPrompt:    prompt,
 		Options:       opts,
 	}, nil

@@ -46,6 +46,7 @@ type Context struct {
 	ActiveThreads []ActiveThread      `json:"active_threads"`
 	Notes         []NoteBrief         `json:"notes"`
 	StyleNotes    string              `json:"style_notes"`
+	SelectionText string              `json:"selection_text"`
 	UserPrompt    string              `json:"user_prompt"`
 	Options       Options             `json:"options"`
 }
