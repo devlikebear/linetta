@@ -19,7 +19,7 @@ interface Props {
   contextItemCount: number;
   errorMessage?: string;
   onOptionsChange: (o: AIOptions) => void;
-  onRun: (preset: PresetID, prompt: string) => void;
+  onRun: (preset: PresetID, prompt: string, variationsOn: boolean) => void;
   onCancel: () => void;
   onClose: () => void;
   onContextClick: () => void;
@@ -40,6 +40,7 @@ export function AIPromptBar({
 }: Props) {
   const [prompt, setPrompt] = useState("");
   const [shake, setShake] = useState(false);
+  const [variationsOn, setVariationsOn] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -58,7 +59,7 @@ export function AIPromptBar({
       return;
     }
     if (preset && !prompt) setPrompt(seed);
-    onRun(preset, text);
+    onRun(preset, text, variationsOn);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -107,6 +108,15 @@ export function AIPromptBar({
         </div>
         <ToneDropdown options={options} onChange={onOptionsChange} />
         <LengthChip options={options} onChange={onOptionsChange} />
+        <button
+          type="button"
+          className={`ai-prompt-bar-preset-chip${variationsOn ? " active" : ""}`}
+          onClick={() => setVariationsOn((v) => !v)}
+          aria-pressed={variationsOn}
+          title="3개 변형 병렬 생성 (토큰 3배)"
+        >
+          변형 ×3
+        </button>
       </div>
 
       <textarea

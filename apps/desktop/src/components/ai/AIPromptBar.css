@@ -40,6 +40,11 @@
   cursor: not-allowed;
 }
 
+.ai-prompt-bar-preset-chip.active {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
 .ai-prompt-bar-textarea {
   width: 100%;
   min-height: 2.4rem;
