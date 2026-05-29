@@ -20,6 +20,16 @@ type Options struct {
 	ShortForm bool   `json:"short_form"` // ask for one-paragraph length
 }
 
+// ProjectMeta carries the project-level configuration the user set when
+// creating the project (장르, 예상 분량, 기본 시점). Renders as a single
+// line near the top of the user message so the LLM understands the project's
+// fundamental constraints.
+type ProjectMeta struct {
+	Genres       []string `json:"genres"`
+	LengthTarget string   `json:"length_target"`
+	DefaultPOV   string   `json:"default_pov"`
+}
+
 // Context is the structured payload that prompts.go renders into the
 // final prompt. Stored as ai_runs.context_json so the user can later see
 // exactly what was sent.
@@ -29,6 +39,7 @@ type Context struct {
 	SceneLabel    string              `json:"scene_label"`
 	SceneText     string              `json:"scene_text"`
 	PrevSummary   string              `json:"prev_summary"`
+	Project       ProjectMeta         `json:"project"`
 	Hierarchical  HierarchicalContext `json:"hierarchical"`
 	RelatedScenes []SceneSummary      `json:"related_scenes"`
 	Entities      []EntityBrief       `json:"entities"`

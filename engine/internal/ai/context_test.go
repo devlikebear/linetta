@@ -17,6 +17,40 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
+func TestBuildContext_projectMetaPopulated(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "t", Genres: []string{"판타지", "미스터리"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	c, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "user prompt", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(c.Project.Genres) != 2 || c.Project.Genres[0] != "판타지" {
+		t.Fatalf("Project.Genres=%v", c.Project.Genres)
+	}
+	if c.Project.LengthTarget != "novel" {
+		t.Fatalf("Project.LengthTarget=%q", c.Project.LengthTarget)
+	}
+	if c.Project.DefaultPOV != "first" {
+		t.Fatalf("Project.DefaultPOV=%q", c.Project.DefaultPOV)
+	}
+}
+
 func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)

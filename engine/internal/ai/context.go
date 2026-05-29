@@ -137,6 +137,11 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt string, opts 
 		SceneLabel:    n.Label,
 		SceneText:     sceneText,
 		PrevSummary:   prevSummary,
+		Project: ProjectMeta{
+			Genres:       proj.Genres,
+			LengthTarget: proj.LengthTarget,
+			DefaultPOV:   proj.DefaultPOV,
+		},
 		Hierarchical:  hierarchical,
 		RelatedScenes: related,
 		Entities:      briefs,
