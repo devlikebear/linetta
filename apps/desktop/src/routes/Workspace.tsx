@@ -330,9 +330,11 @@ export function Workspace() {
       const mod = isMac ? e.metaKey : e.ctrlKey;
       if (!mod) return;
       if (e.key.toLowerCase() === "r") {
+        if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
         window.location.reload();
       } else if (e.key.toLowerCase() === "p") {
+        if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
         setPaletteOpen((v) => !v);
       } else if (e.key.toLowerCase() === "i") {
@@ -427,6 +429,14 @@ export function Workspace() {
     previewReqIdRef.current++;
   }, [gen, tiptapEditor]);
   useEffect(() => { closeAIModalRef.current = closeAIModal; }, [closeAIModal]);
+
+  // Defensive: if the active node changes while the modal is open, close it so
+  // stale selection offsets can't be committed into a freshly-mounted editor.
+  useEffect(() => {
+    if (aiModalOpenRef.current) {
+      closeAIModalRef.current?.();
+    }
+  }, [load?.node.id]);
 
   const acceptAIModal = useCallback(() => {
     if (!aiModal || !tiptapEditor) return;
