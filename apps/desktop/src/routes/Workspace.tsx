@@ -817,7 +817,7 @@ export function Workspace() {
           contextItemCount={totalContextItems(contextCounts ?? FALLBACK_COUNTS)}
           errorMessage={ghost.status.kind === "error" ? ghost.status.message : undefined}
           onOptionsChange={setAiOptions}
-          onRun={(preset, promptText) => {
+          onRun={(preset, promptText, variationsOn) => {
             const isReplacePreset = preset === "rewrite" || preset === "compact";
             const hasSel = !!tiptapEditor && !tiptapEditor.state.selection.empty;
             const selectionText = hasSel
@@ -834,13 +834,18 @@ export function Workspace() {
                     to: tiptapEditor!.state.selection.to,
                   }
                 : undefined;
-            ghost.start({
+            const args = {
               nodeId: load.node.id,
               prompt: promptText,
               options: aiOptions,
               selectionText,
               replaceRange,
-            });
+            };
+            if (variationsOn) {
+              ghost.startVariations(args, 3);
+            } else {
+              ghost.start(args);
+            }
           }}
           onCancel={() => ghost.cancel()}
           onClose={closeAIBar}
