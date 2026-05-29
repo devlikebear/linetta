@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AIOptions,
   Beat,
+  ContextCounts,
   ContextPreviewResponse,
   Entity,
   ExportPayload,
@@ -32,7 +33,6 @@ import type {
   UpdateRelationshipInput,
   UpdateThreadInput,
 } from "./types";
-import type { ContextCounts } from "../components/ai/AIContextChecklist";
 
 // Tauri commands defined in src-tauri.
 

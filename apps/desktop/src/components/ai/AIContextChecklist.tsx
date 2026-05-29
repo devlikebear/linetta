@@ -1,18 +1,9 @@
 import "./AIContextChecklist.css";
+import type { ContextCounts } from "../../lib/types";
 
-export interface ContextCounts {
-  nearbyScenes: number;
-  sameChapter: number;
-  otherChapter: number;
-  otherPart: number;
-  hasSynopsis: boolean;
-  relatedScenes: number;
-  entities: number;
-  activeThreads: number;
-  notes: number;
-  projectMetaFields: number; // 0..3 (Genres+Length+POV)
-  hasStyleNotes: boolean;
-}
+// Re-export so existing consumers that import { ContextCounts } from this file
+// continue to work without changes.
+export type { ContextCounts };
 
 interface Props {
   anchor: { top: number; left: number };

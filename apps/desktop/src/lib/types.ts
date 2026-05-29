@@ -146,6 +146,22 @@ export interface ContextPreviewResponse {
   has_style_notes: boolean;
 }
 
+/** Camel-case context-payload counts surfaced by the FE. Wire shape is
+ *  ContextPreviewResponse (snake_case); rpc.ts maps wire → camel. */
+export interface ContextCounts {
+  nearbyScenes: number;
+  sameChapter: number;
+  otherChapter: number;
+  otherPart: number;
+  hasSynopsis: boolean;
+  relatedScenes: number;
+  entities: number;
+  activeThreads: number;
+  notes: number;
+  projectMetaFields: number;
+  hasStyleNotes: boolean;
+}
+
 export interface GitSyncResult {
   skipped: boolean;
   files_written: number;
