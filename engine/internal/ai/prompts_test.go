@@ -378,3 +378,48 @@ func TestBuildUser_projectMeta_unmappedValuesPassThrough(t *testing.T) {
 		t.Fatalf("unmapped POV should pass through. got:\n%s", got)
 	}
 }
+
+func TestBuildUser_selectionTextSection_present(t *testing.T) {
+	c := Context{
+		SceneLabel:    "씬 1",
+		SceneText:     "전체 본문 텍스트",
+		SelectionText: "그녀는 천천히 고개를 들었다.",
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "## 선택 영역") {
+		t.Fatalf("missing header. got:\n%s", got)
+	}
+	if !strings.Contains(got, "그녀는 천천히 고개를 들었다.") {
+		t.Fatalf("missing selection body. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_selectionTextSection_emptyOmitsSection(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+	}
+	got := buildUser(c)
+	if strings.Contains(got, "## 선택 영역") {
+		t.Fatalf("section should be omitted. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_selectionTextSection_appearsAfterCurrentSceneBeforeInstruction(t *testing.T) {
+	c := Context{
+		SceneLabel:    "씬 1",
+		SceneText:     "본문",
+		SelectionText: "선택본",
+		UserPrompt:    "지시문",
+	}
+	got := buildUser(c)
+	sceneIdx := strings.Index(got, "## 현재 씬")
+	selIdx := strings.Index(got, "## 선택 영역")
+	instIdx := strings.Index(got, "## 작가의 지시")
+	if sceneIdx == -1 || selIdx == -1 || instIdx == -1 {
+		t.Fatalf("missing section. got:\n%s", got)
+	}
+	if !(sceneIdx < selIdx && selIdx < instIdx) {
+		t.Fatalf("expected order: current scene < selection < instruction. got indices: scene=%d sel=%d inst=%d", sceneIdx, selIdx, instIdx)
+	}
+}

@@ -141,6 +141,12 @@ func buildUser(c Context) string {
 	b.WriteString(c.SceneText)
 	b.WriteString("\n\n")
 
+	if strings.TrimSpace(c.SelectionText) != "" {
+		b.WriteString("## 선택 영역\n")
+		b.WriteString(c.SelectionText)
+		b.WriteString("\n\n")
+	}
+
 	if len(c.Entities) > 0 {
 		b.WriteString("## 등장 인물·장소\n")
 		for _, e := range c.Entities {
