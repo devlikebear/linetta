@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, ai as aiApi, settings as settingsApi, exportApi, notes as notesApi, gitSync } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIOptions, AIDelta, AIReset, AIDone, AIError, AICancelled } from "../lib/types";
+import type { NodeRow, Project, Entity, AIOptions } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -11,6 +11,14 @@ import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
+import { GhostExtension } from "../components/editor/GhostExtension";
+import { useGhostText } from "../lib/editor/useGhostText";
+import { AIPromptBar } from "../components/ai/AIPromptBar";
+import {
+  AIContextChecklist,
+  totalContextItems,
+  type ContextCounts,
+} from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
@@ -18,9 +26,6 @@ import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
-import { useEngineEvent } from "../hooks/useEngineEvent";
-import { AIMode, type AIRunStatus } from "../components/ai/AIMode";
-import { AIContextPanel } from "../components/ai/AIContextPanel";
 import { useToast } from "../components/ToastProvider";
 import {
   buildTree,
@@ -64,11 +69,9 @@ export function Workspace() {
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
-  const [mode, setMode] = useState<"edit" | "ai">("edit");
-  const [aiPrompt, setAiPrompt] = useState("");
   const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: false });
-  const [aiStatus, setAiStatus] = useState<AIRunStatus>({ kind: "idle" });
-  const aiRunIdRef = useRef<string | null>(null);
+  const [aiPromptAnchor, setAiPromptAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [aiCtxChecklistOpen, setAiCtxChecklistOpen] = useState(false);
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);
@@ -155,35 +158,6 @@ export function Workspace() {
       .catch(() => { /* benign */ });
     return () => { cancelled = true; };
   }, []);
-
-  useEngineEvent<AIDelta>("ai-delta", (p) => {
-    if (p.run_id !== aiRunIdRef.current) return;
-    setAiStatus((s) => {
-      const prev = s.kind === "running" ? s.text : "";
-      return { kind: "running", runId: p.run_id, text: prev + p.text };
-    });
-  });
-  useEngineEvent<AIReset>("ai-reset", (p) => {
-    // Engine's dedup observed a divergent retry — REPLACE the running text
-    // with the authoritative reconciled buffer.
-    if (p.run_id !== aiRunIdRef.current) return;
-    setAiStatus({ kind: "running", runId: p.run_id, text: p.text });
-  });
-  useEngineEvent<AIDone>("ai-done", (p) => {
-    if (p.run_id !== aiRunIdRef.current) return;
-    setAiStatus({ kind: "done", text: p.full_text });
-    aiRunIdRef.current = null;
-  });
-  useEngineEvent<AIError>("ai-error", (p) => {
-    if (p.run_id !== aiRunIdRef.current) return;
-    setAiStatus((s) => ({ kind: "error", message: p.message, text: s.kind === "running" ? s.text : "" }));
-    aiRunIdRef.current = null;
-  });
-  useEngineEvent<AICancelled>("ai-cancelled", (p) => {
-    if (p.run_id !== aiRunIdRef.current) return;
-    setAiStatus({ kind: "idle" });
-    aiRunIdRef.current = null;
-  });
 
   const mentionExtension = useMemo(() => {
     if (!projectId) return null;
@@ -323,7 +297,7 @@ export function Workspace() {
     return () => window.removeEventListener("linetta:mention-pick-new", handler);
   }, [projectId]);
 
-  // Global Cmd+R reload + Cmd+P palette toggle.
+  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+I AI prompt bar.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -335,6 +309,20 @@ export function Workspace() {
       } else if (e.key.toLowerCase() === "p") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+      } else if (e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        setAiPromptAnchor((cur) => {
+          if (cur) return null; // toggle off if already open
+          const ed = editorRef.current?.editor;
+          if (!ed) return null;
+          const view = ed.view;
+          const coords = view.coordsAtPos(view.state.selection.head);
+          const flip = window.innerHeight - coords.bottom < 200;
+          return {
+            top: flip ? coords.top - 160 : coords.bottom + 4,
+            left: Math.min(coords.left, window.innerWidth - 500),
+          };
+        });
       }
     };
     window.addEventListener("keydown", handler);
@@ -387,66 +375,30 @@ export function Workspace() {
     [load],
   );
 
-  // --- AI handlers ---
+  // --- Ghost-text AI (Cmd+I prompt bar) ---
 
-  const handlePreset = (preset: "rewrite" | "expand" | "compact") => {
-    const seeds: Record<typeof preset, string> = {
-      rewrite: "이 문단을 다른 톤으로 다시 써줘.",
-      expand: "이 장면을 더 감각적으로 확장해줘.",
-      compact: "이 씬을 한 문단으로 요약해줘.",
+  const tiptapEditor = editorRef.current?.editor ?? null;
+  const ghost = useGhostText(tiptapEditor);
+
+  const currentContextCounts: ContextCounts = useMemo(() => {
+    const proj = load?.project;
+    return {
+      nearbyScenes: 3, // best-guess; engine will expose real counts via ai.preview-context in a future PR.
+      sameChapter: 0,
+      otherChapter: 0,
+      otherPart: 0,
+      hasSynopsis: true,
+      relatedScenes: 0,
+      entities: mentioned.length,
+      activeThreads: 0,
+      notes: 0,
+      projectMetaFields:
+        ((proj?.genres?.length ?? 0) > 0 ? 1 : 0) +
+        (proj?.length_target ? 1 : 0) +
+        (proj?.default_pov ? 1 : 0),
+      hasStyleNotes: !!proj?.style_notes,
     };
-    setAiPrompt(seeds[preset]);
-  };
-
-  const startAIRun = async () => {
-    if (!load || !aiPrompt.trim()) return;
-    setAiStatus({ kind: "running", runId: "pending", text: "" });
-    try {
-      const { run_id } = await aiApi.run(load.node.id, aiPrompt, aiOptions);
-      aiRunIdRef.current = run_id;
-      setAiStatus({ kind: "running", runId: run_id, text: "" });
-    } catch (e) {
-      setAiStatus({ kind: "error", message: String(e), text: "" });
-    }
-  };
-
-  const cancelAIRun = async () => {
-    if (!aiRunIdRef.current) return;
-    try { await aiApi.cancel(aiRunIdRef.current); } catch { /* benign */ }
-  };
-
-  const insertResult = (text: string) => {
-    if (!load || !text) return;
-    const docStr = JSON.stringify({
-      type: "doc",
-      content: [
-        ...((load.initialDoc as any).content ?? []),
-        { type: "paragraph", content: [{ type: "text", text }] },
-      ],
-    });
-    nodes.updateContent(load.node.id, docStr).then(() => {
-      setMode("edit");
-      setAiStatus({ kind: "idle" });
-      refreshTreeKeepNode(load.node.id);
-      setTimeout(() => focusEditor(), 0);
-    });
-  };
-
-  const replaceWithResult = (text: string) => {
-    if (!load || !text) return;
-    const docStr = JSON.stringify({
-      type: "doc",
-      content: [{ type: "paragraph", content: [{ type: "text", text }] }],
-    });
-    // Snapshot the old body first.
-    snapshots.createManual(load.node.id, JSON.stringify(load.initialDoc)).catch(() => {});
-    nodes.updateContent(load.node.id, docStr).then(() => {
-      setMode("edit");
-      setAiStatus({ kind: "idle" });
-      refreshTreeKeepNode(load.node.id);
-      setTimeout(() => focusEditor(), 0);
-    });
-  };
+  }, [load, mentioned]);
 
   // --- Commands ---
 
@@ -728,13 +680,6 @@ export function Workspace() {
     return `← 작품 · ${chain.join(" › ")}${load.node.title ? ` — ${load.node.title}` : ""}`;
   }, [load]);
 
-  const aiContextSummary = useMemo(() => {
-    const parts: string[] = ["현재 씬 + 직전 씬"];
-    if (mentioned.length > 0) parts.push("@" + mentioned.map((e) => e.name).join(", @"));
-    if (load?.project.style_notes) parts.push("style notes");
-    return parts.join(" · ");
-  }, [mentioned, load]);
-
   if (error) {
     return (
       <main className="shell">
@@ -755,66 +700,33 @@ export function Workspace() {
     <main className="workspace">
       <header className="ws-top">
         <Link to="/" className="ws-breadcrumb">{breadcrumb}</Link>
-        <span className="ws-modes">
-          <button
-            type="button"
-            className={`mode-toggle${mode === "edit" ? " on" : ""}`}
-            onClick={() => setMode("edit")}
-          >
-            편집
-          </button>
-          <button
-            type="button"
-            className={`mode-toggle${mode === "ai" ? " on" : ""}`}
-            onClick={() => setMode("ai")}
-          >
-            AI
-          </button>
-        </span>
         <button type="button" className="mode-toggle ws-zen-btn" onClick={enterZen}>
           ZEN
         </button>
       </header>
 
       <div className={`ws-body${(entitySheetId || threadSheetId) ? " with-sheet" : ""}`}>
-        {mode === "edit" ? (
-          <div className="ws-editor">
-            <TiptapEditor
-              key={load.node.id}
-              ref={editorRef}
-              initialDoc={load.initialDoc}
-              onChange={(doc) => {
-                debouncedSave(doc);
-                throttledLastOpened();
-              }}
-              onCharCount={setCharCount}
-              typewriter={typewriter}
-              focus={focus}
-              onManualSave={handleManualSave}
-              extensions={[
-                ...(mentionExtension ? [mentionExtension] : []),
-                NoteMarkerExtension,
-              ]}
-              onMentionDoubleClick={(id) => setEntitySheetId(id)}
-            />
-          </div>
-        ) : (
-          <AIMode
-            status={aiStatus}
-            prompt={aiPrompt}
-            onPromptChange={setAiPrompt}
-            options={aiOptions}
-            onOptionsChange={setAiOptions}
-            onPresetClick={handlePreset}
-            onRun={startAIRun}
-            onCancel={cancelAIRun}
-            onInsert={insertResult}
-            onReplace={replaceWithResult}
-            onRegenerate={startAIRun}
-            onDiscard={() => setAiStatus({ kind: "idle" })}
-            contextSummary={aiContextSummary}
+        <div className="ws-editor">
+          <TiptapEditor
+            key={load.node.id}
+            ref={editorRef}
+            initialDoc={load.initialDoc}
+            onChange={(doc) => {
+              debouncedSave(doc);
+              throttledLastOpened();
+            }}
+            onCharCount={setCharCount}
+            typewriter={typewriter}
+            focus={focus}
+            onManualSave={handleManualSave}
+            extensions={[
+              ...(mentionExtension ? [mentionExtension] : []),
+              NoteMarkerExtension,
+              GhostExtension,
+            ]}
+            onMentionDoubleClick={(id) => setEntitySheetId(id)}
           />
-        )}
+        </div>
         {entitySheetId ? (
           <EntitySheet
             entityId={entitySheetId}
@@ -838,13 +750,6 @@ export function Workspace() {
               /* ActiveThreadsPanel self-reloads */
             }}
           />
-        ) : mode === "ai" ? (
-          <AIContextPanel
-            project={load.project}
-            mentioned={mentioned}
-            options={aiOptions}
-            onOptionsChange={setAiOptions}
-          />
         ) : (
           <ContextPanel
             project={load.project}
@@ -862,6 +767,47 @@ export function Workspace() {
           />
         )}
       </div>
+
+      {aiPromptAnchor && (
+        <AIPromptBar
+          anchor={aiPromptAnchor}
+          hasSelection={!!tiptapEditor && !tiptapEditor.state.selection.empty}
+          busy={ghost.status.kind === "running"}
+          options={aiOptions}
+          contextItemCount={totalContextItems(currentContextCounts)}
+          errorMessage={ghost.status.kind === "error" ? ghost.status.message : undefined}
+          onOptionsChange={setAiOptions}
+          onRun={(_preset, promptText) => {
+            const selectionText =
+              tiptapEditor && !tiptapEditor.state.selection.empty
+                ? tiptapEditor.state.doc.textBetween(
+                    tiptapEditor.state.selection.from,
+                    tiptapEditor.state.selection.to,
+                    "\n",
+                  )
+                : "";
+            ghost.start({
+              nodeId: load.node.id,
+              prompt: promptText,
+              options: aiOptions,
+              selectionText,
+            });
+          }}
+          onCancel={() => ghost.cancel()}
+          onClose={() => {
+            ghost.drop();
+            setAiPromptAnchor(null);
+          }}
+          onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
+        />
+      )}
+      {aiCtxChecklistOpen && aiPromptAnchor && (
+        <AIContextChecklist
+          anchor={{ top: aiPromptAnchor.top + 180, left: aiPromptAnchor.left }}
+          counts={currentContextCounts}
+          onClose={() => setAiCtxChecklistOpen(false)}
+        />
+      )}
 
       <OutlinePanel
         tree={load.tree}

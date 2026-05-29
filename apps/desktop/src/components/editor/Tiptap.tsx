@@ -17,6 +17,9 @@ export interface TiptapHandle {
   addNoteMarker: (noteId: string) => void;
   /** Remove the first note-marker atom with the given noteId. */
   removeNoteMarker: (noteId: string) => void;
+  /** Underlying Tiptap Editor instance (null until first mount). Used by
+   *  ghost-text + Cmd+I AI prompt bar to read selection and dispatch commands. */
+  editor: Editor | null;
 }
 
 interface Props {
@@ -112,6 +115,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
       removeNoteMarker: (noteId: string) => {
         (editor?.commands as any)?.removeNoteMarker?.(noteId);
       },
+      editor,
     }),
     [editor],
   );
