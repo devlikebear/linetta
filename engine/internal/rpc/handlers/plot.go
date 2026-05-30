@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
@@ -22,6 +24,9 @@ func PlotSpinePanel(builder *plot.Builder) rpc.Handler {
 		}
 		spine, err := builder.Build(ctx, p.NodeID)
 		if err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(spine)

@@ -61,6 +61,23 @@ func TestPlotSpinePanel_EmptyNodeID(t *testing.T) {
 	}
 }
 
+func TestPlotSpinePanel_UnknownNodeID(t *testing.T) {
+	builder, _ := newPlotFixture(t)
+	h := PlotSpinePanel(builder)
+
+	_, err := h(context.Background(), json.RawMessage(`{"node_id":"00000000-0000-0000-0000-000000000000"}`))
+	if err == nil {
+		t.Fatal("expected error for unknown node_id, got nil")
+	}
+	me, ok := err.(*rpc.MethodError)
+	if !ok {
+		t.Fatalf("expected *rpc.MethodError, got %T: %v", err, err)
+	}
+	if me.Code != rpc.CodeInvalidParams {
+		t.Errorf("code = %d, want CodeInvalidParams (%d)", me.Code, rpc.CodeInvalidParams)
+	}
+}
+
 func TestPlotSpinePanel_ValidLeaf(t *testing.T) {
 	builder, leafID := newPlotFixture(t)
 	h := PlotSpinePanel(builder)
