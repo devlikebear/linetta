@@ -59,11 +59,11 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
     }
   };
 
-  const updateBeat = async (b: Beat, patch: { label?: string; intensity?: number }) => {
+  const updateBeat = async (b: Beat, patch: { label?: string; description?: string; intensity?: number }) => {
     const next = { ...b, ...patch };
     setBeatList((prev) => prev.map((x) => (x.id === b.id ? next : x)));
     try {
-      await beatsApi.update({ id: b.id, label: next.label, intensity: next.intensity });
+      await beatsApi.update({ id: b.id, label: next.label, description: next.description, intensity: next.intensity });
     } catch (e) {
       setError(String(e));
     }
@@ -141,12 +141,21 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
             {beatList.map((b) => (
               <div className="beat-row" key={b.id}>
                 <span className="beat-ordinal">#{b.ordinal}</span>
-                <input
-                  className="attr-value"
-                  value={b.label}
-                  onChange={(e) => updateBeat(b, { label: e.target.value })}
-                  placeholder="마디 설명"
-                />
+                <div className="beat-fields">
+                  <input
+                    className="attr-value"
+                    value={b.label}
+                    onChange={(e) => updateBeat(b, { label: e.target.value })}
+                    placeholder="마디 제목"
+                  />
+                  <textarea
+                    className="beat-desc"
+                    value={b.description}
+                    onChange={(e) => updateBeat(b, { description: e.target.value })}
+                    placeholder="무슨 일이 일어나는지"
+                    rows={2}
+                  />
+                </div>
                 <div className="beat-intensity">
                   {[1, 2, 3].map((lvl) => (
                     <button

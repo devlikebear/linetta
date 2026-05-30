@@ -144,7 +144,7 @@
   display: grid;
   grid-template-columns: auto 1fr auto auto;
   gap: 0.4rem;
-  align-items: center;
+  align-items: start;
 }
 .beat-ordinal { color: #9a9a9a; font-variant-numeric: tabular-nums; min-width: 1.6rem; }
 .beat-intensity { display: flex; gap: 0.2rem; }
@@ -161,3 +161,6 @@
   cursor: pointer; font: inherit; font-size: 0.85rem;
   margin-right: auto; padding: 0;
 }
+
+.beat-fields { display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
+.beat-desc { resize: vertical; font: inherit; padding: 0.3rem; border: 1px solid #d8d6cf; border-radius: 4px; }
