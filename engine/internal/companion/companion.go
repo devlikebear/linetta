@@ -1,0 +1,107 @@
+package companion
+
+import (
+	"context"
+
+	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/plot"
+	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/thread"
+	"github.com/devlikebear/tars/pkg/llm"
+	"github.com/devlikebear/tars/pkg/session"
+)
+
+// historyTokenBudget caps how much prior transcript is replayed into context.
+const historyTokenBudget = 6000
+
+// entityContextLimit caps how many entities are injected.
+const entityContextLimit = 40
+
+// ClientFactory mirrors ai.ClientFactory (provider id + workDir -> llm.Client).
+type ClientFactory func(provider, workDir string) (llm.Client, error)
+
+// ProviderSource yields the current provider id (settings.Store satisfies it).
+type ProviderSource interface{ Provider() string }
+
+// Service wires the companion backend.
+type Service struct {
+	sessions      *session.Store
+	projects      *project.Repo
+	threads       *thread.Repo
+	entities      *entity.Repo
+	relationships *relationship.Repo
+	plot          *plot.Builder
+	notify        rpc.Notifier
+	factory       ClientFactory
+	src           ProviderSource
+	workDir       string
+	runner        *Runner
+}
+
+// NewService constructs the companion service. sessionsDir is passed to
+// session.NewStore (e.g. <home>/companion).
+func NewService(
+	sessionsDir string,
+	projects *project.Repo, threads *thread.Repo, entities *entity.Repo,
+	relationships *relationship.Repo, plotBuilder *plot.Builder,
+	notify rpc.Notifier, factory ClientFactory, src ProviderSource, workDir string,
+) *Service {
+	s := &Service{
+		sessions:      session.NewStore(sessionsDir),
+		projects:      projects, threads: threads, entities: entities,
+		relationships: relationships, plot: plotBuilder,
+		notify: notify, factory: factory, src: src, workDir: workDir,
+	}
+	s.runner = newRunner(s)
+	return s
+}
+
+// gatherContext loads project state for prompt injection. nodeID may be "".
+func (s *Service) gatherContext(ctx context.Context, projectID, nodeID string) (PromptData, error) {
+	proj, err := s.projects.Get(ctx, projectID)
+	if err != nil {
+		return PromptData{}, err
+	}
+	d := PromptData{Outline: proj.Outline}
+
+	resolvedNode := nodeID
+	if resolvedNode == "" && proj.LastOpenedNodeID != nil {
+		resolvedNode = *proj.LastOpenedNodeID
+	}
+	if resolvedNode != "" {
+		if sp, err := s.plot.Build(ctx, resolvedNode); err == nil {
+			d.Spine = sp
+			d.HasSpine = true
+		}
+	}
+	if ths, err := s.threads.ListByProject(ctx, projectID, false); err == nil {
+		d.Threads = ths
+	}
+	if ents, err := s.entities.Search(ctx, projectID, "", entityContextLimit); err == nil {
+		d.Entities = ents
+	}
+	if rels, err := s.relationships.ListByProject(ctx, projectID); err == nil {
+		d.Relationships = rels
+	}
+	return d, nil
+}
+
+// History returns the project's companion transcript messages.
+func (s *Service) History(ctx context.Context, projectID string) ([]session.Message, error) {
+	sess, err := s.sessions.EnsureWorker(projectID)
+	if err != nil {
+		return nil, err
+	}
+	return session.ReadMessages(s.sessions.TranscriptPath(sess.ID))
+}
+
+// Send starts a companion turn; returns the run id. Streaming + proposal arrive
+// via notifications.
+func (s *Service) Send(ctx context.Context, projectID, nodeID, text string, now func() int64) (string, error) {
+	return s.runner.start(ctx, projectID, nodeID, text, now)
+}
+
+// Cancel cancels an in-flight run.
+func (s *Service) Cancel(runID string) error { return s.runner.cancel(runID) }
