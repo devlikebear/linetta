@@ -90,7 +90,12 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 	if rels, err := s.relationships.ListByProject(ctx, projectID); err == nil {
 		d.Relationships = rels
 	}
-	d.Memories = s.Recall(projectID, query, recallLimit)
+	// Keyword memory can't do topical matching (SearchExperiences matches
+	// summary-contains-query), so surface the most recent facts every turn
+	// rather than substring-matching the full user message. `query` is kept
+	// for a future smarter (e.g. semantic) recall.
+	_ = query
+	d.Memories = s.Recall(projectID, "", recallLimit)
 	return d, nil
 }
 
