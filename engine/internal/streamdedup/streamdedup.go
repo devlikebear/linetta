@@ -1,4 +1,4 @@
-package ai
+package streamdedup
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// streamDedup filters OnDelta callbacks against two upstream-provider quirks:
+// Dedup filters OnDelta callbacks against two upstream-provider quirks:
 //
 //  1. **Tars stream retry.** The openai-codex provider in tars retries the
 //     entire SSE stream on certain transient errors, replaying every OnDelta
@@ -31,7 +31,7 @@ import (
 //     suppressed. When cursor catches up to len(buf), drop to state 0.
 //     If a delta diverges, truncate buf at cursor, append it, surface a
 //     reset action so the caller can REPLACE the frontend's running text.
-type streamDedup struct {
+type Dedup struct {
 	mu  sync.Mutex
 	buf string
 
@@ -49,26 +49,27 @@ type streamDedup struct {
 	backToBackWindow time.Duration
 }
 
-// newStreamDedup constructs a dedup with default time-based config.
-func newStreamDedup() *streamDedup {
-	return &streamDedup{
+// New constructs a Dedup with default time-based config.
+func New() *Dedup {
+	return &Dedup{
 		nowFn:            time.Now,
 		backToBackWindow: 100 * time.Millisecond,
 	}
 }
 
-type dedupAction int
+// Action represents the result of an Observe call.
+type Action int
 
 const (
-	dedupEmit  dedupAction = iota // notify ai.delta with payloadText (new content)
-	dedupSkip                     // suppress notification (retry replay, armed-buffer, or back-to-back dup)
-	dedupReset                    // notify ai.reset with payloadText (replace running text)
+	ActionEmit  Action = iota // notify ai.delta with payloadText (new content)
+	ActionSkip                // suppress notification (retry replay, armed-buffer, or back-to-back dup)
+	ActionReset               // notify ai.reset with payloadText (replace running text)
 )
 
 // Observe runs the dedup state machine on one incoming OnDelta text.
-func (d *streamDedup) Observe(text string) (dedupAction, string) {
+func (d *Dedup) Observe(text string) (Action, string) {
 	if text == "" {
-		return dedupSkip, ""
+		return ActionSkip, ""
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -84,7 +85,7 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 		// rapid run of identical chunks all gets folded.
 		if text == d.lastDelta && d.lastDelta != "" && withinWindow {
 			d.lastSeenAt = now
-			return dedupSkip, ""
+			return ActionSkip, ""
 		}
 		// Plausible retry-from-start: incoming delta is a prefix of buf AND
 		// arrives within the retry-likely time window. The window check
@@ -95,13 +96,13 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 			d.cursor = len(text)
 			d.pending = text
 			d.lastSeenAt = now
-			return dedupSkip, ""
+			return ActionSkip, ""
 		}
 		// Genuine incremental delta.
 		d.buf += text
 		d.lastDelta = text
 		d.lastSeenAt = now
-		return dedupEmit, text
+		return ActionEmit, text
 
 	case 1:
 		remaining := d.buf[d.cursor:]
@@ -113,7 +114,7 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 				d.cursor = 0
 			}
 			d.pending = ""
-			return dedupSkip, ""
+			return ActionSkip, ""
 		}
 		// False positive: pending was genuinely new content that happened to
 		// match a buf prefix. Emit pending+text as a single catch-up.
@@ -125,7 +126,7 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 		now := d.nowFn()
 		d.lastDelta = text
 		d.lastSeenAt = now
-		return dedupEmit, combined
+		return ActionEmit, combined
 
 	case 2:
 		remaining := d.buf[d.cursor:]
@@ -135,7 +136,7 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 				d.state = 0
 				d.cursor = 0
 			}
-			return dedupSkip, ""
+			return ActionSkip, ""
 		}
 		// Divergence during confirmed retry: tars's retried response diverged
 		// from the first attempt past the matched prefix. Truncate, append,
@@ -146,13 +147,13 @@ func (d *streamDedup) Observe(text string) (dedupAction, string) {
 		now := d.nowFn()
 		d.lastDelta = text
 		d.lastSeenAt = now
-		return dedupReset, d.buf
+		return ActionReset, d.buf
 	}
-	return dedupSkip, ""
+	return ActionSkip, ""
 }
 
 // Final returns the deduplicated accumulated buffer.
-func (d *streamDedup) Final() string {
+func (d *Dedup) Final() string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.buf

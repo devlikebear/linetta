@@ -8,6 +8,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/streamdedup"
 	"github.com/devlikebear/tars/pkg/llm"
 	"github.com/google/uuid"
 )
@@ -95,17 +96,17 @@ func (r *Runner) run(ctx context.Context, runID string, c Context, client llm.Cl
 		r.mu.Unlock()
 	}()
 
-	dedup := newStreamDedup()
+	dedup := streamdedup.New()
 	msgs := BuildMessages(c)
 
 	resp, err := client.Chat(ctx, msgs, llm.ChatOptions{
 		OnDelta: func(text string) {
 			switch action, payload := dedup.Observe(text); action {
-			case dedupEmit:
+			case streamdedup.ActionEmit:
 				_ = r.notify.Notify("ai.delta", DeltaPayload{RunID: runID, Text: payload})
-			case dedupReset:
+			case streamdedup.ActionReset:
 				_ = r.notify.Notify("ai.reset", ResetPayload{RunID: runID, Text: payload})
-			case dedupSkip:
+			case streamdedup.ActionSkip:
 				// suppressed (retry replay or back-to-back duplicate)
 			}
 		},

@@ -1,17 +1,17 @@
-package ai
+package streamdedup
 
 import (
 	"testing"
 	"time"
 )
 
-// newDedupForTest constructs a streamDedup with a controllable fake clock so
+// newDedupForTest constructs a Dedup with a controllable fake clock so
 // back-to-back detection is deterministic. By default each Observe advances
 // time well beyond the back-to-back window (so non-duplicate emissions never
 // accidentally trip the back-to-back rule).
-func newDedupForTest() (*streamDedup, *fakeClock) {
+func newDedupForTest() (*Dedup, *fakeClock) {
 	fc := &fakeClock{now: time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)}
-	d := &streamDedup{
+	d := &Dedup{
 		nowFn:            fc.Now,
 		backToBackWindow: 100 * time.Millisecond,
 	}
@@ -34,10 +34,10 @@ func (c *fakeClock) Now() time.Time {
 	return t
 }
 
-func assertEmit(t *testing.T, d *streamDedup, text, wantPayload string) {
+func assertEmit(t *testing.T, d *Dedup, text, wantPayload string) {
 	t.Helper()
 	a, p := d.Observe(text)
-	if a != dedupEmit {
+	if a != ActionEmit {
 		t.Fatalf("Observe(%q): action = %v, want emit", text, a)
 	}
 	if p != wantPayload {
@@ -45,18 +45,18 @@ func assertEmit(t *testing.T, d *streamDedup, text, wantPayload string) {
 	}
 }
 
-func assertSkip(t *testing.T, d *streamDedup, text string) {
+func assertSkip(t *testing.T, d *Dedup, text string) {
 	t.Helper()
 	a, _ := d.Observe(text)
-	if a != dedupSkip {
+	if a != ActionSkip {
 		t.Fatalf("Observe(%q): action = %v, want skip", text, a)
 	}
 }
 
-func assertReset(t *testing.T, d *streamDedup, text, wantPayload string) {
+func assertReset(t *testing.T, d *Dedup, text, wantPayload string) {
 	t.Helper()
 	a, p := d.Observe(text)
-	if a != dedupReset {
+	if a != ActionReset {
 		t.Fatalf("Observe(%q): action = %v, want reset", text, a)
 	}
 	if p != wantPayload {
@@ -156,7 +156,7 @@ func TestStreamDedup_divergenceDuringRetry_emitsReset(t *testing.T) {
 func TestStreamDedup_emptyDeltaIsSkipped(t *testing.T) {
 	d, _ := newDedupForTest()
 	a, _ := d.Observe("")
-	if a != dedupSkip {
+	if a != ActionSkip {
 		t.Errorf("empty delta action = %v, want skip", a)
 	}
 	if d.Final() != "" {
