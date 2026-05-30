@@ -36,6 +36,10 @@ type Op struct {
 
 	// set_outline
 	Outline string `json:"outline,omitempty"`
+
+	// remember
+	Text     string `json:"text,omitempty"`
+	Category string `json:"category,omitempty"`
 }
 
 // Proposal is the parsed contents of a linetta-proposal block.
@@ -49,6 +53,7 @@ var knownOps = map[string]bool{
 	"create_thread": true, "update_thread": true,
 	"add_beat": true, "update_beat": true, "delete_beat": true,
 	"set_outline": true,
+	"remember":     true,
 }
 
 // ParseProposal scans full model output for a linetta-proposal fenced block.
@@ -128,6 +133,10 @@ func validateProposal(p Proposal) error {
 			}
 		case "set_outline":
 			// outline may be empty (clears); no required field
+		case "remember":
+			if strings.TrimSpace(op.Text) == "" {
+				return fmt.Errorf("op[%d] remember: text required", i)
+			}
 		}
 	}
 	return nil

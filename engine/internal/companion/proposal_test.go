@@ -88,3 +88,20 @@ func TestParseProposal_CRLF(t *testing.T) {
 		t.Fatalf("p=%+v", p)
 	}
 }
+
+func TestParseProposal_Remember(t *testing.T) {
+	p, present, err := ParseProposal(block(`{"ops":[{"op":"remember","text":"작가는 단문을 선호","category":"preference"}]}`))
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if len(p.Ops) != 1 || p.Ops[0].Text != "작가는 단문을 선호" {
+		t.Fatalf("p=%+v", p)
+	}
+}
+
+func TestParseProposal_RememberRequiresText(t *testing.T) {
+	_, present, err := ParseProposal(block(`{"ops":[{"op":"remember","category":"x"}]}`))
+	if !present || err == nil {
+		t.Fatalf("expected text-required error, present=%v err=%v", present, err)
+	}
+}
