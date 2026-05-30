@@ -22,6 +22,7 @@ import type {
   Note,
   Project,
   Relationship,
+  SceneMention,
   Settings,
   SettingsPatch,
   Snapshot,
@@ -115,6 +116,7 @@ export const entities = {
   get: (id: string) => rpcCall<Entity>("entities.get", { id }),
   create: (input: NewEntityInput) => rpcCall<Entity>("entities.create", input),
   update: (input: UpdateEntityInput) => rpcCall<Entity>("entities.update", input),
+  scenes: (entityId: string) => rpcCall<SceneMention[]>("entities.scenes", { entity_id: entityId }),
 };
 
 export const mentions = {

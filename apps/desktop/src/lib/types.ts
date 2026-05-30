@@ -90,6 +90,11 @@ export interface UpdateEntityInput {
   attributes?: Record<string, string>;
 }
 
+export interface SceneMention {
+  node_id: string;
+  label: string;
+}
+
 export type ToneID =
   | "my"
   | "cool"
