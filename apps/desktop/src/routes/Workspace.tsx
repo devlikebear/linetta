@@ -37,13 +37,12 @@ const LAST_OPENED_THROTTLE_MS = 5000;
 
 const FALLBACK_COUNTS: ContextCounts = {
   nearbyScenes: 0,
-  sameChapter: 0,
-  otherChapter: 0,
-  otherPart: 0,
+  hasOutline: false,
   hasSynopsis: false,
   relatedScenes: 0,
   entities: 0,
-  activeThreads: 0,
+  relationships: 0,
+  plotBeats: 0,
   notes: 0,
   projectMetaFields: 0,
   hasStyleNotes: false,
@@ -858,7 +857,7 @@ export function Workspace() {
               focusEditor();
             }}
             onSaved={() => {
-              /* ActiveThreadsPanel self-reloads */
+              /* PlotPanel self-reloads */
             }}
           />
         ) : (
@@ -872,9 +871,9 @@ export function Workspace() {
             mentionedEntities={mentioned}
             onMentionClick={(id) => setEntitySheetId(id)}
             onOpenThread={setThreadSheetId}
-            onThreadDataChanged={() => {
-              /* no-op; panel auto-reloads */
-            }}
+            onProjectChanged={(p) =>
+              setLoad((prev) => (prev ? { ...prev, project: p } : prev))
+            }
           />
         )}
       </div>

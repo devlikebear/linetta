@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { NodeRow, Project, Entity } from "../lib/types";
-import { ActiveThreadsPanel } from "./ActiveThreadsPanel";
+import { PlotPanel } from "./PlotPanel";
 import { User } from "../lib/icons";
 
 export type SaveStatus =
@@ -19,7 +19,7 @@ interface Props {
   mentionedEntities: Entity[];
   onMentionClick: (entityId: string) => void;
   onOpenThread: (threadId: string) => void;
-  onThreadDataChanged?: () => void;
+  onProjectChanged?: (project: Project) => void;
 }
 
 const STATUS_LABEL: Record<NodeRow["status"], string> = {
@@ -28,7 +28,7 @@ const STATUS_LABEL: Record<NodeRow["status"], string> = {
   final: "완성",
 };
 
-export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onOpenThread, onThreadDataChanged }: Props) {
+export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onOpenThread, onProjectChanged }: Props) {
   return (
     <aside className="ctx-panel">
       <section className="ctx-section">
@@ -52,11 +52,11 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
         ))}
       </section>
 
-      <ActiveThreadsPanel
-        projectId={project.id}
+      <PlotPanel
+        project={project}
         nodeId={node.id}
         onOpenThread={onOpenThread}
-        onChanged={onThreadDataChanged}
+        onProjectChanged={onProjectChanged}
       />
 
       <section className="ctx-section">
