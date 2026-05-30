@@ -210,3 +210,24 @@ func TestRepo_Get_notFound(t *testing.T) {
 		t.Error("expected ErrNotFound")
 	}
 }
+
+func TestListByProject(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	rel, err := f.r.CreateOne(ctx, NewInput{
+		ProjectID: f.pID, FromID: f.a, ToID: f.b, Label: "동료",
+	})
+	if err != nil {
+		t.Fatalf("CreateOne: %v", err)
+	}
+	got, err := f.r.ListByProject(ctx, f.pID)
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1", len(got))
+	}
+	if got[0].ID != rel.ID {
+		t.Errorf("got %q, want %q", got[0].ID, rel.ID)
+	}
+}

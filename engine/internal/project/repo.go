@@ -46,9 +46,9 @@ func (r *Repo) Create(ctx context.Context, now int64, in NewInput) (Project, err
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO projects (id, title, genres, length_target, default_pov, style_notes,
+INSERT INTO projects (id, title, genres, length_target, default_pov, style_notes, outline,
                       word_count, last_opened_node_id, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, '', 0, ?, ?, ?)`,
+VALUES (?, ?, ?, ?, ?, '', '', 0, ?, ?, ?)`,
 		projectID, in.Title, string(genresJSON), in.LengthTarget, in.DefaultPOV,
 		nodeID, now, now); err != nil {
 		return Project{}, err
@@ -122,8 +122,28 @@ WHERE id = ?`, now, now, id)
 	return nil
 }
 
+// Update patches editable fields (currently outline) and bumps updated_at.
+func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, error) {
+	if in.ID == "" {
+		return Project{}, fmt.Errorf("update project: id required")
+	}
+	cur, err := r.Get(ctx, in.ID)
+	if err != nil {
+		return Project{}, err
+	}
+	if in.Outline != nil {
+		cur.Outline = *in.Outline
+	}
+	if _, err := r.s.DB().ExecContext(ctx,
+		`UPDATE projects SET outline = ?, updated_at = ? WHERE id = ?`,
+		cur.Outline, now, in.ID); err != nil {
+		return Project{}, err
+	}
+	return r.Get(ctx, in.ID)
+}
+
 const baseSelect = `
-SELECT id, title, genres, length_target, default_pov, style_notes,
+SELECT id, title, genres, length_target, default_pov, style_notes, outline,
        word_count, last_opened_node_id, created_at, updated_at, archived_at
 FROM projects`
 
@@ -140,7 +160,7 @@ func scan(row scanner) (Project, error) {
 		archivedAt sql.NullInt64
 	)
 	if err := row.Scan(&p.ID, &p.Title, &genresJSON, &p.LengthTarget, &p.DefaultPOV,
-		&p.StyleNotes, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
+		&p.StyleNotes, &p.Outline, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
 		return Project{}, err
 	}
 	if err := json.Unmarshal([]byte(genresJSON), &p.Genres); err != nil {

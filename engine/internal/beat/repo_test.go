@@ -153,6 +153,50 @@ func TestRepo_Delete(t *testing.T) {
 	}
 }
 
+func newBeatRepoWithThread(t *testing.T) (*Repo, string) {
+	t.Helper()
+	s, _, th := openFixture(t)
+	return NewRepo(s), th.ID
+}
+
+func TestBeatDescriptionCRUD(t *testing.T) {
+	repo, threadID := newBeatRepoWithThread(t)
+	ctx := context.Background()
+	b, err := repo.Create(ctx, NewInput{ThreadID: threadID, Label: "재회", Description: "항구에서 마주친다."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Description != "항구에서 마주친다." {
+		t.Fatalf("create description = %q", b.Description)
+	}
+	if err := repo.Update(ctx, UpdateInput{ID: b.ID, Label: "재회(수정)"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := repo.Get(ctx, b.ID)
+	if got.Description != "항구에서 마주친다." {
+		t.Fatalf("nil description should preserve, got %q", got.Description)
+	}
+	if got.Label != "재회(수정)" {
+		t.Fatalf("label patch failed: %q", got.Label)
+	}
+	empty := ""
+	if err := repo.Update(ctx, UpdateInput{ID: b.ID, Description: &empty}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = repo.Get(ctx, b.ID)
+	if got.Description != "" {
+		t.Fatalf("empty-pointer description should clear, got %q", got.Description)
+	}
+	body := "편지로 신분이 드러난다."
+	if err := repo.Update(ctx, UpdateInput{ID: b.ID, Description: &body}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = repo.Get(ctx, b.ID)
+	if got.Description != body {
+		t.Fatalf("description set failed: %q", got.Description)
+	}
+}
+
 func TestRepo_BeatNodeIDNulledByCascade(t *testing.T) {
 	// When the bound node is deleted, beats.node_id becomes NULL (ON DELETE SET NULL).
 	// Verify by direct DELETE in SQL — the migration's FK already covers this.

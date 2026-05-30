@@ -45,8 +45,8 @@ func (r *Repo) Create(ctx context.Context, in NewInput) (Beat, error) {
 
 	id := uuid.NewString()
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO beats (id, thread_id, node_id, ordinal, label, intensity)
-VALUES (?, ?, ?, ?, ?, ?)`, id, in.ThreadID, nullStr(in.NodeID), ordinal, in.Label, intensity); err != nil {
+INSERT INTO beats (id, thread_id, node_id, ordinal, label, description, intensity)
+VALUES (?, ?, ?, ?, ?, ?, ?)`, id, in.ThreadID, nullStr(in.NodeID), ordinal, in.Label, in.Description, intensity); err != nil {
 		return Beat{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -107,12 +107,15 @@ func (r *Repo) Update(ctx context.Context, in UpdateInput) error {
 	if in.Label != "" {
 		cur.Label = in.Label
 	}
+	if in.Description != nil {
+		cur.Description = *in.Description
+	}
 	if in.Intensity != 0 {
 		cur.Intensity = clampIntensity(in.Intensity)
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE beats SET label = ?, intensity = ? WHERE id = ?`,
-		cur.Label, cur.Intensity, in.ID); err != nil {
+		`UPDATE beats SET label = ?, description = ?, intensity = ? WHERE id = ?`,
+		cur.Label, cur.Description, cur.Intensity, in.ID); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -173,7 +176,7 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 }
 
 const baseSelect = `
-SELECT id, thread_id, node_id, ordinal, label, intensity
+SELECT id, thread_id, node_id, ordinal, label, description, intensity
 FROM beats`
 
 type scanner interface{ Scan(...any) error }
@@ -183,7 +186,7 @@ func scan(row scanner) (Beat, error) {
 		b      Beat
 		nodeID sql.NullString
 	)
-	if err := row.Scan(&b.ID, &b.ThreadID, &nodeID, &b.Ordinal, &b.Label, &b.Intensity); err != nil {
+	if err := row.Scan(&b.ID, &b.ThreadID, &nodeID, &b.Ordinal, &b.Label, &b.Description, &b.Intensity); err != nil {
 		return Beat{}, err
 	}
 	if nodeID.Valid {

@@ -119,6 +119,37 @@ func TestRepo_List_excludesArchivedByDefault(t *testing.T) {
 	}
 }
 
+func TestProjectOutlineUpdate(t *testing.T) {
+	s := openStore(t)
+	repo := NewRepo(s)
+	ctx := context.Background()
+	p, err := repo.Create(ctx, 1000, NewInput{Title: "테스트작", Genres: []string{"판타지"}, LengthTarget: "novel", DefaultPOV: "third_limited"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Outline != "" {
+		t.Fatalf("new project outline should be empty, got %q", p.Outline)
+	}
+	body := "한 줄 로그라인과 3막 개요."
+	updated, err := repo.Update(ctx, 2000, UpdateInput{ID: p.ID, Outline: &body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Outline != body {
+		t.Fatalf("outline = %q", updated.Outline)
+	}
+	if updated.UpdatedAt != 2000 {
+		t.Fatalf("updated_at not bumped: %d", updated.UpdatedAt)
+	}
+	again, err := repo.Update(ctx, 3000, UpdateInput{ID: p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Outline != body {
+		t.Fatalf("nil outline should preserve, got %q", again.Outline)
+	}
+}
+
 func TestRepo_Get(t *testing.T) {
 	s := openStore(t)
 	r := NewRepo(s)

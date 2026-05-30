@@ -10,6 +10,7 @@ type Project struct {
 	LengthTarget     string   `json:"length_target"` // flash|short|novella|novel|series
 	DefaultPOV       string   `json:"default_pov"`   // first|third_limited|omniscient
 	StyleNotes       string   `json:"style_notes"`
+	Outline          string   `json:"outline"`
 	WordCount        int      `json:"word_count"`
 	LastOpenedNodeID *string  `json:"last_opened_node_id,omitempty"`
 	CreatedAt        int64    `json:"created_at"`
@@ -29,4 +30,11 @@ type NewInput struct {
 type ListFilter struct {
 	IncludeArchived bool `json:"include_archived"`
 	Limit           int  `json:"limit"`
+}
+
+// UpdateInput patches editable project fields. Each pointer field is nil to
+// leave the value alone, or non-nil (including "") to set it.
+type UpdateInput struct {
+	ID      string  `json:"id"`
+	Outline *string `json:"outline,omitempty"`
 }

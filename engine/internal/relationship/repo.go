@@ -109,6 +109,27 @@ func (r *Repo) ListByEntity(ctx context.Context, entityID string) ([]Relationshi
 	return out, rows.Err()
 }
 
+// ListByProject returns every relationship row in the project, ordered by id.
+// Both directions of a pair are returned as separate rows; callers dedupe by
+// pair_id if needed.
+func (r *Repo) ListByProject(ctx context.Context, projectID string) ([]Relationship, error) {
+	rows, err := r.s.DB().QueryContext(ctx,
+		baseSelect+` WHERE project_id = ? ORDER BY id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Relationship
+	for rows.Next() {
+		rel, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rel)
+	}
+	return out, rows.Err()
+}
+
 // Update patches a single row. The paired side keeps its own label/notes.
 func (r *Repo) Update(ctx context.Context, in UpdateInput) error {
 	if in.ID == "" {
