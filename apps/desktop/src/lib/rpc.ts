@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AIOptions,
   Beat,
+  CompanionMessage,
   ContextCounts,
   ContextPreviewResponse,
   Entity,
@@ -193,4 +194,14 @@ export const relationships = {
 export const plot = {
   spinePanel: (nodeId: string) =>
     rpcCall<PlotSpine>("plot.spine_panel", { node_id: nodeId }),
+};
+
+export const companion = {
+  send: (projectId: string, nodeId: string, text: string) =>
+    rpcCall<{ run_id: string }>("companion.send", { project_id: projectId, node_id: nodeId, text }),
+  history: (projectId: string) =>
+    rpcCall<{ messages: CompanionMessage[] }>("companion.history", { project_id: projectId })
+      .then((r) => r.messages ?? []),
+  cancel: (runId: string) =>
+    rpcCall<{ ok: true }>("companion.cancel", { run_id: runId }),
 };

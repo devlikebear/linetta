@@ -372,3 +372,45 @@ export interface NoteBrief {
   anchor: number;
   body: string;
 }
+
+// Companion (Phase 2) — mirrors engine companion.* payloads.
+export interface CompanionMessage {
+  role: string;
+  content: string;
+  timestamp: number;
+}
+
+export type ProposalOpType =
+  | "create_thread" | "update_thread"
+  | "add_beat" | "update_beat" | "delete_beat"
+  | "set_outline";
+
+export interface ProposalOp {
+  op: ProposalOpType;
+  ref?: string;
+  name?: string;
+  color?: string;
+  summary?: string;
+  thread_id?: string;
+  thread_ref?: string;
+  node_id?: string;
+  beat_id?: string;
+  label?: string;
+  description?: string;
+  intensity?: number;
+  outline?: string;
+}
+
+export interface CompanionProposal {
+  run_id: string;
+  valid: boolean;
+  summary?: string;
+  ops?: ProposalOp[];
+  error?: string;
+}
+
+export interface CompanionDelta { run_id: string; text: string; }
+export interface CompanionReset { run_id: string; text: string; }
+export interface CompanionDone { run_id: string; full_text: string; }
+export interface CompanionError { run_id: string; message: string; }
+export interface CompanionCancelled { run_id: string; }
