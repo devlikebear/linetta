@@ -62,7 +62,7 @@ func NewService(
 }
 
 // gatherContext loads project state for prompt injection. nodeID may be "".
-func (s *Service) gatherContext(ctx context.Context, projectID, nodeID string) (PromptData, error) {
+func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query string) (PromptData, error) {
 	proj, err := s.projects.Get(ctx, projectID)
 	if err != nil {
 		return PromptData{}, err
@@ -90,6 +90,7 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID string) (
 	if rels, err := s.relationships.ListByProject(ctx, projectID); err == nil {
 		d.Relationships = rels
 	}
+	d.Memories = s.Recall(projectID, query, recallLimit)
 	return d, nil
 }
 

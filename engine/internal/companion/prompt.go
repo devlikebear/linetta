@@ -18,6 +18,7 @@ type PromptData struct {
 	Threads       []thread.Thread
 	Entities      []entity.Entity
 	Relationships []relationship.Relationship
+	Memories      []string
 }
 
 // buildSystem returns the companion persona + proposal-format rules.
@@ -28,9 +29,10 @@ func buildSystem() string {
 	b.WriteString("```linetta-proposal\n")
 	b.WriteString(`{"summary":"<한 줄 요약>","ops":[ ... ]}` + "\n")
 	b.WriteString("```\n\n")
-	b.WriteString("op 종류: create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}.\n")
+	b.WriteString("op 종류: create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}.\n")
 	b.WriteString("기존 스토리라인·씬은 아래 컨텍스트에 주어진 id로 참조하세요. 같은 제안에서 새로 만든 스토리라인은 create_thread.ref 핸들을 add_beat.thread_ref로 참조하세요.\n")
 	b.WriteString("당신은 변경을 직접 적용하지 않습니다 — 작가가 제안을 검토 후 적용합니다.\n")
+	b.WriteString("이전 대화에서 알게 된 작품 설정·작가 취향은 아래 '기억'에 주어집니다. 기억할 가치가 있는 새 사실(작가 취향, 세계관 규칙 등)은 remember op로 제안하세요(작가가 승인하면 저장됩니다).\n")
 	return b.String()
 }
 
@@ -41,6 +43,13 @@ func buildContext(d PromptData) string {
 		b.WriteString("## 작품 개요\n")
 		b.WriteString(s)
 		b.WriteString("\n\n")
+	}
+	if len(d.Memories) > 0 {
+		b.WriteString("## 기억\n")
+		for _, m := range d.Memories {
+			b.WriteString("- " + m + "\n")
+		}
+		b.WriteString("\n")
 	}
 	if d.HasSpine && hasSpineBeats(d.Spine) {
 		b.WriteString("## 플롯\n")

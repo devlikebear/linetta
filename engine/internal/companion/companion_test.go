@@ -133,3 +133,23 @@ func TestCancel_UnknownRunErrors(t *testing.T) {
 		t.Fatal("expected error cancelling unknown run")
 	}
 }
+
+func TestGatherContext_InjectsMemory(t *testing.T) {
+	svc, _, projectID := newSvc(t, "안녕")
+	if err := svc.Remember(projectID, "작가는 반전을 좋아한다", "preference"); err != nil {
+		t.Fatal(err)
+	}
+	d, err := svc.gatherContext(context.Background(), projectID, "", "반전")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, m := range d.Memories {
+		if m == "작가는 반전을 좋아한다" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("memory not recalled: %+v", d.Memories)
+	}
+}

@@ -57,7 +57,7 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 	}
 	path := r.svc.sessions.TranscriptPath(sess.ID)
 
-	data, err := r.svc.gatherContext(ctx, projectID, nodeID)
+	data, err := r.svc.gatherContext(ctx, projectID, nodeID, text)
 	if err != nil {
 		return "", err
 	}

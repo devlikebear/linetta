@@ -39,3 +39,17 @@ func TestBuildContext_EmptyIsBlank(t *testing.T) {
 		t.Fatalf("empty data should yield empty context, got %q", out)
 	}
 }
+
+func TestBuildContext_RendersMemories(t *testing.T) {
+	out := buildContext(PromptData{Memories: []string{"작가는 단문을 선호"}})
+	if !strings.Contains(out, "## 기억") || !strings.Contains(out, "작가는 단문을 선호") {
+		t.Fatalf("memories not rendered:\n%s", out)
+	}
+}
+
+func TestBuildSystem_MentionsRemember(t *testing.T) {
+	s := buildSystem()
+	if !strings.Contains(s, "remember") || !strings.Contains(s, "기억") {
+		t.Fatal("buildSystem missing remember/memory guidance")
+	}
+}
