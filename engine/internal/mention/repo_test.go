@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
@@ -84,5 +85,65 @@ func TestListEntitiesForNode_hydratesEntities(t *testing.T) {
 	}
 	if got[0].Name != "해진" || got[0].Role != "POV" {
 		t.Errorf("entity hydration missed: %+v", got[0])
+	}
+}
+
+func TestMentionedNodeIDs(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	n1 := f.nID
+	nr := node.NewRepo(f.store)
+	n2node, err := nr.CreateSibling(ctx, n1, "leaf", "씬 2", "", 1100)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+	n2 := n2node.ID
+
+	e, _ := f.er.Create(ctx, 100, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "해진"})
+
+	// n1 mentions e once.
+	if err := f.mr.ResyncForNode(ctx, n1, []Found{{EntityID: e.ID, Position: 1, Surface: "해진"}}); err != nil {
+		t.Fatalf("ResyncForNode n1: %v", err)
+	}
+	// n2 mentions e twice in one call -> 2 mention rows for n2.
+	if err := f.mr.ResyncForNode(ctx, n2, []Found{
+		{EntityID: e.ID, Position: 1, Surface: "해진"},
+		{EntityID: e.ID, Position: 9, Surface: "해진"},
+	}); err != nil {
+		t.Fatalf("ResyncForNode n2: %v", err)
+	}
+
+	ids, projectID, err := f.mr.MentionedNodeIDs(ctx, e.ID)
+	if err != nil {
+		t.Fatalf("MentionedNodeIDs: %v", err)
+	}
+	if projectID != f.pID {
+		t.Fatalf("projectID=%q want %q", projectID, f.pID)
+	}
+	set := map[string]bool{}
+	for _, id := range ids {
+		set[id] = true
+	}
+	if len(ids) != 2 || !set[n1] || !set[n2] {
+		t.Fatalf("ids=%v want distinct {n1=%q, n2=%q}", ids, n1, n2)
+	}
+}
+
+func TestMentionedNodeIDs_noMentions(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	e, _ := f.er.Create(ctx, 100, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "해진"})
+
+	ids, projectID, err := f.mr.MentionedNodeIDs(ctx, e.ID)
+	if err != nil {
+		t.Fatalf("MentionedNodeIDs: %v", err)
+	}
+	if projectID != f.pID {
+		t.Fatalf("projectID=%q want %q", projectID, f.pID)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("ids=%v want empty", ids)
 	}
 }

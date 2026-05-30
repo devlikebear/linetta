@@ -96,6 +96,31 @@ SELECT n.summary
 	return out, rows.Err()
 }
 
+// MentionedNodeIDs returns the distinct node_ids where entityID is mentioned,
+// plus the entity's project_id (resolved from the entities table so it works
+// even when the entity has zero mentions).
+func (r *Repo) MentionedNodeIDs(ctx context.Context, entityID string) (ids []string, projectID string, err error) {
+	if err = r.s.DB().QueryRowContext(ctx,
+		`SELECT project_id FROM entities WHERE id = ?`, entityID).Scan(&projectID); err != nil {
+		return nil, "", err
+	}
+	rows, err := r.s.DB().QueryContext(ctx,
+		`SELECT DISTINCT node_id FROM mentions WHERE entity_id = ?`, entityID)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	ids = []string{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return nil, "", err
+		}
+		ids = append(ids, id)
+	}
+	return ids, projectID, rows.Err()
+}
+
 // CoMentionResult is one row of the topology-RAG result set.
 type CoMentionResult struct {
 	NodeID   string
