@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
+import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
 import type { NodeRow, Project, Entity, AIOptions, ContextCounts } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
@@ -345,8 +346,10 @@ export function Workspace() {
         if (!ed || !currentLoad) return;
         const { from, to, empty } = ed.state.selection;
         ed.setEditable(false);
+        const mode = empty ? "insert" : "replace";
+        ed.commands.setAITarget(mode, from, to);
         setAiModal({
-          mode: empty ? "insert" : "replace",
+          mode,
           canChooseMode: empty,
           sel: { from, to },
         });
@@ -419,7 +422,10 @@ export function Workspace() {
 
   const closeAIModal = useCallback(() => {
     gen.cancel();
-    if (tiptapEditor) tiptapEditor.setEditable(true);
+    if (tiptapEditor) {
+      tiptapEditor.commands.clearAITarget();
+      tiptapEditor.setEditable(true);
+    }
     setAiModal(null);
     setContextCounts(null);
     setAiCtxChecklistOpen(false);
@@ -439,6 +445,7 @@ export function Workspace() {
     if (!aiModal || !tiptapEditor) return;
     const v = gen.variations[gen.currentIdx];
     if (!v || v.error) return;
+    tiptapEditor.commands.clearAITarget();
     commitGenerated(tiptapEditor, aiModal.mode, aiModal.sel, v.text);
     gen.cancel();
     tiptapEditor.setEditable(true);
@@ -451,6 +458,7 @@ export function Workspace() {
   // Safety: if the modal closes for any reason, re-enable editing.
   useEffect(() => {
     if (aiModal === null && tiptapEditor && !tiptapEditor.isEditable) {
+      tiptapEditor.commands.clearAITarget();
       tiptapEditor.setEditable(true);
     }
   }, [aiModal, tiptapEditor]);
@@ -779,6 +787,7 @@ export function Workspace() {
             extensions={[
               ...(mentionExtension ? [mentionExtension] : []),
               NoteMarkerExtension,
+              AITargetExtension,
             ]}
             onMentionDoubleClick={(id) => setEntitySheetId(id)}
           />
@@ -792,7 +801,17 @@ export function Workspace() {
             variations={gen.variations}
             currentIdx={gen.currentIdx}
             status={gen.status}
-            onModeChange={(m) => setAiModal((s) => (s ? { ...s, mode: m } : s))}
+            onModeChange={(m) => {
+              setAiModal((s) => (s ? { ...s, mode: m } : s));
+              if (!tiptapEditor || !aiModal) return;
+              if (m === "replaceAll") {
+                tiptapEditor.commands.setAITarget("replaceAll", 1, tiptapEditor.state.doc.content.size);
+              } else if (m === "insert") {
+                tiptapEditor.commands.setAITarget("insert", aiModal.sel.from, aiModal.sel.from);
+              } else {
+                tiptapEditor.commands.setAITarget("replace", aiModal.sel.from, aiModal.sel.to);
+              }
+            }}
             onOptionsChange={setAiOptions}
             onRun={(promptText, variationsOn) => {
               const selectionText =
