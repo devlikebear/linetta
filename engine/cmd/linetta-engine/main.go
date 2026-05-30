@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/gitsync"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -120,6 +122,12 @@ func main() {
 		time.Now, time.Sleep, nil /* onTick */)
 	defer stopBackup()
 
+	companionSvc := companion.NewService(
+		filepath.Join(home, "companion"),
+		projects, threads, entities, relationships, plotBuilder,
+		s.Notifier(), companion.ClientFactory(ai.DefaultClientFactory), settingsStore, home,
+	)
+
 	clock := func() int64 { return time.Now().UnixMilli() }
 	s.Handle("ping", handlers.Ping)
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
@@ -170,6 +178,9 @@ func main() {
 	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
 	s.Handle("ai.preview_context", handlers.PreviewContext(contextBuilder))
 	s.Handle("ai.cancel", handlers.CancelAI(runner))
+	s.Handle("companion.send", handlers.CompanionSend(companionSvc, clock))
+	s.Handle("companion.history", handlers.CompanionHistory(companionSvc))
+	s.Handle("companion.cancel", handlers.CompanionCancel(companionSvc))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
