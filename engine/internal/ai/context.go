@@ -42,6 +42,9 @@ type ContextBuilder struct {
 }
 
 // NewContextBuilder returns a builder that reads from the supplied repos.
+// threads and beats are used only to construct the internal *plot.Builder (not
+// stored on ContextBuilder), so the AI context and the plot spine-panel handler
+// share the same neighbor logic without coupling the two callers.
 func NewContextBuilder(projects *project.Repo, nodes *node.Repo, mentions *mention.Repo, threads *thread.Repo, beats *beat.Repo, notes *note.Repo, relationships *relationship.Repo) *ContextBuilder {
 	return &ContextBuilder{
 		projects:      projects,
@@ -358,7 +361,7 @@ func (b *ContextBuilder) loadRelationships(ctx context.Context, projectID string
 		present[e.ID] = true
 	}
 	seenPair := map[string]bool{}
-	out := make([]RelationBrief, 0)
+	out := make([]RelationBrief, 0, len(rels))
 	for _, r := range rels {
 		if !present[r.FromID] || !present[r.ToID] {
 			continue

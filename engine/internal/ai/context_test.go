@@ -414,7 +414,7 @@ func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T)
 	}
 }
 
-func TestBuildContext_relatedScenes_returnsCoMentionTop3(t *testing.T) {
+func TestBuildContext_relatedScenes_returnsTopCoMentionScenes(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
 	if err != nil {

@@ -303,6 +303,9 @@ func hasPlot(s plot.Spine) bool {
 
 // capPlotDescriptions zeroes out beat descriptions (keeping labels + thread
 // names) once the running size of the plot section exceeds maxChars.
+//
+// Note: buildUser passes a value copy of the Context (c Context), so mutation
+// here is local and does not affect the Context returned by Build.
 func capPlotDescriptions(s *plot.Spine, maxChars int) {
 	total := 0
 	trim := func(sb *plot.SceneBeats) {
@@ -311,14 +314,11 @@ func capPlotDescriptions(s *plot.Spine, maxChars int) {
 		}
 		for i := range sb.Beats {
 			head := len(sb.Beats[i].ThreadName) + len(sb.Beats[i].Label) + 12
-			if total+head > maxChars {
+			total += head
+			if total+len(sb.Beats[i].Description) > maxChars {
 				sb.Beats[i].Description = ""
-				total += head
-				continue
-			}
-			total += head + len(sb.Beats[i].Description)
-			if total > maxChars {
-				sb.Beats[i].Description = ""
+			} else {
+				total += len(sb.Beats[i].Description)
 			}
 		}
 	}
