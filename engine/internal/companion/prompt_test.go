@@ -53,3 +53,23 @@ func TestBuildSystem_MentionsRemember(t *testing.T) {
 		t.Fatal("buildSystem missing remember/memory guidance")
 	}
 }
+
+func TestBuildContext_ExposesSceneIDs(t *testing.T) {
+	d := PromptData{
+		HasSpine: true,
+		Spine: plot.Spine{
+			Current: plot.SceneBeats{NodeID: "node-123", Label: "1부 / 1장 / 씬1"},
+		},
+	}
+	out := buildContext(d)
+	if !strings.Contains(out, "## 씬") || !strings.Contains(out, "node-123") {
+		t.Fatalf("scene ids not exposed:\n%s", out)
+	}
+}
+
+func TestBuildSystem_ForbidsInventingIDs(t *testing.T) {
+	s := buildSystem()
+	if !strings.Contains(s, "지어내지 마") || !strings.Contains(s, "node_id") {
+		t.Fatal("system prompt missing id-discipline guidance")
+	}
+}

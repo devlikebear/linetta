@@ -120,8 +120,8 @@ func validateProposal(p Proposal) error {
 			if hasRef && !refs[op.ThreadRef] {
 				return fmt.Errorf("op[%d] add_beat: thread_ref %q not declared by any create_thread.ref", i, op.ThreadRef)
 			}
-			if op.NodeID == "" || strings.TrimSpace(op.Label) == "" {
-				return fmt.Errorf("op[%d] add_beat: node_id and label required", i)
+			if strings.TrimSpace(op.Label) == "" {
+				return fmt.Errorf("op[%d] add_beat: label required", i)
 			}
 		case "update_beat":
 			if op.BeatID == "" {

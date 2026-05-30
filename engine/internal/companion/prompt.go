@@ -29,8 +29,14 @@ func buildSystem() string {
 	b.WriteString("```linetta-proposal\n")
 	b.WriteString(`{"summary":"<한 줄 요약>","ops":[ ... ]}` + "\n")
 	b.WriteString("```\n\n")
-	b.WriteString("op 종류: create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}.\n")
-	b.WriteString("기존 스토리라인·씬은 아래 컨텍스트에 주어진 id로 참조하세요. 같은 제안에서 새로 만든 스토리라인은 create_thread.ref 핸들을 add_beat.thread_ref로 참조하세요.\n")
+	b.WriteString("op 종류: create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id?,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}.\n")
+	b.WriteString("id 규칙(중요): 컨텍스트의 '씬'·'스토리라인'·'등장 인물·장소·관계' 목록에 실제로 주어진 id만 사용하세요. id를 절대 지어내지 마세요.\n")
+	b.WriteString("- add_beat.node_id는 위 '씬' 목록의 node_id 중 하나입니다. 생략하면 현재 씬에 붙습니다.\n")
+	b.WriteString("- 비트는 반드시 스토리라인에 속합니다. 기존 스토리라인이 있으면 그 thread_id를, 새 줄거리면 같은 제안에 create_thread(ref 포함)를 먼저 넣고 add_beat.thread_ref로 그 ref를 참조하세요. thread_id를 추측하지 마세요.\n")
+	b.WriteString("예시:\n")
+	b.WriteString("```\n")
+	b.WriteString(`{"summary":"복수극 라인 추가","ops":[{"op":"create_thread","ref":"t1","name":"복수극"},{"op":"add_beat","thread_ref":"t1","label":"결심","description":"주인공이 복수를 다짐한다"}]}` + "\n")
+	b.WriteString("```\n")
 	b.WriteString("당신은 변경을 직접 적용하지 않습니다 — 작가가 제안을 검토 후 적용합니다.\n")
 	b.WriteString("이전 대화에서 알게 된 작품 설정·작가 취향은 아래 '기억'에 주어집니다. 기억할 가치가 있는 새 사실(작가 취향, 세계관 규칙 등)은 remember op로 제안하세요(작가가 승인하면 저장됩니다).\n")
 	return b.String()
@@ -56,6 +62,17 @@ func buildContext(d PromptData) string {
 		writeScene(&b, "[이전 씬]", d.Spine.Prev)
 		writeSceneVal(&b, "[현재 씬]", d.Spine.Current)
 		writeScene(&b, "[다음 씬]", d.Spine.Next)
+		b.WriteString("\n")
+	}
+	if d.HasSpine {
+		b.WriteString("## 씬 (비트를 붙일 수 있는 실제 씬 — node_id)\n")
+		if d.Spine.Prev != nil {
+			b.WriteString(fmt.Sprintf("- [%s] %s (이전 씬)\n", d.Spine.Prev.NodeID, d.Spine.Prev.Label))
+		}
+		b.WriteString(fmt.Sprintf("- [%s] %s (현재 씬)\n", d.Spine.Current.NodeID, d.Spine.Current.Label))
+		if d.Spine.Next != nil {
+			b.WriteString(fmt.Sprintf("- [%s] %s (다음 씬)\n", d.Spine.Next.NodeID, d.Spine.Next.Label))
+		}
 		b.WriteString("\n")
 	}
 	if len(d.Threads) > 0 {

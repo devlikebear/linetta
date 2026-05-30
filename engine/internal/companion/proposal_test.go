@@ -105,3 +105,10 @@ func TestParseProposal_RememberRequiresText(t *testing.T) {
 		t.Fatalf("expected text-required error, present=%v err=%v", present, err)
 	}
 }
+
+func TestParseProposal_AddBeatNodeIDOptional(t *testing.T) {
+	_, present, err := ParseProposal(block(`{"ops":[{"op":"create_thread","ref":"t1","name":"X"},{"op":"add_beat","thread_ref":"t1","label":"비트"}]}`))
+	if !present || err != nil {
+		t.Fatalf("add_beat without node_id should be valid now: present=%v err=%v", present, err)
+	}
+}
