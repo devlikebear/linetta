@@ -14,31 +14,22 @@ interface Props {
 export function AIContextChecklistList({ counts }: { counts: ContextCounts }) {
   const items: { label: string; present: boolean; caption?: string }[] = [
     { label: "현재 씬 본문", present: true },
+    { label: "작품 개요", present: counts.hasOutline },
+    { label: "작품 시놉시스(폴백)", present: counts.hasSynopsis },
     {
-      label: "인근 씬 요약 (직전 2개 + 직후 1개)",
+      label: "직전·직후 씬 발췌",
       present: counts.nearbyScenes > 0,
       caption: `${counts.nearbyScenes}개`,
     },
     {
-      label: "같은 장 다른 씬",
-      present: counts.sameChapter > 0,
-      caption: `${counts.sameChapter}개`,
-    },
-    {
-      label: "형제 장 요약",
-      present: counts.otherChapter > 0,
-      caption: `${counts.otherChapter}개`,
-    },
-    {
-      label: "형제 부 요약",
-      present: counts.otherPart > 0,
-      caption: `${counts.otherPart}개`,
-    },
-    { label: "작품 시놉시스", present: counts.hasSynopsis },
-    {
       label: "관련 과거 씬 (멘션 RAG)",
       present: counts.relatedScenes > 0,
       caption: `${counts.relatedScenes}개`,
+    },
+    {
+      label: "플롯 (전/현/후 씬 비트)",
+      present: counts.plotBeats > 0,
+      caption: `${counts.plotBeats}개`,
     },
     {
       label: "등장 인물·장소",
@@ -46,9 +37,9 @@ export function AIContextChecklistList({ counts }: { counts: ContextCounts }) {
       caption: `${counts.entities}개`,
     },
     {
-      label: "활성 스토리라인",
-      present: counts.activeThreads > 0,
-      caption: `${counts.activeThreads}개`,
+      label: "관계",
+      present: counts.relationships > 0,
+      caption: `${counts.relationships}개`,
     },
     {
       label: "작가 주석",
@@ -100,13 +91,12 @@ export function AIContextChecklist({ anchor, counts, onClose }: Props) {
 export function totalContextItems(counts: ContextCounts): number {
   return (
     counts.nearbyScenes +
-    counts.sameChapter +
-    counts.otherChapter +
-    counts.otherPart +
+    (counts.hasOutline ? 1 : 0) +
     (counts.hasSynopsis ? 1 : 0) +
     counts.relatedScenes +
+    counts.plotBeats +
     counts.entities +
-    counts.activeThreads +
+    counts.relationships +
     counts.notes +
     counts.projectMetaFields +
     (counts.hasStyleNotes ? 1 : 0)
