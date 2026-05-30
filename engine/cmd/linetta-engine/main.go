@@ -139,6 +139,7 @@ func main() {
 	s.Handle("entities.get", handlers.GetEntity(entities))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
+	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))
 	s.Handle("threads.create", handlers.CreateThread(threads))
 	s.Handle("threads.list", handlers.ListThreads(threads))
 	s.Handle("threads.get", handlers.GetThread(threads))
