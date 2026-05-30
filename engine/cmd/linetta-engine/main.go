@@ -181,6 +181,7 @@ func main() {
 	s.Handle("companion.send", handlers.CompanionSend(companionSvc, clock))
 	s.Handle("companion.history", handlers.CompanionHistory(companionSvc))
 	s.Handle("companion.cancel", handlers.CompanionCancel(companionSvc))
+	s.Handle("companion.remember", handlers.CompanionRemember(companionSvc))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))

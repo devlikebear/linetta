@@ -47,3 +47,12 @@ func TestCompanionCancelInvalidParams(t *testing.T) {
 		t.Fatalf("expected rpc.MethodError CodeInvalidParams, got %T %v", err, err)
 	}
 }
+
+func TestCompanionRememberInvalidParams(t *testing.T) {
+	h := CompanionRemember(nil)
+	_, err := h(context.Background(), json.RawMessage(`{"project_id":"p"}`)) // text missing
+	var me *rpc.MethodError
+	if !errors.As(err, &me) || me.Code != rpc.CodeInvalidParams {
+		t.Fatalf("expected InvalidParams, got %v", err)
+	}
+}

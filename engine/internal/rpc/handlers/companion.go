@@ -75,3 +75,23 @@ func CompanionCancel(svc *companion.Service) rpc.Handler {
 		return json.RawMessage(`{"ok":true}`), nil
 	}
 }
+
+type companionRememberParams struct {
+	ProjectID string `json:"project_id"`
+	Text      string `json:"text"`
+	Category  string `json:"category"`
+}
+
+// CompanionRemember returns a handler for companion.remember.
+func CompanionRemember(svc *companion.Service) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionRememberParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" || p.Text == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and text required"}
+		}
+		if err := svc.Remember(p.ProjectID, p.Text, p.Category); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
