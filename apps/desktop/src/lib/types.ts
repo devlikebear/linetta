@@ -9,11 +9,17 @@ export interface Project {
   length_target: LengthTarget;
   default_pov: DefaultPOV;
   style_notes: string;
+  outline: string;
   word_count: number;
   last_opened_node_id?: string;
   created_at: number;
   updated_at: number;
   archived_at?: number;
+}
+
+export interface UpdateProjectInput {
+  id: string;
+  outline?: string;
 }
 
 export interface NewProjectInput {
@@ -139,13 +145,12 @@ export interface AICancelled {
 // Mapped to ContextCounts (camelCase) inside the rpc client.
 export interface ContextPreviewResponse {
   nearby_scenes: number;
-  same_chapter: number;
-  other_chapter: number;
-  other_part: number;
+  has_outline: boolean;
   has_synopsis: boolean;
   related_scenes: number;
   entities: number;
-  active_threads: number;
+  relationships: number;
+  plot_beats: number;
   notes: number;
   project_meta_fields: number;
   has_style_notes: boolean;
@@ -155,13 +160,12 @@ export interface ContextPreviewResponse {
  *  ContextPreviewResponse (snake_case); rpc.ts maps wire → camel. */
 export interface ContextCounts {
   nearbyScenes: number;
-  sameChapter: number;
-  otherChapter: number;
-  otherPart: number;
+  hasOutline: boolean;
   hasSynopsis: boolean;
   relatedScenes: number;
   entities: number;
-  activeThreads: number;
+  relationships: number;
+  plotBeats: number;
   notes: number;
   projectMetaFields: number;
   hasStyleNotes: boolean;
@@ -266,6 +270,7 @@ export interface Beat {
   node_id?: string;
   ordinal: number;
   label: string;
+  description: string;
   intensity: number;
 }
 
@@ -273,26 +278,39 @@ export interface NewBeatInput {
   thread_id: string;
   node_id?: string;
   label?: string;
+  description?: string;
   intensity?: number;
 }
 
 export interface UpdateBeatInput {
   id: string;
   label?: string;
+  description?: string;
   intensity?: number;
 }
 
-// Mirrors engine/internal/ai ActiveThread / BeatBrief (used in ai_runs.context_json).
-export interface BeatBrief {
+// Mirrors engine/internal/plot Spine / SceneBeats / Beat (plot.spine_panel RPC).
+export interface PlotBeat {
+  id: string;
+  thread_id: string;
+  thread_name: string;
+  thread_color: string;
   label: string;
+  description: string;
+  intensity: number;
   ordinal: number;
 }
 
-export interface ActiveThread {
-  name: string;
-  color: string;
-  summary: string;
-  recent_beats: BeatBrief[];
+export interface PlotScene {
+  node_id: string;
+  label: string;
+  beats: PlotBeat[];
+}
+
+export interface PlotSpine {
+  prev: PlotScene | null;
+  current: PlotScene;
+  next: PlotScene | null;
 }
 
 // Mirrors engine/internal/relationship Relationship struct.

@@ -20,6 +20,7 @@ import type {
   NewThreadInput,
   NodeRow,
   Note,
+  PlotSpine,
   Project,
   Relationship,
   SceneMention,
@@ -31,6 +32,7 @@ import type {
   UpdateBeatInput,
   UpdateEntityInput,
   UpdateNoteInput,
+  UpdateProjectInput,
   UpdateRelationshipInput,
   UpdateThreadInput,
 } from "./types";
@@ -49,6 +51,7 @@ export const projects = {
   create: (input: NewProjectInput) => rpcCall<Project>("projects.create", input),
   list: (params: ListProjectsParams = {}) => rpcCall<Project[]>("projects.list", params),
   get: (id: string) => rpcCall<Project>("projects.get", { id }),
+  update: (input: UpdateProjectInput) => rpcCall<Project>("projects.update", input),
   archive: (id: string) => rpcCall<{ ok: true }>("projects.archive", { id }),
 };
 
@@ -132,13 +135,12 @@ export const ai = {
     rpcCall<ContextPreviewResponse>("ai.preview_context", { node_id: nodeId })
       .then((r) => ({
         nearbyScenes: r.nearby_scenes,
-        sameChapter: r.same_chapter,
-        otherChapter: r.other_chapter,
-        otherPart: r.other_part,
+        hasOutline: r.has_outline,
         hasSynopsis: r.has_synopsis,
         relatedScenes: r.related_scenes,
         entities: r.entities,
-        activeThreads: r.active_threads,
+        relationships: r.relationships,
+        plotBeats: r.plot_beats,
         notes: r.notes,
         projectMetaFields: r.project_meta_fields,
         hasStyleNotes: r.has_style_notes,
@@ -186,4 +188,9 @@ export const relationships = {
   update: (input: UpdateRelationshipInput) =>
     rpcCall<Relationship>("relationships.update", input),
   delete: (id: string) => rpcCall<{ ok: true }>("relationships.delete", { id }),
+};
+
+export const plot = {
+  spinePanel: (nodeId: string) =>
+    rpcCall<PlotSpine>("plot.spine_panel", { node_id: nodeId }),
 };
