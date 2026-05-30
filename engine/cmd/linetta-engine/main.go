@@ -22,6 +22,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/paths"
+	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -70,6 +71,7 @@ func main() {
 	beats := beat.NewRepo(st)
 	notes := note.NewRepo(st)
 	relationships := relationship.NewRepo(st)
+	plotBuilder := plot.NewBuilder(nodes, beats, threads)
 
 	// Keep the mentions table in sync with each saved Tiptap doc.
 	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
@@ -124,6 +126,7 @@ func main() {
 	s.Handle("projects.list", handlers.ListProjects(projects))
 	s.Handle("projects.get", handlers.GetProject(projects))
 	s.Handle("projects.archive", handlers.ArchiveProject(projects, clock))
+	s.Handle("projects.update", handlers.UpdateProject(projects, clock))
 	s.Handle("nodes.get", handlers.GetNode(nodes))
 	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, snaps, clock, summ.Enqueue))
 	s.Handle("nodes.set_last_opened", handlers.SetLastOpened(nodes, clock))
@@ -166,6 +169,7 @@ func main() {
 	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
 	s.Handle("ai.preview_context", handlers.PreviewContext(contextBuilder))
 	s.Handle("ai.cancel", handlers.CancelAI(runner))
+	s.Handle("plot.spine_panel", handlers.PlotSpinePanel(plotBuilder))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
