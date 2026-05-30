@@ -783,8 +783,9 @@ export function Workspace() {
       </header>
 
       <div className={`ws-body${
+        aiModal ? " with-ai-panel" :
         companionOpen ? " with-companion-panel" :
-        aiModal ? " with-ai-panel" : (entitySheetId || threadSheetId) ? " with-sheet" : ""
+        (entitySheetId || threadSheetId) ? " with-sheet" : ""
       }`}>
         <div className="ws-editor">
           <TiptapEditor
@@ -807,14 +808,7 @@ export function Workspace() {
             onMentionDoubleClick={(id) => setEntitySheetId(id)}
           />
         </div>
-        {companionOpen && load ? (
-          <CompanionPanel
-            projectId={load.project.id}
-            nodeIdRef={companionNodeRef}
-            onClose={() => { setCompanionOpen(false); focusEditor(); }}
-            onApplied={() => { if (load) refreshMentioned(load.node.id); }}
-          />
-        ) : aiModal && load ? (
+        {aiModal && load ? (
           <AIPanel
             mode={aiModal.mode}
             canChooseMode={aiModal.canChooseMode}
@@ -855,6 +849,13 @@ export function Workspace() {
             onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
             showChecklist={aiCtxChecklistOpen}
             checklistCounts={contextCounts ?? FALLBACK_COUNTS}
+          />
+        ) : companionOpen && load ? (
+          <CompanionPanel
+            projectId={load.project.id}
+            nodeIdRef={companionNodeRef}
+            onClose={() => { setCompanionOpen(false); focusEditor(); }}
+            onApplied={() => { if (load) refreshMentioned(load.node.id); }}
           />
         ) : entitySheetId ? (
           <EntitySheet
