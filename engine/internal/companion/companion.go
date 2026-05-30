@@ -2,6 +2,7 @@ package companion
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -38,6 +39,7 @@ type Service struct {
 	src           ProviderSource
 	workDir       string
 	runner        *Runner
+	memBase       string
 }
 
 // NewService constructs the companion service. sessionsDir is passed to
@@ -53,6 +55,7 @@ func NewService(
 		projects:      projects, threads: threads, entities: entities,
 		relationships: relationships, plot: plotBuilder,
 		notify: notify, factory: factory, src: src, workDir: workDir,
+		memBase: filepath.Join(sessionsDir, "mem"),
 	}
 	s.runner = newRunner(s)
 	return s
