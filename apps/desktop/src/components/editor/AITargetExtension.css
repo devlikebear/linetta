@@ -1,0 +1,22 @@
+.ai-target-replace {
+  background: rgba(120, 170, 255, 0.22);
+  border-radius: 2px;
+}
+
+.ai-target-all {
+  background: rgba(120, 170, 255, 0.10);
+}
+
+.ai-target-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin: 0 -1px;
+  background: rgba(120, 170, 255, 0.9);
+  vertical-align: text-bottom;
+  animation: ai-target-blink 1s steps(2) infinite;
+}
+
+@keyframes ai-target-blink {
+  to { opacity: 0; }
+}
