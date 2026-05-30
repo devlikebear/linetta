@@ -16,6 +16,10 @@ type deltaPayload struct {
 	RunID string `json:"run_id"`
 	Text  string `json:"text"`
 }
+type resetPayload struct {
+	RunID string `json:"run_id"`
+	Text  string `json:"text"`
+}
 type donePayload struct {
 	RunID    string `json:"run_id"`
 	FullText string `json:"full_text"`
@@ -117,8 +121,10 @@ func (r *Runner) run(ctx context.Context, runID, path string, msgs []llm.ChatMes
 	resp, err := client.Chat(ctx, msgs, llm.ChatOptions{
 		OnDelta: func(text string) {
 			switch act, payload := dedup.Observe(text); act {
-			case streamdedup.ActionEmit, streamdedup.ActionReset:
+			case streamdedup.ActionEmit:
 				_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, Text: payload})
+			case streamdedup.ActionReset:
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: payload})
 			case streamdedup.ActionSkip:
 			}
 		},
