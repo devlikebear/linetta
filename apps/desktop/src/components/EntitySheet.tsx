@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Entity, EntityKind, Relationship, UpdateEntityInput } from "../lib/types";
+import type { Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput } from "../lib/types";
 import { entities, relationships } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
 import { X, Plus } from "../lib/icons";
@@ -9,6 +9,7 @@ interface Props {
   entityId: string | null;
   onClose: () => void;
   onSaved?: (entity: Entity) => void;
+  onNavigate?: (nodeId: string) => void;
 }
 
 const KIND_LABEL: Record<EntityKind, string> = {
@@ -18,7 +19,7 @@ const KIND_LABEL: Record<EntityKind, string> = {
   concept: "개념",
 };
 
-export function EntitySheet({ entityId, onClose, onSaved }: Props) {
+export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
   const [entity, setEntity] = useState<Entity | null>(null);
   const [draft, setDraft] = useState<UpdateEntityInput | null>(null);
   const [attrRows, setAttrRows] = useState<{ key: string; value: string }[]>([]);
@@ -27,6 +28,7 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
   const [rels, setRels] = useState<Relationship[]>([]);
   const [relTargets, setRelTargets] = useState<Record<string, Entity>>({});
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [scenes, setScenes] = useState<SceneMention[]>([]);
 
   const refreshRels = useCallback(async (eid: string) => {
     const list = await relationships.listByEntity(eid);
@@ -67,6 +69,18 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
     }).catch((e) => setError(String(e)));
     refreshRels(entityId).catch((e) => setError(String(e)));
   }, [entityId, refreshRels]);
+
+  useEffect(() => {
+    if (!entityId) {
+      setScenes([]);
+      return;
+    }
+    let cancelled = false;
+    entities.scenes(entityId)
+      .then((s) => { if (!cancelled) setScenes(s); })
+      .catch(() => { if (!cancelled) setScenes([]); });
+    return () => { cancelled = true; };
+  }, [entityId]);
 
   if (!entityId) return null;
 
@@ -236,6 +250,27 @@ export function EntitySheet({ entityId, onClose, onSaved }: Props) {
                   if (entity) refreshRels(entity.id);
                 }}
               />
+            )}
+          </section>
+
+          <section className="entity-section">
+            <h5>등장 씬 · {scenes.length}개</h5>
+            {scenes.length === 0 ? (
+              <p className="entity-empty">아직 등장한 씬이 없어요</p>
+            ) : (
+              <ul className="entity-scenes">
+                {scenes.map((s) => (
+                  <li key={s.node_id}>
+                    <button
+                      type="button"
+                      className="entity-scene-link"
+                      onClick={() => onNavigate?.(s.node_id)}
+                    >
+                      {s.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
 

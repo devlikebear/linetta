@@ -845,6 +845,10 @@ export function Workspace() {
             onSaved={() => {
               if (load) refreshMentioned(load.node.id);
             }}
+            onNavigate={(nodeId) => {
+              setEntitySheetId(null);
+              navigateToNode({ id: nodeId } as NodeRow);
+            }}
           />
         ) : threadSheetId ? (
           <ThreadSheet
