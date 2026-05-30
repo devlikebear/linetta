@@ -38,6 +38,12 @@ pub async fn spawn(app: &tauri::AppHandle) -> Result<EngineHandle> {
             "ai.done" => "ai-done",
             "ai.error" => "ai-error",
             "ai.cancelled" => "ai-cancelled",
+            "companion.delta" => "companion-delta",
+            "companion.reset" => "companion-reset",
+            "companion.done" => "companion-done",
+            "companion.error" => "companion-error",
+            "companion.cancelled" => "companion-cancelled",
+            "companion.proposal" => "companion-proposal",
             _ => return, // ignore unknown
         };
         let _ = handle_clone.emit(event, params);
