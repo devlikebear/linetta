@@ -81,8 +81,8 @@ type RelationBrief struct {
 	Bidirectional bool   `json:"bidirectional"`
 }
 
-// SceneSummary is one rendered leaf/scene rollup (label + body). Used by both
-// hierarchical layer 1 (nearby + same chapter) and topology RAG layer 3.
+// SceneSummary is one rendered leaf/scene rollup (label + body). Used by the
+// nearby adjacent-scene excerpts and the topology RAG related-scenes.
 type SceneSummary struct {
 	NodeID string `json:"node_id"`
 	Label  string `json:"label"` // breadcrumb path, e.g. "1부 / 1장 / 씬 3"
