@@ -4,7 +4,7 @@ import type { CommitMode } from "../../lib/editor/commitGenerated";
 import type { GenStatus, GenVariation } from "../../lib/editor/useAIGeneration";
 import { TONE_PRESETS } from "../../lib/tonePresets";
 import { AIContextChecklistList } from "./AIContextChecklist";
-import "./AIModal.css";
+import "./AIPanel.css";
 
 interface Props {
   mode: CommitMode;
@@ -31,7 +31,7 @@ const MODE_LABEL: Record<CommitMode, string> = {
   replaceAll: "전체교체",
 };
 
-export function AIModal(props: Props) {
+export function AIPanel(props: Props) {
   const [prompt, setPrompt] = useState("");
   const [variationsOn, setVariationsOn] = useState(false);
   const [shake, setShake] = useState(false);
@@ -92,12 +92,7 @@ export function AIModal(props: Props) {
   };
 
   return (
-    <div className="ai-modal-backdrop" onMouseDown={props.onCancel}>
-      <div
-        className="ai-modal"
-        onMouseDown={(e) => e.stopPropagation()}
-        onKeyDown={onKeyDown}
-      >
+    <aside className="ai-panel" onKeyDown={onKeyDown}>
         <div className="ai-modal-modes">
           {props.canChooseMode ? (
             <>
@@ -217,7 +212,6 @@ export function AIModal(props: Props) {
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </aside>
   );
 }

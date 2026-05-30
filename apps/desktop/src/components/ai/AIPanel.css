@@ -1,25 +1,13 @@
-.ai-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.ai-modal {
+.ai-panel {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
   background: var(--surface, #1d1d1f);
   color: var(--text, #e8e8ea);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  width: min(640px, 92vw);
-  max-height: 84vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
   padding: 1rem 1.1rem;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  overflow-y: auto;
   font-size: 0.9rem;
 }
 

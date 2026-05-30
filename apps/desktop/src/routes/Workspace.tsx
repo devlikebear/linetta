@@ -12,7 +12,7 @@ import { VersionSheet } from "../components/VersionSheet";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
 import { useAIGeneration } from "../lib/editor/useAIGeneration";
-import { AIModal } from "../components/ai/AIModal";
+import { AIPanel } from "../components/ai/AIPanel";
 import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated";
 import { totalContextItems } from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
@@ -760,7 +760,9 @@ export function Workspace() {
         </button>
       </header>
 
-      <div className={`ws-body${(entitySheetId || threadSheetId) ? " with-sheet" : ""}`}>
+      <div className={`ws-body${
+        aiModal ? " with-ai-panel" : (entitySheetId || threadSheetId) ? " with-sheet" : ""
+      }`}>
         <div className="ws-editor">
           <TiptapEditor
             key={load.node.id}
@@ -781,7 +783,39 @@ export function Workspace() {
             onMentionDoubleClick={(id) => setEntitySheetId(id)}
           />
         </div>
-        {entitySheetId ? (
+        {aiModal && load ? (
+          <AIPanel
+            mode={aiModal.mode}
+            canChooseMode={aiModal.canChooseMode}
+            options={aiOptions}
+            contextItemCount={totalContextItems(contextCounts ?? FALLBACK_COUNTS)}
+            variations={gen.variations}
+            currentIdx={gen.currentIdx}
+            status={gen.status}
+            onModeChange={(m) => setAiModal((s) => (s ? { ...s, mode: m } : s))}
+            onOptionsChange={setAiOptions}
+            onRun={(promptText, variationsOn) => {
+              const selectionText =
+                aiModal.mode === "replace"
+                  ? tiptapEditor!.state.doc.textBetween(aiModal.sel.from, aiModal.sel.to, "\n")
+                  : "";
+              const args = {
+                nodeId: load.node.id,
+                prompt: promptText,
+                options: aiOptions,
+                selectionText,
+              };
+              if (variationsOn) gen.startVariations(args, 3);
+              else gen.start(args);
+            }}
+            onSwitch={gen.switchVariation}
+            onAccept={acceptAIModal}
+            onCancel={closeAIModal}
+            onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
+            showChecklist={aiCtxChecklistOpen}
+            checklistCounts={contextCounts ?? FALLBACK_COUNTS}
+          />
+        ) : entitySheetId ? (
           <EntitySheet
             entityId={entitySheetId}
             onClose={() => {
@@ -821,40 +855,6 @@ export function Workspace() {
           />
         )}
       </div>
-
-      {aiModal && load && (
-        <AIModal
-          mode={aiModal.mode}
-          canChooseMode={aiModal.canChooseMode}
-          options={aiOptions}
-          contextItemCount={totalContextItems(contextCounts ?? FALLBACK_COUNTS)}
-          variations={gen.variations}
-          currentIdx={gen.currentIdx}
-          status={gen.status}
-          onModeChange={(m) => setAiModal((s) => (s ? { ...s, mode: m } : s))}
-          onOptionsChange={setAiOptions}
-          onRun={(promptText, variationsOn) => {
-            const selectionText =
-              aiModal.mode === "replace"
-                ? tiptapEditor!.state.doc.textBetween(aiModal.sel.from, aiModal.sel.to, "\n")
-                : "";
-            const args = {
-              nodeId: load.node.id,
-              prompt: promptText,
-              options: aiOptions,
-              selectionText,
-            };
-            if (variationsOn) gen.startVariations(args, 3);
-            else gen.start(args);
-          }}
-          onSwitch={gen.switchVariation}
-          onAccept={acceptAIModal}
-          onCancel={closeAIModal}
-          onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
-          showChecklist={aiCtxChecklistOpen}
-          checklistCounts={contextCounts ?? FALLBACK_COUNTS}
-        />
-      )}
 
       <OutlinePanel
         tree={load.tree}

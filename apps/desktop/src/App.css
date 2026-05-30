@@ -457,6 +457,10 @@ body {
   grid-template-columns: 1fr 360px;
 }
 
+.ws-body.with-ai-panel {
+  grid-template-columns: 1fr 420px;
+}
+
 .ws-editor {
   overflow-y: auto;
   overflow-x: hidden;
