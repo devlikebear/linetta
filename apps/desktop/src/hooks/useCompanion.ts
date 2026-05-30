@@ -33,6 +33,9 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
   // Load history on project change.
   useEffect(() => {
     let cancelled = false;
+    // History stores only role/content/timestamp; past proposals render as
+    // prose (no ProposalCard). Proposals are session-ephemeral by design —
+    // re-applying a historical proposal is not supported in Phase 2.
     companionApi.history(projectId)
       .then((msgs: CompanionMessage[]) => {
         if (cancelled) return;
