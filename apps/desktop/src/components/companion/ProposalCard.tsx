@@ -18,10 +18,11 @@ function opLabel(op: ProposalOp): string {
 interface Props {
   proposal: CompanionProposal;
   projectId: string;
+  nodeIdRef: { current: string | null };
   onApplied: () => void;
 }
 
-export function ProposalCard({ proposal, projectId, onApplied }: Props) {
+export function ProposalCard({ proposal, projectId, nodeIdRef, onApplied }: Props) {
   const ops = proposal.ops ?? [];
   const [sel, setSel] = useState<boolean[]>(ops.map(() => true));
   const [result, setResult] = useState<ApplyResult | null>(null);
@@ -44,7 +45,7 @@ export function ProposalCard({ proposal, projectId, onApplied }: Props) {
     setBusy(true);
     const chosen = ops.filter((_, i) => sel[i]);
     try {
-      const res = await applyProposal(chosen, projectId);
+      const res = await applyProposal(chosen, projectId, nodeIdRef.current);
       setResult(res);
       onApplied();
     } finally {
@@ -72,7 +73,14 @@ export function ProposalCard({ proposal, projectId, onApplied }: Props) {
       </ul>
       {result ? (
         <div className="companion-proposal-result">
-          적용됨 {result.applied}건{result.failures.length > 0 ? ` · 실패 ${result.failures.length}건` : ""}
+          <div>적용됨 {result.applied}건{result.failures.length > 0 ? ` · 실패 ${result.failures.length}건` : ""}</div>
+          {result.failures.length > 0 && (
+            <ul className="companion-proposal-failures">
+              {result.failures.map((f, i) => (
+                <li key={i}>{opLabel(f.op)} — {f.error}</li>
+              ))}
+            </ul>
+          )}
         </div>
       ) : (
         <div className="companion-proposal-actions">

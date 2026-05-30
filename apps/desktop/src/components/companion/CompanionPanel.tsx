@@ -46,7 +46,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
         {messages.map((m, i) => (
           <div key={i} className={`companion-msg ${m.role}${m.errored ? " errored" : ""}`}>
             {m.content && <div className="companion-bubble">{m.content}</div>}
-            {m.proposal && <ProposalCard proposal={m.proposal} projectId={projectId} onApplied={onApplied} />}
+            {m.proposal && <ProposalCard proposal={m.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={onApplied} />}
           </div>
         ))}
         {status === "streaming" && (

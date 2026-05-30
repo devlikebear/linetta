@@ -15,7 +15,7 @@ export interface ApplyResult {
 // applyProposal executes the selected ops in order against existing RPCs,
 // resolving create_thread.ref -> created thread id for later add_beat.thread_ref.
 // A failing op is recorded and execution continues (partial apply; no rollback).
-export async function applyProposal(ops: ProposalOp[], projectId: string): Promise<ApplyResult> {
+export async function applyProposal(ops: ProposalOp[], projectId: string, currentNodeId: string | null): Promise<ApplyResult> {
   const refMap = new Map<string, string>();
   const failures: ApplyFailure[] = [];
   let applied = 0;
@@ -49,9 +49,10 @@ export async function applyProposal(ops: ProposalOp[], projectId: string): Promi
         case "add_beat": {
           const tid = op.thread_id ?? (op.thread_ref ? refMap.get(op.thread_ref) : undefined);
           if (!tid) throw new Error("스토리라인 참조를 해소할 수 없음");
+          const nodeId = op.node_id ?? currentNodeId ?? undefined;
           await beatsApi.create({
             thread_id: tid,
-            node_id: op.node_id,
+            node_id: nodeId,
             label: op.label,
             description: op.description,
             intensity: op.intensity,
