@@ -70,6 +70,8 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID string) (
 	if resolvedNode == "" && proj.LastOpenedNodeID != nil {
 		resolvedNode = *proj.LastOpenedNodeID
 	}
+	// Context fields below are best-effort: partial context is preferred over
+	// aborting the turn, so per-section load errors are intentionally ignored.
 	if resolvedNode != "" {
 		if sp, err := s.plot.Build(ctx, resolvedNode); err == nil {
 			d.Spine = sp

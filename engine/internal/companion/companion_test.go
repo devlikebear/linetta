@@ -126,3 +126,10 @@ func TestSend_NoProposalWhenNoBlock(t *testing.T) {
 		t.Fatalf("did not expect a proposal event: %s", notif.get("companion.proposal"))
 	}
 }
+
+func TestCancel_UnknownRunErrors(t *testing.T) {
+	svc, _, _ := newSvc(t, "안녕")
+	if err := svc.Cancel("no-such-run"); err == nil {
+		t.Fatal("expected error cancelling unknown run")
+	}
+}

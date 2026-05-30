@@ -59,6 +59,7 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 	}
 
 	// Persist the user turn before streaming (best-effort).
+	// TODO(phase2): surface persistence errors instead of silently ignoring.
 	_ = session.AppendMessage(path, session.Message{Role: "user", Content: text, Timestamp: time.UnixMilli(now())})
 
 	// Build the message list: system + context + history (history already
@@ -105,6 +106,7 @@ func (r *Runner) cancel(runID string) error {
 		return errors.New("companion: run not found or already finished")
 	}
 	c()
+	delete(r.active, runID)
 	return nil
 }
 
