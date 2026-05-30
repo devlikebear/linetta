@@ -15,6 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -73,7 +74,7 @@ func newAIFixture(t *testing.T) (*ai.Runner, *ai.ContextBuilder, string, string)
 	runs := store.NewAIRunsRepo(s)
 	notif := &capNotif{}
 	runner := ai.NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return streamingFake{}, nil }, fixedProvider("claude-code-cli"))
-	builder := ai.NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := ai.NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	return runner, builder, p.ID, *p.LastOpenedNodeID
 }
 
@@ -117,13 +118,12 @@ func TestPreviewContext_returnsCountsForValidNode(t *testing.T) {
 	}
 	var got struct {
 		NearbyScenes      int  `json:"nearby_scenes"`
-		SameChapter       int  `json:"same_chapter"`
-		OtherChapter      int  `json:"other_chapter"`
-		OtherPart         int  `json:"other_part"`
+		HasOutline        bool `json:"has_outline"`
 		HasSynopsis       bool `json:"has_synopsis"`
 		RelatedScenes     int  `json:"related_scenes"`
 		Entities          int  `json:"entities"`
-		ActiveThreads     int  `json:"active_threads"`
+		Relationships     int  `json:"relationships"`
+		PlotBeats         int  `json:"plot_beats"`
 		Notes             int  `json:"notes"`
 		ProjectMetaFields int  `json:"project_meta_fields"`
 		HasStyleNotes     bool `json:"has_style_notes"`

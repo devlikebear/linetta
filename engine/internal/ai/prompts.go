@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -84,6 +85,8 @@ func buildSystem(c Context) string {
 func buildUser(c Context) string {
 	var b strings.Builder
 
+	capPlotDescriptions(&c.Plot, plotMaxChars)
+
 	// Plan 18 project meta: a one-line summary of the user-configured genres,
 	// length target, and default POV. Sits above everything else so the model
 	// frames the entire context within the writer's stated intent.
@@ -93,32 +96,17 @@ func buildUser(c Context) string {
 		b.WriteString("\n\n")
 	}
 
-	// Plan 16 layer-1 hierarchical sections (project synopsis → nearby parts/
-	// chapters → same-chapter peers → directly-adjacent leaves) precede the
-	// current scene so the model sees coarse-to-fine context.
-	if strings.TrimSpace(c.Hierarchical.ProjectSynopsis) != "" {
-		b.WriteString("## 작품 전반\n")
-		b.WriteString(c.Hierarchical.ProjectSynopsis)
+	// Outline-first overview: the user-editable outline takes precedence over the
+	// derived project synopsis so the model frames the scene within the writer's
+	// stated plan.
+	overview := strings.TrimSpace(c.Outline)
+	if overview == "" {
+		overview = strings.TrimSpace(c.Hierarchical.ProjectSynopsis)
+	}
+	if overview != "" {
+		b.WriteString("## 작품 개요\n")
+		b.WriteString(overview)
 		b.WriteString("\n\n")
-	}
-
-	if len(c.Hierarchical.OtherPartSummaries) > 0 || len(c.Hierarchical.OtherChapterSummaries) > 0 {
-		b.WriteString("## 인근 줄거리\n")
-		for _, pt := range c.Hierarchical.OtherPartSummaries {
-			b.WriteString(fmt.Sprintf("- [%s] %s\n", pt.Label, pt.Body))
-		}
-		for _, ch := range c.Hierarchical.OtherChapterSummaries {
-			b.WriteString(fmt.Sprintf("- [%s] %s\n", ch.Label, ch.Body))
-		}
-		b.WriteString("\n")
-	}
-
-	if len(c.Hierarchical.SameChapterSummaries) > 0 {
-		b.WriteString("## 같은 장 다른 씬\n")
-		for _, ss := range c.Hierarchical.SameChapterSummaries {
-			b.WriteString(fmt.Sprintf("- [%s] %s\n", ss.Label, ss.Body))
-		}
-		b.WriteString("\n")
 	}
 
 	if len(c.Hierarchical.NearbyLeafSummaries) > 0 {
@@ -180,18 +168,41 @@ func buildUser(c Context) string {
 		}
 		b.WriteString("\n")
 	}
-	if len(c.ActiveThreads) > 0 {
-		b.WriteString("## 활성 스토리라인\n")
-		for _, t := range c.ActiveThreads {
-			line := fmt.Sprintf("- [%s] %s", t.Color, t.Name)
-			if t.Summary != "" {
-				line += " — " + t.Summary
+	if hasPlot(c.Plot) {
+		b.WriteString("## 플롯\n")
+		writeScene := func(tag string, s *plot.SceneBeats) {
+			if s == nil || len(s.Beats) == 0 {
+				return
+			}
+			b.WriteString(tag)
+			b.WriteString("\n")
+			for _, bt := range s.Beats {
+				line := fmt.Sprintf("  · [%s] #%d %s", bt.ThreadName, bt.Ordinal, bt.Label)
+				if strings.TrimSpace(bt.Description) != "" {
+					line += " — " + bt.Description
+				}
+				b.WriteString(line)
+				b.WriteString("\n")
+			}
+		}
+		writeScene("[이전 씬]", c.Plot.Prev)
+		writeScene("[현재 씬]", &c.Plot.Current)
+		writeScene("[다음 씬]", c.Plot.Next)
+		b.WriteString("\n")
+	}
+	if len(c.Relationships) > 0 {
+		b.WriteString("## 관계\n")
+		for _, r := range c.Relationships {
+			arrow := "→"
+			if r.Bidirectional {
+				arrow = "↔"
+			}
+			line := fmt.Sprintf("- %s %s %s: %s", r.From, arrow, r.To, r.Label)
+			if strings.TrimSpace(r.Notes) != "" {
+				line += " — " + r.Notes
 			}
 			b.WriteString(line)
 			b.WriteString("\n")
-			for _, bt := range t.RecentBeats {
-				b.WriteString(fmt.Sprintf("  · #%d %s\n", bt.Ordinal, bt.Label))
-			}
 		}
 		b.WriteString("\n")
 	}
@@ -273,4 +284,45 @@ func kindLabel(k string) string {
 		return "개념"
 	}
 	return k
+}
+
+const plotMaxChars = 2000
+
+func hasPlot(s plot.Spine) bool {
+	if len(s.Current.Beats) > 0 {
+		return true
+	}
+	if s.Prev != nil && len(s.Prev.Beats) > 0 {
+		return true
+	}
+	if s.Next != nil && len(s.Next.Beats) > 0 {
+		return true
+	}
+	return false
+}
+
+// capPlotDescriptions zeroes out beat descriptions (keeping labels + thread
+// names) once the running size of the plot section exceeds maxChars.
+func capPlotDescriptions(s *plot.Spine, maxChars int) {
+	total := 0
+	trim := func(sb *plot.SceneBeats) {
+		if sb == nil {
+			return
+		}
+		for i := range sb.Beats {
+			head := len(sb.Beats[i].ThreadName) + len(sb.Beats[i].Label) + 12
+			if total+head > maxChars {
+				sb.Beats[i].Description = ""
+				total += head
+				continue
+			}
+			total += head + len(sb.Beats[i].Description)
+			if total > maxChars {
+				sb.Beats[i].Description = ""
+			}
+		}
+	}
+	trim(s.Prev)
+	trim(&s.Current)
+	trim(s.Next)
 }

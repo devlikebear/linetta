@@ -12,7 +12,9 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
+	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -35,7 +37,7 @@ func TestBuildContext_projectMetaPopulated(t *testing.T) {
 		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
 	})
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	c, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "user prompt", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -86,7 +88,7 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 		t.Fatalf("UpdateContent: %v", err)
 	}
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "재작성", "", Options{Tone: TonePresetMy})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -140,7 +142,7 @@ func TestBuildContext_prevSummary_trims300chars(t *testing.T) {
 
 	second, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "leaf", "씬 2", "", 1200)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), second.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -153,7 +155,7 @@ func TestBuildContext_prevSummary_trims300chars(t *testing.T) {
 	}
 }
 
-func TestBuildContext_activeThreadsForCurrentNode(t *testing.T) {
+func TestBuildContext_plotBeatsForCurrentNode(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
 	if err != nil {
@@ -173,38 +175,32 @@ func TestBuildContext_activeThreadsForCurrentNode(t *testing.T) {
 	tr := thread.NewRepo(s)
 	br := beat.NewRepo(s)
 
-	// Open thread bound to the current node via two beats.
+	// Thread bound to the current node via two beats.
 	th, _ := tr.Create(context.Background(), thread.NewInput{ProjectID: p.ID, Name: "잃어버린 시간", Color: "#c08a3e"})
 	_ = tr.Update(context.Background(), thread.UpdateInput{ID: th.ID, Summary: "요약"})
 	nID := *p.LastOpenedNodeID
 	_, _ = br.Create(context.Background(), beat.NewInput{ThreadID: th.ID, NodeID: &nID, Label: "마디 1"})
 	_, _ = br.Create(context.Background(), beat.NewInput{ThreadID: th.ID, NodeID: &nID, Label: "마디 2"})
 
-	// Closed thread bound to the same node — must NOT appear.
-	closed, _ := tr.Create(context.Background(), thread.NewInput{ProjectID: p.ID, Name: "닫힌"})
-	_, _ = br.Create(context.Background(), beat.NewInput{ThreadID: closed.ID, NodeID: &nID, Label: "닫힌 마디"})
-	_ = tr.Close(context.Background(), closed.ID, 2000)
-
-	builder := NewContextBuilder(pr, nodes, mr, tr, br, note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, note.NewRepo(s), relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), nID, "재작성", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if len(got.ActiveThreads) != 1 {
-		t.Fatalf("active = %d, want 1 (open only)", len(got.ActiveThreads))
+	if got.Plot.Current.NodeID != nID {
+		t.Errorf("plot current node = %q, want %q", got.Plot.Current.NodeID, nID)
 	}
-	at := got.ActiveThreads[0]
-	if at.Name != "잃어버린 시간" || at.Color != "#c08a3e" || at.Summary != "요약" {
-		t.Errorf("active = %+v", at)
+	if len(got.Plot.Current.Beats) != 2 {
+		t.Fatalf("plot current beats = %d, want 2", len(got.Plot.Current.Beats))
 	}
-	if len(at.RecentBeats) != 2 || at.RecentBeats[0].Label != "마디 1" {
-		t.Errorf("beats = %+v", at.RecentBeats)
+	if got.Plot.Current.Beats[0].Label != "마디 1" || got.Plot.Current.Beats[0].ThreadName != "잃어버린 시간" {
+		t.Errorf("beats = %+v", got.Plot.Current.Beats)
 	}
 }
 
 // setupPrevSummaryFixture seeds two leaves and returns the project, repos, and
 // the second leaf's id — shared by the three cache-path tests below.
-func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.Repo, *thread.Repo, *beat.Repo, *note.Repo, string, string) {
+func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.Repo, *thread.Repo, *beat.Repo, *note.Repo, *relationship.Repo, string, string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
@@ -229,18 +225,18 @@ func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.
 	docFirst := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + long.String() + `"}]}]}`
 	_ = nodes.UpdateContent(context.Background(), *p.LastOpenedNodeID, docFirst, 1100)
 	second, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "leaf", "씬 2", "", 1200)
-	return pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), *p.LastOpenedNodeID, second.ID
+	return pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s), *p.LastOpenedNodeID, second.ID
 }
 
 func TestBuildContext_prevSummary_usesFreshCache(t *testing.T) {
-	pr, nodes, mr, tr, br, nr, prevID, secondID := setupPrevSummaryFixture(t)
+	pr, nodes, mr, tr, br, nr, rr, prevID, secondID := setupPrevSummaryFixture(t)
 
 	prevN, _ := nodes.Get(context.Background(), prevID)
 	if err := nodes.SetSummary(context.Background(), prevID, "캐시된 요약", prevN.ContentVersion); err != nil {
 		t.Fatalf("SetSummary: %v", err)
 	}
 
-	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr, rr)
 	got, err := builder.Build(context.Background(), secondID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -251,13 +247,13 @@ func TestBuildContext_prevSummary_usesFreshCache(t *testing.T) {
 }
 
 func TestBuildContext_prevSummary_fallsBackWhenStale(t *testing.T) {
-	pr, nodes, mr, tr, br, nr, prevID, secondID := setupPrevSummaryFixture(t)
+	pr, nodes, mr, tr, br, nr, rr, prevID, secondID := setupPrevSummaryFixture(t)
 
 	// Seed a summary stamped for an older content_version (0 — the doc has been
 	// updated once, so content_version is 1).
 	_ = nodes.SetSummary(context.Background(), prevID, "오래된 요약", 0)
 
-	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr, rr)
 	got, err := builder.Build(context.Background(), secondID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -271,9 +267,9 @@ func TestBuildContext_prevSummary_fallsBackWhenStale(t *testing.T) {
 }
 
 func TestBuildContext_prevSummary_fallsBackWhenEmpty(t *testing.T) {
-	pr, nodes, mr, tr, br, nr, _, secondID := setupPrevSummaryFixture(t)
+	pr, nodes, mr, tr, br, nr, rr, _, secondID := setupPrevSummaryFixture(t)
 
-	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr)
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr, rr)
 	got, err := builder.Build(context.Background(), secondID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -283,7 +279,7 @@ func TestBuildContext_prevSummary_fallsBackWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestBuildContext_hierarchical_populatesNearbySameChapterAndPart(t *testing.T) {
+func TestBuildContext_hierarchical_populatesNearbyAndSynopsis(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
 	if err != nil {
@@ -337,7 +333,7 @@ func TestBuildContext_hierarchical_populatesNearbySameChapterAndPart(t *testing.
 	seedFresh(chap2.ID, "2장 요약")
 	seedFresh(part2.ID, "2부 요약")
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), s3.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -347,24 +343,17 @@ func TestBuildContext_hierarchical_populatesNearbySameChapterAndPart(t *testing.
 	for _, ss := range got.Hierarchical.NearbyLeafSummaries {
 		gotNearby[ss.NodeID] = true
 	}
-	for _, want := range []string{s1.ID, s2.ID, s4.ID} {
+	// Nearby is now 1 prior + 1 next: for s3 that's s2 and s4 (s1 excluded).
+	for _, want := range []string{s2.ID, s4.ID} {
 		if !gotNearby[want] {
 			t.Errorf("nearby missing %s; got %+v", want, got.Hierarchical.NearbyLeafSummaries)
 		}
 	}
-	for _, ss := range got.Hierarchical.SameChapterSummaries {
-		if gotNearby[ss.NodeID] || ss.NodeID == s3.ID {
-			t.Errorf("same_chapter leaked nearby/self: %s", ss.NodeID)
-		}
+	if gotNearby[s1.ID] {
+		t.Errorf("nearby should not include s1 (2 leaves prior): %+v", got.Hierarchical.NearbyLeafSummaries)
 	}
-	foundPart := false
-	for _, ps := range got.Hierarchical.OtherPartSummaries {
-		if ps.NodeID == part2.ID && ps.Body == "2부 요약" {
-			foundPart = true
-		}
-	}
-	if !foundPart {
-		t.Errorf("other_part_summaries missing 2부: %+v", got.Hierarchical.OtherPartSummaries)
+	if gotNearby[s3.ID] {
+		t.Errorf("nearby leaked current: %+v", got.Hierarchical.NearbyLeafSummaries)
 	}
 	if !strings.Contains(got.Hierarchical.ProjectSynopsis, "1부") {
 		t.Errorf("project_synopsis = %q, want to mention 1부", got.Hierarchical.ProjectSynopsis)
@@ -412,7 +401,7 @@ func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T)
 	second, _ := nodes.CreateSibling(context.Background(), first, "leaf", "씬 2", "", 1200)
 	_ = nodes.UpdateContent(context.Background(), second.ID, doc("씬 2의 현재"), 1300)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), second.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -487,7 +476,7 @@ func TestBuildContext_relatedScenes_returnsCoMentionTop3(t *testing.T) {
 	cur := curN.ID
 	_ = nodes.UpdateContent(context.Background(), cur, withBoth("현재 — "), 1310)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), cur, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -517,7 +506,7 @@ func TestBuildContext_includesNotesForNode(t *testing.T) {
 	nr := note.NewRepo(s)
 	_, _ = nr.Create(context.Background(), note.NewInput{NodeID: *p.LastOpenedNodeID, Anchor: 7, Body: "톤 바꾸기"}, 1000)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), nr)
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), nr, relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -613,7 +602,7 @@ func TestBuildContext_hierarchicalRetrieval(t *testing.T) {
 		},
 	}
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s)).
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s)).
 		WithSummaryRefresher(ref)
 	got, err := builder.Build(context.Background(), cur.ID, "확장", "", Options{})
 	if err != nil {
@@ -621,8 +610,7 @@ func TestBuildContext_hierarchicalRetrieval(t *testing.T) {
 	}
 
 	// NearbyLeafSummaries: cur is at index 1 in DFS order [s1, cur, s3, s4, s5, s6].
-	// 2 prior would be (curIdx-2 = -1, skipped) and (curIdx-1 = s1), plus 1 next (s3).
-	// At edge → expect 2 entries: s1 and s3.
+	// 1 prior (curIdx-1 = s1) plus 1 next (curIdx+1 = s3) → expect s1 and s3.
 	nearbyIDs := map[string]bool{}
 	for _, ss := range got.Hierarchical.NearbyLeafSummaries {
 		nearbyIDs[ss.NodeID] = true
@@ -634,45 +622,15 @@ func TestBuildContext_hierarchicalRetrieval(t *testing.T) {
 		t.Errorf("nearby leaked current: %+v", got.Hierarchical.NearbyLeafSummaries)
 	}
 
-	// SameChapterSummaries excludes current + nearby. cur's parent is chap1; the
-	// only other chap1 leaf is s1, which is in nearby — so SameChapter should be
-	// empty here.
-	for _, ss := range got.Hierarchical.SameChapterSummaries {
-		if nearbyIDs[ss.NodeID] || ss.NodeID == cur.ID {
-			t.Errorf("same_chapter leaked nearby/self: %s", ss.NodeID)
-		}
-	}
-
-	// OtherChapterSummaries should include chap2 (sibling of chap1 under part1).
-	foundChap2 := false
-	for _, ch := range got.Hierarchical.OtherChapterSummaries {
-		if ch.NodeID == chap2.ID && strings.Contains(ch.Body, "ROLLUP[2장]") {
-			foundChap2 = true
-		}
-	}
-	if !foundChap2 {
-		t.Errorf("other_chapter_summaries missing 2장 rollup: %+v", got.Hierarchical.OtherChapterSummaries)
-	}
-
-	// OtherPartSummaries should include part2.
-	foundPart2 := false
-	for _, ps := range got.Hierarchical.OtherPartSummaries {
-		if ps.NodeID == part2.ID && strings.Contains(ps.Body, "ROLLUP[2부]") {
-			foundPart2 = true
-		}
-	}
-	if !foundPart2 {
-		t.Errorf("other_part_summaries missing 2부 rollup: %+v", got.Hierarchical.OtherPartSummaries)
-	}
-
 	// ProjectSynopsis non-empty (there's the seeded default leaf at root plus
 	// 1부 and 2부 containers → multi-root branch concatenates 부 rollups).
 	if got.Hierarchical.ProjectSynopsis == "" {
 		t.Errorf("project_synopsis empty; tree has 부 containers")
 	}
 
-	// fakeRefresher was actually invoked for at least one container.
-	if calls[chap2.ID] == 0 && calls[part2.ID] == 0 {
+	// fakeRefresher was actually invoked for at least one root container while
+	// building the synopsis.
+	if calls[part1.ID] == 0 && calls[part2.ID] == 0 {
 		t.Errorf("refresher was never invoked on a container: %+v", calls)
 	}
 }
@@ -730,7 +688,7 @@ func TestBuildContext_entityDossier(t *testing.T) {
 	leaf4, _ := nodes.CreateSibling(context.Background(), leaf3.ID, "leaf", "씬 4", "", 1130)
 	_ = nodes.UpdateContent(context.Background(), leaf4.ID, doc("현재"), 1400)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), leaf4.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -816,7 +774,7 @@ func TestBuildContext_topologyRAG(t *testing.T) {
 	curN, _ := nodes.CreateSibling(context.Background(), filler2.ID, "leaf", "현재", "", 1300)
 	_ = nodes.UpdateContent(context.Background(), curN.ID, withBoth("cur — "), 1310)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	got, err := builder.Build(context.Background(), curN.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -847,7 +805,7 @@ func TestBuildContext_selectionTextPassesThrough(t *testing.T) {
 		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
 	})
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s))
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	selectionText := "그녀는 천천히 고개를 들었다."
 	c, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "더 감각적으로 다시 써줘", selectionText, Options{})
 	if err != nil {
@@ -865,27 +823,33 @@ func TestCountsFromContext_fullyPopulated(t *testing.T) {
 			LengthTarget: "novel",
 			DefaultPOV:   "first",
 		},
+		Outline: "한 줄 개요",
 		Hierarchical: HierarchicalContext{
-			NearbyLeafSummaries:   []SceneSummary{{}, {}, {}},
-			SameChapterSummaries:  []SceneSummary{{}, {}},
-			OtherChapterSummaries: []ChapterSummary{{}},
-			OtherPartSummaries:    []PartSummary{{}, {}},
-			ProjectSynopsis:       "이 작품은…",
+			NearbyLeafSummaries: []SceneSummary{{}, {}, {}},
+			ProjectSynopsis:     "이 작품은…",
 		},
 		RelatedScenes: []SceneSummary{{}, {}, {}},
 		Entities:      []EntityBrief{{}, {}, {}, {}},
-		ActiveThreads: []ActiveThread{{}, {}},
-		Notes:         []NoteBrief{{}},
-		StyleNotes:    "내 톤은…",
+		Relationships: []RelationBrief{{}, {}},
+		Plot: plot.Spine{
+			Prev:    &plot.SceneBeats{Beats: []plot.Beat{{}}},
+			Current: plot.SceneBeats{Beats: []plot.Beat{{}, {}}},
+			Next:    &plot.SceneBeats{Beats: []plot.Beat{{}}},
+		},
+		Notes:      []NoteBrief{{}},
+		StyleNotes: "내 톤은…",
 	}
 	got := CountsFromContext(c)
-	if got.NearbyScenes != 3 || got.SameChapter != 2 || got.OtherChapter != 1 || got.OtherPart != 2 {
+	if got.NearbyScenes != 3 {
 		t.Fatalf("hierarchical counts mismatch: %+v", got)
+	}
+	if !got.HasOutline {
+		t.Fatalf("HasOutline should be true: %+v", got)
 	}
 	if !got.HasSynopsis {
 		t.Fatalf("HasSynopsis should be true: %+v", got)
 	}
-	if got.RelatedScenes != 3 || got.Entities != 4 || got.ActiveThreads != 2 || got.Notes != 1 {
+	if got.RelatedScenes != 3 || got.Entities != 4 || got.Relationships != 2 || got.PlotBeats != 4 || got.Notes != 1 {
 		t.Fatalf("collection counts mismatch: %+v", got)
 	}
 	if got.ProjectMetaFields != 3 {
@@ -898,13 +862,13 @@ func TestCountsFromContext_fullyPopulated(t *testing.T) {
 
 func TestCountsFromContext_emptyContext(t *testing.T) {
 	got := CountsFromContext(Context{})
-	if got.NearbyScenes != 0 || got.SameChapter != 0 || got.OtherChapter != 0 || got.OtherPart != 0 {
+	if got.NearbyScenes != 0 {
 		t.Fatalf("counts should be zero: %+v", got)
 	}
-	if got.HasSynopsis || got.HasStyleNotes {
+	if got.HasOutline || got.HasSynopsis || got.HasStyleNotes {
 		t.Fatalf("booleans should be false: %+v", got)
 	}
-	if got.RelatedScenes != 0 || got.Entities != 0 || got.ActiveThreads != 0 || got.Notes != 0 {
+	if got.RelatedScenes != 0 || got.Entities != 0 || got.Relationships != 0 || got.PlotBeats != 0 || got.Notes != 0 {
 		t.Fatalf("collection counts should be zero: %+v", got)
 	}
 	if got.ProjectMetaFields != 0 {

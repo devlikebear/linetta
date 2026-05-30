@@ -3,6 +3,8 @@ package ai
 import (
 	"strings"
 	"testing"
+
+	"github.com/devlikebear/linetta/engine/internal/plot"
 )
 
 func TestPresetSeed(t *testing.T) {
@@ -90,41 +92,36 @@ func TestBuildMessages_shapesSystemAndUser(t *testing.T) {
 	}
 }
 
-func TestBuildUser_includesActiveThreads(t *testing.T) {
+func TestBuildUserRendersPlotAndRelations(t *testing.T) {
+	prev := plot.SceneBeats{NodeID: "p", Label: "1장 / 씬1", Beats: []plot.Beat{{ThreadName: "메인", Ordinal: 1, Label: "재회", Description: "항구에서"}}}
 	c := Context{
-		SceneLabel: "씬 1",
-		SceneText:  "본문",
-		ActiveThreads: []ActiveThread{
-			{
-				Name:    "잃어버린 시간",
-				Color:   "#c08a3e",
-				Summary: "여름 한 철의 기억",
-				RecentBeats: []BeatBrief{
-					{Label: "사진을 찍는 손", Ordinal: 3},
-					{Label: "사라진 자전거", Ordinal: 4},
-				},
-			},
+		SceneLabel: "씬2", SceneText: "본문",
+		Outline: "전체 개요",
+		Plot: plot.Spine{
+			Prev:    &prev,
+			Current: plot.SceneBeats{NodeID: "c", Beats: []plot.Beat{{ThreadName: "메인", Ordinal: 2, Label: "발각", Description: "편지"}}},
 		},
-		UserPrompt: "확장",
+		Relationships: []RelationBrief{{From: "A", To: "B", Label: "라이벌", Bidirectional: true}},
+		UserPrompt:    "확장해줘",
 	}
-	msgs := BuildMessages(c)
-	usr := msgs[1].Content
-	if !strings.Contains(usr, "## 활성 스토리라인") {
-		t.Errorf("missing header: %q", usr)
+	out := buildUser(c)
+	for _, want := range []string{"## 작품 개요", "전체 개요", "## 플롯", "[이전 씬]", "[현재 씬]", "메인", "재회", "## 관계", "A ↔ B: 라이벌"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
 	}
-	if !strings.Contains(usr, "잃어버린 시간") || !strings.Contains(usr, "여름 한 철의 기억") {
-		t.Errorf("thread metadata missing: %q", usr)
-	}
-	if !strings.Contains(usr, "#3 사진을 찍는 손") || !strings.Contains(usr, "#4 사라진 자전거") {
-		t.Errorf("beats missing: %q", usr)
+	for _, gone := range []string{"## 인근 줄거리", "## 같은 장 다른 씬", "## 활성 스토리라인"} {
+		if strings.Contains(out, gone) {
+			t.Fatalf("removed section %q still present", gone)
+		}
 	}
 }
 
-func TestBuildUser_omitsActiveThreadsHeaderWhenEmpty(t *testing.T) {
-	c := Context{SceneLabel: "씬 1", SceneText: "본문", UserPrompt: "재작성"}
-	usr := BuildMessages(c)[1].Content
-	if strings.Contains(usr, "활성 스토리라인") {
-		t.Errorf("header should not appear when empty: %q", usr)
+func TestOverviewFallsBackToSynopsis(t *testing.T) {
+	c := Context{SceneLabel: "씬", UserPrompt: "x", Hierarchical: HierarchicalContext{ProjectSynopsis: "파생 시놉시스"}}
+	out := buildUser(c)
+	if !strings.Contains(out, "## 작품 개요") || !strings.Contains(out, "파생 시놉시스") {
+		t.Fatalf("synopsis fallback failed:\n%s", out)
 	}
 }
 
@@ -132,23 +129,12 @@ func TestBuildUser_emitsHierarchicalSections(t *testing.T) {
 	c := Context{
 		SceneLabel: "씬 3",
 		SceneText:  "씬 3 본문",
+		Outline:    "작품 개요",
 		Hierarchical: HierarchicalContext{
 			ProjectSynopsis: "작품 시놉시스",
-			OtherPartSummaries: []PartSummary{
-				{Label: "2부", Body: "2부 요약"},
-			},
-			OtherChapterSummaries: []ChapterSummary{
-				{Label: "1부 / 2장", Body: "2장 요약"},
-				{Label: "1부 / 3장", Body: "3장 요약"},
-			},
-			SameChapterSummaries: []SceneSummary{
-				{Label: "1부 / 1장 / 씬 5", Body: "씬 5 요약"},
-				{Label: "1부 / 1장 / 씬 6", Body: "씬 6 요약"},
-			},
 			NearbyLeafSummaries: []SceneSummary{
 				{Label: "1부 / 1장 / 씬 1", Body: "씬 1 요약"},
 				{Label: "1부 / 1장 / 씬 2", Body: "씬 2 요약"},
-				{Label: "1부 / 1장 / 씬 4", Body: "씬 4 요약"},
 			},
 		},
 		RelatedScenes: []SceneSummary{
@@ -163,9 +149,7 @@ func TestBuildUser_emitsHierarchicalSections(t *testing.T) {
 	usr := BuildMessages(c)[1].Content
 
 	want := []string{
-		"## 작품 전반",
-		"## 인근 줄거리",
-		"## 같은 장 다른 씬",
+		"## 작품 개요",
 		"## 직전·직후 씬 발췌",
 		"## 관련 과거 씬",
 		"## 현재 씬: 씬 3",
@@ -186,27 +170,11 @@ func TestBuildUser_emitsHierarchicalSections(t *testing.T) {
 	}
 
 	// Bullet formatting sanity checks.
-	if !strings.Contains(usr, "- [2부] 2부 요약") {
-		t.Errorf("missing other-part bullet: %s", usr)
-	}
-	if !strings.Contains(usr, "- [1부 / 2장] 2장 요약") {
-		t.Errorf("missing other-chapter bullet: %s", usr)
-	}
-	if !strings.Contains(usr, "- [1부 / 1장 / 씬 5] 씬 5 요약") {
-		t.Errorf("missing same-chapter bullet: %s", usr)
-	}
 	if !strings.Contains(usr, "- [1부 / 1장 / 씬 1] 씬 1 요약") {
 		t.Errorf("missing nearby bullet: %s", usr)
 	}
 	if !strings.Contains(usr, "- [1부 / 1장 / 씬 9] 관련 씬 요약") {
 		t.Errorf("missing related-scene bullet: %s", usr)
-	}
-	// Within 인근 줄거리, parts come before chapters per the spec.
-	nearIdx := strings.Index(usr, "## 인근 줄거리")
-	partIdx := strings.Index(usr, "- [2부] 2부 요약")
-	chapIdx := strings.Index(usr, "- [1부 / 2장] 2장 요약")
-	if nearIdx < 0 || partIdx < 0 || chapIdx < 0 || !(nearIdx < partIdx && partIdx < chapIdx) {
-		t.Errorf("ordering within 인근 줄거리 wrong (parts-before-chapters): near=%d part=%d chap=%d", nearIdx, partIdx, chapIdx)
 	}
 }
 
@@ -246,12 +214,14 @@ func TestBuildUser_skipsEmptyHierarchicalSections(t *testing.T) {
 	}
 	usr := BuildMessages(c)[1].Content
 	forbidden := []string{
-		"## 작품 전반",
+		"## 작품 개요",
 		"## 인근 줄거리",
 		"## 같은 장 다른 씬",
 		"## 직전·직후 씬 발췌",
 		"## 관련 과거 씬",
-		"## 직전 씬 발췌", // legacy header removed entirely
+		"## 플롯",
+		"## 관계",
+		"## 활성 스토리라인", // legacy header removed entirely
 	}
 	for _, s := range forbidden {
 		if strings.Contains(usr, s) {

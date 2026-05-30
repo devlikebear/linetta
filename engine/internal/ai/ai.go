@@ -1,6 +1,8 @@
 // Package ai owns prompt assembly and run management for AI mode.
 package ai
 
+import "github.com/devlikebear/linetta/engine/internal/plot"
+
 // Tone preset identifiers. `my` keeps the existing style_notes-driven behavior;
 // the others append a fixed tone instruction to the system prompt. Empty string
 // means no tone fragment at all.
@@ -35,13 +37,12 @@ type ProjectMeta struct {
 // LLM before the user runs a generation.
 type PreviewCounts struct {
 	NearbyScenes      int  `json:"nearby_scenes"`
-	SameChapter       int  `json:"same_chapter"`
-	OtherChapter      int  `json:"other_chapter"`
-	OtherPart         int  `json:"other_part"`
+	HasOutline        bool `json:"has_outline"`
 	HasSynopsis       bool `json:"has_synopsis"`
 	RelatedScenes     int  `json:"related_scenes"`
 	Entities          int  `json:"entities"`
-	ActiveThreads     int  `json:"active_threads"`
+	Relationships     int  `json:"relationships"`
+	PlotBeats         int  `json:"plot_beats"`
 	Notes             int  `json:"notes"`
 	ProjectMetaFields int  `json:"project_meta_fields"`
 	HasStyleNotes     bool `json:"has_style_notes"`
@@ -57,15 +58,27 @@ type Context struct {
 	SceneText     string              `json:"scene_text"`
 	PrevSummary   string              `json:"prev_summary"`
 	Project       ProjectMeta         `json:"project"`
+	Outline       string              `json:"outline"`
 	Hierarchical  HierarchicalContext `json:"hierarchical"`
 	RelatedScenes []SceneSummary      `json:"related_scenes"`
 	Entities      []EntityBrief       `json:"entities"`
-	ActiveThreads []ActiveThread      `json:"active_threads"`
+	Relationships []RelationBrief     `json:"relationships"`
+	Plot          plot.Spine          `json:"plot"`
 	Notes         []NoteBrief         `json:"notes"`
 	StyleNotes    string              `json:"style_notes"`
 	SelectionText string              `json:"selection_text"`
 	UserPrompt    string              `json:"user_prompt"`
 	Options       Options             `json:"options"`
+}
+
+// RelationBrief is one relationship between two entities present in the current
+// scene. Bidirectional pairs render with "↔", singletons with "→".
+type RelationBrief struct {
+	From          string `json:"from"`
+	To            string `json:"to"`
+	Label         string `json:"label"`
+	Notes         string `json:"notes"`
+	Bidirectional bool   `json:"bidirectional"`
 }
 
 // SceneSummary is one rendered leaf/scene rollup (label + body). Used by both
@@ -76,28 +89,11 @@ type SceneSummary struct {
 	Body   string `json:"body"`
 }
 
-// ChapterSummary is the 장-level rollup body + its breadcrumb label.
-type ChapterSummary struct {
-	NodeID string `json:"node_id"`
-	Label  string `json:"label"`
-	Body   string `json:"body"`
-}
-
-// PartSummary is the 부-level rollup.
-type PartSummary struct {
-	NodeID string `json:"node_id"`
-	Label  string `json:"label"`
-	Body   string `json:"body"`
-}
-
 // HierarchicalContext is layer 1 of Plan 16's hierarchical context. Each slice
 // may be empty; renderer skips empty sections.
 type HierarchicalContext struct {
-	NearbyLeafSummaries   []SceneSummary   `json:"nearby_leaf_summaries"`
-	SameChapterSummaries  []SceneSummary   `json:"same_chapter_summaries"`
-	OtherChapterSummaries []ChapterSummary `json:"other_chapter_summaries"`
-	OtherPartSummaries    []PartSummary    `json:"other_part_summaries"`
-	ProjectSynopsis       string           `json:"project_synopsis"`
+	NearbyLeafSummaries []SceneSummary `json:"nearby_leaf_summaries"`
+	ProjectSynopsis     string         `json:"project_synopsis"`
 }
 
 // NoteBrief is a margin-note line sent to the LLM. Anchor stays in the JSON
@@ -116,20 +112,6 @@ type EntityBrief struct {
 	Summary    string            `json:"summary"`
 	Attributes map[string]string `json:"attributes"`
 	Recent     []string          `json:"recent"` // Plan 16 layer 2 dossier — first lines of latest 5 leaf summaries
-}
-
-// ActiveThread is an open storyline thread that touches the current node.
-type ActiveThread struct {
-	Name        string      `json:"name"`
-	Color       string      `json:"color"`
-	Summary     string      `json:"summary"`
-	RecentBeats []BeatBrief `json:"recent_beats"`
-}
-
-// BeatBrief is a minimal beat representation sent to the LLM.
-type BeatBrief struct {
-	Label   string `json:"label"`
-	Ordinal int    `json:"ordinal"`
 }
 
 // DeltaPayload is the body of an "ai.delta" notification.

@@ -6,16 +6,17 @@ import (
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
+	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
 const prevSummaryMaxRunes = 300
-const activeThreadsMaxChars = 1500
-const recentBeatsPerThread = 5
 const hierarchicalMaxChars = 2500
 
 // SummaryRefresher is what ContextBuilder calls when an ancestor container has
@@ -31,21 +32,25 @@ func (noopRefresher) RefreshNow(context.Context, string) {}
 
 // ContextBuilder gathers the Context payload from the repos.
 type ContextBuilder struct {
-	projects  *project.Repo
-	nodes     *node.Repo
-	mentions  *mention.Repo
-	threads   *thread.Repo
-	beats     *beat.Repo
-	notes     *note.Repo
-	refresher SummaryRefresher
+	projects      *project.Repo
+	nodes         *node.Repo
+	mentions      *mention.Repo
+	notes         *note.Repo
+	relationships *relationship.Repo
+	plot          *plot.Builder
+	refresher     SummaryRefresher
 }
 
 // NewContextBuilder returns a builder that reads from the supplied repos.
-func NewContextBuilder(projects *project.Repo, nodes *node.Repo, mentions *mention.Repo, threads *thread.Repo, beats *beat.Repo, notes *note.Repo) *ContextBuilder {
+func NewContextBuilder(projects *project.Repo, nodes *node.Repo, mentions *mention.Repo, threads *thread.Repo, beats *beat.Repo, notes *note.Repo, relationships *relationship.Repo) *ContextBuilder {
 	return &ContextBuilder{
-		projects: projects, nodes: nodes, mentions: mentions,
-		threads: threads, beats: beats, notes: notes,
-		refresher: noopRefresher{},
+		projects:      projects,
+		nodes:         nodes,
+		mentions:      mentions,
+		notes:         notes,
+		relationships: relationships,
+		plot:          plot.NewBuilder(nodes, beats, threads),
+		refresher:     noopRefresher{},
 	}
 }
 
@@ -114,7 +119,11 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt, selectionTex
 		return Context{}, err
 	}
 
-	active, err := b.loadActiveThreads(ctx, nodeID)
+	spine, err := b.plot.Build(ctx, nodeID)
+	if err != nil {
+		return Context{}, err
+	}
+	relations, err := b.loadRelationships(ctx, proj.ID, ents)
 	if err != nil {
 		return Context{}, err
 	}
@@ -142,10 +151,12 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt, selectionTex
 			LengthTarget: proj.LengthTarget,
 			DefaultPOV:   proj.DefaultPOV,
 		},
+		Outline:       proj.Outline,
 		Hierarchical:  hierarchical,
 		RelatedScenes: related,
 		Entities:      briefs,
-		ActiveThreads: active,
+		Relationships: relations,
+		Plot:          spine,
 		Notes:         noteBriefs,
 		StyleNotes:    proj.StyleNotes,
 		SelectionText: selectionText,
@@ -196,11 +207,11 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 	}
 
 	out := HierarchicalContext{}
-	nearbyIDs := make([]string, 0, 3)
+	nearbyIDs := make([]string, 0, 2)
 
-	// Nearby: 2 prior + 1 next (in DFS-leaf order), all excluding cur.
+	// Nearby: 1 prior + 1 next (in DFS-leaf order), all excluding cur.
 	if curIdx >= 0 {
-		for _, j := range []int{curIdx - 2, curIdx - 1, curIdx + 1} {
+		for _, j := range []int{curIdx - 1, curIdx + 1} {
 			if j < 0 || j >= len(leaves) || j == curIdx {
 				continue
 			}
@@ -210,63 +221,9 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 				continue
 			}
 			out.NearbyLeafSummaries = append(out.NearbyLeafSummaries, SceneSummary{
-				NodeID: lf.ID, Label: breadcrumbLabel(byID, lf), Body: body,
+				NodeID: lf.ID, Label: node.BreadcrumbLabel(byID, lf), Body: body,
 			})
 			nearbyIDs = append(nearbyIDs, lf.ID)
-		}
-	}
-
-	// Same chapter: every other leaf under cur.parent_id, minus the nearby IDs
-	// and cur itself.
-	if cur.ParentID != nil {
-		exclude := map[string]bool{cur.ID: true}
-		for _, id := range nearbyIDs {
-			exclude[id] = true
-		}
-		for _, sib := range children[*cur.ParentID] {
-			if sib.Kind != "leaf" || exclude[sib.ID] {
-				continue
-			}
-			body := freshLeafSummary(sib)
-			if body == "" {
-				continue
-			}
-			out.SameChapterSummaries = append(out.SameChapterSummaries, SceneSummary{
-				NodeID: sib.ID, Label: breadcrumbLabel(byID, sib), Body: body,
-			})
-		}
-	}
-
-	// Other chapters within same 부: sibling containers of cur's parent.
-	if cur.ParentID != nil {
-		curChap, hasChap := byID[*cur.ParentID]
-		if hasChap && curChap.ParentID != nil {
-			for _, sibChap := range children[*curChap.ParentID] {
-				if sibChap.Kind != "container" || sibChap.ID == curChap.ID {
-					continue
-				}
-				body := b.refreshAndRead(ctx, sibChap)
-				if body == "" {
-					continue
-				}
-				out.OtherChapterSummaries = append(out.OtherChapterSummaries, ChapterSummary{
-					NodeID: sibChap.ID, Label: breadcrumbLabel(byID, sibChap), Body: body,
-				})
-			}
-			// Other parts: siblings of curChap's parent (top-level containers).
-			curPart := byID[*curChap.ParentID]
-			for _, sibPart := range children[parentKeyOf(curPart)] {
-				if sibPart.Kind != "container" || sibPart.ID == curPart.ID {
-					continue
-				}
-				body := b.refreshAndRead(ctx, sibPart)
-				if body == "" {
-					continue
-				}
-				out.OtherPartSummaries = append(out.OtherPartSummaries, PartSummary{
-					NodeID: sibPart.ID, Label: breadcrumbLabel(byID, sibPart), Body: body,
-				})
-			}
 		}
 	}
 
@@ -305,7 +262,7 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 // up to 3 SceneSummary entries with breadcrumb labels.
 func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, excludeIDs []string) ([]SceneSummary, error) {
 	// Fetch top-K + small buffer so the post-filter can still yield 3.
-	results, err := b.mentions.CoMentionLeaves(ctx, cur.ID, 3+len(excludeIDs))
+	results, err := b.mentions.CoMentionLeaves(ctx, cur.ID, 2+len(excludeIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +282,7 @@ func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, e
 	for _, n := range all {
 		byID[n.ID] = n
 	}
-	out := make([]SceneSummary, 0, 3)
+	out := make([]SceneSummary, 0, 2)
 	for _, r := range results {
 		if excl[r.NodeID] {
 			continue
@@ -338,9 +295,9 @@ func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, e
 			continue
 		}
 		out = append(out, SceneSummary{
-			NodeID: n.ID, Label: breadcrumbLabel(byID, n), Body: n.Summary,
+			NodeID: n.ID, Label: node.BreadcrumbLabel(byID, n), Body: n.Summary,
 		})
-		if len(out) >= 3 {
+		if len(out) >= 2 {
 			break
 		}
 	}
@@ -384,119 +341,57 @@ func (b *ContextBuilder) refreshAndRead(ctx context.Context, n node.Node) string
 	return ""
 }
 
-func parentKeyOf(n node.Node) string {
-	if n.ParentID == nil {
-		return ""
+// loadRelationships returns relationships whose both endpoints appear in the
+// current scene's mentioned entities. Pairs are deduped by pair_id (first wins).
+func (b *ContextBuilder) loadRelationships(ctx context.Context, projectID string, ents []entity.Entity) ([]RelationBrief, error) {
+	if b.relationships == nil || len(ents) == 0 {
+		return nil, nil
 	}
-	return *n.ParentID
-}
-
-func breadcrumbLabel(byID map[string]node.Node, n node.Node) string {
-	parts := []string{n.Label}
-	cur := n
-	for cur.ParentID != nil {
-		p, ok := byID[*cur.ParentID]
-		if !ok {
-			break
+	rels, err := b.relationships.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	nameByID := make(map[string]string, len(ents))
+	present := make(map[string]bool, len(ents))
+	for _, e := range ents {
+		nameByID[e.ID] = e.Name
+		present[e.ID] = true
+	}
+	seenPair := map[string]bool{}
+	out := make([]RelationBrief, 0)
+	for _, r := range rels {
+		if !present[r.FromID] || !present[r.ToID] {
+			continue
 		}
-		parts = append([]string{p.Label}, parts...)
-		cur = p
+		bidir := false
+		if r.PairID != nil && *r.PairID != "" {
+			if seenPair[*r.PairID] {
+				continue
+			}
+			seenPair[*r.PairID] = true
+			bidir = true
+		}
+		out = append(out, RelationBrief{
+			From: nameByID[r.FromID], To: nameByID[r.ToID],
+			Label: r.Label, Notes: r.Notes, Bidirectional: bidir,
+		})
 	}
-	return strings.Join(parts, " / ")
+	return out, nil
 }
 
-// trimToBudget drops trailing entries from the lowest-priority sections first
-// (other_part → other_chapter → same_chapter → nearby) until the estimated
-// rendered size is under maxChars.
+// trimToBudget drops trailing nearby entries until the estimated rendered size
+// is under maxChars.
 func trimToBudget(h *HierarchicalContext, maxChars int) {
 	estimate := func() int {
 		total := len(h.ProjectSynopsis)
 		for _, s := range h.NearbyLeafSummaries {
 			total += len(s.Label) + len(s.Body) + 4
 		}
-		for _, s := range h.SameChapterSummaries {
-			total += len(s.Label) + len(s.Body) + 4
-		}
-		for _, s := range h.OtherChapterSummaries {
-			total += len(s.Label) + len(s.Body) + 4
-		}
-		for _, s := range h.OtherPartSummaries {
-			total += len(s.Label) + len(s.Body) + 4
-		}
 		return total
-	}
-	for estimate() > maxChars && len(h.OtherPartSummaries) > 0 {
-		h.OtherPartSummaries = h.OtherPartSummaries[:len(h.OtherPartSummaries)-1]
-	}
-	for estimate() > maxChars && len(h.OtherChapterSummaries) > 0 {
-		h.OtherChapterSummaries = h.OtherChapterSummaries[:len(h.OtherChapterSummaries)-1]
-	}
-	for estimate() > maxChars && len(h.SameChapterSummaries) > 0 {
-		h.SameChapterSummaries = h.SameChapterSummaries[:len(h.SameChapterSummaries)-1]
 	}
 	for estimate() > maxChars && len(h.NearbyLeafSummaries) > 0 {
 		h.NearbyLeafSummaries = h.NearbyLeafSummaries[:len(h.NearbyLeafSummaries)-1]
 	}
-}
-
-func (b *ContextBuilder) loadActiveThreads(ctx context.Context, nodeID string) ([]ActiveThread, error) {
-	bs, err := b.beats.ListByNode(ctx, nodeID)
-	if err != nil {
-		return nil, err
-	}
-	// Collect unique thread ids preserving first-seen order.
-	seen := map[string]bool{}
-	var threadIDs []string
-	for _, bt := range bs {
-		if !seen[bt.ThreadID] {
-			seen[bt.ThreadID] = true
-			threadIDs = append(threadIDs, bt.ThreadID)
-		}
-	}
-	out := make([]ActiveThread, 0, len(threadIDs))
-	for _, tid := range threadIDs {
-		th, err := b.threads.Get(ctx, tid)
-		if err != nil {
-			continue // benign: stale row
-		}
-		if th.ClosedAt != nil {
-			continue
-		}
-		all, err := b.beats.ListByThread(ctx, tid)
-		if err != nil {
-			return nil, err
-		}
-		// Take last N by ordinal.
-		start := 0
-		if len(all) > recentBeatsPerThread {
-			start = len(all) - recentBeatsPerThread
-		}
-		recents := make([]BeatBrief, 0, len(all)-start)
-		for _, x := range all[start:] {
-			recents = append(recents, BeatBrief{Label: x.Label, Ordinal: x.Ordinal})
-		}
-		out = append(out, ActiveThread{
-			Name: th.Name, Color: th.Color, Summary: th.Summary, RecentBeats: recents,
-		})
-	}
-	return capActiveThreads(out, activeThreadsMaxChars), nil
-}
-
-// capActiveThreads drops trailing entries (whole) until the rough rendered
-// size is under maxChars. Cheap approximation: name + summary + each beat label.
-func capActiveThreads(in []ActiveThread, maxChars int) []ActiveThread {
-	total := 0
-	for i, t := range in {
-		size := len(t.Name) + len(t.Summary) + 8
-		for _, b := range t.RecentBeats {
-			size += len(b.Label) + 8
-		}
-		if total+size > maxChars && i > 0 {
-			return in[:i]
-		}
-		total += size
-	}
-	return in
 }
 
 // findPreviousLeaf returns the previous leaf in DFS order (within the project),
@@ -610,15 +505,21 @@ func CountsFromContext(c Context) PreviewCounts {
 	if c.Project.DefaultPOV != "" {
 		projectMeta++
 	}
+	plotBeats := len(c.Plot.Current.Beats)
+	if c.Plot.Prev != nil {
+		plotBeats += len(c.Plot.Prev.Beats)
+	}
+	if c.Plot.Next != nil {
+		plotBeats += len(c.Plot.Next.Beats)
+	}
 	return PreviewCounts{
 		NearbyScenes:      len(c.Hierarchical.NearbyLeafSummaries),
-		SameChapter:       len(c.Hierarchical.SameChapterSummaries),
-		OtherChapter:      len(c.Hierarchical.OtherChapterSummaries),
-		OtherPart:         len(c.Hierarchical.OtherPartSummaries),
+		HasOutline:        strings.TrimSpace(c.Outline) != "",
 		HasSynopsis:       strings.TrimSpace(c.Hierarchical.ProjectSynopsis) != "",
 		RelatedScenes:     len(c.RelatedScenes),
 		Entities:          len(c.Entities),
-		ActiveThreads:     len(c.ActiveThreads),
+		Relationships:     len(c.Relationships),
+		PlotBeats:         plotBeats,
 		Notes:             len(c.Notes),
 		ProjectMetaFields: projectMeta,
 		HasStyleNotes:     strings.TrimSpace(c.StyleNotes) != "",

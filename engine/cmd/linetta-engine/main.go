@@ -93,7 +93,7 @@ func main() {
 	// Plan 16: ContextBuilder needs a SummaryRefresher so stale container
 	// summaries can be filled on-demand. *summarizer.Summarizer satisfies
 	// ai.SummaryRefresher via RefreshNow.
-	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats, notes).
+	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ)
 
 	// Backup + retention scheduler. Runs once at boot, then daily at midnight+1m.
