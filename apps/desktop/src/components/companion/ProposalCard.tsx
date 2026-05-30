@@ -10,6 +10,7 @@ function opLabel(op: ProposalOp): string {
     case "update_beat": return `비트 수정: ${op.label ?? ""}`;
     case "delete_beat": return `비트 삭제`;
     case "set_outline": return `작품 개요 설정`;
+    case "remember": return `기억하기: ${op.text ?? ""}`;
     default: return op.op;
   }
 }

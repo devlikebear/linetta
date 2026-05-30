@@ -1,5 +1,5 @@
 import type { ProposalOp } from "./types";
-import { threads as threadsApi, beats as beatsApi, projects as projectsApi } from "./rpc";
+import { threads as threadsApi, beats as beatsApi, projects as projectsApi, companion as companionApi } from "./rpc";
 
 export interface ApplyFailure {
   index: number;
@@ -75,6 +75,11 @@ export async function applyProposal(ops: ProposalOp[], projectId: string): Promi
         }
         case "set_outline": {
           await projectsApi.update({ id: projectId, outline: op.outline ?? "" });
+          break;
+        }
+        case "remember": {
+          if (!op.text || !op.text.trim()) throw new Error("기억할 내용 없음");
+          await companionApi.remember(projectId, op.text, op.category);
           break;
         }
         default: {

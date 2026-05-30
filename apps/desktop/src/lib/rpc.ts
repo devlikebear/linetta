@@ -204,4 +204,6 @@ export const companion = {
       .then((r) => r.messages ?? []),
   cancel: (runId: string) =>
     rpcCall<{ ok: true }>("companion.cancel", { run_id: runId }),
+  remember: (projectId: string, text: string, category?: string) =>
+    rpcCall<{ ok: true }>("companion.remember", { project_id: projectId, text, category }),
 };

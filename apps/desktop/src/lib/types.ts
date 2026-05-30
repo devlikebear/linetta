@@ -383,7 +383,8 @@ export interface CompanionMessage {
 export type ProposalOpType =
   | "create_thread" | "update_thread"
   | "add_beat" | "update_beat" | "delete_beat"
-  | "set_outline";
+  | "set_outline"
+  | "remember";
 
 export interface ProposalOp {
   op: ProposalOpType;
@@ -399,6 +400,8 @@ export interface ProposalOp {
   description?: string;
   intensity?: number;
   outline?: string;
+  text?: string;
+  category?: string;
 }
 
 export interface CompanionProposal {
