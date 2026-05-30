@@ -2,7 +2,6 @@ package plot
 
 import (
 	"context"
-	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -65,7 +64,7 @@ func (b *Builder) Build(ctx context.Context, nodeID string) (Spine, error) {
 
 	threadCache := map[string]thread.Thread{}
 	sceneOf := func(n node.Node) (SceneBeats, error) {
-		sb := SceneBeats{NodeID: n.ID, Label: breadcrumbLabel(byID, n), Beats: []Beat{}}
+		sb := SceneBeats{NodeID: n.ID, Label: node.BreadcrumbLabel(byID, n), Beats: []Beat{}}
 		bs, err := b.beats.ListByNode(ctx, n.ID)
 		if err != nil {
 			return SceneBeats{}, err
@@ -114,17 +113,3 @@ func (b *Builder) Build(ctx context.Context, nodeID string) (Spine, error) {
 	return out, nil
 }
 
-// breadcrumbLabel renders the slash-joined ancestor path ending in n.Label.
-func breadcrumbLabel(byID map[string]node.Node, n node.Node) string {
-	parts := []string{n.Label}
-	cur := n
-	for cur.ParentID != nil {
-		p, ok := byID[*cur.ParentID]
-		if !ok {
-			break
-		}
-		parts = append([]string{p.Label}, parts...)
-		cur = p
-	}
-	return strings.Join(parts, " / ")
-}
