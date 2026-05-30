@@ -154,7 +154,7 @@ func extractFencedBlocks(s, lang string) []string {
 			inBlock = false
 			continue
 		}
-		buf = append(buf, ln)
+		buf = append(buf, strings.TrimRight(ln, "\r"))
 	}
 	return out
 }

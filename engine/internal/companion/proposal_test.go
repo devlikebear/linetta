@@ -36,18 +36,27 @@ func TestParseProposal_UnknownOp(t *testing.T) {
 }
 
 func TestParseProposal_AddBeatXorThread(t *testing.T) {
-	_, _, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_id":"x","thread_ref":"y","node_id":"n","label":"l"}]}`))
+	_, present, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_id":"x","thread_ref":"y","node_id":"n","label":"l"}]}`))
+	if !present {
+		t.Fatal("block should be present")
+	}
 	if err == nil {
 		t.Fatal("expected XOR error (both)")
 	}
-	_, _, err = ParseProposal(block(`{"ops":[{"op":"add_beat","node_id":"n","label":"l"}]}`))
+	_, present, err = ParseProposal(block(`{"ops":[{"op":"add_beat","node_id":"n","label":"l"}]}`))
+	if !present {
+		t.Fatal("block should be present")
+	}
 	if err == nil {
 		t.Fatal("expected XOR error (neither)")
 	}
 }
 
 func TestParseProposal_DanglingThreadRef(t *testing.T) {
-	_, _, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_ref":"nope","node_id":"n","label":"l"}]}`))
+	_, present, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_ref":"nope","node_id":"n","label":"l"}]}`))
+	if !present {
+		t.Fatal("block should be present")
+	}
 	if err == nil {
 		t.Fatal("expected dangling thread_ref error")
 	}
@@ -65,5 +74,17 @@ func TestParseProposal_MultipleBlocks(t *testing.T) {
 	_, present, err := ParseProposal(two)
 	if !present || err == nil {
 		t.Fatalf("expected multi-block error, present=%v err=%v", present, err)
+	}
+}
+
+func TestParseProposal_CRLF(t *testing.T) {
+	body := "{\"summary\":\"s\",\"ops\":[{\"op\":\"set_outline\",\"outline\":\"o\"}]}"
+	full := "intro\r\n```linetta-proposal\r\n" + body + "\r\n```\r\nafter"
+	p, present, err := ParseProposal(full)
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if len(p.Ops) != 1 || p.Ops[0].Outline != "o" {
+		t.Fatalf("p=%+v", p)
 	}
 }
