@@ -123,20 +123,35 @@ WHERE id = ?`, now, now, id)
 }
 
 // Update patches editable fields (currently outline) and bumps updated_at.
+// The read of the current row and the UPDATE share a single transaction to
+// avoid losing an interleaved write under concurrent access.
 func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, error) {
 	if in.ID == "" {
 		return Project{}, fmt.Errorf("update project: id required")
 	}
-	cur, err := r.Get(ctx, in.ID)
+	tx, err := r.s.DB().BeginTx(ctx, nil)
 	if err != nil {
+		return Project{}, err
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(ctx, baseSelect+` WHERE id = ?`, in.ID)
+	cur, err := scan(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Project{}, ErrNotFound
+		}
 		return Project{}, err
 	}
 	if in.Outline != nil {
 		cur.Outline = *in.Outline
 	}
-	if _, err := r.s.DB().ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE projects SET outline = ?, updated_at = ? WHERE id = ?`,
 		cur.Outline, now, in.ID); err != nil {
+		return Project{}, err
+	}
+	if err := tx.Commit(); err != nil {
 		return Project{}, err
 	}
 	return r.Get(ctx, in.ID)

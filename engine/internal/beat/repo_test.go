@@ -172,7 +172,10 @@ func TestBeatDescriptionCRUD(t *testing.T) {
 	if err := repo.Update(ctx, UpdateInput{ID: b.ID, Label: "재회(수정)"}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := repo.Get(ctx, b.ID)
+	got, err := repo.Get(ctx, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Description != "항구에서 마주친다." {
 		t.Fatalf("nil description should preserve, got %q", got.Description)
 	}
@@ -183,7 +186,10 @@ func TestBeatDescriptionCRUD(t *testing.T) {
 	if err := repo.Update(ctx, UpdateInput{ID: b.ID, Description: &empty}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = repo.Get(ctx, b.ID)
+	got, err = repo.Get(ctx, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Description != "" {
 		t.Fatalf("empty-pointer description should clear, got %q", got.Description)
 	}
@@ -191,7 +197,10 @@ func TestBeatDescriptionCRUD(t *testing.T) {
 	if err := repo.Update(ctx, UpdateInput{ID: b.ID, Description: &body}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = repo.Get(ctx, b.ID)
+	got, err = repo.Get(ctx, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got.Description != body {
 		t.Fatalf("description set failed: %q", got.Description)
 	}
