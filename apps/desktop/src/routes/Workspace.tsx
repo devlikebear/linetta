@@ -18,6 +18,7 @@ import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated"
 import { totalContextItems } from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
+import { CompanionPanel } from "../components/companion/CompanionPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
@@ -78,6 +79,8 @@ export function Workspace() {
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
+  const [companionOpen, setCompanionOpen] = useState(false);
+  const companionNodeRef = useRef<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: false });
   const [aiModal, setAiModal] = useState<{
@@ -95,6 +98,7 @@ export function Workspace() {
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+  useEffect(() => { companionNodeRef.current = load?.node.id ?? null; }, [load]);
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);
@@ -362,6 +366,10 @@ export function Workspace() {
             if (reqId !== previewReqIdRef.current) return;
             showToast(`컨텍스트 정보를 가져오지 못했습니다: ${err}`);
           });
+      } else if (e.key.toLowerCase() === "j") {
+        if (aiModalOpenRef.current) { e.preventDefault(); return; }
+        e.preventDefault();
+        setCompanionOpen((v) => !v);
       }
     };
     window.addEventListener("keydown", handler);
@@ -722,13 +730,20 @@ export function Workspace() {
       run: () => setFocus((v) => !v),
     });
     cmds.push({
+      id: "toggle-companion",
+      section: "AI",
+      label: companionOpen ? "컴패니언 닫기" : "집필 컴패니언 열기",
+      hint: "Cmd+J",
+      run: () => setCompanionOpen((v) => !v),
+    });
+    cmds.push({
       id: "show-shortcuts",
       section: "도움말",
       label: "단축키 도움말",
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen, focus]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen, focus, companionOpen]);
 
   const breadcrumb = useMemo(() => {
     if (!load) return "";
@@ -768,6 +783,7 @@ export function Workspace() {
       </header>
 
       <div className={`ws-body${
+        companionOpen ? " with-companion-panel" :
         aiModal ? " with-ai-panel" : (entitySheetId || threadSheetId) ? " with-sheet" : ""
       }`}>
         <div className="ws-editor">
@@ -791,7 +807,14 @@ export function Workspace() {
             onMentionDoubleClick={(id) => setEntitySheetId(id)}
           />
         </div>
-        {aiModal && load ? (
+        {companionOpen && load ? (
+          <CompanionPanel
+            projectId={load.project.id}
+            nodeIdRef={companionNodeRef}
+            onClose={() => { setCompanionOpen(false); focusEditor(); }}
+            onApplied={() => { if (load) refreshMentioned(load.node.id); }}
+          />
+        ) : aiModal && load ? (
           <AIPanel
             mode={aiModal.mode}
             canChooseMode={aiModal.canChooseMode}

@@ -461,6 +461,10 @@ body {
   grid-template-columns: 1fr 420px;
 }
 
+.ws-body.with-companion-panel {
+  grid-template-columns: 1fr 480px;
+}
+
 .ws-editor {
   overflow-y: auto;
   overflow-x: hidden;
