@@ -35,7 +35,26 @@ export function PlotPanel({ project, nodeId, onOpenThread, onProjectChanged }: P
     }
   }, [nodeId, project.id]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [sp, ths] = await Promise.all([
+          plotApi.spinePanel(nodeId),
+          threadsApi.list(project.id, false),
+        ]);
+        if (!cancelled) { setSpine(sp); setOpenThreads(ths); }
+      } catch {
+        if (!cancelled) setSpine(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [nodeId, project.id]);
+
+  useEffect(() => () => {
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+  }, []);
+
   useEffect(() => { setOutline(project.outline ?? ""); }, [project.id, project.outline]);
 
   const saveOutline = (next: string) => {
@@ -92,9 +111,9 @@ export function PlotPanel({ project, nodeId, onOpenThread, onProjectChanged }: P
             {editable && editingBeat === bt.id && (
               <div className="plot-beat-edit">
                 <input className="attr-value" defaultValue={bt.label} placeholder="제목"
-                  onBlur={(e) => e.target.value !== bt.label && patchBeat(bt.id, { label: e.target.value })} />
+                  onBlur={(e) => { if (e.target.value !== bt.label) patchBeat(bt.id, { label: e.target.value }); }} />
                 <textarea defaultValue={bt.description} placeholder="무슨 일이 일어나는지" rows={3}
-                  onBlur={(e) => e.target.value !== bt.description && patchBeat(bt.id, { description: e.target.value })} />
+                  onBlur={(e) => { if (e.target.value !== bt.description) patchBeat(bt.id, { description: e.target.value }); }} />
                 <div className="plot-beat-edit-actions">
                   <div className="plot-intensity">
                     {[1, 2, 3].map((lvl) => (
