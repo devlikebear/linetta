@@ -151,3 +151,40 @@ func TestParseProposal_UpdateEntityRequiresID(t *testing.T) {
 		t.Fatal("expected entity_id error")
 	}
 }
+
+func TestParseProposal_CreateSceneAndNodeRef(t *testing.T) {
+	body := `{"ops":[
+	  {"op":"create_thread","ref":"t1","name":"메인"},
+	  {"op":"create_scene","ref":"s1","label":"재회"},
+	  {"op":"add_beat","thread_ref":"t1","node_ref":"s1","label":"첫 만남"}
+	]}`
+	p, present, err := ParseProposal(block(body))
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if len(p.Ops) != 3 || p.Ops[1].Label != "재회" || p.Ops[2].NodeRef != "s1" {
+		t.Fatalf("p=%+v", p)
+	}
+}
+
+func TestParseProposal_CreateSceneRequiresLabel(t *testing.T) {
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_scene"}]}`)); err == nil {
+		t.Fatal("expected label error")
+	}
+}
+
+func TestParseProposal_AddBeatNodeIDXorNodeRef(t *testing.T) {
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_id":"x","node_id":"n","node_ref":"s","label":"L"}]}`)); err == nil {
+		t.Fatal("expected node_id/node_ref mutual-exclusion error")
+	}
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_id":"x","node_ref":"nope","label":"L"}]}`)); err == nil {
+		t.Fatal("expected dangling node_ref error")
+	}
+}
+
+func TestParseProposal_RelationshipInverseLabel(t *testing.T) {
+	_, present, err := ParseProposal(block(`{"ops":[{"op":"create_relationship","from":"a","to":"b","label":"라이벌","inverse_label":"라이벌"}]}`))
+	if !present || err != nil {
+		t.Fatalf("inverse_label should be valid: present=%v err=%v", present, err)
+	}
+}

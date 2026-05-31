@@ -46,12 +46,18 @@ type Op struct {
 	Role     string `json:"role,omitempty"`
 	EntityID string `json:"entity_id,omitempty"`
 
+	// create_scene
+	AfterNodeID string `json:"after_node_id,omitempty"`
+	Title       string `json:"title,omitempty"`
+	NodeRef     string `json:"node_ref,omitempty"`
+
 	// create_relationship
-	From    string `json:"from,omitempty"`
-	FromRef string `json:"from_ref,omitempty"`
-	To      string `json:"to,omitempty"`
-	ToRef   string `json:"to_ref,omitempty"`
-	Notes   string `json:"notes,omitempty"`
+	From         string `json:"from,omitempty"`
+	FromRef      string `json:"from_ref,omitempty"`
+	To           string `json:"to,omitempty"`
+	ToRef        string `json:"to_ref,omitempty"`
+	Notes        string `json:"notes,omitempty"`
+	InverseLabel string `json:"inverse_label,omitempty"`
 }
 
 // Proposal is the parsed contents of a linetta-proposal block.
@@ -67,6 +73,7 @@ var knownOps = map[string]bool{
 	"set_outline": true,
 	"remember":     true,
 	"create_entity": true, "update_entity": true, "create_relationship": true,
+	"create_scene": true,
 }
 
 // ParseProposal scans full model output for a linetta-proposal fenced block.
@@ -107,7 +114,7 @@ func validateProposal(p Proposal) error {
 	}
 	refs := map[string]bool{}
 	for _, op := range p.Ops {
-		if (op.Type == "create_thread" || op.Type == "create_entity") && op.Ref != "" {
+		if (op.Type == "create_thread" || op.Type == "create_entity" || op.Type == "create_scene") && op.Ref != "" {
 			refs[op.Ref] = true
 		}
 	}
@@ -135,6 +142,16 @@ func validateProposal(p Proposal) error {
 			}
 			if strings.TrimSpace(op.Label) == "" {
 				return fmt.Errorf("op[%d] add_beat: label required", i)
+			}
+			if op.NodeID != "" && op.NodeRef != "" {
+				return fmt.Errorf("op[%d] add_beat: node_id and node_ref are mutually exclusive", i)
+			}
+			if op.NodeRef != "" && !refs[op.NodeRef] {
+				return fmt.Errorf("op[%d] add_beat: node_ref %q not declared by any create_scene.ref", i, op.NodeRef)
+			}
+		case "create_scene":
+			if strings.TrimSpace(op.Label) == "" {
+				return fmt.Errorf("op[%d] create_scene: label required", i)
 			}
 		case "update_beat":
 			if op.BeatID == "" {
