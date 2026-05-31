@@ -32,26 +32,26 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 ### Tasks
 
-- [ ] Add a root `Makefile` with documented targets:
+- [x] Add a root `Makefile` with documented targets:
   - `make test`: Go tests + frontend tests/build + Rust check.
   - `make test-go`: `cd engine && go test ./...`.
   - `make test-desktop`: `cd apps/desktop && pnpm test && pnpm build`.
   - `make test-tauri`: `cd apps/desktop/src-tauri && cargo check`.
   - `make build-engine`: `bash scripts/build-engine.sh`.
-- [ ] Add Vitest + React Testing Library to `apps/desktop`.
+- [x] Add Vitest + React Testing Library to `apps/desktop`.
   - Add `test` script to `apps/desktop/package.json`.
   - Add `src/test/setup.ts` for DOM and Tauri mocks.
   - Mock `@tauri-apps/api/core.invoke`, dialog, and fs plugin calls.
-- [ ] Write failing tests first for pure/high-risk frontend seams:
+- [x] Write failing tests first for pure/high-risk frontend seams:
   - `useFirstLeaf` tree building and leaf navigation helpers.
   - `applyProposal` happy path and invalid-op path.
   - `useCompanion.stripProposalBlock` and query/proposal stream hiding.
   - `commitGenerated` insert/replace/replaceAll behavior with a small editor test double.
-- [ ] Add component smoke tests:
+- [x] Add component smoke tests:
   - `CommandPalette` search/disabled command/keyboard selection.
   - `AIPanel` empty prompt guard, run shortcut, accept shortcut.
   - `CompanionPanel` streaming/thinking/proposal rendering.
-- [ ] Add `.github/workflows/ci.yml`.
+- [x] Add `.github/workflows/ci.yml`.
   - Use pnpm cache, Go cache, Cargo cache.
   - Run `make test`.
   - Upload frontend build artifact only on failure if useful.
@@ -60,8 +60,8 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 **Automated:**
 
-- [ ] `make test` passes locally.
-- [ ] `cd apps/desktop && pnpm test` passes.
+- [x] `make test` passes locally.
+- [x] `cd apps/desktop && pnpm test` passes.
 - [ ] GitHub Actions passes on the branch.
 
 **Manual:**

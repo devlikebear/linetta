@@ -16,9 +16,12 @@ export interface ChatMessage {
 
 export type CompanionStatus = "idle" | "streaming";
 
-// stripProposalBlock removes the fenced linetta-proposal block from displayed prose.
+// stripProposalBlock removes fenced machine-control blocks from displayed prose.
 export function stripProposalBlock(text: string): string {
-  return text.replace(/```linetta-proposal[\s\S]*?```/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  return text
+    .replace(/```linetta-(?:proposal|query)[\s\S]*?```/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export function useCompanion(projectId: string, nodeIdRef: { current: string | null }) {

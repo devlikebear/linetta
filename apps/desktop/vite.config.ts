@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+/// <reference types="vitest" />
+
 // Tauri dev server config: fixed port, no minification of dev assets.
 // https://tauri.app/v2/guides/getting-started/setup/vite/
 export default defineConfig({
@@ -15,5 +17,11 @@ export default defineConfig({
     target: "es2021",
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+  },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["src/test/setup.ts"],
+    globals: true,
+    css: true,
   },
 });
