@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AIOptions,
+  CompanionApplyOpsResult,
   Beat,
   CompanionMessage,
   ContextCounts,
@@ -26,8 +27,10 @@ import type {
   OpsStatus,
   PlotSpine,
   Project,
+  ProposalOp,
   Relationship,
   SceneMention,
+  SearchResult,
   Settings,
   SettingsPatch,
   Snapshot,
@@ -135,6 +138,11 @@ export const diagnostics = {
   get: () => rpcCall<DiagnosticsSnapshot>("diagnostics.get"),
 };
 
+export const search = {
+  query: (query: string, limit = 20) =>
+    rpcCall<SearchResult[]>("search.query", { query, limit }),
+};
+
 export const entities = {
   search: (projectId: string, query: string, limit = 20) =>
     rpcCall<Entity[]>("entities.search", { project_id: projectId, query, limit }),
@@ -227,4 +235,11 @@ export const companion = {
     rpcCall<{ ok: true }>("companion.cancel", { run_id: runId }),
   remember: (projectId: string, text: string, category?: string) =>
     rpcCall<{ ok: true }>("companion.remember", { project_id: projectId, text, category }),
+  applyOps: (projectId: string, nodeId: string | null, summary: string, ops: ProposalOp[]) =>
+    rpcCall<CompanionApplyOpsResult>("companion.apply_ops", {
+      project_id: projectId,
+      node_id: nodeId ?? "",
+      summary,
+      ops,
+    }),
 };

@@ -26,6 +26,37 @@ cd apps/desktop/src-tauri && cargo check
 
 All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
+## 1차 개발 종료 Addendum
+
+Completed on 2026-05-31 as the Plan 25 closure slice:
+
+- [x] App-wide search:
+  - Go SQLite-backed `search.query` RPC.
+  - React `SearchModal` usable from Library, Library menu, Workspace command palette, and Workspace `Cmd+F` / `Ctrl+F`.
+  - Search covers visible project titles, scene labels/titles, and scene body text.
+- [x] Version bump flow:
+  - `make bump-version VERSION=0.1.0`.
+  - `scripts/bump-version.sh` keeps desktop package, Tauri config, Cargo metadata, Cargo lock package entry, and Go engine diagnostics version aligned.
+  - Current first-development version is `0.1.0`.
+- [x] Build flow:
+  - `make build-desktop` builds the current-OS desktop release binary after rebuilding the Go sidecar.
+  - `scripts/build-engine.sh` now derives the Tauri sidecar target triple from Rust when possible and supports macOS, Linux, and Windows host builds.
+  - `.github/workflows/build.yml` builds macOS, Linux, and Windows artifacts on manual dispatch and `v*` tags.
+- [x] Docs:
+  - README documents search entry points, version bumping, local builds, CI, and OS-specific build workflow.
+- [x] LLM built-in tools:
+  - `cmd+j` companion now runs through the TARS agent loop with `web_search`, `web_fetch`, and `linetta_apply_ops`.
+  - Settings exposes `web_search` provider selection (`brave` / `perplexity`) and local API-key storage.
+  - `linetta_apply_ops` can directly maintain outline, storylines, beats, characters, relationships, places, scenes, summaries, and memories using the same schema as proposal blocks.
+- [x] Local closure verification:
+  - `git diff --check` passes.
+  - `make test` passes locally.
+  - Version surfaces are aligned at `0.1.0`.
+  - `make build-engine` builds the macOS ARM sidecar into `apps/desktop/src-tauri/binaries/`.
+  - `make build-desktop` builds the current-OS release binary at `apps/desktop/src-tauri/target/release/linetta-desktop`.
+
+Remote GitHub Actions still need to run on the pushed branch/tag before an external release is cut.
+
 ## Phase 1: Quality Gate Foundation
 
 **Outcome:** One repo-level command and CI can verify the engine, frontend, and Tauri shell. Frontend gets its first useful regression tests.

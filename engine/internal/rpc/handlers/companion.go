@@ -95,3 +95,25 @@ func CompanionRemember(svc *companion.Service) rpc.Handler {
 		return json.RawMessage(`{"ok":true}`), nil
 	}
 }
+
+type companionApplyOpsParams struct {
+	ProjectID string         `json:"project_id"`
+	NodeID    string         `json:"node_id"`
+	Summary   string         `json:"summary"`
+	Ops       []companion.Op `json:"ops"`
+}
+
+// CompanionApplyOps returns a handler for companion.apply_ops.
+func CompanionApplyOps(svc *companion.Service, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionApplyOpsParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" || len(p.Ops) == 0 {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and ops required"}
+		}
+		result := svc.ApplyOps(ctx, p.ProjectID, p.NodeID, companion.Proposal{
+			Summary: p.Summary,
+			Ops:     p.Ops,
+		}, func() int64 { return now() })
+		return json.Marshal(result)
+	}
+}

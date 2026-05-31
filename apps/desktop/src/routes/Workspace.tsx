@@ -4,7 +4,7 @@ import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentio
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIOptions, ContextCounts } from "../lib/types";
+import type { NodeRow, Project, Entity, AIOptions, ContextCounts, SearchResult } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -22,6 +22,7 @@ import { CompanionPanel } from "../components/companion/CompanionPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
+import { SearchModal } from "../components/SearchModal";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useToast } from "../components/ToastProvider";
@@ -72,6 +73,7 @@ export function Workspace() {
   const [focus, setFocus] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [versionSheetNodeId, setVersionSheetNodeId] = useState<string | null>(null);
   const [zenOpen, setZenOpen] = useState(false);
@@ -324,7 +326,7 @@ export function Workspace() {
     return () => window.removeEventListener("linetta:mention-pick-new", handler);
   }, [projectId]);
 
-  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+I AI modal.
+  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+I AI modal.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -338,6 +340,10 @@ export function Workspace() {
         if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
         setPaletteOpen((v) => !v);
+      } else if (e.key.toLowerCase() === "f") {
+        if (aiModalOpenRef.current) { e.preventDefault(); return; }
+        e.preventDefault();
+        setSearchOpen(true);
       } else if (e.key.toLowerCase() === "i") {
         e.preventDefault();
         if (aiModalOpenRef.current) {
@@ -404,6 +410,17 @@ export function Workspace() {
     if (!load) return;
     throttledLastOpened();
   }, [load, throttledLastOpened]);
+
+  const handleSearchSelect = useCallback(
+    async (result: SearchResult) => {
+      if (load?.project.id === result.project_id) {
+        await navigateToNode({ id: result.node_id } as NodeRow);
+        return;
+      }
+      navigate(`/workspace/${result.project_id}`, { state: { jumpToNodeId: result.node_id } });
+    },
+    [load?.project.id, navigate, navigateToNode],
+  );
 
   const handleManualSave = useCallback(
     async (doc: object) => {
@@ -506,6 +523,13 @@ export function Workspace() {
       hint: next ? next.label : "(없음)",
       disabled: !next,
       run: async () => { if (next) await navigateToNode(next); },
+    });
+    cmds.push({
+      id: "global-search",
+      section: "이동",
+      label: "작품 전체 검색",
+      hint: "Cmd+F",
+      run: () => setSearchOpen(true),
     });
     for (const leaf of allNodes.filter((n) => n.kind === "leaf").slice(0, 20)) {
       cmds.push({
@@ -855,7 +879,11 @@ export function Workspace() {
             projectId={load.project.id}
             nodeIdRef={companionNodeRef}
             onClose={() => { setCompanionOpen(false); focusEditor(); }}
-            onApplied={() => { if (load) refreshMentioned(load.node.id); }}
+            onApplied={() => {
+              if (!load) return;
+              refreshTreeKeepNode(load.node.id);
+              refreshMentioned(load.node.id);
+            }}
           />
         ) : entitySheetId ? (
           <EntitySheet
@@ -913,6 +941,12 @@ export function Workspace() {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         commands={commands}
+      />
+
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelect={handleSearchSelect}
       />
 
       <MentionPicker state={mentionState} />

@@ -7,25 +7,71 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOT}/apps/desktop/src-tauri/binaries"
 mkdir -p "${OUT_DIR}"
 
-# Determine the host target triple Tauri uses.
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  if [[ "$(uname -m)" == "arm64" ]]; then
-    TRIPLE="aarch64-apple-darwin"
-  else
-    TRIPLE="x86_64-apple-darwin"
+# Determine the host target triple Tauri uses for sidecars.
+TRIPLE=""
+if command -v rustc >/dev/null 2>&1; then
+  TRIPLE="$(rustc --print host-tuple 2>/dev/null || true)"
+  if [[ -z "${TRIPLE}" ]]; then
+    TRIPLE="$(rustc -Vv | awk '/^host:/ {print $2; exit}')"
   fi
-elif [[ "$(uname -s)" == "Linux" ]]; then
-  TRIPLE="x86_64-unknown-linux-gnu"
-else
-  echo "Unsupported host: $(uname -s)" >&2
-  exit 1
 fi
 
-OUT="${OUT_DIR}/linetta-engine-${TRIPLE}"
+if [[ -z "${TRIPLE}" ]]; then
+  case "$(uname -s)" in
+    Darwin)
+      if [[ "$(uname -m)" == "arm64" ]]; then
+        TRIPLE="aarch64-apple-darwin"
+      else
+        TRIPLE="x86_64-apple-darwin"
+      fi
+      ;;
+    Linux)
+      TRIPLE="x86_64-unknown-linux-gnu"
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      TRIPLE="x86_64-pc-windows-msvc"
+      ;;
+    *)
+      echo "Unsupported host: $(uname -s)" >&2
+      exit 1
+      ;;
+  esac
+fi
+
+EXT=""
+case "${TRIPLE}" in
+  aarch64-apple-darwin)
+    GOOS=darwin
+    GOARCH=arm64
+    ;;
+  x86_64-apple-darwin)
+    GOOS=darwin
+    GOARCH=amd64
+    ;;
+  x86_64-unknown-linux-gnu)
+    GOOS=linux
+    GOARCH=amd64
+    ;;
+  aarch64-unknown-linux-gnu)
+    GOOS=linux
+    GOARCH=arm64
+    ;;
+  x86_64-pc-windows-msvc)
+    GOOS=windows
+    GOARCH=amd64
+    EXT=".exe"
+    ;;
+  *)
+    echo "Unsupported target triple: ${TRIPLE}" >&2
+    exit 1
+    ;;
+esac
+
+OUT="${OUT_DIR}/linetta-engine-${TRIPLE}${EXT}"
 
 echo "Building engine -> ${OUT}"
 (
   cd "${ROOT}/engine"
-  go build -o "${OUT}" ./cmd/linetta-engine
+  GOOS="${GOOS}" GOARCH="${GOARCH}" go build -o "${OUT}" ./cmd/linetta-engine
 )
 echo "ok"

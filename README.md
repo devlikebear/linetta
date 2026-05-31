@@ -30,6 +30,24 @@ Build only the sidecar engine:
 make build-engine
 ```
 
+Build the desktop release binary for the current operating system:
+
+```sh
+make build-desktop
+```
+
+Search is available from the Library search button, the Library menu, the Workspace command palette, and `Cmd+F` / `Ctrl+F` in the Workspace. Results search visible projects by project title, scene label/title, and scene body text.
+
+## AI Companion Tools
+
+The `cmd+j` companion chat runs through the TARS agent loop. When the active provider supports tool calls, Linetta exposes these built-in tools:
+
+- `web_search`: searches the web through Brave Search or Perplexity Sonar.
+- `web_fetch`: fetches a URL and returns extracted text with SSRF protection.
+- `linetta_apply_ops`: updates Linetta story state directly, including outline, storylines, beats, characters, relationships, places, scenes, summaries, and memories.
+
+Configure `web_search` in Settings under **LLM 도구**. The provider and API key are stored locally in `settings.json`; `web_fetch` does not require a key.
+
 ## Verification
 
 Run the full local gate:
@@ -47,6 +65,21 @@ make test-tauri
 ```
 
 `make test` runs Go tests, frontend Vitest tests, the Vite production build, and Rust `cargo check`.
+
+## Versioning And Builds
+
+Keep all app version surfaces aligned with:
+
+```sh
+make bump-version VERSION=0.1.0
+```
+
+This updates the desktop `package.json`, Tauri config, Cargo metadata, lockfile package entry, and Go engine diagnostics version.
+
+GitHub Actions:
+
+- `.github/workflows/ci.yml`: runs `make test` on PRs and pushes to `main`.
+- `.github/workflows/build.yml`: builds OS-specific Tauri artifacts on `workflow_dispatch` and `v*` tags for macOS, Linux, and Windows.
 
 ## Data And Safety
 

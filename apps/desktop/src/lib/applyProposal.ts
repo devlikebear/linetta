@@ -1,9 +1,9 @@
-import type { ProposalOp, EntityKind } from "./types";
-import { threads as threadsApi, beats as beatsApi, projects as projectsApi, companion as companionApi, entities as entitiesApi, relationships as relationshipsApi, nodes as nodesApi } from "./rpc";
+import type { ProposalOp } from "./types";
+import { companion as companionApi } from "./rpc";
 
 export interface ApplyFailure {
   index: number;
-  op: ProposalOp;
+  op?: ProposalOp;
   error: string;
 }
 
@@ -12,138 +12,30 @@ export interface ApplyResult {
   failures: ApplyFailure[];
 }
 
-// applyProposal executes the selected ops in order against existing RPCs,
-// resolving create_thread.ref -> created thread id for later add_beat.thread_ref.
-// A failing op is recorded and execution continues (partial apply; no rollback).
-export async function applyProposal(ops: ProposalOp[], projectId: string, currentNodeId: string | null): Promise<ApplyResult> {
-  const refMap = new Map<string, string>();
-  const entityRefMap = new Map<string, string>();
-  const nodeRefMap = new Map<string, string>();
-  const failures: ApplyFailure[] = [];
-  let applied = 0;
+// applyProposal keeps the proposal-card UI thin. The engine owns op validation,
+// ref resolution, partial-apply behavior, and persistence mutations.
+export async function applyProposal(
+  ops: ProposalOp[],
+  projectId: string,
+  currentNodeId: string | null,
+): Promise<ApplyResult> {
+  const result = await companionApi.applyOps(projectId, currentNodeId, "", ops);
+  return {
+    applied: result.applied,
+    failures: (result.failures ?? []).map((failure) => ({
+      index: failure.index,
+      op: resolveFailureOp(ops, failure.index, failure.op),
+      error: failure.error,
+    })),
+  };
+}
 
-  for (let i = 0; i < ops.length; i++) {
-    const op = ops[i];
-    try {
-      switch (op.op) {
-        case "create_thread": {
-          const th = await threadsApi.create({
-            project_id: projectId,
-            name: op.name ?? "",
-            color: op.color,
-          });
-          if (op.ref) refMap.set(op.ref, th.id);
-          if (op.summary) {
-            await threadsApi.update({ id: th.id, summary: op.summary });
-          }
-          break;
-        }
-        case "update_thread": {
-          if (!op.thread_id) throw new Error("thread_id 없음");
-          await threadsApi.update({
-            id: op.thread_id,
-            name: op.name,
-            color: op.color,
-            summary: op.summary,
-          });
-          break;
-        }
-        case "add_beat": {
-          const tid = op.thread_id ?? (op.thread_ref ? refMap.get(op.thread_ref) : undefined);
-          if (!tid) throw new Error("스토리라인 참조를 해소할 수 없음");
-          const nodeId = op.node_id ?? (op.node_ref ? nodeRefMap.get(op.node_ref) : undefined) ?? currentNodeId ?? undefined;
-          await beatsApi.create({
-            thread_id: tid,
-            node_id: nodeId ?? undefined,
-            label: op.label,
-            description: op.description,
-            intensity: op.intensity,
-          });
-          break;
-        }
-        case "update_beat": {
-          if (!op.beat_id) throw new Error("beat_id 없음");
-          await beatsApi.update({
-            id: op.beat_id,
-            label: op.label,
-            description: op.description,
-            intensity: op.intensity,
-          });
-          break;
-        }
-        case "delete_beat": {
-          if (!op.beat_id) throw new Error("beat_id 없음");
-          await beatsApi.delete(op.beat_id);
-          break;
-        }
-        case "set_outline": {
-          await projectsApi.update({ id: projectId, outline: op.outline ?? "" });
-          break;
-        }
-        case "remember": {
-          if (!op.text || !op.text.trim()) throw new Error("기억할 내용 없음");
-          await companionApi.remember(projectId, op.text, op.category);
-          break;
-        }
-        case "create_entity": {
-          if (!op.kind || !op.name) throw new Error("kind/name 없음");
-          const ent = await entitiesApi.create({
-            project_id: projectId,
-            kind: op.kind as EntityKind,
-            name: op.name,
-            role: op.role,
-          });
-          if (op.ref) entityRefMap.set(op.ref, ent.id);
-          if (op.summary) {
-            await entitiesApi.update({ id: ent.id, summary: op.summary });
-          }
-          break;
-        }
-        case "update_entity": {
-          if (!op.entity_id) throw new Error("entity_id 없음");
-          await entitiesApi.update({
-            id: op.entity_id,
-            name: op.name,
-            role: op.role,
-            summary: op.summary,
-            kind: op.kind ? (op.kind as EntityKind) : undefined,
-          });
-          break;
-        }
-        case "create_relationship": {
-          const fromId = op.from ?? (op.from_ref ? entityRefMap.get(op.from_ref) : undefined);
-          const toId = op.to ?? (op.to_ref ? entityRefMap.get(op.to_ref) : undefined);
-          if (!fromId || !toId) throw new Error("관계 양쪽 엔티티 참조를 해소할 수 없음");
-          if (!op.label) throw new Error("관계 라벨 없음");
-          if (op.inverse_label) {
-            await relationshipsApi.createPair({
-              project_id: projectId, from_id: fromId, to_id: toId,
-              label: op.label, inverse_label: op.inverse_label, notes: op.notes,
-            });
-          } else {
-            await relationshipsApi.createOne({
-              project_id: projectId, from_id: fromId, to_id: toId, label: op.label, notes: op.notes,
-            });
-          }
-          break;
-        }
-        case "create_scene": {
-          if (!op.label) throw new Error("씬 라벨 없음");
-          const ref = op.after_node_id ?? currentNodeId;
-          if (!ref) throw new Error("씬을 만들 기준 위치(현재 씬)가 없음");
-          const node = await nodesApi.createSibling(ref, "leaf", op.label, op.title ?? "");
-          if (op.ref) nodeRefMap.set(op.ref, node.id);
-          break;
-        }
-        default: {
-          throw new Error(`알 수 없는 op: ${(op as ProposalOp).op}`);
-        }
-      }
-      applied++;
-    } catch (e) {
-      failures.push({ index: i, op, error: e instanceof Error ? e.message : String(e) });
-    }
+function resolveFailureOp(ops: ProposalOp[], index: number, opType?: string): ProposalOp | undefined {
+  if (index >= 0 && index < ops.length) {
+    return ops[index];
   }
-
-  return { applied, failures };
+  if (!opType) {
+    return undefined;
+  }
+  return { op: (opType || "set_outline") as ProposalOp["op"] };
 }

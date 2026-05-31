@@ -4,7 +4,7 @@ import { useEngineEvent } from "./useEngineEvent";
 import type {
   CompanionMessage, CompanionProposal,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
-  CompanionThinking,
+  CompanionApplied, CompanionThinking,
 } from "../lib/types";
 
 export interface ChatMessage {
@@ -24,7 +24,7 @@ export function stripProposalBlock(text: string): string {
     .trim();
 }
 
-export function useCompanion(projectId: string, nodeIdRef: { current: string | null }) {
+export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: () => void) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState("");
   const [thinking, setThinking] = useState("");
@@ -70,6 +70,10 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
   useEngineEvent<CompanionProposal>("companion-proposal", (p) => {
     if (p.run_id !== runIdRef.current) return;
     pendingProposalRef.current = p;
+  });
+  useEngineEvent<CompanionApplied>("companion-applied", (p) => {
+    if (p.run_id !== runIdRef.current) return;
+    onApplied?.();
   });
   useEngineEvent<CompanionDone>("companion-done", (p) => {
     if (p.run_id !== runIdRef.current) return;

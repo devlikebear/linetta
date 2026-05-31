@@ -23,7 +23,7 @@ function streamProse(text: string): string {
 }
 
 export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Props) {
-  const { messages, streaming, thinking, status, send, cancel } = useCompanion(projectId, nodeIdRef);
+  const { messages, streaming, thinking, status, send, cancel } = useCompanion(projectId, nodeIdRef, onApplied);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
 

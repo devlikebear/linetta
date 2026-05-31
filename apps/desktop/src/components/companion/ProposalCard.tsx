@@ -90,7 +90,7 @@ export function ProposalCard({ proposal, projectId, nodeIdRef, onApplied }: Prop
           {result.failures.length > 0 && (
             <ul className="companion-proposal-failures">
               {result.failures.map((f, i) => (
-                <li key={i}>{opLabel(f.op)} — {f.error}</li>
+                <li key={i}>{f.op ? opLabel(f.op) : "제안 적용"} — {f.error}</li>
               ))}
             </ul>
           )}

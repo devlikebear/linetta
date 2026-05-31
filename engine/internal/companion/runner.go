@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/streamdedup"
+	"github.com/devlikebear/tars/pkg/agentloop"
 	"github.com/devlikebear/tars/pkg/llm"
 	"github.com/devlikebear/tars/pkg/session"
 	"github.com/google/uuid"
@@ -39,6 +40,11 @@ type proposalPayload struct {
 	Summary string `json:"summary,omitempty"`
 	Ops     []Op   `json:"ops,omitempty"`
 	Error   string `json:"error,omitempty"`
+}
+type appliedPayload struct {
+	RunID   string `json:"run_id"`
+	Summary string `json:"summary,omitempty"`
+	Applied int    `json:"applied"`
 }
 type thinkingPayload struct {
 	RunID string `json:"run_id"`
@@ -100,7 +106,7 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 	r.active[runID] = cancel
 	r.mu.Unlock()
 
-	go r.run(runCtx, runID, projectID, path, msgs, client, now)
+	go r.run(runCtx, runID, projectID, nodeID, path, text, msgs, client, now)
 	return runID, nil
 }
 
@@ -126,71 +132,81 @@ func (r *Runner) cancel(runID string) error {
 }
 
 const maxQueryRounds = 3
+const applyOpsToolName = "linetta_apply_ops"
 
-func (r *Runner) run(ctx context.Context, runID, projectID, path string, msgs []llm.ChatMessage, client llm.Client, now func() int64) {
+func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userText string, msgs []llm.ChatMessage, client llm.Client, now func() int64) {
 	defer r.finish(runID)
 
-	for round := 0; round < maxQueryRounds; round++ {
-		dedup := streamdedup.New()
-		resp, err := client.Chat(ctx, msgs, llm.ChatOptions{
-			OnDelta: func(text string) {
-				switch act, payload := dedup.Observe(text); act {
-				case streamdedup.ActionEmit:
-					_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, Text: payload})
-				case streamdedup.ActionReset:
-					_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: payload})
-				case streamdedup.ActionSkip:
-				}
-			},
-		})
-		if ctx.Err() != nil {
-			_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID})
-			return
+	registry := r.svc.buildToolRegistry(projectID, nodeID, now, runID)
+	dedup := streamdedup.New()
+	queryRounds := 0
+	client = newFirstTurnToolChoiceClient(client, companionForcedToolForUserText(userText))
+	loop := agentloop.New(client, registry, agentloop.HookFunc(func(ctx context.Context, evt agentloop.Event) {
+		switch evt.Type {
+		case agentloop.EventBeforeTool:
+			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: "도구 실행 중: " + evt.ToolName})
+		case agentloop.EventAfterTool:
+			if evt.ToolName == "linetta_apply_ops" && !evt.ToolIsError {
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: "작품 설정을 갱신했습니다"})
+			}
 		}
-		if err != nil {
-			_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: err.Error()})
-			return
-		}
-		full := resp.Message.Content
-		if full == "" {
-			full = dedup.Final()
-		}
-
-		// If not the last allowed round, check for a read-query and loop.
-		if round < maxQueryRounds-1 {
+	}))
+	resp, err := loop.Run(ctx, msgs, agentloop.RunOptions{
+		MaxIterations: 8,
+		Tools:         registry.Schemas(),
+		OnDelta: func(text string) {
+			switch act, payload := dedup.Observe(text); act {
+			case streamdedup.ActionEmit:
+				_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, Text: payload})
+			case streamdedup.ActionReset:
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: payload})
+			case streamdedup.ActionSkip:
+			}
+		},
+		OnTurnEnd: func(ctx context.Context, lastResp llm.ChatResponse) (string, error) {
+			if queryRounds >= maxQueryRounds-1 {
+				return "", nil
+			}
+			full := lastResp.Message.Content
 			if qr, present, qerr := ParseQuery(full); present && qerr == nil {
-				// This round was a query, not the final answer: clear partial prose,
-				// surface a thinking status, run reads, feed results, continue.
 				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: ""})
 				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: querySummary(qr)})
-				result := r.svc.runQueries(ctx, projectID, qr.Queries)
-				msgs = append(msgs,
-					llm.ChatMessage{Role: "assistant", Content: full},
-					llm.ChatMessage{Role: "user", Content: result},
-				)
-				continue
+				queryRounds++
+				dedup = streamdedup.New()
+				return r.svc.runQueries(ctx, projectID, qr.Queries), nil
 			}
-		}
-
-		// Final round.
-		assistantAt := now()
-		if err := session.AppendMessage(path, session.Message{Role: "assistant", Content: full, Timestamp: time.UnixMilli(assistantAt)}); err != nil {
-			r.svc.recordPersistenceError(ctx, assistantAt, "assistant", path, err)
-			_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: "companion transcript: " + err.Error()})
-			return
-		}
-		r.svc.recordPersistenceOK(ctx, assistantAt, "assistant", path)
-		if prop, present, perr := ParseProposal(full); present {
-			pp := proposalPayload{RunID: runID, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
-			if perr != nil {
-				pp.Error = perr.Error()
-				pp.Ops = nil
-			}
-			_ = r.svc.notify.Notify("companion.proposal", pp)
-		}
-		_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, FullText: full})
+			return "", nil
+		},
+	})
+	if ctx.Err() != nil {
+		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID})
 		return
 	}
+	if err != nil {
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: err.Error()})
+		return
+	}
+	full := resp.Message.Content
+	if full == "" {
+		full = dedup.Final()
+	}
+
+	assistantAt := now()
+	if err := session.AppendMessage(path, session.Message{Role: "assistant", Content: full, Timestamp: time.UnixMilli(assistantAt)}); err != nil {
+		r.svc.recordPersistenceError(ctx, assistantAt, "assistant", path, err)
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: "companion transcript: " + err.Error()})
+		return
+	}
+	r.svc.recordPersistenceOK(ctx, assistantAt, "assistant", path)
+	if prop, present, perr := ParseProposal(full); present {
+		pp := proposalPayload{RunID: runID, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
+		if perr != nil {
+			pp.Error = perr.Error()
+			pp.Ops = nil
+		}
+		_ = r.svc.notify.Notify("companion.proposal", pp)
+	}
+	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, FullText: full})
 }
 
 // querySummary returns a short "조회 중: toolA, toolB" status string.
@@ -200,4 +216,111 @@ func querySummary(qr QueryRequest) string {
 		names = append(names, q.Tool)
 	}
 	return "조회 중: " + strings.Join(names, ", ")
+}
+
+func companionForcedToolForUserText(text string) string {
+	s := strings.ToLower(strings.TrimSpace(text))
+	if s == "" {
+		return ""
+	}
+	if containsAny(s, companionEducationalTerms) {
+		return ""
+	}
+	if containsAny(s, companionResearchTerms) {
+		return ""
+	}
+	if containsAny(s, companionDiscussionTerms) && !containsAny(s, companionDirectApplyTerms) {
+		return ""
+	}
+	if containsAny(s, companionStructureTerms) && containsAny(s, companionMutationTerms) {
+		return applyOpsToolName
+	}
+	return ""
+}
+
+var companionStructureTerms = []string{
+	"스토리라인", "줄거리", "플롯", "비트", "캐릭터", "인물", "관계",
+	"장소", "씬", "장면", "개요", "요약", "기억", "설정", "세계관",
+	"시놉시스", "아웃라인",
+}
+
+var companionMutationTerms = []string{
+	"수정", "추가", "생성", "만들", "바꿔", "변경", "반영", "저장",
+	"붙여", "넣어", "정리", "업데이트", "삭제", "지워", "작성",
+	"써", "짜", "구성", "잡아", "세워", "완성",
+}
+
+var companionEducationalTerms = []string{
+	"작성법", "방법", "어떻게", "가이드",
+}
+
+var companionResearchTerms = []string{
+	"검색", "찾아", "조사", "웹", "web", "url", "링크", "자료", "최신",
+	"레퍼런스",
+}
+
+var companionDirectApplyTerms = []string{
+	"해줘", "해 줘", "해주세요", "해 주세요", "반영해", "저장해", "수정해",
+	"추가해", "만들어", "넣어", "붙여", "작성해", "써줘", "써 줘",
+	"짜줘", "짜 줘", "구성해", "잡아줘", "잡아 줘", "세워줘", "세워 줘",
+}
+
+var companionDiscussionTerms = []string{
+	"어때", "추천", "아이디어", "설명", "알려", "검토", "브레인스토밍",
+	"가능할까", "괜찮을까",
+}
+
+func containsAny(s string, terms []string) bool {
+	for _, term := range terms {
+		if strings.Contains(s, term) {
+			return true
+		}
+	}
+	return false
+}
+
+type firstTurnToolChoiceClient struct {
+	inner llm.Client
+	tool  string
+	mu    sync.Mutex
+	used  bool
+}
+
+func newFirstTurnToolChoiceClient(inner llm.Client, toolName string) llm.Client {
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return inner
+	}
+	return &firstTurnToolChoiceClient{inner: inner, tool: toolName}
+}
+
+func (c *firstTurnToolChoiceClient) Ask(ctx context.Context, prompt string) (string, error) {
+	return c.inner.Ask(ctx, prompt)
+}
+
+func (c *firstTurnToolChoiceClient) Chat(ctx context.Context, messages []llm.ChatMessage, opts llm.ChatOptions) (llm.ChatResponse, error) {
+	c.mu.Lock()
+	if !c.used {
+		if tools := filterToolSchemas(opts.Tools, c.tool); len(tools) > 0 {
+			opts.Tools = tools
+			opts.ToolChoice = llm.ToolChoiceRequired()
+		}
+		c.used = true
+	}
+	c.mu.Unlock()
+	return c.inner.Chat(ctx, messages, opts)
+}
+
+func filterToolSchemas(tools []llm.ToolSchema, name string) []llm.ToolSchema {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	out := make([]llm.ToolSchema, 0, 1)
+	for _, schema := range tools {
+		if schema.Function.Name == name {
+			out = append(out, schema)
+		}
+	}
+	return out
 }

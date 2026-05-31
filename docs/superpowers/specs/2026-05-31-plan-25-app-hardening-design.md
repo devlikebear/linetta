@@ -1,8 +1,9 @@
 # Linetta Plan 25 — App Hardening & Product Readiness Analysis
 
 > Date: 2026-05-31  
-> Status: Draft for implementation planning  
+> Status: Implemented through 1차 개발 closure slice
 > Scope: 현재 Linetta 앱 전체를 대상으로 한 부족한 부분 분석과 개선 방향. 코드 변경 전 개발 계획의 근거 문서.
+> Closure note: 아래 `Key Gaps`는 구현 전 기준 분석이며, 2026-05-31 종료 시점 반영 사항은 문서 하단 `Implementation Update`와 로드맵 addendum을 기준으로 본다.
 
 ## Executive Summary
 
@@ -226,3 +227,18 @@ The phase-level implementation plan is in:
 
 `docs/superpowers/plans/2026-05-31-plan-25-app-hardening-roadmap.md`
 
+## Implementation Update — 2026-05-31
+
+Plan 25 now includes the 1차 개발 종료 slice:
+
+- App-wide SQLite-backed search with Library/Workspace UI entry points.
+- Version bump command aligned across package, Tauri, Cargo, lockfile, and engine diagnostics.
+- OS-specific GitHub Actions desktop build workflow for macOS, Linux, and Windows artifacts.
+- TARS `pkg/tools` 기반 companion built-in tools:
+  - `web_search` and `web_fetch` are available to the `cmd+j` companion loop.
+  - Settings stores the `web_search` provider (`brave` or `perplexity`) and API key locally.
+  - `linetta_apply_ops` lets the AI directly update outline, storylines, beats, characters, relationships, places, scenes, summaries, and durable memories when the writer's intent is clear.
+- README refresh for search, versioning, local builds, CI, and release-build workflow.
+- GAP-001/GAP-002 are materially addressed by the root verification contract, CI workflow, and frontend regression tests.
+- GAP-005 is materially addressed by operations-status persistence, Settings surfacing, and companion persistence error recording.
+- GAP-006 is partially addressed by README refresh, Library menu actions, and first-run writing-safety checklist; backup restore remains a later roadmap item.

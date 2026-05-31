@@ -12,13 +12,15 @@ import type {
   ImportPreviewResult,
   NewProjectInput,
   Project,
+  SearchResult,
   Settings as SettingsRow,
 } from "../lib/types";
 import { ProjectCard } from "../components/ProjectCard";
 import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
+import { SearchModal } from "../components/SearchModal";
 import { pickAndReadMarkdown } from "../lib/importLoad";
-import { MoreHorizontal, Settings, Plus, Upload } from "../lib/icons";
+import { MoreHorizontal, Settings, Plus, Search, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
 
 const RECENT_LIMIT = 5;
@@ -42,6 +44,7 @@ export function Library() {
   const [diagnostics, setDiagnostics] = useState<DiagnosticsSnapshot | null>(null);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -165,6 +168,10 @@ export function Library() {
     }
   };
 
+  const handleSearchSelect = (result: SearchResult) => {
+    navigate(`/workspace/${result.project_id}`, { state: { jumpToNodeId: result.node_id } });
+  };
+
   return (
     <main className="library">
       <header className="library-top">
@@ -187,6 +194,9 @@ export function Library() {
               </button>
               <button type="button" role="menuitem" onClick={handleMenuImport}>
                 가져오기 (.md)
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSearchOpen(true); }}>
+                검색
               </button>
               <button type="button" role="menuitem" onClick={() => navigate("/settings")}>
                 설정
@@ -218,6 +228,10 @@ export function Library() {
             <Upload size={16} />
             <span>{importing ? "가져오는 중…" : "가져오기 (.md)"}</span>
           </button>
+          <button className="new-button" onClick={() => setSearchOpen(true)}>
+            <Search size={16} />
+            <span>검색</span>
+          </button>
         </div>
 
         {loading ? (
@@ -245,6 +259,12 @@ export function Library() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSubmit={handleCreate}
+      />
+
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelect={handleSearchSelect}
       />
 
       {pending && (

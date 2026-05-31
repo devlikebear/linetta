@@ -30,6 +30,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
+	"github.com/devlikebear/linetta/engine/internal/search"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -37,7 +38,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
-const engineVersion = "0.0.1"
+const engineVersion = "0.1.0"
 
 func main() {
 	stdio := flag.Bool("stdio", false, "serve JSONRPC over stdin/stdout")
@@ -78,6 +79,7 @@ func main() {
 	relationships := relationship.NewRepo(st)
 	plotBuilder := plot.NewBuilder(nodes, beats, threads)
 	ops := opsstatus.NewRepo(st)
+	searchRepo := search.NewRepo(st)
 	clock := func() int64 { return time.Now().UnixMilli() }
 
 	// Keep the mentions table in sync with each saved Tiptap doc.
@@ -144,6 +146,7 @@ func main() {
 	s.Handle("diagnostics.get", handlers.DiagnosticsGet(st, ops, engineVersion))
 	s.Handle("ops_status.get", handlers.GetOpsStatus(ops))
 	s.Handle("ops_status.clear_error", handlers.ClearOpsStatusError(ops))
+	s.Handle("search.query", handlers.Search(searchRepo))
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
 	s.Handle("projects.list", handlers.ListProjects(projects))
 	s.Handle("projects.get", handlers.GetProject(projects))
@@ -196,6 +199,7 @@ func main() {
 	s.Handle("companion.history", handlers.CompanionHistory(companionSvc))
 	s.Handle("companion.cancel", handlers.CompanionCancel(companionSvc))
 	s.Handle("companion.remember", handlers.CompanionRemember(companionSvc))
+	s.Handle("companion.apply_ops", handlers.CompanionApplyOps(companionSvc, clock))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))

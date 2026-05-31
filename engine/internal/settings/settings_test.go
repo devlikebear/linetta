@@ -196,5 +196,38 @@ func TestSet_safetyChecklistDismissed_persists(t *testing.T) {
 	}
 }
 
+func TestSet_webSearchConfig_persists(t *testing.T) {
+	s := newStoreOnTemp(t)
+	if _, err := s.Set(context.Background(), Patch{
+		WebSearchProvider: strPtr("perplexity"),
+		WebSearchAPIKey:   strPtr("secret-key"),
+	}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, _ := s.Get(context.Background())
+	if got.WebSearchProvider != "perplexity" {
+		t.Errorf("web_search_provider in-memory = %q", got.WebSearchProvider)
+	}
+	if got.WebSearchAPIKey != "secret-key" {
+		t.Errorf("web_search_api_key in-memory = %q", got.WebSearchAPIKey)
+	}
+
+	s2, err := New()
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	reloaded, _ := s2.Get(context.Background())
+	if reloaded.WebSearchProvider != "perplexity" || reloaded.WebSearchAPIKey != "secret-key" {
+		t.Errorf("web search config not persisted: %+v", reloaded)
+	}
+}
+
+func TestSet_rejectsUnknownWebSearchProvider(t *testing.T) {
+	s := newStoreOnTemp(t)
+	if _, err := s.Set(context.Background(), Patch{WebSearchProvider: strPtr("unknown")}); err == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
 func boolPtr(v bool) *bool    { return &v }
 func strPtr(v string) *string { return &v }

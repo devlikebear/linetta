@@ -43,6 +43,9 @@ describe("Settings", () => {
       git_sync_dir: "/tmp/linetta-sync",
       git_sync_commit_template: "Linetta sync {date}",
       backup_dir: "/tmp/linetta/backups",
+      safety_checklist_dismissed: false,
+      web_search_provider: "brave",
+      web_search_api_key: "test-key",
     });
   });
 
@@ -81,5 +84,7 @@ describe("Settings", () => {
     expect(screen.getByText(/git push: fatal: no upstream/)).toBeInTheDocument();
     expect(screen.getByText("요약기 상태")).toBeInTheDocument();
     expect(screen.getByText(/provider unavailable/)).toBeInTheDocument();
+    expect(screen.getByText("LLM 도구")).toBeInTheDocument();
+    expect(screen.getByLabelText("web_search API 키")).toBeInTheDocument();
   });
 });

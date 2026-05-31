@@ -51,6 +51,7 @@ pub async fn spawn(app: &tauri::AppHandle) -> Result<EngineHandle> {
                 "companion.error" => "companion-error",
                 "companion.cancelled" => "companion-cancelled",
                 "companion.proposal" => "companion-proposal",
+                "companion.applied" => "companion-applied",
                 "companion.thinking" => "companion-thinking",
                 _ => return, // ignore unknown
             };

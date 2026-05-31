@@ -38,6 +38,17 @@ export interface ListProjectsParams {
 export type NodeKind = "container" | "leaf";
 export type NodeStatus = "draft" | "revision" | "final";
 
+export interface SearchResult {
+  project_id: string;
+  project_title: string;
+  node_id: string;
+  node_label: string;
+  node_title: string;
+  node_kind: NodeKind;
+  preview: string;
+  updated_at: number;
+}
+
 export interface NodeRow {
   id: string;
   project_id: string;
@@ -217,6 +228,7 @@ export interface GitSyncInitResult {
 }
 
 export type ProviderID = "claude-code-cli" | "openai-codex";
+export type WebSearchProvider = "brave" | "perplexity";
 
 export interface Settings {
   provider: ProviderID;
@@ -226,6 +238,8 @@ export interface Settings {
   git_sync_commit_template: string;
   backup_dir: string;
   safety_checklist_dismissed: boolean;
+  web_search_provider: WebSearchProvider;
+  web_search_api_key: string;
 }
 
 export interface SettingsPatch {
@@ -235,6 +249,8 @@ export interface SettingsPatch {
   git_sync_dir?: string;
   git_sync_commit_template?: string;
   safety_checklist_dismissed?: boolean;
+  web_search_provider?: WebSearchProvider;
+  web_search_api_key?: string;
 }
 
 export interface SnapshotEntry {
@@ -456,9 +472,23 @@ export interface CompanionProposal {
   error?: string;
 }
 
+export interface CompanionApplyOpsFailure {
+  index: number;
+  op?: string;
+  error: string;
+}
+
+export interface CompanionApplyOpsResult {
+  summary?: string;
+  applied: number;
+  created?: Record<string, string>;
+  failures?: CompanionApplyOpsFailure[];
+}
+
 export interface CompanionDelta { run_id: string; text: string; }
 export interface CompanionReset { run_id: string; text: string; }
 export interface CompanionDone { run_id: string; full_text: string; }
 export interface CompanionError { run_id: string; message: string; }
 export interface CompanionCancelled { run_id: string; }
+export interface CompanionApplied { run_id: string; summary?: string; applied: number; }
 export interface CompanionThinking { run_id: string; text: string; }

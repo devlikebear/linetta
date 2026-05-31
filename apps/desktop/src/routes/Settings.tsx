@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { settings as settingsApi, gitSync, opsStatus as opsStatusApi } from "../lib/rpc";
-import type { OpsStatus, ProviderID, Settings as SettingsRow } from "../lib/types";
+import type { OpsStatus, ProviderID, Settings as SettingsRow, WebSearchProvider } from "../lib/types";
 
 const JOB_BACKUP = "backup.daily";
 const JOB_GIT_SYNC = "git_sync";
@@ -21,6 +21,7 @@ export function Settings() {
   // returns), not on every keystroke.
   const [gitDirDraft, setGitDirDraft] = useState("");
   const [gitTmplDraft, setGitTmplDraft] = useState("");
+  const [webSearchKeyDraft, setWebSearchKeyDraft] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +31,7 @@ export function Settings() {
         setCurrent(s);
         setGitDirDraft(s.git_sync_dir);
         setGitTmplDraft(s.git_sync_commit_template);
+        setWebSearchKeyDraft(s.web_search_api_key);
         setOpsRows(rows);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
@@ -108,6 +110,41 @@ export function Settings() {
               />
               <span>OpenAI Codex CLI</span>
             </label>
+          </section>
+
+          <section className="settings-section">
+            <h3>LLM 도구</h3>
+            <p className="hint">
+              cmd+j 채팅에서 web_search, web_fetch, linetta_apply_ops 도구를 사용할 수 있습니다.
+              web_fetch는 키 없이 동작합니다.
+            </p>
+            <label className="field">
+              <span>web_search 제공자</span>
+              <select
+                value={current.web_search_provider}
+                onChange={(e) => apply({ web_search_provider: e.target.value as WebSearchProvider })}
+                disabled={saving}
+              >
+                <option value="brave">Brave Search</option>
+                <option value="perplexity">Perplexity Sonar</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>web_search API 키</span>
+              <input
+                type="password"
+                value={webSearchKeyDraft}
+                onChange={(e) => setWebSearchKeyDraft(e.target.value)}
+                onBlur={() => {
+                  if (webSearchKeyDraft !== current.web_search_api_key) {
+                    apply({ web_search_api_key: webSearchKeyDraft });
+                  }
+                }}
+                placeholder={current.web_search_provider === "perplexity" ? "pplx-..." : "BSA..."}
+                autoComplete="off"
+              />
+            </label>
+            <p className="hint">키는 로컬 settings.json에 저장됩니다.</p>
           </section>
 
           <section className="settings-section">

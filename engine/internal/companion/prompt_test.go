@@ -11,9 +11,18 @@ import (
 
 func TestBuildSystem_HasProposalRules(t *testing.T) {
 	s := buildSystem()
-	for _, want := range []string{"집필 동료", "linetta-proposal", "create_thread", "add_beat", "직접 적용하지 않습니다"} {
+	for _, want := range []string{"집필 동료", "linetta-proposal", "create_thread", "add_beat", "linetta_apply_ops"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("system missing %q", want)
+		}
+	}
+}
+
+func TestBuildSystem_MentionsWebTools(t *testing.T) {
+	s := buildSystem()
+	for _, want := range []string{"web_search", "web_fetch"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("buildSystem missing %q", want)
 		}
 	}
 }

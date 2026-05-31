@@ -25,6 +25,8 @@ const (
 
 func validProviders() []string { return []string{ProviderClaudeCodeCLI, ProviderOpenAICodex} }
 
+func validWebSearchProviders() []string { return []string{"brave", "perplexity"} }
+
 // Config is the on-disk JSON. backup_dir is computed at Load time and not
 // persisted (the field is omitted from JSON marshalling on write).
 type Config struct {
@@ -35,6 +37,8 @@ type Config struct {
 	GitSyncDir               string `json:"git_sync_dir"`
 	GitSyncCommitTemplate    string `json:"git_sync_commit_template"`
 	SafetyChecklistDismissed bool   `json:"safety_checklist_dismissed"`
+	WebSearchProvider        string `json:"web_search_provider"`
+	WebSearchAPIKey          string `json:"web_search_api_key,omitempty"`
 }
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
@@ -45,6 +49,8 @@ type Patch struct {
 	GitSyncDir               *string `json:"git_sync_dir,omitempty"`
 	GitSyncCommitTemplate    *string `json:"git_sync_commit_template,omitempty"`
 	SafetyChecklistDismissed *bool   `json:"safety_checklist_dismissed,omitempty"`
+	WebSearchProvider        *string `json:"web_search_provider,omitempty"`
+	WebSearchAPIKey          *string `json:"web_search_api_key,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -75,6 +81,7 @@ func defaults(home string) Config {
 		Provider:          ProviderClaudeCodeCLI,
 		TypewriterDefault: false,
 		BackupDir:         filepath.Join(home, "backups"),
+		WebSearchProvider: "brave",
 	}
 }
 
@@ -101,6 +108,10 @@ func (s *Store) load() error {
 	s.cfg.GitSyncDir = disk.GitSyncDir
 	s.cfg.GitSyncCommitTemplate = disk.GitSyncCommitTemplate
 	s.cfg.SafetyChecklistDismissed = disk.SafetyChecklistDismissed
+	if disk.WebSearchProvider != "" {
+		s.cfg.WebSearchProvider = disk.WebSearchProvider
+	}
+	s.cfg.WebSearchAPIKey = disk.WebSearchAPIKey
 	s.mu.Unlock()
 	return nil
 }
@@ -120,6 +131,21 @@ func (s *Store) Provider() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.Provider
+}
+
+func (s *Store) WebSearchProvider() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.cfg.WebSearchProvider == "" {
+		return "brave"
+	}
+	return s.cfg.WebSearchProvider
+}
+
+func (s *Store) WebSearchAPIKey() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.WebSearchAPIKey
 }
 
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
@@ -152,6 +178,18 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.SafetyChecklistDismissed != nil {
 		next.SafetyChecklistDismissed = *p.SafetyChecklistDismissed
 	}
+	if p.WebSearchProvider != nil {
+		if !slices.Contains(validWebSearchProviders(), *p.WebSearchProvider) {
+			return Config{}, fmt.Errorf("settings: unknown web_search_provider %q", *p.WebSearchProvider)
+		}
+		next.WebSearchProvider = *p.WebSearchProvider
+	}
+	if p.WebSearchAPIKey != nil {
+		next.WebSearchAPIKey = *p.WebSearchAPIKey
+	}
+	if next.WebSearchProvider == "" {
+		next.WebSearchProvider = "brave"
+	}
 
 	// Persist (no backup_dir on disk).
 	persistable := Config{
@@ -161,6 +199,8 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		GitSyncDir:               next.GitSyncDir,
 		GitSyncCommitTemplate:    next.GitSyncCommitTemplate,
 		SafetyChecklistDismissed: next.SafetyChecklistDismissed,
+		WebSearchProvider:        next.WebSearchProvider,
+		WebSearchAPIKey:          next.WebSearchAPIKey,
 	}
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {

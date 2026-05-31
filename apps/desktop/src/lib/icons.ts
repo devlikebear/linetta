@@ -1,5 +1,6 @@
 export {
   MoreHorizontal,
+  Search,
   Settings,
   Plus,
   Upload,

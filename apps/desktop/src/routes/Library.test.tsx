@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   diagnosticsGet: vi.fn(),
+  searchQuery: vi.fn(),
   openPath: vi.fn(),
 }));
 
@@ -31,6 +32,9 @@ vi.mock("../lib/rpc", () => ({
   },
   diagnostics: {
     get: mocks.diagnosticsGet,
+  },
+  search: {
+    query: mocks.searchQuery,
   },
   openPath: mocks.openPath,
 }));
