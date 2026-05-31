@@ -17,6 +17,21 @@ export default defineConfig({
     target: "es2021",
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/@tiptap") || id.includes("node_modules/prosemirror")) {
+            return "editor";
+          }
+          if (id.includes("node_modules/lucide-react")) {
+            return "icons";
+          }
+          if (id.includes("node_modules/react") || id.includes("node_modules/react-router-dom")) {
+            return "vendor";
+          }
+        },
+      },
+    },
   },
   test: {
     environment: "jsdom",

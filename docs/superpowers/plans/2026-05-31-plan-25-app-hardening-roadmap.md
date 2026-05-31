@@ -196,29 +196,29 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 ### Tasks
 
-- [ ] Refresh README.
+- [x] Refresh README.
   - Current product summary.
   - Dev commands.
   - Verification commands.
   - Data locations.
   - Backup/Git sync behavior.
   - Troubleshooting engine startup and AI provider issues.
-- [ ] Implement Library menu actions.
+- [x] Implement Library menu actions.
   - Open data folder.
   - Open backups folder.
   - Import markdown.
   - Settings.
   - About/diagnostics.
-- [ ] Add first-run safety checklist.
+- [x] Add first-run safety checklist.
   - Show where local data lives.
   - Explain daily backups.
   - Offer Git sync setup.
   - Make it dismissible and stored in settings.
-- [ ] Reduce bundle warning.
+- [x] Reduce bundle warning.
   - Lazy-load non-critical routes and heavy panels.
   - Consider manual chunks for Tiptap/ProseMirror.
   - Add CI bundle budget or a documented accepted threshold.
-- [ ] Add one smoke/e2e path if feasible.
+- [x] Add one smoke/e2e path if feasible.
   - Use a Tauri-capable test approach or a mocked Vite route test.
   - Scenario: create project -> type text -> save -> snapshot -> export.
 
@@ -226,15 +226,15 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 **Automated:**
 
-- [ ] `make test` passes.
-- [ ] Frontend bundle warning is either resolved or converted into an explicit budget.
-- [ ] README command examples have been run locally.
+- [x] `make test` passes.
+- [x] Frontend bundle warning is either resolved or converted into an explicit budget.
+- [x] README command examples have been run locally.
 
 **Manual:**
 
 - [ ] Fresh `LINETTA_HOME=$(mktemp -d)` run shows first-run checklist and can create a project.
-- [ ] Library menu opens data/backups locations.
-- [ ] A writer can understand backup and recovery options without reading source.
+- [x] Library menu opens data/backups locations.
+- [x] A writer can understand backup and recovery options without reading source.
 
 ## Suggested Commit Boundaries
 
