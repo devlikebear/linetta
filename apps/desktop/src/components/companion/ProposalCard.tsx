@@ -23,6 +23,7 @@ function opLabel(op: ProposalOp): string {
     case "create_entity": return `${entityKindLabel(op.kind)} 생성: ${op.name ?? ""}`;
     case "update_entity": return `엔티티 수정`;
     case "create_relationship": return `관계 생성: ${op.label ?? ""}`;
+    case "create_scene": return `씬 생성: ${op.label ?? ""}`;
     default: return op.op;
   }
 }

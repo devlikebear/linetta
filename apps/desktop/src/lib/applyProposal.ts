@@ -1,5 +1,5 @@
 import type { ProposalOp, EntityKind } from "./types";
-import { threads as threadsApi, beats as beatsApi, projects as projectsApi, companion as companionApi, entities as entitiesApi, relationships as relationshipsApi } from "./rpc";
+import { threads as threadsApi, beats as beatsApi, projects as projectsApi, companion as companionApi, entities as entitiesApi, relationships as relationshipsApi, nodes as nodesApi } from "./rpc";
 
 export interface ApplyFailure {
   index: number;
@@ -18,6 +18,7 @@ export interface ApplyResult {
 export async function applyProposal(ops: ProposalOp[], projectId: string, currentNodeId: string | null): Promise<ApplyResult> {
   const refMap = new Map<string, string>();
   const entityRefMap = new Map<string, string>();
+  const nodeRefMap = new Map<string, string>();
   const failures: ApplyFailure[] = [];
   let applied = 0;
 
@@ -50,10 +51,10 @@ export async function applyProposal(ops: ProposalOp[], projectId: string, curren
         case "add_beat": {
           const tid = op.thread_id ?? (op.thread_ref ? refMap.get(op.thread_ref) : undefined);
           if (!tid) throw new Error("스토리라인 참조를 해소할 수 없음");
-          const nodeId = op.node_id ?? currentNodeId ?? undefined;
+          const nodeId = op.node_id ?? (op.node_ref ? nodeRefMap.get(op.node_ref) : undefined) ?? currentNodeId ?? undefined;
           await beatsApi.create({
             thread_id: tid,
-            node_id: nodeId,
+            node_id: nodeId ?? undefined,
             label: op.label,
             description: op.description,
             intensity: op.intensity,
@@ -114,13 +115,24 @@ export async function applyProposal(ops: ProposalOp[], projectId: string, curren
           const toId = op.to ?? (op.to_ref ? entityRefMap.get(op.to_ref) : undefined);
           if (!fromId || !toId) throw new Error("관계 양쪽 엔티티 참조를 해소할 수 없음");
           if (!op.label) throw new Error("관계 라벨 없음");
-          await relationshipsApi.createOne({
-            project_id: projectId,
-            from_id: fromId,
-            to_id: toId,
-            label: op.label,
-            notes: op.notes,
-          });
+          if (op.inverse_label) {
+            await relationshipsApi.createPair({
+              project_id: projectId, from_id: fromId, to_id: toId,
+              label: op.label, inverse_label: op.inverse_label, notes: op.notes,
+            });
+          } else {
+            await relationshipsApi.createOne({
+              project_id: projectId, from_id: fromId, to_id: toId, label: op.label, notes: op.notes,
+            });
+          }
+          break;
+        }
+        case "create_scene": {
+          if (!op.label) throw new Error("씬 라벨 없음");
+          const ref = op.after_node_id ?? currentNodeId;
+          if (!ref) throw new Error("씬을 만들 기준 위치(현재 씬)가 없음");
+          const node = await nodesApi.createSibling(ref, "leaf", op.label, op.title ?? "");
+          if (op.ref) nodeRefMap.set(op.ref, node.id);
           break;
         }
         default: {

@@ -385,7 +385,8 @@ export type ProposalOpType =
   | "add_beat" | "update_beat" | "delete_beat"
   | "set_outline"
   | "remember"
-  | "create_entity" | "update_entity" | "create_relationship";
+  | "create_entity" | "update_entity" | "create_relationship"
+  | "create_scene";
 
 export interface ProposalOp {
   op: ProposalOpType;
@@ -411,6 +412,10 @@ export interface ProposalOp {
   to?: string;
   to_ref?: string;
   notes?: string;
+  after_node_id?: string;
+  title?: string;
+  node_ref?: string;
+  inverse_label?: string;
 }
 
 export interface CompanionProposal {
