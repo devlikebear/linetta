@@ -3,6 +3,7 @@ package companion
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,6 +38,10 @@ type proposalPayload struct {
 	Summary string `json:"summary,omitempty"`
 	Ops     []Op   `json:"ops,omitempty"`
 	Error   string `json:"error,omitempty"`
+}
+type thinkingPayload struct {
+	RunID string `json:"run_id"`
+	Text  string `json:"text"`
 }
 
 // Runner manages companion run lifecycle + cancellation.
@@ -89,7 +94,7 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 	r.active[runID] = cancel
 	r.mu.Unlock()
 
-	go r.run(runCtx, runID, path, msgs, client, now)
+	go r.run(runCtx, runID, projectID, path, msgs, client, now)
 	return runID, nil
 }
 
@@ -114,47 +119,73 @@ func (r *Runner) cancel(runID string) error {
 	return nil
 }
 
-func (r *Runner) run(ctx context.Context, runID, path string, msgs []llm.ChatMessage, client llm.Client, now func() int64) {
+const maxQueryRounds = 3
+
+func (r *Runner) run(ctx context.Context, runID, projectID, path string, msgs []llm.ChatMessage, client llm.Client, now func() int64) {
 	defer r.finish(runID)
-	dedup := streamdedup.New()
 
-	resp, err := client.Chat(ctx, msgs, llm.ChatOptions{
-		OnDelta: func(text string) {
-			switch act, payload := dedup.Observe(text); act {
-			case streamdedup.ActionEmit:
-				_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, Text: payload})
-			case streamdedup.ActionReset:
-				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: payload})
-			case streamdedup.ActionSkip:
-			}
-		},
-	})
-	if ctx.Err() != nil {
-		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID})
-		return
-	}
-	if err != nil {
-		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: err.Error()})
-		return
-	}
-
-	full := resp.Message.Content
-	if full == "" {
-		full = dedup.Final()
-	}
-
-	// Persist assistant turn (best-effort).
-	_ = session.AppendMessage(path, session.Message{Role: "assistant", Content: full, Timestamp: time.UnixMilli(now())})
-
-	// Parse + emit proposal if a block is present.
-	if prop, present, perr := ParseProposal(full); present {
-		pp := proposalPayload{RunID: runID, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
-		if perr != nil {
-			pp.Error = perr.Error()
-			pp.Ops = nil
+	for round := 0; round < maxQueryRounds; round++ {
+		dedup := streamdedup.New()
+		resp, err := client.Chat(ctx, msgs, llm.ChatOptions{
+			OnDelta: func(text string) {
+				switch act, payload := dedup.Observe(text); act {
+				case streamdedup.ActionEmit:
+					_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, Text: payload})
+				case streamdedup.ActionReset:
+					_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: payload})
+				case streamdedup.ActionSkip:
+				}
+			},
+		})
+		if ctx.Err() != nil {
+			_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID})
+			return
 		}
-		_ = r.svc.notify.Notify("companion.proposal", pp)
-	}
+		if err != nil {
+			_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: err.Error()})
+			return
+		}
+		full := resp.Message.Content
+		if full == "" {
+			full = dedup.Final()
+		}
 
-	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, FullText: full})
+		// If not the last allowed round, check for a read-query and loop.
+		if round < maxQueryRounds-1 {
+			if qr, present, qerr := ParseQuery(full); present && qerr == nil {
+				// This round was a query, not the final answer: clear partial prose,
+				// surface a thinking status, run reads, feed results, continue.
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: ""})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: querySummary(qr)})
+				result := r.svc.runQueries(ctx, projectID, qr.Queries)
+				msgs = append(msgs,
+					llm.ChatMessage{Role: "assistant", Content: full},
+					llm.ChatMessage{Role: "user", Content: result},
+				)
+				continue
+			}
+		}
+
+		// Final round.
+		_ = session.AppendMessage(path, session.Message{Role: "assistant", Content: full, Timestamp: time.UnixMilli(now())})
+		if prop, present, perr := ParseProposal(full); present {
+			pp := proposalPayload{RunID: runID, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
+			if perr != nil {
+				pp.Error = perr.Error()
+				pp.Ops = nil
+			}
+			_ = r.svc.notify.Notify("companion.proposal", pp)
+		}
+		_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, FullText: full})
+		return
+	}
+}
+
+// querySummary returns a short "조회 중: toolA, toolB" status string.
+func querySummary(qr QueryRequest) string {
+	names := make([]string, 0, len(qr.Queries))
+	for _, q := range qr.Queries {
+		names = append(names, q.Tool)
+	}
+	return "조회 중: " + strings.Join(names, ", ")
 }
