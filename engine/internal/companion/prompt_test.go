@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -71,5 +72,22 @@ func TestBuildSystem_ForbidsInventingIDs(t *testing.T) {
 	s := buildSystem()
 	if !strings.Contains(s, "지어내지 마") || !strings.Contains(s, "node_id") {
 		t.Fatal("system prompt missing id-discipline guidance")
+	}
+}
+
+func TestBuildContext_EntityShowsKind(t *testing.T) {
+	d := PromptData{Entities: []entity.Entity{{ID: "e1", Kind: "character", Name: "하나", Role: "주인공"}}}
+	out := buildContext(d)
+	if !strings.Contains(out, "[e1] (인물) 하나") {
+		t.Fatalf("entity kind not rendered:\n%s", out)
+	}
+}
+
+func TestBuildSystem_MentionsEntityOps(t *testing.T) {
+	s := buildSystem()
+	for _, want := range []string{"create_entity", "create_relationship", "from_ref"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("buildSystem missing %q", want)
+		}
 	}
 }
