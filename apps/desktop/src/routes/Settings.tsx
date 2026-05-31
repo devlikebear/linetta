@@ -1,14 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { settings as settingsApi, gitSync } from "../lib/rpc";
-import type { ProviderID, Settings as SettingsRow } from "../lib/types";
+import { settings as settingsApi, gitSync, opsStatus as opsStatusApi } from "../lib/rpc";
+import type { OpsStatus, ProviderID, Settings as SettingsRow } from "../lib/types";
+
+const JOB_BACKUP = "backup.daily";
+const JOB_GIT_SYNC = "git_sync";
+const JOB_SUMMARIZER = "summarizer";
+const JOB_COMPANION = "companion.persistence";
 
 export function Settings() {
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [opsRows, setOpsRows] = useState<OpsStatus[]>([]);
 
   // Local draft for text-input fields so the cursor doesn't bounce while
   // typing. We commit to the engine on blur (or when the folder picker
@@ -18,16 +24,40 @@ export function Settings() {
 
   useEffect(() => {
     let cancelled = false;
-    settingsApi.get()
-      .then((s) => {
+    Promise.all([settingsApi.get(), opsStatusApi.get()])
+      .then(([s, rows]) => {
         if (cancelled) return;
         setCurrent(s);
         setGitDirDraft(s.git_sync_dir);
         setGitTmplDraft(s.git_sync_commit_template);
+        setOpsRows(rows);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
   }, []);
+
+  const opsByJob = useMemo(() => {
+    return new Map(opsRows.map((row) => [row.job_name, row]));
+  }, [opsRows]);
+
+  const refreshOps = async () => {
+    const rows = await opsStatusApi.get();
+    setOpsRows(rows);
+  };
+
+  const clearOpsError = async (jobName: string) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await opsStatusApi.clearError(jobName);
+      await refreshOps();
+      setSavedAt(Date.now());
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const apply = async (patch: Partial<SettingsRow>) => {
     if (!current) return;
@@ -188,17 +218,138 @@ export function Settings() {
             >
               이 폴더를 git 저장소로 초기화
             </button>
+            <OpsStatusCard
+              title="최근 Git 동기화"
+              status={opsByJob.get(JOB_GIT_SYNC)}
+              okText="Git 동기화 성공"
+              idleText="아직 동기화 기록 없음"
+              onClearError={() => clearOpsError(JOB_GIT_SYNC)}
+              disabled={saving}
+            />
           </section>
 
           <section className="settings-section">
             <h3>백업</h3>
             <p className="hint">하루 한 번 자동 백업이 다음 경로에 저장됩니다 (14일 보관).</p>
             <p className="backup-path"><code>{current.backup_dir}</code></p>
+            <OpsStatusCard
+              title="최근 백업 상태"
+              status={opsByJob.get(JOB_BACKUP)}
+              okText="백업 성공"
+              idleText="아직 백업 기록 없음"
+              onClearError={() => clearOpsError(JOB_BACKUP)}
+              disabled={saving}
+            />
           </section>
+
+          {isDegraded(opsByJob.get(JOB_SUMMARIZER)) && (
+            <section className="settings-section">
+              <h3>요약기 상태</h3>
+              <OpsStatusCard
+                title="최근 요약 실패"
+                status={opsByJob.get(JOB_SUMMARIZER)}
+                okText="요약 정상"
+                idleText="최근 요약 기록 없음"
+                onClearError={() => clearOpsError(JOB_SUMMARIZER)}
+                disabled={saving}
+              />
+            </section>
+          )}
+
+          {isDegraded(opsByJob.get(JOB_COMPANION)) && (
+            <section className="settings-section">
+              <h3>Companion 기록 상태</h3>
+              <OpsStatusCard
+                title="최근 기록 실패"
+                status={opsByJob.get(JOB_COMPANION)}
+                okText="기록 정상"
+                idleText="최근 기록 없음"
+                onClearError={() => clearOpsError(JOB_COMPANION)}
+                disabled={saving}
+              />
+            </section>
+          )}
 
           {savedAt && <p className="settings-saved">저장됨</p>}
         </div>
       )}
     </main>
   );
+}
+
+function isDegraded(status?: OpsStatus): boolean {
+  return Boolean(status?.last_error);
+}
+
+function OpsStatusCard({
+  title,
+  status,
+  okText,
+  idleText,
+  onClearError,
+  disabled,
+}: {
+  title: string;
+  status?: OpsStatus;
+  okText: string;
+  idleText: string;
+  onClearError: () => void;
+  disabled: boolean;
+}) {
+  const metadata = parseMetadata(status?.metadata_json);
+  const failed = Boolean(status?.last_error);
+  const body = failed ? status?.last_error : status?.last_ok ? okText : idleText;
+  const finished = formatMillis(status?.last_finished_at);
+  const metadataLabel = formatMetadata(metadata);
+
+  return (
+    <div className={`ops-status ${failed ? "is-error" : status?.last_ok ? "is-ok" : ""}`}>
+      <div className="ops-status-head">
+        <h4>{title}</h4>
+        {failed && (
+          <button type="button" onClick={onClearError} disabled={disabled}>
+            오류 지우기
+          </button>
+        )}
+      </div>
+      <p className="ops-status-line">{body}</p>
+      {finished && <p className="hint">마지막 완료: {finished}</p>}
+      {metadataLabel && <p className="hint">{metadataLabel}</p>}
+    </div>
+  );
+}
+
+function parseMetadata(raw?: string): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return {};
+  }
+  return {};
+}
+
+function formatMillis(value?: number): string {
+  if (!value) return "";
+  return new Date(value).toLocaleString("ko-KR");
+}
+
+function formatMetadata(metadata: Record<string, unknown>): string {
+  const parts: string[] = [];
+  if (typeof metadata.files_written === "number") {
+    parts.push(`파일 ${metadata.files_written}개`);
+  }
+  if (metadata.committed === true) parts.push("커밋 완료");
+  if (metadata.pushed === true) parts.push("푸시 완료");
+  if (metadata.backup_ran === true) parts.push("새 백업 생성");
+  if (typeof metadata.failure_count === "number" && metadata.failure_count > 0) {
+    parts.push(`연속 실패 ${metadata.failure_count}회`);
+  }
+  if (typeof metadata.path === "string" && metadata.path !== "") {
+    parts.push(metadata.path);
+  }
+  return parts.join(" · ");
 }

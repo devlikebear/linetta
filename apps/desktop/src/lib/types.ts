@@ -151,6 +151,24 @@ export interface EngineStatus {
   migration_count?: number;
 }
 
+export interface OpsStatus {
+  job_name: string;
+  last_started_at?: number;
+  last_finished_at?: number;
+  last_ok: boolean;
+  last_error: string;
+  metadata_json: string;
+}
+
+export interface DiagnosticsSnapshot {
+  version: string;
+  home: string;
+  db_path: string;
+  migration_version: number;
+  migration_count: number;
+  ops_status: OpsStatus[];
+}
+
 // Wire shape from ai.preview_context RPC. Mirrors engine PreviewCounts JSON.
 // Mapped to ContextCounts (camelCase) inside the rpc client.
 export interface ContextPreviewResponse {

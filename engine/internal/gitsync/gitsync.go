@@ -19,6 +19,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
@@ -52,6 +53,7 @@ type Syncer struct {
 	Entities *entity.Repo
 	Run      CmdRunner
 	Now      func() time.Time
+	Ops      *opsstatus.Repo
 }
 
 // New constructs a Syncer with the real `git` runner and wall-clock time.
@@ -114,7 +116,31 @@ func (s *Syncer) Init(ctx context.Context) (InitResult, error) {
 // non-archived project's markdown into GitSyncDir → git add/status/commit/push.
 // A hard Go error is only returned for unrecoverable configuration/IO failures
 // before git runs; everything else surfaces via ResultSummary.
-func (s *Syncer) RunOnce(ctx context.Context) (ResultSummary, error) {
+func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error) {
+	nowFn := s.Now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	startedAt := nowFn().UnixMilli()
+	if s.Ops != nil {
+		defer func() {
+			finishedAt := nowFn().UnixMilli()
+			errMsg := ""
+			if err != nil {
+				errMsg = err.Error()
+			} else if summary.Error != "" {
+				errMsg = summary.Error
+			}
+			_ = s.Ops.Record(ctx, opsstatus.JobGitSync, startedAt, finishedAt, errMsg == "", errMsg, map[string]any{
+				"skipped":       summary.Skipped,
+				"files_written": summary.FilesWritten,
+				"committed":     summary.Committed,
+				"pushed":        summary.Pushed,
+				"message":       summary.Message,
+			})
+		}()
+	}
+
 	cfg, err := s.Settings.Get(ctx)
 	if err != nil {
 		return ResultSummary{}, fmt.Errorf("settings.Get: %w", err)
@@ -144,14 +170,10 @@ func (s *Syncer) RunOnce(ctx context.Context) (ResultSummary, error) {
 		}
 		written++
 	}
-	summary := ResultSummary{FilesWritten: written}
+	summary = ResultSummary{FilesWritten: written}
 	run := s.Run
 	if run == nil {
 		run = runGitProd
-	}
-	nowFn := s.Now
-	if nowFn == nil {
-		nowFn = time.Now
 	}
 	if _, err := run(ctx, dir, "add", "-A"); err != nil {
 		summary.Error = "git add: " + err.Error()

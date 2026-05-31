@@ -12,6 +12,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -62,7 +63,7 @@ func (r *recordingRunner) cmdNames() []string {
 
 // newFixture wires a real settings.Store + store + project/node/entity repos
 // against a fresh LINETTA_HOME, then seeds one non-archived project.
-func newFixture(t *testing.T) (*Syncer, *recordingRunner, string) {
+func newFixture(t *testing.T) (*Syncer, *recordingRunner, string, *opsstatus.Repo) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("LINETTA_HOME", home)
@@ -104,12 +105,13 @@ func newFixture(t *testing.T) (*Syncer, *recordingRunner, string) {
 		Settings: st, Projects: projects, Nodes: nodes, Entities: entities,
 		Run: runner.run,
 		Now: func() time.Time { return fixed },
+		Ops: opsstatus.NewRepo(storeDB),
 	}
-	return s, runner, repoDir
+	return s, runner, repoDir, s.Ops
 }
 
 func TestRunOnce_skippedWhenDirEmpty(t *testing.T) {
-	s, runner, _ := newFixture(t)
+	s, runner, _, _ := newFixture(t)
 	// Leave GitSyncDir empty (default).
 	res, err := s.RunOnce(context.Background())
 	if err != nil {
@@ -124,7 +126,7 @@ func TestRunOnce_skippedWhenDirEmpty(t *testing.T) {
 }
 
 func TestRunOnce_errorWhenNotAGitRepo(t *testing.T) {
-	s, runner, _ := newFixture(t)
+	s, runner, _, _ := newFixture(t)
 	// Point at a dir that exists but has no .git.
 	bare := t.TempDir()
 	if _, err := s.Settings.Set(context.Background(), settings.Patch{GitSyncDir: strPtr(bare)}); err != nil {
@@ -143,7 +145,7 @@ func TestRunOnce_errorWhenNotAGitRepo(t *testing.T) {
 }
 
 func TestRunOnce_writesFilesAndCommitsAndPushes(t *testing.T) {
-	s, runner, repoDir := newFixture(t)
+	s, runner, repoDir, _ := newFixture(t)
 	runner.responses["status"] = stub{stdout: " M quiet-city.md\n"}
 	if _, err := s.Settings.Set(context.Background(), settings.Patch{GitSyncDir: strPtr(repoDir)}); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -191,7 +193,7 @@ func TestRunOnce_writesFilesAndCommitsAndPushes(t *testing.T) {
 }
 
 func TestRunOnce_noopWhenStatusEmpty(t *testing.T) {
-	s, runner, repoDir := newFixture(t)
+	s, runner, repoDir, _ := newFixture(t)
 	runner.responses["status"] = stub{stdout: ""}
 	if _, err := s.Settings.Set(context.Background(), settings.Patch{GitSyncDir: strPtr(repoDir)}); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -215,7 +217,7 @@ func TestRunOnce_noopWhenStatusEmpty(t *testing.T) {
 }
 
 func TestRunOnce_pushFailureCapturedInSummary(t *testing.T) {
-	s, runner, repoDir := newFixture(t)
+	s, runner, repoDir, _ := newFixture(t)
 	runner.responses["status"] = stub{stdout: " M quiet-city.md\n"}
 	runner.responses["push"] = stub{err: errors.New("fatal: no upstream")}
 	if _, err := s.Settings.Set(context.Background(), settings.Patch{GitSyncDir: strPtr(repoDir)}); err != nil {
@@ -237,7 +239,7 @@ func TestRunOnce_pushFailureCapturedInSummary(t *testing.T) {
 }
 
 func TestRunOnce_defaultTemplateWhenEmpty(t *testing.T) {
-	s, runner, repoDir := newFixture(t)
+	s, runner, repoDir, _ := newFixture(t)
 	runner.responses["status"] = stub{stdout: " M quiet-city.md\n"}
 	empty := ""
 	if _, err := s.Settings.Set(context.Background(), settings.Patch{
@@ -252,6 +254,42 @@ func TestRunOnce_defaultTemplateWhenEmpty(t *testing.T) {
 	}
 	if !strings.HasPrefix(res.Message, "Linetta sync ") {
 		t.Errorf("expected Message to start with 'Linetta sync ', got %q", res.Message)
+	}
+}
+
+func TestRunOnce_recordsOpsStatusOnPushFailure(t *testing.T) {
+	s, runner, repoDir, ops := newFixture(t)
+	runner.responses["status"] = stub{stdout: " M quiet-city.md\n"}
+	runner.responses["push"] = stub{err: errors.New("fatal: no upstream")}
+	if _, err := s.Settings.Set(context.Background(), settings.Patch{GitSyncDir: strPtr(repoDir)}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if _, err := s.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	statuses, err := ops.Get(context.Background())
+	if err != nil {
+		t.Fatalf("ops.Get: %v", err)
+	}
+	var status opsstatus.Status
+	for _, s := range statuses {
+		if s.JobName == opsstatus.JobGitSync {
+			status = s
+			break
+		}
+	}
+	if status.JobName == "" {
+		t.Fatalf("missing git sync status: %+v", statuses)
+	}
+	if status.LastOK {
+		t.Fatalf("expected failed status, got %+v", status)
+	}
+	if !strings.Contains(status.LastError, "git push") {
+		t.Fatalf("expected git push error, got %+v", status)
+	}
+	if !strings.Contains(status.MetadataJSON, `"files_written":1`) {
+		t.Fatalf("metadata_json missing files_written: %s", status.MetadataJSON)
 	}
 }
 

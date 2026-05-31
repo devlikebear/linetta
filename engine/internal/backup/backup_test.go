@@ -108,7 +108,13 @@ func TestStart_runsImmediatelyAndCallsRetention(t *testing.T) {
 		}
 		return nil
 	}
-	onTick := func() {
+	onTick := func(result TickResult) {
+		if !result.OK() {
+			t.Errorf("unexpected tick error: %+v", result)
+		}
+		if result.StartedAt == 0 || result.FinishedAt == 0 {
+			t.Errorf("tick timestamps not populated: %+v", result)
+		}
 		select {
 		case calls <- struct{}{}:
 		default:
@@ -136,5 +142,30 @@ func TestStart_runsImmediatelyAndCallsRetention(t *testing.T) {
 	matches, _ := filepath.Glob(filepath.Join(root, "library-*.db"))
 	if len(matches) != 1 {
 		t.Errorf("expected 1 backup file, got %d", len(matches))
+	}
+}
+
+func TestStartReportsBackupErrorsToOnTick(t *testing.T) {
+	s, home := openSeededStore(t)
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	calls := make(chan TickResult, 1)
+	stop := Start(context.Background(), s.DB(), home, nil,
+		func() time.Time { return time.Date(2026, 5, 26, 9, 0, 0, 0, time.Local) },
+		func(time.Duration) { time.Sleep(10 * time.Millisecond) },
+		func(result TickResult) { calls <- result })
+	defer stop()
+
+	select {
+	case result := <-calls:
+		if result.OK() {
+			t.Fatalf("expected failed tick, got %+v", result)
+		}
+		if result.BackupError == "" {
+			t.Fatalf("expected backup error, got %+v", result)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("immediate run did not report tick result")
 	}
 }

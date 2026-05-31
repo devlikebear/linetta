@@ -7,6 +7,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
@@ -44,6 +45,7 @@ type Service struct {
 	workDir       string
 	runner        *Runner
 	memBase       string
+	ops           *opsstatus.Repo
 }
 
 // NewService constructs the companion service. sessionsDir is passed to
@@ -56,8 +58,8 @@ func NewService(
 	nodes *node.Repo, beats *beat.Repo,
 ) *Service {
 	s := &Service{
-		sessions:      session.NewStore(sessionsDir),
-		projects:      projects, threads: threads, entities: entities,
+		sessions: session.NewStore(sessionsDir),
+		projects: projects, threads: threads, entities: entities,
 		relationships: relationships, plot: plotBuilder,
 		nodes: nodes, beats: beats,
 		notify: notify, factory: factory, src: src, workDir: workDir,
@@ -65,6 +67,31 @@ func NewService(
 	}
 	s.runner = newRunner(s)
 	return s
+}
+
+func (s *Service) WithOpsStatus(repo *opsstatus.Repo) *Service {
+	s.ops = repo
+	return s
+}
+
+func (s *Service) recordPersistenceOK(ctx context.Context, at int64, phase string, path string) {
+	if s.ops == nil {
+		return
+	}
+	_ = s.ops.Record(ctx, opsstatus.JobCompanionPersistence, at, at, true, "", map[string]any{
+		"phase": phase,
+		"path":  path,
+	})
+}
+
+func (s *Service) recordPersistenceError(ctx context.Context, at int64, phase string, path string, err error) {
+	if s.ops == nil || err == nil {
+		return
+	}
+	_ = s.ops.Record(ctx, opsstatus.JobCompanionPersistence, at, at, false, err.Error(), map[string]any{
+		"phase": phase,
+		"path":  path,
+	})
 }
 
 // gatherContext loads project state for prompt injection. nodeID may be "".

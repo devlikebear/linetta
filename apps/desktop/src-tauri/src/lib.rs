@@ -2,7 +2,7 @@ mod engine;
 mod jsonrpc;
 
 use serde_json::Value;
-use std::sync::Arc;
+use std::{process::Command, sync::Arc};
 use tauri::Manager;
 
 pub fn run() {
@@ -36,7 +36,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_ping,
             engine_call,
-            engine_status
+            engine_status,
+            open_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -119,6 +120,33 @@ async fn engine_status(state: tauri::State<'_, EngineState>) -> Result<EngineSta
             migration_version: None,
             migration_count: None,
         }),
+    }
+}
+
+#[tauri::command]
+async fn open_path(path: String) -> Result<(), String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("path required".to_string());
+    }
+    let mut cmd = if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg(path);
+        c
+    } else if cfg!(target_os = "windows") {
+        let mut c = Command::new("explorer");
+        c.arg(path);
+        c
+    } else {
+        let mut c = Command::new("xdg-open");
+        c.arg(path);
+        c
+    };
+    let status = cmd.status().map_err(|e| e.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("open path exited with {status}"))
     }
 }
 

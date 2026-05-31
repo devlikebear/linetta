@@ -12,6 +12,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -359,6 +360,34 @@ func TestSummarizer_containerDepthCap_stopsBeyondDepth6(t *testing.T) {
 	if gotLeaf.Summary != "" {
 		t.Errorf("depth-cap breached: deepest leaf got summarized: %q", gotLeaf.Summary)
 	}
+}
+
+func TestSummarizer_recordsLLMFailureInOpsStatus(t *testing.T) {
+	st, nodes, p := newFixture(t)
+	ctx := context.Background()
+	body := ""
+	for i := 0; i < 200; i++ {
+		body += "가나다라마"
+	}
+	_ = nodes.UpdateContent(ctx, *p.LastOpenedNodeID, longDoc(body), 1100)
+
+	ops := opsstatus.NewRepo(st)
+	sum := New(nodes, fixedProvider("fake"),
+		func(_, _ string) (llm.Client, error) { return nil, errors.New("provider unavailable") }).
+		WithOpsStatus(ops, func() int64 { return 2000 })
+	stop := sum.Start(ctx)
+	defer stop()
+
+	sum.Enqueue(*p.LastOpenedNodeID)
+	waitFor(t, func() bool {
+		statuses, _ := ops.Get(ctx)
+		for _, status := range statuses {
+			if status.JobName == opsstatus.JobSummarizer {
+				return strings.Contains(status.LastError, "provider unavailable")
+			}
+		}
+		return false
+	}, "summarizer status records LLM failure")
 }
 
 func TestSummarizer_container_skipsLLMWhenChildrenFresh(t *testing.T) {

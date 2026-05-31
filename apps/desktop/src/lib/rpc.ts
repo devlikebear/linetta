@@ -5,6 +5,7 @@ import type {
   CompanionMessage,
   ContextCounts,
   ContextPreviewResponse,
+  DiagnosticsSnapshot,
   EngineStatus,
   Entity,
   ExportPayload,
@@ -22,6 +23,7 @@ import type {
   NewThreadInput,
   NodeRow,
   Note,
+  OpsStatus,
   PlotSpine,
   Project,
   Relationship,
@@ -47,6 +49,10 @@ export async function enginePing(): Promise<string> {
 
 export async function engineStatus(): Promise<EngineStatus> {
   return invoke<EngineStatus>("engine_status");
+}
+
+export async function openPath(path: string): Promise<void> {
+  return invoke<void>("open_path", { path });
 }
 
 export async function rpcCall<T>(method: string, params?: unknown): Promise<T> {
@@ -117,6 +123,16 @@ export const imports = {
 export const gitSync = {
   run: () => rpcCall<GitSyncResult>("git_sync.run"),
   init: () => rpcCall<GitSyncInitResult>("git_sync.init"),
+};
+
+export const opsStatus = {
+  get: () => rpcCall<OpsStatus[]>("ops_status.get"),
+  clearError: (jobName: string) =>
+    rpcCall<{ ok: true }>("ops_status.clear_error", { job_name: jobName }),
+};
+
+export const diagnostics = {
+  get: () => rpcCall<DiagnosticsSnapshot>("diagnostics.get"),
 };
 
 export const entities = {

@@ -155,33 +155,33 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 ### Tasks
 
-- [ ] Add `ops_status` persistence.
+- [x] Add `ops_status` persistence.
   - New migration table with job name, last_started_at, last_finished_at, last_ok, last_error, metadata_json.
   - Package `engine/internal/opsstatus`.
-- [ ] Wire background jobs.
+- [x] Wire background jobs.
   - Backup scheduler records success/error.
   - Git sync records files written, commit, push, error.
   - Summarizer records recent failures and count.
   - Companion persistence TODO is resolved by surfacing or recording persistence errors.
-- [ ] Add RPC handlers:
+- [x] Add RPC handlers:
   - `diagnostics.get`
   - `ops_status.get`
   - `ops_status.clear_error`
-- [ ] Update Settings UI.
+- [x] Update Settings UI.
   - Show last backup status and folder.
   - Show last Git sync result.
   - Show summarizer status only when degraded.
-- [ ] Add backup recovery flow.
-  - Library menu action: reveal backups folder.
-  - Optional restore MVP: pick backup DB, validate schema, restore to a new file or replace current DB after confirmation.
+- [x] Add backup recovery flow.
+  - [x] Library menu action: reveal backups folder.
+  - [ ] Optional restore MVP: pick backup DB, validate schema, restore to a new file or replace current DB after confirmation.
 
 ### Checkpoint
 
 **Automated:**
 
-- [ ] `make test` passes.
-- [ ] Go tests cover ops status persistence and scheduler write paths.
-- [ ] Frontend tests cover Settings status rendering.
+- [x] `make test` passes.
+- [x] Go tests cover ops status persistence and scheduler write paths.
+- [x] Frontend tests cover Settings status rendering.
 
 **Manual:**
 

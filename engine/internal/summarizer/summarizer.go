@@ -9,9 +9,11 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -27,6 +29,11 @@ type Summarizer struct {
 	src     ai.ProviderSource
 	factory ai.ClientFactory
 	ch      chan string
+	ops     *opsstatus.Repo
+	now     func() int64
+
+	statusMu     sync.Mutex
+	failureCount int
 }
 
 func New(nodes *node.Repo, src ai.ProviderSource, factory ai.ClientFactory) *Summarizer {
@@ -34,6 +41,12 @@ func New(nodes *node.Repo, src ai.ProviderSource, factory ai.ClientFactory) *Sum
 		nodes: nodes, src: src, factory: factory,
 		ch: make(chan string, queueSize),
 	}
+}
+
+func (s *Summarizer) WithOpsStatus(repo *opsstatus.Repo, now func() int64) *Summarizer {
+	s.ops = repo
+	s.now = now
+	return s
 }
 
 func (s *Summarizer) Start(parent context.Context) (stop func()) {
@@ -88,12 +101,15 @@ func (s *Summarizer) RefreshNow(ctx context.Context, nodeID string) {
 // the parent_id graph were ever to become cyclic.
 func (s *Summarizer) summarizeOneDepth(ctx context.Context, nodeID string, depth int) {
 	if depth > maxSummarizeDepth {
-		fmt.Fprintf(os.Stderr, "summarizer: depth cap hit at %s (depth=%d)\n", nodeID, depth)
+		msg := fmt.Sprintf("depth cap hit at %s (depth=%d)", nodeID, depth)
+		fmt.Fprintf(os.Stderr, "summarizer: %s\n", msg)
+		s.recordError(ctx, nodeID, msg)
 		return
 	}
 	n, err := s.nodes.Get(ctx, nodeID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: get %s: %v\n", nodeID, err)
+		s.recordError(ctx, nodeID, err.Error())
 		return
 	}
 	if n.Summary != "" && n.SummaryForVersion == n.ContentVersion {
@@ -120,7 +136,10 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 	if runeLen(plain) < minRunesForLLM {
 		if err := s.nodes.SetSummary(ctx, n.ID, plain, capturedVersion); err != nil {
 			fmt.Fprintf(os.Stderr, "summarizer: SetSummary (short) %s: %v\n", n.ID, err)
+			s.recordError(ctx, n.ID, err.Error())
+			return
 		}
+		s.recordOK(ctx, n.ID)
 		return
 	}
 
@@ -128,6 +147,7 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 	client, err := s.factory(provider, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: factory(%s): %v\n", provider, err)
+		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
 
@@ -138,6 +158,7 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 	resp, err := client.Chat(ctx, msgs, llm.ChatOptions{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: Chat %s: %v\n", n.ID, err)
+		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
 	summary := strings.TrimSpace(resp.Message.Content)
@@ -146,7 +167,10 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 	}
 	if err := s.nodes.SetSummary(ctx, n.ID, summary, capturedVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: SetSummary %s: %v\n", n.ID, err)
+		s.recordError(ctx, n.ID, err.Error())
+		return
 	}
+	s.recordOK(ctx, n.ID)
 }
 
 // summarizeContainer rolls a container up from its children's Label+summary.
@@ -156,6 +180,7 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 	children, err := s.nodes.ListChildren(ctx, n.ID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: ListChildren %s: %v\n", n.ID, err)
+		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
 	if len(children) == 0 {
@@ -170,6 +195,7 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 	// Re-read children after recursion to pick up fresh summaries.
 	children, err = s.nodes.ListChildren(ctx, n.ID)
 	if err != nil {
+		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
 	var b strings.Builder
@@ -196,6 +222,7 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 	client, err := s.factory(provider, "")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: factory(%s): %v\n", provider, err)
+		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
 	msgs := []llm.ChatMessage{
@@ -205,6 +232,7 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 	resp, err := client.Chat(ctx, msgs, llm.ChatOptions{})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: Chat (container) %s: %v\n", n.ID, err)
+		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
 	summary := strings.TrimSpace(resp.Message.Content)
@@ -213,8 +241,53 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 	}
 	if err := s.nodes.SetSummary(ctx, n.ID, summary, capturedVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: SetSummary (container) %s: %v\n", n.ID, err)
+		s.recordError(ctx, n.ID, err.Error())
+		return
 	}
+	s.recordOK(ctx, n.ID)
 }
+
+func (s *Summarizer) recordError(ctx context.Context, nodeID string, msg string) {
+	if s.ops == nil {
+		return
+	}
+	now := s.nowMillis()
+	s.statusMu.Lock()
+	s.failureCount++
+	count := s.failureCount
+	s.statusMu.Unlock()
+	_ = s.ops.Record(ctx, opsstatus.JobSummarizer, now, now, false, msg, map[string]any{
+		"node_id":       nodeID,
+		"failure_count": count,
+	})
+}
+
+func (s *Summarizer) recordOK(ctx context.Context, nodeID string) {
+	if s.ops == nil {
+		return
+	}
+	now := s.nowMillis()
+	s.statusMu.Lock()
+	s.failureCount = 0
+	s.statusMu.Unlock()
+	_ = s.ops.Record(ctx, opsstatus.JobSummarizer, now, now, true, "", map[string]any{
+		"node_id":       nodeID,
+		"failure_count": 0,
+	})
+}
+
+func (s *Summarizer) nowMillis() int64 {
+	if s.now != nil {
+		return s.now()
+	}
+	return timeNowMillis()
+}
+
+func timeNowMillis() int64 {
+	return timeNow().UnixMilli()
+}
+
+var timeNow = func() time.Time { return time.Now() }
 
 func runeLen(s string) int { return len([]rune(s)) }
 

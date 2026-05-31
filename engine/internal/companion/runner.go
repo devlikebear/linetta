@@ -3,6 +3,7 @@ package companion
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -67,9 +68,14 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 		return "", err
 	}
 
-	// Persist the user turn before streaming (best-effort).
-	// TODO(phase2): surface persistence errors instead of silently ignoring.
-	_ = session.AppendMessage(path, session.Message{Role: "user", Content: text, Timestamp: time.UnixMilli(now())})
+	// Persist the user turn before streaming so transcript failures are visible
+	// before the assistant starts generating against missing history.
+	userAt := now()
+	if err := session.AppendMessage(path, session.Message{Role: "user", Content: text, Timestamp: time.UnixMilli(userAt)}); err != nil {
+		r.svc.recordPersistenceError(ctx, userAt, "user", path, err)
+		return "", fmt.Errorf("companion transcript: %w", err)
+	}
+	r.svc.recordPersistenceOK(ctx, userAt, "user", path)
 
 	// Build the message list: system + context + history (history already
 	// includes the just-appended user turn as its last item).
@@ -167,7 +173,13 @@ func (r *Runner) run(ctx context.Context, runID, projectID, path string, msgs []
 		}
 
 		// Final round.
-		_ = session.AppendMessage(path, session.Message{Role: "assistant", Content: full, Timestamp: time.UnixMilli(now())})
+		assistantAt := now()
+		if err := session.AppendMessage(path, session.Message{Role: "assistant", Content: full, Timestamp: time.UnixMilli(assistantAt)}); err != nil {
+			r.svc.recordPersistenceError(ctx, assistantAt, "assistant", path, err)
+			_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: "companion transcript: " + err.Error()})
+			return
+		}
+		r.svc.recordPersistenceOK(ctx, assistantAt, "assistant", path)
 		if prop, present, perr := ParseProposal(full); present {
 			pp := proposalPayload{RunID: runID, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
 			if perr != nil {

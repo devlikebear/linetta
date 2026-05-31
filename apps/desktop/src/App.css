@@ -127,6 +127,37 @@ body {
   padding: 0.75rem 1rem;
 }
 
+.library-menu-wrap {
+  position: relative;
+}
+
+.library-menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  min-width: 164px;
+  padding: 0.35rem;
+  border: 1px solid #d8d6cf;
+  border-radius: 6px;
+  background: #fffefb;
+  box-shadow: 0 10px 30px rgba(26, 26, 26, 0.12);
+  z-index: 30;
+}
+
+.library-menu button {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.library-menu button:hover {
+  background: #f2efe6;
+}
+
 .icon-btn {
   background: none;
   border: none;
@@ -678,5 +709,39 @@ body {
 .settings-section h3 { margin: 0 0 0.5rem; font-weight: 500; }
 .backup-path { font-size: 0.85rem; word-break: break-all; }
 .settings-saved { font-size: 0.85rem; color: #5d8; }
+.ops-status {
+  margin-top: 0.85rem;
+  padding: 0.75rem;
+  border: 1px solid #d8d6cf;
+  border-radius: 6px;
+  background: #fffefb;
+}
+.ops-status.is-ok {
+  border-color: #9fbea8;
+}
+.ops-status.is-error {
+  border-color: #d5a3a3;
+  background: #fff8f7;
+}
+.ops-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.ops-status h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.ops-status .ops-status-line {
+  margin: 0.4rem 0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.ops-status .hint {
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
 
 .ws-zen-btn { font-weight: 500; }

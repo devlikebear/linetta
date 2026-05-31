@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { projects as projectsApi, imports as importsApi } from "../lib/rpc";
+import { projects as projectsApi, imports as importsApi, settings as settingsApi, openPath } from "../lib/rpc";
 import type { ImportPreviewResult, NewProjectInput, Project } from "../lib/types";
 import { ProjectCard } from "../components/ProjectCard";
 import { NewProjectModal } from "../components/NewProjectModal";
@@ -25,6 +25,7 @@ export function Library() {
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [pending, setPending] = useState<PendingImport | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -86,12 +87,39 @@ export function Library() {
     }
   };
 
+  const openBackupFolder = async () => {
+    setMenuOpen(false);
+    try {
+      const current = await settingsApi.get();
+      await openPath(current.backup_dir);
+    } catch (err) {
+      showToast(`백업 폴더 열기 실패: ${err}`);
+    }
+  };
+
   return (
     <main className="library">
       <header className="library-top">
-        <button className="icon-btn" aria-label="라이브러리 옵션" disabled>
-          <MoreHorizontal size={16} />
-        </button>
+        <div className="library-menu-wrap">
+          <button
+            className="icon-btn"
+            aria-label="라이브러리 옵션"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          {menuOpen && (
+            <div className="library-menu" role="menu">
+              <button type="button" role="menuitem" onClick={openBackupFolder}>
+                백업 폴더 열기
+              </button>
+              <button type="button" role="menuitem" onClick={() => navigate("/settings")}>
+                설정
+              </button>
+            </div>
+          )}
+        </div>
         <Link to="/settings" className="icon-btn" aria-label="설정">
           <Settings size={16} />
         </Link>

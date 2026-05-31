@@ -23,6 +23,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
+	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -76,6 +77,8 @@ func main() {
 	notes := note.NewRepo(st)
 	relationships := relationship.NewRepo(st)
 	plotBuilder := plot.NewBuilder(nodes, beats, threads)
+	ops := opsstatus.NewRepo(st)
+	clock := func() int64 { return time.Now().UnixMilli() }
 
 	// Keep the mentions table in sync with each saved Tiptap doc.
 	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
@@ -90,7 +93,8 @@ func main() {
 	aiRuns := store.NewAIRunsRepo(st)
 	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, settingsStore)
 
-	summ := summarizer.New(nodes, settingsStore, ai.DefaultClientFactory)
+	summ := summarizer.New(nodes, settingsStore, ai.DefaultClientFactory).
+		WithOpsStatus(ops, clock)
 	stopSummarizer := summ.Start(ctx)
 	defer stopSummarizer()
 
@@ -106,6 +110,7 @@ func main() {
 		fail("home: %v", err)
 	}
 	syncer := gitsync.New(settingsStore, projects, nodes, entities)
+	syncer.Ops = ops
 	retentionFn := func(ctx context.Context) error {
 		if err := snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli()); err != nil {
 			return err
@@ -121,7 +126,10 @@ func main() {
 		return nil
 	}
 	stopBackup := backup.Start(ctx, st.DB(), home, retentionFn,
-		time.Now, time.Sleep, nil /* onTick */)
+		time.Now, time.Sleep, func(result backup.TickResult) {
+			_ = ops.Record(ctx, opsstatus.JobBackup, result.StartedAt, result.FinishedAt,
+				result.OK(), result.Error(), result)
+		})
 	defer stopBackup()
 
 	companionSvc := companion.NewService(
@@ -129,11 +137,13 @@ func main() {
 		projects, threads, entities, relationships, plotBuilder,
 		s.Notifier(), companion.ClientFactory(ai.DefaultClientFactory), settingsStore, home,
 		nodes, beats,
-	)
+	).WithOpsStatus(ops)
 
-	clock := func() int64 { return time.Now().UnixMilli() }
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, engineVersion))
+	s.Handle("diagnostics.get", handlers.DiagnosticsGet(st, ops, engineVersion))
+	s.Handle("ops_status.get", handlers.GetOpsStatus(ops))
+	s.Handle("ops_status.clear_error", handlers.ClearOpsStatusError(ops))
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
 	s.Handle("projects.list", handlers.ListProjects(projects))
 	s.Handle("projects.get", handlers.GetProject(projects))

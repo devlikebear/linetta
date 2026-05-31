@@ -3,6 +3,7 @@ package companion
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -198,5 +199,28 @@ func TestGatherContext_InjectsMemory(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("memory not recalled: %+v", d.Memories)
+	}
+}
+
+func TestSend_surfacesTranscriptPersistenceError(t *testing.T) {
+	svc, _, projectID := newSvc(t, "안녕")
+	sess, err := svc.sessions.EnsureWorker(projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := svc.sessions.TranscriptPath(sess.ID)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	runID, err := svc.Send(context.Background(), projectID, "", "기록돼야 할 메시지", func() int64 { return 1 })
+	if err == nil {
+		t.Fatalf("expected transcript persistence error, runID=%q", runID)
+	}
+	if !strings.Contains(err.Error(), "transcript") {
+		t.Fatalf("expected transcript error, got %v", err)
 	}
 }
