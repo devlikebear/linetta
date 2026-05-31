@@ -1,5 +1,5 @@
-import type { ProposalOp } from "./types";
-import { threads as threadsApi, beats as beatsApi, projects as projectsApi, companion as companionApi } from "./rpc";
+import type { ProposalOp, EntityKind } from "./types";
+import { threads as threadsApi, beats as beatsApi, projects as projectsApi, companion as companionApi, entities as entitiesApi, relationships as relationshipsApi } from "./rpc";
 
 export interface ApplyFailure {
   index: number;
@@ -17,6 +17,7 @@ export interface ApplyResult {
 // A failing op is recorded and execution continues (partial apply; no rollback).
 export async function applyProposal(ops: ProposalOp[], projectId: string, currentNodeId: string | null): Promise<ApplyResult> {
   const refMap = new Map<string, string>();
+  const entityRefMap = new Map<string, string>();
   const failures: ApplyFailure[] = [];
   let applied = 0;
 
@@ -81,6 +82,45 @@ export async function applyProposal(ops: ProposalOp[], projectId: string, curren
         case "remember": {
           if (!op.text || !op.text.trim()) throw new Error("기억할 내용 없음");
           await companionApi.remember(projectId, op.text, op.category);
+          break;
+        }
+        case "create_entity": {
+          if (!op.kind || !op.name) throw new Error("kind/name 없음");
+          const ent = await entitiesApi.create({
+            project_id: projectId,
+            kind: op.kind as EntityKind,
+            name: op.name,
+            role: op.role,
+          });
+          if (op.ref) entityRefMap.set(op.ref, ent.id);
+          if (op.summary) {
+            await entitiesApi.update({ id: ent.id, summary: op.summary });
+          }
+          break;
+        }
+        case "update_entity": {
+          if (!op.entity_id) throw new Error("entity_id 없음");
+          await entitiesApi.update({
+            id: op.entity_id,
+            name: op.name,
+            role: op.role,
+            summary: op.summary,
+            kind: op.kind ? (op.kind as EntityKind) : undefined,
+          });
+          break;
+        }
+        case "create_relationship": {
+          const fromId = op.from ?? (op.from_ref ? entityRefMap.get(op.from_ref) : undefined);
+          const toId = op.to ?? (op.to_ref ? entityRefMap.get(op.to_ref) : undefined);
+          if (!fromId || !toId) throw new Error("관계 양쪽 엔티티 참조를 해소할 수 없음");
+          if (!op.label) throw new Error("관계 라벨 없음");
+          await relationshipsApi.createOne({
+            project_id: projectId,
+            from_id: fromId,
+            to_id: toId,
+            label: op.label,
+            notes: op.notes,
+          });
           break;
         }
         default: {

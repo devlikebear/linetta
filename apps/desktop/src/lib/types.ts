@@ -384,7 +384,8 @@ export type ProposalOpType =
   | "create_thread" | "update_thread"
   | "add_beat" | "update_beat" | "delete_beat"
   | "set_outline"
-  | "remember";
+  | "remember"
+  | "create_entity" | "update_entity" | "create_relationship";
 
 export interface ProposalOp {
   op: ProposalOpType;
@@ -402,6 +403,14 @@ export interface ProposalOp {
   outline?: string;
   text?: string;
   category?: string;
+  kind?: string;
+  role?: string;
+  entity_id?: string;
+  from?: string;
+  from_ref?: string;
+  to?: string;
+  to_ref?: string;
+  notes?: string;
 }
 
 export interface CompanionProposal {

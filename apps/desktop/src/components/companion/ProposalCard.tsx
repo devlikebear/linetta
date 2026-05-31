@@ -11,6 +11,9 @@ function opLabel(op: ProposalOp): string {
     case "delete_beat": return `비트 삭제`;
     case "set_outline": return `작품 개요 설정`;
     case "remember": return `기억하기: ${op.text ?? ""}`;
+    case "create_entity": return `${op.kind === "place" ? "장소" : "캐릭터"} 생성: ${op.name ?? ""}`;
+    case "update_entity": return `엔티티 수정`;
+    case "create_relationship": return `관계 생성: ${op.label ?? ""}`;
     default: return op.op;
   }
 }
