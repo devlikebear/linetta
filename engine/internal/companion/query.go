@@ -101,7 +101,7 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 			if n.Kind != "leaf" {
 				continue
 			}
-			sb.WriteString("- [" + n.ID + "] " + breadcrumb(byID, n) + "\n")
+			sb.WriteString("- [" + n.ID + "] " + node.BreadcrumbLabel(byID, n) + "\n")
 		}
 		if sb.Len() == 0 {
 			return "(씬 없음)"
@@ -141,20 +141,6 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 	default:
 		return "(오류: 알 수 없는 도구 " + q.Tool + ")"
 	}
-}
-
-func breadcrumb(byID map[string]node.Node, n node.Node) string {
-	parts := []string{n.Label}
-	cur := n
-	for cur.ParentID != nil {
-		p, ok := byID[*cur.ParentID]
-		if !ok {
-			break
-		}
-		parts = append([]string{p.Label}, parts...)
-		cur = p
-	}
-	return strings.Join(parts, " / ")
 }
 
 func plainTextFromDoc(raw *string) string {

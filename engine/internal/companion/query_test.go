@@ -55,8 +55,19 @@ func TestRunQueries(t *testing.T) {
 
 func TestRunQueries_ListScenes(t *testing.T) {
 	svc, _, projectID := newSvc(t, "안녕")
-	out := svc.runOneQuery(context.Background(), projectID, Query{Tool: "list_scenes"})
-	if out == "" || strings.HasPrefix(out, "(오류") {
-		t.Fatalf("list_scenes returned bad output: %q", out)
+	ctx := context.Background()
+
+	p, err := svc.projects.Get(ctx, projectID)
+	if err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if p.LastOpenedNodeID == nil {
+		t.Fatal("project has no LastOpenedNodeID; expected auto-created leaf")
+	}
+	firstSceneID := *p.LastOpenedNodeID
+
+	out := svc.runOneQuery(ctx, projectID, Query{Tool: "list_scenes"})
+	if !strings.Contains(out, firstSceneID) {
+		t.Fatalf("list_scenes should list the first scene id %q:\n%s", firstSceneID, out)
 	}
 }
