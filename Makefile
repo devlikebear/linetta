@@ -13,7 +13,7 @@ test-go: ## Run Go engine tests
 test-desktop: ## Run desktop frontend tests and production build
 	cd apps/desktop && pnpm test && pnpm build
 
-test-tauri: ## Type-check the Tauri shell
+test-tauri: build-engine ## Type-check the Tauri shell
 	cd apps/desktop/src-tauri && cargo check
 
 build-engine: ## Build the Go sidecar into the Tauri binaries directory
