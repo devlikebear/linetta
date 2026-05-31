@@ -141,6 +141,16 @@ export interface AICancelled {
   run_id: string;
 }
 
+export interface EngineStatus {
+  ok: boolean;
+  error?: string;
+  version?: string;
+  home?: string;
+  db_path?: string;
+  migration_version?: number;
+  migration_count?: number;
+}
+
 // Wire shape from ai.preview_context RPC. Mirrors engine PreviewCounts JSON.
 // Mapped to ContextCounts (camelCase) inside the rpc client.
 export interface ContextPreviewResponse {

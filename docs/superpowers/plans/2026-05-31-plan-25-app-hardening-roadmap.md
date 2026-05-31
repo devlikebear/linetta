@@ -76,21 +76,21 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 ### Tasks
 
-- [ ] Add Rust-side engine status state.
+- [x] Add Rust-side engine status state.
   - In `apps/desktop/src-tauri/src/lib.rs`, keep startup error in managed state instead of only logging it.
   - Add `engine_status` command returning `{ ok, error, version? }`.
-- [ ] Add Go engine metadata RPC.
+- [x] Add Go engine metadata RPC.
   - Add `version` or `diagnostics.version` handler returning engine version, db path, home dir, and migration status.
   - Keep it side-effect-free.
-- [ ] Harden JSONRPC client.
+- [x] Harden JSONRPC client.
   - Add per-call timeout to `jsonrpc::Client::call`.
   - On stdout EOF, drain pending calls with a structured error.
   - Keep notification forwarding behavior for `ai.*` and `companion.*`.
-- [ ] Add frontend startup gate.
+- [x] Add frontend startup gate.
   - Add `EngineGate` around routes.
   - Show a friendly diagnostic screen when the engine is unavailable.
   - Include "Retry", "Copy diagnostics", and "Open data folder" when available.
-- [ ] Add tests.
+- [x] Add tests.
   - Rust unit tests for JSONRPC response routing, timeout, EOF drain, and notification handler.
   - Frontend tests for EngineGate ok/error/retry states.
 
@@ -98,9 +98,9 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 **Automated:**
 
-- [ ] `make test` passes.
-- [ ] A Rust test proves pending JSONRPC calls fail when the reader exits.
-- [ ] A frontend test proves engine startup errors do not render Library as if the app loaded normally.
+- [x] `make test` passes.
+- [x] A Rust test proves pending JSONRPC calls fail when the reader exits.
+- [x] A frontend test proves engine startup errors do not render Library as if the app loaded normally.
 
 **Manual:**
 

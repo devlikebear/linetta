@@ -36,6 +36,8 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
+const engineVersion = "0.0.1"
+
 func main() {
 	stdio := flag.Bool("stdio", false, "serve JSONRPC over stdin/stdout")
 	flag.Parse()
@@ -131,6 +133,7 @@ func main() {
 
 	clock := func() int64 { return time.Now().UnixMilli() }
 	s.Handle("ping", handlers.Ping)
+	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, engineVersion))
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
 	s.Handle("projects.list", handlers.ListProjects(projects))
 	s.Handle("projects.get", handlers.GetProject(projects))

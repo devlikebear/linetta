@@ -26,31 +26,41 @@ pub async fn spawn(app: &tauri::AppHandle) -> Result<EngineHandle> {
         .spawn()
         .map_err(|e| anyhow!("spawn {}: {}", binary.display(), e))?;
 
-    let stdin = child.stdin.take().ok_or_else(|| anyhow!("child has no stdin"))?;
-    let stdout = child.stdout.take().ok_or_else(|| anyhow!("child has no stdout"))?;
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| anyhow!("child has no stdin"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("child has no stdout"))?;
 
     let handle_clone = app.clone();
-    let on_notification: NotificationHandler = std::sync::Arc::new(move |method: String, params: Value| {
-        // Route ai.* notifications to Tauri events with the same name (with `.` → `-`).
-        let event = match method.as_str() {
-            "ai.delta" => "ai-delta",
-            "ai.reset" => "ai-reset",
-            "ai.done" => "ai-done",
-            "ai.error" => "ai-error",
-            "ai.cancelled" => "ai-cancelled",
-            "companion.delta" => "companion-delta",
-            "companion.reset" => "companion-reset",
-            "companion.done" => "companion-done",
-            "companion.error" => "companion-error",
-            "companion.cancelled" => "companion-cancelled",
-            "companion.proposal" => "companion-proposal",
-            "companion.thinking" => "companion-thinking",
-            _ => return, // ignore unknown
-        };
-        let _ = handle_clone.emit(event, params);
-    });
+    let on_notification: NotificationHandler =
+        std::sync::Arc::new(move |method: String, params: Value| {
+            // Route ai.* notifications to Tauri events with the same name (with `.` → `-`).
+            let event = match method.as_str() {
+                "ai.delta" => "ai-delta",
+                "ai.reset" => "ai-reset",
+                "ai.done" => "ai-done",
+                "ai.error" => "ai-error",
+                "ai.cancelled" => "ai-cancelled",
+                "companion.delta" => "companion-delta",
+                "companion.reset" => "companion-reset",
+                "companion.done" => "companion-done",
+                "companion.error" => "companion-error",
+                "companion.cancelled" => "companion-cancelled",
+                "companion.proposal" => "companion-proposal",
+                "companion.thinking" => "companion-thinking",
+                _ => return, // ignore unknown
+            };
+            let _ = handle_clone.emit(event, params);
+        });
     let client = Client::new(stdin, stdout, on_notification);
-    Ok(EngineHandle { client, _child: child })
+    Ok(EngineHandle {
+        client,
+        _child: child,
+    })
 }
 
 fn resolve_binary(app: &tauri::AppHandle) -> Result<std::path::PathBuf> {
@@ -63,7 +73,10 @@ fn resolve_binary(app: &tauri::AppHandle) -> Result<std::path::PathBuf> {
     let resource_name = format!("linetta-engine-{}{}", triple, std::env::consts::EXE_SUFFIX);
 
     // 1. Production: Tauri resource dir.
-    if let Ok(path) = app.path().resolve(&resource_name, tauri::path::BaseDirectory::Resource) {
+    if let Ok(path) = app
+        .path()
+        .resolve(&resource_name, tauri::path::BaseDirectory::Resource)
+    {
         if path.exists() {
             return Ok(path);
         }
@@ -93,7 +106,11 @@ fn resolve_binary(app: &tauri::AppHandle) -> Result<std::path::PathBuf> {
         let candidates = [
             cwd.join("binaries").join(&resource_name),
             cwd.join("src-tauri").join("binaries").join(&resource_name),
-            cwd.join("apps").join("desktop").join("src-tauri").join("binaries").join(&resource_name),
+            cwd.join("apps")
+                .join("desktop")
+                .join("src-tauri")
+                .join("binaries")
+                .join(&resource_name),
         ];
         for candidate in candidates {
             if candidate.exists() {
@@ -116,7 +133,11 @@ fn resolve_binary(app: &tauri::AppHandle) -> Result<std::path::PathBuf> {
 
 fn current_target_triple() -> std::result::Result<String, std::env::VarError> {
     // Best-effort detection without pulling in another crate.
-    let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+    let arch = if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "x86_64"
+    };
     let os = if cfg!(target_os = "macos") {
         "apple-darwin"
     } else if cfg!(target_os = "linux") {

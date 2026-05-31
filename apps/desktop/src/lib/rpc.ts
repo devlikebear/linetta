@@ -5,6 +5,7 @@ import type {
   CompanionMessage,
   ContextCounts,
   ContextPreviewResponse,
+  EngineStatus,
   Entity,
   ExportPayload,
   GitSyncInitResult,
@@ -42,6 +43,10 @@ import type {
 
 export async function enginePing(): Promise<string> {
   return invoke<string>("engine_ping");
+}
+
+export async function engineStatus(): Promise<EngineStatus> {
+  return invoke<EngineStatus>("engine_status");
 }
 
 export async function rpcCall<T>(method: string, params?: unknown): Promise<T> {

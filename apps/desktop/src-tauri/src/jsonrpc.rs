@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::process::{ChildStdin, ChildStdout};
 use tokio::sync::{oneshot, Mutex};
 
@@ -46,10 +47,14 @@ pub struct RpcError {
 
 type Pending = Arc<Mutex<std::collections::HashMap<i64, oneshot::Sender<Result<Value, RpcError>>>>>;
 
+const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(30);
+const READER_CLOSED_CODE: i64 = -32099;
+
 pub struct Client {
     next_id: AtomicI64,
-    stdin: Mutex<ChildStdin>,
+    stdin: Mutex<Box<dyn AsyncWrite + Unpin + Send>>,
     pending: Pending,
+    call_timeout: Duration,
 }
 
 impl Client {
@@ -60,16 +65,41 @@ impl Client {
         stdout: ChildStdout,
         on_notification: NotificationHandler,
     ) -> Arc<Self> {
+        Self::new_with_io(stdin, stdout, on_notification, DEFAULT_CALL_TIMEOUT)
+    }
+
+    fn new_with_io<W, R>(
+        stdin: W,
+        stdout: R,
+        on_notification: NotificationHandler,
+        call_timeout: Duration,
+    ) -> Arc<Self>
+    where
+        W: AsyncWrite + Unpin + Send + 'static,
+        R: AsyncRead + Unpin + Send + 'static,
+    {
         let pending: Pending = Arc::new(Mutex::new(Default::default()));
         let client = Arc::new(Client {
             next_id: AtomicI64::new(1),
-            stdin: Mutex::new(stdin),
+            stdin: Mutex::new(Box::new(stdin)),
             pending: pending.clone(),
+            call_timeout,
         });
         let pending_for_reader = pending.clone();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stdout).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
+            loop {
+                let line = match reader.next_line().await {
+                    Ok(Some(line)) => line,
+                    Ok(None) => {
+                        drain_pending(&pending_for_reader, "rpc reader closed").await;
+                        return;
+                    }
+                    Err(e) => {
+                        drain_pending(&pending_for_reader, &format!("rpc reader error: {e}")).await;
+                        return;
+                    }
+                };
                 let resp: Response = match serde_json::from_str(&line) {
                     Ok(r) => r,
                     Err(_) => continue, // drop malformed lines
@@ -113,15 +143,144 @@ impl Client {
         })?;
         {
             let mut stdin = self.stdin.lock().await;
-            stdin.write_all(payload.as_bytes()).await?;
-            stdin.write_all(b"\n").await?;
-            stdin.flush().await?;
+            if let Err(e) = stdin.write_all(payload.as_bytes()).await {
+                self.pending.lock().await.remove(&id);
+                return Err(e.into());
+            }
+            if let Err(e) = stdin.write_all(b"\n").await {
+                self.pending.lock().await.remove(&id);
+                return Err(e.into());
+            }
+            if let Err(e) = stdin.flush().await {
+                self.pending.lock().await.remove(&id);
+                return Err(e.into());
+            }
         }
 
-        match rx.await {
-            Ok(Ok(v)) => Ok(v),
-            Ok(Err(e)) => Err(anyhow!("rpc error {}: {}", e.code, e.message)),
-            Err(_) => Err(anyhow!("rpc channel closed before reply")),
+        match tokio::time::timeout(self.call_timeout, rx).await {
+            Ok(Ok(Ok(v))) => Ok(v),
+            Ok(Ok(Err(e))) => Err(anyhow!("rpc error {}: {}", e.code, e.message)),
+            Ok(Err(_)) => Err(anyhow!("rpc channel closed before reply")),
+            Err(_) => {
+                self.pending.lock().await.remove(&id);
+                Err(anyhow!(
+                    "rpc timeout after {}ms",
+                    self.call_timeout.as_millis()
+                ))
+            }
         }
+    }
+}
+
+async fn drain_pending(pending: &Pending, message: &str) {
+    let drained = std::mem::take(&mut *pending.lock().await);
+    for (_, tx) in drained {
+        let _ = tx.send(Err(RpcError {
+            code: READER_CLOSED_CODE,
+            message: message.to_string(),
+        }));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::sync::Mutex as StdMutex;
+    use tokio::io::duplex;
+
+    fn noop_handler() -> NotificationHandler {
+        Arc::new(|_, _| {})
+    }
+
+    #[tokio::test]
+    async fn routes_response_to_matching_call() {
+        let (client_stdin, engine_read) = duplex(1024);
+        let (mut engine_write, client_stdout) = duplex(1024);
+        let client = Client::new_with_io(
+            client_stdin,
+            client_stdout,
+            noop_handler(),
+            Duration::from_secs(1),
+        );
+
+        let server = tokio::spawn(async move {
+            let mut reader = BufReader::new(engine_read).lines();
+            let line = reader.next_line().await.unwrap().unwrap();
+            let req: Value = serde_json::from_str(&line).unwrap();
+            assert_eq!(req["method"], "ping");
+            let body = json!({"jsonrpc":"2.0","id":req["id"],"result":"pong"}).to_string();
+            engine_write.write_all(body.as_bytes()).await.unwrap();
+            engine_write.write_all(b"\n").await.unwrap();
+        });
+
+        let got = client.call("ping", None).await.unwrap();
+        server.await.unwrap();
+        assert_eq!(got, json!("pong"));
+    }
+
+    #[tokio::test]
+    async fn forwards_notifications_without_pending_response() {
+        let (client_stdin, _engine_read) = duplex(1024);
+        let (mut engine_write, client_stdout) = duplex(1024);
+        let seen: Arc<StdMutex<Vec<(String, Value)>>> = Arc::new(StdMutex::new(Vec::new()));
+        let seen_for_handler = seen.clone();
+        let _client = Client::new_with_io(
+            client_stdin,
+            client_stdout,
+            Arc::new(move |method, params| {
+                seen_for_handler.lock().unwrap().push((method, params));
+            }),
+            Duration::from_secs(1),
+        );
+
+        let body = json!({"jsonrpc":"2.0","method":"ai.delta","params":{"text":"hi"}}).to_string();
+        engine_write.write_all(body.as_bytes()).await.unwrap();
+        engine_write.write_all(b"\n").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(20)).await;
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].0, "ai.delta");
+        assert_eq!(seen[0].1, json!({"text":"hi"}));
+    }
+
+    #[tokio::test]
+    async fn times_out_pending_calls() {
+        let (client_stdin, _engine_read) = duplex(1024);
+        let (_engine_write, client_stdout) = duplex(1024);
+        let client = Client::new_with_io(
+            client_stdin,
+            client_stdout,
+            noop_handler(),
+            Duration::from_millis(20),
+        );
+
+        let err = client.call("slow", None).await.unwrap_err().to_string();
+        assert!(err.contains("rpc timeout"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn reader_eof_fails_pending_calls() {
+        let (client_stdin, engine_read) = duplex(1024);
+        let (engine_write, client_stdout) = duplex(1024);
+        let client = Client::new_with_io(
+            client_stdin,
+            client_stdout,
+            noop_handler(),
+            Duration::from_secs(1),
+        );
+
+        let call = tokio::spawn({
+            let client = client.clone();
+            async move { client.call("will-close", None).await }
+        });
+
+        let mut reader = BufReader::new(engine_read).lines();
+        let _ = reader.next_line().await.unwrap().unwrap();
+        drop(engine_write);
+
+        let err = call.await.unwrap().unwrap_err().to_string();
+        assert!(err.contains("rpc reader closed"), "{err}");
     }
 }

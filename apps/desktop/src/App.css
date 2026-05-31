@@ -82,6 +82,38 @@ body {
   color: #1a1a1a;
 }
 
+.engine-gate {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.engine-gate .error {
+  max-width: 640px;
+  color: #8d1f1f;
+}
+
+.engine-diagnostics {
+  width: min(640px, 100%);
+  max-height: 220px;
+  overflow: auto;
+  padding: 1rem;
+  background: #fffefb;
+  border: 1px solid #d8d6cf;
+  border-radius: 6px;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+.engine-gate-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* Library */
 .library {
   min-height: 100vh;
