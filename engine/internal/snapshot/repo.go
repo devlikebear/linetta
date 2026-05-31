@@ -14,6 +14,8 @@ import (
 // ErrNotFound is returned when no snapshot exists for a query.
 var ErrNotFound = errors.New("snapshot not found")
 
+var ErrInvalidReason = errors.New("invalid snapshot reason")
+
 // Repo persists node_snapshots rows.
 type Repo struct {
 	s *store.Store
@@ -24,6 +26,9 @@ func NewRepo(s *store.Store) *Repo { return &Repo{s: s} }
 
 // Create inserts a snapshot and returns it with a generated id.
 func (r *Repo) Create(ctx context.Context, nodeID, doc, reason string, now int64) (Snapshot, error) {
+	if !ValidReason(reason) {
+		return Snapshot{}, ErrInvalidReason
+	}
 	id := uuid.NewString()
 	if _, err := r.s.DB().ExecContext(ctx, `
 INSERT INTO node_snapshots (id, node_id, content_doc, reason, created_at)

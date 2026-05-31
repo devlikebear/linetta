@@ -47,6 +47,14 @@ func TestCreate_returnsRowWithGeneratedID(t *testing.T) {
 	}
 }
 
+func TestCreate_rejectsInvalidReason(t *testing.T) {
+	r, nodeID := newRepoWithNode(t)
+	_, err := r.Create(context.Background(), nodeID, `{"type":"doc"}`, "bad", 5000)
+	if err != ErrInvalidReason {
+		t.Errorf("err = %v, want ErrInvalidReason", err)
+	}
+}
+
 func TestLatestForNode_returnsMostRecent(t *testing.T) {
 	r, nodeID := newRepoWithNode(t)
 	ctx := context.Background()

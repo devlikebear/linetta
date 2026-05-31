@@ -106,12 +106,41 @@ func TestRepo_SetLastOpened(t *testing.T) {
 	}
 }
 
+func TestRepo_SetLastOpened_rejectsNodeFromDifferentProject(t *testing.T) {
+	s, p1 := newStoreAndProject(t)
+	pr := project.NewRepo(s)
+	p2, err := pr.Create(context.Background(), 2000, project.NewInput{
+		Title: "Other", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first",
+	})
+	if err != nil {
+		t.Fatalf("create second project: %v", err)
+	}
+	r := NewRepo(s)
+	err = r.SetLastOpened(context.Background(), p1.ID, *p2.LastOpenedNodeID, 3000)
+	if err != ErrNodeProjectMismatch {
+		t.Errorf("err = %v, want ErrNodeProjectMismatch", err)
+	}
+}
+
 func TestRepo_UpdateContent_rejectsMissingNode(t *testing.T) {
 	s, _ := newStoreAndProject(t)
 	r := NewRepo(s)
 	err := r.UpdateContent(context.Background(), "no-such-id", `{"type":"doc"}`, 1)
 	if err != ErrNotFound {
 		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRepo_UpdateContent_rejectsContainerNode(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	chapter, err := r.CreateSibling(context.Background(), *p.LastOpenedNodeID, "container", "1장", "", 2)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+	err = r.UpdateContent(context.Background(), chapter.ID, `{"type":"doc"}`, 3)
+	if err != ErrContentOnContainer {
+		t.Errorf("err = %v, want ErrContentOnContainer", err)
 	}
 }
 
@@ -163,6 +192,15 @@ func TestRepo_CreateSibling_placesAfterReference(t *testing.T) {
 	}
 }
 
+func TestRepo_CreateSibling_rejectsInvalidKind(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	_, err := r.CreateSibling(context.Background(), *p.LastOpenedNodeID, "folder", "bad", "", 2)
+	if err != ErrInvalidKind {
+		t.Errorf("err = %v, want ErrInvalidKind", err)
+	}
+}
+
 func TestRepo_CreateChild_lastOrdinal(t *testing.T) {
 	s, p := newStoreAndProject(t)
 	r := NewRepo(s)
@@ -179,6 +217,19 @@ func TestRepo_CreateChild_lastOrdinal(t *testing.T) {
 	second, _ := r.CreateChild(ctx, chapter.ID, "leaf", "씬 B", "", 4000)
 	if second.Ordinal != 1 {
 		t.Errorf("second child ordinal = %d, want 1", second.Ordinal)
+	}
+}
+
+func TestRepo_CreateChild_rejectsInvalidKind(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	chapter, err := r.CreateSibling(context.Background(), *p.LastOpenedNodeID, "container", "1장", "", 2)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+	_, err = r.CreateChild(context.Background(), chapter.ID, "folder", "bad", "", 3)
+	if err != ErrInvalidKind {
+		t.Errorf("err = %v, want ErrInvalidKind", err)
 	}
 }
 
@@ -235,9 +286,9 @@ func TestRepo_MoveUp_andMoveDown(t *testing.T) {
 	r := NewRepo(s)
 	ctx := context.Background()
 
-	first := *p.LastOpenedNodeID                                                          // ordinal 0
-	second, _ := r.CreateSibling(ctx, first, "leaf", "씬 2", "", 2000)                    // ordinal 1
-	third, _ := r.CreateSibling(ctx, second.ID, "leaf", "씬 3", "", 3000)                 // ordinal 2
+	first := *p.LastOpenedNodeID                                         // ordinal 0
+	second, _ := r.CreateSibling(ctx, first, "leaf", "씬 2", "", 2000)    // ordinal 1
+	third, _ := r.CreateSibling(ctx, second.ID, "leaf", "씬 3", "", 3000) // ordinal 2
 
 	// Move third up → should swap with second.
 	if err := r.MoveUp(ctx, third.ID, 4000); err != nil {

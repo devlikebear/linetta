@@ -8,6 +8,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
@@ -256,4 +257,40 @@ func TestUpdateNodeContentHandler_doesNotCallPostUpdateOnError(t *testing.T) {
 	if called != 0 {
 		t.Errorf("postUpdate called %d times on error", called)
 	}
+}
+
+func TestNodeHandlers_returnInvalidParamsForIntegrityErrors(t *testing.T) {
+	f := newNodeFixture(t)
+	ctx := context.Background()
+
+	createSibling := CreateSibling(f.nodes, func() int64 { return 1 })
+	if _, err := createSibling(ctx, json.RawMessage(`{"reference_id":"`+f.nID+`","kind":"folder"}`)); !rpcErrorCode(err, rpc.CodeInvalidParams) {
+		t.Fatalf("CreateSibling err = %v, want invalid params", err)
+	}
+
+	chapter, err := f.nodes.CreateSibling(ctx, f.nID, "container", "1장", "", 2)
+	if err != nil {
+		t.Fatalf("CreateSibling container: %v", err)
+	}
+	updateContent := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return 3 }, nil)
+	if _, err := updateContent(ctx, json.RawMessage(`{"id":"`+chapter.ID+`","doc":"{}"}`)); !rpcErrorCode(err, rpc.CodeInvalidParams) {
+		t.Fatalf("UpdateContent err = %v, want invalid params", err)
+	}
+
+	otherProject, err := f.proj.Create(ctx, 4, project.NewInput{Title: "Other", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatalf("create other project: %v", err)
+	}
+	setLastOpened := SetLastOpened(f.nodes, func() int64 { return 5 })
+	if _, err := setLastOpened(ctx, json.RawMessage(`{"project_id":"`+f.pID+`","node_id":"`+*otherProject.LastOpenedNodeID+`"}`)); !rpcErrorCode(err, rpc.CodeInvalidParams) {
+		t.Fatalf("SetLastOpened err = %v, want invalid params", err)
+	}
+}
+
+func rpcErrorCode(err error, code int) bool {
+	if err == nil {
+		return false
+	}
+	me, ok := err.(*rpc.MethodError)
+	return ok && me.Code == code
 }

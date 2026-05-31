@@ -1,6 +1,36 @@
 // Package project owns Project domain types and the SQLite-backed Repo.
 package project
 
+const (
+	LengthFlash   = "flash"
+	LengthShort   = "short"
+	LengthNovella = "novella"
+	LengthNovel   = "novel"
+	LengthSeries  = "series"
+
+	POVFirst        = "first"
+	POVThirdLimited = "third_limited"
+	POVOmniscient   = "omniscient"
+)
+
+func ValidLengthTarget(v string) bool {
+	switch v {
+	case LengthFlash, LengthShort, LengthNovella, LengthNovel, LengthSeries:
+		return true
+	default:
+		return false
+	}
+}
+
+func ValidDefaultPOV(v string) bool {
+	switch v {
+	case POVFirst, POVThirdLimited, POVOmniscient:
+		return true
+	default:
+		return false
+	}
+}
+
 // Project is the on-wire and on-disk representation of a single work.
 // Genres is a JSON-array stored as TEXT in SQLite; the repo handles conversion.
 type Project struct {

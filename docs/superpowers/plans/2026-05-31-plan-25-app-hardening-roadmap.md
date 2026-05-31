@@ -114,23 +114,23 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 ### Tasks
 
-- [ ] Add validation helpers in engine domain packages.
+- [x] Add validation helpers in engine domain packages.
   - `node.ValidKind`, `node.ValidStatus`.
   - `project.ValidLengthTarget`, `project.ValidDefaultPOV`.
   - `snapshot.ValidReason`.
-- [ ] Write failing tests first for invalid inputs:
+- [x] Write failing tests first for invalid inputs:
   - `nodes.create_sibling` rejects unknown kind.
   - `nodes.create_child` rejects unknown kind.
   - `nodes.update_content` rejects container nodes.
   - `nodes.set_last_opened` rejects a node from a different project.
   - `projects.create` rejects unknown length/POV values.
-- [ ] Implement repo/handler validation.
+- [x] Implement repo/handler validation.
   - Return `rpc.CodeInvalidParams` for user/input errors.
   - Keep internal DB errors as internal errors.
-- [ ] Add migration for constraints where safe.
+- [x] Add migration for constraints where safe.
   - If SQLite cannot add a `CHECK` constraint in place, document which invariants remain application-enforced.
   - Add indexes needed by new validation queries.
-- [ ] Add import/restore regression tests.
+- [x] Add import/restore regression tests.
   - Import cannot create invalid node kinds.
   - Restore recomputes mentions/word count consistently.
   - Delete/move operations keep sibling ordinals coherent.
@@ -139,9 +139,9 @@ All three passed. `pnpm build` warned that the main JS chunk is about 641 KB.
 
 **Automated:**
 
-- [ ] `make test` passes.
-- [ ] New invalid-input tests fail before implementation and pass after.
-- [ ] Existing DB migration tests cover a fresh DB and an upgraded DB.
+- [x] `make test` passes.
+- [x] New invalid-input tests fail before implementation and pass after.
+- [x] Existing DB migration tests cover a fresh DB and an upgraded DB.
 
 **Manual:**
 

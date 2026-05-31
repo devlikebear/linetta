@@ -14,6 +14,12 @@ import (
 // ErrNotFound is returned by Get when the project id doesn't exist.
 var ErrNotFound = errors.New("project not found")
 
+var (
+	ErrInvalidInput        = errors.New("invalid project input")
+	ErrInvalidLengthTarget = errors.New("invalid length_target")
+	ErrInvalidDefaultPOV   = errors.New("invalid default_pov")
+)
+
 // Repo persists Projects (and the auto-created first leaf node) in SQLite.
 type Repo struct {
 	s *store.Store
@@ -26,10 +32,13 @@ func NewRepo(s *store.Store) *Repo { return &Repo{s: s} }
 // node ("씬 1"), and returns the resulting Project (with last_opened_node_id set).
 func (r *Repo) Create(ctx context.Context, now int64, in NewInput) (Project, error) {
 	if in.Title == "" {
-		return Project{}, fmt.Errorf("create project: title required")
+		return Project{}, fmt.Errorf("%w: title required", ErrInvalidInput)
 	}
-	if in.LengthTarget == "" || in.DefaultPOV == "" {
-		return Project{}, fmt.Errorf("create project: length_target and default_pov required")
+	if !ValidLengthTarget(in.LengthTarget) {
+		return Project{}, ErrInvalidLengthTarget
+	}
+	if !ValidDefaultPOV(in.DefaultPOV) {
+		return Project{}, ErrInvalidDefaultPOV
 	}
 
 	projectID := uuid.NewString()

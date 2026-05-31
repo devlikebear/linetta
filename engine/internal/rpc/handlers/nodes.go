@@ -51,6 +51,9 @@ func UpdateNodeContent(nodes *node.Repo, snaps *snapshot.Repo, now Clock, postUp
 			if errors.Is(err, node.ErrNotFound) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
 			}
+			if errors.Is(err, node.ErrContentOnContainer) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 
@@ -86,6 +89,9 @@ func SetLastOpened(nodes *node.Repo, now Clock) rpc.Handler {
 		if err := nodes.SetLastOpened(ctx, p.ProjectID, p.NodeID, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+			}
+			if errors.Is(err, node.ErrNodeProjectMismatch) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -134,6 +140,9 @@ func CreateSibling(nodes *node.Repo, now Clock) rpc.Handler {
 			if errors.Is(err, node.ErrNotFound) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "reference not found"}
 			}
+			if errors.Is(err, node.ErrInvalidKind) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(n)
@@ -157,6 +166,9 @@ func CreateChild(nodes *node.Repo, now Clock) rpc.Handler {
 		if err != nil {
 			if errors.Is(err, node.ErrNotFound) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "parent not found"}
+			}
+			if errors.Is(err, node.ErrInvalidKind) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

@@ -17,3 +17,7 @@ const (
 	ReasonAutosave  = "autosave"
 	ReasonAIReplace = "ai-replace"
 )
+
+func ValidReason(reason string) bool {
+	return reason == ReasonManual || reason == ReasonAutosave || reason == ReasonAIReplace
+}

@@ -1,5 +1,22 @@
 package node
 
+const (
+	KindContainer = "container"
+	KindLeaf      = "leaf"
+
+	StatusDraft    = "draft"
+	StatusRevision = "revision"
+	StatusFinal    = "final"
+)
+
+func ValidKind(kind string) bool {
+	return kind == KindContainer || kind == KindLeaf
+}
+
+func ValidStatus(status string) bool {
+	return status == StatusDraft || status == StatusRevision || status == StatusFinal
+}
+
 // Node mirrors the SQLite row. content_doc is the raw Tiptap JSON; the engine
 // stores and serves it verbatim, never re-shaping it.
 type Node struct {

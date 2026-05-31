@@ -52,6 +52,11 @@ func TestImportMarkdownHandler_createsProjectFromContent(t *testing.T) {
 	if len(nodes) < 3 {
 		t.Errorf("expected 3+ nodes, got %d", len(nodes))
 	}
+	for _, n := range nodes {
+		if !node.ValidKind(n.Kind) {
+			t.Fatalf("import produced invalid node kind: %+v", n)
+		}
+	}
 }
 
 func TestImportMarkdown_resultIncludesCountsAndWarnings(t *testing.T) {

@@ -13,6 +13,12 @@ import (
 // ErrNotFound is returned when a node id does not exist.
 var ErrNotFound = errors.New("node not found")
 
+var (
+	ErrInvalidKind         = errors.New("invalid node kind")
+	ErrContentOnContainer  = errors.New("cannot update content for a container node")
+	ErrNodeProjectMismatch = errors.New("node does not belong to project")
+)
+
 // MentionResyncer is called after a successful UpdateContent. Typical impl:
 // mention.Repo.ResyncForNode + mention.Collect. The callback returning an error
 // surfaces as an UpdateContent failure.
@@ -54,6 +60,17 @@ func (r *Repo) UpdateContent(ctx context.Context, id string, doc string, now int
 		return err
 	}
 	defer tx.Rollback()
+
+	var kind string
+	if err := tx.QueryRowContext(ctx, `SELECT kind FROM nodes WHERE id = ?`, id).Scan(&kind); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if kind != KindLeaf {
+		return ErrContentOnContainer
+	}
 
 	res, err := tx.ExecContext(ctx, `
 UPDATE nodes
@@ -127,9 +144,17 @@ UPDATE nodes SET summary = ?, summary_for_version = ? WHERE id = ?`,
 
 // SetLastOpened updates projects.last_opened_node_id and projects.updated_at.
 func (r *Repo) SetLastOpened(ctx context.Context, projectID, nodeID string, now int64) error {
+	var exists int
+	if err := r.s.DB().QueryRowContext(ctx,
+		`SELECT COUNT(1) FROM nodes WHERE id = ? AND project_id = ?`, nodeID, projectID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return ErrNodeProjectMismatch
+	}
 	res, err := r.s.DB().ExecContext(ctx, `
-UPDATE projects SET last_opened_node_id = ?, updated_at = ?
- WHERE id = ?`, nodeID, now, projectID)
+	UPDATE projects SET last_opened_node_id = ?, updated_at = ?
+	 WHERE id = ?`, nodeID, now, projectID)
 	if err != nil {
 		return err
 	}
@@ -215,6 +240,9 @@ ORDER BY (parent_id IS NULL) DESC, parent_id, ordinal`, projectID)
 // The new ordinal is referenceOrdinal + 1; existing siblings at >= that ordinal
 // are shifted forward by 1.
 func (r *Repo) CreateSibling(ctx context.Context, referenceID, kind, label, title string, now int64) (Node, error) {
+	if !ValidKind(kind) {
+		return Node{}, ErrInvalidKind
+	}
 	tx, err := r.s.DB().BeginTx(ctx, nil)
 	if err != nil {
 		return Node{}, err
@@ -250,7 +278,7 @@ UPDATE nodes SET ordinal = ordinal + 1
 
 	newID := uuid.NewString()
 	var contentDoc any
-	if kind == "leaf" {
+	if kind == KindLeaf {
 		contentDoc = `{"type":"doc","content":[{"type":"paragraph"}]}`
 	} else {
 		contentDoc = nil
@@ -274,6 +302,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 0, ?, ?)`,
 
 // CreateChild inserts a new node as the last child of parentID.
 func (r *Repo) CreateChild(ctx context.Context, parentID, kind, label, title string, now int64) (Node, error) {
+	if !ValidKind(kind) {
+		return Node{}, ErrInvalidKind
+	}
 	tx, err := r.s.DB().BeginTx(ctx, nil)
 	if err != nil {
 		return Node{}, err
@@ -300,7 +331,7 @@ func (r *Repo) CreateChild(ctx context.Context, parentID, kind, label, title str
 
 	newID := uuid.NewString()
 	var contentDoc any
-	if kind == "leaf" {
+	if kind == KindLeaf {
 		contentDoc = `{"type":"doc","content":[{"type":"paragraph"}]}`
 	} else {
 		contentDoc = nil

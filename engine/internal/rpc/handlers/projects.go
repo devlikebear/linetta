@@ -24,6 +24,11 @@ func CreateProject(repo *project.Repo, now Clock) rpc.Handler {
 		}
 		p, err := repo.Create(ctx, now(), in)
 		if err != nil {
+			if errors.Is(err, project.ErrInvalidInput) ||
+				errors.Is(err, project.ErrInvalidLengthTarget) ||
+				errors.Is(err, project.ErrInvalidDefaultPOV) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(p)

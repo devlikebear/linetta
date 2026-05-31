@@ -70,6 +70,23 @@ SELECT id, project_id, kind, label FROM nodes WHERE id = ?`, *p.LastOpenedNodeID
 	}
 }
 
+func TestRepo_Create_rejectsInvalidLengthAndPOV(t *testing.T) {
+	s := openStore(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	if _, err := r.Create(ctx, 1, NewInput{
+		Title: "bad", Genres: []string{"SF"}, LengthTarget: "epic", DefaultPOV: "first",
+	}); err != ErrInvalidLengthTarget {
+		t.Errorf("length err = %v, want ErrInvalidLengthTarget", err)
+	}
+	if _, err := r.Create(ctx, 1, NewInput{
+		Title: "bad", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "second",
+	}); err != ErrInvalidDefaultPOV {
+		t.Errorf("pov err = %v, want ErrInvalidDefaultPOV", err)
+	}
+}
+
 func TestRepo_List_recentFirst(t *testing.T) {
 	s := openStore(t)
 	r := NewRepo(s)

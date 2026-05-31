@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
@@ -44,6 +45,21 @@ func TestCreateProjectHandler(t *testing.T) {
 	}
 	if p.CreatedAt != 12345 {
 		t.Errorf("created_at = %d, want 12345 (clock injected)", p.CreatedAt)
+	}
+}
+
+func TestCreateProjectHandler_invalidEnumsReturnInvalidParams(t *testing.T) {
+	repo := newRepo(t)
+	h := CreateProject(repo, func() int64 { return 1 })
+	_, err := h(context.Background(), json.RawMessage(`{
+		"title": "Bad",
+		"genres": ["SF"],
+		"length_target": "epic",
+		"default_pov": "first"
+	}`))
+	me, ok := err.(*rpc.MethodError)
+	if !ok || me.Code != rpc.CodeInvalidParams {
+		t.Fatalf("err = %v, want invalid params", err)
 	}
 }
 
