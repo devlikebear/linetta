@@ -4,7 +4,9 @@ import (
 	"context"
 	"path/filepath"
 
+	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
@@ -34,6 +36,8 @@ type Service struct {
 	entities      *entity.Repo
 	relationships *relationship.Repo
 	plot          *plot.Builder
+	nodes         *node.Repo
+	beats         *beat.Repo
 	notify        rpc.Notifier
 	factory       ClientFactory
 	src           ProviderSource
@@ -49,11 +53,13 @@ func NewService(
 	projects *project.Repo, threads *thread.Repo, entities *entity.Repo,
 	relationships *relationship.Repo, plotBuilder *plot.Builder,
 	notify rpc.Notifier, factory ClientFactory, src ProviderSource, workDir string,
+	nodes *node.Repo, beats *beat.Repo,
 ) *Service {
 	s := &Service{
 		sessions:      session.NewStore(sessionsDir),
 		projects:      projects, threads: threads, entities: entities,
 		relationships: relationships, plot: plotBuilder,
+		nodes: nodes, beats: beats,
 		notify: notify, factory: factory, src: src, workDir: workDir,
 		memBase: filepath.Join(sessionsDir, "mem"),
 	}

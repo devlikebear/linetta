@@ -85,7 +85,8 @@ func newSvc(t *testing.T, full string) (*Service, *fakeNotifier, string) {
 	notif := &fakeNotifier{}
 	fc := &fakeClient{full: full}
 	svc := NewService(t.TempDir(), projects, threads, entities, rels, pb, notif,
-		func(_, _ string) (llm.Client, error) { return fc, nil }, fixedProvider("claude-code-cli"), "")
+		func(_, _ string) (llm.Client, error) { return fc, nil }, fixedProvider("claude-code-cli"), "",
+		nodes, beats)
 	p, err := projects.Create(context.Background(), 1, project.NewInput{Title: "t", Genres: []string{"f"}, LengthTarget: "novel", DefaultPOV: "first"})
 	if err != nil {
 		t.Fatal(err)

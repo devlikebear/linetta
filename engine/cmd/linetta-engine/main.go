@@ -126,6 +126,7 @@ func main() {
 		filepath.Join(home, "companion"),
 		projects, threads, entities, relationships, plotBuilder,
 		s.Notifier(), companion.ClientFactory(ai.DefaultClientFactory), settingsStore, home,
+		nodes, beats,
 	)
 
 	clock := func() int64 { return time.Now().UnixMilli() }
