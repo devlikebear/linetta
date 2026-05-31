@@ -292,6 +292,52 @@ body {
   margin: 0 0 0.5rem;
 }
 
+.safety-modal,
+.diagnostics-modal {
+  width: min(560px, 100%);
+}
+
+.safety-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+}
+
+.safety-list li {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 0.75rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.safety-list span {
+  color: #6b6b6b;
+  font-size: 0.85rem;
+}
+
+.safety-list code,
+.safety-list strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+
+.diagnostics-modal pre {
+  max-height: 360px;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid #d8d6cf;
+  border-radius: 6px;
+  background: #fffefb;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
 .field {
   display: flex;
   flex-direction: column;

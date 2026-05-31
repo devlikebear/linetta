@@ -1,7 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { projects as projectsApi, imports as importsApi, settings as settingsApi, openPath } from "../lib/rpc";
-import type { ImportPreviewResult, NewProjectInput, Project } from "../lib/types";
+import {
+  projects as projectsApi,
+  imports as importsApi,
+  settings as settingsApi,
+  diagnostics as diagnosticsApi,
+  openPath,
+} from "../lib/rpc";
+import type {
+  DiagnosticsSnapshot,
+  ImportPreviewResult,
+  NewProjectInput,
+  Project,
+  Settings as SettingsRow,
+} from "../lib/types";
 import { ProjectCard } from "../components/ProjectCard";
 import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
@@ -26,6 +38,10 @@ export function Library() {
   const [importing, setImporting] = useState(false);
   const [pending, setPending] = useState<PendingImport | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsSnapshot | null>(null);
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -48,6 +64,21 @@ export function Library() {
     refresh();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([settingsApi.get(), diagnosticsApi.get()])
+      .then(([s, d]) => {
+        if (cancelled) return;
+        setSettingsRow(s);
+        setDiagnostics(d);
+        setSafetyOpen(!s.safety_checklist_dismissed);
+      })
+      .catch((err) => {
+        if (!cancelled) showToast(`앱 상태 불러오기 실패: ${err}`);
+      });
+    return () => { cancelled = true; };
+  }, [showToast]);
+
   const handleCreate = async (input: NewProjectInput) => {
     const created = await projectsApi.create(input);
     setModalOpen(false);
@@ -66,6 +97,11 @@ export function Library() {
     } finally {
       setImporting(false);
     }
+  };
+
+  const handleMenuImport = async () => {
+    setMenuOpen(false);
+    await handleImport();
   };
 
   const confirmImport = async () => {
@@ -90,10 +126,42 @@ export function Library() {
   const openBackupFolder = async () => {
     setMenuOpen(false);
     try {
-      const current = await settingsApi.get();
+      const current = settingsRow ?? await settingsApi.get();
       await openPath(current.backup_dir);
     } catch (err) {
       showToast(`백업 폴더 열기 실패: ${err}`);
+    }
+  };
+
+  const openDataFolder = async () => {
+    setMenuOpen(false);
+    try {
+      const current = diagnostics ?? await diagnosticsApi.get();
+      setDiagnostics(current);
+      await openPath(current.home);
+    } catch (err) {
+      showToast(`데이터 폴더 열기 실패: ${err}`);
+    }
+  };
+
+  const openDiagnostics = async () => {
+    setMenuOpen(false);
+    try {
+      const current = diagnostics ?? await diagnosticsApi.get();
+      setDiagnostics(current);
+      setDiagnosticsOpen(true);
+    } catch (err) {
+      showToast(`진단 정보 불러오기 실패: ${err}`);
+    }
+  };
+
+  const dismissSafety = async () => {
+    try {
+      const next = await settingsApi.set({ safety_checklist_dismissed: true });
+      setSettingsRow(next);
+      setSafetyOpen(false);
+    } catch (err) {
+      showToast(`체크리스트 저장 실패: ${err}`);
     }
   };
 
@@ -111,11 +179,20 @@ export function Library() {
           </button>
           {menuOpen && (
             <div className="library-menu" role="menu">
+              <button type="button" role="menuitem" onClick={openDataFolder}>
+                데이터 폴더 열기
+              </button>
               <button type="button" role="menuitem" onClick={openBackupFolder}>
                 백업 폴더 열기
               </button>
+              <button type="button" role="menuitem" onClick={handleMenuImport}>
+                가져오기 (.md)
+              </button>
               <button type="button" role="menuitem" onClick={() => navigate("/settings")}>
                 설정
+              </button>
+              <button type="button" role="menuitem" onClick={openDiagnostics}>
+                진단 정보
               </button>
             </div>
           )}
@@ -178,6 +255,44 @@ export function Library() {
           onConfirm={confirmImport}
           onCancel={() => setPending(null)}
         />
+      )}
+
+      {safetyOpen && !modalOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal safety-modal">
+            <h2>쓰기 안전 체크리스트</h2>
+            <ul className="safety-list">
+              <li>
+                <span>데이터</span>
+                <code>{diagnostics?.home ?? "확인 중"}</code>
+              </li>
+              <li>
+                <span>백업</span>
+                <code>{settingsRow?.backup_dir ?? "확인 중"}</code>
+              </li>
+              <li>
+                <span>Git sync</span>
+                <strong>{settingsRow?.git_sync_dir ? "설정됨" : "비활성"}</strong>
+              </li>
+            </ul>
+            <div className="modal-actions">
+              <button type="button" onClick={() => navigate("/settings")}>Git sync 설정</button>
+              <button type="button" onClick={dismissSafety}>다시 보지 않기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {diagnosticsOpen && diagnostics && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal diagnostics-modal">
+            <h2>진단 정보</h2>
+            <pre>{JSON.stringify(diagnostics, null, 2)}</pre>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setDiagnosticsOpen(false)}>닫기</button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

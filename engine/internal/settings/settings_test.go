@@ -176,5 +176,25 @@ func TestSet_gitSync_emptyMeansDisabled(t *testing.T) {
 	}
 }
 
+func TestSet_safetyChecklistDismissed_persists(t *testing.T) {
+	s := newStoreOnTemp(t)
+	if _, err := s.Set(context.Background(), Patch{SafetyChecklistDismissed: boolPtr(true)}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, _ := s.Get(context.Background())
+	if !got.SafetyChecklistDismissed {
+		t.Errorf("safety_checklist_dismissed not applied in-memory: %+v", got)
+	}
+
+	s2, err := New()
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	reloaded, _ := s2.Get(context.Background())
+	if !reloaded.SafetyChecklistDismissed {
+		t.Errorf("safety_checklist_dismissed not persisted across reload: %+v", reloaded)
+	}
+}
+
 func boolPtr(v bool) *bool    { return &v }
 func strPtr(v string) *string { return &v }

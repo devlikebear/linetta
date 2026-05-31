@@ -28,21 +28,23 @@ func validProviders() []string { return []string{ProviderClaudeCodeCLI, Provider
 // Config is the on-disk JSON. backup_dir is computed at Load time and not
 // persisted (the field is omitted from JSON marshalling on write).
 type Config struct {
-	Provider              string `json:"provider"`
-	TypewriterDefault     bool   `json:"typewriter_default"`
-	FocusDefault          bool   `json:"focus_default"`
-	BackupDir             string `json:"backup_dir,omitempty"`
-	GitSyncDir            string `json:"git_sync_dir"`
-	GitSyncCommitTemplate string `json:"git_sync_commit_template"`
+	Provider                 string `json:"provider"`
+	TypewriterDefault        bool   `json:"typewriter_default"`
+	FocusDefault             bool   `json:"focus_default"`
+	BackupDir                string `json:"backup_dir,omitempty"`
+	GitSyncDir               string `json:"git_sync_dir"`
+	GitSyncCommitTemplate    string `json:"git_sync_commit_template"`
+	SafetyChecklistDismissed bool   `json:"safety_checklist_dismissed"`
 }
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
 type Patch struct {
-	Provider              *string `json:"provider,omitempty"`
-	TypewriterDefault     *bool   `json:"typewriter_default,omitempty"`
-	FocusDefault          *bool   `json:"focus_default,omitempty"`
-	GitSyncDir            *string `json:"git_sync_dir,omitempty"`
-	GitSyncCommitTemplate *string `json:"git_sync_commit_template,omitempty"`
+	Provider                 *string `json:"provider,omitempty"`
+	TypewriterDefault        *bool   `json:"typewriter_default,omitempty"`
+	FocusDefault             *bool   `json:"focus_default,omitempty"`
+	GitSyncDir               *string `json:"git_sync_dir,omitempty"`
+	GitSyncCommitTemplate    *string `json:"git_sync_commit_template,omitempty"`
+	SafetyChecklistDismissed *bool   `json:"safety_checklist_dismissed,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -98,6 +100,7 @@ func (s *Store) load() error {
 	s.cfg.FocusDefault = disk.FocusDefault
 	s.cfg.GitSyncDir = disk.GitSyncDir
 	s.cfg.GitSyncCommitTemplate = disk.GitSyncCommitTemplate
+	s.cfg.SafetyChecklistDismissed = disk.SafetyChecklistDismissed
 	s.mu.Unlock()
 	return nil
 }
@@ -146,14 +149,18 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.GitSyncCommitTemplate != nil {
 		next.GitSyncCommitTemplate = *p.GitSyncCommitTemplate
 	}
+	if p.SafetyChecklistDismissed != nil {
+		next.SafetyChecklistDismissed = *p.SafetyChecklistDismissed
+	}
 
 	// Persist (no backup_dir on disk).
 	persistable := Config{
-		Provider:              next.Provider,
-		TypewriterDefault:     next.TypewriterDefault,
-		FocusDefault:          next.FocusDefault,
-		GitSyncDir:            next.GitSyncDir,
-		GitSyncCommitTemplate: next.GitSyncCommitTemplate,
+		Provider:                 next.Provider,
+		TypewriterDefault:        next.TypewriterDefault,
+		FocusDefault:             next.FocusDefault,
+		GitSyncDir:               next.GitSyncDir,
+		GitSyncCommitTemplate:    next.GitSyncCommitTemplate,
+		SafetyChecklistDismissed: next.SafetyChecklistDismissed,
 	}
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {

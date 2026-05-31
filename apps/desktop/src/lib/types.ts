@@ -225,6 +225,7 @@ export interface Settings {
   git_sync_dir: string;
   git_sync_commit_template: string;
   backup_dir: string;
+  safety_checklist_dismissed: boolean;
 }
 
 export interface SettingsPatch {
@@ -233,6 +234,7 @@ export interface SettingsPatch {
   focus_default?: boolean;
   git_sync_dir?: string;
   git_sync_commit_template?: string;
+  safety_checklist_dismissed?: boolean;
 }
 
 export interface SnapshotEntry {
