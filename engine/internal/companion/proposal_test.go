@@ -112,3 +112,42 @@ func TestParseProposal_AddBeatNodeIDOptional(t *testing.T) {
 		t.Fatalf("add_beat without node_id should be valid now: present=%v err=%v", present, err)
 	}
 }
+
+func TestParseProposal_EntityAndRelationship(t *testing.T) {
+	body := `{"ops":[
+	  {"op":"create_entity","ref":"e1","kind":"character","name":"하나","role":"주인공"},
+	  {"op":"create_entity","ref":"e2","kind":"character","name":"도윤"},
+	  {"op":"create_relationship","from_ref":"e1","to_ref":"e2","label":"라이벌"}
+	]}`
+	p, present, err := ParseProposal(block(body))
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if len(p.Ops) != 3 || p.Ops[0].Name != "하나" || p.Ops[2].Label != "라이벌" {
+		t.Fatalf("p=%+v", p)
+	}
+}
+
+func TestParseProposal_CreateEntityRequiresKind(t *testing.T) {
+	if _, present, err := ParseProposal(block(`{"ops":[{"op":"create_entity","name":"X"}]}`)); !present || err == nil {
+		t.Fatalf("expected kind error, present=%v err=%v", present, err)
+	}
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_entity","name":"X","kind":"bogus"}]}`)); err == nil {
+		t.Fatal("expected invalid-kind error")
+	}
+}
+
+func TestParseProposal_RelationshipXorAndDanglingRef(t *testing.T) {
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_relationship","from":"a","from_ref":"x","to":"b","label":"L"}]}`)); err == nil {
+		t.Fatal("expected from XOR error")
+	}
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_relationship","from":"a","to_ref":"nope","label":"L"}]}`)); err == nil {
+		t.Fatal("expected dangling to_ref error")
+	}
+}
+
+func TestParseProposal_UpdateEntityRequiresID(t *testing.T) {
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"update_entity","name":"X"}]}`)); err == nil {
+		t.Fatal("expected entity_id error")
+	}
+}

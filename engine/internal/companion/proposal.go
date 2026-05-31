@@ -40,6 +40,18 @@ type Op struct {
 	// remember
 	Text     string `json:"text,omitempty"`
 	Category string `json:"category,omitempty"`
+
+	// create_entity / update_entity
+	Kind     string `json:"kind,omitempty"`
+	Role     string `json:"role,omitempty"`
+	EntityID string `json:"entity_id,omitempty"`
+
+	// create_relationship
+	From    string `json:"from,omitempty"`
+	FromRef string `json:"from_ref,omitempty"`
+	To      string `json:"to,omitempty"`
+	ToRef   string `json:"to_ref,omitempty"`
+	Notes   string `json:"notes,omitempty"`
 }
 
 // Proposal is the parsed contents of a linetta-proposal block.
@@ -54,6 +66,7 @@ var knownOps = map[string]bool{
 	"add_beat": true, "update_beat": true, "delete_beat": true,
 	"set_outline": true,
 	"remember":     true,
+	"create_entity": true, "update_entity": true, "create_relationship": true,
 }
 
 // ParseProposal scans full model output for a linetta-proposal fenced block.
@@ -94,7 +107,7 @@ func validateProposal(p Proposal) error {
 	}
 	refs := map[string]bool{}
 	for _, op := range p.Ops {
-		if op.Type == "create_thread" && op.Ref != "" {
+		if (op.Type == "create_thread" || op.Type == "create_entity") && op.Ref != "" {
 			refs[op.Ref] = true
 		}
 	}
@@ -136,6 +149,37 @@ func validateProposal(p Proposal) error {
 		case "remember":
 			if strings.TrimSpace(op.Text) == "" {
 				return fmt.Errorf("op[%d] remember: text required", i)
+			}
+		case "create_entity":
+			if strings.TrimSpace(op.Name) == "" {
+				return fmt.Errorf("op[%d] create_entity: name required", i)
+			}
+			switch op.Kind {
+			case "character", "place", "item", "concept":
+			default:
+				return fmt.Errorf("op[%d] create_entity: kind must be character|place|item|concept", i)
+			}
+		case "update_entity":
+			if op.EntityID == "" {
+				return fmt.Errorf("op[%d] update_entity: entity_id required", i)
+			}
+		case "create_relationship":
+			if strings.TrimSpace(op.Label) == "" {
+				return fmt.Errorf("op[%d] create_relationship: label required", i)
+			}
+			hasFrom, hasFromRef := op.From != "", op.FromRef != ""
+			hasTo, hasToRef := op.To != "", op.ToRef != ""
+			if hasFrom == hasFromRef {
+				return fmt.Errorf("op[%d] create_relationship: exactly one of from/from_ref required", i)
+			}
+			if hasTo == hasToRef {
+				return fmt.Errorf("op[%d] create_relationship: exactly one of to/to_ref required", i)
+			}
+			if hasFromRef && !refs[op.FromRef] {
+				return fmt.Errorf("op[%d] create_relationship: from_ref %q not declared", i, op.FromRef)
+			}
+			if hasToRef && !refs[op.ToRef] {
+				return fmt.Errorf("op[%d] create_relationship: to_ref %q not declared", i, op.ToRef)
 			}
 		}
 	}
