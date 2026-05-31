@@ -9,6 +9,7 @@
 .companion-msg.user .companion-bubble { background: #2980b9; color: #fff; }
 .companion-msg.assistant .companion-bubble { background: #fff; border: 1px solid #e6e3da; color: #2c2a26; }
 .companion-msg.errored .companion-bubble { background: #fdecec; border-color: #e6b3b3; color: #a33; }
+.companion-thinking { font-size: 0.78rem; color: #8a857b; margin-bottom: 0.2rem; }
 .companion-input { display: flex; gap: 0.4rem; padding: 0.7rem; border-top: 1px solid #ece9e0; align-items: flex-end; }
 .companion-input textarea { flex: 1; resize: none; font: inherit; padding: 0.45rem; border: 1px solid #d8d6cf; border-radius: 6px; }
 .companion-input button { border: 1px solid #d8d6cf; background: #fff; border-radius: 6px; padding: 0.4rem 0.7rem; cursor: pointer; }

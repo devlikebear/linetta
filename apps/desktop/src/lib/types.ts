@@ -431,3 +431,4 @@ export interface CompanionReset { run_id: string; text: string; }
 export interface CompanionDone { run_id: string; full_text: string; }
 export interface CompanionError { run_id: string; message: string; }
 export interface CompanionCancelled { run_id: string; }
+export interface CompanionThinking { run_id: string; text: string; }

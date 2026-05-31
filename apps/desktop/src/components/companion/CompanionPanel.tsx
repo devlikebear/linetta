@@ -11,14 +11,19 @@ interface Props {
   onApplied: () => void;
 }
 
-// hide the proposal block (even partial/unclosed) from the live stream preview.
+// hide proposal/query blocks (even partial/unclosed) from the live stream preview,
+// cutting at whichever fence appears first.
 function streamProse(text: string): string {
-  const idx = text.indexOf("```linetta-proposal");
+  let idx = -1;
+  for (const fence of ["```linetta-proposal", "```linetta-query"]) {
+    const i = text.indexOf(fence);
+    if (i >= 0 && (idx < 0 || i < idx)) idx = i;
+  }
   return (idx >= 0 ? text.slice(0, idx) : text).trimEnd();
 }
 
 export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Props) {
-  const { messages, streaming, status, send, cancel } = useCompanion(projectId, nodeIdRef);
+  const { messages, streaming, thinking, status, send, cancel } = useCompanion(projectId, nodeIdRef);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -51,6 +56,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
         ))}
         {status === "streaming" && (
           <div className="companion-msg assistant">
+            {thinking && <div className="companion-thinking">🔎 {thinking}</div>}
             <div className="companion-bubble">{liveProse || "…"}</div>
           </div>
         )}
