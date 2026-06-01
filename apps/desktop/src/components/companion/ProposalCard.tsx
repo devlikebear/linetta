@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Sparkles } from "lucide-react";
 import type { CompanionProposal, ProposalOp } from "../../lib/types";
 import { applyProposal, type ApplyResult } from "../../lib/applyProposal";
 
@@ -44,14 +45,14 @@ export function ProposalCard({ proposal, projectId, nodeIdRef, onApplied }: Prop
 
   if (!proposal.valid) {
     return (
-      <div className="companion-proposal invalid">
-        <div className="companion-proposal-head">AI 제안 형식 오류</div>
-        {proposal.error && <div className="companion-proposal-error">{proposal.error}</div>}
+      <div className="apply-card invalid">
+        <div className="ttl">AI 제안 형식 오류</div>
+        {proposal.error && <div className="apply-error">{proposal.error}</div>}
       </div>
     );
   }
   if (rejected) {
-    return <div className="companion-proposal done">제안 거절됨</div>;
+    return <div className="apply-card done">제안 거절됨</div>;
   }
 
   const apply = async () => {
@@ -67,9 +68,9 @@ export function ProposalCard({ proposal, projectId, nodeIdRef, onApplied }: Prop
   };
 
   return (
-    <div className="companion-proposal">
-      {proposal.summary && <div className="companion-proposal-head">{proposal.summary}</div>}
-      <ul className="companion-proposal-ops">
+    <div className="apply-card">
+      <div className="ttl"><Sparkles size={14} /> {proposal.summary || "AI 제안"}</div>
+      <ul className="apply-ops">
         {ops.map((op, i) => (
           <li key={i}>
             <label>
@@ -85,10 +86,10 @@ export function ProposalCard({ proposal, projectId, nodeIdRef, onApplied }: Prop
         ))}
       </ul>
       {result ? (
-        <div className="companion-proposal-result">
+        <div className="apply-result">
           <div>적용됨 {result.applied}건{result.failures.length > 0 ? ` · 실패 ${result.failures.length}건` : ""}</div>
           {result.failures.length > 0 && (
-            <ul className="companion-proposal-failures">
+            <ul className="apply-failures">
               {result.failures.map((f, i) => (
                 <li key={i}>{f.op ? opLabel(f.op) : "제안 적용"} — {f.error}</li>
               ))}
@@ -96,11 +97,11 @@ export function ProposalCard({ proposal, projectId, nodeIdRef, onApplied }: Prop
           )}
         </div>
       ) : (
-        <div className="companion-proposal-actions">
-          <button type="button" onClick={() => setRejected(true)} disabled={busy}>거절</button>
-          <button type="button" className="primary" onClick={apply} disabled={busy || sel.every((v) => !v)}>
+        <div className="apply-actions">
+          <button type="button" className="btn accent sm" onClick={apply} disabled={busy || sel.every((v) => !v)}>
             {busy ? "적용 중…" : "적용"}
           </button>
+          <button type="button" className="btn ghost sm" onClick={() => setRejected(true)} disabled={busy}>건너뛰기</button>
         </div>
       )}
     </div>

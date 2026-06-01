@@ -96,8 +96,9 @@ export function NotePopover({ noteId, targetEl, mode, onClose, onSaved, onDelete
             disabled={busy}
           />
           <div className="note-actions">
-            <button className="danger" onClick={remove} disabled={busy}>삭제</button>
-            <button className="primary" onClick={save} disabled={busy || !draft.trim()}>저장</button>
+            <button type="button" className="btn ghost sm note-danger" onClick={remove} disabled={busy}>삭제</button>
+            <span className="spacer" />
+            <button type="button" className="btn accent sm" onClick={save} disabled={busy || !draft.trim()}>저장</button>
           </div>
         </>
       )}

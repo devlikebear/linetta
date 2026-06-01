@@ -1,36 +1,65 @@
-.plot-panel .plot-outline { margin-bottom: 0.6rem; }
-.plot-outline-toggle {
-  background: none; border: none; cursor: pointer; padding: 0.1rem 0;
-  font-size: 0.82rem; color: #6b675e;
+/* PlotPanel — only rules unique to this panel. Shell/spine/beat/add-beat/
+   intensity/plot-toggle/plot-outline-box classes live globally in App.css. */
+
+/* Outline editor (editable variant of .plot-outline-box). */
+.plot-outline-edit {
+  width: 100%;
+  margin-top: 2px;
+  resize: vertical;
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 11px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  outline: none;
 }
-.plot-outline-text {
-  width: 100%; margin-top: 0.3rem; resize: vertical;
-  font: inherit; padding: 0.4rem; border: 1px solid #d8d6cf; border-radius: 4px;
+.plot-outline-edit:focus { border-color: var(--accent); }
+
+/* Inline beat editor inside a .beat card. */
+.plot-beat-edit { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.plot-beat-edit .attr-value,
+.plot-beat-edit textarea {
+  width: 100%;
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 7px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
+  resize: none;
 }
-.plot-scene { margin-bottom: 0.7rem; }
-.plot-scene-label { font-size: 0.74rem; color: #9a958b; margin-bottom: 0.25rem; }
-.plot-scene-current .plot-scene-label { color: #2c2a26; font-weight: 600; }
-.plot-scene-prev, .plot-scene-next { opacity: 0.72; }
-.plot-empty { font-size: 0.76rem; color: #b3aea4; margin: 0.1rem 0; }
-.plot-beat { margin-bottom: 0.3rem; }
-.plot-beat-head {
-  display: flex; align-items: center; gap: 0.4rem; width: 100%;
-  background: none; border: none; cursor: pointer; padding: 0.15rem 0; text-align: left;
+.plot-beat-edit .attr-value:focus,
+.plot-beat-edit textarea:focus { border-color: var(--accent); }
+
+/* Intensity level picker (numeric buttons used while editing). */
+.intensity-pick { display: inline-flex; gap: 4px; }
+.intensity-pick button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
 }
-.plot-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
-.plot-thread { font-size: 0.72rem; color: #8a857b; flex: none; }
-.plot-label { font-size: 0.84rem; color: #2c2a26; }
-.plot-edit { background: none; border: none; cursor: pointer; color: #9a958b; padding: 0 0.3rem; }
-.plot-desc { font-size: 0.78rem; color: #6b675e; margin: 0.1rem 0 0.1rem 1rem; line-height: 1.4; }
-.plot-beat-edit { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.3rem 0 0.3rem 1rem; }
-.plot-beat-edit textarea { resize: vertical; font: inherit; padding: 0.35rem; border: 1px solid #d8d6cf; border-radius: 4px; }
-.plot-beat-edit-actions { display: flex; align-items: center; justify-content: space-between; }
-.plot-intensity button { border: 1px solid #d8d6cf; background: #fff; cursor: pointer; padding: 0 0.4rem; margin-right: 0.2rem; border-radius: 3px; }
-.plot-intensity button.sel { background: #2980b9; color: #fff; border-color: #2980b9; }
-.plot-add { display: flex; flex-direction: column; gap: 0.3rem; margin: 0.3rem 0; }
-.plot-add-btn {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  background: none; border: 1px dashed #d8d6cf; border-radius: 4px;
-  cursor: pointer; padding: 0.25rem 0.5rem; font-size: 0.78rem; color: #6b675e;
+.intensity-pick button.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* New-beat draft inputs. */
+.plot-add { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.plot-add .attr-value {
+  width: 100%;
+  font-size: 12.5px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
 }
-.plot-add-btn:disabled { opacity: 0.5; cursor: default; }
+.plot-add .attr-value:focus { border-color: var(--accent); }

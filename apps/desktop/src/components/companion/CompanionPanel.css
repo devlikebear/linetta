@@ -1,30 +1,41 @@
-.companion-panel { display: flex; flex-direction: column; height: 100%; min-height: 0; border-left: 1px solid #ece9e0; background: #f6f4ee; }
-.companion-head { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.9rem; border-bottom: 1px solid #ece9e0; font-weight: 600; }
-.companion-close { background: none; border: none; cursor: pointer; color: #6b675e; }
-.companion-messages { flex: 1; min-height: 0; overflow-y: auto; padding: 0.8rem; display: flex; flex-direction: column; gap: 0.6rem; }
-.companion-empty { color: #b3aea4; font-size: 0.85rem; }
-.companion-msg { display: flex; flex-direction: column; gap: 0.3rem; }
-.companion-msg.user { align-items: flex-end; }
-.companion-bubble { max-width: 90%; padding: 0.5rem 0.7rem; border-radius: 10px; white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem; }
-.companion-msg.user .companion-bubble { background: #2980b9; color: #fff; }
-.companion-msg.assistant .companion-bubble { background: #fff; border: 1px solid #e6e3da; color: #2c2a26; }
-.companion-msg.errored .companion-bubble { background: #fdecec; border-color: #e6b3b3; color: #a33; }
-.companion-thinking { font-size: 0.78rem; color: #8a857b; margin-bottom: 0.2rem; }
-.companion-input { display: flex; gap: 0.4rem; padding: 0.7rem; border-top: 1px solid #ece9e0; align-items: flex-end; }
-.companion-input textarea { flex: 1; resize: none; font: inherit; padding: 0.45rem; border: 1px solid #d8d6cf; border-radius: 6px; }
-.companion-input button { border: 1px solid #d8d6cf; background: #fff; border-radius: 6px; padding: 0.4rem 0.7rem; cursor: pointer; }
-.companion-input button.primary { background: #2980b9; color: #fff; border-color: #2980b9; }
-.companion-input button:disabled { opacity: 0.5; cursor: default; }
-.companion-proposal { border: 1px solid #d8d6cf; border-radius: 8px; padding: 0.6rem; background: #fbfaf6; font-size: 0.85rem; max-width: 95%; }
-.companion-proposal.invalid { border-color: #e6b3b3; background: #fdf3f3; }
-.companion-proposal.done { color: #9a958b; font-size: 0.8rem; }
-.companion-proposal-head { font-weight: 600; margin-bottom: 0.4rem; }
-.companion-proposal-error { color: #a33; font-size: 0.8rem; }
-.companion-proposal-ops { list-style: none; margin: 0 0 0.5rem; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
-.companion-proposal-ops label { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; }
-.companion-proposal-actions { display: flex; justify-content: flex-end; gap: 0.4rem; }
-.companion-proposal-actions button { border: 1px solid #d8d6cf; background: #fff; border-radius: 6px; padding: 0.3rem 0.6rem; cursor: pointer; }
-.companion-proposal-actions button.primary { background: #2980b9; color: #fff; border-color: #2980b9; }
-.companion-proposal-result { color: #3e8e41; font-size: 0.8rem; }
-.companion-proposal-failures { list-style: none; margin: 0.3rem 0 0; padding: 0; font-size: 0.78rem; color: #a33; }
-.companion-proposal-failures li { margin: 0.1rem 0; }
+/* CompanionPanel + ProposalCard: layout/chrome come from global design-system
+   classes (.panel, .panel-head, .cmp-stream, .msg, .msg-bubble, .msg-who,
+   .apply-card, .cmp-input-wrap, .cmp-input, .cmp-send, .cmp-hint) in App.css.
+   Only component-specific rules live here. */
+
+.companion-empty { color: var(--muted-2); font-size: 13px; font-family: var(--font-serif); }
+
+.companion-thinking { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+
+/* errored assistant bubble */
+.msg-bubble.errored { background: var(--accent-tint2); border: 1px solid var(--warn); color: var(--warn); }
+
+/* live streaming cursor sizing inside a bubble */
+.msg-bubble .ai-cursor { height: 1em; vertical-align: text-bottom; }
+
+/* stop button carries a text label, unlike the icon-only send */
+.cmp-stop { width: auto; padding: 0 12px; font-family: var(--font-ui); font-size: 12px; white-space: nowrap; }
+
+/* ProposalCard — interactive op checklist within the .apply-card surface */
+.apply-card .apply-ops {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--surface);
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+}
+.apply-card .apply-ops label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.apply-card .apply-ops input:disabled + span { opacity: 0.6; }
+
+.apply-card.invalid { background: var(--accent-tint2); border-color: var(--warn); }
+.apply-card.invalid .ttl { color: var(--warn); }
+.apply-card.done { color: var(--muted); font-size: 12px; }
+.apply-error { color: var(--warn); font-size: 12px; }
+
+.apply-result { color: var(--ok); font-size: 12px; }
+.apply-failures { list-style: none; margin: 4px 0 0; padding: 0; font-size: 11.5px; color: var(--warn); }
+.apply-failures li { margin: 2px 0; }

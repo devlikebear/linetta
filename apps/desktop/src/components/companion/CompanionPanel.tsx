@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { CornerDownLeft, MessageSquare, X } from "lucide-react";
 import { useCompanion } from "../../hooks/useCompanion";
 import { ProposalCard } from "./ProposalCard";
-import { X } from "../../lib/icons";
 import "./CompanionPanel.css";
 
 interface Props {
@@ -38,45 +38,70 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
   };
 
   const liveProse = streamProse(streaming);
+  const isStreaming = status === "streaming";
 
   return (
-    <aside className="companion-panel" onMouseDown={(e) => e.stopPropagation()}>
-      <header className="companion-head">
-        <span>집필 컴패니언</span>
-        <button type="button" className="companion-close" onClick={onClose} aria-label="닫기"><X size={16} /></button>
-      </header>
+    <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="panel-head">
+        <span className="ttl"><span className="ic"><MessageSquare size={16} /></span> 집필 컴패니언</span>
+        <button type="button" className="panel-close" onClick={onClose} aria-label="닫기"><X size={16} /></button>
+      </div>
 
-      <div className="companion-messages" ref={scrollRef}>
-        {messages.length === 0 && <p className="companion-empty">무엇이든 물어보거나 플롯을 함께 구상해요.</p>}
-        {messages.map((m, i) => (
-          <div key={i} className={`companion-msg ${m.role}${m.errored ? " errored" : ""}`}>
-            {m.content && <div className="companion-bubble">{m.content}</div>}
-            {m.proposal && <ProposalCard proposal={m.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={onApplied} />}
-          </div>
-        ))}
-        {status === "streaming" && (
-          <div className="companion-msg assistant">
+      <div className="panel-scroll cmp-stream" ref={scrollRef}>
+        {messages.length === 0 && (
+          <p className="companion-empty">무엇이든 물어보거나 플롯을 함께 구상해요.</p>
+        )}
+        {messages.map((m, i) => {
+          if (m.proposal) {
+            return (
+              <div key={i} className="msg bot">
+                {m.content && (
+                  <>
+                    <span className="msg-who">companion</span>
+                    <div className={`msg-bubble${m.errored ? " errored" : ""}`}>{m.content}</div>
+                  </>
+                )}
+                <ProposalCard proposal={m.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={onApplied} />
+              </div>
+            );
+          }
+          const isUser = m.role === "user";
+          return (
+            <div key={i} className={`msg ${isUser ? "user" : "bot"}`}>
+              {!isUser && <span className="msg-who">companion</span>}
+              <div className={`msg-bubble${m.errored ? " errored" : ""}`}>{m.content}</div>
+            </div>
+          );
+        })}
+        {isStreaming && (
+          <div className="msg bot">
+            <span className="msg-who">companion</span>
             {thinking && <div className="companion-thinking">🔎 {thinking}</div>}
-            <div className="companion-bubble">{liveProse || "…"}</div>
+            <div className="msg-bubble">{liveProse || <span className="ai-cursor">&nbsp;</span>}</div>
           </div>
         )}
       </div>
 
-      <div className="companion-input">
-        <textarea
-          value={draft}
-          placeholder="메시지… (Enter 전송, Shift+Enter 줄바꿈)"
-          rows={2}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
-          }}
-        />
-        {status === "streaming" ? (
-          <button type="button" onClick={cancel}>중지</button>
-        ) : (
-          <button type="button" className="primary" onClick={submit} disabled={!draft.trim()}>전송</button>
-        )}
+      <div className="cmp-input-wrap">
+        <div className="cmp-input">
+          <textarea
+            value={draft}
+            placeholder="메시지… (Enter 전송, Shift+Enter 줄바꿈)"
+            rows={1}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+            }}
+          />
+          {isStreaming ? (
+            <button type="button" className="cmp-send cmp-stop" onClick={cancel} aria-label="중지">중지</button>
+          ) : (
+            <button type="button" className="cmp-send" onClick={submit} disabled={!draft.trim()} aria-label="전송">
+              <CornerDownLeft size={16} />
+            </button>
+          )}
+        </div>
+        <div className="cmp-hint"><span>web_search</span><span>web_fetch</span><span>linetta_apply_ops</span></div>
       </div>
     </aside>
   );

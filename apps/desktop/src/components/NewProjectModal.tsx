@@ -80,17 +80,18 @@ export function NewProjectModal({ open, onClose, onSubmit }: Props) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="backdrop center" onClick={onClose}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <h2>새 작품</h2>
+        <p className="modal-sub">제목은 나중에 바꿀 수 있어요. 모든 데이터는 이 컴퓨터에만 저장됩니다.</p>
 
-        <label className="field">
-          <span>제목</span>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-        </label>
+        <div className="modal-field">
+          <label>제목</label>
+          <input value={title} placeholder="예: 물의 기억" onChange={(e) => setTitle(e.target.value)} autoFocus />
+        </div>
 
-        <div className="field">
-          <span>장르 (다중 선택)</span>
+        <div className="modal-field">
+          <label>장르 (다중 선택)</label>
           <div className="chips">
             {[...DEFAULT_GENRES, ...genres.filter((g) => !DEFAULT_GENRES.includes(g))].map((g) => (
               <button
@@ -117,8 +118,8 @@ export function NewProjectModal({ open, onClose, onSubmit }: Props) {
           </div>
         </div>
 
-        <div className="field">
-          <span>예상 분량</span>
+        <div className="modal-field">
+          <label>예상 분량</label>
           <div className="chips">
             {LENGTHS.map((l) => (
               <button
@@ -133,8 +134,8 @@ export function NewProjectModal({ open, onClose, onSubmit }: Props) {
           </div>
         </div>
 
-        <div className="field">
-          <span>기본 시점</span>
+        <div className="modal-field">
+          <label>기본 시점</label>
           <div className="chips">
             {POVS.map((p) => (
               <button
@@ -152,8 +153,8 @@ export function NewProjectModal({ open, onClose, onSubmit }: Props) {
         {error && <p className="error">{error}</p>}
 
         <div className="modal-actions">
-          <button type="button" onClick={onClose} disabled={submitting}>취소</button>
-          <button type="submit" disabled={submitting}>{submitting ? "생성 중…" : "시작"}</button>
+          <button type="button" className="btn ghost" onClick={onClose} disabled={submitting}>취소</button>
+          <button type="submit" className="btn accent" disabled={submitting}>{submitting ? "생성 중…" : "만들기"}</button>
         </div>
       </form>
     </div>

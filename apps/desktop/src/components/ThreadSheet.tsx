@@ -4,12 +4,33 @@ import { beats as beatsApi, threads as threadsApi } from "../lib/rpc";
 import { X, Plus } from "../lib/icons";
 import "./ThreadSheet.css";
 
-const PALETTE = ["#c0392b", "#c08a3e", "#b58a00", "#3e8e41", "#2980b9", "#7e57c2", "#d35d6e", "#666"];
+const PALETTE = [
+  "var(--t-sienna)",
+  "var(--t-teal)",
+  "var(--t-blue)",
+  "var(--t-plum)",
+  "var(--t-olive)",
+  "#c08a3e",
+  "#d35d6e",
+  "#666",
+];
 
 interface Props {
   threadId: string | null;
   onClose: () => void;
   onSaved?: (thread: Thread) => void;
+}
+
+function IntensityPicker({ value, onPick }: { value: number; onPick: (lvl: number) => void }) {
+  return (
+    <span className="intensity-pick">
+      {[1, 2, 3].map((lvl) => (
+        <button key={lvl} type="button" className={value === lvl ? "sel" : ""} onClick={() => onPick(lvl)}>
+          {lvl}
+        </button>
+      ))}
+    </span>
+  );
 }
 
 export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
@@ -88,105 +109,101 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
   };
 
   return (
-    <aside className="thread-sheet" onMouseDown={(e) => e.stopPropagation()}>
-      <header className="thread-head">
-        <span>스토리라인 편집</span>
-        <button type="button" className="thread-close" onClick={onClose} aria-label="닫기">
+    <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="panel-head">
+        <span className="ttl">
+          <span
+            className="beat-dot"
+            style={{ "--bc": draft?.color ?? thread?.color ?? "var(--muted)", width: 12, height: 12 } as React.CSSProperties}
+            aria-hidden
+          />
+          스토리라인
+        </span>
+        <button type="button" className="panel-close" onClick={onClose} aria-label="닫기">
           <X size={16} />
         </button>
-      </header>
+      </div>
 
-      {error && <p className="thread-error">{error}</p>}
-      {!thread && !error && <p className="thread-loading">불러오는 중…</p>}
+      {error && <p className="ts-error">{error}</p>}
+      {!thread && !error && <p className="ts-loading">불러오는 중…</p>}
 
       {thread && draft && (
-        <div className="thread-body">
-          <section className="thread-section">
-            <input
-              className="thread-name"
-              value={draft.name ?? ""}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              placeholder="스토리라인 이름"
-            />
-          </section>
-
-          <section className="thread-section">
-            <h5>색</h5>
-            <div className="thread-colors">
-              {PALETTE.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-label={c}
-                  className={`thread-color-swatch${draft.color === c ? " sel" : ""}`}
-                  style={{ backgroundColor: c }}
-                  onClick={() => setDraft({ ...draft, color: c })}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section className="thread-section">
-            <h5>요약</h5>
-            <textarea
-              value={draft.summary ?? ""}
-              onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
-              rows={3}
-            />
-          </section>
-
-          <section className="thread-section">
-            <h5>마디</h5>
-            {beatList.length === 0 && <p className="thread-empty">아직 마디가 없어요</p>}
-            {beatList.map((b) => (
-              <div className="beat-row" key={b.id}>
-                <span className="beat-ordinal">#{b.ordinal}</span>
-                <div className="beat-fields">
-                  <input
-                    className="attr-value"
-                    value={b.label}
-                    onChange={(e) => updateBeat(b, { label: e.target.value })}
-                    placeholder="마디 제목"
+        <>
+          <div className="panel-scroll">
+            <div className="sec es-field">
+              <h4>이름</h4>
+              <input
+                value={draft.name ?? ""}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                placeholder="스토리라인 이름"
+              />
+              <div className="thread-color-row" style={{ marginTop: 14 }}>
+                {PALETTE.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={c}
+                    className={"tc-swatch" + (draft.color === c ? " sel" : "")}
+                    style={{ background: c }}
+                    onClick={() => setDraft({ ...draft, color: c })}
                   />
-                  <textarea
-                    className="beat-desc"
-                    value={b.description}
-                    onChange={(e) => updateBeat(b, { description: e.target.value })}
-                    placeholder="무슨 일이 일어나는지"
-                    rows={2}
-                  />
-                </div>
-                <div className="beat-intensity">
-                  {[1, 2, 3].map((lvl) => (
-                    <button
-                      key={lvl}
-                      type="button"
-                      className={b.intensity === lvl ? "sel" : ""}
-                      onClick={() => updateBeat(b, { intensity: lvl })}
-                    >{lvl}</button>
-                  ))}
-                </div>
-                <button type="button" className="attr-del" onClick={() => deleteBeat(b)} aria-label="삭제">
-                  <X size={14} />
-                </button>
+                ))}
               </div>
-            ))}
-            <button type="button" className="attr-add" onClick={addBeat}>
-              <Plus size={14} />
-              <span>새 마디 추가</span>
-            </button>
-          </section>
+            </div>
 
-          <div className="thread-actions">
-            <button type="button" className="thread-close-action" onClick={closeThread}>
-              이 스토리라인 닫기
+            <div className="sec es-field">
+              <h4>메모</h4>
+              <textarea
+                value={draft.summary ?? ""}
+                onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
+                rows={3}
+              />
+            </div>
+
+            <div className="sec">
+              <h4>마디 <span style={{ color: "var(--muted-2)" }}>{beatList.length}</span></h4>
+              {beatList.length === 0 && <p className="sec-empty">아직 마디가 없어요</p>}
+              {beatList.map((b) => (
+                <div className="beat-list-item ts-beat" key={b.id}>
+                  <span className="scn">#{b.ordinal}</span>
+                  <div className="ts-beat-fields">
+                    <input
+                      className="ts-beat-label"
+                      value={b.label}
+                      onChange={(e) => updateBeat(b, { label: e.target.value })}
+                      placeholder="마디 제목"
+                    />
+                    <textarea
+                      className="ts-beat-desc"
+                      value={b.description}
+                      onChange={(e) => updateBeat(b, { description: e.target.value })}
+                      placeholder="무슨 일이 일어나는지"
+                      rows={2}
+                    />
+                  </div>
+                  <IntensityPicker value={b.intensity} onPick={(lvl) => updateBeat(b, { intensity: lvl })} />
+                  <button type="button" className="attr-del" onClick={() => deleteBeat(b)} aria-label="삭제">
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+              <button type="button" className="add-beat" onClick={addBeat}>
+                <Plus size={13} /> 새 마디 추가
+              </button>
+            </div>
+          </div>
+
+          <div className="panel-foot">
+            <button type="button" className="btn ghost sm" onClick={closeThread}>
+              스토리라인 닫기(보관)
             </button>
-            <button type="button" onClick={onClose} disabled={saving}>취소</button>
-            <button type="button" className="primary" onClick={onSave} disabled={saving}>
+            <span className="spacer" />
+            <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>취소</button>
+            <button type="button" className="btn accent sm" onClick={onSave} disabled={saving}>
               {saving ? "저장 중…" : "저장"}
             </button>
           </div>
-        </div>
+        </>
       )}
     </aside>
   );

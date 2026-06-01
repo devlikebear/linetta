@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Check } from "lucide-react";
 
 interface ToastOptions {
   durationMs?: number;
@@ -42,7 +43,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {toast && <div className="ws-toast">{toast}</div>}
+      {toast && (
+        <div className="toast" key={toast}>
+          <span className="ic"><Check size={15} /></span>
+          {toast}
+        </div>
+      )}
     </ToastContext.Provider>
   );
 }

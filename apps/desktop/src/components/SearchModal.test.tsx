@@ -36,7 +36,7 @@ describe("SearchModal", () => {
     const onSelect = vi.fn();
     render(<SearchModal open onClose={vi.fn()} onSelect={onSelect} />);
 
-    await user.type(screen.getByPlaceholderText("작품, 씬, 본문 검색"), "열쇠");
+    await user.type(screen.getByPlaceholderText("작품 전체 검색…"), "열쇠");
 
     await waitFor(() => expect(mocks.searchQuery).toHaveBeenCalledWith("열쇠", 20));
     await user.click(await screen.findByRole("button", { name: /도시의 밤/ }));

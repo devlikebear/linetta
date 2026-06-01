@@ -18,7 +18,7 @@ describe("CommandPalette", () => {
       { id: "settings", section: "프로젝트", label: "설정 열기", run: other },
     ]);
 
-    await user.type(screen.getByPlaceholderText("검색…"), "설정");
+    await user.type(screen.getByPlaceholderText("명령 검색…"), "설정");
     await user.keyboard("{Enter}");
 
     expect(run).not.toHaveBeenCalled();

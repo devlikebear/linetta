@@ -1,65 +1,59 @@
+/* Note marker rendered inline in the editor (referenced by Tiptap +
+   NoteMarkerExtension). */
 .note-marker {
   display: inline-block;
   font-size: 0.9em;
-  color: #c08a3e;
+  color: var(--accent);
   cursor: pointer;
   user-select: none;
   padding: 0 1px;
   border-radius: 2px;
   transition: background 0.12s ease;
 }
-.note-marker:hover { background: rgba(192, 138, 62, 0.18); }
+.note-marker:hover { background: var(--accent-tint); }
 
+/* Floating note popover — uses the panel design language for surface + .btn
+   for actions. */
 .note-popover {
   position: absolute;
   width: 280px;
-  background: #faf9f6;
-  border: 1px solid #ece9e0;
-  border-radius: 6px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
-  padding: 0.85rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  padding: 14px;
   z-index: 80;
-  font-size: 14px;
-  color: #1a1a1a;
+  font-size: 13.5px;
+  color: var(--ink);
 }
 .note-popover .note-body {
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.55;
+  font-family: var(--font-serif);
+  line-height: 1.6;
 }
 .note-popover textarea {
   width: 100%;
   min-height: 80px;
   resize: vertical;
-  font: inherit;
-  border: 1px solid #d8d6cf;
-  border-radius: 4px;
-  padding: 0.4rem 0.55rem;
-  background: white;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.6;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: 9px 11px;
+  background: var(--surface);
+  color: var(--ink);
+  outline: none;
   box-sizing: border-box;
 }
+.note-popover textarea:focus { border-color: var(--accent); }
 .note-popover .note-actions {
   display: flex;
-  gap: 0.4rem;
-  justify-content: flex-end;
-  margin-top: 0.55rem;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
 }
-.note-popover button {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0.3rem 0.85rem;
-  background: white;
-  border: 1px solid #1a1a1a;
-  border-radius: 4px;
-  cursor: pointer;
-  display: inline-flex; align-items: center; gap: 0.3rem;
-}
-.note-popover button.primary {
-  background: #1a1a1a;
-  color: #faf9f6;
-}
-.note-popover button.danger {
-  color: #a8312f;
-  border-color: #a8312f;
-}
-.note-popover button:hover { filter: brightness(0.98); }
+.note-popover .note-actions .spacer { flex: 1; }
+.note-popover .note-danger { color: var(--warn); }
+.note-popover .note-danger:hover { border-color: var(--warn); color: var(--warn); }

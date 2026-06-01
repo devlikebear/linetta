@@ -75,13 +75,17 @@ export function ZenMode({
     target > 0 ? Math.min(100, Math.round((charCount / target) * 100)) : 0;
 
   return (
-    <div className="zen-root" onPointerMove={onPointerMove}>
+    <div className="zen-overlay" onPointerMove={onPointerMove}>
       {showBar && target > 0 && (
         <div className="zen-progress">
           <div className="zen-progress-fill" style={{ width: `${progressPercent}%` }} />
         </div>
       )}
-      <div className="zen-canvas">
+      <div className="zen-bar">
+        <span>ZEN</span>
+        <span>{charCount}자 · 씬 {sceneLabel} · esc로 종료</span>
+      </div>
+      <div className="zen-col">
         <TiptapEditor
           ref={(h) => {
             editorRef.current = h;
@@ -92,9 +96,6 @@ export function ZenMode({
           onCharCount={onCharCount}
           onManualSave={onManualSave}
         />
-      </div>
-      <div className="zen-meta">
-        ESC로 나가기 · {charCount}자 · 씬 {sceneLabel}
       </div>
     </div>
   );

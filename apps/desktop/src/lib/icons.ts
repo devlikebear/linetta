@@ -8,4 +8,9 @@ export {
   Trash2,
   User,
   HelpCircle,
+  MapPin,
+  Box,
+  Lightbulb,
+  Pencil,
+  Book,
 } from "lucide-react";

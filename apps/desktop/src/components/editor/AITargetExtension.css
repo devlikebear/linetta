@@ -1,10 +1,10 @@
 .ai-target-replace {
-  background: rgba(120, 170, 255, 0.22);
+  background: var(--accent-tint);
   border-radius: 2px;
 }
 
 .ai-target-all {
-  background: rgba(120, 170, 255, 0.10);
+  background: var(--accent-tint2);
 }
 
 .ai-target-caret {
@@ -12,7 +12,7 @@
   width: 2px;
   height: 1.1em;
   margin: 0 -1px;
-  background: rgba(120, 170, 255, 0.9);
+  background: var(--accent);
   vertical-align: text-bottom;
   animation: ai-target-blink 1s steps(2) infinite;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Layers, Sparkles, X } from "lucide-react";
 import type { AIOptions, ContextCounts } from "../../lib/types";
 import type { CommitMode } from "../../lib/editor/commitGenerated";
 import type { GenStatus, GenVariation } from "../../lib/editor/useAIGeneration";
@@ -92,37 +93,39 @@ export function AIPanel(props: Props) {
   };
 
   return (
-    <aside className="ai-panel" onKeyDown={onKeyDown}>
-        <div className="ai-modal-modes">
+    <aside className="panel" onKeyDown={onKeyDown}>
+      <div className="panel-head">
+        <span className="ttl"><span className="ic"><Sparkles size={16} /></span> AI 생성</span>
+        <button type="button" className="panel-close" onClick={props.onCancel} aria-label="닫기"><X size={16} /></button>
+      </div>
+
+      <div className="panel-scroll" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="ai-modes">
           {props.canChooseMode ? (
             <>
-              <label className="ai-modal-mode-radio">
-                <input
-                  type="radio"
-                  name="ai-mode"
-                  checked={props.mode === "insert"}
-                  onChange={() => props.onModeChange("insert")}
-                />
+              <button
+                type="button"
+                className={`ai-mode-pill${props.mode === "insert" ? " on" : ""}`}
+                onClick={() => props.onModeChange("insert")}
+              >
                 삽입
-              </label>
-              <label className="ai-modal-mode-radio">
-                <input
-                  type="radio"
-                  name="ai-mode"
-                  checked={props.mode === "replaceAll"}
-                  onChange={() => props.onModeChange("replaceAll")}
-                />
+              </button>
+              <button
+                type="button"
+                className={`ai-mode-pill${props.mode === "replaceAll" ? " on" : ""}`}
+                onClick={() => props.onModeChange("replaceAll")}
+              >
                 전체교체
-              </label>
+              </button>
             </>
           ) : (
-            <span className="ai-modal-mode-label">모드: {MODE_LABEL[props.mode]}</span>
+            <span className="ai-mode-pill on">모드 · {MODE_LABEL[props.mode]}</span>
           )}
         </div>
 
         <textarea
           ref={textareaRef}
-          className={`ai-modal-textarea${shake ? " shake" : ""}`}
+          className={`ai-textarea${shake ? " shake" : ""}`}
           placeholder="프롬프트를 입력하세요…"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -130,19 +133,20 @@ export function AIPanel(props: Props) {
           rows={3}
         />
 
-        <div className="ai-modal-chiprow">
-          <select
-            className="ai-modal-chip"
-            value={props.options.tone}
-            onChange={(e) => props.onOptionsChange({ ...props.options, tone: e.target.value as AIOptions["tone"] })}
-          >
-            {TONE_PRESETS.map((t) => (
-              <option key={t.id} value={t.id}>톤: {t.label}</option>
-            ))}
-          </select>
+        <div className="ai-chiprow">
+          <span className="chip">
+            <select
+              value={props.options.tone}
+              onChange={(e) => props.onOptionsChange({ ...props.options, tone: e.target.value as AIOptions["tone"] })}
+            >
+              {TONE_PRESETS.map((t) => (
+                <option key={t.id} value={t.id}>톤: {t.label}</option>
+              ))}
+            </select>
+          </span>
           <button
             type="button"
-            className="ai-modal-chip"
+            className={`chip${props.options.short_form ? " on" : ""}`}
             onClick={() => props.onOptionsChange({ ...props.options, short_form: !props.options.short_form })}
             aria-pressed={props.options.short_form}
           >
@@ -150,15 +154,15 @@ export function AIPanel(props: Props) {
           </button>
           <button
             type="button"
-            className={`ai-modal-chip${variationsOn ? " active" : ""}`}
+            className={`chip${variationsOn ? " on" : ""}`}
             onClick={() => setVariationsOn((v) => !v)}
             aria-pressed={variationsOn}
             title="3개 변형 병렬 생성 (토큰 3배)"
           >
             변형 ×3
           </button>
-          <button type="button" className="ai-modal-ctx" onClick={props.onContextClick}>
-            ⓘ ctx: {props.contextItemCount}개
+          <button type="button" className="chip ctx" onClick={props.onContextClick}>
+            <Layers size={13} /> ctx {props.contextItemCount}
           </button>
         </div>
 
@@ -166,52 +170,53 @@ export function AIPanel(props: Props) {
           <AIContextChecklistList counts={props.checklistCounts} />
         )}
 
-        {hasResult && (
-          <div className="ai-modal-result">
+        {hasResult ? (
+          <div className="ai-result">
             {current?.error ? (
-              <span className="ai-modal-error">(오류: {current.error})</span>
+              <span className="ai-result-empty">(오류: {current.error})</span>
             ) : (
               <>
                 {current?.text}
-                {isRunning && !current?.done && <span className="ai-modal-result-cursor">▌</span>}
+                {isRunning && !current?.done && <span className="ai-cursor">&nbsp;</span>}
               </>
             )}
+          </div>
+        ) : (
+          <div className="ai-result">
+            <span className="ai-result-empty">
+              생성 결과가 여기에 나타납니다. 선택한 컨텍스트 {props.contextItemCount}개가 함께 전달돼요.
+            </span>
           </div>
         )}
+      </div>
 
-        <div className="ai-modal-footer">
-          {hasResult && props.variations.length > 1 && (
-            <div className="ai-modal-nav">
-              <button type="button" className="ai-modal-chip" onClick={() => props.onSwitch(-1)}>◀</button>
-              <span>{props.currentIdx + 1}/{props.variations.length}</span>
-              <button type="button" className="ai-modal-chip" onClick={() => props.onSwitch(1)}>▶</button>
+      <div className="panel-foot">
+        {hasResult && props.variations.length > 1 && (
+          <div className="ai-nav">
+            <button type="button" onClick={() => props.onSwitch(-1)} aria-label="이전 변형"><ArrowLeft size={13} /></button>
+            <div className="ai-dots">
+              {props.variations.map((_, i) => (
+                <i key={i} className={i === props.currentIdx ? "on" : ""} />
+              ))}
             </div>
-          )}
-          <div className="ai-modal-actions">
-            <button type="button" className="ai-modal-btn" onClick={props.onCancel}>
-              취소
-            </button>
-            {!hasResult ? (
-              <button type="button" className="ai-modal-btn primary" onClick={run}>
-                생성 ⌘↵
-              </button>
-            ) : (
-              <>
-                <button type="button" className="ai-modal-btn" onClick={run} title="다시 생성">
-                  다시
-                </button>
-                <button
-                  type="button"
-                  className="ai-modal-btn primary"
-                  onClick={props.onAccept}
-                  disabled={!acceptable}
-                >
-                  수락 Tab
-                </button>
-              </>
-            )}
+            <button type="button" onClick={() => props.onSwitch(1)} aria-label="다음 변형"><ArrowRight size={13} /></button>
           </div>
-        </div>
+        )}
+        <span className="spacer" />
+        <button type="button" className="btn ghost sm" onClick={props.onCancel}>취소</button>
+        {!hasResult ? (
+          <button type="button" className="btn accent sm" onClick={run}>
+            생성 <span className="kbd" style={{ marginLeft: 4 }}>⌘↵</span>
+          </button>
+        ) : (
+          <>
+            <button type="button" className="btn ghost sm" onClick={run} title="다시 생성">다시</button>
+            <button type="button" className="btn accent sm" onClick={props.onAccept} disabled={!acceptable}>
+              수락 <span className="kbd" style={{ marginLeft: 4 }}>Tab</span>
+            </button>
+          </>
+        )}
+      </div>
     </aside>
   );
 }

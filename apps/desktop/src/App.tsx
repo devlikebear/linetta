@@ -21,18 +21,20 @@ export function App() {
   return (
     <ToastProvider>
       <EngineGate>
-        <Suspense
-          fallback={<main className="shell"><p className="hint">불러오는 중…</p></main>}
-        >
-          <Routes>
-            <Route path="/" element={<Library />} />
-            <Route path="/library/all" element={<LibraryAll />} />
-            <Route path="/workspace/:projectId" element={<Workspace />} />
-            <Route path="/workspace/:projectId/threads" element={<ThreadView />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+        <div className="app-frame">
+          <Suspense
+            fallback={<main className="shell"><p className="hint">불러오는 중…</p></main>}
+          >
+            <Routes>
+              <Route path="/" element={<Library />} />
+              <Route path="/library/all" element={<LibraryAll />} />
+              <Route path="/workspace/:projectId" element={<Workspace />} />
+              <Route path="/workspace/:projectId/threads" element={<ThreadView />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </div>
       </EngineGate>
     </ToastProvider>
   );

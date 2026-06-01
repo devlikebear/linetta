@@ -1,9 +1,11 @@
+/* Layout-only wrapper. Typography for the editable surface comes from the
+   global `.prose` design-system class (App.css), applied to the ProseMirror
+   element via editorProps. This file holds the bits the design system can't
+   express on a contentEditable: typewriter padding, focus-mode dimming,
+   the empty-doc placeholder, and the scene-break <hr> glyph. */
+
 .tiptap-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 4rem 2rem;
-  cursor: text;       /* signal "click anywhere to start typing" */
-  min-height: 100%;
+  cursor: text; /* signal "click anywhere to start typing" */
 }
 
 .tiptap-wrap.typewriter {
@@ -11,79 +13,38 @@
   padding-bottom: 40vh;
 }
 
-.tiptap-editor {
-  width: min(65ch, 100%);
-}
-
 .tiptap-editor .ProseMirror {
   outline: none;
-  font-family: ui-serif, Georgia, "Apple SD Gothic Neo", serif;
-  font-size: 1.1rem;
-  line-height: 1.85;
-  color: #1a1a1a;
-  min-height: 4em;    /* always click-able even when doc is empty */
-}
-
-/* Subtle visual cue: when the editable area has focus, the cursor caret blinks
-   inside it. When unfocused, show a faint left-edge indicator on the column
-   so the writer can tell where to click. */
-.tiptap-editor .ProseMirror:not(:focus) {
-  border-left: 2px solid transparent;
-  transition: border-color 200ms ease;
-}
-
-.tiptap-wrap:hover .tiptap-editor .ProseMirror:not(:focus) {
-  border-left-color: #d8d6cf;
+  min-height: 4em; /* always click-able even when the doc is empty */
 }
 
 /* Placeholder hint for empty docs so the click target is obvious. */
 .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
   content: "여기에 글을 쓰세요…";
-  color: #b8b6ad;
+  color: var(--muted-2);
   float: left;
   height: 0;
   pointer-events: none;
 }
 
-.tiptap-editor .ProseMirror p {
-  margin: 0 0 1.25rem;
-}
-
-.tiptap-editor .ProseMirror blockquote {
-  border-left: 3px solid #c8c5bd;
-  padding-left: 1rem;
-  margin: 0 0 1.25rem;
-  color: #555;
-}
-
-.tiptap-editor .ProseMirror h1,
-.tiptap-editor .ProseMirror h2,
-.tiptap-editor .ProseMirror h3 {
-  font-family: inherit;
-  font-weight: 600;
-}
-
+/* Scene divider / marker — centred muted symbol. */
 .tiptap-editor .ProseMirror hr {
   border: none;
-  border-top: 1px solid #d8d6cf;
   margin: 2rem 0;
 }
 
-.tiptap-editor .ProseMirror .mention {
-  color: #1f3b8c;
-  text-decoration: underline;
-  text-decoration-color: rgba(31, 59, 140, 0.4);
-  text-underline-offset: 2px;
-  cursor: pointer;
-  white-space: nowrap;
+.tiptap-editor .ProseMirror hr::before {
+  content: "* * *";
+  display: block;
+  text-align: center;
+  letter-spacing: 0.4em;
+  color: var(--muted);
 }
 
-.tiptap-editor .ProseMirror .mention:hover {
-  background: rgba(31, 59, 140, 0.06);
-  border-radius: 3px;
-}
-
-.tiptap-wrap .ProseMirror .tiptap-dim {
-  opacity: 0.22;
-  transition: opacity 0.18s ease-out;
+/* Focus mode: dim blocks outside the writer's current paragraph group. The
+   FocusExtension only emits `.tiptap-dim` decorations while focus mode is on,
+   so this rule is inert otherwise. */
+.tiptap-editor .ProseMirror .tiptap-dim {
+  opacity: 0.32;
+  transition: opacity 0.3s ease;
 }

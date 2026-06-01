@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   projects as projectsApi,
@@ -10,12 +10,12 @@ import {
 import type {
   DiagnosticsSnapshot,
   ImportPreviewResult,
+  LengthTarget,
   NewProjectInput,
   Project,
   SearchResult,
   Settings as SettingsRow,
 } from "../lib/types";
-import { ProjectCard } from "../components/ProjectCard";
 import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
 import { SearchModal } from "../components/SearchModal";
@@ -24,6 +24,28 @@ import { MoreHorizontal, Settings, Plus, Search, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
 
 const RECENT_LIMIT = 5;
+
+const SPINE_COLORS = [
+  "var(--t-teal)",
+  "var(--t-sienna)",
+  "var(--t-blue)",
+  "var(--t-plum)",
+  "var(--t-olive)",
+];
+
+const LENGTH_LABEL: Record<LengthTarget, string> = {
+  flash: "플래시",
+  short: "단편",
+  novella: "중편",
+  novel: "장편",
+  series: "시리즈",
+};
+
+function humanCount(words: number): string {
+  if (words === 0) return "초안 시작 전";
+  if (words < 10_000) return `${words.toLocaleString("ko-KR")}자`;
+  return `${(words / 1000).toFixed(0)}k자`;
+}
 
 interface PendingImport {
   fileName: string;
@@ -173,19 +195,19 @@ export function Library() {
   };
 
   return (
-    <main className="library">
-      <header className="library-top">
-        <div className="library-menu-wrap">
+    <main className="library fade-in">
+      <header className="lib-top">
+        <div style={{ position: "relative" }}>
           <button
-            className="icon-btn"
+            className="lib-icon-btn"
             aria-label="라이브러리 옵션"
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
           >
-            <MoreHorizontal size={16} />
+            <MoreHorizontal size={18} />
           </button>
           {menuOpen && (
-            <div className="library-menu" role="menu">
+            <div className="lib-menu" role="menu" onMouseLeave={() => setMenuOpen(false)}>
               <button type="button" role="menuitem" onClick={openDataFolder}>
                 데이터 폴더 열기
               </button>
@@ -207,53 +229,79 @@ export function Library() {
             </div>
           )}
         </div>
-        <Link to="/settings" className="icon-btn" aria-label="설정">
-          <Settings size={16} />
-        </Link>
+        <div className="lib-brandmark">local-first writing</div>
+        <div className="lib-top-actions">
+          <button className="lib-icon-btn" aria-label="검색" onClick={() => setSearchOpen(true)}>
+            <Search size={17} />
+          </button>
+          <Link to="/settings" className="lib-icon-btn" aria-label="설정">
+            <Settings size={17} />
+          </Link>
+        </div>
       </header>
 
-      <section className="library-center">
-        <h1 className="library-heading">Linetta</h1>
+      <div className="lib-body">
+        <div className="lib-hero">
+          <div>
+            <h1 className="lib-wordmark">Linetta<span className="dot">.</span></h1>
+            <p className="lib-tagline">한 줄에서 한 권으로. 당신의 컴퓨터 안에서만 자라는 장편소설 작업실.</p>
+          </div>
+          <div className="lib-meta-col">
+            <div><b>{totalRecent}</b> 작품</div>
+            <div><b>외부 전송 없음</b></div>
+            <div>데이터 · <b>로컬</b></div>
+          </div>
+        </div>
 
-        <div className="library-actions">
-          <button className="new-button" onClick={() => setModalOpen(true)}>
-            <Plus size={16} />
-            <span>새 작품</span>
+        <div className="lib-actions">
+          <button className="btn accent" onClick={() => setModalOpen(true)}>
+            <Plus size={16} /> 새 작품
           </button>
           <button
-            className="new-button"
+            className="btn ghost"
             onClick={handleImport}
             disabled={importing || pending !== null}
           >
-            <Upload size={16} />
-            <span>{importing ? "가져오는 중…" : "가져오기 (.md)"}</span>
+            <Upload size={15} /> {importing ? "가져오는 중…" : "가져오기 (.md)"}
           </button>
-          <button className="new-button" onClick={() => setSearchOpen(true)}>
-            <Search size={16} />
-            <span>검색</span>
+          <button className="btn ghost" onClick={() => setSearchOpen(true)}>
+            <Search size={15} /> 검색 <span className="kbd" style={{ marginLeft: 4 }}>⌘F</span>
           </button>
+        </div>
+
+        <div className="lib-shelf-head">
+          <span className="lib-shelf-title">최근 작품</span>
+          {totalRecent > RECENT_LIMIT && (
+            <Link to="/library/all" className="lib-shelf-all">전체 라이브러리 →</Link>
+          )}
         </div>
 
         {loading ? (
           <p className="hint">불러오는 중…</p>
         ) : error ? (
           <p className="error">{error}</p>
-        ) : recent.length === 0 ? null : (
-          <>
-            <p className="library-label">최근 작품 · {recent.length}개</p>
-            <div className="card-grid">
-              {recent.map((p) => (
-                <ProjectCard key={p.id} project={p} />
-              ))}
-            </div>
-            {totalRecent > RECENT_LIMIT && (
-              <Link to="/library/all" className="library-all-link">
-                전체 라이브러리 →
-              </Link>
-            )}
-          </>
+        ) : (
+          <div className="lib-grid">
+            {recent.map((p, i) => (
+              <button
+                key={p.id}
+                className="book"
+                style={{ "--spine": SPINE_COLORS[i % SPINE_COLORS.length] } as CSSProperties}
+                onClick={() => navigate(`/workspace/${p.id}`)}
+              >
+                <h3 className="book-title">{p.title}</h3>
+                <div className="book-spacer" />
+                <div className="book-scenes">{LENGTH_LABEL[p.length_target]}</div>
+                <div className="book-meta">{humanCount(p.word_count)}</div>
+              </button>
+            ))}
+            <button className="book-new" onClick={() => setModalOpen(true)}>
+              <span className="plus-ring"><Plus size={20} /></span>
+              <span>새 작품 시작</span>
+            </button>
+          </div>
         )}
-      </section>
+      </div>
 
       <NewProjectModal
         open={modalOpen}

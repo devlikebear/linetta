@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Project, PlotSpine, PlotScene, Thread } from "../lib/types";
 import { plot as plotApi, beats as beatsApi, threads as threadsApi, projects as projectsApi } from "../lib/rpc";
-import { Plus, X } from "../lib/icons";
+import { Plus, X, Pencil } from "../lib/icons";
 import "./PlotPanel.css";
 
 interface Props {
@@ -11,10 +11,20 @@ interface Props {
   onProjectChanged?: (project: Project) => void;
 }
 
+function IntensityBars({ level }: { level: number }) {
+  return (
+    <span className="intensity">
+      {[1, 2, 3].map((l) => (
+        <i key={l} className={l <= level ? "on" : ""} />
+      ))}
+    </span>
+  );
+}
+
 export function PlotPanel({ project, nodeId, onOpenThread, onProjectChanged }: Props) {
   const [spine, setSpine] = useState<PlotSpine | null>(null);
   const [openThreads, setOpenThreads] = useState<Thread[]>([]);
-  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(true);
   const [outline, setOutline] = useState(project.outline ?? "");
   const [editingBeat, setEditingBeat] = useState<string | null>(null);
   const [adding, setAdding] = useState<"current" | "next" | null>(null);
@@ -94,35 +104,47 @@ export function PlotPanel({ project, nodeId, onOpenThread, onProjectChanged }: P
     if (!scene) return null;
     const editable = mode === "current";
     return (
-      <div className={`plot-scene plot-scene-${mode}`}>
-        <div className="plot-scene-label">{mode === "current" ? "현재 씬" : `${mode === "prev" ? "이전" : "다음"} 씬 · ${scene.label}`}</div>
-        {scene.beats.length === 0 && !editable && <p className="plot-empty">비트 없음</p>}
+      <div className={"spine-scene" + (mode === "current" ? " current" : "")}>
+        <div className="spine-label">
+          {mode === "current"
+            ? <span className="tag">현재 · {scene.label}</span>
+            : <>{mode === "prev" ? "이전" : "다음"} · {scene.label}</>}
+        </div>
+        {scene.beats.length === 0 && !editable && <p className="sec-empty" style={{ margin: "0 0 4px" }}>비트 없음</p>}
         {scene.beats.map((bt) => (
-          <div className="plot-beat" key={bt.id}>
-            <button type="button" className="plot-beat-head" onClick={() => onOpenThread(bt.thread_id)}>
-              <span className="plot-dot" style={{ backgroundColor: bt.thread_color }} aria-hidden />
-              <span className="plot-thread">{bt.thread_name}</span>
-              <span className="plot-label">{bt.label || "(제목 없음)"}</span>
+          <div className={"beat" + (editable ? "" : " dim")} key={bt.id}>
+            <button type="button" className="beat-head" onClick={() => onOpenThread(bt.thread_id)}>
+              <span className="beat-dot" style={{ "--bc": bt.thread_color } as React.CSSProperties} aria-hidden />
+              <span className="beat-thread">{bt.thread_name}</span>
             </button>
-            {editable && (
-              <button type="button" className="plot-edit" aria-label="비트 편집" onClick={() => setEditingBeat(editingBeat === bt.id ? null : bt.id)}>✎</button>
-            )}
-            {bt.description && editingBeat !== bt.id && <p className="plot-desc">{bt.description}</p>}
-            {editable && editingBeat === bt.id && (
+            {editingBeat === bt.id && editable ? (
               <div className="plot-beat-edit">
                 <input className="attr-value" defaultValue={bt.label} placeholder="제목"
                   onBlur={(e) => { if (e.target.value !== bt.label) patchBeat(bt.id, { label: e.target.value }); }} />
                 <textarea defaultValue={bt.description} placeholder="무슨 일이 일어나는지" rows={3}
                   onBlur={(e) => { if (e.target.value !== bt.description) patchBeat(bt.id, { description: e.target.value }); }} />
-                <div className="plot-beat-edit-actions">
-                  <div className="plot-intensity">
+                <div className="beat-foot">
+                  <span className="intensity-pick">
                     {[1, 2, 3].map((lvl) => (
                       <button key={lvl} type="button" className={bt.intensity === lvl ? "sel" : ""} onClick={() => patchBeat(bt.id, { intensity: lvl })}>{lvl}</button>
                     ))}
-                  </div>
-                  <button type="button" className="attr-del" aria-label="삭제" onClick={() => deleteBeat(bt.id)}><X size={14} /></button>
+                  </span>
+                  <button type="button" className="attr-del" aria-label="삭제" onClick={() => deleteBeat(bt.id)}><X size={13} /></button>
                 </div>
               </div>
+            ) : (
+              <>
+                <div className="beat-label" style={{ marginTop: 6 }}>{bt.label || "(제목 없음)"}</div>
+                {bt.description && <p className="beat-desc">{bt.description}</p>}
+                <div className="beat-foot">
+                  <IntensityBars level={bt.intensity} />
+                  {editable && (
+                    <button type="button" className="attr-del" title="편집" aria-label="비트 편집" onClick={() => setEditingBeat(bt.id)}>
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                </div>
+              </>
             )}
           </div>
         ))}
@@ -141,34 +163,35 @@ export function PlotPanel({ project, nodeId, onOpenThread, onProjectChanged }: P
                 }} />
             </div>
           ) : (
-            <button type="button" className="plot-add-btn" disabled={openThreads.length === 0}
+            <button type="button" className="add-beat" disabled={openThreads.length === 0}
               onClick={() => { setAdding(mode); setDraftThread(openThreads[0]?.id ?? ""); setDraftLabel(""); }}>
-              <Plus size={12} /> {mode === "current" ? "비트 추가" : "다음 씬에 비트 추가"}
+              <Plus size={13} /> {mode === "current" ? "비트 추가" : "다음 씬에 비트"}
             </button>
           )
         )}
+        {mode !== "next" && <div className="spine-connector" />}
       </div>
     );
   };
 
   return (
-    <section className="ctx-section plot-panel">
+    <section className="sec">
       <h4>플롯</h4>
-      <div className="plot-outline">
-        <button type="button" className="plot-outline-toggle" onClick={() => setOutlineOpen((v) => !v)}>
-          {outlineOpen ? "▾" : "▸"} 개요
-        </button>
-        {outlineOpen && (
-          <textarea className="plot-outline-text" value={outline} rows={5} placeholder="작품 전체 개요 (로그라인 + 줄거리)"
-            onChange={(e) => saveOutline(e.target.value)} />
-        )}
-      </div>
-      {openThreads.length === 0 && (
-        <p className="ctx-empty">스토리라인이 없어요. 명령 팔레트에서 "이 씬을 새 Thread로 표시"로 시작하세요.</p>
+      <button type="button" className="plot-toggle" onClick={() => setOutlineOpen((v) => !v)}>
+        {outlineOpen ? "▾" : "▸"} 개요
+      </button>
+      {outlineOpen && (
+        <textarea className="plot-outline-edit" value={outline} rows={5} placeholder="작품 전체 개요 (로그라인 + 줄거리)"
+          onChange={(e) => saveOutline(e.target.value)} />
       )}
-      {renderScene(spine?.prev, "prev")}
-      {renderScene(spine?.current, "current")}
-      {renderScene(spine?.next, "next")}
+      {openThreads.length === 0 && (
+        <p className="sec-empty" style={{ marginTop: 12 }}>스토리라인이 없어요. 명령 팔레트에서 "이 씬을 새 Thread로 표시"로 시작하세요.</p>
+      )}
+      <div className="spine" style={{ marginTop: 12 }}>
+        {renderScene(spine?.prev, "prev")}
+        {renderScene(spine?.current, "current")}
+        {renderScene(spine?.next, "next")}
+      </div>
     </section>
   );
 }

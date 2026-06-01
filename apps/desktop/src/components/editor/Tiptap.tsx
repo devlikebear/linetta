@@ -58,6 +58,11 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
       ],
       content: initialDoc,
       autofocus: "end",
+      editorProps: {
+        // Apply the global design-system prose typography to the editable area
+        // so the real Tiptap surface matches the redesign's `.prose` styling.
+        attributes: { class: "prose" },
+      },
       onUpdate: ({ editor }) => {
         const doc = editor.getJSON();
         onChange(doc);

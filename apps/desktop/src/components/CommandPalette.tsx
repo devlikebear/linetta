@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Command as CommandIcon, Circle } from "lucide-react";
 import "./CommandPalette.css";
 
 export interface Command {
@@ -79,15 +80,18 @@ export function CommandPalette({ open, onClose, commands }: Props) {
   let globalIdx = -1;
 
   return (
-    <div className="palette-backdrop" onClick={onClose}>
+    <div className="backdrop top" onClick={onClose}>
       <div className="palette" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
-        <input
-          ref={inputRef}
-          className="palette-input"
-          placeholder="검색…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <div className="palette-input-wrap">
+          <span className="ic"><CommandIcon size={17} /></span>
+          <input
+            ref={inputRef}
+            className="palette-input"
+            placeholder="명령 검색…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
         <div ref={listRef} className="palette-list">
           {groups.length === 0 && <p className="palette-empty">결과 없음</p>}
           {groups.map((g) => (
@@ -105,6 +109,7 @@ export function CommandPalette({ open, onClose, commands }: Props) {
                     onClick={() => runIndex(idx)}
                     disabled={c.disabled}
                   >
+                    <span className="pic"><Circle size={8} /></span>
                     <span className="palette-label">{c.label}</span>
                     {c.hint && <span className="palette-hint">{c.hint}</span>}
                   </button>
@@ -112,6 +117,11 @@ export function CommandPalette({ open, onClose, commands }: Props) {
               })}
             </div>
           ))}
+        </div>
+        <div className="palette-foot">
+          <span><span className="kbd">↑↓</span> 이동</span>
+          <span><span className="kbd">↵</span> 실행</span>
+          <span><span className="kbd">esc</span> 닫기</span>
         </div>
       </div>
     </div>

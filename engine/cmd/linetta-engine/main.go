@@ -38,7 +38,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
-const engineVersion = "0.1.1"
+const engineVersion = "0.2.0"
 
 func main() {
 	stdio := flag.Bool("stdio", false, "serve JSONRPC over stdin/stdout")

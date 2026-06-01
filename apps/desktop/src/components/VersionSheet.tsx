@@ -78,67 +78,81 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
   }
 
   return (
-    <aside className="version-sheet" onMouseDown={(e) => e.stopPropagation()}>
-      <header className="version-head">
-        <span>이전 버전</span>
-        <button type="button" className="version-close" onClick={onClose} aria-label="닫기">
+    <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="panel-head">
+        <span className="ttl">이전 버전</span>
+        <button type="button" className="panel-close" onClick={onClose} aria-label="닫기">
           <X size={16} />
         </button>
-      </header>
-      {error && <p className="version-error">{error}</p>}
-      {!entries && !error && <p className="version-loading">불러오는 중…</p>}
-      {entries && entries.length === 0 && <p className="version-empty">아직 저장된 버전이 없습니다.</p>}
+      </div>
+
+      {error && <p className="vs-error">{error}</p>}
+      {!entries && !error && <p className="vs-loading">불러오는 중…</p>}
+      {entries && entries.length === 0 && (
+        <div className="panel-scroll">
+          <div className="sec"><p className="sec-empty">아직 저장된 버전이 없습니다.</p></div>
+        </div>
+      )}
+
       {entries && entries.length > 0 && (
-        <div className="version-body">
-          <div className="version-timeline">
-            {major.length > 0 && (
-              <div className="version-group">
-                <p className="version-group-head">주요 저장</p>
-                {major.map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    className={`version-row${e.id === selectedId ? " sel" : ""}`}
-                    onClick={() => setSelectedId(e.id)}
-                  >
-                    <span className="version-reason">{REASON_LABEL[e.reason]}</span>
-                    <span className="version-time">{formatTime(e.created_at)}</span>
-                  </button>
+        <>
+          <div className="panel-scroll">
+            <div className="sec">
+              <h4>타임라인</h4>
+              <div className="vs-timeline">
+                {major.length > 0 && (
+                  <div className="vs-group">
+                    <p className="vs-group-head">주요 저장</p>
+                    {major.map((e) => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        className={"vs-row" + (e.id === selectedId ? " sel" : "")}
+                        onClick={() => setSelectedId(e.id)}
+                      >
+                        <span className="vs-reason">{REASON_LABEL[e.reason]}</span>
+                        <span className="vs-time">{formatTime(e.created_at)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {autoByDay.map((g) => (
+                  <div className="vs-group" key={g.day}>
+                    <p className="vs-group-head">자동 저장 · {g.day}</p>
+                    {g.rows.map((e) => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        className={"vs-row" + (e.id === selectedId ? " sel" : "")}
+                        onClick={() => setSelectedId(e.id)}
+                      >
+                        <span className="vs-time">{formatTime(e.created_at)}</span>
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
-            )}
-            {autoByDay.map((g) => (
-              <div className="version-group" key={g.day}>
-                <p className="version-group-head">자동 저장 · {g.day}</p>
-                {g.rows.map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    className={`version-row${e.id === selectedId ? " sel" : ""}`}
-                    onClick={() => setSelectedId(e.id)}
-                  >
-                    <span className="version-time">{formatTime(e.created_at)}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="version-preview">
-            <h5>미리보기</h5>
-            <pre>{selected?.doc_preview || "(빈 본문)"}</pre>
-            <div className="version-actions">
-              <button type="button" onClick={onClose} disabled={restoring}>취소</button>
-              <button
-                type="button"
-                className="primary"
-                onClick={onRestore}
-                disabled={restoring || !selected}
-              >
-                {restoring ? "복원 중…" : "이 버전으로 복원"}
-              </button>
+            </div>
+
+            <div className="sec">
+              <h4>미리보기</h4>
+              <pre className="vs-preview">{selected?.doc_preview || "(빈 본문)"}</pre>
             </div>
           </div>
-        </div>
+
+          <div className="panel-foot">
+            <span className="spacer" />
+            <button type="button" className="btn ghost sm" onClick={onClose} disabled={restoring}>취소</button>
+            <button
+              type="button"
+              className="btn accent sm"
+              onClick={onRestore}
+              disabled={restoring || !selected}
+            >
+              {restoring ? "복원 중…" : "이 버전으로 복원"}
+            </button>
+          </div>
+        </>
       )}
     </aside>
   );

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Search, Command as CommandIcon, Sparkles, MessageCircle, Maximize2, ArrowLeft } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
@@ -71,6 +72,7 @@ export function Workspace() {
   const [charCount, setCharCount] = useState(0);
   const [typewriter, setTypewriter] = useState(false);
   const [focus, setFocus] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -93,6 +95,7 @@ export function Workspace() {
   const aiModalOpenRef = useRef(false);
   useEffect(() => { aiModalOpenRef.current = aiModal !== null; }, [aiModal]);
   const closeAIModalRef = useRef<(() => void) | null>(null);
+  const openAIModalRef = useRef<(() => void) | null>(null);
   const [aiCtxChecklistOpen, setAiCtxChecklistOpen] = useState(false);
   const [contextCounts, setContextCounts] = useState<ContextCounts | null>(null);
   const previewReqIdRef = useRef(0);
@@ -350,28 +353,7 @@ export function Workspace() {
           closeAIModalRef.current?.();
           return;
         }
-        const ed = editorRef.current?.editor;
-        const currentLoad = loadRef.current;
-        if (!ed || !currentLoad) return;
-        const { from, to, empty } = ed.state.selection;
-        ed.setEditable(false);
-        const mode = empty ? "insert" : "replace";
-        ed.commands.setAITarget(mode, from, to);
-        setAiModal({
-          mode,
-          canChooseMode: empty,
-          sel: { from, to },
-        });
-        const reqId = ++previewReqIdRef.current;
-        aiApi.previewContext(currentLoad.node.id)
-          .then((counts) => {
-            if (reqId !== previewReqIdRef.current) return;
-            setContextCounts(counts);
-          })
-          .catch((err) => {
-            if (reqId !== previewReqIdRef.current) return;
-            showToast(`컨텍스트 정보를 가져오지 못했습니다: ${err}`);
-          });
+        openAIModalRef.current?.();
       } else if (e.key.toLowerCase() === "j") {
         if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
@@ -456,6 +438,40 @@ export function Workspace() {
     previewReqIdRef.current++;
   }, [gen, tiptapEditor]);
   useEffect(() => { closeAIModalRef.current = closeAIModal; }, [closeAIModal]);
+
+  // Open the Cmd+I AI generation modal targeting the current selection. Shared
+  // by the keyboard shortcut and the top-bar AI button.
+  const openAIModal = useCallback(() => {
+    const ed = editorRef.current?.editor;
+    const currentLoad = loadRef.current;
+    if (!ed || !currentLoad) return;
+    const { from, to, empty } = ed.state.selection;
+    ed.setEditable(false);
+    const mode = empty ? "insert" : "replace";
+    ed.commands.setAITarget(mode, from, to);
+    setAiModal({
+      mode,
+      canChooseMode: empty,
+      sel: { from, to },
+    });
+    const reqId = ++previewReqIdRef.current;
+    aiApi.previewContext(currentLoad.node.id)
+      .then((counts) => {
+        if (reqId !== previewReqIdRef.current) return;
+        setContextCounts(counts);
+      })
+      .catch((err) => {
+        if (reqId !== previewReqIdRef.current) return;
+        showToast(`컨텍스트 정보를 가져오지 못했습니다: ${err}`);
+      });
+  }, [showToast]);
+  useEffect(() => { openAIModalRef.current = openAIModal; }, [openAIModal]);
+
+  // Toggle the AI modal — mirrors the Cmd+I keyboard behaviour for the top-bar button.
+  const toggleAIModal = useCallback(() => {
+    if (aiModalOpenRef.current) closeAIModal();
+    else openAIModal();
+  }, [closeAIModal, openAIModal]);
 
   // Defensive: if the active node changes while the modal is open, close it so
   // stale selection offsets can't be committed into a freshly-mounted editor.
@@ -659,10 +675,8 @@ export function Workspace() {
     cmds.push({
       id: "view-outline",
       section: "보기",
-      label: "아웃라인 (왼쪽 가장자리 호버)",
-      disabled: true,
-      hint: "↤",
-      run: () => {},
+      label: railCollapsed ? "아웃라인 펼치기" : "아웃라인 접기",
+      run: () => setRailCollapsed((v) => !v),
     });
     cmds.push({
       id: "view-threads",
@@ -767,10 +781,11 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen, focus, companionOpen]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen, focus, companionOpen, railCollapsed]);
 
-  const breadcrumb = useMemo(() => {
-    if (!load) return "";
+  // Breadcrumb chain: ancestor container labels + the current scene label.
+  const crumbChain = useMemo(() => {
+    if (!load) return [] as string[];
     const byId = new Map(flatten(load.tree).map((n) => [n.id, n] as const));
     const chain: string[] = [];
     let cur: TreeNode | undefined = byId.get(load.node.id);
@@ -778,8 +793,14 @@ export function Workspace() {
       chain.unshift(cur.label);
       cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
     }
-    return `← 작품 · ${chain.join(" › ")}${load.node.title ? ` — ${load.node.title}` : ""}`;
+    return chain;
   }, [load]);
+
+  // Scene-marker text shown above the editor title (uppercase mono path).
+  const sceneMarker = useMemo(
+    () => crumbChain.join(" · "),
+    [crumbChain],
+  );
 
   if (error) {
     return (
@@ -800,38 +821,106 @@ export function Workspace() {
   return (
     <main className="workspace">
       <header className="ws-top">
-        <Link to="/" className="ws-breadcrumb">{breadcrumb}</Link>
-        <button type="button" className="mode-toggle ws-zen-btn" onClick={enterZen}>
-          ZEN
-        </button>
+        <Link to="/" className="ws-crumb">
+          <span className="home"><ArrowLeft size={16} /></span>
+          <span className="ws-crumb-path">
+            <b>{load.project.title}</b>
+            {crumbChain.map((label, i) => (
+              <span key={i} className="label-inline">
+                <span className="sep">›</span>{label}
+              </span>
+            ))}
+            {load.node.title && (
+              <>
+                <span className="sep">—</span>
+                <span className="title">{load.node.title}</span>
+              </>
+            )}
+          </span>
+        </Link>
+        <div className="ws-top-actions">
+          <button
+            type="button"
+            className="ws-tool icon-only"
+            title="검색 (Cmd+F)"
+            onClick={() => setSearchOpen(true)}
+          >
+            <Search size={16} />
+          </button>
+          <button
+            type="button"
+            className="ws-tool icon-only"
+            title="명령 팔레트 (Cmd+P)"
+            onClick={() => setPaletteOpen((v) => !v)}
+          >
+            <CommandIcon size={16} />
+          </button>
+          <div className="ws-sep" />
+          <button
+            type="button"
+            className={`ws-tool${aiModal ? " is-active" : ""}`}
+            onClick={toggleAIModal}
+          >
+            <Sparkles size={15} /> AI <span className="kbd">⌘I</span>
+          </button>
+          <button
+            type="button"
+            className={`ws-tool${companionOpen ? " is-active" : ""}`}
+            onClick={() => setCompanionOpen((v) => !v)}
+          >
+            <MessageCircle size={15} /> 컴패니언 <span className="kbd">⌘J</span>
+          </button>
+          <div className="ws-sep" />
+          <button type="button" className="ws-tool" onClick={enterZen}>
+            <Maximize2 size={15} /> ZEN
+          </button>
+        </div>
       </header>
 
-      <div className={`ws-body${
-        aiModal ? " with-ai-panel" :
-        companionOpen ? " with-companion-panel" :
-        (entitySheetId || threadSheetId) ? " with-sheet" : ""
-      }`}>
-        <div className="ws-editor">
-          <TiptapEditor
-            key={load.node.id}
-            ref={editorRef}
-            initialDoc={load.initialDoc}
-            onChange={(doc) => {
-              debouncedSave(doc);
-              throttledLastOpened();
-            }}
-            onCharCount={setCharCount}
-            typewriter={typewriter}
-            focus={focus}
-            onManualSave={handleManualSave}
-            extensions={[
-              ...(mentionExtension ? [mentionExtension] : []),
-              NoteMarkerExtension,
-              AITargetExtension,
-            ]}
-            onMentionDoubleClick={(id) => setEntitySheetId(id)}
-          />
-        </div>
+      <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
+        (aiModal || companionOpen) ? " right-wide" : ""
+      }${companionOpen ? " right-xwide" : ""}`}>
+        <OutlinePanel
+          tree={load.tree}
+          currentId={load.node.id}
+          collapsed={railCollapsed}
+          onToggleCollapse={() => setRailCollapsed((v) => !v)}
+          onSelect={(n) => navigateToNode(n)}
+        />
+        <section className={`ws-editor${focus ? " focus-mode" : ""}`}>
+          <div className="editor-col">
+            <div className="scene-marker">
+              <span>{sceneMarker}</span>
+              <span className="rule" />
+            </div>
+            <h1 className="scene-title">{load.node.title || load.node.label}</h1>
+            {load.node.title && <div className="scene-sub">{load.node.label}</div>}
+            <TiptapEditor
+              key={load.node.id}
+              ref={editorRef}
+              initialDoc={load.initialDoc}
+              onChange={(doc) => {
+                debouncedSave(doc);
+                throttledLastOpened();
+              }}
+              onCharCount={setCharCount}
+              typewriter={typewriter}
+              focus={focus}
+              onManualSave={handleManualSave}
+              extensions={[
+                ...(mentionExtension ? [mentionExtension] : []),
+                NoteMarkerExtension,
+                AITargetExtension,
+              ]}
+              onMentionDoubleClick={(id) => setEntitySheetId(id)}
+            />
+          </div>
+          <div className="editor-foot">
+            <span>{load.node.title || load.node.label}</span>
+            <span>·</span>
+            <span>{charCount}자</span>
+          </div>
+        </section>
         {aiModal && load ? (
           <AIPanel
             mode={aiModal.mode}
@@ -929,13 +1018,6 @@ export function Workspace() {
           />
         )}
       </div>
-
-      <OutlinePanel
-        tree={load.tree}
-        currentId={load.node.id}
-        onSelect={(n) => navigateToNode(n)}
-        onClose={focusEditor}
-      />
 
       <CommandPalette
         open={paletteOpen}

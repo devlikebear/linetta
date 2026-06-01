@@ -1,14 +1,37 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, type CSSProperties } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { projects as projectsApi } from "../lib/rpc";
-import type { Project } from "../lib/types";
+import type { LengthTarget, Project } from "../lib/types";
 
 type Tab = "active" | "archived";
+
+const SPINE_COLORS = [
+  "var(--t-teal)",
+  "var(--t-sienna)",
+  "var(--t-blue)",
+  "var(--t-plum)",
+  "var(--t-olive)",
+];
+
+const LENGTH_LABEL: Record<LengthTarget, string> = {
+  flash: "플래시",
+  short: "단편",
+  novella: "중편",
+  novel: "장편",
+  series: "시리즈",
+};
+
+function humanCount(words: number): string {
+  if (words === 0) return "초안 시작 전";
+  if (words < 10_000) return `${words.toLocaleString("ko-KR")}자`;
+  return `${(words / 1000).toFixed(0)}k자`;
+}
 
 export function LibraryAll() {
   const [tab, setTab] = useState<Tab>("active");
   const [items, setItems] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const load = async (which: Tab) => {
     setError(null);
@@ -31,37 +54,72 @@ export function LibraryAll() {
   };
 
   return (
-    <main className="shell library-all">
-      <p>
-        <Link to="/">← Library</Link>
-      </p>
-      <h2>전체 라이브러리</h2>
+    <main className="library fade-in">
+      <header className="lib-top">
+        <Link to="/" className="lib-shelf-all">← Library</Link>
+        <div className="lib-brandmark">전체 라이브러리</div>
+        <div className="lib-top-actions" />
+      </header>
 
-      <div className="tabs">
-        <button className={`chip${tab === "active" ? " on" : ""}`} onClick={() => setTab("active")}>
-          진행 중
-        </button>
-        <button className={`chip${tab === "archived" ? " on" : ""}`} onClick={() => setTab("archived")}>
-          보관됨
-        </button>
+      <div className="lib-body">
+        <div className="lib-actions">
+          <button
+            className={`btn ${tab === "active" ? "accent" : "ghost"}`}
+            onClick={() => setTab("active")}
+          >
+            진행 중
+          </button>
+          <button
+            className={`btn ${tab === "archived" ? "accent" : "ghost"}`}
+            onClick={() => setTab("archived")}
+          >
+            보관됨
+          </button>
+        </div>
+
+        {error && <p className="error">{error}</p>}
+
+        <div className="lib-shelf-head">
+          <span className="lib-shelf-title">{tab === "active" ? "진행 중" : "보관됨"} · {items.length}개</span>
+        </div>
+
+        {items.length === 0 ? (
+          <p className="hint">없음</p>
+        ) : (
+          <div className="lib-grid">
+            {items.map((p, i) => (
+              <button
+                key={p.id}
+                className="book"
+                style={{ "--spine": SPINE_COLORS[i % SPINE_COLORS.length] } as CSSProperties}
+                onClick={() => navigate(`/workspace/${p.id}`)}
+              >
+                <h3 className="book-title">{p.title}</h3>
+                <div className="book-spacer" />
+                <div className="book-scenes">{LENGTH_LABEL[p.length_target]}</div>
+                <div className="book-meta">{humanCount(p.word_count)}</div>
+                {tab === "active" && (
+                  <div
+                    className="lib-shelf-all"
+                    style={{ marginTop: 8 }}
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); archive(p.id); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation();
+                        archive(p.id);
+                      }
+                    }}
+                  >
+                    아카이브
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-
-      {error && <p className="error">{error}</p>}
-
-      <ul className="all-list">
-        {items.map((p) => (
-          <li key={p.id} className="all-row">
-            <Link to={`/workspace/${p.id}`} className="all-row-link">
-              <span className="all-row-title">{p.title}</span>
-              <span className="all-row-meta">{p.length_target} · {p.word_count}자</span>
-            </Link>
-            {tab === "active" && (
-              <button className="chip" onClick={() => archive(p.id)}>아카이브</button>
-            )}
-          </li>
-        ))}
-        {items.length === 0 && <li className="hint">없음</li>}
-      </ul>
     </main>
   );
 }

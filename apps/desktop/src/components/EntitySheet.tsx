@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput } from "../lib/types";
 import { entities, relationships } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
-import { X, Plus } from "../lib/icons";
+import { X, Plus, User, MapPin, Box, Lightbulb } from "../lib/icons";
 import "./EntitySheet.css";
 
 interface Props {
@@ -12,11 +12,11 @@ interface Props {
   onNavigate?: (nodeId: string) => void;
 }
 
-const KIND_LABEL: Record<EntityKind, string> = {
-  character: "인물",
-  place: "장소",
-  item: "물건",
-  concept: "개념",
+const KIND_META: Record<EntityKind, { label: string; color: string; Icon: typeof User }> = {
+  character: { label: "인물", color: "var(--t-sienna)", Icon: User },
+  place: { label: "장소", color: "var(--t-teal)", Icon: MapPin },
+  item: { label: "물건", color: "var(--t-olive)", Icon: Box },
+  concept: { label: "개념", color: "var(--t-plum)", Icon: Lightbulb },
 };
 
 export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
@@ -104,183 +104,193 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
     }
   };
 
+  const kind = (draft?.kind ?? entity?.kind ?? "character") as EntityKind;
+  const meta = KIND_META[kind];
+  const HeadIcon = meta.Icon;
+
   return (
-    <aside className="entity-sheet" onMouseDown={(e) => e.stopPropagation()}>
-      <header className="entity-head">
-        <span>엔티티 편집</span>
-        <button type="button" className="entity-close" onClick={onClose} aria-label="닫기">
+    <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="panel-head">
+        <span className="ttl">
+          <span className="ic"><HeadIcon size={16} /></span> 엔티티 편집
+        </span>
+        <button type="button" className="panel-close" onClick={onClose} aria-label="닫기">
           <X size={16} />
         </button>
-      </header>
+      </div>
 
-      {error && <p className="entity-error">{error}</p>}
-      {!entity && !error && <p className="entity-loading">불러오는 중…</p>}
+      {error && <p className="es-error">{error}</p>}
+      {!entity && !error && <p className="es-loading">불러오는 중…</p>}
 
       {entity && draft && (
-        <div className="entity-body">
-          <div className="entity-id-row">
-            <div className="entity-avatar">{(draft.name ?? entity.name).slice(0, 1)}</div>
-            <div className="entity-id-text">
-              <input
-                className="entity-name"
-                value={draft.name ?? ""}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="이름"
-              />
-              <div className="entity-kind-row">
-                <select
-                  value={draft.kind ?? entity.kind}
-                  onChange={(e) => setDraft({ ...draft, kind: e.target.value as EntityKind })}
-                >
-                  {(Object.keys(KIND_LABEL) as EntityKind[]).map((k) => (
-                    <option key={k} value={k}>{KIND_LABEL[k]}</option>
-                  ))}
-                </select>
-                <input
-                  className="entity-role"
-                  value={draft.role ?? ""}
-                  onChange={(e) => setDraft({ ...draft, role: e.target.value })}
-                  placeholder="역할 (예: POV)"
-                />
+        <>
+          <div className="panel-scroll">
+            <div className="sec">
+              <div className="es-id">
+                <span className="es-av" style={{ "--av": meta.color } as React.CSSProperties}>
+                  {(draft.name ?? entity.name).slice(0, 1) || "?"}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <input
+                    className="es-name"
+                    value={draft.name ?? ""}
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                    placeholder="이름"
+                  />
+                  <div className="es-kindrow">
+                    <label className="es-kind-chip">
+                      <HeadIcon size={12} />
+                      <select
+                        value={kind}
+                        onChange={(e) => setDraft({ ...draft, kind: e.target.value as EntityKind })}
+                      >
+                        {(Object.keys(KIND_META) as EntityKind[]).map((k) => (
+                          <option key={k} value={k}>{KIND_META[k].label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <input
+                      className="es-role"
+                      value={draft.role ?? ""}
+                      onChange={(e) => setDraft({ ...draft, role: e.target.value })}
+                      placeholder="역할 (예: POV)"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <section className="entity-section">
-            <h5>요약</h5>
-            <textarea
-              value={draft.summary ?? ""}
-              onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
-              rows={3}
-            />
-          </section>
-
-          <section className="entity-section">
-            <h5>속성</h5>
-            <div className="attr-table">
-              {attrRows.map((row, i) => (
-                <div className="attr-row" key={i}>
-                  <input
-                    className="attr-key"
-                    value={row.key}
-                    placeholder="키 (예: 나이)"
-                    onChange={(e) => {
-                      const next = [...attrRows];
-                      next[i] = { ...row, key: e.target.value };
-                      setAttrRows(next);
-                    }}
-                  />
-                  <input
-                    className="attr-value"
-                    value={row.value}
-                    placeholder="값 (예: 32)"
-                    onChange={(e) => {
-                      const next = [...attrRows];
-                      next[i] = { ...row, value: e.target.value };
-                      setAttrRows(next);
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="attr-del"
-                    onClick={() => setAttrRows(attrRows.filter((_, j) => j !== i))}
-                    aria-label="삭제"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                className="attr-add"
-                onClick={() => setAttrRows([...attrRows, { key: "", value: "" }])}
-              >
-                <Plus size={14} />
-                <span>속성 추가</span>
-              </button>
-            </div>
-          </section>
-
-          <section className="entity-section relations">
-            <h5>관계</h5>
-            {rels.length === 0 && (
-              <p className="entity-empty">아직 관계가 없어요</p>
-            )}
-            {rels.length > 0 && (
-              <ul className="relation-list">
-                {rels.map((r) => {
-                  const target = relTargets[r.to_id];
-                  return (
-                    <li className="relation-row" key={r.id}>
-                      <span className="relation-target">
-                        {target ? target.name : r.to_id.slice(0, 6)}
-                      </span>
-                      <span className="relation-dash"> — </span>
-                      <span className="relation-label">{r.label}</span>
-                      <button
-                        type="button"
-                        className="relation-del"
-                        aria-label="삭제"
-                        onClick={async () => {
-                          await relationships.delete(r.id);
-                          if (entity) await refreshRels(entity.id);
-                        }}
-                      >
-                        <X size={14} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            <button
-              type="button"
-              className="relation-add"
-              onClick={() => setPickerOpen(true)}
-            >
-              <Plus size={14} />
-              <span>관계 추가</span>
-            </button>
-            {pickerOpen && entity && (
-              <RelationshipPicker
-                projectId={entity.project_id}
-                fromEntityId={entity.id}
-                onClose={() => setPickerOpen(false)}
-                onCreated={() => {
-                  if (entity) refreshRels(entity.id);
-                }}
+            <div className="sec es-field">
+              <h4>요약</h4>
+              <textarea
+                value={draft.summary ?? ""}
+                onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
+                rows={5}
               />
-            )}
-          </section>
+            </div>
 
-          <section className="entity-section">
-            <h5>등장 씬 · {scenes.length}개</h5>
-            {scenes.length === 0 ? (
-              <p className="entity-empty">아직 등장한 씬이 없어요</p>
-            ) : (
-              <ul className="entity-scenes">
-                {scenes.map((s) => (
-                  <li key={s.node_id}>
+            <div className="sec es-field">
+              <h4>속성</h4>
+              <div className="attr-grid">
+                {attrRows.map((row, i) => (
+                  <div className="attr-row" key={i}>
+                    <input
+                      className="attr-k"
+                      value={row.key}
+                      placeholder="키 (예: 나이)"
+                      onChange={(e) => {
+                        const next = [...attrRows];
+                        next[i] = { ...row, key: e.target.value };
+                        setAttrRows(next);
+                      }}
+                    />
+                    <input
+                      value={row.value}
+                      placeholder="값 (예: 32)"
+                      onChange={(e) => {
+                        const next = [...attrRows];
+                        next[i] = { ...row, value: e.target.value };
+                        setAttrRows(next);
+                      }}
+                    />
                     <button
                       type="button"
-                      className="entity-scene-link"
+                      className="attr-del"
+                      onClick={() => setAttrRows(attrRows.filter((_, j) => j !== i))}
+                      aria-label="삭제"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="attr-add"
+                  onClick={() => setAttrRows([...attrRows, { key: "", value: "" }])}
+                >
+                  <Plus size={13} /> 속성 추가
+                </button>
+              </div>
+            </div>
+
+            <div className="sec">
+              <h4>관계</h4>
+              {rels.length === 0 && <p className="sec-empty">아직 관계가 없어요</p>}
+              {rels.length > 0 && (
+                <ul className="rel-list">
+                  {rels.map((r) => {
+                    const target = relTargets[r.to_id];
+                    return (
+                      <li className="rel-row" key={r.id}>
+                        <span className="rel-target">
+                          {target ? target.name : r.to_id.slice(0, 6)}
+                        </span>
+                        <span className="gap" />
+                        <span className="rel-label">{r.label}</span>
+                        <button
+                          type="button"
+                          className="attr-del"
+                          aria-label="삭제"
+                          onClick={async () => {
+                            await relationships.delete(r.id);
+                            if (entity) await refreshRels(entity.id);
+                          }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <button
+                type="button"
+                className="rel-add"
+                onClick={() => setPickerOpen(true)}
+              >
+                <Plus size={13} /> 관계 추가
+              </button>
+              {pickerOpen && entity && (
+                <RelationshipPicker
+                  projectId={entity.project_id}
+                  fromEntityId={entity.id}
+                  onClose={() => setPickerOpen(false)}
+                  onCreated={() => {
+                    if (entity) refreshRels(entity.id);
+                  }}
+                />
+              )}
+            </div>
+
+            <div className="sec">
+              <h4>등장 씬 <span style={{ color: "var(--muted-2)" }}>{scenes.length}</span></h4>
+              {scenes.length === 0 ? (
+                <p className="sec-empty">아직 등장한 씬이 없어요</p>
+              ) : (
+                <div className="scene-chips">
+                  {scenes.map((s) => (
+                    <button
+                      key={s.node_id}
+                      type="button"
+                      className="scene-chip"
                       onClick={() => onNavigate?.(s.node_id)}
                     >
                       {s.label}
                     </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
-          <div className="entity-actions">
-            <button type="button" onClick={onClose} disabled={saving}>취소</button>
-            <button type="button" className="primary" onClick={onSave} disabled={saving}>
+          <div className="panel-foot">
+            <span className="spacer" />
+            <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>취소</button>
+            <button type="button" className="btn accent sm" onClick={onSave} disabled={saving}>
               {saving ? "저장 중…" : "저장"}
             </button>
           </div>
-        </div>
+        </>
       )}
     </aside>
   );

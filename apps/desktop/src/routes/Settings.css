@@ -1,0 +1,114 @@
+/* Settings reuses the global design system (App.css):
+   .settings, .lib-top, .lib-brandmark, .settings-inner, .settings-section,
+   .set-row(.sk/.sd/.mono), .switch(.on), .modal-field, .btn, .mono.
+   Only the toggle-row button reset, field rows and ops-status cards are local. */
+
+/* Toggle rows are buttons that must look like plain .set-rows. */
+.settings .set-row-btn {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.settings .set-row-btn:last-of-type {
+  border-bottom: 0;
+}
+.settings .set-row-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.settings .set-row .sk-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+/* git folder picker: input + button on one line. */
+.settings .set-field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.settings .set-field-row input {
+  flex: 1;
+}
+
+/* Operational status cards (backup / git sync / summarizer). */
+.settings .ops-status {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--paper);
+}
+.settings .ops-status.is-ok {
+  border-color: color-mix(in oklch, var(--ok) 40%, var(--line-soft));
+}
+.settings .ops-status.is-error {
+  border-color: color-mix(in oklch, var(--warn) 50%, var(--line-soft));
+}
+.settings .ops-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.settings .ops-status-head h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.settings .ops-status-head button {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.settings .ops-status-line {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.settings .ops-status.is-error .ops-status-line {
+  color: var(--warn);
+}
+.settings .ops-status .hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings .error {
+  color: var(--warn);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+.settings .hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+.settings .settings-saved {
+  color: var(--ok);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Standalone descriptive paragraphs (.sd used outside a .set-row). */
+.settings .settings-section > .sd {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0 12px;
+  line-height: 1.55;
+}
+.settings .settings-section > .sd code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}

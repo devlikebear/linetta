@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import "./AIContextChecklist.css";
 import type { ContextCounts } from "../../lib/types";
 
@@ -55,17 +56,15 @@ export function AIContextChecklistList({ counts }: { counts: ContextCounts }) {
   ];
 
   return (
-    <div className="ai-context-checklist-inline">
-      <h5>AI에게 전달되는 컨텍스트</h5>
-      <ul>
-        {items.map((it, i) => (
-          <li key={i} className={it.present ? "" : "item-disabled"}>
-            <span>{it.present ? "✓" : "—"} {it.label}</span>
-            {it.caption && <span className="item-count">{it.caption}</span>}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ul className="ai-checklist">
+      {items.map((it, i) => (
+        <li key={i} className={it.present ? "" : "off"}>
+          <span className="ck">{it.present ? <Check size={11} /> : null}</span>
+          {it.label}
+          {it.caption && <span className="n">{it.caption}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
