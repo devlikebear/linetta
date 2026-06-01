@@ -90,15 +90,158 @@ jobs:
         working-directory: apps/desktop
         run: pnpm tauri bundle --bundles "${{ matrix.bundles }}"
 
-      - name: Pack macOS app bundle
-        if: runner.os == 'macOS'
+      - name: Collect release assets
         shell: bash
         working-directory: apps/desktop/src-tauri/target/release/bundle
-        run: tar -czf Linetta-macos.app.tar.gz -C macos Linetta.app
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          case "${{ matrix.artifact }}" in
+            macos)
+              tar -czf dist/Linetta-macos.app.tar.gz -C macos Linetta.app
+              ;;
+            linux)
+              cp appimage/*.AppImage dist/
+              cp deb/*.deb dist/
+              ;;
+            windows)
+              cp nsis/*-setup.exe dist/
+              ;;
+          esac
+          ls -la dist
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: Linetta-${{ matrix.artifact }}
-          path: apps/desktop/src-tauri/target/release/bundle/**/*
+          path: apps/desktop/src-tauri/target/release/bundle/dist/*
           if-no-files-found: error
+
+  publish-release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      macos_sha: ${{ steps.meta.outputs.macos_sha }}
+    steps:
+      - name: Download built assets
+        uses: actions/download-artifact@v7
+        with:
+          path: dist
+          pattern: Linetta-*
+          merge-multiple: true
+
+      - name: Compute version and macOS checksum
+        id: meta
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          macos_asset="dist/Linetta-macos.app.tar.gz"
+          test -f "${macos_asset}"
+          macos_sha="$(shasum -a 256 "${macos_asset}" | awk '{print $1}')"
+          printf 'version=%s\n' "${version}" >> "${GITHUB_OUTPUT}"
+          printf 'macos_sha=%s\n' "${macos_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" dist/* --clobber
+          else
+            gh release create "${TAG_NAME}" dist/* \
+              --target "${GITHUB_SHA}" \
+              --title "${TAG_NAME}" \
+              --generate-notes
+          fi
+
+  update-homebrew:
+    name: Update Homebrew tap
+    needs: publish-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Require tap token
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HOMEBREW_TAP_TOKEN}" ]; then
+            echo "HOMEBREW_TAP_TOKEN is required to update devlikebear/homebrew-tap" >&2
+            exit 1
+          fi
+
+      - name: Checkout Homebrew tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: devlikebear/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Render cask
+        env:
+          VERSION: ${{ needs.publish-release.outputs.version }}
+          MACOS_SHA: ${{ needs.publish-release.outputs.macos_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p homebrew-tap/Casks
+          cat > homebrew-tap/Casks/linetta.rb <<EOF
+          cask "linetta" do
+            version "${VERSION}"
+            sha256 "${MACOS_SHA}"
+
+            url "https://github.com/devlikebear/linetta/releases/download/v#{version}/Linetta-macos.app.tar.gz"
+            name "Linetta"
+            desc "Local-first desktop writing app for long-form fiction"
+            homepage "https://github.com/devlikebear/linetta"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            # The macOS build is published for Apple Silicon only.
+            depends_on arch: :arm64
+
+            app "Linetta.app"
+
+            zap trash: "~/Library/Application Support/com.devlikebear.linetta"
+
+            caveats <<~CAVEATS
+              Linetta is ad-hoc signed and not notarized, so macOS Gatekeeper may block
+              it on first launch. To allow it to run, clear the quarantine attribute:
+
+                xattr -dr com.apple.quarantine "#{appdir}/Linetta.app"
+
+              Or install without quarantine in the first place:
+
+                brew install --cask --no-quarantine linetta
+            CAVEATS
+          end
+          EOF
+          cat homebrew-tap/Casks/linetta.rb
+
+      - name: Commit and push cask update
+        working-directory: homebrew-tap
+        env:
+          VERSION: ${{ needs.publish-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/linetta.rb
+          if git diff --cached --quiet; then
+            echo "cask already up to date"
+            exit 0
+          fi
+          git commit -m "linetta ${VERSION}"
+          git push origin HEAD:main
