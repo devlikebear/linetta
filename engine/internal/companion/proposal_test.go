@@ -53,12 +53,14 @@ func TestParseProposal_AddBeatXorThread(t *testing.T) {
 }
 
 func TestParseProposal_DanglingThreadRef(t *testing.T) {
+	// An undeclared thread_ref now parses (it is often a real thread id);
+	// resolution and any error happen at apply time.
 	_, present, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_ref":"nope","node_id":"n","label":"l"}]}`))
 	if !present {
 		t.Fatal("block should be present")
 	}
-	if err == nil {
-		t.Fatal("expected dangling thread_ref error")
+	if err != nil {
+		t.Fatalf("dangling thread_ref should parse (resolved at apply), got %v", err)
 	}
 }
 
@@ -169,8 +171,10 @@ func TestParseProposal_RelationshipXorAndDanglingRef(t *testing.T) {
 	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_relationship","from":"a","from_ref":"x","to":"b","label":"L"}]}`)); err == nil {
 		t.Fatal("expected from XOR error")
 	}
-	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_relationship","from":"a","to_ref":"nope","label":"L"}]}`)); err == nil {
-		t.Fatal("expected dangling to_ref error")
+	// An undeclared to_ref now parses (it is often a real entity id/name);
+	// resolution and any error happen at apply time.
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_relationship","from":"a","to_ref":"nope","label":"L"}]}`)); err != nil {
+		t.Fatalf("dangling to_ref should parse (resolved at apply), got %v", err)
 	}
 }
 
@@ -205,8 +209,11 @@ func TestParseProposal_AddBeatNodeIDXorNodeRef(t *testing.T) {
 	if _, _, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_id":"x","node_id":"n","node_ref":"s","label":"L"}]}`)); err == nil {
 		t.Fatal("expected node_id/node_ref mutual-exclusion error")
 	}
-	if _, _, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_id":"x","node_ref":"nope","label":"L"}]}`)); err == nil {
-		t.Fatal("expected dangling node_ref error")
+	// A node_ref that is not declared by a create_scene in the same proposal is
+	// NO LONGER a parse error: the model often places a real node id there, so
+	// resolution (and any clear error) is deferred to apply time.
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"add_beat","thread_id":"x","node_ref":"nope","label":"L"}]}`)); err != nil {
+		t.Fatalf("dangling node_ref should parse (resolved at apply), got %v", err)
 	}
 }
 

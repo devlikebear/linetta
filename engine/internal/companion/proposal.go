@@ -132,12 +132,6 @@ func validateProposal(p Proposal) error {
 	if len(p.Ops) == 0 {
 		return fmt.Errorf("proposal has no ops")
 	}
-	refs := map[string]bool{}
-	for _, op := range p.Ops {
-		if (op.Type == "create_thread" || op.Type == "create_entity" || op.Type == "create_scene") && op.Ref != "" {
-			refs[op.Ref] = true
-		}
-	}
 	for i, op := range p.Ops {
 		if !knownOps[op.Type] {
 			return fmt.Errorf("op[%d]: unknown op %q", i, op.Type)
@@ -157,17 +151,14 @@ func validateProposal(p Proposal) error {
 			if hasID == hasRef {
 				return fmt.Errorf("op[%d] add_beat: exactly one of thread_id/thread_ref required", i)
 			}
-			if hasRef && !refs[op.ThreadRef] {
-				return fmt.Errorf("op[%d] add_beat: thread_ref %q not declared by any create_thread.ref", i, op.ThreadRef)
-			}
+			// An undeclared thread_ref is allowed here: the model often places a
+			// real thread id in thread_ref. Resolution (declared ref → real id →
+			// name) and any clear error happen at apply time.
 			if strings.TrimSpace(op.Label) == "" {
 				return fmt.Errorf("op[%d] add_beat: label required", i)
 			}
 			if op.NodeID != "" && op.NodeRef != "" {
 				return fmt.Errorf("op[%d] add_beat: node_id and node_ref are mutually exclusive", i)
-			}
-			if op.NodeRef != "" && !refs[op.NodeRef] {
-				return fmt.Errorf("op[%d] add_beat: node_ref %q not declared by any create_scene.ref", i, op.NodeRef)
 			}
 		case "create_scene":
 			if strings.TrimSpace(op.Label) == "" {
@@ -212,12 +203,9 @@ func validateProposal(p Proposal) error {
 			if hasTo == hasToRef {
 				return fmt.Errorf("op[%d] create_relationship: exactly one of to/to_ref required", i)
 			}
-			if hasFromRef && !refs[op.FromRef] {
-				return fmt.Errorf("op[%d] create_relationship: from_ref %q not declared", i, op.FromRef)
-			}
-			if hasToRef && !refs[op.ToRef] {
-				return fmt.Errorf("op[%d] create_relationship: to_ref %q not declared", i, op.ToRef)
-			}
+			// Undeclared from_ref/to_ref are allowed: the model often places a
+			// real entity id (or name) in the ref field. Resolution and any
+			// clear error happen at apply time.
 		}
 	}
 	return nil
