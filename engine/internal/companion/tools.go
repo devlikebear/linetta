@@ -197,11 +197,11 @@ func (s *Service) applyOneOp(
 		}
 		return s.threads.Update(ctx, in)
 	case "add_beat":
-		threadID, err := resolveID(op.ThreadID, op.ThreadRef, threadRefs, "thread")
+		threadID, err := s.resolveThreadID(ctx, projectID, op.ThreadID, op.ThreadRef, threadRefs)
 		if err != nil {
 			return err
 		}
-		beatNodeID, err := resolveOptionalNodeID(op.NodeID, op.NodeRef, currentNodeID, nodeRefs)
+		beatNodeID, err := s.resolveOptionalNodeID(ctx, op.NodeID, op.NodeRef, currentNodeID, nodeRefs)
 		if err != nil {
 			return err
 		}
@@ -325,61 +325,71 @@ func (s *Service) applyOneOp(
 // name (case-insensitive). Returns a clear error instead of letting an
 // unresolved value hit a FOREIGN KEY constraint at insert time.
 func (s *Service) resolveEntityID(ctx context.Context, projectID, id, ref string, refs map[string]string, label string) (string, error) {
-	id = strings.TrimSpace(id)
-	ref = strings.TrimSpace(ref)
-
-	if ref != "" {
-		if resolved := refs[ref]; resolved != "" {
+	// ref and id are treated interchangeably: the model conflates them (a real
+	// entity id or name often lands in from_ref, and vice versa). Each is tried
+	// as a declared proposal ref, then a real entity id, then a name.
+	for _, candidate := range []string{strings.TrimSpace(ref), strings.TrimSpace(id)} {
+		if candidate == "" {
+			continue
+		}
+		if resolved, ok := refs[candidate]; ok {
 			return resolved, nil
 		}
-		return "", fmt.Errorf("%s ref %q is not available yet", label, ref)
-	}
-	if id == "" {
-		return "", fmt.Errorf("%s id or ref required", label)
-	}
-	// A proposal ref mistakenly placed in the id field.
-	if resolved, ok := refs[id]; ok {
-		return resolved, nil
-	}
-	// A real entity id.
-	if _, err := s.entities.Get(ctx, id); err == nil {
-		return id, nil
-	}
-	// An entity name (case-insensitive exact match within the project).
-	if matches, err := s.entities.Search(ctx, projectID, id, 20); err == nil {
-		for _, e := range matches {
-			if strings.EqualFold(strings.TrimSpace(e.Name), id) {
-				return e.ID, nil
+		if _, err := s.entities.Get(ctx, candidate); err == nil {
+			return candidate, nil
+		}
+		if matches, err := s.entities.Search(ctx, projectID, candidate, 20); err == nil {
+			for _, e := range matches {
+				if strings.EqualFold(strings.TrimSpace(e.Name), candidate) {
+					return e.ID, nil
+				}
 			}
 		}
 	}
-	return "", fmt.Errorf("%s %q not found (use an entity id, name, or from_ref)", label, id)
+	return "", fmt.Errorf("%s could not be resolved to an entity (id, name, or ref)", label)
 }
 
-func resolveID(id, ref string, refs map[string]string, label string) (string, error) {
-	if strings.TrimSpace(id) != "" {
-		return id, nil
-	}
-	if strings.TrimSpace(ref) == "" {
-		return "", fmt.Errorf("%s id or ref required", label)
-	}
-	resolved := refs[ref]
-	if resolved == "" {
-		return "", fmt.Errorf("%s ref %q is not available yet", label, ref)
-	}
-	return resolved, nil
-}
-
-func resolveOptionalNodeID(id, ref, currentNodeID string, refs map[string]string) (*string, error) {
-	if strings.TrimSpace(id) != "" {
-		return &id, nil
-	}
-	if strings.TrimSpace(ref) != "" {
-		resolved := refs[ref]
-		if resolved == "" {
-			return nil, fmt.Errorf("node ref %q is not available yet", ref)
+// resolveThreadID resolves an add_beat thread endpoint, tolerating a real thread
+// id (or name) placed in thread_ref and vice versa.
+func (s *Service) resolveThreadID(ctx context.Context, projectID, id, ref string, refs map[string]string) (string, error) {
+	for _, candidate := range []string{strings.TrimSpace(ref), strings.TrimSpace(id)} {
+		if candidate == "" {
+			continue
 		}
-		return &resolved, nil
+		if resolved, ok := refs[candidate]; ok {
+			return resolved, nil
+		}
+		if _, err := s.threads.Get(ctx, candidate); err == nil {
+			return candidate, nil
+		}
+		if list, err := s.threads.ListByProject(ctx, projectID, true); err == nil {
+			for _, th := range list {
+				if strings.EqualFold(strings.TrimSpace(th.Name), candidate) {
+					return th.ID, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("thread could not be resolved (id, name, or ref)")
+}
+
+// resolveOptionalNodeID resolves an optional scene/node endpoint. A real node id
+// placed in node_ref (or a declared scene ref) both resolve; absent both, it
+// falls back to the current node.
+func (s *Service) resolveOptionalNodeID(ctx context.Context, id, ref, currentNodeID string, refs map[string]string) (*string, error) {
+	provided := strings.TrimSpace(ref)
+	if provided == "" {
+		provided = strings.TrimSpace(id)
+	}
+	if provided != "" {
+		if resolved, ok := refs[provided]; ok {
+			return &resolved, nil
+		}
+		if _, err := s.nodes.Get(ctx, provided); err == nil {
+			p := provided
+			return &p, nil
+		}
+		return nil, fmt.Errorf("scene ref/id %q not found", provided)
 	}
 	if strings.TrimSpace(currentNodeID) != "" {
 		return &currentNodeID, nil
