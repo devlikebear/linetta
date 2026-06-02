@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 
+	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -13,7 +14,6 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/thread"
-	"github.com/devlikebear/tars/pkg/llm"
 	"github.com/devlikebear/tars/pkg/session"
 )
 
@@ -23,11 +23,10 @@ const historyTokenBudget = 6000
 // entityContextLimit caps how many entities are injected.
 const entityContextLimit = 40
 
-// ClientFactory mirrors ai.ClientFactory (provider id + workDir -> llm.Client).
-type ClientFactory func(provider, workDir string) (llm.Client, error)
-
-// ProviderSource yields the current provider id (settings.Store satisfies it).
-type ProviderSource interface{ Provider() string }
+// ClientFactory and ProviderSource are shared with the ai package so the same
+// settings adapter and default factory serve AI runs, companion, and summaries.
+type ClientFactory = ai.ClientFactory
+type ProviderSource = ai.ProviderSource
 
 // Service wires the companion backend.
 type Service struct {

@@ -31,6 +31,7 @@ import type {
   Relationship,
   SceneMention,
   SearchResult,
+  ProviderID,
   Settings,
   SettingsPatch,
   Snapshot,
@@ -101,6 +102,11 @@ export const snapshots = {
 export const settings = {
   get: () => rpcCall<Settings>("settings.get"),
   set: (patch: SettingsPatch) => rpcCall<Settings>("settings.set", patch),
+};
+
+export const providers = {
+  listModels: (provider: ProviderID) =>
+    rpcCall<{ models: string[] }>("providers.list_models", { provider }),
 };
 
 export const exportApi = {

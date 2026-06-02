@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -20,7 +21,9 @@ import (
 
 type toolConfigSource struct{}
 
-func (toolConfigSource) Provider() string          { return "openai-codex" }
+func (toolConfigSource) Resolve() ai.ResolvedProvider {
+	return ai.ResolvedProvider{Provider: "openai-codex"}
+}
 func (toolConfigSource) WebSearchProvider() string { return "brave" }
 func (toolConfigSource) WebSearchAPIKey() string   { return "test-key" }
 

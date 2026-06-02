@@ -20,7 +20,7 @@ import (
 
 type fixedProvider string
 
-func (p fixedProvider) Provider() string { return string(p) }
+func (p fixedProvider) Resolve() ai.ResolvedProvider { return ai.ResolvedProvider{Provider: string(p)} }
 
 type fakeClient struct {
 	mu         sync.Mutex
@@ -101,7 +101,7 @@ func TestSummarizer_writesSummaryAndMatchesVersion(t *testing.T) {
 
 	fake := &fakeClient{response: "이것은 요약문이다."}
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return fake, nil })
+		func(ai.ResolvedProvider) (llm.Client, error) { return fake, nil })
 	stop := sum.Start(ctx)
 	defer stop()
 
@@ -130,7 +130,7 @@ func TestSummarizer_skipsWhenAlreadyFresh(t *testing.T) {
 
 	fake := &fakeClient{response: "새로 만든 요약."}
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return fake, nil })
+		func(ai.ResolvedProvider) (llm.Client, error) { return fake, nil })
 	stop := sum.Start(ctx)
 	defer stop()
 
@@ -149,7 +149,7 @@ func TestSummarizer_shortContent_writesPlaintextWithoutLLM(t *testing.T) {
 
 	fake := &fakeClient{response: "should not be used"}
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return fake, nil })
+		func(ai.ResolvedProvider) (llm.Client, error) { return fake, nil })
 	stop := sum.Start(ctx)
 	defer stop()
 
@@ -175,7 +175,7 @@ func TestSummarizer_reRunsAfterContentChange(t *testing.T) {
 
 	fake := &fakeClient{response: "v1 요약"}
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return fake, nil })
+		func(ai.ResolvedProvider) (llm.Client, error) { return fake, nil })
 	stop := sum.Start(ctx)
 	defer stop()
 
@@ -205,7 +205,7 @@ func TestSummarizer_enqueueIsNonBlocking(t *testing.T) {
 	ctx := context.Background()
 	fake := &fakeClient{response: "ok", block: make(chan struct{})}
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return fake, nil })
+		func(ai.ResolvedProvider) (llm.Client, error) { return fake, nil })
 	stop := sum.Start(ctx)
 	defer func() {
 		close(fake.block)
@@ -262,7 +262,7 @@ func TestSummarizer_containerRollupBuildsDepth2Tree(t *testing.T) {
 	}
 
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return fake, nil })
+		func(ai.ResolvedProvider) (llm.Client, error) { return fake, nil })
 	stop := sum.Start(ctx)
 	defer stop()
 
@@ -337,7 +337,7 @@ func TestSummarizer_containerDepthCap_stopsBeyondDepth6(t *testing.T) {
 	}
 
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return fake, nil })
+		func(ai.ResolvedProvider) (llm.Client, error) { return fake, nil })
 	stop := sum.Start(ctx)
 	defer stop()
 
@@ -373,7 +373,7 @@ func TestSummarizer_recordsLLMFailureInOpsStatus(t *testing.T) {
 
 	ops := opsstatus.NewRepo(st)
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return nil, errors.New("provider unavailable") }).
+		func(ai.ResolvedProvider) (llm.Client, error) { return nil, errors.New("provider unavailable") }).
 		WithOpsStatus(ops, func() int64 { return 2000 })
 	stop := sum.Start(ctx)
 	defer stop()
@@ -414,7 +414,7 @@ func TestSummarizer_container_skipsLLMWhenChildrenFresh(t *testing.T) {
 	fake := &fakeClient{response: "최종 부 요약"}
 
 	sum := New(nodes, fixedProvider("fake"),
-		func(_, _ string) (llm.Client, error) { return fake, nil })
+		func(ai.ResolvedProvider) (llm.Client, error) { return fake, nil })
 	stop := sum.Start(ctx)
 	defer stop()
 

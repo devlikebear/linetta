@@ -16,10 +16,11 @@ import (
 // Clock matches handlers.Clock.
 type Clock func() int64
 
-// ProviderSource yields the current provider id; consulted on every Start so
-// settings changes take effect on the next AI call without an engine restart.
+// ProviderSource yields the resolved active provider config; consulted on every
+// Start so settings changes take effect on the next AI call without an engine
+// restart.
 type ProviderSource interface {
-	Provider() string
+	Resolve() ResolvedProvider
 }
 
 // Runner manages active AI runs.
@@ -56,7 +57,9 @@ func (r *Runner) Start(ctx context.Context, c Context, now Clock) (string, error
 
 	// Resolve provider once per Start so settings updates apply to the very
 	// next run without restarting the engine.
-	provider := r.src.Provider()
+	rp := r.src.Resolve()
+	rp.WorkDir = r.workDir
+	provider := rp.Provider
 
 	var nodeID *string
 	if c.NodeID != "" {
@@ -74,7 +77,7 @@ func (r *Runner) Start(ctx context.Context, c Context, now Clock) (string, error
 		return "", err
 	}
 
-	client, err := r.factory(provider, r.workDir)
+	client, err := r.factory(rp)
 	if err != nil {
 		_ = r.runs.UpdateStatus(ctx, runID, store.AIRunError, "", err.Error(), now())
 		return "", err

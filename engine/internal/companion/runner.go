@@ -95,7 +95,9 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 		}
 	}
 
-	client, err := r.svc.factory(r.svc.src.Provider(), r.svc.workDir)
+	rp := r.svc.src.Resolve()
+	rp.WorkDir = r.svc.workDir
+	client, err := r.svc.factory(rp)
 	if err != nil {
 		return "", err
 	}

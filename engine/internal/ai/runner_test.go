@@ -18,7 +18,7 @@ import (
 // fixedProvider is a tiny ProviderSource stub returning a constant id.
 type fixedProvider string
 
-func (p fixedProvider) Provider() string { return string(p) }
+func (p fixedProvider) Resolve() ResolvedProvider { return ResolvedProvider{Provider: string(p)} }
 
 // fakeClient streams a fixed set of chunks. Implements llm.Client.
 type fakeClient struct {
@@ -89,7 +89,7 @@ func TestRunner_streams_thenEmitsDone(t *testing.T) {
 	notif := &fakeNotifier{}
 
 	runs := store.NewAIRunsRepo(s)
-	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
+	r := NewRunner(notif, runs, func(ResolvedProvider) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
 	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
@@ -138,7 +138,7 @@ func TestRunner_cancel_emitsCancelled_andPersistsCancelled(t *testing.T) {
 	fake := &fakeClient{chunks: []string{"한", "두"}, failAt: -1, hold: make(chan struct{})}
 	notif := &fakeNotifier{}
 	runs := store.NewAIRunsRepo(s)
-	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
+	r := NewRunner(notif, runs, func(ResolvedProvider) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
 	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
@@ -181,10 +181,10 @@ type mutableProvider struct {
 	v  string
 }
 
-func (m *mutableProvider) Provider() string {
+func (m *mutableProvider) Resolve() ResolvedProvider {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.v
+	return ResolvedProvider{Provider: m.v}
 }
 
 func (m *mutableProvider) set(v string) {
@@ -199,11 +199,11 @@ type recordingFactory struct {
 	delegate     ClientFactory
 }
 
-func (rf *recordingFactory) build(provider, workDir string) (llm.Client, error) {
+func (rf *recordingFactory) build(p ResolvedProvider) (llm.Client, error) {
 	rf.mu.Lock()
-	rf.lastProvider = provider
+	rf.lastProvider = p.Provider
 	rf.mu.Unlock()
-	return rf.delegate(provider, workDir)
+	return rf.delegate(p)
 }
 
 func (rf *recordingFactory) last() string {
@@ -217,7 +217,7 @@ func TestRunner_readsProviderOnEachStart(t *testing.T) {
 	notif := &fakeNotifier{}
 	runs := store.NewAIRunsRepo(s)
 
-	rf := &recordingFactory{delegate: func(_, _ string) (llm.Client, error) {
+	rf := &recordingFactory{delegate: func(ResolvedProvider) (llm.Client, error) {
 		return &fakeClient{chunks: []string{"x"}, failAt: -1}, nil
 	}}
 	src := &mutableProvider{v: "claude-code-cli"}
@@ -262,7 +262,7 @@ func TestRunner_providerError_emitsError(t *testing.T) {
 	fake := &fakeClient{chunks: []string{"한", "두"}, failAt: 1} // error after first chunk
 	notif := &fakeNotifier{}
 	runs := store.NewAIRunsRepo(s)
-	r := NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
+	r := NewRunner(notif, runs, func(ResolvedProvider) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
 	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}

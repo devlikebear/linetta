@@ -143,8 +143,9 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 		return
 	}
 
-	provider := s.src.Provider()
-	client, err := s.factory(provider, "")
+	rp := s.src.Resolve()
+	provider := rp.Provider
+	client, err := s.factory(rp)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: factory(%s): %v\n", provider, err)
 		s.recordError(ctx, n.ID, err.Error())
@@ -218,8 +219,9 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 		input = string(r[:containerSummaryMaxRunes])
 	}
 
-	provider := s.src.Provider()
-	client, err := s.factory(provider, "")
+	rp := s.src.Resolve()
+	provider := rp.Provider
+	client, err := s.factory(rp)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: factory(%s): %v\n", provider, err)
 		s.recordError(ctx, n.ID, err.Error())

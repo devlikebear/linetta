@@ -24,7 +24,9 @@ import (
 
 type fixedProvider string
 
-func (p fixedProvider) Provider() string { return string(p) }
+func (p fixedProvider) Resolve() ai.ResolvedProvider {
+	return ai.ResolvedProvider{Provider: string(p)}
+}
 
 type capNotif struct {
 	mu sync.Mutex
@@ -73,7 +75,7 @@ func newAIFixture(t *testing.T) (*ai.Runner, *ai.ContextBuilder, string, string)
 	mr := mention.NewRepo(s)
 	runs := store.NewAIRunsRepo(s)
 	notif := &capNotif{}
-	runner := ai.NewRunner(notif, runs, func(_, _ string) (llm.Client, error) { return streamingFake{}, nil }, fixedProvider("claude-code-cli"))
+	runner := ai.NewRunner(notif, runs, func(ai.ResolvedProvider) (llm.Client, error) { return streamingFake{}, nil }, fixedProvider("claude-code-cli"))
 	builder := ai.NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	return runner, builder, p.ID, *p.LastOpenedNodeID
 }

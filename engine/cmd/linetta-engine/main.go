@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/gitsync"
 	"github.com/devlikebear/linetta/engine/internal/mention"
+	"github.com/devlikebear/linetta/engine/internal/modelcatalog"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
@@ -39,6 +40,20 @@ import (
 )
 
 const engineVersion = "0.2.1"
+
+// providerSource adapts *settings.Store to ai.ProviderSource. The adapter lives
+// here so the settings package has no dependency on ai.
+type providerSource struct{ store *settings.Store }
+
+func (p providerSource) Resolve() ai.ResolvedProvider {
+	r := p.store.Resolve()
+	return ai.ResolvedProvider{
+		Provider: r.Provider,
+		Model:    r.Model,
+		APIKey:   r.APIKey,
+		CliPath:  r.CliPath,
+	}
+}
 
 func main() {
 	stdio := flag.Bool("stdio", false, "serve JSONRPC over stdin/stdout")
@@ -91,11 +106,12 @@ func main() {
 	if err != nil {
 		fail("settings: %v", err)
 	}
+	providerSrc := providerSource{store: settingsStore}
 
 	aiRuns := store.NewAIRunsRepo(st)
-	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, settingsStore)
+	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, providerSrc)
 
-	summ := summarizer.New(nodes, settingsStore, ai.DefaultClientFactory).
+	summ := summarizer.New(nodes, providerSrc, ai.DefaultClientFactory).
 		WithOpsStatus(ops, clock)
 	stopSummarizer := summ.Start(ctx)
 	defer stopSummarizer()
@@ -137,7 +153,7 @@ func main() {
 	companionSvc := companion.NewService(
 		filepath.Join(home, "companion"),
 		projects, threads, entities, relationships, plotBuilder,
-		s.Notifier(), companion.ClientFactory(ai.DefaultClientFactory), settingsStore, home,
+		s.Notifier(), companion.ClientFactory(ai.DefaultClientFactory), providerSrc, home,
 		nodes, beats,
 	).WithOpsStatus(ops)
 
@@ -202,6 +218,7 @@ func main() {
 	s.Handle("companion.apply_ops", handlers.CompanionApplyOps(companionSvc, clock))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
+	s.Handle("providers.list_models", handlers.ListModels(settingsStore, modelcatalog.Default()))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities))
