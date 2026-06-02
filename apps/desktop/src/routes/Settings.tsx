@@ -59,6 +59,8 @@ export function Settings() {
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [cliDetecting, setCliDetecting] = useState(false);
+  const [cliDetectMsg, setCliDetectMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +88,7 @@ export function Settings() {
     setCliPathDraft(pc.cli_path ?? "");
     setModelOptions([]);
     setModelsError(null);
+    setCliDetectMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProvider]);
 
@@ -131,6 +134,25 @@ export function Settings() {
     if (!current) return;
     const existing = current.providers?.[id] ?? {};
     await apply({ providers: { [id]: { ...existing, ...partial } } } as Partial<SettingsRow>);
+  };
+
+  const detectCliPath = async (id: ProviderID) => {
+    setCliDetecting(true);
+    setCliDetectMsg(null);
+    try {
+      const { path } = await providersApi.detectCli();
+      if (path) {
+        setCliPathDraft(path);
+        await applyProviderConfig(id, { cli_path: path });
+        setCliDetectMsg(`찾음: ${path}`);
+      } else {
+        setCliDetectMsg("claude 실행 파일을 찾지 못했습니다. 경로를 직접 입력하세요.");
+      }
+    } catch (e) {
+      setCliDetectMsg(String(e));
+    } finally {
+      setCliDetecting(false);
+    }
   };
 
   const fetchModels = async (id: ProviderID) => {
@@ -208,19 +230,33 @@ export function Settings() {
                     {meta.credential === "cli" && (
                       <div className="modal-field">
                         <label htmlFor="provider-cli">CLI 경로 (선택)</label>
-                        <input
-                          id="provider-cli"
-                          type="text"
-                          value={cliPathDraft}
-                          onChange={(e) => setCliPathDraft(e.target.value)}
-                          onBlur={() => {
-                            const stored = current.providers?.[meta.id]?.cli_path ?? "";
-                            if (cliPathDraft !== stored) {
-                              applyProviderConfig(meta.id, { cli_path: cliPathDraft });
-                            }
-                          }}
-                          placeholder="PATH에서 claude를 못 찾을 때 실행 파일 경로"
-                        />
+                        <div className="set-field-row">
+                          <input
+                            id="provider-cli"
+                            type="text"
+                            value={cliPathDraft}
+                            onChange={(e) => setCliPathDraft(e.target.value)}
+                            onBlur={() => {
+                              const stored = current.providers?.[meta.id]?.cli_path ?? "";
+                              if (cliPathDraft !== stored) {
+                                applyProviderConfig(meta.id, { cli_path: cliPathDraft });
+                              }
+                            }}
+                            placeholder="PATH에서 claude를 못 찾을 때 실행 파일 경로"
+                          />
+                          <button
+                            type="button"
+                            className="btn ghost sm"
+                            onClick={() => detectCliPath(meta.id)}
+                            disabled={saving || cliDetecting}
+                          >
+                            {cliDetecting ? "찾는 중…" : "자동 찾기"}
+                          </button>
+                        </div>
+                        <p className="sd">
+                          PATH·로그인 셸·Homebrew/npm 설치 위치에서 claude를 자동으로 찾습니다.
+                        </p>
+                        {cliDetectMsg && <p className="sd">{cliDetectMsg}</p>}
                       </div>
                     )}
                     <div className="modal-field">
