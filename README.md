@@ -14,14 +14,19 @@ Linetta is a local-first desktop writing app for long-form fiction. The app keep
 On macOS (Apple Silicon) install the prebuilt app from the Homebrew tap:
 
 ```sh
-brew install --cask --no-quarantine devlikebear/tap/linetta
+brew tap devlikebear/tap
+brew install --cask linetta
 ```
 
-The `--no-quarantine` flag is recommended because the app is ad-hoc signed and not notarized, so macOS Gatekeeper would otherwise block the first launch. If you omit it, clear the quarantine attribute manually after install:
+The fully qualified `devlikebear/tap/linetta` cask name also works in a single `brew install` without a separate `brew tap` step.
+
+The app is ad-hoc signed and not notarized, so macOS Gatekeeper blocks the first launch. After installing, clear the quarantine attribute once:
 
 ```sh
 xattr -dr com.apple.quarantine "/Applications/Linetta.app"
 ```
+
+(Homebrew's `--no-quarantine` install switch has been disabled with no replacement, so the quarantine attribute must be cleared after install instead.)
 
 Other platforms (Linux, Windows) and Intel Macs are not yet covered by a prebuilt download — build from source with `make build-desktop` (see below).
 

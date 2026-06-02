@@ -221,10 +221,6 @@ jobs:
               it on first launch. To allow it to run, clear the quarantine attribute:
 
                 xattr -dr com.apple.quarantine "#{appdir}/Linetta.app"
-
-              Or install without quarantine in the first place:
-
-                brew install --cask --no-quarantine linetta
             CAVEATS
           end
           EOF
