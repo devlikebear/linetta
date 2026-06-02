@@ -28,14 +28,16 @@ interface ProviderMeta {
   desc: string;
   /** "key" => API key field, "cli" => CLI path field. */
   credential: "key" | "cli";
+  /** Whether a custom base URL may be set (OpenAI/Anthropic-compatible endpoints). */
+  endpoint?: boolean;
 }
 
 const PROVIDERS: ProviderMeta[] = [
   { id: "claude-code-cli", label: "Claude Code CLI", desc: "설치된 Claude Code CLI로 생성", credential: "cli" },
   { id: "openai-codex", label: "OpenAI Codex CLI", desc: "설치된 Codex CLI로 생성", credential: "key" },
-  { id: "anthropic", label: "Anthropic API", desc: "Anthropic API 키로 생성", credential: "key" },
-  { id: "openai", label: "OpenAI API", desc: "OpenAI API 키로 생성", credential: "key" },
-  { id: "gemini-native", label: "Gemini API", desc: "Google Gemini API 키로 생성", credential: "key" },
+  { id: "anthropic", label: "Anthropic API", desc: "Anthropic API 키로 생성", credential: "key", endpoint: true },
+  { id: "openai", label: "OpenAI API", desc: "OpenAI API 또는 호환 엔드포인트(Kimi, MiniMax 등)", credential: "key", endpoint: true },
+  { id: "gemini-native", label: "Gemini API", desc: "Google Gemini API 키로 생성", credential: "key", endpoint: true },
 ];
 
 export function Settings() {
@@ -55,6 +57,7 @@ export function Settings() {
   // Per-provider config drafts (re-synced when the active provider changes).
   const [modelDraft, setModelDraft] = useState("");
   const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [baseUrlDraft, setBaseUrlDraft] = useState("");
   const [cliPathDraft, setCliPathDraft] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
@@ -85,6 +88,7 @@ export function Settings() {
     const pc = current.providers?.[current.provider] ?? {};
     setModelDraft(pc.model ?? "");
     setApiKeyDraft(pc.api_key ?? "");
+    setBaseUrlDraft(pc.base_url ?? "");
     setCliPathDraft(pc.cli_path ?? "");
     setModelOptions([]);
     setModelsError(null);
@@ -224,6 +228,24 @@ export function Settings() {
                           }}
                           placeholder="sk-..."
                           autoComplete="off"
+                        />
+                      </div>
+                    )}
+                    {meta.endpoint && (
+                      <div className="modal-field">
+                        <label htmlFor="provider-base-url">Base URL (선택)</label>
+                        <input
+                          id="provider-base-url"
+                          type="text"
+                          value={baseUrlDraft}
+                          onChange={(e) => setBaseUrlDraft(e.target.value)}
+                          onBlur={() => {
+                            const stored = current.providers?.[meta.id]?.base_url ?? "";
+                            if (baseUrlDraft !== stored) {
+                              applyProviderConfig(meta.id, { base_url: baseUrlDraft });
+                            }
+                          }}
+                          placeholder="비우면 기본 엔드포인트. 호환 API 예: https://api.minimax.io/v1"
                         />
                       </div>
                     )}

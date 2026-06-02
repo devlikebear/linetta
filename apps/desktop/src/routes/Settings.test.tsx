@@ -133,6 +133,22 @@ describe("Settings", () => {
     expect(await screen.findByDisplayValue("/opt/homebrew/bin/claude")).toBeInTheDocument();
   });
 
+  it("custom Base URL field persists for OpenAI-compatible providers", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: /OpenAI API/ }));
+    const baseUrl = await screen.findByLabelText("Base URL (선택)");
+    await user.type(baseUrl, "https://api.minimax.io/v1");
+    await user.tab();
+
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({
+        providers: { openai: { base_url: "https://api.minimax.io/v1" } },
+      }),
+    );
+  });
+
   it("selecting Anthropic reveals API key + model fields and persists the provider", async () => {
     const user = userEvent.setup();
     renderSettings();

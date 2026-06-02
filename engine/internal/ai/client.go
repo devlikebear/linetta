@@ -14,6 +14,7 @@ type ResolvedProvider struct {
 	Provider string
 	Model    string
 	APIKey   string
+	BaseURL  string
 	CliPath  string
 	WorkDir  string
 }
@@ -35,6 +36,7 @@ func DefaultClientFactory(p ResolvedProvider) (llm.Client, error) {
 		Provider: p.Provider,
 		Model:    p.Model,
 		APIKey:   p.APIKey,
+		BaseURL:  p.BaseURL,
 		WorkDir:  p.WorkDir,
 	})
 }
