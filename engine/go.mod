@@ -22,3 +22,7 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+// Dev-only: consume the local tars checkout for the ModelFetcher export.
+// Removed once tars is tagged and the version bumped (see plan Task 10).
+replace github.com/devlikebear/tars => /Users/changheonshin/workspace/myworks/tars
