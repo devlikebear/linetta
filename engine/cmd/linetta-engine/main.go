@@ -51,6 +51,7 @@ func (p providerSource) Resolve() ai.ResolvedProvider {
 		Provider: r.Provider,
 		Model:    r.Model,
 		APIKey:   r.APIKey,
+		BaseURL:  r.BaseURL,
 		CliPath:  r.CliPath,
 	}
 }

@@ -33,8 +33,8 @@ func ListModels(store *settings.Store, catalog *modelcatalog.Catalog) rpc.Handle
 		if provider == "" {
 			provider = store.Provider()
 		}
-		key := store.ProviderConfigFor(provider).APIKey
-		models, err := catalog.List(ctx, provider, key)
+		cfg := store.ProviderConfigFor(provider)
+		models, err := catalog.List(ctx, provider, cfg.APIKey, cfg.BaseURL)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

@@ -238,6 +238,7 @@ export type WebSearchProvider = "brave" | "perplexity";
 export interface ProviderConfig {
   model?: string;
   api_key?: string;
+  base_url?: string;
   cli_path?: string;
 }
 
