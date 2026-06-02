@@ -9,6 +9,22 @@ Linetta is a local-first desktop writing app for long-form fiction. The app keep
 - SQLite under the local Linetta data directory
 - `github.com/devlikebear/tars` for LLM provider integration
 
+## Install
+
+On macOS (Apple Silicon) install the prebuilt app from the Homebrew tap:
+
+```sh
+brew install --cask --no-quarantine devlikebear/tap/linetta
+```
+
+The `--no-quarantine` flag is recommended because the app is ad-hoc signed and not notarized, so macOS Gatekeeper would otherwise block the first launch. If you omit it, clear the quarantine attribute manually after install:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Linetta.app"
+```
+
+Other platforms (Linux, Windows) and Intel Macs are not yet covered by a prebuilt download — build from source with `make build-desktop` (see below).
+
 ## Development
 
 Install dependencies in the desktop app once:
@@ -21,8 +37,10 @@ pnpm install
 Build the sidecar engine and start the desktop app:
 
 ```sh
-./scripts/dev.sh
+make dev
 ```
+
+This wraps `scripts/dev.sh`, which builds the Go engine once and then launches `tauri dev`.
 
 Build only the sidecar engine:
 
@@ -71,7 +89,7 @@ make test-tauri
 Keep all app version surfaces aligned with:
 
 ```sh
-make bump-version VERSION=0.1.0
+make bump-version VERSION=0.2.0
 ```
 
 This updates the desktop `package.json`, Tauri config, Cargo metadata, lockfile package entry, and Go engine diagnostics version.
@@ -83,18 +101,22 @@ GitHub Actions:
 
 ## Data And Safety
 
-Linetta stores all writing data locally. Set `LINETTA_HOME` to override the data directory; otherwise the default macOS path is:
+Linetta stores all writing data locally. Set `LINETTA_HOME` to override the data directory; otherwise the per-OS defaults are:
 
 ```text
-~/Library/Application Support/com.devlikebear.linetta
+macOS    ~/Library/Application Support/com.devlikebear.linetta
+Linux    ${XDG_DATA_HOME:-~/.local/share}/com.devlikebear.linetta
+Windows  %APPDATA%\com.devlikebear.linetta
 ```
 
 Important files and folders:
 
-- `library.db`: main SQLite database
+- `library.db`: main SQLite database (projects, scenes, entities, and version snapshots)
 - `settings.json`: app preferences
-- `backups/YYYY-MM-DD/library-HHMMSS.db`: daily SQLite backups, kept for 14 days
+- `backups/YYYY-MM-DD/library-HHMMSS.db`: daily full-database backups, kept for 14 days
 - `companion/`: companion transcript and memory files
+
+Linetta keeps two layers of history. Daily backups (above) snapshot the whole database; scene-level **version snapshots** live inside `library.db`. Manual and AI-replace snapshots are kept indefinitely, while autosave snapshots are thinned over time (all kept for the first 24 hours, then one per hour up to 30 days, then one per day).
 
 Git sync is optional. When configured in Settings, Linetta exports active projects as markdown into the selected Git repository, then runs `git add`, `git commit`, and `git push` using the system Git credentials.
 

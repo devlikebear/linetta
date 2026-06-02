@@ -1,7 +1,10 @@
-.PHONY: help test test-go test-desktop test-tauri build-engine build-desktop bump-version ci
+.PHONY: help dev test test-go test-desktop test-tauri build-engine build-desktop bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+dev: ## Build the engine and start the desktop app in dev mode
+	bash scripts/dev.sh
 
 test: test-go test-desktop test-tauri ## Run all local verification
 
@@ -22,6 +25,6 @@ build-engine: ## Build the Go sidecar into the Tauri binaries directory
 build-desktop: build-engine ## Build the desktop release binary for the current OS
 	cd apps/desktop && pnpm tauri build --no-bundle
 
-bump-version: ## Bump app versions. Usage: make bump-version VERSION=0.1.0
-	@test -n "$(VERSION)" || (echo "VERSION is required, for example: make bump-version VERSION=0.1.0" >&2; exit 2)
+bump-version: ## Bump app versions. Usage: make bump-version VERSION=0.2.0
+	@test -n "$(VERSION)" || (echo "VERSION is required, for example: make bump-version VERSION=0.2.0" >&2; exit 2)
 	bash scripts/bump-version.sh "$(VERSION)"
