@@ -3,7 +3,7 @@ module github.com/devlikebear/linetta/engine
 go 1.26.2
 
 require (
-	github.com/devlikebear/tars v0.33.1
+	github.com/devlikebear/tars v0.33.2
 	github.com/google/uuid v1.6.0
 	modernc.org/sqlite v1.50.1
 )
