@@ -2,14 +2,41 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { settings as settingsApi, gitSync, opsStatus as opsStatusApi } from "../lib/rpc";
+import {
+  settings as settingsApi,
+  gitSync,
+  opsStatus as opsStatusApi,
+  providers as providersApi,
+} from "../lib/rpc";
 import "./Settings.css";
-import type { OpsStatus, ProviderID, Settings as SettingsRow, WebSearchProvider } from "../lib/types";
+import type {
+  OpsStatus,
+  ProviderConfig,
+  ProviderID,
+  Settings as SettingsRow,
+  WebSearchProvider,
+} from "../lib/types";
 
 const JOB_BACKUP = "backup.daily";
 const JOB_GIT_SYNC = "git_sync";
 const JOB_SUMMARIZER = "summarizer";
 const JOB_COMPANION = "companion.persistence";
+
+interface ProviderMeta {
+  id: ProviderID;
+  label: string;
+  desc: string;
+  /** "key" => API key field, "cli" => CLI path field. */
+  credential: "key" | "cli";
+}
+
+const PROVIDERS: ProviderMeta[] = [
+  { id: "claude-code-cli", label: "Claude Code CLI", desc: "설치된 Claude Code CLI로 생성", credential: "cli" },
+  { id: "openai-codex", label: "OpenAI Codex CLI", desc: "설치된 Codex CLI로 생성", credential: "key" },
+  { id: "anthropic", label: "Anthropic API", desc: "Anthropic API 키로 생성", credential: "key" },
+  { id: "openai", label: "OpenAI API", desc: "OpenAI API 키로 생성", credential: "key" },
+  { id: "gemini-native", label: "Gemini API", desc: "Google Gemini API 키로 생성", credential: "key" },
+];
 
 export function Settings() {
   const [current, setCurrent] = useState<SettingsRow | null>(null);
@@ -25,6 +52,14 @@ export function Settings() {
   const [gitTmplDraft, setGitTmplDraft] = useState("");
   const [webSearchKeyDraft, setWebSearchKeyDraft] = useState("");
 
+  // Per-provider config drafts (re-synced when the active provider changes).
+  const [modelDraft, setModelDraft] = useState("");
+  const [apiKeyDraft, setApiKeyDraft] = useState("");
+  const [cliPathDraft, setCliPathDraft] = useState("");
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     Promise.all([settingsApi.get(), opsStatusApi.get()])
@@ -39,6 +74,20 @@ export function Settings() {
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
   }, []);
+
+  // Reset the per-provider drafts whenever the active provider changes (or on
+  // first load) so each provider's stored config shows in the fields.
+  const activeProvider = current?.provider;
+  useEffect(() => {
+    if (!current) return;
+    const pc = current.providers?.[current.provider] ?? {};
+    setModelDraft(pc.model ?? "");
+    setApiKeyDraft(pc.api_key ?? "");
+    setCliPathDraft(pc.cli_path ?? "");
+    setModelOptions([]);
+    setModelsError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProvider]);
 
   const opsByJob = useMemo(() => {
     return new Map(opsRows.map((row) => [row.job_name, row]));
@@ -78,6 +127,25 @@ export function Settings() {
     }
   };
 
+  const applyProviderConfig = async (id: ProviderID, partial: ProviderConfig) => {
+    if (!current) return;
+    const existing = current.providers?.[id] ?? {};
+    await apply({ providers: { [id]: { ...existing, ...partial } } } as Partial<SettingsRow>);
+  };
+
+  const fetchModels = async (id: ProviderID) => {
+    setModelsLoading(true);
+    setModelsError(null);
+    try {
+      const res = await providersApi.listModels(id);
+      setModelOptions(res.models);
+    } catch (e) {
+      setModelsError(String(e));
+    } finally {
+      setModelsLoading(false);
+    }
+  };
+
   return (
     <div className="settings">
       <div className="lib-top">
@@ -96,31 +164,107 @@ export function Settings() {
           <>
             <section className="settings-section">
               <h3>AI 제공자</h3>
-              <button
-                type="button"
-                className="set-row set-row-btn"
-                onClick={() => !saving && apply({ provider: "claude-code-cli" as ProviderID })}
-                disabled={saving}
-              >
-                <span className="sk-wrap">
-                  <span className="sk">Claude Code CLI</span>
-                  <span className="sd">설치된 Claude Code CLI로 생성</span>
-                </span>
-                <span className={`switch${current.provider === "claude-code-cli" ? " on" : ""}`} />
-              </button>
-              <button
-                type="button"
-                className="set-row set-row-btn"
-                onClick={() => !saving && apply({ provider: "openai-codex" as ProviderID })}
-                disabled={saving}
-              >
-                <span className="sk-wrap">
-                  <span className="sk">OpenAI Codex CLI</span>
-                  <span className="sd">설치된 Codex CLI로 생성</span>
-                </span>
-                <span className={`switch${current.provider === "openai-codex" ? " on" : ""}`} />
-              </button>
+              {PROVIDERS.map((meta) => (
+                <button
+                  key={meta.id}
+                  type="button"
+                  className="set-row set-row-btn"
+                  onClick={() => !saving && apply({ provider: meta.id })}
+                  disabled={saving}
+                >
+                  <span className="sk-wrap">
+                    <span className="sk">{meta.label}</span>
+                    <span className="sd">{meta.desc}</span>
+                  </span>
+                  <span className={`switch${current.provider === meta.id ? " on" : ""}`} />
+                </button>
+              ))}
               <p className="sd">변경은 다음 AI 호출부터 적용됩니다.</p>
+
+              {(() => {
+                const meta = PROVIDERS.find((m) => m.id === current.provider);
+                if (!meta) return null;
+                return (
+                  <div className="provider-config">
+                    {meta.credential === "key" && (
+                      <div className="modal-field">
+                        <label htmlFor="provider-key">API 키</label>
+                        <input
+                          id="provider-key"
+                          type="password"
+                          value={apiKeyDraft}
+                          onChange={(e) => setApiKeyDraft(e.target.value)}
+                          onBlur={() => {
+                            const stored = current.providers?.[meta.id]?.api_key ?? "";
+                            if (apiKeyDraft !== stored) {
+                              applyProviderConfig(meta.id, { api_key: apiKeyDraft });
+                            }
+                          }}
+                          placeholder="sk-..."
+                          autoComplete="off"
+                        />
+                      </div>
+                    )}
+                    {meta.credential === "cli" && (
+                      <div className="modal-field">
+                        <label htmlFor="provider-cli">CLI 경로 (선택)</label>
+                        <input
+                          id="provider-cli"
+                          type="text"
+                          value={cliPathDraft}
+                          onChange={(e) => setCliPathDraft(e.target.value)}
+                          onBlur={() => {
+                            const stored = current.providers?.[meta.id]?.cli_path ?? "";
+                            if (cliPathDraft !== stored) {
+                              applyProviderConfig(meta.id, { cli_path: cliPathDraft });
+                            }
+                          }}
+                          placeholder="PATH에서 claude를 못 찾을 때 실행 파일 경로"
+                        />
+                      </div>
+                    )}
+                    <div className="modal-field">
+                      <label htmlFor="provider-model">모델</label>
+                      <div className="set-field-row">
+                        <input
+                          id="provider-model"
+                          type="text"
+                          list="provider-model-options"
+                          value={modelDraft}
+                          onChange={(e) => setModelDraft(e.target.value)}
+                          onBlur={() => {
+                            const stored = current.providers?.[meta.id]?.model ?? "";
+                            if (modelDraft !== stored) {
+                              applyProviderConfig(meta.id, { model: modelDraft });
+                            }
+                          }}
+                          placeholder="비우면 기본 모델 사용"
+                        />
+                        <datalist id="provider-model-options">
+                          {modelOptions.map((m) => (
+                            <option key={m} value={m} />
+                          ))}
+                        </datalist>
+                        <button
+                          type="button"
+                          className="btn ghost sm"
+                          onClick={() => fetchModels(meta.id)}
+                          disabled={saving || modelsLoading || meta.id === "claude-code-cli"}
+                        >
+                          {modelsLoading ? "불러오는 중…" : "모델 새로고침"}
+                        </button>
+                      </div>
+                      {meta.id === "claude-code-cli" ? (
+                        <p className="sd">Claude Code CLI는 모델 목록 조회를 지원하지 않습니다. 직접 입력하세요.</p>
+                      ) : (
+                        <p className="sd">새로고침은 위 API 키로 제공자의 모델 목록을 가져옵니다. 직접 입력도 가능합니다.</p>
+                      )}
+                      {modelsError && <p className="error">{modelsError}</p>}
+                    </div>
+                    <p className="sd">키·모델은 로컬 settings.json에 저장됩니다.</p>
+                  </div>
+                );
+              })()}
             </section>
 
             <section className="settings-section">
