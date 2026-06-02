@@ -23,7 +23,7 @@ function streamProse(text: string): string {
 }
 
 export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Props) {
-  const { messages, streaming, thinking, status, send, cancel } = useCompanion(projectId, nodeIdRef, onApplied);
+  const { messages, streaming, thinking, reasoning, status, send, cancel } = useCompanion(projectId, nodeIdRef, onApplied);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -76,7 +76,16 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
         {isStreaming && (
           <div className="msg bot">
             <span className="msg-who">companion</span>
-            {thinking && <div className="companion-thinking">🔎 {thinking}</div>}
+            <div className="companion-thinking">
+              <span className="ai-working-dot" aria-hidden="true" />
+              {thinking || (liveProse ? "작성 중…" : "생각 중…")}
+            </div>
+            {reasoning && (
+              <details className="companion-reasoning">
+                <summary>추론 중…</summary>
+                <div className="companion-reasoning-body">{reasoning}</div>
+              </details>
+            )}
             <div className="msg-bubble">{liveProse || <span className="ai-cursor">&nbsp;</span>}</div>
           </div>
         )}
