@@ -107,6 +107,7 @@ export const settings = {
 export const providers = {
   listModels: (provider: ProviderID) =>
     rpcCall<{ models: string[] }>("providers.list_models", { provider }),
+  detectCli: () => rpcCall<{ path: string }>("providers.detect_cli"),
 };
 
 export const exportApi = {

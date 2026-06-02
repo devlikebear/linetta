@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/devlikebear/linetta/engine/internal/clidetect"
 	"github.com/devlikebear/linetta/engine/internal/modelcatalog"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
@@ -38,5 +39,18 @@ func ListModels(store *settings.Store, catalog *modelcatalog.Catalog) rpc.Handle
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(listModelsResult{Models: models})
+	}
+}
+
+type detectCLIResult struct {
+	Path string `json:"path"`
+}
+
+// DetectCLI returns a handler for providers.detect_cli. It locates the Claude
+// Code CLI executable (PATH, login shell, then known install dirs) and returns
+// the resolved path, or an empty string when not found.
+func DetectCLI() rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		return json.Marshal(detectCLIResult{Path: clidetect.Detect(ctx)})
 	}
 }

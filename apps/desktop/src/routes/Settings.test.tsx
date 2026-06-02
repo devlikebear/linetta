@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   opsStatusGet: vi.fn(),
   opsStatusClearError: vi.fn(),
   providersListModels: vi.fn(),
+  providersDetectCli: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -27,6 +28,7 @@ vi.mock("../lib/rpc", () => ({
   },
   providers: {
     listModels: mocks.providersListModels,
+    detectCli: mocks.providersDetectCli,
   },
 }));
 
@@ -67,6 +69,7 @@ describe("Settings", () => {
       return Promise.resolve({ ...state });
     });
     mocks.providersListModels.mockResolvedValue({ models: [] });
+    mocks.providersDetectCli.mockResolvedValue({ path: "" });
   });
 
   it("renders backup, git sync, and degraded summarizer status", async () => {
@@ -112,6 +115,22 @@ describe("Settings", () => {
     renderSettings();
     expect(await screen.findByLabelText("CLI 경로 (선택)")).toBeInTheDocument();
     expect(screen.queryByLabelText("API 키")).not.toBeInTheDocument();
+  });
+
+  it("auto-detect fills the CLI path and persists it for claude-code-cli", async () => {
+    mocks.providersDetectCli.mockResolvedValue({ path: "/opt/homebrew/bin/claude" });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: "자동 찾기" }));
+
+    await waitFor(() => expect(mocks.providersDetectCli).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({
+        providers: { "claude-code-cli": { cli_path: "/opt/homebrew/bin/claude" } },
+      }),
+    );
+    expect(await screen.findByDisplayValue("/opt/homebrew/bin/claude")).toBeInTheDocument();
   });
 
   it("selecting Anthropic reveals API key + model fields and persists the provider", async () => {
