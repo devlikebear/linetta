@@ -231,3 +231,62 @@ func TestSet_rejectsUnknownWebSearchProvider(t *testing.T) {
 
 func boolPtr(v bool) *bool    { return &v }
 func strPtr(v string) *string { return &v }
+
+func TestProvidersBackwardCompatLoadAndResolve(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	// Legacy file with no `providers` key must still load and resolve.
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"provider":"anthropic"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	rp := s.Resolve()
+	if rp.Provider != "anthropic" {
+		t.Fatalf("provider=%q, want anthropic", rp.Provider)
+	}
+	if rp.Model != "" || rp.APIKey != "" || rp.CliPath != "" {
+		t.Fatalf("expected empty per-provider fields, got %+v", rp)
+	}
+}
+
+func TestSetProviderConfigMergePerKey(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderConfig{"anthropic": {Model: "claude-3", APIKey: "k1"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderConfig{"openai": {Model: "gpt-4o", APIKey: "k2"}}}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := s.Get(ctx)
+	if cfg.Providers["anthropic"].Model != "claude-3" {
+		t.Fatalf("anthropic clobbered: %+v", cfg.Providers)
+	}
+	if cfg.Providers["openai"].Model != "gpt-4o" {
+		t.Fatalf("openai missing: %+v", cfg.Providers)
+	}
+}
+
+func TestSetRejectsUnknownProvider(t *testing.T) {
+	s := newStoreOnTemp(t)
+	bad := "bedrock"
+	if _, err := s.Set(context.Background(), Patch{Provider: &bad}); err == nil {
+		t.Fatal("expected error for unknown provider")
+	}
+}
+
+func TestResolveReturnsActiveProviderConfig(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	active := "gemini-native"
+	if _, err := s.Set(ctx, Patch{Provider: &active, Providers: map[string]ProviderConfig{"gemini-native": {Model: "gemini-2.5-pro", APIKey: "gk"}}}); err != nil {
+		t.Fatal(err)
+	}
+	rp := s.Resolve()
+	if rp.Provider != "gemini-native" || rp.Model != "gemini-2.5-pro" || rp.APIKey != "gk" {
+		t.Fatalf("resolve mismatch: %+v", rp)
+	}
+}
