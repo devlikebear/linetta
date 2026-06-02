@@ -3,7 +3,7 @@ module github.com/devlikebear/linetta/engine
 go 1.26.2
 
 require (
-	github.com/devlikebear/tars v0.33.0
+	github.com/devlikebear/tars v0.33.1
 	github.com/google/uuid v1.6.0
 	modernc.org/sqlite v1.50.1
 )
@@ -22,7 +22,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-// Dev-only: consume the local tars checkout for the ModelFetcher export.
-// Removed once tars is tagged and the version bumped (see plan Task 10).
-replace github.com/devlikebear/tars => /Users/changheonshin/workspace/myworks/tars
