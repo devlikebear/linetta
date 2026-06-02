@@ -269,11 +269,11 @@ func (s *Service) applyOneOp(
 		}
 		return s.entities.Update(ctx, now(), in)
 	case "create_relationship":
-		fromID, err := resolveID(op.From, op.FromRef, entityRefs, "from entity")
+		fromID, err := s.resolveEntityID(ctx, projectID, op.From, op.FromRef, entityRefs, "from entity")
 		if err != nil {
 			return err
 		}
-		toID, err := resolveID(op.To, op.ToRef, entityRefs, "to entity")
+		toID, err := s.resolveEntityID(ctx, projectID, op.To, op.ToRef, entityRefs, "to entity")
 		if err != nil {
 			return err
 		}
@@ -313,6 +313,43 @@ func (s *Service) applyOneOp(
 	default:
 		return fmt.Errorf("unknown op %q", op.Type)
 	}
+}
+
+// resolveEntityID resolves a create_relationship endpoint to a real entity id.
+// It tolerates the model's common mistakes: an entity may be referenced by a
+// proposal ref (in from_ref or mistakenly in from), by a real entity id, or by
+// name (case-insensitive). Returns a clear error instead of letting an
+// unresolved value hit a FOREIGN KEY constraint at insert time.
+func (s *Service) resolveEntityID(ctx context.Context, projectID, id, ref string, refs map[string]string, label string) (string, error) {
+	id = strings.TrimSpace(id)
+	ref = strings.TrimSpace(ref)
+
+	if ref != "" {
+		if resolved := refs[ref]; resolved != "" {
+			return resolved, nil
+		}
+		return "", fmt.Errorf("%s ref %q is not available yet", label, ref)
+	}
+	if id == "" {
+		return "", fmt.Errorf("%s id or ref required", label)
+	}
+	// A proposal ref mistakenly placed in the id field.
+	if resolved, ok := refs[id]; ok {
+		return resolved, nil
+	}
+	// A real entity id.
+	if _, err := s.entities.Get(ctx, id); err == nil {
+		return id, nil
+	}
+	// An entity name (case-insensitive exact match within the project).
+	if matches, err := s.entities.Search(ctx, projectID, id, 20); err == nil {
+		for _, e := range matches {
+			if strings.EqualFold(strings.TrimSpace(e.Name), id) {
+				return e.ID, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("%s %q not found (use an entity id, name, or from_ref)", label, id)
 }
 
 func resolveID(id, ref string, refs map[string]string, label string) (string, error) {
