@@ -227,11 +227,23 @@ export interface GitSyncInitResult {
   error: string;
 }
 
-export type ProviderID = "claude-code-cli" | "openai-codex";
+export type ProviderID =
+  | "claude-code-cli"
+  | "openai-codex"
+  | "anthropic"
+  | "openai"
+  | "gemini-native";
 export type WebSearchProvider = "brave" | "perplexity";
+
+export interface ProviderConfig {
+  model?: string;
+  api_key?: string;
+  cli_path?: string;
+}
 
 export interface Settings {
   provider: ProviderID;
+  providers?: Record<string, ProviderConfig>;
   typewriter_default: boolean;
   focus_default: boolean;
   git_sync_dir: string;
@@ -244,6 +256,7 @@ export interface Settings {
 
 export interface SettingsPatch {
   provider?: ProviderID;
+  providers?: Record<string, ProviderConfig>;
   typewriter_default?: boolean;
   focus_default?: boolean;
   git_sync_dir?: string;
