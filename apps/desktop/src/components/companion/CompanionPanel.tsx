@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CornerDownLeft, MessageSquare, X } from "lucide-react";
 import { useCompanion } from "../../hooks/useCompanion";
+import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { ProposalCard } from "./ProposalCard";
 import "./CompanionPanel.css";
 
@@ -37,8 +38,11 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
     setDraft("");
   };
 
-  const liveProse = streamProse(streaming);
   const isStreaming = status === "streaming";
+  // Smooth out chunky/bursty provider deltas so the prose reveals evenly
+  // instead of jumping. The completed message still uses the full text.
+  const smoothStreaming = useSmoothStream(streaming, isStreaming);
+  const liveProse = streamProse(smoothStreaming);
 
   return (
     <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
