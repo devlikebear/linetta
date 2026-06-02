@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/gitsync"
 	"github.com/devlikebear/linetta/engine/internal/mention"
+	"github.com/devlikebear/linetta/engine/internal/modelcatalog"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
@@ -217,6 +218,7 @@ func main() {
 	s.Handle("companion.apply_ops", handlers.CompanionApplyOps(companionSvc, clock))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
+	s.Handle("providers.list_models", handlers.ListModels(settingsStore, modelcatalog.Default()))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities))
