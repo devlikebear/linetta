@@ -250,11 +250,15 @@ func (s *Service) applyOneOp(
 		}
 		return nil
 	case "update_entity":
-		cur, err := s.entities.Get(ctx, op.EntityID)
+		entityID, err := s.resolveEntityID(ctx, projectID, op.EntityID, "", entityRefs, "entity")
 		if err != nil {
 			return err
 		}
-		in := entity.UpdateInput{ID: op.EntityID, Kind: cur.Kind, Name: cur.Name, Role: cur.Role, Summary: cur.Summary}
+		cur, err := s.entities.Get(ctx, entityID)
+		if err != nil {
+			return err
+		}
+		in := entity.UpdateInput{ID: entityID, Kind: cur.Kind, Name: cur.Name, Role: cur.Role, Summary: cur.Summary}
 		if strings.TrimSpace(op.Kind) != "" {
 			in.Kind = op.Kind
 		}
