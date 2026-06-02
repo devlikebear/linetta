@@ -128,10 +128,38 @@ func TestParseProposal_EntityAndRelationship(t *testing.T) {
 	}
 }
 
-func TestParseProposal_CreateEntityRequiresKind(t *testing.T) {
-	if _, present, err := ParseProposal(block(`{"ops":[{"op":"create_entity","name":"X"}]}`)); !present || err == nil {
-		t.Fatalf("expected kind error, present=%v err=%v", present, err)
+func TestParseProposal_CreateEntityKindNormalization(t *testing.T) {
+	// Missing kind defaults to "character" (the dominant entity type) so the
+	// common "캐릭터 만들어줘" flow applies instead of failing.
+	p, _, err := ParseProposal(block(`{"ops":[{"op":"create_entity","name":"X"}]}`))
+	if err != nil {
+		t.Fatalf("missing kind should default, got err=%v", err)
 	}
+	if p.Ops[0].Kind != "character" {
+		t.Fatalf("missing kind: want character, got %q", p.Ops[0].Kind)
+	}
+
+	// Synonyms (Korean / mixed case) normalize to the canonical value.
+	cases := map[string]string{
+		"캐릭터":       "character",
+		"인물":        "character",
+		"Character": "character",
+		"장소":        "place",
+		"LOCATION":  "place",
+		"아이템":       "item",
+		"개념":        "concept",
+	}
+	for raw, want := range cases {
+		p, _, err := ParseProposal(block(`{"ops":[{"op":"create_entity","name":"X","kind":"` + raw + `"}]}`))
+		if err != nil {
+			t.Fatalf("kind %q: unexpected err %v", raw, err)
+		}
+		if p.Ops[0].Kind != want {
+			t.Fatalf("kind %q: want %q, got %q", raw, want, p.Ops[0].Kind)
+		}
+	}
+
+	// A truly unknown kind is still rejected.
 	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_entity","name":"X","kind":"bogus"}]}`)); err == nil {
 		t.Fatal("expected invalid-kind error")
 	}

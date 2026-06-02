@@ -108,6 +108,26 @@ func decodeProposal(body string) (Proposal, error) {
 	return p, nil
 }
 
+// normalizeEntityKind maps a raw create_entity kind to one of the canonical
+// values (character|place|item|concept). It is lenient because the model does
+// not always emit the exact token: an empty kind defaults to "character" (the
+// dominant entity type), and common English/Korean synonyms are accepted.
+// Returns (canonical, true) on success, or ("", false) for an unknown value.
+func normalizeEntityKind(raw string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "character", "char", "person", "people", "인물", "캐릭터", "등장인물":
+		return "character", true
+	case "place", "location", "장소", "공간", "위치":
+		return "place", true
+	case "item", "object", "thing", "사물", "아이템", "물건":
+		return "item", true
+	case "concept", "idea", "theme", "개념", "주제":
+		return "concept", true
+	default:
+		return "", false
+	}
+}
+
 func validateProposal(p Proposal) error {
 	if len(p.Ops) == 0 {
 		return fmt.Errorf("proposal has no ops")
@@ -171,11 +191,11 @@ func validateProposal(p Proposal) error {
 			if strings.TrimSpace(op.Name) == "" {
 				return fmt.Errorf("op[%d] create_entity: name required", i)
 			}
-			switch op.Kind {
-			case "character", "place", "item", "concept":
-			default:
+			kind, ok := normalizeEntityKind(op.Kind)
+			if !ok {
 				return fmt.Errorf("op[%d] create_entity: kind must be character|place|item|concept", i)
 			}
+			p.Ops[i].Kind = kind
 		case "update_entity":
 			if op.EntityID == "" {
 				return fmt.Errorf("op[%d] update_entity: entity_id required", i)
