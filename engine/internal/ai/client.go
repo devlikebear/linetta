@@ -1,17 +1,40 @@
 package ai
 
 import (
+	"os"
+	"strings"
+
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
-// ClientFactory creates an llm.Client for a given provider name. Wraps
-// llm.NewProvider so tests can inject a fake without monkey-patching tars.
-type ClientFactory func(provider, workDir string) (llm.Client, error)
+// ResolvedProvider is the per-call provider configuration handed to the factory:
+// the active provider id plus its model, credential, optional CLI path override,
+// and the working directory.
+type ResolvedProvider struct {
+	Provider string
+	Model    string
+	APIKey   string
+	CliPath  string
+	WorkDir  string
+}
 
-// DefaultClientFactory delegates to tars.
-func DefaultClientFactory(provider, workDir string) (llm.Client, error) {
+// ClientFactory creates an llm.Client from a resolved provider config. Wraps
+// llm.NewProvider so tests can inject a fake without monkey-patching tars.
+type ClientFactory func(p ResolvedProvider) (llm.Client, error)
+
+// DefaultClientFactory delegates to tars. For claude-code-cli it injects the
+// configured CLI path via the CLAUDE_CODE_CLI_PATH env var that tars reads
+// (NewClaudeCodeCLIClient has no path parameter, so the env var is the only hook).
+func DefaultClientFactory(p ResolvedProvider) (llm.Client, error) {
+	if p.Provider == "claude-code-cli" {
+		if path := strings.TrimSpace(p.CliPath); path != "" {
+			_ = os.Setenv("CLAUDE_CODE_CLI_PATH", path)
+		}
+	}
 	return llm.NewProvider(llm.ProviderOptions{
-		Provider: provider,
-		WorkDir:  workDir,
+		Provider: p.Provider,
+		Model:    p.Model,
+		APIKey:   p.APIKey,
+		WorkDir:  p.WorkDir,
 	})
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -69,7 +70,9 @@ func (n *fakeNotifier) get(method string) string {
 
 type fixedProvider string
 
-func (p fixedProvider) Provider() string { return string(p) }
+func (p fixedProvider) Resolve() ai.ResolvedProvider {
+	return ai.ResolvedProvider{Provider: string(p)}
+}
 
 func waitFor(t *testing.T, n *fakeNotifier, method string) {
 	t.Helper()
@@ -106,7 +109,7 @@ func newSvcQueue(t *testing.T, responses []string) (*Service, *fakeNotifier, str
 	notif := &fakeNotifier{}
 	fc := &fakeClient{responses: responses}
 	svc := NewService(t.TempDir(), projects, threads, entities, rels, pb, notif,
-		func(_, _ string) (llm.Client, error) { return fc, nil }, fixedProvider("claude-code-cli"), "",
+		func(ai.ResolvedProvider) (llm.Client, error) { return fc, nil }, fixedProvider("claude-code-cli"), "",
 		nodes, beats)
 	p, err := projects.Create(context.Background(), 1, project.NewInput{Title: "t", Genres: []string{"f"}, LengthTarget: "novel", DefaultPOV: "first"})
 	if err != nil {
