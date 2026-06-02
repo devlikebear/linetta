@@ -219,6 +219,7 @@ func main() {
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
 	s.Handle("providers.list_models", handlers.ListModels(settingsStore, modelcatalog.Default()))
+	s.Handle("providers.detect_cli", handlers.DetectCLI())
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities))
