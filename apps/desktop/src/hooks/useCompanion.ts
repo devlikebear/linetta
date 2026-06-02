@@ -4,7 +4,7 @@ import { useEngineEvent } from "./useEngineEvent";
 import type {
   CompanionMessage, CompanionProposal,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
-  CompanionApplied, CompanionThinking,
+  CompanionApplied, CompanionThinking, CompanionReasoning,
 } from "../lib/types";
 
 export interface ChatMessage {
@@ -28,6 +28,9 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState("");
   const [thinking, setThinking] = useState("");
+  const [reasoning, setReasoning] = useState("");
+  const reasoningRef = useRef("");
+  const setReasoningBoth = (v: string) => { reasoningRef.current = v; setReasoning(v); };
   const [status, setStatus] = useState<CompanionStatus>("idle");
   const runIdRef = useRef<string | null>(null);
   const streamingRef = useRef("");
@@ -67,6 +70,10 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     if (p.run_id !== runIdRef.current) return;
     setThinking(p.text);
   });
+  useEngineEvent<CompanionReasoning>("companion-reasoning", (p) => {
+    if (p.run_id !== runIdRef.current) return;
+    setReasoningBoth(reasoningRef.current + p.text);
+  });
   useEngineEvent<CompanionProposal>("companion-proposal", (p) => {
     if (p.run_id !== runIdRef.current) return;
     pendingProposalRef.current = p;
@@ -83,6 +90,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     pendingProposalRef.current = null;
     setStreamingBoth("");
     setThinking("");
+    setReasoningBoth("");
     setStatus("idle");
     runIdRef.current = null;
   });
@@ -91,6 +99,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setMessages((prev) => [...prev, { role: "assistant", content: p.message, errored: true }]);
     setStreamingBoth("");
     setThinking("");
+    setReasoningBoth("");
     setStatus("idle");
     runIdRef.current = null;
   });
@@ -98,6 +107,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     if (p.run_id !== runIdRef.current) return;
     setStreamingBoth("");
     setThinking("");
+    setReasoningBoth("");
     setStatus("idle");
     runIdRef.current = null;
   });
@@ -109,6 +119,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setStatus("streaming");
     setStreamingBoth("");
     setThinking("");
+    setReasoningBoth("");
     try {
       const { run_id } = await companionApi.send(projectId, nodeIdRef.current ?? "", trimmed);
       runIdRef.current = run_id;
@@ -123,5 +134,5 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     if (id) companionApi.cancel(id).catch(() => {});
   }, []);
 
-  return { messages, streaming, thinking, status, send, cancel };
+  return { messages, streaming, thinking, reasoning, status, send, cancel };
 }

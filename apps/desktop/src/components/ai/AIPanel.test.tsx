@@ -55,6 +55,11 @@ describe("AIPanel", () => {
     expect(props.onRun).toHaveBeenCalledWith("이어 써줘", false);
   });
 
+  it("shows a generating indicator while running before any text", () => {
+    renderPanel({ status: { kind: "running" }, variations: [] });
+    expect(screen.getByText("AI 생성 중…")).toBeInTheDocument();
+  });
+
   it("accepts a result with Tab and switches variations with arrows", () => {
     const { props, container } = renderPanel({
       variations: [

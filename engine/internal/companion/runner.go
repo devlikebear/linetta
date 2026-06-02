@@ -50,6 +50,25 @@ type thinkingPayload struct {
 	RunID string `json:"run_id"`
 	Text  string `json:"text"`
 }
+type reasoningPayload struct {
+	RunID string `json:"run_id"`
+	Text  string `json:"text"`
+}
+
+// friendlyToolLabel maps a tool name to a human-readable status shown while the
+// companion is working, so the user sees what the AI is doing.
+func friendlyToolLabel(name string) string {
+	switch name {
+	case "web_search":
+		return "웹 검색 중…"
+	case "web_fetch":
+		return "웹 페이지 읽는 중…"
+	case "linetta_apply_ops":
+		return "작품 설정 반영 중…"
+	default:
+		return "도구 실행 중: " + name
+	}
+}
 
 // Runner manages companion run lifecycle + cancellation.
 type Runner struct {
@@ -146,7 +165,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 	loop := agentloop.New(client, registry, agentloop.HookFunc(func(ctx context.Context, evt agentloop.Event) {
 		switch evt.Type {
 		case agentloop.EventBeforeTool:
-			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: "도구 실행 중: " + evt.ToolName})
+			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: friendlyToolLabel(evt.ToolName)})
 		case agentloop.EventAfterTool:
 			if evt.ToolName == "linetta_apply_ops" && !evt.ToolIsError {
 				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: "작품 설정을 갱신했습니다"})
@@ -164,6 +183,12 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: payload})
 			case streamdedup.ActionSkip:
 			}
+		},
+		OnReasoningDelta: func(text string) {
+			if strings.TrimSpace(text) == "" {
+				return
+			}
+			_ = r.svc.notify.Notify("companion.reasoning", reasoningPayload{RunID: runID, Text: text})
 		},
 		OnTurnEnd: func(ctx context.Context, lastResp llm.ChatResponse) (string, error) {
 			if queryRounds >= maxQueryRounds-1 {

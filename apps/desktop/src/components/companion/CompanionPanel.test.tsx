@@ -13,6 +13,7 @@ const companionState = vi.hoisted(() => ({
     }[],
     streaming: "",
     thinking: "",
+    reasoning: "",
     status: "idle",
     send: vi.fn(),
     cancel: vi.fn(),
@@ -29,10 +30,29 @@ describe("CompanionPanel", () => {
       messages: [],
       streaming: "",
       thinking: "",
+      reasoning: "",
       status: "idle",
       send: vi.fn(),
       cancel: vi.fn(),
     };
+  });
+
+  it("shows a working indicator while streaming even before any prose", () => {
+    companionState.value = { ...companionState.value, status: "streaming", streaming: "", thinking: "" };
+    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    expect(screen.getByText("생각 중…")).toBeInTheDocument();
+  });
+
+  it("renders provider reasoning in a collapsible block while streaming", () => {
+    companionState.value = {
+      ...companionState.value,
+      status: "streaming",
+      streaming: "초안",
+      reasoning: "주인공의 동기를 먼저 정한다",
+    };
+    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    expect(screen.getByText("추론 중…")).toBeInTheDocument();
+    expect(screen.getByText("주인공의 동기를 먼저 정한다")).toBeInTheDocument();
   });
 
   it("sends non-empty messages", async () => {

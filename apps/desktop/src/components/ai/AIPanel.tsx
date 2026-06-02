@@ -170,7 +170,13 @@ export function AIPanel(props: Props) {
           <AIContextChecklistList counts={props.checklistCounts} />
         )}
 
-        {hasResult ? (
+        {isRunning && !current?.text && !current?.error ? (
+          <div className="ai-result">
+            <span className="ai-working">
+              <span className="ai-working-dot" aria-hidden="true" /> AI 생성 중…
+            </span>
+          </div>
+        ) : hasResult ? (
           <div className="ai-result">
             {current?.error ? (
               <span className="ai-result-empty">(오류: {current.error})</span>

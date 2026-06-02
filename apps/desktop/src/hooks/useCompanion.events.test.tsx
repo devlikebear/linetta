@@ -52,4 +52,20 @@ describe("useCompanion streaming", () => {
       content: "안녕하세요! 반가워요.",
     });
   });
+
+  it("accumulates companion-reasoning and clears it on done", async () => {
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(ev.listeners.has("companion-reasoning")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("개요 써줘");
+    });
+
+    fire("companion-reasoning", { run_id: "r1", text: "먼저 " });
+    fire("companion-reasoning", { run_id: "r1", text: "구조를 잡는다" });
+    expect(result.current.reasoning).toBe("먼저 구조를 잡는다");
+
+    fire("companion-done", { run_id: "r1", full_text: "개요입니다." });
+    expect(result.current.reasoning).toBe("");
+  });
 });
