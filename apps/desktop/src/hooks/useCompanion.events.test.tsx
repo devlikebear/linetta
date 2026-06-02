@@ -46,7 +46,8 @@ describe("useCompanion streaming", () => {
 
     fire("companion-done", { run_id: "r1", full_text: "안녕하세요! 반가워요." });
     expect(result.current.streaming).toBe("");
-    expect(result.current.messages.at(-1)).toMatchObject({
+    const msgs = result.current.messages;
+    expect(msgs[msgs.length - 1]).toMatchObject({
       role: "assistant",
       content: "안녕하세요! 반가워요.",
     });
