@@ -154,6 +154,7 @@ export const search = {
 };
 
 export const entities = {
+  list: (projectId: string) => rpcCall<Entity[]>("entities.list", { project_id: projectId }),
   search: (projectId: string, query: string, limit = 20) =>
     rpcCall<Entity[]>("entities.search", { project_id: projectId, query, limit }),
   get: (id: string) => rpcCall<Entity>("entities.get", { id }),

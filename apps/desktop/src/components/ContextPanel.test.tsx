@@ -153,4 +153,26 @@ describe("ContextPanel", () => {
 
     await waitFor(() => expect(onProjectTitleChange).toHaveBeenCalledWith("바뀐 제목"));
   });
+
+  it("triggers scene mention scanning from the mentioned section", async () => {
+    const user = userEvent.setup();
+    const onAutoMention = vi.fn();
+    render(
+      <ContextPanel
+        project={project}
+        node={node}
+        charCount={0}
+        typewriter={false}
+        onToggleTypewriter={vi.fn()}
+        saveStatus={{ kind: "idle" }}
+        mentionedEntities={[]}
+        onMentionClick={vi.fn()}
+        onAutoMention={onAutoMention}
+        onOpenThread={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /씬 스캔/ }));
+    expect(onAutoMention).toHaveBeenCalledOnce();
+  });
 });

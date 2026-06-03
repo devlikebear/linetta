@@ -16,6 +16,7 @@ import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
 import { useAIGeneration } from "../lib/editor/useAIGeneration";
 import { AIPanel } from "../components/ai/AIPanel";
 import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated";
+import { autoMentionDoc } from "../lib/editor/autoMention";
 import { DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
@@ -93,6 +94,7 @@ export function Workspace() {
   const [companionOpen, setCompanionOpen] = useState(false);
   const companionNodeRef = useRef<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
+  const [autoMentionBusy, setAutoMentionBusy] = useState(false);
   const [aiOptions, setAiOptions] = useState<AIOptions>({
     tone: "my",
     short_form: true,
@@ -542,6 +544,35 @@ export function Workspace() {
     },
     [load],
   );
+
+  const handleAutoMentionScene = useCallback(async () => {
+    if (!load) return;
+    const editor = editorRef.current?.editor;
+    const doc = editorRef.current?.getDoc();
+    if (!editor || !doc) return;
+    setAutoMentionBusy(true);
+    try {
+      const allEntities = await entitiesApi.list(load.project.id);
+      const result = autoMentionDoc(doc, allEntities);
+      if (result.applied === 0) {
+        showToast("자동 언급할 등록 항목을 찾지 못했습니다");
+        return;
+      }
+      setSaveStatus({ kind: "saving" });
+      editor.commands.setContent(result.doc);
+      const updated = await nodes.updateContent(load.node.id, JSON.stringify(result.doc));
+      setLoad((prev) => (prev ? { ...prev, node: updated, initialDoc: result.doc } : prev));
+      setCharCount(updated.word_count);
+      await refreshMentioned(load.node.id);
+      setSaveStatus({ kind: "saved", at: Date.now() });
+      showToast(`${result.applied}개 언급을 표시했습니다`);
+    } catch (e) {
+      setSaveStatus({ kind: "error", message: String(e) });
+      showToast("씬 스캔 실패: " + String(e));
+    } finally {
+      setAutoMentionBusy(false);
+    }
+  }, [load, refreshMentioned, showToast]);
 
   const handleSceneTitleCommit = useCallback(
     async (title: string) => {
@@ -1155,6 +1186,8 @@ export function Workspace() {
             saveStatus={saveStatus}
             mentionedEntities={mentioned}
             onMentionClick={(id) => setEntitySheetId(id)}
+            onAutoMention={handleAutoMentionScene}
+            autoMentionBusy={autoMentionBusy}
             onOpenThread={setThreadSheetId}
             onProjectTitleChange={handleProjectTitleCommit}
             onProjectChanged={(p) =>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { NodeRow, Project, Entity, EntityKind } from "../lib/types";
 import { projects as projectsApi } from "../lib/rpc";
 import { PlotPanel } from "./PlotPanel";
-import { User, MapPin, Box, Lightbulb, Book } from "../lib/icons";
+import { User, MapPin, Box, Lightbulb, Book, Search } from "../lib/icons";
 import { InlineEditableText } from "./InlineEditableText";
 
 export type SaveStatus =
@@ -20,6 +20,8 @@ interface Props {
   saveStatus: SaveStatus;
   mentionedEntities: Entity[];
   onMentionClick: (entityId: string) => void;
+  onAutoMention?: () => void;
+  autoMentionBusy?: boolean;
   onOpenThread: (threadId: string) => void;
   onProjectChanged?: (project: Project) => void;
   onProjectTitleChange?: (title: string) => void | Promise<void>;
@@ -48,7 +50,7 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
   series: 200000,
 };
 
-export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onOpenThread, onProjectChanged, onProjectTitleChange }: Props) {
+export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange }: Readonly<Props>) {
   const target = TARGET_WORDS[project.length_target] ?? 90000;
   const pct = target > 0 ? Math.min(100, Math.round((project.word_count / target) * 100)) : 0;
   const [overview, setOverview] = useState(project.outline ?? "");
@@ -203,7 +205,16 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
 
         {/* 등장 — mentioned entities */}
         <div className="sec">
-          <h4>등장 <span style={{ color: "var(--muted-2)" }}>{mentionedEntities.length}</span></h4>
+          <h4>
+            <span>등장 <span style={{ color: "var(--muted-2)" }}>{mentionedEntities.length}</span></span>
+            {onAutoMention && (
+              <span className="sec-actions">
+                <button type="button" onClick={onAutoMention} disabled={!!autoMentionBusy}>
+                  <Search size={11} /> {autoMentionBusy ? "스캔 중" : "씬 스캔"}
+                </button>
+              </span>
+            )}
+          </h4>
           {mentionedEntities.length === 0 && (
             <p className="sec-empty">이 씬에 언급된 인물이 없어요</p>
           )}
