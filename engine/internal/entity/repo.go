@@ -145,6 +145,16 @@ LIMIT ?`, projectID, "%"+q+"%", q+"%", limit)
 	return out, rows.Err()
 }
 
+func (r *Repo) ListByProject(ctx context.Context, projectID string) ([]Entity, error) {
+	rows, err := r.s.DB().QueryContext(ctx, baseSelect+`
+WHERE project_id = ?
+ORDER BY updated_at DESC`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return ScanAll(rows)
+}
+
 // ListCoreByProject returns entities with story-skeleton roles such as
 // 주인공/빌런/메인무대/특별한 장소, newest first within that core set.
 func (r *Repo) ListCoreByProject(ctx context.Context, projectID string, limit int) ([]Entity, error) {

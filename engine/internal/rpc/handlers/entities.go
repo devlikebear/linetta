@@ -52,6 +52,23 @@ func SearchEntities(repo *entity.Repo) rpc.Handler {
 	}
 }
 
+func ListEntities(repo *entity.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p searchEntitiesParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		list, err := repo.ListByProject(ctx, p.ProjectID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		if list == nil {
+			list = []entity.Entity{}
+		}
+		return json.Marshal(list)
+	}
+}
+
 func GetEntity(repo *entity.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p idParam

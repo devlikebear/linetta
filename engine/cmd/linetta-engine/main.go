@@ -183,6 +183,7 @@ func main() {
 	s.Handle("nodes.move_up", handlers.MoveUp(nodes, clock))
 	s.Handle("nodes.move_down", handlers.MoveDown(nodes, clock))
 	s.Handle("entities.search", handlers.SearchEntities(entities))
+	s.Handle("entities.list", handlers.ListEntities(entities))
 	s.Handle("entities.get", handlers.GetEntity(entities))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))

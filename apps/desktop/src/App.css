@@ -616,6 +616,9 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .project-text-edit:focus { border-color: var(--accent); }
 .sec-actions { display: inline-flex; align-items: center; gap: 5px; }
 .sec-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--ink-soft);

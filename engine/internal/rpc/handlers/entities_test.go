@@ -62,6 +62,23 @@ func TestSearchEntityHandler(t *testing.T) {
 	}
 }
 
+func TestListEntitiesHandler(t *testing.T) {
+	r, p := newEntityFixture(t)
+	_, _ = r.Create(context.Background(), 100, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
+	_, _ = r.Create(context.Background(), 110, entity.NewInput{ProjectID: p.ID, Kind: "place", Name: "항구"})
+
+	h := ListEntities(r)
+	res, err := h(context.Background(), json.RawMessage(`{"project_id":"`+p.ID+`"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got []entity.Entity
+	_ = json.Unmarshal(res, &got)
+	if len(got) != 2 {
+		t.Fatalf("results = %+v", got)
+	}
+}
+
 func TestGetEntityHandler(t *testing.T) {
 	r, p := newEntityFixture(t)
 	created, _ := r.Create(context.Background(), 100, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
