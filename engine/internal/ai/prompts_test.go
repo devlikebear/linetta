@@ -58,6 +58,102 @@ func TestBuildSystem_shortFormStillWorks(t *testing.T) {
 	}
 }
 
+func TestBuildMessages_contextSelectionOmitsDisabledSections(t *testing.T) {
+	off := false
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "현재 씬 본문",
+		Project: ProjectMeta{
+			Genres:       []string{"미스터리"},
+			LengthTarget: "novel",
+			DefaultPOV:   "third_limited",
+		},
+		Outline: "작품 전체 개요",
+		Hierarchical: HierarchicalContext{
+			NearbyLeafSummaries: []SceneSummary{{Label: "씬 0", Body: "직전 씬"}},
+		},
+		RelatedScenes: []SceneSummary{{Label: "씬 9", Body: "관련 과거 씬"}},
+		Entities:      []EntityBrief{{Name: "해진", Kind: "character", Summary: "사진작가"}},
+		Relationships: []RelationBrief{{From: "해진", To: "도윤", Label: "동료"}},
+		Plot: plot.Spine{
+			Current: plot.SceneBeats{NodeID: "n1", Beats: []plot.Beat{{ThreadName: "첫 장면", Ordinal: 1, Label: "단서 발견", Description: "비밀 편지를 본다"}}},
+		},
+		Notes:      []NoteBrief{{Body: "작가 주석"}},
+		StyleNotes: "내 문체",
+		UserPrompt: "이어 써줘",
+		Options: Options{Tone: TonePresetMy, Context: ContextSelection{
+			CurrentScene:  &off,
+			Overview:      &off,
+			NearbyScenes:  &off,
+			RelatedScenes: &off,
+			Plot:          &off,
+			Entities:      &off,
+			Relationships: &off,
+			Notes:         &off,
+			ProjectMeta:   &off,
+			StyleNotes:    &off,
+		}},
+	}
+
+	msgs := BuildMessages(c)
+	system := msgs[0].Content
+	user := msgs[1].Content
+
+	for _, gone := range []string{
+		"내 문체",
+		"작품 설정",
+		"미스터리",
+		"작품 전체 개요",
+		"직전 씬",
+		"관련 과거 씬",
+		"현재 씬 본문",
+		"@해진",
+		"동료",
+		"단서 발견",
+		"작가 주석",
+	} {
+		if strings.Contains(system, gone) || strings.Contains(user, gone) {
+			t.Fatalf("disabled context %q leaked into prompt\nsystem:\n%s\nuser:\n%s", gone, system, user)
+		}
+	}
+	if !strings.Contains(user, "## 작가의 지시\n이어 써줘") {
+		t.Fatalf("user instruction should remain in prompt:\n%s", user)
+	}
+}
+
+func TestPreviewFromContextRendersPlotSection(t *testing.T) {
+	c := Context{
+		Outline: "작품 전체 개요",
+		Plot: plot.Spine{
+			Current: plot.SceneBeats{
+				NodeID: "n1",
+				Label:  "현재",
+				Beats:  []plot.Beat{{ThreadName: "첫 장면", Ordinal: 2, Label: "마지막 기회", Description: "주인공이 장소로 향한다"}},
+			},
+		},
+	}
+
+	preview := PreviewFromContext(c, DefaultContextSelection())
+	var plotSection *PreviewSection
+	for i := range preview.Sections {
+		if preview.Sections[i].ID == ContextKeyPlot {
+			plotSection = &preview.Sections[i]
+			break
+		}
+	}
+	if plotSection == nil {
+		t.Fatal("missing plot preview section")
+	}
+	if !plotSection.Present || plotSection.Count != 1 {
+		t.Fatalf("unexpected plot section metadata: %+v", *plotSection)
+	}
+	for _, want := range []string{"첫 장면", "마지막 기회", "주인공이 장소로 향한다"} {
+		if !strings.Contains(plotSection.Preview, want) {
+			t.Fatalf("plot preview missing %q: %+v", want, *plotSection)
+		}
+	}
+}
+
 func TestBuildMessages_shapesSystemAndUser(t *testing.T) {
 	c := Context{
 		ProjectID:   "p1",

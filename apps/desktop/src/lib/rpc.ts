@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AIOptions,
+  AIContextPreview,
   CompanionApplyOpsResult,
   Beat,
   CompanionMessage,
@@ -168,20 +169,37 @@ export const ai = {
   run: (nodeId: string, prompt: string, options: AIOptions, selectionText: string = "") =>
     rpcCall<{ run_id: string }>("ai.run", { node_id: nodeId, prompt, selection_text: selectionText, options }),
   cancel: (runId: string) => rpcCall<{ ok: true }>("ai.cancel", { run_id: runId }),
-  previewContext: (nodeId: string): Promise<ContextCounts> =>
-    rpcCall<ContextPreviewResponse>("ai.preview_context", { node_id: nodeId })
-      .then((r) => ({
-        nearbyScenes: r.nearby_scenes,
-        hasOutline: r.has_outline,
-        hasSynopsis: r.has_synopsis,
-        relatedScenes: r.related_scenes,
-        entities: r.entities,
-        relationships: r.relationships,
-        plotBeats: r.plot_beats,
-        notes: r.notes,
-        projectMetaFields: r.project_meta_fields,
-        hasStyleNotes: r.has_style_notes,
-      })),
+  previewContext: (nodeId: string, options?: AIOptions): Promise<AIContextPreview> =>
+    rpcCall<ContextPreviewResponse>(
+      "ai.preview_context",
+      options ? { node_id: nodeId, options } : { node_id: nodeId },
+    )
+      .then((r) => {
+        const counts: ContextCounts = {
+          nearbyScenes: r.nearby_scenes,
+          hasOutline: r.has_outline,
+          hasSynopsis: r.has_synopsis,
+          relatedScenes: r.related_scenes,
+          entities: r.entities,
+          relationships: r.relationships,
+          plotBeats: r.plot_beats,
+          notes: r.notes,
+          projectMetaFields: r.project_meta_fields,
+          hasStyleNotes: r.has_style_notes,
+        };
+        return {
+          counts,
+          sections: (r.sections ?? []).map((s) => ({
+            id: s.id,
+            label: s.label,
+            present: s.present,
+            selected: s.selected,
+            count: s.count,
+            preview: s.preview,
+          })),
+          selectedItemCount: r.selected_item_count ?? 0,
+        };
+      }),
 };
 
 export const threads = {

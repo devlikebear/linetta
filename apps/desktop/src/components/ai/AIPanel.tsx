@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Layers, Sparkles, X } from "lucide-react";
-import type { AIOptions, ContextCounts } from "../../lib/types";
+import type { AIContextPreview, AIContextSelection, AIOptions } from "../../lib/types";
 import type { CommitMode } from "../../lib/editor/commitGenerated";
 import type { GenStatus, GenVariation } from "../../lib/editor/useAIGeneration";
 import { TONE_PRESETS } from "../../lib/tonePresets";
@@ -12,18 +12,20 @@ interface Props {
   canChooseMode: boolean; // true when no selection → show 삽입/전체교체 radio
   options: AIOptions;
   contextItemCount: number;
+  contextPreview: AIContextPreview;
+  contextSelection: AIContextSelection;
   variations: GenVariation[];
   currentIdx: number;
   status: GenStatus;
   onModeChange: (m: CommitMode) => void;
   onOptionsChange: (o: AIOptions) => void;
+  onContextSelectionChange: (next: AIContextSelection) => void;
   onRun: (prompt: string, variationsOn: boolean) => void;
   onSwitch: (direction: -1 | 1) => void;
   onAccept: () => void;
   onCancel: () => void;
   onContextClick: () => void;
   showChecklist: boolean;
-  checklistCounts: ContextCounts;
 }
 
 const MODE_LABEL: Record<CommitMode, string> = {
@@ -175,7 +177,12 @@ export function AIPanel(props: Props) {
         </div>
 
         {props.showChecklist && (
-          <AIContextChecklistList counts={props.checklistCounts} />
+          <AIContextChecklistList
+            preview={props.contextPreview}
+            selection={props.contextSelection}
+            onSelectionChange={props.onContextSelectionChange}
+            disabled={isRunning}
+          />
         )}
 
         {isRunning && !current?.text && !current?.error ? (

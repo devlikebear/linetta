@@ -18,8 +18,74 @@ const (
 
 // Options is the per-call user-selected options.
 type Options struct {
-	Tone      string `json:"tone"`       // tone preset id; see TonePreset* constants
-	ShortForm bool   `json:"short_form"` // ask for one-paragraph length
+	Tone      string           `json:"tone"`       // tone preset id; see TonePreset* constants
+	ShortForm bool             `json:"short_form"` // ask for one-paragraph length
+	Context   ContextSelection `json:"context,omitempty"`
+}
+
+// ContextKey identifies one independently toggleable context section.
+type ContextKey string
+
+const (
+	ContextKeyCurrentScene  ContextKey = "current_scene"
+	ContextKeyOverview      ContextKey = "overview"
+	ContextKeyNearbyScenes  ContextKey = "nearby_scenes"
+	ContextKeyRelatedScenes ContextKey = "related_scenes"
+	ContextKeyPlot          ContextKey = "plot"
+	ContextKeyEntities      ContextKey = "entities"
+	ContextKeyRelationships ContextKey = "relationships"
+	ContextKeyNotes         ContextKey = "notes"
+	ContextKeyProjectMeta   ContextKey = "project_meta"
+	ContextKeyStyleNotes    ContextKey = "style_notes"
+)
+
+// ContextSelection mirrors the AI panel checklist. Nil means "use the default",
+// which is enabled for backwards compatibility with older callers.
+type ContextSelection struct {
+	CurrentScene  *bool `json:"current_scene,omitempty"`
+	Overview      *bool `json:"overview,omitempty"`
+	NearbyScenes  *bool `json:"nearby_scenes,omitempty"`
+	RelatedScenes *bool `json:"related_scenes,omitempty"`
+	Plot          *bool `json:"plot,omitempty"`
+	Entities      *bool `json:"entities,omitempty"`
+	Relationships *bool `json:"relationships,omitempty"`
+	Notes         *bool `json:"notes,omitempty"`
+	ProjectMeta   *bool `json:"project_meta,omitempty"`
+	StyleNotes    *bool `json:"style_notes,omitempty"`
+}
+
+// DefaultContextSelection returns the nil-pointer default: every section is on.
+func DefaultContextSelection() ContextSelection { return ContextSelection{} }
+
+func (s ContextSelection) Enabled(key ContextKey) bool {
+	switch key {
+	case ContextKeyCurrentScene:
+		return enabledByDefault(s.CurrentScene)
+	case ContextKeyOverview:
+		return enabledByDefault(s.Overview)
+	case ContextKeyNearbyScenes:
+		return enabledByDefault(s.NearbyScenes)
+	case ContextKeyRelatedScenes:
+		return enabledByDefault(s.RelatedScenes)
+	case ContextKeyPlot:
+		return enabledByDefault(s.Plot)
+	case ContextKeyEntities:
+		return enabledByDefault(s.Entities)
+	case ContextKeyRelationships:
+		return enabledByDefault(s.Relationships)
+	case ContextKeyNotes:
+		return enabledByDefault(s.Notes)
+	case ContextKeyProjectMeta:
+		return enabledByDefault(s.ProjectMeta)
+	case ContextKeyStyleNotes:
+		return enabledByDefault(s.StyleNotes)
+	default:
+		return true
+	}
+}
+
+func enabledByDefault(v *bool) bool {
+	return v == nil || *v
 }
 
 // ProjectMeta carries the project-level configuration the user set when
@@ -46,6 +112,24 @@ type PreviewCounts struct {
 	Notes             int  `json:"notes"`
 	ProjectMetaFields int  `json:"project_meta_fields"`
 	HasStyleNotes     bool `json:"has_style_notes"`
+}
+
+// PreviewSection is one context section shown in the AI panel before a run.
+type PreviewSection struct {
+	ID       ContextKey `json:"id"`
+	Label    string     `json:"label"`
+	Present  bool       `json:"present"`
+	Selected bool       `json:"selected"`
+	Count    int        `json:"count"`
+	Preview  string     `json:"preview"`
+}
+
+// ContextPreview keeps the historical top-level counts and adds inspectable
+// sections so the UI can show what is actually being injected.
+type ContextPreview struct {
+	PreviewCounts
+	Sections          []PreviewSection `json:"sections"`
+	SelectedItemCount int              `json:"selected_item_count"`
 }
 
 // Context is the structured payload that prompts.go renders into the

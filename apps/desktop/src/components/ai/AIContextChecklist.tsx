@@ -1,74 +1,90 @@
-import { Check } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import "./AIContextChecklist.css";
-import type { ContextCounts } from "../../lib/types";
+import type { AIContextKey, AIContextPreview, AIContextSelection, ContextCounts } from "../../lib/types";
 
 // Re-export so existing consumers that import { ContextCounts } from this file
 // continue to work without changes.
 export type { ContextCounts };
 
+export const DEFAULT_AI_CONTEXT_SELECTION: AIContextSelection = {
+  current_scene: true,
+  overview: true,
+  nearby_scenes: true,
+  related_scenes: true,
+  plot: true,
+  entities: true,
+  relationships: true,
+  notes: true,
+  project_meta: true,
+  style_notes: true,
+};
+
 interface Props {
   anchor: { top: number; left: number };
-  counts: ContextCounts;
+  preview: AIContextPreview;
+  selection: AIContextSelection;
+  onSelectionChange: (next: AIContextSelection) => void;
   onClose: () => void;
 }
 
-export function AIContextChecklistList({ counts }: { counts: ContextCounts }) {
-  const items: { label: string; present: boolean; caption?: string }[] = [
-    { label: "현재 씬 본문", present: true },
-    { label: "작품 개요", present: counts.hasOutline },
-    { label: "작품 시놉시스(폴백)", present: counts.hasSynopsis },
-    {
-      label: "직전·직후 씬 발췌",
-      present: counts.nearbyScenes > 0,
-      caption: `${counts.nearbyScenes}개`,
-    },
-    {
-      label: "관련 과거 씬 (멘션 RAG)",
-      present: counts.relatedScenes > 0,
-      caption: `${counts.relatedScenes}개`,
-    },
-    {
-      label: "플롯 (전/현/후 씬 비트)",
-      present: counts.plotBeats > 0,
-      caption: `${counts.plotBeats}개`,
-    },
-    {
-      label: "등장 인물·장소",
-      present: counts.entities > 0,
-      caption: `${counts.entities}개`,
-    },
-    {
-      label: "관계",
-      present: counts.relationships > 0,
-      caption: `${counts.relationships}개`,
-    },
-    {
-      label: "작가 주석",
-      present: counts.notes > 0,
-      caption: `${counts.notes}개`,
-    },
-    {
-      label: "작품 설정 (장르/분량/시점)",
-      present: counts.projectMetaFields > 0,
-      caption: `${counts.projectMetaFields}/3`,
-    },
-    { label: "작가 style notes", present: counts.hasStyleNotes },
-  ];
+interface ListProps {
+  preview: AIContextPreview;
+  selection: AIContextSelection;
+  onSelectionChange: (next: AIContextSelection) => void;
+  disabled?: boolean;
+}
+
+export function AIContextChecklistList({ preview, selection, onSelectionChange, disabled = false }: ListProps) {
+  const [openId, setOpenId] = useState<AIContextKey | null>(null);
 
   return (
     <ul className="ai-checklist">
-      {items.map((it, i) => (
-        <li key={i} className={it.present ? "" : "off"}>
-          <span className="ck">{it.present ? <Check size={11} /> : null}</span>
-          {it.label}
-          {it.caption && <span className="n">{it.caption}</span>}
-        </li>
-      ))}
+      {preview.sections.map((section) => {
+        const checked = section.present && selection[section.id];
+        const canToggle = section.present && !disabled;
+        return (
+          <li key={section.id} className={section.present ? "" : "off"}>
+            <div className="ai-context-row">
+              <label className="ai-context-label">
+                <input
+                  className="ai-context-check"
+                  type="checkbox"
+                  checked={checked}
+                  disabled={!canToggle}
+                  onChange={(e) => onSelectionChange({ ...selection, [section.id]: e.target.checked })}
+                />
+                <span>{section.label}</span>
+              </label>
+              {section.count > 0 && <span className="n">{formatCount(section)}</span>}
+              <button
+                type="button"
+                className="ai-preview-toggle"
+                onClick={() => setOpenId((id) => (id === section.id ? null : section.id))}
+                disabled={!section.present}
+                aria-label={`${section.label} 미리보기`}
+              >
+                {openId === section.id ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              </button>
+            </div>
+            {openId === section.id && (
+              <pre className="ai-context-preview">
+                {section.preview || "전달할 내용이 없습니다."}
+              </pre>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
-export function AIContextChecklist({ anchor, counts, onClose }: Props) {
+function formatCount(section: { id: AIContextKey; count: number }) {
+  if (section.id === "project_meta") return `${section.count}/3`;
+  return `${section.count}개`;
+}
+
+export function AIContextChecklist({ anchor, preview, selection, onSelectionChange, onClose }: Props) {
   return (
     <>
       <div
@@ -76,7 +92,7 @@ export function AIContextChecklist({ anchor, counts, onClose }: Props) {
         style={{ top: anchor.top, left: anchor.left }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <AIContextChecklistList counts={counts} />
+        <AIContextChecklistList preview={preview} selection={selection} onSelectionChange={onSelectionChange} />
       </div>
       {/* invisible backdrop to capture outside click */}
       <div
@@ -87,17 +103,9 @@ export function AIContextChecklist({ anchor, counts, onClose }: Props) {
   );
 }
 
-export function totalContextItems(counts: ContextCounts): number {
-  return (
-    counts.nearbyScenes +
-    (counts.hasOutline ? 1 : 0) +
-    (counts.hasSynopsis ? 1 : 0) +
-    counts.relatedScenes +
-    counts.plotBeats +
-    counts.entities +
-    counts.relationships +
-    counts.notes +
-    counts.projectMetaFields +
-    (counts.hasStyleNotes ? 1 : 0)
-  );
+export function totalContextItems(preview: AIContextPreview, selection: AIContextSelection): number {
+  return preview.sections.reduce((sum, section) => {
+    if (!section.present || !selection[section.id]) return sum;
+    return sum + Math.max(section.count, 1);
+  }, 0);
 }

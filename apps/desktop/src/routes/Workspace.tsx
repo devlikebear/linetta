@@ -5,7 +5,7 @@ import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentio
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIOptions, ContextCounts, SearchResult } from "../lib/types";
+import type { NodeRow, Project, Entity, AIContextPreview, AIOptions, ContextCounts, SearchResult } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -16,7 +16,7 @@ import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
 import { useAIGeneration } from "../lib/editor/useAIGeneration";
 import { AIPanel } from "../components/ai/AIPanel";
 import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated";
-import { totalContextItems } from "../components/ai/AIContextChecklist";
+import { DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CompanionPanel } from "../components/companion/CompanionPanel";
@@ -50,6 +50,12 @@ const FALLBACK_COUNTS: ContextCounts = {
   notes: 0,
   projectMetaFields: 0,
   hasStyleNotes: false,
+};
+
+const FALLBACK_CONTEXT_PREVIEW: AIContextPreview = {
+  counts: FALLBACK_COUNTS,
+  sections: [],
+  selectedItemCount: 0,
 };
 
 interface LoadState {
@@ -87,7 +93,11 @@ export function Workspace() {
   const [companionOpen, setCompanionOpen] = useState(false);
   const companionNodeRef = useRef<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
-  const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: true });
+  const [aiOptions, setAiOptions] = useState<AIOptions>({
+    tone: "my",
+    short_form: true,
+    context: DEFAULT_AI_CONTEXT_SELECTION,
+  });
   const [aiModal, setAiModal] = useState<{
     mode: CommitMode;
     canChooseMode: boolean;
@@ -98,7 +108,7 @@ export function Workspace() {
   const closeAIModalRef = useRef<(() => void) | null>(null);
   const openAIModalRef = useRef<(() => void) | null>(null);
   const [aiCtxChecklistOpen, setAiCtxChecklistOpen] = useState(false);
-  const [contextCounts, setContextCounts] = useState<ContextCounts | null>(null);
+  const [contextPreview, setContextPreview] = useState<AIContextPreview | null>(null);
   const previewReqIdRef = useRef(0);
   const loadRef = useRef<LoadState | null>(null);
   useEffect(() => {
@@ -574,7 +584,7 @@ export function Workspace() {
       tiptapEditor.setEditable(true);
     }
     setAiModal(null);
-    setContextCounts(null);
+    setContextPreview(null);
     setAiCtxChecklistOpen(false);
     previewReqIdRef.current++;
   }, [gen, tiptapEditor]);
@@ -596,16 +606,16 @@ export function Workspace() {
       sel: { from, to },
     });
     const reqId = ++previewReqIdRef.current;
-    aiApi.previewContext(currentLoad.node.id)
-      .then((counts) => {
+    aiApi.previewContext(currentLoad.node.id, aiOptions)
+      .then((preview) => {
         if (reqId !== previewReqIdRef.current) return;
-        setContextCounts(counts);
+        setContextPreview(preview);
       })
       .catch((err) => {
         if (reqId !== previewReqIdRef.current) return;
         showToast(`컨텍스트 정보를 가져오지 못했습니다: ${err}`);
       });
-  }, [showToast]);
+  }, [aiOptions, showToast]);
   useEffect(() => { openAIModalRef.current = openAIModal; }, [openAIModal]);
 
   // Toggle the AI modal — mirrors the Cmd+I keyboard behaviour for the top-bar button.
@@ -631,7 +641,7 @@ export function Workspace() {
     gen.cancel();
     tiptapEditor.setEditable(true);
     setAiModal(null);
-    setContextCounts(null);
+    setContextPreview(null);
     setAiCtxChecklistOpen(false);
     previewReqIdRef.current++;
   }, [aiModal, gen, tiptapEditor]);
@@ -917,6 +927,9 @@ export function Workspace() {
     () => crumbChain.join(" · "),
     [crumbChain],
   );
+  const aiContextSelection = aiOptions.context ?? DEFAULT_AI_CONTEXT_SELECTION;
+  const aiContextPreview = contextPreview ?? FALLBACK_CONTEXT_PREVIEW;
+  const aiContextItemCount = totalContextItems(aiContextPreview, aiContextSelection);
 
   if (error) {
     return (
@@ -1055,7 +1068,9 @@ export function Workspace() {
             mode={aiModal.mode}
             canChooseMode={aiModal.canChooseMode}
             options={aiOptions}
-            contextItemCount={totalContextItems(contextCounts ?? FALLBACK_COUNTS)}
+            contextItemCount={aiContextItemCount}
+            contextPreview={aiContextPreview}
+            contextSelection={aiContextSelection}
             variations={gen.variations}
             currentIdx={gen.currentIdx}
             status={gen.status}
@@ -1071,6 +1086,7 @@ export function Workspace() {
               }
             }}
             onOptionsChange={setAiOptions}
+            onContextSelectionChange={(context) => setAiOptions((opts) => ({ ...opts, context }))}
             onRun={(promptText, variationsOn) => {
               const selectionText =
                 aiModal.mode === "replace"
@@ -1090,7 +1106,6 @@ export function Workspace() {
             onCancel={closeAIModal}
             onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
             showChecklist={aiCtxChecklistOpen}
-            checklistCounts={contextCounts ?? FALLBACK_COUNTS}
           />
         ) : companionOpen && load ? (
           <CompanionPanel

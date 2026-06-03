@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
@@ -69,8 +70,19 @@ func (b *ContextBuilder) WithSummaryRefresher(r SummaryRefresher) *ContextBuilde
 	return &cp
 }
 
-// Build assembles the context for the given leaf node + user prompt + options.
+// Build assembles the context for the given leaf node + user prompt + options,
+// then removes sections disabled by Options.Context.
 func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt, selectionText string, opts Options) (Context, error) {
+	c, err := b.BuildFull(ctx, nodeID, prompt, selectionText, opts)
+	if err != nil {
+		return Context{}, err
+	}
+	return ApplyContextSelection(c), nil
+}
+
+// BuildFull assembles every available context section without applying
+// Options.Context. Used by preview so disabled sections can still be inspected.
+func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectionText string, opts Options) (Context, error) {
 	n, err := b.nodes.Get(ctx, nodeID)
 	if err != nil {
 		return Context{}, err
@@ -166,6 +178,45 @@ func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt, selectionTex
 		UserPrompt:    prompt,
 		Options:       opts,
 	}, nil
+}
+
+// ApplyContextSelection removes context sections that the writer unchecked in
+// the AI panel. UserPrompt and SelectionText stay intact because they are the
+// requested operation target, not ambient context.
+func ApplyContextSelection(c Context) Context {
+	s := c.Options.Context
+	if !s.Enabled(ContextKeyCurrentScene) {
+		c.SceneText = ""
+	}
+	if !s.Enabled(ContextKeyOverview) {
+		c.Outline = ""
+		c.Hierarchical.ProjectSynopsis = ""
+	}
+	if !s.Enabled(ContextKeyNearbyScenes) {
+		c.Hierarchical.NearbyLeafSummaries = nil
+	}
+	if !s.Enabled(ContextKeyRelatedScenes) {
+		c.RelatedScenes = nil
+	}
+	if !s.Enabled(ContextKeyPlot) {
+		c.Plot = plot.Spine{}
+	}
+	if !s.Enabled(ContextKeyEntities) {
+		c.Entities = nil
+	}
+	if !s.Enabled(ContextKeyRelationships) {
+		c.Relationships = nil
+	}
+	if !s.Enabled(ContextKeyNotes) {
+		c.Notes = nil
+	}
+	if !s.Enabled(ContextKeyProjectMeta) {
+		c.Project = ProjectMeta{}
+	}
+	if !s.Enabled(ContextKeyStyleNotes) {
+		c.StyleNotes = ""
+	}
+	return c
 }
 
 // loadHierarchicalContext gathers layer-1 (container rollup) data for cur.
@@ -527,4 +578,183 @@ func CountsFromContext(c Context) PreviewCounts {
 		ProjectMetaFields: projectMeta,
 		HasStyleNotes:     strings.TrimSpace(c.StyleNotes) != "",
 	}
+}
+
+// PreviewFromContext renders inspectable sections from an unfiltered Context.
+// It does not mutate c, and selected state is derived from the supplied
+// selection so the UI can preview disabled sections before a run.
+func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
+	sections := []PreviewSection{}
+	add := func(id ContextKey, label string, count int, preview string, forcePresent bool) {
+		present := forcePresent || count > 0 || strings.TrimSpace(preview) != ""
+		selected := present && selection.Enabled(id)
+		section := PreviewSection{
+			ID:       id,
+			Label:    label,
+			Present:  present,
+			Selected: selected,
+			Count:    count,
+			Preview:  trimRunes(strings.TrimSpace(preview), 1200),
+		}
+		sections = append(sections, section)
+	}
+
+	add(ContextKeyCurrentScene, "현재 씬 본문", 1, c.SceneText, true)
+
+	overviewLabel := "작품 개요"
+	overview := strings.TrimSpace(c.Outline)
+	if overview == "" {
+		overviewLabel = "작품 시놉시스(폴백)"
+		overview = strings.TrimSpace(c.Hierarchical.ProjectSynopsis)
+	}
+	add(ContextKeyOverview, overviewLabel, boolCount(overview != ""), overview, false)
+
+	add(ContextKeyNearbyScenes, "직전·직후 씬 발췌", len(c.Hierarchical.NearbyLeafSummaries), renderSceneSummariesPreview(c.Hierarchical.NearbyLeafSummaries), false)
+	add(ContextKeyRelatedScenes, "관련 과거 씬 (멘션 RAG)", len(c.RelatedScenes), renderSceneSummariesPreview(c.RelatedScenes), false)
+	add(ContextKeyPlot, "플롯 (스토리라인&비트)", countPlotBeats(c.Plot), renderPlotPreview(c.Plot), false)
+	add(ContextKeyEntities, "등장 인물·장소", len(c.Entities), renderEntitiesPreview(c.Entities), false)
+	add(ContextKeyRelationships, "관계", len(c.Relationships), renderRelationshipsPreview(c.Relationships), false)
+	add(ContextKeyNotes, "작가 주석", len(c.Notes), renderNotesPreview(c.Notes), false)
+	if meta := renderProjectMeta(c.Project); meta != "" {
+		add(ContextKeyProjectMeta, "작품 설정 (장르/분량/시점)", countProjectMeta(c.Project), meta, false)
+	} else {
+		add(ContextKeyProjectMeta, "작품 설정 (장르/분량/시점)", 0, "", false)
+	}
+	add(ContextKeyStyleNotes, "작가 style notes", boolCount(strings.TrimSpace(c.StyleNotes) != ""), c.StyleNotes, false)
+
+	selectedCount := 0
+	for _, section := range sections {
+		if !section.Selected {
+			continue
+		}
+		if section.Count > 0 {
+			selectedCount += section.Count
+		} else {
+			selectedCount++
+		}
+	}
+
+	return ContextPreview{
+		PreviewCounts:     CountsFromContext(c),
+		Sections:          sections,
+		SelectedItemCount: selectedCount,
+	}
+}
+
+func boolCount(ok bool) int {
+	if ok {
+		return 1
+	}
+	return 0
+}
+
+func countProjectMeta(m ProjectMeta) int {
+	n := 0
+	if len(m.Genres) > 0 {
+		n++
+	}
+	if m.LengthTarget != "" {
+		n++
+	}
+	if m.DefaultPOV != "" {
+		n++
+	}
+	return n
+}
+
+func countPlotBeats(spine plot.Spine) int {
+	n := len(spine.Current.Beats)
+	if spine.Prev != nil {
+		n += len(spine.Prev.Beats)
+	}
+	if spine.Next != nil {
+		n += len(spine.Next.Beats)
+	}
+	return n
+}
+
+func renderSceneSummariesPreview(scenes []SceneSummary) string {
+	var b strings.Builder
+	for _, s := range scenes {
+		b.WriteString(fmt.Sprintf("- [%s] %s\n", s.Label, s.Body))
+	}
+	return b.String()
+}
+
+func renderPlotPreview(spine plot.Spine) string {
+	var b strings.Builder
+	writeScene := func(tag string, s *plot.SceneBeats) {
+		if s == nil || len(s.Beats) == 0 {
+			return
+		}
+		b.WriteString(tag)
+		if s.Label != "" {
+			b.WriteString(" ")
+			b.WriteString(s.Label)
+		}
+		b.WriteString("\n")
+		for _, bt := range s.Beats {
+			line := fmt.Sprintf("  · [%s] #%d %s", bt.ThreadName, bt.Ordinal, bt.Label)
+			if strings.TrimSpace(bt.Description) != "" {
+				line += " — " + bt.Description
+			}
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+	writeScene("[이전 씬]", spine.Prev)
+	writeScene("[현재 씬]", &spine.Current)
+	writeScene("[다음 씬]", spine.Next)
+	return b.String()
+}
+
+func renderEntitiesPreview(entities []EntityBrief) string {
+	var b strings.Builder
+	for _, e := range entities {
+		b.WriteString(fmt.Sprintf("- @%s — %s", e.Name, kindLabel(e.Kind)))
+		if e.Role != "" {
+			b.WriteString(" / " + e.Role)
+		}
+		if e.Summary != "" {
+			b.WriteString(": " + e.Summary)
+		}
+		if len(e.Recent) > 0 {
+			b.WriteString("\n")
+			for _, line := range e.Recent {
+				b.WriteString("  · ")
+				b.WriteString(line)
+				b.WriteString("\n")
+			}
+		} else {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+func renderRelationshipsPreview(relationships []RelationBrief) string {
+	var b strings.Builder
+	for _, r := range relationships {
+		arrow := "→"
+		if r.Bidirectional {
+			arrow = "↔"
+		}
+		b.WriteString(fmt.Sprintf("- %s %s %s: %s", r.From, arrow, r.To, r.Label))
+		if strings.TrimSpace(r.Notes) != "" {
+			b.WriteString(" — ")
+			b.WriteString(r.Notes)
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func renderNotesPreview(notes []NoteBrief) string {
+	var b strings.Builder
+	for _, n := range notes {
+		b.WriteString("- ")
+		b.WriteString(n.Body)
+		b.WriteString("\n")
+	}
+	return b.String()
 }

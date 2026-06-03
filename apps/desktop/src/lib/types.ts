@@ -125,7 +125,22 @@ export type ToneID =
 export interface AIOptions {
   tone: ToneID;
   short_form: boolean;
+  context?: AIContextSelection;
 }
+
+export type AIContextKey =
+  | "current_scene"
+  | "overview"
+  | "nearby_scenes"
+  | "related_scenes"
+  | "plot"
+  | "entities"
+  | "relationships"
+  | "notes"
+  | "project_meta"
+  | "style_notes";
+
+export type AIContextSelection = Record<AIContextKey, boolean>;
 
 export interface AIDelta {
   run_id: string;
@@ -194,6 +209,17 @@ export interface ContextPreviewResponse {
   notes: number;
   project_meta_fields: number;
   has_style_notes: boolean;
+  sections?: ContextPreviewSectionResponse[];
+  selected_item_count?: number;
+}
+
+export interface ContextPreviewSectionResponse {
+  id: AIContextKey;
+  label: string;
+  present: boolean;
+  selected: boolean;
+  count: number;
+  preview: string;
 }
 
 /** Camel-case context-payload counts surfaced by the FE. Wire shape is
@@ -209,6 +235,21 @@ export interface ContextCounts {
   notes: number;
   projectMetaFields: number;
   hasStyleNotes: boolean;
+}
+
+export interface AIContextSection {
+  id: AIContextKey;
+  label: string;
+  present: boolean;
+  selected: boolean;
+  count: number;
+  preview: string;
+}
+
+export interface AIContextPreview {
+  counts: ContextCounts;
+  sections: AIContextSection[];
+  selectedItemCount: number;
 }
 
 export interface GitSyncResult {

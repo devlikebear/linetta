@@ -43,6 +43,7 @@ func PresetSeed(p PresetID) string {
 // system-prompt assembler ignores ContentBlocks entirely. ContentBlocks is for
 // multimodal inputs (images, PDFs) which we don't send.
 func BuildMessages(c Context) []llm.ChatMessage {
+	c = ApplyContextSelection(c)
 	system := buildSystem(c)
 	user := buildUser(c)
 	return []llm.ChatMessage{
@@ -125,9 +126,11 @@ func buildUser(c Context) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(fmt.Sprintf("## 현재 씬: %s\n", c.SceneLabel))
-	b.WriteString(c.SceneText)
-	b.WriteString("\n\n")
+	if strings.TrimSpace(c.SceneText) != "" {
+		b.WriteString(fmt.Sprintf("## 현재 씬: %s\n", c.SceneLabel))
+		b.WriteString(c.SceneText)
+		b.WriteString("\n\n")
+	}
 
 	if strings.TrimSpace(c.SelectionText) != "" {
 		b.WriteString("## 선택 영역\n")

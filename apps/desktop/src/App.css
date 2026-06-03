@@ -709,11 +709,26 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .ai-dots i.on { background: var(--accent); }
 
 .ai-checklist { list-style: none; margin: 0; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); display: flex; flex-direction: column; gap: 7px; }
-.ai-checklist li { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-soft); }
-.ai-checklist li .ck { width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center; flex: none; color: #fff; background: var(--ok); }
+.ai-checklist li { display: block; font-size: 12.5px; color: var(--ink-soft); }
 .ai-checklist li.off { color: var(--muted-2); }
-.ai-checklist li.off .ck { background: var(--surface-3); color: var(--muted-2); }
-.ai-checklist li .n { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.ai-context-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ai-context-label { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }
+.ai-context-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-context-check { width: 16px; height: 16px; accent-color: var(--ok); flex: none; }
+.ai-checklist li .n { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--muted); flex: none; }
+.ai-preview-toggle {
+  width: 22px; height: 22px; display: grid; place-items: center; flex: none;
+  border: 0; background: transparent; border-radius: var(--r-sm); color: var(--muted);
+}
+.ai-preview-toggle:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.ai-preview-toggle:disabled { cursor: default; opacity: 0.38; }
+.ai-context-preview {
+  margin: 7px 0 3px 25px; max-height: 150px; overflow-y: auto;
+  padding: 9px 10px; border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface-2) 64%, var(--surface));
+  color: var(--ink-soft); white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--font-serif); font-size: 12.5px; line-height: 1.55;
+}
 
 .panel-foot { padding: 14px 16px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }
 .panel-foot .spacer { flex: 1; }
