@@ -157,13 +157,27 @@ func (s *Store) load() error {
 	if disk.WebSearchProvider != "" {
 		s.cfg.WebSearchProvider = disk.WebSearchProvider
 	}
-	s.cfg.WebSearchAPIKey = disk.WebSearchAPIKey
+	migratedProviderKeys, migratedWebKey, err := s.migrateLegacySecrets(&disk)
+	if err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	next := s.cfg
+	s.mu.Unlock()
+	if migratedWebKey || migratedProviderKeys {
+		if err := s.persist(next); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) migrateLegacySecrets(disk *Config) (bool, bool, error) {
 	migratedProviderKeys := false
 	if len(disk.Providers) > 0 {
 		providers, migrated, err := s.migrateProviderSecrets(disk.Providers)
 		if err != nil {
-			s.mu.Unlock()
-			return err
+			return false, false, err
 		}
 		s.cfg.Providers = providers
 		if migrated {
@@ -174,21 +188,13 @@ func (s *Store) load() error {
 	migratedWebKey := false
 	if disk.WebSearchAPIKey != "" {
 		if err := s.setSecret(webSearchAPIKeySecretName, disk.WebSearchAPIKey); err != nil {
-			s.mu.Unlock()
-			return err
+			return false, false, err
 		}
 		s.cfg.WebSearchAPIKey = ""
 		disk.WebSearchAPIKey = ""
 		migratedWebKey = true
 	}
-	next := s.cfg
-	s.mu.Unlock()
-	if migratedWebKey || migratedProviderKeys {
-		if err := s.persist(next); err != nil {
-			return err
-		}
-	}
-	return nil
+	return migratedProviderKeys, migratedWebKey, nil
 }
 
 // Get returns a copy of the current Config (with backup_dir filled in).

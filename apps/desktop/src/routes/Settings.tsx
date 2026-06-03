@@ -330,6 +330,7 @@ export function Settings() {
   const activeConfig = current?.providers?.[current.provider] ?? {};
   const selectedGuide = SETUP_GUIDES.find((g) => g.id === guideId) ?? SETUP_GUIDES[0];
   const credentialState = getCredentialState(activeMeta, activeConfig);
+  const webSearchKeyPlaceholder = current ? getWebSearchKeyPlaceholder(current) : "BSA...";
 
   return (
     <div className="settings">
@@ -651,13 +652,7 @@ export function Settings() {
                         apply({ web_search_api_key: webSearchKeyDraft });
                       }
                     }}
-                    placeholder={
-                      current.web_search_api_key_set
-                        ? "저장된 검색 API 키 있음 · 새 키를 붙여넣으면 교체"
-                        : current.web_search_provider === "perplexity"
-                          ? "pplx-..."
-                          : "BSA..."
-                    }
+                    placeholder={webSearchKeyPlaceholder}
                     autoComplete="off"
                   />
                   {current.web_search_api_key_set && (
@@ -847,6 +842,16 @@ function getCredentialState(meta?: ProviderMeta, cfg: ProviderConfig = {}): stri
     return cfg.cli_path ? "CLI 경로 저장됨" : "기존 CLI 설정";
   }
   return "설정 확인 필요";
+}
+
+function getWebSearchKeyPlaceholder(current: SettingsRow): string {
+  if (current.web_search_api_key_set) {
+    return "저장된 검색 API 키 있음 · 새 키를 붙여넣으면 교체";
+  }
+  if (current.web_search_provider === "perplexity") {
+    return "pplx-...";
+  }
+  return "BSA...";
 }
 
 function OpsStatusCard({
