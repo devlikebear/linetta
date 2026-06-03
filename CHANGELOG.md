@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.1 - 2026-06-04
+
+- Added Windows and Linux release packaging for NSIS, MSI, AppImage, deb, and rpm bundles.
+- Added winget manifest rendering and Flathub submission starter metadata.
+- Added distribution metadata validation for release automation.
+
 ## v0.4.0 - 2026-06-03
 
 - Added a guided onboarding tour for first-run users across the library and workspace.
