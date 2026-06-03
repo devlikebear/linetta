@@ -94,6 +94,12 @@ func newSvc(t *testing.T, full string) (*Service, *fakeNotifier, string) {
 
 func newSvcQueue(t *testing.T, responses []string) (*Service, *fakeNotifier, string) {
 	t.Helper()
+	fc := &fakeClient{responses: responses}
+	return newSvcWithClient(t, fc)
+}
+
+func newSvcWithClient(t *testing.T, client llm.Client) (*Service, *fakeNotifier, string) {
+	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	st, err := store.Open(context.Background(), dbPath)
 	if err != nil {
@@ -109,9 +115,8 @@ func newSvcQueue(t *testing.T, responses []string) (*Service, *fakeNotifier, str
 	rels := relationship.NewRepo(st)
 	pb := plot.NewBuilder(nodes, beats, threads)
 	notif := &fakeNotifier{}
-	fc := &fakeClient{responses: responses}
 	svc := NewService(t.TempDir(), projects, threads, entities, rels, pb, notif,
-		func(ai.ResolvedProvider) (llm.Client, error) { return fc, nil }, fixedProvider("claude-code-cli"), "",
+		func(ai.ResolvedProvider) (llm.Client, error) { return client, nil }, fixedProvider("claude-code-cli"), "",
 		nodes, beats)
 	p, err := projects.Create(context.Background(), 1, project.NewInput{Title: "t", Genres: []string{"f"}, LengthTarget: "novel", DefaultPOV: "first"})
 	if err != nil {
@@ -177,6 +182,106 @@ func TestRun_QueryThenFinal(t *testing.T) {
 	msgs, _ := svc.History(context.Background(), projectID)
 	if len(msgs) != 2 {
 		t.Fatalf("want 2 transcript msgs (user+final assistant), got %d: %+v", len(msgs), msgs)
+	}
+}
+
+func TestSend_RetriesDirectMutationWhenModelOnlyClaimsApplied(t *testing.T) {
+	client := &claimThenApplyClient{}
+	svc, notif, projectID := newSvcWithClient(t, client)
+	runID, err := svc.Send(context.Background(), projectID, "", "아웃라인을 새로 작성해줘", func() int64 { return 1000 })
+	if err != nil || runID == "" {
+		t.Fatalf("Send err=%v runID=%q", err, runID)
+	}
+	waitFor(t, notif, "companion.done")
+
+	client.mu.Lock()
+	calls := client.calls
+	firstChoice := client.firstChoice
+	firstTools := append([]string(nil), client.firstTools...)
+	sawCorrection := client.sawCorrection
+	sawToolResult := client.sawToolResult
+	client.mu.Unlock()
+
+	if calls < 3 {
+		t.Fatalf("expected retry, tool call, and final response, got %d calls", calls)
+	}
+	if firstChoice == nil || firstChoice.Mode != llm.ToolChoiceModeRequired {
+		t.Fatalf("first tool choice = %+v, want required", firstChoice)
+	}
+	if len(firstTools) != 1 || firstTools[0] != applyOpsToolName {
+		t.Fatalf("first tools = %+v, want only %s", firstTools, applyOpsToolName)
+	}
+	if !sawCorrection {
+		t.Fatal("expected corrective prompt after a direct mutation without tool use")
+	}
+	if !sawToolResult {
+		t.Fatal("expected final turn to receive apply-ops tool result")
+	}
+	if got := notif.get("companion.applied"); !strings.Contains(got, `"applied":2`) {
+		t.Fatalf("expected applied event, got %s", got)
+	}
+	nodes, err := svc.nodes.ListByProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundPart := false
+	foundScene := false
+	for _, n := range nodes {
+		if n.Label == "1부" && n.Title == "항구의 복수극" {
+			foundPart = true
+		}
+		if n.Label == "씬 1" && n.Title == "안개 낀 항구" && n.ParentID != nil {
+			foundScene = true
+		}
+	}
+	if !foundPart || !foundScene {
+		t.Fatalf("outline tree was not applied: %+v", nodes)
+	}
+}
+
+type claimThenApplyClient struct {
+	mu            sync.Mutex
+	calls         int
+	firstChoice   *llm.ToolChoice
+	firstTools    []string
+	sawCorrection bool
+	sawToolResult bool
+}
+
+func (c *claimThenApplyClient) Ask(context.Context, string) (string, error) { return "", nil }
+
+func (c *claimThenApplyClient) Chat(_ context.Context, messages []llm.ChatMessage, opts llm.ChatOptions) (llm.ChatResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	switch c.calls {
+	case 1:
+		c.firstChoice = opts.ToolChoice
+		c.firstTools = toolSchemaNames(opts.Tools)
+		return llm.ChatResponse{Message: llm.ChatMessage{
+			Role:    "assistant",
+			Content: "아웃라인을 반영했습니다.",
+		}}, nil
+	case 2:
+		if len(messages) > 0 && strings.Contains(messages[len(messages)-1].Content, "실제 작품 상태 변경") {
+			c.sawCorrection = true
+		}
+		return llm.ChatResponse{Message: llm.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []llm.ToolCall{{
+				ID:        "call_apply",
+				Name:      applyOpsToolName,
+				Arguments: `{"summary":"아웃라인 작성","ops_json":"[{\"op\":\"create_outline_node\",\"ref\":\"p1\",\"kind\":\"container\",\"label\":\"1부\",\"title\":\"항구의 복수극\"},{\"op\":\"create_outline_node\",\"ref\":\"s1\",\"kind\":\"leaf\",\"parent_node_ref\":\"p1\",\"label\":\"씬 1\",\"title\":\"안개 낀 항구\"}]"}`,
+			}},
+		}}, nil
+	default:
+		if len(messages) > 0 && messages[len(messages)-1].Role == "tool" && strings.Contains(messages[len(messages)-1].Content, `"applied":2`) {
+			c.sawToolResult = true
+		}
+		return llm.ChatResponse{Message: llm.ChatMessage{
+			Role:    "assistant",
+			Content: "아웃라인을 실제로 반영했습니다.",
+		}}, nil
 	}
 }
 

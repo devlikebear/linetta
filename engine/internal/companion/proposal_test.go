@@ -199,6 +199,36 @@ func TestParseProposal_CreateSceneAndNodeRef(t *testing.T) {
 	}
 }
 
+func TestParseProposal_CreateOutlineNode(t *testing.T) {
+	body := `{"ops":[
+	  {"op":"create_outline_node","ref":"p1","kind":"container","label":"1부"},
+	  {"op":"create_outline_node","ref":"c1","kind":"container","parent_node_ref":"p1","label":"1장"},
+	  {"op":"create_outline_node","ref":"s1","kind":"leaf","parent_node_ref":"c1","label":"씬 1"}
+	]}`
+	p, present, err := ParseProposal(block(body))
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if len(p.Ops) != 3 || p.Ops[1].ParentNodeRef != "p1" || p.Ops[2].Kind != "leaf" {
+		t.Fatalf("p=%+v", p)
+	}
+}
+
+func TestParseProposal_CreateOutlineNodeValidation(t *testing.T) {
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_outline_node","kind":"leaf"}]}`)); err == nil {
+		t.Fatal("expected label error")
+	}
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_outline_node","kind":"folder","label":"x"}]}`)); err == nil {
+		t.Fatal("expected kind error")
+	}
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_outline_node","kind":"leaf","label":"x","parent_node_id":"p","parent_node_ref":"pr"}]}`)); err == nil {
+		t.Fatal("expected parent id/ref mutual-exclusion error")
+	}
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_outline_node","kind":"leaf","label":"x","after_node_id":"a","after_node_ref":"ar"}]}`)); err == nil {
+		t.Fatal("expected after id/ref mutual-exclusion error")
+	}
+}
+
 func TestParseProposal_CreateSceneRequiresLabel(t *testing.T) {
 	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_scene"}]}`)); err == nil {
 		t.Fatal("expected label error")

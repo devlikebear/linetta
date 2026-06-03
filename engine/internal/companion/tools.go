@@ -37,15 +37,19 @@ func (r ApplyOpsResult) isError() bool {
 	return len(r.Failures) > 0
 }
 
-func (s *Service) buildToolRegistry(projectID, nodeID string, now func() int64, runID ...string) *tarstools.Registry {
+func (s *Service) buildToolRegistry(projectID, nodeID string, now func() int64, runIDAndUserText ...string) *tarstools.Registry {
 	reg := tarstools.NewRegistryWithScope(tarstools.RegistryScopeUser)
 	reg.Register(tarstools.NewWebFetchTool(true))
 	reg.Register(s.buildWebSearchTool())
 	activeRunID := ""
-	if len(runID) > 0 {
-		activeRunID = runID[0]
+	if len(runIDAndUserText) > 0 {
+		activeRunID = runIDAndUserText[0]
 	}
-	reg.Register(s.buildApplyOpsTool(projectID, nodeID, activeRunID, now))
+	userText := ""
+	if len(runIDAndUserText) > 1 {
+		userText = runIDAndUserText[1]
+	}
+	reg.Register(s.buildApplyOpsTool(projectID, nodeID, activeRunID, userText, now))
 	return reg
 }
 
@@ -71,15 +75,22 @@ func (s *Service) buildWebSearchTool() tarstools.Tool {
 	return tarstools.NewWebSearchToolWithOptions(opts)
 }
 
-func (s *Service) buildApplyOpsTool(projectID, nodeID, runID string, now func() int64) tarstools.Tool {
+func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, now func() int64) tarstools.Tool {
 	return tarstools.Tool{
 		Name:        "linetta_apply_ops",
-		Description: "Apply Linetta story-structure mutations to the current project: outline, storylines, beats, entities, relationships, scenes, and memories.",
+		Description: "Directly apply Linetta story mutations to the current project. Use create_outline_node/create_scene for the left outline tree, set_outline for project synopsis/overview text, and thread/beat ops for plot beats.",
 		Parameters:  applyOpsSchema(),
 		Execute: func(ctx context.Context, params json.RawMessage) (tarstools.Result, error) {
 			p, err := decodeApplyOpsParams(params)
 			if err != nil {
 				result := ApplyOpsResult{Failures: []ApplyOpsFailure{{Index: -1, Error: "invalid JSON: " + err.Error()}}}
+				return tarstools.JSONTextResult(result, true), nil
+			}
+			if err := validateApplyOpsIntent(p, companionApplyOpsIntent(userText)); err != nil {
+				result := ApplyOpsResult{
+					Summary:  strings.TrimSpace(p.Summary),
+					Failures: []ApplyOpsFailure{{Index: -1, Error: err.Error()}},
+				}
 				return tarstools.JSONTextResult(result, true), nil
 			}
 			result := s.ApplyOps(ctx, projectID, nodeID, p, now)
@@ -99,8 +110,8 @@ func applyOpsSchema() json.RawMessage {
 	return json.RawMessage(`{
   "type":"object",
   "properties":{
-    "summary":{"type":"string","description":"Short Korean summary of the changes."},
-    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects. Each object has an op such as create_thread, update_thread, add_beat, update_beat, delete_beat, set_outline, remember, create_entity, update_entity, create_relationship, or create_scene."}
+    "summary":{"type":"string","description":"Short Korean summary of the actual project changes to apply."},
+    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use create_outline_node or create_scene for the visible left outline tree, set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, and entity/relationship ops for cast/place updates."}
   },
   "required":["summary","ops_json"],
   "additionalProperties":false
@@ -127,6 +138,43 @@ func decodeApplyOpsParams(params json.RawMessage) (Proposal, error) {
 	return Proposal{Summary: in.Summary, Ops: ops}, nil
 }
 
+type applyOpsIntent struct {
+	RequireOutlineTree bool
+}
+
+func companionApplyOpsIntent(text string) applyOpsIntent {
+	s := strings.ToLower(strings.TrimSpace(text))
+	if s == "" {
+		return applyOpsIntent{}
+	}
+	if containsAny(s, companionEducationalTerms) || containsAny(s, companionResearchTerms) {
+		return applyOpsIntent{}
+	}
+	if containsAny(s, companionDiscussionTerms) && !containsAny(s, companionDirectApplyTerms) {
+		return applyOpsIntent{}
+	}
+	return applyOpsIntent{
+		RequireOutlineTree: containsAny(s, companionOutlineTreeTerms) && containsAny(s, companionMutationTerms),
+	}
+}
+
+var companionOutlineTreeTerms = []string{
+	"아웃라인", "목차", "챕터", "회차", "세부 씬", "몇 편", "1부", "2부",
+	"3부", "4부", "파트", "얼개", "막 구성", "부 구성", "부별", "장별",
+}
+
+func validateApplyOpsIntent(p Proposal, intent applyOpsIntent) error {
+	if !intent.RequireOutlineTree {
+		return nil
+	}
+	for _, op := range p.Ops {
+		if op.Type == "create_outline_node" || op.Type == "create_scene" {
+			return nil
+		}
+	}
+	return fmt.Errorf("outline requests must update the visible left outline tree with create_outline_node or create_scene; create_thread/add_beat only update plot beats")
+}
+
 // ApplyOps applies a validated proposal op list directly to project state.
 func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Proposal, now func() int64) ApplyOpsResult {
 	result := ApplyOpsResult{
@@ -141,9 +189,10 @@ func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Prop
 	threadRefs := map[string]string{}
 	entityRefs := map[string]string{}
 	nodeRefs := map[string]string{}
+	nodeInsertCursor := ""
 
 	for i, op := range p.Ops {
-		if err := s.applyOneOp(ctx, projectID, nodeID, op, now, threadRefs, entityRefs, nodeRefs, result.Created); err != nil {
+		if err := s.applyOneOp(ctx, projectID, nodeID, op, now, threadRefs, entityRefs, nodeRefs, result.Created, &nodeInsertCursor); err != nil {
 			result.Failures = append(result.Failures, ApplyOpsFailure{Index: i, Op: op.Type, Error: err.Error()})
 			continue
 		}
@@ -165,6 +214,7 @@ func (s *Service) applyOneOp(
 	entityRefs map[string]string,
 	nodeRefs map[string]string,
 	created map[string]string,
+	nodeInsertCursor *string,
 ) error {
 	switch op.Type {
 	case "set_outline":
@@ -301,7 +351,7 @@ func (s *Service) applyOneOp(
 		})
 		return err
 	case "create_scene":
-		afterNodeID, err := s.resolveSceneAnchor(ctx, projectID, currentNodeID, op.AfterNodeID)
+		afterNodeID, err := s.resolveSceneAnchor(ctx, projectID, currentNodeID, op.AfterNodeID, op.AfterNodeRef, nodeRefs, *nodeInsertCursor)
 		if err != nil {
 			return err
 		}
@@ -313,10 +363,64 @@ func (s *Service) applyOneOp(
 			nodeRefs[op.Ref] = n.ID
 			created["node:"+op.Ref] = n.ID
 		}
+		*nodeInsertCursor = n.ID
 		return nil
+	case "create_outline_node":
+		return s.applyCreateOutlineNode(ctx, projectID, currentNodeID, op, now, nodeRefs, created, nodeInsertCursor)
 	default:
 		return fmt.Errorf("unknown op %q", op.Type)
 	}
+}
+
+func (s *Service) applyCreateOutlineNode(
+	ctx context.Context,
+	projectID string,
+	currentNodeID string,
+	op Op,
+	now func() int64,
+	nodeRefs map[string]string,
+	created map[string]string,
+	nodeInsertCursor *string,
+) error {
+	kind := strings.TrimSpace(op.Kind)
+	if kind == "" {
+		kind = node.KindLeaf
+	}
+	if !node.ValidKind(kind) {
+		return fmt.Errorf("create_outline_node: kind must be container|leaf")
+	}
+	parentID, err := s.resolveOptionalNodeID(ctx, op.ParentNodeID, op.ParentNodeRef, "", nodeRefs)
+	if err != nil {
+		return err
+	}
+	var n node.Node
+	if parentID != nil {
+		parent, err := s.nodes.Get(ctx, *parentID)
+		if err != nil {
+			return err
+		}
+		if parent.Kind != node.KindContainer {
+			return fmt.Errorf("create_outline_node: parent must be a container node")
+		}
+		n, err = s.nodes.CreateChild(ctx, *parentID, kind, op.Label, op.Title, now())
+	} else {
+		afterNodeID, err := s.resolveSceneAnchor(ctx, projectID, currentNodeID, op.AfterNodeID, op.AfterNodeRef, nodeRefs, *nodeInsertCursor)
+		if err != nil {
+			return err
+		}
+		n, err = s.nodes.CreateSibling(ctx, afterNodeID, kind, op.Label, op.Title, now())
+	}
+	if err != nil {
+		return err
+	}
+	if op.Ref != "" {
+		nodeRefs[op.Ref] = n.ID
+		created["node:"+op.Ref] = n.ID
+	}
+	if parentID == nil {
+		*nodeInsertCursor = n.ID
+	}
+	return nil
 }
 
 // resolveEntityID resolves a create_relationship endpoint to a real entity id.
@@ -397,9 +501,22 @@ func (s *Service) resolveOptionalNodeID(ctx context.Context, id, ref, currentNod
 	return nil, nil
 }
 
-func (s *Service) resolveSceneAnchor(ctx context.Context, projectID, currentNodeID, afterNodeID string) (string, error) {
-	if strings.TrimSpace(afterNodeID) != "" {
-		return afterNodeID, nil
+func (s *Service) resolveSceneAnchor(ctx context.Context, projectID, currentNodeID, afterNodeID, afterNodeRef string, refs map[string]string, fallbackAfterNodeID string) (string, error) {
+	provided := strings.TrimSpace(afterNodeRef)
+	if provided == "" {
+		provided = strings.TrimSpace(afterNodeID)
+	}
+	if provided != "" {
+		if resolved, ok := refs[provided]; ok {
+			return resolved, nil
+		}
+		if _, err := s.nodes.Get(ctx, provided); err == nil {
+			return provided, nil
+		}
+		return "", fmt.Errorf("scene anchor ref/id %q not found", provided)
+	}
+	if strings.TrimSpace(fallbackAfterNodeID) != "" {
+		return fallbackAfterNodeID, nil
 	}
 	if strings.TrimSpace(currentNodeID) != "" {
 		return currentNodeID, nil
