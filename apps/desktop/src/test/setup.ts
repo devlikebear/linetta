@@ -25,6 +25,25 @@ Object.defineProperty(HTMLElement.prototype, "scrollTo", {
   writable: true,
 });
 
+const localStorageStore = new Map<string, string>();
+const localStorageMock = {
+  get length() {
+    return localStorageStore.size;
+  },
+  clear: vi.fn(() => localStorageStore.clear()),
+  getItem: vi.fn((key: string) => localStorageStore.get(key) ?? null),
+  key: vi.fn((index: number) => Array.from(localStorageStore.keys())[index] ?? null),
+  removeItem: vi.fn((key: string) => { localStorageStore.delete(key); }),
+  setItem: vi.fn((key: string, value: string) => { localStorageStore.set(key, String(value)); }),
+};
+
+if (typeof window.localStorage?.getItem !== "function") {
+  Object.defineProperty(window, "localStorage", {
+    value: localStorageMock,
+    writable: true,
+  });
+}
+
 class ResizeObserverMock {
   observe() {}
   unobserve() {}

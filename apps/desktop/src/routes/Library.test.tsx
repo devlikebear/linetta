@@ -80,6 +80,8 @@ describe("Library", () => {
       git_sync_commit_template: "",
       backup_dir: "/tmp/linetta/backups",
       safety_checklist_dismissed: false,
+      onboarding_tour_enabled: true,
+      onboarding_tour_seen_version: "",
     });
     mocks.settingsSet.mockResolvedValue({
       language: "ko",
@@ -90,6 +92,8 @@ describe("Library", () => {
       git_sync_commit_template: "",
       backup_dir: "/tmp/linetta/backups",
       safety_checklist_dismissed: true,
+      onboarding_tour_enabled: true,
+      onboarding_tour_seen_version: "",
     });
     mocks.diagnosticsGet.mockResolvedValue({
       version: "0.0.1",
@@ -113,6 +117,18 @@ describe("Library", () => {
     expect(mocks.settingsSet).toHaveBeenCalledWith({ safety_checklist_dismissed: true });
   });
 
+  it("waits for first-run modals before starting the onboarding tour", async () => {
+    const user = userEvent.setup();
+    renderLibrary();
+
+    expect(await screen.findByText("쓰기 안전 체크리스트")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Linetta 둘러보기" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "다시 보지 않기" }));
+
+    expect(await screen.findByRole("heading", { name: "Linetta 둘러보기" })).toBeInTheDocument();
+  });
+
   it("opens the data folder from the library menu", async () => {
     const user = userEvent.setup();
     mocks.settingsGet.mockResolvedValue({
@@ -124,6 +140,8 @@ describe("Library", () => {
       git_sync_commit_template: "",
       backup_dir: "/tmp/linetta/backups",
       safety_checklist_dismissed: true,
+      onboarding_tour_enabled: true,
+      onboarding_tour_seen_version: "library-workspace-v1",
     });
     renderLibrary();
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeft, ExternalLink } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -9,6 +9,12 @@ import {
   providers as providersApi,
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
+import {
+  MANUAL_PHASE_STORAGE_KEY,
+  WORKSPACE_PENDING_STORAGE_KEY,
+  clearStoredPhase,
+  storePhase,
+} from "../components/onboarding/onboardingState";
 import "./Settings.css";
 import type {
   AppLanguage,
@@ -178,6 +184,7 @@ function setupGuideLinks(t: Translate, id: GuideID): SetupGuide["links"] {
 
 export function Settings() {
   const { language, setLanguage, t } = useI18n();
+  const navigate = useNavigate();
   const providers = useMemo(() => buildProviders(t), [t]);
   const setupGuides = useMemo(() => buildSetupGuides(t), [t]);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
@@ -358,6 +365,12 @@ export function Settings() {
   const selectedGuide = setupGuides.find((g) => g.id === guideId) ?? setupGuides[0];
   const credentialState = getCredentialState(t, activeMeta, activeConfig);
   const webSearchKeyPlaceholder = current ? getWebSearchKeyPlaceholder(t, current) : t("settings.tools.keyPlaceholder");
+
+  const replayOnboardingTour = () => {
+    clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
+    storePhase(MANUAL_PHASE_STORAGE_KEY, "library");
+    navigate("/");
+  };
 
   return (
     <div className="settings">
@@ -649,6 +662,31 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.focus_default ? " on" : ""}`} />
               </button>
+            </section>
+
+            <section className="settings-section">
+              <h3>{t("settings.onboarding.title")}</h3>
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() => !saving && apply({ onboarding_tour_enabled: current.onboarding_tour_enabled === false })}
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.onboarding.enabled")}</span>
+                  <span className="sd">{t("settings.onboarding.enabledDescription")}</span>
+                </span>
+                <span className={`switch${current.onboarding_tour_enabled !== false ? " on" : ""}`} />
+              </button>
+              <div className="set-row">
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.onboarding.replay")}</span>
+                  <span className="sd">{t("settings.onboarding.replayDescription")}</span>
+                </span>
+                <button type="button" className="btn ghost sm" onClick={replayOnboardingTour}>
+                  {t("settings.onboarding.replay")}
+                </button>
+              </div>
             </section>
 
             <section className="settings-section">

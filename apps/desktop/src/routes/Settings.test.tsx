@@ -54,6 +54,8 @@ const baseSettings = {
   git_sync_commit_template: "Linetta sync {date}",
   backup_dir: "/tmp/linetta/backups",
   safety_checklist_dismissed: false,
+  onboarding_tour_enabled: true,
+  onboarding_tour_seen_version: "",
   web_search_provider: "brave" as const,
   web_search_api_key: "",
   web_search_api_key_set: true,
@@ -69,6 +71,8 @@ async function clickAdvancedProvider(user: ReturnType<typeof userEvent.setup>, l
 describe("Settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.removeItem("linetta:onboarding:manual-phase");
+    window.localStorage.removeItem("linetta:onboarding:workspace-pending");
     // Stateful settings mock mirroring the engine: patches merge onto the live
     // config, and the `providers` map merges per-key.
     let state: Record<string, unknown> = { ...baseSettings };
@@ -179,6 +183,20 @@ describe("Settings", () => {
     expect(await screen.findByLabelText("App language")).toHaveValue("en");
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByText("AI Setup Wizard")).toBeInTheDocument();
+  });
+
+  it("persists onboarding tour toggle and queues a manual replay", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: /첫 실행 투어 자동 표시/ }));
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ onboarding_tour_enabled: false }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "투어 다시 보기" }));
+
+    expect(window.localStorage.getItem("linetta:onboarding:manual-phase")).toBe("library");
   });
 
   it("renders setup links and ops metadata in English when selected", async () => {

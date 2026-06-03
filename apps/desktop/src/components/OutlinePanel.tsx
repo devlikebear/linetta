@@ -16,6 +16,7 @@ interface Props {
   onMoveSceneUp?: (node: TreeNode) => void;
   onMoveSceneDown?: (node: TreeNode) => void;
   onDeleteScene?: (node: TreeNode) => void;
+  tourTarget?: string;
 }
 
 type MenuState = {
@@ -36,6 +37,7 @@ export function OutlinePanel({
   onMoveSceneUp,
   onMoveSceneDown,
   onDeleteScene,
+  tourTarget,
 }: Props) {
   const { language, t } = useI18n();
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -78,7 +80,7 @@ export function OutlinePanel({
   if (collapsed) {
     const scenes = flatten(tree).filter((n) => n.kind === "leaf");
     return (
-      <nav className="rail is-collapsed">
+      <nav className="rail is-collapsed" data-tour={tourTarget}>
         <div className="rail-head">
           <button type="button" className="rail-collapse" onClick={onToggleCollapse} title={t("workspace.outlineExpand")}>
             <Layers size={16} />
@@ -100,7 +102,7 @@ export function OutlinePanel({
   }
 
   return (
-    <nav className="rail">
+    <nav className="rail" data-tour={tourTarget}>
       <div className="rail-head">
         <span className="lbl">{t("workspace.outline")}</span>
         <button type="button" className="rail-collapse" onClick={onToggleCollapse} title={t("workspace.collapse")}>

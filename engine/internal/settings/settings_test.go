@@ -35,6 +35,12 @@ func TestLoad_missingFileReturnsDefaults(t *testing.T) {
 	if got.TypewriterDefault != false {
 		t.Errorf("typewriter_default = %v", got.TypewriterDefault)
 	}
+	if !got.OnboardingTourEnabled {
+		t.Errorf("onboarding_tour_enabled = false, want true")
+	}
+	if got.OnboardingTourSeenVersion != "" {
+		t.Errorf("onboarding_tour_seen_version = %q, want empty", got.OnboardingTourSeenVersion)
+	}
 	if got.BackupDir == "" {
 		t.Error("backup_dir empty")
 	}
@@ -224,6 +230,55 @@ func TestSet_safetyChecklistDismissed_persists(t *testing.T) {
 	reloaded, _ := s2.Get(context.Background())
 	if !reloaded.SafetyChecklistDismissed {
 		t.Errorf("safety_checklist_dismissed not persisted across reload: %+v", reloaded)
+	}
+}
+
+func TestLoad_legacyFileDefaultsOnboardingTourEnabled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"provider":"openai","language":"en"}`), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	s, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got, _ := s.Get(context.Background())
+	if !got.OnboardingTourEnabled {
+		t.Fatalf("legacy settings should default onboarding_tour_enabled to true: %+v", got)
+	}
+}
+
+func TestSet_onboardingTour_persistsAndMerges(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	if _, err := s.Set(ctx, Patch{
+		OnboardingTourEnabled:     boolPtr(false),
+		OnboardingTourSeenVersion: strPtr("library-workspace-v1"),
+	}); err != nil {
+		t.Fatalf("Set onboarding: %v", err)
+	}
+	if _, err := s.Set(ctx, Patch{Language: strPtr("ja")}); err != nil {
+		t.Fatalf("Set language: %v", err)
+	}
+	got, _ := s.Get(ctx)
+	if got.OnboardingTourEnabled {
+		t.Errorf("onboarding_tour_enabled not applied in-memory: %+v", got)
+	}
+	if got.OnboardingTourSeenVersion != "library-workspace-v1" {
+		t.Errorf("onboarding_tour_seen_version in-memory = %q", got.OnboardingTourSeenVersion)
+	}
+	if got.Language != "ja" {
+		t.Errorf("language patch did not merge: %+v", got)
+	}
+
+	s2, err := New()
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	reloaded, _ := s2.Get(ctx)
+	if reloaded.OnboardingTourEnabled || reloaded.OnboardingTourSeenVersion != "library-workspace-v1" || reloaded.Language != "ja" {
+		t.Errorf("onboarding tour settings not persisted across reload: %+v", reloaded)
 	}
 }
 

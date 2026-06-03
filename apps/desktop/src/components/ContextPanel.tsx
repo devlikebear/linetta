@@ -26,6 +26,7 @@ interface Props {
   onOpenThread: (threadId: string) => void;
   onProjectChanged?: (project: Project) => void;
   onProjectTitleChange?: (title: string) => void | Promise<void>;
+  tourTarget?: string;
 }
 
 const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
@@ -45,7 +46,7 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
   series: 200000,
 };
 
-export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange }: Readonly<Props>) {
+export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget }: Readonly<Props>) {
   const { language, t } = useI18n();
   const locale = localeForLanguage(language);
   const target = TARGET_WORDS[project.length_target] ?? 90000;
@@ -121,7 +122,7 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
   };
 
   return (
-    <aside className="panel">
+    <aside className="panel" data-tour={tourTarget}>
       <div className="panel-head">
         <span className="ttl">
           <span className="ic"><Book size={16} /></span>
