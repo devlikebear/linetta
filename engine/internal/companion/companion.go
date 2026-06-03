@@ -23,7 +23,8 @@ import (
 // historyTokenBudget caps how much prior transcript is replayed into context.
 const historyTokenBudget = 6000
 
-// entityContextLimit caps how many entities are injected.
+// entityContextLimit caps how many entities are injected. Core story roles are
+// prioritized within this cap so 주인공/빌런/메인무대 settings survive recency.
 const entityContextLimit = 40
 
 const compactHistoryMaxMessages = 24
@@ -123,7 +124,11 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 		d.Threads = ths
 	}
 	if ents, err := s.entities.Search(ctx, projectID, "", entityContextLimit); err == nil {
-		d.Entities = ents
+		if core, coreErr := s.entities.ListCoreByProject(ctx, projectID, entityContextLimit); coreErr == nil {
+			d.Entities = mergeCoreEntities(core, ents, entityContextLimit)
+		} else {
+			d.Entities = ents
+		}
 	}
 	if rels, err := s.relationships.ListByProject(ctx, projectID); err == nil {
 		d.Relationships = rels
@@ -135,6 +140,30 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 	_ = query
 	d.Memories = s.Recall(projectID, "", recallLimit)
 	return d, nil
+}
+
+func mergeCoreEntities(core, recent []entity.Entity, limit int) []entity.Entity {
+	if limit <= 0 {
+		limit = len(core) + len(recent)
+	}
+	seen := make(map[string]bool, len(core)+len(recent))
+	capacity := len(core) + len(recent)
+	if capacity > limit {
+		capacity = limit
+	}
+	out := make([]entity.Entity, 0, capacity)
+	add := func(list []entity.Entity) {
+		for _, e := range list {
+			if e.ID == "" || seen[e.ID] || len(out) >= limit {
+				continue
+			}
+			seen[e.ID] = true
+			out = append(out, e)
+		}
+	}
+	add(core)
+	add(recent)
+	return out
 }
 
 // History returns the project's companion transcript messages.

@@ -19,6 +19,17 @@ const KIND_META: Record<EntityKind, { label: string; color: string; Icon: typeof
   concept: { label: "개념", color: "var(--t-plum)", Icon: Lightbulb },
 };
 
+const ROLE_PRESETS: Partial<Record<EntityKind, string[]>> = {
+  character: ["주인공", "공동 주인공", "조연", "빌런", "라이벌", "멘토", "조력자"],
+  place: ["메인무대", "특별한 장소", "일상 거점", "위험 구역", "금지된 장소", "기억의 장소"],
+};
+
+function rolePlaceholder(kind: EntityKind) {
+  if (kind === "place") return "역할 (예: 메인무대)";
+  if (kind === "character") return "역할 (예: 주인공)";
+  return "역할";
+}
+
 export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
   const [entity, setEntity] = useState<Entity | null>(null);
   const [draft, setDraft] = useState<UpdateEntityInput | null>(null);
@@ -107,6 +118,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
   const kind = (draft?.kind ?? entity?.kind ?? "character") as EntityKind;
   const meta = KIND_META[kind];
   const HeadIcon = meta.Icon;
+  const rolePresets = ROLE_PRESETS[kind] ?? [];
 
   return (
     <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
@@ -153,9 +165,23 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                       className="es-role"
                       value={draft.role ?? ""}
                       onChange={(e) => setDraft({ ...draft, role: e.target.value })}
-                      placeholder="역할 (예: POV)"
+                      placeholder={rolePlaceholder(kind)}
                     />
                   </div>
+                  {rolePresets.length > 0 && (
+                    <div className="es-role-presets" aria-label="핵심 역할 프리셋">
+                      {rolePresets.map((role) => (
+                        <button
+                          key={role}
+                          type="button"
+                          className={"es-role-chip" + ((draft.role ?? "") === role ? " active" : "")}
+                          onClick={() => setDraft({ ...draft, role })}
+                        >
+                          {role}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

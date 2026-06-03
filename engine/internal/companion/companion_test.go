@@ -3,6 +3,7 @@ package companion
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -262,6 +263,43 @@ func TestGatherContext_InjectsMemory(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("memory not recalled: %+v", d.Memories)
+	}
+}
+
+func TestGatherContext_PrioritizesCoreEntitiesPastRecentLimit(t *testing.T) {
+	svc, _, projectID := newSvc(t, "안녕")
+	ctx := context.Background()
+	core, err := svc.entities.Create(ctx, 10, entity.NewInput{
+		ProjectID: projectID, Kind: "place", Name: "망각의 항구", Role: "특별한 장소",
+	})
+	if err != nil {
+		t.Fatalf("create core entity: %v", err)
+	}
+	for i := 0; i < entityContextLimit+5; i++ {
+		_, err := svc.entities.Create(ctx, int64(100+i), entity.NewInput{
+			ProjectID: projectID,
+			Kind:      "character",
+			Name:      "최근 인물 " + fmt.Sprint(i),
+			Role:      "단역",
+		})
+		if err != nil {
+			t.Fatalf("create filler %d: %v", i, err)
+		}
+	}
+
+	d, err := svc.gatherContext(ctx, projectID, "", "항구 설정")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range d.Entities {
+		if e.ID == core.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("core entity %q missing from companion context of %d entities", core.Name, len(d.Entities))
 	}
 }
 

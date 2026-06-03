@@ -145,12 +145,51 @@ LIMIT ?`, projectID, "%"+q+"%", q+"%", limit)
 	return out, rows.Err()
 }
 
+// ListCoreByProject returns entities with story-skeleton roles such as
+// 주인공/빌런/메인무대/특별한 장소, newest first within that core set.
+func (r *Repo) ListCoreByProject(ctx context.Context, projectID string, limit int) ([]Entity, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	rows, err := r.s.DB().QueryContext(ctx, `
+SELECT id, project_id, kind, name, aliases, role, summary, attributes,
+       created_at, updated_at
+  FROM entities
+ WHERE project_id = ?
+ ORDER BY updated_at DESC`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []Entity{}
+	for rows.Next() {
+		e, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		if !IsCoreEntity(e) {
+			continue
+		}
+		out = append(out, e)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, rows.Err()
+}
+
 const baseSelect = `
 SELECT id, project_id, kind, name, aliases, role, summary, attributes,
        created_at, updated_at
 FROM entities`
 
 type scanner interface{ Scan(...any) error }
+
+// Scan consumes one row whose columns match baseSelect.
+func Scan(row scanner) (Entity, error) {
+	return scan(row)
+}
 
 // ScanAll consumes a *sql.Rows (or compatible) whose columns match baseSelect
 // and returns the full slice. Exposed for cross-package callers (e.g. mention.Repo).

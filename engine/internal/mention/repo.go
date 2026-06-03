@@ -181,3 +181,9 @@ SELECT e.id, e.project_id, e.kind, e.name, e.aliases, e.role, e.summary, e.attri
 	}
 	return entity.ScanAll(rows)
 }
+
+// ListCoreEntitiesForProject returns core story-bible entities independently of
+// scene mentions so AI context can keep the global skeleton visible.
+func (r *Repo) ListCoreEntitiesForProject(ctx context.Context, projectID string, limit int) ([]entity.Entity, error) {
+	return entity.NewRepo(r.s).ListCoreByProject(ctx, projectID, limit)
+}

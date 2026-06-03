@@ -21,3 +21,33 @@
 
 /* es-role is a borderless inline input; keep it from stretching past its row. */
 .es-role { min-width: 0; }
+
+.es-role-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.es-role-chip {
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 5px 8px;
+}
+
+.es-role-chip:hover {
+  border-color: var(--accent-tint);
+  color: var(--accent-deep);
+}
+
+.es-role-chip.active {
+  background: var(--accent-tint2);
+  border-color: var(--accent-tint);
+  color: var(--accent-deep);
+}
