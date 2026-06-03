@@ -135,3 +135,94 @@ func TestLinettaApplyOpsToolMutatesProjectStructure(t *testing.T) {
 		t.Fatalf("relationships = %+v", rels)
 	}
 }
+
+func TestLinettaApplyOpsToolRejectsPlotOnlyOpsForOutlineRequest(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 2_000 }, "run-1", "아웃라인 작성해줘")
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[
+	  {"op":"create_thread","ref":"t1","name":"메인 플롯"},
+	  {"op":"add_beat","thread_ref":"t1","label":"첫 충돌","description":"화신들이 처음 맞선다"}
+	]`
+	params := json.RawMessage(`{
+	  "summary":"아웃라인 작성",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("plot-only outline request should be rejected: %s", result.Text())
+	}
+	if !strings.Contains(result.Text(), "left outline tree") {
+		t.Fatalf("error should explain outline tree mismatch: %s", result.Text())
+	}
+	threads, _ := svc.threads.ListByProject(ctx, projectID, false)
+	if len(threads) != 0 {
+		t.Fatalf("plot-only rejected request should not create threads: %+v", threads)
+	}
+}
+
+func TestLinettaApplyOpsToolCreatesOutlineTree(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 2_000 }, "run-1", "물과 불의 화신들이 펼치는 판타지 히어로 아웃라인 작성해줘")
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[
+	  {"op":"create_outline_node","ref":"p1","kind":"container","label":"1부","title":"불씨와 파도"},
+	  {"op":"create_outline_node","ref":"c1","kind":"container","parent_node_ref":"p1","label":"1장","title":"두 화신의 조우"},
+	  {"op":"create_outline_node","ref":"s1","kind":"leaf","parent_node_ref":"c1","label":"씬 1","title":"국경의 첫 충돌"},
+	  {"op":"create_thread","ref":"t1","name":"물과 불의 전쟁"},
+	  {"op":"add_beat","thread_ref":"t1","node_ref":"s1","label":"첫 충돌","description":"오롯과 카엘이 전장에서 맞선다"}
+	]`
+	params := json.RawMessage(`{
+	  "summary":"아웃라인 트리 작성",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("tool result is error: %s", result.Text())
+	}
+
+	nodes, err := svc.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+	byLabel := map[string]node.Node{}
+	for _, n := range nodes {
+		byLabel[n.Label] = n
+	}
+	part := byLabel["1부"]
+	chapter := byLabel["1장"]
+	scene := byLabel["씬 1"]
+	if part.ID == "" || chapter.ID == "" || scene.ID == "" {
+		t.Fatalf("missing outline nodes: %+v", byLabel)
+	}
+	if part.Kind != node.KindContainer || chapter.Kind != node.KindContainer || scene.Kind != node.KindLeaf {
+		t.Fatalf("unexpected outline kinds: part=%s chapter=%s scene=%s", part.Kind, chapter.Kind, scene.Kind)
+	}
+	if chapter.ParentID == nil || *chapter.ParentID != part.ID {
+		t.Fatalf("chapter parent = %v, want %s", chapter.ParentID, part.ID)
+	}
+	if scene.ParentID == nil || *scene.ParentID != chapter.ID {
+		t.Fatalf("scene parent = %v, want %s", scene.ParentID, chapter.ID)
+	}
+	threads, _ := svc.threads.ListByProject(ctx, projectID, false)
+	beats, _ := svc.beats.ListByThread(ctx, threads[0].ID)
+	if len(beats) != 1 || beats[0].NodeID == nil || *beats[0].NodeID != scene.ID {
+		t.Fatalf("beat should attach to created outline scene %s: %+v", scene.ID, beats)
+	}
+}

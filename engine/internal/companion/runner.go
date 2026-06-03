@@ -164,16 +164,21 @@ const applyOpsToolName = "linetta_apply_ops"
 func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userText string, msgs []llm.ChatMessage, client llm.Client, now func() int64) {
 	defer r.finish(runID)
 
-	registry := r.svc.buildToolRegistry(projectID, nodeID, now, runID)
+	registry := r.svc.buildToolRegistry(projectID, nodeID, now, runID, userText)
 	dedup := streamdedup.New()
 	queryRounds := 0
-	client = newFirstTurnToolChoiceClient(client, companionForcedToolForUserText(userText))
+	forcedTool := companionForcedToolForUserText(userText)
+	forcedApplyOps := forcedTool == applyOpsToolName
+	applyOpsSucceeded := false
+	applyOpsCorrectionUsed := false
+	client = newFirstTurnToolChoiceClient(client, forcedTool)
 	loop := agentloop.New(client, registry, agentloop.HookFunc(func(ctx context.Context, evt agentloop.Event) {
 		switch evt.Type {
 		case agentloop.EventBeforeTool:
 			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: friendlyToolLabel(evt.ToolName)})
 		case agentloop.EventAfterTool:
 			if evt.ToolName == "linetta_apply_ops" && !evt.ToolIsError {
+				applyOpsSucceeded = true
 				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: "작품 설정을 갱신했습니다"})
 			}
 		}
@@ -197,6 +202,13 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 			_ = r.svc.notify.Notify("companion.reasoning", reasoningPayload{RunID: runID, Text: text})
 		},
 		OnTurnEnd: func(ctx context.Context, lastResp llm.ChatResponse) (string, error) {
+			if forcedApplyOps && !applyOpsSucceeded && !applyOpsCorrectionUsed {
+				applyOpsCorrectionUsed = true
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: ""})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: friendlyToolLabel(applyOpsToolName)})
+				dedup = streamdedup.New()
+				return directApplyCorrectionPrompt(userText), nil
+			}
 			if queryRounds >= maxQueryRounds-1 {
 				return "", nil
 			}
@@ -281,16 +293,31 @@ func companionForcedToolForUserText(text string) string {
 	return ""
 }
 
+func directApplyCorrectionPrompt(userText string) string {
+	userText = strings.TrimSpace(userText)
+	if userText == "" {
+		userText = "(원문 없음)"
+	}
+	return "방금 사용자 요청은 설명이나 제안이 아니라 실제 작품 상태 변경 요청입니다. " +
+		"변경했다고 말로만 답하지 말고 linetta_apply_ops를 호출해 작품 상태에 적용하세요. " +
+		"아웃라인/목차 요청이면 create_outline_node 또는 create_scene으로 왼쪽 아웃라인 트리를 만들고, 필요한 경우 그 노드에 create_thread/add_beat를 함께 연결하세요. " +
+		"현재 정보만으로 적용할 수 없으면 적용하지 말고 부족한 정보를 한 문장으로 질문하세요.\n\n" +
+		"사용자 요청: " + userText
+}
+
 var companionStructureTerms = []string{
 	"스토리라인", "줄거리", "플롯", "비트", "캐릭터", "인물", "관계",
 	"장소", "씬", "장면", "개요", "요약", "기억", "설정", "세계관",
-	"시놉시스", "아웃라인",
+	"시놉시스", "아웃라인", "얼개", "구조", "챕터", "막", "파트",
+	"에피소드", "회차",
 }
 
 var companionMutationTerms = []string{
 	"수정", "추가", "생성", "만들", "바꿔", "변경", "반영", "저장",
 	"붙여", "넣어", "정리", "업데이트", "삭제", "지워", "작성",
-	"써", "짜", "구성", "잡아", "세워", "완성",
+	"써", "짜", "구성", "잡아", "세워", "완성", "나눠", "나누",
+	"쪼개", "분할", "세분", "구체화", "확장", "전개", "다듬",
+	"고쳐", "재작성", "초기화", "비워", "채워",
 }
 
 var companionEducationalTerms = []string{
@@ -306,6 +333,8 @@ var companionDirectApplyTerms = []string{
 	"해줘", "해 줘", "해주세요", "해 주세요", "반영해", "저장해", "수정해",
 	"추가해", "만들어", "넣어", "붙여", "작성해", "써줘", "써 줘",
 	"짜줘", "짜 줘", "구성해", "잡아줘", "잡아 줘", "세워줘", "세워 줘",
+	"나눠줘", "나눠 줘", "쪼개줘", "쪼개 줘", "구체화해", "확장해",
+	"전개해", "다듬어", "고쳐줘", "고쳐 줘", "재작성해",
 }
 
 var companionDiscussionTerms = []string{

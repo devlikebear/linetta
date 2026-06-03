@@ -25,6 +25,7 @@ function opLabel(op: ProposalOp): string {
     case "update_entity": return `엔티티 수정`;
     case "create_relationship": return `관계 생성: ${op.label ?? ""}`;
     case "create_scene": return `씬 생성: ${op.label ?? ""}`;
+    case "create_outline_node": return `${op.kind === "container" ? "아웃라인 묶음" : "아웃라인 씬"} 생성: ${op.label ?? ""}`;
     default: return op.op;
   }
 }

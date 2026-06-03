@@ -16,6 +16,10 @@ func TestCompanionToolChoiceForUserText_ForcesApplyOpsForDirectMutations(t *test
 		"소설 개요 작성해줘",
 		"시놉시스를 새로 써줘",
 		"챕터별 아웃라인을 잡아줘",
+		"거친 시놉시스를 바탕으로 소설 전체 얼개를 아웃라인으로 작성해줘",
+		"1부를 몇 편의 세부 씬으로 나눠줘",
+		"이 씬을 더 구체화해서 비트로 확장해줘",
+		"막연한 문장을 바탕으로 전체 아웃라인을 세워줘",
 	} {
 		tool := companionForcedToolForUserText(text)
 		if tool != applyOpsToolName {

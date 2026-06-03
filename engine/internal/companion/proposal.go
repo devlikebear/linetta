@@ -47,9 +47,12 @@ type Op struct {
 	EntityID string `json:"entity_id,omitempty"`
 
 	// create_scene
-	AfterNodeID string `json:"after_node_id,omitempty"`
-	Title       string `json:"title,omitempty"`
-	NodeRef     string `json:"node_ref,omitempty"`
+	AfterNodeID   string `json:"after_node_id,omitempty"`
+	AfterNodeRef  string `json:"after_node_ref,omitempty"`
+	Title         string `json:"title,omitempty"`
+	NodeRef       string `json:"node_ref,omitempty"`
+	ParentNodeID  string `json:"parent_node_id,omitempty"`
+	ParentNodeRef string `json:"parent_node_ref,omitempty"`
 
 	// create_relationship
 	From         string `json:"from,omitempty"`
@@ -70,10 +73,11 @@ type Proposal struct {
 var knownOps = map[string]bool{
 	"create_thread": true, "update_thread": true,
 	"add_beat": true, "update_beat": true, "delete_beat": true,
-	"set_outline": true,
-	"remember":     true,
+	"set_outline":   true,
+	"remember":      true,
 	"create_entity": true, "update_entity": true, "create_relationship": true,
-	"create_scene": true,
+	"create_scene":        true,
+	"create_outline_node": true,
 }
 
 // ParseProposal scans full model output for a linetta-proposal fenced block.
@@ -128,6 +132,17 @@ func normalizeEntityKind(raw string) (string, bool) {
 	}
 }
 
+func normalizeOutlineNodeKind(raw string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "leaf", "scene", "씬", "장면":
+		return "leaf", true
+	case "container", "chapter", "part", "장", "챕터", "부", "파트", "막":
+		return "container", true
+	default:
+		return "", false
+	}
+}
+
 func validateProposal(p Proposal) error {
 	if len(p.Ops) == 0 {
 		return fmt.Errorf("proposal has no ops")
@@ -163,6 +178,29 @@ func validateProposal(p Proposal) error {
 		case "create_scene":
 			if strings.TrimSpace(op.Label) == "" {
 				return fmt.Errorf("op[%d] create_scene: label required", i)
+			}
+			if op.AfterNodeID != "" && op.AfterNodeRef != "" {
+				return fmt.Errorf("op[%d] create_scene: after_node_id and after_node_ref are mutually exclusive", i)
+			}
+		case "create_outline_node":
+			if strings.TrimSpace(op.Label) == "" {
+				return fmt.Errorf("op[%d] create_outline_node: label required", i)
+			}
+			kind, ok := normalizeOutlineNodeKind(op.Kind)
+			if !ok {
+				return fmt.Errorf("op[%d] create_outline_node: kind must be container|leaf", i)
+			}
+			p.Ops[i].Kind = kind
+			if op.ParentNodeID != "" && op.ParentNodeRef != "" {
+				return fmt.Errorf("op[%d] create_outline_node: parent_node_id and parent_node_ref are mutually exclusive", i)
+			}
+			if op.AfterNodeID != "" && op.AfterNodeRef != "" {
+				return fmt.Errorf("op[%d] create_outline_node: after_node_id and after_node_ref are mutually exclusive", i)
+			}
+			hasParent := op.ParentNodeID != "" || op.ParentNodeRef != ""
+			hasAfter := op.AfterNodeID != "" || op.AfterNodeRef != ""
+			if hasParent && hasAfter {
+				return fmt.Errorf("op[%d] create_outline_node: parent_node_* and after_node_* are mutually exclusive", i)
 			}
 		case "update_beat":
 			if op.BeatID == "" {

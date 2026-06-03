@@ -73,6 +73,22 @@ describe("useCompanion streaming", () => {
     expect(result.current.reasoning).toBe("");
   });
 
+  it("notifies the workspace when apply-ops changes the project", async () => {
+    const onApplied = vi.fn();
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }, onApplied));
+    await waitFor(() => expect(ev.listeners.has("companion-applied")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("아웃라인 수정해줘");
+    });
+
+    fire("companion-applied", { run_id: "other", summary: "다른 실행", applied: 1 });
+    expect(onApplied).not.toHaveBeenCalled();
+
+    fire("companion-applied", { run_id: "r1", summary: "아웃라인 수정", applied: 1 });
+    expect(onApplied).toHaveBeenCalledOnce();
+  });
+
   it("clears transcript through rpc and local state", async () => {
     rpc.history.mockResolvedValue([{ role: "user", content: "남은 대화", timestamp: 1 }]);
     const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));

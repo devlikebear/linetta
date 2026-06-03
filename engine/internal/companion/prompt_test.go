@@ -103,7 +103,7 @@ func TestBuildSystem_MentionsEntityOps(t *testing.T) {
 
 func TestBuildSystem_MentionsSceneAndPair(t *testing.T) {
 	s := buildSystem()
-	for _, want := range []string{"create_scene", "node_ref", "inverse_label"} {
+	for _, want := range []string{"create_scene", "create_outline_node", "parent_node_ref", "node_ref", "inverse_label"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("buildSystem missing %q", want)
 		}

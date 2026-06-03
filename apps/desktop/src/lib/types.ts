@@ -491,7 +491,7 @@ export type ProposalOpType =
   | "set_outline"
   | "remember"
   | "create_entity" | "update_entity" | "create_relationship"
-  | "create_scene";
+  | "create_scene" | "create_outline_node";
 
 export interface ProposalOp {
   op: ProposalOpType;
@@ -518,8 +518,11 @@ export interface ProposalOp {
   to_ref?: string;
   notes?: string;
   after_node_id?: string;
+  after_node_ref?: string;
   title?: string;
   node_ref?: string;
+  parent_node_id?: string;
+  parent_node_ref?: string;
   inverse_label?: string;
 }
 
