@@ -17,6 +17,9 @@ describe("Tiptap editor CSS", () => {
     expect(css).toContain("caret-color: var(--ink)");
     expect(css).toContain(".tiptap-editor .ProseMirror p");
     expect(css).toContain("min-height: 1.92em");
+    expect(css).toContain(".tiptap-wrap.empty-focused .tiptap-editor .ProseMirror");
+    expect(css).toContain("caret-color: transparent");
+    expect(css).toContain("@keyframes linetta-caret-blink");
   });
 
   it("does not apply first-letter styling inside ZEN mode", async () => {

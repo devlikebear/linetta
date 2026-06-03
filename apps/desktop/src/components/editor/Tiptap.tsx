@@ -1,6 +1,6 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FocusExtension } from "./FocusExtension";
 import "./Tiptap.css";
 
@@ -48,6 +48,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
 ) {
   // Stable reference for the initial doc to avoid resetting on every render.
   const initialKey = useMemo(() => JSON.stringify(initialDoc).length, [initialDoc]);
+  const [emptyFocused, setEmptyFocused] = useState(false);
 
   const editor = useEditor(
     {
@@ -79,6 +80,27 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
     if (!editor) return;
     if (onCharCount) onCharCount(countChars(editor.getJSON()));
   }, [editor, onCharCount]);
+
+  useEffect(() => {
+    if (!editor) {
+      setEmptyFocused(false);
+      return;
+    }
+
+    const updateEmptyFocused = () => setEmptyFocused(editor.isFocused && editor.isEmpty);
+    updateEmptyFocused();
+    editor.on("focus", updateEmptyFocused);
+    editor.on("blur", updateEmptyFocused);
+    editor.on("update", updateEmptyFocused);
+    editor.on("selectionUpdate", updateEmptyFocused);
+
+    return () => {
+      editor.off("focus", updateEmptyFocused);
+      editor.off("blur", updateEmptyFocused);
+      editor.off("update", updateEmptyFocused);
+      editor.off("selectionUpdate", updateEmptyFocused);
+    };
+  }, [editor]);
 
   // Cmd+S → manual save (intercept before browser save dialog).
   useEffect(() => {
@@ -136,7 +158,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
 
   return (
     <div
-      className={`tiptap-wrap${typewriter ? " typewriter" : ""}`}
+      className={`tiptap-wrap${typewriter ? " typewriter" : ""}${emptyFocused ? " empty-focused" : ""}`}
       onMouseDown={onWrapMouseDown}
       onDoubleClick={(e) => {
         const t = (e.target as HTMLElement).closest(".mention");
