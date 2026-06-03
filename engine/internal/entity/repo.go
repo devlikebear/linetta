@@ -146,9 +146,12 @@ LIMIT ?`, projectID, "%"+q+"%", q+"%", limit)
 }
 
 func (r *Repo) ListByProject(ctx context.Context, projectID string) ([]Entity, error) {
-	rows, err := r.s.DB().QueryContext(ctx, baseSelect+`
-WHERE project_id = ?
-ORDER BY updated_at DESC`, projectID)
+	rows, err := r.s.DB().QueryContext(ctx, `
+SELECT id, project_id, kind, name, aliases, role, summary, attributes,
+       created_at, updated_at
+  FROM entities
+ WHERE project_id = ?
+ ORDER BY updated_at DESC`, projectID)
 	if err != nil {
 		return nil, err
 	}
