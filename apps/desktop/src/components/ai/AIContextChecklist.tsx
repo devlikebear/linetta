@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import "./AIContextChecklist.css";
 import type { AIContextKey, AIContextPreview, AIContextSelection, ContextCounts } from "../../lib/types";
+import { useI18n } from "../../lib/i18n";
 
 // Re-export so existing consumers that import { ContextCounts } from this file
 // continue to work without changes.
@@ -37,6 +38,7 @@ interface ListProps {
 }
 
 export function AIContextChecklistList({ preview, selection, onSelectionChange, disabled = false }: ListProps) {
+  const { t } = useI18n();
   const [openId, setOpenId] = useState<AIContextKey | null>(null);
 
   return (
@@ -57,20 +59,20 @@ export function AIContextChecklistList({ preview, selection, onSelectionChange, 
                 />
                 <span>{section.label}</span>
               </label>
-              {section.count > 0 && <span className="n">{formatCount(section)}</span>}
+              {section.count > 0 && <span className="n">{formatCount(section, t)}</span>}
               <button
                 type="button"
                 className="ai-preview-toggle"
                 onClick={() => setOpenId((id) => (id === section.id ? null : section.id))}
                 disabled={!section.present}
-                aria-label={`${section.label} 미리보기`}
+                aria-label={t("ai.context.preview", { label: section.label })}
               >
                 {openId === section.id ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
               </button>
             </div>
             {openId === section.id && (
               <pre className="ai-context-preview">
-                {section.preview || "전달할 내용이 없습니다."}
+                {section.preview || t("ai.context.empty")}
               </pre>
             )}
           </li>
@@ -80,9 +82,9 @@ export function AIContextChecklistList({ preview, selection, onSelectionChange, 
   );
 }
 
-function formatCount(section: { id: AIContextKey; count: number }) {
+function formatCount(section: { id: AIContextKey; count: number }, t: ReturnType<typeof useI18n>["t"]) {
   if (section.id === "project_meta") return `${section.count}/3`;
-  return `${section.count}개`;
+  return t("ai.context.count", { count: section.count });
 }
 
 export function AIContextChecklist({ anchor, preview, selection, onSelectionChange, onClose }: Props) {

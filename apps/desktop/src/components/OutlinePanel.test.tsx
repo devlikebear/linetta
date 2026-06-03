@@ -1,8 +1,20 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TreeNode } from "../hooks/useFirstLeaf";
+import { I18nProvider } from "../lib/i18n";
 import { OutlinePanel } from "./OutlinePanel";
+
+const mocks = vi.hoisted(() => ({
+  settingsGet: vi.fn(),
+}));
+
+vi.mock("../lib/rpc", () => ({
+  settings: {
+    get: mocks.settingsGet,
+  },
+}));
 
 const scene: TreeNode = {
   id: "scene-1",
@@ -33,6 +45,26 @@ const chapter: TreeNode = {
   children: [scene],
 };
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.settingsGet.mockResolvedValue({ language: "ko" });
+});
+
+function renderOutline(props: Partial<ComponentProps<typeof OutlinePanel>> = {}) {
+  return render(
+    <I18nProvider>
+      <OutlinePanel
+        tree={[chapter]}
+        currentId="scene-1"
+        collapsed={false}
+        onToggleCollapse={vi.fn()}
+        onSelect={vi.fn()}
+        {...props}
+      />
+    </I18nProvider>,
+  );
+}
+
 describe("OutlinePanel", () => {
   it("opens a popup menu for scene rename and creation actions", async () => {
     const user = userEvent.setup();
@@ -40,18 +72,11 @@ describe("OutlinePanel", () => {
     const onCreateScene = vi.fn();
     const onCreateChapter = vi.fn();
 
-    render(
-      <OutlinePanel
-        tree={[chapter]}
-        currentId="scene-1"
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        onSelect={vi.fn()}
-        onRename={onRename}
-        onCreateScene={onCreateScene}
-        onCreateChapter={onCreateChapter}
-      />,
-    );
+    renderOutline({
+      onRename,
+      onCreateScene,
+      onCreateChapter,
+    });
 
     fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
     await user.click(screen.getByRole("menuitem", { name: "이름 변경" }));
@@ -72,18 +97,11 @@ describe("OutlinePanel", () => {
     const onMoveSceneDown = vi.fn();
     const onDeleteScene = vi.fn();
 
-    render(
-      <OutlinePanel
-        tree={[chapter]}
-        currentId="scene-1"
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        onSelect={vi.fn()}
-        onMoveSceneUp={onMoveSceneUp}
-        onMoveSceneDown={onMoveSceneDown}
-        onDeleteScene={onDeleteScene}
-      />,
-    );
+    renderOutline({
+      onMoveSceneUp,
+      onMoveSceneDown,
+      onDeleteScene,
+    });
 
     fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
     await user.click(screen.getByRole("menuitem", { name: "위로 이동" }));
@@ -96,5 +114,21 @@ describe("OutlinePanel", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
     await user.click(screen.getByRole("menuitem", { name: "삭제" }));
     expect(onDeleteScene).toHaveBeenCalledWith(scene);
+  });
+
+  it("renders the outline chrome and menu actions in English when selected", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn();
+    mocks.settingsGet.mockResolvedValue({ language: "en" });
+
+    renderOutline({ onRename });
+
+    expect(await screen.findByText("Outline")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Scene 1/ })).toBeInTheDocument();
+    expect(screen.getByText("Chapter 1")).toBeInTheDocument();
+    fireEvent.contextMenu(screen.getByRole("button", { name: /Scene 1/ }));
+    await user.click(await screen.findByRole("menuitem", { name: "Rename" }));
+
+    expect(onRename).toHaveBeenCalledWith(scene);
   });
 });

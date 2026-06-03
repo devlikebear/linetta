@@ -918,7 +918,12 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   background: var(--paper); padding: 10px 12px; font-size: 14px; outline: none; color: var(--ink);
   font-family: var(--font-serif); resize: none;
 }
-.modal-field input:focus, .modal-field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint2); }
+.modal-field select {
+  min-height: 32px;
+  padding: 6px 34px 6px 10px;
+  line-height: 1.25;
+}
+.modal-field input:focus, .modal-field textarea:focus, .modal-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint2); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
 
 .tmpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

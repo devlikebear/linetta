@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ListChecks, Pencil } from "lucide-react";
 import type { CompanionChoices } from "../../lib/types";
+import { useI18n } from "../../lib/i18n";
 
 interface Props {
   choices: CompanionChoices;
@@ -16,6 +17,7 @@ interface Props {
 // sends the option immediately (single-select); afterward the card locks to the
 // chosen option so it reads as a settled answer in the transcript.
 export function ChoiceCard({ choices, disabled, onPick, onCustom }: Props) {
+  const { t } = useI18n();
   const [picked, setPicked] = useState<string | null>(null);
   const done = picked !== null;
 
@@ -49,7 +51,7 @@ export function ChoiceCard({ choices, disabled, onPick, onCustom }: Props) {
             onClick={onCustom}
             disabled={done || disabled}
           >
-            <Pencil size={12} /> 직접 입력
+            <Pencil size={12} /> {t("companion.choice.custom")}
           </button>
         )}
       </div>

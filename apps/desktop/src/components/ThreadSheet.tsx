@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Beat, Thread, UpdateThreadInput } from "../lib/types";
 import { beats as beatsApi, threads as threadsApi } from "../lib/rpc";
 import { X, Plus } from "../lib/icons";
+import { useI18n } from "../lib/i18n";
 import "./ThreadSheet.css";
 
 const PALETTE = [
@@ -34,6 +35,7 @@ function IntensityPicker({ value, onPick }: { value: number; onPick: (lvl: numbe
 }
 
 export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
+  const { t } = useI18n();
   const [thread, setThread] = useState<Thread | null>(null);
   const [draft, setDraft] = useState<UpdateThreadInput | null>(null);
   const [beatList, setBeatList] = useState<Beat[]>([]);
@@ -117,25 +119,25 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
             style={{ "--bc": draft?.color ?? thread?.color ?? "var(--muted)", width: 12, height: 12 } as React.CSSProperties}
             aria-hidden
           />
-          스토리라인
+          {t("thread.title")}
         </span>
-        <button type="button" className="panel-close" onClick={onClose} aria-label="닫기">
+        <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}>
           <X size={16} />
         </button>
       </div>
 
       {error && <p className="ts-error">{error}</p>}
-      {!thread && !error && <p className="ts-loading">불러오는 중…</p>}
+      {!thread && !error && <p className="ts-loading">{t("common.loading")}</p>}
 
       {thread && draft && (
         <>
           <div className="panel-scroll">
             <div className="sec es-field">
-              <h4>이름</h4>
+              <h4>{t("thread.name")}</h4>
               <input
                 value={draft.name ?? ""}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                placeholder="스토리라인 이름"
+                placeholder={t("thread.namePlaceholder")}
               />
               <div className="thread-color-row" style={{ marginTop: 14 }}>
                 {PALETTE.map((c) => (
@@ -152,7 +154,7 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
             </div>
 
             <div className="sec es-field">
-              <h4>메모</h4>
+              <h4>{t("thread.note")}</h4>
               <textarea
                 value={draft.summary ?? ""}
                 onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
@@ -161,8 +163,8 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
             </div>
 
             <div className="sec">
-              <h4>마디 <span style={{ color: "var(--muted-2)" }}>{beatList.length}</span></h4>
-              {beatList.length === 0 && <p className="sec-empty">아직 마디가 없어요</p>}
+              <h4>{t("thread.beats")} <span style={{ color: "var(--muted-2)" }}>{beatList.length}</span></h4>
+              {beatList.length === 0 && <p className="sec-empty">{t("thread.noBeats")}</p>}
               {beatList.map((b) => (
                 <div className="beat-list-item ts-beat" key={b.id}>
                   <span className="scn">#{b.ordinal}</span>
@@ -171,36 +173,36 @@ export function ThreadSheet({ threadId, onClose, onSaved }: Props) {
                       className="ts-beat-label"
                       value={b.label}
                       onChange={(e) => updateBeat(b, { label: e.target.value })}
-                      placeholder="마디 제목"
+                      placeholder={t("thread.beatTitlePlaceholder")}
                     />
                     <textarea
                       className="ts-beat-desc"
                       value={b.description}
                       onChange={(e) => updateBeat(b, { description: e.target.value })}
-                      placeholder="무슨 일이 일어나는지"
+                      placeholder={t("thread.beatDescriptionPlaceholder")}
                       rows={2}
                     />
                   </div>
                   <IntensityPicker value={b.intensity} onPick={(lvl) => updateBeat(b, { intensity: lvl })} />
-                  <button type="button" className="attr-del" onClick={() => deleteBeat(b)} aria-label="삭제">
+                  <button type="button" className="attr-del" onClick={() => deleteBeat(b)} aria-label={t("workspace.delete")}>
                     <X size={13} />
                   </button>
                 </div>
               ))}
               <button type="button" className="add-beat" onClick={addBeat}>
-                <Plus size={13} /> 새 마디 추가
+                <Plus size={13} /> {t("thread.addBeat")}
               </button>
             </div>
           </div>
 
           <div className="panel-foot">
             <button type="button" className="btn ghost sm" onClick={closeThread}>
-              스토리라인 닫기(보관)
+              {t("thread.closeArchive")}
             </button>
             <span className="spacer" />
-            <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>취소</button>
+            <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>{t("common.cancel")}</button>
             <button type="button" className="btn accent sm" onClick={onSave} disabled={saving}>
-              {saving ? "저장 중…" : "저장"}
+              {saving ? t("common.saving") : t("common.save")}
             </button>
           </div>
         </>

@@ -1,9 +1,20 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../../lib/i18n";
 import { AIPanel } from "./AIPanel";
 import { DEFAULT_AI_CONTEXT_SELECTION } from "./AIContextChecklist";
 import type { AIContextPreview, ContextCounts } from "../../lib/types";
+
+const mocks = vi.hoisted(() => ({
+  settingsGet: vi.fn(),
+}));
+
+vi.mock("../../lib/rpc", () => ({
+  settings: {
+    get: mocks.settingsGet,
+  },
+}));
 
 const counts: ContextCounts = {
   nearbyScenes: 0,
@@ -63,11 +74,20 @@ function renderPanel(overrides = {}) {
     showChecklist: false,
     ...overrides,
   };
-  const rendered = render(<AIPanel {...props} />);
+  const rendered = render(
+    <I18nProvider>
+      <AIPanel {...props} />
+    </I18nProvider>,
+  );
   return { props, ...rendered };
 }
 
 describe("AIPanel", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.settingsGet.mockResolvedValue({ language: "ko" });
+  });
+
   it("guards empty prompts and runs non-empty prompts", async () => {
     const user = userEvent.setup();
     const { props } = renderPanel();
@@ -134,5 +154,19 @@ describe("AIPanel", () => {
     await user.click(screen.getByRole("button", { name: "플롯 (스토리라인&비트) 미리보기" }));
     expect(screen.getByText(/마지막 기회/)).toBeInTheDocument();
     expect(screen.getByText(/첫 장면/)).toBeInTheDocument();
+  });
+
+  it("renders AI generation controls in English when selected", async () => {
+    mocks.settingsGet.mockResolvedValue({ language: "en" });
+
+    renderPanel({ contextItemCount: 3 });
+
+    expect(await screen.findByText("AI generation")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Insert" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Replace all" })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Enter a prompt...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Length: free" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generate ⌘↵" })).toBeInTheDocument();
+    expect(screen.getByText("Generation results will appear here. 3 selected context items will be sent along.")).toBeInTheDocument();
   });
 });

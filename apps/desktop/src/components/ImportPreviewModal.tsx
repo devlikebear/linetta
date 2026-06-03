@@ -1,5 +1,6 @@
 import { FileText, Folder } from "lucide-react";
 import type { ImportPreviewNode, ImportPreviewResult } from "../lib/types";
+import { displayNodeLabel, useI18n } from "../lib/i18n";
 import "./ImportPreviewModal.css";
 
 interface Props {
@@ -11,18 +12,24 @@ interface Props {
 }
 
 export function ImportPreviewModal({ preview, fileName, busy, onConfirm, onCancel }: Props) {
+  const { t } = useI18n();
   const total = preview.container_count + preview.leaf_count;
   return (
     <div className="backdrop center" onMouseDown={busy ? undefined : onCancel}>
       <div className="modal import-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <h2>가져오기 미리보기</h2>
+        <h2>{t("importPreview.title")}</h2>
         <p className="modal-sub">
-          {fileName} → <strong>{preview.title}</strong> · 컨테이너 {preview.container_count}개 · 씬 {preview.leaf_count}개
+          {t("importPreview.summary", {
+            fileName,
+            title: preview.title,
+            containers: preview.container_count,
+            scenes: preview.leaf_count,
+          })}
         </p>
 
         {preview.warnings.length > 0 && (
           <div className="import-warnings" role="alert">
-            <strong>경고</strong>
+            <strong>{t("importPreview.warning")}</strong>
             <ul>
               {preview.warnings.map((w, i) => (
                 <li key={i}>{w}</li>
@@ -33,7 +40,7 @@ export function ImportPreviewModal({ preview, fileName, busy, onConfirm, onCance
 
         <div className="import-tree">
           {total === 0 ? (
-            <p className="import-empty">가져올 노드가 없습니다.</p>
+            <p className="import-empty">{t("importPreview.empty")}</p>
           ) : (
             <ul>
               {preview.roots.map((n, i) => (
@@ -45,10 +52,10 @@ export function ImportPreviewModal({ preview, fileName, busy, onConfirm, onCance
 
         <div className="modal-actions">
           <button type="button" className="btn ghost" onClick={onCancel} disabled={busy}>
-            취소
+            {t("importPreview.cancel")}
           </button>
           <button type="button" className="btn accent" onClick={onConfirm} disabled={busy || total === 0}>
-            {busy ? "가져오는 중…" : "확인 후 가져오기"}
+            {busy ? t("importPreview.importing") : t("importPreview.confirm")}
           </button>
         </div>
       </div>
@@ -57,11 +64,12 @@ export function ImportPreviewModal({ preview, fileName, busy, onConfirm, onCance
 }
 
 function PreviewItem({ node }: { node: ImportPreviewNode }) {
+  const { language, t } = useI18n();
   return (
     <li>
       <span className={`import-node kind-${node.kind}`}>
         {node.kind === "container" ? <Folder size={13} /> : <FileText size={13} />}
-        {node.label || "(이름 없음)"}
+        {node.label ? displayNodeLabel(language, node.label) : t("importPreview.unnamed")}
       </span>
       {node.children && node.children.length > 0 && (
         <ul>

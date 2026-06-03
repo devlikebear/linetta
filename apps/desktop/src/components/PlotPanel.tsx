@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Project, PlotSpine, PlotScene, Thread } from "../lib/types";
 import { plot as plotApi, beats as beatsApi, threads as threadsApi } from "../lib/rpc";
 import { Plus, X, Pencil } from "../lib/icons";
+import { displayNodeLabel, useI18n } from "../lib/i18n";
 import "./PlotPanel.css";
 
 interface Props {
@@ -21,6 +22,7 @@ function IntensityBars({ level }: { level: number }) {
 }
 
 export function PlotPanel({ project, nodeId, onOpenThread }: Props) {
+  const { language, t } = useI18n();
   const [spine, setSpine] = useState<PlotSpine | null>(null);
   const [openThreads, setOpenThreads] = useState<Thread[]>([]);
   const [editingBeat, setEditingBeat] = useState<string | null>(null);
@@ -82,14 +84,15 @@ export function PlotPanel({ project, nodeId, onOpenThread }: Props) {
   const renderScene = (scene: PlotScene | null | undefined, mode: "prev" | "current" | "next") => {
     if (!scene) return null;
     const editable = mode === "current";
+    const label = displayNodeLabel(language, scene.label);
     return (
       <div className={"spine-scene" + (mode === "current" ? " current" : "")}>
         <div className="spine-label">
           {mode === "current"
-            ? <span className="tag">현재 · {scene.label}</span>
-            : <>{mode === "prev" ? "이전" : "다음"} · {scene.label}</>}
+            ? <span className="tag">{t("workspace.current")} · {label}</span>
+            : <>{mode === "prev" ? t("workspace.previous") : t("workspace.next")} · {label}</>}
         </div>
-        {scene.beats.length === 0 && !editable && <p className="sec-empty" style={{ margin: "0 0 4px" }}>비트 없음</p>}
+        {scene.beats.length === 0 && !editable && <p className="sec-empty" style={{ margin: "0 0 4px" }}>{t("workspace.noBeats")}</p>}
         {scene.beats.map((bt) => (
           <div className={"beat" + (editable ? "" : " dim")} key={bt.id}>
             <button type="button" className="beat-head" onClick={() => onOpenThread(bt.thread_id)}>
@@ -98,9 +101,9 @@ export function PlotPanel({ project, nodeId, onOpenThread }: Props) {
             </button>
             {editingBeat === bt.id && editable ? (
               <div className="plot-beat-edit">
-                <input className="attr-value" defaultValue={bt.label} placeholder="제목"
+                <input className="attr-value" defaultValue={bt.label} placeholder={t("workspace.title")}
                   onBlur={(e) => { if (e.target.value !== bt.label) patchBeat(bt.id, { label: e.target.value }); }} />
-                <textarea defaultValue={bt.description} placeholder="무슨 일이 일어나는지" rows={3}
+                <textarea defaultValue={bt.description} placeholder={t("workspace.whatHappens")} rows={3}
                   onBlur={(e) => { if (e.target.value !== bt.description) patchBeat(bt.id, { description: e.target.value }); }} />
                 <div className="beat-foot">
                   <span className="intensity-pick">
@@ -108,17 +111,17 @@ export function PlotPanel({ project, nodeId, onOpenThread }: Props) {
                       <button key={lvl} type="button" className={bt.intensity === lvl ? "sel" : ""} onClick={() => patchBeat(bt.id, { intensity: lvl })}>{lvl}</button>
                     ))}
                   </span>
-                  <button type="button" className="attr-del" aria-label="삭제" onClick={() => deleteBeat(bt.id)}><X size={13} /></button>
+                  <button type="button" className="attr-del" aria-label={t("workspace.delete")} onClick={() => deleteBeat(bt.id)}><X size={13} /></button>
                 </div>
               </div>
             ) : (
               <>
-                <div className="beat-label" style={{ marginTop: 6 }}>{bt.label || "(제목 없음)"}</div>
+                <div className="beat-label" style={{ marginTop: 6 }}>{bt.label || t("workspace.untitled")}</div>
                 {bt.description && <p className="beat-desc">{bt.description}</p>}
                 <div className="beat-foot">
                   <IntensityBars level={bt.intensity} />
                   {editable && (
-                    <button type="button" className="attr-del" title="편집" aria-label="비트 편집" onClick={() => setEditingBeat(bt.id)}>
+                    <button type="button" className="attr-del" title={t("workspace.editBeat")} aria-label={t("workspace.editBeat")} onClick={() => setEditingBeat(bt.id)}>
                       <Pencil size={13} />
                     </button>
                   )}
@@ -131,10 +134,10 @@ export function PlotPanel({ project, nodeId, onOpenThread }: Props) {
           adding === mode ? (
             <div className="plot-add">
               <select className="attr-value" value={draftThread} onChange={(e) => setDraftThread(e.target.value)}>
-                {openThreads.length === 0 && <option value="">스토리라인 없음</option>}
+                {openThreads.length === 0 && <option value="">{t("workspace.noStoryline")}</option>}
                 {openThreads.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
-              <input autoFocus className="attr-value" value={draftLabel} placeholder="비트 제목 (Enter)"
+              <input autoFocus className="attr-value" value={draftLabel} placeholder={t("workspace.beatTitleEnter")}
                 onChange={(e) => setDraftLabel(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") { e.preventDefault(); addBeat(mode); }
@@ -144,7 +147,7 @@ export function PlotPanel({ project, nodeId, onOpenThread }: Props) {
           ) : (
             <button type="button" className="add-beat" disabled={openThreads.length === 0}
               onClick={() => { setAdding(mode); setDraftThread(openThreads[0]?.id ?? ""); setDraftLabel(""); }}>
-              <Plus size={13} /> {mode === "current" ? "비트 추가" : "다음 씬에 비트"}
+              <Plus size={13} /> {mode === "current" ? t("workspace.addBeat") : t("workspace.addBeatToNextScene")}
             </button>
           )
         )}
@@ -155,9 +158,11 @@ export function PlotPanel({ project, nodeId, onOpenThread }: Props) {
 
   return (
     <section className="sec">
-      <h4>플롯</h4>
+      <h4>{t("workspace.plot")}</h4>
       {openThreads.length === 0 && (
-        <p className="sec-empty" style={{ marginTop: 12 }}>스토리라인이 없어요. 명령 팔레트에서 "이 씬을 새 Thread로 표시"로 시작하세요.</p>
+        <p className="sec-empty" style={{ marginTop: 12 }}>
+          {t("workspace.noStorylineHint", { command: t("workspace.markSceneAsThread") })}
+        </p>
       )}
       <div className="spine" style={{ marginTop: 12 }}>
         {renderScene(spine?.prev, "prev")}

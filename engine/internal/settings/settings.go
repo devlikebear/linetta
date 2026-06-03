@@ -38,6 +38,8 @@ func validProviders() []string {
 
 func validWebSearchProviders() []string { return []string{"brave", "perplexity"} }
 
+func validLanguages() []string { return []string{"ko", "en", "ja"} }
+
 // ProviderConfig holds per-provider settings keyed by provider id in Config.Providers.
 type ProviderConfig struct {
 	Model       string `json:"model,omitempty"`         // selected model id; empty => provider default
@@ -61,6 +63,7 @@ type ProviderSettings struct {
 // Config is the on-disk JSON. backup_dir is computed at Load time and not
 // persisted (the field is omitted from JSON marshalling on write).
 type Config struct {
+	Language                 string                    `json:"language"`
 	Provider                 string                    `json:"provider"`
 	Providers                map[string]ProviderConfig `json:"providers,omitempty"`
 	TypewriterDefault        bool                      `json:"typewriter_default"`
@@ -76,6 +79,7 @@ type Config struct {
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
 type Patch struct {
+	Language                 *string                   `json:"language,omitempty"`
 	Provider                 *string                   `json:"provider,omitempty"`
 	Providers                map[string]ProviderConfig `json:"providers,omitempty"`
 	TypewriterDefault        *bool                     `json:"typewriter_default,omitempty"`
@@ -124,6 +128,7 @@ func NewWithSecretStore(secrets SecretStore) (*Store, error) {
 
 func defaults(home string) Config {
 	return Config{
+		Language:          "ko",
 		Provider:          ProviderOpenAICodex,
 		TypewriterDefault: false,
 		BackupDir:         filepath.Join(home, "backups"),
@@ -146,6 +151,9 @@ func (s *Store) load() error {
 		return nil // ignore corrupt file; defaults stand
 	}
 	s.mu.Lock()
+	if disk.Language != "" && slices.Contains(validLanguages(), disk.Language) {
+		s.cfg.Language = disk.Language
+	}
 	if disk.Provider != "" {
 		s.cfg.Provider = disk.Provider
 	}
@@ -265,6 +273,12 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	next := s.cfg
 	s.mu.RUnlock()
 
+	if p.Language != nil {
+		if !slices.Contains(validLanguages(), *p.Language) {
+			return Config{}, fmt.Errorf("settings: unknown language %q", *p.Language)
+		}
+		next.Language = *p.Language
+	}
 	if p.Provider != nil {
 		if !slices.Contains(validProviders(), *p.Provider) {
 			return Config{}, fmt.Errorf("settings: unknown provider %q", *p.Provider)
@@ -315,6 +329,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if next.WebSearchProvider == "" {
 		next.WebSearchProvider = "brave"
 	}
+	if next.Language == "" {
+		next.Language = "ko"
+	}
 
 	if err := s.persist(next); err != nil {
 		return Config{}, err
@@ -330,6 +347,7 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 func (s *Store) persist(next Config) error {
 	next = sanitizeConfigForDisk(next)
 	persistable := Config{
+		Language:                 next.Language,
 		Provider:                 next.Provider,
 		Providers:                next.Providers,
 		TypewriterDefault:        next.TypewriterDefault,

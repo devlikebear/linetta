@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Command as CommandIcon, Circle } from "lucide-react";
+import { useI18n } from "../lib/i18n";
 import "./CommandPalette.css";
 
 export interface Command {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function CommandPalette({ open, onClose, commands }: Props) {
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,13 +89,13 @@ export function CommandPalette({ open, onClose, commands }: Props) {
           <input
             ref={inputRef}
             className="palette-input"
-            placeholder="명령 검색…"
+            placeholder={t("workspace.command.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
         <div ref={listRef} className="palette-list">
-          {groups.length === 0 && <p className="palette-empty">결과 없음</p>}
+          {groups.length === 0 && <p className="palette-empty">{t("workspace.command.noResults")}</p>}
           {groups.map((g) => (
             <div key={g.section} className="palette-group">
               <p className="palette-section">{g.section}</p>
@@ -119,9 +121,9 @@ export function CommandPalette({ open, onClose, commands }: Props) {
           ))}
         </div>
         <div className="palette-foot">
-          <span><span className="kbd">↑↓</span> 이동</span>
-          <span><span className="kbd">↵</span> 실행</span>
-          <span><span className="kbd">esc</span> 닫기</span>
+          <span><span className="kbd">↑↓</span> {t("workspace.command.move")}</span>
+          <span><span className="kbd">↵</span> {t("workspace.command.run")}</span>
+          <span><span className="kbd">esc</span> {t("common.close")}</span>
         </div>
       </div>
     </div>

@@ -1,11 +1,13 @@
 import "./MentionPicker.css";
 import type { MentionPickerState } from "./MentionExtension";
+import { useI18n } from "../../lib/i18n";
 
 interface Props {
   state: MentionPickerState | null;
 }
 
 export function MentionPicker({ state }: Props) {
+  const { t } = useI18n();
   if (!state || !state.open) return null;
   return (
     <div
@@ -14,7 +16,7 @@ export function MentionPicker({ state }: Props) {
       onMouseDown={(e) => e.preventDefault()} // keep focus in the editor
     >
       {state.items.length === 0 && (
-        <p className="mention-picker-empty">결과 없음</p>
+        <p className="mention-picker-empty">{t("mention.noResults")}</p>
       )}
       {state.items.map((item, i) => {
         const active = i === state.selectedIndex;
@@ -26,7 +28,7 @@ export function MentionPicker({ state }: Props) {
             onClick={() => state.pickAt(i)}
           >
             <span className="mention-name">
-              {item.isNew ? `새 인물로 추가: "${item.name}"` : item.name}
+              {item.isNew ? t("mention.create", { name: item.name }) : item.name}
             </span>
             {!item.isNew && item.role && <span className="mention-role">{item.role}</span>}
           </button>

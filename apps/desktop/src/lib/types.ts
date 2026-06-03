@@ -280,6 +280,8 @@ export type ProviderID =
   | "gemini-native";
 export type WebSearchProvider = "brave" | "perplexity";
 
+export type AppLanguage = "ko" | "en" | "ja";
+
 export interface ProviderConfig {
   model?: string;
   api_key?: string;
@@ -297,6 +299,7 @@ export interface ProviderTestResult {
 }
 
 export interface Settings {
+  language: AppLanguage;
   provider: ProviderID;
   providers?: Record<string, ProviderConfig>;
   typewriter_default: boolean;
@@ -311,6 +314,7 @@ export interface Settings {
 }
 
 export interface SettingsPatch {
+  language?: AppLanguage;
   provider?: ProviderID;
   providers?: Record<string, ProviderConfig>;
   typewriter_default?: boolean;

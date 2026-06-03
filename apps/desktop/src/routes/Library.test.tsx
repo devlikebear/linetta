@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/ToastProvider";
+import { I18nProvider } from "../lib/i18n";
 import { Library } from "./Library";
 
 const mocks = vi.hoisted(() => ({
@@ -43,7 +44,9 @@ function renderLibrary() {
   render(
     <MemoryRouter>
       <ToastProvider>
-        <Library />
+        <I18nProvider>
+          <Library />
+        </I18nProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -69,6 +72,7 @@ describe("Library", () => {
       },
     ]);
     mocks.settingsGet.mockResolvedValue({
+      language: "ko",
       provider: "claude-code-cli",
       typewriter_default: false,
       focus_default: false,
@@ -78,6 +82,7 @@ describe("Library", () => {
       safety_checklist_dismissed: false,
     });
     mocks.settingsSet.mockResolvedValue({
+      language: "ko",
       provider: "claude-code-cli",
       typewriter_default: false,
       focus_default: false,
@@ -111,6 +116,7 @@ describe("Library", () => {
   it("opens the data folder from the library menu", async () => {
     const user = userEvent.setup();
     mocks.settingsGet.mockResolvedValue({
+      language: "ko",
       provider: "claude-code-cli",
       typewriter_default: false,
       focus_default: false,

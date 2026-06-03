@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../lib/i18n";
 import { Settings } from "./Settings";
 
 const mocks = vi.hoisted(() => ({
@@ -37,12 +38,15 @@ vi.mock("../lib/rpc", () => ({
 function renderSettings() {
   render(
     <MemoryRouter>
-      <Settings />
+      <I18nProvider>
+        <Settings />
+      </I18nProvider>
     </MemoryRouter>,
   );
 }
 
 const baseSettings = {
+  language: "ko" as const,
   provider: "openai-codex" as const,
   typewriter_default: true,
   focus_default: false,
@@ -158,6 +162,58 @@ describe("Settings", () => {
       "href",
       "https://developers.openai.com/codex/cli",
     );
+  });
+
+  it("defaults to Korean and switches the settings UI to English", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    const selector = await screen.findByLabelText("앱 언어");
+    expect(selector).toHaveValue("ko");
+
+    await user.selectOptions(selector, "en");
+
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ language: "en" }),
+    );
+    expect(await screen.findByLabelText("App language")).toHaveValue("en");
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByText("AI Setup Wizard")).toBeInTheDocument();
+  });
+
+  it("renders setup links and ops metadata in English when selected", async () => {
+    mocks.settingsGet.mockResolvedValue({
+      ...baseSettings,
+      language: "en",
+      web_search_api_key_set: false,
+    });
+    mocks.opsStatusGet.mockResolvedValue([
+      {
+        job_name: "git_sync",
+        last_started_at: 1780200002000,
+        last_finished_at: 1780200003000,
+        last_ok: true,
+        last_error: "",
+        metadata_json: "{\"files_written\":1,\"committed\":true,\"pushed\":true}",
+      },
+      {
+        job_name: "backup.daily",
+        last_started_at: 1780200004000,
+        last_finished_at: 1780200005000,
+        last_ok: true,
+        last_error: "",
+        metadata_json: "{\"backup_ran\":true}",
+      },
+    ]);
+
+    renderSettings();
+
+    expect(await screen.findByRole("link", { name: /OpenAI Codex CLI guide/ })).toBeInTheDocument();
+    expect(screen.getByText(/If the selected folder is not a git repository yet/)).toBeInTheDocument();
+    expect(screen.getByText(/1 file/)).toBeInTheDocument();
+    expect(screen.getByText(/Committed/)).toBeInTheDocument();
+    expect(screen.getByText(/Pushed/)).toBeInTheDocument();
+    expect(screen.getByText(/New backup created/)).toBeInTheDocument();
   });
 
   it("selecting the Claude API guide persists the API provider", async () => {

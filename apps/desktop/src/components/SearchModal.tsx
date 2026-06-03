@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { search } from "../lib/rpc";
 import type { SearchResult } from "../lib/types";
+import { displayNodeLabel, useI18n } from "../lib/i18n";
 import "./SearchModal.css";
 
 interface Props {
@@ -33,6 +34,7 @@ function highlight(text: string, query: string) {
 }
 
 export function SearchModal({ open, onClose, onSelect }: Props) {
+  const { language, t } = useI18n();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -114,17 +116,17 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
           <input
             ref={inputRef}
             className="palette-input"
-            placeholder="작품 전체 검색…"
+            placeholder={t("search.placeholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
 
         <div className="palette-list">
-          {loading && <p className="palette-empty">검색 중…</p>}
-          {error && <p className="palette-empty">검색 실패: {error}</p>}
-          {showEmpty && <p className="palette-empty">결과 없음</p>}
-          {!query.trim() && !loading && <p className="palette-empty">찾을 단어를 입력하세요</p>}
+          {loading && <p className="palette-empty">{t("search.loading")}</p>}
+          {error && <p className="palette-empty">{t("search.failed", { error })}</p>}
+          {showEmpty && <p className="palette-empty">{t("search.noResults")}</p>}
+          {!query.trim() && !loading && <p className="palette-empty">{t("search.emptyPrompt")}</p>}
           {results.map((result, i) => (
             <button
               key={`${result.project_id}:${result.node_id}`}
@@ -136,7 +138,7 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
               <div className="sr-top">
                 <span className="sr-proj">{result.project_title}</span>
                 <span className="sr-scene">
-                  {result.node_label}{result.node_title ? ` · ${result.node_title}` : ""}
+                  {displayNodeLabel(language, result.node_label)}{result.node_title ? ` · ${result.node_title}` : ""}
                 </span>
               </div>
               <div className="sr-snip">{highlight(result.preview, query)}</div>
@@ -144,7 +146,7 @@ export function SearchModal({ open, onClose, onSelect }: Props) {
           ))}
         </div>
 
-        <div className="palette-foot"><span>제목 · 씬 · 본문에서 검색</span></div>
+        <div className="palette-foot"><span>{t("search.footer")}</span></div>
       </div>
     </div>
   );

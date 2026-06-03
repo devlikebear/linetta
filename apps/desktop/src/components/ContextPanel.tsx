@@ -4,6 +4,7 @@ import { projects as projectsApi } from "../lib/rpc";
 import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book, Search } from "../lib/icons";
 import { InlineEditableText } from "./InlineEditableText";
+import { localeForLanguage, useI18n } from "../lib/i18n";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -27,17 +28,11 @@ interface Props {
   onProjectTitleChange?: (title: string) => void | Promise<void>;
 }
 
-const STATUS_LABEL: Record<NodeRow["status"], string> = {
-  draft: "초고",
-  revision: "퇴고",
-  final: "완성",
-};
-
-const KIND_META: Record<EntityKind, { label: string; color: string; Icon: typeof User }> = {
-  character: { label: "인물", color: "var(--t-sienna)", Icon: User },
-  place: { label: "장소", color: "var(--t-teal)", Icon: MapPin },
-  item: { label: "물건", color: "var(--t-olive)", Icon: Box },
-  concept: { label: "개념", color: "var(--t-plum)", Icon: Lightbulb },
+const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
+  character: { color: "var(--t-sienna)", Icon: User },
+  place: { color: "var(--t-teal)", Icon: MapPin },
+  item: { color: "var(--t-olive)", Icon: Box },
+  concept: { color: "var(--t-plum)", Icon: Lightbulb },
 };
 
 // Word-count target by length_target. Mirrors the spirit of the mockup's
@@ -51,6 +46,8 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
 };
 
 export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange }: Readonly<Props>) {
+  const { language, t } = useI18n();
+  const locale = localeForLanguage(language);
   const target = TARGET_WORDS[project.length_target] ?? 90000;
   const pct = target > 0 ? Math.min(100, Math.round((project.word_count / target) * 100)) : 0;
   const [overview, setOverview] = useState(project.outline ?? "");
@@ -130,21 +127,21 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
           <span className="ic"><Book size={16} /></span>
           <InlineEditableText
             value={project.title}
-            ariaLabel="소설 제목"
+            ariaLabel={t("workspace.novelTitle")}
             className="panel-title-input"
             onCommit={async (title) => { await onProjectTitleChange?.(title); }}
           />
         </span>
-        <span className="sub">{STATUS_LABEL[node.status]}</span>
+        <span className="sub">{t(`workspace.status.${node.status}`)}</span>
       </div>
 
       <div className="panel-scroll">
         {/* 이 씬 — stats */}
         <div className="sec">
-          <h4>이 씬</h4>
+          <h4>{t("workspace.thisScene")}</h4>
           <div className="stat-row">
-            <span className="stat-big">{charCount.toLocaleString("ko-KR")}</span>
-            <span className="stat-unit">자</span>
+            <span className="stat-big">{charCount.toLocaleString(locale)}</span>
+            <span className="stat-unit">{t("workspace.charUnit")}</span>
             <span style={{ flex: 1 }} />
             <SaveStatusPill status={saveStatus} />
           </div>
@@ -153,14 +150,14 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
               <div className="progress-fill" style={{ width: `${pct}%` }} />
             </div>
             <div className="progress-meta">
-              <span>작품 전체 {project.word_count.toLocaleString("ko-KR")}</span>
+              <span>{t("workspace.totalWork", { count: project.word_count.toLocaleString(locale) })}</span>
               <span>{pct}% / {Math.round(target / 1000)}k</span>
             </div>
           </div>
           <div className="toggles">
             <button type="button" className="toggle-row" onClick={onToggleTypewriter}>
               <span className="lbl">
-                <span className="ic"><Book size={15} /></span> 타자기 모드
+                <span className="ic"><Book size={15} /></span> {t("workspace.typewriterMode")}
               </span>
               <span className={"switch" + (typewriter ? " on" : "")} />
             </button>
@@ -169,13 +166,13 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
 
         {/* 작품 개요 — writer-authored plan/intent. */}
         <div className="sec">
-          <h4>작품 개요</h4>
+          <h4>{t("workspace.projectOverview")}</h4>
           <textarea
-            aria-label="작품 개요"
+            aria-label={t("workspace.projectOverview")}
             className="project-text-edit"
             value={overview}
             rows={5}
-            placeholder="로그라인, 주제, 큰 흐름"
+            placeholder={t("workspace.projectOverviewPlaceholder")}
             onChange={(e) => saveOverview(e.target.value)}
           />
         </div>
@@ -183,22 +180,22 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
         {/* 시놉시스 — editable story summary used as its own AI context item. */}
         <div className="sec">
           <h4>
-            <span>시놉시스</span>
+            <span>{t("workspace.synopsis")}</span>
             <span className="sec-actions">
               <button type="button" onClick={rewriteSynopsis} disabled={synopsisBusy !== null}>
-                {synopsisBusy === "rewrite" ? "재작성 중" : "재작성"}
+                {synopsisBusy === "rewrite" ? t("workspace.rewriting") : t("workspace.rewrite")}
               </button>
               <button type="button" onClick={clearSynopsis} disabled={synopsisBusy !== null || synopsis.trim() === ""}>
-                클리어
+                {t("workspace.clear")}
               </button>
             </span>
           </h4>
           <textarea
-            aria-label="작품 시놉시스"
+            aria-label={t("workspace.projectSynopsis")}
             className="project-text-edit"
             value={synopsis}
             rows={6}
-            placeholder="현재 줄거리 요약"
+            placeholder={t("workspace.synopsisPlaceholder")}
             onChange={(e) => saveSynopsis(e.target.value)}
           />
         </div>
@@ -206,17 +203,17 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
         {/* 등장 — mentioned entities */}
         <div className="sec">
           <h4>
-            <span>등장 <span style={{ color: "var(--muted-2)" }}>{mentionedEntities.length}</span></span>
+            <span>{t("workspace.mentions")} <span style={{ color: "var(--muted-2)" }}>{mentionedEntities.length}</span></span>
             {onAutoMention && (
               <span className="sec-actions">
                 <button type="button" onClick={onAutoMention} disabled={!!autoMentionBusy}>
-                  <Search size={11} /> {autoMentionBusy ? "스캔 중" : "씬 스캔"}
+                  <Search size={11} /> {autoMentionBusy ? t("workspace.scanning") : t("workspace.scanScene")}
                 </button>
               </span>
             )}
           </h4>
           {mentionedEntities.length === 0 && (
-            <p className="sec-empty">이 씬에 언급된 인물이 없어요</p>
+            <p className="sec-empty">{t("workspace.noMentionedEntities")}</p>
           )}
           {mentionedEntities.map((e) => {
             const meta = KIND_META[e.kind];
@@ -253,6 +250,7 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
 }
 
 function SaveStatusPill({ status }: { status: SaveStatus }) {
+  const { t } = useI18n();
   // Re-render every second when in "saved" state so the relative label updates.
   const [, tick] = useState(0);
   useEffect(() => {
@@ -265,18 +263,18 @@ function SaveStatusPill({ status }: { status: SaveStatus }) {
     case "idle":
       return (
         <span className="save-pill">
-          <span className="d" />저장됨
+          <span className="d" />{t("workspace.saved")}
         </span>
       );
     case "saving":
       return (
         <span className="save-pill saving">
-          <span className="d" />저장 중
+          <span className="d" />{t("common.saving")}
         </span>
       );
     case "saved": {
       const seconds = Math.max(0, Math.floor((Date.now() - status.at) / 1000));
-      const label = seconds < 1 ? "방금 저장됨" : `${seconds}초 전 저장됨`;
+      const label = seconds < 1 ? t("workspace.justSaved") : t("workspace.savedSecondsAgo", { seconds });
       return (
         <span className="save-pill">
           <span className="d" />{label}
@@ -286,7 +284,7 @@ function SaveStatusPill({ status }: { status: SaveStatus }) {
     case "error":
       return (
         <span className="save-pill saving" title={status.message}>
-          <span className="d" />저장 실패
+          <span className="d" />{t("workspace.saveFailed")}
         </span>
       );
   }

@@ -2,6 +2,7 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { ChevronLeft, FilePlus2, FolderPlus, Layers, MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { TreeNode } from "../hooks/useFirstLeaf";
 import { flatten } from "../hooks/useFirstLeaf";
+import { displayNodeLabel, useI18n } from "../lib/i18n";
 
 interface Props {
   tree: TreeNode[];
@@ -36,6 +37,7 @@ export function OutlinePanel({
   onMoveSceneDown,
   onDeleteScene,
 }: Props) {
+  const { language, t } = useI18n();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const canOpenMenu = (node: TreeNode) =>
     Boolean(
@@ -78,7 +80,7 @@ export function OutlinePanel({
     return (
       <nav className="rail is-collapsed">
         <div className="rail-head">
-          <button type="button" className="rail-collapse" onClick={onToggleCollapse} title="아웃라인 펼치기">
+          <button type="button" className="rail-collapse" onClick={onToggleCollapse} title={t("workspace.outlineExpand")}>
             <Layers size={16} />
           </button>
         </div>
@@ -89,7 +91,7 @@ export function OutlinePanel({
               type="button"
               className={`dot-scene${s.id === currentId ? " active" : ""}`}
               onClick={() => onSelect(s)}
-              title={`${s.label}${s.title ? ` · ${s.title}` : ""}`}
+              title={`${displayNodeLabel(language, s.label)}${s.title ? ` · ${s.title}` : ""}`}
             />
           ))}
         </div>
@@ -100,8 +102,8 @@ export function OutlinePanel({
   return (
     <nav className="rail">
       <div className="rail-head">
-        <span className="lbl">아웃라인</span>
-        <button type="button" className="rail-collapse" onClick={onToggleCollapse} title="접기">
+        <span className="lbl">{t("workspace.outline")}</span>
+        <button type="button" className="rail-collapse" onClick={onToggleCollapse} title={t("workspace.collapse")}>
           <ChevronLeft size={15} />
         </button>
       </div>
@@ -127,17 +129,17 @@ export function OutlinePanel({
         >
           {onRename && (
             <button type="button" role="menuitem" onClick={() => runAction(onRename)}>
-              <Pencil size={13} /> 이름 변경
+              <Pencil size={13} /> {t("workspace.rename")}
             </button>
           )}
           {onCreateScene && (
             <button type="button" role="menuitem" onClick={() => runAction(onCreateScene)}>
-              <FilePlus2 size={13} /> 새 씬
+              <FilePlus2 size={13} /> {t("workspace.newScene")}
             </button>
           )}
           {onCreateChapter && (
             <button type="button" role="menuitem" onClick={() => runAction(onCreateChapter)}>
-              <FolderPlus size={13} /> 새 장
+              <FolderPlus size={13} /> {t("workspace.newChapter")}
             </button>
           )}
           {menu.node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene) && (
@@ -145,17 +147,17 @@ export function OutlinePanel({
           )}
           {menu.node.kind === "leaf" && onMoveSceneUp && (
             <button type="button" role="menuitem" onClick={() => runAction(onMoveSceneUp)}>
-              <ArrowUp size={13} /> 위로 이동
+              <ArrowUp size={13} /> {t("workspace.moveUp")}
             </button>
           )}
           {menu.node.kind === "leaf" && onMoveSceneDown && (
             <button type="button" role="menuitem" onClick={() => runAction(onMoveSceneDown)}>
-              <ArrowDown size={13} /> 아래로 이동
+              <ArrowDown size={13} /> {t("workspace.moveDown")}
             </button>
           )}
           {menu.node.kind === "leaf" && onDeleteScene && (
             <button type="button" role="menuitem" className="danger" onClick={() => runAction(onDeleteScene)}>
-              <Trash2 size={13} /> 삭제
+              <Trash2 size={13} /> {t("workspace.delete")}
             </button>
           )}
         </div>
@@ -182,7 +184,9 @@ function RailNode({
   onOpenMenu: (e: MouseEvent, n: TreeNode) => void;
   canOpenMenu: (n: TreeNode) => boolean;
 }) {
+  const { language, t } = useI18n();
   const hasMenu = canOpenMenu(node);
+  const label = displayNodeLabel(language, node.label);
 
   if (node.kind === "leaf") {
     const active = node.id === currentId;
@@ -193,7 +197,7 @@ function RailNode({
           className={`tree-scene${active ? " active" : ""}`}
           onClick={() => onSelect(node)}
         >
-          <span className="sc-label">{node.label}</span>
+          <span className="sc-label">{label}</span>
           <span className="sc-title">{node.title}</span>
           <span className="sc-words">{node.word_count}</span>
         </button>
@@ -201,8 +205,8 @@ function RailNode({
           <button
             type="button"
             className="tree-menu-btn"
-            title="메뉴"
-            aria-label="메뉴"
+            title={t("workspace.menu")}
+            aria-label={t("workspace.menu")}
             onClick={(e) => onOpenMenu(e, node)}
           >
             <MoreHorizontal size={14} />
@@ -217,15 +221,15 @@ function RailNode({
     depth === 0 ? (
       <div className="tree-part-row" onContextMenu={(e) => onOpenMenu(e, node)}>
         <div className="tree-part">
-          {node.label}
+          {label}
           {node.title ? ` · ${node.title}` : ""}
         </div>
         {hasMenu && (
           <button
             type="button"
             className="tree-menu-btn"
-            title="메뉴"
-            aria-label="메뉴"
+            title={t("workspace.menu")}
+            aria-label={t("workspace.menu")}
             onClick={(e) => onOpenMenu(e, node)}
           >
             <MoreHorizontal size={14} />
@@ -235,15 +239,15 @@ function RailNode({
     ) : (
       <div className="tree-chapter-row" onContextMenu={(e) => onOpenMenu(e, node)}>
         <div className="tree-chapter">
-          <span className="ch-label">{node.label}</span>
+          <span className="ch-label">{label}</span>
           {node.title && <span className="ch-title">{node.title}</span>}
         </div>
         {hasMenu && (
           <button
             type="button"
             className="tree-menu-btn"
-            title="메뉴"
-            aria-label="메뉴"
+            title={t("workspace.menu")}
+            aria-label={t("workspace.menu")}
             onClick={(e) => onOpenMenu(e, node)}
           >
             <MoreHorizontal size={14} />
