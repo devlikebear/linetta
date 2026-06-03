@@ -151,9 +151,12 @@ func (r *Repo) ListCoreByProject(ctx context.Context, projectID string, limit in
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	rows, err := r.s.DB().QueryContext(ctx, baseSelect+`
-WHERE project_id = ?
-ORDER BY updated_at DESC`, projectID)
+	rows, err := r.s.DB().QueryContext(ctx, `
+SELECT id, project_id, kind, name, aliases, role, summary, attributes,
+       created_at, updated_at
+  FROM entities
+ WHERE project_id = ?
+ ORDER BY updated_at DESC`, projectID)
 	if err != nil {
 		return nil, err
 	}
