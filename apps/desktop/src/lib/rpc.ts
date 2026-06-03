@@ -33,6 +33,7 @@ import type {
   SceneMention,
   SearchResult,
   ProviderID,
+  ProviderTestResult,
   Settings,
   SettingsPatch,
   Snapshot,
@@ -111,6 +112,8 @@ export const providers = {
   listModels: (provider: ProviderID) =>
     rpcCall<{ models: string[] }>("providers.list_models", { provider }),
   detectCli: () => rpcCall<{ path: string }>("providers.detect_cli"),
+  test: (provider: ProviderID) =>
+    rpcCall<ProviderTestResult>("providers.test", { provider }),
 };
 
 export const exportApi = {

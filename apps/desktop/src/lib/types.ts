@@ -283,8 +283,17 @@ export type WebSearchProvider = "brave" | "perplexity";
 export interface ProviderConfig {
   model?: string;
   api_key?: string;
+  api_key_set?: boolean;
+  clear_api_key?: boolean;
   base_url?: string;
   cli_path?: string;
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  provider: ProviderID;
+  model?: string;
+  message: string;
 }
 
 export interface Settings {
@@ -298,6 +307,7 @@ export interface Settings {
   safety_checklist_dismissed: boolean;
   web_search_provider: WebSearchProvider;
   web_search_api_key: string;
+  web_search_api_key_set?: boolean;
 }
 
 export interface SettingsPatch {

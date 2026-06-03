@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   opsStatusClearError: vi.fn(),
   providersListModels: vi.fn(),
   providersDetectCli: vi.fn(),
+  providersTest: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -29,6 +30,7 @@ vi.mock("../lib/rpc", () => ({
   providers: {
     listModels: mocks.providersListModels,
     detectCli: mocks.providersDetectCli,
+    test: mocks.providersTest,
   },
 }));
 
@@ -41,7 +43,7 @@ function renderSettings() {
 }
 
 const baseSettings = {
-  provider: "claude-code-cli" as const,
+  provider: "openai-codex" as const,
   typewriter_default: true,
   focus_default: false,
   git_sync_dir: "/tmp/linetta-sync",
@@ -49,8 +51,16 @@ const baseSettings = {
   backup_dir: "/tmp/linetta/backups",
   safety_checklist_dismissed: false,
   web_search_provider: "brave" as const,
-  web_search_api_key: "test-key",
+  web_search_api_key: "",
+  web_search_api_key_set: true,
 };
+
+async function clickAdvancedProvider(user: ReturnType<typeof userEvent.setup>, label: RegExp, desc: string) {
+  const buttons = await screen.findAllByRole("button", { name: label });
+  const match = buttons.find((button) => button.textContent?.includes(desc));
+  if (!match) throw new Error(`Provider button not found: ${label}`);
+  await user.click(match);
+}
 
 describe("Settings", () => {
   beforeEach(() => {
@@ -61,15 +71,41 @@ describe("Settings", () => {
     mocks.settingsGet.mockImplementation(() => Promise.resolve({ ...state }));
     mocks.opsStatusGet.mockResolvedValue([]);
     mocks.settingsSet.mockImplementation((patch: Record<string, unknown>) => {
+      const providerPatch = patch.providers as Record<string, Record<string, unknown>> | undefined;
+      const redactedProviderPatch = providerPatch
+        ? Object.fromEntries(Object.entries(providerPatch).map(([key, value]) => {
+          const next = { ...value };
+          if (typeof next.api_key === "string" && next.api_key !== "") {
+            delete next.api_key;
+            next.api_key_set = true;
+          }
+          if (next.clear_api_key) {
+            delete next.clear_api_key;
+            next.api_key_set = false;
+          }
+          return [key, next];
+        }))
+        : undefined;
       const providers = {
         ...(state.providers as Record<string, unknown> | undefined),
-        ...(patch.providers as Record<string, unknown> | undefined),
+        ...redactedProviderPatch,
       };
-      state = { ...state, ...patch, providers };
+      const nextPatch = { ...patch };
+      if (typeof nextPatch.web_search_api_key === "string") {
+        nextPatch.web_search_api_key_set = nextPatch.web_search_api_key !== "";
+        nextPatch.web_search_api_key = "";
+      }
+      state = { ...state, ...nextPatch, providers };
       return Promise.resolve({ ...state });
     });
     mocks.providersListModels.mockResolvedValue({ models: [] });
     mocks.providersDetectCli.mockResolvedValue({ path: "" });
+    mocks.providersTest.mockResolvedValue({
+      ok: true,
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      message: "연결되었습니다",
+    });
   });
 
   it("renders backup, git sync, and degraded summarizer status", async () => {
@@ -109,10 +145,42 @@ describe("Settings", () => {
     expect(screen.getByText(/provider unavailable/)).toBeInTheDocument();
     expect(screen.getByText("LLM 도구")).toBeInTheDocument();
     expect(screen.getByLabelText("web_search API 키")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/저장된 검색 API 키 있음/)).toBeInTheDocument();
   });
 
-  it("shows CLI path field for claude-code-cli and no API key field", async () => {
+  it("renders the beginner AI setup guide with subscription policy links", async () => {
     renderSettings();
+
+    expect(await screen.findByText("AI 연결 마법사")).toBeInTheDocument();
+    expect(screen.getByText(/Claude와 Gemini 구독 로그인은/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /OpenAI Codex CLI 안내/ })).toHaveAttribute(
+      "href",
+      "https://developers.openai.com/codex/cli",
+    );
+  });
+
+  it("selecting the Claude API guide persists the API provider", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: /Claude API 키로 연결/ }));
+    await user.click(await screen.findByRole("button", { name: "Claude API 선택" }));
+
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ provider: "anthropic" }),
+    );
+    expect(await screen.findByText(/Claude 구독 하네스는 Linetta에서 지원하지 않습니다/)).toBeInTheDocument();
+  });
+
+  it("shows CLI path field only for the legacy claude-code-cli provider", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    expect(await screen.findByText("AI 연결 마법사")).toBeInTheDocument();
+    expect(screen.queryByLabelText("CLI 경로 (선택)")).not.toBeInTheDocument();
+    await clickAdvancedProvider(user, /Claude Code CLI/, "기존 설정 유지용");
+
     expect(await screen.findByLabelText("CLI 경로 (선택)")).toBeInTheDocument();
     expect(screen.queryByLabelText("API 키")).not.toBeInTheDocument();
   });
@@ -122,6 +190,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
+    await clickAdvancedProvider(user, /Claude Code CLI/, "기존 설정 유지용");
     await user.click(await screen.findByRole("button", { name: "자동 찾기" }));
 
     await waitFor(() => expect(mocks.providersDetectCli).toHaveBeenCalled());
@@ -137,7 +206,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByRole("button", { name: /OpenAI API/ }));
+    await clickAdvancedProvider(user, /OpenAI API/, "호환 엔드포인트");
     const baseUrl = await screen.findByLabelText("Base URL (선택)");
     await user.type(baseUrl, "https://api.minimax.io/v1");
     await user.tab();
@@ -153,7 +222,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByRole("button", { name: /Anthropic API/ }));
+    await clickAdvancedProvider(user, /Claude API/, "Anthropic Console API 키로 연결");
 
     await waitFor(() =>
       expect(mocks.settingsSet).toHaveBeenCalledWith({ provider: "anthropic" }),
@@ -166,7 +235,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByRole("button", { name: /OpenAI API/ }));
+    await clickAdvancedProvider(user, /OpenAI API/, "호환 엔드포인트");
     const modelInput = await screen.findByLabelText("모델");
     await user.type(modelInput, "gpt-4o");
     await user.tab(); // blur
@@ -185,7 +254,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByRole("button", { name: /Anthropic API/ }));
+    await clickAdvancedProvider(user, /Claude API/, "Anthropic Console API 키로 연결");
     await user.click(await screen.findByRole("button", { name: "모델 새로고침" }));
 
     await waitFor(() =>
@@ -194,5 +263,51 @@ describe("Settings", () => {
     await waitFor(() =>
       expect(document.querySelector('option[value="claude-sonnet-4-6"]')).not.toBeNull(),
     );
+  });
+
+  it("connection test persists unsaved provider drafts before pinging the provider", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await clickAdvancedProvider(user, /Claude API/, "Anthropic Console API 키로 연결");
+    await user.type(await screen.findByLabelText("API 키"), "sk-ant-test");
+    await user.type(screen.getByLabelText("모델"), "claude-sonnet-4-6");
+    await user.click(await screen.findByRole("button", { name: "연결 테스트" }));
+
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({
+        providers: {
+          anthropic: expect.objectContaining({
+            api_key: "sk-ant-test",
+          }),
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({
+        providers: {
+          anthropic: expect.objectContaining({
+            model: "claude-sonnet-4-6",
+          }),
+        },
+      }),
+    );
+    await waitFor(() => expect(mocks.providersTest).toHaveBeenCalledWith("anthropic"));
+    expect(await screen.findByText("연결 성공: 연결되었습니다")).toBeInTheDocument();
+  });
+
+  it("shows saved provider API key state without echoing the secret", async () => {
+    mocks.settingsGet.mockResolvedValue({
+      ...baseSettings,
+      provider: "anthropic",
+      web_search_api_key_set: false,
+      providers: { anthropic: { model: "claude-sonnet-4-6", api_key_set: true } },
+    });
+    renderSettings();
+
+    expect(await screen.findByText("API 키 저장됨")).toBeInTheDocument();
+    expect(screen.getByLabelText("API 키")).toHaveValue("");
+    expect(screen.getByPlaceholderText(/저장된 API 키 있음/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "키 삭제" })).toBeInTheDocument();
   });
 });

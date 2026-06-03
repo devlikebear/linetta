@@ -11,7 +11,7 @@ import (
 func newSettingsFixture(t *testing.T) *settings.Store {
 	t.Helper()
 	t.Setenv("LINETTA_HOME", t.TempDir())
-	s, err := settings.New()
+	s, err := settings.NewWithSecretStore(settings.NewMemorySecretStore())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestGetSettingsHandler_returnsDefaults(t *testing.T) {
 	if err := json.Unmarshal(res, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.Provider != "claude-code-cli" {
+	if got.Provider != "openai-codex" {
 		t.Errorf("provider = %q", got.Provider)
 	}
 	if got.BackupDir == "" {
