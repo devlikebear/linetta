@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./ZenMode.css";
 import { TiptapEditor, type TiptapHandle } from "./editor/Tiptap";
+import { localeForLanguage, useI18n } from "../lib/i18n";
 
 interface Props {
   initialDoc: object;
@@ -28,6 +29,8 @@ export function ZenMode({
   onMountEditor,
   onExit,
 }: Props) {
+  const { language, t } = useI18n();
+  const locale = localeForLanguage(language);
   const [showBar, setShowBar] = useState(false);
   const editorRef = useRef<TiptapHandle | null>(null);
   const hideTimer = useRef<number | null>(null);
@@ -83,7 +86,7 @@ export function ZenMode({
       )}
       <div className="zen-bar">
         <span>ZEN</span>
-        <span>{charCount}자 · 씬 {sceneLabel} · esc로 종료</span>
+        <span>{t("workspace.zenStatus", { count: charCount.toLocaleString(locale), scene: sceneLabel })}</span>
       </div>
       <div className="zen-col">
         <TiptapEditor

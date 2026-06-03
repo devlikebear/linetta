@@ -29,6 +29,7 @@ import { SearchModal } from "../components/SearchModal";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useToast } from "../components/ToastProvider";
+import { displayNodeLabel, localeForLanguage, useI18n } from "../lib/i18n";
 import {
   buildTree,
   findFirstLeaf,
@@ -77,6 +78,8 @@ export function Workspace() {
   const [load, setLoad] = useState<LoadState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
+  const { language, t } = useI18n();
+  const locale = localeForLanguage(language);
   const [charCount, setCharCount] = useState(0);
   const [typewriter, setTypewriter] = useState(false);
   const [focus, setFocus] = useState(false);
@@ -277,21 +280,21 @@ export function Workspace() {
 
   const handleRenameNode = useCallback(
     async (target: TreeNode) => {
-      const nextLabel = await promptDialog("새 이름", target.label);
+      const nextLabel = await promptDialog(t("workspace.prompt.renameLabel"), target.label);
       if (nextLabel === null) return;
       const label = nextLabel.trim();
       if (!label) return;
-      const nextTitle = await promptDialog("표시 제목", target.title);
+      const nextTitle = await promptDialog(t("workspace.prompt.displayTitle"), target.title);
       if (nextTitle === null) return;
       try {
         await nodes.rename(target.id, label, nextTitle.trim());
         await refreshTreeKeepNode(loadRef.current?.node.id ?? target.id);
-        showToast("이름이 변경되었습니다");
+        showToast(t("workspace.toast.renameSuccess"));
       } catch (e) {
-        showToast("이름 변경 실패: " + String(e));
+        showToast(t("workspace.toast.renameFailed", { error: String(e) }));
       }
     },
-    [promptDialog, refreshTreeKeepNode, showToast],
+    [promptDialog, refreshTreeKeepNode, showToast, t],
   );
 
   const handleCreateSceneFromOutline = useCallback(
@@ -303,18 +306,18 @@ export function Workspace() {
         let created: NodeRow;
         if (anchor.kind === "container") {
           const childLeaves = anchor.children.filter((n) => n.kind === "leaf");
-          created = await nodes.createChild(anchor.id, "leaf", `씬 ${childLeaves.length + 1}`, "");
+          created = await nodes.createChild(anchor.id, "leaf", t("workspace.sceneNumber", { number: childLeaves.length + 1 }), "");
         } else {
           const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (anchor.parent_id ?? null));
           const leafCount = siblings.filter((n) => n.kind === "leaf").length;
-          created = await nodes.createSibling(anchor.id, "leaf", `씬 ${leafCount + 1}`, "");
+          created = await nodes.createSibling(anchor.id, "leaf", t("workspace.sceneNumber", { number: leafCount + 1 }), "");
         }
         await refreshTreeAndNavigateTo(created.id);
       } catch (e) {
-        showToast("새 씬 생성 실패: " + String(e));
+        showToast(t("workspace.toast.createSceneFailed", { error: String(e) }));
       }
     },
-    [refreshTreeAndNavigateTo, showToast],
+    [refreshTreeAndNavigateTo, showToast, t],
   );
 
   const handleCreateChapterFromOutline = useCallback(
@@ -329,14 +332,14 @@ export function Workspace() {
         const reference = anchor.kind === "leaf" && parentContainer ? parentContainer : anchor;
         const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (reference.parent_id ?? null));
         const chapterCount = siblings.filter((n) => n.kind === "container").length;
-        const chapter = await nodes.createSibling(reference.id, "container", `${chapterCount + 1}장`, "");
-        const seeded = await nodes.createChild(chapter.id, "leaf", "씬 1", "");
+        const chapter = await nodes.createSibling(reference.id, "container", t("workspace.chapterNumber", { number: chapterCount + 1 }), "");
+        const seeded = await nodes.createChild(chapter.id, "leaf", t("workspace.sceneNumber", { number: 1 }), "");
         await refreshTreeAndNavigateTo(seeded.id);
       } catch (e) {
-        showToast("새 장 생성 실패: " + String(e));
+        showToast(t("workspace.toast.createChapterFailed", { error: String(e) }));
       }
     },
-    [refreshTreeAndNavigateTo, showToast],
+    [refreshTreeAndNavigateTo, showToast, t],
   );
 
   const handleMoveSceneFromOutline = useCallback(
@@ -352,10 +355,10 @@ export function Workspace() {
         }
         await refreshTreeKeepNode(current.node.id);
       } catch (e) {
-        showToast("씬 이동 실패: " + String(e));
+        showToast(t("workspace.toast.moveSceneFailed", { error: String(e) }));
       }
     },
-    [refreshTreeKeepNode, showToast],
+    [refreshTreeKeepNode, showToast, t],
   );
 
   const handleDeleteSceneFromOutline = useCallback(
@@ -363,7 +366,7 @@ export function Workspace() {
       if (target.kind !== "leaf") return;
       const current = loadRef.current;
       if (!current) return;
-      const ok = await confirmDialog(`"${target.label}" 씬을 삭제하시겠습니까?`);
+      const ok = await confirmDialog(t("workspace.confirm.deleteScene", { label: displayNodeLabel(language, target.label) }));
       if (!ok) return;
       try {
         const { prev, next } = leafNeighbors(current.tree, target.id);
@@ -378,12 +381,12 @@ export function Workspace() {
         } else {
           await refreshTreeKeepNode(current.node.id);
         }
-        showToast("씬이 삭제되었습니다");
+        showToast(t("workspace.toast.deleteSceneSuccess"));
       } catch (e) {
-        showToast("씬 삭제 실패: " + String(e));
+        showToast(t("workspace.toast.deleteSceneFailed", { error: String(e) }));
       }
     },
-    [confirmDialog, navigate, refreshTreeAndNavigateTo, refreshTreeKeepNode, showToast],
+    [confirmDialog, language, navigate, refreshTreeAndNavigateTo, refreshTreeKeepNode, showToast, t],
   );
 
   // Navigate without re-fetching the tree (used by outline click + leaf neighbor cmds).
@@ -392,7 +395,7 @@ export function Workspace() {
       if (!projectId) return;
       const leaf = "children" in target ? findFirstLeaf(target as TreeNode) : (target as NodeRow);
       if (!leaf) {
-        showToast("이동할 씬이 없습니다");
+        showToast(t("workspace.toast.noSceneToNavigate"));
         return;
       }
       const n = await nodes.get(leaf.id);
@@ -402,7 +405,7 @@ export function Workspace() {
       setCharCount(n.word_count);
       nodes.setLastOpened(projectId, n.id).catch(() => { /* benign */ });
     },
-    [projectId],
+    [projectId, showToast, t],
   );
 
   // Initial load.
@@ -446,12 +449,12 @@ export function Workspace() {
         ]).run();
         setEntitySheetId(created.id);
       } catch (err) {
-        showToast("엔티티 생성 실패: " + String(err));
+        showToast(t("workspace.toast.entityCreateFailed", { error: String(err) }));
       }
     };
     window.addEventListener("linetta:mention-pick-new", handler);
     return () => window.removeEventListener("linetta:mention-pick-new", handler);
-  }, [projectId]);
+  }, [projectId, showToast, t]);
 
   // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+I AI modal.
   useEffect(() => {
@@ -536,13 +539,13 @@ export function Workspace() {
         await nodes.updateContent(load.node.id, JSON.stringify(doc));
         await snapshots.createManual(load.node.id, JSON.stringify(doc));
         setSaveStatus({ kind: "saved", at: Date.now() });
-        showToast("스냅샷 저장됨");
+        showToast(t("workspace.toast.snapshotSaved"));
       } catch (e) {
         setSaveStatus({ kind: "error", message: String(e) });
         setError(String(e));
       }
     },
-    [load],
+    [load, showToast, t],
   );
 
   const handleAutoMentionScene = useCallback(async () => {
@@ -555,7 +558,7 @@ export function Workspace() {
       const allEntities = await entitiesApi.list(load.project.id);
       const result = autoMentionDoc(doc, allEntities);
       if (result.applied === 0) {
-        showToast("자동 언급할 등록 항목을 찾지 못했습니다");
+        showToast(t("workspace.toast.autoMentionNone"));
         return;
       }
       setSaveStatus({ kind: "saving" });
@@ -565,14 +568,14 @@ export function Workspace() {
       setCharCount(updated.word_count);
       await refreshMentioned(load.node.id);
       setSaveStatus({ kind: "saved", at: Date.now() });
-      showToast(`${result.applied}개 언급을 표시했습니다`);
+      showToast(t("workspace.toast.autoMentionApplied", { count: result.applied }));
     } catch (e) {
       setSaveStatus({ kind: "error", message: String(e) });
-      showToast("씬 스캔 실패: " + String(e));
+      showToast(t("workspace.toast.scanSceneFailed", { error: String(e) }));
     } finally {
       setAutoMentionBusy(false);
     }
-  }, [load, refreshMentioned, showToast]);
+  }, [load, refreshMentioned, showToast, t]);
 
   const handleSceneTitleCommit = useCallback(
     async (title: string) => {
@@ -582,11 +585,11 @@ export function Workspace() {
         await nodes.rename(load.node.id, load.node.label, nextTitle);
         await refreshTreeKeepNode(load.node.id);
       } catch (e) {
-        showToast("씬 이름 저장 실패: " + String(e));
+        showToast(t("workspace.toast.sceneTitleSaveFailed", { error: String(e) }));
         throw e;
       }
     },
-    [load, refreshTreeKeepNode, showToast],
+    [load, refreshTreeKeepNode, showToast, t],
   );
 
   const handleProjectTitleCommit = useCallback(
@@ -596,11 +599,11 @@ export function Workspace() {
         const updated = await projects.update({ id: load.project.id, title });
         setLoad((prev) => (prev ? { ...prev, project: updated } : prev));
       } catch (e) {
-        showToast("소설 제목 저장 실패: " + String(e));
+        showToast(t("workspace.toast.novelTitleSaveFailed", { error: String(e) }));
         throw e;
       }
     },
-    [load, showToast],
+    [load, showToast, t],
   );
 
   // --- AI generation (Cmd+I modal) ---
@@ -644,9 +647,9 @@ export function Workspace() {
       })
       .catch((err) => {
         if (reqId !== previewReqIdRef.current) return;
-        showToast(`컨텍스트 정보를 가져오지 못했습니다: ${err}`);
+        showToast(t("workspace.toast.contextLoadFailed", { error: String(err) }));
       });
-  }, [aiOptions, showToast]);
+  }, [aiOptions, showToast, t]);
   useEffect(() => { openAIModalRef.current = openAIModal; }, [openAIModal]);
 
   // Toggle the AI modal — mirrors the Cmd+I keyboard behaviour for the top-bar button.
@@ -701,7 +704,7 @@ export function Workspace() {
       (n) => (n.parent_id ?? null) === (load.node.parent_id ?? null),
     );
     const leafSiblings = siblingsOfCurrent.filter((n) => n.kind === "leaf");
-    const nextSceneLabel = `씬 ${leafSiblings.length + 1}`;
+    const nextSceneLabel = t("workspace.sceneNumber", { number: leafSiblings.length + 1 });
     const currentTreeNode = allNodes.find((n) => n.id === load.node.id) ?? ({ ...load.node, children: [] } as TreeNode);
     const parentContainer = currentTreeNode.parent_id
       ? allNodes.find((n) => n.id === currentTreeNode.parent_id && n.kind === "container")
@@ -710,37 +713,45 @@ export function Workspace() {
     const chapterSiblings = allNodes.filter(
       (n) => (n.parent_id ?? null) === (chapterReference.parent_id ?? null) && n.kind === "container",
     );
-    const nextChapterLabel = `${chapterSiblings.length + 1}장`;
+    const nextChapterLabel = t("workspace.chapterNumber", { number: chapterSiblings.length + 1 });
+    const sectionNavigation = t("workspace.command.section.navigation");
+    const sectionNode = t("workspace.command.section.node");
+    const sectionView = t("workspace.command.section.view");
+    const sectionProject = t("workspace.command.section.project");
+    const sectionExport = t("workspace.command.section.export");
+    const sectionHelp = t("workspace.command.section.help");
+    const noTarget = t("workspace.command.none");
 
     const cmds: Command[] = [];
     cmds.push({
       id: "go-prev",
-      section: "이동",
-      label: "이전 씬",
-      hint: prev ? prev.label : "(없음)",
+      section: sectionNavigation,
+      label: t("workspace.command.prevScene"),
+      hint: prev ? displayNodeLabel(language, prev.label) : noTarget,
       disabled: !prev,
       run: async () => { if (prev) await navigateToNode(prev); },
     });
     cmds.push({
       id: "go-next",
-      section: "이동",
-      label: "다음 씬",
-      hint: next ? next.label : "(없음)",
+      section: sectionNavigation,
+      label: t("workspace.command.nextScene"),
+      hint: next ? displayNodeLabel(language, next.label) : noTarget,
       disabled: !next,
       run: async () => { if (next) await navigateToNode(next); },
     });
     cmds.push({
       id: "global-search",
-      section: "이동",
-      label: "작품 전체 검색",
+      section: sectionNavigation,
+      label: t("workspace.command.globalSearch"),
       hint: "Cmd+F",
       run: () => setSearchOpen(true),
     });
     for (const leaf of allNodes.filter((n) => n.kind === "leaf").slice(0, 20)) {
+      const leafLabel = displayNodeLabel(language, leaf.label);
       cmds.push({
         id: `go-${leaf.id}`,
-        section: "이동",
-        label: `씬으로 이동: ${leaf.label}`,
+        section: sectionNavigation,
+        label: t("workspace.command.goToScene", { label: leafLabel }),
         hint: leaf.title || undefined,
         disabled: leaf.id === load.node.id,
         run: async () => navigateToNode(leaf),
@@ -749,22 +760,22 @@ export function Workspace() {
 
     cmds.push({
       id: "new-scene",
-      section: "노드",
-      label: `여기 옆에 새 씬 (${nextSceneLabel})`,
+      section: sectionNode,
+      label: t("workspace.command.newSceneBeside", { label: nextSceneLabel }),
       run: async () => { await handleCreateSceneFromOutline(currentTreeNode); },
     });
     cmds.push({
       id: "new-chapter",
-      section: "노드",
-      label: `여기 옆에 새 장 (${nextChapterLabel})`,
+      section: sectionNode,
+      label: t("workspace.command.newChapterBeside", { label: nextChapterLabel }),
       run: async () => { await handleCreateChapterFromOutline(currentTreeNode); },
     });
     cmds.push({
       id: "mark-thread",
-      section: "노드",
-      label: "이 씬을 새 Thread로 표시",
+      section: sectionNode,
+      label: t("workspace.markSceneAsThread"),
       run: async () => {
-        const name = await promptDialog("새 스토리라인 이름", load.node.title || load.node.label);
+        const name = await promptDialog(t("workspace.prompt.storylineName"), load.node.title || load.node.label);
         if (name === null) return;
         const trimmed = name.trim();
         if (!trimmed) return;
@@ -777,16 +788,16 @@ export function Workspace() {
           await beatsApi.create({ thread_id: t.id, node_id: load.node.id, label: "" });
           setThreadSheetId(t.id);
         } catch (e) {
-          showToast("스토리라인 생성 실패: " + String(e));
+          showToast(t("workspace.toast.storylineCreateFailed", { error: String(e) }));
         }
       },
     });
     cmds.push({
       id: "add-note",
-      section: "노드",
-      label: "여백 주석 추가",
+      section: sectionNode,
+      label: t("workspace.command.addMarginNote"),
       run: async () => {
-        const body = await promptDialog("여백 주석 본문", "");
+        const body = await promptDialog(t("workspace.prompt.noteBody"), "");
         if (body === null) return;
         const trimmed = body.trim();
         if (!trimmed) return;
@@ -801,144 +812,144 @@ export function Workspace() {
           if (sel) editorRef.current?.setSelection(sel);
           editorRef.current?.addNoteMarker(created.id);
         } catch (e) {
-          showToast("주석 추가 실패: " + String(e));
+          showToast(t("workspace.toast.noteCreateFailed", { error: String(e) }));
         }
       },
     });
     cmds.push({
       id: "rename",
-      section: "노드",
-      label: "이름 바꾸기",
+      section: sectionNode,
+      label: t("workspace.command.renameNode"),
       run: async () => { await handleRenameNode(currentTreeNode); },
     });
     cmds.push({
       id: "delete",
-      section: "노드",
-      label: "삭제",
+      section: sectionNode,
+      label: t("workspace.delete"),
       run: async () => { await handleDeleteSceneFromOutline(currentTreeNode); },
     });
     cmds.push({
       id: "move-up",
-      section: "노드",
-      label: "이 씬 위로",
+      section: sectionNode,
+      label: t("workspace.command.moveSceneUp"),
       run: async () => { await handleMoveSceneFromOutline(currentTreeNode, "up"); },
     });
     cmds.push({
       id: "move-down",
-      section: "노드",
-      label: "이 씬 아래로",
+      section: sectionNode,
+      label: t("workspace.command.moveSceneDown"),
       run: async () => { await handleMoveSceneFromOutline(currentTreeNode, "down"); },
     });
     cmds.push({
       id: "view-outline",
-      section: "보기",
-      label: railCollapsed ? "아웃라인 펼치기" : "아웃라인 접기",
+      section: sectionView,
+      label: railCollapsed ? t("workspace.outlineExpand") : t("workspace.outlineCollapse"),
       run: () => setRailCollapsed((v) => !v),
     });
     cmds.push({
       id: "view-threads",
-      section: "보기",
-      label: "흐름 (Thread View)",
+      section: sectionView,
+      label: t("workspace.command.flowThreadView"),
       run: () => navigate(`/workspace/${load.project.id}/threads`),
     });
     cmds.push({
       id: "version-restore",
-      section: "프로젝트",
-      label: "이 씬의 이전 버전",
-      hint: "복원",
+      section: sectionProject,
+      label: t("workspace.command.sceneVersions"),
+      hint: t("workspace.command.restore"),
       run: () => setVersionSheetNodeId(load.node.id),
     });
     cmds.push({
       id: "export-project",
-      section: "내보내기",
-      label: "프로젝트 (.md)",
+      section: sectionExport,
+      label: t("workspace.command.exportProject"),
       run: async () => {
         try {
           const payload = await exportApi.project(load.project.id);
           const path = await saveExportedMarkdown(payload);
-          if (path) showToast("내보내기 완료");
+          if (path) showToast(t("workspace.toast.exportComplete"));
         } catch (e) {
-          showToast("내보내기 실패: " + String(e));
+          showToast(t("workspace.toast.exportFailed", { error: String(e) }));
         }
       },
     });
     cmds.push({
       id: "export-node",
-      section: "내보내기",
-      label: "이 씬 (.md)",
+      section: sectionExport,
+      label: t("workspace.command.exportScene"),
       run: async () => {
         try {
           const payload = await exportApi.node(load.node.id);
           const path = await saveExportedMarkdown(payload);
-          if (path) showToast("내보내기 완료");
+          if (path) showToast(t("workspace.toast.exportComplete"));
         } catch (e) {
-          showToast("내보내기 실패: " + String(e));
+          showToast(t("workspace.toast.exportFailed", { error: String(e) }));
         }
       },
     });
     cmds.push({
       id: "go-settings",
-      section: "프로젝트",
-      label: "설정 열기",
+      section: sectionProject,
+      label: t("workspace.command.openSettings"),
       run: () => navigate("/settings"),
     });
     cmds.push({
       id: "git-sync-now",
-      section: "프로젝트",
-      label: "지금 GitHub로 동기화",
+      section: sectionProject,
+      label: t("workspace.command.syncNow"),
       run: async () => {
         try {
           const res = await gitSync.run();
           if (res.skipped) {
-            showToast("동기화 비활성화 — 설정에서 git 폴더를 지정하세요");
+            showToast(t("workspace.toast.syncDisabled"));
             return;
           }
           if (res.error) {
-            showToast(`동기화 오류: ${res.error}`);
+            showToast(t("workspace.toast.syncError", { error: res.error }));
             return;
           }
           if (!res.committed) {
-            showToast(`변경 없음 (${res.files_written}개 파일 점검 완료)`);
+            showToast(t("workspace.toast.syncNoChanges", { count: res.files_written }));
             return;
           }
           if (res.pushed) {
-            showToast(`${res.files_written}개 파일 동기화 완료 (push OK)`);
+            showToast(t("workspace.toast.syncPushed", { count: res.files_written }));
           } else {
-            showToast(`${res.files_written}개 파일 커밋됨 — push 실패`);
+            showToast(t("workspace.toast.syncCommittedPushFailed", { count: res.files_written }));
           }
         } catch (e) {
-          showToast("동기화 실패: " + String(e));
+          showToast(t("workspace.toast.syncFailed", { error: String(e) }));
         }
       },
     });
     cmds.push({
       id: "enter-zen",
-      section: "보기",
-      label: "ZEN 모드 열기",
-      hint: "ESC로 종료",
+      section: sectionView,
+      label: t("workspace.command.openZen"),
+      hint: t("workspace.command.exitEsc"),
       run: enterZen,
     });
     cmds.push({
       id: "toggle-focus",
-      section: "보기",
-      label: focus ? "Focus 모드 끄기" : "Focus 모드 켜기",
+      section: sectionView,
+      label: focus ? t("workspace.command.toggleFocusOff") : t("workspace.command.toggleFocusOn"),
       run: () => setFocus((v) => !v),
     });
     cmds.push({
       id: "toggle-companion",
       section: "AI",
-      label: companionOpen ? "컴패니언 닫기" : "집필 컴패니언 열기",
+      label: companionOpen ? t("workspace.command.closeCompanion") : t("workspace.command.openWritingCompanion"),
       hint: "Cmd+J",
       run: () => setCompanionOpen((v) => !v),
     });
     cmds.push({
       id: "show-shortcuts",
-      section: "도움말",
-      label: "단축키 도움말",
+      section: sectionHelp,
+      label: t("workspace.command.shortcutHelp"),
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, handleCreateSceneFromOutline, handleCreateChapterFromOutline, handleRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, handleCreateSceneFromOutline, handleCreateChapterFromOutline, handleRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, showToast, language, t]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -947,11 +958,11 @@ export function Workspace() {
     const chain: string[] = [];
     let cur: TreeNode | undefined = byId.get(load.node.id);
     while (cur) {
-      chain.unshift(cur.label);
+      chain.unshift(displayNodeLabel(language, cur.label));
       cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
     }
     return chain;
-  }, [load]);
+  }, [language, load]);
 
   // Scene-marker text shown above the editor title (uppercase mono path).
   const sceneMarker = useMemo(
@@ -965,7 +976,7 @@ export function Workspace() {
   if (error) {
     return (
       <main className="shell">
-        <p><Link to="/">← Library</Link></p>
+        <p><Link to="/">← {t("settings.backToLibrary")}</Link></p>
         <p className="error">{error}</p>
       </main>
     );
@@ -973,10 +984,13 @@ export function Workspace() {
   if (!load) {
     return (
       <main className="shell">
-        <p className="hint">불러오는 중…</p>
+        <p className="hint">{t("common.loading")}</p>
       </main>
     );
   }
+
+  const currentNodeLabel = displayNodeLabel(language, load.node.label);
+  const currentSceneTitle = load.node.title || currentNodeLabel;
 
   return (
     <main className="workspace">
@@ -1002,7 +1016,7 @@ export function Workspace() {
           <button
             type="button"
             className="ws-tool icon-only"
-            title="검색 (Cmd+F)"
+            title={t("workspace.searchShortcut")}
             onClick={() => setSearchOpen(true)}
           >
             <Search size={16} />
@@ -1010,7 +1024,7 @@ export function Workspace() {
           <button
             type="button"
             className="ws-tool icon-only"
-            title="명령 팔레트 (Cmd+P)"
+            title={t("workspace.commandPaletteShortcut")}
             onClick={() => setPaletteOpen((v) => !v)}
           >
             <CommandIcon size={16} />
@@ -1028,7 +1042,7 @@ export function Workspace() {
             className={`ws-tool${companionOpen ? " is-active" : ""}`}
             onClick={() => setCompanionOpen((v) => !v)}
           >
-            <MessageCircle size={15} /> 컴패니언 <span className="kbd">⌘J</span>
+            <MessageCircle size={15} /> {t("workspace.companion")} <span className="kbd">⌘J</span>
           </button>
           <div className="ws-sep" />
           <button type="button" className="ws-tool" onClick={enterZen}>
@@ -1061,13 +1075,13 @@ export function Workspace() {
             </div>
             <h1 className="scene-title">
               <InlineEditableText
-                value={load.node.title || load.node.label}
-                ariaLabel="씬 이름"
+                value={currentSceneTitle}
+                ariaLabel={t("workspace.sceneName")}
                 className="scene-title-input"
                 onCommit={handleSceneTitleCommit}
               />
             </h1>
-            {load.node.title && <div className="scene-sub">{load.node.label}</div>}
+            {load.node.title && <div className="scene-sub">{currentNodeLabel}</div>}
             <TiptapEditor
               key={load.node.id}
               ref={editorRef}
@@ -1089,9 +1103,9 @@ export function Workspace() {
             />
           </div>
           <div className="editor-foot">
-            <span>{load.node.title || load.node.label}</span>
+            <span>{currentSceneTitle}</span>
             <span>·</span>
-            <span>{charCount}자</span>
+            <span>{t("workspace.charCount", { count: charCount.toLocaleString(locale) })}</span>
           </div>
         </section>
         {aiModal && load ? (
@@ -1232,7 +1246,7 @@ export function Workspace() {
             const docStr = updatedNode.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`;
             setLoad((prev) => prev ? { ...prev, node: updatedNode, initialDoc: JSON.parse(docStr) } : prev);
             setCharCount(updatedNode.word_count);
-            showToast("이전 버전으로 복원되었습니다");
+            showToast(t("workspace.toast.versionRestored"));
           }}
         />
       )}
@@ -1242,7 +1256,7 @@ export function Workspace() {
           initialDoc={load.initialDoc}
           initialSelection={savedSelectionRef.current}
           charCount={charCount}
-          sceneLabel={load.node.label}
+          sceneLabel={currentNodeLabel}
           onChange={(doc) => { debouncedSave(doc); }}
           onCharCount={setCharCount}
           onManualSave={handleManualSave}
@@ -1267,6 +1281,7 @@ export function Workspace() {
 }
 
 function DialogModal({ dialog, onClose }: { dialog: DialogState; onClose: () => void }) {
+  const { t } = useI18n();
   const [value, setValue] = useState(dialog.kind === "prompt" ? dialog.initial : "");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -1311,8 +1326,8 @@ function DialogModal({ dialog, onClose }: { dialog: DialogState; onClose: () => 
           />
         )}
         <div className="dialog-actions">
-          <button type="button" onClick={handleCancel}>취소</button>
-          <button type="button" className="primary" onClick={handleConfirm}>확인</button>
+          <button type="button" onClick={handleCancel}>{t("common.cancel")}</button>
+          <button type="button" className="primary" onClick={handleConfirm}>{t("common.confirm")}</button>
         </div>
       </div>
     </div>

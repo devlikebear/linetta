@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../../lib/i18n";
 import { CompanionPanel } from "./CompanionPanel";
 
 const companionState = vi.hoisted(() => ({
@@ -22,13 +23,31 @@ const companionState = vi.hoisted(() => ({
     compact: vi.fn(),
   },
 }));
+const mocks = vi.hoisted(() => ({
+  settingsGet: vi.fn(),
+}));
 
 vi.mock("../../hooks/useCompanion", () => ({
   useCompanion: () => companionState.value,
 }));
 
+vi.mock("../../lib/rpc", () => ({
+  settings: {
+    get: mocks.settingsGet,
+  },
+}));
+
+function renderPanel() {
+  return render(
+    <I18nProvider>
+      <CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />
+    </I18nProvider>,
+  );
+}
+
 describe("CompanionPanel", () => {
   beforeEach(() => {
+    mocks.settingsGet.mockResolvedValue({ language: "ko" });
     companionState.value = {
       messages: [],
       streaming: "",
@@ -48,7 +67,7 @@ describe("CompanionPanel", () => {
 
   it("shows a working indicator while streaming even before any prose", () => {
     companionState.value = { ...companionState.value, status: "streaming", streaming: "", thinking: "" };
-    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    renderPanel();
     expect(screen.getByText("생각 중…")).toBeInTheDocument();
   });
 
@@ -59,14 +78,14 @@ describe("CompanionPanel", () => {
       streaming: "초안",
       reasoning: "주인공의 동기를 먼저 정한다",
     };
-    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    renderPanel();
     expect(screen.getByText("추론 중…")).toBeInTheDocument();
     expect(screen.getByText("주인공의 동기를 먼저 정한다")).toBeInTheDocument();
   });
 
   it("sends non-empty messages", async () => {
     const user = userEvent.setup();
-    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    renderPanel();
 
     await user.type(screen.getByPlaceholderText(/메시지/), "도와줘");
     await user.click(screen.getByRole("button", { name: "전송" }));
@@ -82,7 +101,7 @@ describe("CompanionPanel", () => {
       streaming: "확인 중\n```linetta-query\n{}\n```\n숨겨질 내용",
     };
 
-    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    renderPanel();
 
     expect(screen.getByText(/씬 조회 중/)).toBeInTheDocument();
     expect(screen.getByText("확인 중")).toBeInTheDocument();
@@ -104,7 +123,7 @@ describe("CompanionPanel", () => {
       }],
     };
 
-    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    renderPanel();
 
     expect(screen.getByText("제안")).toBeInTheDocument();
     expect(screen.getByText("스토리라인 생성: 추적자")).toBeInTheDocument();
@@ -126,7 +145,7 @@ describe("CompanionPanel", () => {
       }],
     };
 
-    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    renderPanel();
 
     expect(screen.getByText("새 제목?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "직접 입력" })).toBeInTheDocument();
@@ -146,7 +165,7 @@ describe("CompanionPanel", () => {
       ],
     };
 
-    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    renderPanel();
 
     await user.click(screen.getByRole("button", { name: "대화 복사" }));
 
@@ -164,12 +183,23 @@ describe("CompanionPanel", () => {
       ],
     };
 
-    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+    renderPanel();
 
     await user.click(screen.getByRole("button", { name: "대화 압축" }));
     await user.click(screen.getByRole("button", { name: "대화 클리어" }));
 
     expect(companionState.value.compact).toHaveBeenCalledOnce();
     expect(companionState.value.clear).toHaveBeenCalledOnce();
+  });
+
+  it("renders companion controls in English when selected", async () => {
+    mocks.settingsGet.mockResolvedValue({ language: "en" });
+
+    renderPanel();
+
+    expect(await screen.findByText("Writing companion")).toBeInTheDocument();
+    expect(screen.getByText("Ask anything or shape the plot together.")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Message... (Enter to send, Shift+Enter for line break)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { notes as notesApi } from "../lib/rpc";
 import type { Note } from "../lib/types";
+import { useI18n } from "../lib/i18n";
 import "./NotePopover.css";
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function NotePopover({ noteId, targetEl, mode, onClose, onSaved, onDeleted }: Props) {
+  const { t } = useI18n();
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const [note, setNote] = useState<Note | null>(null);
   const [draft, setDraft] = useState("");
@@ -96,9 +98,9 @@ export function NotePopover({ noteId, targetEl, mode, onClose, onSaved, onDelete
             disabled={busy}
           />
           <div className="note-actions">
-            <button type="button" className="btn ghost sm note-danger" onClick={remove} disabled={busy}>삭제</button>
+            <button type="button" className="btn ghost sm note-danger" onClick={remove} disabled={busy}>{t("workspace.delete")}</button>
             <span className="spacer" />
-            <button type="button" className="btn accent sm" onClick={save} disabled={busy || !draft.trim()}>저장</button>
+            <button type="button" className="btn accent sm" onClick={save} disabled={busy || !draft.trim()}>{t("common.save")}</button>
           </div>
         </>
       )}

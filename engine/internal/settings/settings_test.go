@@ -29,6 +29,9 @@ func TestLoad_missingFileReturnsDefaults(t *testing.T) {
 	if got.Provider != "openai-codex" {
 		t.Errorf("provider = %q, want openai-codex", got.Provider)
 	}
+	if got.Language != "ko" {
+		t.Errorf("language = %q, want ko", got.Language)
+	}
 	if got.TypewriterDefault != false {
 		t.Errorf("typewriter_default = %v", got.TypewriterDefault)
 	}
@@ -71,6 +74,33 @@ func TestSet_rejectsUnknownProvider(t *testing.T) {
 	_, err := s.Set(context.Background(), Patch{Provider: strPtr("bad-provider")})
 	if err == nil {
 		t.Error("expected validation error")
+	}
+}
+
+func TestSet_language_persists(t *testing.T) {
+	s := newStoreOnTemp(t)
+	if _, err := s.Set(context.Background(), Patch{Language: strPtr("ja")}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, _ := s.Get(context.Background())
+	if got.Language != "ja" {
+		t.Errorf("language in-memory = %q, want ja", got.Language)
+	}
+	s2, err := New()
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	reloaded, _ := s2.Get(context.Background())
+	if reloaded.Language != "ja" {
+		t.Errorf("language not persisted across reload: %q", reloaded.Language)
+	}
+}
+
+func TestSet_rejectsUnknownLanguage(t *testing.T) {
+	s := newStoreOnTemp(t)
+	_, err := s.Set(context.Background(), Patch{Language: strPtr("fr")})
+	if err == nil {
+		t.Fatal("expected validation error")
 	}
 }
 

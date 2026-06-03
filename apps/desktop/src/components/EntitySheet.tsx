@@ -3,6 +3,7 @@ import type { Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput 
 import { entities, relationships } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
 import { X, Plus, User, MapPin, Box, Lightbulb } from "../lib/icons";
+import { displayNodeLabel, entityKindLabel, entityRolePresets, useI18n } from "../lib/i18n";
 import "./EntitySheet.css";
 
 interface Props {
@@ -12,25 +13,15 @@ interface Props {
   onNavigate?: (nodeId: string) => void;
 }
 
-const KIND_META: Record<EntityKind, { label: string; color: string; Icon: typeof User }> = {
-  character: { label: "인물", color: "var(--t-sienna)", Icon: User },
-  place: { label: "장소", color: "var(--t-teal)", Icon: MapPin },
-  item: { label: "물건", color: "var(--t-olive)", Icon: Box },
-  concept: { label: "개념", color: "var(--t-plum)", Icon: Lightbulb },
+const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
+  character: { color: "var(--t-sienna)", Icon: User },
+  place: { color: "var(--t-teal)", Icon: MapPin },
+  item: { color: "var(--t-olive)", Icon: Box },
+  concept: { color: "var(--t-plum)", Icon: Lightbulb },
 };
-
-const ROLE_PRESETS: Partial<Record<EntityKind, string[]>> = {
-  character: ["주인공", "공동 주인공", "조연", "빌런", "라이벌", "멘토", "조력자"],
-  place: ["메인무대", "특별한 장소", "일상 거점", "위험 구역", "금지된 장소", "기억의 장소"],
-};
-
-function rolePlaceholder(kind: EntityKind) {
-  if (kind === "place") return "역할 (예: 메인무대)";
-  if (kind === "character") return "역할 (예: 주인공)";
-  return "역할";
-}
 
 export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
+  const { language, t } = useI18n();
   const [entity, setEntity] = useState<Entity | null>(null);
   const [draft, setDraft] = useState<UpdateEntityInput | null>(null);
   const [attrRows, setAttrRows] = useState<{ key: string; value: string }[]>([]);
@@ -118,21 +109,26 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
   const kind = (draft?.kind ?? entity?.kind ?? "character") as EntityKind;
   const meta = KIND_META[kind];
   const HeadIcon = meta.Icon;
-  const rolePresets = ROLE_PRESETS[kind] ?? [];
+  const rolePresets = entityRolePresets(language, kind);
+  const rolePlaceholder = kind === "place"
+    ? t("entity.rolePlacePlaceholder")
+    : kind === "character"
+      ? t("entity.roleCharacterPlaceholder")
+      : t("entity.role");
 
   return (
     <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
         <span className="ttl">
-          <span className="ic"><HeadIcon size={16} /></span> 엔티티 편집
+          <span className="ic"><HeadIcon size={16} /></span> {t("entity.title")}
         </span>
-        <button type="button" className="panel-close" onClick={onClose} aria-label="닫기">
+        <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}>
           <X size={16} />
         </button>
       </div>
 
       {error && <p className="es-error">{error}</p>}
-      {!entity && !error && <p className="es-loading">불러오는 중…</p>}
+      {!entity && !error && <p className="es-loading">{t("common.loading")}</p>}
 
       {entity && draft && (
         <>
@@ -147,7 +143,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                     className="es-name"
                     value={draft.name ?? ""}
                     onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                    placeholder="이름"
+                    placeholder={t("entity.namePlaceholder")}
                   />
                   <div className="es-kindrow">
                     <label className="es-kind-chip">
@@ -157,7 +153,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                         onChange={(e) => setDraft({ ...draft, kind: e.target.value as EntityKind })}
                       >
                         {(Object.keys(KIND_META) as EntityKind[]).map((k) => (
-                          <option key={k} value={k}>{KIND_META[k].label}</option>
+                          <option key={k} value={k}>{entityKindLabel(language, k)}</option>
                         ))}
                       </select>
                     </label>
@@ -165,11 +161,11 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                       className="es-role"
                       value={draft.role ?? ""}
                       onChange={(e) => setDraft({ ...draft, role: e.target.value })}
-                      placeholder={rolePlaceholder(kind)}
+                      placeholder={rolePlaceholder}
                     />
                   </div>
                   {rolePresets.length > 0 && (
-                    <div className="es-role-presets" aria-label="핵심 역할 프리셋">
+                    <div className="es-role-presets" aria-label={t("entity.rolePresets")}>
                       {rolePresets.map((role) => (
                         <button
                           key={role}
@@ -187,7 +183,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
             </div>
 
             <div className="sec es-field">
-              <h4>요약</h4>
+              <h4>{t("entity.summary")}</h4>
               <textarea
                 value={draft.summary ?? ""}
                 onChange={(e) => setDraft({ ...draft, summary: e.target.value })}
@@ -196,14 +192,14 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
             </div>
 
             <div className="sec es-field">
-              <h4>속성</h4>
+              <h4>{t("entity.attributes")}</h4>
               <div className="attr-grid">
                 {attrRows.map((row, i) => (
                   <div className="attr-row" key={i}>
                     <input
                       className="attr-k"
                       value={row.key}
-                      placeholder="키 (예: 나이)"
+                      placeholder={t("entity.keyPlaceholder")}
                       onChange={(e) => {
                         const next = [...attrRows];
                         next[i] = { ...row, key: e.target.value };
@@ -212,7 +208,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                     />
                     <input
                       value={row.value}
-                      placeholder="값 (예: 32)"
+                      placeholder={t("entity.valuePlaceholder")}
                       onChange={(e) => {
                         const next = [...attrRows];
                         next[i] = { ...row, value: e.target.value };
@@ -223,7 +219,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                       type="button"
                       className="attr-del"
                       onClick={() => setAttrRows(attrRows.filter((_, j) => j !== i))}
-                      aria-label="삭제"
+                      aria-label={t("workspace.delete")}
                     >
                       <X size={13} />
                     </button>
@@ -234,14 +230,14 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                   className="attr-add"
                   onClick={() => setAttrRows([...attrRows, { key: "", value: "" }])}
                 >
-                  <Plus size={13} /> 속성 추가
+                  <Plus size={13} /> {t("entity.addAttribute")}
                 </button>
               </div>
             </div>
 
             <div className="sec">
-              <h4>관계</h4>
-              {rels.length === 0 && <p className="sec-empty">아직 관계가 없어요</p>}
+              <h4>{t("entity.relationships")}</h4>
+              {rels.length === 0 && <p className="sec-empty">{t("entity.noRelationships")}</p>}
               {rels.length > 0 && (
                 <ul className="rel-list">
                   {rels.map((r) => {
@@ -256,7 +252,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                         <button
                           type="button"
                           className="attr-del"
-                          aria-label="삭제"
+                          aria-label={t("workspace.delete")}
                           onClick={async () => {
                             await relationships.delete(r.id);
                             if (entity) await refreshRels(entity.id);
@@ -274,7 +270,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                 className="rel-add"
                 onClick={() => setPickerOpen(true)}
               >
-                <Plus size={13} /> 관계 추가
+                <Plus size={13} /> {t("entity.addRelationship")}
               </button>
               {pickerOpen && entity && (
                 <RelationshipPicker
@@ -289,9 +285,9 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
             </div>
 
             <div className="sec">
-              <h4>등장 씬 <span style={{ color: "var(--muted-2)" }}>{scenes.length}</span></h4>
+              <h4>{t("entity.mentions")} <span style={{ color: "var(--muted-2)" }}>{scenes.length}</span></h4>
               {scenes.length === 0 ? (
-                <p className="sec-empty">아직 등장한 씬이 없어요</p>
+                <p className="sec-empty">{t("entity.noMentions")}</p>
               ) : (
                 <div className="scene-chips">
                   {scenes.map((s) => (
@@ -301,7 +297,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
                       className="scene-chip"
                       onClick={() => onNavigate?.(s.node_id)}
                     >
-                      {s.label}
+                      {displayNodeLabel(language, s.label)}
                     </button>
                   ))}
                 </div>
@@ -311,9 +307,9 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
 
           <div className="panel-foot">
             <span className="spacer" />
-            <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>취소</button>
+            <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>{t("common.cancel")}</button>
             <button type="button" className="btn accent sm" onClick={onSave} disabled={saving}>
-              {saving ? "저장 중…" : "저장"}
+              {saving ? t("common.saving") : t("common.save")}
             </button>
           </div>
         </>

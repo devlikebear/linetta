@@ -1,7 +1,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { projects as projectsApi } from "../lib/rpc";
-import type { LengthTarget, Project } from "../lib/types";
+import type { Project } from "../lib/types";
+import { formatWordCount, lengthLabel, useI18n } from "../lib/i18n";
 
 type Tab = "active" | "archived";
 
@@ -13,21 +14,8 @@ const SPINE_COLORS = [
   "var(--t-olive)",
 ];
 
-const LENGTH_LABEL: Record<LengthTarget, string> = {
-  flash: "플래시",
-  short: "단편",
-  novella: "중편",
-  novel: "장편",
-  series: "시리즈",
-};
-
-function humanCount(words: number): string {
-  if (words === 0) return "초안 시작 전";
-  if (words < 10_000) return `${words.toLocaleString("ko-KR")}자`;
-  return `${(words / 1000).toFixed(0)}k자`;
-}
-
 export function LibraryAll() {
+  const { language, t } = useI18n();
   const [tab, setTab] = useState<Tab>("active");
   const [items, setItems] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -56,8 +44,8 @@ export function LibraryAll() {
   return (
     <main className="library fade-in">
       <header className="lib-top">
-        <Link to="/" className="lib-shelf-all">← Library</Link>
-        <div className="lib-brandmark">전체 라이브러리</div>
+        <Link to="/" className="lib-shelf-all">← {t("settings.backToLibrary")}</Link>
+        <div className="lib-brandmark">{t("library.allProjects").replace(" →", "")}</div>
         <div className="lib-top-actions" />
       </header>
 
@@ -67,24 +55,26 @@ export function LibraryAll() {
             className={`btn ${tab === "active" ? "accent" : "ghost"}`}
             onClick={() => setTab("active")}
           >
-            진행 중
+            {t("library.active")}
           </button>
           <button
             className={`btn ${tab === "archived" ? "accent" : "ghost"}`}
             onClick={() => setTab("archived")}
           >
-            보관됨
+            {t("library.archived")}
           </button>
         </div>
 
         {error && <p className="error">{error}</p>}
 
         <div className="lib-shelf-head">
-          <span className="lib-shelf-title">{tab === "active" ? "진행 중" : "보관됨"} · {items.length}개</span>
+          <span className="lib-shelf-title">
+            {t("library.itemCount", { label: tab === "active" ? t("library.active") : t("library.archived"), count: items.length })}
+          </span>
         </div>
 
         {items.length === 0 ? (
-          <p className="hint">없음</p>
+          <p className="hint">{t("library.empty")}</p>
         ) : (
           <div className="lib-grid">
             {items.map((p, i) => (
@@ -96,8 +86,8 @@ export function LibraryAll() {
               >
                 <h3 className="book-title">{p.title}</h3>
                 <div className="book-spacer" />
-                <div className="book-scenes">{LENGTH_LABEL[p.length_target]}</div>
-                <div className="book-meta">{humanCount(p.word_count)}</div>
+                <div className="book-scenes">{lengthLabel(language, p.length_target)}</div>
+                <div className="book-meta">{formatWordCount(language, p.word_count)}</div>
                 {tab === "active" && (
                   <div
                     className="lib-shelf-all"
@@ -112,7 +102,7 @@ export function LibraryAll() {
                       }
                     }}
                   >
-                    아카이브
+                    {t("library.archive")}
                   </div>
                 )}
               </button>

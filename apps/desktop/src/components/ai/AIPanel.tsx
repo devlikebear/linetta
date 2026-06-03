@@ -4,6 +4,7 @@ import type { AIContextPreview, AIContextSelection, AIOptions } from "../../lib/
 import type { CommitMode } from "../../lib/editor/commitGenerated";
 import type { GenStatus, GenVariation } from "../../lib/editor/useAIGeneration";
 import { TONE_PRESETS } from "../../lib/tonePresets";
+import { toneLabel, useI18n } from "../../lib/i18n";
 import { AIContextChecklistList } from "./AIContextChecklist";
 import "./AIPanel.css";
 
@@ -28,13 +29,8 @@ interface Props {
   showChecklist: boolean;
 }
 
-const MODE_LABEL: Record<CommitMode, string> = {
-  replace: "대체",
-  insert: "삽입",
-  replaceAll: "전체교체",
-};
-
 export function AIPanel(props: Props) {
+  const { language, t } = useI18n();
   const [prompt, setPrompt] = useState("");
   const [variationsOn, setVariationsOn] = useState(false);
   const [shake, setShake] = useState(false);
@@ -49,6 +45,7 @@ export function AIPanel(props: Props) {
   const current = props.variations[props.currentIdx];
   const acceptable = !!current && current.done && !current.error && current.text.trim().length > 0;
   const canRun = !isRunning;
+  const modeLabel = (mode: CommitMode) => t(`ai.mode.${mode}`);
 
   const run = () => {
     if (!canRun) return;
@@ -99,8 +96,8 @@ export function AIPanel(props: Props) {
   return (
     <aside className="panel" onKeyDown={onKeyDown}>
       <div className="panel-head">
-        <span className="ttl"><span className="ic"><Sparkles size={16} /></span> AI 생성</span>
-        <button type="button" className="panel-close" onClick={props.onCancel} aria-label="닫기"><X size={16} /></button>
+        <span className="ttl"><span className="ic"><Sparkles size={16} /></span> {t("ai.title")}</span>
+        <button type="button" className="panel-close" onClick={props.onCancel} aria-label={t("common.close")}><X size={16} /></button>
       </div>
 
       <div className="panel-scroll" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
@@ -113,7 +110,7 @@ export function AIPanel(props: Props) {
                 onClick={() => props.onModeChange("insert")}
                 disabled={isRunning}
               >
-                삽입
+                {t("ai.mode.insert")}
               </button>
               <button
                 type="button"
@@ -121,18 +118,18 @@ export function AIPanel(props: Props) {
                 onClick={() => props.onModeChange("replaceAll")}
                 disabled={isRunning}
               >
-                전체교체
+                {t("ai.mode.replaceAll")}
               </button>
             </>
           ) : (
-            <span className="ai-mode-pill on">모드 · {MODE_LABEL[props.mode]}</span>
+            <span className="ai-mode-pill on">{t("ai.mode.label", { mode: modeLabel(props.mode) })}</span>
           )}
         </div>
 
         <textarea
           ref={textareaRef}
           className={`ai-textarea${shake ? " shake" : ""}`}
-          placeholder="프롬프트를 입력하세요…"
+          placeholder={t("ai.promptPlaceholder")}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={onTextareaKeyDown}
@@ -147,8 +144,10 @@ export function AIPanel(props: Props) {
               onChange={(e) => props.onOptionsChange({ ...props.options, tone: e.target.value as AIOptions["tone"] })}
               disabled={isRunning}
             >
-              {TONE_PRESETS.map((t) => (
-                <option key={t.id} value={t.id}>톤: {t.label}</option>
+              {TONE_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {t("ai.tonePrefix", { tone: toneLabel(language, preset.id) })}
+                </option>
               ))}
             </select>
           </span>
@@ -159,17 +158,17 @@ export function AIPanel(props: Props) {
             aria-pressed={props.options.short_form}
             disabled={isRunning}
           >
-            {props.options.short_form ? "길이: 한 문단" : "길이: 자유"}
+            {props.options.short_form ? t("ai.length.short") : t("ai.length.free")}
           </button>
           <button
             type="button"
             className={`chip${variationsOn ? " on" : ""}`}
             onClick={() => setVariationsOn((v) => !v)}
             aria-pressed={variationsOn}
-            title="3개 변형 병렬 생성 (토큰 3배)"
+            title={t("ai.variationsTitle")}
             disabled={isRunning}
           >
-            변형 ×3
+            {t("ai.variations")}
           </button>
           <button type="button" className="chip ctx" onClick={props.onContextClick}>
             <Layers size={13} /> ctx {props.contextItemCount}
@@ -188,13 +187,13 @@ export function AIPanel(props: Props) {
         {isRunning && !current?.text && !current?.error ? (
           <div className="ai-result">
             <span className="ai-working">
-              <span className="ai-working-dot" aria-hidden="true" /> AI 생성 중…
+              <span className="ai-working-dot" aria-hidden="true" /> {t("ai.generating")}
             </span>
           </div>
         ) : hasResult ? (
           <div className="ai-result">
             {current?.error ? (
-              <span className="ai-result-empty">(오류: {current.error})</span>
+              <span className="ai-result-empty">{t("ai.error", { error: current.error })}</span>
             ) : (
               <>
                 {current?.text}
@@ -205,7 +204,7 @@ export function AIPanel(props: Props) {
         ) : (
           <div className="ai-result">
             <span className="ai-result-empty">
-              생성 결과가 여기에 나타납니다. 선택한 컨텍스트 {props.contextItemCount}개가 함께 전달돼요.
+              {t("ai.emptyResult", { count: props.contextItemCount })}
             </span>
           </div>
         )}
@@ -214,26 +213,26 @@ export function AIPanel(props: Props) {
       <div className="panel-foot">
         {hasResult && props.variations.length > 1 && (
           <div className="ai-nav">
-            <button type="button" onClick={() => props.onSwitch(-1)} aria-label="이전 변형"><ArrowLeft size={13} /></button>
+            <button type="button" onClick={() => props.onSwitch(-1)} aria-label={t("ai.prevVariation")}><ArrowLeft size={13} /></button>
             <div className="ai-dots">
               {props.variations.map((_, i) => (
                 <i key={i} className={i === props.currentIdx ? "on" : ""} />
               ))}
             </div>
-            <button type="button" onClick={() => props.onSwitch(1)} aria-label="다음 변형"><ArrowRight size={13} /></button>
+            <button type="button" onClick={() => props.onSwitch(1)} aria-label={t("ai.nextVariation")}><ArrowRight size={13} /></button>
           </div>
         )}
         <span className="spacer" />
-        <button type="button" className="btn ghost sm" onClick={props.onCancel}>취소</button>
+        <button type="button" className="btn ghost sm" onClick={props.onCancel}>{t("common.cancel")}</button>
         {!hasResult ? (
           <button type="button" className="btn accent sm" onClick={run} disabled={!canRun}>
-            생성 <span className="kbd" style={{ marginLeft: 4 }}>⌘↵</span>
+            {t("ai.generate")} <span className="kbd" style={{ marginLeft: 4 }}>⌘↵</span>
           </button>
         ) : (
           <>
-            <button type="button" className="btn ghost sm" onClick={run} title="다시 생성" disabled={!canRun}>다시</button>
+            <button type="button" className="btn ghost sm" onClick={run} title={t("ai.retry")} disabled={!canRun}>{t("ai.retry")}</button>
             <button type="button" className="btn accent sm" onClick={props.onAccept} disabled={!acceptable}>
-              수락 <span className="kbd" style={{ marginLeft: 4 }}>Tab</span>
+              {t("ai.accept")} <span className="kbd" style={{ marginLeft: 4 }}>Tab</span>
             </button>
           </>
         )}

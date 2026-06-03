@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { entities, relationships } from "../lib/rpc";
-import { LABEL_PRESETS } from "../lib/relationshipPresets";
 import type { Entity } from "../lib/types";
 import { X, Plus } from "../lib/icons";
+import { relationshipLabelPresets, useI18n } from "../lib/i18n";
 import "./RelationshipPicker.css";
 
 interface Props {
@@ -21,6 +21,7 @@ export function RelationshipPicker({
   onClose,
   onCreated,
 }: Props) {
+  const { language, t } = useI18n();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Entity[]>([]);
   const [target, setTarget] = useState<Entity | null>(null);
@@ -31,6 +32,7 @@ export function RelationshipPicker({
   const debounceRef = useRef<number | null>(null);
 
   const hide = new Set([fromEntityId, ...excludeIds]);
+  const labelPresets = relationshipLabelPresets(language);
 
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
@@ -82,9 +84,9 @@ export function RelationshipPicker({
       <div className="panel rel-picker" onMouseDown={(e) => e.stopPropagation()}>
         <div className="panel-head">
           <span className="ttl">
-            <span className="ic"><Plus size={15} /></span> 관계 추가
+            <span className="ic"><Plus size={15} /></span> {t("relationship.add")}
           </span>
-          <button type="button" className="panel-close" onClick={onClose} aria-label="닫기">
+          <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}>
             <X size={16} />
           </button>
         </div>
@@ -93,18 +95,18 @@ export function RelationshipPicker({
 
         <div className="panel-scroll">
           <div className="sec">
-            <h4>대상</h4>
+            <h4>{t("relationship.target")}</h4>
             {!target ? (
               <>
                 <input
                   className="rel-picker-input"
-                  placeholder="엔티티 이름 검색"
+                  placeholder={t("relationship.searchPlaceholder")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   autoFocus
                 />
                 <div className="rel-picker-results">
-                  {results.length === 0 && <p className="sec-empty">결과 없음</p>}
+                  {results.length === 0 && <p className="sec-empty">{t("relationship.noResults")}</p>}
                   {results.map((e) => (
                     <button
                       type="button"
@@ -122,16 +124,16 @@ export function RelationshipPicker({
               <div className="rel-picker-target">
                 <span className="rel-picker-target-name">{target.name}</span>
                 <button type="button" className="btn ghost sm" onClick={() => setTarget(null)}>
-                  변경
+                  {t("relationship.change")}
                 </button>
               </div>
             )}
           </div>
 
           <div className="sec">
-            <h4>관계 (이쪽 → 상대)</h4>
+            <h4>{t("relationship.label")}</h4>
             <div className="rel-picker-chips">
-              {LABEL_PRESETS.map((p) => (
+              {labelPresets.map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -144,19 +146,19 @@ export function RelationshipPicker({
             </div>
             <input
               className="rel-picker-input"
-              placeholder="예: 친구"
+              placeholder={t("relationship.labelPlaceholder")}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
             />
           </div>
 
           <div className="sec">
-            <h4>역방향 라벨 (선택)</h4>
+            <h4>{t("relationship.inverseLabel")}</h4>
             <p className="rel-picker-hint">
-              비워두면 단방향 한 줄만 저장됩니다. 입력하면 상대 쪽에도 자동으로 추가됩니다.
+              {t("relationship.inverseHint")}
             </p>
             <div className="rel-picker-chips">
-              {LABEL_PRESETS.map((p) => (
+              {labelPresets.map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -169,7 +171,7 @@ export function RelationshipPicker({
             </div>
             <input
               className="rel-picker-input"
-              placeholder="예: 친구 (또는 비워두기)"
+              placeholder={t("relationship.inversePlaceholder")}
               value={inverseLabel}
               onChange={(e) => setInverseLabel(e.target.value)}
             />
@@ -178,14 +180,14 @@ export function RelationshipPicker({
 
         <div className="panel-foot">
           <span className="spacer" />
-          <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>취소</button>
+          <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>{t("common.cancel")}</button>
           <button
             type="button"
             className="btn accent sm"
             disabled={saving || !target || label.trim() === ""}
             onClick={onSave}
           >
-            {saving ? "저장 중…" : "저장"}
+            {saving ? t("common.saving") : t("common.save")}
           </button>
         </div>
       </div>

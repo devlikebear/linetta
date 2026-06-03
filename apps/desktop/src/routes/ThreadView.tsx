@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { beats as beatsApi, threads as threadsApi } from "../lib/rpc";
 import type { Beat, Thread } from "../lib/types";
+import { useI18n } from "../lib/i18n";
 import "./ThreadView.css";
 
 const INTENSITY_PX: Record<number, number> = { 1: 14, 2: 22, 3: 30 };
@@ -13,6 +14,7 @@ interface Lane {
 }
 
 export function ThreadView() {
+  const { t } = useI18n();
   const { projectId } = useParams();
   const navigate = useNavigate();
   const [lanes, setLanes] = useState<Lane[] | null>(null);
@@ -49,17 +51,17 @@ export function ThreadView() {
     <div className="thread-view">
       <div className="lib-top">
         <Link to={`/workspace/${projectId}`} className="btn ghost sm">
-          <ChevronLeft size={15} /> 작업실
+          <ChevronLeft size={15} /> {t("threadView.workspace")}
         </Link>
-        <div className="lib-brandmark">흐름</div>
+        <div className="lib-brandmark">{t("threadView.title")}</div>
         <span style={{ width: 90 }} />
       </div>
 
       <div className="thread-inner">
         {error && <p className="thread-error">{error}</p>}
-        {!error && !lanes && <p className="thread-hint">불러오는 중…</p>}
+        {!error && !lanes && <p className="thread-hint">{t("common.loading")}</p>}
         {!error && lanes && lanes.length === 0 && (
-          <p className="thread-hint">아직 스토리라인이 없어요. Cmd+P → "이 씬을 새 Thread로 표시"로 시작하세요.</p>
+          <p className="thread-hint">{t("threadView.empty", { command: t("workspace.markSceneAsThread") })}</p>
         )}
 
         {!error && lanes && lanes.length > 0 && (
@@ -81,7 +83,7 @@ export function ThreadView() {
                         key={b.id}
                         type="button"
                         className={`beat-disc${isOrphan ? " orphan" : ""}`}
-                        title={`#${b.ordinal} ${b.label}${isOrphan ? " (씬 삭제됨)" : ""}`}
+                        title={`#${b.ordinal} ${b.label}${isOrphan ? ` (${t("threadView.deletedScene")})` : ""}`}
                         style={{
                           left,
                           width: size,

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { snapshots } from "../lib/rpc";
 import type { NodeRow, SnapshotEntry } from "../lib/types";
 import { X } from "../lib/icons";
+import { useI18n } from "../lib/i18n";
 import "./VersionSheet.css";
 
 interface Props {
@@ -9,12 +10,6 @@ interface Props {
   onClose: () => void;
   onRestored: (node: NodeRow) => void;
 }
-
-const REASON_LABEL: Record<SnapshotEntry["reason"], string> = {
-  manual: "수동 저장",
-  "ai-replace": "AI 교체 전",
-  autosave: "자동 저장",
-};
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
@@ -27,6 +22,7 @@ function formatTime(ts: number): string {
 }
 
 export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<SnapshotEntry[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -46,6 +42,10 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
 
   if (!nodeId) return null;
   const selected = entries?.find((e) => e.id === selectedId) ?? null;
+  const reasonLabel = (reason: SnapshotEntry["reason"]) => {
+    if (reason === "ai-replace") return t("version.reason.aiReplace");
+    return t(`version.reason.${reason}`);
+  };
 
   const onRestore = async () => {
     if (!selected) return;
@@ -80,17 +80,17 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
   return (
     <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
-        <span className="ttl">이전 버전</span>
-        <button type="button" className="panel-close" onClick={onClose} aria-label="닫기">
+        <span className="ttl">{t("version.title")}</span>
+        <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}>
           <X size={16} />
         </button>
       </div>
 
       {error && <p className="vs-error">{error}</p>}
-      {!entries && !error && <p className="vs-loading">불러오는 중…</p>}
+      {!entries && !error && <p className="vs-loading">{t("common.loading")}</p>}
       {entries && entries.length === 0 && (
         <div className="panel-scroll">
-          <div className="sec"><p className="sec-empty">아직 저장된 버전이 없습니다.</p></div>
+          <div className="sec"><p className="sec-empty">{t("version.empty")}</p></div>
         </div>
       )}
 
@@ -98,11 +98,11 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
         <>
           <div className="panel-scroll">
             <div className="sec">
-              <h4>타임라인</h4>
+              <h4>{t("version.timeline")}</h4>
               <div className="vs-timeline">
                 {major.length > 0 && (
                   <div className="vs-group">
-                    <p className="vs-group-head">주요 저장</p>
+                    <p className="vs-group-head">{t("version.major")}</p>
                     {major.map((e) => (
                       <button
                         key={e.id}
@@ -110,7 +110,7 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
                         className={"vs-row" + (e.id === selectedId ? " sel" : "")}
                         onClick={() => setSelectedId(e.id)}
                       >
-                        <span className="vs-reason">{REASON_LABEL[e.reason]}</span>
+                        <span className="vs-reason">{reasonLabel(e.reason)}</span>
                         <span className="vs-time">{formatTime(e.created_at)}</span>
                       </button>
                     ))}
@@ -118,7 +118,7 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
                 )}
                 {autoByDay.map((g) => (
                   <div className="vs-group" key={g.day}>
-                    <p className="vs-group-head">자동 저장 · {g.day}</p>
+                    <p className="vs-group-head">{t("version.autoGroup", { day: g.day })}</p>
                     {g.rows.map((e) => (
                       <button
                         key={e.id}
@@ -135,21 +135,21 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
             </div>
 
             <div className="sec">
-              <h4>미리보기</h4>
-              <pre className="vs-preview">{selected?.doc_preview || "(빈 본문)"}</pre>
+              <h4>{t("version.preview")}</h4>
+              <pre className="vs-preview">{selected?.doc_preview || t("version.emptyBody")}</pre>
             </div>
           </div>
 
           <div className="panel-foot">
             <span className="spacer" />
-            <button type="button" className="btn ghost sm" onClick={onClose} disabled={restoring}>취소</button>
+            <button type="button" className="btn ghost sm" onClick={onClose} disabled={restoring}>{t("common.cancel")}</button>
             <button
               type="button"
               className="btn accent sm"
               onClick={onRestore}
               disabled={restoring || !selected}
             >
-              {restoring ? "복원 중…" : "이 버전으로 복원"}
+              {restoring ? t("version.restoring") : t("version.restore")}
             </button>
           </div>
         </>

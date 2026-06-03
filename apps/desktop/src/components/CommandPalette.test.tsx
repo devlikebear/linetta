@@ -1,10 +1,30 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "../lib/i18n";
 import { CommandPalette, type Command } from "./CommandPalette";
 
+const mocks = vi.hoisted(() => ({
+  settingsGet: vi.fn(),
+}));
+
+vi.mock("../lib/rpc", () => ({
+  settings: {
+    get: mocks.settingsGet,
+  },
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.settingsGet.mockResolvedValue({ language: "ko" });
+});
+
 function renderPalette(commands: Command[], onClose = vi.fn()) {
-  render(<CommandPalette open onClose={onClose} commands={commands} />);
+  render(
+    <I18nProvider>
+      <CommandPalette open onClose={onClose} commands={commands} />
+    </I18nProvider>,
+  );
   return { onClose };
 }
 

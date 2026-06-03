@@ -8,15 +8,16 @@ import {
   opsStatus as opsStatusApi,
   providers as providersApi,
 } from "../lib/rpc";
+import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import "./Settings.css";
 import type {
+  AppLanguage,
   OpsStatus,
   ProviderConfig,
   ProviderID,
   Settings as SettingsRow,
   WebSearchProvider,
 } from "../lib/types";
-import setupGuideData from "./aiSetupGuides.json";
 
 const JOB_BACKUP = "backup.daily";
 const JOB_GIT_SYNC = "git_sync";
@@ -34,14 +35,6 @@ interface ProviderMeta {
   legacy?: boolean;
 }
 
-const PROVIDERS: ProviderMeta[] = [
-  { id: "openai-codex", label: "ChatGPT 계정 (OpenAI Codex)", desc: "공식 Codex 로그인으로 연결 · API 키 복붙 없음", credential: "oauth" },
-  { id: "openai", label: "OpenAI API", desc: "OpenAI API 키 또는 호환 엔드포인트(Kimi, MiniMax 등)", credential: "key", endpoint: true },
-  { id: "anthropic", label: "Claude API", desc: "Anthropic Console API 키로 연결", credential: "key", endpoint: true },
-  { id: "gemini-native", label: "Gemini API", desc: "Google AI Studio API 키로 연결", credential: "key", endpoint: true },
-  { id: "claude-code-cli", label: "Claude Code CLI (기존/고급)", desc: "기존 설정 유지용 · 신규 사용자는 Claude API 키 권장", credential: "cli", legacy: true },
-];
-
 type GuideID = "chatgpt-subscription" | "openai-api" | "claude-api" | "gemini-api";
 
 interface SetupGuide {
@@ -56,7 +49,25 @@ interface SetupGuide {
   links: Array<{ label: string; href: string }>;
 }
 
-const SETUP_GUIDES = setupGuideData as SetupGuide[];
+const SETUP_GUIDE_LINKS: Record<GuideID, Array<{ labelKey: string; href: string }>> = {
+  "chatgpt-subscription": [
+    { labelKey: "settings.setup.chatgpt.linkCodexCli", href: "https://developers.openai.com/codex/cli" },
+    { labelKey: "settings.setup.chatgpt.linkBilling", href: "https://help.openai.com/en/articles/9039756-managing-billing-settings-on-chatgpt-web-and-platform" },
+  ],
+  "openai-api": [
+    { labelKey: "settings.setup.openai.linkApiKey", href: "https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key" },
+    { labelKey: "settings.setup.openai.linkPricing", href: "https://openai.com/api/pricing/" },
+  ],
+  "claude-api": [
+    { labelKey: "settings.setup.claude.linkAccess", href: "https://support.claude.com/en/articles/8114521-how-can-i-access-the-claude-api" },
+    { labelKey: "settings.setup.claude.linkAuth", href: "https://platform.claude.com/docs/en/manage-claude/authentication" },
+    { labelKey: "settings.setup.claude.linkPolicy", href: "https://code.claude.com/docs/en/legal-and-compliance" },
+  ],
+  "gemini-api": [
+    { labelKey: "settings.setup.gemini.linkApiKey", href: "https://ai.google.dev/gemini-api/docs/api-key" },
+    { labelKey: "settings.setup.gemini.linkBilling", href: "https://ai.google.dev/gemini-api/docs/billing" },
+  ],
+};
 
 function guideForProvider(provider: ProviderID): GuideID {
   switch (provider) {
@@ -73,7 +84,102 @@ function guideForProvider(provider: ProviderID): GuideID {
   }
 }
 
+type Translate = ReturnType<typeof useI18n>["t"];
+
+function buildProviders(t: Translate): ProviderMeta[] {
+  return [
+    { id: "openai-codex", label: t("settings.provider.openaiCodex.label"), desc: t("settings.provider.openaiCodex.desc"), credential: "oauth" },
+    { id: "openai", label: t("settings.provider.openai.label"), desc: t("settings.provider.openai.desc"), credential: "key", endpoint: true },
+    { id: "anthropic", label: t("settings.provider.anthropic.label"), desc: t("settings.provider.anthropic.desc"), credential: "key", endpoint: true },
+    { id: "gemini-native", label: t("settings.provider.gemini.label"), desc: t("settings.provider.gemini.desc"), credential: "key", endpoint: true },
+    { id: "claude-code-cli", label: t("settings.provider.claudeCli.label"), desc: t("settings.provider.claudeCli.desc"), credential: "cli", legacy: true },
+  ];
+}
+
+function buildSetupGuides(t: Translate): SetupGuide[] {
+  return [
+    {
+      id: "chatgpt-subscription",
+      provider: "openai-codex",
+      title: t("settings.setup.chatgpt.title"),
+      badge: t("settings.setup.chatgpt.badge"),
+      summary: t("settings.setup.chatgpt.summary"),
+      policy: t("settings.setup.chatgpt.policy"),
+      action: t("settings.setup.chatgpt.action"),
+      steps: [
+        t("settings.setup.chatgpt.step1"),
+        t("settings.setup.chatgpt.step2"),
+        t("settings.setup.chatgpt.step3"),
+        t("settings.setup.chatgpt.step4"),
+        t("settings.setup.chatgpt.step5"),
+      ],
+      links: setupGuideLinks(t, "chatgpt-subscription"),
+    },
+    {
+      id: "openai-api",
+      provider: "openai",
+      title: t("settings.setup.openai.title"),
+      badge: t("settings.setup.openai.badge"),
+      summary: t("settings.setup.openai.summary"),
+      policy: t("settings.setup.openai.policy"),
+      action: t("settings.setup.openai.action"),
+      steps: [
+        t("settings.setup.openai.step1"),
+        t("settings.setup.openai.step2"),
+        t("settings.setup.openai.step3"),
+        t("settings.setup.openai.step4"),
+        t("settings.setup.openai.step5"),
+      ],
+      links: setupGuideLinks(t, "openai-api"),
+    },
+    {
+      id: "claude-api",
+      provider: "anthropic",
+      title: t("settings.setup.claude.title"),
+      badge: t("settings.setup.claude.badge"),
+      summary: t("settings.setup.claude.summary"),
+      policy: t("settings.setup.claude.policy"),
+      action: t("settings.setup.claude.action"),
+      steps: [
+        t("settings.setup.claude.step1"),
+        t("settings.setup.claude.step2"),
+        t("settings.setup.claude.step3"),
+        t("settings.setup.claude.step4"),
+        t("settings.setup.claude.step5"),
+      ],
+      links: setupGuideLinks(t, "claude-api"),
+    },
+    {
+      id: "gemini-api",
+      provider: "gemini-native",
+      title: t("settings.setup.gemini.title"),
+      badge: t("settings.setup.gemini.badge"),
+      summary: t("settings.setup.gemini.summary"),
+      policy: t("settings.setup.gemini.policy"),
+      action: t("settings.setup.gemini.action"),
+      steps: [
+        t("settings.setup.gemini.step1"),
+        t("settings.setup.gemini.step2"),
+        t("settings.setup.gemini.step3"),
+        t("settings.setup.gemini.step4"),
+        t("settings.setup.gemini.step5"),
+      ],
+      links: setupGuideLinks(t, "gemini-api"),
+    },
+  ];
+}
+
+function setupGuideLinks(t: Translate, id: GuideID): SetupGuide["links"] {
+  return SETUP_GUIDE_LINKS[id].map((link) => ({
+    label: t(link.labelKey),
+    href: link.href,
+  }));
+}
+
 export function Settings() {
+  const { language, setLanguage, t } = useI18n();
+  const providers = useMemo(() => buildProviders(t), [t]);
+  const setupGuides = useMemo(() => buildSetupGuides(t), [t]);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +213,7 @@ export function Settings() {
       .then(([s, rows]) => {
         if (cancelled) return;
         setCurrent(s);
+        setLanguage(s.language);
         setGitDirDraft(s.git_sync_dir);
         setGitTmplDraft(s.git_sync_commit_template);
         setWebSearchKeyDraft(s.web_search_api_key);
@@ -164,6 +271,7 @@ export function Settings() {
     try {
       const next = await settingsApi.set(patch);
       setCurrent(next);
+      setLanguage(next.language);
       setSavedAt(Date.now());
     } catch (e) {
       setError(String(e));
@@ -186,9 +294,9 @@ export function Settings() {
       if (path) {
         setCliPathDraft(path);
         await applyProviderConfig(id, { cli_path: path });
-        setCliDetectMsg(`찾음: ${path}`);
+        setCliDetectMsg(t("settings.provider.detectFound", { path }));
       } else {
-        setCliDetectMsg("claude 실행 파일을 찾지 못했습니다. 경로를 직접 입력하세요.");
+        setCliDetectMsg(t("settings.provider.detectMissing"));
       }
     } catch (e) {
       setCliDetectMsg(String(e));
@@ -237,56 +345,71 @@ export function Settings() {
     try {
       await persistActiveProviderDrafts(meta);
       const res = await providersApi.test(meta.id);
-      setProviderTestMsg({ kind: "ok", text: `연결 성공: ${res.message}` });
+      setProviderTestMsg({ kind: "ok", text: t("settings.provider.testOk", { message: res.message }) });
     } catch (e) {
-      setProviderTestMsg({ kind: "error", text: `연결 실패: ${String(e)}` });
+      setProviderTestMsg({ kind: "error", text: t("settings.provider.testError", { message: String(e) }) });
     } finally {
       setProviderTesting(false);
     }
   };
 
-  const activeMeta = current ? PROVIDERS.find((m) => m.id === current.provider) : undefined;
+  const activeMeta = current ? providers.find((m) => m.id === current.provider) : undefined;
   const activeConfig = current?.providers?.[current.provider] ?? {};
-  const selectedGuide = SETUP_GUIDES.find((g) => g.id === guideId) ?? SETUP_GUIDES[0];
-  const credentialState = getCredentialState(activeMeta, activeConfig);
-  const webSearchKeyPlaceholder = current ? getWebSearchKeyPlaceholder(current) : "BSA...";
+  const selectedGuide = setupGuides.find((g) => g.id === guideId) ?? setupGuides[0];
+  const credentialState = getCredentialState(t, activeMeta, activeConfig);
+  const webSearchKeyPlaceholder = current ? getWebSearchKeyPlaceholder(t, current) : t("settings.tools.keyPlaceholder");
 
   return (
     <div className="settings">
       <div className="lib-top">
         <Link to="/" className="btn ghost sm">
-          <ChevronLeft size={15} /> 라이브러리
+          <ChevronLeft size={15} /> {t("settings.backToLibrary")}
         </Link>
-        <div className="lib-brandmark">설정</div>
+        <div className="lib-brandmark">{t("settings.brand")}</div>
         <span style={{ width: 90 }} />
       </div>
       <div className="settings-inner">
-        <h1>설정</h1>
+        <h1>{t("settings.title")}</h1>
         {error && <p className="error">{error}</p>}
         {!current ? (
-          <p className="hint">불러오는 중…</p>
+          <p className="hint">{t("common.loading")}</p>
         ) : (
           <>
             <section className="settings-section">
-              <div className="settings-section-head">
-                <h3>AI 연결 마법사</h3>
-                <span className="setup-pill">초보자용</span>
+              <h3>{t("settings.language.title")}</h3>
+              <p className="sd">{t("settings.language.description")}</p>
+              <div className="modal-field">
+                <label htmlFor="app-language">{t("settings.language.label")}</label>
+                <select
+                  id="app-language"
+                  value={current.language ?? language}
+                  onChange={(e) => apply({ language: e.target.value as AppLanguage })}
+                  disabled={saving}
+                >
+                  {APP_LANGUAGES.map((lang) => (
+                    <option key={lang.value} value={lang.value}>
+                      {lang.nativeLabel}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <p className="sd">
-                API 키나 모델 이름을 몰라도 괜찮습니다. 아래에서 쓰고 싶은 AI를 고르면 Linetta가 필요한 단계만 보여줍니다.
-              </p>
+            </section>
+
+            <section className="settings-section">
+              <div className="settings-section-head">
+                <h3>{t("settings.aiWizard.title")}</h3>
+                <span className="setup-pill">{t("settings.aiWizard.badge")}</span>
+              </div>
+              <p className="sd">{t("settings.aiWizard.description")}</p>
               <div className="setup-current">
                 <span>
-                  현재 선택: <strong>{activeMeta?.label ?? current.provider}</strong>
+                  {t("settings.aiWizard.current")}: <strong>{activeMeta?.label ?? current.provider}</strong>
                 </span>
                 <span>{credentialState}</span>
               </div>
-              <div className="setup-policy">
-                Claude와 Gemini 구독 로그인은 각 회사의 공식 제품 안에서 쓰는 흐름이라 Linetta에서는 제공하지 않습니다.
-                ChatGPT 구독은 OpenAI Codex 공식 로그인만 지원하고, Claude/Gemini는 API 키로 연결합니다.
-              </div>
+              <div className="setup-policy">{t("settings.aiWizard.policy")}</div>
               <div className="setup-choice-list">
-                {SETUP_GUIDES.map((guide) => (
+                {setupGuides.map((guide) => (
                   <button
                     key={guide.id}
                     type="button"
@@ -313,7 +436,7 @@ export function Settings() {
                     onClick={() => !saving && apply({ provider: selectedGuide.provider })}
                     disabled={saving}
                   >
-                    {current.provider === selectedGuide.provider ? "선택됨" : selectedGuide.action}
+                    {current.provider === selectedGuide.provider ? t("settings.aiWizard.selected") : selectedGuide.action}
                   </button>
                 </div>
                 <ol className="setup-steps">
@@ -321,7 +444,7 @@ export function Settings() {
                     <li key={step}>{step}</li>
                   ))}
                 </ol>
-                <div className="setup-links" aria-label={`${selectedGuide.title} 공식 가이드`}>
+                <div className="setup-links" aria-label={`${selectedGuide.title} ${t("settings.aiWizard.officialGuide")}`}>
                   {selectedGuide.links.map((link) => (
                     <a key={link.href} href={link.href} target="_blank" rel="noreferrer">
                       <ExternalLink size={13} /> {link.label}
@@ -332,12 +455,9 @@ export function Settings() {
             </section>
 
             <section className="settings-section">
-              <h3>고급 AI 설정</h3>
-              <p className="sd">
-                마법사에서 선택한 연결 방식의 실제 provider, API 키, 모델 값을 조정합니다.
-                초보자는 위 순서대로 진행한 뒤 필요한 칸만 채우면 됩니다.
-              </p>
-              {PROVIDERS.map((meta) => (
+              <h3>{t("settings.aiAdvanced.title")}</h3>
+              <p className="sd">{t("settings.aiAdvanced.description")}</p>
+              {providers.map((meta) => (
                 <button
                   key={meta.id}
                   type="button"
@@ -352,16 +472,16 @@ export function Settings() {
                   <span className={`switch${current.provider === meta.id ? " on" : ""}`} />
                 </button>
               ))}
-              <p className="sd">변경은 다음 AI 호출부터 적용됩니다.</p>
+              <p className="sd">{t("settings.aiAdvanced.changeNote")}</p>
 
               {(() => {
-                const meta = PROVIDERS.find((m) => m.id === current.provider);
+                const meta = providers.find((m) => m.id === current.provider);
                 if (!meta) return null;
                 return (
                   <div className="provider-config">
                     {meta.credential === "key" && (
                       <div className="modal-field">
-                        <label htmlFor="provider-key">API 키</label>
+                        <label htmlFor="provider-key">{t("settings.provider.apiKey")}</label>
                         <div className="set-field-row">
                           <input
                             id="provider-key"
@@ -373,7 +493,7 @@ export function Settings() {
                                 applyProviderConfig(meta.id, { api_key: apiKeyDraft });
                               }
                             }}
-                            placeholder={activeConfig.api_key_set ? "저장된 API 키 있음 · 새 키를 붙여넣으면 교체" : "sk-..."}
+                            placeholder={activeConfig.api_key_set ? t("settings.provider.apiKeySavedPlaceholder") : t("settings.provider.apiKeyPlaceholder")}
                             autoComplete="off"
                           />
                           {activeConfig.api_key_set && (
@@ -386,18 +506,16 @@ export function Settings() {
                               }}
                               disabled={saving}
                             >
-                              키 삭제
+                              {t("common.deleteKey")}
                             </button>
                           )}
                         </div>
-                        <p className="sd">
-                          저장된 키는 다시 표시하지 않습니다. 새 키를 입력하면 macOS Keychain의 기존 키를 교체합니다.
-                        </p>
+                        <p className="sd">{t("settings.provider.apiKeyHelp")}</p>
                       </div>
                     )}
                     {meta.endpoint && (
                       <div className="modal-field">
-                        <label htmlFor="provider-base-url">Base URL (선택)</label>
+                        <label htmlFor="provider-base-url">{t("settings.provider.baseUrl")}</label>
                         <input
                           id="provider-base-url"
                           type="text"
@@ -409,13 +527,13 @@ export function Settings() {
                               applyProviderConfig(meta.id, { base_url: baseUrlDraft });
                             }
                           }}
-                          placeholder="비우면 기본 엔드포인트. 호환 API 예: https://api.minimax.io/v1"
+                          placeholder={t("settings.provider.baseUrlPlaceholder")}
                         />
                       </div>
                     )}
                     {meta.credential === "cli" && (
                       <div className="modal-field">
-                        <label htmlFor="provider-cli">CLI 경로 (선택)</label>
+                        <label htmlFor="provider-cli">{t("settings.provider.cliPath")}</label>
                         <div className="set-field-row">
                           <input
                             id="provider-cli"
@@ -428,7 +546,7 @@ export function Settings() {
                                 applyProviderConfig(meta.id, { cli_path: cliPathDraft });
                               }
                             }}
-                            placeholder="PATH에서 claude를 못 찾을 때 실행 파일 경로"
+                            placeholder={t("settings.provider.cliPathPlaceholder")}
                           />
                           <button
                             type="button"
@@ -436,17 +554,15 @@ export function Settings() {
                             onClick={() => detectCliPath(meta.id)}
                             disabled={saving || cliDetecting}
                           >
-                            {cliDetecting ? "찾는 중…" : "자동 찾기"}
+                            {cliDetecting ? t("settings.provider.cliDetecting") : t("settings.provider.cliDetect")}
                           </button>
                         </div>
-                        <p className="sd">
-                          PATH·로그인 셸·Homebrew/npm 설치 위치에서 claude를 자동으로 찾습니다.
-                        </p>
+                        <p className="sd">{t("settings.provider.cliHelp")}</p>
                         {cliDetectMsg && <p className="sd">{cliDetectMsg}</p>}
                       </div>
                     )}
                     <div className="modal-field">
-                      <label htmlFor="provider-model">모델</label>
+                      <label htmlFor="provider-model">{t("settings.provider.model")}</label>
                       <div className="set-field-row">
                         <input
                           id="provider-model"
@@ -460,7 +576,7 @@ export function Settings() {
                               applyProviderConfig(meta.id, { model: modelDraft });
                             }
                           }}
-                          placeholder="비우면 기본 모델 사용"
+                          placeholder={t("settings.provider.modelPlaceholder")}
                         />
                         <datalist id="provider-model-options">
                           {modelOptions.map((m) => (
@@ -473,22 +589,19 @@ export function Settings() {
                           onClick={() => fetchModels(meta.id)}
                           disabled={saving || modelsLoading || meta.id === "claude-code-cli" || meta.credential === "oauth"}
                         >
-                          {modelsLoading ? "불러오는 중…" : "모델 새로고침"}
+                          {modelsLoading ? t("settings.provider.refreshingModels") : t("settings.provider.refreshModels")}
                         </button>
                       </div>
                       {meta.id === "claude-code-cli" ? (
-                        <p className="sd">Claude Code CLI는 모델 목록 조회를 지원하지 않습니다. 직접 입력하세요.</p>
+                        <p className="sd">{t("settings.provider.cliNoModels")}</p>
                       ) : meta.credential === "oauth" ? (
-                        <p className="sd">OpenAI Codex 로그인은 모델 목록 조회를 지원하지 않습니다. 모델 ID를 직접 입력할 수 있고, 비우면 Codex 기본 모델을 사용합니다.</p>
+                        <p className="sd">{t("settings.provider.oauthNoModels")}</p>
                       ) : (
-                        <p className="sd">새로고침은 위 API 키로 제공자의 모델 목록을 가져옵니다. 직접 입력도 가능합니다.</p>
+                        <p className="sd">{t("settings.provider.modelHelp")}</p>
                       )}
                       {modelsError && <p className="error">{modelsError}</p>}
                     </div>
-                    <p className="sd">
-                      API 키는 macOS Keychain에 저장되고, 모델·Base URL 같은 일반 설정만 로컬 settings.json에 저장됩니다.
-                      Claude Code CLI는 기존 사용자 호환용이며 신규 사용자는 Claude API 연결을 권장합니다.
-                    </p>
+                    <p className="sd">{t("settings.provider.storageHelp")}</p>
                     <div className="provider-test">
                       <button
                         type="button"
@@ -496,11 +609,9 @@ export function Settings() {
                         onClick={() => testActiveProvider(meta)}
                         disabled={providerTesting}
                       >
-                        {providerTesting ? "테스트 중…" : "연결 테스트"}
+                        {providerTesting ? t("settings.provider.testing") : t("settings.provider.test")}
                       </button>
-                      <p className="sd">
-                        짧은 AI 요청을 한 번 보냅니다. API 키 방식은 제공자 정책에 따라 소량의 사용량이 기록될 수 있습니다.
-                      </p>
+                      <p className="sd">{t("settings.provider.testHelp")}</p>
                       {providerTestMsg && (
                         <p className={providerTestMsg.kind === "ok" ? "provider-test-ok" : "provider-test-error"}>
                           {providerTestMsg.text}
@@ -513,7 +624,7 @@ export function Settings() {
             </section>
 
             <section className="settings-section">
-              <h3>집필</h3>
+              <h3>{t("settings.writing.title")}</h3>
               <button
                 type="button"
                 className="set-row set-row-btn"
@@ -521,8 +632,8 @@ export function Settings() {
                 disabled={saving}
               >
                 <span className="sk-wrap">
-                  <span className="sk">타자기 모드 기본값</span>
-                  <span className="sd">새 씬을 열 때 타이프라이터 스크롤 켜기</span>
+                  <span className="sk">{t("settings.writing.typewriter")}</span>
+                  <span className="sd">{t("settings.writing.typewriterDescription")}</span>
                 </span>
                 <span className={`switch${current.typewriter_default ? " on" : ""}`} />
               </button>
@@ -533,21 +644,18 @@ export function Settings() {
                 disabled={saving}
               >
                 <span className="sk-wrap">
-                  <span className="sk">포커스 모드 기본값</span>
-                  <span className="sd">현재 단락 외 디밍</span>
+                  <span className="sk">{t("settings.writing.focus")}</span>
+                  <span className="sd">{t("settings.writing.focusDescription")}</span>
                 </span>
                 <span className={`switch${current.focus_default ? " on" : ""}`} />
               </button>
             </section>
 
             <section className="settings-section">
-              <h3>LLM 도구</h3>
-              <p className="sd">
-                cmd+j 채팅에서 web_search, web_fetch, linetta_apply_ops 도구를 사용할 수 있습니다.
-                web_fetch는 키 없이 동작합니다.
-              </p>
+              <h3>{t("settings.tools.title")}</h3>
+              <p className="sd">{t("settings.tools.description")}</p>
               <div className="modal-field">
-                <label htmlFor="ws-provider">web_search 제공자</label>
+                <label htmlFor="ws-provider">{t("settings.tools.webSearchProvider")}</label>
                 <select
                   id="ws-provider"
                   value={current.web_search_provider}
@@ -559,7 +667,7 @@ export function Settings() {
                 </select>
               </div>
               <div className="modal-field">
-                <label htmlFor="ws-key">web_search API 키</label>
+                <label htmlFor="ws-key">{t("settings.tools.webSearchApiKey")}</label>
                 <div className="set-field-row">
                   <input
                     id="ws-key"
@@ -584,22 +692,19 @@ export function Settings() {
                       }}
                       disabled={saving}
                     >
-                      키 삭제
+                      {t("common.deleteKey")}
                     </button>
                   )}
                 </div>
               </div>
-              <p className="sd">키는 macOS Keychain에 저장됩니다. settings.json에는 저장 여부만 표시됩니다.</p>
+              <p className="sd">{t("settings.tools.keyHelp")}</p>
             </section>
 
             <section className="settings-section">
-              <h3>GitHub 동기화</h3>
-              <p className="sd">
-                하루 한 번 모든 작품을 마크다운으로 내보내 지정한 git 폴더에 커밋·푸시합니다.
-                경로를 비워두면 비활성화됩니다. 인증은 시스템 git 설정(SSH 키, 자격 증명 도우미)을 그대로 사용합니다.
-              </p>
+              <h3>{t("settings.git.title")}</h3>
+              <p className="sd">{t("settings.git.description")}</p>
               <div className="modal-field">
-                <label htmlFor="git-dir">git 폴더</label>
+                <label htmlFor="git-dir">{t("settings.git.folder")}</label>
                 <div className="set-field-row">
                   <input
                     id="git-dir"
@@ -611,7 +716,7 @@ export function Settings() {
                         apply({ git_sync_dir: gitDirDraft });
                       }
                     }}
-                    placeholder="예: /Users/me/notes/linetta"
+                    placeholder={t("settings.git.folderPlaceholder")}
                   />
                   <button
                     type="button"
@@ -625,12 +730,12 @@ export function Settings() {
                     }}
                     disabled={saving}
                   >
-                    폴더 선택…
+                    {t("settings.git.pickFolder")}
                   </button>
                 </div>
               </div>
               <div className="modal-field">
-                <label htmlFor="git-tmpl">커밋 메시지</label>
+                <label htmlFor="git-tmpl">{t("settings.git.commitTemplate")}</label>
                 <input
                   id="git-tmpl"
                   type="text"
@@ -641,15 +746,12 @@ export function Settings() {
                       apply({ git_sync_commit_template: gitTmplDraft });
                     }
                   }}
-                  placeholder="Linetta sync {date}"
+                  placeholder={t("settings.git.commitTemplatePlaceholder")}
                 />
               </div>
+              <p className="sd">{t("settings.git.commitTemplateHelp")}</p>
               <p className="sd">
-                <code>{"{date}"}</code> 자리표시자만 지원됩니다 (YYYY-MM-DD HH:MM 으로 치환).
-              </p>
-              <p className="sd">
-                지정한 폴더가 아직 git 저장소가 아닐 때 아래 버튼으로 초기화할 수 있습니다.
-                초기화 후 <code>git remote add origin &lt;URL&gt;</code> 로 GitHub remote를 추가하세요.
+                {t("settings.git.initHelp")} <code>git remote add origin &lt;URL&gt;</code>
               </p>
               <button
                 type="button"
@@ -658,16 +760,16 @@ export function Settings() {
                   try {
                     const res = await gitSync.init();
                     if (res.skipped) {
-                      setError("git 폴더를 먼저 지정하세요");
+                      setError(t("settings.git.errorNoFolder"));
                       return;
                     }
                     if (res.error) {
-                      setError(`초기화 실패: ${res.error}`);
+                      setError(t("settings.git.errorInitFailed", { error: res.error }));
                       return;
                     }
                     if (res.already_repo) {
                       setSavedAt(Date.now());
-                      setError("이미 git 저장소입니다");
+                      setError(t("settings.git.alreadyRepo"));
                       return;
                     }
                     if (res.created) {
@@ -680,64 +782,72 @@ export function Settings() {
                 }}
                 disabled={saving}
               >
-                이 폴더를 git 저장소로 초기화
+                {t("settings.git.init")}
               </button>
               <OpsStatusCard
-                title="최근 Git 동기화"
+                title={t("settings.ops.gitStatus")}
                 status={opsByJob.get(JOB_GIT_SYNC)}
-                okText="Git 동기화 성공"
-                idleText="아직 동기화 기록 없음"
+                okText={t("settings.ops.gitOk")}
+                idleText={t("settings.ops.noRuns")}
                 onClearError={() => clearOpsError(JOB_GIT_SYNC)}
                 disabled={saving}
+                t={t}
+                language={language}
               />
             </section>
 
             <section className="settings-section">
-              <h3>백업</h3>
-              <p className="sd">하루 한 번 자동 백업이 다음 경로에 저장됩니다 (14일 보관).</p>
+              <h3>{t("settings.backup.title")}</h3>
+              <p className="sd">{t("settings.backup.description")}</p>
               <div className="set-row">
-                <span className="sk-wrap"><span className="sk">데이터 폴더</span></span>
+                <span className="sk-wrap"><span className="sk">{t("settings.backup.folder")}</span></span>
                 <span className="mono">{current.backup_dir}</span>
               </div>
               <OpsStatusCard
-                title="최근 백업 상태"
+                title={t("settings.ops.backupStatus")}
                 status={opsByJob.get(JOB_BACKUP)}
-                okText="백업 성공"
-                idleText="아직 백업 기록 없음"
+                okText={t("settings.ops.backupOk")}
+                idleText={t("settings.ops.noRuns")}
                 onClearError={() => clearOpsError(JOB_BACKUP)}
                 disabled={saving}
+                t={t}
+                language={language}
               />
             </section>
 
             {isDegraded(opsByJob.get(JOB_SUMMARIZER)) && (
               <section className="settings-section">
-                <h3>요약기 상태</h3>
+                <h3>{t("settings.ops.summarizerStatus")}</h3>
                 <OpsStatusCard
-                  title="최근 요약 실패"
+                  title={t("settings.ops.summarizerRecentFailure")}
                   status={opsByJob.get(JOB_SUMMARIZER)}
-                  okText="요약 정상"
-                  idleText="최근 요약 기록 없음"
+                  okText={t("settings.ops.summarizerOk")}
+                  idleText={t("settings.ops.noRuns")}
                   onClearError={() => clearOpsError(JOB_SUMMARIZER)}
                   disabled={saving}
+                  t={t}
+                  language={language}
                 />
               </section>
             )}
 
             {isDegraded(opsByJob.get(JOB_COMPANION)) && (
               <section className="settings-section">
-                <h3>Companion 기록 상태</h3>
+                <h3>{t("settings.ops.companionStatus")}</h3>
                 <OpsStatusCard
-                  title="최근 기록 실패"
+                  title={t("settings.ops.companionRecentFailure")}
                   status={opsByJob.get(JOB_COMPANION)}
-                  okText="기록 정상"
-                  idleText="최근 기록 없음"
+                  okText={t("settings.ops.companionOk")}
+                  idleText={t("settings.ops.noRuns")}
                   onClearError={() => clearOpsError(JOB_COMPANION)}
                   disabled={saving}
+                  t={t}
+                  language={language}
                 />
               </section>
             )}
 
-            {savedAt && <p className="settings-saved">저장됨</p>}
+            {savedAt && <p className="settings-saved">{t("settings.saved")}</p>}
           </>
         )}
       </div>
@@ -749,28 +859,28 @@ function isDegraded(status?: OpsStatus): boolean {
   return Boolean(status?.last_error);
 }
 
-function getCredentialState(meta?: ProviderMeta, cfg: ProviderConfig = {}): string {
-  if (!meta) return "연결 방식 확인 필요";
+function getCredentialState(t: Translate, meta?: ProviderMeta, cfg: ProviderConfig = {}): string {
+  if (!meta) return t("settings.provider.stateNeedsConnection");
   if (meta.credential === "oauth") {
-    return "Codex 로그인 필요";
+    return t("settings.provider.stateCodexLogin");
   }
   if (meta.credential === "key") {
-    return cfg.api_key_set || cfg.api_key ? "API 키 저장됨" : "API 키 필요";
+    return cfg.api_key_set || cfg.api_key ? t("settings.provider.stateApiSaved") : t("settings.provider.stateApiNeeded");
   }
   if (meta.credential === "cli") {
-    return cfg.cli_path ? "CLI 경로 저장됨" : "기존 CLI 설정";
+    return cfg.cli_path ? t("settings.provider.stateCliSaved") : t("settings.provider.stateCliLegacy");
   }
-  return "설정 확인 필요";
+  return t("settings.provider.stateNeedsSettings");
 }
 
-function getWebSearchKeyPlaceholder(current: SettingsRow): string {
+function getWebSearchKeyPlaceholder(t: Translate, current: SettingsRow): string {
   if (current.web_search_api_key_set) {
-    return "저장된 검색 API 키 있음 · 새 키를 붙여넣으면 교체";
+    return t("settings.tools.keySavedPlaceholder");
   }
   if (current.web_search_provider === "perplexity") {
     return "pplx-...";
   }
-  return "BSA...";
+  return t("settings.tools.keyPlaceholder");
 }
 
 function OpsStatusCard({
@@ -780,6 +890,8 @@ function OpsStatusCard({
   idleText,
   onClearError,
   disabled,
+  t,
+  language,
 }: {
   title: string;
   status?: OpsStatus;
@@ -787,12 +899,14 @@ function OpsStatusCard({
   idleText: string;
   onClearError: () => void;
   disabled: boolean;
+  t: Translate;
+  language: AppLanguage;
 }) {
   const metadata = parseMetadata(status?.metadata_json);
   const failed = Boolean(status?.last_error);
   const body = failed ? status?.last_error : status?.last_ok ? okText : idleText;
-  const finished = formatMillis(status?.last_finished_at);
-  const metadataLabel = formatMetadata(metadata);
+  const finished = formatMillis(language, status?.last_finished_at);
+  const metadataLabel = formatMetadata(t, metadata);
 
   return (
     <div className={`ops-status ${failed ? "is-error" : status?.last_ok ? "is-ok" : ""}`}>
@@ -800,12 +914,12 @@ function OpsStatusCard({
         <h4>{title}</h4>
         {failed && (
           <button type="button" onClick={onClearError} disabled={disabled}>
-            오류 지우기
+            {t("settings.ops.clearError")}
           </button>
         )}
       </div>
       <p className="ops-status-line">{body}</p>
-      {finished && <p className="hint">마지막 완료: {finished}</p>}
+      {finished && <p className="hint">{t("settings.ops.lastRun")}: {finished}</p>}
       {metadataLabel && <p className="hint">{metadataLabel}</p>}
     </div>
   );
@@ -824,21 +938,21 @@ function parseMetadata(raw?: string): Record<string, unknown> {
   return {};
 }
 
-function formatMillis(value?: number): string {
+function formatMillis(language: AppLanguage, value?: number): string {
   if (!value) return "";
-  return new Date(value).toLocaleString("ko-KR");
+  return new Date(value).toLocaleString(localeForLanguage(language));
 }
 
-function formatMetadata(metadata: Record<string, unknown>): string {
+function formatMetadata(t: Translate, metadata: Record<string, unknown>): string {
   const parts: string[] = [];
   if (typeof metadata.files_written === "number") {
-    parts.push(`파일 ${metadata.files_written}개`);
+    parts.push(t(metadata.files_written === 1 ? "settings.ops.metadata.file" : "settings.ops.metadata.files", { count: metadata.files_written }));
   }
-  if (metadata.committed === true) parts.push("커밋 완료");
-  if (metadata.pushed === true) parts.push("푸시 완료");
-  if (metadata.backup_ran === true) parts.push("새 백업 생성");
+  if (metadata.committed === true) parts.push(t("settings.ops.metadata.committed"));
+  if (metadata.pushed === true) parts.push(t("settings.ops.metadata.pushed"));
+  if (metadata.backup_ran === true) parts.push(t("settings.ops.metadata.backupRan"));
   if (typeof metadata.failure_count === "number" && metadata.failure_count > 0) {
-    parts.push(`연속 실패 ${metadata.failure_count}회`);
+    parts.push(t("settings.ops.metadata.failures", { count: metadata.failure_count }));
   }
   if (typeof metadata.path === "string" && metadata.path !== "") {
     parts.push(metadata.path);

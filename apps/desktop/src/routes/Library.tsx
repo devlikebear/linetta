@@ -10,7 +10,6 @@ import {
 import type {
   DiagnosticsSnapshot,
   ImportPreviewResult,
-  LengthTarget,
   NewProjectInput,
   Project,
   SearchResult,
@@ -22,6 +21,7 @@ import { SearchModal } from "../components/SearchModal";
 import { pickAndReadMarkdown } from "../lib/importLoad";
 import { MoreHorizontal, Settings, Plus, Search, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
+import { formatWordCount, lengthLabel, useI18n } from "../lib/i18n";
 
 const RECENT_LIMIT = 5;
 
@@ -33,20 +33,6 @@ const SPINE_COLORS = [
   "var(--t-olive)",
 ];
 
-const LENGTH_LABEL: Record<LengthTarget, string> = {
-  flash: "플래시",
-  short: "단편",
-  novella: "중편",
-  novel: "장편",
-  series: "시리즈",
-};
-
-function humanCount(words: number): string {
-  if (words === 0) return "초안 시작 전";
-  if (words < 10_000) return `${words.toLocaleString("ko-KR")}자`;
-  return `${(words / 1000).toFixed(0)}k자`;
-}
-
 interface PendingImport {
   fileName: string;
   content: string;
@@ -54,6 +40,7 @@ interface PendingImport {
 }
 
 export function Library() {
+  const { language, t } = useI18n();
   const [recent, setRecent] = useState<Project[]>([]);
   const [totalRecent, setTotalRecent] = useState<number>(0);
   const [modalOpen, setModalOpen] = useState(false);
@@ -99,10 +86,10 @@ export function Library() {
         setSafetyOpen(!s.safety_checklist_dismissed);
       })
       .catch((err) => {
-        if (!cancelled) showToast(`앱 상태 불러오기 실패: ${err}`);
+        if (!cancelled) showToast(t("library.toast.appStateFailed", { error: String(err) }));
       });
     return () => { cancelled = true; };
-  }, [showToast]);
+  }, [showToast, t]);
 
   const handleCreate = async (input: NewProjectInput) => {
     const created = await projectsApi.create(input);
@@ -118,7 +105,7 @@ export function Library() {
       const preview = await importsApi.preview(picked.fileName, picked.content);
       setPending({ fileName: picked.fileName, content: picked.content, preview });
     } catch (err) {
-      showToast(`가져오기 실패: ${err}`);
+      showToast(t("library.toast.importFailed", { error: String(err) }));
     } finally {
       setImporting(false);
     }
@@ -135,14 +122,19 @@ export function Library() {
     try {
       const res = await importsApi.markdown(pending.fileName, pending.content);
       const total = res.container_count + res.leaf_count;
-      let msg = `가져오기 완료 · 컨테이너 ${res.container_count}개 · 씬 ${res.leaf_count}개`;
-      if (total === 0) msg = "가져오기 완료 · 빈 작품 (헤딩 없음)";
-      if (res.warnings.length > 0) msg += ` · 경고 ${res.warnings.length}개`;
+      let msg = t("library.toast.importComplete", {
+        containers: res.container_count,
+        scenes: res.leaf_count,
+      });
+      if (total === 0) msg = t("library.toast.importEmpty");
+      if (res.warnings.length > 0) {
+        msg += ` · ${t("library.toast.importWarnings", { count: res.warnings.length })}`;
+      }
       showToast(msg);
       setPending(null);
       navigate(`/workspace/${res.project_id}`);
     } catch (err) {
-      showToast(`가져오기 실패: ${err}`);
+      showToast(t("library.toast.importFailed", { error: String(err) }));
     } finally {
       setImporting(false);
     }
@@ -154,7 +146,7 @@ export function Library() {
       const current = settingsRow ?? await settingsApi.get();
       await openPath(current.backup_dir);
     } catch (err) {
-      showToast(`백업 폴더 열기 실패: ${err}`);
+      showToast(t("library.toast.openBackupFailed", { error: String(err) }));
     }
   };
 
@@ -165,7 +157,7 @@ export function Library() {
       setDiagnostics(current);
       await openPath(current.home);
     } catch (err) {
-      showToast(`데이터 폴더 열기 실패: ${err}`);
+      showToast(t("library.toast.openDataFailed", { error: String(err) }));
     }
   };
 
@@ -176,7 +168,7 @@ export function Library() {
       setDiagnostics(current);
       setDiagnosticsOpen(true);
     } catch (err) {
-      showToast(`진단 정보 불러오기 실패: ${err}`);
+      showToast(t("library.toast.diagnosticsFailed", { error: String(err) }));
     }
   };
 
@@ -186,7 +178,7 @@ export function Library() {
       setSettingsRow(next);
       setSafetyOpen(false);
     } catch (err) {
-      showToast(`체크리스트 저장 실패: ${err}`);
+      showToast(t("library.toast.safetySaveFailed", { error: String(err) }));
     }
   };
 
@@ -200,7 +192,7 @@ export function Library() {
         <div style={{ position: "relative" }}>
           <button
             className="lib-icon-btn"
-            aria-label="라이브러리 옵션"
+            aria-label={t("library.menu.label")}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
           >
@@ -209,32 +201,32 @@ export function Library() {
           {menuOpen && (
             <div className="lib-menu" role="menu" onMouseLeave={() => setMenuOpen(false)}>
               <button type="button" role="menuitem" onClick={openDataFolder}>
-                데이터 폴더 열기
+                {t("library.menu.dataFolder")}
               </button>
               <button type="button" role="menuitem" onClick={openBackupFolder}>
-                백업 폴더 열기
+                {t("library.menu.backupFolder")}
               </button>
               <button type="button" role="menuitem" onClick={handleMenuImport}>
-                가져오기 (.md)
+                {t("library.menu.importMarkdown")}
               </button>
               <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSearchOpen(true); }}>
-                검색
+                {t("library.menu.search")}
               </button>
               <button type="button" role="menuitem" onClick={() => navigate("/settings")}>
-                설정
+                {t("library.menu.settings")}
               </button>
               <button type="button" role="menuitem" onClick={openDiagnostics}>
-                진단 정보
+                {t("library.menu.diagnostics")}
               </button>
             </div>
           )}
         </div>
-        <div className="lib-brandmark">local-first writing</div>
+        <div className="lib-brandmark">{t("library.brand")}</div>
         <div className="lib-top-actions">
-          <button className="lib-icon-btn" aria-label="검색" onClick={() => setSearchOpen(true)}>
+          <button className="lib-icon-btn" aria-label={t("library.menu.search")} onClick={() => setSearchOpen(true)}>
             <Search size={17} />
           </button>
-          <Link to="/settings" className="lib-icon-btn" aria-label="설정">
+          <Link to="/settings" className="lib-icon-btn" aria-label={t("library.menu.settings")}>
             <Settings size={17} />
           </Link>
         </div>
@@ -244,40 +236,40 @@ export function Library() {
         <div className="lib-hero">
           <div>
             <h1 className="lib-wordmark">Linetta<span className="dot">.</span></h1>
-            <p className="lib-tagline">한 줄에서 한 권으로. 당신의 컴퓨터 안에서만 자라는 장편소설 작업실.</p>
+            <p className="lib-tagline">{t("library.tagline")}</p>
           </div>
           <div className="lib-meta-col">
-            <div><b>{totalRecent}</b> 작품</div>
-            <div><b>외부 전송 없음</b></div>
-            <div>데이터 · <b>로컬</b></div>
+            <div><b>{totalRecent}</b> {t("library.projectCount")}</div>
+            <div><b>{t("library.noExternalTransfer")}</b></div>
+            <div>{t("library.dataLocal", { local: t("library.local") })}</div>
           </div>
         </div>
 
         <div className="lib-actions">
           <button className="btn accent" onClick={() => setModalOpen(true)}>
-            <Plus size={16} /> 새 작품
+            <Plus size={16} /> {t("library.newProject")}
           </button>
           <button
             className="btn ghost"
             onClick={handleImport}
             disabled={importing || pending !== null}
           >
-            <Upload size={15} /> {importing ? "가져오는 중…" : "가져오기 (.md)"}
+            <Upload size={15} /> {importing ? t("library.importing") : t("library.menu.importMarkdown")}
           </button>
           <button className="btn ghost" onClick={() => setSearchOpen(true)}>
-            <Search size={15} /> 검색 <span className="kbd" style={{ marginLeft: 4 }}>⌘F</span>
+            <Search size={15} /> {t("library.menu.search")} <span className="kbd" style={{ marginLeft: 4 }}>⌘F</span>
           </button>
         </div>
 
         <div className="lib-shelf-head">
-          <span className="lib-shelf-title">최근 작품</span>
+          <span className="lib-shelf-title">{t("library.recentProjects")}</span>
           {totalRecent > RECENT_LIMIT && (
-            <Link to="/library/all" className="lib-shelf-all">전체 라이브러리 →</Link>
+            <Link to="/library/all" className="lib-shelf-all">{t("library.allProjects")}</Link>
           )}
         </div>
 
         {loading ? (
-          <p className="hint">불러오는 중…</p>
+          <p className="hint">{t("common.loading")}</p>
         ) : error ? (
           <p className="error">{error}</p>
         ) : (
@@ -291,13 +283,13 @@ export function Library() {
               >
                 <h3 className="book-title">{p.title}</h3>
                 <div className="book-spacer" />
-                <div className="book-scenes">{LENGTH_LABEL[p.length_target]}</div>
-                <div className="book-meta">{humanCount(p.word_count)}</div>
+                <div className="book-scenes">{lengthLabel(language, p.length_target)}</div>
+                <div className="book-meta">{formatWordCount(language, p.word_count)}</div>
               </button>
             ))}
             <button className="book-new" onClick={() => setModalOpen(true)}>
               <span className="plus-ring"><Plus size={20} /></span>
-              <span>새 작품 시작</span>
+              <span>{t("library.startNewProject")}</span>
             </button>
           </div>
         )}
@@ -328,24 +320,24 @@ export function Library() {
       {safetyOpen && !modalOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal safety-modal">
-            <h2>쓰기 안전 체크리스트</h2>
+            <h2>{t("library.safety.title")}</h2>
             <ul className="safety-list">
               <li>
-                <span>데이터</span>
-                <code>{diagnostics?.home ?? "확인 중"}</code>
+                <span>{t("library.safety.data")}</span>
+                <code>{diagnostics?.home ?? t("library.safety.checking")}</code>
               </li>
               <li>
-                <span>백업</span>
-                <code>{settingsRow?.backup_dir ?? "확인 중"}</code>
+                <span>{t("library.safety.backup")}</span>
+                <code>{settingsRow?.backup_dir ?? t("library.safety.checking")}</code>
               </li>
               <li>
                 <span>Git sync</span>
-                <strong>{settingsRow?.git_sync_dir ? "설정됨" : "비활성"}</strong>
+                <strong>{settingsRow?.git_sync_dir ? t("library.safety.configured") : t("library.safety.disabled")}</strong>
               </li>
             </ul>
             <div className="modal-actions">
-              <button type="button" onClick={() => navigate("/settings")}>Git sync 설정</button>
-              <button type="button" onClick={dismissSafety}>다시 보지 않기</button>
+              <button type="button" onClick={() => navigate("/settings")}>{t("library.safety.gitSettings")}</button>
+              <button type="button" onClick={dismissSafety}>{t("library.safety.dismiss")}</button>
             </div>
           </div>
         </div>
@@ -354,10 +346,10 @@ export function Library() {
       {diagnosticsOpen && diagnostics && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal diagnostics-modal">
-            <h2>진단 정보</h2>
+            <h2>{t("library.diagnostics.title")}</h2>
             <pre>{JSON.stringify(diagnostics, null, 2)}</pre>
             <div className="modal-actions">
-              <button type="button" onClick={() => setDiagnosticsOpen(false)}>닫기</button>
+              <button type="button" onClick={() => setDiagnosticsOpen(false)}>{t("common.close")}</button>
             </div>
           </div>
         </div>
