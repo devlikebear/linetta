@@ -20,6 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/tars/pkg/llm"
+	"github.com/devlikebear/tars/pkg/session"
 )
 
 type fakeClient struct {
@@ -182,6 +183,65 @@ func TestCancel_UnknownRunErrors(t *testing.T) {
 	svc, _, _ := newSvc(t, "안녕")
 	if err := svc.Cancel("no-such-run"); err == nil {
 		t.Fatal("expected error cancelling unknown run")
+	}
+}
+
+func TestCompactHistory_RewritesTranscriptAsSummary(t *testing.T) {
+	svc, _, projectID := newSvc(t, "안녕")
+	sess, err := svc.sessions.EnsureWorker(projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := svc.sessions.TranscriptPath(sess.ID)
+	at := time.UnixMilli(1000)
+	if err := session.AppendMessage(path, session.Message{Role: "user", Content: "첫 장면을 더 불안하게 만들고 싶어", Timestamp: at}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.AppendMessage(path, session.Message{Role: "assistant", Content: "비 오는 창문과 문자를 늦게 보여주면 긴장이 생깁니다.", Timestamp: at}); err != nil {
+		t.Fatal(err)
+	}
+
+	msgs, err := svc.CompactHistory(context.Background(), projectID, func() int64 { return 2000 })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 || msgs[0].Role != "assistant" {
+		t.Fatalf("compact messages = %+v", msgs)
+	}
+	if !strings.Contains(msgs[0].Content, "이전 컴패니언 대화 요약") ||
+		!strings.Contains(msgs[0].Content, "나: 첫 장면을 더 불안하게") ||
+		!strings.Contains(msgs[0].Content, "컴패니언: 비 오는 창문") {
+		t.Fatalf("summary missing transcript details: %q", msgs[0].Content)
+	}
+	history, err := svc.History(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].Content != msgs[0].Content {
+		t.Fatalf("history not compacted: %+v", history)
+	}
+}
+
+func TestClearHistory_RemovesTranscriptMessages(t *testing.T) {
+	svc, _, projectID := newSvc(t, "안녕")
+	sess, err := svc.sessions.EnsureWorker(projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := svc.sessions.TranscriptPath(sess.ID)
+	if err := session.AppendMessage(path, session.Message{Role: "user", Content: "지울 대화", Timestamp: time.UnixMilli(1000)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.ClearHistory(context.Background(), projectID); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := svc.History(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("expected empty history, got %+v", msgs)
 	}
 }
 

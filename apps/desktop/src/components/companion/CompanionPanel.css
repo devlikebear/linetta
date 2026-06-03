@@ -5,6 +5,21 @@
 
 .companion-empty { color: var(--muted-2); font-size: 13px; font-family: var(--font-serif); }
 
+.companion-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.companion-action:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.companion-action:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+
 .companion-thinking { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
 
 /* collapsible provider reasoning / chain-of-thought */

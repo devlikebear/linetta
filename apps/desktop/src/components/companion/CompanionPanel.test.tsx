@@ -18,6 +18,8 @@ const companionState = vi.hoisted(() => ({
     status: "idle",
     send: vi.fn(),
     cancel: vi.fn(),
+    clear: vi.fn(),
+    compact: vi.fn(),
   },
 }));
 
@@ -35,7 +37,13 @@ describe("CompanionPanel", () => {
       status: "idle",
       send: vi.fn(),
       cancel: vi.fn(),
+      clear: vi.fn(),
+      compact: vi.fn(),
     };
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
   });
 
   it("shows a working indicator while streaming even before any prose", () => {
@@ -125,5 +133,43 @@ describe("CompanionPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "「온기」" }));
     expect(companionState.value.send).toHaveBeenCalledWith("「온기」");
+  });
+
+  it("copies visible chat messages to the clipboard", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    companionState.value = {
+      ...companionState.value,
+      messages: [
+        { role: "user", content: "이 장면 이상해?" },
+        { role: "assistant", content: "동기가 조금 더 필요해요." },
+      ],
+    };
+
+    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "대화 복사" }));
+
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("나:\n이 장면 이상해?"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("컴패니언:\n동기가 조금 더 필요해요."));
+  });
+
+  it("compacts and clears chat through panel actions", async () => {
+    const user = userEvent.setup();
+    companionState.value = {
+      ...companionState.value,
+      messages: [
+        { role: "user", content: "요약해줘" },
+        { role: "assistant", content: "요약했습니다." },
+      ],
+    };
+
+    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: "대화 압축" }));
+    await user.click(screen.getByRole("button", { name: "대화 클리어" }));
+
+    expect(companionState.value.compact).toHaveBeenCalledOnce();
+    expect(companionState.value.clear).toHaveBeenCalledOnce();
   });
 });

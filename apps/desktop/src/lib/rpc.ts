@@ -258,6 +258,11 @@ export const companion = {
   history: (projectId: string) =>
     rpcCall<{ messages: CompanionMessage[] }>("companion.history", { project_id: projectId })
       .then((r) => r.messages ?? []),
+  compact: (projectId: string) =>
+    rpcCall<{ messages: CompanionMessage[] }>("companion.compact", { project_id: projectId })
+      .then((r) => r.messages ?? []),
+  clear: (projectId: string) =>
+    rpcCall<{ ok: true }>("companion.clear", { project_id: projectId }),
   cancel: (runId: string) =>
     rpcCall<{ ok: true }>("companion.cancel", { run_id: runId }),
   remember: (projectId: string, text: string, category?: string) =>

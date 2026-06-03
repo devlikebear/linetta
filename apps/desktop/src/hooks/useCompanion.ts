@@ -25,6 +25,13 @@ export function stripProposalBlock(text: string): string {
     .trim();
 }
 
+function toChatMessage(m: CompanionMessage): ChatMessage {
+  return {
+    role: m.role === "assistant" ? "assistant" : "user",
+    content: m.role === "assistant" ? stripProposalBlock(m.content) : m.content,
+  };
+}
+
 export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: () => void) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState("");
@@ -49,12 +56,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     companionApi.history(projectId)
       .then((msgs: CompanionMessage[]) => {
         if (cancelled) return;
-        setMessages(
-          msgs.map((m) => ({
-            role: m.role === "assistant" ? "assistant" : "user",
-            content: m.role === "assistant" ? stripProposalBlock(m.content) : m.content,
-          })),
-        );
+        setMessages(msgs.map(toChatMessage));
       })
       .catch(() => { if (!cancelled) setMessages([]); });
     return () => { cancelled = true; };
@@ -142,5 +144,29 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     if (id) companionApi.cancel(id).catch(() => {});
   }, []);
 
-  return { messages, streaming, thinking, reasoning, status, send, cancel };
+  const clear = useCallback(async () => {
+    await companionApi.clear(projectId);
+    setMessages([]);
+    setStreamingBoth("");
+    setThinking("");
+    setReasoningBoth("");
+    setStatus("idle");
+    runIdRef.current = null;
+    pendingProposalRef.current = null;
+    pendingChoicesRef.current = null;
+  }, [projectId]);
+
+  const compact = useCallback(async () => {
+    const msgs = await companionApi.compact(projectId);
+    setMessages(msgs.map(toChatMessage));
+    setStreamingBoth("");
+    setThinking("");
+    setReasoningBoth("");
+    setStatus("idle");
+    runIdRef.current = null;
+    pendingProposalRef.current = null;
+    pendingChoicesRef.current = null;
+  }, [projectId]);
+
+  return { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact };
 }

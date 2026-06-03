@@ -6,6 +6,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/tars/pkg/session"
 )
 
 type companionSendParams struct {
@@ -50,12 +51,45 @@ func CompanionHistory(svc *companion.Service) rpc.Handler {
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		out := make([]companionMessage, 0, len(msgs))
-		for _, m := range msgs {
-			out = append(out, companionMessage{Role: m.Role, Content: m.Content, Timestamp: m.Timestamp.UnixMilli()})
-		}
-		return json.Marshal(map[string][]companionMessage{"messages": out})
+		return marshalCompanionMessages(msgs)
 	}
+}
+
+// CompanionCompact returns a handler for companion.compact.
+func CompanionCompact(svc *companion.Service, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionHistoryParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		msgs, err := svc.CompactHistory(ctx, p.ProjectID, func() int64 { return now() })
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return marshalCompanionMessages(msgs)
+	}
+}
+
+// CompanionClear returns a handler for companion.clear.
+func CompanionClear(svc *companion.Service) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionHistoryParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		if err := svc.ClearHistory(ctx, p.ProjectID); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+func marshalCompanionMessages(msgs []session.Message) (json.RawMessage, error) {
+	out := make([]companionMessage, 0, len(msgs))
+	for _, m := range msgs {
+		out = append(out, companionMessage{Role: m.Role, Content: m.Content, Timestamp: m.Timestamp.UnixMilli()})
+	}
+	return json.Marshal(map[string][]companionMessage{"messages": out})
 }
 
 type companionCancelParams struct {

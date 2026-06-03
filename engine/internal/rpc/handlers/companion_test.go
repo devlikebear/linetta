@@ -39,6 +39,25 @@ func TestCompanionHistoryInvalidParams(t *testing.T) {
 	}
 }
 
+func TestCompanionCompactInvalidParams(t *testing.T) {
+	clock := func() int64 { return 0 }
+	h := CompanionCompact(nil, clock)
+	_, err := h(context.Background(), json.RawMessage(`{}`))
+	var mErr *rpc.MethodError
+	if !errors.As(err, &mErr) || mErr.Code != rpc.CodeInvalidParams {
+		t.Fatalf("expected rpc.MethodError CodeInvalidParams, got %T %v", err, err)
+	}
+}
+
+func TestCompanionClearInvalidParams(t *testing.T) {
+	h := CompanionClear(nil)
+	_, err := h(context.Background(), json.RawMessage(`{}`))
+	var mErr *rpc.MethodError
+	if !errors.As(err, &mErr) || mErr.Code != rpc.CodeInvalidParams {
+		t.Fatalf("expected rpc.MethodError CodeInvalidParams, got %T %v", err, err)
+	}
+}
+
 func TestCompanionCancelInvalidParams(t *testing.T) {
 	h := CompanionCancel(nil)
 	_, err := h(context.Background(), json.RawMessage(`{}`))

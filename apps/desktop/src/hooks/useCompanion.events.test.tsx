@@ -10,9 +10,9 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 
-const rpc = vi.hoisted(() => ({ history: vi.fn(), send: vi.fn() }));
+const rpc = vi.hoisted(() => ({ history: vi.fn(), send: vi.fn(), cancel: vi.fn(), clear: vi.fn(), compact: vi.fn() }));
 vi.mock("../lib/rpc", () => ({
-  companion: { history: rpc.history, send: rpc.send },
+  companion: { history: rpc.history, send: rpc.send, cancel: rpc.cancel, clear: rpc.clear, compact: rpc.compact },
 }));
 
 import { useCompanion } from "./useCompanion";
@@ -25,9 +25,13 @@ function fire(event: string, payload: unknown) {
 
 describe("useCompanion streaming", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     ev.listeners.clear();
     rpc.history.mockResolvedValue([]);
     rpc.send.mockResolvedValue({ run_id: "r1" });
+    rpc.cancel.mockResolvedValue({ ok: true });
+    rpc.clear.mockResolvedValue({ ok: true });
+    rpc.compact.mockResolvedValue([]);
   });
 
   it("accumulates companion-delta into streaming live, then finalizes on done", async () => {
@@ -67,5 +71,40 @@ describe("useCompanion streaming", () => {
 
     fire("companion-done", { run_id: "r1", full_text: "개요입니다." });
     expect(result.current.reasoning).toBe("");
+  });
+
+  it("clears transcript through rpc and local state", async () => {
+    rpc.history.mockResolvedValue([{ role: "user", content: "남은 대화", timestamp: 1 }]);
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+
+    await act(async () => {
+      await result.current.clear();
+    });
+
+    expect(rpc.clear).toHaveBeenCalledWith("p1");
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.status).toBe("idle");
+  });
+
+  it("replaces local transcript with compacted history", async () => {
+    rpc.history.mockResolvedValue([
+      { role: "user", content: "긴 질문", timestamp: 1 },
+      { role: "assistant", content: "긴 응답", timestamp: 2 },
+    ]);
+    rpc.compact.mockResolvedValue([
+      { role: "assistant", content: "이전 컴패니언 대화 요약\n- 나: 긴 질문", timestamp: 3 },
+    ]);
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(result.current.messages).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.compact();
+    });
+
+    expect(rpc.compact).toHaveBeenCalledWith("p1");
+    expect(result.current.messages).toEqual([
+      { role: "assistant", content: "이전 컴패니언 대화 요약\n- 나: 긴 질문" },
+    ]);
   });
 });

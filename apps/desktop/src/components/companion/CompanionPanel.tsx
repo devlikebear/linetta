@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { CornerDownLeft, MessageSquare, X } from "lucide-react";
-import { useCompanion } from "../../hooks/useCompanion";
+import { Archive, Check, Copy, CornerDownLeft, MessageSquare, Trash2, X } from "lucide-react";
+import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { ProposalCard } from "./ProposalCard";
 import { ChoiceCard } from "./ChoiceCard";
@@ -25,9 +25,17 @@ function streamProse(text: string): string {
   return (idx >= 0 ? text.slice(0, idx) : text).trimEnd();
 }
 
+function formatTranscript(messages: ChatMessage[], liveProse: string): string {
+  const rows = messages.map((m) => `${m.role === "user" ? "나" : "컴패니언"}:\n${m.content.trim()}`);
+  const live = liveProse.trim();
+  if (live) rows.push(`컴패니언:\n${live}`);
+  return rows.filter((row) => row.trim()).join("\n\n");
+}
+
 export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Props) {
-  const { messages, streaming, thinking, reasoning, status, send, cancel } = useCompanion(projectId, nodeIdRef, onApplied);
+  const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied);
   const [draft, setDraft] = useState("");
+  const [copied, setCopied] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const focusInput = () => inputRef.current?.focus();
@@ -47,12 +55,52 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
   // instead of jumping. The completed message still uses the full text.
   const smoothStreaming = useSmoothStream(streaming, isStreaming);
   const liveProse = streamProse(smoothStreaming);
+  const hasTranscript = messages.length > 0 || liveProse.trim().length > 0;
+
+  const copyTranscript = async () => {
+    const text = formatTranscript(messages, liveProse);
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+  };
 
   return (
     <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
         <span className="ttl"><span className="ic"><MessageSquare size={16} /></span> 집필 컴패니언</span>
-        <button type="button" className="panel-close" onClick={onClose} aria-label="닫기"><X size={16} /></button>
+        <div className="companion-head-actions">
+          <button
+            type="button"
+            className="panel-close companion-action"
+            onClick={copyTranscript}
+            disabled={!hasTranscript}
+            aria-label="대화 복사"
+            title="대화 복사"
+          >
+            {copied ? <Check size={15} /> : <Copy size={15} />}
+          </button>
+          <button
+            type="button"
+            className="panel-close companion-action"
+            onClick={() => { void compact(); }}
+            disabled={!hasTranscript || isStreaming}
+            aria-label="대화 압축"
+            title="대화 압축"
+          >
+            <Archive size={15} />
+          </button>
+          <button
+            type="button"
+            className="panel-close companion-action"
+            onClick={() => { void clear(); }}
+            disabled={!hasTranscript || isStreaming}
+            aria-label="대화 클리어"
+            title="대화 클리어"
+          >
+            <Trash2 size={15} />
+          </button>
+          <button type="button" className="panel-close" onClick={onClose} aria-label="닫기"><X size={16} /></button>
+        </div>
       </div>
 
       <div className="panel-scroll cmp-stream" ref={scrollRef}>

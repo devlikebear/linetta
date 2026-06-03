@@ -3,6 +3,9 @@ package companion
 import (
 	"context"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/beat"
@@ -22,6 +25,9 @@ const historyTokenBudget = 6000
 
 // entityContextLimit caps how many entities are injected.
 const entityContextLimit = 40
+
+const compactHistoryMaxMessages = 24
+const compactHistorySnippetRunes = 240
 
 // ClientFactory and ProviderSource are shared with the ai package so the same
 // settings adapter and default factory serve AI runs, companion, and summaries.
@@ -138,6 +144,121 @@ func (s *Service) History(ctx context.Context, projectID string) ([]session.Mess
 		return nil, err
 	}
 	return session.ReadMessages(s.sessions.TranscriptPath(sess.ID))
+}
+
+// CompactHistory replaces a long companion transcript with one assistant
+// summary message so future turns keep the useful context without replaying
+// every prior exchange.
+func (s *Service) CompactHistory(ctx context.Context, projectID string, now func() int64) ([]session.Message, error) {
+	sess, err := s.sessions.EnsureWorker(projectID)
+	if err != nil {
+		return nil, err
+	}
+	path := s.sessions.TranscriptPath(sess.ID)
+	msgs, err := session.ReadMessages(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(msgs) == 0 {
+		return nil, nil
+	}
+	at := time.Now().UTC()
+	if now != nil {
+		at = time.UnixMilli(now()).UTC()
+	}
+	compacted := []session.Message{{
+		Role:      "assistant",
+		Content:   compactTranscriptSummary(msgs),
+		Timestamp: at,
+	}}
+	if err := session.RewriteMessages(path, compacted); err != nil {
+		return nil, err
+	}
+	return compacted, nil
+}
+
+// ClearHistory removes all persisted companion transcript messages.
+func (s *Service) ClearHistory(ctx context.Context, projectID string) error {
+	sess, err := s.sessions.EnsureWorker(projectID)
+	if err != nil {
+		return err
+	}
+	return session.RewriteMessages(s.sessions.TranscriptPath(sess.ID), nil)
+}
+
+func compactTranscriptSummary(msgs []session.Message) string {
+	start := 0
+	if len(msgs) > compactHistoryMaxMessages {
+		start = len(msgs) - compactHistoryMaxMessages
+	}
+	var b strings.Builder
+	b.WriteString("이전 컴패니언 대화 요약\n\n")
+	if start > 0 {
+		b.WriteString("- 이전 메시지 ")
+		b.WriteString(strconv.Itoa(start))
+		b.WriteString("개는 생략됨\n")
+	}
+	for _, msg := range msgs[start:] {
+		text := compactSnippet(stripCompanionControlBlocks(msg.Content))
+		if text == "" {
+			continue
+		}
+		b.WriteString("- ")
+		b.WriteString(displayRole(msg.Role))
+		b.WriteString(": ")
+		b.WriteString(text)
+		b.WriteString("\n")
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func displayRole(role string) string {
+	switch strings.TrimSpace(role) {
+	case "assistant":
+		return "컴패니언"
+	case "user":
+		return "나"
+	default:
+		if strings.TrimSpace(role) == "" {
+			return "기록"
+		}
+		return strings.TrimSpace(role)
+	}
+}
+
+func compactSnippet(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	runes := []rune(text)
+	if len(runes) <= compactHistorySnippetRunes {
+		return text
+	}
+	return string(runes[:compactHistorySnippetRunes]) + "..."
+}
+
+func stripCompanionControlBlocks(text string) string {
+	for {
+		idx := firstControlFence(text)
+		if idx < 0 {
+			return text
+		}
+		rest := text[idx+len("```linetta-"):]
+		end := strings.Index(rest, "```")
+		if end < 0 {
+			return text[:idx]
+		}
+		text = text[:idx] + rest[end+len("```"):]
+	}
+}
+
+func firstControlFence(text string) int {
+	first := -1
+	for _, fence := range []string{"```linetta-proposal", "```linetta-query", "```linetta-choices"} {
+		idx := strings.Index(text, fence)
+		if idx >= 0 && (first < 0 || idx < first) {
+			first = idx
+		}
+	}
+	return first
 }
 
 // Send starts a companion turn; returns the run id. Streaming + proposal arrive

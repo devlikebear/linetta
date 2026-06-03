@@ -216,6 +216,8 @@ func main() {
 	s.Handle("ai.cancel", handlers.CancelAI(runner))
 	s.Handle("companion.send", handlers.CompanionSend(companionSvc, clock))
 	s.Handle("companion.history", handlers.CompanionHistory(companionSvc))
+	s.Handle("companion.compact", handlers.CompanionCompact(companionSvc, clock))
+	s.Handle("companion.clear", handlers.CompanionClear(companionSvc))
 	s.Handle("companion.cancel", handlers.CompanionCancel(companionSvc))
 	s.Handle("companion.remember", handlers.CompanionRemember(companionSvc))
 	s.Handle("companion.apply_ops", handlers.CompanionApplyOps(companionSvc, clock))
