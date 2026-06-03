@@ -155,6 +155,9 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 	if in.Outline != nil {
 		cur.Outline = *in.Outline
 	}
+	if in.Synopsis != nil {
+		cur.Synopsis = *in.Synopsis
+	}
 	if in.Title != nil {
 		if *in.Title == "" {
 			return Project{}, fmt.Errorf("%w: title required", ErrInvalidInput)
@@ -162,8 +165,8 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		cur.Title = *in.Title
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE projects SET title = ?, outline = ?, updated_at = ? WHERE id = ?`,
-		cur.Title, cur.Outline, now, in.ID); err != nil {
+		`UPDATE projects SET title = ?, outline = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
+		cur.Title, cur.Outline, cur.Synopsis, now, in.ID); err != nil {
 		return Project{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -173,7 +176,7 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 }
 
 const baseSelect = `
-SELECT id, title, genres, length_target, default_pov, style_notes, outline,
+SELECT id, title, genres, length_target, default_pov, style_notes, outline, synopsis,
        word_count, last_opened_node_id, created_at, updated_at, archived_at
 FROM projects`
 
@@ -190,7 +193,7 @@ func scan(row scanner) (Project, error) {
 		archivedAt sql.NullInt64
 	)
 	if err := row.Scan(&p.ID, &p.Title, &genresJSON, &p.LengthTarget, &p.DefaultPOV,
-		&p.StyleNotes, &p.Outline, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
+		&p.StyleNotes, &p.Outline, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
 		return Project{}, err
 	}
 	if err := json.Unmarshal([]byte(genresJSON), &p.Genres); err != nil {

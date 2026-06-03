@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { NodeRow, Project, Entity, EntityKind } from "../lib/types";
+import { projects as projectsApi } from "../lib/rpc";
 import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book } from "../lib/icons";
 import { InlineEditableText } from "./InlineEditableText";
@@ -50,6 +51,75 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
 export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onOpenThread, onProjectChanged, onProjectTitleChange }: Props) {
   const target = TARGET_WORDS[project.length_target] ?? 90000;
   const pct = target > 0 ? Math.min(100, Math.round((project.word_count / target) * 100)) : 0;
+  const [overview, setOverview] = useState(project.outline ?? "");
+  const [synopsis, setSynopsis] = useState(project.synopsis ?? "");
+  const [synopsisBusy, setSynopsisBusy] = useState<"rewrite" | "clear" | null>(null);
+  const overviewSaveTimer = useRef<number | null>(null);
+  const synopsisSaveTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    setOverview(project.outline ?? "");
+    setSynopsis(project.synopsis ?? "");
+  }, [project.id, project.outline, project.synopsis]);
+
+  useEffect(() => () => {
+    if (overviewSaveTimer.current) window.clearTimeout(overviewSaveTimer.current);
+    if (synopsisSaveTimer.current) window.clearTimeout(synopsisSaveTimer.current);
+  }, []);
+
+  const saveOverview = (next: string) => {
+    setOverview(next);
+    if (overviewSaveTimer.current) window.clearTimeout(overviewSaveTimer.current);
+    overviewSaveTimer.current = window.setTimeout(async () => {
+      try {
+        const updated = await projectsApi.update({ id: project.id, outline: next });
+        onProjectChanged?.(updated);
+      } catch {
+        /* benign; keep local draft */
+      }
+    }, 600);
+  };
+
+  const saveSynopsis = (next: string) => {
+    setSynopsis(next);
+    if (synopsisSaveTimer.current) window.clearTimeout(synopsisSaveTimer.current);
+    synopsisSaveTimer.current = window.setTimeout(async () => {
+      try {
+        const updated = await projectsApi.update({ id: project.id, synopsis: next });
+        onProjectChanged?.(updated);
+      } catch {
+        /* benign; keep local draft */
+      }
+    }, 600);
+  };
+
+  const rewriteSynopsis = async () => {
+    if (synopsisSaveTimer.current) window.clearTimeout(synopsisSaveTimer.current);
+    setSynopsisBusy("rewrite");
+    try {
+      const updated = await projectsApi.rewriteSynopsis(project.id);
+      setSynopsis(updated.synopsis ?? "");
+      onProjectChanged?.(updated);
+    } catch {
+      /* benign; leave current synopsis visible */
+    } finally {
+      setSynopsisBusy(null);
+    }
+  };
+
+  const clearSynopsis = async () => {
+    if (synopsisSaveTimer.current) window.clearTimeout(synopsisSaveTimer.current);
+    setSynopsisBusy("clear");
+    try {
+      const updated = await projectsApi.clearSynopsis(project.id);
+      setSynopsis(updated.synopsis ?? "");
+      onProjectChanged?.(updated);
+    } catch {
+      /* benign; leave current synopsis visible */
+    } finally {
+      setSynopsisBusy(null);
+    }
+  };
 
   return (
     <aside className="panel">
@@ -95,6 +165,42 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
           </div>
         </div>
 
+        {/* 작품 개요 — writer-authored plan/intent. */}
+        <div className="sec">
+          <h4>작품 개요</h4>
+          <textarea
+            aria-label="작품 개요"
+            className="project-text-edit"
+            value={overview}
+            rows={5}
+            placeholder="로그라인, 주제, 큰 흐름"
+            onChange={(e) => saveOverview(e.target.value)}
+          />
+        </div>
+
+        {/* 시놉시스 — editable story summary used as its own AI context item. */}
+        <div className="sec">
+          <h4>
+            <span>시놉시스</span>
+            <span className="sec-actions">
+              <button type="button" onClick={rewriteSynopsis} disabled={synopsisBusy !== null}>
+                {synopsisBusy === "rewrite" ? "재작성 중" : "재작성"}
+              </button>
+              <button type="button" onClick={clearSynopsis} disabled={synopsisBusy !== null || synopsis.trim() === ""}>
+                클리어
+              </button>
+            </span>
+          </h4>
+          <textarea
+            aria-label="작품 시놉시스"
+            className="project-text-edit"
+            value={synopsis}
+            rows={6}
+            placeholder="현재 줄거리 요약"
+            onChange={(e) => saveSynopsis(e.target.value)}
+          />
+        </div>
+
         {/* 등장 — mentioned entities */}
         <div className="sec">
           <h4>등장 <span style={{ color: "var(--muted-2)" }}>{mentionedEntities.length}</span></h4>
@@ -124,12 +230,11 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
           })}
         </div>
 
-        {/* 플롯 — outline + spine */}
+        {/* 플롯 — storylines + beats */}
         <PlotPanel
           project={project}
           nodeId={node.id}
           onOpenThread={onOpenThread}
-          onProjectChanged={onProjectChanged}
         />
       </div>
     </aside>

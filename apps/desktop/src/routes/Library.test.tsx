@@ -61,6 +61,7 @@ describe("Library", () => {
         default_pov: "first",
         style_notes: "",
         outline: "",
+        synopsis: "",
         word_count: 120,
         last_opened_node_id: "node-1",
         created_at: 1,

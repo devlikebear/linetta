@@ -29,6 +29,7 @@ type ContextKey string
 const (
 	ContextKeyCurrentScene  ContextKey = "current_scene"
 	ContextKeyOverview      ContextKey = "overview"
+	ContextKeySynopsis      ContextKey = "synopsis"
 	ContextKeyNearbyScenes  ContextKey = "nearby_scenes"
 	ContextKeyRelatedScenes ContextKey = "related_scenes"
 	ContextKeyPlot          ContextKey = "plot"
@@ -44,6 +45,7 @@ const (
 type ContextSelection struct {
 	CurrentScene  *bool `json:"current_scene,omitempty"`
 	Overview      *bool `json:"overview,omitempty"`
+	Synopsis      *bool `json:"synopsis,omitempty"`
 	NearbyScenes  *bool `json:"nearby_scenes,omitempty"`
 	RelatedScenes *bool `json:"related_scenes,omitempty"`
 	Plot          *bool `json:"plot,omitempty"`
@@ -63,6 +65,8 @@ func (s ContextSelection) Enabled(key ContextKey) bool {
 		return enabledByDefault(s.CurrentScene)
 	case ContextKeyOverview:
 		return enabledByDefault(s.Overview)
+	case ContextKeySynopsis:
+		return enabledByDefault(s.Synopsis)
 	case ContextKeyNearbyScenes:
 		return enabledByDefault(s.NearbyScenes)
 	case ContextKeyRelatedScenes:
@@ -96,6 +100,7 @@ type ProjectMeta struct {
 	Genres       []string `json:"genres"`
 	LengthTarget string   `json:"length_target"`
 	DefaultPOV   string   `json:"default_pov"`
+	Synopsis     string   `json:"synopsis"`
 }
 
 // PreviewCounts is the structural summary of a built Context, used by the

@@ -167,6 +167,42 @@ func TestProjectOutlineUpdate(t *testing.T) {
 	}
 }
 
+func TestProjectSynopsisUpdate(t *testing.T) {
+	s := openStore(t)
+	repo := NewRepo(s)
+	ctx := context.Background()
+	p, err := repo.Create(ctx, 1000, NewInput{Title: "테스트작", Genres: []string{"판타지"}, LengthTarget: "novel", DefaultPOV: "third_limited"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Synopsis != "" {
+		t.Fatalf("new project synopsis should be empty, got %q", p.Synopsis)
+	}
+	outline := "주제와 3막 계획"
+	synopsis := "실제로 일어나는 사건 요약"
+	updated, err := repo.Update(ctx, 2000, UpdateInput{ID: p.ID, Outline: &outline, Synopsis: &synopsis})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Outline != outline {
+		t.Fatalf("outline = %q", updated.Outline)
+	}
+	if updated.Synopsis != synopsis {
+		t.Fatalf("synopsis = %q", updated.Synopsis)
+	}
+	cleared := ""
+	again, err := repo.Update(ctx, 3000, UpdateInput{ID: p.ID, Synopsis: &cleared})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Outline != outline {
+		t.Fatalf("synopsis clear should preserve outline, got %q", again.Outline)
+	}
+	if again.Synopsis != "" {
+		t.Fatalf("synopsis should be clear, got %q", again.Synopsis)
+	}
+}
+
 func TestProjectTitleUpdate(t *testing.T) {
 	s := openStore(t)
 	repo := NewRepo(s)

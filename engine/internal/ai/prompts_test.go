@@ -121,6 +121,52 @@ func TestBuildMessages_contextSelectionOmitsDisabledSections(t *testing.T) {
 	}
 }
 
+func TestBuildMessagesRendersOutlineAndSynopsisSeparately(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬",
+		Project: ProjectMeta{
+			Synopsis: "사건이 실제로 이렇게 전개된다.",
+		},
+		Outline:    "작가의 계획과 주제 메모.",
+		UserPrompt: "이어 써줘",
+	}
+	user := BuildMessages(c)[1].Content
+	for _, want := range []string{
+		"## 작품 개요",
+		"작가의 계획과 주제 메모.",
+		"## 작품 시놉시스",
+		"사건이 실제로 이렇게 전개된다.",
+	} {
+		if !strings.Contains(user, want) {
+			t.Fatalf("prompt missing %q:\n%s", want, user)
+		}
+	}
+}
+
+func TestProjectMetaSelectionDoesNotDisableSynopsis(t *testing.T) {
+	off := false
+	c := Context{
+		SceneLabel: "씬",
+		Project: ProjectMeta{
+			Genres:       []string{"미스터리"},
+			LengthTarget: "novel",
+			DefaultPOV:   "third_limited",
+			Synopsis:     "사건 요약",
+		},
+		UserPrompt: "이어 써줘",
+		Options: Options{Context: ContextSelection{
+			ProjectMeta: &off,
+		}},
+	}
+	user := BuildMessages(c)[1].Content
+	if strings.Contains(user, "## 작품 설정") || strings.Contains(user, "미스터리") {
+		t.Fatalf("project meta should be disabled:\n%s", user)
+	}
+	if !strings.Contains(user, "## 작품 시놉시스") || !strings.Contains(user, "사건 요약") {
+		t.Fatalf("synopsis should remain enabled when project meta is disabled:\n%s", user)
+	}
+}
+
 func TestPreviewFromContextRendersPlotSection(t *testing.T) {
 	c := Context{
 		Outline: "작품 전체 개요",
@@ -216,11 +262,11 @@ func TestBuildUserRendersPlotAndRelations(t *testing.T) {
 	}
 }
 
-func TestOverviewFallsBackToSynopsis(t *testing.T) {
+func TestOverviewDoesNotFallbackToDerivedSynopsis(t *testing.T) {
 	c := Context{SceneLabel: "씬", UserPrompt: "x", Hierarchical: HierarchicalContext{ProjectSynopsis: "파생 시놉시스"}}
 	out := buildUser(c)
-	if !strings.Contains(out, "## 작품 개요") || !strings.Contains(out, "파생 시놉시스") {
-		t.Fatalf("synopsis fallback failed:\n%s", out)
+	if strings.Contains(out, "파생 시놉시스") || strings.Contains(out, "## 작품 개요") || strings.Contains(out, "## 작품 시놉시스") {
+		t.Fatalf("derived synopsis should not be injected unless stored on project:\n%s", out)
 	}
 }
 

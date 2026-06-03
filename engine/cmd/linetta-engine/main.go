@@ -169,6 +169,8 @@ func main() {
 	s.Handle("projects.get", handlers.GetProject(projects))
 	s.Handle("projects.archive", handlers.ArchiveProject(projects, clock))
 	s.Handle("projects.update", handlers.UpdateProject(projects, clock))
+	s.Handle("projects.rewrite_synopsis", handlers.RewriteProjectSynopsis(projects, contextBuilder, clock))
+	s.Handle("projects.clear_synopsis", handlers.ClearProjectSynopsis(projects, clock))
 	s.Handle("nodes.get", handlers.GetNode(nodes))
 	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, snaps, clock, summ.Enqueue))
 	s.Handle("nodes.set_last_opened", handlers.SetLastOpened(nodes, clock))

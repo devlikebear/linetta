@@ -597,6 +597,36 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .save-pill.saving { color: var(--muted); }
 .save-pill.saving .d { background: var(--muted); }
 
+/* ---- Project overview / synopsis ---- */
+.project-text-edit {
+  width: 100%;
+  min-height: 126px;
+  max-height: 240px;
+  resize: vertical;
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 11px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  outline: none;
+}
+.project-text-edit:focus { border-color: var(--accent); }
+.sec-actions { display: inline-flex; align-items: center; gap: 5px; }
+.sec-actions button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  border-radius: var(--r-sm);
+  padding: 3px 7px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+.sec-actions button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.sec-actions button:disabled { opacity: 0.45; }
+
 /* ---- Mentioned entities ---- */
 .ent-row {
   display: flex; align-items: center; gap: 10px; width: 100%;

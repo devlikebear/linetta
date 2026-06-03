@@ -10,6 +10,7 @@ export interface Project {
   default_pov: DefaultPOV;
   style_notes: string;
   outline: string;
+  synopsis: string;
   word_count: number;
   last_opened_node_id?: string;
   created_at: number;
@@ -21,6 +22,7 @@ export interface UpdateProjectInput {
   id: string;
   title?: string;
   outline?: string;
+  synopsis?: string;
 }
 
 export interface NewProjectInput {
@@ -131,6 +133,7 @@ export interface AIOptions {
 export type AIContextKey =
   | "current_scene"
   | "overview"
+  | "synopsis"
   | "nearby_scenes"
   | "related_scenes"
   | "plot"

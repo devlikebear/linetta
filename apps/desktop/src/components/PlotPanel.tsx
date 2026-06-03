@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Project, PlotSpine, PlotScene, Thread } from "../lib/types";
-import { plot as plotApi, beats as beatsApi, threads as threadsApi, projects as projectsApi } from "../lib/rpc";
+import { plot as plotApi, beats as beatsApi, threads as threadsApi } from "../lib/rpc";
 import { Plus, X, Pencil } from "../lib/icons";
 import "./PlotPanel.css";
 
@@ -8,7 +8,6 @@ interface Props {
   project: Project;
   nodeId: string;
   onOpenThread: (threadId: string) => void;
-  onProjectChanged?: (project: Project) => void;
 }
 
 function IntensityBars({ level }: { level: number }) {
@@ -21,16 +20,13 @@ function IntensityBars({ level }: { level: number }) {
   );
 }
 
-export function PlotPanel({ project, nodeId, onOpenThread, onProjectChanged }: Props) {
+export function PlotPanel({ project, nodeId, onOpenThread }: Props) {
   const [spine, setSpine] = useState<PlotSpine | null>(null);
   const [openThreads, setOpenThreads] = useState<Thread[]>([]);
-  const [outlineOpen, setOutlineOpen] = useState(true);
-  const [outline, setOutline] = useState(project.outline ?? "");
   const [editingBeat, setEditingBeat] = useState<string | null>(null);
   const [adding, setAdding] = useState<"current" | "next" | null>(null);
   const [draftThread, setDraftThread] = useState("");
   const [draftLabel, setDraftLabel] = useState("");
-  const saveTimer = useRef<number | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -60,23 +56,6 @@ export function PlotPanel({ project, nodeId, onOpenThread, onProjectChanged }: P
     })();
     return () => { cancelled = true; };
   }, [nodeId, project.id]);
-
-  useEffect(() => () => {
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-  }, []);
-
-  useEffect(() => { setOutline(project.outline ?? ""); }, [project.id, project.outline]);
-
-  const saveOutline = (next: string) => {
-    setOutline(next);
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(async () => {
-      try {
-        const updated = await projectsApi.update({ id: project.id, outline: next });
-        onProjectChanged?.(updated);
-      } catch { /* benign; keep local draft */ }
-    }, 600);
-  };
 
   const addBeat = async (target: "current" | "next") => {
     const sceneId = target === "current" ? spine?.current.node_id : spine?.next?.node_id;
@@ -177,13 +156,6 @@ export function PlotPanel({ project, nodeId, onOpenThread, onProjectChanged }: P
   return (
     <section className="sec">
       <h4>플롯</h4>
-      <button type="button" className="plot-toggle" onClick={() => setOutlineOpen((v) => !v)}>
-        {outlineOpen ? "▾" : "▸"} 개요
-      </button>
-      {outlineOpen && (
-        <textarea className="plot-outline-edit" value={outline} rows={5} placeholder="작품 전체 개요 (로그라인 + 줄거리)"
-          onChange={(e) => saveOutline(e.target.value)} />
-      )}
       {openThreads.length === 0 && (
         <p className="sec-empty" style={{ marginTop: 12 }}>스토리라인이 없어요. 명령 팔레트에서 "이 씬을 새 Thread로 표시"로 시작하세요.</p>
       )}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
@@ -101,6 +102,48 @@ func UpdateProject(repo *project.Repo, now Clock) rpc.Handler {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(p)
+	}
+}
+
+// RewriteProjectSynopsis derives a fresh synopsis from the current root
+// container summaries and stores it on the project as the editable synopsis.
+func RewriteProjectSynopsis(repo *project.Repo, builder *ai.ContextBuilder, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		synopsis, err := builder.DeriveProjectSynopsis(ctx, p.ID, true)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		got, err := repo.Update(ctx, now(), project.UpdateInput{ID: p.ID, Synopsis: &synopsis})
+		if errors.Is(err, project.ErrNotFound) {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+		}
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(got)
+	}
+}
+
+// ClearProjectSynopsis removes the editable synopsis while preserving outline.
+func ClearProjectSynopsis(repo *project.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		empty := ""
+		got, err := repo.Update(ctx, now(), project.UpdateInput{ID: p.ID, Synopsis: &empty})
+		if errors.Is(err, project.ErrNotFound) {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+		}
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(got)
 	}
 }
 

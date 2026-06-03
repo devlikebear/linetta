@@ -69,6 +69,8 @@ export const projects = {
   list: (params: ListProjectsParams = {}) => rpcCall<Project[]>("projects.list", params),
   get: (id: string) => rpcCall<Project>("projects.get", { id }),
   update: (input: UpdateProjectInput) => rpcCall<Project>("projects.update", input),
+  rewriteSynopsis: (id: string) => rpcCall<Project>("projects.rewrite_synopsis", { id }),
+  clearSynopsis: (id: string) => rpcCall<Project>("projects.clear_synopsis", { id }),
   archive: (id: string) => rpcCall<{ ok: true }>("projects.archive", { id }),
 };
 

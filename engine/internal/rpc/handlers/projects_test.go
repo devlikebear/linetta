@@ -6,9 +6,16 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/ai"
+	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/mention"
+	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
 func newRepo(t *testing.T) *project.Repo {
@@ -20,6 +27,59 @@ func newRepo(t *testing.T) *project.Repo {
 	}
 	t.Cleanup(func() { _ = s.Close() })
 	return project.NewRepo(s)
+}
+
+type projectSynopsisFixture struct {
+	projects *project.Repo
+	nodes    *node.Repo
+	builder  *ai.ContextBuilder
+	project  project.Project
+	root     node.Node
+}
+
+type fakeSynopsisRefresher struct {
+	nodes *node.Repo
+	text  string
+}
+
+func (r fakeSynopsisRefresher) RefreshNow(ctx context.Context, nodeID string) {
+	n, err := r.nodes.Get(ctx, nodeID)
+	if err != nil {
+		return
+	}
+	_ = r.nodes.SetSummary(ctx, nodeID, r.text, n.ContentVersion)
+}
+
+func newProjectSynopsisFixture(t *testing.T) projectSynopsisFixture {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	projects := project.NewRepo(s)
+	nodes := node.NewRepo(s)
+	p, err := projects.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	root, err := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, node.KindContainer, "1부", "", 1100)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+	builder := ai.NewContextBuilder(
+		projects,
+		nodes,
+		mention.NewRepo(s),
+		thread.NewRepo(s),
+		beat.NewRepo(s),
+		note.NewRepo(s),
+		relationship.NewRepo(s),
+	).WithSummaryRefresher(fakeSynopsisRefresher{nodes: nodes, text: "재작성된 시놉시스"})
+	return projectSynopsisFixture{projects: projects, nodes: nodes, builder: builder, project: p, root: root}
 }
 
 func TestCreateProjectHandler(t *testing.T) {
@@ -115,5 +175,46 @@ func TestArchiveAndGetProject(t *testing.T) {
 	_ = json.Unmarshal(gotRes, &fetched)
 	if fetched.ArchivedAt == nil || *fetched.ArchivedAt != 99 {
 		t.Errorf("archived_at = %v, want 99", fetched.ArchivedAt)
+	}
+}
+
+func TestRewriteProjectSynopsisHandler(t *testing.T) {
+	f := newProjectSynopsisFixture(t)
+	h := RewriteProjectSynopsis(f.projects, f.builder, func() int64 { return 2000 })
+
+	res, err := h(context.Background(), json.RawMessage(`{"id":"`+f.project.ID+`"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got project.Project
+	if err := json.Unmarshal(res, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Synopsis != "재작성된 시놉시스" {
+		t.Fatalf("synopsis = %q", got.Synopsis)
+	}
+	if got.Outline != "" {
+		t.Fatalf("rewrite synopsis should not touch outline, got %q", got.Outline)
+	}
+}
+
+func TestClearProjectSynopsisHandler(t *testing.T) {
+	f := newProjectSynopsisFixture(t)
+	body := "잘못된 시놉시스"
+	if _, err := f.projects.Update(context.Background(), 1500, project.UpdateInput{ID: f.project.ID, Synopsis: &body}); err != nil {
+		t.Fatalf("seed synopsis: %v", err)
+	}
+	h := ClearProjectSynopsis(f.projects, func() int64 { return 2000 })
+
+	res, err := h(context.Background(), json.RawMessage(`{"id":"`+f.project.ID+`"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got project.Project
+	if err := json.Unmarshal(res, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Synopsis != "" {
+		t.Fatalf("synopsis should be clear, got %q", got.Synopsis)
 	}
 }

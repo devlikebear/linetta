@@ -41,6 +41,7 @@ type Project struct {
 	DefaultPOV       string   `json:"default_pov"`   // first|third_limited|omniscient
 	StyleNotes       string   `json:"style_notes"`
 	Outline          string   `json:"outline"`
+	Synopsis         string   `json:"synopsis"`
 	WordCount        int      `json:"word_count"`
 	LastOpenedNodeID *string  `json:"last_opened_node_id,omitempty"`
 	CreatedAt        int64    `json:"created_at"`
@@ -65,7 +66,8 @@ type ListFilter struct {
 // UpdateInput patches editable project fields. Each pointer field is nil to
 // leave the value alone, or non-nil (including "") to set it.
 type UpdateInput struct {
-	ID      string  `json:"id"`
-	Title   *string `json:"title,omitempty"`
-	Outline *string `json:"outline,omitempty"`
+	ID       string  `json:"id"`
+	Title    *string `json:"title,omitempty"`
+	Outline  *string `json:"outline,omitempty"`
+	Synopsis *string `json:"synopsis,omitempty"`
 }

@@ -10,6 +10,7 @@ export type { ContextCounts };
 export const DEFAULT_AI_CONTEXT_SELECTION: AIContextSelection = {
   current_scene: true,
   overview: true,
+  synopsis: true,
   nearby_scenes: true,
   related_scenes: true,
   plot: true,

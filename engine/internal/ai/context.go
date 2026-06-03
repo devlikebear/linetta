@@ -165,6 +165,7 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			Genres:       proj.Genres,
 			LengthTarget: proj.LengthTarget,
 			DefaultPOV:   proj.DefaultPOV,
+			Synopsis:     proj.Synopsis,
 		},
 		Outline:       proj.Outline,
 		Hierarchical:  hierarchical,
@@ -190,6 +191,9 @@ func ApplyContextSelection(c Context) Context {
 	}
 	if !s.Enabled(ContextKeyOverview) {
 		c.Outline = ""
+	}
+	if !s.Enabled(ContextKeySynopsis) {
+		c.Project.Synopsis = ""
 		c.Hierarchical.ProjectSynopsis = ""
 	}
 	if !s.Enabled(ContextKeyNearbyScenes) {
@@ -211,7 +215,7 @@ func ApplyContextSelection(c Context) Context {
 		c.Notes = nil
 	}
 	if !s.Enabled(ContextKeyProjectMeta) {
-		c.Project = ProjectMeta{}
+		c.Project = ProjectMeta{Synopsis: c.Project.Synopsis}
 	}
 	if !s.Enabled(ContextKeyStyleNotes) {
 		c.StyleNotes = ""
@@ -309,6 +313,45 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 	trimToBudget(&out, hierarchicalMaxChars)
 
 	return out, nearbyIDs, nil
+}
+
+// DeriveProjectSynopsis builds the rollup synopsis from root containers. When
+// refresh is true, cached root summaries are invalidated first so the injected
+// SummaryRefresher rewrites them before this method returns.
+func (b *ContextBuilder) DeriveProjectSynopsis(ctx context.Context, projectID string, refresh bool) (string, error) {
+	all, err := b.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return "", err
+	}
+	var roots []node.Node
+	for _, n := range all {
+		if n.ParentID == nil && n.Kind == node.KindContainer {
+			if refresh {
+				_ = b.nodes.SetSummary(ctx, n.ID, "", 0)
+				n.Summary = ""
+				n.SummaryForVersion = 0
+			}
+			roots = append(roots, n)
+		}
+	}
+	if len(roots) == 0 {
+		return "", nil
+	}
+	if len(roots) == 1 {
+		return b.refreshAndRead(ctx, roots[0]), nil
+	}
+	var sb strings.Builder
+	for _, root := range roots {
+		body := b.refreshAndRead(ctx, root)
+		if body == "" {
+			continue
+		}
+		sb.WriteString(root.Label)
+		sb.WriteString(": ")
+		sb.WriteString(body)
+		sb.WriteString("\n")
+	}
+	return strings.TrimSpace(sb.String()), nil
 }
 
 // loadRelatedScenes runs the co-mention topology-RAG query and post-filters
@@ -569,7 +612,7 @@ func CountsFromContext(c Context) PreviewCounts {
 	return PreviewCounts{
 		NearbyScenes:      len(c.Hierarchical.NearbyLeafSummaries),
 		HasOutline:        strings.TrimSpace(c.Outline) != "",
-		HasSynopsis:       strings.TrimSpace(c.Hierarchical.ProjectSynopsis) != "",
+		HasSynopsis:       strings.TrimSpace(c.Project.Synopsis) != "",
 		RelatedScenes:     len(c.RelatedScenes),
 		Entities:          len(c.Entities),
 		Relationships:     len(c.Relationships),
@@ -601,13 +644,11 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 
 	add(ContextKeyCurrentScene, "현재 씬 본문", 1, c.SceneText, true)
 
-	overviewLabel := "작품 개요"
 	overview := strings.TrimSpace(c.Outline)
-	if overview == "" {
-		overviewLabel = "작품 시놉시스(폴백)"
-		overview = strings.TrimSpace(c.Hierarchical.ProjectSynopsis)
-	}
-	add(ContextKeyOverview, overviewLabel, boolCount(overview != ""), overview, false)
+	add(ContextKeyOverview, "작품 개요", boolCount(overview != ""), overview, false)
+
+	synopsis := strings.TrimSpace(c.Project.Synopsis)
+	add(ContextKeySynopsis, "작품 시놉시스", boolCount(synopsis != ""), synopsis, false)
 
 	add(ContextKeyNearbyScenes, "직전·직후 씬 발췌", len(c.Hierarchical.NearbyLeafSummaries), renderSceneSummariesPreview(c.Hierarchical.NearbyLeafSummaries), false)
 	add(ContextKeyRelatedScenes, "관련 과거 씬 (멘션 RAG)", len(c.RelatedScenes), renderSceneSummariesPreview(c.RelatedScenes), false)

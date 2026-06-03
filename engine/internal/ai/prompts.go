@@ -97,16 +97,17 @@ func buildUser(c Context) string {
 		b.WriteString("\n\n")
 	}
 
-	// Outline-first overview: the user-editable outline takes precedence over the
-	// derived project synopsis so the model frames the scene within the writer's
-	// stated plan.
 	overview := strings.TrimSpace(c.Outline)
-	if overview == "" {
-		overview = strings.TrimSpace(c.Hierarchical.ProjectSynopsis)
-	}
 	if overview != "" {
 		b.WriteString("## 작품 개요\n")
 		b.WriteString(overview)
+		b.WriteString("\n\n")
+	}
+
+	synopsis := strings.TrimSpace(c.Project.Synopsis)
+	if synopsis != "" {
+		b.WriteString("## 작품 시놉시스\n")
+		b.WriteString(synopsis)
 		b.WriteString("\n\n")
 	}
 

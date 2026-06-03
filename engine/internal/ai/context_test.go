@@ -822,6 +822,7 @@ func TestCountsFromContext_fullyPopulated(t *testing.T) {
 			Genres:       []string{"판타지"},
 			LengthTarget: "novel",
 			DefaultPOV:   "first",
+			Synopsis:     "작품 시놉시스",
 		},
 		Outline: "한 줄 개요",
 		Hierarchical: HierarchicalContext{
