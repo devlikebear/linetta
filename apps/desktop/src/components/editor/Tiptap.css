@@ -15,7 +15,12 @@
 
 .tiptap-editor .ProseMirror {
   outline: none;
+  caret-color: var(--ink);
   min-height: 4em; /* always click-able even when the doc is empty */
+}
+
+.tiptap-editor .ProseMirror p {
+  min-height: 1.92em;
 }
 
 /* Placeholder hint for empty docs so the click target is obvious. */

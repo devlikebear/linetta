@@ -532,7 +532,6 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   width: min(640px, 84%); margin: 0 auto; padding: 6vh 0 40vh;
   font-size: 22px; line-height: 2;
 }
-.zen-col .prose p:first-of-type::first-letter { color: var(--ink); }
 
 /* ============================================================
    RIGHT PANELS — context, plot, AI, companion, entity, thread
