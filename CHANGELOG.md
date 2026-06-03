@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.0 - 2026-06-03
+
+- Added a guided onboarding tour for first-run users across the library and workspace.
+- Added Settings controls to enable or disable automatic tours and replay the tour manually.
+- Added persisted tour state so completed or skipped tours stay dismissed until the tour version changes.
+- Localized onboarding tour copy in Korean, English, and Japanese.
+
 ## v0.3.0 - 2026-06-03
 
 - Added Korean, English, and Japanese app UI language support with Korean as the default.

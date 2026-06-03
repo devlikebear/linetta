@@ -5,7 +5,7 @@ import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentio
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIContextPreview, AIOptions, ContextCounts, SearchResult } from "../lib/types";
+import type { NodeRow, Project, Entity, AIContextPreview, AIOptions, ContextCounts, SearchResult, Settings as SettingsRow } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -26,6 +26,15 @@ import { InlineEditableText } from "../components/InlineEditableText";
 import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
 import { SearchModal } from "../components/SearchModal";
+import { OnboardingTour, type OnboardingTourStep } from "../components/onboarding/OnboardingTour";
+import {
+  CURRENT_ONBOARDING_TOUR_VERSION,
+  MANUAL_PHASE_STORAGE_KEY,
+  WORKSPACE_PENDING_STORAGE_KEY,
+  clearStoredPhase,
+  readStoredPhase,
+  shouldAutoStartOnboarding,
+} from "../components/onboarding/onboardingState";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useToast } from "../components/ToastProvider";
@@ -96,6 +105,8 @@ export function Workspace() {
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState(false);
   const companionNodeRef = useRef<string | null>(null);
+  const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
+  const [tourOpen, setTourOpen] = useState(false);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [autoMentionBusy, setAutoMentionBusy] = useState(false);
   const [aiOptions, setAiOptions] = useState<AIOptions>({
@@ -200,6 +211,7 @@ export function Workspace() {
     settingsApi.get()
       .then((s) => {
         if (cancelled) return;
+        setSettingsRow(s);
         setTypewriter(s.typewriter_default);
         setFocus(s.focus_default);
       })
@@ -973,6 +985,93 @@ export function Workspace() {
   const aiContextPreview = contextPreview ?? FALLBACK_CONTEXT_PREVIEW;
   const aiContextItemCount = totalContextItems(aiContextPreview, aiContextSelection);
 
+  const tourSteps: OnboardingTourStep[] = [
+    {
+      target: "workspace-outline",
+      title: t("onboarding.workspace.outline.title"),
+      body: t("onboarding.workspace.outline.body"),
+    },
+    {
+      target: "workspace-editor",
+      title: t("onboarding.workspace.editor.title"),
+      body: t("onboarding.workspace.editor.body"),
+    },
+    {
+      target: "workspace-context",
+      title: t("onboarding.workspace.context.title"),
+      body: t("onboarding.workspace.context.body"),
+    },
+    {
+      target: "workspace-ai",
+      title: t("onboarding.workspace.ai.title"),
+      body: t("onboarding.workspace.ai.body"),
+    },
+    {
+      target: "workspace-companion",
+      title: t("onboarding.workspace.companion.title"),
+      body: t("onboarding.workspace.companion.body"),
+    },
+    {
+      target: "workspace-zen",
+      title: t("onboarding.workspace.zen.title"),
+      body: t("onboarding.workspace.zen.body"),
+    },
+    {
+      target: "workspace-navigation",
+      title: t("onboarding.workspace.navigation.title"),
+      body: t("onboarding.workspace.navigation.body"),
+    },
+  ];
+
+  const finishWorkspaceTour = useCallback(async () => {
+    clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
+    clearStoredPhase(MANUAL_PHASE_STORAGE_KEY);
+    setTourOpen(false);
+    try {
+      const next = await settingsApi.set({ onboarding_tour_seen_version: CURRENT_ONBOARDING_TOUR_VERSION });
+      setSettingsRow(next);
+    } catch (err) {
+      showToast(t("workspace.toast.contextLoadFailed", { error: String(err) }));
+    }
+  }, [showToast, t]);
+
+  useEffect(() => {
+    const blocked = !load ||
+      tourOpen ||
+      aiModal !== null ||
+      companionOpen ||
+      entitySheetId !== null ||
+      threadSheetId !== null ||
+      versionSheetNodeId !== null ||
+      zenOpen ||
+      paletteOpen ||
+      searchOpen ||
+      shortcutsOpen ||
+      dialog !== null ||
+      notePopover !== null;
+    if (blocked || !settingsRow) return;
+    const manual = readStoredPhase(MANUAL_PHASE_STORAGE_KEY);
+    const pending = readStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
+    if (manual === "workspace" || pending === "workspace" || shouldAutoStartOnboarding(settingsRow)) {
+      setTourOpen(true);
+    }
+  }, [
+    aiModal,
+    companionOpen,
+    dialog,
+    entitySheetId,
+    load,
+    notePopover,
+    paletteOpen,
+    searchOpen,
+    settingsRow,
+    shortcutsOpen,
+    threadSheetId,
+    tourOpen,
+    versionSheetNodeId,
+    zenOpen,
+  ]);
+
   if (error) {
     return (
       <main className="shell">
@@ -1012,7 +1111,7 @@ export function Workspace() {
             )}
           </span>
         </Link>
-        <div className="ws-top-actions">
+        <div className="ws-top-actions" data-tour="workspace-navigation">
           <button
             type="button"
             className="ws-tool icon-only"
@@ -1034,6 +1133,7 @@ export function Workspace() {
             type="button"
             className={`ws-tool${aiModal ? " is-active" : ""}`}
             onClick={toggleAIModal}
+            data-tour="workspace-ai"
           >
             <Sparkles size={15} /> AI <span className="kbd">⌘I</span>
           </button>
@@ -1041,11 +1141,12 @@ export function Workspace() {
             type="button"
             className={`ws-tool${companionOpen ? " is-active" : ""}`}
             onClick={() => setCompanionOpen((v) => !v)}
+            data-tour="workspace-companion"
           >
             <MessageCircle size={15} /> {t("workspace.companion")} <span className="kbd">⌘J</span>
           </button>
           <div className="ws-sep" />
-          <button type="button" className="ws-tool" onClick={enterZen}>
+          <button type="button" className="ws-tool" onClick={enterZen} data-tour="workspace-zen">
             <Maximize2 size={15} /> ZEN
           </button>
         </div>
@@ -1066,8 +1167,9 @@ export function Workspace() {
           onMoveSceneUp={(node) => handleMoveSceneFromOutline(node, "up")}
           onMoveSceneDown={(node) => handleMoveSceneFromOutline(node, "down")}
           onDeleteScene={handleDeleteSceneFromOutline}
+          tourTarget="workspace-outline"
         />
-        <section className={`ws-editor${focus ? " focus-mode" : ""}`}>
+        <section className={`ws-editor${focus ? " focus-mode" : ""}`} data-tour="workspace-editor">
           <div className="editor-col">
             <div className="scene-marker">
               <span>{sceneMarker}</span>
@@ -1207,6 +1309,7 @@ export function Workspace() {
             onProjectChanged={(p) =>
               setLoad((prev) => (prev ? { ...prev, project: p } : prev))
             }
+            tourTarget="workspace-context"
           />
         )}
       </div>
@@ -1276,6 +1379,12 @@ export function Workspace() {
       )}
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <OnboardingTour
+        open={tourOpen}
+        steps={tourSteps}
+        onFinish={finishWorkspaceTour}
+        onSkip={finishWorkspaceTour}
+      />
     </main>
   );
 }

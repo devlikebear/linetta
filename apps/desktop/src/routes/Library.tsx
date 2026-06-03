@@ -22,6 +22,16 @@ import { pickAndReadMarkdown } from "../lib/importLoad";
 import { MoreHorizontal, Settings, Plus, Search, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
 import { formatWordCount, lengthLabel, useI18n } from "../lib/i18n";
+import { OnboardingTour, type OnboardingTourStep } from "../components/onboarding/OnboardingTour";
+import {
+  CURRENT_ONBOARDING_TOUR_VERSION,
+  MANUAL_PHASE_STORAGE_KEY,
+  WORKSPACE_PENDING_STORAGE_KEY,
+  clearStoredPhase,
+  readStoredPhase,
+  shouldAutoStartOnboarding,
+  storePhase,
+} from "../components/onboarding/onboardingState";
 
 const RECENT_LIMIT = 5;
 
@@ -54,6 +64,7 @@ export function Library() {
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -186,6 +197,65 @@ export function Library() {
     navigate(`/workspace/${result.project_id}`, { state: { jumpToNodeId: result.node_id } });
   };
 
+  const tourSteps: OnboardingTourStep[] = [
+    {
+      target: "library-brand",
+      title: t("onboarding.library.brand.title"),
+      body: t("onboarding.library.brand.body"),
+    },
+    {
+      target: "library-new",
+      title: t("onboarding.library.new.title"),
+      body: t("onboarding.library.new.body"),
+    },
+    {
+      target: "library-import",
+      title: t("onboarding.library.import.title"),
+      body: t("onboarding.library.import.body"),
+    },
+    {
+      target: "library-search",
+      title: t("onboarding.library.search.title"),
+      body: t("onboarding.library.search.body"),
+    },
+    {
+      target: "library-settings",
+      title: t("onboarding.library.settings.title"),
+      body: t("onboarding.library.settings.body"),
+    },
+  ];
+
+  const finishLibraryTour = () => {
+    storePhase(WORKSPACE_PENDING_STORAGE_KEY, "workspace");
+    clearStoredPhase(MANUAL_PHASE_STORAGE_KEY);
+    setTourOpen(false);
+  };
+
+  const skipLibraryTour = async () => {
+    clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
+    clearStoredPhase(MANUAL_PHASE_STORAGE_KEY);
+    setTourOpen(false);
+    try {
+      const next = await settingsApi.set({ onboarding_tour_seen_version: CURRENT_ONBOARDING_TOUR_VERSION });
+      setSettingsRow(next);
+    } catch (err) {
+      showToast(t("library.toast.appStateFailed", { error: String(err) }));
+    }
+  };
+
+  useEffect(() => {
+    const blocked = loading || modalOpen || safetyOpen || pending !== null || diagnosticsOpen || searchOpen || tourOpen;
+    if (blocked || !settingsRow) return;
+    if (readStoredPhase(WORKSPACE_PENDING_STORAGE_KEY) === "workspace") return;
+    if (readStoredPhase(MANUAL_PHASE_STORAGE_KEY) === "library") {
+      setTourOpen(true);
+      return;
+    }
+    if (shouldAutoStartOnboarding(settingsRow)) {
+      setTourOpen(true);
+    }
+  }, [diagnosticsOpen, loading, modalOpen, pending, safetyOpen, searchOpen, settingsRow, tourOpen]);
+
   return (
     <main className="library fade-in">
       <header className="lib-top">
@@ -226,14 +296,14 @@ export function Library() {
           <button className="lib-icon-btn" aria-label={t("library.menu.search")} onClick={() => setSearchOpen(true)}>
             <Search size={17} />
           </button>
-          <Link to="/settings" className="lib-icon-btn" aria-label={t("library.menu.settings")}>
+          <Link to="/settings" className="lib-icon-btn" aria-label={t("library.menu.settings")} data-tour="library-settings">
             <Settings size={17} />
           </Link>
         </div>
       </header>
 
       <div className="lib-body">
-        <div className="lib-hero">
+        <div className="lib-hero" data-tour="library-brand">
           <div>
             <h1 className="lib-wordmark">Linetta<span className="dot">.</span></h1>
             <p className="lib-tagline">{t("library.tagline")}</p>
@@ -246,17 +316,18 @@ export function Library() {
         </div>
 
         <div className="lib-actions">
-          <button className="btn accent" onClick={() => setModalOpen(true)}>
+          <button className="btn accent" onClick={() => setModalOpen(true)} data-tour="library-new">
             <Plus size={16} /> {t("library.newProject")}
           </button>
           <button
             className="btn ghost"
             onClick={handleImport}
             disabled={importing || pending !== null}
+            data-tour="library-import"
           >
             <Upload size={15} /> {importing ? t("library.importing") : t("library.menu.importMarkdown")}
           </button>
-          <button className="btn ghost" onClick={() => setSearchOpen(true)}>
+          <button className="btn ghost" onClick={() => setSearchOpen(true)} data-tour="library-search">
             <Search size={15} /> {t("library.menu.search")} <span className="kbd" style={{ marginLeft: 4 }}>⌘F</span>
           </button>
         </div>
@@ -354,6 +425,13 @@ export function Library() {
           </div>
         </div>
       )}
+
+      <OnboardingTour
+        open={tourOpen}
+        steps={tourSteps}
+        onFinish={finishLibraryTour}
+        onSkip={skipLibraryTour}
+      />
     </main>
   );
 }

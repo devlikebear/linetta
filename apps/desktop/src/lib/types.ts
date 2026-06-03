@@ -308,6 +308,8 @@ export interface Settings {
   git_sync_commit_template: string;
   backup_dir: string;
   safety_checklist_dismissed: boolean;
+  onboarding_tour_enabled: boolean;
+  onboarding_tour_seen_version: string;
   web_search_provider: WebSearchProvider;
   web_search_api_key: string;
   web_search_api_key_set?: boolean;
@@ -322,6 +324,8 @@ export interface SettingsPatch {
   git_sync_dir?: string;
   git_sync_commit_template?: string;
   safety_checklist_dismissed?: boolean;
+  onboarding_tour_enabled?: boolean;
+  onboarding_tour_seen_version?: string;
   web_search_provider?: WebSearchProvider;
   web_search_api_key?: string;
 }

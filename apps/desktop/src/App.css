@@ -854,6 +854,81 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .backdrop.top { align-items: flex-start; padding-top: 12vh; }
 .backdrop.center { align-items: center; }
 
+/* ---- Onboarding tour ---- */
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: rgba(33,30,24,0.44);
+  pointer-events: auto;
+  animation: tourLayerIn .14s ease both;
+}
+.tour-spotlight {
+  position: fixed;
+  top: 0;
+  left: 0;
+  border: 2px solid var(--accent);
+  border-radius: var(--r-md);
+  background: color-mix(in oklch, var(--surface) 18%, transparent);
+  box-shadow: 0 0 0 9999px rgba(33,30,24,0.42), 0 12px 36px rgba(33,30,24,0.20);
+  pointer-events: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.tour-card {
+  position: fixed;
+  top: 0;
+  left: 0;
+  max-width: calc(100vw - 36px);
+  min-height: 188px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: tourCardIn .14s ease both;
+}
+.tour-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.tour-card h2 {
+  margin: 0;
+  font-family: var(--font-edit);
+  font-weight: 400;
+  font-size: 25px;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.tour-card p {
+  flex: 1;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.62;
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tour-spacer { flex: 1; }
+
+@keyframes tourCardIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes tourLayerIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* ---- Command palette ---- */
 .palette {
   width: min(620px, 92%);

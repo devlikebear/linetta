@@ -63,32 +63,36 @@ type ProviderSettings struct {
 // Config is the on-disk JSON. backup_dir is computed at Load time and not
 // persisted (the field is omitted from JSON marshalling on write).
 type Config struct {
-	Language                 string                    `json:"language"`
-	Provider                 string                    `json:"provider"`
-	Providers                map[string]ProviderConfig `json:"providers,omitempty"`
-	TypewriterDefault        bool                      `json:"typewriter_default"`
-	FocusDefault             bool                      `json:"focus_default"`
-	BackupDir                string                    `json:"backup_dir,omitempty"`
-	GitSyncDir               string                    `json:"git_sync_dir"`
-	GitSyncCommitTemplate    string                    `json:"git_sync_commit_template"`
-	SafetyChecklistDismissed bool                      `json:"safety_checklist_dismissed"`
-	WebSearchProvider        string                    `json:"web_search_provider"`
-	WebSearchAPIKey          string                    `json:"web_search_api_key,omitempty"`     // write-only in settings.set; redacted from settings.get and disk
-	WebSearchAPIKeySet       bool                      `json:"web_search_api_key_set,omitempty"` // read-only presence flag for settings.get
+	Language                  string                    `json:"language"`
+	Provider                  string                    `json:"provider"`
+	Providers                 map[string]ProviderConfig `json:"providers,omitempty"`
+	TypewriterDefault         bool                      `json:"typewriter_default"`
+	FocusDefault              bool                      `json:"focus_default"`
+	BackupDir                 string                    `json:"backup_dir,omitempty"`
+	GitSyncDir                string                    `json:"git_sync_dir"`
+	GitSyncCommitTemplate     string                    `json:"git_sync_commit_template"`
+	SafetyChecklistDismissed  bool                      `json:"safety_checklist_dismissed"`
+	OnboardingTourEnabled     bool                      `json:"onboarding_tour_enabled"`
+	OnboardingTourSeenVersion string                    `json:"onboarding_tour_seen_version"`
+	WebSearchProvider         string                    `json:"web_search_provider"`
+	WebSearchAPIKey           string                    `json:"web_search_api_key,omitempty"`     // write-only in settings.set; redacted from settings.get and disk
+	WebSearchAPIKeySet        bool                      `json:"web_search_api_key_set,omitempty"` // read-only presence flag for settings.get
 }
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
 type Patch struct {
-	Language                 *string                   `json:"language,omitempty"`
-	Provider                 *string                   `json:"provider,omitempty"`
-	Providers                map[string]ProviderConfig `json:"providers,omitempty"`
-	TypewriterDefault        *bool                     `json:"typewriter_default,omitempty"`
-	FocusDefault             *bool                     `json:"focus_default,omitempty"`
-	GitSyncDir               *string                   `json:"git_sync_dir,omitempty"`
-	GitSyncCommitTemplate    *string                   `json:"git_sync_commit_template,omitempty"`
-	SafetyChecklistDismissed *bool                     `json:"safety_checklist_dismissed,omitempty"`
-	WebSearchProvider        *string                   `json:"web_search_provider,omitempty"`
-	WebSearchAPIKey          *string                   `json:"web_search_api_key,omitempty"`
+	Language                  *string                   `json:"language,omitempty"`
+	Provider                  *string                   `json:"provider,omitempty"`
+	Providers                 map[string]ProviderConfig `json:"providers,omitempty"`
+	TypewriterDefault         *bool                     `json:"typewriter_default,omitempty"`
+	FocusDefault              *bool                     `json:"focus_default,omitempty"`
+	GitSyncDir                *string                   `json:"git_sync_dir,omitempty"`
+	GitSyncCommitTemplate     *string                   `json:"git_sync_commit_template,omitempty"`
+	SafetyChecklistDismissed  *bool                     `json:"safety_checklist_dismissed,omitempty"`
+	OnboardingTourEnabled     *bool                     `json:"onboarding_tour_enabled,omitempty"`
+	OnboardingTourSeenVersion *string                   `json:"onboarding_tour_seen_version,omitempty"`
+	WebSearchProvider         *string                   `json:"web_search_provider,omitempty"`
+	WebSearchAPIKey           *string                   `json:"web_search_api_key,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -128,11 +132,12 @@ func NewWithSecretStore(secrets SecretStore) (*Store, error) {
 
 func defaults(home string) Config {
 	return Config{
-		Language:          "ko",
-		Provider:          ProviderOpenAICodex,
-		TypewriterDefault: false,
-		BackupDir:         filepath.Join(home, "backups"),
-		WebSearchProvider: "brave",
+		Language:              "ko",
+		Provider:              ProviderOpenAICodex,
+		TypewriterDefault:     false,
+		BackupDir:             filepath.Join(home, "backups"),
+		OnboardingTourEnabled: true,
+		WebSearchProvider:     "brave",
 	}
 }
 
@@ -150,6 +155,10 @@ func (s *Store) load() error {
 		log.Printf("settings: ignoring corrupt %s; falling back to defaults: %v", path, err)
 		return nil // ignore corrupt file; defaults stand
 	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		raw = map[string]json.RawMessage{}
+	}
 	s.mu.Lock()
 	if disk.Language != "" && slices.Contains(validLanguages(), disk.Language) {
 		s.cfg.Language = disk.Language
@@ -162,6 +171,10 @@ func (s *Store) load() error {
 	s.cfg.GitSyncDir = disk.GitSyncDir
 	s.cfg.GitSyncCommitTemplate = disk.GitSyncCommitTemplate
 	s.cfg.SafetyChecklistDismissed = disk.SafetyChecklistDismissed
+	if _, ok := raw["onboarding_tour_enabled"]; ok {
+		s.cfg.OnboardingTourEnabled = disk.OnboardingTourEnabled
+	}
+	s.cfg.OnboardingTourSeenVersion = disk.OnboardingTourSeenVersion
 	if disk.WebSearchProvider != "" {
 		s.cfg.WebSearchProvider = disk.WebSearchProvider
 	}
@@ -314,6 +327,12 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.SafetyChecklistDismissed != nil {
 		next.SafetyChecklistDismissed = *p.SafetyChecklistDismissed
 	}
+	if p.OnboardingTourEnabled != nil {
+		next.OnboardingTourEnabled = *p.OnboardingTourEnabled
+	}
+	if p.OnboardingTourSeenVersion != nil {
+		next.OnboardingTourSeenVersion = *p.OnboardingTourSeenVersion
+	}
 	if p.WebSearchProvider != nil {
 		if !slices.Contains(validWebSearchProviders(), *p.WebSearchProvider) {
 			return Config{}, fmt.Errorf("settings: unknown web_search_provider %q", *p.WebSearchProvider)
@@ -347,15 +366,17 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 func (s *Store) persist(next Config) error {
 	next = sanitizeConfigForDisk(next)
 	persistable := Config{
-		Language:                 next.Language,
-		Provider:                 next.Provider,
-		Providers:                next.Providers,
-		TypewriterDefault:        next.TypewriterDefault,
-		FocusDefault:             next.FocusDefault,
-		GitSyncDir:               next.GitSyncDir,
-		GitSyncCommitTemplate:    next.GitSyncCommitTemplate,
-		SafetyChecklistDismissed: next.SafetyChecklistDismissed,
-		WebSearchProvider:        next.WebSearchProvider,
+		Language:                  next.Language,
+		Provider:                  next.Provider,
+		Providers:                 next.Providers,
+		TypewriterDefault:         next.TypewriterDefault,
+		FocusDefault:              next.FocusDefault,
+		GitSyncDir:                next.GitSyncDir,
+		GitSyncCommitTemplate:     next.GitSyncCommitTemplate,
+		SafetyChecklistDismissed:  next.SafetyChecklistDismissed,
+		OnboardingTourEnabled:     next.OnboardingTourEnabled,
+		OnboardingTourSeenVersion: next.OnboardingTourSeenVersion,
+		WebSearchProvider:         next.WebSearchProvider,
 	}
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {
