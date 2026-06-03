@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, ExternalLink } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   settings as settingsApi,
@@ -30,15 +30,129 @@ interface ProviderMeta {
   credential: "key" | "cli" | "oauth";
   /** Whether a custom base URL may be set (OpenAI/Anthropic-compatible endpoints). */
   endpoint?: boolean;
+  legacy?: boolean;
 }
 
 const PROVIDERS: ProviderMeta[] = [
-  { id: "claude-code-cli", label: "Claude Code CLI", desc: "설치된 Claude Code CLI로 생성", credential: "cli" },
-  { id: "openai-codex", label: "OpenAI Codex", desc: "Codex(ChatGPT) OAuth 로그인으로 생성 · API 키 불필요", credential: "oauth" },
-  { id: "anthropic", label: "Anthropic API", desc: "Anthropic API 키로 생성", credential: "key", endpoint: true },
-  { id: "openai", label: "OpenAI API", desc: "OpenAI API 또는 호환 엔드포인트(Kimi, MiniMax 등)", credential: "key", endpoint: true },
-  { id: "gemini-native", label: "Gemini API", desc: "Google Gemini API 키로 생성", credential: "key", endpoint: true },
+  { id: "openai-codex", label: "ChatGPT 계정 (OpenAI Codex)", desc: "공식 Codex 로그인으로 연결 · API 키 복붙 없음", credential: "oauth" },
+  { id: "openai", label: "OpenAI API", desc: "OpenAI API 키 또는 호환 엔드포인트(Kimi, MiniMax 등)", credential: "key", endpoint: true },
+  { id: "anthropic", label: "Claude API", desc: "Anthropic Console API 키로 연결", credential: "key", endpoint: true },
+  { id: "gemini-native", label: "Gemini API", desc: "Google AI Studio API 키로 연결", credential: "key", endpoint: true },
+  { id: "claude-code-cli", label: "Claude Code CLI (기존/고급)", desc: "기존 설정 유지용 · 신규 사용자는 Claude API 키 권장", credential: "cli", legacy: true },
 ];
+
+type GuideID = "chatgpt-subscription" | "openai-api" | "claude-api" | "gemini-api";
+
+interface SetupGuide {
+  id: GuideID;
+  provider: ProviderID;
+  title: string;
+  badge: string;
+  summary: string;
+  policy: string;
+  steps: string[];
+  action: string;
+  links: Array<{ label: string; href: string }>;
+}
+
+const SETUP_GUIDES: SetupGuide[] = [
+  {
+    id: "chatgpt-subscription",
+    provider: "openai-codex",
+    title: "ChatGPT 구독으로 연결",
+    badge: "가장 쉬움",
+    summary: "ChatGPT 계정을 OpenAI Codex에 로그인해 Linetta에서 사용합니다.",
+    policy: "구독형 연결은 OpenAI Codex 공식 로그인 경로만 지원합니다.",
+    action: "ChatGPT 계정 선택",
+    steps: [
+      "OpenAI Codex를 설치합니다.",
+      "터미널에서 codex를 실행합니다.",
+      "처음 실행할 때 뜨는 로그인 안내에서 ChatGPT 계정으로 인증합니다.",
+      "Linetta에서 이 연결 방식을 선택합니다.",
+      "아래 연결 테스트를 눌러 짧은 응답이 오는지 확인합니다.",
+    ],
+    links: [
+      { label: "OpenAI Codex CLI 안내", href: "https://developers.openai.com/codex/cli" },
+      { label: "ChatGPT와 API 과금 차이", href: "https://help.openai.com/en/articles/9039756-managing-billing-settings-on-chatgpt-web-and-platform" },
+    ],
+  },
+  {
+    id: "openai-api",
+    provider: "openai",
+    title: "OpenAI API 키로 연결",
+    badge: "직접 과금",
+    summary: "OpenAI Platform에서 API 키를 만든 뒤 Linetta에 붙여넣습니다.",
+    policy: "ChatGPT 구독과 API 사용량 과금은 별도일 수 있습니다.",
+    action: "OpenAI API 선택",
+    steps: [
+      "OpenAI Platform의 API Keys 페이지를 엽니다.",
+      "새 secret key를 만들고 한 번만 표시되는 키를 복사합니다.",
+      "Linetta에서 OpenAI API를 선택합니다.",
+      "아래 API 키 입력란에 붙여넣고 저장합니다.",
+      "모델 새로고침 또는 직접 입력 후 연결 테스트를 누릅니다.",
+    ],
+    links: [
+      { label: "OpenAI API 키 만들기", href: "https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key" },
+      { label: "OpenAI API 가격", href: "https://openai.com/api/pricing/" },
+    ],
+  },
+  {
+    id: "claude-api",
+    provider: "anthropic",
+    title: "Claude API 키로 연결",
+    badge: "API 전용",
+    summary: "Claude 구독 로그인 대신 Anthropic Console API 키를 사용합니다.",
+    policy: "Claude 구독 하네스는 Linetta에서 지원하지 않습니다. 정책 리스크를 피하기 위해 API 키만 안내합니다.",
+    action: "Claude API 선택",
+    steps: [
+      "Anthropic Console에 접속합니다.",
+      "Billing 또는 크레딧 설정을 완료합니다.",
+      "API Keys 메뉴에서 새 키를 만들고 복사합니다.",
+      "Linetta에서 Claude API를 선택합니다.",
+      "아래 API 키 입력란에 붙여넣고 모델을 선택한 뒤 연결 테스트를 누릅니다.",
+    ],
+    links: [
+      { label: "Claude API 접근 안내", href: "https://support.claude.com/en/articles/8114521-how-can-i-access-the-claude-api" },
+      { label: "Claude API 인증 문서", href: "https://platform.claude.com/docs/en/manage-claude/authentication" },
+      { label: "Claude Code 정책 참고", href: "https://code.claude.com/docs/en/legal-and-compliance" },
+    ],
+  },
+  {
+    id: "gemini-api",
+    provider: "gemini-native",
+    title: "Gemini API 키로 연결",
+    badge: "API 전용",
+    summary: "Google AI Studio에서 Gemini API 키를 만든 뒤 Linetta에 붙여넣습니다.",
+    policy: "Gemini/Google AI 구독 로그인은 Linetta에서 지원하지 않습니다. API 키 연결만 안내합니다.",
+    action: "Gemini API 선택",
+    steps: [
+      "Google AI Studio의 API Keys 페이지를 엽니다.",
+      "기존 프로젝트를 선택하거나 새 프로젝트와 API 키를 만듭니다.",
+      "무료 tier 또는 유료 billing 상태를 확인합니다.",
+      "Linetta에서 Gemini API를 선택합니다.",
+      "아래 API 키 입력란에 붙여넣고 모델을 선택한 뒤 연결 테스트를 누릅니다.",
+    ],
+    links: [
+      { label: "Gemini API 키 만들기", href: "https://ai.google.dev/gemini-api/docs/api-key" },
+      { label: "Gemini API 과금 안내", href: "https://ai.google.dev/gemini-api/docs/billing" },
+    ],
+  },
+];
+
+function guideForProvider(provider: ProviderID): GuideID {
+  switch (provider) {
+    case "openai":
+      return "openai-api";
+    case "anthropic":
+      return "claude-api";
+    case "gemini-native":
+      return "gemini-api";
+    case "openai-codex":
+    case "claude-code-cli":
+    default:
+      return "chatgpt-subscription";
+  }
+}
 
 export function Settings() {
   const [current, setCurrent] = useState<SettingsRow | null>(null);
@@ -64,6 +178,9 @@ export function Settings() {
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [cliDetecting, setCliDetecting] = useState(false);
   const [cliDetectMsg, setCliDetectMsg] = useState<string | null>(null);
+  const [guideId, setGuideId] = useState<GuideID>("chatgpt-subscription");
+  const [providerTesting, setProviderTesting] = useState(false);
+  const [providerTestMsg, setProviderTestMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +203,7 @@ export function Settings() {
   useEffect(() => {
     if (!current) return;
     const pc = current.providers?.[current.provider] ?? {};
+    setGuideId(guideForProvider(current.provider));
     setModelDraft(pc.model ?? "");
     setApiKeyDraft(pc.api_key ?? "");
     setBaseUrlDraft(pc.base_url ?? "");
@@ -93,6 +211,7 @@ export function Settings() {
     setModelOptions([]);
     setModelsError(null);
     setCliDetectMsg(null);
+    setProviderTestMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProvider]);
 
@@ -172,6 +291,46 @@ export function Settings() {
     }
   };
 
+  const persistActiveProviderDrafts = async (meta: ProviderMeta) => {
+    if (!current) return;
+    const stored = current.providers?.[meta.id] ?? {};
+    const patch: ProviderConfig = {};
+    if (modelDraft !== (stored.model ?? "")) {
+      patch.model = modelDraft;
+    }
+    if (meta.credential === "key" && apiKeyDraft !== (stored.api_key ?? "")) {
+      patch.api_key = apiKeyDraft;
+    }
+    if (meta.endpoint && baseUrlDraft !== (stored.base_url ?? "")) {
+      patch.base_url = baseUrlDraft;
+    }
+    if (meta.credential === "cli" && cliPathDraft !== (stored.cli_path ?? "")) {
+      patch.cli_path = cliPathDraft;
+    }
+    if (Object.keys(patch).length > 0) {
+      await applyProviderConfig(meta.id, patch);
+    }
+  };
+
+  const testActiveProvider = async (meta: ProviderMeta) => {
+    setProviderTesting(true);
+    setProviderTestMsg(null);
+    try {
+      await persistActiveProviderDrafts(meta);
+      const res = await providersApi.test(meta.id);
+      setProviderTestMsg({ kind: "ok", text: `연결 성공: ${res.message}` });
+    } catch (e) {
+      setProviderTestMsg({ kind: "error", text: `연결 실패: ${String(e)}` });
+    } finally {
+      setProviderTesting(false);
+    }
+  };
+
+  const activeMeta = current ? PROVIDERS.find((m) => m.id === current.provider) : undefined;
+  const activeConfig = current?.providers?.[current.provider] ?? {};
+  const selectedGuide = SETUP_GUIDES.find((g) => g.id === guideId) ?? SETUP_GUIDES[0];
+  const credentialState = getCredentialState(activeMeta, activeConfig);
+
   return (
     <div className="settings">
       <div className="lib-top">
@@ -189,12 +348,80 @@ export function Settings() {
         ) : (
           <>
             <section className="settings-section">
-              <h3>AI 제공자</h3>
+              <div className="settings-section-head">
+                <h3>AI 연결 마법사</h3>
+                <span className="setup-pill">초보자용</span>
+              </div>
+              <p className="sd">
+                API 키나 모델 이름을 몰라도 괜찮습니다. 아래에서 쓰고 싶은 AI를 고르면 Linetta가 필요한 단계만 보여줍니다.
+              </p>
+              <div className="setup-current">
+                <span>
+                  현재 선택: <strong>{activeMeta?.label ?? current.provider}</strong>
+                </span>
+                <span>{credentialState}</span>
+              </div>
+              <div className="setup-policy">
+                Claude와 Gemini 구독 로그인은 각 회사의 공식 제품 안에서 쓰는 흐름이라 Linetta에서는 제공하지 않습니다.
+                ChatGPT 구독은 OpenAI Codex 공식 로그인만 지원하고, Claude/Gemini는 API 키로 연결합니다.
+              </div>
+              <div className="setup-choice-list">
+                {SETUP_GUIDES.map((guide) => (
+                  <button
+                    key={guide.id}
+                    type="button"
+                    className={`setup-choice${guide.id === guideId ? " is-selected" : ""}`}
+                    onClick={() => setGuideId(guide.id)}
+                  >
+                    <span className="setup-choice-main">
+                      <span className="setup-choice-title">{guide.title}</span>
+                      <span className="setup-choice-summary">{guide.summary}</span>
+                    </span>
+                    <span className="setup-choice-badge">{guide.badge}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="setup-guide">
+                <div className="setup-guide-head">
+                  <div>
+                    <h4>{selectedGuide.title}</h4>
+                    <p>{selectedGuide.policy}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => !saving && apply({ provider: selectedGuide.provider })}
+                    disabled={saving}
+                  >
+                    {current.provider === selectedGuide.provider ? "선택됨" : selectedGuide.action}
+                  </button>
+                </div>
+                <ol className="setup-steps">
+                  {selectedGuide.steps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+                <div className="setup-links" aria-label={`${selectedGuide.title} 공식 가이드`}>
+                  {selectedGuide.links.map((link) => (
+                    <a key={link.href} href={link.href} target="_blank" rel="noreferrer">
+                      <ExternalLink size={13} /> {link.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="settings-section">
+              <h3>고급 AI 설정</h3>
+              <p className="sd">
+                마법사에서 선택한 연결 방식의 실제 provider, API 키, 모델 값을 조정합니다.
+                초보자는 위 순서대로 진행한 뒤 필요한 칸만 채우면 됩니다.
+              </p>
               {PROVIDERS.map((meta) => (
                 <button
                   key={meta.id}
                   type="button"
-                  className="set-row set-row-btn"
+                  className={`set-row set-row-btn${meta.legacy ? " is-legacy" : ""}`}
                   onClick={() => !saving && apply({ provider: meta.id })}
                   disabled={saving}
                 >
@@ -215,20 +442,37 @@ export function Settings() {
                     {meta.credential === "key" && (
                       <div className="modal-field">
                         <label htmlFor="provider-key">API 키</label>
-                        <input
-                          id="provider-key"
-                          type="password"
-                          value={apiKeyDraft}
-                          onChange={(e) => setApiKeyDraft(e.target.value)}
-                          onBlur={() => {
-                            const stored = current.providers?.[meta.id]?.api_key ?? "";
-                            if (apiKeyDraft !== stored) {
-                              applyProviderConfig(meta.id, { api_key: apiKeyDraft });
-                            }
-                          }}
-                          placeholder="sk-..."
-                          autoComplete="off"
-                        />
+                        <div className="set-field-row">
+                          <input
+                            id="provider-key"
+                            type="password"
+                            value={apiKeyDraft}
+                            onChange={(e) => setApiKeyDraft(e.target.value)}
+                            onBlur={() => {
+                              if (apiKeyDraft !== "") {
+                                applyProviderConfig(meta.id, { api_key: apiKeyDraft });
+                              }
+                            }}
+                            placeholder={activeConfig.api_key_set ? "저장된 API 키 있음 · 새 키를 붙여넣으면 교체" : "sk-..."}
+                            autoComplete="off"
+                          />
+                          {activeConfig.api_key_set && (
+                            <button
+                              type="button"
+                              className="btn ghost sm"
+                              onClick={() => {
+                                setApiKeyDraft("");
+                                applyProviderConfig(meta.id, { clear_api_key: true });
+                              }}
+                              disabled={saving}
+                            >
+                              키 삭제
+                            </button>
+                          )}
+                        </div>
+                        <p className="sd">
+                          저장된 키는 다시 표시하지 않습니다. 새 키를 입력하면 macOS Keychain의 기존 키를 교체합니다.
+                        </p>
                       </div>
                     )}
                     {meta.endpoint && (
@@ -315,13 +559,34 @@ export function Settings() {
                       {meta.id === "claude-code-cli" ? (
                         <p className="sd">Claude Code CLI는 모델 목록 조회를 지원하지 않습니다. 직접 입력하세요.</p>
                       ) : meta.credential === "oauth" ? (
-                        <p className="sd">OAuth 로그인은 모델 목록 조회를 지원하지 않습니다. 모델 ID를 직접 입력하세요(예: gpt-5.3-codex). 비우면 기본 모델을 사용합니다.</p>
+                        <p className="sd">OpenAI Codex 로그인은 모델 목록 조회를 지원하지 않습니다. 모델 ID를 직접 입력할 수 있고, 비우면 Codex 기본 모델을 사용합니다.</p>
                       ) : (
                         <p className="sd">새로고침은 위 API 키로 제공자의 모델 목록을 가져옵니다. 직접 입력도 가능합니다.</p>
                       )}
                       {modelsError && <p className="error">{modelsError}</p>}
                     </div>
-                    <p className="sd">키·모델은 로컬 settings.json에 저장됩니다.</p>
+                    <p className="sd">
+                      API 키는 macOS Keychain에 저장되고, 모델·Base URL 같은 일반 설정만 로컬 settings.json에 저장됩니다.
+                      Claude Code CLI는 기존 사용자 호환용이며 신규 사용자는 Claude API 연결을 권장합니다.
+                    </p>
+                    <div className="provider-test">
+                      <button
+                        type="button"
+                        className="btn ghost sm"
+                        onClick={() => testActiveProvider(meta)}
+                        disabled={providerTesting}
+                      >
+                        {providerTesting ? "테스트 중…" : "연결 테스트"}
+                      </button>
+                      <p className="sd">
+                        짧은 AI 요청을 한 번 보냅니다. API 키 방식은 제공자 정책에 따라 소량의 사용량이 기록될 수 있습니다.
+                      </p>
+                      {providerTestMsg && (
+                        <p className={providerTestMsg.kind === "ok" ? "provider-test-ok" : "provider-test-error"}>
+                          {providerTestMsg.text}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
@@ -375,21 +640,42 @@ export function Settings() {
               </div>
               <div className="modal-field">
                 <label htmlFor="ws-key">web_search API 키</label>
-                <input
-                  id="ws-key"
-                  type="password"
-                  value={webSearchKeyDraft}
-                  onChange={(e) => setWebSearchKeyDraft(e.target.value)}
-                  onBlur={() => {
-                    if (webSearchKeyDraft !== current.web_search_api_key) {
-                      apply({ web_search_api_key: webSearchKeyDraft });
+                <div className="set-field-row">
+                  <input
+                    id="ws-key"
+                    type="password"
+                    value={webSearchKeyDraft}
+                    onChange={(e) => setWebSearchKeyDraft(e.target.value)}
+                    onBlur={() => {
+                      if (webSearchKeyDraft !== "") {
+                        apply({ web_search_api_key: webSearchKeyDraft });
+                      }
+                    }}
+                    placeholder={
+                      current.web_search_api_key_set
+                        ? "저장된 검색 API 키 있음 · 새 키를 붙여넣으면 교체"
+                        : current.web_search_provider === "perplexity"
+                          ? "pplx-..."
+                          : "BSA..."
                     }
-                  }}
-                  placeholder={current.web_search_provider === "perplexity" ? "pplx-..." : "BSA..."}
-                  autoComplete="off"
-                />
+                    autoComplete="off"
+                  />
+                  {current.web_search_api_key_set && (
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      onClick={() => {
+                        setWebSearchKeyDraft("");
+                        apply({ web_search_api_key: "" });
+                      }}
+                      disabled={saving}
+                    >
+                      키 삭제
+                    </button>
+                  )}
+                </div>
               </div>
-              <p className="sd">키는 로컬 settings.json에 저장됩니다.</p>
+              <p className="sd">키는 macOS Keychain에 저장됩니다. settings.json에는 저장 여부만 표시됩니다.</p>
             </section>
 
             <section className="settings-section">
@@ -547,6 +833,20 @@ export function Settings() {
 
 function isDegraded(status?: OpsStatus): boolean {
   return Boolean(status?.last_error);
+}
+
+function getCredentialState(meta?: ProviderMeta, cfg: ProviderConfig = {}): string {
+  if (!meta) return "연결 방식 확인 필요";
+  if (meta.credential === "oauth") {
+    return "Codex 로그인 필요";
+  }
+  if (meta.credential === "key") {
+    return cfg.api_key_set || cfg.api_key ? "API 키 저장됨" : "API 키 필요";
+  }
+  if (meta.credential === "cli") {
+    return cfg.cli_path ? "CLI 경로 저장됨" : "기존 CLI 설정";
+  }
+  return "설정 확인 필요";
 }
 
 function OpsStatusCard({

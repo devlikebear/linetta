@@ -54,7 +54,7 @@ type Config struct {
 
 - New provider whitelist: `claude-code-cli`, `openai-codex`, `anthropic`, `openai`, `gemini-native`.
 - Backward compatibility: settings.json without `providers` loads as an empty map; missing entries resolve to zero-value `ProviderConfig`. The existing `provider` field is preserved; default stays `claude-code-cli`.
-- `settings.set` patch handling: the `providers` map is merged per-key (a patch that sets `providers["openai"]` must not wipe `providers["anthropic"]`). API keys follow the same plaintext-in-settings.json storage as the existing `web_search_api_key`.
+- `settings.set` patch handling: the `providers` map is merged per-key (a patch that sets `providers["openai"]` must not wipe `providers["anthropic"]`). As of 2026-06-03, provider API keys and `web_search_api_key` are migrated to macOS Keychain and redacted from `settings.json`; the Settings UI receives `*_set` presence flags instead of stored secret values.
 
 ## Provider construction (factory refactor)
 

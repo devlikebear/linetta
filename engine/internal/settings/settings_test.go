@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -12,7 +13,7 @@ func newStoreOnTemp(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("LINETTA_HOME", dir)
-	s, err := New()
+	s, err := NewWithSecretStore(NewMemorySecretStore())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -25,8 +26,8 @@ func TestLoad_missingFileReturnsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.Provider != "claude-code-cli" {
-		t.Errorf("provider = %q, want claude-code-cli", got.Provider)
+	if got.Provider != "openai-codex" {
+		t.Errorf("provider = %q, want openai-codex", got.Provider)
 	}
 	if got.TypewriterDefault != false {
 		t.Errorf("typewriter_default = %v", got.TypewriterDefault)
@@ -42,7 +43,7 @@ func TestSet_partialPatchPreservesUntouchedFields(t *testing.T) {
 		t.Fatalf("Set: %v", err)
 	}
 	got, _ := s.Get(context.Background())
-	if got.Provider != "claude-code-cli" {
+	if got.Provider != "openai-codex" {
 		t.Errorf("provider mutated to %q", got.Provider)
 	}
 	if !got.TypewriterDefault {
@@ -84,7 +85,7 @@ func TestLoad_corruptFileReturnsDefaults(t *testing.T) {
 		t.Fatalf("New on corrupt: %v", err)
 	}
 	got, _ := s.Get(context.Background())
-	if got.Provider != "claude-code-cli" {
+	if got.Provider != "openai-codex" {
 		t.Errorf("did not fall back to defaults: %+v", got)
 	}
 }
@@ -208,16 +209,22 @@ func TestSet_webSearchConfig_persists(t *testing.T) {
 	if got.WebSearchProvider != "perplexity" {
 		t.Errorf("web_search_provider in-memory = %q", got.WebSearchProvider)
 	}
-	if got.WebSearchAPIKey != "secret-key" {
-		t.Errorf("web_search_api_key in-memory = %q", got.WebSearchAPIKey)
+	if got.WebSearchAPIKey != "" {
+		t.Errorf("web_search_api_key should be redacted in settings view, got %q", got.WebSearchAPIKey)
+	}
+	if !got.WebSearchAPIKeySet {
+		t.Errorf("web_search_api_key_set = false")
+	}
+	if s.WebSearchAPIKey() != "secret-key" {
+		t.Errorf("web search secret not resolved")
 	}
 
-	s2, err := New()
+	s2, err := NewWithSecretStore(s.secrets)
 	if err != nil {
 		t.Fatalf("re-New: %v", err)
 	}
 	reloaded, _ := s2.Get(context.Background())
-	if reloaded.WebSearchProvider != "perplexity" || reloaded.WebSearchAPIKey != "secret-key" {
+	if reloaded.WebSearchProvider != "perplexity" || !reloaded.WebSearchAPIKeySet || s2.WebSearchAPIKey() != "secret-key" {
 		t.Errorf("web search config not persisted: %+v", reloaded)
 	}
 }
@@ -268,6 +275,9 @@ func TestSetProviderConfigMergePerKey(t *testing.T) {
 	if cfg.Providers["openai"].Model != "gpt-4o" {
 		t.Fatalf("openai missing: %+v", cfg.Providers)
 	}
+	if !cfg.Providers["anthropic"].APIKeySet || !cfg.Providers["openai"].APIKeySet {
+		t.Fatalf("api key set flags missing: %+v", cfg.Providers)
+	}
 }
 
 func TestSetRejectsUnknownProvider(t *testing.T) {
@@ -288,5 +298,98 @@ func TestResolveReturnsActiveProviderConfig(t *testing.T) {
 	rp := s.Resolve()
 	if rp.Provider != "gemini-native" || rp.Model != "gemini-2.5-pro" || rp.APIKey != "gk" {
 		t.Fatalf("resolve mismatch: %+v", rp)
+	}
+}
+
+func TestSecretsAreNotWrittenToSettingsJSON(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	if _, err := s.Set(ctx, Patch{
+		Providers: map[string]ProviderConfig{
+			"anthropic": {Model: "claude-3", APIKey: "provider-secret"},
+		},
+		WebSearchAPIKey: strPtr("web-secret"),
+	}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(s.dir, "settings.json"))
+	if err != nil {
+		t.Fatalf("read settings.json: %v", err)
+	}
+	for _, secret := range []string{"provider-secret", "web-secret", "api_key", "web_search_api_key"} {
+		if strings.Contains(string(body), secret) {
+			t.Fatalf("settings.json contains secret marker %q: %s", secret, body)
+		}
+	}
+
+	cfg, _ := s.Get(ctx)
+	if cfg.Providers["anthropic"].APIKey != "" || cfg.WebSearchAPIKey != "" {
+		t.Fatalf("secrets leaked through settings view: %+v", cfg)
+	}
+	if !cfg.Providers["anthropic"].APIKeySet || !cfg.WebSearchAPIKeySet {
+		t.Fatalf("secret presence flags missing: %+v", cfg)
+	}
+	if s.ProviderConfigFor("anthropic").APIKey != "provider-secret" || s.WebSearchAPIKey() != "web-secret" {
+		t.Fatalf("secrets not resolved through runtime accessors")
+	}
+}
+
+func TestPlaintextSecretsMigrateOutOfSettingsJSON(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{
+		"provider":"anthropic",
+		"providers":{"anthropic":{"model":"claude-3","api_key":"legacy-provider-secret"}},
+		"web_search_provider":"brave",
+		"web_search_api_key":"legacy-web-secret"
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	secrets := NewMemorySecretStore()
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	rp := s.Resolve()
+	if rp.APIKey != "legacy-provider-secret" || s.WebSearchAPIKey() != "legacy-web-secret" {
+		t.Fatalf("legacy secrets not migrated: rp=%+v web=%q", rp, s.WebSearchAPIKey())
+	}
+	body, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "legacy-provider-secret") || strings.Contains(string(body), "legacy-web-secret") {
+		t.Fatalf("legacy secrets still on disk: %s", body)
+	}
+}
+
+func TestSetClearsStoredSecrets(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	if _, err := s.Set(ctx, Patch{
+		Providers: map[string]ProviderConfig{
+			"anthropic": {APIKey: "provider-secret"},
+		},
+		WebSearchAPIKey: strPtr("web-secret"),
+	}); err != nil {
+		t.Fatalf("set secrets: %v", err)
+	}
+	if _, err := s.Set(ctx, Patch{
+		Providers: map[string]ProviderConfig{
+			"anthropic": {ClearAPIKey: true},
+		},
+		WebSearchAPIKey: strPtr(""),
+	}); err != nil {
+		t.Fatalf("clear secrets: %v", err)
+	}
+
+	cfg, _ := s.Get(ctx)
+	if cfg.Providers["anthropic"].APIKeySet || cfg.WebSearchAPIKeySet {
+		t.Fatalf("secret flags not cleared: %+v", cfg)
+	}
+	if s.ProviderConfigFor("anthropic").APIKey != "" || s.WebSearchAPIKey() != "" {
+		t.Fatalf("runtime secrets not cleared")
 	}
 }
