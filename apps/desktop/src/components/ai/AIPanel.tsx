@@ -45,9 +45,11 @@ export function AIPanel(props: Props) {
   const hasResult = props.variations.length > 0;
   const isRunning = props.status.kind === "running";
   const current = props.variations[props.currentIdx];
-  const acceptable = !!current && !current.error;
+  const acceptable = !!current && current.done && !current.error && current.text.trim().length > 0;
+  const canRun = !isRunning;
 
   const run = () => {
+    if (!canRun) return;
     const text = prompt.trim();
     if (!text) {
       setShake(true);
@@ -107,6 +109,7 @@ export function AIPanel(props: Props) {
                 type="button"
                 className={`ai-mode-pill${props.mode === "insert" ? " on" : ""}`}
                 onClick={() => props.onModeChange("insert")}
+                disabled={isRunning}
               >
                 삽입
               </button>
@@ -114,6 +117,7 @@ export function AIPanel(props: Props) {
                 type="button"
                 className={`ai-mode-pill${props.mode === "replaceAll" ? " on" : ""}`}
                 onClick={() => props.onModeChange("replaceAll")}
+                disabled={isRunning}
               >
                 전체교체
               </button>
@@ -131,6 +135,7 @@ export function AIPanel(props: Props) {
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={onTextareaKeyDown}
           rows={3}
+          disabled={isRunning}
         />
 
         <div className="ai-chiprow">
@@ -138,6 +143,7 @@ export function AIPanel(props: Props) {
             <select
               value={props.options.tone}
               onChange={(e) => props.onOptionsChange({ ...props.options, tone: e.target.value as AIOptions["tone"] })}
+              disabled={isRunning}
             >
               {TONE_PRESETS.map((t) => (
                 <option key={t.id} value={t.id}>톤: {t.label}</option>
@@ -149,6 +155,7 @@ export function AIPanel(props: Props) {
             className={`chip${props.options.short_form ? " on" : ""}`}
             onClick={() => props.onOptionsChange({ ...props.options, short_form: !props.options.short_form })}
             aria-pressed={props.options.short_form}
+            disabled={isRunning}
           >
             {props.options.short_form ? "길이: 한 문단" : "길이: 자유"}
           </button>
@@ -158,6 +165,7 @@ export function AIPanel(props: Props) {
             onClick={() => setVariationsOn((v) => !v)}
             aria-pressed={variationsOn}
             title="3개 변형 병렬 생성 (토큰 3배)"
+            disabled={isRunning}
           >
             변형 ×3
           </button>
@@ -211,12 +219,12 @@ export function AIPanel(props: Props) {
         <span className="spacer" />
         <button type="button" className="btn ghost sm" onClick={props.onCancel}>취소</button>
         {!hasResult ? (
-          <button type="button" className="btn accent sm" onClick={run}>
+          <button type="button" className="btn accent sm" onClick={run} disabled={!canRun}>
             생성 <span className="kbd" style={{ marginLeft: 4 }}>⌘↵</span>
           </button>
         ) : (
           <>
-            <button type="button" className="btn ghost sm" onClick={run} title="다시 생성">다시</button>
+            <button type="button" className="btn ghost sm" onClick={run} title="다시 생성" disabled={!canRun}>다시</button>
             <button type="button" className="btn accent sm" onClick={props.onAccept} disabled={!acceptable}>
               수락 <span className="kbd" style={{ marginLeft: 4 }}>Tab</span>
             </button>

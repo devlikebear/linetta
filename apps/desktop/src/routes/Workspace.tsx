@@ -87,7 +87,7 @@ export function Workspace() {
   const [companionOpen, setCompanionOpen] = useState(false);
   const companionNodeRef = useRef<string | null>(null);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
-  const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: false });
+  const [aiOptions, setAiOptions] = useState<AIOptions>({ tone: "my", short_form: true });
   const [aiModal, setAiModal] = useState<{
     mode: CommitMode;
     canChooseMode: boolean;

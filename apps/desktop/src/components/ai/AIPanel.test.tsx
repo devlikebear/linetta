@@ -76,4 +76,19 @@ describe("AIPanel", () => {
     expect(props.onAccept).toHaveBeenCalledOnce();
     expect(props.onSwitch).toHaveBeenCalledWith(1);
   });
+
+  it("locks accept and retry while the current result is still streaming", () => {
+    const { props, container } = renderPanel({
+      variations: [{ text: "아직 쓰는 중", done: false }],
+      status: { kind: "running" as const },
+    });
+
+    const retry = screen.getByRole("button", { name: "다시" });
+    const accept = screen.getByRole("button", { name: /수락/ });
+    expect(retry).toBeDisabled();
+    expect(accept).toBeDisabled();
+
+    fireEvent.keyDown(container.firstElementChild!, { key: "Tab" });
+    expect(props.onAccept).not.toHaveBeenCalled();
+  });
 });

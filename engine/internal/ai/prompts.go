@@ -77,7 +77,7 @@ func buildSystem(c Context) string {
 		b.WriteString("이번 출력은 가볍고 위트 있는 톤으로 유지하라.\n\n")
 	}
 	if c.Options.ShortForm {
-		b.WriteString("출력은 한 문단 이내로 짧게 작성하세요.\n")
+		b.WriteString("출력은 한 문단 이내, 500자 이내로 짧게 작성하세요.\n")
 	}
 	return b.String()
 }

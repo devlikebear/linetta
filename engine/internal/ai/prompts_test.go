@@ -50,6 +50,9 @@ func TestBuildSystem_shortFormStillWorks(t *testing.T) {
 	if !strings.Contains(sys, "한 문단 이내") {
 		t.Errorf("short_form clause dropped: %q", sys)
 	}
+	if !strings.Contains(sys, "500자 이내") {
+		t.Errorf("short_form length cap missing: %q", sys)
+	}
 	if !strings.Contains(sys, "감각적 톤") {
 		t.Errorf("tone fragment missing alongside short_form: %q", sys)
 	}

@@ -217,6 +217,14 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .btn.ghost { border-color: var(--line); color: var(--ink-soft); }
 .btn.ghost:hover { background: var(--surface); border-color: var(--line); color: var(--ink); }
 .btn.sm { padding: 7px 12px; font-size: 13px; }
+.btn:disabled,
+.chip:disabled,
+.ai-mode-pill:disabled {
+  cursor: default;
+  opacity: 0.48;
+  transform: none;
+  box-shadow: none;
+}
 
 /* ---- Shelf ---- */
 .lib-shelf-head {
@@ -674,7 +682,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   background: var(--surface); border: 1px solid var(--line-soft);
   border-radius: var(--r-md); padding: 15px 16px;
   font-family: var(--font-edit); font-size: 16px; line-height: 1.8; color: var(--ink);
-  min-height: 80px; white-space: pre-wrap;
+  min-height: 80px; max-height: min(44vh, 420px); overflow-y: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
 }
 .ai-cursor { display: inline-block; width: 2px; background: var(--accent); animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
