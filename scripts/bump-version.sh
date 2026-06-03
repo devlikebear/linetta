@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Keep the desktop, Tauri shell, Cargo metadata, and engine diagnostics version aligned.
+# Keep desktop, Tauri shell, Cargo metadata, release packaging, and engine
+# diagnostics versions aligned.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -36,5 +37,7 @@ perl -0pi -e 's/(name = "linetta-desktop"\nversion = ")[^"]+(")/$1$ENV{VERSION}$
   "${ROOT}/apps/desktop/src-tauri/Cargo.lock"
 perl -0pi -e 's/(const engineVersion = ")[^"]+(")/$1$ENV{VERSION}$2/' \
   "${ROOT}/engine/cmd/linetta-engine/main.go"
+perl -0pi -e 's/(^\s*tag: v)[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?/$1$ENV{VERSION}/m' \
+  "${ROOT}/packaging/flathub/com.devlikebear.linetta.yml"
 
 echo "Version bumped to ${VERSION}"

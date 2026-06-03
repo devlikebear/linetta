@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION="$(awk -F'"' '/"version":/ {print $4; exit}' "${ROOT}/apps/desktop/package.json")"
 
 fail() {
   echo "distribution validation failed: $*" >&2
@@ -38,6 +39,7 @@ require_file "packaging/README.md"
 require_file "packaging/flathub/com.devlikebear.linetta.yml"
 require_contains "packaging/flathub/com.devlikebear.linetta.yml" "app-id: com.devlikebear.linetta"
 require_contains "packaging/flathub/com.devlikebear.linetta.yml" "command: linetta-desktop"
+require_contains "packaging/flathub/com.devlikebear.linetta.yml" "tag: v${VERSION}"
 
 require_file "packaging/winget/Devlikebear.Linetta.yaml.template"
 require_file "packaging/winget/Devlikebear.Linetta.installer.yaml.template"
