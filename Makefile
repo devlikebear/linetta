@@ -1,4 +1,4 @@
-.PHONY: help dev test test-go test-desktop test-tauri build-engine build-desktop bump-version ci
+.PHONY: help dev test test-go test-desktop test-tauri validate-distribution build-engine build-desktop bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -18,6 +18,9 @@ test-desktop: ## Run desktop frontend tests and production build
 
 test-tauri: build-engine ## Type-check the Tauri shell
 	cd apps/desktop/src-tauri && cargo check
+
+validate-distribution: ## Validate release packaging metadata
+	bash scripts/validate-distribution.sh
 
 build-engine: ## Build the Go sidecar into the Tauri binaries directory
 	bash scripts/build-engine.sh

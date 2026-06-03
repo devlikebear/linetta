@@ -24,11 +24,11 @@ jobs:
           - name: Linux
             os: ubuntu-latest
             artifact: linux
-            bundles: appimage,deb
+            bundles: appimage,deb,rpm
           - name: Windows
             os: windows-latest
             artifact: windows
-            bundles: nsis
+            bundles: nsis,msi
 
     steps:
       - name: Checkout
@@ -44,7 +44,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libssl-dev \
-            patchelf
+            patchelf \
+            rpm
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -103,9 +104,11 @@ jobs:
             linux)
               cp appimage/*.AppImage dist/
               cp deb/*.deb dist/
+              cp rpm/*.rpm dist/
               ;;
             windows)
               cp nsis/*-setup.exe dist/
+              cp msi/*.msi dist/
               ;;
           esac
           ls -la dist
@@ -114,7 +117,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Linetta-${{ matrix.artifact }}
-          path: apps/desktop/src-tauri/target/release/bundle/dist/*
+          path: apps/desktop/src-tauri/target/release/bundle/dist/
           if-no-files-found: error
 
   publish-release:
@@ -128,6 +131,9 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       macos_sha: ${{ steps.meta.outputs.macos_sha }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download built assets
         uses: actions/download-artifact@v7
         with:
@@ -145,6 +151,36 @@ jobs:
           macos_sha="$(shasum -a 256 "${macos_asset}" | awk '{print $1}')"
           printf 'version=%s\n' "${version}" >> "${GITHUB_OUTPUT}"
           printf 'macos_sha=%s\n' "${macos_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Render distribution metadata
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          RELEASE_URL_BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          windows_installer="$(find dist -maxdepth 1 -type f -name '*-setup.exe' | sort | head -n 1)"
+          if [ -z "${windows_installer}" ]; then
+            echo "Windows NSIS installer is required for winget metadata" >&2
+            exit 1
+          fi
+          windows_sha="$(shasum -a 256 "${windows_installer}" | awk '{print $1}')"
+
+          rm -rf release-metadata
+          mkdir -p release-metadata/winget
+          scripts/render-winget-manifest.sh \
+            "${VERSION}" \
+            "${RELEASE_URL_BASE}" \
+            "$(basename "${windows_installer}")" \
+            "${windows_sha}" \
+            release-metadata/winget
+
+          tar -czf dist/Linetta-winget-manifests.tar.gz -C release-metadata winget
+          cp packaging/flathub/com.devlikebear.linetta.yml dist/Linetta-flathub-manifest.yml
+
+          find dist -maxdepth 1 -type f ! -name SHA256SUMS -print | LC_ALL=C sort | while IFS= read -r asset; do
+            shasum -a 256 "${asset}"
+          done > dist/SHA256SUMS
+          ls -la dist
 
       - name: Publish GitHub release
         env:

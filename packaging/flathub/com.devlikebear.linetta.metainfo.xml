@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.devlikebear.linetta</id>
+  <name>Linetta</name>
+  <summary>Local-first desktop writing app for long-form fiction</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <description>
+    <p>
+      Linetta is a local-first desktop workspace for planning, drafting, and
+      revising long-form fiction.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.devlikebear.linetta.desktop</launchable>
+  <url type="homepage">https://github.com/devlikebear/linetta</url>
+  <developer id="devlikebear">
+    <name>devlikebear</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+</component>

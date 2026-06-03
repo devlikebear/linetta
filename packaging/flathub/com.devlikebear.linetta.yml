@@ -1,0 +1,34 @@
+# Flathub submission starter.
+# Before opening a Flathub PR, replace the commit pin and add generated offline
+# source files for Cargo, Go, and pnpm dependencies.
+app-id: com.devlikebear.linetta
+runtime: org.gnome.Platform
+runtime-version: "49"
+sdk: org.gnome.Sdk
+command: linetta-desktop
+only-arches:
+  - x86_64
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=xdg-documents
+modules:
+  - name: linetta
+    buildsystem: simple
+    sources:
+      - type: git
+        url: https://github.com/devlikebear/linetta.git
+        tag: v0.4.0
+        commit: REPLACE_WITH_RELEASE_COMMIT
+    build-commands:
+      - cd engine && go build -o ../apps/desktop/src-tauri/binaries/linetta-engine-x86_64-unknown-linux-gnu ./cmd/linetta-engine
+      - cd apps/desktop && corepack enable
+      - cd apps/desktop && pnpm install --frozen-lockfile --offline
+      - cd apps/desktop && pnpm build
+      - cd apps/desktop && pnpm tauri build --no-bundle
+      - install -Dm755 apps/desktop/src-tauri/target/release/linetta-desktop /app/bin/linetta-desktop
+      - install -Dm644 packaging/flathub/com.devlikebear.linetta.desktop /app/share/applications/com.devlikebear.linetta.desktop
+      - install -Dm644 packaging/flathub/com.devlikebear.linetta.metainfo.xml /app/share/metainfo/com.devlikebear.linetta.metainfo.xml
+      - install -Dm644 apps/desktop/src-tauri/icons/icon.png /app/share/icons/hicolor/512x512/apps/com.devlikebear.linetta.png

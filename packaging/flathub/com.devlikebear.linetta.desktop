@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Linetta
+Comment=Local-first desktop writing app for long-form fiction
+Exec=linetta-desktop
+Icon=com.devlikebear.linetta
+Terminal=false
+Categories=Office;TextEditor;
