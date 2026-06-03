@@ -19,6 +19,7 @@ import (
 
 const prevSummaryMaxRunes = 300
 const hierarchicalMaxChars = 2500
+const coreEntityContextLimit = 12
 
 // SummaryRefresher is what ContextBuilder calls when an ancestor container has
 // a stale summary. *summarizer.Summarizer satisfies this via its RefreshNow
@@ -112,6 +113,11 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	if err != nil {
 		return Context{}, err
 	}
+	coreEnts, err := b.mentions.ListCoreEntitiesForProject(ctx, n.ProjectID, coreEntityContextLimit)
+	if err != nil {
+		return Context{}, err
+	}
+	ents = mergeEntitiesByID(ents, coreEnts)
 	briefs := make([]EntityBrief, 0, len(ents))
 	for _, e := range ents {
 		recent, err := b.mentions.RecentSummariesForEntity(ctx, e.ID, nodeID, 5)
@@ -179,6 +185,29 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		UserPrompt:    prompt,
 		Options:       opts,
 	}, nil
+}
+
+func mergeEntitiesByID(primary, extra []entity.Entity) []entity.Entity {
+	if len(extra) == 0 {
+		return primary
+	}
+	seen := make(map[string]bool, len(primary)+len(extra))
+	out := make([]entity.Entity, 0, len(primary)+len(extra))
+	for _, e := range primary {
+		if e.ID == "" || seen[e.ID] {
+			continue
+		}
+		seen[e.ID] = true
+		out = append(out, e)
+	}
+	for _, e := range extra {
+		if e.ID == "" || seen[e.ID] {
+			continue
+		}
+		seen[e.ID] = true
+		out = append(out, e)
+	}
+	return out
 }
 
 // ApplyContextSelection removes context sections that the writer unchecked in

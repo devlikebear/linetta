@@ -113,6 +113,71 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 	}
 }
 
+func TestBuildContext_includesCoreEntitiesEvenWhenNotMentioned(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	defer s.Close()
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+
+	er := entity.NewRepo(s)
+	mr := mention.NewRepo(s)
+	nodes := node.NewRepo(s)
+	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
+		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
+	})
+	rr := relationship.NewRepo(s)
+
+	pov, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진", Role: "주인공"})
+	villain, _ := er.Create(context.Background(), 1060, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "검은 왕", Role: "빌런"})
+	stage, _ := er.Create(context.Background(), 1070, entity.NewInput{ProjectID: p.ID, Kind: "place", Name: "폐쇄 도시", Role: "메인무대"})
+	witness, _ := er.Create(context.Background(), 1080, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "목격자", Role: "단역"})
+	_, _ = rr.CreatePair(context.Background(), relationship.NewPairInput{
+		ProjectID: p.ID, FromID: pov.ID, ToID: villain.ID,
+		Label: "추적자", InverseLabel: "표적",
+	})
+
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[
+		{"type":"text","text":"골목 끝에서 "},
+		{"type":"mention","attrs":{"id":"` + witness.ID + `","label":"목격자"}},
+		{"type":"text","text":"가 고개를 들었다."}
+	]}]}`
+	if err := nodes.UpdateContent(context.Background(), *p.LastOpenedNodeID, doc, 2000); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+
+	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), rr)
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "이어쓰기", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	names := map[string]bool{}
+	for _, e := range got.Entities {
+		names[e.Name] = true
+	}
+	for _, want := range []string{"목격자", "해진", "검은 왕", "폐쇄 도시"} {
+		if !names[want] {
+			t.Fatalf("missing entity %q from context: %+v", want, got.Entities)
+		}
+	}
+	if len(got.Relationships) != 1 {
+		t.Fatalf("relationships = %+v, want one core relationship", got.Relationships)
+	}
+	rel := got.Relationships[0]
+	if !((rel.From == "해진" && rel.To == "검은 왕") || (rel.From == "검은 왕" && rel.To == "해진")) {
+		t.Fatalf("relationship endpoints = %+v", got.Relationships[0])
+	}
+	if stage.Role != "메인무대" {
+		t.Fatalf("fixture sanity: stage role = %q", stage.Role)
+	}
+}
+
 func TestBuildContext_prevSummary_trims300chars(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)

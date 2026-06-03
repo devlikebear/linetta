@@ -181,3 +181,36 @@ SELECT e.id, e.project_id, e.kind, e.name, e.aliases, e.role, e.summary, e.attri
 	}
 	return entity.ScanAll(rows)
 }
+
+// ListCoreEntitiesForProject returns core story-bible entities independently of
+// scene mentions so AI context can keep the global skeleton visible.
+func (r *Repo) ListCoreEntitiesForProject(ctx context.Context, projectID string, limit int) ([]entity.Entity, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	rows, err := r.s.DB().QueryContext(ctx, `
+SELECT e.id, e.project_id, e.kind, e.name, e.aliases, e.role, e.summary, e.attributes,
+       e.created_at, e.updated_at
+  FROM entities e
+ WHERE e.project_id = ?
+ ORDER BY e.updated_at DESC`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []entity.Entity{}
+	for rows.Next() {
+		e, err := entity.Scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		if !entity.IsCoreEntity(e) {
+			continue
+		}
+		out = append(out, e)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, rows.Err()
+}
