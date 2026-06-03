@@ -50,7 +50,7 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
   series: 200000,
 };
 
-export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange }: Props) {
+export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange }: Readonly<Props>) {
   const target = TARGET_WORDS[project.length_target] ?? 90000;
   const pct = target > 0 ? Math.min(100, Math.round((project.word_count / target) * 100)) : 0;
   const [overview, setOverview] = useState(project.outline ?? "");
