@@ -19,6 +19,7 @@ export interface Project {
 
 export interface UpdateProjectInput {
   id: string;
+  title?: string;
   outline?: string;
 }
 

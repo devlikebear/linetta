@@ -21,6 +21,7 @@ import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CompanionPanel } from "../components/companion/CompanionPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
+import { InlineEditableText } from "../components/InlineEditableText";
 import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
 import { SearchModal } from "../components/SearchModal";
@@ -262,6 +263,117 @@ export function Workspace() {
     [projectId, fetchTree],
   );
 
+  const handleRenameNode = useCallback(
+    async (target: TreeNode) => {
+      const nextLabel = await promptDialog("새 이름", target.label);
+      if (nextLabel === null) return;
+      const label = nextLabel.trim();
+      if (!label) return;
+      const nextTitle = await promptDialog("표시 제목", target.title);
+      if (nextTitle === null) return;
+      try {
+        await nodes.rename(target.id, label, nextTitle.trim());
+        await refreshTreeKeepNode(loadRef.current?.node.id ?? target.id);
+        showToast("이름이 변경되었습니다");
+      } catch (e) {
+        showToast("이름 변경 실패: " + String(e));
+      }
+    },
+    [promptDialog, refreshTreeKeepNode, showToast],
+  );
+
+  const handleCreateSceneFromOutline = useCallback(
+    async (anchor: TreeNode) => {
+      const current = loadRef.current;
+      if (!current) return;
+      try {
+        const allNodes = flatten(current.tree);
+        let created: NodeRow;
+        if (anchor.kind === "container") {
+          const childLeaves = anchor.children.filter((n) => n.kind === "leaf");
+          created = await nodes.createChild(anchor.id, "leaf", `씬 ${childLeaves.length + 1}`, "");
+        } else {
+          const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (anchor.parent_id ?? null));
+          const leafCount = siblings.filter((n) => n.kind === "leaf").length;
+          created = await nodes.createSibling(anchor.id, "leaf", `씬 ${leafCount + 1}`, "");
+        }
+        await refreshTreeAndNavigateTo(created.id);
+      } catch (e) {
+        showToast("새 씬 생성 실패: " + String(e));
+      }
+    },
+    [refreshTreeAndNavigateTo, showToast],
+  );
+
+  const handleCreateChapterFromOutline = useCallback(
+    async (anchor: TreeNode) => {
+      const current = loadRef.current;
+      if (!current) return;
+      try {
+        const allNodes = flatten(current.tree);
+        const parentContainer = anchor.parent_id
+          ? allNodes.find((n) => n.id === anchor.parent_id && n.kind === "container")
+          : undefined;
+        const reference = anchor.kind === "leaf" && parentContainer ? parentContainer : anchor;
+        const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (reference.parent_id ?? null));
+        const chapterCount = siblings.filter((n) => n.kind === "container").length;
+        const chapter = await nodes.createSibling(reference.id, "container", `${chapterCount + 1}장`, "");
+        const seeded = await nodes.createChild(chapter.id, "leaf", "씬 1", "");
+        await refreshTreeAndNavigateTo(seeded.id);
+      } catch (e) {
+        showToast("새 장 생성 실패: " + String(e));
+      }
+    },
+    [refreshTreeAndNavigateTo, showToast],
+  );
+
+  const handleMoveSceneFromOutline = useCallback(
+    async (target: TreeNode, direction: "up" | "down") => {
+      if (target.kind !== "leaf") return;
+      const current = loadRef.current;
+      if (!current) return;
+      try {
+        if (direction === "up") {
+          await nodes.moveUp(target.id);
+        } else {
+          await nodes.moveDown(target.id);
+        }
+        await refreshTreeKeepNode(current.node.id);
+      } catch (e) {
+        showToast("씬 이동 실패: " + String(e));
+      }
+    },
+    [refreshTreeKeepNode, showToast],
+  );
+
+  const handleDeleteSceneFromOutline = useCallback(
+    async (target: TreeNode) => {
+      if (target.kind !== "leaf") return;
+      const current = loadRef.current;
+      if (!current) return;
+      const ok = await confirmDialog(`"${target.label}" 씬을 삭제하시겠습니까?`);
+      if (!ok) return;
+      try {
+        const { prev, next } = leafNeighbors(current.tree, target.id);
+        const fallback = prev ?? next ?? null;
+        await nodes.delete(target.id);
+        if (target.id === current.node.id) {
+          if (fallback) {
+            await refreshTreeAndNavigateTo(fallback.id);
+          } else {
+            navigate("/");
+          }
+        } else {
+          await refreshTreeKeepNode(current.node.id);
+        }
+        showToast("씬이 삭제되었습니다");
+      } catch (e) {
+        showToast("씬 삭제 실패: " + String(e));
+      }
+    },
+    [confirmDialog, navigate, refreshTreeAndNavigateTo, refreshTreeKeepNode, showToast],
+  );
+
   // Navigate without re-fetching the tree (used by outline click + leaf neighbor cmds).
   const navigateToNode = useCallback(
     async (target: TreeNode | NodeRow) => {
@@ -421,6 +533,35 @@ export function Workspace() {
     [load],
   );
 
+  const handleSceneTitleCommit = useCallback(
+    async (title: string) => {
+      if (!load) return;
+      const nextTitle = title === load.node.label ? "" : title;
+      try {
+        await nodes.rename(load.node.id, load.node.label, nextTitle);
+        await refreshTreeKeepNode(load.node.id);
+      } catch (e) {
+        showToast("씬 이름 저장 실패: " + String(e));
+        throw e;
+      }
+    },
+    [load, refreshTreeKeepNode, showToast],
+  );
+
+  const handleProjectTitleCommit = useCallback(
+    async (title: string) => {
+      if (!load) return;
+      try {
+        const updated = await projects.update({ id: load.project.id, title });
+        setLoad((prev) => (prev ? { ...prev, project: updated } : prev));
+      } catch (e) {
+        showToast("소설 제목 저장 실패: " + String(e));
+        throw e;
+      }
+    },
+    [load, showToast],
+  );
+
   // --- AI generation (Cmd+I modal) ---
 
   const tiptapEditor = editorRef.current?.editor ?? null;
@@ -519,9 +660,16 @@ export function Workspace() {
       (n) => (n.parent_id ?? null) === (load.node.parent_id ?? null),
     );
     const leafSiblings = siblingsOfCurrent.filter((n) => n.kind === "leaf");
-    const containerSiblings = siblingsOfCurrent.filter((n) => n.kind === "container");
     const nextSceneLabel = `씬 ${leafSiblings.length + 1}`;
-    const nextChapterLabel = `${containerSiblings.length + 1}장`;
+    const currentTreeNode = allNodes.find((n) => n.id === load.node.id) ?? ({ ...load.node, children: [] } as TreeNode);
+    const parentContainer = currentTreeNode.parent_id
+      ? allNodes.find((n) => n.id === currentTreeNode.parent_id && n.kind === "container")
+      : undefined;
+    const chapterReference = currentTreeNode.kind === "leaf" && parentContainer ? parentContainer : currentTreeNode;
+    const chapterSiblings = allNodes.filter(
+      (n) => (n.parent_id ?? null) === (chapterReference.parent_id ?? null) && n.kind === "container",
+    );
+    const nextChapterLabel = `${chapterSiblings.length + 1}장`;
 
     const cmds: Command[] = [];
     cmds.push({
@@ -562,20 +710,13 @@ export function Workspace() {
       id: "new-scene",
       section: "노드",
       label: `여기 옆에 새 씬 (${nextSceneLabel})`,
-      run: async () => {
-        const created = await nodes.createSibling(load.node.id, "leaf", nextSceneLabel, "");
-        await refreshTreeAndNavigateTo(created.id);
-      },
+      run: async () => { await handleCreateSceneFromOutline(currentTreeNode); },
     });
     cmds.push({
       id: "new-chapter",
       section: "노드",
       label: `여기 옆에 새 장 (${nextChapterLabel})`,
-      run: async () => {
-        const chapter = await nodes.createSibling(load.node.id, "container", nextChapterLabel, "");
-        const seeded = await nodes.createChild(chapter.id, "leaf", "씬 1", "");
-        await refreshTreeAndNavigateTo(seeded.id);
-      },
+      run: async () => { await handleCreateChapterFromOutline(currentTreeNode); },
     });
     cmds.push({
       id: "mark-thread",
@@ -627,50 +768,25 @@ export function Workspace() {
       id: "rename",
       section: "노드",
       label: "이름 바꾸기",
-      run: async () => {
-        const nextLabel = await promptDialog("새 이름 (label)", load.node.label);
-        if (nextLabel === null) return;
-        const trimmed = nextLabel.trim();
-        if (!trimmed) return;
-        const nextTitle = await promptDialog("부제 (title, 비울 수 있음)", load.node.title);
-        await nodes.rename(load.node.id, trimmed, nextTitle ?? "");
-        await refreshTreeKeepNode(load.node.id);
-        showToast("이름이 변경되었습니다");
-      },
+      run: async () => { await handleRenameNode(currentTreeNode); },
     });
     cmds.push({
       id: "delete",
       section: "노드",
       label: "삭제",
-      run: async () => {
-        const ok = await confirmDialog(`"${load.node.label}"을(를) 삭제하시겠습니까?`);
-        if (!ok) return;
-        const fallback = prev ?? next ?? null;
-        await nodes.delete(load.node.id);
-        if (fallback) {
-          await refreshTreeAndNavigateTo(fallback.id);
-        } else {
-          navigate("/");
-        }
-      },
+      run: async () => { await handleDeleteSceneFromOutline(currentTreeNode); },
     });
     cmds.push({
       id: "move-up",
       section: "노드",
       label: "이 씬 위로",
-      run: async () => {
-        await nodes.moveUp(load.node.id);
-        await refreshTreeKeepNode(load.node.id);
-      },
+      run: async () => { await handleMoveSceneFromOutline(currentTreeNode, "up"); },
     });
     cmds.push({
       id: "move-down",
       section: "노드",
       label: "이 씬 아래로",
-      run: async () => {
-        await nodes.moveDown(load.node.id);
-        await refreshTreeKeepNode(load.node.id);
-      },
+      run: async () => { await handleMoveSceneFromOutline(currentTreeNode, "down"); },
     });
     cmds.push({
       id: "view-outline",
@@ -781,7 +897,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, confirmDialog, enterZen, focus, companionOpen, railCollapsed]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, handleCreateSceneFromOutline, handleCreateChapterFromOutline, handleRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -886,6 +1002,12 @@ export function Workspace() {
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((v) => !v)}
           onSelect={(n) => navigateToNode(n)}
+          onRename={handleRenameNode}
+          onCreateScene={handleCreateSceneFromOutline}
+          onCreateChapter={handleCreateChapterFromOutline}
+          onMoveSceneUp={(node) => handleMoveSceneFromOutline(node, "up")}
+          onMoveSceneDown={(node) => handleMoveSceneFromOutline(node, "down")}
+          onDeleteScene={handleDeleteSceneFromOutline}
         />
         <section className={`ws-editor${focus ? " focus-mode" : ""}`}>
           <div className="editor-col">
@@ -893,7 +1015,14 @@ export function Workspace() {
               <span>{sceneMarker}</span>
               <span className="rule" />
             </div>
-            <h1 className="scene-title">{load.node.title || load.node.label}</h1>
+            <h1 className="scene-title">
+              <InlineEditableText
+                value={load.node.title || load.node.label}
+                ariaLabel="씬 이름"
+                className="scene-title-input"
+                onCommit={handleSceneTitleCommit}
+              />
+            </h1>
             {load.node.title && <div className="scene-sub">{load.node.label}</div>}
             <TiptapEditor
               key={load.node.id}
@@ -1012,6 +1141,7 @@ export function Workspace() {
             mentionedEntities={mentioned}
             onMentionClick={(id) => setEntitySheetId(id)}
             onOpenThread={setThreadSheetId}
+            onProjectTitleChange={handleProjectTitleCommit}
             onProjectChanged={(p) =>
               setLoad((prev) => (prev ? { ...prev, project: p } : prev))
             }

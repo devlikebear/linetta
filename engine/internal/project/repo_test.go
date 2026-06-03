@@ -167,6 +167,36 @@ func TestProjectOutlineUpdate(t *testing.T) {
 	}
 }
 
+func TestProjectTitleUpdate(t *testing.T) {
+	s := openStore(t)
+	repo := NewRepo(s)
+	ctx := context.Background()
+	p, err := repo.Create(ctx, 1000, NewInput{Title: "처음 제목", Genres: []string{"판타지"}, LengthTarget: "novel", DefaultPOV: "third_limited"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	next := "바뀐 제목"
+	updated, err := repo.Update(ctx, 2000, UpdateInput{ID: p.ID, Title: &next})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Title != next {
+		t.Fatalf("title = %q, want %q", updated.Title, next)
+	}
+	if updated.UpdatedAt != 2000 {
+		t.Fatalf("updated_at not bumped: %d", updated.UpdatedAt)
+	}
+
+	again, err := repo.Update(ctx, 3000, UpdateInput{ID: p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Title != next {
+		t.Fatalf("nil title should preserve, got %q", again.Title)
+	}
+}
+
 func TestRepo_Get(t *testing.T) {
 	s := openStore(t)
 	r := NewRepo(s)

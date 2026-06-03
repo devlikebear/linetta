@@ -76,6 +76,9 @@ func GetProject(repo *project.Repo) rpc.Handler {
 		if errors.Is(err, project.ErrNotFound) {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
 		}
+		if errors.Is(err, project.ErrInvalidInput) {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -83,7 +86,7 @@ func GetProject(repo *project.Repo) rpc.Handler {
 	}
 }
 
-// UpdateProject returns a handler for projects.update. Currently patches outline.
+// UpdateProject returns a handler for projects.update.
 func UpdateProject(repo *project.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in project.UpdateInput

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { NodeRow, Project, Entity, EntityKind } from "../lib/types";
 import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book } from "../lib/icons";
+import { InlineEditableText } from "./InlineEditableText";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -20,6 +21,7 @@ interface Props {
   onMentionClick: (entityId: string) => void;
   onOpenThread: (threadId: string) => void;
   onProjectChanged?: (project: Project) => void;
+  onProjectTitleChange?: (title: string) => void | Promise<void>;
 }
 
 const STATUS_LABEL: Record<NodeRow["status"], string> = {
@@ -45,7 +47,7 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
   series: 200000,
 };
 
-export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onOpenThread, onProjectChanged }: Props) {
+export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onOpenThread, onProjectChanged, onProjectTitleChange }: Props) {
   const target = TARGET_WORDS[project.length_target] ?? 90000;
   const pct = target > 0 ? Math.min(100, Math.round((project.word_count / target) * 100)) : 0;
 
@@ -54,7 +56,12 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
       <div className="panel-head">
         <span className="ttl">
           <span className="ic"><Book size={16} /></span>
-          {project.title}
+          <InlineEditableText
+            value={project.title}
+            ariaLabel="소설 제목"
+            className="panel-title-input"
+            onCommit={async (title) => { await onProjectTitleChange?.(title); }}
+          />
         </span>
         <span className="sub">{STATUS_LABEL[node.status]}</span>
       </div>

@@ -66,5 +66,6 @@ type ListFilter struct {
 // leave the value alone, or non-nil (including "") to set it.
 type UpdateInput struct {
 	ID      string  `json:"id"`
+	Title   *string `json:"title,omitempty"`
 	Outline *string `json:"outline,omitempty"`
 }
