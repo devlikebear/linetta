@@ -507,3 +507,9 @@ export interface CompanionCancelled { run_id: string; }
 export interface CompanionApplied { run_id: string; summary?: string; applied: number; }
 export interface CompanionThinking { run_id: string; text: string; }
 export interface CompanionReasoning { run_id: string; text: string; }
+export interface CompanionChoices {
+  run_id: string;
+  prompt?: string;
+  options: string[];
+  allow_custom: boolean;
+}

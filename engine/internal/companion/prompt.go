@@ -43,7 +43,14 @@ func buildSystem() string {
 	b.WriteString(`{"summary":"복수극 라인 추가","ops":[{"op":"create_thread","ref":"t1","name":"복수극"},{"op":"add_beat","thread_ref":"t1","label":"결심","description":"주인공이 복수를 다짐한다"}]}` + "\n")
 	b.WriteString("```\n")
 	b.WriteString("도구 적용과 제안 블록의 op 스키마는 동일합니다. linetta_apply_ops 입력은 summary와 ops_json입니다. ops_json에는 위 op 배열을 JSON 문자열로 넣으세요. linetta_apply_ops를 사용할 때도 위 id/ref 규칙을 지키고, id를 지어내지 마세요.\n")
-	b.WriteString("이전 대화에서 알게 된 작품 설정·작가 취향은 아래 '기억'에 주어집니다. 기억할 가치가 있는 새 사실(작가 취향, 세계관 규칙 등)은 작가 의도가 명확하면 linetta_apply_ops의 remember op로 저장하고, 아니면 remember op로 제안하세요.\n")
+	b.WriteString("이전 대화에서 알게 된 작품 설정·작가 취향은 아래 '기억'에 주어집니다. 기억할 가치가 있는 새 사실(작가 취향, 세계관 규칙 등)은 작가 의도가 명확하면 linetta_apply_ops의 remember op로 저장하고, 아니면 remember op로 제안하세요.\n\n")
+	b.WriteString("작가에게 여러 후보 중 하나를 고르게 할 때(제목·이름·전개 방향·톤 등)는 본문에 목록으로 나열하지 말고, 아래 형식의 펜스드 블록 **정확히 하나**로 제시하세요. 그러면 작가가 버튼으로 바로 고를 수 있습니다.\n")
+	b.WriteString("```linetta-choices\n")
+	b.WriteString(`{"prompt":"<무엇을 고르는지 한 줄>","options":["후보1","후보2","후보3"],"allow_custom":true}` + "\n")
+	b.WriteString("```\n")
+	b.WriteString("- options는 2개 이상이며, 작가가 그 텍스트를 그대로 답장으로 보냅니다. 짧고 명확하게 쓰세요.\n")
+	b.WriteString("- allow_custom이 true면 '직접 입력' 버튼이 함께 표시됩니다(작가가 직접 답을 적을 수 있을 때 true).\n")
+	b.WriteString("- 블록 앞 본문에는 맥락/이유를 짧게 적되, 후보 목록 자체는 본문에 중복하지 마세요. linetta-choices와 linetta-proposal은 같은 턴에 함께 쓰지 마세요(선택지는 작가에게 되묻는 차례입니다). 단순 대화·설명에는 이 블록을 넣지 마세요.\n")
 	return b.String()
 }
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { companion as companionApi } from "../lib/rpc";
 import { useEngineEvent } from "./useEngineEvent";
 import type {
-  CompanionMessage, CompanionProposal,
+  CompanionMessage, CompanionProposal, CompanionChoices,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
   CompanionApplied, CompanionThinking, CompanionReasoning,
 } from "../lib/types";
@@ -11,6 +11,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   proposal?: CompanionProposal;
+  choices?: CompanionChoices;
   errored?: boolean;
 }
 
@@ -19,7 +20,7 @@ export type CompanionStatus = "idle" | "streaming";
 // stripProposalBlock removes fenced machine-control blocks from displayed prose.
 export function stripProposalBlock(text: string): string {
   return text
-    .replace(/```linetta-(?:proposal|query)[\s\S]*?```/g, "")
+    .replace(/```linetta-(?:proposal|query|choices)[\s\S]*?```/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
@@ -35,6 +36,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
   const runIdRef = useRef<string | null>(null);
   const streamingRef = useRef("");
   const pendingProposalRef = useRef<CompanionProposal | null>(null);
+  const pendingChoicesRef = useRef<CompanionChoices | null>(null);
 
   const setStreamingBoth = (v: string) => { streamingRef.current = v; setStreaming(v); };
 
@@ -78,6 +80,10 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     if (p.run_id !== runIdRef.current) return;
     pendingProposalRef.current = p;
   });
+  useEngineEvent<CompanionChoices>("companion-choices", (p) => {
+    if (p.run_id !== runIdRef.current) return;
+    pendingChoicesRef.current = p;
+  });
   useEngineEvent<CompanionApplied>("companion-applied", (p) => {
     if (p.run_id !== runIdRef.current) return;
     onApplied?.();
@@ -86,8 +92,10 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     if (p.run_id !== runIdRef.current) return;
     const prose = stripProposalBlock(p.full_text);
     const proposal = pendingProposalRef.current ?? undefined;
-    setMessages((prev) => [...prev, { role: "assistant", content: prose, proposal }]);
+    const choices = pendingChoicesRef.current ?? undefined;
+    setMessages((prev) => [...prev, { role: "assistant", content: prose, proposal, choices }]);
     pendingProposalRef.current = null;
+    pendingChoicesRef.current = null;
     setStreamingBoth("");
     setThinking("");
     setReasoningBoth("");

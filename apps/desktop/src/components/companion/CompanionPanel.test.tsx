@@ -9,6 +9,7 @@ const companionState = vi.hoisted(() => ({
       role: "user" | "assistant";
       content: string;
       proposal?: import("../../hooks/useCompanion").ChatMessage["proposal"];
+      choices?: import("../../hooks/useCompanion").ChatMessage["choices"];
       errored?: boolean;
     }[],
     streaming: "",
@@ -99,5 +100,30 @@ describe("CompanionPanel", () => {
 
     expect(screen.getByText("제안")).toBeInTheDocument();
     expect(screen.getByText("스토리라인 생성: 추적자")).toBeInTheDocument();
+  });
+
+  it("renders choice buttons and sends the picked option on click", async () => {
+    const user = userEvent.setup();
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "어떤 제목으로 할까요?",
+        choices: {
+          run_id: "r1",
+          prompt: "새 제목?",
+          options: ["「부엌」", "「온기」"],
+          allow_custom: true,
+        },
+      }],
+    };
+
+    render(<CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />);
+
+    expect(screen.getByText("새 제목?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "직접 입력" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "「온기」" }));
+    expect(companionState.value.send).toHaveBeenCalledWith("「온기」");
   });
 });

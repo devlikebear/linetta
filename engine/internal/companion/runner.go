@@ -46,6 +46,12 @@ type appliedPayload struct {
 	Summary string `json:"summary,omitempty"`
 	Applied int    `json:"applied"`
 }
+type choicesPayload struct {
+	RunID       string   `json:"run_id"`
+	Prompt      string   `json:"prompt,omitempty"`
+	Options     []string `json:"options,omitempty"`
+	AllowCustom bool     `json:"allow_custom"`
+}
 type thinkingPayload struct {
 	RunID string `json:"run_id"`
 	Text  string `json:"text"`
@@ -232,6 +238,16 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 			pp.Ops = nil
 		}
 		_ = r.svc.notify.Notify("companion.proposal", pp)
+	}
+	// A valid choices block becomes an interactive button list. Malformed blocks
+	// are dropped silently (no card) so the writer just sees the prose.
+	if ch, present, cerr := ParseChoices(full); present && cerr == nil {
+		_ = r.svc.notify.Notify("companion.choices", choicesPayload{
+			RunID:       runID,
+			Prompt:      ch.Prompt,
+			Options:     ch.Options,
+			AllowCustom: ch.AllowCustom,
+		})
 	}
 	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, FullText: full})
 }

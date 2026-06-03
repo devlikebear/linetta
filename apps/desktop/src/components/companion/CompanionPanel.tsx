@@ -3,6 +3,8 @@ import { CornerDownLeft, MessageSquare, X } from "lucide-react";
 import { useCompanion } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { ProposalCard } from "./ProposalCard";
+import { ChoiceCard } from "./ChoiceCard";
+import { Markdown } from "./Markdown";
 import "./CompanionPanel.css";
 
 interface Props {
@@ -16,7 +18,7 @@ interface Props {
 // cutting at whichever fence appears first.
 function streamProse(text: string): string {
   let idx = -1;
-  for (const fence of ["```linetta-proposal", "```linetta-query"]) {
+  for (const fence of ["```linetta-proposal", "```linetta-query", "```linetta-choices"]) {
     const i = text.indexOf(fence);
     if (i >= 0 && (idx < 0 || i < idx)) idx = i;
   }
@@ -27,6 +29,8 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
   const { messages, streaming, thinking, reasoning, status, send, cancel } = useCompanion(projectId, nodeIdRef, onApplied);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const focusInput = () => inputRef.current?.focus();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -56,24 +60,31 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
           <p className="companion-empty">무엇이든 물어보거나 플롯을 함께 구상해요.</p>
         )}
         {messages.map((m, i) => {
-          if (m.proposal) {
+          const isUser = m.role === "user";
+          if (isUser) {
             return (
-              <div key={i} className="msg bot">
-                {m.content && (
-                  <>
-                    <span className="msg-who">companion</span>
-                    <div className={`msg-bubble${m.errored ? " errored" : ""}`}>{m.content}</div>
-                  </>
-                )}
-                <ProposalCard proposal={m.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={onApplied} />
+              <div key={i} className="msg user">
+                <div className={`msg-bubble${m.errored ? " errored" : ""}`}>{m.content}</div>
               </div>
             );
           }
-          const isUser = m.role === "user";
+          const hasCard = !!m.proposal || !!m.choices;
           return (
-            <div key={i} className={`msg ${isUser ? "user" : "bot"}`}>
-              {!isUser && <span className="msg-who">companion</span>}
-              <div className={`msg-bubble${m.errored ? " errored" : ""}`}>{m.content}</div>
+            <div key={i} className="msg bot">
+              {(m.content || !hasCard) && (
+                <>
+                  <span className="msg-who">companion</span>
+                  <div className={`msg-bubble${m.errored ? " errored" : ""}`}>
+                    {m.errored ? m.content : <Markdown text={m.content} />}
+                  </div>
+                </>
+              )}
+              {m.proposal && (
+                <ProposalCard proposal={m.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={onApplied} />
+              )}
+              {m.choices && (
+                <ChoiceCard choices={m.choices} disabled={isStreaming} onPick={send} onCustom={focusInput} />
+              )}
             </div>
           );
         })}
@@ -90,7 +101,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
                 <div className="companion-reasoning-body">{reasoning}</div>
               </details>
             )}
-            <div className="msg-bubble">{liveProse || <span className="ai-cursor">&nbsp;</span>}</div>
+            <div className="msg-bubble">{liveProse ? <Markdown text={liveProse} /> : <span className="ai-cursor">&nbsp;</span>}</div>
           </div>
         )}
       </div>
@@ -98,6 +109,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
       <div className="cmp-input-wrap">
         <div className="cmp-input">
           <textarea
+            ref={inputRef}
             value={draft}
             placeholder="메시지… (Enter 전송, Shift+Enter 줄바꿈)"
             rows={1}
