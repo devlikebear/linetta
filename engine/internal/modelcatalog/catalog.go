@@ -5,6 +5,8 @@ package modelcatalog
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/devlikebear/tars/pkg/llm"
@@ -23,13 +25,28 @@ func Default() *Catalog { return &Catalog{fetcher: llm.NewModelFetcher()} }
 // returns an empty slice (callers fall back to free-text entry). baseURL is the
 // optional custom endpoint for OpenAI/Anthropic-compatible providers; empty uses
 // the provider default.
+//
+// OAuth providers (openai-codex) authenticate against the chat backend, but the
+// model-list endpoint (api.openai.com/v1/models) requires the api.model.read
+// scope that ChatGPT OAuth tokens lack, so it always returns 401/403. Mirroring
+// tars' own console handler, we treat that as a soft failure: return an empty
+// list so the UI falls back to manual model entry rather than surfacing a raw
+// permission error. Other failures still propagate.
 func (c *Catalog) List(ctx context.Context, provider, apiKey, baseURL string) ([]string, error) {
 	if strings.TrimSpace(provider) == "claude-code-cli" {
 		return []string{}, nil
 	}
-	return c.fetcher.FetchModels(ctx, llm.ProviderOptions{
+	models, err := c.fetcher.FetchModels(ctx, llm.ProviderOptions{
 		Provider: provider,
 		APIKey:   apiKey,
 		BaseURL:  baseURL,
 	})
+	if err != nil {
+		var pe *llm.ProviderError
+		if errors.As(err, &pe) && (pe.StatusCode == http.StatusUnauthorized || pe.StatusCode == http.StatusForbidden) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	return models, nil
 }

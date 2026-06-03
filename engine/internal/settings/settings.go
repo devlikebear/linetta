@@ -42,7 +42,7 @@ func validWebSearchProviders() []string { return []string{"brave", "perplexity"}
 // ProviderConfig holds per-provider settings keyed by provider id in Config.Providers.
 type ProviderConfig struct {
 	Model   string `json:"model,omitempty"`    // selected model id; empty => provider default
-	APIKey  string `json:"api_key,omitempty"`  // anthropic / openai / gemini-native (and codex listing)
+	APIKey  string `json:"api_key,omitempty"`  // anthropic / openai / gemini-native (openai-codex uses OAuth, no key)
 	BaseURL string `json:"base_url,omitempty"` // custom endpoint for OpenAI/Anthropic-compatible providers (MiniMax, Kimi, ...)
 	CliPath string `json:"cli_path,omitempty"` // claude-code-cli binary path override
 }

@@ -26,15 +26,15 @@ interface ProviderMeta {
   id: ProviderID;
   label: string;
   desc: string;
-  /** "key" => API key field, "cli" => CLI path field. */
-  credential: "key" | "cli";
+  /** "key" => API key field, "cli" => CLI path field, "oauth" => no field (uses OAuth login). */
+  credential: "key" | "cli" | "oauth";
   /** Whether a custom base URL may be set (OpenAI/Anthropic-compatible endpoints). */
   endpoint?: boolean;
 }
 
 const PROVIDERS: ProviderMeta[] = [
   { id: "claude-code-cli", label: "Claude Code CLI", desc: "설치된 Claude Code CLI로 생성", credential: "cli" },
-  { id: "openai-codex", label: "OpenAI Codex CLI", desc: "설치된 Codex CLI로 생성", credential: "key" },
+  { id: "openai-codex", label: "OpenAI Codex", desc: "Codex(ChatGPT) OAuth 로그인으로 생성 · API 키 불필요", credential: "oauth" },
   { id: "anthropic", label: "Anthropic API", desc: "Anthropic API 키로 생성", credential: "key", endpoint: true },
   { id: "openai", label: "OpenAI API", desc: "OpenAI API 또는 호환 엔드포인트(Kimi, MiniMax 등)", credential: "key", endpoint: true },
   { id: "gemini-native", label: "Gemini API", desc: "Google Gemini API 키로 생성", credential: "key", endpoint: true },
@@ -307,13 +307,15 @@ export function Settings() {
                           type="button"
                           className="btn ghost sm"
                           onClick={() => fetchModels(meta.id)}
-                          disabled={saving || modelsLoading || meta.id === "claude-code-cli"}
+                          disabled={saving || modelsLoading || meta.id === "claude-code-cli" || meta.credential === "oauth"}
                         >
                           {modelsLoading ? "불러오는 중…" : "모델 새로고침"}
                         </button>
                       </div>
                       {meta.id === "claude-code-cli" ? (
                         <p className="sd">Claude Code CLI는 모델 목록 조회를 지원하지 않습니다. 직접 입력하세요.</p>
+                      ) : meta.credential === "oauth" ? (
+                        <p className="sd">OAuth 로그인은 모델 목록 조회를 지원하지 않습니다. 모델 ID를 직접 입력하세요(예: gpt-5.3-codex). 비우면 기본 모델을 사용합니다.</p>
                       ) : (
                         <p className="sd">새로고침은 위 API 키로 제공자의 모델 목록을 가져옵니다. 직접 입력도 가능합니다.</p>
                       )}

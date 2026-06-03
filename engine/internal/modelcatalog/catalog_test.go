@@ -52,3 +52,18 @@ func TestListPropagatesError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestListOAuthScopeErrorSoftFails(t *testing.T) {
+	// ChatGPT OAuth tokens lack api.model.read; the models endpoint returns 403.
+	// Mirroring tars, this becomes an empty list (manual entry), not an error.
+	for _, status := range []int{401, 403} {
+		c := New(&fakeFetcher{err: &llm.ProviderError{Provider: "openai-codex", StatusCode: status, Message: "insufficient permissions"}})
+		got, err := c.List(context.Background(), "openai-codex", "", "")
+		if err != nil {
+			t.Fatalf("status %d: expected soft fail, got error %v", status, err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("status %d: expected empty list, got %v", status, got)
+		}
+	}
+}
