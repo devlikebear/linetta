@@ -114,32 +114,16 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 }
 
 func TestBuildContext_includesCoreEntitiesEvenWhenNotMentioned(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
-
-	pr := project.NewRepo(s)
-	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
-		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
-	})
-
+	s, pr, nodes, mr, tr, br, nr, rr, _, currentID := setupPrevSummaryFixture(t)
+	cur, _ := nodes.Get(context.Background(), currentID)
 	er := entity.NewRepo(s)
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
-	rr := relationship.NewRepo(s)
 
-	pov, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진", Role: "주인공"})
-	villain, _ := er.Create(context.Background(), 1060, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "검은 왕", Role: "빌런"})
-	stage, _ := er.Create(context.Background(), 1070, entity.NewInput{ProjectID: p.ID, Kind: "place", Name: "폐쇄 도시", Role: "메인무대"})
-	witness, _ := er.Create(context.Background(), 1080, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "목격자", Role: "단역"})
+	pov, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: cur.ProjectID, Kind: "character", Name: "해진", Role: "주인공"})
+	villain, _ := er.Create(context.Background(), 1060, entity.NewInput{ProjectID: cur.ProjectID, Kind: "character", Name: "검은 왕", Role: "빌런"})
+	stage, _ := er.Create(context.Background(), 1070, entity.NewInput{ProjectID: cur.ProjectID, Kind: "place", Name: "폐쇄 도시", Role: "메인무대"})
+	witness, _ := er.Create(context.Background(), 1080, entity.NewInput{ProjectID: cur.ProjectID, Kind: "character", Name: "목격자", Role: "단역"})
 	_, _ = rr.CreatePair(context.Background(), relationship.NewPairInput{
-		ProjectID: p.ID, FromID: pov.ID, ToID: villain.ID,
+		ProjectID: cur.ProjectID, FromID: pov.ID, ToID: villain.ID,
 		Label: "추적자", InverseLabel: "표적",
 	})
 
@@ -148,12 +132,12 @@ func TestBuildContext_includesCoreEntitiesEvenWhenNotMentioned(t *testing.T) {
 		{"type":"mention","attrs":{"id":"` + witness.ID + `","label":"목격자"}},
 		{"type":"text","text":"가 고개를 들었다."}
 	]}]}`
-	if err := nodes.UpdateContent(context.Background(), *p.LastOpenedNodeID, doc, 2000); err != nil {
+	if err := nodes.UpdateContent(context.Background(), currentID, doc, 2000); err != nil {
 		t.Fatalf("UpdateContent: %v", err)
 	}
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), rr)
-	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "이어쓰기", "", Options{})
+	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr, rr)
+	got, err := builder.Build(context.Background(), currentID, "이어쓰기", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -265,7 +249,7 @@ func TestBuildContext_plotBeatsForCurrentNode(t *testing.T) {
 
 // setupPrevSummaryFixture seeds two leaves and returns the project, repos, and
 // the second leaf's id — shared by the three cache-path tests below.
-func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.Repo, *thread.Repo, *beat.Repo, *note.Repo, *relationship.Repo, string, string) {
+func setupPrevSummaryFixture(t *testing.T) (*store.Store, *project.Repo, *node.Repo, *mention.Repo, *thread.Repo, *beat.Repo, *note.Repo, *relationship.Repo, string, string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
@@ -290,11 +274,11 @@ func setupPrevSummaryFixture(t *testing.T) (*project.Repo, *node.Repo, *mention.
 	docFirst := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + long.String() + `"}]}]}`
 	_ = nodes.UpdateContent(context.Background(), *p.LastOpenedNodeID, docFirst, 1100)
 	second, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "leaf", "씬 2", "", 1200)
-	return pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s), *p.LastOpenedNodeID, second.ID
+	return s, pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s), *p.LastOpenedNodeID, second.ID
 }
 
 func TestBuildContext_prevSummary_usesFreshCache(t *testing.T) {
-	pr, nodes, mr, tr, br, nr, rr, prevID, secondID := setupPrevSummaryFixture(t)
+	_, pr, nodes, mr, tr, br, nr, rr, prevID, secondID := setupPrevSummaryFixture(t)
 
 	prevN, _ := nodes.Get(context.Background(), prevID)
 	if err := nodes.SetSummary(context.Background(), prevID, "캐시된 요약", prevN.ContentVersion); err != nil {
@@ -312,7 +296,7 @@ func TestBuildContext_prevSummary_usesFreshCache(t *testing.T) {
 }
 
 func TestBuildContext_prevSummary_fallsBackWhenStale(t *testing.T) {
-	pr, nodes, mr, tr, br, nr, rr, prevID, secondID := setupPrevSummaryFixture(t)
+	_, pr, nodes, mr, tr, br, nr, rr, prevID, secondID := setupPrevSummaryFixture(t)
 
 	// Seed a summary stamped for an older content_version (0 — the doc has been
 	// updated once, so content_version is 1).
@@ -332,7 +316,7 @@ func TestBuildContext_prevSummary_fallsBackWhenStale(t *testing.T) {
 }
 
 func TestBuildContext_prevSummary_fallsBackWhenEmpty(t *testing.T) {
-	pr, nodes, mr, tr, br, nr, rr, _, secondID := setupPrevSummaryFixture(t)
+	_, pr, nodes, mr, tr, br, nr, rr, _, secondID := setupPrevSummaryFixture(t)
 
 	builder := NewContextBuilder(pr, nodes, mr, tr, br, nr, rr)
 	got, err := builder.Build(context.Background(), secondID, "확장", "", Options{})
