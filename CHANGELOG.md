@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.2 - 2026-06-04
+
+- Added companion empty-state prompt examples and a built-in tool help toggle.
+- Added companion help copy for `web_search`, `web_fetch`, and `linetta_apply_ops` in Korean, English, and Japanese.
+- Fixed OpenAI Codex ChatGPT-account connections by defaulting to `gpt-5.3-codex-spark` and replacing the unsupported legacy `gpt-5.3-codex` setting.
+
 ## v0.4.1 - 2026-06-04
 
 - Added Windows and Linux release packaging for NSIS, MSI, AppImage, deb, and rpm bundles.
