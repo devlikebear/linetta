@@ -73,6 +73,8 @@ export const projects = {
   rewriteSynopsis: (id: string) => rpcCall<Project>("projects.rewrite_synopsis", { id }),
   clearSynopsis: (id: string) => rpcCall<Project>("projects.clear_synopsis", { id }),
   archive: (id: string) => rpcCall<{ ok: true }>("projects.archive", { id }),
+  restore: (id: string) => rpcCall<{ ok: true }>("projects.restore", { id }),
+  delete: (id: string) => rpcCall<{ ok: true }>("projects.delete", { id }),
 };
 
 export const nodes = {

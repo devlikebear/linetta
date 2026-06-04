@@ -46,12 +46,18 @@ type MessageKey = string
   | "library.importing"
   | "library.recentProjects"
   | "library.allProjects"
+  | "library.archiveBox"
   | "library.startNewProject"
+  | "library.projectActionsLabel"
+  | "library.projectBackup"
+  | "library.deleteProject"
   | "library.active"
   | "library.archived"
   | "library.itemCount"
   | "library.empty"
   | "library.archive"
+  | "library.restore"
+  | "library.confirm.deleteProject"
   | "library.safety.title"
   | "library.safety.data"
   | "library.safety.backup"
@@ -70,6 +76,12 @@ type MessageKey = string
   | "library.toast.openDataFailed"
   | "library.toast.diagnosticsFailed"
   | "library.toast.safetySaveFailed"
+  | "library.toast.projectBackupComplete"
+  | "library.toast.projectBackupFailed"
+  | "library.toast.projectArchiveSuccess"
+  | "library.toast.projectArchiveFailed"
+  | "library.toast.projectDeleteSuccess"
+  | "library.toast.projectDeleteFailed"
   | "newProject.defaultGenre.scifi"
   | "newProject.defaultGenre.fantasy"
   | "newProject.defaultGenre.mystery"
@@ -603,12 +615,18 @@ const messages: Record<AppLanguage, Messages> = {
     "library.importing": "가져오는 중…",
     "library.recentProjects": "최근 작품",
     "library.allProjects": "전체 라이브러리 →",
+    "library.archiveBox": "보관함",
     "library.startNewProject": "새 작품 시작",
+    "library.projectActionsLabel": "{title} 작품 옵션",
+    "library.projectBackup": "작품 백업 (.md)",
+    "library.deleteProject": "작품 삭제",
     "library.active": "진행 중",
     "library.archived": "보관됨",
     "library.itemCount": "{label} · {count}개",
     "library.empty": "없음",
-    "library.archive": "아카이브",
+    "library.archive": "보관",
+    "library.restore": "복원",
+    "library.confirm.deleteProject": "\"{title}\" 작품을 영구 삭제하시겠습니까?",
     "library.safety.title": "쓰기 안전 체크리스트",
     "library.safety.data": "데이터",
     "library.safety.backup": "백업",
@@ -627,6 +645,12 @@ const messages: Record<AppLanguage, Messages> = {
     "library.toast.openDataFailed": "데이터 폴더 열기 실패: {error}",
     "library.toast.diagnosticsFailed": "진단 정보 불러오기 실패: {error}",
     "library.toast.safetySaveFailed": "체크리스트 저장 실패: {error}",
+    "library.toast.projectBackupComplete": "작품 백업 저장됨",
+    "library.toast.projectBackupFailed": "작품 백업 실패: {error}",
+    "library.toast.projectArchiveSuccess": "작품을 보관했습니다",
+    "library.toast.projectArchiveFailed": "작품 보관 실패: {error}",
+    "library.toast.projectDeleteSuccess": "작품을 삭제했습니다",
+    "library.toast.projectDeleteFailed": "작품 삭제 실패: {error}",
     "newProject.defaultGenre.scifi": "SF",
     "newProject.defaultGenre.fantasy": "판타지",
     "newProject.defaultGenre.mystery": "추리",
@@ -1181,12 +1205,18 @@ const messages: Record<AppLanguage, Messages> = {
     "library.importing": "Importing...",
     "library.recentProjects": "Recent projects",
     "library.allProjects": "All library →",
+    "library.archiveBox": "Archive",
     "library.startNewProject": "Start a new project",
+    "library.projectActionsLabel": "{title} project options",
+    "library.projectBackup": "Back up project (.md)",
+    "library.deleteProject": "Delete project",
     "library.active": "Active",
     "library.archived": "Archived",
     "library.itemCount": "{label} · {count}",
     "library.empty": "None",
     "library.archive": "Archive",
+    "library.restore": "Restore",
+    "library.confirm.deleteProject": "Permanently delete \"{title}\"?",
     "library.safety.title": "Writing Safety Checklist",
     "library.safety.data": "Data",
     "library.safety.backup": "Backup",
@@ -1205,6 +1235,12 @@ const messages: Record<AppLanguage, Messages> = {
     "library.toast.openDataFailed": "Failed to open data folder: {error}",
     "library.toast.diagnosticsFailed": "Failed to load diagnostics: {error}",
     "library.toast.safetySaveFailed": "Failed to save checklist: {error}",
+    "library.toast.projectBackupComplete": "Project backup saved",
+    "library.toast.projectBackupFailed": "Project backup failed: {error}",
+    "library.toast.projectArchiveSuccess": "Project archived",
+    "library.toast.projectArchiveFailed": "Failed to archive project: {error}",
+    "library.toast.projectDeleteSuccess": "Project deleted",
+    "library.toast.projectDeleteFailed": "Failed to delete project: {error}",
     "newProject.defaultGenre.scifi": "Sci-fi",
     "newProject.defaultGenre.fantasy": "Fantasy",
     "newProject.defaultGenre.mystery": "Mystery",
@@ -1759,12 +1795,18 @@ const messages: Record<AppLanguage, Messages> = {
     "library.importing": "インポート中...",
     "library.recentProjects": "最近の作品",
     "library.allProjects": "全ライブラリ →",
+    "library.archiveBox": "保管箱",
     "library.startNewProject": "新しい作品を始める",
+    "library.projectActionsLabel": "{title} の作品オプション",
+    "library.projectBackup": "作品をバックアップ (.md)",
+    "library.deleteProject": "作品を削除",
     "library.active": "進行中",
     "library.archived": "保管済み",
     "library.itemCount": "{label} · {count}件",
     "library.empty": "なし",
-    "library.archive": "アーカイブ",
+    "library.archive": "保管",
+    "library.restore": "復元",
+    "library.confirm.deleteProject": "作品「{title}」を完全に削除しますか？",
     "library.safety.title": "執筆安全チェックリスト",
     "library.safety.data": "データ",
     "library.safety.backup": "バックアップ",
@@ -1783,6 +1825,12 @@ const messages: Record<AppLanguage, Messages> = {
     "library.toast.openDataFailed": "データフォルダを開けませんでした: {error}",
     "library.toast.diagnosticsFailed": "診断情報の読み込みに失敗: {error}",
     "library.toast.safetySaveFailed": "チェックリスト保存失敗: {error}",
+    "library.toast.projectBackupComplete": "作品バックアップを保存しました",
+    "library.toast.projectBackupFailed": "作品バックアップに失敗: {error}",
+    "library.toast.projectArchiveSuccess": "作品を保管しました",
+    "library.toast.projectArchiveFailed": "作品の保管に失敗: {error}",
+    "library.toast.projectDeleteSuccess": "作品を削除しました",
+    "library.toast.projectDeleteFailed": "作品の削除に失敗: {error}",
     "newProject.defaultGenre.scifi": "SF",
     "newProject.defaultGenre.fantasy": "ファンタジー",
     "newProject.defaultGenre.mystery": "ミステリー",

@@ -1,10 +1,15 @@
-import { useEffect, useState, type CSSProperties } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState, type CSSProperties, type MouseEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { projects as projectsApi } from "../lib/rpc";
 import type { Project } from "../lib/types";
 import { formatWordCount, lengthLabel, useI18n } from "../lib/i18n";
+import { Archive, MoreHorizontal, RotateCcw } from "../lib/icons";
 
 type Tab = "active" | "archived";
+
+function tabFromSearch(search: string): Tab {
+  return new URLSearchParams(search).get("tab") === "archived" ? "archived" : "active";
+}
 
 const SPINE_COLORS = [
   "var(--t-teal)",
@@ -16,9 +21,11 @@ const SPINE_COLORS = [
 
 export function LibraryAll() {
   const { language, t } = useI18n();
-  const [tab, setTab] = useState<Tab>("active");
+  const location = useLocation();
+  const [tab, setTab] = useState<Tab>(() => tabFromSearch(location.search));
   const [items, setItems] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const load = async (which: Tab) => {
@@ -35,10 +42,32 @@ export function LibraryAll() {
   };
 
   useEffect(() => { load(tab); }, [tab]);
+  useEffect(() => {
+    const next = tabFromSearch(location.search);
+    setTab((current) => current === next ? current : next);
+  }, [location.search]);
+
+  const selectTab = (next: Tab) => {
+    setTab(next);
+    navigate(next === "archived" ? "/library/all?tab=archived" : "/library/all", { replace: true });
+  };
 
   const archive = async (id: string) => {
+    setMenuOpenId(null);
     await projectsApi.archive(id);
     await load(tab);
+  };
+
+  const restore = async (id: string) => {
+    setMenuOpenId(null);
+    await projectsApi.restore(id);
+    await load(tab);
+  };
+
+  const toggleProjectMenu = (event: MouseEvent, id: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuOpenId((current) => current === id ? null : id);
   };
 
   return (
@@ -53,13 +82,13 @@ export function LibraryAll() {
         <div className="lib-actions">
           <button
             className={`btn ${tab === "active" ? "accent" : "ghost"}`}
-            onClick={() => setTab("active")}
+            onClick={() => selectTab("active")}
           >
             {t("library.active")}
           </button>
           <button
             className={`btn ${tab === "archived" ? "accent" : "ghost"}`}
-            onClick={() => setTab("archived")}
+            onClick={() => selectTab("archived")}
           >
             {t("library.archived")}
           </button>
@@ -78,34 +107,44 @@ export function LibraryAll() {
         ) : (
           <div className="lib-grid">
             {items.map((p, i) => (
-              <button
+              <div
                 key={p.id}
-                className="book"
+                className="book-wrap"
                 style={{ "--spine": SPINE_COLORS[i % SPINE_COLORS.length] } as CSSProperties}
-                onClick={() => navigate(`/workspace/${p.id}`)}
               >
-                <h3 className="book-title">{p.title}</h3>
-                <div className="book-spacer" />
-                <div className="book-scenes">{lengthLabel(language, p.length_target)}</div>
-                <div className="book-meta">{formatWordCount(language, p.word_count)}</div>
-                {tab === "active" && (
-                  <div
-                    className="lib-shelf-all"
-                    style={{ marginTop: 8 }}
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => { e.stopPropagation(); archive(p.id); }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.stopPropagation();
-                        archive(p.id);
-                      }
-                    }}
-                  >
-                    {t("library.archive")}
+                <button
+                  className="book"
+                  onClick={() => navigate(`/workspace/${p.id}`)}
+                >
+                  <h3 className="book-title">{p.title}</h3>
+                  <div className="book-spacer" />
+                  <div className="book-scenes">{lengthLabel(language, p.length_target)}</div>
+                  <div className="book-meta">{formatWordCount(language, p.word_count)}</div>
+                </button>
+                <button
+                  type="button"
+                  className="book-action"
+                  aria-label={t("library.projectActionsLabel", { title: p.title })}
+                  aria-expanded={menuOpenId === p.id}
+                  aria-haspopup="menu"
+                  onClick={(event) => toggleProjectMenu(event, p.id)}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {menuOpenId === p.id && (
+                  <div className="lib-menu book-menu" role="menu">
+                    {tab === "active" ? (
+                      <button type="button" role="menuitem" onClick={() => archive(p.id)}>
+                        <Archive size={15} /> <span>{t("library.archive")}</span>
+                      </button>
+                    ) : (
+                      <button type="button" role="menuitem" onClick={() => restore(p.id)}>
+                        <RotateCcw size={15} /> <span>{t("library.restore")}</span>
+                      </button>
+                    )}
                   </div>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         )}

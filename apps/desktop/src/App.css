@@ -152,13 +152,15 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   text-align: left;
 }
 .lib-menu button {
-  display: block; width: 100%;
+  display: flex; align-items: center; gap: 8px; width: 100%;
   padding: 9px 11px;
   border: 0; background: transparent;
   font-size: 13.5px; color: var(--ink-soft);
   text-align: left; border-radius: var(--r-sm);
 }
 .lib-menu button:hover { background: var(--surface-2); color: var(--ink); }
+.lib-menu button.danger { color: #a13c32; }
+.lib-menu button.danger:hover { color: #7f2e27; }
 
 .lib-body {
   width: min(1080px, 92%);
@@ -238,6 +240,13 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--muted);
 }
+.lib-shelf-links {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
 .lib-shelf-all { font-size: 12.5px; color: var(--muted); text-decoration: none; }
 .lib-shelf-all:hover { color: var(--accent); }
 
@@ -246,9 +255,14 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 18px;
 }
+.book-wrap {
+  position: relative;
+  min-width: 0;
+}
 .book {
   position: relative;
   display: flex; flex-direction: column;
+  width: 100%;
   height: 220px;
   padding: 20px 18px 16px 22px;
   background: linear-gradient(180deg, var(--surface) 0%, #f4efe4 100%);
@@ -273,10 +287,42 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   font-family: var(--font-edit);
   font-size: 22px; line-height: 1.18; color: var(--ink);
   margin: 0; letter-spacing: -0.01em;
+  padding-right: 26px;
 }
 .book-spacer { flex: 1; }
 .book-scenes { font-family: var(--font-mono); font-size: 11px; color: var(--muted-2); margin-bottom: 6px; }
 .book-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.book-action {
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  color: var(--muted);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  transition: opacity .14s ease, background .15s ease, color .15s ease, border-color .15s ease;
+  z-index: 4;
+}
+.book-wrap:hover .book-action,
+.book-action:focus-visible,
+.book-action[aria-expanded="true"] {
+  opacity: 1;
+}
+.book-action:hover,
+.book-action[aria-expanded="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line-soft);
+}
+.book-menu {
+  top: 44px;
+  right: 10px;
+  left: auto;
+  min-width: 190px;
+}
 
 .book-new {
   display: grid; place-content: center; gap: 10px;

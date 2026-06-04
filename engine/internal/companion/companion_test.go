@@ -351,6 +351,33 @@ func TestClearHistory_RemovesTranscriptMessages(t *testing.T) {
 	}
 }
 
+func TestDeleteProjectData_RemovesTranscriptAndMemory(t *testing.T) {
+	svc, _, projectID := newSvc(t, "안녕")
+	sess, err := svc.sessions.EnsureWorker(projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := svc.sessions.TranscriptPath(sess.ID)
+	if err := session.AppendMessage(path, session.Message{Role: "user", Content: "삭제될 대화", Timestamp: time.UnixMilli(1000)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Remember(projectID, "삭제될 기억", "fact"); err != nil {
+		t.Fatal(err)
+	}
+	memPath := memRoot(svc.memBase, projectID)
+
+	if err := svc.DeleteProjectData(context.Background(), projectID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("transcript stat err = %v, want not exist", err)
+	}
+	if _, err := os.Stat(memPath); !os.IsNotExist(err) {
+		t.Fatalf("memory stat err = %v, want not exist", err)
+	}
+}
+
 func TestGatherContext_InjectsMemory(t *testing.T) {
 	svc, _, projectID := newSvc(t, "안녕")
 	if err := svc.Remember(projectID, "작가는 반전을 좋아한다", "preference"); err != nil {

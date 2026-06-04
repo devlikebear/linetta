@@ -2,6 +2,7 @@ package companion
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -213,6 +214,19 @@ func (s *Service) ClearHistory(ctx context.Context, projectID string) error {
 		return err
 	}
 	return session.RewriteMessages(s.sessions.TranscriptPath(sess.ID), nil)
+}
+
+// DeleteProjectData removes companion files tied to a permanently deleted
+// project: the hidden worker transcript and keyword memory directory.
+func (s *Service) DeleteProjectData(ctx context.Context, projectID string) error {
+	sess, err := s.sessions.EnsureWorker(projectID)
+	if err != nil {
+		return err
+	}
+	if err := s.sessions.Delete(sess.ID); err != nil {
+		return err
+	}
+	return os.RemoveAll(memRoot(s.memBase, projectID))
 }
 
 func compactTranscriptSummary(msgs []session.Message) string {

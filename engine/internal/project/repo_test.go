@@ -136,6 +136,67 @@ func TestRepo_List_excludesArchivedByDefault(t *testing.T) {
 	}
 }
 
+func TestRepo_Restore_reactivatesArchivedProject(t *testing.T) {
+	s := openStore(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	p, err := r.Create(ctx, 1000, NewInput{Title: "restore me", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := r.Archive(ctx, p.ID, 2000); err != nil {
+		t.Fatalf("Archive: %v", err)
+	}
+	if err := r.Restore(ctx, p.ID, 3000); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	got, err := r.Get(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ArchivedAt != nil {
+		t.Fatalf("archived_at = %v, want nil", *got.ArchivedAt)
+	}
+	if got.UpdatedAt != 3000 {
+		t.Fatalf("updated_at = %d, want 3000", got.UpdatedAt)
+	}
+
+	active, err := r.List(ctx, ListFilter{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(active) != 1 || active[0].ID != p.ID {
+		t.Fatalf("active list = %+v, want restored project", active)
+	}
+}
+
+func TestRepo_Delete_removesProjectAndNodes(t *testing.T) {
+	s := openStore(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	p, err := r.Create(ctx, 1000, NewInput{Title: "delete me", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := r.Delete(ctx, p.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := r.Get(ctx, p.ID); err != ErrNotFound {
+		t.Fatalf("Get deleted project err = %v, want ErrNotFound", err)
+	}
+
+	var nodeCount int
+	if err := s.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM nodes WHERE project_id = ?`, p.ID).Scan(&nodeCount); err != nil {
+		t.Fatalf("count nodes: %v", err)
+	}
+	if nodeCount != 0 {
+		t.Fatalf("node count = %d, want 0", nodeCount)
+	}
+}
+
 func TestProjectOutlineUpdate(t *testing.T) {
 	s := openStore(t)
 	repo := NewRepo(s)

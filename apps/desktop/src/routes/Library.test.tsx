@@ -9,6 +9,10 @@ import { Library } from "./Library";
 const mocks = vi.hoisted(() => ({
   projectsList: vi.fn(),
   projectsCreate: vi.fn(),
+  projectsArchive: vi.fn(),
+  projectsDelete: vi.fn(),
+  exportProject: vi.fn(),
+  saveExportedMarkdown: vi.fn(),
   importsPreview: vi.fn(),
   importsMarkdown: vi.fn(),
   settingsGet: vi.fn(),
@@ -22,6 +26,11 @@ vi.mock("../lib/rpc", () => ({
   projects: {
     list: mocks.projectsList,
     create: mocks.projectsCreate,
+    archive: mocks.projectsArchive,
+    delete: mocks.projectsDelete,
+  },
+  exportApi: {
+    project: mocks.exportProject,
   },
   imports: {
     preview: mocks.importsPreview,
@@ -38,6 +47,10 @@ vi.mock("../lib/rpc", () => ({
     query: mocks.searchQuery,
   },
   openPath: mocks.openPath,
+}));
+
+vi.mock("../lib/exportSave", () => ({
+  saveExportedMarkdown: mocks.saveExportedMarkdown,
 }));
 
 function renderLibrary() {
@@ -71,6 +84,13 @@ describe("Library", () => {
         updated_at: 2,
       },
     ]);
+    mocks.projectsArchive.mockResolvedValue({ ok: true });
+    mocks.projectsDelete.mockResolvedValue({ ok: true });
+    mocks.exportProject.mockResolvedValue({
+      suggested_filename: "quiet-city.md",
+      markdown: "# Quiet City\n",
+    });
+    mocks.saveExportedMarkdown.mockResolvedValue("/tmp/quiet-city.md");
     mocks.settingsGet.mockResolvedValue({
       language: "ko",
       provider: "claude-code-cli",
@@ -149,5 +169,55 @@ describe("Library", () => {
     await user.click(screen.getByRole("menuitem", { name: "데이터 폴더 열기" }));
 
     expect(mocks.openPath).toHaveBeenCalledWith("/tmp/linetta");
+  });
+
+  it("always exposes the archive from the home shelf", async () => {
+    mocks.projectsList.mockResolvedValue([]);
+    mocks.settingsGet.mockResolvedValue({
+      language: "ko",
+      provider: "claude-code-cli",
+      typewriter_default: false,
+      focus_default: false,
+      git_sync_dir: "",
+      git_sync_commit_template: "",
+      backup_dir: "/tmp/linetta/backups",
+      safety_checklist_dismissed: true,
+      onboarding_tour_enabled: true,
+      onboarding_tour_seen_version: "library-workspace-v1",
+    });
+    renderLibrary();
+
+    const archiveLink = await screen.findByRole("link", { name: "보관함" });
+
+    expect(archiveLink).toHaveAttribute("href", "/library/all?tab=archived");
+    expect(screen.getByRole("link", { name: "전체 라이브러리 →" })).toBeInTheDocument();
+  });
+
+  it("backs up a recent project from its card action menu", async () => {
+    const user = userEvent.setup();
+    renderLibrary();
+
+    await user.click(await screen.findByLabelText("Quiet City 작품 옵션"));
+    await user.click(screen.getByRole("menuitem", { name: "작품 백업 (.md)" }));
+
+    expect(mocks.exportProject).toHaveBeenCalledWith("project-1");
+    expect(mocks.saveExportedMarkdown).toHaveBeenCalledWith({
+      suggested_filename: "quiet-city.md",
+      markdown: "# Quiet City\n",
+    });
+  });
+
+  it("deletes a recent project after confirmation", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderLibrary();
+
+    await user.pointer({ keys: "[MouseRight]", target: await screen.findByRole("button", { name: "Quiet City 단편 120자" }) });
+    await user.click(screen.getByRole("menuitem", { name: "작품 삭제" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith("\"Quiet City\" 작품을 영구 삭제하시겠습니까?");
+    expect(mocks.projectsDelete).toHaveBeenCalledWith("project-1");
+    expect(mocks.projectsList).toHaveBeenCalledTimes(2);
+    confirmSpy.mockRestore();
   });
 });

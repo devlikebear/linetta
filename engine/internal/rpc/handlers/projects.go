@@ -66,6 +66,9 @@ type idParam struct {
 	ID string `json:"id"`
 }
 
+// ProjectDataCleaner removes non-SQLite project data such as companion files.
+type ProjectDataCleaner func(context.Context, string) error
+
 // GetProject returns a handler for projects.get.
 func GetProject(repo *project.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
@@ -155,6 +158,54 @@ func ArchiveProject(repo *project.Repo, now Clock) rpc.Handler {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
 		}
 		if err := repo.Archive(ctx, p.ID, now()); err != nil {
+			if errors.Is(err, project.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+// RestoreProject returns a handler for projects.restore.
+func RestoreProject(repo *project.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := repo.Restore(ctx, p.ID, now()); err != nil {
+			if errors.Is(err, project.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+// DeleteProject returns a handler for projects.delete.
+func DeleteProject(repo *project.Repo, cleaners ...ProjectDataCleaner) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if _, err := repo.Get(ctx, p.ID); err != nil {
+			if errors.Is(err, project.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		for _, clean := range cleaners {
+			if clean == nil {
+				continue
+			}
+			if err := clean(ctx, p.ID); err != nil {
+				return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+			}
+		}
+		if err := repo.Delete(ctx, p.ID); err != nil {
 			if errors.Is(err, project.ErrNotFound) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
 			}

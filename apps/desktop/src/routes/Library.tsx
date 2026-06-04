@@ -1,10 +1,11 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   projects as projectsApi,
   imports as importsApi,
   settings as settingsApi,
   diagnostics as diagnosticsApi,
+  exportApi,
   openPath,
 } from "../lib/rpc";
 import type {
@@ -19,7 +20,8 @@ import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
 import { SearchModal } from "../components/SearchModal";
 import { pickAndReadMarkdown } from "../lib/importLoad";
-import { MoreHorizontal, Settings, Plus, Search, Upload } from "../lib/icons";
+import { saveExportedMarkdown } from "../lib/exportSave";
+import { Archive, Download, FolderOpen, MoreHorizontal, Settings, Plus, Search, Trash2, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
 import { formatWordCount, lengthLabel, useI18n } from "../lib/i18n";
 import { OnboardingTour, type OnboardingTourStep } from "../components/onboarding/OnboardingTour";
@@ -65,6 +67,7 @@ export function Library() {
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -153,6 +156,7 @@ export function Library() {
 
   const openBackupFolder = async () => {
     setMenuOpen(false);
+    setProjectMenuOpenId(null);
     try {
       const current = settingsRow ?? await settingsApi.get();
       await openPath(current.backup_dir);
@@ -163,6 +167,7 @@ export function Library() {
 
   const openDataFolder = async () => {
     setMenuOpen(false);
+    setProjectMenuOpenId(null);
     try {
       const current = diagnostics ?? await diagnosticsApi.get();
       setDiagnostics(current);
@@ -174,6 +179,7 @@ export function Library() {
 
   const openDiagnostics = async () => {
     setMenuOpen(false);
+    setProjectMenuOpenId(null);
     try {
       const current = diagnostics ?? await diagnosticsApi.get();
       setDiagnostics(current);
@@ -195,6 +201,55 @@ export function Library() {
 
   const handleSearchSelect = (result: SearchResult) => {
     navigate(`/workspace/${result.project_id}`, { state: { jumpToNodeId: result.node_id } });
+  };
+
+  const toggleProjectMenu = (event: MouseEvent, projectId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuOpen(false);
+    setProjectMenuOpenId((current) => current === projectId ? null : projectId);
+  };
+
+  const openProjectContextMenu = (event: MouseEvent, projectId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuOpen(false);
+    setProjectMenuOpenId(projectId);
+  };
+
+  const handleProjectBackup = async (p: Project) => {
+    setProjectMenuOpenId(null);
+    try {
+      const payload = await exportApi.project(p.id);
+      const path = await saveExportedMarkdown(payload);
+      if (path) showToast(t("library.toast.projectBackupComplete"));
+    } catch (err) {
+      showToast(t("library.toast.projectBackupFailed", { error: String(err) }));
+    }
+  };
+
+  const handleProjectArchive = async (p: Project) => {
+    setProjectMenuOpenId(null);
+    try {
+      await projectsApi.archive(p.id);
+      showToast(t("library.toast.projectArchiveSuccess"));
+      await refresh();
+    } catch (err) {
+      showToast(t("library.toast.projectArchiveFailed", { error: String(err) }));
+    }
+  };
+
+  const handleProjectDelete = async (p: Project) => {
+    setProjectMenuOpenId(null);
+    const ok = window.confirm(t("library.confirm.deleteProject", { title: p.title }));
+    if (!ok) return;
+    try {
+      await projectsApi.delete(p.id);
+      showToast(t("library.toast.projectDeleteSuccess"));
+      await refresh();
+    } catch (err) {
+      showToast(t("library.toast.projectDeleteFailed", { error: String(err) }));
+    }
   };
 
   const tourSteps: OnboardingTourStep[] = [
@@ -282,7 +337,7 @@ export function Library() {
               <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setSearchOpen(true); }}>
                 {t("library.menu.search")}
               </button>
-              <button type="button" role="menuitem" onClick={() => navigate("/settings")}>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); navigate("/settings"); }}>
                 {t("library.menu.settings")}
               </button>
               <button type="button" role="menuitem" onClick={openDiagnostics}>
@@ -334,9 +389,10 @@ export function Library() {
 
         <div className="lib-shelf-head">
           <span className="lib-shelf-title">{t("library.recentProjects")}</span>
-          {totalRecent > RECENT_LIMIT && (
+          <div className="lib-shelf-links">
+            <Link to="/library/all?tab=archived" className="lib-shelf-all">{t("library.archiveBox")}</Link>
             <Link to="/library/all" className="lib-shelf-all">{t("library.allProjects")}</Link>
-          )}
+          </div>
         </div>
 
         {loading ? (
@@ -346,17 +402,48 @@ export function Library() {
         ) : (
           <div className="lib-grid">
             {recent.map((p, i) => (
-              <button
+              <div
                 key={p.id}
-                className="book"
+                className="book-wrap"
                 style={{ "--spine": SPINE_COLORS[i % SPINE_COLORS.length] } as CSSProperties}
-                onClick={() => navigate(`/workspace/${p.id}`)}
+                onContextMenu={(event) => openProjectContextMenu(event, p.id)}
               >
-                <h3 className="book-title">{p.title}</h3>
-                <div className="book-spacer" />
-                <div className="book-scenes">{lengthLabel(language, p.length_target)}</div>
-                <div className="book-meta">{formatWordCount(language, p.word_count)}</div>
-              </button>
+                <button
+                  className="book"
+                  onClick={() => navigate(`/workspace/${p.id}`)}
+                >
+                  <h3 className="book-title">{p.title}</h3>
+                  <div className="book-spacer" />
+                  <div className="book-scenes">{lengthLabel(language, p.length_target)}</div>
+                  <div className="book-meta">{formatWordCount(language, p.word_count)}</div>
+                </button>
+                <button
+                  type="button"
+                  className="book-action"
+                  aria-label={t("library.projectActionsLabel", { title: p.title })}
+                  aria-expanded={projectMenuOpenId === p.id}
+                  aria-haspopup="menu"
+                  onClick={(event) => toggleProjectMenu(event, p.id)}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {projectMenuOpenId === p.id && (
+                  <div className="lib-menu book-menu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => handleProjectBackup(p)}>
+                      <Download size={15} /> <span>{t("library.projectBackup")}</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={openBackupFolder}>
+                      <FolderOpen size={15} /> <span>{t("library.menu.backupFolder")}</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => handleProjectArchive(p)}>
+                      <Archive size={15} /> <span>{t("library.archive")}</span>
+                    </button>
+                    <button type="button" role="menuitem" className="danger" onClick={() => handleProjectDelete(p)}>
+                      <Trash2 size={15} /> <span>{t("library.deleteProject")}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
             <button className="book-new" onClick={() => setModalOpen(true)}>
               <span className="plus-ring"><Plus size={20} /></span>

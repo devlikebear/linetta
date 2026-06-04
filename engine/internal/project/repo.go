@@ -131,6 +131,34 @@ WHERE id = ?`, now, now, id)
 	return nil
 }
 
+// Restore reactivates an archived project by clearing archived_at.
+func (r *Repo) Restore(ctx context.Context, id string, now int64) error {
+	res, err := r.s.DB().ExecContext(ctx, `
+UPDATE projects SET archived_at = NULL, updated_at = ?
+WHERE id = ?`, now, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// Delete permanently removes a project and all rows that depend on it.
+func (r *Repo) Delete(ctx context.Context, id string) error {
+	res, err := r.s.DB().ExecContext(ctx, `DELETE FROM projects WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Update patches editable fields and bumps updated_at.
 // The read of the current row and the UPDATE share a single transaction to
 // avoid losing an interleaved write under concurrent access.

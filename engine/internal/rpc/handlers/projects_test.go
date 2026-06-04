@@ -178,6 +178,61 @@ func TestArchiveAndGetProject(t *testing.T) {
 	}
 }
 
+func TestRestoreProjectHandler(t *testing.T) {
+	repo := newRepo(t)
+	create := CreateProject(repo, func() int64 { return 1 })
+	res, _ := create(context.Background(), json.RawMessage(`{"title":"x","genres":["SF"],"length_target":"short","default_pov":"first"}`))
+	var created project.Project
+	_ = json.Unmarshal(res, &created)
+
+	arch := ArchiveProject(repo, func() int64 { return 99 })
+	if _, err := arch(context.Background(), json.RawMessage(`{"id":"`+created.ID+`"}`)); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	restore := RestoreProject(repo, func() int64 { return 150 })
+	if _, err := restore(context.Background(), json.RawMessage(`{"id":"`+created.ID+`"}`)); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	got, err := repo.Get(context.Background(), created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ArchivedAt != nil {
+		t.Fatalf("archived_at = %v, want nil", *got.ArchivedAt)
+	}
+	if got.UpdatedAt != 150 {
+		t.Fatalf("updated_at = %d, want 150", got.UpdatedAt)
+	}
+}
+
+func TestDeleteProjectHandler(t *testing.T) {
+	repo := newRepo(t)
+	create := CreateProject(repo, func() int64 { return 1 })
+	res, _ := create(context.Background(), json.RawMessage(`{"title":"x","genres":["SF"],"length_target":"short","default_pov":"first"}`))
+	var created project.Project
+	_ = json.Unmarshal(res, &created)
+
+	cleanedID := ""
+	del := DeleteProject(repo, func(_ context.Context, id string) error {
+		cleanedID = id
+		return nil
+	})
+	if _, err := del(context.Background(), json.RawMessage(`{"id":"`+created.ID+`"}`)); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if cleanedID != created.ID {
+		t.Fatalf("cleaned id = %q, want %q", cleanedID, created.ID)
+	}
+
+	get := GetProject(repo)
+	_, err := get(context.Background(), json.RawMessage(`{"id":"`+created.ID+`"}`))
+	me, ok := err.(*rpc.MethodError)
+	if !ok || me.Code != rpc.CodeInvalidParams {
+		t.Fatalf("get deleted err = %v, want invalid params", err)
+	}
+}
+
 func TestRewriteProjectSynopsisHandler(t *testing.T) {
 	f := newProjectSynopsisFixture(t)
 	h := RewriteProjectSynopsis(f.projects, f.builder, func() int64 { return 2000 })

@@ -168,6 +168,8 @@ func main() {
 	s.Handle("projects.list", handlers.ListProjects(projects))
 	s.Handle("projects.get", handlers.GetProject(projects))
 	s.Handle("projects.archive", handlers.ArchiveProject(projects, clock))
+	s.Handle("projects.restore", handlers.RestoreProject(projects, clock))
+	s.Handle("projects.delete", handlers.DeleteProject(projects, companionSvc.DeleteProjectData))
 	s.Handle("projects.update", handlers.UpdateProject(projects, clock))
 	s.Handle("projects.rewrite_synopsis", handlers.RewriteProjectSynopsis(projects, contextBuilder, clock))
 	s.Handle("projects.clear_synopsis", handlers.ClearProjectSynopsis(projects, clock))
