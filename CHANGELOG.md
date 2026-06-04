@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.3 - 2026-06-04
+
+- Added written draft excerpts to companion context so character, relationship, and scene analysis can use the actual manuscript text.
+- Saved the current editor document immediately before companion sends to avoid stale or missing draft context.
+- Added an outline-building companion prompt example and made the companion composer grow for multi-line prompts.
+
 ## v0.4.2 - 2026-06-04
 
 - Added companion empty-state prompt examples and a built-in tool help toggle.
