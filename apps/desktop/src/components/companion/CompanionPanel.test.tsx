@@ -71,6 +71,36 @@ describe("CompanionPanel", () => {
     expect(screen.getByText("생각 중…")).toBeInTheDocument();
   });
 
+  it("shows prompt examples in the empty state and copies one into the draft", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(screen.getByText("무엇부터 맡길까요?")).toBeInTheDocument();
+    expect(screen.getByText("프롬프트 예시")).toBeInTheDocument();
+
+    const example = screen.getByRole("button", {
+      name: /최근 스페이스 오페라 장르 레퍼런스/,
+    });
+    await user.click(example);
+
+    expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("web_search");
+    expect(companionState.value.send).not.toHaveBeenCalled();
+  });
+
+  it("toggles built-in tool help from the companion header", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(screen.queryByText("컴패니언이 사용할 수 있는 도구")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "컴패니언 도움말" }));
+
+    expect(screen.getByText("컴패니언이 사용할 수 있는 도구")).toBeInTheDocument();
+    expect(screen.getByText("web_search · 최신 자료나 장르 레퍼런스 찾기")).toBeInTheDocument();
+    expect(screen.getByText("web_fetch · 특정 URL 본문 확인")).toBeInTheDocument();
+    expect(screen.getByText("linetta_apply_ops · 개요, 스토리라인, 비트, 인물, 관계, 장소, 씬, 기억 갱신")).toBeInTheDocument();
+  });
+
   it("renders provider reasoning in a collapsible block while streaming", () => {
     companionState.value = {
       ...companionState.value,

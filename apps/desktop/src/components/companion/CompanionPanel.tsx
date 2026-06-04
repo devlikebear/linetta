@@ -1,5 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Archive, Check, Copy, CornerDownLeft, MessageSquare, Trash2, X } from "lucide-react";
+import {
+  Archive,
+  Book,
+  Check,
+  Copy,
+  CornerDownLeft,
+  HelpCircle,
+  Lightbulb,
+  MessageSquare,
+  Pencil,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { ProposalCard } from "./ProposalCard";
@@ -28,6 +41,74 @@ function streamProse(text: string): string {
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
+const PROMPT_EXAMPLE_KEYS = [
+  "companion.example.conflict",
+  "companion.example.search",
+  "companion.example.fetch",
+  "companion.example.apply",
+] as const;
+
+function CompanionEmpty({
+  t,
+  onPick,
+}: {
+  t: Translate;
+  onPick: (prompt: string) => void;
+}) {
+  return (
+    <section className="companion-empty-card" aria-label={t("companion.examplesLabel")}>
+      <div className="companion-empty-kicker">
+        <Lightbulb size={14} />
+        <span>{t("companion.examplesTitle")}</span>
+      </div>
+      <h3>{t("companion.emptyTitle")}</h3>
+      <p>{t("companion.empty")}</p>
+      <div className="companion-example-list">
+        {PROMPT_EXAMPLE_KEYS.map((key) => {
+          const prompt = t(key);
+          return (
+            <button
+              key={key}
+              type="button"
+              className="companion-example"
+              onClick={() => onPick(prompt)}
+            >
+              <Lightbulb size={13} />
+              <span>{prompt}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function CompanionHelp({ t }: { t: Translate }) {
+  return (
+    <section className="companion-help-card" aria-label={t("companion.help")}>
+      <div className="companion-help-title">
+        <HelpCircle size={15} />
+        <span>{t("companion.helpTitle")}</span>
+      </div>
+      <p>{t("companion.helpBody")}</p>
+      <div className="companion-tool-list">
+        <div className="companion-tool-row">
+          <Search size={14} />
+          <span>{t("companion.tool.webSearch")}</span>
+        </div>
+        <div className="companion-tool-row">
+          <Book size={14} />
+          <span>{t("companion.tool.webFetch")}</span>
+        </div>
+        <div className="companion-tool-row">
+          <Pencil size={14} />
+          <span>{t("companion.tool.applyOps")}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function formatTranscript(messages: ChatMessage[], liveProse: string, t: Translate): string {
   const rows = messages.map((m) => `${m.role === "user" ? t("companion.transcript.user") : t("companion.transcript.assistant")}:\n${m.content.trim()}`);
   const live = liveProse.trim();
@@ -40,6 +121,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
   const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied);
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const focusInput = () => inputRef.current?.focus();
@@ -66,6 +148,11 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
     if (!text) return;
     await navigator.clipboard.writeText(text);
     setCopied(true);
+  };
+
+  const pickExample = (prompt: string) => {
+    setDraft(prompt);
+    window.requestAnimationFrame(() => focusInput());
   };
 
   return (
@@ -103,13 +190,24 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
           >
             <Trash2 size={15} />
           </button>
+          <button
+            type="button"
+            className={`panel-close companion-action${showHelp ? " is-active" : ""}`}
+            onClick={() => setShowHelp((v) => !v)}
+            aria-label={t("companion.help")}
+            aria-pressed={showHelp}
+            title={t("companion.help")}
+          >
+            <HelpCircle size={15} />
+          </button>
           <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}><X size={16} /></button>
         </div>
       </div>
 
       <div className="panel-scroll cmp-stream" ref={scrollRef}>
+        {showHelp && <CompanionHelp t={t} />}
         {messages.length === 0 && (
-          <p className="companion-empty">{t("companion.empty")}</p>
+          <CompanionEmpty t={t} onPick={pickExample} />
         )}
         {messages.map((m, i) => {
           const isUser = m.role === "user";
