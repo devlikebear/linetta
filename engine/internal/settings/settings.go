@@ -26,6 +26,11 @@ const (
 	ProviderGeminiNative  = "gemini-native"
 )
 
+// DefaultOpenAICodexModel is the ChatGPT-account compatible Codex default.
+// Leaving the model empty lets tars fall back to gpt-5.3-codex, which is only
+// supported for API-backed Codex and returns 400 for ChatGPT account auth.
+const DefaultOpenAICodexModel = "gpt-5.3-codex-spark"
+
 func validProviders() []string {
 	return []string{
 		ProviderClaudeCodeCLI,
@@ -134,6 +139,7 @@ func defaults(home string) Config {
 	return Config{
 		Language:              "ko",
 		Provider:              ProviderOpenAICodex,
+		Providers:             map[string]ProviderConfig{ProviderOpenAICodex: {Model: DefaultOpenAICodexModel}},
 		TypewriterDefault:     false,
 		BackupDir:             filepath.Join(home, "backups"),
 		OnboardingTourEnabled: true,
@@ -308,6 +314,7 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 			if err := s.applyProviderSecretPatch(k, &v); err != nil {
 				return Config{}, err
 			}
+			v = normalizeProviderConfig(k, v)
 			merged[k] = v
 		}
 		next.Providers = merged
@@ -406,6 +413,7 @@ func (s *Store) migrateProviderSecrets(providers map[string]ProviderConfig) (map
 		}
 		cfg.APIKeySet = false
 		cfg.ClearAPIKey = false
+		cfg = normalizeProviderConfig(id, cfg)
 		out[id] = cfg
 	}
 	return out, migrated, nil
@@ -452,6 +460,7 @@ func (s *Store) setSecret(name, value string) error {
 }
 
 func (s *Store) runtimeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig {
+	cfg = normalizeProviderConfig(provider, cfg)
 	cfg.APIKey = ""
 	cfg.APIKeySet = false
 	cfg.ClearAPIKey = false
@@ -464,6 +473,13 @@ func (s *Store) runtimeProviderConfig(provider string, cfg ProviderConfig) Provi
 	return cfg
 }
 
+func normalizeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig {
+	if provider == ProviderOpenAICodex && (cfg.Model == "" || cfg.Model == "gpt-5.3-codex") {
+		cfg.Model = DefaultOpenAICodexModel
+	}
+	return cfg
+}
+
 func (s *Store) redactedSettingsView(c Config) Config {
 	c = sanitizeConfigForMemory(c)
 	providers := map[string]ProviderConfig{}
@@ -472,6 +488,7 @@ func (s *Store) redactedSettingsView(c Config) Config {
 		if err == nil {
 			cfg.APIKeySet = ok
 		}
+		cfg = normalizeProviderConfig(id, cfg)
 		providers[id] = cfg
 	}
 	c.Providers = providers

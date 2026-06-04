@@ -68,6 +68,30 @@ func TestProviderHandler_usesRequestedProviderConfig(t *testing.T) {
 	}
 }
 
+func TestProviderHandler_usesOpenAICodexDefaultModel(t *testing.T) {
+	store := newSettingsFixture(t)
+	var captured ai.ResolvedProvider
+	handler := TestProvider(store, func(p ai.ResolvedProvider) (llm.Client, error) {
+		captured = p
+		return &providerTestFakeClient{}, nil
+	})
+
+	raw, err := handler(context.Background(), json.RawMessage(`{"provider":"openai-codex"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got testProviderResult
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if captured.Provider != settings.ProviderOpenAICodex || captured.Model != settings.DefaultOpenAICodexModel {
+		t.Fatalf("captured provider = %+v", captured)
+	}
+	if got.Model != settings.DefaultOpenAICodexModel {
+		t.Fatalf("result model=%q, want %q", got.Model, settings.DefaultOpenAICodexModel)
+	}
+}
+
 func TestProviderHandler_returnsFactoryError(t *testing.T) {
 	store := newSettingsFixture(t)
 	handler := TestProvider(store, func(ai.ResolvedProvider) (llm.Client, error) {

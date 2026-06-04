@@ -344,6 +344,58 @@ func TestProvidersBackwardCompatLoadAndResolve(t *testing.T) {
 	}
 }
 
+func TestResolveOpenAICodexDefaultsToChatGPTAccountModel(t *testing.T) {
+	s := newStoreOnTemp(t)
+
+	rp := s.Resolve()
+	if rp.Provider != ProviderOpenAICodex {
+		t.Fatalf("provider=%q, want %s", rp.Provider, ProviderOpenAICodex)
+	}
+	if rp.Model != DefaultOpenAICodexModel {
+		t.Fatalf("model=%q, want %q", rp.Model, DefaultOpenAICodexModel)
+	}
+}
+
+func TestResolveOpenAICodexKeepsExplicitModel(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	custom := "gpt-5.5"
+	if _, err := s.Set(ctx, Patch{
+		Providers: map[string]ProviderConfig{
+			ProviderOpenAICodex: {Model: custom},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := s.Resolve().Model; got != custom {
+		t.Fatalf("model=%q, want explicit %q", got, custom)
+	}
+}
+
+func TestSetOpenAICodexReplacesUnsupportedLegacyModel(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	if _, err := s.Set(ctx, Patch{
+		Providers: map[string]ProviderConfig{
+			ProviderOpenAICodex: {Model: "gpt-5.3-codex"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := s.Get(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Providers[ProviderOpenAICodex].Model; got != DefaultOpenAICodexModel {
+		t.Fatalf("stored model=%q, want %q", got, DefaultOpenAICodexModel)
+	}
+	if got := s.Resolve().Model; got != DefaultOpenAICodexModel {
+		t.Fatalf("resolved model=%q, want %q", got, DefaultOpenAICodexModel)
+	}
+}
+
 func TestSetProviderConfigMergePerKey(t *testing.T) {
 	s := newStoreOnTemp(t)
 	ctx := context.Background()
