@@ -398,6 +398,33 @@ func TestGatherContext_InjectsMemory(t *testing.T) {
 	}
 }
 
+func TestGatherContext_IncludesWrittenSceneText(t *testing.T) {
+	svc, _, projectID := newSvc(t, "안녕")
+	ctx := context.Background()
+	p, err := svc.projects.Get(ctx, projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.LastOpenedNodeID == nil {
+		t.Fatal("project has no LastOpenedNodeID")
+	}
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"해진은 민호와 비밀 동맹을 맺었다."}]}]}`
+	if err := svc.nodes.UpdateContent(ctx, *p.LastOpenedNodeID, doc, 1200); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+
+	d, err := svc.gatherContext(ctx, projectID, "", "작성된 글을 분석해서 캐릭터와 관계 구성해줘")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.SceneExcerpts) == 0 {
+		t.Fatal("expected scene excerpts in companion context")
+	}
+	if !strings.Contains(d.SceneExcerpts[0].Text, "비밀 동맹") {
+		t.Fatalf("scene excerpt missing written body: %+v", d.SceneExcerpts)
+	}
+}
+
 func TestGatherContext_PrioritizesCoreEntitiesPastRecentLimit(t *testing.T) {
 	svc, _, projectID := newSvc(t, "안녕")
 	ctx := context.Background()

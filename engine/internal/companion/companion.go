@@ -30,6 +30,8 @@ const entityContextLimit = 40
 
 const compactHistoryMaxMessages = 24
 const compactHistorySnippetRunes = 240
+const sceneExcerptMaxRunes = 1200
+const sceneExcerptTotalRunes = 6000
 
 // ClientFactory and ProviderSource are shared with the ai package so the same
 // settings adapter and default factory serve AI runs, companion, and summaries.
@@ -121,6 +123,9 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 			d.HasSpine = true
 		}
 	}
+	if excerpts, err := s.loadSceneExcerpts(ctx, projectID, resolvedNode); err == nil {
+		d.SceneExcerpts = excerpts
+	}
 	if ths, err := s.threads.ListByProject(ctx, projectID, false); err == nil {
 		d.Threads = ths
 	}
@@ -141,6 +146,83 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 	_ = query
 	d.Memories = s.Recall(projectID, "", recallLimit)
 	return d, nil
+}
+
+func (s *Service) loadSceneExcerpts(ctx context.Context, projectID, currentNodeID string) ([]SceneExcerpt, error) {
+	all, err := s.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	leaves, byID := sceneLeavesInDocumentOrder(all)
+	if len(leaves) == 0 {
+		return nil, nil
+	}
+
+	ordered := make([]node.Node, 0, len(leaves))
+	if currentNodeID != "" {
+		for _, n := range leaves {
+			if n.ID == currentNodeID {
+				ordered = append(ordered, n)
+				break
+			}
+		}
+	}
+	for _, n := range leaves {
+		if n.ID == currentNodeID {
+			continue
+		}
+		ordered = append(ordered, n)
+	}
+
+	out := make([]SceneExcerpt, 0, len(ordered))
+	used := 0
+	for _, n := range ordered {
+		text := strings.TrimSpace(plainTextFromDoc(n.ContentDoc))
+		if text == "" {
+			continue
+		}
+		text = trimRunesLocal(text, sceneExcerptMaxRunes)
+		remaining := sceneExcerptTotalRunes - used
+		if remaining <= 0 {
+			break
+		}
+		if len([]rune(text)) > remaining {
+			text = trimRunesLocal(text, remaining)
+		}
+		out = append(out, SceneExcerpt{
+			NodeID:    n.ID,
+			Label:     node.BreadcrumbLabel(byID, n),
+			Text:      text,
+			IsCurrent: n.ID == currentNodeID,
+		})
+		used += len([]rune(text))
+	}
+	return out, nil
+}
+
+func sceneLeavesInDocumentOrder(all []node.Node) ([]node.Node, map[string]node.Node) {
+	byID := make(map[string]node.Node, len(all))
+	children := map[string][]node.Node{}
+	for _, n := range all {
+		byID[n.ID] = n
+		key := ""
+		if n.ParentID != nil {
+			key = *n.ParentID
+		}
+		children[key] = append(children[key], n)
+	}
+	leaves := []node.Node{}
+	var walk func(parent string)
+	walk = func(parent string) {
+		for _, child := range children[parent] {
+			if child.Kind == node.KindLeaf {
+				leaves = append(leaves, child)
+			}
+			walk(child.ID)
+		}
+	}
+	walk("")
+	return leaves, byID
 }
 
 func mergeCoreEntities(core, recent []entity.Entity, limit int) []entity.Entity {

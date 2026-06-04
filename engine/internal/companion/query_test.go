@@ -31,6 +31,16 @@ func TestParseQuery_Malformed(t *testing.T) {
 	}
 }
 
+func TestPlainTextFromDoc_RendersMentions(t *testing.T) {
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"mention","attrs":{"id":"e1","label":"해진"}},{"type":"text","text":"은 "},{"type":"mention","attrs":{"id":"e2","label":"민호"}},{"type":"text","text":"를 믿었다."}]}]}`
+	got := plainTextFromDoc(&doc)
+	for _, want := range []string{"해진", "민호", "믿었다"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("plain text missing %q: %q", want, got)
+		}
+	}
+}
+
 func TestRunQueries(t *testing.T) {
 	svc, _, projectID := newSvc(t, "안녕")
 	ctx := context.Background()

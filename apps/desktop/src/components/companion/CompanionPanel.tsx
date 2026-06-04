@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Archive,
   Book,
@@ -26,6 +26,7 @@ interface Props {
   nodeIdRef: { current: string | null };
   onClose: () => void;
   onApplied: () => void;
+  beforeSend?: () => Promise<void> | void;
 }
 
 // hide proposal/query blocks (even partial/unclosed) from the live stream preview,
@@ -43,6 +44,7 @@ type Translate = ReturnType<typeof useI18n>["t"];
 
 const PROMPT_EXAMPLE_KEYS = [
   "companion.example.conflict",
+  "companion.example.outline",
   "companion.example.search",
   "companion.example.fetch",
   "companion.example.apply",
@@ -116,10 +118,11 @@ function formatTranscript(messages: ChatMessage[], liveProse: string, t: Transla
   return rows.filter((row) => row.trim()).join("\n\n");
 }
 
-export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Props) {
+export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, beforeSend }: Props) {
   const { t } = useI18n();
   const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied);
   const [draft, setDraft] = useState("");
+  const [flushing, setFlushing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -130,13 +133,37 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages, streaming]);
 
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${input.scrollHeight}px`;
+  }, [draft]);
+
+  const sendWithFreshContext = async (text: string) => {
+    if (!text.trim() || flushing) return false;
+    setFlushing(true);
+    try {
+      await beforeSend?.();
+      await send(text);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setFlushing(false);
+    }
+  };
+
   const submit = () => {
-    if (!draft.trim()) return;
-    send(draft);
-    setDraft("");
+    const text = draft;
+    if (!text.trim()) return;
+    void sendWithFreshContext(text).then((sent) => {
+      if (sent) setDraft("");
+    });
   };
 
   const isStreaming = status === "streaming";
+  const isBusy = isStreaming || flushing;
   // Smooth out chunky/bursty provider deltas so the prose reveals evenly
   // instead of jumping. The completed message still uses the full text.
   const smoothStreaming = useSmoothStream(streaming, isStreaming);
@@ -233,7 +260,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
                 <ProposalCard proposal={m.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={onApplied} />
               )}
               {m.choices && (
-                <ChoiceCard choices={m.choices} disabled={isStreaming} onPick={send} onCustom={focusInput} />
+                <ChoiceCard choices={m.choices} disabled={isBusy} onPick={(text) => { void sendWithFreshContext(text); }} onCustom={focusInput} />
               )}
             </div>
           );
@@ -271,7 +298,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied }: Pro
           {isStreaming ? (
             <button type="button" className="cmp-send cmp-stop" onClick={cancel} aria-label={t("companion.stop")}>{t("companion.stop")}</button>
           ) : (
-            <button type="button" className="cmp-send" onClick={submit} disabled={!draft.trim()} aria-label={t("companion.send")}>
+            <button type="button" className="cmp-send" onClick={submit} disabled={!draft.trim() || flushing} aria-label={t("companion.send")}>
               <CornerDownLeft size={16} />
             </button>
           )}

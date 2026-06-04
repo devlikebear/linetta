@@ -57,6 +57,21 @@ func TestBuildContext_RendersMemories(t *testing.T) {
 	}
 }
 
+func TestBuildContext_RendersSceneExcerpts(t *testing.T) {
+	out := buildContext(PromptData{
+		SceneExcerpts: []SceneExcerpt{{
+			NodeID: "n1",
+			Label:  "1부 / 1장 / 씬 1",
+			Text:   "해진은 민호를 믿지 못한 채 항구를 떠났다.",
+		}},
+	})
+	for _, want := range []string{"## 작성된 본문 발췌", "[n1] 1부 / 1장 / 씬 1", "해진은 민호를 믿지 못한 채"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("context missing %q in:\n%s", want, out)
+		}
+	}
+}
+
 func TestBuildSystem_MentionsRemember(t *testing.T) {
 	s := buildSystem()
 	if !strings.Contains(s, "remember") || !strings.Contains(s, "기억") {

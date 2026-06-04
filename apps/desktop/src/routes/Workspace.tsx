@@ -519,6 +519,26 @@ export function Workspace() {
     [load, refreshMentioned],
   );
   const debouncedSave = useDebouncedCallback(saveNow, SAVE_DEBOUNCE_MS);
+  const flushEditorBeforeCompanionSend = useCallback(async () => {
+    const currentLoad = loadRef.current;
+    const doc = editorRef.current?.getDoc();
+    if (!currentLoad || !doc) return;
+    setSaveStatus({ kind: "saving" });
+    try {
+      const updated = await nodes.updateContent(currentLoad.node.id, JSON.stringify(doc));
+      setLoad((prev) => {
+        if (!prev || prev.node.id !== updated.id) return prev;
+        return { ...prev, node: updated, initialDoc: doc };
+      });
+      setCharCount(updated.word_count);
+      setSaveStatus({ kind: "saved", at: Date.now() });
+      refreshMentioned(currentLoad.node.id);
+    } catch (e) {
+      setSaveStatus({ kind: "error", message: String(e) });
+      setError(String(e));
+      throw e;
+    }
+  }, [refreshMentioned]);
   const throttledLastOpened = useThrottledCallback(
     useCallback(() => {
       if (!load) return;
@@ -1258,6 +1278,7 @@ export function Workspace() {
           <CompanionPanel
             projectId={load.project.id}
             nodeIdRef={companionNodeRef}
+            beforeSend={flushEditorBeforeCompanionSend}
             onClose={() => { setCompanionOpen(false); focusEditor(); }}
             onApplied={() => {
               if (!load) return;

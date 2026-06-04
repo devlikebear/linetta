@@ -13,6 +13,7 @@ import (
 // PromptData is everything buildContext needs, gathered by the service.
 type PromptData struct {
 	Outline       string
+	SceneExcerpts []SceneExcerpt
 	Spine         plot.Spine
 	HasSpine      bool
 	Threads       []thread.Thread
@@ -21,11 +22,21 @@ type PromptData struct {
 	Memories      []string
 }
 
+// SceneExcerpt is a bounded plaintext excerpt from an already-written leaf
+// scene. The companion uses it as direct evidence for draft analysis.
+type SceneExcerpt struct {
+	NodeID    string
+	Label     string
+	Text      string
+	IsCurrent bool
+}
+
 // buildSystem returns the companion persona + tool/proposal rules.
 func buildSystem() string {
 	var b strings.Builder
 	b.WriteString("당신은 한국어 소설 작가의 집필 동료입니다. 작가와 자연스럽게 대화하며 플롯·인물·전개를 함께 구상합니다.\n\n")
 	b.WriteString("도구가 제공되면 적극적으로 사용하세요: web_search는 최신 자료나 장르 레퍼런스를 찾고, web_fetch는 특정 URL 내용을 확인하며, linetta_apply_ops는 작품의 개요·시놉시스·아웃라인 트리·스토리라인·비트·캐릭터·관계·장소·씬·기억을 직접 갱신합니다.\n")
+	b.WriteString("컨텍스트의 '작성된 본문 발췌'는 이미 작성된 실제 원고입니다. 캐릭터·관계·전개 분석 요청에서는 이 본문을 우선 근거로 삼고, 본문이 제공되어 있는데 없다고 말하지 마세요.\n")
 	b.WriteString("용어 구분: '아웃라인/목차/부/장/씬 구성'은 왼쪽 아웃라인 트리이며 create_outline_node 또는 create_scene으로 갱신합니다. '작품 개요/시놉시스' 텍스트는 set_outline으로 갱신합니다. '플롯/스토리라인/비트'는 create_thread/add_beat로 갱신합니다.\n")
 	b.WriteString("작가가 아이디어를 승인했거나 작품/소설 개요·시놉시스·아웃라인·얼개·스토리라인·비트·캐릭터·관계·장소·씬·기억의 작성/수정/추가/생성/구체화/세분화/분할/확장/반영/저장을 명확히 요청하면 설명으로 끝내지 말고 반드시 linetta_apply_ops를 호출하세요. 적용 후에는 무엇을 바꿨는지 짧게 말하고, 불확실한 변경은 먼저 질문하세요.\n")
 	b.WriteString("조각하듯 집필을 돕습니다: 거친 시놉시스나 한 문장을 받으면 set_outline으로 작품 개요를 정리하고 create_outline_node/create_scene으로 보이는 아웃라인 트리를 만들며, 필요하면 그 씬들에 create_thread/add_beat로 플롯 비트를 함께 붙이세요. 특정 파트·챕터·막을 요청받으면 아웃라인 노드를 세분화하고 비트를 연결하며, 특정 씬을 구체화해 달라는 요청에는 현재 씬 또는 새 씬에 비트를 붙여 실제 상태를 갱신하세요.\n\n")
@@ -72,6 +83,21 @@ func buildContext(d PromptData) string {
 			b.WriteString("- " + m + "\n")
 		}
 		b.WriteString("\n")
+	}
+	if len(d.SceneExcerpts) > 0 {
+		b.WriteString("## 작성된 본문 발췌\n")
+		for _, s := range d.SceneExcerpts {
+			if strings.TrimSpace(s.Text) == "" {
+				continue
+			}
+			current := ""
+			if s.IsCurrent {
+				current = " (현재 씬)"
+			}
+			b.WriteString(fmt.Sprintf("### [%s] %s%s\n", s.NodeID, s.Label, current))
+			b.WriteString(strings.TrimSpace(s.Text))
+			b.WriteString("\n\n")
+		}
 	}
 	if d.HasSpine && hasSpineBeats(d.Spine) {
 		b.WriteString("## 플롯\n")

@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../lib/i18n";
 import { CompanionPanel } from "./CompanionPanel";
@@ -37,10 +38,10 @@ vi.mock("../../lib/rpc", () => ({
   },
 }));
 
-function renderPanel() {
+function renderPanel(props: Partial<ComponentProps<typeof CompanionPanel>> = {}) {
   return render(
     <I18nProvider>
-      <CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} />
+      <CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} {...props} />
     </I18nProvider>,
   );
 }
@@ -77,6 +78,7 @@ describe("CompanionPanel", () => {
 
     expect(screen.getByText("무엇부터 맡길까요?")).toBeInTheDocument();
     expect(screen.getByText("프롬프트 예시")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /아웃라인/ })).toBeInTheDocument();
 
     const example = screen.getByRole("button", {
       name: /최근 스페이스 오페라 장르 레퍼런스/,
@@ -85,6 +87,26 @@ describe("CompanionPanel", () => {
 
     expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("web_search");
     expect(companionState.value.send).not.toHaveBeenCalled();
+  });
+
+  it("grows the draft textarea when a picked example wraps to multiple lines", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return this.value.includes("아웃라인") ? 72 : 32;
+      },
+    });
+
+    renderPanel();
+
+    const input = screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement;
+    expect(input.style.height).toBe("32px");
+
+    await user.click(screen.getByRole("button", { name: /아웃라인/ }));
+
+    expect(input.value).toContain("아웃라인");
+    expect(input.style.height).toBe("72px");
   });
 
   it("toggles built-in tool help from the companion header", async () => {
@@ -121,6 +143,22 @@ describe("CompanionPanel", () => {
     await user.click(screen.getByRole("button", { name: "전송" }));
 
     expect(companionState.value.send).toHaveBeenCalledWith("도와줘");
+  });
+
+  it("waits for the editor flush before sending messages", async () => {
+    const user = userEvent.setup();
+    let resolveFlush!: () => void;
+    const beforeSend = vi.fn(() => new Promise<void>((resolve) => { resolveFlush = resolve; }));
+    renderPanel({ beforeSend });
+
+    await user.type(screen.getByPlaceholderText(/메시지/), "본문 보고 분석해줘");
+    await user.click(screen.getByRole("button", { name: "전송" }));
+
+    await waitFor(() => expect(beforeSend).toHaveBeenCalledOnce());
+    expect(companionState.value.send).not.toHaveBeenCalled();
+
+    resolveFlush();
+    await waitFor(() => expect(companionState.value.send).toHaveBeenCalledWith("본문 보고 분석해줘"));
   });
 
   it("shows thinking state and hides query/proposal fences from live prose", () => {

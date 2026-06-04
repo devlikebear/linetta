@@ -156,6 +156,14 @@ func plainTextFromDoc(raw *string) string {
 	walk = func(x interface{}) {
 		switch t := x.(type) {
 		case map[string]interface{}:
+			if t["type"] == "mention" {
+				if attrs, ok := t["attrs"].(map[string]interface{}); ok {
+					if label, ok := attrs["label"].(string); ok {
+						sb.WriteString(label)
+					}
+				}
+				return
+			}
 			if t["type"] == "text" {
 				if s, ok := t["text"].(string); ok {
 					sb.WriteString(s)
