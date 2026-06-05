@@ -1,6 +1,6 @@
 # Linetta License Notice
 
-Copyright (C) 2026 Changheon Shin
+Copyright (C) 2026 devlikebear
 
 Linetta is licensed under the GNU Affero General Public License version 3
 only (`AGPL-3.0-only`). See [LICENSE](LICENSE) for the full license text.
