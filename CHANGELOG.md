@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.4 - 2026-06-05
+
+- Added a Homebrew cask post-install step that clears the macOS quarantine attribute for hobby releases that are not notarized yet.
+- Kept optional Developer ID signing and notarization support in the release workflow for a future public distribution path.
+
 ## v0.4.3 - 2026-06-04
 
 - Added written draft excerpts to companion context so character, relationship, and scene analysis can use the actual manuscript text.
