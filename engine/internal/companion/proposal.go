@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/devlikebear/linetta/engine/internal/fact"
 )
 
 // proposalFence is the fenced-block language tag the model must use to emit a
@@ -61,6 +63,12 @@ type Op struct {
 	ToRef        string `json:"to_ref,omitempty"`
 	Notes        string `json:"notes,omitempty"`
 	InverseLabel string `json:"inverse_label,omitempty"`
+
+	// create_fact_card
+	Claim   string             `json:"claim,omitempty"`
+	Result  string             `json:"result,omitempty"`
+	Status  string             `json:"status,omitempty"`
+	Sources []fact.SourceInput `json:"sources,omitempty"`
 }
 
 // Proposal is the parsed contents of a linetta-proposal block.
@@ -78,6 +86,7 @@ var knownOps = map[string]bool{
 	"create_entity": true, "update_entity": true, "create_relationship": true,
 	"create_scene":        true,
 	"create_outline_node": true,
+	"create_fact_card":    true,
 }
 
 // ParseProposal scans full model output for a linetta-proposal fenced block.
@@ -244,6 +253,34 @@ func validateProposal(p Proposal) error {
 			// Undeclared from_ref/to_ref are allowed: the model often places a
 			// real entity id (or name) in the ref field. Resolution and any
 			// clear error happen at apply time.
+		case "create_fact_card":
+			if strings.TrimSpace(op.Claim) == "" {
+				return fmt.Errorf("op[%d] create_fact_card: claim required", i)
+			}
+			if strings.TrimSpace(op.Result) == "" {
+				return fmt.Errorf("op[%d] create_fact_card: result required", i)
+			}
+			status := strings.TrimSpace(op.Status)
+			if status == "" {
+				status = fact.StatusUncertain
+				p.Ops[i].Status = status
+			}
+			if !fact.ValidStatus(status) {
+				return fmt.Errorf("op[%d] create_fact_card: status must be verified|uncertain|intentional_fiction|stale", i)
+			}
+			hasSource := false
+			for _, src := range op.Sources {
+				if strings.TrimSpace(src.URL) != "" {
+					hasSource = true
+					break
+				}
+			}
+			if !hasSource {
+				return fmt.Errorf("op[%d] create_fact_card: at least one source URL required", i)
+			}
+			if op.NodeID != "" && op.NodeRef != "" {
+				return fmt.Errorf("op[%d] create_fact_card: node_id and node_ref are mutually exclusive", i)
+			}
 		}
 	}
 	return nil

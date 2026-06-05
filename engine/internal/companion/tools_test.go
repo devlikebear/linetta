@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -42,10 +43,11 @@ func newToolSvc(t *testing.T) (*Service, string, string) {
 	beats := beat.NewRepo(st)
 	entities := entity.NewRepo(st)
 	rels := relationship.NewRepo(st)
+	facts := fact.NewRepo(st)
 	pb := plot.NewBuilder(nodes, beats, threads)
 	svc := &Service{
 		projects: projects, threads: threads, entities: entities,
-		relationships: rels, plot: pb, nodes: nodes, beats: beats,
+		relationships: rels, facts: facts, plot: pb, nodes: nodes, beats: beats,
 		src: toolConfigSource{},
 	}
 	p, err := projects.Create(ctx, 1_000, project.NewInput{
@@ -133,6 +135,72 @@ func TestLinettaApplyOpsToolMutatesProjectStructure(t *testing.T) {
 	rels, _ := svc.relationships.ListByProject(ctx, projectID)
 	if len(rels) != 1 || rels[0].Label != "조사한다" {
 		t.Fatalf("relationships = %+v", rels)
+	}
+}
+
+func TestLinettaApplyOpsToolCreatesFactCard(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 3_000 })
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[
+	  {"op":"create_fact_card","claim":"런던 일반 경찰은 항상 총기를 휴대한다","result":"일반 경찰은 통상 비무장 근무이며 무장 경찰은 별도 단위다.","status":"verified","category":"police","sources":[{"url":"https://www.met.police.uk/","title":"Met Police","snippet":"official reference"}]}
+	]`
+	params := json.RawMessage(`{
+	  "summary":"자료집 카드 저장",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("tool result is error: %s", result.Text())
+	}
+
+	list, err := svc.facts.List(ctx, fact.ListFilter{ProjectID: projectID, NodeID: &nodeID})
+	if err != nil {
+		t.Fatalf("facts.List: %v", err)
+	}
+	if len(list) != 1 || list[0].Claim == "" || len(list[0].Sources) != 1 {
+		t.Fatalf("facts = %+v", list)
+	}
+	if list[0].NodeID == nil || *list[0].NodeID != nodeID {
+		t.Fatalf("fact should link to current node %s: %+v", nodeID, list[0])
+	}
+}
+
+func TestLinettaApplyOpsToolRejectsFactCardWithoutSource(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 3_000 })
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[{"op":"create_fact_card","claim":"출처 없는 주장","result":"검증됨","status":"verified"}]`
+	params := json.RawMessage(`{
+	  "summary":"잘못된 자료집 카드",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("source-less fact card should be rejected: %s", result.Text())
+	}
+	list, err := svc.facts.List(ctx, fact.ListFilter{ProjectID: projectID})
+	if err != nil {
+		t.Fatalf("facts.List: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("source-less fact card should not persist: %+v", list)
 	}
 }
 

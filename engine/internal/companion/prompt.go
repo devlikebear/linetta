@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -19,6 +20,7 @@ type PromptData struct {
 	Threads       []thread.Thread
 	Entities      []entity.Entity
 	Relationships []relationship.Relationship
+	Facts         []fact.Card
 	Memories      []string
 }
 
@@ -35,7 +37,7 @@ type SceneExcerpt struct {
 func buildSystem() string {
 	var b strings.Builder
 	b.WriteString("당신은 한국어 소설 작가의 집필 동료입니다. 작가와 자연스럽게 대화하며 플롯·인물·전개를 함께 구상합니다.\n\n")
-	b.WriteString("도구가 제공되면 적극적으로 사용하세요: web_search는 최신 자료나 장르 레퍼런스를 찾고, web_fetch는 특정 URL 내용을 확인하며, linetta_apply_ops는 작품의 개요·시놉시스·아웃라인 트리·스토리라인·비트·캐릭터·관계·장소·씬·기억을 직접 갱신합니다.\n")
+	b.WriteString("도구가 제공되면 적극적으로 사용하세요: web_search는 최신 자료나 장르 레퍼런스를 찾고, web_fetch는 특정 URL 내용을 확인하며, linetta_apply_ops는 작품의 개요·시놉시스·아웃라인 트리·스토리라인·비트·캐릭터·관계·장소·씬·기억·팩트 자료집을 직접 갱신합니다.\n")
 	b.WriteString("컨텍스트의 '작성된 본문 발췌'는 이미 작성된 실제 원고입니다. 캐릭터·관계·전개 분석 요청에서는 이 본문을 우선 근거로 삼고, 본문이 제공되어 있는데 없다고 말하지 마세요.\n")
 	b.WriteString("용어 구분: '아웃라인/목차/부/장/씬 구성'은 왼쪽 아웃라인 트리이며 create_outline_node 또는 create_scene으로 갱신합니다. '작품 개요/시놉시스' 텍스트는 set_outline으로 갱신합니다. '플롯/스토리라인/비트'는 create_thread/add_beat로 갱신합니다.\n")
 	b.WriteString("작가가 아이디어를 승인했거나 작품/소설 개요·시놉시스·아웃라인·얼개·스토리라인·비트·캐릭터·관계·장소·씬·기억의 작성/수정/추가/생성/구체화/세분화/분할/확장/반영/저장을 명확히 요청하면 설명으로 끝내지 말고 반드시 linetta_apply_ops를 호출하세요. 적용 후에는 무엇을 바꿨는지 짧게 말하고, 불확실한 변경은 먼저 질문하세요.\n")
@@ -44,7 +46,8 @@ func buildSystem() string {
 	b.WriteString("```linetta-proposal\n")
 	b.WriteString(`{"summary":"<한 줄 요약>","ops":[ ... ]}` + "\n")
 	b.WriteString("```\n\n")
-	b.WriteString("op 종류: create_outline_node{ref?,kind:container|leaf,label,title?,parent_node_id?|parent_node_ref?,after_node_id?|after_node_ref?}, create_scene{ref?,label,title?,after_node_id?|after_node_ref?}, create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id?|node_ref?,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}, create_entity{ref?,kind,name,role?,summary?}, update_entity{entity_id,name?,role?,summary?}, create_relationship{from|from_ref,to|to_ref,label,inverse_label?,notes?}.\n")
+	b.WriteString("op 종류: create_outline_node{ref?,kind:container|leaf,label,title?,parent_node_id?|parent_node_ref?,after_node_id?|after_node_ref?}, create_scene{ref?,label,title?,after_node_id?|after_node_ref?}, create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id?|node_ref?,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}, create_entity{ref?,kind,name,role?,summary?}, update_entity{entity_id,name?,role?,summary?}, create_relationship{from|from_ref,to|to_ref,label,inverse_label?,notes?}, create_fact_card{ref?,claim,result,status,category?,node_id?|node_ref?,sources:[{url,title?,snippet?,accessed_at?}]}.\n")
+	b.WriteString("- 팩트 자료집 저장 규칙: create_fact_card는 최소 1개 출처 URL이 있을 때만 사용하세요. sources[].url 없는 자료는 저장하지 말고, 최신성·불확실성은 status(verified|uncertain|intentional_fiction|stale)로 표시하세요. 출처 본문은 긴 인용 대신 짧은 요약/snippet만 넣으세요.\n")
 	b.WriteString("id 규칙(중요): 컨텍스트의 '씬'·'스토리라인'·'등장 인물·장소·관계' 목록에 실제로 주어진 id만 사용하세요. id를 절대 지어내지 마세요.\n")
 	b.WriteString("- add_beat.node_id는 위 '씬' 목록의 node_id 중 하나입니다. 생략하면 현재 씬에 붙습니다.\n")
 	b.WriteString("- 비트는 반드시 스토리라인에 속합니다. 기존 스토리라인이 있으면 그 thread_id를, 새 줄거리면 같은 제안에 create_thread(ref 포함)를 먼저 넣고 add_beat.thread_ref로 그 ref를 참조하세요. thread_id를 추측하지 마세요.\n")
@@ -81,6 +84,30 @@ func buildContext(d PromptData) string {
 		b.WriteString("## 기억\n")
 		for _, m := range d.Memories {
 			b.WriteString("- " + m + "\n")
+		}
+		b.WriteString("\n")
+	}
+	if len(d.Facts) > 0 {
+		b.WriteString("## 팩트 자료집\n")
+		for _, f := range d.Facts {
+			line := fmt.Sprintf("- [%s] (%s) %s", f.ID, f.Status, f.Claim)
+			if strings.TrimSpace(f.Category) != "" {
+				line += " / " + f.Category
+			}
+			if strings.TrimSpace(f.Result) != "" {
+				line += ": " + f.Result
+			}
+			b.WriteString(line + "\n")
+			for _, src := range f.Sources {
+				if strings.TrimSpace(src.URL) == "" {
+					continue
+				}
+				title := strings.TrimSpace(src.Title)
+				if title == "" {
+					title = src.URL
+				}
+				b.WriteString(fmt.Sprintf("  · %s — %s\n", title, src.URL))
+			}
 		}
 		b.WriteString("\n")
 	}

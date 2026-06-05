@@ -253,3 +253,21 @@ func TestParseProposal_RelationshipInverseLabel(t *testing.T) {
 		t.Fatalf("inverse_label should be valid: present=%v err=%v", present, err)
 	}
 }
+
+func TestParseProposal_CreateFactCard(t *testing.T) {
+	body := `{"ops":[{"op":"create_fact_card","claim":"런던 일반 경찰은 항상 총기를 휴대한다","result":"일반 경찰은 통상 비무장이다.","status":"verified","category":"police","sources":[{"url":"https://www.met.police.uk/","title":"Met Police","snippet":"official reference","accessed_at":100}]}]}`
+	p, present, err := ParseProposal(block(body))
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if len(p.Ops) != 1 || p.Ops[0].Claim == "" || len(p.Ops[0].Sources) != 1 {
+		t.Fatalf("p=%+v", p)
+	}
+}
+
+func TestParseProposal_CreateFactCardRequiresSource(t *testing.T) {
+	_, present, err := ParseProposal(block(`{"ops":[{"op":"create_fact_card","claim":"X","result":"Y","status":"verified"}]}`))
+	if !present || err == nil {
+		t.Fatalf("expected source-required error, present=%v err=%v", present, err)
+	}
+}

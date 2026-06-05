@@ -8,6 +8,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
@@ -78,7 +79,7 @@ func (s *Service) buildWebSearchTool() tarstools.Tool {
 func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, now func() int64) tarstools.Tool {
 	return tarstools.Tool{
 		Name:        "linetta_apply_ops",
-		Description: "Directly apply Linetta story mutations to the current project. Use create_outline_node/create_scene for the left outline tree, set_outline for project synopsis/overview text, and thread/beat ops for plot beats.",
+		Description: "Directly apply Linetta story mutations to the current project. Use create_outline_node/create_scene for the left outline tree, set_outline for project synopsis/overview text, thread/beat ops for plot beats, and create_fact_card for source-backed Fact Book cards.",
 		Parameters:  applyOpsSchema(),
 		Execute: func(ctx context.Context, params json.RawMessage) (tarstools.Result, error) {
 			p, err := decodeApplyOpsParams(params)
@@ -111,7 +112,7 @@ func applyOpsSchema() json.RawMessage {
   "type":"object",
   "properties":{
     "summary":{"type":"string","description":"Short Korean summary of the actual project changes to apply."},
-    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use create_outline_node or create_scene for the visible left outline tree, set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, and entity/relationship ops for cast/place updates."}
+    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use create_outline_node or create_scene for the visible left outline tree, set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, entity/relationship ops for cast/place updates, and create_fact_card only when at least one source URL is available."}
   },
   "required":["summary","ops_json"],
   "additionalProperties":false
@@ -273,6 +274,30 @@ func (s *Service) applyOneOp(
 		return s.beats.Delete(ctx, op.BeatID)
 	case "remember":
 		return s.Remember(projectID, op.Text, op.Category)
+	case "create_fact_card":
+		if s.facts == nil {
+			return fmt.Errorf("fact book is not available")
+		}
+		cardNodeID, err := s.resolveOptionalNodeID(ctx, op.NodeID, op.NodeRef, currentNodeID, nodeRefs)
+		if err != nil {
+			return err
+		}
+		card, err := s.facts.Create(ctx, now(), fact.NewInput{
+			ProjectID: projectID,
+			NodeID:    cardNodeID,
+			Claim:     op.Claim,
+			Result:    op.Result,
+			Status:    op.Status,
+			Category:  op.Category,
+			Sources:   op.Sources,
+		})
+		if err != nil {
+			return err
+		}
+		if op.Ref != "" {
+			created["fact:"+op.Ref] = card.ID
+		}
+		return nil
 	case "create_entity":
 		ent, err := s.entities.Create(ctx, now(), entity.NewInput{
 			ProjectID: projectID,

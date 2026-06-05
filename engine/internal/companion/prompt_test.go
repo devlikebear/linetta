@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -121,6 +122,35 @@ func TestBuildSystem_MentionsSceneAndPair(t *testing.T) {
 	for _, want := range []string{"create_scene", "create_outline_node", "parent_node_ref", "node_ref", "inverse_label"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("buildSystem missing %q", want)
+		}
+	}
+}
+
+func TestBuildSystem_MentionsFactBookRules(t *testing.T) {
+	s := buildSystem()
+	for _, want := range []string{"create_fact_card", "출처 URL", "status", "팩트 자료집"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("buildSystem missing %q", want)
+		}
+	}
+}
+
+func TestBuildContext_RendersFactBook(t *testing.T) {
+	out := buildContext(PromptData{
+		Facts: []fact.Card{{
+			ID:     "f1",
+			Claim:  "런던 일반 경찰은 항상 총기를 휴대한다",
+			Result: "일반 경찰은 통상 비무장이다.",
+			Status: fact.StatusVerified,
+			Sources: []fact.Source{{
+				URL:   "https://www.met.police.uk/",
+				Title: "Met Police",
+			}},
+		}},
+	})
+	for _, want := range []string{"## 팩트 자료집", "[f1]", "verified", "https://www.met.police.uk/"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("context missing %q in:\n%s", want, out)
 		}
 	}
 }

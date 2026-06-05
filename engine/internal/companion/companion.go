@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -32,6 +33,7 @@ const compactHistoryMaxMessages = 24
 const compactHistorySnippetRunes = 240
 const sceneExcerptMaxRunes = 1200
 const sceneExcerptTotalRunes = 6000
+const factContextLimit = 12
 
 // ClientFactory and ProviderSource are shared with the ai package so the same
 // settings adapter and default factory serve AI runs, companion, and summaries.
@@ -45,6 +47,7 @@ type Service struct {
 	threads       *thread.Repo
 	entities      *entity.Repo
 	relationships *relationship.Repo
+	facts         *fact.Repo
 	plot          *plot.Builder
 	nodes         *node.Repo
 	beats         *beat.Repo
@@ -80,6 +83,11 @@ func NewService(
 
 func (s *Service) WithOpsStatus(repo *opsstatus.Repo) *Service {
 	s.ops = repo
+	return s
+}
+
+func (s *Service) WithFacts(repo *fact.Repo) *Service {
+	s.facts = repo
 	return s
 }
 
@@ -138,6 +146,15 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 	}
 	if rels, err := s.relationships.ListByProject(ctx, projectID); err == nil {
 		d.Relationships = rels
+	}
+	if s.facts != nil {
+		filter := fact.ListFilter{ProjectID: projectID, Limit: factContextLimit}
+		if resolvedNode != "" {
+			filter.NodeID = &resolvedNode
+		}
+		if facts, err := s.facts.List(ctx, filter); err == nil {
+			d.Facts = facts
+		}
 	}
 	// Keyword memory can't do topical matching (SearchExperiences matches
 	// summary-contains-query), so surface the most recent facts every turn
