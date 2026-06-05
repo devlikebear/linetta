@@ -13,11 +13,19 @@ The release workflow publishes:
 ## macOS Homebrew cask
 
 The Homebrew cask uses `Linetta-macos.app.tar.gz` from the GitHub Release.
-macOS tag releases must publish a Developer ID signed, notarized, and stapled
-`.app` archive; otherwise Gatekeeper treats the quarantined Homebrew download
-as damaged.
+Until Linetta is ready for a paid Apple Developer Program membership, the cask
+installs the ad-hoc signed app and clears the quarantine attribute in
+`postflight`. This avoids the hobby-release Gatekeeper "damaged app" prompt for
+Homebrew installs without requiring users to run `xattr` manually.
 
-Configure these GitHub Actions secrets before creating a `v*` release tag:
+When the project has enough expected users to justify it, switch to Developer
+ID signing and notarization. The release workflow already supports that path:
+if the Apple secrets below are configured, the macOS job signs the Tauri app
+bundle and sidecar binaries, submits it to Apple's notary service, staples the
+ticket, validates the result, and only then creates the Homebrew tarball and
+checksum.
+
+Configure these GitHub Actions secrets to enable notarized macOS releases:
 
 - `APPLE_CERTIFICATE`: base64-encoded `.p12` Developer ID Application certificate
 - `APPLE_CERTIFICATE_PASSWORD`: password for the exported `.p12`
@@ -35,13 +43,6 @@ Export the certificate from Keychain Access, then encode it with:
 ```sh
 openssl base64 -A -in DeveloperIDApplication.p12 -out certificate-base64.txt
 ```
-
-The macOS release job imports the certificate into a temporary keychain, signs
-the Tauri app bundle and bundled sidecar binaries, submits the app with
-`xcrun notarytool`, staples the ticket, validates it with `stapler`, and only
-then creates the Homebrew tarball and checksum. Untagged `workflow_dispatch`
-builds may still run without these secrets, but tag releases fail early if the
-required signing configuration is missing.
 
 ## Windows winget
 
