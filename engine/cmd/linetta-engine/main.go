@@ -19,6 +19,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/gitsync"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/modelcatalog"
@@ -93,6 +94,7 @@ func main() {
 	beats := beat.NewRepo(st)
 	notes := note.NewRepo(st)
 	relationships := relationship.NewRepo(st)
+	facts := fact.NewRepo(st)
 	plotBuilder := plot.NewBuilder(nodes, beats, threads)
 	ops := opsstatus.NewRepo(st)
 	searchRepo := search.NewRepo(st)
@@ -213,6 +215,10 @@ func main() {
 	s.Handle("notes.get", handlers.GetNote(notes))
 	s.Handle("notes.update", handlers.UpdateNote(notes))
 	s.Handle("notes.delete", handlers.DeleteNote(notes))
+	s.Handle("facts.create", handlers.CreateFact(facts, clock))
+	s.Handle("facts.list", handlers.ListFacts(facts))
+	s.Handle("facts.update", handlers.UpdateFact(facts, clock))
+	s.Handle("facts.delete", handlers.DeleteFact(facts))
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
 	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
 	s.Handle("ai.preview_context", handlers.PreviewContext(contextBuilder))
