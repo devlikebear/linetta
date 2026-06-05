@@ -20,13 +20,18 @@ brew install --cask linetta
 
 The fully qualified `devlikebear/tap/linetta` cask name also works in a single `brew install` without a separate `brew tap` step.
 
-The app is ad-hoc signed and not notarized, so macOS Gatekeeper blocks the first launch. After installing, clear the quarantine attribute once:
+Release casks are built from Developer ID signed and notarized macOS archives. Older casks published before the signing pipeline was enabled, including v0.4.3 and earlier, were ad-hoc signed and can be blocked by macOS Gatekeeper. If macOS reports that an older app is damaged, reinstall the latest cask first:
+
+```sh
+brew update
+brew reinstall --cask linetta
+```
+
+If you are intentionally running one of those older ad-hoc builds, clear the quarantine attribute once:
 
 ```sh
 xattr -dr com.apple.quarantine "/Applications/Linetta.app"
 ```
-
-(Homebrew's `--no-quarantine` install switch has been disabled with no replacement, so the quarantine attribute must be cleared after install instead.)
 
 Other platforms (Linux, Windows) and Intel Macs are not yet covered by a prebuilt download — build from source with `make build-desktop` (see below).
 

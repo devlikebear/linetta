@@ -77,6 +77,47 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
+      - name: Check Apple signing configuration
+        id: apple_signing
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("${name}")
+            fi
+          done
+
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "configured=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "configured=false" >> "${GITHUB_OUTPUT}"
+            printf 'Missing Apple signing secrets: %s\n' "${missing[*]}"
+          fi
+
+      - name: Require notarized macOS release asset
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v') && steps.apple_signing.outputs.configured != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Apple Developer ID signing and notarization secrets are required for tag releases." >&2
+          echo "Configure APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID." >&2
+          exit 1
+
+      - name: Warn about unsigned macOS workflow build
+        if: runner.os == 'macOS' && !startsWith(github.ref, 'refs/tags/v') && steps.apple_signing.outputs.configured != 'true'
+        shell: bash
+        run: |
+          echo "::warning::Apple signing secrets are not configured. This workflow_dispatch macOS artifact will not be notarized."
+
       - name: Build engine sidecar
         shell: bash
         run: bash scripts/build-engine.sh
@@ -90,6 +131,19 @@ jobs:
         shell: bash
         working-directory: apps/desktop
         run: pnpm tauri bundle --bundles "${{ matrix.bundles }}"
+
+      - name: Sign and notarize macOS app
+        if: runner.os == 'macOS' && steps.apple_signing.outputs.configured == 'true'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: scripts/sign-notarize-macos-app.sh apps/desktop/src-tauri/target/release/bundle/macos/Linetta.app
 
       - name: Collect release assets
         shell: bash
@@ -251,13 +305,6 @@ jobs:
             app "Linetta.app"
 
             zap trash: "~/Library/Application Support/com.devlikebear.linetta"
-
-            caveats <<~CAVEATS
-              Linetta is ad-hoc signed and not notarized, so macOS Gatekeeper may block
-              it on first launch. To allow it to run, clear the quarantine attribute:
-
-                xattr -dr com.apple.quarantine "#{appdir}/Linetta.app"
-            CAVEATS
           end
           EOF
           cat homebrew-tap/Casks/linetta.rb

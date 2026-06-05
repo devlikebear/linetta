@@ -10,6 +10,39 @@ The release workflow publishes:
 - a tarball of rendered winget manifests
 - a Flathub manifest starter
 
+## macOS Homebrew cask
+
+The Homebrew cask uses `Linetta-macos.app.tar.gz` from the GitHub Release.
+macOS tag releases must publish a Developer ID signed, notarized, and stapled
+`.app` archive; otherwise Gatekeeper treats the quarantined Homebrew download
+as damaged.
+
+Configure these GitHub Actions secrets before creating a `v*` release tag:
+
+- `APPLE_CERTIFICATE`: base64-encoded `.p12` Developer ID Application certificate
+- `APPLE_CERTIFICATE_PASSWORD`: password for the exported `.p12`
+- `APPLE_ID`: Apple ID email used for notarization
+- `APPLE_PASSWORD`: app-specific password for that Apple ID
+- `APPLE_TEAM_ID`: Apple Developer team ID
+
+Optional secrets:
+
+- `APPLE_SIGNING_IDENTITY`: exact keychain identity if more than one Developer ID Application certificate is present
+- `KEYCHAIN_PASSWORD`: temporary CI keychain password; generated automatically when omitted
+
+Export the certificate from Keychain Access, then encode it with:
+
+```sh
+openssl base64 -A -in DeveloperIDApplication.p12 -out certificate-base64.txt
+```
+
+The macOS release job imports the certificate into a temporary keychain, signs
+the Tauri app bundle and bundled sidecar binaries, submits the app with
+`xcrun notarytool`, staples the ticket, validates it with `stapler`, and only
+then creates the Homebrew tarball and checksum. Untagged `workflow_dispatch`
+builds may still run without these secrets, but tag releases fail early if the
+required signing configuration is missing.
+
 ## Windows winget
 
 The release workflow renders `Linetta-winget-manifests.tar.gz` from the
