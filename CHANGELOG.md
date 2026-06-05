@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.5 - 2026-06-05
+
+- Added a Fact Book persistence layer with sourced fact cards for project-wide and scene-linked claims.
+- Added companion support for creating sourced fact cards and reusing saved Fact Book context in later responses.
+- Added a Workspace Fact Book panel with current-scene review prompts, source links, deletion, and localized UI copy.
+
 ## v0.4.4 - 2026-06-05
 
 - Added a Homebrew cask post-install step that clears the macOS quarantine attribute for hobby releases that are not notarized yet.
