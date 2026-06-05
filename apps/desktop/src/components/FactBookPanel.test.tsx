@@ -140,4 +140,38 @@ describe("FactBookPanel", () => {
 
     expect(companionState.value.send).toHaveBeenCalledWith("검색 후 자료집에 저장: 런던 경찰 총기 휴대");
   });
+
+  it("sends a direct reply from the fact book panel", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const input = await screen.findByRole("textbox", { name: "자료집 답장 입력" });
+    await user.type(input, "https://www.met.police.uk/");
+    await user.click(screen.getByRole("button", { name: "전송" }));
+
+    expect(companionState.value.send).toHaveBeenCalledWith("https://www.met.police.uk/");
+    expect(input).toHaveValue("");
+  });
+
+  it("focuses the direct reply input from custom choices", async () => {
+    const user = userEvent.setup();
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "출처 URL을 직접 입력해 주세요.",
+        choices: {
+          run_id: "run-1",
+          prompt: "출처 입력",
+          options: ["검색 후 자료집에 저장: 런던 경찰 총기 휴대"],
+          allow_custom: true,
+        },
+      }],
+    };
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "직접 입력" }));
+
+    expect(screen.getByRole("textbox", { name: "자료집 답장 입력" })).toHaveFocus();
+  });
 });

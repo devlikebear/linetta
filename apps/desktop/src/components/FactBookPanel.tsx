@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, ExternalLink, Search, Trash2, X } from "lucide-react";
+import { BookOpen, CornerDownLeft, ExternalLink, Search, Trash2, X } from "lucide-react";
 import { facts as factsApi } from "../lib/rpc";
 import type { FactCard, FactStatus } from "../lib/types";
 import { useI18n } from "../lib/i18n";
@@ -24,6 +24,7 @@ function buildReviewPrompt(sceneLabel: string): string {
     "후보가 있으면 설명은 짧게 하고 linetta-choices 블록 하나로만 보여줘.",
     "각 options 항목은 반드시 `검색 후 자료집에 저장: <주장>` 형식으로 작성해.",
     "작가가 후보를 선택하면 그때 web_search와 web_fetch로 출처 URL을 확인하고, create_fact_card로 자료집에 저장해.",
+    "web_search API 키가 없어 실패하면 포기하지 말고 작가에게 출처 URL 직접 입력을 요청해. 작가가 URL을 입력하면 web_fetch로 확인한 뒤 저장해.",
     "출처 URL 없는 create_fact_card는 금지야. 후보가 없으면 짧게 이유만 말해.",
   ].join("\n");
 }
@@ -43,7 +44,9 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [replyDraft, setReplyDraft] = useState("");
   const nodeIdRef = useRef<string | null>(nodeId);
+  const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => { nodeIdRef.current = nodeId; }, [nodeId]);
 
@@ -63,6 +66,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
     void loadFacts();
     onChanged?.();
   });
+  const busy = status === "streaming";
 
   useEffect(() => { void loadFacts(); }, [loadFacts]);
 
@@ -84,6 +88,17 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
     }
   };
 
+  const submitReply = async () => {
+    const text = replyDraft.trim();
+    if (!text || busy) return;
+    setReplyDraft("");
+    await send(text);
+  };
+
+  const focusReplyInput = () => {
+    replyInputRef.current?.focus();
+  };
+
   const deleteCard = async (id: string) => {
     await factsApi.delete(id);
     await loadFacts();
@@ -98,8 +113,8 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
       </div>
 
       <div className="fact-review">
-        <button type="button" className="btn accent sm" onClick={startReview} disabled={reviewing || status === "streaming"}>
-          <Search size={14} /> {reviewing || status === "streaming" ? t("factBook.reviewing") : t("factBook.reviewScene")}
+        <button type="button" className="btn accent sm" onClick={startReview} disabled={reviewing || busy}>
+          <Search size={14} /> {reviewing || busy ? t("factBook.reviewing") : t("factBook.reviewScene")}
         </button>
         <p>{t("factBook.reviewHint")}</p>
       </div>
@@ -112,13 +127,40 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
           {latestAssistant?.choices && (
             <ChoiceCard
               choices={latestAssistant.choices}
-              disabled={status === "streaming"}
+              disabled={busy}
               onPick={(text) => { void send(text); }}
-              onCustom={() => {}}
+              onCustom={focusReplyInput}
             />
           )}
         </section>
       )}
+
+      <form
+        className="fact-reply"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submitReply();
+        }}
+      >
+        <textarea
+          ref={replyInputRef}
+          value={replyDraft}
+          aria-label={t("factBook.directInput")}
+          placeholder={t("factBook.directPlaceholder")}
+          rows={2}
+          disabled={busy}
+          onChange={(e) => setReplyDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void submitReply();
+            }
+          }}
+        />
+        <button type="submit" className="fact-reply-send" disabled={!replyDraft.trim() || busy} aria-label={t("companion.send")}>
+          <CornerDownLeft size={15} />
+        </button>
+      </form>
 
       <div className="panel-scroll fact-list">
         {loading && <p className="fact-empty">{t("factBook.loading")}</p>}
