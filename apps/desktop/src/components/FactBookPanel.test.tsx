@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,6 +19,10 @@ const companionState = vi.hoisted(() => ({
   },
 }));
 
+const companionHook = vi.hoisted(() => ({
+  onApplied: undefined as (() => void) | undefined,
+}));
+
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   factsList: vi.fn(),
@@ -26,7 +30,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../hooks/useCompanion", () => ({
-  useCompanion: () => companionState.value,
+  useCompanion: (_projectId: string, _nodeIdRef: { current: string | null }, onApplied?: () => void) => {
+    companionHook.onApplied = onApplied;
+    return companionState.value;
+  },
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -84,6 +91,7 @@ describe("FactBookPanel", () => {
       clear: vi.fn(),
       compact: vi.fn(),
     };
+    companionHook.onApplied = undefined;
   });
 
   it("renders saved fact cards with source links", async () => {
@@ -139,6 +147,57 @@ describe("FactBookPanel", () => {
     await user.click(await screen.findByRole("button", { name: "검색 후 자료집에 저장: 런던 경찰 총기 휴대" }));
 
     expect(companionState.value.send).toHaveBeenCalledWith("검색 후 자료집에 저장: 런던 경찰 총기 휴대");
+  });
+
+  it("renders assistant errors even when no choices are present", async () => {
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "web_search 실행 실패: api key is required",
+        errored: true,
+      }],
+    };
+    renderPanel();
+
+    expect(await screen.findByText("web_search 실행 실패: api key is required")).toBeInTheDocument();
+  });
+
+  it("renders fact card proposals inside the panel", async () => {
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "자료집에 저장할 수 있어요.",
+        proposal: {
+          run_id: "run-1",
+          valid: true,
+          summary: "자료집 저장",
+          ops: [{
+            op: "create_fact_card",
+            claim: "런던 일반 경찰은 항상 총기를 휴대한다",
+            result: "일반 경찰은 통상 비무장이다.",
+            status: "verified",
+            sources: [{ url: "https://www.met.police.uk/" }],
+          }],
+        },
+      }],
+    };
+    renderPanel();
+
+    expect(await screen.findByText("자료집 저장")).toBeInTheDocument();
+    expect(screen.getByText("자료집 카드 생성: 런던 일반 경찰은 항상 총기를 휴대한다")).toBeInTheDocument();
+  });
+
+  it("shows refresh feedback after companion applies a fact card", async () => {
+    renderPanel();
+
+    await act(async () => {
+      companionHook.onApplied?.();
+    });
+
+    expect(await screen.findByText("자료집을 새로고침했습니다.")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.factsList.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
   it("sends a direct reply from the fact book panel", async () => {

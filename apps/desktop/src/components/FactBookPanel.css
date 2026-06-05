@@ -39,6 +39,29 @@
   color: var(--ink-soft);
 }
 
+.fact-companion-prose.errored {
+  border: 1px solid color-mix(in srgb, var(--warn) 42%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warn) 8%, var(--surface));
+  color: var(--warn);
+  padding: 9px;
+  white-space: pre-wrap;
+}
+
+.fact-feedback {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 9px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fact-feedback.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 35%, var(--line));
+  background: color-mix(in srgb, var(--ok) 7%, var(--surface));
+}
+
 .fact-reply {
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);

@@ -6,6 +6,7 @@ import { useI18n } from "../lib/i18n";
 import { useCompanion } from "../hooks/useCompanion";
 import { ChoiceCard } from "./companion/ChoiceCard";
 import { Markdown } from "./companion/Markdown";
+import { ProposalCard } from "./companion/ProposalCard";
 import "./FactBookPanel.css";
 
 interface Props {
@@ -45,6 +46,8 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
   const [error, setError] = useState("");
   const [reviewing, setReviewing] = useState(false);
   const [replyDraft, setReplyDraft] = useState("");
+  const [feedbackAnchor, setFeedbackAnchor] = useState<number | null>(null);
+  const [feedbackNote, setFeedbackNote] = useState("");
   const nodeIdRef = useRef<string | null>(nodeId);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -62,23 +65,41 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
     }
   }, [projectId, nodeId]);
 
-  const { messages, streaming, thinking, status, send } = useCompanion(projectId, nodeIdRef, () => {
+  const handleApplied = useCallback(() => {
+    setFeedbackNote(t("factBook.applied"));
     void loadFacts();
     onChanged?.();
-  });
+  }, [loadFacts, onChanged, t]);
+
+  const { messages, streaming, thinking, status, send } = useCompanion(projectId, nodeIdRef, handleApplied);
   const busy = status === "streaming";
 
   useEffect(() => { void loadFacts(); }, [loadFacts]);
 
-  const latestAssistant = useMemo(() => {
+  const latestAssistantInfo = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") return messages[i];
+      if (messages[i].role === "assistant") return { index: i, message: messages[i] };
     }
     return null;
   }, [messages]);
+  const latestAssistant = latestAssistantInfo?.message ?? null;
+  const isNewFeedback = feedbackAnchor !== null && latestAssistantInfo !== null && latestAssistantInfo.index > feedbackAnchor;
+  const showAssistantContent = Boolean(
+    latestAssistant?.content &&
+    (isNewFeedback || latestAssistant.errored || latestAssistant.choices || latestAssistant.proposal),
+  );
+  const showCompanionFeedback = Boolean(
+    busy || streaming || feedbackNote || showAssistantContent || latestAssistant?.choices || latestAssistant?.proposal,
+  );
+
+  const markFeedbackStart = () => {
+    setFeedbackAnchor(messages.length);
+    setFeedbackNote("");
+  };
 
   const startReview = async () => {
     if (reviewing || status === "streaming") return;
+    markFeedbackStart();
     setReviewing(true);
     try {
       await beforeReview?.();
@@ -91,8 +112,14 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
   const submitReply = async () => {
     const text = replyDraft.trim();
     if (!text || busy) return;
+    markFeedbackStart();
     setReplyDraft("");
     await send(text);
+  };
+
+  const pickChoice = (text: string) => {
+    markFeedbackStart();
+    void send(text);
   };
 
   const focusReplyInput = () => {
@@ -119,16 +146,24 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
         <p>{t("factBook.reviewHint")}</p>
       </div>
 
-      {(status === "streaming" || streaming || latestAssistant?.choices) && (
+      {showCompanionFeedback && (
         <section className="fact-companion-box">
           {status === "streaming" && <div className="companion-thinking"><span className="ai-working-dot" aria-hidden="true" /> {thinking || t("companion.thinking")}</div>}
           {streaming && <div className="fact-companion-prose"><Markdown text={streaming} /></div>}
-          {latestAssistant?.content && <div className="fact-companion-prose"><Markdown text={latestAssistant.content} /></div>}
+          {feedbackNote && <div className="fact-feedback ok">{feedbackNote}</div>}
+          {showAssistantContent && (
+            <div className={`fact-companion-prose${latestAssistant?.errored ? " errored" : ""}`}>
+              {latestAssistant?.errored ? latestAssistant.content : <Markdown text={latestAssistant?.content ?? ""} />}
+            </div>
+          )}
+          {latestAssistant?.proposal && (
+            <ProposalCard proposal={latestAssistant.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={handleApplied} />
+          )}
           {latestAssistant?.choices && (
             <ChoiceCard
               choices={latestAssistant.choices}
               disabled={busy}
-              onPick={(text) => { void send(text); }}
+              onPick={pickChoice}
               onCustom={focusReplyInput}
             />
           )}
