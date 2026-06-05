@@ -479,6 +479,55 @@ export interface Note {
   created_at: number;
 }
 
+export type FactStatus = "verified" | "uncertain" | "intentional_fiction" | "stale";
+
+export interface FactSource {
+  id: string;
+  card_id: string;
+  url: string;
+  title: string;
+  snippet: string;
+  accessed_at: number;
+}
+
+export interface FactSourceInput {
+  url: string;
+  title?: string;
+  snippet?: string;
+  accessed_at?: number;
+}
+
+export interface FactCard {
+  id: string;
+  project_id: string;
+  node_id?: string;
+  claim: string;
+  result: string;
+  status: FactStatus;
+  category: string;
+  sources: FactSource[];
+  created_at: number;
+  updated_at: number;
+}
+
+export interface NewFactInput {
+  project_id: string;
+  node_id?: string;
+  claim: string;
+  result: string;
+  status: FactStatus;
+  category?: string;
+  sources: FactSourceInput[];
+}
+
+export interface UpdateFactInput {
+  id: string;
+  claim?: string;
+  result?: string;
+  status?: FactStatus;
+  category?: string;
+}
+
 export interface NewNoteInput {
   node_id: string;
   anchor: number;
@@ -509,7 +558,8 @@ export type ProposalOpType =
   | "set_outline"
   | "remember"
   | "create_entity" | "update_entity" | "create_relationship"
-  | "create_scene" | "create_outline_node";
+  | "create_scene" | "create_outline_node"
+  | "create_fact_card";
 
 export interface ProposalOp {
   op: ProposalOpType;
@@ -542,6 +592,10 @@ export interface ProposalOp {
   parent_node_id?: string;
   parent_node_ref?: string;
   inverse_label?: string;
+  claim?: string;
+  result?: string;
+  status?: FactStatus;
+  sources?: FactSourceInput[];
 }
 
 export interface CompanionProposal {

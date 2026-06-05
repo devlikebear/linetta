@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, Sparkles, MessageCircle, Maximize2, ArrowLeft } from "lucide-react";
+import { Search, Command as CommandIcon, Sparkles, MessageCircle, Maximize2, ArrowLeft, BookOpen } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
@@ -21,6 +21,7 @@ import { DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../components/a
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CompanionPanel } from "../components/companion/CompanionPanel";
+import { FactBookPanel } from "../components/FactBookPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { InlineEditableText } from "../components/InlineEditableText";
 import { CommandPalette, type Command } from "../components/CommandPalette";
@@ -104,6 +105,7 @@ export function Workspace() {
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState(false);
+  const [factBookOpen, setFactBookOpen] = useState(false);
   const companionNodeRef = useRef<string | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
@@ -496,6 +498,7 @@ export function Workspace() {
       } else if (e.key.toLowerCase() === "j") {
         if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
+        setFactBookOpen(false);
         setCompanionOpen((v) => !v);
       }
     };
@@ -687,8 +690,24 @@ export function Workspace() {
   // Toggle the AI modal — mirrors the Cmd+I keyboard behaviour for the top-bar button.
   const toggleAIModal = useCallback(() => {
     if (aiModalOpenRef.current) closeAIModal();
-    else openAIModal();
+    else {
+      setFactBookOpen(false);
+      openAIModal();
+    }
   }, [closeAIModal, openAIModal]);
+
+  const toggleFactBook = useCallback(() => {
+    setFactBookOpen((v) => {
+      const next = !v;
+      if (next) {
+        setCompanionOpen(false);
+        setEntitySheetId(null);
+        setThreadSheetId(null);
+        closeAIModalRef.current?.();
+      }
+      return next;
+    });
+  }, []);
 
   // Defensive: if the active node changes while the modal is open, close it so
   // stale selection offsets can't be committed into a freshly-mounted editor.
@@ -972,7 +991,16 @@ export function Workspace() {
       section: "AI",
       label: companionOpen ? t("workspace.command.closeCompanion") : t("workspace.command.openWritingCompanion"),
       hint: "Cmd+J",
-      run: () => setCompanionOpen((v) => !v),
+      run: () => {
+        setFactBookOpen(false);
+        setCompanionOpen((v) => !v);
+      },
+    });
+    cmds.push({
+      id: "toggle-fact-book",
+      section: sectionProject,
+      label: t("factBook.title"),
+      run: toggleFactBook,
     });
     cmds.push({
       id: "show-shortcuts",
@@ -981,7 +1009,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, handleCreateSceneFromOutline, handleCreateChapterFromOutline, handleRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, showToast, language, t]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, handleCreateSceneFromOutline, handleCreateChapterFromOutline, handleRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, showToast, language, t, toggleFactBook]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1160,10 +1188,21 @@ export function Workspace() {
           <button
             type="button"
             className={`ws-tool${companionOpen ? " is-active" : ""}`}
-            onClick={() => setCompanionOpen((v) => !v)}
+            onClick={() => {
+              setFactBookOpen(false);
+              setCompanionOpen((v) => !v);
+            }}
             data-tour="workspace-companion"
           >
             <MessageCircle size={15} /> {t("workspace.companion")} <span className="kbd">⌘J</span>
+          </button>
+          <button
+            type="button"
+            className={`ws-tool${factBookOpen ? " is-active" : ""}`}
+            onClick={toggleFactBook}
+            title={t("factBook.title")}
+          >
+            <BookOpen size={15} /> {t("factBook.title")}
           </button>
           <div className="ws-sep" />
           <button type="button" className="ws-tool" onClick={enterZen} data-tour="workspace-zen">
@@ -1173,7 +1212,7 @@ export function Workspace() {
       </header>
 
       <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
-        (aiModal || companionOpen) ? " right-wide" : ""
+        (aiModal || companionOpen || factBookOpen) ? " right-wide" : ""
       }${companionOpen ? " right-xwide" : ""}`}>
         <OutlinePanel
           tree={load.tree}
@@ -1284,6 +1323,17 @@ export function Workspace() {
               if (!load) return;
               refreshTreeKeepNode(load.node.id);
               refreshMentioned(load.node.id);
+            }}
+          />
+        ) : factBookOpen && load ? (
+          <FactBookPanel
+            projectId={load.project.id}
+            nodeId={load.node.id}
+            sceneLabel={currentSceneTitle}
+            beforeReview={flushEditorBeforeCompanionSend}
+            onClose={() => { setFactBookOpen(false); focusEditor(); }}
+            onChanged={() => {
+              refreshTreeKeepNode(load.node.id);
             }}
           />
         ) : entitySheetId ? (

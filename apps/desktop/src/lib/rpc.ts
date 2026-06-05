@@ -11,6 +11,7 @@ import type {
   EngineStatus,
   Entity,
   ExportPayload,
+  FactCard,
   GitSyncInitResult,
   GitSyncResult,
   ImportMarkdownResult,
@@ -18,6 +19,7 @@ import type {
   ListProjectsParams,
   NewBeatInput,
   NewEntityInput,
+  NewFactInput,
   NewNoteInput,
   NewProjectInput,
   NewRelationshipInput,
@@ -41,6 +43,7 @@ import type {
   Thread,
   UpdateBeatInput,
   UpdateEntityInput,
+  UpdateFactInput,
   UpdateNoteInput,
   UpdateProjectInput,
   UpdateRelationshipInput,
@@ -239,6 +242,14 @@ export const notes = {
   get: (id: string) => rpcCall<Note>("notes.get", { id }),
   update: (input: UpdateNoteInput) => rpcCall<Note>("notes.update", input),
   delete: (id: string) => rpcCall<{ ok: true }>("notes.delete", { id }),
+};
+
+export const facts = {
+  list: (projectId: string, nodeId?: string) =>
+    rpcCall<FactCard[]>("facts.list", nodeId ? { project_id: projectId, node_id: nodeId } : { project_id: projectId }),
+  create: (input: NewFactInput) => rpcCall<FactCard>("facts.create", input),
+  update: (input: UpdateFactInput) => rpcCall<FactCard>("facts.update", input),
+  delete: (id: string) => rpcCall<{ ok: true }>("facts.delete", { id }),
 };
 
 export const relationships = {

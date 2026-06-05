@@ -197,6 +197,33 @@ describe("CompanionPanel", () => {
     expect(screen.getByText("스토리라인 생성: 추적자")).toBeInTheDocument();
   });
 
+  it("renders fact-card proposal operations", () => {
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "자료집에 저장할게요.",
+        proposal: {
+          run_id: "r1",
+          valid: true,
+          summary: "자료집 저장",
+          ops: [{
+            op: "create_fact_card",
+            claim: "런던 일반 경찰은 항상 총기를 휴대한다",
+            result: "일반 경찰은 통상 비무장이다.",
+            status: "verified",
+            sources: [{ url: "https://www.met.police.uk/" }],
+          }],
+        },
+      }],
+    };
+
+    renderPanel();
+
+    expect(screen.getByText("자료집 저장")).toBeInTheDocument();
+    expect(screen.getByText("자료집 카드 생성: 런던 일반 경찰은 항상 총기를 휴대한다")).toBeInTheDocument();
+  });
+
   it("renders choice buttons and sends the picked option on click", async () => {
     const user = userEvent.setup();
     companionState.value = {

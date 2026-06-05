@@ -1,0 +1,128 @@
+.fact-panel {
+  min-width: 0;
+}
+
+.fact-review {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}
+
+.fact-review .btn {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.fact-review p,
+.fact-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.fact-companion-box {
+  margin: 12px 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.fact-companion-prose {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.fact-list {
+  padding: 14px 16px 18px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.fact-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.fact-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.fact-card-head .panel-close {
+  margin-left: auto;
+}
+
+.fact-card h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.fact-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.fact-status,
+.fact-scope,
+.fact-category {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 7px;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.fact-status.verified { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+.fact-status.uncertain { color: var(--accent-deep); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.fact-status.intentional_fiction { color: var(--ink-soft); }
+.fact-status.stale { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
+
+.fact-sources {
+  display: grid;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.fact-sources-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-2);
+}
+
+.fact-sources a {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--accent-deep);
+  text-decoration: none;
+}
+
+.fact-sources a span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

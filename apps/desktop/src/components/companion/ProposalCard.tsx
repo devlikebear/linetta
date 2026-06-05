@@ -29,6 +29,7 @@ function opLabel(t: Translate, op: ProposalOp): string {
     case "create_relationship": return t("companion.op.createRelationship", { label: op.label ?? "" });
     case "create_scene": return t("companion.op.createScene", { label: op.label ?? "" });
     case "create_outline_node": return t(op.kind === "container" ? "companion.op.createOutlineContainer" : "companion.op.createOutlineScene", { label: op.label ?? "" });
+    case "create_fact_card": return t("companion.op.createFactCard", { claim: op.claim ?? "" });
     default: return op.op;
   }
 }
