@@ -136,3 +136,9 @@ Git sync is optional. When configured in Settings, Linetta exports active projec
 - Missing sidecar binary: run `make build-engine`, then restart the app.
 - AI provider errors: check Settings for the selected provider and confirm the corresponding CLI credentials work in the same shell environment.
 - Backup or Git sync failures: open Settings and check the operation status cards for the latest error and timestamp.
+
+## License
+
+Linetta is licensed under the GNU Affero General Public License version 3 only
+(`AGPL-3.0-only`). See [LICENSE](LICENSE) and [LICENSE-NOTICE.md](LICENSE-NOTICE.md)
+for details, including commercial licensing options.
