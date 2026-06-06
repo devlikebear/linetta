@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.6 - 2026-06-06
+
+- Improved Fact Book source saving with direct URL fallback, clearer in-panel failure feedback, and web search API key connection testing.
+- Added editor selection actions for fact-checking selected blocks and replacing selected text with AI.
+- Added Linetta frontmatter metadata to markdown exports so imported markdown restores characters, places, and relationships instead of treating metadata appendices as scenes.
+
 ## v0.4.5 - 2026-06-05
 
 - Added a Fact Book persistence layer with sourced fact cards for project-wide and scene-linked claims.
