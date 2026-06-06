@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
@@ -23,9 +25,20 @@ func setupImportFixture(t *testing.T) (*project.Repo, *node.Repo) {
 	return project.NewRepo(s), node.NewRepo(s)
 }
 
+func setupImportFixtureFull(t *testing.T) (*project.Repo, *node.Repo, *entity.Repo, *relationship.Repo) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := store.Open(context.Background(), dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	return project.NewRepo(s), node.NewRepo(s), entity.NewRepo(s), relationship.NewRepo(s)
+}
+
 func TestImportMarkdownHandler_createsProjectFromContent(t *testing.T) {
 	pr, nr := setupImportFixture(t)
-	h := ImportMarkdown(pr, nr, func() int64 { return 5000 })
+	h := ImportMarkdown(pr, nr, nil, nil, func() int64 { return 5000 })
 
 	params := json.RawMessage(`{"file_name":"my-work.md","content":"# Imported Work\n## Part A\n### Chapter 1\n#### Scene 1\nhello\n"}`)
 	res, err := h(context.Background(), params)
@@ -59,9 +72,163 @@ func TestImportMarkdownHandler_createsProjectFromContent(t *testing.T) {
 	}
 }
 
+func TestImportMarkdownHandler_restoresLinettaMetadataWithoutAppendixNodes(t *testing.T) {
+	pr, nr, er, rr := setupImportFixtureFull(t)
+	h := ImportMarkdown(pr, nr, er, rr, func() int64 { return 5000 })
+	ctx := context.Background()
+
+	md := "---\n" +
+		"linetta:\n" +
+		"  version: 1\n" +
+		"  entities:\n" +
+		"    - id: char-1\n" +
+		"      kind: character\n" +
+		"      name: 해진\n" +
+		"      role: 주인공\n" +
+		"      summary: 사진작가\n" +
+		"    - id: place-1\n" +
+		"      kind: place\n" +
+		"      name: 항구\n" +
+		"      role: 메인무대\n" +
+		"      summary: 오래된 부두\n" +
+		"  relationships:\n" +
+		"    - from_id: char-1\n" +
+		"      to_id: place-1\n" +
+		"      label: 거주지\n" +
+		"      notes: 자주 머문다\n" +
+		"---\n\n" +
+		"# 복원작\n" +
+		"## 1부\n" +
+		"### 1장\n" +
+		"#### 씬 1\n본문\n\n" +
+		"## 등장인물\n\n" +
+		"- **해진** (character) · 주인공 — 사진작가\n" +
+		"- **항구** (place) · 메인무대 — 오래된 부두\n"
+	params, _ := json.Marshal(map[string]any{
+		"file_name": "roundtrip.md",
+		"content":   md,
+	})
+	raw, err := h(ctx, params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var out struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	nodes, err := nr.ListByProject(ctx, out.ProjectID)
+	if err != nil {
+		t.Fatalf("nodes: %v", err)
+	}
+	for _, n := range nodes {
+		if n.Label == "등장인물" {
+			t.Fatalf("metadata appendix restored as a node: %+v", nodes)
+		}
+	}
+	ents, err := er.ListByProject(ctx, out.ProjectID)
+	if err != nil {
+		t.Fatalf("entities: %v", err)
+	}
+	if len(ents) != 2 {
+		t.Fatalf("entities=%d want 2: %+v", len(ents), ents)
+	}
+	var foundPlace bool
+	for _, e := range ents {
+		if e.Name == "항구" && e.Kind == entity.KindPlace && e.Summary == "오래된 부두" {
+			foundPlace = true
+		}
+	}
+	if !foundPlace {
+		t.Fatalf("place entity not restored: %+v", ents)
+	}
+	rels, err := rr.ListByProject(ctx, out.ProjectID)
+	if err != nil {
+		t.Fatalf("relationships: %v", err)
+	}
+	if len(rels) != 1 || rels[0].Label != "거주지" || rels[0].Notes != "자주 머문다" {
+		t.Fatalf("relationship not restored: %+v", rels)
+	}
+}
+
+func TestImportMarkdownHandler_restoresRelationshipPairs(t *testing.T) {
+	pr, nr, er, rr := setupImportFixtureFull(t)
+	h := ImportMarkdown(pr, nr, er, rr, func() int64 { return 5000 })
+	ctx := context.Background()
+
+	md := "---\n" +
+		"linetta:\n" +
+		"  version: 1\n" +
+		"  entities:\n" +
+		"    - id: a\n" +
+		"      kind: character\n" +
+		"      name: 해진\n" +
+		"    - id: b\n" +
+		"      kind: character\n" +
+		"      name: 아지\n" +
+		"    - id: c\n" +
+		"      kind: place\n" +
+		"      name: 등대\n" +
+		"  relationships:\n" +
+		"    - pair_id: pair-1\n" +
+		"      from_id: a\n" +
+		"      to_id: b\n" +
+		"      label: 보호자\n" +
+		"      notes: 정서적 보호자\n" +
+		"    - pair_id: pair-1\n" +
+		"      from_id: b\n" +
+		"      to_id: a\n" +
+		"      label: 피보호자\n" +
+		"    - from_id: a\n" +
+		"      to_id: c\n" +
+		"      label: 자주 찾는 곳\n" +
+		"---\n\n" +
+		"# 복원작\n" +
+		"## 1부\n" +
+		"### 씬 1\n본문\n"
+	params, _ := json.Marshal(map[string]any{
+		"file_name": "pairs.md",
+		"content":   md,
+	})
+	raw, err := h(ctx, params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var out struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	rels, err := rr.ListByProject(ctx, out.ProjectID)
+	if err != nil {
+		t.Fatalf("relationships: %v", err)
+	}
+	if len(rels) != 3 {
+		t.Fatalf("rels=%d want 3: %+v", len(rels), rels)
+	}
+	paired := []relationship.Relationship{}
+	var foundSingle bool
+	for _, rel := range rels {
+		if rel.PairID != nil {
+			paired = append(paired, rel)
+		}
+		if rel.Label == "자주 찾는 곳" {
+			foundSingle = true
+		}
+	}
+	if len(paired) != 2 || *paired[0].PairID != *paired[1].PairID {
+		t.Fatalf("pair id not restored: %+v", rels)
+	}
+	if !foundSingle {
+		t.Fatalf("single relationship not restored after pair: %+v", rels)
+	}
+}
+
 func TestImportMarkdown_resultIncludesCountsAndWarnings(t *testing.T) {
 	pr, nr := setupImportFixture(t)
-	h := ImportMarkdown(pr, nr, func() int64 { return 7000 })
+	h := ImportMarkdown(pr, nr, nil, nil, func() int64 { return 7000 })
 	ctx := context.Background()
 
 	md := "# 작품\n## 1부\n### 1장\n#### 씬 1\n본문\n"
@@ -101,7 +268,7 @@ func TestImportMarkdown_resultIncludesCountsAndWarnings(t *testing.T) {
 
 func TestImportMarkdownHandler_fallbackTitleFromFileName(t *testing.T) {
 	pr, nr := setupImportFixture(t)
-	h := ImportMarkdown(pr, nr, func() int64 { return 6000 })
+	h := ImportMarkdown(pr, nr, nil, nil, func() int64 { return 6000 })
 
 	// No H1 in content → title should come from file_name (stripped of .md).
 	params := json.RawMessage(`{"file_name":"my-novel.md","content":"## Part A\n### Chapter\n#### Scene\nbody\n"}`)

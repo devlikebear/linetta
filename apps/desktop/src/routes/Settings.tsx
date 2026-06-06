@@ -7,6 +7,7 @@ import {
   gitSync,
   opsStatus as opsStatusApi,
   providers as providersApi,
+  webSearch as webSearchApi,
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import {
@@ -213,6 +214,8 @@ export function Settings() {
   const [guideId, setGuideId] = useState<GuideID>("chatgpt-subscription");
   const [providerTesting, setProviderTesting] = useState(false);
   const [providerTestMsg, setProviderTestMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [webSearchTesting, setWebSearchTesting] = useState(false);
+  const [webSearchTestMsg, setWebSearchTestMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -223,7 +226,7 @@ export function Settings() {
         setLanguage(s.language);
         setGitDirDraft(s.git_sync_dir);
         setGitTmplDraft(s.git_sync_commit_template);
-        setWebSearchKeyDraft(s.web_search_api_key);
+        setWebSearchKeyDraft(s.web_search_api_key ?? "");
         setOpsRows(rows);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
@@ -357,6 +360,46 @@ export function Settings() {
       setProviderTestMsg({ kind: "error", text: t("settings.provider.testError", { message: String(e) }) });
     } finally {
       setProviderTesting(false);
+    }
+  };
+
+  const persistWebSearchKeyDraft = async () => {
+    const draft = (webSearchKeyDraft ?? "").trim();
+    if (!current || draft === "") return;
+    const next = await settingsApi.set({ web_search_api_key: draft });
+    setCurrent(next);
+    setLanguage(next.language);
+    setWebSearchKeyDraft(next.web_search_api_key ?? "");
+    setSavedAt(Date.now());
+  };
+
+  const saveWebSearchKeyDraft = async () => {
+    if (!current || (webSearchKeyDraft ?? "").trim() === "") return;
+    setSaving(true);
+    setError(null);
+    try {
+      await persistWebSearchKeyDraft();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const testWebSearchConnection = async () => {
+    setWebSearchTesting(true);
+    setSaving(true);
+    setError(null);
+    setWebSearchTestMsg(null);
+    try {
+      await persistWebSearchKeyDraft();
+      const res = await webSearchApi.test();
+      setWebSearchTestMsg({ kind: "ok", text: t("settings.tools.webSearchTestOk", { message: res.message }) });
+    } catch (e) {
+      setWebSearchTestMsg({ kind: "error", text: t("settings.tools.webSearchTestError", { message: String(e) }) });
+    } finally {
+      setSaving(false);
+      setWebSearchTesting(false);
     }
   };
 
@@ -697,7 +740,10 @@ export function Settings() {
                 <select
                   id="ws-provider"
                   value={current.web_search_provider}
-                  onChange={(e) => apply({ web_search_provider: e.target.value as WebSearchProvider })}
+                  onChange={(e) => {
+                    setWebSearchTestMsg(null);
+                    apply({ web_search_provider: e.target.value as WebSearchProvider });
+                  }}
                   disabled={saving}
                 >
                   <option value="brave">Brave Search</option>
@@ -710,11 +756,14 @@ export function Settings() {
                   <input
                     id="ws-key"
                     type="password"
-                    value={webSearchKeyDraft}
-                    onChange={(e) => setWebSearchKeyDraft(e.target.value)}
+                    value={webSearchKeyDraft ?? ""}
+                    onChange={(e) => {
+                      setWebSearchKeyDraft(e.target.value);
+                      setWebSearchTestMsg(null);
+                    }}
                     onBlur={() => {
-                      if (webSearchKeyDraft !== "") {
-                        apply({ web_search_api_key: webSearchKeyDraft });
+                      if ((webSearchKeyDraft ?? "").trim() !== "") {
+                        saveWebSearchKeyDraft();
                       }
                     }}
                     placeholder={webSearchKeyPlaceholder}
@@ -736,6 +785,22 @@ export function Settings() {
                 </div>
               </div>
               <p className="sd">{t("settings.tools.keyHelp")}</p>
+              <div className="provider-test">
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={testWebSearchConnection}
+                  disabled={webSearchTesting}
+                >
+                  {webSearchTesting ? t("settings.tools.webSearchTesting") : t("settings.tools.webSearchTest")}
+                </button>
+                <p className="sd">{t("settings.tools.webSearchTestHelp")}</p>
+                {webSearchTestMsg && (
+                  <p className={webSearchTestMsg.kind === "ok" ? "provider-test-ok" : "provider-test-error"}>
+                    {webSearchTestMsg.text}
+                  </p>
+                )}
+              </div>
             </section>
 
             <section className="settings-section">

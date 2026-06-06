@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
@@ -47,19 +48,24 @@ type CmdRunner func(ctx context.Context, dir string, args ...string) (string, er
 // Syncer composes the dependencies needed to read settings, list projects,
 // build markdown payloads and shell out to git.
 type Syncer struct {
-	Settings *settings.Store
-	Projects *project.Repo
-	Nodes    *node.Repo
-	Entities *entity.Repo
-	Run      CmdRunner
-	Now      func() time.Time
-	Ops      *opsstatus.Repo
+	Settings      *settings.Store
+	Projects      *project.Repo
+	Nodes         *node.Repo
+	Entities      *entity.Repo
+	Relationships *relationship.Repo
+	Run           CmdRunner
+	Now           func() time.Time
+	Ops           *opsstatus.Repo
 }
 
 // New constructs a Syncer with the real `git` runner and wall-clock time.
-func New(s *settings.Store, p *project.Repo, n *node.Repo, e *entity.Repo) *Syncer {
+func New(s *settings.Store, p *project.Repo, n *node.Repo, e *entity.Repo, rels ...*relationship.Repo) *Syncer {
+	var rr *relationship.Repo
+	if len(rels) > 0 {
+		rr = rels[0]
+	}
 	return &Syncer{
-		Settings: s, Projects: p, Nodes: n, Entities: e,
+		Settings: s, Projects: p, Nodes: n, Entities: e, Relationships: rr,
 		Run: runGitProd, Now: time.Now,
 	}
 }
@@ -158,7 +164,7 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 	}
 	written := 0
 	for _, p := range projs {
-		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, p.ID)
+		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "gitsync: export project %s: %v\n", p.ID, err)
 			continue

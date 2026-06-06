@@ -298,6 +298,12 @@ export interface ProviderTestResult {
   message: string;
 }
 
+export interface WebSearchTestResult {
+  ok: boolean;
+  provider: WebSearchProvider;
+  message: string;
+}
+
 export interface Settings {
   language: AppLanguage;
   provider: ProviderID;
@@ -518,6 +524,16 @@ export interface NewFactInput {
   status: FactStatus;
   category?: string;
   sources: FactSourceInput[];
+}
+
+export interface NewFactFromUrlInput {
+  project_id: string;
+  node_id?: string;
+  claim: string;
+  result?: string;
+  status?: FactStatus;
+  category?: string;
+  url: string;
 }
 
 export interface UpdateFactInput {

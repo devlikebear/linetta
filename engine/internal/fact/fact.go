@@ -1,6 +1,12 @@
 // Package fact owns Fact Book cards and their source URLs.
 package fact
 
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+)
+
 const (
 	StatusVerified           = "verified"
 	StatusUncertain          = "uncertain"
@@ -35,6 +41,53 @@ type SourceInput struct {
 	Title      string `json:"title,omitempty"`
 	Snippet    string `json:"snippet,omitempty"`
 	AccessedAt int64  `json:"accessed_at,omitempty"`
+}
+
+func (s *SourceInput) UnmarshalJSON(data []byte) error {
+	var in struct {
+		URL        string          `json:"url"`
+		Title      string          `json:"title,omitempty"`
+		Snippet    string          `json:"snippet,omitempty"`
+		AccessedAt json.RawMessage `json:"accessed_at,omitempty"`
+	}
+	if err := json.Unmarshal(data, &in); err != nil {
+		return err
+	}
+	accessedAt, err := parseOptionalAccessedAt(in.AccessedAt)
+	if err != nil {
+		return err
+	}
+	*s = SourceInput{
+		URL:        in.URL,
+		Title:      in.Title,
+		Snippet:    in.Snippet,
+		AccessedAt: accessedAt,
+	}
+	return nil
+}
+
+func parseOptionalAccessedAt(raw json.RawMessage) (int64, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return 0, nil
+	}
+	var n int64
+	if err := json.Unmarshal(raw, &n); err == nil {
+		return n, nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return 0, nil
+		}
+		parsed, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return 0, nil
+		}
+		return parsed, nil
+	}
+	return 0, nil
 }
 
 type NewInput struct {

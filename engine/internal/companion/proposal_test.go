@@ -265,6 +265,20 @@ func TestParseProposal_CreateFactCard(t *testing.T) {
 	}
 }
 
+func TestParseProposal_CreateFactCardAllowsStringAccessedAt(t *testing.T) {
+	body := `{"ops":[{"op":"create_fact_card","claim":"비 온 뒤 흙냄새","result":"페트리코어와 지오스민이 관련된다.","status":"verified","sources":[{"url":"https://example.com/petrichor","title":"Example","accessed_at":""},{"url":"https://example.com/geosmin","accessed_at":"123"}]}]}`
+	p, present, err := ParseProposal(block(body))
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if got := p.Ops[0].Sources[0].AccessedAt; got != 0 {
+		t.Fatalf("empty accessed_at string should be ignored, got %d", got)
+	}
+	if got := p.Ops[0].Sources[1].AccessedAt; got != 123 {
+		t.Fatalf("numeric accessed_at string should be parsed, got %d", got)
+	}
+}
+
 func TestParseProposal_CreateFactCardRequiresSource(t *testing.T) {
 	_, present, err := ParseProposal(block(`{"ops":[{"op":"create_fact_card","claim":"X","result":"Y","status":"verified"}]}`))
 	if !present || err == nil {

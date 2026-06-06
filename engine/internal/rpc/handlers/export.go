@@ -8,6 +8,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
 
@@ -16,13 +17,13 @@ type exportProjectParams struct {
 }
 
 // ExportProject returns a handler for export.project.
-func ExportProject(pr *project.Repo, nr *node.Repo, er *entity.Repo) rpc.Handler {
+func ExportProject(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p exportProjectParams
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
 		}
-		out, err := export.ExportProject(ctx, pr, nr, er, p.ProjectID)
+		out, err := export.ExportProject(ctx, pr, nr, er, rr, p.ProjectID)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

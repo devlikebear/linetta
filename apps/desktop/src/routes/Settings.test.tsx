@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   providersListModels: vi.fn(),
   providersDetectCli: vi.fn(),
   providersTest: vi.fn(),
+  webSearchTest: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -32,6 +33,9 @@ vi.mock("../lib/rpc", () => ({
     listModels: mocks.providersListModels,
     detectCli: mocks.providersDetectCli,
     test: mocks.providersTest,
+  },
+  webSearch: {
+    test: mocks.webSearchTest,
   },
 }));
 
@@ -113,6 +117,11 @@ describe("Settings", () => {
       provider: "anthropic",
       model: "claude-sonnet-4-6",
       message: "연결되었습니다",
+    });
+    mocks.webSearchTest.mockResolvedValue({
+      ok: true,
+      provider: "brave",
+      message: "검색 결과 1건 응답",
     });
   });
 
@@ -383,5 +392,45 @@ describe("Settings", () => {
     expect(screen.getByLabelText("API 키")).toHaveValue("");
     expect(screen.getByPlaceholderText(/저장된 API 키 있음/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "키 삭제" })).toBeInTheDocument();
+  });
+
+  it("web_search connection test persists an unsaved API key before testing", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.type(await screen.findByLabelText("web_search API 키"), "BSA-test");
+    await user.click(await screen.findByRole("button", { name: "web_search 연결 테스트" }));
+
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ web_search_api_key: "BSA-test" }),
+    );
+    await waitFor(() => expect(mocks.webSearchTest).toHaveBeenCalled());
+    expect(await screen.findByText("web_search 연결 성공: 검색 결과 1건 응답")).toBeInTheDocument();
+  });
+
+  it("web_search connection test shows the provider error message", async () => {
+    mocks.webSearchTest.mockRejectedValue(new Error("web_search brave api key is required"));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: "web_search 연결 테스트" }));
+
+    expect(await screen.findByText(/web_search 연결 실패: Error: web_search brave api key is required/)).toBeInTheDocument();
+  });
+
+  it("web_search connection test handles a redacted missing API key field", async () => {
+    mocks.settingsGet.mockResolvedValue({
+      ...baseSettings,
+      web_search_api_key: undefined,
+      web_search_api_key_set: true,
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: "web_search 연결 테스트" }));
+
+    await waitFor(() => expect(mocks.webSearchTest).toHaveBeenCalled());
+    expect(mocks.settingsSet).not.toHaveBeenCalledWith({ web_search_api_key: undefined });
+    expect(await screen.findByText("web_search 연결 성공: 검색 결과 1건 응답")).toBeInTheDocument();
   });
 });

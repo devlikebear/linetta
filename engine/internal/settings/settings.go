@@ -283,6 +283,10 @@ func (s *Store) WebSearchAPIKey() string {
 	return secret
 }
 
+func (s *Store) WebSearchAPIKeyStatus() (string, bool, error) {
+	return s.secrets.Get(webSearchAPIKeySecretName)
+}
+
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
 func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	s.writeMu.Lock()

@@ -9,10 +9,11 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
-func newExportFixture(t *testing.T) (*store.Store, *project.Repo, *node.Repo, *entity.Repo) {
+func newExportFixture(t *testing.T) (*store.Store, *project.Repo, *node.Repo, *entity.Repo, *relationship.Repo) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
@@ -20,11 +21,11 @@ func newExportFixture(t *testing.T) (*store.Store, *project.Repo, *node.Repo, *e
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = s.Close() })
-	return s, project.NewRepo(s), node.NewRepo(s), entity.NewRepo(s)
+	return s, project.NewRepo(s), node.NewRepo(s), entity.NewRepo(s), relationship.NewRepo(s)
 }
 
-func TestExportProject_buildsTreeWithHeadingsAndEntitiesAppendix(t *testing.T) {
-	_, pr, nr, er := newExportFixture(t)
+func TestExportProject_buildsTreeWithHeadingsAndMetadataAppendix(t *testing.T) {
+	_, pr, nr, er, rr := newExportFixture(t)
 	ctx := context.Background()
 	p, err := pr.Create(ctx, 1, project.NewInput{
 		Title: "조용한 도시", Genres: []string{"문학"}, LengthTarget: "novella", DefaultPOV: "first",
@@ -58,13 +59,23 @@ func TestExportProject_buildsTreeWithHeadingsAndEntitiesAppendix(t *testing.T) {
 		t.Fatalf("update scene2: %v", err)
 	}
 
-	_, _ = er.Create(ctx, 1, entity.NewInput{ProjectID: p.ID, Name: "해진", Role: "POV", Kind: "character"})
+	character, _ := er.Create(ctx, 1, entity.NewInput{ProjectID: p.ID, Name: "해진", Role: "POV", Kind: "character"})
+	place, _ := er.Create(ctx, 2, entity.NewInput{ProjectID: p.ID, Name: "항구", Role: "메인무대", Kind: "place"})
+	_, _ = rr.CreateOne(ctx, relationship.NewInput{
+		ProjectID: p.ID, FromID: character.ID, ToID: place.ID, Label: "거주지", Notes: "자주 머문다",
+	})
 
-	out, err := ExportProject(ctx, pr, nr, er, p.ID)
+	out, err := ExportProject(ctx, pr, nr, er, rr, p.ID)
 	if err != nil {
 		t.Fatalf("ExportProject: %v", err)
 	}
-	if !strings.HasPrefix(out.Markdown, "# 조용한 도시\n\n") {
+	if !strings.Contains(out.Markdown, "linetta:\n") {
+		t.Fatalf("missing linetta frontmatter; doc=\n%s", out.Markdown)
+	}
+	if !strings.Contains(out.Markdown, "entities:\n") || !strings.Contains(out.Markdown, "relationships:\n") {
+		t.Fatalf("missing metadata entities/relationships; doc=\n%s", out.Markdown)
+	}
+	if !strings.Contains(out.Markdown, "\n# 조용한 도시\n\n") {
 		t.Errorf("missing project H1 prefix; got prefix %q", out.Markdown[:min(40, len(out.Markdown))])
 	}
 	if !strings.Contains(out.Markdown, "## 1부") {
@@ -82,8 +93,11 @@ func TestExportProject_buildsTreeWithHeadingsAndEntitiesAppendix(t *testing.T) {
 	if !strings.Contains(out.Markdown, "## 등장인물") {
 		t.Errorf("missing entities appendix")
 	}
-	if !strings.Contains(out.Markdown, "해진") {
+	if !strings.Contains(out.Markdown, "해진") || !strings.Contains(out.Markdown, "항구") {
 		t.Errorf("missing entity name in appendix")
+	}
+	if !strings.Contains(out.Markdown, "## 관계") || !strings.Contains(out.Markdown, "거주지") {
+		t.Errorf("missing relationship appendix")
 	}
 	if out.SuggestedFilename != "조용한-도시.md" {
 		t.Errorf("filename = %q, want 조용한-도시.md", out.SuggestedFilename)
@@ -91,7 +105,7 @@ func TestExportProject_buildsTreeWithHeadingsAndEntitiesAppendix(t *testing.T) {
 }
 
 func TestExportNode_returnsLeafBodyOnly(t *testing.T) {
-	_, pr, nr, _ := newExportFixture(t)
+	_, pr, nr, _, _ := newExportFixture(t)
 	ctx := context.Background()
 	p, _ := pr.Create(ctx, 1, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first",

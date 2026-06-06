@@ -19,6 +19,7 @@ import type {
   ListProjectsParams,
   NewBeatInput,
   NewEntityInput,
+  NewFactFromUrlInput,
   NewFactInput,
   NewNoteInput,
   NewProjectInput,
@@ -48,6 +49,7 @@ import type {
   UpdateProjectInput,
   UpdateRelationshipInput,
   UpdateThreadInput,
+  WebSearchTestResult,
 } from "./types";
 
 // Tauri commands defined in src-tauri.
@@ -119,6 +121,10 @@ export const providers = {
   detectCli: () => rpcCall<{ path: string }>("providers.detect_cli"),
   test: (provider: ProviderID) =>
     rpcCall<ProviderTestResult>("providers.test", { provider }),
+};
+
+export const webSearch = {
+  test: () => rpcCall<WebSearchTestResult>("web_search.test"),
 };
 
 export const exportApi = {
@@ -248,6 +254,7 @@ export const facts = {
   list: (projectId: string, nodeId?: string) =>
     rpcCall<FactCard[]>("facts.list", nodeId ? { project_id: projectId, node_id: nodeId } : { project_id: projectId }),
   create: (input: NewFactInput) => rpcCall<FactCard>("facts.create", input),
+  createFromUrl: (input: NewFactFromUrlInput) => rpcCall<FactCard>("facts.create_from_url", input),
   update: (input: UpdateFactInput) => rpcCall<FactCard>("facts.update", input),
   delete: (id: string) => rpcCall<{ ok: true }>("facts.delete", { id }),
 };

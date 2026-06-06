@@ -7,6 +7,8 @@ interface Props {
   choices: CompanionChoices;
   /** True while a run is streaming — picking is blocked until it settles. */
   disabled?: boolean;
+  /** Keep ordinary chat choices single-use, but allow task panels to reuse choices. */
+  lockAfterPick?: boolean;
   /** Send the picked option text verbatim as the writer's next reply. */
   onPick: (text: string) => void;
   /** Focus the message input so the writer can type their own answer. */
@@ -16,10 +18,10 @@ interface Props {
 // ChoiceCard renders a linetta-choices block as a pick-one button list. A click
 // sends the option immediately (single-select); afterward the card locks to the
 // chosen option so it reads as a settled answer in the transcript.
-export function ChoiceCard({ choices, disabled, onPick, onCustom }: Props) {
+export function ChoiceCard({ choices, disabled, lockAfterPick = true, onPick, onCustom }: Props) {
   const { t } = useI18n();
   const [picked, setPicked] = useState<string | null>(null);
-  const done = picked !== null;
+  const done = lockAfterPick && picked !== null;
 
   const pick = (opt: string) => {
     if (done || disabled) return;

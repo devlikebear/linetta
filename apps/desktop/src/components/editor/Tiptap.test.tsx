@@ -1,11 +1,17 @@
-import { render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { TiptapEditor } from "./Tiptap";
+import { TiptapEditor, type TiptapHandle } from "./Tiptap";
 
 const emptyDoc = {
   type: "doc",
   content: [{ type: "paragraph" }],
+};
+
+const textDoc = {
+  type: "doc",
+  content: [{ type: "paragraph", content: [{ type: "text", text: "비 온 뒤 흙냄새가 났다." }] }],
 };
 
 const rect = {
@@ -68,5 +74,50 @@ describe("TiptapEditor", () => {
     await user.type(editor!, "a");
 
     await waitFor(() => expect(wrap).not.toHaveClass("empty-focused"));
+  });
+
+  it("emits selected text details from the editor context menu", async () => {
+    const ref = createRef<TiptapHandle>();
+    const onSelectionContextMenu = vi.fn();
+    const { container } = render(
+      <TiptapEditor
+        ref={ref}
+        initialDoc={textDoc}
+        onChange={vi.fn()}
+        onSelectionContextMenu={onSelectionContextMenu}
+      />,
+    );
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+
+    act(() => {
+      ref.current?.setSelection({ from: 1, to: 8 });
+    });
+    fireEvent.contextMenu(container.querySelector(".ProseMirror")!);
+
+    expect(onSelectionContextMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ from: 1, to: 8, text: expect.stringContaining("비 온 뒤") }),
+    );
+  });
+
+  it("does not emit the editor context menu for an empty selection", async () => {
+    const ref = createRef<TiptapHandle>();
+    const onSelectionContextMenu = vi.fn();
+    const { container } = render(
+      <TiptapEditor
+        ref={ref}
+        initialDoc={textDoc}
+        onChange={vi.fn()}
+        onSelectionContextMenu={onSelectionContextMenu}
+      />,
+    );
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+
+    act(() => {
+      ref.current?.setSelection({ from: 1, to: 1 });
+    });
+    fireEvent.contextMenu(container.querySelector(".ProseMirror")!);
+
+    expect(onSelectionContextMenu).not.toHaveBeenCalled();
   });
 });

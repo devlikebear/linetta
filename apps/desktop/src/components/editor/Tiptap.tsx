@@ -22,6 +22,12 @@ export interface TiptapHandle {
   editor: Editor | null;
 }
 
+export interface TiptapSelectionMenuPayload {
+  from: number;
+  to: number;
+  text: string;
+}
+
 interface Props {
   /** Tiptap JSON doc — controls the editor's initial state. The component is
    *  uncontrolled afterwards; consumers respond to onUpdate. */
@@ -40,10 +46,12 @@ interface Props {
   onMentionDoubleClick?: (entityId: string) => void;
   /** Focus mode: dim every paragraph except the one containing the cursor. */
   focus?: boolean;
+  /** Fired when the writer right-clicks a non-empty editor selection. */
+  onSelectionContextMenu?: (event: React.MouseEvent, payload: TiptapSelectionMenuPayload) => void;
 }
 
 export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEditor(
-  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick, focus },
+  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu },
   ref,
 ) {
   // Stable reference for the initial doc to avoid resetting on every render.
@@ -156,10 +164,22 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
     editor?.commands.focus("end");
   };
 
+  const onWrapContextMenu = (e: React.MouseEvent) => {
+    if (!editor || !onSelectionContextMenu) return;
+    if (!(e.target as HTMLElement).closest(".ProseMirror")) return;
+    const { from, to, empty } = editor.state.selection;
+    if (empty || from === to) return;
+    const text = editor.state.doc.textBetween(from, to, "\n").trim();
+    if (!text) return;
+    e.preventDefault();
+    onSelectionContextMenu(e, { from, to, text });
+  };
+
   return (
     <div
       className={`tiptap-wrap${typewriter ? " typewriter" : ""}${emptyFocused ? " empty-focused" : ""}`}
       onMouseDown={onWrapMouseDown}
+      onContextMenu={onWrapContextMenu}
       onDoubleClick={(e) => {
         const t = (e.target as HTMLElement).closest(".mention");
         if (t && onMentionDoubleClick) {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Command as CommandIcon, Sparkles, MessageCircle, Maximize2, ArrowLeft, BookOpen } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi } from "../lib/rpc";
@@ -12,7 +13,7 @@ import { EntitySheet } from "../components/EntitySheet";
 import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
 import { saveExportedMarkdown } from "../lib/exportSave";
-import { TiptapEditor, type TiptapHandle } from "../components/editor/Tiptap";
+import { TiptapEditor, type TiptapHandle, type TiptapSelectionMenuPayload } from "../components/editor/Tiptap";
 import { useAIGeneration } from "../lib/editor/useAIGeneration";
 import { AIPanel } from "../components/ai/AIPanel";
 import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated";
@@ -81,6 +82,11 @@ type DialogState =
   | { kind: "prompt"; title: string; initial: string; resolve: (v: string | null) => void }
   | { kind: "confirm"; title: string; resolve: (v: boolean) => void };
 
+type SelectionMenuState = TiptapSelectionMenuPayload & {
+  x: number;
+  y: number;
+};
+
 export function Workspace() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -106,6 +112,8 @@ export function Workspace() {
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState(false);
   const [factBookOpen, setFactBookOpen] = useState(false);
+  const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
+  const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const companionNodeRef = useRef<string | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
@@ -128,6 +136,7 @@ export function Workspace() {
   const [aiCtxChecklistOpen, setAiCtxChecklistOpen] = useState(false);
   const [contextPreview, setContextPreview] = useState<AIContextPreview | null>(null);
   const previewReqIdRef = useRef(0);
+  const factBookSelectionSeqRef = useRef(0);
   const loadRef = useRef<LoadState | null>(null);
   useEffect(() => {
     loadRef.current = load;
@@ -205,6 +214,28 @@ export function Workspace() {
 
   const focusEditor = useCallback(() => {
     window.setTimeout(() => editorRef.current?.focus(), 0);
+  }, []);
+
+  useEffect(() => {
+    if (!selectionMenu) return undefined;
+    const close = () => setSelectionMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [selectionMenu]);
+
+  const openEditorSelectionMenu = useCallback((event: ReactMouseEvent, payload: TiptapSelectionMenuPayload) => {
+    setSelectionMenu({
+      ...payload,
+      x: event.clientX,
+      y: event.clientY,
+    });
   }, []);
 
   // Apply typewriter + focus defaults from settings exactly once on mount.
@@ -661,10 +692,14 @@ export function Workspace() {
 
   // Open the Cmd+I AI generation modal targeting the current selection. Shared
   // by the keyboard shortcut and the top-bar AI button.
-  const openAIModal = useCallback(() => {
+  const openAIModal = useCallback((selectionOverride?: { from: number; to: number }) => {
     const ed = editorRef.current?.editor;
     const currentLoad = loadRef.current;
     if (!ed || !currentLoad) return;
+    if (selectionOverride) {
+      ed.commands.setTextSelection(selectionOverride);
+      ed.view.focus();
+    }
     const { from, to, empty } = ed.state.selection;
     ed.setEditable(false);
     const mode = empty ? "insert" : "replace";
@@ -697,6 +732,7 @@ export function Workspace() {
   }, [closeAIModal, openAIModal]);
 
   const toggleFactBook = useCallback(() => {
+    setFactBookSelectedClaimRequest(null);
     setFactBookOpen((v) => {
       const next = !v;
       if (next) {
@@ -708,6 +744,33 @@ export function Workspace() {
       return next;
     });
   }, []);
+
+  const runSelectionFactCheck = useCallback(() => {
+    if (!selectionMenu) return;
+    editorRef.current?.setSelection({ from: selectionMenu.from, to: selectionMenu.to });
+    setSelectionMenu(null);
+    setCompanionOpen(false);
+    setEntitySheetId(null);
+    setThreadSheetId(null);
+    closeAIModalRef.current?.();
+    setFactBookOpen(true);
+    setFactBookSelectedClaimRequest({
+      id: `selection-${++factBookSelectionSeqRef.current}`,
+      claim: selectionMenu.text,
+    });
+  }, [selectionMenu]);
+
+  const runSelectionAIReplace = useCallback(() => {
+    if (!selectionMenu) return;
+    const sel = { from: selectionMenu.from, to: selectionMenu.to };
+    editorRef.current?.setSelection(sel);
+    setSelectionMenu(null);
+    setFactBookOpen(false);
+    setCompanionOpen(false);
+    setEntitySheetId(null);
+    setThreadSheetId(null);
+    openAIModal(sel);
+  }, [openAIModal, selectionMenu]);
 
   // Defensive: if the active node changes while the modal is open, close it so
   // stale selection offsets can't be committed into a freshly-mounted editor.
@@ -1261,7 +1324,25 @@ export function Workspace() {
                 AITargetExtension,
               ]}
               onMentionDoubleClick={(id) => setEntitySheetId(id)}
+              onSelectionContextMenu={openEditorSelectionMenu}
             />
+            {selectionMenu && (
+              <div
+                role="menu"
+                aria-label={t("workspace.selectionMenu.label")}
+                className="editor-selection-menu"
+                style={{ left: selectionMenu.x, top: selectionMenu.y }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button type="button" role="menuitem" onClick={runSelectionFactCheck}>
+                  <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
+                </button>
+                <button type="button" role="menuitem" onClick={runSelectionAIReplace}>
+                  <Sparkles size={13} /> {t("workspace.selectionMenu.aiReplace")}
+                </button>
+              </div>
+            )}
           </div>
           <div className="editor-foot">
             <span>{currentSceneTitle}</span>
@@ -1330,8 +1411,13 @@ export function Workspace() {
             projectId={load.project.id}
             nodeId={load.node.id}
             sceneLabel={currentSceneTitle}
+            selectedClaimRequest={factBookSelectedClaimRequest}
             beforeReview={flushEditorBeforeCompanionSend}
-            onClose={() => { setFactBookOpen(false); focusEditor(); }}
+            onClose={() => {
+              setFactBookOpen(false);
+              setFactBookSelectedClaimRequest(null);
+              focusEditor();
+            }}
             onChanged={() => {
               refreshTreeKeepNode(load.node.id);
             }}

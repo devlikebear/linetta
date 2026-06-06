@@ -174,6 +174,45 @@ func TestLinettaApplyOpsToolCreatesFactCard(t *testing.T) {
 	}
 }
 
+func TestLinettaApplyOpsToolCreatesFactCardWithStringAccessedAt(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 3_000 })
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[
+	  {"op":"create_fact_card","claim":"비 온 뒤 흙냄새","result":"페트리코어와 지오스민이 관련된다.","status":"verified","sources":[{"url":"https://example.com/petrichor","accessed_at":""},{"url":"https://example.com/geosmin","accessed_at":"123"}]}
+	]`
+	params := json.RawMessage(`{
+	  "summary":"자료집 카드 저장",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("tool result is error: %s", result.Text())
+	}
+
+	list, err := svc.facts.List(ctx, fact.ListFilter{ProjectID: projectID, NodeID: &nodeID})
+	if err != nil {
+		t.Fatalf("facts.List: %v", err)
+	}
+	if len(list) != 1 || len(list[0].Sources) != 2 {
+		t.Fatalf("facts = %+v", list)
+	}
+	if list[0].Sources[0].AccessedAt != 3_000 {
+		t.Fatalf("empty accessed_at should fall back to now, got %d", list[0].Sources[0].AccessedAt)
+	}
+	if list[0].Sources[1].AccessedAt != 123 {
+		t.Fatalf("numeric accessed_at string should persist, got %d", list[0].Sources[1].AccessedAt)
+	}
+}
+
 func TestLinettaApplyOpsToolRejectsFactCardWithoutSource(t *testing.T) {
 	ctx := context.Background()
 	svc, projectID, nodeID := newToolSvc(t)

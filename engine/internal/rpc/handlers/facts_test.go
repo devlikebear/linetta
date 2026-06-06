@@ -3,7 +3,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/fact"
@@ -32,6 +34,51 @@ func newFactsFixture(t *testing.T) factsFixture {
 		t.Fatalf("project.Create: %v", err)
 	}
 	return factsFixture{repo: fact.NewRepo(s), projectID: p.ID, nodeID: *p.LastOpenedNodeID}
+}
+
+func TestCreateFactFromURLHandlerFetchesAndCreatesCard(t *testing.T) {
+	f := newFactsFixture(t)
+	handler := CreateFactFromURL(f.repo, func() int64 { return 200 }, func(_ context.Context, url string) (fetchedFactSource, error) {
+		if url != "https://example.com/source" {
+			t.Fatalf("fetch url = %q", url)
+		}
+		return fetchedFactSource{
+			URL:     url,
+			Title:   "Example Source",
+			Content: "비 온 뒤 흙냄새는 지오스민과 식물성 오일 등 여러 성분과 관련된다.",
+		}, nil
+	})
+
+	res, err := handler(context.Background(),
+		json.RawMessage(`{"project_id":"`+f.projectID+`","node_id":"`+f.nodeID+`","claim":"비 온 뒤 흙냄새","url":"https://example.com/source"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var card fact.Card
+	if err := json.Unmarshal(res, &card); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if card.ProjectID != f.projectID || card.NodeID == nil || *card.NodeID != f.nodeID {
+		t.Fatalf("card scope = %+v", card)
+	}
+	if card.Status != fact.StatusUncertain || !strings.Contains(card.Result, "지오스민") {
+		t.Fatalf("card result/status = %+v", card)
+	}
+	if len(card.Sources) != 1 || card.Sources[0].Title != "Example Source" || !strings.Contains(card.Sources[0].Snippet, "지오스민") {
+		t.Fatalf("sources = %+v", card.Sources)
+	}
+}
+
+func TestCreateFactFromURLHandlerReportsFetchError(t *testing.T) {
+	f := newFactsFixture(t)
+	handler := CreateFactFromURL(f.repo, func() int64 { return 200 }, func(context.Context, string) (fetchedFactSource, error) {
+		return fetchedFactSource{}, errors.New("web_fetch status 403")
+	})
+
+	if _, err := handler(context.Background(),
+		json.RawMessage(`{"project_id":"`+f.projectID+`","claim":"비 온 뒤 흙냄새","url":"https://example.com/source"}`)); err == nil {
+		t.Fatal("expected fetch error")
+	}
 }
 
 func TestCreateFactHandler(t *testing.T) {
@@ -77,10 +124,10 @@ func TestUpdateAndDeleteFactHandlers(t *testing.T) {
 	f := newFactsFixture(t)
 	card, err := f.repo.Create(context.Background(), 10, fact.NewInput{
 		ProjectID: f.projectID,
-		Claim:    "원본",
-		Result:   "검증",
-		Status:   fact.StatusVerified,
-		Sources:  []fact.SourceInput{{URL: "https://example.com", AccessedAt: 10}},
+		Claim:     "원본",
+		Result:    "검증",
+		Status:    fact.StatusVerified,
+		Sources:   []fact.SourceInput{{URL: "https://example.com", AccessedAt: 10}},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)

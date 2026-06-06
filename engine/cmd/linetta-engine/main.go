@@ -57,6 +57,14 @@ func (p providerSource) Resolve() ai.ResolvedProvider {
 	}
 }
 
+func (p providerSource) WebSearchProvider() string {
+	return p.store.WebSearchProvider()
+}
+
+func (p providerSource) WebSearchAPIKey() string {
+	return p.store.WebSearchAPIKey()
+}
+
 func main() {
 	stdio := flag.Bool("stdio", false, "serve JSONRPC over stdin/stdout")
 	flag.Parse()
@@ -130,7 +138,7 @@ func main() {
 	if err != nil {
 		fail("home: %v", err)
 	}
-	syncer := gitsync.New(settingsStore, projects, nodes, entities)
+	syncer := gitsync.New(settingsStore, projects, nodes, entities, relationships)
 	syncer.Ops = ops
 	retentionFn := func(ctx context.Context) error {
 		if err := snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli()); err != nil {
@@ -216,6 +224,7 @@ func main() {
 	s.Handle("notes.update", handlers.UpdateNote(notes))
 	s.Handle("notes.delete", handlers.DeleteNote(notes))
 	s.Handle("facts.create", handlers.CreateFact(facts, clock))
+	s.Handle("facts.create_from_url", handlers.CreateFactFromURL(facts, clock, nil))
 	s.Handle("facts.list", handlers.ListFacts(facts))
 	s.Handle("facts.update", handlers.UpdateFact(facts, clock))
 	s.Handle("facts.delete", handlers.DeleteFact(facts))
@@ -235,11 +244,12 @@ func main() {
 	s.Handle("providers.list_models", handlers.ListModels(settingsStore, modelcatalog.Default()))
 	s.Handle("providers.detect_cli", handlers.DetectCLI())
 	s.Handle("providers.test", handlers.TestProvider(settingsStore, ai.DefaultClientFactory))
+	s.Handle("web_search.test", handlers.TestWebSearch(settingsStore, handlers.DefaultWebSearchTester))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
-	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities))
+	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities, relationships))
 	s.Handle("export.node", handlers.ExportNode(nodes))
-	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, clock))
+	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	s.Handle("git_sync.run", handlers.RunGitSync(syncer))
 	s.Handle("git_sync.init", handlers.InitGitSync(syncer))

@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
@@ -27,6 +28,7 @@ func TestSmokeCreateSaveSnapshotExport(t *testing.T) {
 	nodes := node.NewRepo(st)
 	snaps := snapshot.NewRepo(st)
 	entities := entity.NewRepo(st)
+	relationships := relationship.NewRepo(st)
 
 	createdRaw, err := CreateProject(projects, func() int64 { return 1000 })(ctx, json.RawMessage(`{
 		"title": "Smoke Story",
@@ -57,7 +59,7 @@ func TestSmokeCreateSaveSnapshotExport(t *testing.T) {
 	}
 
 	exportParams, _ := json.Marshal(map[string]string{"project_id": created.ID})
-	exportedRaw, err := ExportProject(projects, nodes, entities)(ctx, exportParams)
+	exportedRaw, err := ExportProject(projects, nodes, entities, relationships)(ctx, exportParams)
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}

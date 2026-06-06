@@ -57,6 +57,27 @@ describe("useCompanion streaming", () => {
     });
   });
 
+  it("accepts fast engine events that arrive before companion.send resolves", async () => {
+    let resolveSend: (value: { run_id: string }) => void = () => {};
+    rpc.send.mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      void result.current.send("빠른 응답");
+    });
+
+    fire("companion-delta", { run_id: "r-fast", text: "이미 " });
+    fire("companion-done", { run_id: "r-fast", full_text: "이미 끝났어요." });
+    expect(result.current.status).toBe("idle");
+    expect(result.current.messages[result.current.messages.length - 1]).toMatchObject({ role: "assistant", content: "이미 끝났어요." });
+
+    await act(async () => {
+      resolveSend({ run_id: "r-fast" });
+    });
+    expect(result.current.status).toBe("idle");
+  });
+
   it("accumulates companion-reasoning and clears it on done", async () => {
     const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
     await waitFor(() => expect(ev.listeners.has("companion-reasoning")).toBe(true));

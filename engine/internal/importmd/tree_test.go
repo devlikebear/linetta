@@ -159,3 +159,29 @@ func TestParseOutline_hashWithoutSpaceIsNotHeading(t *testing.T) {
 		t.Fatalf("want no headings, got %d", len(out.Roots))
 	}
 }
+
+func TestParseDocument_skipsLegacyEntityAppendixAndCapturesEntities(t *testing.T) {
+	md := "# 작품\n" +
+		"## 1부\n" +
+		"### 1장\n" +
+		"#### 씬 1\n본문\n\n" +
+		"## 등장인물\n\n" +
+		"- **해진** (character) · 주인공 — 사진작가\n" +
+		"- **항구** (place) · 메인무대 — 오래된 부두\n"
+
+	doc := ParseDocument(md)
+	if len(doc.Outline.Roots) != 1 {
+		t.Fatalf("roots=%d want 1", len(doc.Outline.Roots))
+	}
+	for _, root := range doc.Outline.Roots {
+		if root.Label == "등장인물" {
+			t.Fatalf("entity appendix became an outline node: %+v", doc.Outline.Roots)
+		}
+	}
+	if len(doc.Metadata.Entities) != 2 {
+		t.Fatalf("entities=%d want 2: %+v", len(doc.Metadata.Entities), doc.Metadata.Entities)
+	}
+	if doc.Metadata.Entities[1].Kind != "place" || doc.Metadata.Entities[1].Name != "항구" {
+		t.Fatalf("place entity not captured: %+v", doc.Metadata.Entities[1])
+	}
+}

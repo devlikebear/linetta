@@ -8,12 +8,14 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 )
 
 func TestExportProjectHandler(t *testing.T) {
 	f := newNodeFixture(t)
 	er := entity.NewRepo(f.store)
-	h := ExportProject(f.proj, f.nodes, er)
+	rr := relationship.NewRepo(f.store)
+	h := ExportProject(f.proj, f.nodes, er, rr)
 	res, err := h(context.Background(), json.RawMessage(`{"project_id":"`+f.pID+`"}`))
 	if err != nil {
 		t.Fatalf("handler: %v", err)
@@ -22,7 +24,7 @@ func TestExportProjectHandler(t *testing.T) {
 	if err := json.Unmarshal(res, &p); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if !strings.HasPrefix(p.Markdown, "# T\n\n") {
+	if !strings.Contains(p.Markdown, "\n# T\n\n") {
 		t.Errorf("missing project H1: %q", p.Markdown)
 	}
 	if !strings.HasSuffix(p.SuggestedFilename, ".md") {

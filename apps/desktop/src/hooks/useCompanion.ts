@@ -17,6 +17,8 @@ export interface ChatMessage {
 
 export type CompanionStatus = "idle" | "streaming";
 
+const PENDING_RUN_ID = "__linetta_pending_run__";
+
 // stripProposalBlock removes fenced machine-control blocks from displayed prose.
 export function stripProposalBlock(text: string): string {
   return text
@@ -46,6 +48,14 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
   const pendingChoicesRef = useRef<CompanionChoices | null>(null);
 
   const setStreamingBoth = (v: string) => { streamingRef.current = v; setStreaming(v); };
+  const acceptRunEvent = (runId: string) => {
+    if (runIdRef.current === runId) return true;
+    if (runIdRef.current === PENDING_RUN_ID) {
+      runIdRef.current = runId;
+      return true;
+    }
+    return false;
+  };
 
   // Load history on project change.
   useEffect(() => {
@@ -63,35 +73,35 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
   }, [projectId]);
 
   useEngineEvent<CompanionDelta>("companion-delta", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     setStreamingBoth(streamingRef.current + p.text);
   });
   useEngineEvent<CompanionReset>("companion-reset", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     setStreamingBoth(p.text);
   });
   useEngineEvent<CompanionThinking>("companion-thinking", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     setThinking(p.text);
   });
   useEngineEvent<CompanionReasoning>("companion-reasoning", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     setReasoningBoth(reasoningRef.current + p.text);
   });
   useEngineEvent<CompanionProposal>("companion-proposal", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     pendingProposalRef.current = p;
   });
   useEngineEvent<CompanionChoices>("companion-choices", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     pendingChoicesRef.current = p;
   });
   useEngineEvent<CompanionApplied>("companion-applied", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     onApplied?.();
   });
   useEngineEvent<CompanionDone>("companion-done", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     const prose = stripProposalBlock(p.full_text);
     const proposal = pendingProposalRef.current ?? undefined;
     const choices = pendingChoicesRef.current ?? undefined;
@@ -105,7 +115,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     runIdRef.current = null;
   });
   useEngineEvent<CompanionError>("companion-error", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     setMessages((prev) => [...prev, { role: "assistant", content: p.message, errored: true }]);
     setStreamingBoth("");
     setThinking("");
@@ -114,7 +124,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     runIdRef.current = null;
   });
   useEngineEvent<CompanionCancelled>("companion-cancelled", (p) => {
-    if (p.run_id !== runIdRef.current) return;
+    if (!acceptRunEvent(p.run_id)) return;
     setStreamingBoth("");
     setThinking("");
     setReasoningBoth("");
@@ -127,15 +137,19 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     if (!trimmed || status === "streaming") return;
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setStatus("streaming");
+    runIdRef.current = PENDING_RUN_ID;
     setStreamingBoth("");
     setThinking("");
     setReasoningBoth("");
     try {
       const { run_id } = await companionApi.send(projectId, nodeIdRef.current ?? "", trimmed);
-      runIdRef.current = run_id;
+      if (runIdRef.current === PENDING_RUN_ID) {
+        runIdRef.current = run_id;
+      }
     } catch (e) {
       setMessages((prev) => [...prev, { role: "assistant", content: String(e), errored: true }]);
       setStatus("idle");
+      runIdRef.current = null;
     }
   }, [projectId, status, nodeIdRef]);
 

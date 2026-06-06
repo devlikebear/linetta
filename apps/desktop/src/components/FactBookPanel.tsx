@@ -13,6 +13,7 @@ interface Props {
   projectId: string;
   nodeId: string;
   sceneLabel: string;
+  selectedClaimRequest?: { id: string; claim: string } | null;
   beforeReview?: () => Promise<void> | void;
   onClose: () => void;
   onChanged?: () => void;
@@ -25,9 +26,74 @@ function buildReviewPrompt(sceneLabel: string): string {
     "후보가 있으면 설명은 짧게 하고 linetta-choices 블록 하나로만 보여줘.",
     "각 options 항목은 반드시 `검색 후 자료집에 저장: <주장>` 형식으로 작성해.",
     "작가가 후보를 선택하면 그때 web_search와 web_fetch로 출처 URL을 확인하고, create_fact_card로 자료집에 저장해.",
+    "web_fetch가 404/403/본문 부족이면 그 URL은 저장 후보에서 제외하고 대체 출처를 더 찾아.",
     "web_search API 키가 없어 실패하면 포기하지 말고 작가에게 출처 URL 직접 입력을 요청해. 작가가 URL을 입력하면 web_fetch로 확인한 뒤 저장해.",
     "출처 URL 없는 create_fact_card는 금지야. 후보가 없으면 짧게 이유만 말해.",
   ].join("\n");
+}
+
+function claimFromChoice(text: string): string {
+  return text.replace(/^검색 후 자료집에 저장:\s*/i, "").trim();
+}
+
+function normalizeClaim(text: string): string {
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function buildFactCheckPrompt(claim: string): string {
+  return [
+    `선택한 주장: ${claim}`,
+    "지금 바로 web_search로 신뢰 가능한 출처 후보를 찾고, 최소 1개 URL은 web_fetch로 본문 접근을 확인해.",
+    "web_fetch가 404/403/본문 부족이면 그 URL은 저장 후보에서 제외하고 같은 턴에 대체 출처를 더 검색해.",
+    "확인된 출처 URL이 있으면 같은 턴에 linetta_apply_ops의 create_fact_card로 자료집에 저장해.",
+    "create_fact_card 호출 없이 저장 완료라고 말하지 마. 저장이 실패하면 실패 이유와 필요한 다음 행동만 짧게 말해.",
+    "web_search나 web_fetch가 실패하면 포기하지 말고 출처 URL 직접 입력을 요청해.",
+  ].join("\n");
+}
+
+function firstURL(text: string): string {
+  const match = text.match(/https?:\/\/[^\s<>"']+/i);
+  return match ? match[0].replace(/[),.;\]]+$/, "") : "";
+}
+
+function sourceURLFromAssistant(text: string): string {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const urls = lines[i].match(/https?:\/\/[^\s<>"']+/gi) ?? [];
+    for (const raw of urls) {
+      const context = [lines[i - 1] ?? "", lines[i], lines[i + 1] ?? ""].join(" ").toLowerCase();
+      if (isRejectedSourceContext(context)) continue;
+      return raw.replace(/[),.;\]]+$/, "");
+    }
+  }
+  return "";
+}
+
+function isRejectedSourceContext(context: string): boolean {
+  return [
+    /404/,
+    /403/,
+    /실패/,
+    /오류/,
+    /불충분/,
+    /부족/,
+    /차단/,
+    /저장하지 못/,
+    /저장 못/,
+    /본문[^.]*충분하지/,
+    /본문[^.]*추출[^.]*안/,
+    /접근[^.]*안/,
+    /접근[^.]*불/,
+    /접근[^.]*실패/,
+    /not accessible/,
+    /inaccessible/,
+    /blocked/,
+    /failed/,
+    /failure/,
+    /insufficient/,
+    /could not/,
+    /unable/,
+  ].some((pattern) => pattern.test(context));
 }
 
 function statusKey(status: FactStatus): string {
@@ -39,17 +105,22 @@ function statusKey(status: FactStatus): string {
   }
 }
 
-export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onClose, onChanged }: Props) {
+export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequest, beforeReview, onClose, onChanged }: Props) {
   const { t } = useI18n();
   const [cards, setCards] = useState<FactCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [directSaving, setDirectSaving] = useState(false);
   const [replyDraft, setReplyDraft] = useState("");
   const [feedbackAnchor, setFeedbackAnchor] = useState<number | null>(null);
   const [feedbackNote, setFeedbackNote] = useState("");
+  const [feedbackKind, setFeedbackKind] = useState<"ok" | "error">("ok");
+  const [directFactClaim, setDirectFactClaim] = useState("");
+  const [awaitingFactSave, setAwaitingFactSave] = useState(false);
   const nodeIdRef = useRef<string | null>(nodeId);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const handledSelectedClaimRequestRef = useRef<string | null>(null);
 
   useEffect(() => { nodeIdRef.current = nodeId; }, [nodeId]);
 
@@ -66,6 +137,8 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
   }, [projectId, nodeId]);
 
   const handleApplied = useCallback(() => {
+    setAwaitingFactSave(false);
+    setFeedbackKind("ok");
     setFeedbackNote(t("factBook.applied"));
     void loadFacts();
     onChanged?.();
@@ -76,6 +149,29 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
 
   useEffect(() => { void loadFacts(); }, [loadFacts]);
 
+  const saveDirectURL = useCallback(async (claim: string, url: string, startMessage?: string) => {
+    setDirectSaving(true);
+    if (startMessage) {
+      setFeedbackKind("ok");
+      setFeedbackNote(startMessage);
+    }
+    try {
+      await factsApi.createFromUrl({ project_id: projectId, node_id: nodeId, claim, url });
+      setReplyDraft("");
+      setDirectFactClaim("");
+      setAwaitingFactSave(false);
+      setFeedbackKind("ok");
+      setFeedbackNote(t("factBook.directSaved"));
+      await loadFacts();
+      onChanged?.();
+    } catch (err) {
+      setFeedbackKind("error");
+      setFeedbackNote(t("factBook.directSaveFailed", { error: String(err) }));
+    } finally {
+      setDirectSaving(false);
+    }
+  }, [loadFacts, nodeId, onChanged, projectId, t]);
+
   const latestAssistantInfo = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "assistant") return { index: i, message: messages[i] };
@@ -83,22 +179,48 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
     return null;
   }, [messages]);
   const latestAssistant = latestAssistantInfo?.message ?? null;
+  const savedClaims = useMemo(() => new Set(cards.map((card) => normalizeClaim(card.claim))), [cards]);
+  const latestChoices = useMemo(() => {
+    if (!latestAssistant?.choices) return null;
+    return {
+      ...latestAssistant.choices,
+      options: latestAssistant.choices.options.filter((option) => !savedClaims.has(normalizeClaim(claimFromChoice(option)))),
+    };
+  }, [latestAssistant, savedClaims]);
+  const hasLatestChoices = Boolean(latestChoices && (latestChoices.options.length > 0 || latestChoices.allow_custom));
   const isNewFeedback = feedbackAnchor !== null && latestAssistantInfo !== null && latestAssistantInfo.index > feedbackAnchor;
   const showAssistantContent = Boolean(
     latestAssistant?.content &&
     (isNewFeedback || latestAssistant.errored || latestAssistant.choices || latestAssistant.proposal),
   );
   const showCompanionFeedback = Boolean(
-    busy || streaming || feedbackNote || showAssistantContent || latestAssistant?.choices || latestAssistant?.proposal,
+    busy || streaming || feedbackNote || showAssistantContent || hasLatestChoices || latestAssistant?.proposal,
   );
+
+  useEffect(() => {
+    if (!awaitingFactSave || busy || directSaving || feedbackNote || !isNewFeedback || !latestAssistant) return;
+    if (latestAssistant.proposal || latestAssistant.choices) return;
+    const url = sourceURLFromAssistant(latestAssistant.content ?? "");
+    const claim = directFactClaim.trim();
+    if (url && claim) {
+      setAwaitingFactSave(false);
+      void saveDirectURL(claim, url, t("factBook.autoSaving"));
+      return;
+    }
+    setFeedbackKind("error");
+    setFeedbackNote(t("factBook.saveNotApplied"));
+  }, [awaitingFactSave, busy, directFactClaim, directSaving, feedbackNote, isNewFeedback, latestAssistant, saveDirectURL, t]);
 
   const markFeedbackStart = () => {
     setFeedbackAnchor(messages.length);
     setFeedbackNote("");
+    setFeedbackKind("ok");
   };
 
   const startReview = async () => {
     if (reviewing || status === "streaming") return;
+    setDirectFactClaim("");
+    setAwaitingFactSave(false);
     markFeedbackStart();
     setReviewing(true);
     try {
@@ -109,17 +231,46 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
     }
   };
 
+  useEffect(() => {
+    if (!selectedClaimRequest || handledSelectedClaimRequestRef.current === selectedClaimRequest.id) return;
+    if (busy || directSaving) return;
+    const claim = selectedClaimRequest.claim.trim();
+    if (!claim) return;
+    handledSelectedClaimRequestRef.current = selectedClaimRequest.id;
+    setDirectFactClaim(claim);
+    setAwaitingFactSave(true);
+    markFeedbackStart();
+    void (async () => {
+      await beforeReview?.();
+      await send(buildFactCheckPrompt(claim));
+    })();
+  }, [beforeReview, busy, directSaving, selectedClaimRequest, send]);
+
   const submitReply = async () => {
     const text = replyDraft.trim();
-    if (!text || busy) return;
+    if (!text || busy || directSaving) return;
+    const url = firstURL(text);
     markFeedbackStart();
+    if (url) {
+      const claim = directFactClaim.trim();
+      if (!claim) {
+        setFeedbackKind("error");
+        setFeedbackNote(t("factBook.directNeedsClaim"));
+        return;
+      }
+      await saveDirectURL(claim, url);
+      return;
+    }
     setReplyDraft("");
     await send(text);
   };
 
   const pickChoice = (text: string) => {
+    const claim = claimFromChoice(text);
+    setDirectFactClaim(claim);
+    setAwaitingFactSave(Boolean(claim));
     markFeedbackStart();
-    void send(text);
+    void send(claim ? buildFactCheckPrompt(claim) : text);
   };
 
   const focusReplyInput = () => {
@@ -140,8 +291,8 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
       </div>
 
       <div className="fact-review">
-        <button type="button" className="btn accent sm" onClick={startReview} disabled={reviewing || busy}>
-          <Search size={14} /> {reviewing || busy ? t("factBook.reviewing") : t("factBook.reviewScene")}
+        <button type="button" className="btn accent sm" onClick={startReview} disabled={reviewing || busy || directSaving}>
+          <Search size={14} /> {reviewing || busy || directSaving ? t("factBook.reviewing") : t("factBook.reviewScene")}
         </button>
         <p>{t("factBook.reviewHint")}</p>
       </div>
@@ -150,7 +301,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
         <section className="fact-companion-box">
           {status === "streaming" && <div className="companion-thinking"><span className="ai-working-dot" aria-hidden="true" /> {thinking || t("companion.thinking")}</div>}
           {streaming && <div className="fact-companion-prose"><Markdown text={streaming} /></div>}
-          {feedbackNote && <div className="fact-feedback ok">{feedbackNote}</div>}
+          {feedbackNote && <div className={`fact-feedback ${feedbackKind}`}>{feedbackNote}</div>}
           {showAssistantContent && (
             <div className={`fact-companion-prose${latestAssistant?.errored ? " errored" : ""}`}>
               {latestAssistant?.errored ? latestAssistant.content : <Markdown text={latestAssistant?.content ?? ""} />}
@@ -159,10 +310,11 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
           {latestAssistant?.proposal && (
             <ProposalCard proposal={latestAssistant.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={handleApplied} />
           )}
-          {latestAssistant?.choices && (
+          {hasLatestChoices && latestChoices && (
             <ChoiceCard
-              choices={latestAssistant.choices}
-              disabled={busy}
+              choices={latestChoices}
+              disabled={busy || directSaving}
+              lockAfterPick={false}
               onPick={pickChoice}
               onCustom={focusReplyInput}
             />
@@ -183,7 +335,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
           aria-label={t("factBook.directInput")}
           placeholder={t("factBook.directPlaceholder")}
           rows={2}
-          disabled={busy}
+          disabled={busy || directSaving}
           onChange={(e) => setReplyDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -192,7 +344,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, beforeReview, onC
             }
           }}
         />
-        <button type="submit" className="fact-reply-send" disabled={!replyDraft.trim() || busy} aria-label={t("companion.send")}>
+        <button type="submit" className="fact-reply-send" disabled={!replyDraft.trim() || busy || directSaving} aria-label={t("companion.send")}>
           <CornerDownLeft size={15} />
         </button>
       </form>

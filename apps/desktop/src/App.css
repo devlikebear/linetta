@@ -457,6 +457,17 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .outline-menu button.danger { color: var(--warn); }
 .outline-menu button.danger:hover { background: rgba(151,64,32,0.10); color: var(--warn); }
 .outline-menu-sep { height: 1px; margin: 5px 3px; background: var(--line-soft); }
+.editor-selection-menu {
+  position: fixed; z-index: 90; min-width: 148px; padding: 5px;
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  background: var(--surface); box-shadow: var(--shadow-md);
+}
+.editor-selection-menu button {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 8px 9px; border: 0; border-radius: var(--r-sm);
+  background: transparent; color: var(--ink-soft); font-size: 13px; text-align: left;
+}
+.editor-selection-menu button:hover { background: var(--surface-2); color: var(--ink); }
 .tree-chapter-row {
   padding-right: 2px;
 }
