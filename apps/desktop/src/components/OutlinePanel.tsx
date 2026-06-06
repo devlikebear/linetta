@@ -3,7 +3,16 @@ import { AlertTriangle, ChevronLeft, FilePlus2, FolderPlus, Layers, MoreHorizont
 import type { TreeNode } from "../hooks/useFirstLeaf";
 import { flatten } from "../hooks/useFirstLeaf";
 import { displayNodeLabel, useI18n } from "../lib/i18n";
-import { collectOutlineLabelIssues, isSceneLabel, isStructuralChapterLabel } from "../lib/outlineRepair";
+import {
+  OUTLINE_PRESETS,
+  collectOutlineLabelIssues,
+  isSceneLabel,
+  isStructuralChapterLabel,
+  outlinePresetById,
+  outlineRoleName,
+  type OutlinePresetId,
+  type OutlineStructurePreset,
+} from "../lib/outlineRepair";
 import "./OutlinePanel.css";
 
 interface Props {
@@ -25,6 +34,8 @@ interface Props {
   onRepairOutline?: () => void;
   onUndoRepairOutline?: () => void;
   canUndoRepair?: boolean;
+  outlinePresetId?: OutlinePresetId;
+  onOutlinePresetChange?: (presetId: OutlinePresetId) => void;
   tourTarget?: string;
 }
 
@@ -53,12 +64,17 @@ export function OutlinePanel({
   onRepairOutline,
   onUndoRepairOutline,
   canUndoRepair,
+  outlinePresetId,
+  onOutlinePresetChange,
   tourTarget,
 }: Props) {
   const { language, t } = useI18n();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [doctorOpen, setDoctorOpen] = useState(false);
-  const outlineIssues = analyzeOutline(tree, t);
+  const outlinePreset = outlinePresetById(outlinePresetId);
+  const outlineIssues = analyzeOutline(tree, t, outlinePreset);
+  const partName = outlineRoleName(outlinePreset, "part", t);
+  const chapterName = outlineRoleName(outlinePreset, "chapter", t);
   const canOpenMenu = (node: TreeNode) =>
     Boolean(
       onRename ||
@@ -149,6 +165,21 @@ export function OutlinePanel({
             <span>{t("workspace.outlineDoctorResult")}</span>
             <strong>{outlineIssues.length}</strong>
           </div>
+          <label className="outline-preset">
+            <span>{t("workspace.outlinePreset")}</span>
+            <select
+              value={outlinePreset.id}
+              aria-label={t("workspace.outlinePreset")}
+              onChange={(e) => onOutlinePresetChange?.(e.currentTarget.value as OutlinePresetId)}
+              disabled={!onOutlinePresetChange}
+            >
+              {Object.values(OUTLINE_PRESETS).map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {t(preset.nameKey)}
+                </option>
+              ))}
+            </select>
+          </label>
           {outlineIssues.length === 0 ? (
             <p>{t("workspace.outlineDoctorClean")}</p>
           ) : (
@@ -195,7 +226,7 @@ export function OutlinePanel({
           )}
           {onCreatePart && (
             <button type="button" role="menuitem" onClick={() => runAction(onCreatePart)}>
-              <FolderPlus size={13} /> {t("workspace.newPart")}
+              <FolderPlus size={13} /> {t("workspace.newOutlineLevel", { level: partName })}
             </button>
           )}
           {onCreateScene && (
@@ -205,7 +236,7 @@ export function OutlinePanel({
           )}
           {onCreateChapter && (
             <button type="button" role="menuitem" onClick={() => runAction(onCreateChapter)}>
-              <FolderPlus size={13} /> {t("workspace.newChapter")}
+              <FolderPlus size={13} /> {t("workspace.newOutlineLevel", { level: chapterName })}
             </button>
           )}
           {(onMoveNodeUp || onMoveNodeDown || onDeleteNode || (menu.node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene))) && (
@@ -237,8 +268,14 @@ type OutlineIssue = {
   text: string;
 };
 
-function analyzeOutline(tree: TreeNode[], t: ReturnType<typeof useI18n>["t"]): OutlineIssue[] {
+function analyzeOutline(tree: TreeNode[], t: ReturnType<typeof useI18n>["t"], preset: OutlineStructurePreset): OutlineIssue[] {
   const issues: OutlineIssue[] = [];
+  const issueValues = (label: string) => ({
+    label,
+    part: outlineRoleName(preset, "part", t),
+    chapter: outlineRoleName(preset, "chapter", t),
+    scene: outlineRoleName(preset, "scene", t),
+  });
   const visit = (nodes: TreeNode[], depth: number, parentKey: string) => {
     const seen = new Map<string, TreeNode[]>();
     nodes.forEach((node, index) => {
@@ -249,61 +286,61 @@ function analyzeOutline(tree: TreeNode[], t: ReturnType<typeof useI18n>["t"]): O
         seen.set(label, list);
       }
       if (node.kind === "container" && node.children.length === 0) {
-        issues.push({ key: `empty-${node.id}`, text: t("workspace.outlineIssue.empty", { label: node.label }) });
+        issues.push({ key: `empty-${node.id}`, text: t("workspace.outlineIssue.empty", issueValues(node.label)) });
       }
-      if (node.kind === "leaf" && node.word_count === 0 && isStructuralChapterLabel(node.label)) {
-        issues.push({ key: `chapter-as-scene-${node.id}`, text: t("workspace.outlineIssue.chapterAsScene", { label: node.label }) });
+      if (node.kind === "leaf" && node.word_count === 0 && isStructuralChapterLabel(node.label, preset)) {
+        issues.push({ key: `chapter-as-scene-${node.id}`, text: t("workspace.outlineIssue.chapterAsScene", issueValues(node.label)) });
       }
       if (
         node.kind === "leaf" &&
         node.word_count === 0 &&
-        !isSceneLabel(node.label) &&
-        !isStructuralChapterLabel(node.label) &&
-        nodes.slice(0, index).some((sibling) => isStructuralChapterLabel(sibling.label)) &&
-        nodes.slice(index + 1).some((sibling) => isStructuralChapterLabel(sibling.label))
+        !isSceneLabel(node.label, preset) &&
+        !isStructuralChapterLabel(node.label, preset) &&
+        nodes.slice(0, index).some((sibling) => isStructuralChapterLabel(sibling.label, preset)) &&
+        nodes.slice(index + 1).some((sibling) => isStructuralChapterLabel(sibling.label, preset))
       ) {
-        issues.push({ key: `part-as-scene-${node.id}`, text: t("workspace.outlineIssue.partAsScene", { label: node.label }) });
+        issues.push({ key: `part-as-scene-${node.id}`, text: t("workspace.outlineIssue.partAsScene", issueValues(node.label)) });
       }
       if (depth === 0 && node.kind === "leaf" && tree.some((root) => root.kind === "container")) {
-        issues.push({ key: `root-leaf-${node.id}`, text: t("workspace.outlineIssue.rootLeaf", { label: node.label }) });
+        issues.push({ key: `root-leaf-${node.id}`, text: t("workspace.outlineIssue.rootLeaf", issueValues(node.label)) });
       }
-      if (depth === 0 && node.kind === "container" && isStructuralChapterLabel(node.label)) {
-        issues.push({ key: `root-chapter-${node.id}`, text: t("workspace.outlineIssue.rootChapter", { label: node.label }) });
+      if (depth === 0 && node.kind === "container" && isStructuralChapterLabel(node.label, preset)) {
+        issues.push({ key: `root-chapter-${node.id}`, text: t("workspace.outlineIssue.rootChapter", issueValues(node.label)) });
       }
       if (
         node.kind === "container" &&
-        isStructuralChapterLabel(node.label) &&
+        isStructuralChapterLabel(node.label, preset) &&
         node.children.some((child) => child.kind === "container")
       ) {
-        issues.push({ key: `chapter-containers-${node.id}`, text: t("workspace.outlineIssue.chapterContainsContainers", { label: node.label }) });
+        issues.push({ key: `chapter-containers-${node.id}`, text: t("workspace.outlineIssue.chapterContainsContainers", issueValues(node.label)) });
       }
       if (
         depth > 0 &&
         node.kind === "container" &&
-        !isStructuralChapterLabel(node.label) &&
+        !isStructuralChapterLabel(node.label, preset) &&
         node.children.some((child) => child.kind === "container")
       ) {
-        issues.push({ key: `nested-part-${node.id}`, text: t("workspace.outlineIssue.nestedPart", { label: node.label }) });
+        issues.push({ key: `nested-part-${node.id}`, text: t("workspace.outlineIssue.nestedPart", issueValues(node.label)) });
       }
       if (depth === 1 && node.kind === "leaf") {
-        issues.push({ key: `part-leaf-${node.id}`, text: t("workspace.outlineIssue.sceneUnderPart", { label: node.label }) });
+        issues.push({ key: `part-leaf-${node.id}`, text: t("workspace.outlineIssue.sceneUnderPart", issueValues(node.label)) });
       }
       if (depth > 2) {
-        issues.push({ key: `deep-${node.id}`, text: t("workspace.outlineIssue.deep", { label: node.label }) });
+        issues.push({ key: `deep-${node.id}`, text: t("workspace.outlineIssue.deep", issueValues(node.label)) });
       }
       visit(node.children, depth + 1, node.id);
     });
     seen.forEach((items, label) => {
       if (items.length > 1) {
-        issues.push({ key: `dup-${parentKey}-${label}`, text: t("workspace.outlineIssue.duplicate", { label }) });
+        issues.push({ key: `dup-${parentKey}-${label}`, text: t("workspace.outlineIssue.duplicate", issueValues(label)) });
       }
     });
   };
   visit(tree, 0, "root");
-  for (const issue of collectOutlineLabelIssues(tree, t)) {
+  for (const issue of collectOutlineLabelIssues(tree, t, preset)) {
     issues.push({
       key: `label-cleanup-${issue.id}`,
-      text: t("workspace.outlineIssue.labelCleanup", { label: issue.label }),
+      text: t("workspace.outlineIssue.labelCleanup", issueValues(issue.label)),
     });
   }
   return issues;

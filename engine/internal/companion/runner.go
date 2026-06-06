@@ -88,7 +88,7 @@ func newRunner(svc *Service) *Runner {
 	return &Runner{svc: svc, active: map[string]context.CancelFunc{}}
 }
 
-func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, images []ImageAttachment, now func() int64) (string, error) {
+func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, outlineStructure string, images []ImageAttachment, now func() int64) (string, error) {
 	sess, err := r.svc.sessions.EnsureWorker(projectID)
 	if err != nil {
 		return "", err
@@ -99,6 +99,7 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, sele
 	if err != nil {
 		return "", err
 	}
+	data.OutlineStructure = strings.TrimSpace(outlineStructure)
 	data = applyContextSelection(data, selection)
 
 	// Persist the user turn before streaming so transcript failures are visible

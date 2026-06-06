@@ -34,7 +34,7 @@ function toChatMessage(m: CompanionMessage): ChatMessage {
   };
 }
 
-export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: () => void, contextSelection?: AIContextSelection) {
+export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: () => void, contextSelection?: AIContextSelection, outlineStructure?: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState("");
   const [thinking, setThinking] = useState("");
@@ -142,8 +142,12 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setThinking("");
     setReasoningBoth("");
     try {
-      const payload = contextSelection || images.length > 0
-        ? { ...(contextSelection ? { context: contextSelection } : {}), ...(images.length > 0 ? { images } : {}) }
+      const payload = contextSelection || outlineStructure || images.length > 0
+        ? {
+            ...(contextSelection ? { context: contextSelection } : {}),
+            ...(outlineStructure ? { outline_structure: outlineStructure } : {}),
+            ...(images.length > 0 ? { images } : {}),
+          }
         : undefined;
       const { run_id } = payload
         ? await companionApi.send(projectId, nodeIdRef.current ?? "", trimmed, payload)
@@ -156,7 +160,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
       setStatus("idle");
       runIdRef.current = null;
     }
-  }, [projectId, status, nodeIdRef, contextSelection]);
+  }, [projectId, status, nodeIdRef, contextSelection, outlineStructure]);
 
   const cancel = useCallback(() => {
     const id = runIdRef.current;

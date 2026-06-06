@@ -61,6 +61,29 @@
   color: var(--muted-2);
 }
 
+.outline-preset {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+
+.outline-preset select {
+  min-width: 0;
+  flex: 1;
+  height: 24px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  padding: 0 6px;
+}
+
 .outline-doctor p,
 .outline-doctor ul {
   margin: 7px 0;

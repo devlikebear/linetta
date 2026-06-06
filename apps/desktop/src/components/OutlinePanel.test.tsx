@@ -313,6 +313,31 @@ describe("OutlinePanel", () => {
     expect(screen.getByText(/씬으로 저장된 부 후보/)).toBeInTheDocument();
   });
 
+  it("lets writers switch the doctor to the web novel outline preset", async () => {
+    const user = userEvent.setup();
+    const onOutlinePresetChange = vi.fn();
+    const episode = {
+      ...chapter,
+      id: "episode-root",
+      label: "1화 - 경계의 틈",
+      children: [scene],
+    };
+
+    renderOutline({
+      tree: [episode],
+      outlinePresetId: "webnovel",
+      onOutlinePresetChange,
+      onRepairOutline: vi.fn(),
+    });
+
+    await user.click(screen.getByRole("button", { name: "아웃라인 점검" }));
+
+    expect(screen.getByLabelText("아웃라인 구조")).toHaveValue("webnovel");
+    expect(screen.getByText(/권 밖에 있는 화: 1화 - 경계의 틈/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("아웃라인 구조"), "novel");
+    expect(onOutlinePresetChange).toHaveBeenCalledWith("novel");
+  });
+
   it("renders the outline chrome and menu actions in English when selected", async () => {
     const user = userEvent.setup();
     const onRename = vi.fn();

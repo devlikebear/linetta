@@ -17,6 +17,7 @@ type FrontMatter struct {
 
 type Metadata struct {
 	Version       int            `yaml:"version,omitempty" json:"version,omitempty"`
+	OutlinePreset string         `yaml:"outline_preset,omitempty" json:"outline_preset,omitempty"`
 	Entities      []Entity       `yaml:"entities,omitempty" json:"entities,omitempty"`
 	Relationships []Relationship `yaml:"relationships,omitempty" json:"relationships,omitempty"`
 }
@@ -43,7 +44,7 @@ type Relationship struct {
 }
 
 func (m Metadata) Empty() bool {
-	return len(m.Entities) == 0 && len(m.Relationships) == 0
+	return m.OutlinePreset == "" && len(m.Entities) == 0 && len(m.Relationships) == 0
 }
 
 func Normalize(m Metadata) Metadata {

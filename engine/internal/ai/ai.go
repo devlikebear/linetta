@@ -18,9 +18,10 @@ const (
 
 // Options is the per-call user-selected options.
 type Options struct {
-	Tone      string           `json:"tone"`       // tone preset id; see TonePreset* constants
-	ShortForm bool             `json:"short_form"` // ask for one-paragraph length
-	Context   ContextSelection `json:"context,omitempty"`
+	Tone             string           `json:"tone"`       // tone preset id; see TonePreset* constants
+	ShortForm        bool             `json:"short_form"` // ask for one-paragraph length
+	Context          ContextSelection `json:"context,omitempty"`
+	OutlineStructure string           `json:"outline_structure,omitempty"`
 }
 
 // ContextKey identifies one independently toggleable context section.

@@ -228,6 +228,41 @@ func TestProjectOutlineUpdate(t *testing.T) {
 	}
 }
 
+func TestProjectOutlinePresetUpdate(t *testing.T) {
+	s := openStore(t)
+	repo := NewRepo(s)
+	ctx := context.Background()
+	p, err := repo.Create(ctx, 1000, NewInput{Title: "웹소설", Genres: []string{"판타지"}, LengthTarget: "series", DefaultPOV: "third_limited"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.OutlinePreset != OutlinePresetNovel {
+		t.Fatalf("new project outline_preset = %q, want %q", p.OutlinePreset, OutlinePresetNovel)
+	}
+	preset := OutlinePresetWebNovel
+	updated, err := repo.Update(ctx, 2000, UpdateInput{ID: p.ID, OutlinePreset: &preset})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.OutlinePreset != OutlinePresetWebNovel {
+		t.Fatalf("outline_preset = %q", updated.OutlinePreset)
+	}
+	if updated.UpdatedAt != 2000 {
+		t.Fatalf("updated_at not bumped: %d", updated.UpdatedAt)
+	}
+	again, err := repo.Update(ctx, 3000, UpdateInput{ID: p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.OutlinePreset != OutlinePresetWebNovel {
+		t.Fatalf("nil outline_preset should preserve, got %q", again.OutlinePreset)
+	}
+	bad := "screenplay"
+	if _, err := repo.Update(ctx, 4000, UpdateInput{ID: p.ID, OutlinePreset: &bad}); err != ErrInvalidOutlinePreset {
+		t.Fatalf("invalid outline_preset err = %v, want ErrInvalidOutlinePreset", err)
+	}
+}
+
 func TestProjectSynopsisUpdate(t *testing.T) {
 	s := openStore(t)
 	repo := NewRepo(s)

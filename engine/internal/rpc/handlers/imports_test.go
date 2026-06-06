@@ -226,6 +226,43 @@ func TestImportMarkdownHandler_restoresRelationshipPairs(t *testing.T) {
 	}
 }
 
+func TestImportMarkdownHandler_restoresOutlinePreset(t *testing.T) {
+	pr, nr := setupImportFixture(t)
+	h := ImportMarkdown(pr, nr, nil, nil, func() int64 { return 5000 })
+	ctx := context.Background()
+
+	md := "---\n" +
+		"linetta:\n" +
+		"  version: 1\n" +
+		"  outline_preset: webnovel\n" +
+		"---\n\n" +
+		"# 웹소설\n" +
+		"## 1권\n" +
+		"### 1화\n" +
+		"#### 씬 1\n본문\n"
+	params, _ := json.Marshal(map[string]any{
+		"file_name": "webnovel.md",
+		"content":   md,
+	})
+	raw, err := h(ctx, params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var out struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	p, err := pr.Get(ctx, out.ProjectID)
+	if err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if p.OutlinePreset != project.OutlinePresetWebNovel {
+		t.Fatalf("outline_preset=%q want %q", p.OutlinePreset, project.OutlinePresetWebNovel)
+	}
+}
+
 func TestImportMarkdown_resultIncludesCountsAndWarnings(t *testing.T) {
 	pr, nr := setupImportFixture(t)
 	h := ImportMarkdown(pr, nr, nil, nil, func() int64 { return 7000 })

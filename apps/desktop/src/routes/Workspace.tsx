@@ -41,7 +41,7 @@ import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useToast } from "../components/ToastProvider";
 import { displayNodeLabel, localeForLanguage, useI18n } from "../lib/i18n";
-import { repairOutlineTree } from "../lib/outlineRepair";
+import { outlineNumberLabel, outlinePresetById, outlineRoleName, repairOutlineTree, type OutlinePresetId } from "../lib/outlineRepair";
 import {
   buildTree,
   findFirstLeaf,
@@ -118,6 +118,14 @@ export function Workspace() {
   const [companionOpen, setCompanionOpen] = useState(false);
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
+  const outlinePreset = useMemo(() => outlinePresetById(load?.project.outline_preset), [load?.project.outline_preset]);
+  const outlinePresetId = outlinePreset.id;
+  const outlineStructure = useMemo(() => {
+    const part = outlineRoleName(outlinePreset, "part", t);
+    const chapter = outlineRoleName(outlinePreset, "chapter", t);
+    const scene = outlineRoleName(outlinePreset, "scene", t);
+    return `${t(outlinePreset.nameKey)}: ${part} > ${chapter} > ${scene} (예: ${outlineNumberLabel(outlinePreset, "part", 1, t)} > ${outlineNumberLabel(outlinePreset, "chapter", 1, t)} > ${outlineNumberLabel(outlinePreset, "scene", 1, t)})`;
+  }, [outlinePreset, t]);
   const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const companionNodeRef = useRef<string | null>(null);
@@ -206,6 +214,21 @@ export function Workspace() {
     }
     setZenOpen(false);
   }, []);
+
+  const handleOutlinePresetChange = useCallback(
+    async (nextPresetId: OutlinePresetId) => {
+      const current = loadRef.current;
+      if (!current) return;
+      try {
+        const updated = await projects.update({ id: current.project.id, outline_preset: nextPresetId });
+        setLoad((prev) => (prev && prev.project.id === updated.id ? { ...prev, project: updated } : prev));
+        setOutlineUndoSnapshot(null);
+      } catch (e) {
+        showToast(t("workspace.toast.outlinePresetSaveFailed", { error: String(e) }));
+      }
+    },
+    [showToast, t],
+  );
 
   // Restore the saved selection in the Edit-mode editor once ZEN closes.
   useEffect(() => {
@@ -358,18 +381,18 @@ export function Workspace() {
         let created: NodeRow;
         if (anchor.kind === "container") {
           const childLeaves = anchor.children.filter((n) => n.kind === "leaf");
-          created = await nodes.createChild(anchor.id, "leaf", t("workspace.sceneNumber", { number: childLeaves.length + 1 }), "");
+          created = await nodes.createChild(anchor.id, "leaf", outlineNumberLabel(outlinePreset, "scene", childLeaves.length + 1, t), "");
         } else {
           const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (anchor.parent_id ?? null));
           const leafCount = siblings.filter((n) => n.kind === "leaf").length;
-          created = await nodes.createSibling(anchor.id, "leaf", t("workspace.sceneNumber", { number: leafCount + 1 }), "");
+          created = await nodes.createSibling(anchor.id, "leaf", outlineNumberLabel(outlinePreset, "scene", leafCount + 1, t), "");
         }
         await refreshTreeAndNavigateTo(created.id);
       } catch (e) {
         showToast(t("workspace.toast.createSceneFailed", { error: String(e) }));
       }
     },
-    [refreshTreeAndNavigateTo, showToast, t],
+    [outlinePreset, refreshTreeAndNavigateTo, showToast, t],
   );
 
   const handleCreatePartFromOutline = useCallback(
@@ -385,15 +408,15 @@ export function Workspace() {
           reference = parent;
         }
         const partCount = current.tree.filter((n) => n.kind === "container").length;
-        const part = await nodes.createSibling(reference.id, "container", t("workspace.partNumber", { number: partCount + 1 }), "");
-        const chapter = await nodes.createChild(part.id, "container", t("workspace.chapterNumber", { number: 1 }), "");
-        const scene = await nodes.createChild(chapter.id, "leaf", t("workspace.sceneNumber", { number: 1 }), "");
+        const part = await nodes.createSibling(reference.id, "container", outlineNumberLabel(outlinePreset, "part", partCount + 1, t), "");
+        const chapter = await nodes.createChild(part.id, "container", outlineNumberLabel(outlinePreset, "chapter", 1, t), "");
+        const scene = await nodes.createChild(chapter.id, "leaf", outlineNumberLabel(outlinePreset, "scene", 1, t), "");
         await refreshTreeAndNavigateTo(scene.id);
       } catch (e) {
         showToast(t("workspace.toast.createPartFailed", { error: String(e) }));
       }
     },
-    [refreshTreeAndNavigateTo, showToast, t],
+    [outlinePreset, refreshTreeAndNavigateTo, showToast, t],
   );
 
   const handleCreateChapterFromOutline = useCallback(
@@ -408,23 +431,23 @@ export function Workspace() {
         let chapter: NodeRow;
         if (anchor.kind === "container" && !anchor.parent_id) {
           const existingChapters = anchor.children.filter((n) => n.kind === "container").length;
-          chapter = await nodes.createChild(anchor.id, "container", t("workspace.chapterNumber", { number: existingChapters + 1 }), "");
+          chapter = await nodes.createChild(anchor.id, "container", outlineNumberLabel(outlinePreset, "chapter", existingChapters + 1, t), "");
         } else if (anchor.kind === "leaf" && parentContainer && !parentContainer.parent_id) {
           const existingChapters = parentContainer.children.filter((n) => n.kind === "container").length;
-          chapter = await nodes.createChild(parentContainer.id, "container", t("workspace.chapterNumber", { number: existingChapters + 1 }), "");
+          chapter = await nodes.createChild(parentContainer.id, "container", outlineNumberLabel(outlinePreset, "chapter", existingChapters + 1, t), "");
         } else {
           const reference = anchor.kind === "leaf" && parentContainer ? parentContainer : anchor;
           const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (reference.parent_id ?? null));
           const chapterCount = siblings.filter((n) => n.kind === "container").length;
-          chapter = await nodes.createSibling(reference.id, "container", t("workspace.chapterNumber", { number: chapterCount + 1 }), "");
+          chapter = await nodes.createSibling(reference.id, "container", outlineNumberLabel(outlinePreset, "chapter", chapterCount + 1, t), "");
         }
-        const seeded = await nodes.createChild(chapter.id, "leaf", t("workspace.sceneNumber", { number: 1 }), "");
+        const seeded = await nodes.createChild(chapter.id, "leaf", outlineNumberLabel(outlinePreset, "scene", 1, t), "");
         await refreshTreeAndNavigateTo(seeded.id);
       } catch (e) {
         showToast(t("workspace.toast.createChapterFailed", { error: String(e) }));
       }
     },
-    [refreshTreeAndNavigateTo, showToast, t],
+    [outlinePreset, refreshTreeAndNavigateTo, showToast, t],
   );
 
   const handleMoveSceneFromOutline = useCallback(
@@ -495,7 +518,7 @@ export function Workspace() {
       if (!ok) return;
       try {
         const snapshot = snapshotOutlineTree(current.tree);
-        await repairOutlineTree(current.tree, nodes, t);
+        await repairOutlineTree(current.tree, nodes, t, outlinePreset);
         setOutlineUndoSnapshot(snapshot);
         await refreshTreeKeepNode(current.node.id);
         showToast(t("workspace.toast.repairOutlineSuccess"));
@@ -503,7 +526,7 @@ export function Workspace() {
         showToast(t("workspace.toast.repairOutlineFailed", { error: String(e) }));
       }
     },
-    [confirmDialog, refreshTreeKeepNode, showToast, t],
+    [confirmDialog, outlinePreset, refreshTreeKeepNode, showToast, t],
   );
 
   const handleUndoRepairOutline = useCallback(
@@ -908,7 +931,7 @@ export function Workspace() {
       (n) => (n.parent_id ?? null) === (load.node.parent_id ?? null),
     );
     const leafSiblings = siblingsOfCurrent.filter((n) => n.kind === "leaf");
-    const nextSceneLabel = t("workspace.sceneNumber", { number: leafSiblings.length + 1 });
+    const nextSceneLabel = outlineNumberLabel(outlinePreset, "scene", leafSiblings.length + 1, t);
     const currentTreeNode = allNodes.find((n) => n.id === load.node.id) ?? ({ ...load.node, children: [] } as TreeNode);
     const parentContainer = currentTreeNode.parent_id
       ? allNodes.find((n) => n.id === currentTreeNode.parent_id && n.kind === "container")
@@ -917,7 +940,7 @@ export function Workspace() {
     const chapterSiblings = allNodes.filter(
       (n) => (n.parent_id ?? null) === (chapterReference.parent_id ?? null) && n.kind === "container",
     );
-    const nextChapterLabel = t("workspace.chapterNumber", { number: chapterSiblings.length + 1 });
+    const nextChapterLabel = outlineNumberLabel(outlinePreset, "chapter", chapterSiblings.length + 1, t);
     const sectionNavigation = t("workspace.command.section.navigation");
     const sectionNode = t("workspace.command.section.node");
     const sectionView = t("workspace.command.section.view");
@@ -1162,7 +1185,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, handleCreateSceneFromOutline, handleCreateChapterFromOutline, handleRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, showToast, language, t, toggleFactBook]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, handleRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, showToast, language, t, toggleFactBook]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1383,6 +1406,8 @@ export function Workspace() {
           onRepairOutline={handleRepairOutline}
           onUndoRepairOutline={handleUndoRepairOutline}
           canUndoRepair={Boolean(outlineUndoSnapshot)}
+          outlinePresetId={outlinePresetId}
+          onOutlinePresetChange={handleOutlinePresetChange}
           tourTarget="workspace-outline"
         />
         <section className={`ws-editor${focus ? " focus-mode" : ""}`} data-tour="workspace-editor">
@@ -1493,6 +1518,7 @@ export function Workspace() {
             projectId={load.project.id}
             nodeIdRef={companionNodeRef}
             beforeSend={flushEditorBeforeCompanionSend}
+            outlineStructure={outlineStructure}
             onClose={() => { setCompanionOpen(false); focusEditor(); }}
             onApplied={() => {
               if (!load) return;

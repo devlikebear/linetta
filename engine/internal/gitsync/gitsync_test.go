@@ -192,6 +192,36 @@ func TestRunOnce_writesFilesAndCommitsAndPushes(t *testing.T) {
 	}
 }
 
+func TestRunOnce_writesOutlinePresetMetadata(t *testing.T) {
+	s, runner, repoDir, _ := newFixture(t)
+	ctx := context.Background()
+	runner.responses["status"] = stub{stdout: " M quiet-city.md\n"}
+	projs, err := s.Projects.List(ctx, project.ListFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("projects.List: %v", err)
+	}
+	if len(projs) != 1 {
+		t.Fatalf("projects=%d want 1", len(projs))
+	}
+	preset := project.OutlinePresetWebNovel
+	if _, err := s.Projects.Update(ctx, 2, project.UpdateInput{ID: projs[0].ID, OutlinePreset: &preset}); err != nil {
+		t.Fatalf("set outline preset: %v", err)
+	}
+	if _, err := s.Settings.Set(ctx, settings.Patch{GitSyncDir: strPtr(repoDir)}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if _, err := s.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(repoDir, "quiet-city.md"))
+	if err != nil {
+		t.Fatalf("read exported markdown: %v", err)
+	}
+	if !strings.Contains(string(body), "outline_preset: webnovel\n") {
+		t.Fatalf("missing outline preset metadata; doc=\n%s", string(body))
+	}
+}
+
 func TestRunOnce_noopWhenStatusEmpty(t *testing.T) {
 	s, runner, repoDir, _ := newFixture(t)
 	runner.responses["status"] = stub{stdout: ""}

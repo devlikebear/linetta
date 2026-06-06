@@ -11,6 +11,9 @@ const (
 	POVFirst        = "first"
 	POVThirdLimited = "third_limited"
 	POVOmniscient   = "omniscient"
+
+	OutlinePresetNovel    = "novel"
+	OutlinePresetWebNovel = "webnovel"
 )
 
 func ValidLengthTarget(v string) bool {
@@ -31,6 +34,15 @@ func ValidDefaultPOV(v string) bool {
 	}
 }
 
+func ValidOutlinePreset(v string) bool {
+	switch v {
+	case OutlinePresetNovel, OutlinePresetWebNovel:
+		return true
+	default:
+		return false
+	}
+}
+
 // Project is the on-wire and on-disk representation of a single work.
 // Genres is a JSON-array stored as TEXT in SQLite; the repo handles conversion.
 type Project struct {
@@ -41,6 +53,7 @@ type Project struct {
 	DefaultPOV       string   `json:"default_pov"`   // first|third_limited|omniscient
 	StyleNotes       string   `json:"style_notes"`
 	Outline          string   `json:"outline"`
+	OutlinePreset    string   `json:"outline_preset"`
 	Synopsis         string   `json:"synopsis"`
 	WordCount        int      `json:"word_count"`
 	LastOpenedNodeID *string  `json:"last_opened_node_id,omitempty"`
@@ -66,8 +79,9 @@ type ListFilter struct {
 // UpdateInput patches editable project fields. Each pointer field is nil to
 // leave the value alone, or non-nil (including "") to set it.
 type UpdateInput struct {
-	ID       string  `json:"id"`
-	Title    *string `json:"title,omitempty"`
-	Outline  *string `json:"outline,omitempty"`
-	Synopsis *string `json:"synopsis,omitempty"`
+	ID            string  `json:"id"`
+	Title         *string `json:"title,omitempty"`
+	Outline       *string `json:"outline,omitempty"`
+	OutlinePreset *string `json:"outline_preset,omitempty"`
+	Synopsis      *string `json:"synopsis,omitempty"`
 }

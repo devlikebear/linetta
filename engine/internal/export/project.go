@@ -50,7 +50,7 @@ func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *ent
 			return Payload{}, err
 		}
 	}
-	meta, entityNames := buildMetadata(ents, rels)
+	meta, entityNames := buildMetadata(p, ents, rels)
 	frontmatter, err := mdmeta.RenderFrontMatter(meta)
 	if err != nil {
 		return Payload{}, err
@@ -129,8 +129,8 @@ func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *ent
 	}, nil
 }
 
-func buildMetadata(ents []entity.Entity, rels []relationship.Relationship) (mdmeta.Metadata, map[string]string) {
-	meta := mdmeta.Metadata{Version: mdmeta.Version}
+func buildMetadata(p project.Project, ents []entity.Entity, rels []relationship.Relationship) (mdmeta.Metadata, map[string]string) {
+	meta := mdmeta.Metadata{Version: mdmeta.Version, OutlinePreset: p.OutlinePreset}
 	entityNames := map[string]string{}
 	for _, e := range ents {
 		entityNames[e.ID] = e.Name

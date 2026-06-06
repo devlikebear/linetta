@@ -88,6 +88,22 @@ describe("useCompanion streaming", () => {
     expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "이미지 참고해줘", { context: selection, images: [image] });
   });
 
+  it("passes the selected outline structure to companion turns", async () => {
+    const selection = { ...DEFAULT_AI_CONTEXT_SELECTION };
+    const outlineStructure = "웹소설: 권 > 화 > 씬 (예: 1권 > 1화 > 씬 1)";
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }, undefined, selection, outlineStructure));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("아웃라인 작성해줘");
+    });
+
+    expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "아웃라인 작성해줘", {
+      context: selection,
+      outline_structure: outlineStructure,
+    });
+  });
+
   it("accepts fast engine events that arrive before companion.send resolves", async () => {
     let resolveSend: (value: { run_id: string }) => void = () => {};
     rpc.send.mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));

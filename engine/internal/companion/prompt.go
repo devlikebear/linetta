@@ -14,16 +14,17 @@ import (
 
 // PromptData is everything buildContext needs, gathered by the service.
 type PromptData struct {
-	Outline       string
-	OutlineNodes  []OutlineNode
-	SceneExcerpts []SceneExcerpt
-	Spine         plot.Spine
-	HasSpine      bool
-	Threads       []thread.Thread
-	Entities      []entity.Entity
-	Relationships []relationship.Relationship
-	Facts         []fact.Card
-	Memories      []string
+	Outline          string
+	OutlineStructure string
+	OutlineNodes     []OutlineNode
+	SceneExcerpts    []SceneExcerpt
+	Spine            plot.Spine
+	HasSpine         bool
+	Threads          []thread.Thread
+	Entities         []entity.Entity
+	Relationships    []relationship.Relationship
+	Facts            []fact.Card
+	Memories         []string
 }
 
 // OutlineNode is a compact view of the left outline tree with node ids.
@@ -66,7 +67,7 @@ func buildSystem() string {
 	b.WriteString("- 캐릭터·장소(엔티티)와 관계도 같은 규칙입니다. 기존 엔티티는 '등장 인물·장소·관계' 목록의 id로 참조하고, 새 엔티티는 create_entity(ref 포함) 후 create_relationship에서 from_ref/to_ref로 그 ref를 참조하세요.\n")
 	b.WriteString("- create_entity.kind는 반드시 character|place|item|concept 중 하나입니다(생략 시 character로 간주). 캐릭터/인물은 character, 장소는 place.\n")
 	b.WriteString("- 아웃라인 정리 규칙: 컨텍스트의 '아웃라인 트리'에 기존 node_id가 있으면 같은 부/장/씬을 다시 만들지 말고 rename_outline_node/delete_outline_node/move_outline_node로 정리하세요. 새 구조를 추가할 때만 create_outline_node(ref 포함)를 쓰세요.\n")
-	b.WriteString("- 새 아웃라인 구조는 parent_node_ref로 부→장→씬 계층을 만들고, add_beat.node_ref로 생성한 씬에 비트를 붙입니다. parent/after가 없는 create_outline_node는 루트에 만들어집니다.\n")
+	b.WriteString("- 새 아웃라인 구조는 컨텍스트의 '아웃라인 구조 프리셋'이 있으면 그 계층과 라벨을 따르고, parent_node_ref로 상위→하위 계층을 만든 뒤 add_beat.node_ref로 생성한 씬에 비트를 붙입니다. parent/after가 없는 create_outline_node는 루트에 만들어집니다.\n")
 	b.WriteString("- 새 씬 하나만 현재 위치 옆에 만들 때는 create_scene(ref 포함) 후 add_beat.node_ref로 그 씬에 비트를 붙입니다(node_id 생략 시 현재 씬). 관계를 양방향으로 만들려면 create_relationship에 inverse_label을 주세요.\n")
 	b.WriteString("예시:\n")
 	b.WriteString("```\n")
@@ -93,8 +94,14 @@ func buildContext(d PromptData) string {
 		b.WriteString(s)
 		b.WriteString("\n\n")
 	}
+	if s := strings.TrimSpace(d.OutlineStructure); s != "" {
+		b.WriteString("## 아웃라인 구조 프리셋\n")
+		b.WriteString(s)
+		b.WriteString("\n")
+		b.WriteString("아웃라인 트리를 새로 만들거나 정리할 때 이 계층과 라벨 예시를 따르세요.\n\n")
+	}
 	if len(d.OutlineNodes) > 0 {
-		b.WriteString("## 아웃라인 트리 (기존 부/장/씬 — node_id)\n")
+		b.WriteString("## 아웃라인 트리 (기존 구조 — node_id)\n")
 		for _, n := range d.OutlineNodes {
 			indent := strings.Repeat("  ", n.Depth)
 			line := fmt.Sprintf("%s- [%s] (%s) %s", indent, n.ID, n.Kind, n.Label)

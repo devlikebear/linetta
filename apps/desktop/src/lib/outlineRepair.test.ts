@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TreeNode } from "../hooks/useFirstLeaf";
-import { repairOutlineTree, type OutlineRepairRPC } from "./outlineRepair";
+import { OUTLINE_PRESETS, repairOutlineTree, type OutlineRepairRPC } from "./outlineRepair";
 
 function node(input: Partial<TreeNode> & Pick<TreeNode, "id" | "kind" | "label">): TreeNode {
   return {
@@ -20,6 +20,8 @@ const t = (key: string, values?: Record<string, unknown>) => {
   if (key === "workspace.partNumber") return `${values?.number}부`;
   if (key === "workspace.chapterNumber") return `${values?.number}장`;
   if (key === "workspace.sceneNumber") return `씬 ${values?.number}`;
+  if (key === "workspace.webNovelPartNumber") return `${values?.number}권`;
+  if (key === "workspace.webNovelChapterNumber") return `${values?.number}화`;
   return key;
 };
 
@@ -243,6 +245,45 @@ describe("repairOutlineTree", () => {
     expect(calls).toContain("rename:part-2:2부:개별성의 경계선 2차 - 2027, AGI와 자아의 재정의");
     expect(calls).toContain("rename:part2-chapter:1장:멈춰버린 약속");
     expect(calls).toContain("rename:part2-scene:씬 1:2026년의 침묵");
+    expect(calls.some((call) => call.startsWith("delete:"))).toBe(false);
+  });
+
+  it("uses the web novel preset to normalize arcs and episodes without losing titles", async () => {
+    const firstScene = node({ id: "scene", kind: "leaf", label: "씬 7 - 조각난 아침", parent_id: "episode", ordinal: 0 });
+    const episode = node({ id: "episode", kind: "container", label: "1장 - 경계의 틈", ordinal: 0, children: [firstScene] });
+    const arc = node({ id: "arc", kind: "container", label: "개별성의 경계선", title: "1막", ordinal: 1, children: [] });
+    const calls: string[] = [];
+    const rpc: OutlineRepairRPC = {
+      createChild: vi.fn(async (parentId, kind, label) => node({ id: "created-episode", parent_id: parentId, kind, label }) as never),
+      createSibling: vi.fn(),
+      moveToParent: vi.fn(async (id, parentID) => {
+        calls.push(`move:${id}->${parentID}`);
+        return { ok: true as const };
+      }),
+      moveToRoot: vi.fn(async (id) => {
+        calls.push(`root:${id}`);
+        return { ok: true as const };
+      }),
+      convertToContainer: vi.fn(async (id) => {
+        calls.push(`convert:${id}`);
+        return { ok: true as const };
+      }),
+      delete: vi.fn(async (id) => {
+        calls.push(`delete:${id}`);
+        return { ok: true as const };
+      }),
+      rename: vi.fn(async (id, label, title) => {
+        calls.push(`rename:${id}:${label}:${title}`);
+        return { ok: true as const };
+      }),
+    };
+
+    await repairOutlineTree([episode, arc], rpc, t, OUTLINE_PRESETS.webnovel);
+
+    expect(calls).toContain("move:episode->arc");
+    expect(calls).toContain("rename:arc:1권:1막");
+    expect(calls).toContain("rename:episode:1화:경계의 틈");
+    expect(calls).toContain("rename:scene:씬 1:조각난 아침");
     expect(calls.some((call) => call.startsWith("delete:"))).toBe(false);
   });
 });

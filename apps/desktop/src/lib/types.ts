@@ -10,6 +10,7 @@ export interface Project {
   default_pov: DefaultPOV;
   style_notes: string;
   outline: string;
+  outline_preset?: string;
   synopsis: string;
   word_count: number;
   last_opened_node_id?: string;
@@ -22,6 +23,7 @@ export interface UpdateProjectInput {
   id: string;
   title?: string;
   outline?: string;
+  outline_preset?: string;
   synopsis?: string;
 }
 
@@ -128,6 +130,7 @@ export interface AIOptions {
   tone: ToneID;
   short_form: boolean;
   context?: AIContextSelection;
+  outline_structure?: string;
 }
 
 export type AIContextKey =

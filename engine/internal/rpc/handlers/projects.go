@@ -101,6 +101,9 @@ func UpdateProject(repo *project.Repo, now Clock) rpc.Handler {
 		if errors.Is(err, project.ErrNotFound) {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
 		}
+		if errors.Is(err, project.ErrInvalidInput) || errors.Is(err, project.ErrInvalidOutlinePreset) {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

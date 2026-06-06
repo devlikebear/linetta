@@ -26,24 +26,149 @@ export type OutlineRepairRPC = {
 type Labeler = (key: string, values?: Record<string, string | number>) => string;
 type OutlineRole = "part" | "chapter" | "scene";
 
-export function isStructuralChapterLabel(label: string): boolean {
-  const normalized = label.trim().toLowerCase();
-  const boundary = String.raw`(?:\s|$|[-—–·:])`;
-  return new RegExp(String.raw`^(?:제\s*)?\d+\s*(?:장|章)${boundary}`).test(normalized) ||
-    new RegExp(String.raw`^(?:장|章)\s*\d+${boundary}`).test(normalized) ||
-    new RegExp(String.raw`^(?:chapter|ch)\s*\d+${boundary}`).test(normalized);
+type OutlineLevelSpec = {
+  numberKey: string;
+  nameKey: string;
+  structuralPatterns: RegExp[];
+  titlePatterns: RegExp[];
+};
+
+export type OutlineStructurePreset = {
+  id: "novel" | "webnovel";
+  nameKey: string;
+  levels: Record<OutlineRole, OutlineLevelSpec>;
+};
+
+const boundary = String.raw`(?:\s|$|[-—–·:])`;
+
+const novelPartPatterns = [
+  new RegExp(String.raw`^(?:제\s*)?\d+\s*(?:부|部)${boundary}`, "i"),
+  new RegExp(String.raw`^(?:부|部)\s*\d+${boundary}`, "i"),
+  new RegExp(String.raw`^part\s*\d+${boundary}`, "i"),
+];
+
+const novelChapterPatterns = [
+  new RegExp(String.raw`^(?:제\s*)?\d+\s*(?:장|章)${boundary}`, "i"),
+  new RegExp(String.raw`^(?:장|章)\s*\d+${boundary}`, "i"),
+  new RegExp(String.raw`^(?:chapter|ch)\s*\d+${boundary}`, "i"),
+];
+
+const scenePatterns = [
+  /^(?:씬|scene|シーン)\s*\d+(?:\s|$|[-—–·:])/i,
+];
+
+export const OUTLINE_PRESETS = {
+  novel: {
+    id: "novel",
+    nameKey: "workspace.outlinePreset.novel",
+    levels: {
+      part: {
+        numberKey: "workspace.partNumber",
+        nameKey: "workspace.outlineLevel.part",
+        structuralPatterns: novelPartPatterns,
+        titlePatterns: [
+          /^(?:제\s*)?\d+\s*(?:부|部)\s*[-—–·:]?\s*(.+)$/i,
+          /^(?:부|部)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+          /^part\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+        ],
+      },
+      chapter: {
+        numberKey: "workspace.chapterNumber",
+        nameKey: "workspace.outlineLevel.chapter",
+        structuralPatterns: novelChapterPatterns,
+        titlePatterns: [
+          /^(?:제\s*)?\d+\s*(?:장|章)\s*[-—–·:]?\s*(.+)$/i,
+          /^(?:장|章)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+          /^(?:chapter|ch)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+        ],
+      },
+      scene: {
+        numberKey: "workspace.sceneNumber",
+        nameKey: "workspace.outlineLevel.scene",
+        structuralPatterns: scenePatterns,
+        titlePatterns: [
+          /^(?:씬|scene|シーン)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+        ],
+      },
+    },
+  },
+  webnovel: {
+    id: "webnovel",
+    nameKey: "workspace.outlinePreset.webnovel",
+    levels: {
+      part: {
+        numberKey: "workspace.webNovelPartNumber",
+        nameKey: "workspace.outlineLevel.webNovelPart",
+        structuralPatterns: [
+          ...novelPartPatterns,
+          new RegExp(String.raw`^(?:제\s*)?\d+\s*(?:권|卷|아크)${boundary}`, "i"),
+          new RegExp(String.raw`^(?:권|卷|아크)\s*\d+${boundary}`, "i"),
+          new RegExp(String.raw`^arc\s*\d+${boundary}`, "i"),
+        ],
+        titlePatterns: [
+          /^(?:제\s*)?\d+\s*(?:권|卷|아크|부|部)\s*[-—–·:]?\s*(.+)$/i,
+          /^(?:권|卷|아크|부|部)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+          /^(?:arc|part)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+        ],
+      },
+      chapter: {
+        numberKey: "workspace.webNovelChapterNumber",
+        nameKey: "workspace.outlineLevel.webNovelChapter",
+        structuralPatterns: [
+          ...novelChapterPatterns,
+          new RegExp(String.raw`^(?:제\s*)?\d+\s*(?:화|話|회)${boundary}`, "i"),
+          new RegExp(String.raw`^(?:화|話|회)\s*\d+${boundary}`, "i"),
+          new RegExp(String.raw`^(?:episode|ep)\s*\d+${boundary}`, "i"),
+        ],
+        titlePatterns: [
+          /^(?:제\s*)?\d+\s*(?:화|話|회|장|章)\s*[-—–·:]?\s*(.+)$/i,
+          /^(?:화|話|회|장|章)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+          /^(?:episode|ep|chapter|ch)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+        ],
+      },
+      scene: {
+        numberKey: "workspace.sceneNumber",
+        nameKey: "workspace.outlineLevel.scene",
+        structuralPatterns: scenePatterns,
+        titlePatterns: [
+          /^(?:씬|scene|シーン)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
+        ],
+      },
+    },
+  },
+} satisfies Record<OutlineStructurePreset["id"], OutlineStructurePreset>;
+
+export type OutlinePresetId = keyof typeof OUTLINE_PRESETS;
+
+const DEFAULT_OUTLINE_PRESET: OutlineStructurePreset = OUTLINE_PRESETS.novel;
+
+export function outlinePresetById(id?: string): OutlineStructurePreset {
+  return id === "webnovel" ? OUTLINE_PRESETS.webnovel : DEFAULT_OUTLINE_PRESET;
 }
 
-export function isStructuralPartLabel(label: string): boolean {
-  const normalized = label.trim().toLowerCase();
-  const boundary = String.raw`(?:\s|$|[-—–·:])`;
-  return new RegExp(String.raw`^(?:제\s*)?\d+\s*(?:부|部)${boundary}`).test(normalized) ||
-    new RegExp(String.raw`^(?:부|部)\s*\d+${boundary}`).test(normalized) ||
-    new RegExp(String.raw`^part\s*\d+${boundary}`).test(normalized);
+export function outlineRoleName(preset: OutlineStructurePreset, role: OutlineRole, t: Labeler): string {
+  return t(preset.levels[role].nameKey);
 }
 
-export function isSceneLabel(label: string): boolean {
-  return /^(?:씬|scene|シーン)\s*\d+(?:\s|$|[-—–·:])/i.test(label.trim());
+export function outlineNumberLabel(preset: OutlineStructurePreset, role: OutlineRole, number: number, t: Labeler): string {
+  return t(preset.levels[role].numberKey, { number });
+}
+
+function matchesRoleLabel(label: string, role: OutlineRole, preset: OutlineStructurePreset = DEFAULT_OUTLINE_PRESET): boolean {
+  const normalized = label.trim().toLowerCase();
+  return preset.levels[role].structuralPatterns.some((pattern) => pattern.test(normalized));
+}
+
+export function isStructuralChapterLabel(label: string, preset: OutlineStructurePreset = DEFAULT_OUTLINE_PRESET): boolean {
+  return matchesRoleLabel(label, "chapter", preset);
+}
+
+export function isStructuralPartLabel(label: string, preset: OutlineStructurePreset = DEFAULT_OUTLINE_PRESET): boolean {
+  return matchesRoleLabel(label, "part", preset);
+}
+
+export function isSceneLabel(label: string, preset: OutlineStructurePreset = DEFAULT_OUTLINE_PRESET): boolean {
+  return matchesRoleLabel(label, "scene", preset);
 }
 
 type LabelPlan = {
@@ -66,41 +191,21 @@ function cleanupTitle(value: string): string {
   return trimmed;
 }
 
-function embeddedTitle(label: string, role: OutlineRole): string {
+function embeddedTitle(label: string, role: OutlineRole, preset: OutlineStructurePreset): string {
   const trimmed = label.trim();
-  const patterns = {
-    part: [
-      /^(?:제\s*)?\d+\s*(?:부|部)\s*[-—–·:]?\s*(.+)$/i,
-      /^(?:부|部)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
-      /^part\s*\d+\s*[-—–·:]?\s*(.+)$/i,
-    ],
-    chapter: [
-      /^(?:제\s*)?\d+\s*(?:장|章)\s*[-—–·:]?\s*(.+)$/i,
-      /^(?:장|章)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
-      /^(?:chapter|ch)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
-    ],
-    scene: [
-      /^(?:씬|scene|シーン)\s*\d+\s*[-—–·:]?\s*(.+)$/i,
-    ],
-  }[role];
-  for (const pattern of patterns) {
+  for (const pattern of preset.levels[role].titlePatterns) {
     const match = trimmed.match(pattern);
     if (match?.[1]) return cleanupTitle(match[1]);
   }
-  if (role === "part" && !isStructuralPartLabel(trimmed)) return cleanupTitle(trimmed);
-  if (role === "chapter" && !isStructuralChapterLabel(trimmed)) return cleanupTitle(trimmed);
-  if (role === "scene" && !isSceneLabel(trimmed)) return cleanupTitle(trimmed);
+  if (role === "part" && !isStructuralPartLabel(trimmed, preset)) return cleanupTitle(trimmed);
+  if (role === "chapter" && !isStructuralChapterLabel(trimmed, preset)) return cleanupTitle(trimmed);
+  if (role === "scene" && !isSceneLabel(trimmed, preset)) return cleanupTitle(trimmed);
   return "";
 }
 
-function plannedName(node: OutlineNameNode, role: OutlineRole, number: number, t: Labeler): LabelPlan {
-  const title = cleanupTitle(node.title) || embeddedTitle(node.label, role);
-  const label =
-    role === "part"
-      ? t("workspace.partNumber", { number })
-      : role === "chapter"
-        ? t("workspace.chapterNumber", { number })
-        : t("workspace.sceneNumber", { number });
+function plannedName(node: OutlineNameNode, role: OutlineRole, number: number, t: Labeler, preset: OutlineStructurePreset): LabelPlan {
+  const title = cleanupTitle(node.title) || embeddedTitle(node.label, role, preset);
+  const label = outlineNumberLabel(preset, role, number, t);
   return { label, title };
 }
 
@@ -109,10 +214,10 @@ export type OutlineLabelIssue = {
   label: string;
 };
 
-export function collectOutlineLabelIssues(tree: TreeNode[], t: Labeler): OutlineLabelIssue[] {
+export function collectOutlineLabelIssues(tree: TreeNode[], t: Labeler, preset: OutlineStructurePreset = DEFAULT_OUTLINE_PRESET): OutlineLabelIssue[] {
   const issues: OutlineLabelIssue[] = [];
   const addIfNeeded = (node: OutlineNameNode, role: OutlineRole, number: number) => {
-    const plan = plannedName(node, role, number, t);
+    const plan = plannedName(node, role, number, t, preset);
     if (node.label !== plan.label || cleanupTitle(node.title) !== plan.title) {
       issues.push({ id: node.id, label: node.label });
     }
@@ -129,7 +234,7 @@ export function collectOutlineLabelIssues(tree: TreeNode[], t: Labeler): Outline
   return issues;
 }
 
-export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC, t: Labeler): Promise<void> {
+export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC, t: Labeler, preset: OutlineStructurePreset = DEFAULT_OUTLINE_PRESET): Promise<void> {
   const records = new Map<string, RepairNode>();
   const seed = (nodes: TreeNode[]) => {
     for (const n of nodes) {
@@ -214,7 +319,7 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
     node.kind = "container";
   };
   const rename = async (node: RepairNode, role: OutlineRole, number: number) => {
-    const plan = plannedName(node, role, number, t);
+    const plan = plannedName(node, role, number, t, preset);
     if (node.label === plan.label && cleanupTitle(node.title) === plan.title) return;
     await rpc.rename(node.id, plan.label, plan.title);
     node.label = plan.label;
@@ -227,28 +332,28 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
   const ensureChapter = async (part: RepairNode): Promise<RepairNode> => {
     const existing = childrenOf(part.id).find((n) => n.kind === "container");
     if (existing) return existing;
-    const created = await rpc.createChild(part.id, "container", t("workspace.chapterNumber", { number: 1 }), "");
+    const created = await rpc.createChild(part.id, "container", outlineNumberLabel(preset, "chapter", 1, t), "");
     return addCreated(created);
   };
   const hasContainerChild = (node: RepairNode) => childrenOf(node.id).some((child) => child.kind === "container");
   const isNestedPartLike = (node: RepairNode) =>
     node.kind === "container" &&
     Boolean(node.parent_id) &&
-    !isStructuralChapterLabel(node.label) &&
+    !isStructuralChapterLabel(node.label, preset) &&
     hasContainerChild(node);
   const nextStructuralChapterSibling = (siblings: RepairNode[], index: number) =>
-    siblings.slice(index + 1).find((sibling) => isStructuralChapterLabel(sibling.label));
+    siblings.slice(index + 1).find((sibling) => isStructuralChapterLabel(sibling.label, preset));
   const previousStructuralChapterSibling = (siblings: RepairNode[], index: number) =>
-    [...siblings.slice(0, index)].reverse().find((sibling) => isStructuralChapterLabel(sibling.label));
+    [...siblings.slice(0, index)].reverse().find((sibling) => isStructuralChapterLabel(sibling.label, preset));
   const isPartMarkerLeaf = (siblings: RepairNode[], index: number, node: RepairNode) =>
     node.kind === "leaf" &&
     node.word_count === 0 &&
-    !isSceneLabel(node.label) &&
-    !isStructuralChapterLabel(node.label) &&
+    !isSceneLabel(node.label, preset) &&
+    !isStructuralChapterLabel(node.label, preset) &&
     Boolean(previousStructuralChapterSibling(siblings, index)) &&
     Boolean(nextStructuralChapterSibling(siblings, index));
   const sceneTargetFor = async (container: RepairNode) => {
-    if (isStructuralChapterLabel(container.label)) return container;
+    if (isStructuralChapterLabel(container.label, preset)) return container;
     if (hasContainerChild(container)) return ensureChapter(container);
     return container;
   };
@@ -275,13 +380,13 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
       .sort((a, b) => depthOf(b) - depthOf(a) || a.ordinal - b.ordinal);
     for (const parent of parents) {
       const parentOfParent = parent.parent_id ? records.get(parent.parent_id) : undefined;
-      const chapterHost = isStructuralChapterLabel(parent.label) && parentOfParent?.kind === "container" ? parentOfParent : parent;
+      const chapterHost = isStructuralChapterLabel(parent.label, preset) && parentOfParent?.kind === "container" ? parentOfParent : parent;
       let currentPart: RepairNode | null = null;
       let currentChapter: RepairNode | null = null;
       const children = childrenOf(parent.id);
       for (let index = 0; index < children.length; index += 1) {
         const child = children[index];
-        if (child.kind === "leaf" && isStructuralChapterLabel(child.label) && child.word_count === 0) {
+        if (child.kind === "leaf" && isStructuralChapterLabel(child.label, preset) && child.word_count === 0) {
           await convertToContainer(child);
           const host = currentPart ?? chapterHost;
           await moveToParent(child, host);
@@ -296,7 +401,7 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
           continue;
         }
         if (child.kind === "container") {
-          if (isStructuralChapterLabel(child.label)) {
+          if (isStructuralChapterLabel(child.label, preset)) {
             currentChapter = child;
           } else if (hasContainerChild(child)) {
             currentPart = child;
@@ -319,12 +424,12 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
   }
 
   let rootContainers = childrenOf().filter((n) => n.kind === "container");
-  const rootChapters = rootContainers.filter((n) => isStructuralChapterLabel(n.label));
-  let rootParts = rootContainers.filter((n) => !isStructuralChapterLabel(n.label));
+  const rootChapters = rootContainers.filter((n) => isStructuralChapterLabel(n.label, preset));
+  let rootParts = rootContainers.filter((n) => !isStructuralChapterLabel(n.label, preset));
   if (rootChapters.length > 0) {
     let part = rootParts[0];
     if (!part) {
-      part = addCreated(await rpc.createSibling(rootChapters[0].id, "container", t("workspace.partNumber", { number: 1 }), ""));
+      part = addCreated(await rpc.createSibling(rootChapters[0].id, "container", outlineNumberLabel(preset, "part", 1, t), ""));
     }
     for (const chapter of rootChapters) {
       await moveToParent(chapter, part);
@@ -332,7 +437,7 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
   }
 
   rootContainers = childrenOf().filter((n) => n.kind === "container");
-  rootParts = rootContainers.filter((n) => !isStructuralChapterLabel(n.label));
+  rootParts = rootContainers.filter((n) => !isStructuralChapterLabel(n.label, preset));
   const rootLeaves = childrenOf().filter((n) => n.kind === "leaf");
   if (rootParts.length > 0 && rootLeaves.length > 0) {
     const chapter = await ensureChapter(rootParts[0]);
@@ -341,7 +446,7 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
     }
   }
 
-  for (const part of childrenOf().filter((n) => n.kind === "container" && !isStructuralChapterLabel(n.label))) {
+  for (const part of childrenOf().filter((n) => n.kind === "container" && !isStructuralChapterLabel(n.label, preset))) {
     const directLeaves = childrenOf(part.id).filter((n) => n.kind === "leaf");
     if (directLeaves.length === 0) continue;
     const chapter = await ensureChapter(part);

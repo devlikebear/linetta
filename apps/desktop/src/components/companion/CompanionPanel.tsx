@@ -32,6 +32,7 @@ interface Props {
   onClose: () => void;
   onApplied: () => void;
   beforeSend?: () => Promise<void> | void;
+  outlineStructure?: string;
 }
 
 // hide proposal/query blocks (even partial/unclosed) from the live stream preview,
@@ -211,10 +212,10 @@ function MessageCopyButton({
   );
 }
 
-export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, beforeSend }: Props) {
+export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, beforeSend, outlineStructure }: Props) {
   const { t } = useI18n();
   const [contextSelection, setContextSelection] = useState<AIContextSelection>(DEFAULT_AI_CONTEXT_SELECTION);
-  const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied, contextSelection);
+  const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied, contextSelection, outlineStructure);
   const [draft, setDraft] = useState("");
   const [flushing, setFlushing] = useState(false);
   const [copied, setCopied] = useState(false);

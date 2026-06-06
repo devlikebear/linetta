@@ -531,11 +531,17 @@ func (s *Service) SendWithContext(ctx context.Context, projectID, nodeID, text s
 // SendWithContextAndImages starts a companion turn with transient multimodal
 // images attached to the latest user message.
 func (s *Service) SendWithContextAndImages(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, images []ImageAttachment, now func() int64) (string, error) {
+	return s.SendWithOptionsAndImages(ctx, projectID, nodeID, text, ai.Options{Context: selection}, images, now)
+}
+
+// SendWithOptionsAndImages starts a companion turn with the full per-call
+// option payload used by the desktop client.
+func (s *Service) SendWithOptionsAndImages(ctx context.Context, projectID, nodeID, text string, opts ai.Options, images []ImageAttachment, now func() int64) (string, error) {
 	normalized, err := normalizeImageAttachments(images)
 	if err != nil {
 		return "", err
 	}
-	return s.runner.start(ctx, projectID, nodeID, text, selection, normalized, now)
+	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, normalized, now)
 }
 
 // Cancel cancels an in-flight run.

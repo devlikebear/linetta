@@ -33,6 +33,10 @@ func TestExportProject_buildsTreeWithHeadingsAndMetadataAppendix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
+	preset := project.OutlinePresetWebNovel
+	if _, err := pr.Update(ctx, 2, project.UpdateInput{ID: p.ID, OutlinePreset: &preset}); err != nil {
+		t.Fatalf("set outline preset: %v", err)
+	}
 	// p auto-creates 씬 1 leaf at root. We add 1부 → 1장 → 씬 1·씬 2.
 	bu1, err := nr.CreateSibling(ctx, *p.LastOpenedNodeID, "container", "1부", "", 10)
 	if err != nil {
@@ -71,6 +75,9 @@ func TestExportProject_buildsTreeWithHeadingsAndMetadataAppendix(t *testing.T) {
 	}
 	if !strings.Contains(out.Markdown, "linetta:\n") {
 		t.Fatalf("missing linetta frontmatter; doc=\n%s", out.Markdown)
+	}
+	if !strings.Contains(out.Markdown, "outline_preset: webnovel\n") {
+		t.Fatalf("missing outline preset metadata; doc=\n%s", out.Markdown)
 	}
 	if !strings.Contains(out.Markdown, "entities:\n") || !strings.Contains(out.Markdown, "relationships:\n") {
 		t.Fatalf("missing metadata entities/relationships; doc=\n%s", out.Markdown)

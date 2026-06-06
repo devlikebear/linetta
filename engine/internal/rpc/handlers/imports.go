@@ -45,6 +45,9 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relati
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		built.Warnings = append(doc.Warnings, built.Warnings...)
+		if err := restoreProjectOutlinePreset(ctx, pr, ts, doc.Metadata.OutlinePreset, &built); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
 		if err := importmd.RestoreMetadata(ctx, er, rr, ts, built.Project.ID, doc.Metadata, &built); err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -61,6 +64,23 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relati
 		}
 		return json.Marshal(out)
 	}
+}
+
+func restoreProjectOutlinePreset(ctx context.Context, pr *project.Repo, now int64, preset string, built *importmd.BuildResult) error {
+	preset = strings.TrimSpace(preset)
+	if preset == "" {
+		return nil
+	}
+	if !project.ValidOutlinePreset(preset) {
+		built.Warnings = append(built.Warnings, "알 수 없는 아웃라인 구조 프리셋을 무시했습니다: "+preset)
+		return nil
+	}
+	updated, err := pr.Update(ctx, now, project.UpdateInput{ID: built.Project.ID, OutlinePreset: &preset})
+	if err != nil {
+		return err
+	}
+	built.Project = updated
+	return nil
 }
 
 // ImportPreview returns a handler for imports.preview. It parses the markdown

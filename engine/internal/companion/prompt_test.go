@@ -108,6 +108,17 @@ func TestBuildContext_RendersOutlineTreeIDs(t *testing.T) {
 	}
 }
 
+func TestBuildContext_RendersOutlineStructurePreset(t *testing.T) {
+	out := buildContext(PromptData{
+		OutlineStructure: "웹소설: 권 > 화 > 씬 (예: 1권 > 1화 > 씬 1)",
+	})
+	for _, want := range []string{"## 아웃라인 구조 프리셋", "웹소설: 권 > 화 > 씬", "계층과 라벨 예시"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("outline structure context missing %q in:\n%s", want, out)
+		}
+	}
+}
+
 func TestBuildSystem_ForbidsInventingIDs(t *testing.T) {
 	s := buildSystem()
 	if !strings.Contains(s, "지어내지 마") || !strings.Contains(s, "node_id") {
