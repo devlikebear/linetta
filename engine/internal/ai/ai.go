@@ -38,6 +38,8 @@ const (
 	ContextKeyNotes         ContextKey = "notes"
 	ContextKeyProjectMeta   ContextKey = "project_meta"
 	ContextKeyStyleNotes    ContextKey = "style_notes"
+	ContextKeyFacts         ContextKey = "facts"
+	ContextKeyMemories      ContextKey = "memories"
 )
 
 // ContextSelection mirrors the AI panel checklist. Nil means "use the default",
@@ -54,6 +56,8 @@ type ContextSelection struct {
 	Notes         *bool `json:"notes,omitempty"`
 	ProjectMeta   *bool `json:"project_meta,omitempty"`
 	StyleNotes    *bool `json:"style_notes,omitempty"`
+	Facts         *bool `json:"facts,omitempty"`
+	Memories      *bool `json:"memories,omitempty"`
 }
 
 // DefaultContextSelection returns the nil-pointer default: every section is on.
@@ -83,6 +87,10 @@ func (s ContextSelection) Enabled(key ContextKey) bool {
 		return enabledByDefault(s.ProjectMeta)
 	case ContextKeyStyleNotes:
 		return enabledByDefault(s.StyleNotes)
+	case ContextKeyFacts:
+		return enabledByDefault(s.Facts)
+	case ContextKeyMemories:
+		return enabledByDefault(s.Memories)
 	default:
 		return true
 	}

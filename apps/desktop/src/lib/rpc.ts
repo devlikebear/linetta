@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AIOptions,
   AIContextPreview,
+  CompanionImageAttachment,
   CompanionApplyOpsResult,
   Beat,
   CompanionMessage,
@@ -70,6 +71,33 @@ export async function rpcCall<T>(method: string, params?: unknown): Promise<T> {
   return invoke<T>("engine_call", { method, params: params ?? null });
 }
 
+function mapContextPreviewResponse(r: ContextPreviewResponse): AIContextPreview {
+  const counts: ContextCounts = {
+    nearbyScenes: r.nearby_scenes,
+    hasOutline: r.has_outline,
+    hasSynopsis: r.has_synopsis,
+    relatedScenes: r.related_scenes,
+    entities: r.entities,
+    relationships: r.relationships,
+    plotBeats: r.plot_beats,
+    notes: r.notes,
+    projectMetaFields: r.project_meta_fields,
+    hasStyleNotes: r.has_style_notes,
+  };
+  return {
+    counts,
+    sections: (r.sections ?? []).map((s) => ({
+      id: s.id,
+      label: s.label,
+      present: s.present,
+      selected: s.selected,
+      count: s.count,
+      preview: s.preview,
+    })),
+    selectedItemCount: r.selected_item_count ?? 0,
+  };
+}
+
 export const projects = {
   create: (input: NewProjectInput) => rpcCall<Project>("projects.create", input),
   list: (params: ListProjectsParams = {}) => rpcCall<Project[]>("projects.list", params),
@@ -94,6 +122,14 @@ export const nodes = {
     rpcCall<NodeRow>("nodes.create_sibling", { reference_id: referenceId, kind, label, title }),
   createChild: (parentId: string, kind: "leaf" | "container", label: string, title: string) =>
     rpcCall<NodeRow>("nodes.create_child", { parent_id: parentId, kind, label, title }),
+  moveToParent: (id: string, parentId: string) =>
+    rpcCall<{ ok: true }>("nodes.move_to_parent", { id, parent_id: parentId }),
+  moveToRoot: (id: string) =>
+    rpcCall<{ ok: true }>("nodes.move_to_root", { id }),
+  convertToContainer: (id: string) =>
+    rpcCall<{ ok: true }>("nodes.convert_to_container", { id }),
+  restoreOutline: (projectId: string, snapshot: NodeRow[]) =>
+    rpcCall<{ ok: true }>("nodes.restore_outline", { project_id: projectId, nodes: snapshot }),
   rename: (id: string, label: string, title: string) =>
     rpcCall<{ ok: true }>("nodes.rename", { id, label, title }),
   delete: (id: string) => rpcCall<{ ok: true }>("nodes.delete", { id }),
@@ -191,32 +227,7 @@ export const ai = {
       "ai.preview_context",
       options ? { node_id: nodeId, options } : { node_id: nodeId },
     )
-      .then((r) => {
-        const counts: ContextCounts = {
-          nearbyScenes: r.nearby_scenes,
-          hasOutline: r.has_outline,
-          hasSynopsis: r.has_synopsis,
-          relatedScenes: r.related_scenes,
-          entities: r.entities,
-          relationships: r.relationships,
-          plotBeats: r.plot_beats,
-          notes: r.notes,
-          projectMetaFields: r.project_meta_fields,
-          hasStyleNotes: r.has_style_notes,
-        };
-        return {
-          counts,
-          sections: (r.sections ?? []).map((s) => ({
-            id: s.id,
-            label: s.label,
-            present: s.present,
-            selected: s.selected,
-            count: s.count,
-            preview: s.preview,
-          })),
-          selectedItemCount: r.selected_item_count ?? 0,
-        };
-      }),
+      .then(mapContextPreviewResponse),
 };
 
 export const threads = {
@@ -277,8 +288,19 @@ export const plot = {
 };
 
 export const companion = {
-  send: (projectId: string, nodeId: string, text: string) =>
-    rpcCall<{ run_id: string }>("companion.send", { project_id: projectId, node_id: nodeId, text }),
+  send: (projectId: string, nodeId: string, text: string, options?: Pick<AIOptions, "context"> & { images?: CompanionImageAttachment[] }) =>
+    rpcCall<{ run_id: string }>("companion.send", {
+      project_id: projectId,
+      node_id: nodeId,
+      text,
+      options: options ? { context: options.context } : {},
+      images: options?.images ?? [],
+    }),
+  previewContext: (projectId: string, nodeId: string, options?: Pick<AIOptions, "context">): Promise<AIContextPreview> =>
+    rpcCall<ContextPreviewResponse>(
+      "companion.preview_context",
+      { project_id: projectId, node_id: nodeId, options: options ?? {} },
+    ).then(mapContextPreviewResponse),
   history: (projectId: string) =>
     rpcCall<{ messages: CompanionMessage[] }>("companion.history", { project_id: projectId })
       .then((r) => r.messages ?? []),

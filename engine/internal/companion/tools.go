@@ -79,7 +79,7 @@ func (s *Service) buildWebSearchTool() tarstools.Tool {
 func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, now func() int64) tarstools.Tool {
 	return tarstools.Tool{
 		Name:        "linetta_apply_ops",
-		Description: "Directly apply Linetta story mutations to the current project. Use create_outline_node/create_scene for the left outline tree, set_outline for project synopsis/overview text, thread/beat ops for plot beats, and create_fact_card for source-backed Fact Book cards.",
+		Description: "Directly apply Linetta story mutations to the current project. Use create_outline_node/create_scene for new left outline tree items, rename_outline_node/delete_outline_node/move_outline_node to clean up existing outline items, set_outline for project synopsis/overview text, thread/beat ops for plot beats, and create_fact_card for source-backed Fact Book cards.",
 		Parameters:  applyOpsSchema(),
 		Execute: func(ctx context.Context, params json.RawMessage) (tarstools.Result, error) {
 			p, err := decodeApplyOpsParams(params)
@@ -112,7 +112,7 @@ func applyOpsSchema() json.RawMessage {
   "type":"object",
   "properties":{
     "summary":{"type":"string","description":"Short Korean summary of the actual project changes to apply."},
-    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use create_outline_node or create_scene for the visible left outline tree, set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, entity/relationship ops for cast/place updates, and create_fact_card only when at least one source URL is available."}
+    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use create_outline_node/create_scene only for new visible left outline items; use rename_outline_node/delete_outline_node/move_outline_node for existing outline cleanup. Use set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, entity/relationship ops for cast/place updates, and create_fact_card only when at least one source URL is available."}
   },
   "required":["summary","ops_json"],
   "additionalProperties":false
@@ -169,7 +169,8 @@ func validateApplyOpsIntent(p Proposal, intent applyOpsIntent) error {
 		return nil
 	}
 	for _, op := range p.Ops {
-		if op.Type == "create_outline_node" || op.Type == "create_scene" {
+		if op.Type == "create_outline_node" || op.Type == "create_scene" ||
+			op.Type == "rename_outline_node" || op.Type == "delete_outline_node" || op.Type == "move_outline_node" {
 			return nil
 		}
 	}
@@ -392,6 +393,39 @@ func (s *Service) applyOneOp(
 		return nil
 	case "create_outline_node":
 		return s.applyCreateOutlineNode(ctx, projectID, currentNodeID, op, now, nodeRefs, created, nodeInsertCursor)
+	case "rename_outline_node":
+		nodeID, err := s.resolveRequiredNodeID(ctx, op.NodeID, op.NodeRef, nodeRefs)
+		if err != nil {
+			return err
+		}
+		cur, err := s.nodes.Get(ctx, nodeID)
+		if err != nil {
+			return err
+		}
+		label := cur.Label
+		if strings.TrimSpace(op.Label) != "" {
+			label = op.Label
+		}
+		title := cur.Title
+		if strings.TrimSpace(op.Title) != "" {
+			title = op.Title
+		}
+		return s.nodes.Rename(ctx, nodeID, label, title, now())
+	case "delete_outline_node":
+		nodeID, err := s.resolveRequiredNodeID(ctx, op.NodeID, op.NodeRef, nodeRefs)
+		if err != nil {
+			return err
+		}
+		return s.nodes.Delete(ctx, nodeID, now())
+	case "move_outline_node":
+		nodeID, err := s.resolveRequiredNodeID(ctx, op.NodeID, op.NodeRef, nodeRefs)
+		if err != nil {
+			return err
+		}
+		if strings.ToLower(strings.TrimSpace(op.Direction)) == "up" {
+			return s.nodes.MoveUp(ctx, nodeID, now())
+		}
+		return s.nodes.MoveDown(ctx, nodeID, now())
 	default:
 		return fmt.Errorf("unknown op %q", op.Type)
 	}
@@ -427,16 +461,49 @@ func (s *Service) applyCreateOutlineNode(
 		if parent.Kind != node.KindContainer {
 			return fmt.Errorf("create_outline_node: parent must be a container node")
 		}
-		n, err = s.nodes.CreateChild(ctx, *parentID, kind, op.Label, op.Title, now())
-	} else {
-		afterNodeID, err := s.resolveSceneAnchor(ctx, projectID, currentNodeID, op.AfterNodeID, op.AfterNodeRef, nodeRefs, *nodeInsertCursor)
-		if err != nil {
+		if existing, ok, err := s.findMatchingOutlineNode(ctx, projectID, parentID, kind, op.Label); err != nil {
 			return err
+		} else if ok {
+			n = existing
+		} else {
+			n, err = s.nodes.CreateChild(ctx, *parentID, kind, op.Label, op.Title, now())
 		}
-		n, err = s.nodes.CreateSibling(ctx, afterNodeID, kind, op.Label, op.Title, now())
+	} else {
+		hasAfter := strings.TrimSpace(op.AfterNodeID) != "" || strings.TrimSpace(op.AfterNodeRef) != "" || strings.TrimSpace(*nodeInsertCursor) != ""
+		if hasAfter {
+			afterNodeID, err := s.resolveSceneAnchor(ctx, projectID, currentNodeID, op.AfterNodeID, op.AfterNodeRef, nodeRefs, *nodeInsertCursor)
+			if err != nil {
+				return err
+			}
+			after, err := s.nodes.Get(ctx, afterNodeID)
+			if err != nil {
+				return err
+			}
+			if existing, ok, err := s.findMatchingOutlineNode(ctx, projectID, after.ParentID, kind, op.Label); err != nil {
+				return err
+			} else if ok {
+				n = existing
+			} else {
+				n, err = s.nodes.CreateSibling(ctx, afterNodeID, kind, op.Label, op.Title, now())
+			}
+		} else {
+			if existing, ok, err := s.findMatchingOutlineNode(ctx, projectID, nil, kind, op.Label); err != nil {
+				return err
+			} else if ok {
+				n = existing
+			} else {
+				n, err = s.nodes.CreateRoot(ctx, projectID, kind, op.Label, op.Title, now())
+			}
+		}
 	}
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(op.Title) != "" && strings.TrimSpace(n.Title) == "" {
+		if err := s.nodes.Rename(ctx, n.ID, n.Label, op.Title, now()); err != nil {
+			return err
+		}
+		n, _ = s.nodes.Get(ctx, n.ID)
 	}
 	if op.Ref != "" {
 		nodeRefs[op.Ref] = n.ID
@@ -446,6 +513,32 @@ func (s *Service) applyCreateOutlineNode(
 		*nodeInsertCursor = n.ID
 	}
 	return nil
+}
+
+func (s *Service) findMatchingOutlineNode(ctx context.Context, projectID string, parentID *string, kind, label string) (node.Node, bool, error) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return node.Node{}, false, nil
+	}
+	all, err := s.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return node.Node{}, false, err
+	}
+	for _, n := range all {
+		if n.Kind != kind || strings.TrimSpace(n.Label) != label {
+			continue
+		}
+		if parentID == nil {
+			if n.ParentID == nil {
+				return n, true, nil
+			}
+			continue
+		}
+		if n.ParentID != nil && *n.ParentID == *parentID {
+			return n, true, nil
+		}
+	}
+	return node.Node{}, false, nil
 }
 
 // resolveEntityID resolves a create_relationship endpoint to a real entity id.
@@ -524,6 +617,17 @@ func (s *Service) resolveOptionalNodeID(ctx context.Context, id, ref, currentNod
 		return &currentNodeID, nil
 	}
 	return nil, nil
+}
+
+func (s *Service) resolveRequiredNodeID(ctx context.Context, id, ref string, refs map[string]string) (string, error) {
+	resolved, err := s.resolveOptionalNodeID(ctx, id, ref, "", refs)
+	if err != nil {
+		return "", err
+	}
+	if resolved == nil || strings.TrimSpace(*resolved) == "" {
+		return "", fmt.Errorf("outline node id/ref required")
+	}
+	return *resolved, nil
 }
 
 func (s *Service) resolveSceneAnchor(ctx context.Context, projectID, currentNodeID, afterNodeID, afterNodeRef string, refs map[string]string, fallbackAfterNodeID string) (string, error) {

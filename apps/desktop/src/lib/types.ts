@@ -141,7 +141,9 @@ export type AIContextKey =
   | "relationships"
   | "notes"
   | "project_meta"
-  | "style_notes";
+  | "style_notes"
+  | "facts"
+  | "memories";
 
 export type AIContextSelection = Record<AIContextKey, boolean>;
 
@@ -566,6 +568,13 @@ export interface CompanionMessage {
   role: string;
   content: string;
   timestamp: number;
+}
+
+export interface CompanionImageAttachment {
+  name: string;
+  media_type: string;
+  data: string;
+  size?: number;
 }
 
 export type ProposalOpType =

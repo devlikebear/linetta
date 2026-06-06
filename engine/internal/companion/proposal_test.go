@@ -229,6 +229,33 @@ func TestParseProposal_CreateOutlineNodeValidation(t *testing.T) {
 	}
 }
 
+func TestParseProposal_OutlineMaintenanceOps(t *testing.T) {
+	body := `{"ops":[
+	  {"op":"rename_outline_node","node_id":"n1","label":"1부","title":"새 제목"},
+	  {"op":"move_outline_node","node_id":"n2","direction":"up"},
+	  {"op":"delete_outline_node","node_ref":"old"}
+	]}`
+	p, present, err := ParseProposal(block(body))
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if p.Ops[0].Type != "rename_outline_node" || p.Ops[1].Direction != "up" || p.Ops[2].NodeRef != "old" {
+		t.Fatalf("p=%+v", p)
+	}
+}
+
+func TestParseProposal_OutlineMaintenanceValidation(t *testing.T) {
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"rename_outline_node","label":"1부"}]}`)); err == nil {
+		t.Fatal("expected rename target error")
+	}
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"move_outline_node","node_id":"n1","direction":"sideways"}]}`)); err == nil {
+		t.Fatal("expected direction error")
+	}
+	if _, _, err := ParseProposal(block(`{"ops":[{"op":"delete_outline_node","node_id":"n1","node_ref":"r1"}]}`)); err == nil {
+		t.Fatal("expected node id/ref mutual-exclusion error")
+	}
+}
+
 func TestParseProposal_CreateSceneRequiresLabel(t *testing.T) {
 	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_scene"}]}`)); err == nil {
 		t.Fatal("expected label error")

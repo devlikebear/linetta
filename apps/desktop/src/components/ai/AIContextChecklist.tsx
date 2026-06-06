@@ -20,6 +20,8 @@ export const DEFAULT_AI_CONTEXT_SELECTION: AIContextSelection = {
   notes: true,
   project_meta: true,
   style_notes: true,
+  facts: true,
+  memories: true,
 };
 
 interface Props {

@@ -4,7 +4,8 @@
    Only component-specific rules live here. */
 
 .companion-empty-card,
-.companion-help-card {
+.companion-help-card,
+.companion-context-card {
   background: color-mix(in srgb, var(--surface) 82%, var(--surface-2));
   border: 1px solid var(--line-soft);
   border-radius: var(--r-md);
@@ -29,7 +30,8 @@
 }
 
 .companion-empty-kicker,
-.companion-help-title {
+.companion-help-title,
+.companion-context-title {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -103,6 +105,126 @@
   gap: 2px;
   flex: none;
 }
+.companion-context-title {
+  margin-bottom: 10px;
+}
+.companion-context-count {
+  margin-left: auto;
+  color: var(--muted);
+}
+.companion-context-loading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.companion-context-card .ai-checklist {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.companion-input-toolbar {
+  align-items: center;
+}
+.companion-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.companion-attach-chip {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.companion-attach-chip:disabled {
+  opacity: 0.36;
+  cursor: default;
+}
+.companion-context-chip {
+  margin-left: auto;
+  padding: 4px 9px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+}
+.companion-context-chip svg {
+  flex: none;
+}
+.cmp-input-wrap .companion-context-card {
+  margin-top: 10px;
+}
+.companion-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+.companion-attachment {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-rows: 17px 17px;
+  align-items: center;
+  column-gap: 8px;
+  width: min(100%, 218px);
+  min-height: 44px;
+  padding: 5px 27px 5px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface) 78%, var(--surface-2));
+}
+.companion-attachment img {
+  grid-row: 1 / span 2;
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 5px;
+  background: var(--surface-3);
+}
+.companion-attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  color: var(--ink);
+}
+.companion-attachment-size {
+  grid-column: 2 / span 2;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.companion-attachment-remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted-2);
+}
+.companion-attachment-remove:hover,
+.companion-attachment-remove:focus-visible {
+  background: var(--surface-3);
+  color: var(--ink-soft);
+}
+.companion-attachment-notice {
+  margin: -2px 0 7px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--muted);
+}
 .companion-action:disabled {
   opacity: 0.38;
   cursor: default;
@@ -114,6 +236,44 @@
 .companion-action.is-active {
   background: var(--accent-tint);
   color: var(--accent-deep);
+}
+
+.msg-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+}
+.msg.user .msg-line {
+  justify-content: flex-end;
+  width: 100%;
+}
+.msg-copy {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  margin-top: 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted-2);
+  opacity: 0.42;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.msg:hover .msg-copy,
+.msg-copy:focus-visible {
+  opacity: 1;
+}
+.msg-copy:hover,
+.msg-copy:focus-visible {
+  background: var(--surface-3);
+  color: var(--ink-soft);
+}
+.msg.user .msg-copy:hover,
+.msg.user .msg-copy:focus-visible {
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
 
 .companion-thinking { font-size: 12px; color: var(--muted); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }

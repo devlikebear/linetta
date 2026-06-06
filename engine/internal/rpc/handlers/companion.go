@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/tars/pkg/session"
 )
 
 type companionSendParams struct {
-	ProjectID string `json:"project_id"`
-	NodeID    string `json:"node_id"`
-	Text      string `json:"text"`
+	ProjectID string                      `json:"project_id"`
+	NodeID    string                      `json:"node_id"`
+	Text      string                      `json:"text"`
+	Options   ai.Options                  `json:"options"`
+	Images    []companion.ImageAttachment `json:"images"`
 }
 
 // CompanionSend returns a handler for companion.send.
@@ -22,11 +25,33 @@ func CompanionSend(svc *companion.Service, now Clock) rpc.Handler {
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" || p.Text == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and text required"}
 		}
-		runID, err := svc.Send(ctx, p.ProjectID, p.NodeID, p.Text, func() int64 { return now() })
+		runID, err := svc.SendWithContextAndImages(ctx, p.ProjectID, p.NodeID, p.Text, p.Options.Context, p.Images, func() int64 { return now() })
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(map[string]string{"run_id": runID})
+	}
+}
+
+type companionPreviewContextParams struct {
+	ProjectID string     `json:"project_id"`
+	NodeID    string     `json:"node_id"`
+	Options   ai.Options `json:"options"`
+}
+
+// CompanionPreviewContext returns inspectable companion context sections before
+// a turn starts, mirroring the AI context checklist behavior.
+func CompanionPreviewContext(svc *companion.Service) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionPreviewContextParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		preview, err := svc.PreviewContext(ctx, p.ProjectID, p.NodeID, p.Options.Context)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(preview)
 	}
 }
 

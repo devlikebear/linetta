@@ -176,6 +176,91 @@ func CreateChild(nodes *node.Repo, now Clock) rpc.Handler {
 	}
 }
 
+type moveToParentParams struct {
+	ID       string `json:"id"`
+	ParentID string `json:"parent_id"`
+}
+
+func MoveToParent(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p moveToParentParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" || p.ParentID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id and parent_id required"}
+		}
+		if err := nodes.MoveToParent(ctx, p.ID, p.ParentID, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node or parent not found"}
+			}
+			if errors.Is(err, node.ErrNodeProjectMismatch) ||
+				errors.Is(err, node.ErrContentOnContainer) ||
+				errors.Is(err, node.ErrInvalidMove) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+func MoveToRoot(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := nodes.MoveToRoot(ctx, p.ID, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+func ConvertToContainer(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := nodes.ConvertLeafToContainer(ctx, p.ID, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
+			if errors.Is(err, node.ErrInvalidMove) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+type restoreOutlineParams struct {
+	ProjectID string      `json:"project_id"`
+	Nodes     []node.Node `json:"nodes"`
+}
+
+func RestoreOutline(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p restoreOutlineParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" || len(p.Nodes) == 0 {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and nodes required"}
+		}
+		if err := nodes.RestoreOutline(ctx, p.ProjectID, p.Nodes, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+			}
+			if errors.Is(err, node.ErrInvalidMove) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
 type renameParams struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`

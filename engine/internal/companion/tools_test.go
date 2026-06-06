@@ -333,3 +333,94 @@ func TestLinettaApplyOpsToolCreatesOutlineTree(t *testing.T) {
 		t.Fatalf("beat should attach to created outline scene %s: %+v", scene.ID, beats)
 	}
 }
+
+func TestApplyOpsCreateOutlineNodeIsIdempotentAtRoot(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	ops := []Op{
+		{Type: "create_outline_node", Ref: "p1", Kind: node.KindContainer, Label: "1부", Title: "개별성의 경계선"},
+		{Type: "create_outline_node", Ref: "c1", Kind: node.KindContainer, ParentNodeRef: "p1", Label: "1장", Title: "경계의 틈"},
+		{Type: "create_outline_node", Ref: "s1", Kind: node.KindLeaf, ParentNodeRef: "c1", Label: "씬 1", Title: "조각난 아침"},
+	}
+
+	first := svc.ApplyOps(ctx, projectID, nodeID, Proposal{Summary: "아웃라인", Ops: ops}, func() int64 { return 10 })
+	second := svc.ApplyOps(ctx, projectID, nodeID, Proposal{Summary: "아웃라인 재적용", Ops: ops}, func() int64 { return 20 })
+	if len(first.Failures) > 0 || len(second.Failures) > 0 {
+		t.Fatalf("unexpected failures: first=%+v second=%+v", first, second)
+	}
+
+	list, err := svc.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+	var parts []node.Node
+	for _, n := range list {
+		if n.Kind == node.KindContainer && n.Label == "1부" && n.ParentID == nil {
+			parts = append(parts, n)
+		}
+	}
+	if len(parts) != 1 {
+		t.Fatalf("root part count = %d, nodes=%+v", len(parts), list)
+	}
+	part := parts[0]
+	if part.ParentID != nil {
+		t.Fatalf("root part should not be created under the current scene parent: %+v", part)
+	}
+	chapters := matchingChildren(list, part.ID, node.KindContainer, "1장")
+	if len(chapters) != 1 {
+		t.Fatalf("chapter count under part = %d, nodes=%+v", len(chapters), list)
+	}
+	scenes := matchingChildren(list, chapters[0].ID, node.KindLeaf, "씬 1")
+	if len(scenes) != 1 {
+		t.Fatalf("scene count under chapter = %d, nodes=%+v", len(scenes), list)
+	}
+	if first.Created["node:p1"] != second.Created["node:p1"] {
+		t.Fatalf("reused ref should point to same id: first=%+v second=%+v", first.Created, second.Created)
+	}
+}
+
+func matchingChildren(list []node.Node, parentID, kind, label string) []node.Node {
+	var out []node.Node
+	for _, n := range list {
+		if n.ParentID == nil || *n.ParentID != parentID {
+			continue
+		}
+		if n.Kind == kind && n.Label == label {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func TestApplyOpsOutlineMaintenanceOps(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	result := svc.ApplyOps(ctx, projectID, nodeID, Proposal{Summary: "초기", Ops: []Op{
+		{Type: "create_outline_node", Ref: "p1", Kind: node.KindContainer, Label: "1부", Title: "낡은 제목"},
+		{Type: "create_outline_node", Ref: "p2", Kind: node.KindContainer, Label: "2부", Title: "뒤쪽"},
+	}}, func() int64 { return 10 })
+	if len(result.Failures) > 0 {
+		t.Fatalf("create failures: %+v", result)
+	}
+	part1 := result.Created["node:p1"]
+	part2 := result.Created["node:p2"]
+
+	result = svc.ApplyOps(ctx, projectID, nodeID, Proposal{Summary: "정리", Ops: []Op{
+		{Type: "rename_outline_node", NodeID: part1, Label: "1부", Title: "새 제목"},
+		{Type: "move_outline_node", NodeID: part2, Direction: "up"},
+		{Type: "delete_outline_node", NodeID: part1},
+	}}, func() int64 { return 20 })
+	if len(result.Failures) > 0 {
+		t.Fatalf("maintenance failures: %+v", result)
+	}
+	if _, err := svc.nodes.Get(ctx, part1); err != node.ErrNotFound {
+		t.Fatalf("part1 should be deleted, err=%v", err)
+	}
+	got, err := svc.nodes.Get(ctx, part2)
+	if err != nil {
+		t.Fatalf("part2 get: %v", err)
+	}
+	if got.Ordinal != 1 {
+		t.Fatalf("part2 should move above the initial root scene but keep deterministic order, got ordinal %d", got.Ordinal)
+	}
+}

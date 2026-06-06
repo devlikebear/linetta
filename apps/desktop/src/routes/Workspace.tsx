@@ -41,6 +41,7 @@ import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useToast } from "../components/ToastProvider";
 import { displayNodeLabel, localeForLanguage, useI18n } from "../lib/i18n";
+import { repairOutlineTree } from "../lib/outlineRepair";
 import {
   buildTree,
   findFirstLeaf,
@@ -87,6 +88,10 @@ type SelectionMenuState = TiptapSelectionMenuPayload & {
   y: number;
 };
 
+function snapshotOutlineTree(tree: TreeNode[]): NodeRow[] {
+  return flatten(tree).map(({ children: _children, ...node }) => ({ ...node }));
+}
+
 export function Workspace() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -112,6 +117,7 @@ export function Workspace() {
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState(false);
   const [factBookOpen, setFactBookOpen] = useState(false);
+  const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const companionNodeRef = useRef<string | null>(null);
@@ -141,6 +147,7 @@ export function Workspace() {
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+  useEffect(() => { setOutlineUndoSnapshot(null); }, [projectId]);
   useEffect(() => { companionNodeRef.current = load?.node.id ?? null; }, [load]);
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
@@ -365,6 +372,30 @@ export function Workspace() {
     [refreshTreeAndNavigateTo, showToast, t],
   );
 
+  const handleCreatePartFromOutline = useCallback(
+    async (anchor: TreeNode) => {
+      const current = loadRef.current;
+      if (!current) return;
+      try {
+        const allNodes = flatten(current.tree);
+        let reference = anchor;
+        while (reference.parent_id) {
+          const parent = allNodes.find((n) => n.id === reference.parent_id);
+          if (!parent) break;
+          reference = parent;
+        }
+        const partCount = current.tree.filter((n) => n.kind === "container").length;
+        const part = await nodes.createSibling(reference.id, "container", t("workspace.partNumber", { number: partCount + 1 }), "");
+        const chapter = await nodes.createChild(part.id, "container", t("workspace.chapterNumber", { number: 1 }), "");
+        const scene = await nodes.createChild(chapter.id, "leaf", t("workspace.sceneNumber", { number: 1 }), "");
+        await refreshTreeAndNavigateTo(scene.id);
+      } catch (e) {
+        showToast(t("workspace.toast.createPartFailed", { error: String(e) }));
+      }
+    },
+    [refreshTreeAndNavigateTo, showToast, t],
+  );
+
   const handleCreateChapterFromOutline = useCallback(
     async (anchor: TreeNode) => {
       const current = loadRef.current;
@@ -374,10 +405,19 @@ export function Workspace() {
         const parentContainer = anchor.parent_id
           ? allNodes.find((n) => n.id === anchor.parent_id && n.kind === "container")
           : undefined;
-        const reference = anchor.kind === "leaf" && parentContainer ? parentContainer : anchor;
-        const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (reference.parent_id ?? null));
-        const chapterCount = siblings.filter((n) => n.kind === "container").length;
-        const chapter = await nodes.createSibling(reference.id, "container", t("workspace.chapterNumber", { number: chapterCount + 1 }), "");
+        let chapter: NodeRow;
+        if (anchor.kind === "container" && !anchor.parent_id) {
+          const existingChapters = anchor.children.filter((n) => n.kind === "container").length;
+          chapter = await nodes.createChild(anchor.id, "container", t("workspace.chapterNumber", { number: existingChapters + 1 }), "");
+        } else if (anchor.kind === "leaf" && parentContainer && !parentContainer.parent_id) {
+          const existingChapters = parentContainer.children.filter((n) => n.kind === "container").length;
+          chapter = await nodes.createChild(parentContainer.id, "container", t("workspace.chapterNumber", { number: existingChapters + 1 }), "");
+        } else {
+          const reference = anchor.kind === "leaf" && parentContainer ? parentContainer : anchor;
+          const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (reference.parent_id ?? null));
+          const chapterCount = siblings.filter((n) => n.kind === "container").length;
+          chapter = await nodes.createSibling(reference.id, "container", t("workspace.chapterNumber", { number: chapterCount + 1 }), "");
+        }
         const seeded = await nodes.createChild(chapter.id, "leaf", t("workspace.sceneNumber", { number: 1 }), "");
         await refreshTreeAndNavigateTo(seeded.id);
       } catch (e) {
@@ -389,7 +429,6 @@ export function Workspace() {
 
   const handleMoveSceneFromOutline = useCallback(
     async (target: TreeNode, direction: "up" | "down") => {
-      if (target.kind !== "leaf") return;
       const current = loadRef.current;
       if (!current) return;
       try {
@@ -408,16 +447,30 @@ export function Workspace() {
 
   const handleDeleteSceneFromOutline = useCallback(
     async (target: TreeNode) => {
-      if (target.kind !== "leaf") return;
       const current = loadRef.current;
       if (!current) return;
-      const ok = await confirmDialog(t("workspace.confirm.deleteScene", { label: displayNodeLabel(language, target.label) }));
+      const targetLabel = displayNodeLabel(language, target.label);
+      const ok = await confirmDialog(
+        target.kind === "leaf"
+          ? t("workspace.confirm.deleteScene", { label: targetLabel })
+          : t("workspace.confirm.deleteNode", { label: target.title ? `${targetLabel} · ${target.title}` : targetLabel }),
+      );
       if (!ok) return;
       try {
-        const { prev, next } = leafNeighbors(current.tree, target.id);
-        const fallback = prev ?? next ?? null;
+        const deletedIDs = new Set(flatten([target]).map((n) => n.id));
+        const leaves = flatten(current.tree).filter((n) => n.kind === "leaf");
+        const deletedLeafIndexes = leaves
+          .map((leaf, index) => (deletedIDs.has(leaf.id) ? index : -1))
+          .filter((index) => index >= 0);
+        const firstDeleted = deletedLeafIndexes.length > 0 ? Math.min(...deletedLeafIndexes) : -1;
+        const lastDeleted = deletedLeafIndexes.length > 0 ? Math.max(...deletedLeafIndexes) : -1;
+        const fallback = lastDeleted >= 0
+          ? (leaves.slice(lastDeleted + 1).find((leaf) => !deletedIDs.has(leaf.id)) ??
+            [...leaves.slice(0, firstDeleted)].reverse().find((leaf) => !deletedIDs.has(leaf.id)) ??
+            null)
+          : null;
         await nodes.delete(target.id);
-        if (target.id === current.node.id) {
+        if (deletedIDs.has(current.node.id)) {
           if (fallback) {
             await refreshTreeAndNavigateTo(fallback.id);
           } else {
@@ -432,6 +485,43 @@ export function Workspace() {
       }
     },
     [confirmDialog, language, navigate, refreshTreeAndNavigateTo, refreshTreeKeepNode, showToast, t],
+  );
+
+  const handleRepairOutline = useCallback(
+    async () => {
+      const current = loadRef.current;
+      if (!current) return;
+      const ok = await confirmDialog(t("workspace.confirm.repairOutline"));
+      if (!ok) return;
+      try {
+        const snapshot = snapshotOutlineTree(current.tree);
+        await repairOutlineTree(current.tree, nodes, t);
+        setOutlineUndoSnapshot(snapshot);
+        await refreshTreeKeepNode(current.node.id);
+        showToast(t("workspace.toast.repairOutlineSuccess"));
+      } catch (e) {
+        showToast(t("workspace.toast.repairOutlineFailed", { error: String(e) }));
+      }
+    },
+    [confirmDialog, refreshTreeKeepNode, showToast, t],
+  );
+
+  const handleUndoRepairOutline = useCallback(
+    async () => {
+      const current = loadRef.current;
+      if (!current || !projectId || !outlineUndoSnapshot) return;
+      const ok = await confirmDialog(t("workspace.confirm.undoRepairOutline"));
+      if (!ok) return;
+      try {
+        await nodes.restoreOutline(projectId, outlineUndoSnapshot);
+        setOutlineUndoSnapshot(null);
+        await refreshTreeKeepNode(current.node.id);
+        showToast(t("workspace.toast.undoRepairOutlineSuccess"));
+      } catch (e) {
+        showToast(t("workspace.toast.undoRepairOutlineFailed", { error: String(e) }));
+      }
+    },
+    [confirmDialog, outlineUndoSnapshot, projectId, refreshTreeKeepNode, showToast, t],
   );
 
   // Navigate without re-fetching the tree (used by outline click + leaf neighbor cmds).
@@ -1285,10 +1375,14 @@ export function Workspace() {
           onSelect={(n) => navigateToNode(n)}
           onRename={handleRenameNode}
           onCreateScene={handleCreateSceneFromOutline}
+          onCreatePart={handleCreatePartFromOutline}
           onCreateChapter={handleCreateChapterFromOutline}
-          onMoveSceneUp={(node) => handleMoveSceneFromOutline(node, "up")}
-          onMoveSceneDown={(node) => handleMoveSceneFromOutline(node, "down")}
-          onDeleteScene={handleDeleteSceneFromOutline}
+          onMoveNodeUp={(node) => handleMoveSceneFromOutline(node, "up")}
+          onMoveNodeDown={(node) => handleMoveSceneFromOutline(node, "down")}
+          onDeleteNode={handleDeleteSceneFromOutline}
+          onRepairOutline={handleRepairOutline}
+          onUndoRepairOutline={handleUndoRepairOutline}
+          canUndoRepair={Boolean(outlineUndoSnapshot)}
           tourTarget="workspace-outline"
         />
         <section className={`ws-editor${focus ? " focus-mode" : ""}`} data-tour="workspace-editor">

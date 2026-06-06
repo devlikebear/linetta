@@ -2,6 +2,8 @@ package companion
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -34,6 +36,17 @@ const compactHistorySnippetRunes = 240
 const sceneExcerptMaxRunes = 1200
 const sceneExcerptTotalRunes = 6000
 const factContextLimit = 12
+const maxImageAttachments = 4
+const maxImageAttachmentBytes = 8 * 1024 * 1024
+
+// ImageAttachment is a transient multimodal companion input. Images are sent to
+// the current LLM turn but are not persisted in the transcript.
+type ImageAttachment struct {
+	Name      string `json:"name,omitempty"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+	Size      int    `json:"size,omitempty"`
+}
 
 // ClientFactory and ProviderSource are shared with the ai package so the same
 // settings adapter and default factory serve AI runs, companion, and summaries.
@@ -131,6 +144,9 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 			d.HasSpine = true
 		}
 	}
+	if outlineNodes, err := s.loadOutlineNodes(ctx, projectID); err == nil {
+		d.OutlineNodes = outlineNodes
+	}
 	if excerpts, err := s.loadSceneExcerpts(ctx, projectID, resolvedNode); err == nil {
 		d.SceneExcerpts = excerpts
 	}
@@ -163,6 +179,42 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 	_ = query
 	d.Memories = s.Recall(projectID, "", recallLimit)
 	return d, nil
+}
+
+func (s *Service) loadOutlineNodes(ctx context.Context, projectID string) ([]OutlineNode, error) {
+	all, err := s.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	children := map[string][]node.Node{}
+	for _, n := range all {
+		key := ""
+		if n.ParentID != nil {
+			key = *n.ParentID
+		}
+		children[key] = append(children[key], n)
+	}
+	out := []OutlineNode{}
+	var walk func(parent string, depth int)
+	walk = func(parent string, depth int) {
+		for _, n := range children[parent] {
+			parentID := ""
+			if n.ParentID != nil {
+				parentID = *n.ParentID
+			}
+			out = append(out, OutlineNode{
+				ID:       n.ID,
+				ParentID: parentID,
+				Kind:     n.Kind,
+				Label:    n.Label,
+				Title:    n.Title,
+				Depth:    depth,
+			})
+			walk(n.ID, depth+1)
+		}
+	}
+	walk("", 0)
+	return out, nil
 }
 
 func (s *Service) loadSceneExcerpts(ctx context.Context, projectID, currentNodeID string) ([]SceneExcerpt, error) {
@@ -328,6 +380,16 @@ func (s *Service) DeleteProjectData(ctx context.Context, projectID string) error
 	return os.RemoveAll(memRoot(s.memBase, projectID))
 }
 
+// PreviewContext returns the same context sections a companion turn can inject,
+// with selected flags derived from the writer's current checklist choices.
+func (s *Service) PreviewContext(ctx context.Context, projectID, nodeID string, selection ai.ContextSelection) (ai.ContextPreview, error) {
+	data, err := s.gatherContext(ctx, projectID, nodeID, "")
+	if err != nil {
+		return ai.ContextPreview{}, err
+	}
+	return previewFromPromptData(data, selection), nil
+}
+
 func compactTranscriptSummary(msgs []session.Message) string {
 	start := 0
 	if len(msgs) > compactHistoryMaxMessages {
@@ -403,10 +465,77 @@ func firstControlFence(text string) int {
 	return first
 }
 
+var supportedImageAttachmentMediaTypes = map[string]bool{
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/webp": true,
+	"image/gif":  true,
+}
+
+func normalizeImageAttachments(images []ImageAttachment) ([]ImageAttachment, error) {
+	if len(images) == 0 {
+		return nil, nil
+	}
+	if len(images) > maxImageAttachments {
+		return nil, fmt.Errorf("companion images: maximum %d images", maxImageAttachments)
+	}
+	out := make([]ImageAttachment, 0, len(images))
+	for i, image := range images {
+		mediaType := strings.TrimSpace(image.MediaType)
+		data := strings.TrimSpace(image.Data)
+		if strings.HasPrefix(data, "data:") {
+			header, payload, ok := strings.Cut(data, ",")
+			if !ok {
+				return nil, fmt.Errorf("companion image %d: invalid data URL", i+1)
+			}
+			data = payload
+			if mediaType == "" {
+				if semi := strings.Index(header, ";"); semi >= 0 {
+					mediaType = strings.TrimPrefix(header[:semi], "data:")
+				}
+			}
+		}
+		if !supportedImageAttachmentMediaTypes[mediaType] {
+			return nil, fmt.Errorf("companion image %d: unsupported media type %q", i+1, mediaType)
+		}
+		if data == "" {
+			return nil, fmt.Errorf("companion image %d: empty data", i+1)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(data)
+		if err != nil {
+			return nil, fmt.Errorf("companion image %d: invalid base64", i+1)
+		}
+		if len(decoded) > maxImageAttachmentBytes {
+			return nil, fmt.Errorf("companion image %d: exceeds %d bytes", i+1, maxImageAttachmentBytes)
+		}
+		image.MediaType = mediaType
+		image.Data = data
+		image.Size = len(decoded)
+		out = append(out, image)
+	}
+	return out, nil
+}
+
 // Send starts a companion turn; returns the run id. Streaming + proposal arrive
 // via notifications.
 func (s *Service) Send(ctx context.Context, projectID, nodeID, text string, now func() int64) (string, error) {
-	return s.runner.start(ctx, projectID, nodeID, text, now)
+	return s.SendWithContext(ctx, projectID, nodeID, text, ai.DefaultContextSelection(), now)
+}
+
+// SendWithContext starts a companion turn using the writer-selected context
+// checklist state.
+func (s *Service) SendWithContext(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, now func() int64) (string, error) {
+	return s.SendWithContextAndImages(ctx, projectID, nodeID, text, selection, nil, now)
+}
+
+// SendWithContextAndImages starts a companion turn with transient multimodal
+// images attached to the latest user message.
+func (s *Service) SendWithContextAndImages(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, images []ImageAttachment, now func() int64) (string, error) {
+	normalized, err := normalizeImageAttachments(images)
+	if err != nil {
+		return "", err
+	}
+	return s.runner.start(ctx, projectID, nodeID, text, selection, normalized, now)
 }
 
 // Cancel cancels an in-flight run.

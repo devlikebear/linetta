@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Archive,
   Book,
@@ -6,6 +6,8 @@ import {
   Copy,
   CornerDownLeft,
   HelpCircle,
+  ImagePlus,
+  Layers,
   Lightbulb,
   MessageSquare,
   Pencil,
@@ -15,6 +17,9 @@ import {
 } from "lucide-react";
 import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
+import { companion as companionApi } from "../../lib/rpc";
+import type { AIContextPreview, AIContextSelection, CompanionImageAttachment } from "../../lib/types";
+import { AIContextChecklistList, DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../ai/AIContextChecklist";
 import { ProposalCard } from "./ProposalCard";
 import { ChoiceCard } from "./ChoiceCard";
 import { Markdown } from "./Markdown";
@@ -49,6 +54,68 @@ const PROMPT_EXAMPLE_KEYS = [
   "companion.example.fetch",
   "companion.example.apply",
 ] as const;
+
+const EMPTY_CONTEXT_PREVIEW: AIContextPreview = {
+  counts: {
+    nearbyScenes: 0,
+    hasOutline: false,
+    hasSynopsis: false,
+    relatedScenes: 0,
+    entities: 0,
+    relationships: 0,
+    plotBeats: 0,
+    notes: 0,
+    projectMetaFields: 0,
+    hasStyleNotes: false,
+  },
+  sections: [],
+  selectedItemCount: 0,
+};
+
+const MAX_COMPANION_IMAGES = 4;
+const MAX_COMPANION_IMAGE_BYTES = 8 * 1024 * 1024;
+const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+type CompanionImageDraft = CompanionImageAttachment & {
+  id: string;
+  previewUrl: string;
+};
+
+function readAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("failed to read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function fileToImageDraft(file: File): Promise<CompanionImageDraft> {
+  const previewUrl = await readAsDataURL(file);
+  const comma = previewUrl.indexOf(",");
+  const meta = comma >= 0 ? previewUrl.slice(0, comma) : "";
+  const data = comma >= 0 ? previewUrl.slice(comma + 1) : previewUrl;
+  const mediaType = /^data:([^;]+)/.exec(meta)?.[1] || file.type || "image/png";
+  return {
+    id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+    name: file.name || "image.png",
+    media_type: mediaType,
+    data,
+    size: file.size,
+    previewUrl,
+  };
+}
+
+function toWireImageAttachments(images: CompanionImageDraft[]): CompanionImageAttachment[] {
+  return images.map(({ id: _id, previewUrl: _previewUrl, ...image }) => image);
+}
+
+function formatAttachmentSize(size?: number): string {
+  if (!size) return "";
+  if (size < 1024) return `${size}B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)}KB`;
+  return `${(size / 1024 / 1024).toFixed(1)}MB`;
+}
 
 function CompanionEmpty({
   t,
@@ -118,15 +185,51 @@ function formatTranscript(messages: ChatMessage[], liveProse: string, t: Transla
   return rows.filter((row) => row.trim()).join("\n\n");
 }
 
+function copyLabelSnippet(text: string): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  const runes = Array.from(trimmed);
+  if (runes.length <= 80) return trimmed;
+  return `${runes.slice(0, 80).join("")}…`;
+}
+
+function MessageCopyButton({
+  text,
+  copied,
+  onCopy,
+  t,
+}: {
+  text: string;
+  copied: boolean;
+  onCopy: () => void;
+  t: Translate;
+}) {
+  const label = t("companion.copyMessage", { text: copyLabelSnippet(text) });
+  return (
+    <button type="button" className="msg-copy" onClick={onCopy} aria-label={label} title={label}>
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  );
+}
+
 export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, beforeSend }: Props) {
   const { t } = useI18n();
-  const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied);
+  const [contextSelection, setContextSelection] = useState<AIContextSelection>(DEFAULT_AI_CONTEXT_SELECTION);
+  const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied, contextSelection);
   const [draft, setDraft] = useState("");
   const [flushing, setFlushing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showContext, setShowContext] = useState(false);
+  const [contextPreview, setContextPreview] = useState<AIContextPreview>(EMPTY_CONTEXT_PREVIEW);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [attachments, setAttachments] = useState<CompanionImageDraft[]>([]);
+  const [attachmentNotice, setAttachmentNotice] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const contextReqIdRef = useRef(0);
+  const loadedContextSelectionRef = useRef<AIContextSelection | null>(null);
   const focusInput = () => inputRef.current?.focus();
 
   useEffect(() => {
@@ -140,12 +243,85 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
     input.style.height = `${input.scrollHeight}px`;
   }, [draft]);
 
-  const sendWithFreshContext = async (text: string) => {
-    if (!text.trim() || flushing) return false;
+  const loadContextPreview = useCallback(async (selection: AIContextSelection, flushEditor = false) => {
+    const reqId = ++contextReqIdRef.current;
+    setContextLoading(true);
+    try {
+      if (flushEditor) await beforeSend?.();
+      const preview = await companionApi.previewContext(projectId, nodeIdRef.current ?? "", { context: selection });
+      if (reqId === contextReqIdRef.current) {
+        setContextPreview(preview);
+      }
+    } catch {
+      if (reqId === contextReqIdRef.current) {
+        setContextPreview(EMPTY_CONTEXT_PREVIEW);
+      }
+    } finally {
+      if (reqId === contextReqIdRef.current) {
+        setContextLoading(false);
+      }
+    }
+  }, [beforeSend, nodeIdRef, projectId]);
+
+  useEffect(() => {
+    if (!showContext) return;
+    if (loadedContextSelectionRef.current === contextSelection) return;
+    loadedContextSelectionRef.current = contextSelection;
+    void loadContextPreview(contextSelection);
+  }, [contextSelection, loadContextPreview, showContext]);
+
+  const toggleContext = () => {
+    setShowContext((open) => {
+      const next = !open;
+      if (next) {
+        loadedContextSelectionRef.current = contextSelection;
+        void loadContextPreview(contextSelection, true);
+      }
+      return next;
+    });
+  };
+
+  const addImageFiles = useCallback(async (files: File[]) => {
+    const usable = files.filter((file) => SUPPORTED_IMAGE_TYPES.has(file.type) && file.size <= MAX_COMPANION_IMAGE_BYTES);
+    if (usable.length === 0) {
+      if (files.length > 0) setAttachmentNotice(t("companion.attachUnsupported"));
+      return;
+    }
+    const slots = MAX_COMPANION_IMAGES - attachments.length;
+    if (slots <= 0) {
+      setAttachmentNotice(t("companion.attachLimit"));
+      return;
+    }
+    const selected = usable.slice(0, slots);
+    if (usable.length > selected.length) {
+      setAttachmentNotice(t("companion.attachLimit"));
+    } else if (files.length > usable.length) {
+      setAttachmentNotice(t("companion.attachUnsupported"));
+    } else {
+      setAttachmentNotice("");
+    }
+    const drafts = await Promise.all(selected.map(fileToImageDraft));
+    setAttachments((prev) => [...prev, ...drafts].slice(0, MAX_COMPANION_IMAGES));
+  }, [attachments.length, t]);
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((item) => item.id !== id));
+    setAttachmentNotice("");
+  };
+
+  const sendWithFreshContext = async (text: string, imageDrafts: CompanionImageDraft[] = []) => {
+    const trimmed = text.trim();
+    if ((!trimmed && imageDrafts.length === 0) || flushing) return false;
     setFlushing(true);
     try {
       await beforeSend?.();
-      await send(text);
+      const sendText = trimmed || t("companion.defaultImagePrompt");
+      const images = toWireImageAttachments(imageDrafts);
+      if (images.length > 0) {
+        await send(sendText, images);
+      } else {
+        await send(sendText);
+      }
       return true;
     } catch {
       return false;
@@ -156,9 +332,14 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
 
   const submit = () => {
     const text = draft;
-    if (!text.trim()) return;
-    void sendWithFreshContext(text).then((sent) => {
-      if (sent) setDraft("");
+    const imageDrafts = attachments;
+    if (!text.trim() && imageDrafts.length === 0) return;
+    void sendWithFreshContext(text, imageDrafts).then((sent) => {
+      if (sent) {
+        setDraft("");
+        setAttachments([]);
+        setAttachmentNotice("");
+      }
     });
   };
 
@@ -169,12 +350,20 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
   const smoothStreaming = useSmoothStream(streaming, isStreaming);
   const liveProse = streamProse(smoothStreaming);
   const hasTranscript = messages.length > 0 || liveProse.trim().length > 0;
+  const contextItemCount = totalContextItems(contextPreview, contextSelection);
 
   const copyTranscript = async () => {
     const text = formatTranscript(messages, liveProse, t);
     if (!text) return;
     await navigator.clipboard.writeText(text);
     setCopied(true);
+  };
+
+  const copyMessage = async (key: string, text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    await navigator.clipboard.writeText(trimmed);
+    setCopiedMessageKey(key);
   };
 
   const pickExample = (prompt: string) => {
@@ -238,10 +427,19 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
         )}
         {messages.map((m, i) => {
           const isUser = m.role === "user";
+          const messageKey = `${m.role}-${i}`;
           if (isUser) {
             return (
               <div key={i} className="msg user">
-                <div className={`msg-bubble${m.errored ? " errored" : ""}`}>{m.content}</div>
+                <div className="msg-line">
+                  <MessageCopyButton
+                    text={m.content}
+                    copied={copiedMessageKey === messageKey}
+                    onCopy={() => { void copyMessage(messageKey, m.content); }}
+                    t={t}
+                  />
+                  <div className={`msg-bubble${m.errored ? " errored" : ""}`}>{m.content}</div>
+                </div>
               </div>
             );
           }
@@ -251,8 +449,16 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
               {(m.content || !hasCard) && (
                 <>
                   <span className="msg-who">companion</span>
-                  <div className={`msg-bubble${m.errored ? " errored" : ""}`}>
-                    {m.errored ? m.content : <Markdown text={m.content} />}
+                  <div className="msg-line">
+                    <div className={`msg-bubble${m.errored ? " errored" : ""}`}>
+                      {m.errored ? m.content : <Markdown text={m.content} />}
+                    </div>
+                    <MessageCopyButton
+                      text={m.content}
+                      copied={copiedMessageKey === messageKey}
+                      onCopy={() => { void copyMessage(messageKey, m.content); }}
+                      t={t}
+                    />
                   </div>
                 </>
               )}
@@ -284,6 +490,27 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
       </div>
 
       <div className="cmp-input-wrap">
+        {attachments.length > 0 && (
+          <div className="companion-attachments" aria-label={t("companion.attachments")}>
+            {attachments.map((item) => (
+              <div key={item.id} className="companion-attachment">
+                <img src={item.previewUrl} alt="" />
+                <span className="companion-attachment-name" title={item.name}>{item.name}</span>
+                <span className="companion-attachment-size">{formatAttachmentSize(item.size)}</span>
+                <button
+                  type="button"
+                  className="companion-attachment-remove"
+                  onClick={() => removeAttachment(item.id)}
+                  aria-label={t("companion.removeImage", { name: item.name })}
+                  title={t("companion.removeImage", { name: item.name })}
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {attachmentNotice && <div className="companion-attachment-notice" aria-live="polite">{attachmentNotice}</div>}
         <div className="cmp-input">
           <textarea
             ref={inputRef}
@@ -291,6 +518,16 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
             placeholder={t("companion.placeholder")}
             rows={1}
             onChange={(e) => setDraft(e.target.value)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData.items)
+                .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+                .map((item) => item.getAsFile())
+                .filter((file): file is File => !!file);
+              if (files.length > 0) {
+                e.preventDefault();
+                void addImageFiles(files);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
             }}
@@ -298,12 +535,72 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
           {isStreaming ? (
             <button type="button" className="cmp-send cmp-stop" onClick={cancel} aria-label={t("companion.stop")}>{t("companion.stop")}</button>
           ) : (
-            <button type="button" className="cmp-send" onClick={submit} disabled={!draft.trim() || flushing} aria-label={t("companion.send")}>
+            <button type="button" className="cmp-send" onClick={submit} disabled={(!draft.trim() && attachments.length === 0) || flushing} aria-label={t("companion.send")}>
               <CornerDownLeft size={16} />
             </button>
           )}
         </div>
-        <div className="cmp-hint"><span>web_search</span><span>web_fetch</span><span>linetta_apply_ops</span></div>
+        <div className="cmp-hint companion-input-toolbar">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+            className="companion-file-input"
+            aria-label={t("companion.attachImage")}
+            onChange={(e) => {
+              const files = Array.from(e.currentTarget.files ?? []);
+              e.currentTarget.value = "";
+              void addImageFiles(files);
+            }}
+          />
+          <button
+            type="button"
+            className="chip companion-attach-chip"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isBusy || attachments.length >= MAX_COMPANION_IMAGES}
+            aria-label={t("companion.attachImageButton")}
+            title={t("companion.attachImageButton")}
+          >
+            <ImagePlus size={13} />
+          </button>
+          <span>web_search</span>
+          <span>web_fetch</span>
+          <span>linetta_apply_ops</span>
+          <button
+            type="button"
+            className={`chip ctx companion-context-chip${showContext ? " on" : ""}`}
+            onClick={toggleContext}
+            aria-label={t("companion.context")}
+            aria-pressed={showContext}
+            title={t("companion.context")}
+          >
+            <Layers size={13} />
+            ctx {contextLoading ? "…" : (contextPreview.sections.length > 0 ? contextItemCount : "")}
+          </button>
+        </div>
+        {showContext && (
+          <section className="companion-context-card" aria-label={t("companion.context")}>
+            <div className="companion-context-title">
+              <Layers size={15} />
+              <span>{t("companion.contextTitle")}</span>
+              <span className="companion-context-count">{contextItemCount}</span>
+            </div>
+            {contextLoading ? (
+              <div className="companion-context-loading">
+                <span className="ai-working-dot" aria-hidden="true" />
+                {t("companion.contextLoading")}
+              </div>
+            ) : (
+              <AIContextChecklistList
+                preview={contextPreview}
+                selection={contextSelection}
+                onSelectionChange={setContextSelection}
+                disabled={isBusy}
+              />
+            )}
+          </section>
+        )}
       </div>
     </aside>
   );

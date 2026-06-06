@@ -4,7 +4,7 @@ import { useEngineEvent } from "./useEngineEvent";
 import type {
   CompanionMessage, CompanionProposal, CompanionChoices,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
-  CompanionApplied, CompanionThinking, CompanionReasoning,
+  CompanionApplied, CompanionThinking, CompanionReasoning, AIContextSelection, CompanionImageAttachment,
 } from "../lib/types";
 
 export interface ChatMessage {
@@ -34,7 +34,7 @@ function toChatMessage(m: CompanionMessage): ChatMessage {
   };
 }
 
-export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: () => void) {
+export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: () => void, contextSelection?: AIContextSelection) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState("");
   const [thinking, setThinking] = useState("");
@@ -132,7 +132,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     runIdRef.current = null;
   });
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, images: CompanionImageAttachment[] = []) => {
     const trimmed = text.trim();
     if (!trimmed || status === "streaming") return;
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
@@ -142,7 +142,12 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setThinking("");
     setReasoningBoth("");
     try {
-      const { run_id } = await companionApi.send(projectId, nodeIdRef.current ?? "", trimmed);
+      const payload = contextSelection || images.length > 0
+        ? { ...(contextSelection ? { context: contextSelection } : {}), ...(images.length > 0 ? { images } : {}) }
+        : undefined;
+      const { run_id } = payload
+        ? await companionApi.send(projectId, nodeIdRef.current ?? "", trimmed, payload)
+        : await companionApi.send(projectId, nodeIdRef.current ?? "", trimmed);
       if (runIdRef.current === PENDING_RUN_ID) {
         runIdRef.current = run_id;
       }
@@ -151,7 +156,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
       setStatus("idle");
       runIdRef.current = null;
     }
-  }, [projectId, status, nodeIdRef]);
+  }, [projectId, status, nodeIdRef, contextSelection]);
 
   const cancel = useCallback(() => {
     const id = runIdRef.current;

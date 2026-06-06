@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_AI_CONTEXT_SELECTION } from "../ai/AIContextChecklist";
 import { I18nProvider } from "../../lib/i18n";
 import { CompanionPanel } from "./CompanionPanel";
 
@@ -26,6 +27,7 @@ const companionState = vi.hoisted(() => ({
 }));
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
+  companionPreviewContext: vi.fn(),
 }));
 
 vi.mock("../../hooks/useCompanion", () => ({
@@ -35,6 +37,9 @@ vi.mock("../../hooks/useCompanion", () => ({
 vi.mock("../../lib/rpc", () => ({
   settings: {
     get: mocks.settingsGet,
+  },
+  companion: {
+    previewContext: mocks.companionPreviewContext,
   },
 }));
 
@@ -49,6 +54,39 @@ function renderPanel(props: Partial<ComponentProps<typeof CompanionPanel>> = {})
 describe("CompanionPanel", () => {
   beforeEach(() => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
+    mocks.companionPreviewContext.mockResolvedValue({
+      counts: {
+        nearbyScenes: 1,
+        hasOutline: true,
+        hasSynopsis: false,
+        relatedScenes: 0,
+        entities: 0,
+        relationships: 0,
+        plotBeats: 0,
+        notes: 0,
+        projectMetaFields: 0,
+        hasStyleNotes: false,
+      },
+      sections: [
+        {
+          id: "current_scene",
+          label: "작성된 본문 발췌",
+          present: true,
+          selected: true,
+          count: 1,
+          preview: "씬 1\n인간의 개별성은 무엇일까?",
+        },
+        {
+          id: "overview",
+          label: "작품 개요",
+          present: true,
+          selected: true,
+          count: 1,
+          preview: "자의식을 다루는 소설",
+        },
+      ],
+      selectedItemCount: 2,
+    });
     companionState.value = {
       messages: [],
       streaming: "",
@@ -123,6 +161,36 @@ describe("CompanionPanel", () => {
     expect(screen.getByText("linetta_apply_ops · 개요, 스토리라인, 비트, 인물, 관계, 장소, 씬, 기억 갱신")).toBeInTheDocument();
   });
 
+  it("lets writers inspect and disable companion context injection", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "컨텍스트 확인" }));
+
+    await waitFor(() => {
+      expect(mocks.companionPreviewContext).toHaveBeenCalledWith("p1", "n1", {
+        context: DEFAULT_AI_CONTEXT_SELECTION,
+      });
+    });
+
+    expect(screen.getByText("작성된 본문 발췌")).toBeInTheDocument();
+    expect(screen.getByText("작품 개요")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "작성된 본문 발췌 미리보기" }));
+    expect(screen.getByText(/인간의 개별성/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "작성된 본문 발췌" }));
+
+    await waitFor(() => {
+      expect(mocks.companionPreviewContext).toHaveBeenLastCalledWith("p1", "n1", {
+        context: {
+          ...DEFAULT_AI_CONTEXT_SELECTION,
+          current_scene: false,
+        },
+      });
+    });
+  });
+
   it("renders provider reasoning in a collapsible block while streaming", () => {
     companionState.value = {
       ...companionState.value,
@@ -143,6 +211,60 @@ describe("CompanionPanel", () => {
     await user.click(screen.getByRole("button", { name: "전송" }));
 
     expect(companionState.value.send).toHaveBeenCalledWith("도와줘");
+  });
+
+  it("attaches an image from the file picker and sends it with the prompt", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const file = new File([new Uint8Array([1, 2, 3])], "scene.png", { type: "image/png" });
+    await user.upload(screen.getByLabelText("이미지 첨부"), file);
+
+    expect(await screen.findByText("scene.png")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText(/메시지/), "이 이미지 참고해줘");
+    await user.click(screen.getByRole("button", { name: "전송" }));
+
+    await waitFor(() => {
+      expect(companionState.value.send).toHaveBeenCalledWith("이 이미지 참고해줘", [
+        expect.objectContaining({
+          name: "scene.png",
+          media_type: "image/png",
+          data: expect.any(String),
+          size: 3,
+        }),
+      ]);
+    });
+  });
+
+  it("attaches a pasted clipboard image before sending", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const input = screen.getByPlaceholderText(/메시지/);
+    const file = new File([new Uint8Array([9, 8])], "pasted.png", { type: "image/png" });
+    fireEvent.paste(input, {
+      clipboardData: {
+        items: [{ kind: "file", type: "image/png", getAsFile: () => file }],
+        files: [file],
+      },
+    });
+
+    expect(await screen.findByText("pasted.png")).toBeInTheDocument();
+
+    await user.type(input, "붙여넣은 이미지 봐줘");
+    await user.click(screen.getByRole("button", { name: "전송" }));
+
+    await waitFor(() => {
+      expect(companionState.value.send).toHaveBeenCalledWith("붙여넣은 이미지 봐줘", [
+        expect.objectContaining({
+          name: "pasted.png",
+          media_type: "image/png",
+          data: expect.any(String),
+          size: 2,
+        }),
+      ]);
+    });
   });
 
   it("waits for the editor flush before sending messages", async () => {
@@ -266,6 +388,24 @@ describe("CompanionPanel", () => {
 
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("나:\n이 장면 이상해?"));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("컴패니언:\n동기가 조금 더 필요해요."));
+  });
+
+  it("copies an individual message bubble to the clipboard", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    companionState.value = {
+      ...companionState.value,
+      messages: [
+        { role: "user", content: "개별성의 비트를 잡아줘" },
+        { role: "assistant", content: "자아 인식의 균열을 첫 장면에 배치해보세요." },
+      ],
+    };
+
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "메시지 복사: 자아 인식의 균열을 첫 장면에 배치해보세요." }));
+
+    expect(writeText).toHaveBeenCalledWith("자아 인식의 균열을 첫 장면에 배치해보세요.");
   });
 
   it("compacts and clears chat through panel actions", async () => {

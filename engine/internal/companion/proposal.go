@@ -55,6 +55,7 @@ type Op struct {
 	NodeRef       string `json:"node_ref,omitempty"`
 	ParentNodeID  string `json:"parent_node_id,omitempty"`
 	ParentNodeRef string `json:"parent_node_ref,omitempty"`
+	Direction     string `json:"direction,omitempty"`
 
 	// create_relationship
 	From         string `json:"from,omitempty"`
@@ -86,6 +87,9 @@ var knownOps = map[string]bool{
 	"create_entity": true, "update_entity": true, "create_relationship": true,
 	"create_scene":        true,
 	"create_outline_node": true,
+	"rename_outline_node": true,
+	"delete_outline_node": true,
+	"move_outline_node":   true,
 	"create_fact_card":    true,
 }
 
@@ -211,6 +215,35 @@ func validateProposal(p Proposal) error {
 			if hasParent && hasAfter {
 				return fmt.Errorf("op[%d] create_outline_node: parent_node_* and after_node_* are mutually exclusive", i)
 			}
+		case "rename_outline_node":
+			if op.NodeID != "" && op.NodeRef != "" {
+				return fmt.Errorf("op[%d] rename_outline_node: node_id and node_ref are mutually exclusive", i)
+			}
+			if op.NodeID == "" && op.NodeRef == "" {
+				return fmt.Errorf("op[%d] rename_outline_node: node_id or node_ref required", i)
+			}
+			if strings.TrimSpace(op.Label) == "" && strings.TrimSpace(op.Title) == "" {
+				return fmt.Errorf("op[%d] rename_outline_node: label or title required", i)
+			}
+		case "delete_outline_node":
+			if op.NodeID != "" && op.NodeRef != "" {
+				return fmt.Errorf("op[%d] delete_outline_node: node_id and node_ref are mutually exclusive", i)
+			}
+			if op.NodeID == "" && op.NodeRef == "" {
+				return fmt.Errorf("op[%d] delete_outline_node: node_id or node_ref required", i)
+			}
+		case "move_outline_node":
+			if op.NodeID != "" && op.NodeRef != "" {
+				return fmt.Errorf("op[%d] move_outline_node: node_id and node_ref are mutually exclusive", i)
+			}
+			if op.NodeID == "" && op.NodeRef == "" {
+				return fmt.Errorf("op[%d] move_outline_node: node_id or node_ref required", i)
+			}
+			direction := strings.ToLower(strings.TrimSpace(op.Direction))
+			if direction != "up" && direction != "down" {
+				return fmt.Errorf("op[%d] move_outline_node: direction must be up|down", i)
+			}
+			p.Ops[i].Direction = direction
 		case "update_beat":
 			if op.BeatID == "" {
 				return fmt.Errorf("op[%d] update_beat: beat_id required", i)

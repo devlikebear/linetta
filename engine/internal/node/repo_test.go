@@ -315,6 +315,213 @@ func TestRepo_MoveUp_andMoveDown(t *testing.T) {
 	}
 }
 
+func TestRepo_MoveToParent_preservesNodeAndMovesToNewContainer(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	rootScene := *p.LastOpenedNodeID
+	if err := r.UpdateContent(ctx, rootScene, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"원고"}]}]}`, 1500); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	part, err := r.CreateSibling(ctx, rootScene, "container", "1부", "", 2000)
+	if err != nil {
+		t.Fatalf("CreateSibling part: %v", err)
+	}
+	chapter, err := r.CreateChild(ctx, part.ID, "container", "1장", "", 3000)
+	if err != nil {
+		t.Fatalf("CreateChild chapter: %v", err)
+	}
+
+	if err := r.MoveToParent(ctx, rootScene, chapter.ID, 4000); err != nil {
+		t.Fatalf("MoveToParent: %v", err)
+	}
+
+	moved, err := r.Get(ctx, rootScene)
+	if err != nil {
+		t.Fatalf("Get moved: %v", err)
+	}
+	if moved.ParentID == nil || *moved.ParentID != chapter.ID {
+		t.Fatalf("moved parent = %v, want %s", moved.ParentID, chapter.ID)
+	}
+	if moved.ContentDoc == nil || moved.WordCount == 0 {
+		t.Fatalf("move should preserve leaf content and word count: %+v", moved)
+	}
+	roots, err := r.ListByProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+	for _, n := range roots {
+		if n.ID == rootScene && n.ParentID == nil {
+			t.Fatalf("root scene should no longer be top-level: %+v", roots)
+		}
+	}
+}
+
+func TestRepo_MoveToParent_rejectsMovingContainerIntoDescendant(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	part, _ := r.CreateSibling(ctx, *p.LastOpenedNodeID, "container", "1부", "", 2000)
+	chapter, _ := r.CreateChild(ctx, part.ID, "container", "1장", "", 3000)
+
+	if err := r.MoveToParent(ctx, part.ID, chapter.ID, 4000); err != ErrInvalidMove {
+		t.Fatalf("err = %v, want ErrInvalidMove", err)
+	}
+}
+
+func TestRepo_MoveToRoot_preservesNodeAndChildren(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	rootScene := *p.LastOpenedNodeID
+	part, _ := r.CreateSibling(ctx, rootScene, "container", "1부", "", 2000)
+	chapter, _ := r.CreateChild(ctx, part.ID, "container", "1장", "경계의 틈", 3000)
+	scene, _ := r.CreateChild(ctx, chapter.ID, "leaf", "씬 1", "조간난 아침", 4000)
+
+	if err := r.MoveToRoot(ctx, chapter.ID, 5000); err != nil {
+		t.Fatalf("MoveToRoot: %v", err)
+	}
+
+	moved, err := r.Get(ctx, chapter.ID)
+	if err != nil {
+		t.Fatalf("Get moved chapter: %v", err)
+	}
+	if moved.ParentID != nil {
+		t.Fatalf("moved parent = %v, want root", moved.ParentID)
+	}
+	if moved.Label != "1장" || moved.Title != "경계의 틈" {
+		t.Fatalf("move should preserve label/title: %+v", moved)
+	}
+	child, err := r.Get(ctx, scene.ID)
+	if err != nil {
+		t.Fatalf("Get child scene: %v", err)
+	}
+	if child.ParentID == nil || *child.ParentID != chapter.ID || child.Title != "조간난 아침" {
+		t.Fatalf("child should remain under moved node with title preserved: %+v", child)
+	}
+}
+
+func TestRepo_ConvertLeafToContainer_convertsOnlyEmptyLeaf(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	emptyLeaf, _ := r.CreateSibling(ctx, *p.LastOpenedNodeID, "leaf", "1장 - 경계의 틈", "표시 제목", 2000)
+	if err := r.ConvertLeafToContainer(ctx, emptyLeaf.ID, 3000); err != nil {
+		t.Fatalf("ConvertLeafToContainer: %v", err)
+	}
+	got, err := r.Get(ctx, emptyLeaf.ID)
+	if err != nil {
+		t.Fatalf("Get converted: %v", err)
+	}
+	if got.Kind != KindContainer || got.ContentDoc != nil || got.Label != "1장 - 경계의 틈" || got.Title != "표시 제목" {
+		t.Fatalf("converted node should preserve label/title and clear empty doc: %+v", got)
+	}
+
+	filledLeaf, _ := r.CreateSibling(ctx, got.ID, "leaf", "씬 1", "", 4000)
+	if err := r.UpdateContent(ctx, filledLeaf.ID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"원고"}]}]}`, 5000); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	if err := r.ConvertLeafToContainer(ctx, filledLeaf.ID, 6000); err != ErrInvalidMove {
+		t.Fatalf("non-empty leaf err = %v, want ErrInvalidMove", err)
+	}
+}
+
+func TestRepo_RestoreOutline_restoresSnapshotAndRemovesRepairCreatedNodes(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	rootScene := *p.LastOpenedNodeID
+	part, _ := r.CreateSibling(ctx, rootScene, "container", "1부", "", 2000)
+	chapter, _ := r.CreateChild(ctx, part.ID, "container", "1장", "", 3000)
+	empty, _ := r.CreateChild(ctx, part.ID, "container", "2장", "", 3500)
+	snapshot, err := r.ListByProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("ListByProject snapshot: %v", err)
+	}
+
+	if err := r.MoveToParent(ctx, rootScene, chapter.ID, 4000); err != nil {
+		t.Fatalf("MoveToParent: %v", err)
+	}
+	if err := r.Rename(ctx, rootScene, "씬 99", "", 5000); err != nil {
+		t.Fatalf("Rename: %v", err)
+	}
+	if err := r.Delete(ctx, empty.ID, 6000); err != nil {
+		t.Fatalf("Delete empty: %v", err)
+	}
+	created, _ := r.CreateChild(ctx, part.ID, "container", "새 장", "", 7000)
+
+	if err := r.RestoreOutline(ctx, p.ID, snapshot, 8000); err != nil {
+		t.Fatalf("RestoreOutline: %v", err)
+	}
+
+	gotRoot, err := r.Get(ctx, rootScene)
+	if err != nil {
+		t.Fatalf("Get root scene: %v", err)
+	}
+	if gotRoot.ParentID != nil || gotRoot.Label != "씬 1" {
+		t.Fatalf("root scene not restored: %+v", gotRoot)
+	}
+	gotEmpty, err := r.Get(ctx, empty.ID)
+	if err != nil {
+		t.Fatalf("empty chapter should be restored: %v", err)
+	}
+	if gotEmpty.ParentID == nil || *gotEmpty.ParentID != part.ID {
+		t.Fatalf("empty chapter parent = %v, want %s", gotEmpty.ParentID, part.ID)
+	}
+	if _, err := r.Get(ctx, created.ID); err != ErrNotFound {
+		t.Fatalf("repair-created node should be removed, err=%v", err)
+	}
+}
+
+func TestRepo_RestoreOutline_rejectsInvalidSnapshotShape(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	scene, _ := r.Get(ctx, *p.LastOpenedNodeID)
+	duplicate := scene
+	if err := r.RestoreOutline(ctx, p.ID, []Node{scene, duplicate}, 8000); err != ErrInvalidMove {
+		t.Fatalf("duplicate snapshot err = %v, want ErrInvalidMove", err)
+	}
+
+	parentA := "node-b"
+	parentB := "node-a"
+	cyclic := []Node{
+		{
+			ID:        "node-a",
+			ProjectID: p.ID,
+			ParentID:  &parentA,
+			Kind:      KindContainer,
+			Label:     "1부",
+			Status:    StatusDraft,
+		},
+		{
+			ID:        "node-b",
+			ProjectID: p.ID,
+			ParentID:  &parentB,
+			Kind:      KindContainer,
+			Label:     "1장",
+			Status:    StatusDraft,
+		},
+	}
+	if err := r.RestoreOutline(ctx, p.ID, cyclic, 9000); err != ErrInvalidMove {
+		t.Fatalf("cyclic snapshot err = %v, want ErrInvalidMove", err)
+	}
+
+	got, err := r.Get(ctx, scene.ID)
+	if err != nil {
+		t.Fatalf("original scene should remain: %v", err)
+	}
+	if got.Label != scene.Label || got.ParentID != scene.ParentID {
+		t.Fatalf("invalid restore should not mutate original scene: before=%+v after=%+v", scene, got)
+	}
+}
+
 func TestRepo_UpdateContent_bumpsContentVersion(t *testing.T) {
 	s, p := newStoreAndProject(t)
 	r := NewRepo(s)

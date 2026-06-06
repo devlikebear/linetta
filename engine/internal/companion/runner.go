@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/streamdedup"
 	"github.com/devlikebear/tars/pkg/agentloop"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -87,7 +88,7 @@ func newRunner(svc *Service) *Runner {
 	return &Runner{svc: svc, active: map[string]context.CancelFunc{}}
 }
 
-func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now func() int64) (string, error) {
+func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, images []ImageAttachment, now func() int64) (string, error) {
 	sess, err := r.svc.sessions.EnsureWorker(projectID)
 	if err != nil {
 		return "", err
@@ -98,6 +99,7 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 	if err != nil {
 		return "", err
 	}
+	data = applyContextSelection(data, selection)
 
 	// Persist the user turn before streaming so transcript failures are visible
 	// before the assistant starts generating against missing history.
@@ -115,8 +117,12 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 		msgs = append(msgs, llm.ChatMessage{Role: "user", Content: cctx})
 	}
 	if hist, err := session.LoadHistory(path, historyTokenBudget); err == nil {
-		for _, m := range hist {
-			msgs = append(msgs, llm.ChatMessage{Role: m.Role, Content: m.Content})
+		for i, m := range hist {
+			msg := llm.ChatMessage{Role: m.Role, Content: m.Content}
+			if len(images) > 0 && i == len(hist)-1 && m.Role == "user" {
+				msg.ContentBlocks = companionImageContentBlocks(m.Content, images)
+			}
+			msgs = append(msgs, msg)
 		}
 	}
 
@@ -135,6 +141,21 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, now 
 
 	go r.run(runCtx, runID, projectID, nodeID, path, text, msgs, client, now)
 	return runID, nil
+}
+
+func companionImageContentBlocks(text string, images []ImageAttachment) []llm.ContentBlock {
+	blocks := make([]llm.ContentBlock, 0, len(images)+1)
+	if strings.TrimSpace(text) != "" {
+		blocks = append(blocks, llm.ContentBlock{Type: "text", Text: text})
+	}
+	for _, image := range images {
+		blocks = append(blocks, llm.ContentBlock{
+			Type:      "image",
+			MediaType: image.MediaType,
+			Data:      image.Data,
+		})
+	}
+	return blocks
 }
 
 func (r *Runner) finish(runID string) {

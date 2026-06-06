@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_AI_CONTEXT_SELECTION } from "../components/ai/AIContextChecklist";
 
 // Capture the Tauri event listeners so the test can fire engine events.
 const ev = vi.hoisted(() => ({ listeners: new Map<string, (e: { payload: unknown }) => void>() }));
@@ -55,6 +56,36 @@ describe("useCompanion streaming", () => {
       role: "assistant",
       content: "안녕하세요! 반가워요.",
     });
+  });
+
+  it("passes the selected context sections when sending a companion turn", async () => {
+    const selection = { ...DEFAULT_AI_CONTEXT_SELECTION, current_scene: false, memories: false };
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }, undefined, selection));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("본문은 빼고 봐줘");
+    });
+
+    expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "본문은 빼고 봐줘", { context: selection });
+  });
+
+  it("passes companion image attachments with the selected context", async () => {
+    const selection = { ...DEFAULT_AI_CONTEXT_SELECTION, current_scene: false };
+    const image = {
+      name: "scene.png",
+      media_type: "image/png",
+      data: "AQID",
+      size: 3,
+    };
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }, undefined, selection));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("이미지 참고해줘", [image]);
+    });
+
+    expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "이미지 참고해줘", { context: selection, images: [image] });
   });
 
   it("accepts fast engine events that arrive before companion.send resolves", async () => {

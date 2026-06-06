@@ -1,8 +1,10 @@
 import { useEffect, useState, type MouseEvent } from "react";
-import { ChevronLeft, FilePlus2, FolderPlus, Layers, MoreHorizontal, Pencil, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { AlertTriangle, ChevronLeft, FilePlus2, FolderPlus, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { TreeNode } from "../hooks/useFirstLeaf";
 import { flatten } from "../hooks/useFirstLeaf";
 import { displayNodeLabel, useI18n } from "../lib/i18n";
+import { collectOutlineLabelIssues, isSceneLabel, isStructuralChapterLabel } from "../lib/outlineRepair";
+import "./OutlinePanel.css";
 
 interface Props {
   tree: TreeNode[];
@@ -12,10 +14,17 @@ interface Props {
   onSelect: (node: TreeNode) => void;
   onRename?: (node: TreeNode) => void;
   onCreateScene?: (node: TreeNode) => void;
+  onCreatePart?: (node: TreeNode) => void;
   onCreateChapter?: (node: TreeNode) => void;
   onMoveSceneUp?: (node: TreeNode) => void;
   onMoveSceneDown?: (node: TreeNode) => void;
   onDeleteScene?: (node: TreeNode) => void;
+  onMoveNodeUp?: (node: TreeNode) => void;
+  onMoveNodeDown?: (node: TreeNode) => void;
+  onDeleteNode?: (node: TreeNode) => void;
+  onRepairOutline?: () => void;
+  onUndoRepairOutline?: () => void;
+  canUndoRepair?: boolean;
   tourTarget?: string;
 }
 
@@ -33,19 +42,32 @@ export function OutlinePanel({
   onSelect,
   onRename,
   onCreateScene,
+  onCreatePart,
   onCreateChapter,
   onMoveSceneUp,
   onMoveSceneDown,
   onDeleteScene,
+  onMoveNodeUp,
+  onMoveNodeDown,
+  onDeleteNode,
+  onRepairOutline,
+  onUndoRepairOutline,
+  canUndoRepair,
   tourTarget,
 }: Props) {
   const { language, t } = useI18n();
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [doctorOpen, setDoctorOpen] = useState(false);
+  const outlineIssues = analyzeOutline(tree, t);
   const canOpenMenu = (node: TreeNode) =>
     Boolean(
       onRename ||
+        onCreatePart ||
         onCreateScene ||
         onCreateChapter ||
+        onMoveNodeUp ||
+        onMoveNodeDown ||
+        onDeleteNode ||
         (node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene)),
     );
 
@@ -105,10 +127,47 @@ export function OutlinePanel({
     <nav className="rail" data-tour={tourTarget}>
       <div className="rail-head">
         <span className="lbl">{t("workspace.outline")}</span>
-        <button type="button" className="rail-collapse" onClick={onToggleCollapse} title={t("workspace.collapse")}>
-          <ChevronLeft size={15} />
-        </button>
+        <div className="rail-actions">
+          <button
+            type="button"
+            className={`rail-doctor${doctorOpen ? " is-active" : ""}`}
+            onClick={() => setDoctorOpen((v) => !v)}
+            aria-label={t("workspace.outlineDoctor")}
+            title={t("workspace.outlineDoctor")}
+          >
+            <Stethoscope size={14} />
+          </button>
+          <button type="button" className="rail-collapse" onClick={onToggleCollapse} title={t("workspace.collapse")}>
+            <ChevronLeft size={15} />
+          </button>
+        </div>
       </div>
+      {doctorOpen && (
+        <section className="outline-doctor" aria-label={t("workspace.outlineDoctor")}>
+          <div className="outline-doctor-title">
+            <AlertTriangle size={13} />
+            <span>{t("workspace.outlineDoctorResult")}</span>
+            <strong>{outlineIssues.length}</strong>
+          </div>
+          {outlineIssues.length === 0 ? (
+            <p>{t("workspace.outlineDoctorClean")}</p>
+          ) : (
+            <ul>
+              {outlineIssues.map((issue) => (
+                <li key={issue.key}>{issue.text}</li>
+              ))}
+            </ul>
+          )}
+          <button type="button" className="outline-repair" onClick={onRepairOutline} disabled={!onRepairOutline || outlineIssues.length === 0}>
+            {t("workspace.outlineRepair")}
+          </button>
+          {canUndoRepair && onUndoRepairOutline && (
+            <button type="button" className="outline-undo-repair" onClick={onUndoRepairOutline}>
+              {t("workspace.outlineUndoRepair")}
+            </button>
+          )}
+        </section>
+      )}
       <div className="rail-tree">
         {tree.map((root) => (
           <RailNode
@@ -134,6 +193,11 @@ export function OutlinePanel({
               <Pencil size={13} /> {t("workspace.rename")}
             </button>
           )}
+          {onCreatePart && (
+            <button type="button" role="menuitem" onClick={() => runAction(onCreatePart)}>
+              <FolderPlus size={13} /> {t("workspace.newPart")}
+            </button>
+          )}
           {onCreateScene && (
             <button type="button" role="menuitem" onClick={() => runAction(onCreateScene)}>
               <FilePlus2 size={13} /> {t("workspace.newScene")}
@@ -144,21 +208,21 @@ export function OutlinePanel({
               <FolderPlus size={13} /> {t("workspace.newChapter")}
             </button>
           )}
-          {menu.node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene) && (
+          {(onMoveNodeUp || onMoveNodeDown || onDeleteNode || (menu.node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene))) && (
             <div className="outline-menu-sep" role="separator" />
           )}
-          {menu.node.kind === "leaf" && onMoveSceneUp && (
-            <button type="button" role="menuitem" onClick={() => runAction(onMoveSceneUp)}>
+          {(onMoveNodeUp || (menu.node.kind === "leaf" && onMoveSceneUp)) && (
+            <button type="button" role="menuitem" onClick={() => runAction(onMoveNodeUp ?? onMoveSceneUp)}>
               <ArrowUp size={13} /> {t("workspace.moveUp")}
             </button>
           )}
-          {menu.node.kind === "leaf" && onMoveSceneDown && (
-            <button type="button" role="menuitem" onClick={() => runAction(onMoveSceneDown)}>
+          {(onMoveNodeDown || (menu.node.kind === "leaf" && onMoveSceneDown)) && (
+            <button type="button" role="menuitem" onClick={() => runAction(onMoveNodeDown ?? onMoveSceneDown)}>
               <ArrowDown size={13} /> {t("workspace.moveDown")}
             </button>
           )}
-          {menu.node.kind === "leaf" && onDeleteScene && (
-            <button type="button" role="menuitem" className="danger" onClick={() => runAction(onDeleteScene)}>
+          {(onDeleteNode || (menu.node.kind === "leaf" && onDeleteScene)) && (
+            <button type="button" role="menuitem" className="danger" onClick={() => runAction(onDeleteNode ?? onDeleteScene)}>
               <Trash2 size={13} /> {t("workspace.delete")}
             </button>
           )}
@@ -166,6 +230,83 @@ export function OutlinePanel({
       )}
     </nav>
   );
+}
+
+type OutlineIssue = {
+  key: string;
+  text: string;
+};
+
+function analyzeOutline(tree: TreeNode[], t: ReturnType<typeof useI18n>["t"]): OutlineIssue[] {
+  const issues: OutlineIssue[] = [];
+  const visit = (nodes: TreeNode[], depth: number, parentKey: string) => {
+    const seen = new Map<string, TreeNode[]>();
+    nodes.forEach((node, index) => {
+      const label = node.label.trim();
+      if (label) {
+        const list = seen.get(label) ?? [];
+        list.push(node);
+        seen.set(label, list);
+      }
+      if (node.kind === "container" && node.children.length === 0) {
+        issues.push({ key: `empty-${node.id}`, text: t("workspace.outlineIssue.empty", { label: node.label }) });
+      }
+      if (node.kind === "leaf" && node.word_count === 0 && isStructuralChapterLabel(node.label)) {
+        issues.push({ key: `chapter-as-scene-${node.id}`, text: t("workspace.outlineIssue.chapterAsScene", { label: node.label }) });
+      }
+      if (
+        node.kind === "leaf" &&
+        node.word_count === 0 &&
+        !isSceneLabel(node.label) &&
+        !isStructuralChapterLabel(node.label) &&
+        nodes.slice(0, index).some((sibling) => isStructuralChapterLabel(sibling.label)) &&
+        nodes.slice(index + 1).some((sibling) => isStructuralChapterLabel(sibling.label))
+      ) {
+        issues.push({ key: `part-as-scene-${node.id}`, text: t("workspace.outlineIssue.partAsScene", { label: node.label }) });
+      }
+      if (depth === 0 && node.kind === "leaf" && tree.some((root) => root.kind === "container")) {
+        issues.push({ key: `root-leaf-${node.id}`, text: t("workspace.outlineIssue.rootLeaf", { label: node.label }) });
+      }
+      if (depth === 0 && node.kind === "container" && isStructuralChapterLabel(node.label)) {
+        issues.push({ key: `root-chapter-${node.id}`, text: t("workspace.outlineIssue.rootChapter", { label: node.label }) });
+      }
+      if (
+        node.kind === "container" &&
+        isStructuralChapterLabel(node.label) &&
+        node.children.some((child) => child.kind === "container")
+      ) {
+        issues.push({ key: `chapter-containers-${node.id}`, text: t("workspace.outlineIssue.chapterContainsContainers", { label: node.label }) });
+      }
+      if (
+        depth > 0 &&
+        node.kind === "container" &&
+        !isStructuralChapterLabel(node.label) &&
+        node.children.some((child) => child.kind === "container")
+      ) {
+        issues.push({ key: `nested-part-${node.id}`, text: t("workspace.outlineIssue.nestedPart", { label: node.label }) });
+      }
+      if (depth === 1 && node.kind === "leaf") {
+        issues.push({ key: `part-leaf-${node.id}`, text: t("workspace.outlineIssue.sceneUnderPart", { label: node.label }) });
+      }
+      if (depth > 2) {
+        issues.push({ key: `deep-${node.id}`, text: t("workspace.outlineIssue.deep", { label: node.label }) });
+      }
+      visit(node.children, depth + 1, node.id);
+    });
+    seen.forEach((items, label) => {
+      if (items.length > 1) {
+        issues.push({ key: `dup-${parentKey}-${label}`, text: t("workspace.outlineIssue.duplicate", { label }) });
+      }
+    });
+  };
+  visit(tree, 0, "root");
+  for (const issue of collectOutlineLabelIssues(tree, t)) {
+    issues.push({
+      key: `label-cleanup-${issue.id}`,
+      text: t("workspace.outlineIssue.labelCleanup", { label: issue.label }),
+    });
+  }
+  return issues;
 }
 
 /** Recursively renders the project tree against the mockup's rail classes.

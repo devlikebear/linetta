@@ -233,6 +233,80 @@ func TestMoveHandlers(t *testing.T) {
 	}
 }
 
+func TestMoveToParentHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	ctx := context.Background()
+	part, _ := f.nodes.CreateSibling(ctx, f.nID, "container", "1부", "", 2000)
+	chapter, _ := f.nodes.CreateChild(ctx, part.ID, "container", "1장", "", 3000)
+
+	h := MoveToParent(f.nodes, func() int64 { return 4000 })
+	if _, err := h(ctx, json.RawMessage(`{"id":"`+f.nID+`","parent_id":"`+chapter.ID+`"}`)); err != nil {
+		t.Fatalf("MoveToParent handler: %v", err)
+	}
+
+	got, _ := f.nodes.Get(ctx, f.nID)
+	if got.ParentID == nil || *got.ParentID != chapter.ID {
+		t.Fatalf("parent = %v, want %s", got.ParentID, chapter.ID)
+	}
+}
+
+func TestMoveToRootHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	ctx := context.Background()
+	part, _ := f.nodes.CreateSibling(ctx, f.nID, "container", "1부", "", 2000)
+	chapter, _ := f.nodes.CreateChild(ctx, part.ID, "container", "1장", "경계의 틈", 3000)
+
+	h := MoveToRoot(f.nodes, func() int64 { return 4000 })
+	if _, err := h(ctx, json.RawMessage(`{"id":"`+chapter.ID+`"}`)); err != nil {
+		t.Fatalf("MoveToRoot handler: %v", err)
+	}
+
+	got, _ := f.nodes.Get(ctx, chapter.ID)
+	if got.ParentID != nil {
+		t.Fatalf("parent = %v, want root", got.ParentID)
+	}
+	if got.Title != "경계의 틈" {
+		t.Fatalf("title should be preserved: %+v", got)
+	}
+}
+
+func TestConvertToContainerHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	ctx := context.Background()
+	leaf, _ := f.nodes.CreateSibling(ctx, f.nID, "leaf", "1장 - 경계의 틈", "표시 제목", 2000)
+
+	h := ConvertToContainer(f.nodes, func() int64 { return 3000 })
+	if _, err := h(ctx, json.RawMessage(`{"id":"`+leaf.ID+`"}`)); err != nil {
+		t.Fatalf("ConvertToContainer handler: %v", err)
+	}
+
+	got, _ := f.nodes.Get(ctx, leaf.ID)
+	if got.Kind != node.KindContainer || got.Title != "표시 제목" {
+		t.Fatalf("converted node mismatch: %+v", got)
+	}
+}
+
+func TestRestoreOutlineHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	ctx := context.Background()
+	chapter, _ := f.nodes.CreateSibling(ctx, f.nID, "container", "1장", "", 2000)
+	snapshot, _ := f.nodes.ListByProject(ctx, f.pID)
+	_ = f.nodes.MoveToParent(ctx, f.nID, chapter.ID, 3000)
+
+	payload, _ := json.Marshal(map[string]any{
+		"project_id": f.pID,
+		"nodes":      snapshot,
+	})
+	h := RestoreOutline(f.nodes, func() int64 { return 4000 })
+	if _, err := h(ctx, payload); err != nil {
+		t.Fatalf("RestoreOutline handler: %v", err)
+	}
+	got, _ := f.nodes.Get(ctx, f.nID)
+	if got.ParentID != nil {
+		t.Fatalf("node should be restored to root: %+v", got)
+	}
+}
+
 func TestUpdateNodeContentHandler_callsPostUpdateAfterSuccess(t *testing.T) {
 	f := newNodeFixture(t)
 	var got []string

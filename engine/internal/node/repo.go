@@ -17,6 +17,7 @@ var (
 	ErrInvalidKind         = errors.New("invalid node kind")
 	ErrContentOnContainer  = errors.New("cannot update content for a container node")
 	ErrNodeProjectMismatch = errors.New("node does not belong to project")
+	ErrInvalidMove         = errors.New("invalid node move")
 )
 
 // MentionResyncer is called after a successful UpdateContent. Typical impl:
@@ -353,6 +354,57 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 0, ?, ?)`,
 	return r.Get(ctx, newID)
 }
 
+// CreateRoot inserts a new top-level node at the end of the project's outline.
+func (r *Repo) CreateRoot(ctx context.Context, projectID, kind, label, title string, now int64) (Node, error) {
+	if !ValidKind(kind) {
+		return Node{}, ErrInvalidKind
+	}
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return Node{}, err
+	}
+	defer tx.Rollback()
+
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM projects WHERE id = ?`, projectID).Scan(&exists); err != nil {
+		return Node{}, err
+	}
+	if exists == 0 {
+		return Node{}, ErrNotFound
+	}
+
+	var maxOrd sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT MAX(ordinal) FROM nodes WHERE project_id = ? AND parent_id IS NULL`, projectID).Scan(&maxOrd); err != nil {
+		return Node{}, err
+	}
+	nextOrd := 0
+	if maxOrd.Valid {
+		nextOrd = int(maxOrd.Int64) + 1
+	}
+
+	newID := uuid.NewString()
+	var contentDoc any
+	if kind == KindLeaf {
+		contentDoc = `{"type":"doc","content":[{"type":"paragraph"}]}`
+	} else {
+		contentDoc = nil
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
+                   content_doc, status, word_count, created_at, updated_at)
+VALUES (?, ?, NULL, ?, ?, ?, ?, ?, 'draft', 0, ?, ?)`,
+		newID, projectID, nextOrd, kind, label, title, contentDoc, now, now); err != nil {
+		return Node{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_at = ? WHERE id = ?`, now, projectID); err != nil {
+		return Node{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Node{}, err
+	}
+	return r.Get(ctx, newID)
+}
+
 // Rename updates label and title (both can be empty strings to clear).
 func (r *Repo) Rename(ctx context.Context, id, label, title string, now int64) error {
 	res, err := r.s.DB().ExecContext(ctx, `
@@ -406,6 +458,295 @@ func (r *Repo) MoveUp(ctx context.Context, id string, now int64) error {
 // MoveDown swaps the node with its next sibling. No-op if last.
 func (r *Repo) MoveDown(ctx context.Context, id string, now int64) error {
 	return r.swap(ctx, id, "down", now)
+}
+
+// MoveToParent moves a node to the end of another container's children.
+func (r *Repo) MoveToParent(ctx context.Context, id, parentID string, now int64) error {
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(ctx, baseSelect+` WHERE id = ?`, id)
+	cur, err := scan(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+	row = tx.QueryRowContext(ctx, baseSelect+` WHERE id = ?`, parentID)
+	parent, err := scan(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+	if parent.ProjectID != cur.ProjectID {
+		return ErrNodeProjectMismatch
+	}
+	if parent.Kind != KindContainer {
+		return ErrContentOnContainer
+	}
+	if cur.ID == parent.ID {
+		return ErrInvalidMove
+	}
+	if cur.ParentID != nil && *cur.ParentID == parent.ID {
+		return tx.Commit()
+	}
+
+	var descendantCount int
+	if err := tx.QueryRowContext(ctx, `
+WITH RECURSIVE descendants(id) AS (
+  SELECT id FROM nodes WHERE parent_id = ?
+  UNION ALL
+  SELECT n.id FROM nodes n JOIN descendants d ON n.parent_id = d.id
+)
+SELECT COUNT(1) FROM descendants WHERE id = ?`, cur.ID, parent.ID).Scan(&descendantCount); err != nil {
+		return err
+	}
+	if descendantCount > 0 {
+		return ErrInvalidMove
+	}
+
+	var maxOrd sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT MAX(ordinal) FROM nodes WHERE parent_id = ?`, parent.ID).Scan(&maxOrd); err != nil {
+		return err
+	}
+	nextOrd := 0
+	if maxOrd.Valid {
+		nextOrd = int(maxOrd.Int64) + 1
+	}
+
+	if cur.ParentID == nil {
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET ordinal = ordinal - 1
+ WHERE project_id = ? AND parent_id IS NULL AND ordinal > ?`, cur.ProjectID, cur.Ordinal); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET ordinal = ordinal - 1
+ WHERE parent_id = ? AND ordinal > ?`, *cur.ParentID, cur.Ordinal); err != nil {
+			return err
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET parent_id = ?, ordinal = ?, updated_at = ? WHERE id = ?`,
+		parent.ID, nextOrd, now, cur.ID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_at = ? WHERE id = ?`, now, cur.ProjectID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// MoveToRoot moves a node to the end of the project's top-level outline.
+func (r *Repo) MoveToRoot(ctx context.Context, id string, now int64) error {
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(ctx, baseSelect+` WHERE id = ?`, id)
+	cur, err := scan(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+	if cur.ParentID == nil {
+		return tx.Commit()
+	}
+
+	var maxOrd sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT MAX(ordinal) FROM nodes WHERE project_id = ? AND parent_id IS NULL`, cur.ProjectID).Scan(&maxOrd); err != nil {
+		return err
+	}
+	nextOrd := 0
+	if maxOrd.Valid {
+		nextOrd = int(maxOrd.Int64) + 1
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET ordinal = ordinal - 1
+ WHERE parent_id = ? AND ordinal > ?`, *cur.ParentID, cur.Ordinal); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET parent_id = NULL, ordinal = ?, updated_at = ? WHERE id = ?`,
+		nextOrd, now, cur.ID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_at = ? WHERE id = ?`, now, cur.ProjectID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ConvertLeafToContainer turns an empty leaf marker into a container while
+// preserving its label/title/status. Non-empty manuscript leaves are rejected.
+func (r *Repo) ConvertLeafToContainer(ctx context.Context, id string, now int64) error {
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(ctx, baseSelect+` WHERE id = ?`, id)
+	cur, err := scan(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+	if cur.Kind == KindContainer {
+		return tx.Commit()
+	}
+	if cur.Kind != KindLeaf || cur.WordCount != 0 {
+		return ErrInvalidMove
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE nodes
+   SET kind = 'container', content_doc = NULL, word_count = 0, updated_at = ?
+ WHERE id = ?`, now, cur.ID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE projects
+   SET word_count = COALESCE((SELECT SUM(word_count) FROM nodes WHERE project_id = ? AND kind = 'leaf'), 0),
+       updated_at = ?
+ WHERE id = ?`, cur.ProjectID, now, cur.ProjectID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// RestoreOutline restores a previous outline topology for a project.
+func (r *Repo) RestoreOutline(ctx context.Context, projectID string, snapshot []Node, now int64) error {
+	if projectID == "" || len(snapshot) == 0 {
+		return ErrInvalidMove
+	}
+	byID := map[string]Node{}
+	for _, n := range snapshot {
+		if n.ID == "" || n.ProjectID != projectID || !ValidKind(n.Kind) || !ValidStatus(n.Status) {
+			return ErrInvalidMove
+		}
+		if _, ok := byID[n.ID]; ok {
+			return ErrInvalidMove
+		}
+		if n.ParentID != nil && *n.ParentID == n.ID {
+			return ErrInvalidMove
+		}
+		byID[n.ID] = n
+	}
+	for _, n := range snapshot {
+		if n.ParentID != nil {
+			if _, ok := byID[*n.ParentID]; !ok {
+				return ErrInvalidMove
+			}
+		}
+	}
+	for _, n := range snapshot {
+		seen := map[string]bool{n.ID: true}
+		for parentID := n.ParentID; parentID != nil; {
+			if seen[*parentID] {
+				return ErrInvalidMove
+			}
+			seen[*parentID] = true
+			parent := byID[*parentID]
+			parentID = parent.ParentID
+		}
+	}
+
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var projectExists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM projects WHERE id = ?`, projectID).Scan(&projectExists); err != nil {
+		return err
+	}
+	if projectExists == 0 {
+		return ErrNotFound
+	}
+
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM nodes WHERE project_id = ?`, projectID)
+	if err != nil {
+		return err
+	}
+	currentIDs := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		currentIDs[id] = true
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	for _, n := range snapshot {
+		if currentIDs[n.ID] {
+			continue
+		}
+		var contentDoc any
+		if n.ContentDoc != nil {
+			contentDoc = *n.ContentDoc
+		}
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
+                   content_doc, status, word_count, summary, content_version,
+                   summary_for_version, created_at, updated_at)
+VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			n.ID, n.ProjectID, n.Ordinal, n.Kind, n.Label, n.Title, contentDoc,
+			n.Status, n.WordCount, n.Summary, n.ContentVersion, n.SummaryForVersion,
+			n.CreatedAt, now); err != nil {
+			return err
+		}
+	}
+
+	for _, n := range snapshot {
+		var parentID any
+		if n.ParentID != nil {
+			parentID = *n.ParentID
+		}
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes
+   SET parent_id = ?, ordinal = ?, label = ?, title = ?, status = ?, updated_at = ?
+ WHERE id = ? AND project_id = ?`,
+			parentID, n.Ordinal, n.Label, n.Title, n.Status, now, n.ID, projectID); err != nil {
+			return err
+		}
+	}
+
+	for id := range currentIDs {
+		if _, ok := byID[id]; ok {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ? AND project_id = ?`, id, projectID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE projects
+   SET word_count = COALESCE((SELECT SUM(word_count) FROM nodes WHERE project_id = ? AND kind = 'leaf'), 0),
+       updated_at = ?
+ WHERE id = ?`, projectID, now, projectID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *Repo) swap(ctx context.Context, id, direction string, now int64) error {

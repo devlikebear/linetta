@@ -2,6 +2,7 @@ package companion
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -47,6 +49,20 @@ func (f *fakeClient) Chat(ctx context.Context, _ []llm.ChatMessage, opts llm.Cha
 		opts.OnDelta(resp)
 	}
 	return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: resp}}, nil
+}
+
+type captureMessagesClient struct {
+	mu       sync.Mutex
+	messages [][]llm.ChatMessage
+}
+
+func (c *captureMessagesClient) Ask(context.Context, string) (string, error) { return "", nil }
+func (c *captureMessagesClient) Chat(_ context.Context, messages []llm.ChatMessage, _ llm.ChatOptions) (llm.ChatResponse, error) {
+	c.mu.Lock()
+	copied := append([]llm.ChatMessage(nil), messages...)
+	c.messages = append(c.messages, copied)
+	c.mu.Unlock()
+	return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "확인했습니다."}}, nil
 }
 
 type fakeNotifier struct {
@@ -156,6 +172,48 @@ func TestSend_NoProposalWhenNoBlock(t *testing.T) {
 	waitFor(t, notif, "companion.done")
 	if notif.get("companion.proposal") != "" {
 		t.Fatalf("did not expect a proposal event: %s", notif.get("companion.proposal"))
+	}
+}
+
+func TestSendWithContextAndImages_AttachesLatestUserMessageBlocks(t *testing.T) {
+	client := &captureMessagesClient{}
+	svc, notif, projectID := newSvcWithClient(t, client)
+	imageData := base64.StdEncoding.EncodeToString([]byte{1, 2, 3})
+
+	runID, err := svc.SendWithContextAndImages(context.Background(), projectID, "", "이 장면 이미지를 참고해줘", ai.DefaultContextSelection(), []ImageAttachment{{
+		Name:      "scene.png",
+		MediaType: "image/png",
+		Data:      imageData,
+		Size:      3,
+	}}, func() int64 { return 1 })
+	if err != nil || runID == "" {
+		t.Fatalf("SendWithContextAndImages err=%v runID=%q", err, runID)
+	}
+	waitFor(t, notif, "companion.done")
+
+	client.mu.Lock()
+	calls := append([][]llm.ChatMessage(nil), client.messages...)
+	client.mu.Unlock()
+	if len(calls) == 0 {
+		t.Fatal("expected one LLM chat call")
+	}
+	messages := calls[0]
+	if len(messages) == 0 {
+		t.Fatal("expected chat messages")
+	}
+	last := messages[len(messages)-1]
+	if last.Role != "user" {
+		t.Fatalf("last role = %q, want user", last.Role)
+	}
+	if len(last.ContentBlocks) != 2 {
+		t.Fatalf("content blocks = %+v, want text + image", last.ContentBlocks)
+	}
+	if last.ContentBlocks[0].Type != "text" || !strings.Contains(last.ContentBlocks[0].Text, "이미지") {
+		t.Fatalf("text block = %+v", last.ContentBlocks[0])
+	}
+	image := last.ContentBlocks[1]
+	if image.Type != "image" || image.MediaType != "image/png" || image.Data != imageData {
+		t.Fatalf("image block = %+v", image)
 	}
 }
 
@@ -459,6 +517,103 @@ func TestGatherContext_PrioritizesCoreEntitiesPastRecentLimit(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("core entity %q missing from companion context of %d entities", core.Name, len(d.Entities))
+	}
+}
+
+func TestApplyContextSelection_RemovesUncheckedCompanionSections(t *testing.T) {
+	off := false
+	data := PromptData{
+		Outline: "자의식에 관한 작품 개요",
+		SceneExcerpts: []SceneExcerpt{{
+			NodeID: "n1",
+			Label:  "씬 1",
+			Text:   "인간의 개별성은 무엇일까?",
+		}},
+		Threads: []thread.Thread{{ID: "t1", Name: "자의식의 균열"}},
+		Entities: []entity.Entity{
+			{ID: "e1", Kind: "character", Name: "해진"},
+			{ID: "e2", Kind: "place", Name: "거울방"},
+		},
+		Relationships: []relationship.Relationship{{
+			FromID: "e1",
+			ToID:   "e2",
+			Label:  "집착",
+		}},
+		Facts: []fact.Card{{
+			ID:     "f1",
+			Claim:  "자의식은 자기 인식과 관련된다",
+			Result: "검증된 참고",
+			Status: fact.StatusVerified,
+		}},
+		Memories: []string{"작가는 철학적인 질문을 좋아한다"},
+	}
+
+	selection := ai.ContextSelection{
+		CurrentScene:  &off,
+		Overview:      &off,
+		Plot:          &off,
+		Entities:      &off,
+		Relationships: &off,
+		Facts:         &off,
+		Memories:      &off,
+	}
+
+	text := buildContext(applyContextSelection(data, selection))
+	for _, blocked := range []string{
+		"자의식에 관한 작품 개요",
+		"인간의 개별성",
+		"자의식의 균열",
+		"해진",
+		"집착",
+		"자의식은 자기 인식",
+		"철학적인 질문",
+	} {
+		if strings.Contains(text, blocked) {
+			t.Fatalf("unchecked context %q still rendered in:\n%s", blocked, text)
+		}
+	}
+}
+
+func TestPreviewFromPromptData_RendersSelectableCompanionSections(t *testing.T) {
+	off := false
+	data := PromptData{
+		Outline: "자의식을 다루는 소설",
+		SceneExcerpts: []SceneExcerpt{{
+			NodeID:    "n1",
+			Label:     "씬 1",
+			Text:      "인간의 개별성은 무엇일까?",
+			IsCurrent: true,
+		}},
+		Facts: []fact.Card{{
+			ID:       "f1",
+			Claim:    "일반 경찰은 통상 비무장이다",
+			Result:   "배경 참고",
+			Status:   fact.StatusVerified,
+			Category: "reference",
+			Sources:  []fact.Source{{URL: "https://example.com", Title: "자료"}},
+		}},
+		Memories: []string{"작가는 모호한 결말을 선호한다"},
+	}
+
+	preview := previewFromPromptData(data, ai.ContextSelection{Facts: &off})
+
+	var sawScene, sawFact bool
+	for _, section := range preview.Sections {
+		if section.ID == ai.ContextKeyCurrentScene {
+			sawScene = true
+			if !section.Selected || !strings.Contains(section.Preview, "인간의 개별성") {
+				t.Fatalf("scene preview not selected/rendered: %+v", section)
+			}
+		}
+		if section.ID == ai.ContextKeyFacts {
+			sawFact = true
+			if section.Selected || !strings.Contains(section.Preview, "일반 경찰") {
+				t.Fatalf("facts preview should be visible but unselected: %+v", section)
+			}
+		}
+	}
+	if !sawScene || !sawFact {
+		t.Fatalf("missing expected sections in preview: %+v", preview.Sections)
 	}
 }
 

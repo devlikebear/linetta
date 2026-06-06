@@ -93,6 +93,21 @@ func TestBuildContext_ExposesSceneIDs(t *testing.T) {
 	}
 }
 
+func TestBuildContext_RendersOutlineTreeIDs(t *testing.T) {
+	out := buildContext(PromptData{
+		OutlineNodes: []OutlineNode{
+			{ID: "part-1", ParentID: "", Kind: "container", Label: "1부", Title: "경계의 틈", Depth: 0},
+			{ID: "chapter-1", ParentID: "part-1", Kind: "container", Label: "1장", Title: "불안한 아침", Depth: 1},
+			{ID: "scene-1", ParentID: "chapter-1", Kind: "leaf", Label: "씬 1", Title: "조각난 자아", Depth: 2},
+		},
+	})
+	for _, want := range []string{"## 아웃라인 트리", "[part-1]", "1부", "[chapter-1]", "1장", "[scene-1]", "씬 1"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("outline tree context missing %q in:\n%s", want, out)
+		}
+	}
+}
+
 func TestBuildSystem_ForbidsInventingIDs(t *testing.T) {
 	s := buildSystem()
 	if !strings.Contains(s, "지어내지 마") || !strings.Contains(s, "node_id") {
