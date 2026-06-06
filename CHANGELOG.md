@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.7 - 2026-06-06
+
+- Added companion context inspection, per-message copy controls, and image attachments from file upload or clipboard paste.
+- Added outline inspection and repair tools that preserve node content while moving, restoring, renumbering, and undoing structure changes.
+- Improved outline editing controls for parts, chapters, and scenes, including scrollable repair issue lists for long diagnostics.
+
 ## v0.4.6 - 2026-06-06
 
 - Improved Fact Book source saving with direct URL fallback, clearer in-panel failure feedback, and web search API key connection testing.
