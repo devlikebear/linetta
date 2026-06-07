@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.11 - 2026-06-07
+
+- Upgraded the bundled `tars` LLM engine to v0.34.0: `claude-code-cli` runs are now bounded by a timeout (`CLAUDE_CODE_CLI_TIMEOUT`, default 5m) and a hung run no longer blocks until cancelled, descendant processes are killed as a group, and per-call startup is ~1s faster.
+
 ## v0.4.10 - 2026-06-07
 
 - Recovered leaked `linetta_apply_ops` JSON into applyable Fact Book proposal cards instead of showing raw tool payloads.
