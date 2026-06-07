@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   factsList: vi.fn(),
   factsCreateFromUrl: vi.fn(),
   factsDelete: vi.fn(),
+  companionApplyOps: vi.fn(),
 }));
 
 vi.mock("../hooks/useCompanion", () => ({
@@ -45,6 +46,9 @@ vi.mock("../lib/rpc", () => ({
     list: mocks.factsList,
     createFromUrl: mocks.factsCreateFromUrl,
     delete: mocks.factsDelete,
+  },
+  companion: {
+    applyOps: mocks.companionApplyOps,
   },
 }));
 
@@ -84,6 +88,7 @@ describe("FactBookPanel", () => {
       created_at: 200,
       updated_at: 200,
     });
+    mocks.companionApplyOps.mockResolvedValue({ applied: 1, failures: [] });
     mocks.factsList.mockResolvedValue([
       {
         id: "fact-1",
@@ -245,6 +250,138 @@ describe("FactBookPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("web_search 실행 실패: api key is required")).toBeInTheDocument();
+  });
+
+  it("hides raw apply-ops JSON from streaming fact-book feedback", async () => {
+    companionState.value = {
+      ...companionState.value,
+      status: "streaming",
+      streaming: '{"summary":"현실 팩트카드 저장","ops_json":"[{\\"op\\":\\"create_fact_card\\"}]"}확인된 출처를 기준으로 처리했어요.',
+    };
+    renderPanel();
+
+    expect(await screen.findByText("확인된 출처를 기준으로 처리했어요.")).toBeInTheDocument();
+    expect(screen.queryByText(/ops_json/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/create_fact_card/)).not.toBeInTheDocument();
+  });
+
+  it("hides raw apply-ops JSON from completed fact-book feedback", async () => {
+    const user = userEvent.setup();
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "후보를 골라주세요.",
+        choices: {
+          run_id: "run-1",
+          prompt: "검토할 후보",
+          options: ["검색 후 자료집에 저장: 운하 갑문 구조"],
+          allow_custom: true,
+        },
+      }],
+    };
+    const view = renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "검색 후 자료집에 저장: 운하 갑문 구조" }));
+    companionState.value = {
+      ...companionState.value,
+      status: "idle",
+      messages: [
+        companionState.value.messages[0],
+        { role: "user", content: "선택한 주장: 운하 갑문 구조" },
+        {
+          role: "assistant",
+          content: '{"summary":"현실 팩트카드 저장","ops_json":"[{\\"op\\":\\"create_fact_card\\"}]"}이번 턴에는 저장 이벤트가 확인되지 않았어요.',
+        },
+      ],
+    };
+    view.rerender(
+      <I18nProvider>
+        <FactBookPanel
+          projectId="project-1"
+          nodeId="node-1"
+          sceneLabel="씬 1"
+          beforeReview={vi.fn()}
+          onClose={vi.fn()}
+          onChanged={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByText("이번 턴에는 저장 이벤트가 확인되지 않았어요.")).toBeInTheDocument();
+    expect(screen.queryByText(/ops_json/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/create_fact_card/)).not.toBeInTheDocument();
+  });
+
+  it("turns raw apply-ops JSON into an applyable fact-card proposal", async () => {
+    const user = userEvent.setup();
+    const inlineOps = [{
+      op: "create_fact_card",
+      claim: "운하 갑문 구조",
+      result: "갑문은 수위를 맞춰 선박을 이동시키는 구조물이다.",
+      status: "verified",
+      sources: [{ url: "https://example.com/lock-gate", title: "Lock gate", snippet: "official", accessed_at: 200 }],
+    }];
+    const inlineArgs = JSON.stringify({
+      summary: "현실 팩트카드 저장",
+      ops_json: JSON.stringify(inlineOps),
+    });
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "후보를 골라주세요.",
+        choices: {
+          run_id: "run-1",
+          prompt: "검토할 후보",
+          options: ["검색 후 자료집에 저장: 운하 갑문 구조"],
+          allow_custom: true,
+        },
+      }],
+    };
+    const view = renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "검색 후 자료집에 저장: 운하 갑문 구조" }));
+    companionState.value = {
+      ...companionState.value,
+      status: "idle",
+      messages: [
+        companionState.value.messages[0],
+        { role: "user", content: "선택한 주장: 운하 갑문 구조" },
+        {
+          role: "assistant",
+          content: `${inlineArgs}저장 제안을 확인해 주세요.`,
+        },
+      ],
+    };
+    view.rerender(
+      <I18nProvider>
+        <FactBookPanel
+          projectId="project-1"
+          nodeId="node-1"
+          sceneLabel="씬 1"
+          beforeReview={vi.fn()}
+          onClose={vi.fn()}
+          onChanged={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByText("저장 제안을 확인해 주세요.")).toBeInTheDocument();
+    expect(screen.getByText("현실 팩트카드 저장")).toBeInTheDocument();
+    expect(screen.getByText("자료집 카드 생성: 운하 갑문 구조")).toBeInTheDocument();
+    expect(screen.queryByText(/ops_json/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/create_fact_card/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "적용" }));
+
+    await waitFor(() => expect(mocks.companionApplyOps).toHaveBeenCalledWith(
+      "project-1",
+      "node-1",
+      "",
+      [expect.objectContaining({ op: "create_fact_card", claim: "운하 갑문 구조" })],
+    ));
+    await waitFor(() => expect(mocks.factsList.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
   it("renders fact card proposals inside the panel", async () => {
@@ -420,6 +557,41 @@ describe("FactBookPanel", () => {
 
     await waitFor(() => expect(screen.getByText("아직 자료집 저장 이벤트가 확인되지 않았습니다. 출처 URL을 입력하면 바로 저장할 수 있습니다.")).toBeInTheDocument());
     expect(mocks.factsCreateFromUrl).not.toHaveBeenCalled();
+  });
+
+  it("offers an alternative-source retry after direct source URL saving fails", async () => {
+    mocks.factsList.mockResolvedValue([]);
+    mocks.factsCreateFromUrl.mockRejectedValueOnce(new Error("web_fetch status 404"));
+    const user = userEvent.setup();
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "후보를 골라주세요.",
+        choices: {
+          run_id: "run-1",
+          prompt: "검토할 후보",
+          options: ["검색 후 자료집에 저장: 대장장이가 농기구와 무기를 수리했다"],
+          allow_custom: true,
+        },
+      }],
+    };
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "검색 후 자료집에 저장: 대장장이가 농기구와 무기를 수리했다" }));
+    const input = await screen.findByRole("textbox", { name: "자료집 답장 입력" });
+    await user.type(input, "https://www.britannica.com/topic/blacksmith");
+    await user.click(screen.getByRole("button", { name: "전송" }));
+
+    expect(await screen.findByText(/출처 URL 저장 실패: Error: web_fetch status 404/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "다른 출처 찾기" }));
+
+    expect(companionState.value.send).toHaveBeenCalledTimes(2);
+    expect(companionState.value.send).toHaveBeenLastCalledWith(expect.stringContaining("대장장이가 농기구와 무기를 수리했다"));
+    expect(companionState.value.send).toHaveBeenLastCalledWith(expect.stringContaining("https://www.britannica.com/topic/blacksmith"));
+    expect(companionState.value.send).toHaveBeenLastCalledWith(expect.stringContaining("저장 후보에서 제외"));
+    expect(companionState.value.send).toHaveBeenLastCalledWith(expect.stringContaining("create_fact_card"));
   });
 
   it("saves a direct source URL for the picked claim without companion", async () => {

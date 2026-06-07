@@ -16,6 +16,7 @@ vi.mock("../lib/rpc", () => ({
   companion: { history: rpc.history, send: rpc.send, cancel: rpc.cancel, clear: rpc.clear, compact: rpc.compact },
 }));
 
+import { stripProposalBlock } from "../lib/companionDisplay";
 import { useCompanion } from "./useCompanion";
 
 function fire(event: string, payload: unknown) {
@@ -23,6 +24,21 @@ function fire(event: string, payload: unknown) {
   if (!cb) throw new Error(`no listener registered for ${event}`);
   act(() => cb({ payload }));
 }
+
+describe("stripProposalBlock", () => {
+  it("removes standalone web tool argument echoes from displayed assistant prose", () => {
+    expect(stripProposalBlock([
+      '{"count":5,"provider":"brave","query":"blacksmith historical role"}',
+      "확인된 출처를 기준으로 처리했어요.",
+    ].join("\n"))).toBe("확인된 출처를 기준으로 처리했어요.");
+  });
+
+  it("removes a leading web tool argument echo even when prose follows on the same line", () => {
+    expect(stripProposalBlock(
+      '{"count":5,"provider":"brave","query":"blacksmith historical role"}좋아, 확인된 출처를 기준으로 처리했어요.',
+    )).toBe("좋아, 확인된 출처를 기준으로 처리했어요.");
+  });
+});
 
 describe("useCompanion streaming", () => {
   beforeEach(() => {
@@ -56,6 +72,37 @@ describe("useCompanion streaming", () => {
       role: "assistant",
       content: "안녕하세요! 반가워요.",
     });
+  });
+
+  it("recovers leaked apply-ops JSON into a proposal when finalizing a turn", async () => {
+    const inlineOps = [{
+      op: "create_fact_card",
+      claim: "운하 갑문 구조",
+      result: "갑문은 수위를 맞춰 선박을 이동시키는 구조물이다.",
+      status: "verified",
+      sources: [{ url: "https://example.com/lock-gate", title: "Lock gate" }],
+    }];
+    const fullText = `${JSON.stringify({
+      summary: "현실 팩트카드 저장",
+      ops_json: JSON.stringify(inlineOps),
+    })}저장 제안을 확인해 주세요.`;
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("운하 갑문 구조 확인");
+    });
+    fire("companion-done", { run_id: "r1", full_text: fullText });
+
+    const message = result.current.messages[result.current.messages.length - 1];
+    expect(message.content).toBe("저장 제안을 확인해 주세요.");
+    expect(message.proposal).toMatchObject({
+      valid: true,
+      summary: "현실 팩트카드 저장",
+      ops: [expect.objectContaining({ op: "create_fact_card", claim: "운하 갑문 구조" })],
+    });
+    expect(message.content).not.toContain("ops_json");
+    expect(message.content).not.toContain("create_fact_card");
   });
 
   it("passes the selected context sections when sending a companion turn", async () => {

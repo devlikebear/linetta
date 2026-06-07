@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, CornerDownLeft, ExternalLink, Search, Trash2, X } from "lucide-react";
 import { facts as factsApi } from "../lib/rpc";
-import type { FactCard, FactStatus } from "../lib/types";
+import type { CompanionProposal, FactCard, FactStatus } from "../lib/types";
 import { useI18n } from "../lib/i18n";
+import { extractApplyOpsProposal, stripProposalBlock } from "../lib/companionDisplay";
 import { useCompanion } from "../hooks/useCompanion";
 import { ChoiceCard } from "./companion/ChoiceCard";
 import { Markdown } from "./companion/Markdown";
@@ -48,6 +49,19 @@ function buildFactCheckPrompt(claim: string): string {
     "확인된 출처 URL이 있으면 같은 턴에 linetta_apply_ops의 create_fact_card로 자료집에 저장해.",
     "create_fact_card 호출 없이 저장 완료라고 말하지 마. 저장이 실패하면 실패 이유와 필요한 다음 행동만 짧게 말해.",
     "web_search나 web_fetch가 실패하면 포기하지 말고 출처 URL 직접 입력을 요청해.",
+  ].join("\n");
+}
+
+function buildAlternativeSourcePrompt(claim: string, failedURL: string, error: string): string {
+  return [
+    `선택한 주장: ${claim}`,
+    `방금 이 출처 URL은 앱의 저장 경로에서 실패했습니다: ${failedURL}`,
+    `실패 이유: ${error}`,
+    "이 URL은 저장 후보에서 제외해.",
+    "지금 바로 web_search로 신뢰 가능한 대체 출처 후보를 찾고, 최소 1개 URL은 web_fetch로 본문 접근을 확인해.",
+    "web_fetch가 404/403/본문 부족이면 그 URL도 저장 후보에서 제외하고 같은 턴에 대체 출처를 더 검색해.",
+    "확인된 출처 URL이 있으면 같은 턴에 linetta_apply_ops의 create_fact_card로 자료집에 저장해.",
+    "확인된 대체 출처가 없으면 저장했다고 말하지 말고, 출처 URL 직접 입력만 요청해.",
   ].join("\n");
 }
 
@@ -105,6 +119,13 @@ function statusKey(status: FactStatus): string {
   }
 }
 
+function extractFactCardProposal(text: string, runId = "fact-book-inline-apply-ops"): CompanionProposal | null {
+  const proposal = extractApplyOpsProposal(text, runId);
+  if (!proposal?.ops?.length) return null;
+  if (!proposal.ops.every((op) => op.op === "create_fact_card")) return null;
+  return proposal;
+}
+
 export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequest, beforeReview, onClose, onChanged }: Props) {
   const { t } = useI18n();
   const [cards, setCards] = useState<FactCard[]>([]);
@@ -117,6 +138,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
   const [feedbackNote, setFeedbackNote] = useState("");
   const [feedbackKind, setFeedbackKind] = useState<"ok" | "error">("ok");
   const [directFactClaim, setDirectFactClaim] = useState("");
+  const [sourceRetry, setSourceRetry] = useState<{ claim: string; url: string; error: string } | null>(null);
   const [awaitingFactSave, setAwaitingFactSave] = useState(false);
   const nodeIdRef = useRef<string | null>(nodeId);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -151,6 +173,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
 
   const saveDirectURL = useCallback(async (claim: string, url: string, startMessage?: string) => {
     setDirectSaving(true);
+    setSourceRetry(null);
     if (startMessage) {
       setFeedbackKind("ok");
       setFeedbackNote(startMessage);
@@ -160,13 +183,16 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
       setReplyDraft("");
       setDirectFactClaim("");
       setAwaitingFactSave(false);
+      setSourceRetry(null);
       setFeedbackKind("ok");
       setFeedbackNote(t("factBook.directSaved"));
       await loadFacts();
       onChanged?.();
     } catch (err) {
+      const error = String(err);
       setFeedbackKind("error");
-      setFeedbackNote(t("factBook.directSaveFailed", { error: String(err) }));
+      setFeedbackNote(t("factBook.directSaveFailed", { error }));
+      setSourceRetry({ claim, url, error });
     } finally {
       setDirectSaving(false);
     }
@@ -179,6 +205,13 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     return null;
   }, [messages]);
   const latestAssistant = latestAssistantInfo?.message ?? null;
+  const displayStreaming = stripProposalBlock(streaming);
+  const latestAssistantDisplayContent = stripProposalBlock(latestAssistant?.content ?? "");
+  const inlineFactProposal = useMemo(() => {
+    if (!latestAssistant || latestAssistant.proposal) return null;
+    return extractFactCardProposal(latestAssistant.content ?? "", latestAssistant.choices?.run_id);
+  }, [latestAssistant]);
+  const latestProposal = latestAssistant?.proposal ?? inlineFactProposal ?? undefined;
   const savedClaims = useMemo(() => new Set(cards.map((card) => normalizeClaim(card.claim))), [cards]);
   const latestChoices = useMemo(() => {
     if (!latestAssistant?.choices) return null;
@@ -190,16 +223,16 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
   const hasLatestChoices = Boolean(latestChoices && (latestChoices.options.length > 0 || latestChoices.allow_custom));
   const isNewFeedback = feedbackAnchor !== null && latestAssistantInfo !== null && latestAssistantInfo.index > feedbackAnchor;
   const showAssistantContent = Boolean(
-    latestAssistant?.content &&
-    (isNewFeedback || latestAssistant.errored || latestAssistant.choices || latestAssistant.proposal),
+    latestAssistantDisplayContent &&
+    (isNewFeedback || latestAssistant?.errored || latestAssistant?.choices || latestProposal),
   );
   const showCompanionFeedback = Boolean(
-    busy || streaming || feedbackNote || showAssistantContent || hasLatestChoices || latestAssistant?.proposal,
+    busy || streaming || feedbackNote || showAssistantContent || hasLatestChoices || latestProposal,
   );
 
   useEffect(() => {
     if (!awaitingFactSave || busy || directSaving || feedbackNote || !isNewFeedback || !latestAssistant) return;
-    if (latestAssistant.proposal || latestAssistant.choices) return;
+    if (latestProposal || latestAssistant.choices) return;
     const url = sourceURLFromAssistant(latestAssistant.content ?? "");
     const claim = directFactClaim.trim();
     if (url && claim) {
@@ -209,7 +242,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     }
     setFeedbackKind("error");
     setFeedbackNote(t("factBook.saveNotApplied"));
-  }, [awaitingFactSave, busy, directFactClaim, directSaving, feedbackNote, isNewFeedback, latestAssistant, saveDirectURL, t]);
+  }, [awaitingFactSave, busy, directFactClaim, directSaving, feedbackNote, isNewFeedback, latestAssistant, latestProposal, saveDirectURL, t]);
 
   const markFeedbackStart = () => {
     setFeedbackAnchor(messages.length);
@@ -220,6 +253,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
   const startReview = async () => {
     if (reviewing || status === "streaming") return;
     setDirectFactClaim("");
+    setSourceRetry(null);
     setAwaitingFactSave(false);
     markFeedbackStart();
     setReviewing(true);
@@ -238,6 +272,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     if (!claim) return;
     handledSelectedClaimRequestRef.current = selectedClaimRequest.id;
     setDirectFactClaim(claim);
+    setSourceRetry(null);
     setAwaitingFactSave(true);
     markFeedbackStart();
     void (async () => {
@@ -262,15 +297,30 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
       return;
     }
     setReplyDraft("");
+    setSourceRetry(null);
     await send(text);
   };
 
   const pickChoice = (text: string) => {
     const claim = claimFromChoice(text);
     setDirectFactClaim(claim);
+    setSourceRetry(null);
     setAwaitingFactSave(Boolean(claim));
     markFeedbackStart();
     void send(claim ? buildFactCheckPrompt(claim) : text);
+  };
+
+  const retryAlternativeSource = () => {
+    if (!sourceRetry || busy || directSaving) return;
+    const retry = sourceRetry;
+    setDirectFactClaim(retry.claim);
+    setAwaitingFactSave(true);
+    setReplyDraft("");
+    setSourceRetry(null);
+    markFeedbackStart();
+    setFeedbackKind("ok");
+    setFeedbackNote(t("factBook.retryingSource"));
+    void send(buildAlternativeSourcePrompt(retry.claim, retry.url, retry.error));
   };
 
   const focusReplyInput = () => {
@@ -300,15 +350,22 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
       {showCompanionFeedback && (
         <section className="fact-companion-box">
           {status === "streaming" && <div className="companion-thinking"><span className="ai-working-dot" aria-hidden="true" /> {thinking || t("companion.thinking")}</div>}
-          {streaming && <div className="fact-companion-prose"><Markdown text={streaming} /></div>}
+          {displayStreaming && <div className="fact-companion-prose"><Markdown text={displayStreaming} /></div>}
           {feedbackNote && <div className={`fact-feedback ${feedbackKind}`}>{feedbackNote}</div>}
-          {showAssistantContent && (
-            <div className={`fact-companion-prose${latestAssistant?.errored ? " errored" : ""}`}>
-              {latestAssistant?.errored ? latestAssistant.content : <Markdown text={latestAssistant?.content ?? ""} />}
+          {sourceRetry && feedbackKind === "error" && !busy && !directSaving && (
+            <div className="fact-feedback-actions">
+              <button type="button" className="fact-feedback-action" onClick={retryAlternativeSource}>
+                <Search size={13} /> {t("factBook.findAlternativeSource")}
+              </button>
             </div>
           )}
-          {latestAssistant?.proposal && (
-            <ProposalCard proposal={latestAssistant.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={handleApplied} />
+          {showAssistantContent && (
+            <div className={`fact-companion-prose${latestAssistant?.errored ? " errored" : ""}`}>
+              {latestAssistant?.errored ? latestAssistantDisplayContent : <Markdown text={latestAssistantDisplayContent} />}
+            </div>
+          )}
+          {latestProposal && (
+            <ProposalCard proposal={latestProposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={handleApplied} />
           )}
           {hasLatestChoices && latestChoices && (
             <ChoiceCard

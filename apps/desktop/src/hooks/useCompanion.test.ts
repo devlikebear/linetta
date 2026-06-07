@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { stripProposalBlock } from "./useCompanion";
+import { stripProposalBlock } from "../lib/companionDisplay";
 
 describe("stripProposalBlock", () => {
   it("removes proposal and query fenced blocks from displayed prose", () => {

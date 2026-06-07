@@ -18,6 +18,7 @@ import {
 import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { companion as companionApi } from "../../lib/rpc";
+import { stripProposalBlock } from "../../lib/companionDisplay";
 import type { AIContextPreview, AIContextSelection, CompanionImageAttachment } from "../../lib/types";
 import { AIContextChecklistList, DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../ai/AIContextChecklist";
 import { ProposalCard } from "./ProposalCard";
@@ -43,7 +44,7 @@ function streamProse(text: string): string {
     const i = text.indexOf(fence);
     if (i >= 0 && (idx < 0 || i < idx)) idx = i;
   }
-  return (idx >= 0 ? text.slice(0, idx) : text).trimEnd();
+  return stripProposalBlock(idx >= 0 ? text.slice(0, idx) : text).trimEnd();
 }
 
 type Translate = ReturnType<typeof useI18n>["t"];

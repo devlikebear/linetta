@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { companion as companionApi } from "../lib/rpc";
 import { useEngineEvent } from "./useEngineEvent";
+import { extractApplyOpsProposal, stripProposalBlock } from "../lib/companionDisplay";
 import type {
   CompanionMessage, CompanionProposal, CompanionChoices,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
@@ -18,14 +19,6 @@ export interface ChatMessage {
 export type CompanionStatus = "idle" | "streaming";
 
 const PENDING_RUN_ID = "__linetta_pending_run__";
-
-// stripProposalBlock removes fenced machine-control blocks from displayed prose.
-export function stripProposalBlock(text: string): string {
-  return text
-    .replace(/```linetta-(?:proposal|query|choices)[\s\S]*?```/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 function toChatMessage(m: CompanionMessage): ChatMessage {
   return {
@@ -103,7 +96,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
   useEngineEvent<CompanionDone>("companion-done", (p) => {
     if (!acceptRunEvent(p.run_id)) return;
     const prose = stripProposalBlock(p.full_text);
-    const proposal = pendingProposalRef.current ?? undefined;
+    const proposal = pendingProposalRef.current ?? extractApplyOpsProposal(p.full_text, p.run_id) ?? undefined;
     const choices = pendingChoicesRef.current ?? undefined;
     setMessages((prev) => [...prev, { role: "assistant", content: prose, proposal, choices }]);
     pendingProposalRef.current = null;
