@@ -682,7 +682,7 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 	add(ContextKeyNearbyScenes, "직전·직후 씬 발췌", len(c.Hierarchical.NearbyLeafSummaries), renderSceneSummariesPreview(c.Hierarchical.NearbyLeafSummaries), false)
 	add(ContextKeyRelatedScenes, "관련 과거 씬 (멘션 RAG)", len(c.RelatedScenes), renderSceneSummariesPreview(c.RelatedScenes), false)
 	add(ContextKeyPlot, "플롯 (스토리라인&비트)", countPlotBeats(c.Plot), renderPlotPreview(c.Plot), false)
-	add(ContextKeyEntities, "등장 인물·장소", len(c.Entities), renderEntitiesPreview(c.Entities), false)
+	add(ContextKeyEntities, "세계관 요소", len(c.Entities), renderEntitiesPreview(c.Entities), false)
 	add(ContextKeyRelationships, "관계", len(c.Relationships), renderRelationshipsPreview(c.Relationships), false)
 	add(ContextKeyNotes, "작가 주석", len(c.Notes), renderNotesPreview(c.Notes), false)
 	if meta := renderProjectMeta(c.Project); meta != "" {

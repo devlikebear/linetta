@@ -13,4 +13,10 @@ export const LABEL_PRESET_IDS = [
   "teacherStudent",
   "guardian",
   "betrayer",
+  "owns",
+  "uses",
+  "teaches",
+  "weakness",
+  "counters",
+  "origin",
 ] as const;

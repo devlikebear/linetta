@@ -140,7 +140,7 @@ func buildUser(c Context) string {
 	}
 
 	if len(c.Entities) > 0 {
-		b.WriteString("## 등장 인물·장소\n")
+		b.WriteString("## 세계관 요소\n")
 		for _, e := range c.Entities {
 			b.WriteString(fmt.Sprintf("- @%s — %s", e.Name, kindLabel(e.Kind)))
 			if e.Role != "" {
@@ -283,7 +283,7 @@ func kindLabel(k string) string {
 	case "place":
 		return "장소"
 	case "item":
-		return "물건"
+		return "아이템"
 	case "concept":
 		return "개념"
 	}

@@ -607,6 +607,7 @@ export interface ProposalOp {
   category?: string;
   kind?: string;
   role?: string;
+  attributes?: Record<string, string>;
   entity_id?: string;
   from?: string;
   from_ref?: string;

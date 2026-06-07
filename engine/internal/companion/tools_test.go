@@ -99,7 +99,9 @@ func TestLinettaApplyOpsToolMutatesProjectStructure(t *testing.T) {
 	  {"op":"add_beat","thread_ref":"t1","label":"단서 발견","description":"주인공이 낡은 열쇠를 줍는다","intensity":2},
 	  {"op":"create_entity","ref":"e1","kind":"character","name":"하나","role":"탐정","summary":"조용한 관찰자"},
 	  {"op":"create_entity","ref":"e2","kind":"place","name":"붉은 등대","summary":"항구 끝의 금지된 장소"},
-	  {"op":"create_relationship","from_ref":"e1","to_ref":"e2","label":"조사한다"}
+	  {"op":"create_entity","ref":"e3","kind":"concept","name":"빛의 맹약","role":"마법","summary":"진실을 드러내는 계약 마법","attributes":{"효과":"거짓말을 하면 손등의 문장이 빛난다","비용":"사용자의 기억 한 조각"}},
+	  {"op":"create_relationship","from_ref":"e1","to_ref":"e2","label":"조사한다"},
+	  {"op":"create_relationship","from_ref":"e1","to_ref":"e3","label":"사용함"}
 	]`
 	params := json.RawMessage(`{
 	  "summary":"세계관 정리",
@@ -129,11 +131,25 @@ func TestLinettaApplyOpsToolMutatesProjectStructure(t *testing.T) {
 		t.Fatalf("beats = %+v", beats)
 	}
 	entities, _ := svc.entities.Search(ctx, projectID, "", 10)
-	if len(entities) != 2 {
+	if len(entities) != 3 {
 		t.Fatalf("entities = %+v", entities)
 	}
+	magic, err := svc.entities.Get(ctx, entities[0].ID)
+	if err != nil {
+		t.Fatalf("get entity: %v", err)
+	}
+	for _, ent := range entities {
+		if ent.Name == "빛의 맹약" {
+			magic = ent
+			break
+		}
+	}
+	if magic.Name != "빛의 맹약" || magic.Kind != entity.KindConcept ||
+		magic.Attributes["효과"] == "" || magic.Attributes["비용"] == "" {
+		t.Fatalf("magic entity = %+v", magic)
+	}
 	rels, _ := svc.relationships.ListByProject(ctx, projectID)
-	if len(rels) != 1 || rels[0].Label != "조사한다" {
+	if len(rels) != 2 {
 		t.Fatalf("relationships = %+v", rels)
 	}
 }

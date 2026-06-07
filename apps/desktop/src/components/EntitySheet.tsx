@@ -3,7 +3,7 @@ import type { Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput 
 import { entities, relationships } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
 import { X, Plus, User, MapPin, Box, Lightbulb } from "../lib/icons";
-import { displayNodeLabel, entityKindLabel, entityRolePresets, useI18n } from "../lib/i18n";
+import { displayNodeLabel, entityAttributePresets, entityKindLabel, entityRolePresets, useI18n } from "../lib/i18n";
 import "./EntitySheet.css";
 
 interface Props {
@@ -110,11 +110,29 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
   const meta = KIND_META[kind];
   const HeadIcon = meta.Icon;
   const rolePresets = entityRolePresets(language, kind);
+  const attrPresets = entityAttributePresets(language, kind);
   const rolePlaceholder = kind === "place"
     ? t("entity.rolePlacePlaceholder")
     : kind === "character"
       ? t("entity.roleCharacterPlaceholder")
-      : t("entity.role");
+      : kind === "item"
+        ? t("entity.roleItemPlaceholder")
+        : kind === "concept"
+          ? t("entity.roleConceptPlaceholder")
+          : t("entity.role");
+
+  const addAttributePreset = (key: string) => {
+    setAttrRows((rows) => {
+      if (rows.some((row) => row.key.trim() === key)) return rows;
+      const emptyIndex = rows.findIndex((row) => row.key.trim() === "" && row.value.trim() === "");
+      if (emptyIndex >= 0) {
+        const next = [...rows];
+        next[emptyIndex] = { key, value: "" };
+        return next;
+      }
+      return [...rows, { key, value: "" }];
+    });
+  };
 
   return (
     <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
@@ -193,6 +211,23 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
 
             <div className="sec es-field">
               <h4>{t("entity.attributes")}</h4>
+              {attrPresets.length > 0 && (
+                <div className="es-attr-presets" aria-label={t("entity.attributePresets")}>
+                  {attrPresets.map((key) => {
+                    const active = attrRows.some((row) => row.key.trim() === key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={"es-attr-chip" + (active ? " active" : "")}
+                        onClick={() => addAttributePreset(key)}
+                      >
+                        {key}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <div className="attr-grid">
                 {attrRows.map((row, i) => (
                   <div className="attr-row" key={i}>

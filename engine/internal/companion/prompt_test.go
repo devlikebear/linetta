@@ -127,16 +127,21 @@ func TestBuildSystem_ForbidsInventingIDs(t *testing.T) {
 }
 
 func TestBuildContext_EntityShowsKind(t *testing.T) {
-	d := PromptData{Entities: []entity.Entity{{ID: "e1", Kind: "character", Name: "하나", Role: "주인공"}}}
+	d := PromptData{Entities: []entity.Entity{{
+		ID: "e1", Kind: "concept", Name: "빛의 맹약", Role: "마법",
+		Attributes: map[string]string{"효과": "거짓을 드러낸다", "비용": "기억 한 조각"},
+	}}}
 	out := buildContext(d)
-	if !strings.Contains(out, "[e1] (인물) 하나") {
-		t.Fatalf("entity kind not rendered:\n%s", out)
+	for _, want := range []string{"## 세계관 요소·관계", "[e1] (개념) 빛의 맹약 / 마법", "비용:기억 한 조각", "효과:거짓을 드러낸다"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("entity context missing %q:\n%s", want, out)
+		}
 	}
 }
 
 func TestBuildSystem_MentionsEntityOps(t *testing.T) {
 	s := buildSystem()
-	for _, want := range []string{"create_entity", "create_relationship", "from_ref"} {
+	for _, want := range []string{"create_entity", "create_relationship", "from_ref", "attributes", "아이템", "스킬", "마법", "능력"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("buildSystem missing %q", want)
 		}

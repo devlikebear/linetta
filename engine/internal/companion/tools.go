@@ -79,7 +79,7 @@ func (s *Service) buildWebSearchTool() tarstools.Tool {
 func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, now func() int64) tarstools.Tool {
 	return tarstools.Tool{
 		Name:        "linetta_apply_ops",
-		Description: "Directly apply Linetta story mutations to the current project. Use create_outline_node/create_scene for new left outline tree items, rename_outline_node/delete_outline_node/move_outline_node to clean up existing outline items, set_outline for project synopsis/overview text, thread/beat ops for plot beats, and create_fact_card for source-backed Fact Book cards.",
+		Description: "Directly apply Linetta story mutations to the current project. Use create_outline_node/create_scene for new left outline tree items, thread/beat ops for plot beats, entity/relationship ops for characters, places, items, skills, magic, abilities, and create_fact_card for source-backed Fact Book cards.",
 		Parameters:  applyOpsSchema(),
 		Execute: func(ctx context.Context, params json.RawMessage) (tarstools.Result, error) {
 			p, err := decodeApplyOpsParams(params)
@@ -112,7 +112,7 @@ func applyOpsSchema() json.RawMessage {
   "type":"object",
   "properties":{
     "summary":{"type":"string","description":"Short Korean summary of the actual project changes to apply."},
-    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use create_outline_node/create_scene only for new visible left outline items; use rename_outline_node/delete_outline_node/move_outline_node for existing outline cleanup. Use set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, entity/relationship ops for cast/place updates, and create_fact_card only when at least one source URL is available."}
+    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use create_outline_node/create_scene only for new visible left outline items; use rename_outline_node/delete_outline_node/move_outline_node for existing outline cleanup. Use set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, entity/relationship ops for characters, places, items, skills, magic, abilities, and create_fact_card only when at least one source URL is available. create_entity/update_entity may include attributes for effect, cost, trigger, limits, owner, origin, or weakness."}
   },
   "required":["summary","ops_json"],
   "additionalProperties":false
@@ -309,13 +309,15 @@ func (s *Service) applyOneOp(
 		if err != nil {
 			return err
 		}
-		if strings.TrimSpace(op.Summary) != "" {
+		attrs := cleanEntityAttributes(op.Attributes)
+		if strings.TrimSpace(op.Summary) != "" || len(attrs) > 0 {
 			if err := s.entities.Update(ctx, now(), entity.UpdateInput{
-				ID:      ent.ID,
-				Kind:    ent.Kind,
-				Name:    ent.Name,
-				Role:    ent.Role,
-				Summary: op.Summary,
+				ID:         ent.ID,
+				Kind:       ent.Kind,
+				Name:       ent.Name,
+				Role:       ent.Role,
+				Summary:    op.Summary,
+				Attributes: optionalEntityAttributes(attrs),
 			}); err != nil {
 				return err
 			}
@@ -346,6 +348,10 @@ func (s *Service) applyOneOp(
 		}
 		if strings.TrimSpace(op.Summary) != "" {
 			in.Summary = op.Summary
+		}
+		if attrs := cleanEntityAttributes(op.Attributes); len(attrs) > 0 {
+			merged := mergeEntityAttributes(cur.Attributes, attrs)
+			in.Attributes = &merged
 		}
 		return s.entities.Update(ctx, now(), in)
 	case "create_relationship":
@@ -429,6 +435,39 @@ func (s *Service) applyOneOp(
 	default:
 		return fmt.Errorf("unknown op %q", op.Type)
 	}
+}
+
+func cleanEntityAttributes(attrs map[string]string) map[string]string {
+	if len(attrs) == 0 {
+		return nil
+	}
+	out := map[string]string{}
+	for key, value := range attrs {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		out[key] = strings.TrimSpace(value)
+	}
+	return out
+}
+
+func optionalEntityAttributes(attrs map[string]string) *map[string]string {
+	if len(attrs) == 0 {
+		return nil
+	}
+	return &attrs
+}
+
+func mergeEntityAttributes(base, next map[string]string) map[string]string {
+	merged := map[string]string{}
+	for key, value := range base {
+		merged[key] = value
+	}
+	for key, value := range next {
+		merged[key] = value
+	}
+	return merged
 }
 
 func (s *Service) applyCreateOutlineNode(

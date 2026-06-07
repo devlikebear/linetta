@@ -53,7 +53,12 @@ func TestApplyOps_UpdateEntityResolvesByName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ops := `[{"op":"update_entity","entity_id":"우진","summary":"마을 뒷산의 비밀 아지트를 가진 소년"}]`
+	initialAttrs := map[string]string{"기원": "폐광 마을"}
+	if err := svc.entities.Update(ctx, 2, entity.UpdateInput{ID: ent.ID, Attributes: &initialAttrs}); err != nil {
+		t.Fatal(err)
+	}
+
+	ops := `[{"op":"update_entity","entity_id":"우진","summary":"마을 뒷산의 비밀 아지트를 가진 소년","attributes":{"약점":"강한 햇빛"}}]`
 	p, _, err := ParseProposal("```linetta-proposal\n{\"ops\":" + ops + "}\n```")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -69,6 +74,9 @@ func TestApplyOps_UpdateEntityResolvesByName(t *testing.T) {
 	}
 	if got.Summary != "마을 뒷산의 비밀 아지트를 가진 소년" {
 		t.Fatalf("summary not updated: %q", got.Summary)
+	}
+	if got.Attributes["기원"] != "폐광 마을" || got.Attributes["약점"] != "강한 햇빛" {
+		t.Fatalf("attributes not merged: %+v", got.Attributes)
 	}
 }
 

@@ -82,4 +82,38 @@ describe("EntitySheet", () => {
     expect(screen.getByRole("button", { name: "메인무대" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "특별한 장소" })).toBeInTheDocument();
   });
+
+  it("offers item role and attribute presets for worldbuilding props", async () => {
+    const user = userEvent.setup();
+    const item = { ...baseEntity, kind: "item" as const, name: "검은 단검" };
+    mocks.entities.get.mockResolvedValue(item);
+
+    renderSheet();
+
+    expect(await screen.findByDisplayValue("검은 단검")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "핵심 아이템" }));
+    await user.click(screen.getByRole("button", { name: "효과" }));
+    await user.click(screen.getByRole("button", { name: "저장" }));
+
+    await waitFor(() => {
+      expect(mocks.entities.update).toHaveBeenCalledWith(expect.objectContaining({
+        id: "entity-1",
+        role: "핵심 아이템",
+        attributes: { 효과: "" },
+      }));
+    });
+  });
+
+  it("offers skill and magic presets for concept entities", async () => {
+    const concept = { ...baseEntity, kind: "concept" as const, name: "빛의 맹약" };
+    mocks.entities.get.mockResolvedValue(concept);
+
+    renderSheet();
+
+    expect(await screen.findByDisplayValue("빛의 맹약")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "마법" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "스킬" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "발동 조건" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "비용" })).toBeInTheDocument();
+  });
 });

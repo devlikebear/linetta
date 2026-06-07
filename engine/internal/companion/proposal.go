@@ -44,9 +44,10 @@ type Op struct {
 	Category string `json:"category,omitempty"`
 
 	// create_entity / update_entity
-	Kind     string `json:"kind,omitempty"`
-	Role     string `json:"role,omitempty"`
-	EntityID string `json:"entity_id,omitempty"`
+	Kind       string            `json:"kind,omitempty"`
+	Role       string            `json:"role,omitempty"`
+	EntityID   string            `json:"entity_id,omitempty"`
+	Attributes map[string]string `json:"attributes,omitempty"`
 
 	// create_scene
 	AfterNodeID   string `json:"after_node_id,omitempty"`
@@ -138,7 +139,9 @@ func normalizeEntityKind(raw string) (string, bool) {
 		return "place", true
 	case "item", "object", "thing", "사물", "아이템", "물건":
 		return "item", true
-	case "concept", "idea", "theme", "개념", "주제":
+	case "concept", "idea", "theme", "skill", "magic", "ability",
+		"spell", "rule", "system", "개념", "주제", "스킬", "마법", "능력",
+		"주문", "규칙", "세계관":
 		return "concept", true
 	default:
 		return "", false
@@ -270,6 +273,13 @@ func validateProposal(p Proposal) error {
 		case "update_entity":
 			if op.EntityID == "" {
 				return fmt.Errorf("op[%d] update_entity: entity_id required", i)
+			}
+			if strings.TrimSpace(op.Kind) != "" {
+				kind, ok := normalizeEntityKind(op.Kind)
+				if !ok {
+					return fmt.Errorf("op[%d] update_entity: kind must be character|place|item|concept", i)
+				}
+				p.Ops[i].Kind = kind
 			}
 		case "create_relationship":
 			if strings.TrimSpace(op.Label) == "" {

@@ -158,7 +158,7 @@ describe("CompanionPanel", () => {
     expect(screen.getByText("컴패니언이 사용할 수 있는 도구")).toBeInTheDocument();
     expect(screen.getByText("web_search · 최신 자료나 장르 레퍼런스 찾기")).toBeInTheDocument();
     expect(screen.getByText("web_fetch · 특정 URL 본문 확인")).toBeInTheDocument();
-    expect(screen.getByText("linetta_apply_ops · 개요, 스토리라인, 비트, 인물, 관계, 장소, 씬, 기억 갱신")).toBeInTheDocument();
+    expect(screen.getByText("linetta_apply_ops · 개요, 스토리라인, 비트, 세계관 요소, 관계, 씬, 기억 갱신")).toBeInTheDocument();
   });
 
   it("lets writers inspect and disable companion context injection", async () => {

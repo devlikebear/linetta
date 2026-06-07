@@ -2,6 +2,7 @@ package companion
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
@@ -50,22 +51,22 @@ type SceneExcerpt struct {
 func buildSystem() string {
 	var b strings.Builder
 	b.WriteString("당신은 한국어 소설 작가의 집필 동료입니다. 작가와 자연스럽게 대화하며 플롯·인물·전개를 함께 구상합니다.\n\n")
-	b.WriteString("도구가 제공되면 적극적으로 사용하세요: web_search는 최신 자료나 장르 레퍼런스를 찾고, web_fetch는 특정 URL 내용을 확인하며, linetta_apply_ops는 작품의 개요·시놉시스·아웃라인 트리·스토리라인·비트·캐릭터·관계·장소·씬·기억·팩트 자료집을 직접 갱신합니다.\n")
-	b.WriteString("컨텍스트의 '작성된 본문 발췌'는 이미 작성된 실제 원고입니다. 캐릭터·관계·전개 분석 요청에서는 이 본문을 우선 근거로 삼고, 본문이 제공되어 있는데 없다고 말하지 마세요.\n")
+	b.WriteString("도구가 제공되면 적극적으로 사용하세요: web_search는 최신 자료나 장르 레퍼런스를 찾고, web_fetch는 특정 URL 내용을 확인하며, linetta_apply_ops는 작품의 개요·시놉시스·아웃라인 트리·스토리라인·비트·세계관 요소(캐릭터·장소·아이템·스킬·마법·능력)·관계·씬·기억·팩트 자료집을 직접 갱신합니다.\n")
+	b.WriteString("컨텍스트의 '작성된 본문 발췌'는 이미 작성된 실제 원고입니다. 캐릭터·관계·세계관 요소·전개 분석 요청에서는 이 본문을 우선 근거로 삼고, 본문이 제공되어 있는데 없다고 말하지 마세요.\n")
 	b.WriteString("용어 구분: '아웃라인/목차/부/장/씬 구성'은 왼쪽 아웃라인 트리이며 create_outline_node/create_scene/rename_outline_node/delete_outline_node/move_outline_node로 갱신합니다. '작품 개요/시놉시스' 텍스트는 set_outline으로 갱신합니다. '플롯/스토리라인/비트'는 create_thread/add_beat로 갱신합니다.\n")
-	b.WriteString("작가가 아이디어를 승인했거나 작품/소설 개요·시놉시스·아웃라인·얼개·스토리라인·비트·캐릭터·관계·장소·씬·기억의 작성/수정/추가/생성/구체화/세분화/분할/확장/반영/저장을 명확히 요청하면 설명으로 끝내지 말고 반드시 linetta_apply_ops를 호출하세요. 적용 후에는 무엇을 바꿨는지 짧게 말하고, 불확실한 변경은 먼저 질문하세요.\n")
+	b.WriteString("작가가 아이디어를 승인했거나 작품/소설 개요·시놉시스·아웃라인·얼개·스토리라인·비트·세계관 요소·캐릭터·관계·장소·아이템·스킬·마법·능력·씬·기억의 작성/수정/추가/생성/구체화/세분화/분할/확장/반영/저장을 명확히 요청하면 설명으로 끝내지 말고 반드시 linetta_apply_ops를 호출하세요. 적용 후에는 무엇을 바꿨는지 짧게 말하고, 불확실한 변경은 먼저 질문하세요.\n")
 	b.WriteString("조각하듯 집필을 돕습니다: 거친 시놉시스나 한 문장을 받으면 set_outline으로 작품 개요를 정리하고 create_outline_node/create_scene으로 보이는 아웃라인 트리를 만들며, 필요하면 그 씬들에 create_thread/add_beat로 플롯 비트를 함께 붙이세요. 특정 파트·챕터·막을 요청받으면 아웃라인 노드를 세분화하고 비트를 연결하며, 특정 씬을 구체화해 달라는 요청에는 현재 씬 또는 새 씬에 비트를 붙여 실제 상태를 갱신하세요.\n\n")
 	b.WriteString("도구가 없거나 작가가 검토용 제안을 원할 때만, 구체적인 변경(아웃라인 트리 생성/수정, 스토리라인 생성/수정, 비트 추가/수정/삭제, 작품 개요/시놉시스 설정)을 다음 형식의 펜스드 블록 **정확히 하나**로 제안하세요. 단순 대화·질문 응답이면 블록을 넣지 마세요.\n\n")
 	b.WriteString("```linetta-proposal\n")
 	b.WriteString(`{"summary":"<한 줄 요약>","ops":[ ... ]}` + "\n")
 	b.WriteString("```\n\n")
-	b.WriteString("op 종류: create_outline_node{ref?,kind:container|leaf,label,title?,parent_node_id?|parent_node_ref?,after_node_id?|after_node_ref?}, rename_outline_node{node_id|node_ref,label?,title?}, delete_outline_node{node_id|node_ref}, move_outline_node{node_id|node_ref,direction:up|down}, create_scene{ref?,label,title?,after_node_id?|after_node_ref?}, create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id?|node_ref?,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}, create_entity{ref?,kind,name,role?,summary?}, update_entity{entity_id,name?,role?,summary?}, create_relationship{from|from_ref,to|to_ref,label,inverse_label?,notes?}, create_fact_card{ref?,claim,result,status,category?,node_id?|node_ref?,sources:[{url,title?,snippet?,accessed_at?}]}.\n")
+	b.WriteString("op 종류: create_outline_node{ref?,kind:container|leaf,label,title?,parent_node_id?|parent_node_ref?,after_node_id?|after_node_ref?}, rename_outline_node{node_id|node_ref,label?,title?}, delete_outline_node{node_id|node_ref}, move_outline_node{node_id|node_ref,direction:up|down}, create_scene{ref?,label,title?,after_node_id?|after_node_ref?}, create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id?|node_ref?,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}, create_entity{ref?,kind,name,role?,summary?,attributes?}, update_entity{entity_id,name?,role?,summary?,attributes?}, create_relationship{from|from_ref,to|to_ref,label,inverse_label?,notes?}, create_fact_card{ref?,claim,result,status,category?,node_id?|node_ref?,sources:[{url,title?,snippet?,accessed_at?}]}.\n")
 	b.WriteString("- 팩트 자료집 저장 규칙: create_fact_card는 최소 1개 출처 URL이 있을 때만 사용하세요. sources[].url 없는 자료는 저장하지 말고, 최신성·불확실성은 status(verified|uncertain|intentional_fiction|stale)로 표시하세요. 출처 본문은 긴 인용 대신 짧은 요약/snippet만 넣으세요.\n")
-	b.WriteString("id 규칙(중요): 컨텍스트의 '씬'·'스토리라인'·'등장 인물·장소·관계' 목록에 실제로 주어진 id만 사용하세요. id를 절대 지어내지 마세요.\n")
+	b.WriteString("id 규칙(중요): 컨텍스트의 '씬'·'스토리라인'·'세계관 요소·관계' 목록에 실제로 주어진 id만 사용하세요. id를 절대 지어내지 마세요.\n")
 	b.WriteString("- add_beat.node_id는 위 '씬' 목록의 node_id 중 하나입니다. 생략하면 현재 씬에 붙습니다.\n")
 	b.WriteString("- 비트는 반드시 스토리라인에 속합니다. 기존 스토리라인이 있으면 그 thread_id를, 새 줄거리면 같은 제안에 create_thread(ref 포함)를 먼저 넣고 add_beat.thread_ref로 그 ref를 참조하세요. thread_id를 추측하지 마세요.\n")
-	b.WriteString("- 캐릭터·장소(엔티티)와 관계도 같은 규칙입니다. 기존 엔티티는 '등장 인물·장소·관계' 목록의 id로 참조하고, 새 엔티티는 create_entity(ref 포함) 후 create_relationship에서 from_ref/to_ref로 그 ref를 참조하세요.\n")
-	b.WriteString("- create_entity.kind는 반드시 character|place|item|concept 중 하나입니다(생략 시 character로 간주). 캐릭터/인물은 character, 장소는 place.\n")
+	b.WriteString("- 세계관 요소와 관계도 같은 규칙입니다. 기존 요소는 '세계관 요소·관계' 목록의 id로 참조하고, 새 요소는 create_entity(ref 포함) 후 create_relationship에서 from_ref/to_ref로 그 ref를 참조하세요.\n")
+	b.WriteString("- create_entity.kind는 반드시 character|place|item|concept 중 하나입니다(생략 시 character로 간주). 캐릭터/인물은 character, 장소는 place, 아이템/물건/유물은 item, 스킬/마법/능력/세계관 규칙은 concept입니다. 효과·비용·제약·약점처럼 일관성 관리에 필요한 정보는 attributes에 key-value로 넣으세요.\n")
 	b.WriteString("- 아웃라인 정리 규칙: 컨텍스트의 '아웃라인 트리'에 기존 node_id가 있으면 같은 부/장/씬을 다시 만들지 말고 rename_outline_node/delete_outline_node/move_outline_node로 정리하세요. 새 구조를 추가할 때만 create_outline_node(ref 포함)를 쓰세요.\n")
 	b.WriteString("- 새 아웃라인 구조는 컨텍스트의 '아웃라인 구조 프리셋'이 있으면 그 계층과 라벨을 따르고, parent_node_ref로 상위→하위 계층을 만든 뒤 add_beat.node_ref로 생성한 씬에 비트를 붙입니다. parent/after가 없는 create_outline_node는 루트에 만들어집니다.\n")
 	b.WriteString("- 새 씬 하나만 현재 위치 옆에 만들 때는 create_scene(ref 포함) 후 add_beat.node_ref로 그 씬에 비트를 붙입니다(node_id 생략 시 현재 씬). 관계를 양방향으로 만들려면 create_relationship에 inverse_label을 주세요.\n")
@@ -188,7 +189,7 @@ func buildContext(d PromptData) string {
 		b.WriteString("\n")
 	}
 	if len(d.Entities) > 0 || len(d.Relationships) > 0 {
-		b.WriteString("## 등장 인물·장소·관계\n")
+		b.WriteString("## 세계관 요소·관계\n")
 		nameByID := map[string]string{}
 		for _, e := range d.Entities {
 			nameByID[e.ID] = e.Name
@@ -198,6 +199,9 @@ func buildContext(d PromptData) string {
 			}
 			if e.Summary != "" {
 				line += ": " + e.Summary
+			}
+			if attrs := formatEntityAttributes(e.Attributes); attrs != "" {
+				line += " (" + attrs + ")"
 			}
 			b.WriteString(line + "\n")
 		}
@@ -268,7 +272,7 @@ func previewFromPromptData(d PromptData, selection ai.ContextSelection) ai.Conte
 
 	add(ai.ContextKeyFacts, "팩트 자료집", len(d.Facts), renderFactsPreview(d.Facts))
 	add(ai.ContextKeyPlot, "플롯 (스토리라인&비트)", companionPlotCount(d), renderCompanionPlotPreview(d))
-	add(ai.ContextKeyEntities, "등장 인물·장소", len(d.Entities), renderCompanionEntitiesPreview(d.Entities))
+	add(ai.ContextKeyEntities, "세계관 요소", len(d.Entities), renderCompanionEntitiesPreview(d.Entities))
 	add(ai.ContextKeyRelationships, "관계", len(d.Relationships), renderCompanionRelationshipsPreview(d.Entities, d.Relationships))
 	add(ai.ContextKeyMemories, "컴패니언 기억", len(d.Memories), renderMemoriesPreview(d.Memories))
 
@@ -414,9 +418,38 @@ func renderCompanionEntitiesPreview(entities []entity.Entity) string {
 		if e.Summary != "" {
 			line += ": " + e.Summary
 		}
+		if attrs := formatEntityAttributes(e.Attributes); attrs != "" {
+			line += " (" + attrs + ")"
+		}
 		b.WriteString(line + "\n")
 	}
 	return b.String()
+}
+
+func formatEntityAttributes(attrs map[string]string) string {
+	if len(attrs) == 0 {
+		return ""
+	}
+	cleaned := map[string]string{}
+	keys := make([]string, 0, len(attrs))
+	for key, value := range attrs {
+		trimmed := strings.TrimSpace(key)
+		if trimmed != "" {
+			cleaned[trimmed] = strings.TrimSpace(value)
+			keys = append(keys, trimmed)
+		}
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		value := cleaned[key]
+		if value == "" {
+			parts = append(parts, key)
+		} else {
+			parts = append(parts, key+":"+value)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 func renderCompanionRelationshipsPreview(entities []entity.Entity, relationships []relationship.Relationship) string {
@@ -493,7 +526,7 @@ func kindLabel(k string) string {
 	case "place":
 		return "장소"
 	case "item":
-		return "물건"
+		return "아이템"
 	case "concept":
 		return "개념"
 	}

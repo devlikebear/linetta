@@ -118,14 +118,14 @@ func TestParseProposal_AddBeatNodeIDOptional(t *testing.T) {
 func TestParseProposal_EntityAndRelationship(t *testing.T) {
 	body := `{"ops":[
 	  {"op":"create_entity","ref":"e1","kind":"character","name":"하나","role":"주인공"},
-	  {"op":"create_entity","ref":"e2","kind":"character","name":"도윤"},
-	  {"op":"create_relationship","from_ref":"e1","to_ref":"e2","label":"라이벌"}
+	  {"op":"create_entity","ref":"e2","kind":"concept","name":"그림자 도약","role":"스킬","attributes":{"효과":"짧은 거리를 순간 이동한다","비용":"체온 저하"}},
+	  {"op":"create_relationship","from_ref":"e1","to_ref":"e2","label":"사용함"}
 	]}`
 	p, present, err := ParseProposal(block(body))
 	if !present || err != nil {
 		t.Fatalf("present=%v err=%v", present, err)
 	}
-	if len(p.Ops) != 3 || p.Ops[0].Name != "하나" || p.Ops[2].Label != "라이벌" {
+	if len(p.Ops) != 3 || p.Ops[0].Name != "하나" || p.Ops[1].Attributes["효과"] == "" || p.Ops[2].Label != "사용함" {
 		t.Fatalf("p=%+v", p)
 	}
 }
@@ -164,6 +164,16 @@ func TestParseProposal_CreateEntityKindNormalization(t *testing.T) {
 	// A truly unknown kind is still rejected.
 	if _, _, err := ParseProposal(block(`{"ops":[{"op":"create_entity","name":"X","kind":"bogus"}]}`)); err == nil {
 		t.Fatal("expected invalid-kind error")
+	}
+}
+
+func TestParseProposal_UpdateEntityKindNormalization(t *testing.T) {
+	p, _, err := ParseProposal(block(`{"ops":[{"op":"update_entity","entity_id":"e1","kind":"능력"}]}`))
+	if err != nil {
+		t.Fatalf("update kind synonym should normalize, got err=%v", err)
+	}
+	if p.Ops[0].Kind != "concept" {
+		t.Fatalf("kind: want concept, got %q", p.Ops[0].Kind)
 	}
 }
 

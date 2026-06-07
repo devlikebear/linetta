@@ -298,7 +298,7 @@ func TestBuildUser_emitsHierarchicalSections(t *testing.T) {
 		"## 직전·직후 씬 발췌",
 		"## 관련 과거 씬",
 		"## 현재 씬: 씬 3",
-		"## 등장 인물·장소",
+		"## 세계관 요소",
 		"## 작가의 지시",
 	}
 	last := -1
