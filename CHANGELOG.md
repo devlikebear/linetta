@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.9 - 2026-06-07
+
+- Added story-element presets for items, skills, magic, abilities, and relationship labels in the Entity Sheet.
+- Extended companion story-state tools so worldbuilding elements can store structured attributes such as effects, costs, triggers, limits, and weaknesses.
+- Renamed entity and AI context surfaces toward story/worldbuilding elements so items and concepts appear alongside characters and places.
+
 ## v0.4.7 - 2026-06-06
 
 - Added companion context inspection, per-message copy controls, and image attachments from file upload or clipboard paste.
