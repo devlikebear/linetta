@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.10 - 2026-06-07
+
+- Recovered leaked `linetta_apply_ops` JSON into applyable Fact Book proposal cards instead of showing raw tool payloads.
+- Wrapped long Fact Book assistant text, source URLs, and proposal cards so feedback stays inside the side panel.
+- Added a Fact Book retry action for failed source URL saves so writers can search for an alternative source without restarting the review.
+
 ## v0.4.9 - 2026-06-07
 
 - Added story-element presets for items, skills, magic, abilities, and relationship labels in the Entity Sheet.
