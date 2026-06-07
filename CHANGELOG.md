@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.12 - 2026-06-07
+
+- Fixed the Windows desktop build that broke in v0.4.11: bumped the bundled `tars` engine to v0.34.0, whose `claude-code-cli` process-teardown used unix-only syscalls. Updated to tars v0.34.1, which builds for Windows again. macOS and Linux were unaffected.
+
 ## v0.4.11 - 2026-06-07
 
 - Upgraded the bundled `tars` LLM engine to v0.34.0: `claude-code-cli` runs are now bounded by a timeout (`CLAUDE_CODE_CLI_TIMEOUT`, default 5m) and a hung run no longer blocks until cancelled, descendant processes are killed as a group, and per-call startup is ~1s faster.
