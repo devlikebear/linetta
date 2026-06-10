@@ -47,3 +47,26 @@ func TestExportNodeHandler(t *testing.T) {
 		t.Errorf("node export should not have headings: %q", p.Markdown)
 	}
 }
+
+func TestExportNodeTextHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	if err := f.nodes.UpdateContent(context.Background(), f.nID,
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"플랫폼 복사"}]}]}`, 100); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	h := ExportNodeText(f.nodes)
+	res, err := h(context.Background(), json.RawMessage(`{"node_id":"`+f.nID+`"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var p export.TextPayload
+	if err := json.Unmarshal(res, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if p.Text != "플랫폼 복사" {
+		t.Fatalf("text = %q", p.Text)
+	}
+	if p.CharCount != 6 {
+		t.Fatalf("char_count = %d, want 6", p.CharCount)
+	}
+}

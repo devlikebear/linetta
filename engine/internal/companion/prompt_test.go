@@ -28,6 +28,15 @@ func TestBuildSystem_MentionsWebTools(t *testing.T) {
 	}
 }
 
+func TestBuildSystem_MentionsProofreadRules(t *testing.T) {
+	s := buildSystem()
+	for _, want := range []string{"맞춤법", "고유명사", "대사 톤", "변경 목록"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("buildSystem missing proofread rule %q", want)
+		}
+	}
+}
+
 func TestBuildContext_RendersSections(t *testing.T) {
 	d := PromptData{
 		Outline:  "전체 개요",
@@ -150,7 +159,7 @@ func TestBuildSystem_MentionsEntityOps(t *testing.T) {
 
 func TestBuildSystem_MentionsSceneAndPair(t *testing.T) {
 	s := buildSystem()
-	for _, want := range []string{"create_scene", "create_outline_node", "parent_node_ref", "node_ref", "inverse_label"} {
+	for _, want := range []string{"create_scene", "create_outline_node", "set_scene_text", "현재 씬", "parent_node_ref", "node_ref", "inverse_label"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("buildSystem missing %q", want)
 		}

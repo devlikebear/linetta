@@ -35,6 +35,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/search"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
+	"github.com/devlikebear/linetta/engine/internal/stats"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/summarizer"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -96,6 +97,7 @@ func main() {
 	projects := project.NewRepo(st)
 	nodes := node.NewRepo(st)
 	snaps := snapshot.NewRepo(st)
+	writingStats := stats.NewRepo(st)
 	entities := entity.NewRepo(st)
 	mentions := mention.NewRepo(st)
 	threads := thread.NewRepo(st)
@@ -112,6 +114,7 @@ func main() {
 	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
 		return mentions.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
 	})
+	nodes.SetWritingStatsRecorder(writingStats)
 
 	settingsStore, err := settings.New()
 	if err != nil {
@@ -185,6 +188,9 @@ func main() {
 	s.Handle("projects.clear_synopsis", handlers.ClearProjectSynopsis(projects, clock))
 	s.Handle("nodes.get", handlers.GetNode(nodes))
 	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, snaps, clock, summ.Enqueue))
+	s.Handle("stats.today", handlers.TodayStats(writingStats))
+	s.Handle("stats.range", handlers.RangeStats(writingStats))
+	s.Handle("stats.summary", handlers.SummaryStats(writingStats))
 	s.Handle("nodes.set_last_opened", handlers.SetLastOpened(nodes, clock))
 	s.Handle("snapshots.create_manual", handlers.CreateManualSnapshot(snaps, clock))
 	s.Handle("nodes.list_tree", handlers.ListTree(nodes))
@@ -192,12 +198,14 @@ func main() {
 	s.Handle("nodes.create_child", handlers.CreateChild(nodes, clock))
 	s.Handle("nodes.rename", handlers.RenameNode(nodes, clock))
 	s.Handle("nodes.delete", handlers.DeleteNode(nodes, clock))
+	s.Handle("nodes.move_to", handlers.MoveTo(nodes, clock))
 	s.Handle("nodes.move_to_parent", handlers.MoveToParent(nodes, clock))
 	s.Handle("nodes.move_to_root", handlers.MoveToRoot(nodes, clock))
 	s.Handle("nodes.convert_to_container", handlers.ConvertToContainer(nodes, clock))
 	s.Handle("nodes.restore_outline", handlers.RestoreOutline(nodes, clock))
 	s.Handle("nodes.move_up", handlers.MoveUp(nodes, clock))
 	s.Handle("nodes.move_down", handlers.MoveDown(nodes, clock))
+	s.Handle("nodes.set_status", handlers.SetNodeStatus(nodes, clock))
 	s.Handle("entities.search", handlers.SearchEntities(entities))
 	s.Handle("entities.list", handlers.ListEntities(entities))
 	s.Handle("entities.get", handlers.GetEntity(entities))
@@ -254,6 +262,7 @@ func main() {
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities, relationships))
 	s.Handle("export.node", handlers.ExportNode(nodes))
+	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	s.Handle("git_sync.run", handlers.RunGitSync(syncer))

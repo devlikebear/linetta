@@ -14,6 +14,8 @@ const (
 
 	OutlinePresetNovel    = "novel"
 	OutlinePresetWebNovel = "webnovel"
+
+	DefaultEpisodeCharTarget = 5000
 )
 
 func ValidLengthTarget(v string) bool {
@@ -46,28 +48,30 @@ func ValidOutlinePreset(v string) bool {
 // Project is the on-wire and on-disk representation of a single work.
 // Genres is a JSON-array stored as TEXT in SQLite; the repo handles conversion.
 type Project struct {
-	ID               string   `json:"id"`
-	Title            string   `json:"title"`
-	Genres           []string `json:"genres"`
-	LengthTarget     string   `json:"length_target"` // flash|short|novella|novel|series
-	DefaultPOV       string   `json:"default_pov"`   // first|third_limited|omniscient
-	StyleNotes       string   `json:"style_notes"`
-	Outline          string   `json:"outline"`
-	OutlinePreset    string   `json:"outline_preset"`
-	Synopsis         string   `json:"synopsis"`
-	WordCount        int      `json:"word_count"`
-	LastOpenedNodeID *string  `json:"last_opened_node_id,omitempty"`
-	CreatedAt        int64    `json:"created_at"`
-	UpdatedAt        int64    `json:"updated_at"`
-	ArchivedAt       *int64   `json:"archived_at,omitempty"`
+	ID                string   `json:"id"`
+	Title             string   `json:"title"`
+	Genres            []string `json:"genres"`
+	LengthTarget      string   `json:"length_target"` // flash|short|novella|novel|series
+	DefaultPOV        string   `json:"default_pov"`   // first|third_limited|omniscient
+	StyleNotes        string   `json:"style_notes"`
+	Outline           string   `json:"outline"`
+	OutlinePreset     string   `json:"outline_preset"`
+	EpisodeCharTarget int      `json:"episode_char_target"`
+	Synopsis          string   `json:"synopsis"`
+	WordCount         int      `json:"word_count"`
+	LastOpenedNodeID  *string  `json:"last_opened_node_id,omitempty"`
+	CreatedAt         int64    `json:"created_at"`
+	UpdatedAt         int64    `json:"updated_at"`
+	ArchivedAt        *int64   `json:"archived_at,omitempty"`
 }
 
 // NewInput is what the UI submits from the New Project modal.
 type NewInput struct {
-	Title        string   `json:"title"`
-	Genres       []string `json:"genres"`
-	LengthTarget string   `json:"length_target"`
-	DefaultPOV   string   `json:"default_pov"`
+	Title         string   `json:"title"`
+	Genres        []string `json:"genres"`
+	LengthTarget  string   `json:"length_target"`
+	DefaultPOV    string   `json:"default_pov"`
+	OutlinePreset string   `json:"outline_preset,omitempty"`
 }
 
 // ListFilter selects which projects to return.
@@ -79,9 +83,10 @@ type ListFilter struct {
 // UpdateInput patches editable project fields. Each pointer field is nil to
 // leave the value alone, or non-nil (including "") to set it.
 type UpdateInput struct {
-	ID            string  `json:"id"`
-	Title         *string `json:"title,omitempty"`
-	Outline       *string `json:"outline,omitempty"`
-	OutlinePreset *string `json:"outline_preset,omitempty"`
-	Synopsis      *string `json:"synopsis,omitempty"`
+	ID                string  `json:"id"`
+	Title             *string `json:"title,omitempty"`
+	Outline           *string `json:"outline,omitempty"`
+	OutlinePreset     *string `json:"outline_preset,omitempty"`
+	EpisodeCharTarget *int    `json:"episode_char_target,omitempty"`
+	Synopsis          *string `json:"synopsis,omitempty"`
 }

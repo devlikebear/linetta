@@ -4,6 +4,11 @@ export interface TreeNode extends NodeRow {
   children: TreeNode[];
 }
 
+export interface EpisodeStatusCounts {
+  published: number;
+  stock: number;
+}
+
 /** Build a tree (parent_id NULL roots + recursive children) from a flat list.
  *  Caller must have sorted by (parent_id, ordinal) — `nodes.list_tree` already does. */
 export function buildTree(rows: NodeRow[]): TreeNode[] {
@@ -30,6 +35,30 @@ export function findFirstLeaf(root: TreeNode): TreeNode | null {
     if (found) return found;
   }
   return null;
+}
+
+/** Sum saved character counts for every leaf under a node. */
+export function sumLeafChars(root: TreeNode): number {
+  if (root.kind === "leaf") return root.word_count;
+  return root.children.reduce((total, child) => total + sumLeafChars(child), 0);
+}
+
+/** Count direct episode nodes under each top-level part for webnovel stock stats. */
+export function countEpisodeStatus(roots: TreeNode[]): EpisodeStatusCounts {
+  let published = 0;
+  let stock = 0;
+
+  for (const root of roots) {
+    for (const episode of root.children) {
+      if (episode.status === "published") {
+        published += 1;
+      } else if (episode.status === "final") {
+        stock += 1;
+      }
+    }
+  }
+
+  return { published, stock };
 }
 
 /** Flatten a tree to a list in DFS order (used by Cmd+P's "search node"). */

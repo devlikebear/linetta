@@ -172,6 +172,25 @@ describe("useCompanion streaming", () => {
     expect(result.current.status).toBe("idle");
   });
 
+  it("ignores duplicate sends while a companion run is pending", async () => {
+    let resolveSend: (value: { run_id: string }) => void = () => {};
+    rpc.send.mockReturnValue(new Promise((resolve) => { resolveSend = resolve; }));
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      void result.current.send("같은 요청");
+      void result.current.send("같은 요청");
+    });
+
+    expect(rpc.send).toHaveBeenCalledTimes(1);
+    expect(result.current.messages.filter((m) => m.role === "user" && m.content === "같은 요청")).toHaveLength(1);
+
+    await act(async () => {
+      resolveSend({ run_id: "r1" });
+    });
+  });
+
   it("accumulates companion-reasoning and clears it on done", async () => {
     const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
     await waitFor(() => expect(ev.listeners.has("companion-reasoning")).toBe(true));

@@ -5,7 +5,8 @@
 
 .companion-empty-card,
 .companion-help-card,
-.companion-context-card {
+.companion-context-card,
+.companion-ai-draft-card {
   background: color-mix(in srgb, var(--surface) 82%, var(--surface-2));
   border: 1px solid var(--line-soft);
   border-radius: var(--r-md);
@@ -31,7 +32,8 @@
 
 .companion-empty-kicker,
 .companion-help-title,
-.companion-context-title {
+.companion-context-title,
+.companion-ai-draft-title {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -44,6 +46,7 @@
 
 .companion-empty-kicker svg,
 .companion-help-title svg,
+.companion-ai-draft-title svg,
 .companion-tool-row svg {
   flex: none;
 }
@@ -124,6 +127,18 @@
   padding: 0;
   border: 0;
   background: transparent;
+}
+.companion-ai-draft-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.companion-ai-draft-title {
+  margin-bottom: 2px;
+}
+.companion-ai-draft-foot {
+  margin: 12px -14px -14px;
+  border-radius: 0 0 var(--r-md) var(--r-md);
 }
 .companion-input-toolbar {
   align-items: center;

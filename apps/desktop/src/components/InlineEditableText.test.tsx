@@ -43,4 +43,28 @@ describe("InlineEditableText", () => {
     expect(onCommit).not.toHaveBeenCalled();
     expect(input).toHaveValue("작품 제목");
   });
+
+  it("cancels edits with Escape without committing on blur", async () => {
+    const user = userEvent.setup();
+    const onCommit = vi.fn();
+    const onCancel = vi.fn();
+    render(
+      <InlineEditableText
+        value="이전 제목"
+        ariaLabel="표시 제목"
+        autoFocus
+        onCommit={onCommit}
+        onCancel={onCancel}
+      />,
+    );
+
+    const input = screen.getByLabelText("표시 제목");
+    await user.clear(input);
+    await user.type(input, "새 제목");
+    await user.keyboard("{Escape}");
+
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(input).toHaveValue("이전 제목");
+  });
 });

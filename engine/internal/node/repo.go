@@ -15,6 +15,7 @@ var ErrNotFound = errors.New("node not found")
 
 var (
 	ErrInvalidKind         = errors.New("invalid node kind")
+	ErrInvalidStatus       = errors.New("invalid node status")
 	ErrContentOnContainer  = errors.New("cannot update content for a container node")
 	ErrNodeProjectMismatch = errors.New("node does not belong to project")
 	ErrInvalidMove         = errors.New("invalid node move")
@@ -25,10 +26,18 @@ var (
 // surfaces as an UpdateContent failure.
 type MentionResyncer func(ctx context.Context, nodeID, doc string) error
 
+// WritingStatsRecorder records positive character-count growth for a saved
+// node. The caller passes its open transaction so content and stats commit
+// together.
+type WritingStatsRecorder interface {
+	RecordNodeDelta(ctx context.Context, tx *sql.Tx, projectID string, oldCount int, newCount int, nowMillis int64) error
+}
+
 // Repo persists Nodes in SQLite and keeps derived counts on projects in sync.
 type Repo struct {
-	s      *store.Store
-	resync MentionResyncer
+	s       *store.Store
+	resync  MentionResyncer
+	writing WritingStatsRecorder
 }
 
 // NewRepo returns a Repo backed by the given Store.
@@ -38,6 +47,11 @@ func NewRepo(s *store.Store) *Repo { return &Repo{s: s} }
 // the resync (used in tests that don't care about mentions).
 func (r *Repo) SetMentionResyncer(fn MentionResyncer) {
 	r.resync = fn
+}
+
+// SetWritingStatsRecorder wires the optional daily progress recorder.
+func (r *Repo) SetWritingStatsRecorder(rec WritingStatsRecorder) {
+	r.writing = rec
 }
 
 // Get returns a single node by id.
@@ -62,8 +76,12 @@ func (r *Repo) UpdateContent(ctx context.Context, id string, doc string, now int
 	}
 	defer tx.Rollback()
 
-	var kind string
-	if err := tx.QueryRowContext(ctx, `SELECT kind FROM nodes WHERE id = ?`, id).Scan(&kind); err != nil {
+	var (
+		kind          string
+		projectID     string
+		previousCount int
+	)
+	if err := tx.QueryRowContext(ctx, `SELECT kind, project_id, word_count FROM nodes WHERE id = ?`, id).Scan(&kind, &projectID, &previousCount); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -114,6 +132,12 @@ UPDATE projects
        updated_at = ?
  WHERE id = (SELECT project_id FROM nodes WHERE id = ?)`, now, id); err != nil {
 		return fmt.Errorf("update project totals: %w", err)
+	}
+
+	if r.writing != nil {
+		if err := r.writing.RecordNodeDelta(ctx, tx, projectID, previousCount, count, now); err != nil {
+			return fmt.Errorf("record writing stats: %w", err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -420,6 +444,24 @@ UPDATE nodes SET label = ?, title = ?, updated_at = ?
 	return nil
 }
 
+// SetStatus updates the workflow status for a node.
+func (r *Repo) SetStatus(ctx context.Context, id, status string, now int64) error {
+	if !ValidStatus(status) {
+		return ErrInvalidStatus
+	}
+	res, err := r.s.DB().ExecContext(ctx, `
+UPDATE nodes SET status = ?, updated_at = ?
+ WHERE id = ?`, status, now, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // Delete removes the node (children cascade via FK). Recomputes the project's
 // word_count.
 func (r *Repo) Delete(ctx context.Context, id string, now int64) error {
@@ -458,6 +500,119 @@ func (r *Repo) MoveUp(ctx context.Context, id string, now int64) error {
 // MoveDown swaps the node with its next sibling. No-op if last.
 func (r *Repo) MoveDown(ctx context.Context, id string, now int64) error {
 	return r.swap(ctx, id, "down", now)
+}
+
+// MoveTo moves a node into a target parent (or root when parentID is nil) at
+// the requested ordinal, shifting siblings to keep a dense order.
+func (r *Repo) MoveTo(ctx context.Context, id string, parentID *string, ordinal int, now int64) error {
+	if ordinal < 0 {
+		ordinal = 0
+	}
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	row := tx.QueryRowContext(ctx, baseSelect+` WHERE id = ?`, id)
+	cur, err := scan(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return ErrNotFound
+		}
+		return err
+	}
+
+	if parentID != nil {
+		row = tx.QueryRowContext(ctx, baseSelect+` WHERE id = ?`, *parentID)
+		parent, err := scan(row)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return ErrNotFound
+			}
+			return err
+		}
+		if parent.ProjectID != cur.ProjectID {
+			return ErrNodeProjectMismatch
+		}
+		if parent.Kind != KindContainer {
+			return ErrContentOnContainer
+		}
+		if cur.ID == parent.ID {
+			return ErrInvalidMove
+		}
+		var descendantCount int
+		if err := tx.QueryRowContext(ctx, `
+WITH RECURSIVE descendants(id) AS (
+  SELECT id FROM nodes WHERE parent_id = ?
+  UNION ALL
+  SELECT n.id FROM nodes n JOIN descendants d ON n.parent_id = d.id
+)
+SELECT COUNT(1) FROM descendants WHERE id = ?`, cur.ID, parent.ID).Scan(&descendantCount); err != nil {
+			return err
+		}
+		if descendantCount > 0 {
+			return ErrInvalidMove
+		}
+	}
+
+	if cur.ParentID == nil {
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET ordinal = ordinal - 1
+ WHERE project_id = ? AND parent_id IS NULL AND ordinal > ?`, cur.ProjectID, cur.Ordinal); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET ordinal = ordinal - 1
+ WHERE parent_id = ? AND ordinal > ?`, *cur.ParentID, cur.Ordinal); err != nil {
+			return err
+		}
+	}
+
+	var siblingCount int
+	if parentID == nil {
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(1) FROM nodes WHERE project_id = ? AND parent_id IS NULL`, cur.ProjectID).Scan(&siblingCount); err != nil {
+			return err
+		}
+	} else {
+		if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(1) FROM nodes WHERE parent_id = ?`, *parentID).Scan(&siblingCount); err != nil {
+			return err
+		}
+	}
+	if ordinal > siblingCount {
+		ordinal = siblingCount
+	}
+
+	if parentID == nil {
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET ordinal = ordinal + 1
+ WHERE project_id = ? AND parent_id IS NULL AND ordinal >= ?`, cur.ProjectID, ordinal); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET parent_id = NULL, ordinal = ?, updated_at = ? WHERE id = ?`,
+			ordinal, now, cur.ID); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET ordinal = ordinal + 1
+ WHERE parent_id = ? AND ordinal >= ?`, *parentID, ordinal); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+UPDATE nodes SET parent_id = ?, ordinal = ?, updated_at = ? WHERE id = ?`,
+			*parentID, ordinal, now, cur.ID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE projects SET updated_at = ? WHERE id = ?`, now, cur.ProjectID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // MoveToParent moves a node to the end of another container's children.

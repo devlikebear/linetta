@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
@@ -79,7 +80,7 @@ func (s *Service) buildWebSearchTool() tarstools.Tool {
 func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, now func() int64) tarstools.Tool {
 	return tarstools.Tool{
 		Name:        "linetta_apply_ops",
-		Description: "Directly apply Linetta story mutations to the current project. Use create_outline_node/create_scene for new left outline tree items, thread/beat ops for plot beats, entity/relationship ops for characters, places, items, skills, magic, abilities, and create_fact_card for source-backed Fact Book cards.",
+		Description: "Directly apply Linetta story mutations to the current project. Use set_scene_text to rewrite the current scene body, create_outline_node/create_scene for new left outline tree items, thread/beat ops for plot beats, entity/relationship ops for characters, places, items, skills, magic, abilities, and create_fact_card for source-backed Fact Book cards.",
 		Parameters:  applyOpsSchema(),
 		Execute: func(ctx context.Context, params json.RawMessage) (tarstools.Result, error) {
 			p, err := decodeApplyOpsParams(params)
@@ -112,7 +113,7 @@ func applyOpsSchema() json.RawMessage {
   "type":"object",
   "properties":{
     "summary":{"type":"string","description":"Short Korean summary of the actual project changes to apply."},
-    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use create_outline_node/create_scene only for new visible left outline items; use rename_outline_node/delete_outline_node/move_outline_node for existing outline cleanup. Use set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, entity/relationship ops for characters, places, items, skills, magic, abilities, and create_fact_card only when at least one source URL is available. create_entity/update_entity may include attributes for effect, cost, trigger, limits, owner, origin, or weakness."}
+    "ops_json":{"type":"string","description":"JSON array string of Linetta mutation objects to apply now. Use set_scene_text{text,node_id?,node_ref?,allow_empty?} to replace the actual body of the current or specified scene. Use create_outline_node/create_scene only for new visible left outline items; use rename_outline_node/delete_outline_node/move_outline_node for existing outline cleanup. Use set_outline only for project synopsis/overview text, create_thread/add_beat for storylines and beats, entity/relationship ops for characters, places, items, skills, magic, abilities, and create_fact_card only when at least one source URL is available. create_entity/update_entity may include attributes for effect, cost, trigger, limits, owner, origin, or weakness."}
   },
   "required":["summary","ops_json"],
   "additionalProperties":false
@@ -223,6 +224,19 @@ func (s *Service) applyOneOp(
 		outline := op.Outline
 		_, err := s.projects.Update(ctx, now(), project.UpdateInput{ID: projectID, Outline: &outline})
 		return err
+	case "set_scene_text":
+		targetNodeID, err := s.resolveOptionalNodeID(ctx, op.NodeID, op.NodeRef, currentNodeID, nodeRefs)
+		if err != nil {
+			return err
+		}
+		if targetNodeID == nil || strings.TrimSpace(*targetNodeID) == "" {
+			return fmt.Errorf("set_scene_text requires a current node or node_id")
+		}
+		doc, err := plainTextToTiptapDoc(op.Text)
+		if err != nil {
+			return err
+		}
+		return s.nodes.UpdateContent(ctx, *targetNodeID, doc, now())
 	case "create_thread":
 		th, err := s.threads.Create(ctx, thread.NewInput{ProjectID: projectID, Name: op.Name, Color: op.Color})
 		if err != nil {
@@ -457,6 +471,55 @@ func optionalEntityAttributes(attrs map[string]string) *map[string]string {
 		return nil
 	}
 	return &attrs
+}
+
+type tiptapDoc struct {
+	Type    string        `json:"type"`
+	Content []tiptapBlock `json:"content"`
+}
+
+type tiptapBlock struct {
+	Type    string         `json:"type"`
+	Content []tiptapInline `json:"content,omitempty"`
+}
+
+type tiptapInline struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+}
+
+var paragraphBreakRE = regexp.MustCompile(`\n{2,}`)
+
+func plainTextToTiptapDoc(text string) (string, error) {
+	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	blocks := paragraphBreakRE.Split(normalized, -1)
+	paragraphs := make([]tiptapBlock, 0, len(blocks))
+	for _, block := range blocks {
+		lines := strings.Split(block, "\n")
+		content := make([]tiptapInline, 0, len(lines)*2)
+		for i, line := range lines {
+			if i > 0 {
+				content = append(content, tiptapInline{Type: "hardBreak"})
+			}
+			if line != "" {
+				content = append(content, tiptapInline{Type: "text", Text: line})
+			}
+		}
+		paragraph := tiptapBlock{Type: "paragraph"}
+		if len(content) > 0 {
+			paragraph.Content = content
+		}
+		paragraphs = append(paragraphs, paragraph)
+	}
+	if len(paragraphs) == 0 {
+		paragraphs = append(paragraphs, tiptapBlock{Type: "paragraph"})
+	}
+	raw, err := json.Marshal(tiptapDoc{Type: "doc", Content: paragraphs})
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
 }
 
 func mergeEntityAttributes(base, next map[string]string) map[string]string {

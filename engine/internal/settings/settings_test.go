@@ -44,6 +44,18 @@ func TestLoad_missingFileReturnsDefaults(t *testing.T) {
 	if got.BackupDir == "" {
 		t.Error("backup_dir empty")
 	}
+	if got.Theme != "system" {
+		t.Errorf("theme = %q, want system", got.Theme)
+	}
+	if got.EditorFontSize != 20 {
+		t.Errorf("editor_font_size = %d, want 20", got.EditorFontSize)
+	}
+	if got.EditorLineHeight != 1.92 {
+		t.Errorf("editor_line_height = %v, want 1.92", got.EditorLineHeight)
+	}
+	if got.CopyProfile != "plain" {
+		t.Errorf("copy_profile = %q, want plain", got.CopyProfile)
+	}
 }
 
 func TestSet_partialPatchPreservesUntouchedFields(t *testing.T) {
@@ -168,6 +180,49 @@ func TestSet_focusDefault_persists(t *testing.T) {
 	reloaded, _ := s2.Get(context.Background())
 	if !reloaded.FocusDefault {
 		t.Errorf("focus_default not persisted across reload: %+v", reloaded)
+	}
+}
+
+func TestSet_editorPreferences_persistAndValidate(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	secrets := NewMemorySecretStore()
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := s.Set(ctx, Patch{
+		Theme:            strPtr("dark"),
+		EditorFontSize:   intPtr(18),
+		EditorLineHeight: floatPtr(2.05),
+		CopyProfile:      strPtr("munpia"),
+	}); err != nil {
+		t.Fatalf("Set editor prefs: %v", err)
+	}
+	got, _ := s.Get(ctx)
+	if got.Theme != "dark" || got.EditorFontSize != 18 || got.EditorLineHeight != 2.05 || got.CopyProfile != "munpia" {
+		t.Fatalf("editor prefs not applied in memory: %+v", got)
+	}
+	s2, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	reloaded, _ := s2.Get(ctx)
+	if reloaded.Theme != "dark" || reloaded.EditorFontSize != 18 || reloaded.EditorLineHeight != 2.05 || reloaded.CopyProfile != "munpia" {
+		t.Fatalf("editor prefs not persisted: %+v", reloaded)
+	}
+	if _, err := s.Set(ctx, Patch{Theme: strPtr("sepia")}); err == nil {
+		t.Fatalf("expected invalid theme error")
+	}
+	if _, err := s.Set(ctx, Patch{EditorFontSize: intPtr(30)}); err == nil {
+		t.Fatalf("expected invalid font size error")
+	}
+	if _, err := s.Set(ctx, Patch{EditorLineHeight: floatPtr(3.0)}); err == nil {
+		t.Fatalf("expected invalid line height error")
+	}
+	if _, err := s.Set(ctx, Patch{CopyProfile: strPtr("fax")}); err == nil {
+		t.Fatalf("expected invalid copy profile error")
 	}
 }
 
@@ -321,8 +376,10 @@ func TestSet_rejectsUnknownWebSearchProvider(t *testing.T) {
 	}
 }
 
-func boolPtr(v bool) *bool    { return &v }
-func strPtr(v string) *string { return &v }
+func boolPtr(v bool) *bool        { return &v }
+func intPtr(v int) *int           { return &v }
+func floatPtr(v float64) *float64 { return &v }
+func strPtr(v string) *string     { return &v }
 
 func TestProvidersBackwardCompatLoadAndResolve(t *testing.T) {
 	dir := t.TempDir()

@@ -151,3 +151,78 @@
   margin-left: 4px;
   color: var(--ink-soft);
 }
+
+.outline-menu-label {
+  padding: 3px 9px 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.outline-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--line);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 70%, transparent);
+}
+
+.outline-status-dot.is-draft {
+  background: var(--line);
+}
+
+.outline-status-dot.is-revision {
+  background: var(--t-olive);
+}
+
+.outline-status-dot.is-final {
+  background: var(--t-teal);
+}
+
+.outline-status-dot.is-published {
+  background: var(--ink);
+}
+
+.status-menu-item.is-current {
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+.episode-progress {
+  width: 74px;
+  margin-left: auto;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: none;
+}
+
+.episode-count {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--muted-2);
+  line-height: 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.episode-meter {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.episode-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.episode-meter-fill.is-complete {
+  background: var(--t-teal);
+}

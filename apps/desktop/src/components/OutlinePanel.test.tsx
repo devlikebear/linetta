@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -66,21 +66,17 @@ function renderOutline(props: Partial<ComponentProps<typeof OutlinePanel>> = {})
 }
 
 describe("OutlinePanel", () => {
-  it("opens a popup menu for scene rename and creation actions", async () => {
+  it("opens a popup menu for scene creation actions", async () => {
     const user = userEvent.setup();
-    const onRename = vi.fn();
     const onCreateScene = vi.fn();
     const onCreateChapter = vi.fn();
+    const onCopyText = vi.fn();
 
     renderOutline({
-      onRename,
       onCreateScene,
       onCreateChapter,
+      onCopyText,
     });
-
-    fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
-    await user.click(screen.getByRole("menuitem", { name: "이름 변경" }));
-    expect(onRename).toHaveBeenCalledWith(scene);
 
     fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
     await user.click(screen.getByRole("menuitem", { name: "새 씬" }));
@@ -89,6 +85,80 @@ describe("OutlinePanel", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
     await user.click(screen.getByRole("menuitem", { name: "새 장" }));
     expect(onCreateChapter).toHaveBeenCalledWith(scene);
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
+    await user.click(screen.getByRole("menuitem", { name: "본문 복사" }));
+    expect(onCopyText).toHaveBeenCalledWith(scene);
+  });
+
+  it("renames a node title inline from the popup menu and commits with Enter", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn().mockResolvedValue(undefined);
+
+    renderOutline({ onRename });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
+    await user.click(screen.getByRole("menuitem", { name: "이름 변경" }));
+
+    const input = screen.getByLabelText("표시 제목");
+    expect(input).toHaveValue("첫 만남");
+    await user.clear(input);
+    await user.type(input, "낯선 동행{Enter}");
+
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith(scene, "낯선 동행"));
+  });
+
+  it("cancels inline rename with Escape", async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn();
+
+    renderOutline({ onRename });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
+    await user.click(screen.getByRole("menuitem", { name: "이름 변경" }));
+    const input = screen.getByLabelText("표시 제목");
+    await user.clear(input);
+    await user.type(input, "취소할 제목");
+    await user.keyboard("{Escape}");
+
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.getByText("첫 만남")).toBeInTheDocument();
+  });
+
+  it("moves a dragged node before a sibling", () => {
+    const onMoveNode = vi.fn();
+    const first: TreeNode = { ...scene, parent_id: undefined };
+    const second: TreeNode = { ...scene, id: "scene-2", parent_id: undefined, ordinal: 1, label: "씬 2", title: "두 번째" };
+
+    renderOutline({
+      tree: [first, second],
+      onMoveNode,
+    });
+
+    fireEvent.dragStart(screen.getByRole("button", { name: /씬 2/ }), { dataTransfer: { setData: vi.fn(), effectAllowed: "" } });
+    fireEvent.dragOver(screen.getByRole("button", { name: /씬 1/ }));
+    fireEvent.drop(screen.getByRole("button", { name: /씬 1/ }));
+
+    expect(onMoveNode).toHaveBeenCalledWith(second, null, 0);
+  });
+
+  it("moves a dragged node into a container as the last child", () => {
+    const onMoveNode = vi.fn();
+    const rootScene: TreeNode = { ...scene, id: "root-scene", parent_id: undefined, label: "씬 9", title: "프롤로그" };
+    const childScene: TreeNode = { ...scene, id: "child-scene", parent_id: "part-1", label: "씬 1" };
+    const part: TreeNode = { ...chapter, id: "part-1", label: "1부", children: [childScene] };
+
+    renderOutline({
+      tree: [rootScene, part],
+      currentId: "root-scene",
+      onMoveNode,
+    });
+
+    fireEvent.dragStart(screen.getByRole("button", { name: /씬 9/ }), { dataTransfer: { setData: vi.fn(), effectAllowed: "" } });
+    fireEvent.dragOver(screen.getByText("1부"));
+    fireEvent.drop(screen.getByText("1부"));
+
+    expect(onMoveNode).toHaveBeenCalledWith(rootScene, "part-1", 1);
   });
 
   it("opens scene move and delete actions from the popup menu", async () => {
@@ -114,6 +184,20 @@ describe("OutlinePanel", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
     await user.click(screen.getByRole("menuitem", { name: "삭제" }));
     expect(onDeleteScene).toHaveBeenCalledWith(scene);
+  });
+
+  it("shows status dots and changes node status from the popup menu", async () => {
+    const user = userEvent.setup();
+    const onSetStatus = vi.fn();
+
+    renderOutline({ onSetStatus });
+
+    expect(await screen.findByLabelText("상태: 초고")).toBeInTheDocument();
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
+    await user.click(screen.getByRole("menuitem", { name: "발행" }));
+
+    expect(onSetStatus).toHaveBeenCalledWith(scene, "published");
   });
 
   it("opens part and container maintenance actions from the popup menu", async () => {
@@ -338,9 +422,121 @@ describe("OutlinePanel", () => {
     expect(onOutlinePresetChange).toHaveBeenCalledWith("novel");
   });
 
+  it("accepts direct leaf episodes under an arc for the web novel preset", async () => {
+    const user = userEvent.setup();
+    const episode: TreeNode = {
+      ...scene,
+      id: "episode-leaf",
+      parent_id: "arc",
+      label: "1화",
+      title: "경계의 틈",
+      word_count: 1200,
+    };
+    const arc: TreeNode = {
+      ...chapter,
+      id: "arc",
+      label: "1권",
+      children: [episode],
+    };
+
+    renderOutline({
+      tree: [arc],
+      outlinePresetId: "webnovel",
+      onRepairOutline: vi.fn(),
+    });
+
+    await user.click(screen.getByRole("button", { name: "아웃라인 점검" }));
+
+    expect(screen.getByText("문제 없음")).toBeInTheDocument();
+    expect(screen.queryByText(/화 밖에 있는 씬/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/씬으로 저장된 화/)).not.toBeInTheDocument();
+  });
+
+  it("labels the web novel chapter creation action as 새 화", async () => {
+    const user = userEvent.setup();
+    const onCreateChapter = vi.fn();
+    const episode: TreeNode = {
+      ...scene,
+      id: "episode-leaf",
+      parent_id: "arc",
+      label: "1화",
+      word_count: 1200,
+    };
+    const arc: TreeNode = {
+      ...chapter,
+      id: "arc",
+      label: "1권",
+      children: [episode],
+    };
+
+    renderOutline({
+      tree: [arc],
+      currentId: "episode-leaf",
+      outlinePresetId: "webnovel",
+      onCreateChapter,
+    });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /1화/ }));
+    await user.click(screen.getByRole("menuitem", { name: "새 화" }));
+
+    expect(onCreateChapter).toHaveBeenCalledWith(episode);
+  });
+
+  it("shows episode progress for web novel chapter containers only", () => {
+    const episode: TreeNode = {
+      ...chapter,
+      id: "episode-1",
+      parent_id: "part-1",
+      label: "1화",
+      children: [
+        { ...scene, id: "scene-a", parent_id: "episode-1", word_count: 1200 },
+        { ...scene, id: "scene-b", parent_id: "episode-1", word_count: 300 },
+      ],
+    };
+    const part: TreeNode = {
+      ...chapter,
+      id: "part-1",
+      label: "1권",
+      children: [episode],
+    };
+
+    const { rerender } = render(
+      <I18nProvider>
+        <OutlinePanel
+          tree={[part]}
+          currentId="scene-a"
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          onSelect={vi.fn()}
+          outlinePresetId="webnovel"
+          episodeCharTarget={1500}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("1,500 / 1,500")).toBeInTheDocument();
+    expect(document.querySelector(".episode-meter-fill.is-complete")).toBeInTheDocument();
+
+    rerender(
+      <I18nProvider>
+        <OutlinePanel
+          tree={[part]}
+          currentId="scene-a"
+          collapsed={false}
+          onToggleCollapse={vi.fn()}
+          onSelect={vi.fn()}
+          outlinePresetId="novel"
+          episodeCharTarget={1500}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByText("1,500 / 1,500")).not.toBeInTheDocument();
+  });
+
   it("renders the outline chrome and menu actions in English when selected", async () => {
     const user = userEvent.setup();
-    const onRename = vi.fn();
+    const onRename = vi.fn().mockResolvedValue(undefined);
     mocks.settingsGet.mockResolvedValue({ language: "en" });
 
     renderOutline({ onRename });
@@ -350,7 +546,10 @@ describe("OutlinePanel", () => {
     expect(screen.getByText("Chapter 1")).toBeInTheDocument();
     fireEvent.contextMenu(screen.getByRole("button", { name: /Scene 1/ }));
     await user.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    const input = screen.getByLabelText("Display title");
+    await user.clear(input);
+    await user.type(input, "First meeting{Enter}");
 
-    expect(onRename).toHaveBeenCalledWith(scene);
+    await waitFor(() => expect(onRename).toHaveBeenCalledWith(scene, "First meeting"));
   });
 });

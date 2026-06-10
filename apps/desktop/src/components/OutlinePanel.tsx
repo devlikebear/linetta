@@ -1,8 +1,11 @@
-import { useEffect, useState, type MouseEvent } from "react";
-import { AlertTriangle, ChevronLeft, FilePlus2, FolderPlus, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
+import { AlertTriangle, ChevronLeft, Copy, FilePlus2, FolderPlus, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { TreeNode } from "../hooks/useFirstLeaf";
-import { flatten } from "../hooks/useFirstLeaf";
+import { flatten, sumLeafChars } from "../hooks/useFirstLeaf";
+import type { NodeStatus } from "../lib/types";
 import { displayNodeLabel, useI18n } from "../lib/i18n";
+import { InlineEditableText } from "./InlineEditableText";
+import { planNodeMove, type DropPosition } from "../lib/outlineMove";
 import {
   OUTLINE_PRESETS,
   collectOutlineLabelIssues,
@@ -21,20 +24,25 @@ interface Props {
   collapsed: boolean;
   onToggleCollapse: () => void;
   onSelect: (node: TreeNode) => void;
-  onRename?: (node: TreeNode) => void;
+  onRename?: (node: TreeNode, title: string) => void | Promise<void>;
+  renameRequest?: { id: string; nonce: number } | null;
   onCreateScene?: (node: TreeNode) => void;
   onCreatePart?: (node: TreeNode) => void;
   onCreateChapter?: (node: TreeNode) => void;
   onMoveSceneUp?: (node: TreeNode) => void;
   onMoveSceneDown?: (node: TreeNode) => void;
   onDeleteScene?: (node: TreeNode) => void;
+  onCopyText?: (node: TreeNode) => void;
   onMoveNodeUp?: (node: TreeNode) => void;
   onMoveNodeDown?: (node: TreeNode) => void;
+  onMoveNode?: (node: TreeNode, parentId: string | null, ordinal: number) => void;
   onDeleteNode?: (node: TreeNode) => void;
+  onSetStatus?: (node: TreeNode, status: NodeStatus) => void;
   onRepairOutline?: () => void;
   onUndoRepairOutline?: () => void;
   canUndoRepair?: boolean;
   outlinePresetId?: OutlinePresetId;
+  episodeCharTarget?: number;
   onOutlinePresetChange?: (presetId: OutlinePresetId) => void;
   tourTarget?: string;
 }
@@ -45,6 +53,8 @@ type MenuState = {
   y: number;
 };
 
+const NODE_STATUSES: NodeStatus[] = ["draft", "revision", "final", "published"];
+
 export function OutlinePanel({
   tree,
   currentId,
@@ -52,26 +62,35 @@ export function OutlinePanel({
   onToggleCollapse,
   onSelect,
   onRename,
+  renameRequest,
   onCreateScene,
   onCreatePart,
   onCreateChapter,
   onMoveSceneUp,
   onMoveSceneDown,
   onDeleteScene,
+  onCopyText,
   onMoveNodeUp,
   onMoveNodeDown,
+  onMoveNode,
   onDeleteNode,
+  onSetStatus,
   onRepairOutline,
   onUndoRepairOutline,
   canUndoRepair,
   outlinePresetId,
+  episodeCharTarget = 5000,
   onOutlinePresetChange,
   tourTarget,
 }: Props) {
   const { language, t } = useI18n();
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [doctorOpen, setDoctorOpen] = useState(false);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ nodeId: string; position: DropPosition } | null>(null);
   const outlinePreset = outlinePresetById(outlinePresetId);
+  const showEpisodeProgress = outlinePreset.id === "webnovel";
   const outlineIssues = analyzeOutline(tree, t, outlinePreset);
   const partName = outlineRoleName(outlinePreset, "part", t);
   const chapterName = outlineRoleName(outlinePreset, "chapter", t);
@@ -81,9 +100,11 @@ export function OutlinePanel({
         onCreatePart ||
         onCreateScene ||
         onCreateChapter ||
+        onCopyText ||
         onMoveNodeUp ||
         onMoveNodeDown ||
         onDeleteNode ||
+        onSetStatus ||
         (node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene)),
     );
 
@@ -113,6 +134,78 @@ export function OutlinePanel({
     const node = menu.node;
     setMenu(null);
     fn(node);
+  };
+
+  const startRename = () => {
+    if (!menu || !onRename) return;
+    const node = menu.node;
+    setMenu(null);
+    setEditingNodeId(node.id);
+  };
+
+  const commitRename = async (node: TreeNode, title: string) => {
+    if (!onRename) return;
+    await onRename(node, title);
+    setEditingNodeId(null);
+  };
+
+  const runStatusAction = (status: NodeStatus) => {
+    if (!menu || !onSetStatus) return;
+    const node = menu.node;
+    setMenu(null);
+    onSetStatus(node, status);
+  };
+
+  useEffect(() => {
+    if (!renameRequest) return;
+    setEditingNodeId(renameRequest.id);
+  }, [renameRequest]);
+
+  const dropPositionFor = (e: DragEvent<HTMLElement>, node: TreeNode): DropPosition => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (rect.height === 0) return node.kind === "container" ? "inside" : "before";
+    const y = e.clientY - rect.top;
+    if (node.kind === "container" && y > rect.height * 0.25 && y < rect.height * 0.75) return "inside";
+    return y > rect.height / 2 ? "after" : "before";
+  };
+
+  const handleDragStart = (e: DragEvent<HTMLElement>, node: TreeNode) => {
+    if (!onMoveNode) return;
+    e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", node.id);
+    }
+    setDraggingNodeId(node.id);
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLElement>, node: TreeNode) => {
+    if (!onMoveNode || !draggingNodeId) return;
+    const position = dropPositionFor(e, node);
+    if (!planNodeMove(tree, draggingNodeId, node.id, position)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "move";
+    }
+    setDropTarget({ nodeId: node.id, position });
+  };
+
+  const clearDragState = () => {
+    setDraggingNodeId(null);
+    setDropTarget(null);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLElement>, node: TreeNode) => {
+    if (!onMoveNode || !draggingNodeId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const position = dropTarget?.nodeId === node.id ? dropTarget.position : dropPositionFor(e, node);
+    const plan = planNodeMove(tree, draggingNodeId, node.id, position);
+    const dragged = flatten(tree).find((item) => item.id === draggingNodeId);
+    clearDragState();
+    if (!plan || !dragged) return;
+    onMoveNode(dragged, plan.parentId, plan.ordinal);
   };
 
   if (collapsed) {
@@ -209,6 +302,17 @@ export function OutlinePanel({
             onSelect={onSelect}
             onOpenMenu={openMenu}
             canOpenMenu={canOpenMenu}
+            showEpisodeProgress={showEpisodeProgress}
+            episodeCharTarget={episodeCharTarget}
+            editingNodeId={editingNodeId}
+            onCommitRename={onRename ? commitRename : undefined}
+            onCancelRename={() => setEditingNodeId(null)}
+            draggingNodeId={draggingNodeId}
+            dropTarget={dropTarget}
+            onDragStartNode={onMoveNode ? handleDragStart : undefined}
+            onDragOverNode={onMoveNode ? handleDragOver : undefined}
+            onDropNode={onMoveNode ? handleDrop : undefined}
+            onDragEndNode={clearDragState}
           />
         ))}
       </div>
@@ -220,7 +324,7 @@ export function OutlinePanel({
           onClick={(e) => e.stopPropagation()}
         >
           {onRename && (
-            <button type="button" role="menuitem" onClick={() => runAction(onRename)}>
+            <button type="button" role="menuitem" onClick={startRename}>
               <Pencil size={13} /> {t("workspace.rename")}
             </button>
           )}
@@ -238,6 +342,30 @@ export function OutlinePanel({
             <button type="button" role="menuitem" onClick={() => runAction(onCreateChapter)}>
               <FolderPlus size={13} /> {t("workspace.newOutlineLevel", { level: chapterName })}
             </button>
+          )}
+          {onCopyText && (
+            <button type="button" role="menuitem" onClick={() => runAction(onCopyText)}>
+              <Copy size={13} /> {t("workspace.copyText")}
+            </button>
+          )}
+          {onSetStatus && (
+            <>
+              <div className="outline-menu-sep" role="separator" />
+              <div className="outline-menu-label">{t("workspace.statusMenu")}</div>
+              {NODE_STATUSES.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  role="menuitem"
+                  className={`status-menu-item is-${status}${menu.node.status === status ? " is-current" : ""}`}
+                  title={t("workspace.setStatus", { status: t(`workspace.status.${status}`) })}
+                  onClick={() => runStatusAction(status)}
+                >
+                  <span className={`outline-status-dot is-${status}`} aria-hidden="true" />
+                  {t(`workspace.status.${status}`)}
+                </button>
+              ))}
+            </>
           )}
           {(onMoveNodeUp || onMoveNodeDown || onDeleteNode || (menu.node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene))) && (
             <div className="outline-menu-sep" role="separator" />
@@ -276,10 +404,16 @@ function analyzeOutline(tree: TreeNode[], t: ReturnType<typeof useI18n>["t"], pr
     chapter: outlineRoleName(preset, "chapter", t),
     scene: outlineRoleName(preset, "scene", t),
   });
+  const isDirectWebNovelEpisodeLeaf = (node: TreeNode, depth: number) =>
+    preset.id === "webnovel" &&
+    depth === 1 &&
+    node.kind === "leaf" &&
+    isStructuralChapterLabel(node.label, preset);
   const visit = (nodes: TreeNode[], depth: number, parentKey: string) => {
     const seen = new Map<string, TreeNode[]>();
     nodes.forEach((node, index) => {
       const label = node.label.trim();
+      const directWebNovelEpisodeLeaf = isDirectWebNovelEpisodeLeaf(node, depth);
       if (label) {
         const list = seen.get(label) ?? [];
         list.push(node);
@@ -288,7 +422,7 @@ function analyzeOutline(tree: TreeNode[], t: ReturnType<typeof useI18n>["t"], pr
       if (node.kind === "container" && node.children.length === 0) {
         issues.push({ key: `empty-${node.id}`, text: t("workspace.outlineIssue.empty", issueValues(node.label)) });
       }
-      if (node.kind === "leaf" && node.word_count === 0 && isStructuralChapterLabel(node.label, preset)) {
+      if (node.kind === "leaf" && node.word_count === 0 && isStructuralChapterLabel(node.label, preset) && !directWebNovelEpisodeLeaf) {
         issues.push({ key: `chapter-as-scene-${node.id}`, text: t("workspace.outlineIssue.chapterAsScene", issueValues(node.label)) });
       }
       if (
@@ -322,7 +456,7 @@ function analyzeOutline(tree: TreeNode[], t: ReturnType<typeof useI18n>["t"], pr
       ) {
         issues.push({ key: `nested-part-${node.id}`, text: t("workspace.outlineIssue.nestedPart", issueValues(node.label)) });
       }
-      if (depth === 1 && node.kind === "leaf") {
+      if (depth === 1 && node.kind === "leaf" && !directWebNovelEpisodeLeaf) {
         issues.push({ key: `part-leaf-${node.id}`, text: t("workspace.outlineIssue.sceneUnderPart", issueValues(node.label)) });
       }
       if (depth > 2) {
@@ -346,6 +480,18 @@ function analyzeOutline(tree: TreeNode[], t: ReturnType<typeof useI18n>["t"], pr
   return issues;
 }
 
+function StatusDot({ status }: { status: NodeStatus }) {
+  const { t } = useI18n();
+  const label = t(`workspace.status.${status}`);
+  return (
+    <span
+      className={`outline-status-dot is-${status}`}
+      aria-label={t("workspace.statusLabel", { status: label })}
+      title={label}
+    />
+  );
+}
+
 /** Recursively renders the project tree against the mockup's rail classes.
  *  Top-level containers → `.tree-part` headers; deeper containers →
  *  `.tree-chapter`; leaves → selectable `.tree-scene` buttons. */
@@ -356,6 +502,17 @@ function RailNode({
   onSelect,
   onOpenMenu,
   canOpenMenu,
+  showEpisodeProgress,
+  episodeCharTarget,
+  editingNodeId,
+  onCommitRename,
+  onCancelRename,
+  draggingNodeId,
+  dropTarget,
+  onDragStartNode,
+  onDragOverNode,
+  onDropNode,
+  onDragEndNode,
 }: {
   node: TreeNode;
   depth: number;
@@ -363,24 +520,68 @@ function RailNode({
   onSelect: (n: TreeNode) => void;
   onOpenMenu: (e: MouseEvent, n: TreeNode) => void;
   canOpenMenu: (n: TreeNode) => boolean;
+  showEpisodeProgress: boolean;
+  episodeCharTarget: number;
+  editingNodeId: string | null;
+  onCommitRename?: (node: TreeNode, title: string) => Promise<void>;
+  onCancelRename: () => void;
+  draggingNodeId: string | null;
+  dropTarget: { nodeId: string; position: DropPosition } | null;
+  onDragStartNode?: (e: DragEvent<HTMLElement>, node: TreeNode) => void;
+  onDragOverNode?: (e: DragEvent<HTMLElement>, node: TreeNode) => void;
+  onDropNode?: (e: DragEvent<HTMLElement>, node: TreeNode) => void;
+  onDragEndNode: () => void;
 }) {
   const { language, t } = useI18n();
   const hasMenu = canOpenMenu(node);
   const label = displayNodeLabel(language, node.label);
+  const editing = editingNodeId === node.id && Boolean(onCommitRename);
+  const draggable = Boolean(onDragStartNode) && !editing;
+  const dragClass = `${draggingNodeId === node.id ? " is-dragging" : ""}${dropTarget?.nodeId === node.id ? ` is-drop-${dropTarget.position}` : ""}`;
+  const titleEditor = (
+    <InlineEditableText
+      value={node.title}
+      ariaLabel={t("workspace.prompt.displayTitle")}
+      className="outline-title-input"
+      autoFocus
+      allowEmpty
+      placeholder={t("workspace.prompt.displayTitle")}
+      onCommit={async (title) => { await onCommitRename?.(node, title); }}
+      onCancel={onCancelRename}
+    />
+  );
 
   if (node.kind === "leaf") {
     const active = node.id === currentId;
     return (
-      <div className={`tree-scene-row${active ? " active" : ""}`} onContextMenu={(e) => onOpenMenu(e, node)}>
-        <button
-          type="button"
-          className={`tree-scene${active ? " active" : ""}`}
-          onClick={() => onSelect(node)}
-        >
-          <span className="sc-label">{label}</span>
-          <span className="sc-title">{node.title}</span>
-          <span className="sc-words">{node.word_count}</span>
-        </button>
+      <div
+        className={`tree-scene-row${active ? " active" : ""}${dragClass}`}
+        draggable={draggable}
+        onDragStart={(e) => onDragStartNode?.(e, node)}
+        onDragOver={(e) => onDragOverNode?.(e, node)}
+        onDrop={(e) => onDropNode?.(e, node)}
+        onDragEnd={onDragEndNode}
+        onContextMenu={(e) => onOpenMenu(e, node)}
+      >
+        {editing ? (
+          <div className={`tree-scene${active ? " active" : ""}`}>
+            <StatusDot status={node.status} />
+            <span className="sc-label">{label}</span>
+            {titleEditor}
+            <span className="sc-words">{node.word_count}</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={`tree-scene${active ? " active" : ""}`}
+            onClick={() => onSelect(node)}
+          >
+            <StatusDot status={node.status} />
+            <span className="sc-label">{label}</span>
+            <span className="sc-title">{node.title}</span>
+            <span className="sc-words">{node.word_count}</span>
+          </button>
+        )}
         {hasMenu && (
           <button
             type="button"
@@ -397,12 +598,42 @@ function RailNode({
   }
 
   // Containers: top-level → part header, otherwise chapter header.
+  const episodeChars = showEpisodeProgress && depth > 0 ? sumLeafChars(node) : 0;
+  const normalizedTarget = Math.max(1, episodeCharTarget);
+  const episodePercent = Math.min(100, Math.round((episodeChars / normalizedTarget) * 100));
+  const episodeProgress =
+    showEpisodeProgress && depth > 0 ? (
+      <span className="episode-progress">
+        <span className="episode-count">
+          {episodeChars.toLocaleString(language)} / {normalizedTarget.toLocaleString(language)}
+        </span>
+        <span className="episode-meter" aria-hidden="true">
+          <span
+            className={`episode-meter-fill${episodeChars >= normalizedTarget ? " is-complete" : ""}`}
+            style={{ width: `${episodePercent}%` }}
+          />
+        </span>
+      </span>
+    ) : null;
   const header =
     depth === 0 ? (
-      <div className="tree-part-row" onContextMenu={(e) => onOpenMenu(e, node)}>
+      <div
+        className={`tree-part-row${dragClass}`}
+        draggable={draggable}
+        onDragStart={(e) => onDragStartNode?.(e, node)}
+        onDragOver={(e) => onDragOverNode?.(e, node)}
+        onDrop={(e) => onDropNode?.(e, node)}
+        onDragEnd={onDragEndNode}
+        onContextMenu={(e) => onOpenMenu(e, node)}
+      >
         <div className="tree-part">
           {label}
-          {node.title ? ` · ${node.title}` : ""}
+          {editing ? (
+            <>
+              <span className="tree-title-sep"> · </span>
+              {titleEditor}
+            </>
+          ) : node.title ? ` · ${node.title}` : ""}
         </div>
         {hasMenu && (
           <button
@@ -417,10 +648,20 @@ function RailNode({
         )}
       </div>
     ) : (
-      <div className="tree-chapter-row" onContextMenu={(e) => onOpenMenu(e, node)}>
+      <div
+        className={`tree-chapter-row${dragClass}`}
+        draggable={draggable}
+        onDragStart={(e) => onDragStartNode?.(e, node)}
+        onDragOver={(e) => onDragOverNode?.(e, node)}
+        onDrop={(e) => onDropNode?.(e, node)}
+        onDragEnd={onDragEndNode}
+        onContextMenu={(e) => onOpenMenu(e, node)}
+      >
         <div className="tree-chapter">
+          {depth > 0 && <StatusDot status={node.status} />}
           <span className="ch-label">{label}</span>
-          {node.title && <span className="ch-title">{node.title}</span>}
+          {editing ? titleEditor : node.title && <span className="ch-title">{node.title}</span>}
+          {episodeProgress}
         </div>
         {hasMenu && (
           <button
@@ -448,6 +689,17 @@ function RailNode({
           onSelect={onSelect}
           onOpenMenu={onOpenMenu}
           canOpenMenu={canOpenMenu}
+          showEpisodeProgress={showEpisodeProgress}
+          episodeCharTarget={episodeCharTarget}
+          editingNodeId={editingNodeId}
+          onCommitRename={onCommitRename}
+          onCancelRename={onCancelRename}
+          draggingNodeId={draggingNodeId}
+          dropTarget={dropTarget}
+          onDragStartNode={onDragStartNode}
+          onDragOverNode={onDragOverNode}
+          onDropNode={onDropNode}
+          onDragEndNode={onDragEndNode}
         />
       ))}
     </div>

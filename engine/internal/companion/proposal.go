@@ -40,8 +40,9 @@ type Op struct {
 	Outline string `json:"outline,omitempty"`
 
 	// remember
-	Text     string `json:"text,omitempty"`
-	Category string `json:"category,omitempty"`
+	Text       string `json:"text,omitempty"`
+	AllowEmpty bool   `json:"allow_empty,omitempty"`
+	Category   string `json:"category,omitempty"`
 
 	// create_entity / update_entity
 	Kind       string            `json:"kind,omitempty"`
@@ -83,9 +84,10 @@ type Proposal struct {
 var knownOps = map[string]bool{
 	"create_thread": true, "update_thread": true,
 	"add_beat": true, "update_beat": true, "delete_beat": true,
-	"set_outline":   true,
-	"remember":      true,
-	"create_entity": true, "update_entity": true, "create_relationship": true,
+	"set_outline":    true,
+	"set_scene_text": true,
+	"remember":       true,
+	"create_entity":  true, "update_entity": true, "create_relationship": true,
 	"create_scene":        true,
 	"create_outline_node": true,
 	"rename_outline_node": true,
@@ -257,6 +259,13 @@ func validateProposal(p Proposal) error {
 			}
 		case "set_outline":
 			// outline may be empty (clears); no required field
+		case "set_scene_text":
+			if op.NodeID != "" && op.NodeRef != "" {
+				return fmt.Errorf("op[%d] set_scene_text: node_id and node_ref are mutually exclusive", i)
+			}
+			if strings.TrimSpace(op.Text) == "" && !op.AllowEmpty {
+				return fmt.Errorf("op[%d] set_scene_text: text required unless allow_empty is true", i)
+			}
 		case "remember":
 			if strings.TrimSpace(op.Text) == "" {
 				return fmt.Errorf("op[%d] remember: text required", i)

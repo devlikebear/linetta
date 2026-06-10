@@ -108,6 +108,30 @@ func TestCreateProjectHandler(t *testing.T) {
 	}
 }
 
+func TestCreateProjectHandler_acceptsWebnovelOutlinePreset(t *testing.T) {
+	repo := newRepo(t)
+	h := CreateProject(repo, func() int64 { return 12345 })
+
+	params := json.RawMessage(`{
+		"title": "Serial",
+		"genres": ["modern fantasy"],
+		"length_target": "series",
+		"default_pov": "third_limited",
+		"outline_preset": "webnovel"
+	}`)
+	res, err := h(context.Background(), params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var p project.Project
+	if err := json.Unmarshal(res, &p); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if p.OutlinePreset != project.OutlinePresetWebNovel {
+		t.Fatalf("outline_preset = %q, want %q", p.OutlinePreset, project.OutlinePresetWebNovel)
+	}
+}
+
 func TestCreateProjectHandler_invalidEnumsReturnInvalidParams(t *testing.T) {
 	repo := newRepo(t)
 	h := CreateProject(repo, func() int64 { return 1 })
@@ -120,6 +144,52 @@ func TestCreateProjectHandler_invalidEnumsReturnInvalidParams(t *testing.T) {
 	me, ok := err.(*rpc.MethodError)
 	if !ok || me.Code != rpc.CodeInvalidParams {
 		t.Fatalf("err = %v, want invalid params", err)
+	}
+
+	_, err = h(context.Background(), json.RawMessage(`{
+		"title": "Bad",
+		"genres": ["SF"],
+		"length_target": "short",
+		"default_pov": "first",
+		"outline_preset": "screenplay"
+	}`))
+	me, ok = err.(*rpc.MethodError)
+	if !ok || me.Code != rpc.CodeInvalidParams {
+		t.Fatalf("outline err = %v, want invalid params", err)
+	}
+}
+
+func TestUpdateProjectHandler_episodeCharTarget(t *testing.T) {
+	repo := newRepo(t)
+	create := CreateProject(repo, func() int64 { return 1000 })
+	res, err := create(context.Background(), json.RawMessage(`{
+		"title": "Serial",
+		"genres": ["fantasy"],
+		"length_target": "series",
+		"default_pov": "third_limited"
+	}`))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	var created project.Project
+	if err := json.Unmarshal(res, &created); err != nil {
+		t.Fatalf("unmarshal created: %v", err)
+	}
+
+	update := UpdateProject(repo, func() int64 { return 2000 })
+	res, err = update(context.Background(), json.RawMessage(`{"id":"`+created.ID+`","episode_char_target":5500}`))
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	var got project.Project
+	if err := json.Unmarshal(res, &got); err != nil {
+		t.Fatalf("unmarshal updated: %v", err)
+	}
+	if got.EpisodeCharTarget != 5500 {
+		t.Fatalf("episode_char_target = %d, want 5500", got.EpisodeCharTarget)
+	}
+	if got.UpdatedAt != 2000 {
+		t.Fatalf("updated_at = %d, want 2000", got.UpdatedAt)
 	}
 }
 

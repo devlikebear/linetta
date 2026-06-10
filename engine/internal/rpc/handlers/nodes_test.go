@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -195,6 +196,35 @@ func TestRenameHandler(t *testing.T) {
 	}
 }
 
+func TestSetStatusHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	h := SetNodeStatus(f.nodes, func() int64 { return 9999 })
+	params := json.RawMessage(`{"id":"` + f.nID + `","status":"published"}`)
+	if _, err := h(context.Background(), params); err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	got, err := f.nodes.Get(context.Background(), f.nID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Status != node.StatusPublished {
+		t.Errorf("status = %q, want published", got.Status)
+	}
+}
+
+func TestSetStatusHandler_rejectsInvalidStatus(t *testing.T) {
+	f := newNodeFixture(t)
+	h := SetNodeStatus(f.nodes, func() int64 { return 9999 })
+	_, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","status":"queued"}`))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var methodErr *rpc.MethodError
+	if !errors.As(err, &methodErr) || methodErr.Code != rpc.CodeInvalidParams {
+		t.Fatalf("err = %v, want invalid params", err)
+	}
+}
+
 func TestDeleteHandler(t *testing.T) {
 	f := newNodeFixture(t)
 	// Create a second leaf so the project still has a node after the delete.
@@ -247,6 +277,27 @@ func TestMoveToParentHandler(t *testing.T) {
 	got, _ := f.nodes.Get(ctx, f.nID)
 	if got.ParentID == nil || *got.ParentID != chapter.ID {
 		t.Fatalf("parent = %v, want %s", got.ParentID, chapter.ID)
+	}
+}
+
+func TestMoveToHandler(t *testing.T) {
+	f := newNodeFixture(t)
+	ctx := context.Background()
+	second, _ := f.nodes.CreateSibling(ctx, f.nID, "leaf", "씬 2", "", 2000)
+
+	payload, _ := json.Marshal(map[string]any{
+		"id":        second.ID,
+		"parent_id": nil,
+		"ordinal":   0,
+	})
+	h := MoveTo(f.nodes, func() int64 { return 3000 })
+	if _, err := h(ctx, payload); err != nil {
+		t.Fatalf("MoveTo handler: %v", err)
+	}
+
+	tree, _ := f.nodes.ListByProject(ctx, f.pID)
+	if tree[0].ID != second.ID || tree[1].ID != f.nID {
+		t.Fatalf("order after MoveTo = %q,%q", tree[0].Label, tree[1].Label)
 	}
 }
 

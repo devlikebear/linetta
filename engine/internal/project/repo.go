@@ -15,10 +15,11 @@ import (
 var ErrNotFound = errors.New("project not found")
 
 var (
-	ErrInvalidInput         = errors.New("invalid project input")
-	ErrInvalidLengthTarget  = errors.New("invalid length_target")
-	ErrInvalidDefaultPOV    = errors.New("invalid default_pov")
-	ErrInvalidOutlinePreset = errors.New("invalid outline_preset")
+	ErrInvalidInput             = errors.New("invalid project input")
+	ErrInvalidLengthTarget      = errors.New("invalid length_target")
+	ErrInvalidDefaultPOV        = errors.New("invalid default_pov")
+	ErrInvalidOutlinePreset     = errors.New("invalid outline_preset")
+	ErrInvalidEpisodeCharTarget = errors.New("invalid episode_char_target")
 )
 
 // Repo persists Projects (and the auto-created first leaf node) in SQLite.
@@ -41,6 +42,13 @@ func (r *Repo) Create(ctx context.Context, now int64, in NewInput) (Project, err
 	if !ValidDefaultPOV(in.DefaultPOV) {
 		return Project{}, ErrInvalidDefaultPOV
 	}
+	outlinePreset := in.OutlinePreset
+	if outlinePreset == "" {
+		outlinePreset = OutlinePresetNovel
+	}
+	if !ValidOutlinePreset(outlinePreset) {
+		return Project{}, ErrInvalidOutlinePreset
+	}
 
 	projectID := uuid.NewString()
 	nodeID := uuid.NewString()
@@ -60,7 +68,7 @@ INSERT INTO projects (id, title, genres, length_target, default_pov, style_notes
                       outline_preset, word_count, last_opened_node_id, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, '', '', ?, 0, ?, ?, ?)`,
 		projectID, in.Title, string(genresJSON), in.LengthTarget, in.DefaultPOV,
-		OutlinePresetNovel, nodeID, now, now); err != nil {
+		outlinePreset, nodeID, now, now); err != nil {
 		return Project{}, err
 	}
 	// Empty Tiptap doc: single empty paragraph.
@@ -193,6 +201,12 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		}
 		cur.OutlinePreset = *in.OutlinePreset
 	}
+	if in.EpisodeCharTarget != nil {
+		if *in.EpisodeCharTarget <= 0 {
+			return Project{}, ErrInvalidEpisodeCharTarget
+		}
+		cur.EpisodeCharTarget = *in.EpisodeCharTarget
+	}
 	if in.Title != nil {
 		if *in.Title == "" {
 			return Project{}, fmt.Errorf("%w: title required", ErrInvalidInput)
@@ -200,8 +214,8 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		cur.Title = *in.Title
 	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE projects SET title = ?, outline = ?, outline_preset = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
-		cur.Title, cur.Outline, cur.OutlinePreset, cur.Synopsis, now, in.ID); err != nil {
+		`UPDATE projects SET title = ?, outline = ?, outline_preset = ?, episode_char_target = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
+		cur.Title, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.Synopsis, now, in.ID); err != nil {
 		return Project{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -211,7 +225,7 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 }
 
 const baseSelect = `
-SELECT id, title, genres, length_target, default_pov, style_notes, outline, outline_preset, synopsis,
+SELECT id, title, genres, length_target, default_pov, style_notes, outline, outline_preset, episode_char_target, synopsis,
        word_count, last_opened_node_id, created_at, updated_at, archived_at
 FROM projects`
 
@@ -228,7 +242,7 @@ func scan(row scanner) (Project, error) {
 		archivedAt sql.NullInt64
 	)
 	if err := row.Scan(&p.ID, &p.Title, &genresJSON, &p.LengthTarget, &p.DefaultPOV,
-		&p.StyleNotes, &p.Outline, &p.OutlinePreset, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
+		&p.StyleNotes, &p.Outline, &p.OutlinePreset, &p.EpisodeCharTarget, &p.Synopsis, &p.WordCount, &lastNode, &p.CreatedAt, &p.UpdatedAt, &archivedAt); err != nil {
 		return Project{}, err
 	}
 	if err := json.Unmarshal([]byte(genresJSON), &p.Genres); err != nil {

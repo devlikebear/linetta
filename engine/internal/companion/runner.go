@@ -322,6 +322,7 @@ func directApplyCorrectionPrompt(userText string) string {
 	}
 	return "방금 사용자 요청은 설명이나 제안이 아니라 실제 작품 상태 변경 요청입니다. " +
 		"변경했다고 말로만 답하지 말고 linetta_apply_ops를 호출해 작품 상태에 적용하세요. " +
+		"현재 씬의 본문 재작성/수정/확장/다듬기 요청이면 set_scene_text로 실제 씬 원고를 교체하세요. " +
 		"아웃라인/목차 요청이면 create_outline_node 또는 create_scene으로 왼쪽 아웃라인 트리를 만들고, 필요한 경우 그 노드에 create_thread/add_beat를 함께 연결하세요. " +
 		"현재 정보만으로 적용할 수 없으면 적용하지 말고 부족한 정보를 한 문장으로 질문하세요.\n\n" +
 		"사용자 요청: " + userText
@@ -331,7 +332,7 @@ var companionStructureTerms = []string{
 	"스토리라인", "줄거리", "플롯", "비트", "캐릭터", "인물", "관계",
 	"장소", "씬", "장면", "개요", "요약", "기억", "설정", "세계관",
 	"시놉시스", "아웃라인", "얼개", "구조", "챕터", "막", "파트",
-	"에피소드", "회차",
+	"에피소드", "회차", "본문", "원고", "문장",
 }
 
 var companionMutationTerms = []string{

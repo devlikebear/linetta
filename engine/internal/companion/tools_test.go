@@ -79,6 +79,9 @@ func TestApplyOpsSchemaUsesOpsJSONString(t *testing.T) {
 	if !strings.Contains(schema, `"ops_json"`) {
 		t.Fatalf("schema should expose ops_json string input:\n%s", schema)
 	}
+	if !strings.Contains(schema, "set_scene_text") {
+		t.Fatalf("schema should document scene body rewrite op:\n%s", schema)
+	}
 	if strings.Contains(schema, `"ops":`) {
 		t.Fatalf("schema should not expose nested ops object that strict providers expand poorly:\n%s", schema)
 	}
@@ -151,6 +154,48 @@ func TestLinettaApplyOpsToolMutatesProjectStructure(t *testing.T) {
 	rels, _ := svc.relationships.ListByProject(ctx, projectID)
 	if len(rels) != 2 {
 		t.Fatalf("relationships = %+v", rels)
+	}
+}
+
+func TestLinettaApplyOpsToolRewritesCurrentSceneText(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	if err := svc.nodes.UpdateContent(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"기존 본문"}]}]}`, 1_100); err != nil {
+		t.Fatalf("seed content: %v", err)
+	}
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 2_000 }, "run-1", "이번 캐릭터와 플롯 고려해서 현재 씬 재작성해줘")
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[
+	  {"op":"set_scene_text","text":"새 본문 첫 줄\n새 본문 둘째 줄\n\n새 문단"}
+	]`
+	params := json.RawMessage(`{
+	  "summary":"현재 씬 재작성",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("tool result is error: %s", result.Text())
+	}
+
+	got, err := svc.nodes.Get(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	if got.ContentDoc == nil {
+		t.Fatal("content_doc is nil")
+	}
+	if !strings.Contains(*got.ContentDoc, `"새 본문 첫 줄"`) || !strings.Contains(*got.ContentDoc, `"hardBreak"`) || !strings.Contains(*got.ContentDoc, `"새 문단"`) {
+		t.Fatalf("scene text was not rewritten as tiptap doc: %s", *got.ContentDoc)
+	}
+	if got.WordCount == 0 {
+		t.Fatalf("word count should be recomputed: %+v", got)
 	}
 }
 

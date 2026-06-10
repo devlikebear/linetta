@@ -49,3 +49,18 @@ func ExportNode(nr *node.Repo) rpc.Handler {
 		return json.Marshal(out)
 	}
 }
+
+// ExportNodeText returns platform-paste plain text for a leaf or subtree.
+func ExportNodeText(nr *node.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p exportNodeParams
+		if err := json.Unmarshal(params, &p); err != nil || p.NodeID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node_id required"}
+		}
+		out, err := export.ExportNodeText(ctx, nr, p.NodeID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(out)
+	}
+}

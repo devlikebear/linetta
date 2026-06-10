@@ -4,7 +4,36 @@ import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_AI_CONTEXT_SELECTION } from "../ai/AIContextChecklist";
 import { I18nProvider } from "../../lib/i18n";
+import type { AIContextPreview, ContextCounts } from "../../lib/types";
 import { CompanionPanel } from "./CompanionPanel";
+
+const aiCounts: ContextCounts = {
+  nearbyScenes: 0,
+  hasOutline: false,
+  hasSynopsis: false,
+  relatedScenes: 0,
+  entities: 0,
+  relationships: 0,
+  plotBeats: 0,
+  notes: 0,
+  projectMetaFields: 0,
+  hasStyleNotes: false,
+};
+
+const aiPreview: AIContextPreview = {
+  counts: aiCounts,
+  selectedItemCount: 1,
+  sections: [
+    {
+      id: "current_scene",
+      label: "현재 씬 본문",
+      present: true,
+      selected: true,
+      count: 1,
+      preview: "현재 씬 본문입니다.",
+    },
+  ],
+};
 
 const companionState = vi.hoisted(() => ({
   value: {
@@ -125,6 +154,82 @@ describe("CompanionPanel", () => {
 
     expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("web_search");
     expect(companionState.value.send).not.toHaveBeenCalled();
+  });
+
+  it("renders AI draft controls inside the companion panel", async () => {
+    const user = userEvent.setup();
+    const onRun = vi.fn();
+    renderPanel({
+      aiDraft: {
+        mode: "replace",
+        canChooseMode: false,
+        options: { tone: "my", short_form: true, context: DEFAULT_AI_CONTEXT_SELECTION },
+        contextItemCount: 1,
+        contextPreview: aiPreview,
+        contextSelection: DEFAULT_AI_CONTEXT_SELECTION,
+        variations: [],
+        currentIdx: 0,
+        status: { kind: "idle" },
+        onModeChange: vi.fn(),
+        onOptionsChange: vi.fn(),
+        onContextSelectionChange: vi.fn(),
+        onRun,
+        onSwitch: vi.fn(),
+        onAccept: vi.fn(),
+        onCancel: vi.fn(),
+        onContextClick: vi.fn(),
+        showChecklist: false,
+      },
+    });
+
+    expect(screen.getByText("AI 생성")).toBeInTheDocument();
+    expect(screen.queryByText("무엇부터 맡길까요?")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/메시지/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "전송" })).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("프롬프트를 입력하세요…"), "문장을 더 선명하게");
+    await user.click(screen.getByRole("button", { name: "생성 ⌘↵" }));
+
+    expect(onRun).toHaveBeenCalledWith("문장을 더 선명하게", false);
+    expect(companionState.value.send).not.toHaveBeenCalled();
+  });
+
+  it("prefills a companion rewrite prompt for selected editor text", () => {
+    renderPanel({
+      selectionRewriteRequest: {
+        id: "sel-1",
+        text: "@브란이 말 없이 지도를 가장자리로 당겼다.",
+      },
+    });
+
+    const input = screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement;
+    expect(input.value).toContain("선택한 문장을");
+    expect(input.value).toContain("@브란이 말 없이 지도를 가장자리로 당겼다.");
+    expect(input.value).toContain("set_scene_text");
+    expect(companionState.value.send).not.toHaveBeenCalled();
+  });
+
+  it("prefills and sends a proofread prompt for selected editor text", async () => {
+    const user = userEvent.setup();
+    renderPanel({
+      selectionRewriteRequest: {
+        id: "sel-proofread-1",
+        kind: "proofread",
+        text: "나는 그말을 믿을수 없엇다.",
+      },
+    });
+
+    const input = screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement;
+    expect(input.value).toContain("맞춤법");
+    expect(input.value).toContain("고유명사");
+    expect(input.value).toContain("변경 목록");
+    expect(input.value).toContain("나는 그말을 믿을수 없엇다.");
+
+    await user.click(screen.getByRole("button", { name: "전송" }));
+
+    await waitFor(() => {
+      expect(companionState.value.send).toHaveBeenCalledWith(expect.stringContaining("맞춤법"));
+    });
   });
 
   it("grows the draft textarea when a picked example wraps to multiple lines", async () => {

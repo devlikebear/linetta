@@ -20,7 +20,7 @@
 }
 
 .tiptap-editor .ProseMirror p {
-  min-height: 1.92em;
+  min-height: calc(var(--edit-leading) * 1em);
 }
 
 .tiptap-wrap.empty-focused .tiptap-editor .ProseMirror {

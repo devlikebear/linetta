@@ -24,4 +24,23 @@ describe("AI panel presentation and defaults", () => {
 
     expect(workspace).toContain('short_form: true');
   });
+
+  it("routes inline AI generation through the companion panel", async () => {
+    const workspace = await readSource("routes/Workspace.tsx");
+
+    expect(workspace).not.toContain("<AIPanel");
+    expect(workspace).not.toContain('data-tour="workspace-ai"');
+    expect(workspace).not.toContain("<Sparkles size={15} /> AI");
+    expect(workspace).not.toContain("const toggleAIModal");
+    expect(workspace).not.toContain("runSelectionAIReplace");
+    expect(workspace).not.toContain("workspace.selectionMenu.aiReplace");
+    expect(workspace).toContain("setCompanionOpen(true)");
+    expect(workspace).toContain("{(aiModal || companionOpen) && load ?");
+    expect(workspace).toContain('className={`ws-tool${companionOpen || aiModal ? " is-active" : ""}`}');
+    expect(workspace).toContain("aiDraft={aiModal ?");
+    expect(workspace).toContain("finishAIModalPanelState();");
+    expect(workspace).toContain('key={`${load.node.id}:${load.node.content_version ?? load.node.updated_at}`}');
+    expect(workspace).toContain("runSelectionCompanionRewrite");
+    expect(workspace).toContain("selectionRewriteRequest={companionRewriteRequest}");
+  });
 });

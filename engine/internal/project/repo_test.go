@@ -47,6 +47,9 @@ func TestRepo_Create_returnsProjectWithGeneratedID_andFirstLeafNode(t *testing.T
 	if p.LastOpenedNodeID == nil || *p.LastOpenedNodeID == "" {
 		t.Error("Create: last_opened_node_id should point to the auto-created first leaf")
 	}
+	if p.OutlinePreset != OutlinePresetNovel {
+		t.Errorf("outline_preset = %q, want %q", p.OutlinePreset, OutlinePresetNovel)
+	}
 
 	// First leaf node exists?
 	var (
@@ -70,6 +73,26 @@ SELECT id, project_id, kind, label FROM nodes WHERE id = ?`, *p.LastOpenedNodeID
 	}
 }
 
+func TestRepo_Create_acceptsOutlinePreset(t *testing.T) {
+	s := openStore(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	p, err := r.Create(ctx, 1000, NewInput{
+		Title:         "연재작",
+		Genres:        []string{"현대판타지"},
+		LengthTarget:  "series",
+		DefaultPOV:    "third_limited",
+		OutlinePreset: OutlinePresetWebNovel,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if p.OutlinePreset != OutlinePresetWebNovel {
+		t.Fatalf("outline_preset = %q, want %q", p.OutlinePreset, OutlinePresetWebNovel)
+	}
+}
+
 func TestRepo_Create_rejectsInvalidLengthAndPOV(t *testing.T) {
 	s := openStore(t)
 	r := NewRepo(s)
@@ -84,6 +107,11 @@ func TestRepo_Create_rejectsInvalidLengthAndPOV(t *testing.T) {
 		Title: "bad", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "second",
 	}); err != ErrInvalidDefaultPOV {
 		t.Errorf("pov err = %v, want ErrInvalidDefaultPOV", err)
+	}
+	if _, err := r.Create(ctx, 1, NewInput{
+		Title: "bad", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first", OutlinePreset: "screenplay",
+	}); err != ErrInvalidOutlinePreset {
+		t.Errorf("outline preset err = %v, want ErrInvalidOutlinePreset", err)
 	}
 }
 
@@ -260,6 +288,41 @@ func TestProjectOutlinePresetUpdate(t *testing.T) {
 	bad := "screenplay"
 	if _, err := repo.Update(ctx, 4000, UpdateInput{ID: p.ID, OutlinePreset: &bad}); err != ErrInvalidOutlinePreset {
 		t.Fatalf("invalid outline_preset err = %v, want ErrInvalidOutlinePreset", err)
+	}
+}
+
+func TestProjectEpisodeCharTargetUpdate(t *testing.T) {
+	s := openStore(t)
+	repo := NewRepo(s)
+	ctx := context.Background()
+	p, err := repo.Create(ctx, 1000, NewInput{Title: "웹소설", Genres: []string{"판타지"}, LengthTarget: "series", DefaultPOV: "third_limited"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.EpisodeCharTarget != 5000 {
+		t.Fatalf("new project episode_char_target = %d, want 5000", p.EpisodeCharTarget)
+	}
+	target := 5500
+	updated, err := repo.Update(ctx, 2000, UpdateInput{ID: p.ID, EpisodeCharTarget: &target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.EpisodeCharTarget != 5500 {
+		t.Fatalf("episode_char_target = %d", updated.EpisodeCharTarget)
+	}
+	if updated.UpdatedAt != 2000 {
+		t.Fatalf("updated_at not bumped: %d", updated.UpdatedAt)
+	}
+	again, err := repo.Update(ctx, 3000, UpdateInput{ID: p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.EpisodeCharTarget != 5500 {
+		t.Fatalf("nil episode_char_target should preserve, got %d", again.EpisodeCharTarget)
+	}
+	bad := 0
+	if _, err := repo.Update(ctx, 4000, UpdateInput{ID: p.ID, EpisodeCharTarget: &bad}); err != ErrInvalidEpisodeCharTarget {
+		t.Fatalf("invalid episode_char_target err = %v, want ErrInvalidEpisodeCharTarget", err)
 	}
 }
 

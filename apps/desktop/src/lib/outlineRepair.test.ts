@@ -286,4 +286,70 @@ describe("repairOutlineTree", () => {
     expect(calls).toContain("rename:scene:씬 1:조각난 아침");
     expect(calls.some((call) => call.startsWith("delete:"))).toBe(false);
   });
+
+  it("leaves direct web novel leaf episodes with body text under their arc", async () => {
+    const leafEpisode = node({
+      id: "leaf-episode",
+      kind: "leaf",
+      label: "1화",
+      title: "경계의 틈",
+      parent_id: "arc",
+      ordinal: 0,
+      word_count: 1800,
+    });
+    const containerEpisodeScene = node({
+      id: "container-scene",
+      kind: "leaf",
+      label: "씬 1",
+      parent_id: "container-episode",
+      ordinal: 0,
+    });
+    const containerEpisode = node({
+      id: "container-episode",
+      kind: "container",
+      label: "2화",
+      parent_id: "arc",
+      ordinal: 1,
+      children: [containerEpisodeScene],
+    });
+    const arc = node({
+      id: "arc",
+      kind: "container",
+      label: "1권",
+      ordinal: 0,
+      children: [leafEpisode, containerEpisode],
+    });
+    const calls: string[] = [];
+    const rpc: OutlineRepairRPC = {
+      createChild: vi.fn(),
+      createSibling: vi.fn(),
+      moveToParent: vi.fn(async (id, parentID) => {
+        calls.push(`move:${id}->${parentID}`);
+        return { ok: true as const };
+      }),
+      moveToRoot: vi.fn(async (id) => {
+        calls.push(`root:${id}`);
+        return { ok: true as const };
+      }),
+      convertToContainer: vi.fn(async (id) => {
+        calls.push(`convert:${id}`);
+        return { ok: true as const };
+      }),
+      delete: vi.fn(async (id) => {
+        calls.push(`delete:${id}`);
+        return { ok: true as const };
+      }),
+      rename: vi.fn(async (id, label, title) => {
+        calls.push(`rename:${id}:${label}:${title}`);
+        return { ok: true as const };
+      }),
+    };
+
+    await repairOutlineTree([arc], rpc, t, OUTLINE_PRESETS.webnovel);
+
+    expect(calls).not.toContain("move:leaf-episode->container-episode");
+    expect(calls).not.toContain("convert:leaf-episode");
+    expect(calls).not.toContain("rename:container-episode:1화:");
+    expect(calls.some((call) => call.startsWith("delete:"))).toBe(false);
+  });
 });

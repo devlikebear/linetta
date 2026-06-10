@@ -18,4 +18,12 @@ describe("OutlinePanel CSS", () => {
     expect(css).toContain("max-height: min(34vh, 280px)");
     expect(css).toContain("overflow-y: auto");
   });
+
+  it("keeps episode progress compact in the outline rail", async () => {
+    const css = await readSource("components/OutlinePanel.css");
+
+    expect(css).toContain(".episode-progress");
+    expect(css).toContain("width: 74px");
+    expect(css).toContain(".episode-meter-fill.is-complete");
+  });
 });

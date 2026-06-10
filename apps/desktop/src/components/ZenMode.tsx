@@ -7,8 +7,9 @@ interface Props {
   initialDoc: object;
   initialSelection?: { from: number; to: number } | null;
   charCount: number;
+  episodeCharCount?: number;
   sceneLabel: string;
-  /** Target word count for the progress bar; 0 disables the bar. */
+  /** Target character count for the progress bar; 0 disables the bar. */
   target?: number;
   onChange: (doc: object) => void;
   onCharCount: (n: number) => void;
@@ -21,6 +22,7 @@ export function ZenMode({
   initialDoc,
   initialSelection,
   charCount,
+  episodeCharCount,
   sceneLabel,
   target = 0,
   onChange,
@@ -74,8 +76,16 @@ export function ZenMode({
     hideTimer.current = window.setTimeout(() => setShowBar(false), 2000);
   };
 
+  const progressCount = target > 0 ? episodeCharCount ?? charCount : charCount;
   const progressPercent =
-    target > 0 ? Math.min(100, Math.round((charCount / target) * 100)) : 0;
+    target > 0 ? Math.min(100, Math.round((progressCount / target) * 100)) : 0;
+  const statusText = target > 0
+    ? t("workspace.zenEpisodeStatus", {
+      count: progressCount.toLocaleString(locale),
+      target: target.toLocaleString(locale),
+      scene: sceneLabel,
+    })
+    : t("workspace.zenStatus", { count: charCount.toLocaleString(locale), scene: sceneLabel });
 
   return (
     <div className="zen-overlay" onPointerMove={onPointerMove}>
@@ -86,7 +96,7 @@ export function ZenMode({
       )}
       <div className="zen-bar">
         <span>ZEN</span>
-        <span>{t("workspace.zenStatus", { count: charCount.toLocaleString(locale), scene: sceneLabel })}</span>
+        <span>{statusText}</span>
       </div>
       <div className="zen-col">
         <TiptapEditor

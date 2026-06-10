@@ -20,12 +20,15 @@ import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { companion as companionApi } from "../../lib/rpc";
 import { stripProposalBlock } from "../../lib/companionDisplay";
 import type { AIContextPreview, AIContextSelection, CompanionImageAttachment } from "../../lib/types";
+import { AIDraftComposer, type AIDraftComposerProps } from "../ai/AIPanel";
 import { AIContextChecklistList, DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../ai/AIContextChecklist";
 import { ProposalCard } from "./ProposalCard";
 import { ChoiceCard } from "./ChoiceCard";
 import { Markdown } from "./Markdown";
 import { useI18n } from "../../lib/i18n";
 import "./CompanionPanel.css";
+
+export type SelectionRewriteKind = "rewrite" | "proofread";
 
 interface Props {
   projectId: string;
@@ -34,6 +37,12 @@ interface Props {
   onApplied: () => void;
   beforeSend?: () => Promise<void> | void;
   outlineStructure?: string;
+  aiDraft?: AIDraftComposerProps;
+  selectionRewriteRequest?: {
+    id: string;
+    text: string;
+    kind?: SelectionRewriteKind;
+  } | null;
 }
 
 // hide proposal/query blocks (even partial/unclosed) from the live stream preview,
@@ -194,6 +203,31 @@ function copyLabelSnippet(text: string): string {
   return `${runes.slice(0, 80).join("")}…`;
 }
 
+function selectionRewritePrompt(text: string, kind: SelectionRewriteKind = "rewrite"): string {
+  const trimmed = text.trim();
+  if (kind === "proofread") {
+    return [
+      "선택한 문장을 맞춤법·띄어쓰기·조사 오류·비문 중심으로 퇴고해줘.",
+      "원문 의미·문체·고유명사·대사 톤은 유지하고, 바꾼 부분의 변경 목록을 함께 제시해줘.",
+      "설명으로 끝내지 말고, 현재 씬 본문에서 아래 선택문만 교정되도록 전체 씬 원고를 set_scene_text로 실제 반영해줘.",
+      "",
+      "선택문:",
+      "```",
+      trimmed,
+      "```",
+    ].join("\n");
+  }
+  return [
+    "선택한 문장을 현재 씬의 캐릭터, 플롯, 문체에 맞게 자연스럽게 수정해줘.",
+    "설명으로 끝내지 말고, 현재 씬 본문에서 아래 선택문만 바뀌도록 전체 씬 원고를 set_scene_text로 실제 반영해줘.",
+    "",
+    "선택문:",
+    "```",
+    trimmed,
+    "```",
+  ].join("\n");
+}
+
 function MessageCopyButton({
   text,
   copied,
@@ -213,7 +247,7 @@ function MessageCopyButton({
   );
 }
 
-export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, beforeSend, outlineStructure }: Props) {
+export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, beforeSend, outlineStructure, aiDraft, selectionRewriteRequest }: Props) {
   const { t } = useI18n();
   const [contextSelection, setContextSelection] = useState<AIContextSelection>(DEFAULT_AI_CONTEXT_SELECTION);
   const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied, contextSelection, outlineStructure);
@@ -232,6 +266,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const contextReqIdRef = useRef(0);
   const loadedContextSelectionRef = useRef<AIContextSelection | null>(null);
+  const lastSelectionRewriteRequestIdRef = useRef<string | null>(null);
   const focusInput = () => inputRef.current?.focus();
 
   useEffect(() => {
@@ -244,6 +279,14 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
     input.style.height = "auto";
     input.style.height = `${input.scrollHeight}px`;
   }, [draft]);
+
+  useEffect(() => {
+    if (!selectionRewriteRequest || aiDraft) return;
+    if (lastSelectionRewriteRequestIdRef.current === selectionRewriteRequest.id) return;
+    lastSelectionRewriteRequestIdRef.current = selectionRewriteRequest.id;
+    setDraft(selectionRewritePrompt(selectionRewriteRequest.text, selectionRewriteRequest.kind ?? "rewrite"));
+    window.requestAnimationFrame(() => focusInput());
+  }, [aiDraft, selectionRewriteRequest]);
 
   const loadContextPreview = useCallback(async (selection: AIContextSelection, flushEditor = false) => {
     const reqId = ++contextReqIdRef.current;
@@ -424,10 +467,12 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
 
       <div className="panel-scroll cmp-stream" ref={scrollRef}>
         {showHelp && <CompanionHelp t={t} />}
-        {messages.length === 0 && (
+        {aiDraft ? (
+          <AIDraftComposer {...aiDraft} />
+        ) : messages.length === 0 && (
           <CompanionEmpty t={t} onPick={pickExample} />
         )}
-        {messages.map((m, i) => {
+        {!aiDraft && messages.map((m, i) => {
           const isUser = m.role === "user";
           const messageKey = `${m.role}-${i}`;
           if (isUser) {
@@ -473,7 +518,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
             </div>
           );
         })}
-        {isStreaming && (
+        {!aiDraft && isStreaming && (
           <div className="msg bot">
             <span className="msg-who">companion</span>
             <div className="companion-thinking">
@@ -491,6 +536,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
         )}
       </div>
 
+      {!aiDraft && (
       <div className="cmp-input-wrap">
         {attachments.length > 0 && (
           <div className="companion-attachments" aria-label={t("companion.attachments")}>
@@ -604,6 +650,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
           </section>
         )}
       </div>
+      )}
     </aside>
   );
 }

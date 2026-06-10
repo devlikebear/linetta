@@ -20,9 +20,11 @@ import "./Settings.css";
 import type {
   AppLanguage,
   OpsStatus,
+  PlatformProfileId,
   ProviderConfig,
   ProviderID,
   Settings as SettingsRow,
+  ThemePreference,
   WebSearchProvider,
 } from "../lib/types";
 
@@ -200,6 +202,8 @@ export function Settings() {
   const [gitDirDraft, setGitDirDraft] = useState("");
   const [gitTmplDraft, setGitTmplDraft] = useState("");
   const [webSearchKeyDraft, setWebSearchKeyDraft] = useState("");
+  const [editorFontSizeDraft, setEditorFontSizeDraft] = useState("20");
+  const [editorLineHeightDraft, setEditorLineHeightDraft] = useState("1.92");
 
   // Per-provider config drafts (re-synced when the active provider changes).
   const [modelDraft, setModelDraft] = useState("");
@@ -227,6 +231,8 @@ export function Settings() {
         setGitDirDraft(s.git_sync_dir);
         setGitTmplDraft(s.git_sync_commit_template);
         setWebSearchKeyDraft(s.web_search_api_key ?? "");
+        setEditorFontSizeDraft(String(s.editor_font_size ?? 20));
+        setEditorLineHeightDraft(String(s.editor_line_height ?? 1.92));
         setOpsRows(rows);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
@@ -282,6 +288,9 @@ export function Settings() {
       const next = await settingsApi.set(patch);
       setCurrent(next);
       setLanguage(next.language);
+      setEditorFontSizeDraft(String(next.editor_font_size ?? 20));
+      setEditorLineHeightDraft(String(next.editor_line_height ?? 1.92));
+      window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
       setSavedAt(Date.now());
     } catch (e) {
       setError(String(e));
@@ -705,6 +714,87 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.focus_default ? " on" : ""}`} />
               </button>
+            </section>
+
+            <section className="settings-section">
+              <h3>{t("settings.editor.title")}</h3>
+              <div className="modal-field">
+                <label>{t("settings.editor.theme")}</label>
+                <div className="settings-segmented" role="group" aria-label={t("settings.editor.theme")}>
+                  {([
+                    ["system", t("settings.editor.themeSystem")],
+                    ["light", t("settings.editor.themeLight")],
+                    ["dark", t("settings.editor.themeDark")],
+                  ] as Array<[ThemePreference, string]>).map(([theme, label]) => (
+                    <button
+                      key={theme}
+                      type="button"
+                      className={current.theme === theme ? "is-selected" : ""}
+                      onClick={() => !saving && apply({ theme })}
+                      disabled={saving}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="settings-number-grid">
+                <div className="modal-field">
+                  <label htmlFor="editor-font-size">{t("settings.editor.fontSize")}</label>
+                  <input
+                    id="editor-font-size"
+                    type="number"
+                    min={15}
+                    max={22}
+                    step={1}
+                    value={editorFontSizeDraft}
+                    onChange={(e) => {
+                      const raw = e.currentTarget.value;
+                      setEditorFontSizeDraft(raw);
+                      const value = Number(raw);
+                      if (Number.isFinite(value) && value >= 15 && value <= 22) {
+                        apply({ editor_font_size: value });
+                      }
+                    }}
+                    disabled={saving}
+                  />
+                </div>
+                <div className="modal-field">
+                  <label htmlFor="editor-line-height">{t("settings.editor.lineHeight")}</label>
+                  <input
+                    id="editor-line-height"
+                    type="number"
+                    min={1.6}
+                    max={2.2}
+                    step={0.1}
+                    value={editorLineHeightDraft}
+                    onChange={(e) => {
+                      const raw = e.currentTarget.value;
+                      setEditorLineHeightDraft(raw);
+                      const value = Number(raw);
+                      if (Number.isFinite(value) && value >= 1.6 && value <= 2.2) {
+                        apply({ editor_line_height: value });
+                      }
+                    }}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+              <div className="modal-field">
+                <label htmlFor="copy-profile">{t("settings.editor.copyProfile")}</label>
+                <select
+                  id="copy-profile"
+                  value={current.copy_profile ?? "plain"}
+                  onChange={(e) => apply({ copy_profile: e.target.value as PlatformProfileId })}
+                  disabled={saving}
+                >
+                  {(["plain", "munpia", "series", "joara"] as PlatformProfileId[]).map((profile) => (
+                    <option key={profile} value={profile}>
+                      {t(`platformProfile.${profile}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </section>
 
             <section className="settings-section">

@@ -5,6 +5,8 @@ import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book, Search } from "../lib/icons";
 import { InlineEditableText } from "./InlineEditableText";
 import { localeForLanguage, useI18n } from "../lib/i18n";
+import type { EpisodeStatusCounts } from "../hooks/useFirstLeaf";
+import { StatsSection } from "./StatsSection";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -16,6 +18,9 @@ interface Props {
   project: Project;
   node: NodeRow;
   charCount: number;
+  todayChars?: number | null;
+  episodeStock?: EpisodeStatusCounts | null;
+  statsRefreshKey?: number | null;
   typewriter: boolean;
   onToggleTypewriter: () => void;
   saveStatus: SaveStatus;
@@ -46,11 +51,13 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
   series: 200000,
 };
 
-export function ContextPanel({ project, node, charCount, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget }: Readonly<Props>) {
+export function ContextPanel({ project, node, charCount, todayChars = null, episodeStock = null, statsRefreshKey = null, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget }: Readonly<Props>) {
   const { language, t } = useI18n();
   const locale = localeForLanguage(language);
   const target = TARGET_WORDS[project.length_target] ?? 90000;
   const pct = target > 0 ? Math.min(100, Math.round((project.word_count / target) * 100)) : 0;
+  const isWebnovelProject = project.outline_preset === "webnovel";
+  const episodeCharTarget = project.episode_char_target > 0 ? project.episode_char_target : 5000;
   const [overview, setOverview] = useState(project.outline ?? "");
   const [synopsis, setSynopsis] = useState(project.synopsis ?? "");
   const [synopsisBusy, setSynopsisBusy] = useState<"rewrite" | "clear" | null>(null);
@@ -91,6 +98,16 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
         /* benign; keep local draft */
       }
     }, 600);
+  };
+
+  const saveEpisodeTarget = async (next: string) => {
+    const compact = next.replace(/,/g, "");
+    const parsed = Number.parseInt(compact, 10);
+    if (!/^\d+$/.test(compact) || parsed <= 0) {
+      throw new Error("invalid episode target");
+    }
+    const updated = await projectsApi.update({ id: project.id, episode_char_target: parsed });
+    onProjectChanged?.(updated);
   };
 
   const rewriteSynopsis = async () => {
@@ -146,13 +163,39 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
             <span style={{ flex: 1 }} />
             <SaveStatusPill status={saveStatus} />
           </div>
+          {todayChars !== null && (
+            <div className="scene-today">
+              {t("workspace.todayChars", { count: todayChars.toLocaleString(locale) })}
+            </div>
+          )}
+          {isWebnovelProject && episodeStock && (
+            <div className="scene-today">
+              {t("workspace.episodeStock", {
+                published: episodeStock.published.toLocaleString(locale),
+                stock: episodeStock.stock.toLocaleString(locale),
+              })}
+            </div>
+          )}
           <div className="progress">
             <div className="progress-track">
               <div className="progress-fill" style={{ width: `${pct}%` }} />
             </div>
             <div className="progress-meta">
               <span>{t("workspace.totalWork", { count: project.word_count.toLocaleString(locale) })}</span>
-              <span>{pct}% / {Math.round(target / 1000)}k</span>
+              {isWebnovelProject ? (
+                <span className="episode-target-meta">
+                  <span>{t("workspace.episodeTarget")}</span>
+                  <InlineEditableText
+                    value={String(episodeCharTarget)}
+                    ariaLabel={t("workspace.episodeTarget")}
+                    className="episode-target-input"
+                    onCommit={saveEpisodeTarget}
+                  />
+                  <span>{t("workspace.charUnit")}</span>
+                </span>
+              ) : (
+                <span>{pct}% / {Math.round(target / 1000)}k</span>
+              )}
             </div>
           </div>
           <div className="toggles">
@@ -244,6 +287,12 @@ export function ContextPanel({ project, node, charCount, typewriter, onToggleTyp
           project={project}
           nodeId={node.id}
           onOpenThread={onOpenThread}
+        />
+
+        <StatsSection
+          project={project}
+          refreshKey={statsRefreshKey}
+          episodeCharTarget={episodeCharTarget}
         />
       </div>
     </aside>

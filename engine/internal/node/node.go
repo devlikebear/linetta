@@ -4,9 +4,10 @@ const (
 	KindContainer = "container"
 	KindLeaf      = "leaf"
 
-	StatusDraft    = "draft"
-	StatusRevision = "revision"
-	StatusFinal    = "final"
+	StatusDraft     = "draft"
+	StatusRevision  = "revision"
+	StatusFinal     = "final"
+	StatusPublished = "published"
 )
 
 func ValidKind(kind string) bool {
@@ -14,7 +15,7 @@ func ValidKind(kind string) bool {
 }
 
 func ValidStatus(status string) bool {
-	return status == StatusDraft || status == StatusRevision || status == StatusFinal
+	return status == StatusDraft || status == StatusRevision || status == StatusFinal || status == StatusPublished
 }
 
 // Node mirrors the SQLite row. content_doc is the raw Tiptap JSON; the engine

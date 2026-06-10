@@ -352,6 +352,13 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
     !isStructuralChapterLabel(node.label, preset) &&
     Boolean(previousStructuralChapterSibling(siblings, index)) &&
     Boolean(nextStructuralChapterSibling(siblings, index));
+  const isDirectWebNovelEpisodeLeaf = (node: RepairNode) => {
+    if (preset.id !== "webnovel" || node.kind !== "leaf" || !isStructuralChapterLabel(node.label, preset)) return false;
+    const parent = node.parent_id ? records.get(node.parent_id) : undefined;
+    return Boolean(parent && parent.kind === "container" && !parent.parent_id);
+  };
+  const isWebNovelEpisodeNode = (node: RepairNode) =>
+    preset.id === "webnovel" && (node.kind === "container" || isDirectWebNovelEpisodeLeaf(node));
   const sceneTargetFor = async (container: RepairNode) => {
     if (isStructuralChapterLabel(container.label, preset)) return container;
     if (hasContainerChild(container)) return ensureChapter(container);
@@ -368,6 +375,7 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
           currentContainer = child;
           continue;
         }
+        if (isDirectWebNovelEpisodeLeaf(child)) continue;
         if (!currentContainer) continue;
         const target = await sceneTargetFor(currentContainer);
         await moveToParent(child, target);
@@ -386,7 +394,7 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
       const children = childrenOf(parent.id);
       for (let index = 0; index < children.length; index += 1) {
         const child = children[index];
-        if (child.kind === "leaf" && isStructuralChapterLabel(child.label, preset) && child.word_count === 0) {
+        if (child.kind === "leaf" && isStructuralChapterLabel(child.label, preset) && child.word_count === 0 && !isDirectWebNovelEpisodeLeaf(child)) {
           await convertToContainer(child);
           const host = currentPart ?? chapterHost;
           await moveToParent(child, host);
@@ -447,7 +455,7 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
   }
 
   for (const part of childrenOf().filter((n) => n.kind === "container" && !isStructuralChapterLabel(n.label, preset))) {
-    const directLeaves = childrenOf(part.id).filter((n) => n.kind === "leaf");
+    const directLeaves = childrenOf(part.id).filter((n) => n.kind === "leaf" && !isDirectWebNovelEpisodeLeaf(n));
     if (directLeaves.length === 0) continue;
     const chapter = await ensureChapter(part);
     for (const leaf of directLeaves) {
@@ -465,8 +473,12 @@ export async function repairOutlineTree(tree: TreeNode[], rpc: OutlineRepairRPC,
 
   for (const [partIndex, part] of childrenOf().filter((n) => n.kind === "container").entries()) {
     await rename(part, "part", partIndex + 1);
-    for (const [chapterIndex, chapter] of childrenOf(part.id).filter((n) => n.kind === "container").entries()) {
+    const chapterNodes = preset.id === "webnovel"
+      ? childrenOf(part.id).filter(isWebNovelEpisodeNode)
+      : childrenOf(part.id).filter((n) => n.kind === "container");
+    for (const [chapterIndex, chapter] of chapterNodes.entries()) {
       await rename(chapter, "chapter", chapterIndex + 1);
+      if (chapter.kind !== "container") continue;
       for (const [sceneIndex, scene] of childrenOf(chapter.id).filter((n) => n.kind === "leaf").entries()) {
         await rename(scene, "scene", sceneIndex + 1);
       }

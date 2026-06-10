@@ -40,6 +40,8 @@
   --font-serif: "Newsreader", "Nanum Myeongjo", "AppleMyungjo", "Apple SD Gothic Neo", Georgia, serif;
   --font-edit:  "Newsreader", "Nanum Myeongjo", "AppleMyungjo", "Apple SD Gothic Neo", Georgia, serif;
   --font-mono:  "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --edit-size: 20px;
+  --edit-leading: 1.92;
 
   /* ---- Geometry ---- */
   --r-sm: 6px;
@@ -51,6 +53,72 @@
   --shadow-lg: 0 30px 80px -24px rgba(33,30,24,0.42);
 
   color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --paper:        #171714;
+  --surface:      #22211d;
+  --surface-2:    #2c2a25;
+  --surface-3:    #37342d;
+  --ink:          #f3eee2;
+  --ink-soft:     #d7cfc0;
+  --muted:        #a69d8d;
+  --muted-2:      #756f64;
+  --line:         #454138;
+  --line-soft:    #343129;
+
+  --accent:       oklch(0.72 0.12 54);
+  --accent-deep:  oklch(0.78 0.10 58);
+  --accent-tint:  oklch(0.72 0.12 54 / 0.18);
+  --accent-tint2: oklch(0.72 0.12 54 / 0.10);
+
+  --t-sienna: oklch(0.70 0.12 47);
+  --t-teal:   oklch(0.72 0.10 195);
+  --t-blue:   oklch(0.72 0.12 255);
+  --t-plum:   oklch(0.72 0.12 340);
+  --t-olive:  oklch(0.72 0.11 125);
+
+  --ok:    oklch(0.72 0.12 150);
+  --warn:  oklch(0.72 0.14 35);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.26);
+  --shadow-md: 0 8px 28px -10px rgba(0,0,0,0.55);
+  --shadow-lg: 0 30px 80px -24px rgba(0,0,0,0.72);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --paper:        #171714;
+    --surface:      #22211d;
+    --surface-2:    #2c2a25;
+    --surface-3:    #37342d;
+    --ink:          #f3eee2;
+    --ink-soft:     #d7cfc0;
+    --muted:        #a69d8d;
+    --muted-2:      #756f64;
+    --line:         #454138;
+    --line-soft:    #343129;
+
+    --accent:       oklch(0.72 0.12 54);
+    --accent-deep:  oklch(0.78 0.10 58);
+    --accent-tint:  oklch(0.72 0.12 54 / 0.18);
+    --accent-tint2: oklch(0.72 0.12 54 / 0.10);
+
+    --t-sienna: oklch(0.70 0.12 47);
+    --t-teal:   oklch(0.72 0.10 195);
+    --t-blue:   oklch(0.72 0.12 255);
+    --t-plum:   oklch(0.72 0.12 340);
+    --t-olive:  oklch(0.72 0.11 125);
+
+    --ok:    oklch(0.72 0.12 150);
+    --warn:  oklch(0.72 0.14 35);
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.26);
+    --shadow-md: 0 8px 28px -10px rgba(0,0,0,0.55);
+    --shadow-lg: 0 30px 80px -24px rgba(0,0,0,0.72);
+
+    color-scheme: dark;
+  }
 }
 
 * , *::before, *::after { box-sizing: border-box; }
@@ -427,8 +495,39 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .tree-part-row, .tree-chapter-row, .tree-scene-row {
   display: flex; align-items: center; gap: 2px; min-width: 0;
   border-radius: var(--r-sm);
+  position: relative;
 }
 .tree-part-row:hover, .tree-chapter-row:hover { background: rgba(33,30,24,0.04); }
+.tree-part-row.is-dragging,
+.tree-chapter-row.is-dragging,
+.tree-scene-row.is-dragging {
+  opacity: 0.48;
+}
+.tree-part-row.is-drop-before::before,
+.tree-chapter-row.is-drop-before::before,
+.tree-scene-row.is-drop-before::before,
+.tree-part-row.is-drop-after::after,
+.tree-chapter-row.is-drop-after::after,
+.tree-scene-row.is-drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: var(--accent);
+  z-index: 2;
+}
+.tree-part-row.is-drop-before::before,
+.tree-chapter-row.is-drop-before::before,
+.tree-scene-row.is-drop-before::before { top: 0; }
+.tree-part-row.is-drop-after::after,
+.tree-chapter-row.is-drop-after::after,
+.tree-scene-row.is-drop-after::after { bottom: 0; }
+.tree-part-row.is-drop-inside,
+.tree-chapter-row.is-drop-inside {
+  background: var(--accent-tint2);
+  box-shadow: inset 0 0 0 1px var(--accent-tint);
+}
 .tree-part-row .tree-menu-btn { margin-top: 10px; }
 .tree-chapter-row .tree-menu-btn { margin-right: 2px; }
 .tree-menu-btn {
@@ -478,6 +577,19 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .tree-chapter { min-width: 0; }
 .tree-chapter .ch-label { font-family: var(--font-serif); font-size: 13.5px; color: var(--ink-soft); font-weight: 500; white-space: nowrap; flex: none; }
 .tree-chapter .ch-title { font-size: 12px; color: var(--muted); font-style: italic; font-family: var(--font-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tree-title-sep { letter-spacing: 0; text-transform: none; }
+.outline-title-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 1px 3px;
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  font-style: italic;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-soft);
+}
 
 .tree-scene-row { margin: 1px 0; }
 .tree-scene {
@@ -552,8 +664,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 
 .prose {
   font-family: var(--font-edit);
-  font-size: 20px;
-  line-height: 1.92;
+  font-size: var(--edit-size);
+  line-height: var(--edit-leading);
   color: var(--ink);
   outline: none;
 }
@@ -595,7 +707,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .zen-col { flex: 1; overflow-y: auto; }
 .zen-col .prose {
   width: min(640px, 84%); margin: 0 auto; padding: 6vh 0 40vh;
-  font-size: 22px; line-height: 2;
+  font-size: calc(var(--edit-size) + 2px); line-height: var(--edit-leading);
 }
 
 /* ============================================================
@@ -631,10 +743,13 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .stat-row { display: flex; align-items: baseline; gap: 8px; }
 .stat-big { font-family: var(--font-edit); font-size: 38px; line-height: 1; color: var(--ink); }
 .stat-unit { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.scene-today { margin-top: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
 .progress { margin-top: 14px; }
 .progress-track { height: 5px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
 .progress-fill { height: 100%; border-radius: 3px; background: var(--accent); }
 .progress-meta { display: flex; justify-content: space-between; margin-top: 7px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
+.episode-target-meta { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.episode-target-input { width: 42px; padding: 1px 2px; font: inherit; color: var(--ink-soft); text-align: right; }
 
 .toggles { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .toggle-row {

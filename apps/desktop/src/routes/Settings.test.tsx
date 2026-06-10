@@ -54,6 +54,10 @@ const baseSettings = {
   provider: "openai-codex" as const,
   typewriter_default: true,
   focus_default: false,
+  theme: "system" as const,
+  editor_font_size: 20,
+  editor_line_height: 1.92,
+  copy_profile: "plain" as const,
   git_sync_dir: "/tmp/linetta-sync",
   git_sync_commit_template: "Linetta sync {date}",
   backup_dir: "/tmp/linetta/backups",
@@ -206,6 +210,37 @@ describe("Settings", () => {
     await user.click(screen.getByRole("button", { name: "투어 다시 보기" }));
 
     expect(window.localStorage.getItem("linetta:onboarding:manual-phase")).toBe("library");
+  });
+
+  it("persists editor theme and typography controls", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    expect(await screen.findByText("에디터")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "다크" }));
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ theme: "dark" }),
+    );
+
+    const fontSize = screen.getByLabelText("글자 크기");
+    await user.clear(fontSize);
+    await user.type(fontSize, "18");
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ editor_font_size: 18 }),
+    );
+
+    const lineHeight = screen.getByLabelText("줄간격");
+    await user.clear(lineHeight);
+    await user.type(lineHeight, "2.1");
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ editor_line_height: 2.1 }),
+    );
+
+    await user.selectOptions(screen.getByLabelText("복사 프로필"), "munpia");
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ copy_profile: "munpia" }),
+    );
   });
 
   it("renders setup links and ops metadata in English when selected", async () => {

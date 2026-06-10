@@ -181,6 +181,33 @@ type moveToParentParams struct {
 	ParentID string `json:"parent_id"`
 }
 
+type moveToParams struct {
+	ID       string  `json:"id"`
+	ParentID *string `json:"parent_id"`
+	Ordinal  int     `json:"ordinal"`
+}
+
+func MoveTo(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p moveToParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := nodes.MoveTo(ctx, p.ID, p.ParentID, p.Ordinal, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node or parent not found"}
+			}
+			if errors.Is(err, node.ErrNodeProjectMismatch) ||
+				errors.Is(err, node.ErrContentOnContainer) ||
+				errors.Is(err, node.ErrInvalidMove) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
 func MoveToParent(nodes *node.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p moveToParentParams
@@ -267,6 +294,11 @@ type renameParams struct {
 	Title string `json:"title"`
 }
 
+type setStatusParams struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
 func RenameNode(nodes *node.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p renameParams
@@ -276,6 +308,25 @@ func RenameNode(nodes *node.Repo, now Clock) rpc.Handler {
 		if err := nodes.Rename(ctx, p.ID, p.Label, p.Title, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+func SetNodeStatus(nodes *node.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p setStatusParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" || p.Status == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id and status required"}
+		}
+		if err := nodes.SetStatus(ctx, p.ID, p.Status, now()); err != nil {
+			if errors.Is(err, node.ErrNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			}
+			if errors.Is(err, node.ErrInvalidStatus) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

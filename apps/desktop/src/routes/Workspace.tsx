@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, Sparkles, MessageCircle, Maximize2, ArrowLeft, BookOpen } from "lucide-react";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi } from "../lib/rpc";
+import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Sparkles } from "lucide-react";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi, stats as statsApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIContextPreview, AIOptions, ContextCounts, SearchResult, Settings as SettingsRow } from "../lib/types";
+import type { NodeRow, Project, Entity, AIContextPreview, AIOptions, ContextCounts, SearchResult, Settings as SettingsRow, NodeStatus } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -15,13 +15,12 @@ import { VersionSheet } from "../components/VersionSheet";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle, type TiptapSelectionMenuPayload } from "../components/editor/Tiptap";
 import { useAIGeneration } from "../lib/editor/useAIGeneration";
-import { AIPanel } from "../components/ai/AIPanel";
 import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated";
 import { autoMentionDoc } from "../lib/editor/autoMention";
 import { DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
-import { CompanionPanel } from "../components/companion/CompanionPanel";
+import { CompanionPanel, type SelectionRewriteKind } from "../components/companion/CompanionPanel";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { InlineEditableText } from "../components/InlineEditableText";
@@ -42,11 +41,15 @@ import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useToast } from "../components/ToastProvider";
 import { displayNodeLabel, localeForLanguage, useI18n } from "../lib/i18n";
 import { outlineNumberLabel, outlinePresetById, outlineRoleName, repairOutlineTree, type OutlinePresetId } from "../lib/outlineRepair";
+import { planChapterCreation, type CreateNodeStep } from "../lib/outlineCreate";
+import { normalizePlatformProfile, transformPlatformText } from "../lib/platformProfiles";
 import {
   buildTree,
+  countEpisodeStatus,
   findFirstLeaf,
   flatten,
   leafNeighbors,
+  sumLeafChars,
   type TreeNode,
 } from "../hooks/useFirstLeaf";
 
@@ -102,10 +105,12 @@ export function Workspace() {
   const { language, t } = useI18n();
   const locale = localeForLanguage(language);
   const [charCount, setCharCount] = useState(0);
+  const [todayChars, setTodayChars] = useState<number | null>(null);
   const [typewriter, setTypewriter] = useState(false);
   const [focus, setFocus] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
+  const saveCompletedAt = saveStatus.kind === "saved" ? saveStatus.at : null;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -116,8 +121,12 @@ export function Workspace() {
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [companionOpen, setCompanionOpen] = useState(false);
+  const companionOpenRef = useRef(false);
+  const aiOpenedCompanionRef = useRef(false);
+  useEffect(() => { companionOpenRef.current = companionOpen; }, [companionOpen]);
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
+  const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
   const outlinePreset = useMemo(() => outlinePresetById(load?.project.outline_preset), [load?.project.outline_preset]);
   const outlinePresetId = outlinePreset.id;
   const outlineStructure = useMemo(() => {
@@ -127,6 +136,7 @@ export function Workspace() {
     return `${t(outlinePreset.nameKey)}: ${part} > ${chapter} > ${scene} (예: ${outlineNumberLabel(outlinePreset, "part", 1, t)} > ${outlineNumberLabel(outlinePreset, "chapter", 1, t)} > ${outlineNumberLabel(outlinePreset, "scene", 1, t)})`;
   }, [outlinePreset, t]);
   const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
+  const [companionRewriteRequest, setCompanionRewriteRequest] = useState<{ id: string; text: string; kind?: SelectionRewriteKind } | null>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const companionNodeRef = useRef<string | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
@@ -151,10 +161,33 @@ export function Workspace() {
   const [contextPreview, setContextPreview] = useState<AIContextPreview | null>(null);
   const previewReqIdRef = useRef(0);
   const factBookSelectionSeqRef = useRef(0);
+  const companionRewriteSeqRef = useRef(0);
   const loadRef = useRef<LoadState | null>(null);
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+  const refreshTodayChars = useCallback(async (targetProjectId?: string) => {
+    const id = targetProjectId ?? loadRef.current?.project.id;
+    if (!id) return;
+    try {
+      const today = await statsApi.today(id);
+      setTodayChars(today.chars_added);
+    } catch {
+      /* benign; the sidebar can omit today's number */
+    }
+  }, []);
+  useEffect(() => {
+    if (!load?.project.id) {
+      setTodayChars(null);
+      return;
+    }
+    setTodayChars(null);
+    void refreshTodayChars(load.project.id);
+  }, [load?.project.id, refreshTodayChars]);
+  useEffect(() => {
+    if (saveCompletedAt === null || !load?.project.id) return;
+    void refreshTodayChars(load.project.id);
+  }, [saveCompletedAt, load?.project.id, refreshTodayChars]);
   useEffect(() => { setOutlineUndoSnapshot(null); }, [projectId]);
   useEffect(() => { companionNodeRef.current = load?.node.id ?? null; }, [load]);
   const editorRef = useRef<TiptapHandle>(null);
@@ -354,23 +387,21 @@ export function Workspace() {
   );
 
   const handleRenameNode = useCallback(
-    async (target: TreeNode) => {
-      const nextLabel = await promptDialog(t("workspace.prompt.renameLabel"), target.label);
-      if (nextLabel === null) return;
-      const label = nextLabel.trim();
-      if (!label) return;
-      const nextTitle = await promptDialog(t("workspace.prompt.displayTitle"), target.title);
-      if (nextTitle === null) return;
+    async (target: TreeNode, title: string) => {
       try {
-        await nodes.rename(target.id, label, nextTitle.trim());
+        await nodes.rename(target.id, target.label, title.trim());
         await refreshTreeKeepNode(loadRef.current?.node.id ?? target.id);
         showToast(t("workspace.toast.renameSuccess"));
       } catch (e) {
         showToast(t("workspace.toast.renameFailed", { error: String(e) }));
       }
     },
-    [promptDialog, refreshTreeKeepNode, showToast, t],
+    [refreshTreeKeepNode, showToast, t],
   );
+
+  const requestInlineRenameNode = useCallback((target: TreeNode) => {
+    setOutlineRenameRequest({ id: target.id, nonce: Date.now() });
+  }, []);
 
   const handleCreateSceneFromOutline = useCallback(
     async (anchor: TreeNode) => {
@@ -424,24 +455,19 @@ export function Workspace() {
       const current = loadRef.current;
       if (!current) return;
       try {
-        const allNodes = flatten(current.tree);
-        const parentContainer = anchor.parent_id
-          ? allNodes.find((n) => n.id === anchor.parent_id && n.kind === "container")
-          : undefined;
-        let chapter: NodeRow;
-        if (anchor.kind === "container" && !anchor.parent_id) {
-          const existingChapters = anchor.children.filter((n) => n.kind === "container").length;
-          chapter = await nodes.createChild(anchor.id, "container", outlineNumberLabel(outlinePreset, "chapter", existingChapters + 1, t), "");
-        } else if (anchor.kind === "leaf" && parentContainer && !parentContainer.parent_id) {
-          const existingChapters = parentContainer.children.filter((n) => n.kind === "container").length;
-          chapter = await nodes.createChild(parentContainer.id, "container", outlineNumberLabel(outlinePreset, "chapter", existingChapters + 1, t), "");
-        } else {
-          const reference = anchor.kind === "leaf" && parentContainer ? parentContainer : anchor;
-          const siblings = allNodes.filter((n) => (n.parent_id ?? null) === (reference.parent_id ?? null));
-          const chapterCount = siblings.filter((n) => n.kind === "container").length;
-          chapter = await nodes.createSibling(reference.id, "container", outlineNumberLabel(outlinePreset, "chapter", chapterCount + 1, t), "");
+        const plan = planChapterCreation(current.tree, anchor, outlinePreset, t);
+        const createNode = async (step: CreateNodeStep) => {
+          if (step.placement === "child") {
+            return nodes.createChild(step.parentId, step.kind, step.label, step.title);
+          }
+          return nodes.createSibling(step.referenceId, step.kind, step.label, step.title);
+        };
+        const chapter = await createNode(plan.chapter);
+        if (!plan.seedScene) {
+          await refreshTreeAndNavigateTo(chapter.id);
+          return;
         }
-        const seeded = await nodes.createChild(chapter.id, "leaf", outlineNumberLabel(outlinePreset, "scene", 1, t), "");
+        const seeded = await nodes.createChild(chapter.id, "leaf", plan.seedSceneLabel, "");
         await refreshTreeAndNavigateTo(seeded.id);
       } catch (e) {
         showToast(t("workspace.toast.createChapterFailed", { error: String(e) }));
@@ -463,6 +489,32 @@ export function Workspace() {
         await refreshTreeKeepNode(current.node.id);
       } catch (e) {
         showToast(t("workspace.toast.moveSceneFailed", { error: String(e) }));
+      }
+    },
+    [refreshTreeKeepNode, showToast, t],
+  );
+
+  const handleMoveNodeTo = useCallback(
+    async (target: TreeNode, parentId: string | null, ordinal: number) => {
+      try {
+        await nodes.moveTo(target.id, parentId, ordinal);
+        await refreshTreeKeepNode(loadRef.current?.node.id ?? target.id);
+      } catch (e) {
+        showToast(t("workspace.toast.moveSceneFailed", { error: String(e) }));
+      }
+    },
+    [refreshTreeKeepNode, showToast, t],
+  );
+
+  const handleSetNodeStatus = useCallback(
+    async (target: TreeNode, status: NodeStatus) => {
+      const current = loadRef.current;
+      if (!current) return;
+      try {
+        await nodes.setStatus(target.id, status);
+        await refreshTreeKeepNode(current.node.id);
+      } catch (e) {
+        showToast(t("workspace.toast.statusChangeFailed", { error: String(e) }));
       }
     },
     [refreshTreeKeepNode, showToast, t],
@@ -614,7 +666,7 @@ export function Workspace() {
     return () => window.removeEventListener("linetta:mention-pick-new", handler);
   }, [projectId, showToast, t]);
 
-  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+I AI modal.
+  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+I companion draft mode.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -785,10 +837,21 @@ export function Workspace() {
     [load, showToast, t],
   );
 
-  // --- AI generation (Cmd+I modal) ---
+  // --- AI generation (Cmd+I inside companion) ---
 
   const tiptapEditor = editorRef.current?.editor ?? null;
   const gen = useAIGeneration();
+
+  const finishAIModalPanelState = useCallback(() => {
+    setAiModal(null);
+    setContextPreview(null);
+    setAiCtxChecklistOpen(false);
+    if (aiOpenedCompanionRef.current) {
+      setCompanionOpen(false);
+      aiOpenedCompanionRef.current = false;
+    }
+    previewReqIdRef.current++;
+  }, []);
 
   const closeAIModal = useCallback(() => {
     gen.cancel();
@@ -796,19 +859,20 @@ export function Workspace() {
       tiptapEditor.commands.clearAITarget();
       tiptapEditor.setEditable(true);
     }
-    setAiModal(null);
-    setContextPreview(null);
-    setAiCtxChecklistOpen(false);
-    previewReqIdRef.current++;
-  }, [gen, tiptapEditor]);
+    finishAIModalPanelState();
+  }, [finishAIModalPanelState, gen, tiptapEditor]);
   useEffect(() => { closeAIModalRef.current = closeAIModal; }, [closeAIModal]);
 
-  // Open the Cmd+I AI generation modal targeting the current selection. Shared
-  // by the keyboard shortcut and the top-bar AI button.
+  // Open the Cmd+I AI generation flow inside the companion panel.
   const openAIModal = useCallback((selectionOverride?: { from: number; to: number }) => {
     const ed = editorRef.current?.editor;
     const currentLoad = loadRef.current;
     if (!ed || !currentLoad) return;
+    aiOpenedCompanionRef.current = !companionOpenRef.current;
+    setCompanionOpen(true);
+    setFactBookOpen(false);
+    setEntitySheetId(null);
+    setThreadSheetId(null);
     if (selectionOverride) {
       ed.commands.setTextSelection(selectionOverride);
       ed.view.focus();
@@ -834,15 +898,6 @@ export function Workspace() {
       });
   }, [aiOptions, showToast, t]);
   useEffect(() => { openAIModalRef.current = openAIModal; }, [openAIModal]);
-
-  // Toggle the AI modal — mirrors the Cmd+I keyboard behaviour for the top-bar button.
-  const toggleAIModal = useCallback(() => {
-    if (aiModalOpenRef.current) closeAIModal();
-    else {
-      setFactBookOpen(false);
-      openAIModal();
-    }
-  }, [closeAIModal, openAIModal]);
 
   const toggleFactBook = useCallback(() => {
     setFactBookSelectedClaimRequest(null);
@@ -873,17 +928,48 @@ export function Workspace() {
     });
   }, [selectionMenu]);
 
-  const runSelectionAIReplace = useCallback(() => {
+  const runSelectionCompanionRequest = useCallback((kind: SelectionRewriteKind) => {
     if (!selectionMenu) return;
     const sel = { from: selectionMenu.from, to: selectionMenu.to };
     editorRef.current?.setSelection(sel);
     setSelectionMenu(null);
     setFactBookOpen(false);
-    setCompanionOpen(false);
     setEntitySheetId(null);
     setThreadSheetId(null);
-    openAIModal(sel);
-  }, [openAIModal, selectionMenu]);
+    closeAIModalRef.current?.();
+    setCompanionOpen(true);
+    setCompanionRewriteRequest({
+      id: `selection-${kind}-${++companionRewriteSeqRef.current}`,
+      text: selectionMenu.text,
+      kind,
+    });
+  }, [selectionMenu]);
+
+  const runSelectionCompanionRewrite = useCallback(() => {
+    runSelectionCompanionRequest("rewrite");
+  }, [runSelectionCompanionRequest]);
+
+  const runSelectionCompanionProofread = useCallback(() => {
+    runSelectionCompanionRequest("proofread");
+  }, [runSelectionCompanionRequest]);
+
+  const copyNodeText = useCallback(async (node: Pick<TreeNode, "id">) => {
+    try {
+      const payload = await exportApi.nodeText(node.id);
+      const copyProfile = normalizePlatformProfile(settingsRow?.copy_profile);
+      const text = transformPlatformText(payload.text, copyProfile);
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("clipboard unavailable");
+      }
+      await navigator.clipboard.writeText(text);
+      showToast(t("workspace.toast.copyTextSuccessWithProfile", {
+        count: Array.from(text).length.toLocaleString(locale),
+        profile: t(`platformProfile.${copyProfile}`),
+      }));
+    } catch (e) {
+      showToast(t("workspace.toast.copyTextFailed", { error: String(e) }));
+    }
+  }, [locale, settingsRow?.copy_profile, showToast, t]);
 
   // Defensive: if the active node changes while the modal is open, close it so
   // stale selection offsets can't be committed into a freshly-mounted editor.
@@ -901,11 +987,8 @@ export function Workspace() {
     commitGenerated(tiptapEditor, aiModal.mode, aiModal.sel, v.text);
     gen.cancel();
     tiptapEditor.setEditable(true);
-    setAiModal(null);
-    setContextPreview(null);
-    setAiCtxChecklistOpen(false);
-    previewReqIdRef.current++;
-  }, [aiModal, gen, tiptapEditor]);
+    finishAIModalPanelState();
+  }, [aiModal, finishAIModalPanelState, gen, tiptapEditor]);
 
   // Safety: if the modal closes for any reason, re-enable editing.
   useEffect(() => {
@@ -936,6 +1019,7 @@ export function Workspace() {
     const parentContainer = currentTreeNode.parent_id
       ? allNodes.find((n) => n.id === currentTreeNode.parent_id && n.kind === "container")
       : undefined;
+    const copyEpisodeTarget = parentContainer ?? currentTreeNode;
     const chapterReference = currentTreeNode.kind === "leaf" && parentContainer ? parentContainer : currentTreeNode;
     const chapterSiblings = allNodes.filter(
       (n) => (n.parent_id ?? null) === (chapterReference.parent_id ?? null) && n.kind === "container",
@@ -1047,7 +1131,7 @@ export function Workspace() {
       id: "rename",
       section: sectionNode,
       label: t("workspace.command.renameNode"),
-      run: async () => { await handleRenameNode(currentTreeNode); },
+      run: () => { requestInlineRenameNode(currentTreeNode); },
     });
     cmds.push({
       id: "delete",
@@ -1113,6 +1197,20 @@ export function Workspace() {
           showToast(t("workspace.toast.exportFailed", { error: String(e) }));
         }
       },
+    });
+    if (outlinePreset.id === "webnovel") {
+      cmds.push({
+        id: "copy-episode-text",
+        section: sectionExport,
+        label: t("workspace.command.copyEpisodeText"),
+        run: async () => { await copyNodeText(copyEpisodeTarget); },
+      });
+    }
+    cmds.push({
+      id: "copy-scene-text",
+      section: sectionExport,
+      label: t("workspace.command.copySceneText"),
+      run: async () => { await copyNodeText(currentTreeNode); },
     });
     cmds.push({
       id: "go-settings",
@@ -1185,7 +1283,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, handleRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, showToast, language, t, toggleFactBook]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1208,6 +1306,20 @@ export function Workspace() {
   const aiContextSelection = aiOptions.context ?? DEFAULT_AI_CONTEXT_SELECTION;
   const aiContextPreview = contextPreview ?? FALLBACK_CONTEXT_PREVIEW;
   const aiContextItemCount = totalContextItems(aiContextPreview, aiContextSelection);
+  const isWebnovelProject = outlinePresetId === "webnovel";
+  const episodeCharTarget = load?.project.episode_char_target ?? 5000;
+  const currentEpisodeCharCount = useMemo(() => {
+    if (!load || !isWebnovelProject) return charCount;
+    const byId = new Map(flatten(load.tree).map((n) => [n.id, n] as const));
+    const current = byId.get(load.node.id);
+    if (!current) return charCount;
+    const episode = current.parent_id ? byId.get(current.parent_id) ?? current : current;
+    return Math.max(0, sumLeafChars(episode) - current.word_count + charCount);
+  }, [charCount, isWebnovelProject, load]);
+  const episodeStock = useMemo(
+    () => (load && isWebnovelProject ? countEpisodeStatus(load.tree) : null),
+    [isWebnovelProject, load],
+  );
 
   const tourSteps: OnboardingTourStep[] = [
     {
@@ -1224,11 +1336,6 @@ export function Workspace() {
       target: "workspace-context",
       title: t("onboarding.workspace.context.title"),
       body: t("onboarding.workspace.context.body"),
-    },
-    {
-      target: "workspace-ai",
-      title: t("onboarding.workspace.ai.title"),
-      body: t("onboarding.workspace.ai.body"),
     },
     {
       target: "workspace-companion",
@@ -1355,16 +1462,12 @@ export function Workspace() {
           <div className="ws-sep" />
           <button
             type="button"
-            className={`ws-tool${aiModal ? " is-active" : ""}`}
-            onClick={toggleAIModal}
-            data-tour="workspace-ai"
-          >
-            <Sparkles size={15} /> AI <span className="kbd">⌘I</span>
-          </button>
-          <button
-            type="button"
-            className={`ws-tool${companionOpen ? " is-active" : ""}`}
+            className={`ws-tool${companionOpen || aiModal ? " is-active" : ""}`}
             onClick={() => {
+              if (aiModal) {
+                closeAIModal();
+                return;
+              }
               setFactBookOpen(false);
               setCompanionOpen((v) => !v);
             }}
@@ -1397,16 +1500,21 @@ export function Workspace() {
           onToggleCollapse={() => setRailCollapsed((v) => !v)}
           onSelect={(n) => navigateToNode(n)}
           onRename={handleRenameNode}
+          renameRequest={outlineRenameRequest}
           onCreateScene={handleCreateSceneFromOutline}
           onCreatePart={handleCreatePartFromOutline}
           onCreateChapter={handleCreateChapterFromOutline}
+          onCopyText={copyNodeText}
           onMoveNodeUp={(node) => handleMoveSceneFromOutline(node, "up")}
           onMoveNodeDown={(node) => handleMoveSceneFromOutline(node, "down")}
+          onMoveNode={handleMoveNodeTo}
           onDeleteNode={handleDeleteSceneFromOutline}
+          onSetStatus={handleSetNodeStatus}
           onRepairOutline={handleRepairOutline}
           onUndoRepairOutline={handleUndoRepairOutline}
           canUndoRepair={Boolean(outlineUndoSnapshot)}
           outlinePresetId={outlinePresetId}
+          episodeCharTarget={episodeCharTarget}
           onOutlinePresetChange={handleOutlinePresetChange}
           tourTarget="workspace-outline"
         />
@@ -1426,7 +1534,7 @@ export function Workspace() {
             </h1>
             {load.node.title && <div className="scene-sub">{currentNodeLabel}</div>}
             <TiptapEditor
-              key={load.node.id}
+              key={`${load.node.id}:${load.node.content_version ?? load.node.updated_at}`}
               ref={editorRef}
               initialDoc={load.initialDoc}
               onChange={(doc) => {
@@ -1457,8 +1565,11 @@ export function Workspace() {
                 <button type="button" role="menuitem" onClick={runSelectionFactCheck}>
                   <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
                 </button>
-                <button type="button" role="menuitem" onClick={runSelectionAIReplace}>
-                  <Sparkles size={13} /> {t("workspace.selectionMenu.aiReplace")}
+                <button type="button" role="menuitem" onClick={runSelectionCompanionRewrite}>
+                  <MessageCircle size={13} /> {t("workspace.selectionMenu.companionRewrite")}
+                </button>
+                <button type="button" role="menuitem" onClick={runSelectionCompanionProofread}>
+                  <Sparkles size={13} /> {t("workspace.selectionMenu.aiProofread")}
                 </button>
               </div>
             )}
@@ -1466,60 +1577,79 @@ export function Workspace() {
           <div className="editor-foot">
             <span>{currentSceneTitle}</span>
             <span>·</span>
-            <span>{t("workspace.charCount", { count: charCount.toLocaleString(locale) })}</span>
+            {isWebnovelProject ? (
+              <>
+                <span>
+                  {t("workspace.episodeCharCount", {
+                    count: currentEpisodeCharCount.toLocaleString(locale),
+                    target: episodeCharTarget.toLocaleString(locale),
+                  })}
+                </span>
+                <span>·</span>
+                <span>{t("workspace.charCountWithSpaces")}</span>
+              </>
+            ) : (
+              <span>{t("workspace.charCount", { count: charCount.toLocaleString(locale) })}</span>
+            )}
           </div>
         </section>
-        {aiModal && load ? (
-          <AIPanel
-            mode={aiModal.mode}
-            canChooseMode={aiModal.canChooseMode}
-            options={aiOptions}
-            contextItemCount={aiContextItemCount}
-            contextPreview={aiContextPreview}
-            contextSelection={aiContextSelection}
-            variations={gen.variations}
-            currentIdx={gen.currentIdx}
-            status={gen.status}
-            onModeChange={(m) => {
-              setAiModal((s) => (s ? { ...s, mode: m } : s));
-              if (!tiptapEditor || !aiModal) return;
-              if (m === "replaceAll") {
-                tiptapEditor.commands.setAITarget("replaceAll", 1, tiptapEditor.state.doc.content.size);
-              } else if (m === "insert") {
-                tiptapEditor.commands.setAITarget("insert", aiModal.sel.from, aiModal.sel.from);
-              } else {
-                tiptapEditor.commands.setAITarget("replace", aiModal.sel.from, aiModal.sel.to);
-              }
-            }}
-            onOptionsChange={setAiOptions}
-            onContextSelectionChange={(context) => setAiOptions((opts) => ({ ...opts, context }))}
-            onRun={(promptText, variationsOn) => {
-              const selectionText =
-                aiModal.mode === "replace"
-                  ? tiptapEditor!.state.doc.textBetween(aiModal.sel.from, aiModal.sel.to, "\n")
-                  : "";
-              const args = {
-                nodeId: load.node.id,
-                prompt: promptText,
-                options: aiOptions,
-                selectionText,
-              };
-              if (variationsOn) gen.startVariations(args, 3);
-              else gen.start(args);
-            }}
-            onSwitch={gen.switchVariation}
-            onAccept={acceptAIModal}
-            onCancel={closeAIModal}
-            onContextClick={() => setAiCtxChecklistOpen((v) => !v)}
-            showChecklist={aiCtxChecklistOpen}
-          />
-        ) : companionOpen && load ? (
+        {(aiModal || companionOpen) && load ? (
           <CompanionPanel
             projectId={load.project.id}
             nodeIdRef={companionNodeRef}
             beforeSend={flushEditorBeforeCompanionSend}
             outlineStructure={outlineStructure}
-            onClose={() => { setCompanionOpen(false); focusEditor(); }}
+            selectionRewriteRequest={companionRewriteRequest}
+            aiDraft={aiModal ? {
+              mode: aiModal.mode,
+              canChooseMode: aiModal.canChooseMode,
+              options: aiOptions,
+              contextItemCount: aiContextItemCount,
+              contextPreview: aiContextPreview,
+              contextSelection: aiContextSelection,
+              variations: gen.variations,
+              currentIdx: gen.currentIdx,
+              status: gen.status,
+              onModeChange: (m) => {
+                setAiModal((s) => (s ? { ...s, mode: m } : s));
+                if (!tiptapEditor || !aiModal) return;
+                if (m === "replaceAll") {
+                  tiptapEditor.commands.setAITarget("replaceAll", 1, tiptapEditor.state.doc.content.size);
+                } else if (m === "insert") {
+                  tiptapEditor.commands.setAITarget("insert", aiModal.sel.from, aiModal.sel.from);
+                } else {
+                  tiptapEditor.commands.setAITarget("replace", aiModal.sel.from, aiModal.sel.to);
+                }
+              },
+              onOptionsChange: setAiOptions,
+              onContextSelectionChange: (context) => setAiOptions((opts) => ({ ...opts, context })),
+              onRun: (promptText, variationsOn) => {
+                const selectionText =
+                  aiModal.mode === "replace"
+                    ? tiptapEditor!.state.doc.textBetween(aiModal.sel.from, aiModal.sel.to, "\n")
+                    : "";
+                const args = {
+                  nodeId: load.node.id,
+                  prompt: promptText,
+                  options: aiOptions,
+                  selectionText,
+                };
+                if (variationsOn) gen.startVariations(args, 3);
+                else gen.start(args);
+              },
+              onSwitch: gen.switchVariation,
+              onAccept: acceptAIModal,
+              onCancel: closeAIModal,
+              onContextClick: () => setAiCtxChecklistOpen((v) => !v),
+              showChecklist: aiCtxChecklistOpen,
+            } : undefined}
+            onClose={() => {
+              if (aiModal) {
+                closeAIModal();
+              }
+              setCompanionOpen(false);
+              focusEditor();
+            }}
             onApplied={() => {
               if (!load) return;
               refreshTreeKeepNode(load.node.id);
@@ -1574,6 +1704,9 @@ export function Workspace() {
             project={load.project}
             node={load.node}
             charCount={charCount}
+            todayChars={todayChars}
+            episodeStock={episodeStock}
+            statsRefreshKey={saveCompletedAt}
             typewriter={typewriter}
             onToggleTypewriter={() => setTypewriter((v) => !v)}
             saveStatus={saveStatus}
@@ -1636,7 +1769,9 @@ export function Workspace() {
           initialDoc={load.initialDoc}
           initialSelection={savedSelectionRef.current}
           charCount={charCount}
+          episodeCharCount={currentEpisodeCharCount}
           sceneLabel={currentNodeLabel}
+          target={isWebnovelProject ? episodeCharTarget : 0}
           onChange={(doc) => { debouncedSave(doc); }}
           onCharCount={setCharCount}
           onManualSave={handleManualSave}

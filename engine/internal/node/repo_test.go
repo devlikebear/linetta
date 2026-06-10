@@ -4,8 +4,10 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/stats"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
@@ -25,6 +27,14 @@ func newStoreAndProject(t *testing.T) (*store.Store, project.Project) {
 		t.Fatalf("create project: %v", err)
 	}
 	return s, p
+}
+
+func textDoc(text string) string {
+	return `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + text + `"}]}]}`
+}
+
+func millisUTC(year int, month time.Month, day int) int64 {
+	return time.Date(year, month, day, 12, 0, 0, 0, time.UTC).UnixMilli()
 }
 
 func TestRepo_Get_firstLeaf(t *testing.T) {
@@ -80,6 +90,119 @@ func TestRepo_UpdateContent_updatesWordCount_andProjectCount(t *testing.T) {
 	}
 	if pp.UpdatedAt != 9999 {
 		t.Errorf("project.updated_at = %d, want 9999", pp.UpdatedAt)
+	}
+}
+
+func TestValidStatus_allowsPublished(t *testing.T) {
+	if !ValidStatus(StatusPublished) {
+		t.Fatalf("published status should be valid")
+	}
+}
+
+func TestRepo_SetStatus_updatesStatus(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	if err := r.SetStatus(ctx, *p.LastOpenedNodeID, StatusPublished, 5000); err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+
+	got, err := r.Get(ctx, *p.LastOpenedNodeID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Status != StatusPublished {
+		t.Errorf("status = %q, want %q", got.Status, StatusPublished)
+	}
+	if got.UpdatedAt != 5000 {
+		t.Errorf("updated_at = %d, want 5000", got.UpdatedAt)
+	}
+}
+
+func TestRepo_SetStatus_rejectsInvalidStatus(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+
+	err := r.SetStatus(context.Background(), *p.LastOpenedNodeID, "queued", 5000)
+	if err != ErrInvalidStatus {
+		t.Fatalf("err = %v, want ErrInvalidStatus", err)
+	}
+}
+
+func TestRepo_UpdateContent_recordsPositiveWritingStats(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	statRepo := stats.NewRepoWithLocation(s, time.UTC)
+	r.SetWritingStatsRecorder(statRepo)
+	ctx := context.Background()
+
+	if err := r.UpdateContent(ctx, *p.LastOpenedNodeID, textDoc("안녕"), millisUTC(2026, 6, 10)); err != nil {
+		t.Fatalf("UpdateContent 1: %v", err)
+	}
+	if err := r.UpdateContent(ctx, *p.LastOpenedNodeID, textDoc("안녕 세계"), millisUTC(2026, 6, 10)); err != nil {
+		t.Fatalf("UpdateContent 2: %v", err)
+	}
+
+	got, err := statRepo.GetDay(ctx, p.ID, "2026-06-10")
+	if err != nil {
+		t.Fatalf("GetDay: %v", err)
+	}
+	if got.CharsAdded != 5 {
+		t.Errorf("chars_added = %d, want 5", got.CharsAdded)
+	}
+}
+
+func TestRepo_UpdateContent_doesNotSubtractWritingStatsOnDeletion(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	statRepo := stats.NewRepoWithLocation(s, time.UTC)
+	r.SetWritingStatsRecorder(statRepo)
+	ctx := context.Background()
+
+	if err := r.UpdateContent(ctx, *p.LastOpenedNodeID, textDoc("안녕 세계"), millisUTC(2026, 6, 10)); err != nil {
+		t.Fatalf("UpdateContent 1: %v", err)
+	}
+	if err := r.UpdateContent(ctx, *p.LastOpenedNodeID, textDoc("안녕"), millisUTC(2026, 6, 10)); err != nil {
+		t.Fatalf("UpdateContent 2: %v", err)
+	}
+
+	got, err := statRepo.GetDay(ctx, p.ID, "2026-06-10")
+	if err != nil {
+		t.Fatalf("GetDay: %v", err)
+	}
+	if got.CharsAdded != 5 {
+		t.Errorf("chars_added = %d, want 5", got.CharsAdded)
+	}
+}
+
+func TestRepo_UpdateContent_splitsWritingStatsByLocalDay(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	statRepo := stats.NewRepoWithLocation(s, time.UTC)
+	r.SetWritingStatsRecorder(statRepo)
+	ctx := context.Background()
+
+	if err := r.UpdateContent(ctx, *p.LastOpenedNodeID, textDoc("하나"), millisUTC(2026, 6, 10)); err != nil {
+		t.Fatalf("UpdateContent 1: %v", err)
+	}
+	if err := r.UpdateContent(ctx, *p.LastOpenedNodeID, textDoc("하나둘"), millisUTC(2026, 6, 11)); err != nil {
+		t.Fatalf("UpdateContent 2: %v", err)
+	}
+
+	day1, err := statRepo.GetDay(ctx, p.ID, "2026-06-10")
+	if err != nil {
+		t.Fatalf("GetDay day1: %v", err)
+	}
+	if day1.CharsAdded != 2 {
+		t.Errorf("day1 chars_added = %d, want 2", day1.CharsAdded)
+	}
+	day2, err := statRepo.GetDay(ctx, p.ID, "2026-06-11")
+	if err != nil {
+		t.Fatalf("GetDay day2: %v", err)
+	}
+	if day2.CharsAdded != 1 {
+		t.Errorf("day2 chars_added = %d, want 1", day2.CharsAdded)
 	}
 }
 
@@ -312,6 +435,59 @@ func TestRepo_MoveUp_andMoveDown(t *testing.T) {
 	// MoveUp on the first-position node is a no-op (no error).
 	if err := r.MoveUp(ctx, list[0].ID, 6000); err != nil {
 		t.Errorf("MoveUp on first: %v", err)
+	}
+}
+
+func TestRepo_MoveTo_reordersWithinSameParent(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	first := *p.LastOpenedNodeID
+	second, _ := r.CreateSibling(ctx, first, "leaf", "씬 2", "", 2000)
+	third, _ := r.CreateSibling(ctx, second.ID, "leaf", "씬 3", "", 3000)
+
+	if err := r.MoveTo(ctx, third.ID, nil, 0, 4000); err != nil {
+		t.Fatalf("MoveTo third to first: %v", err)
+	}
+	list, _ := r.ListByProject(ctx, p.ID)
+	if list[0].Label != "씬 3" || list[1].Label != "씬 1" || list[2].Label != "씬 2" {
+		t.Fatalf("after MoveTo first = %q,%q,%q", list[0].Label, list[1].Label, list[2].Label)
+	}
+
+	if err := r.MoveTo(ctx, third.ID, nil, 2, 5000); err != nil {
+		t.Fatalf("MoveTo third to last: %v", err)
+	}
+	list, _ = r.ListByProject(ctx, p.ID)
+	if list[0].Label != "씬 1" || list[1].Label != "씬 2" || list[2].Label != "씬 3" {
+		t.Fatalf("after MoveTo last = %q,%q,%q", list[0].Label, list[1].Label, list[2].Label)
+	}
+}
+
+func TestRepo_MoveTo_movesIntoContainerAtOrdinal(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	rootScene := *p.LastOpenedNodeID
+	part, _ := r.CreateSibling(ctx, rootScene, "container", "1부", "", 2000)
+	first, _ := r.CreateChild(ctx, part.ID, "leaf", "씬 A", "", 3000)
+	second, _ := r.CreateChild(ctx, part.ID, "leaf", "씬 B", "", 4000)
+
+	if err := r.MoveTo(ctx, rootScene, &part.ID, 1, 5000); err != nil {
+		t.Fatalf("MoveTo root into part: %v", err)
+	}
+
+	children, _ := r.ListChildren(ctx, part.ID)
+	if len(children) != 3 {
+		t.Fatalf("children len = %d, want 3", len(children))
+	}
+	if children[0].ID != first.ID || children[1].ID != rootScene || children[2].ID != second.ID {
+		t.Fatalf("children order = %q,%q,%q", children[0].Label, children[1].Label, children[2].Label)
+	}
+	moved, _ := r.Get(ctx, rootScene)
+	if moved.ParentID == nil || *moved.ParentID != part.ID {
+		t.Fatalf("parent = %v, want %s", moved.ParentID, part.ID)
 	}
 }
 

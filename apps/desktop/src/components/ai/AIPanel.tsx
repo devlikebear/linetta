@@ -8,7 +8,7 @@ import { toneLabel, useI18n } from "../../lib/i18n";
 import { AIContextChecklistList } from "./AIContextChecklist";
 import "./AIPanel.css";
 
-interface Props {
+export interface AIDraftComposerProps {
   mode: CommitMode;
   canChooseMode: boolean; // true when no selection → show 삽입/전체교체 radio
   options: AIOptions;
@@ -29,7 +29,11 @@ interface Props {
   showChecklist: boolean;
 }
 
-export function AIPanel(props: Props) {
+interface AIDraftComposerChromeProps extends AIDraftComposerProps {
+  variant?: "panel" | "embedded";
+}
+
+export function AIDraftComposer({ variant = "embedded", ...props }: AIDraftComposerChromeProps) {
   const { language, t } = useI18n();
   const [prompt, setPrompt] = useState("");
   const [variationsOn, setVariationsOn] = useState(false);
@@ -93,150 +97,178 @@ export function AIPanel(props: Props) {
     }
   };
 
-  return (
-    <aside className="panel" onKeyDown={onKeyDown}>
-      <div className="panel-head">
-        <span className="ttl"><span className="ic"><Sparkles size={16} /></span> {t("ai.title")}</span>
-        <button type="button" className="panel-close" onClick={props.onCancel} aria-label={t("common.close")}><X size={16} /></button>
-      </div>
-
-      <div className="panel-scroll" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
-        <div className="ai-modes">
-          {props.canChooseMode ? (
-            <>
-              <button
-                type="button"
-                className={`ai-mode-pill${props.mode === "insert" ? " on" : ""}`}
-                onClick={() => props.onModeChange("insert")}
-                disabled={isRunning}
-              >
-                {t("ai.mode.insert")}
-              </button>
-              <button
-                type="button"
-                className={`ai-mode-pill${props.mode === "replaceAll" ? " on" : ""}`}
-                onClick={() => props.onModeChange("replaceAll")}
-                disabled={isRunning}
-              >
-                {t("ai.mode.replaceAll")}
-              </button>
-            </>
-          ) : (
-            <span className="ai-mode-pill on">{t("ai.mode.label", { mode: modeLabel(props.mode) })}</span>
-          )}
+  const body = (
+    <div
+      className={variant === "panel" ? "panel-scroll" : "companion-ai-draft-body"}
+      style={variant === "panel" ? { padding: 16, display: "flex", flexDirection: "column", gap: 14 } : undefined}
+    >
+      {variant === "embedded" && (
+        <div className="companion-ai-draft-title">
+          <Sparkles size={15} />
+          <span>{t("ai.title")}</span>
         </div>
-
-        <textarea
-          ref={textareaRef}
-          className={`ai-textarea${shake ? " shake" : ""}`}
-          placeholder={t("ai.promptPlaceholder")}
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={onTextareaKeyDown}
-          rows={3}
-          disabled={isRunning}
-        />
-
-        <div className="ai-chiprow">
-          <span className="chip">
-            <select
-              value={props.options.tone}
-              onChange={(e) => props.onOptionsChange({ ...props.options, tone: e.target.value as AIOptions["tone"] })}
+      )}
+      <div className="ai-modes">
+        {props.canChooseMode ? (
+          <>
+            <button
+              type="button"
+              className={`ai-mode-pill${props.mode === "insert" ? " on" : ""}`}
+              onClick={() => props.onModeChange("insert")}
               disabled={isRunning}
             >
-              {TONE_PRESETS.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {t("ai.tonePrefix", { tone: toneLabel(language, preset.id) })}
-                </option>
-              ))}
-            </select>
-          </span>
-          <button
-            type="button"
-            className={`chip${props.options.short_form ? " on" : ""}`}
-            onClick={() => props.onOptionsChange({ ...props.options, short_form: !props.options.short_form })}
-            aria-pressed={props.options.short_form}
-            disabled={isRunning}
-          >
-            {props.options.short_form ? t("ai.length.short") : t("ai.length.free")}
-          </button>
-          <button
-            type="button"
-            className={`chip${variationsOn ? " on" : ""}`}
-            onClick={() => setVariationsOn((v) => !v)}
-            aria-pressed={variationsOn}
-            title={t("ai.variationsTitle")}
-            disabled={isRunning}
-          >
-            {t("ai.variations")}
-          </button>
-          <button type="button" className="chip ctx" onClick={props.onContextClick}>
-            <Layers size={13} /> ctx {props.contextItemCount}
-          </button>
-        </div>
-
-        {props.showChecklist && (
-          <AIContextChecklistList
-            preview={props.contextPreview}
-            selection={props.contextSelection}
-            onSelectionChange={props.onContextSelectionChange}
-            disabled={isRunning}
-          />
-        )}
-
-        {isRunning && !current?.text && !current?.error ? (
-          <div className="ai-result">
-            <span className="ai-working">
-              <span className="ai-working-dot" aria-hidden="true" /> {t("ai.generating")}
-            </span>
-          </div>
-        ) : hasResult ? (
-          <div className="ai-result">
-            {current?.error ? (
-              <span className="ai-result-empty">{t("ai.error", { error: current.error })}</span>
-            ) : (
-              <>
-                {current?.text}
-                {isRunning && !current?.done && <span className="ai-cursor">&nbsp;</span>}
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="ai-result">
-            <span className="ai-result-empty">
-              {t("ai.emptyResult", { count: props.contextItemCount })}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="panel-foot">
-        {hasResult && props.variations.length > 1 && (
-          <div className="ai-nav">
-            <button type="button" onClick={() => props.onSwitch(-1)} aria-label={t("ai.prevVariation")}><ArrowLeft size={13} /></button>
-            <div className="ai-dots">
-              {props.variations.map((_, i) => (
-                <i key={i} className={i === props.currentIdx ? "on" : ""} />
-              ))}
-            </div>
-            <button type="button" onClick={() => props.onSwitch(1)} aria-label={t("ai.nextVariation")}><ArrowRight size={13} /></button>
-          </div>
-        )}
-        <span className="spacer" />
-        <button type="button" className="btn ghost sm" onClick={props.onCancel}>{t("common.cancel")}</button>
-        {!hasResult ? (
-          <button type="button" className="btn accent sm" onClick={run} disabled={!canRun}>
-            {t("ai.generate")} <span className="kbd" style={{ marginLeft: 4 }}>⌘↵</span>
-          </button>
-        ) : (
-          <>
-            <button type="button" className="btn ghost sm" onClick={run} title={t("ai.retry")} disabled={!canRun}>{t("ai.retry")}</button>
-            <button type="button" className="btn accent sm" onClick={props.onAccept} disabled={!acceptable}>
-              {t("ai.accept")} <span className="kbd" style={{ marginLeft: 4 }}>Tab</span>
+              {t("ai.mode.insert")}
+            </button>
+            <button
+              type="button"
+              className={`ai-mode-pill${props.mode === "replaceAll" ? " on" : ""}`}
+              onClick={() => props.onModeChange("replaceAll")}
+              disabled={isRunning}
+            >
+              {t("ai.mode.replaceAll")}
             </button>
           </>
+        ) : (
+          <span className="ai-mode-pill on">{t("ai.mode.label", { mode: modeLabel(props.mode) })}</span>
         )}
       </div>
-    </aside>
+
+      <textarea
+        ref={textareaRef}
+        className={`ai-textarea${shake ? " shake" : ""}`}
+        placeholder={t("ai.promptPlaceholder")}
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        onKeyDown={onTextareaKeyDown}
+        rows={3}
+        disabled={isRunning}
+      />
+
+      <div className="ai-chiprow">
+        <span className="chip">
+          <select
+            value={props.options.tone}
+            onChange={(e) => props.onOptionsChange({ ...props.options, tone: e.target.value as AIOptions["tone"] })}
+            disabled={isRunning}
+          >
+            {TONE_PRESETS.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {t("ai.tonePrefix", { tone: toneLabel(language, preset.id) })}
+              </option>
+            ))}
+          </select>
+        </span>
+        <button
+          type="button"
+          className={`chip${props.options.short_form ? " on" : ""}`}
+          onClick={() => props.onOptionsChange({ ...props.options, short_form: !props.options.short_form })}
+          aria-pressed={props.options.short_form}
+          disabled={isRunning}
+        >
+          {props.options.short_form ? t("ai.length.short") : t("ai.length.free")}
+        </button>
+        <button
+          type="button"
+          className={`chip${variationsOn ? " on" : ""}`}
+          onClick={() => setVariationsOn((v) => !v)}
+          aria-pressed={variationsOn}
+          title={t("ai.variationsTitle")}
+          disabled={isRunning}
+        >
+          {t("ai.variations")}
+        </button>
+        <button type="button" className="chip ctx" onClick={props.onContextClick}>
+          <Layers size={13} /> ctx {props.contextItemCount}
+        </button>
+      </div>
+
+      {props.showChecklist && (
+        <AIContextChecklistList
+          preview={props.contextPreview}
+          selection={props.contextSelection}
+          onSelectionChange={props.onContextSelectionChange}
+          disabled={isRunning}
+        />
+      )}
+
+      {isRunning && !current?.text && !current?.error ? (
+        <div className="ai-result">
+          <span className="ai-working">
+            <span className="ai-working-dot" aria-hidden="true" /> {t("ai.generating")}
+          </span>
+        </div>
+      ) : hasResult ? (
+        <div className="ai-result">
+          {current?.error ? (
+            <span className="ai-result-empty">{t("ai.error", { error: current.error })}</span>
+          ) : (
+            <>
+              {current?.text}
+              {isRunning && !current?.done && <span className="ai-cursor">&nbsp;</span>}
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="ai-result">
+          <span className="ai-result-empty">
+            {t("ai.emptyResult", { count: props.contextItemCount })}
+          </span>
+        </div>
+      )}
+    </div>
   );
+
+  const footer = (
+    <div className={variant === "panel" ? "panel-foot" : "companion-ai-draft-foot panel-foot"}>
+      {hasResult && props.variations.length > 1 && (
+        <div className="ai-nav">
+          <button type="button" onClick={() => props.onSwitch(-1)} aria-label={t("ai.prevVariation")}><ArrowLeft size={13} /></button>
+          <div className="ai-dots">
+            {props.variations.map((_, i) => (
+              <i key={i} className={i === props.currentIdx ? "on" : ""} />
+            ))}
+          </div>
+          <button type="button" onClick={() => props.onSwitch(1)} aria-label={t("ai.nextVariation")}><ArrowRight size={13} /></button>
+        </div>
+      )}
+      <span className="spacer" />
+      <button type="button" className="btn ghost sm" onClick={props.onCancel}>{t("common.cancel")}</button>
+      {!hasResult ? (
+        <button type="button" className="btn accent sm" onClick={run} disabled={!canRun}>
+          {t("ai.generate")} <span className="kbd" style={{ marginLeft: 4 }}>⌘↵</span>
+        </button>
+      ) : (
+        <>
+          <button type="button" className="btn ghost sm" onClick={run} title={t("ai.retry")} disabled={!canRun}>{t("ai.retry")}</button>
+          <button type="button" className="btn accent sm" onClick={props.onAccept} disabled={!acceptable}>
+            {t("ai.accept")} <span className="kbd" style={{ marginLeft: 4 }}>Tab</span>
+          </button>
+        </>
+      )}
+    </div>
+  );
+
+  if (variant === "panel") {
+    return (
+      <aside className="panel" onKeyDown={onKeyDown}>
+        <div className="panel-head">
+          <span className="ttl"><span className="ic"><Sparkles size={16} /></span> {t("ai.title")}</span>
+          <button type="button" className="panel-close" onClick={props.onCancel} aria-label={t("common.close")}><X size={16} /></button>
+        </div>
+        {body}
+        {footer}
+      </aside>
+    );
+  }
+
+  return (
+    <section className="companion-ai-draft-card" onKeyDown={onKeyDown}>
+      {body}
+      {footer}
+    </section>
+  );
+}
+
+export function AIPanel(props: AIDraftComposerProps) {
+  return <AIDraftComposer {...props} variant="panel" />;
 }

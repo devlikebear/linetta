@@ -1,0 +1,38 @@
+.stats-section {
+  --stats-level-1: color-mix(in srgb, var(--t-teal) 24%, var(--surface-3));
+  --stats-level-2: color-mix(in srgb, var(--t-teal) 44%, var(--surface-3));
+  --stats-level-3: color-mix(in srgb, var(--t-teal) 66%, var(--surface-3));
+  --stats-level-4: var(--t-teal);
+}
+
+.stats-heatmap {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 10px);
+  grid-auto-columns: 10px;
+  gap: 3px;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.stats-cell {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--surface-3);
+}
+
+.stats-cell.level-1 { background: var(--stats-level-1); }
+.stats-cell.level-2 { background: var(--stats-level-2); }
+.stats-cell.level-3 { background: var(--stats-level-3); }
+.stats-cell.level-4 { background: var(--stats-level-4); }
+
+.stats-summary {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}

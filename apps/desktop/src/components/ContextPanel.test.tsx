@@ -29,6 +29,10 @@ vi.mock("./PlotPanel", () => ({
   PlotPanel: () => <div data-testid="plot-panel" />,
 }));
 
+vi.mock("./StatsSection", () => ({
+  StatsSection: () => <div data-testid="stats-section" />,
+}));
+
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
@@ -46,6 +50,8 @@ const project: Project = {
   default_pov: "third_limited",
   style_notes: "",
   outline: "",
+  outline_preset: "novel",
+  episode_char_target: 5000,
   synopsis: "",
   word_count: 0,
   last_opened_node_id: "scene-1",
@@ -141,6 +147,44 @@ describe("ContextPanel", () => {
       expect(projects.clearSynopsis).toHaveBeenCalledWith("project-1");
     });
     expect(screen.getByLabelText("작품 시놉시스")).toHaveValue("");
+  });
+
+  it("lets web novel projects edit the episode character target", async () => {
+    const user = userEvent.setup();
+    const onProjectChanged = vi.fn();
+    vi.mocked(projects.update).mockResolvedValue({ ...project, outline_preset: "webnovel", episode_char_target: 5500 });
+
+    renderContextPanel({
+      project: { ...project, outline_preset: "webnovel", episode_char_target: 5000 },
+      onProjectChanged,
+    });
+
+    const target = screen.getByLabelText("회차 목표");
+    expect(target).toHaveValue("5000");
+
+    await user.clear(target);
+    await user.type(target, "5500");
+    await user.tab();
+
+    await waitFor(() => {
+      expect(projects.update).toHaveBeenCalledWith({ id: "project-1", episode_char_target: 5500 });
+    });
+    expect(onProjectChanged).toHaveBeenCalledWith({ ...project, outline_preset: "webnovel", episode_char_target: 5500 });
+  });
+
+  it("shows today's writing progress when loaded", async () => {
+    renderContextPanel({ todayChars: 1234 });
+
+    expect(await screen.findByText("오늘 1,234자")).toBeInTheDocument();
+  });
+
+  it("shows web novel episode stock counts", async () => {
+    renderContextPanel({
+      project: { ...project, outline_preset: "webnovel" },
+      episodeStock: { published: 1, stock: 2 },
+    });
+
+    expect(await screen.findByText("발행 1화 · 비축 2화")).toBeInTheDocument();
   });
 
   it("lets the project title be edited directly", async () => {

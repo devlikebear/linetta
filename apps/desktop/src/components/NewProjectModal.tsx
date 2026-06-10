@@ -1,9 +1,10 @@
 import { useState, useEffect, type FormEvent } from "react";
-import type { NewProjectInput, LengthTarget, DefaultPOV } from "../lib/types";
-import { defaultGenres, lengthLabel, povLabel, useI18n } from "../lib/i18n";
+import type { NewProjectInput, LengthTarget, DefaultPOV, OutlinePreset } from "../lib/types";
+import { defaultGenres, lengthLabel, povLabel, useI18n, webnovelGenres } from "../lib/i18n";
 
 const LENGTHS: LengthTarget[] = ["flash", "short", "novella", "novel", "series"];
 const POVS: DefaultPOV[] = ["first", "third_limited", "omniscient"];
+type ProjectKind = OutlinePreset;
 
 interface Props {
   open: boolean;
@@ -14,20 +15,24 @@ interface Props {
 export function NewProjectModal({ open, onClose, onSubmit }: Props) {
   const { language, t } = useI18n();
   const defaultGenreOptions = defaultGenres(language);
+  const webnovelGenreOptions = webnovelGenres(language);
   const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<ProjectKind>("webnovel");
   const [genres, setGenres] = useState<string[]>([]);
   const [customGenre, setCustomGenre] = useState("");
-  const [length, setLength] = useState<LengthTarget>("short");
+  const [length, setLength] = useState<LengthTarget>("series");
   const [pov, setPov] = useState<DefaultPOV>("first");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const genreOptions = kind === "webnovel" ? webnovelGenreOptions : defaultGenreOptions;
 
   useEffect(() => {
     if (!open) {
       setTitle("");
+      setKind("webnovel");
       setGenres([]);
       setCustomGenre("");
-      setLength("short");
+      setLength("series");
       setPov("first");
       setError(null);
     }
@@ -37,6 +42,13 @@ export function NewProjectModal({ open, onClose, onSubmit }: Props) {
 
   const toggleGenre = (g: string) => {
     setGenres((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
+  };
+
+  const switchKind = (nextKind: ProjectKind) => {
+    setKind(nextKind);
+    setGenres([]);
+    setCustomGenre("");
+    setLength(nextKind === "webnovel" ? "series" : "short");
   };
 
   const addCustomGenre = () => {
@@ -61,8 +73,9 @@ export function NewProjectModal({ open, onClose, onSubmit }: Props) {
       await onSubmit({
         title: title.trim(),
         genres,
-        length_target: length,
+        length_target: kind === "webnovel" ? "series" : length,
         default_pov: pov,
+        outline_preset: kind,
       });
     } catch (err) {
       setError(String(err));
@@ -78,14 +91,36 @@ export function NewProjectModal({ open, onClose, onSubmit }: Props) {
         <p className="modal-sub">{t("newProject.subtitle")}</p>
 
         <div className="modal-field">
-          <label>{t("newProject.titleLabel")}</label>
-          <input value={title} placeholder={t("newProject.titlePlaceholder")} onChange={(e) => setTitle(e.target.value)} autoFocus />
+          <label>{t("newProject.kind.label")}</label>
+          <div className="chips">
+            <button
+              type="button"
+              className={`chip${kind === "webnovel" ? " on" : ""}`}
+              onClick={() => switchKind("webnovel")}
+            >
+              {t("newProject.kind.webnovel")}
+            </button>
+            <button type="button" className={`chip${kind === "novel" ? " on" : ""}`} onClick={() => switchKind("novel")}>
+              {t("newProject.kind.novel")}
+            </button>
+          </div>
+        </div>
+
+        <div className="modal-field">
+          <label htmlFor="new-project-title">{t("newProject.titleLabel")}</label>
+          <input
+            id="new-project-title"
+            value={title}
+            placeholder={t("newProject.titlePlaceholder")}
+            onChange={(e) => setTitle(e.target.value)}
+            autoFocus
+          />
         </div>
 
         <div className="modal-field">
           <label>{t("newProject.genres")}</label>
           <div className="chips">
-            {[...defaultGenreOptions, ...genres.filter((g) => !defaultGenreOptions.includes(g))].map((g) => (
+            {[...genreOptions, ...genres.filter((g) => !genreOptions.includes(g))].map((g) => (
               <button
                 type="button"
                 key={g}
@@ -110,21 +145,23 @@ export function NewProjectModal({ open, onClose, onSubmit }: Props) {
           </div>
         </div>
 
-        <div className="modal-field">
-          <label>{t("newProject.length")}</label>
-          <div className="chips">
-            {LENGTHS.map((l) => (
-              <button
-                type="button"
-                key={l}
-                className={`chip${length === l ? " on" : ""}`}
-                onClick={() => setLength(l)}
-              >
-                {lengthLabel(language, l)}
-              </button>
-            ))}
+        {kind === "novel" && (
+          <div className="modal-field">
+            <label>{t("newProject.length")}</label>
+            <div className="chips">
+              {LENGTHS.map((l) => (
+                <button
+                  type="button"
+                  key={l}
+                  className={`chip${length === l ? " on" : ""}`}
+                  onClick={() => setLength(l)}
+                >
+                  {lengthLabel(language, l)}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="modal-field">
           <label>{t("newProject.pov")}</label>

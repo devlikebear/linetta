@@ -1,6 +1,7 @@
 // Mirrors engine/internal/project Project struct (JSON tag names).
 export type LengthTarget = "flash" | "short" | "novella" | "novel" | "series";
 export type DefaultPOV = "first" | "third_limited" | "omniscient";
+export type OutlinePreset = "novel" | "webnovel";
 
 export interface Project {
   id: string;
@@ -10,7 +11,8 @@ export interface Project {
   default_pov: DefaultPOV;
   style_notes: string;
   outline: string;
-  outline_preset?: string;
+  outline_preset?: OutlinePreset;
+  episode_char_target: number;
   synopsis: string;
   word_count: number;
   last_opened_node_id?: string;
@@ -23,7 +25,8 @@ export interface UpdateProjectInput {
   id: string;
   title?: string;
   outline?: string;
-  outline_preset?: string;
+  outline_preset?: OutlinePreset;
+  episode_char_target?: number;
   synopsis?: string;
 }
 
@@ -32,6 +35,22 @@ export interface NewProjectInput {
   genres: string[];
   length_target: LengthTarget;
   default_pov: DefaultPOV;
+  outline_preset?: OutlinePreset;
+}
+
+export interface WritingStatsToday {
+  chars_added: number;
+}
+
+export interface WritingStatsDay {
+  day: string;
+  chars_added: number;
+}
+
+export interface WritingStatsSummary {
+  today: number;
+  week_avg: number;
+  total_days: number;
 }
 
 export interface ListProjectsParams {
@@ -41,7 +60,7 @@ export interface ListProjectsParams {
 
 // Mirrors engine/internal/node Node struct.
 export type NodeKind = "container" | "leaf";
-export type NodeStatus = "draft" | "revision" | "final";
+export type NodeStatus = "draft" | "revision" | "final" | "published";
 
 export interface SearchResult {
   project_id: string;
@@ -65,6 +84,7 @@ export interface NodeRow {
   content_doc?: string; // raw JSON string for leaves
   status: NodeStatus;
   word_count: number;
+  content_version?: number;
   created_at: number;
   updated_at: number;
 }
@@ -309,12 +329,19 @@ export interface WebSearchTestResult {
   message: string;
 }
 
+export type ThemePreference = "system" | "light" | "dark";
+export type PlatformProfileId = "plain" | "munpia" | "series" | "joara";
+
 export interface Settings {
   language: AppLanguage;
   provider: ProviderID;
   providers?: Record<string, ProviderConfig>;
   typewriter_default: boolean;
   focus_default: boolean;
+  theme: ThemePreference;
+  editor_font_size: number;
+  editor_line_height: number;
+  copy_profile: PlatformProfileId;
   git_sync_dir: string;
   git_sync_commit_template: string;
   backup_dir: string;
@@ -332,6 +359,10 @@ export interface SettingsPatch {
   providers?: Record<string, ProviderConfig>;
   typewriter_default?: boolean;
   focus_default?: boolean;
+  theme?: ThemePreference;
+  editor_font_size?: number;
+  editor_line_height?: number;
+  copy_profile?: PlatformProfileId;
   git_sync_dir?: string;
   git_sync_commit_template?: string;
   safety_checklist_dismissed?: boolean;
@@ -351,6 +382,11 @@ export interface SnapshotEntry {
 export interface ExportPayload {
   markdown: string;
   suggested_filename: string;
+}
+
+export interface ExportTextPayload {
+  text: string;
+  char_count: number;
 }
 
 export interface ImportMarkdownResult {

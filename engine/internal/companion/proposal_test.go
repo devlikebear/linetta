@@ -108,6 +108,23 @@ func TestParseProposal_RememberRequiresText(t *testing.T) {
 	}
 }
 
+func TestParseProposal_SetSceneText(t *testing.T) {
+	p, present, err := ParseProposal(block(`{"summary":"씬 재작성","ops":[{"op":"set_scene_text","text":"새 본문"}]}`))
+	if !present || err != nil {
+		t.Fatalf("present=%v err=%v", present, err)
+	}
+	if len(p.Ops) != 1 || p.Ops[0].Type != "set_scene_text" || p.Ops[0].Text != "새 본문" {
+		t.Fatalf("p=%+v", p)
+	}
+}
+
+func TestParseProposal_SetSceneTextRejectsAccidentalEmpty(t *testing.T) {
+	_, present, err := ParseProposal(block(`{"ops":[{"op":"set_scene_text"}]}`))
+	if !present || err == nil {
+		t.Fatalf("expected text-required error, present=%v err=%v", present, err)
+	}
+}
+
 func TestParseProposal_AddBeatNodeIDOptional(t *testing.T) {
 	_, present, err := ParseProposal(block(`{"ops":[{"op":"create_thread","ref":"t1","name":"X"},{"op":"add_beat","thread_ref":"t1","label":"비트"}]}`))
 	if !present || err != nil {

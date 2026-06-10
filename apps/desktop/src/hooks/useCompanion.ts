@@ -36,6 +36,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
   const setReasoningBoth = (v: string) => { reasoningRef.current = v; setReasoning(v); };
   const [status, setStatus] = useState<CompanionStatus>("idle");
   const runIdRef = useRef<string | null>(null);
+  const sendingRef = useRef(false);
   const streamingRef = useRef("");
   const pendingProposalRef = useRef<CompanionProposal | null>(null);
   const pendingChoicesRef = useRef<CompanionChoices | null>(null);
@@ -106,6 +107,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setReasoningBoth("");
     setStatus("idle");
     runIdRef.current = null;
+    sendingRef.current = false;
   });
   useEngineEvent<CompanionError>("companion-error", (p) => {
     if (!acceptRunEvent(p.run_id)) return;
@@ -115,6 +117,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setReasoningBoth("");
     setStatus("idle");
     runIdRef.current = null;
+    sendingRef.current = false;
   });
   useEngineEvent<CompanionCancelled>("companion-cancelled", (p) => {
     if (!acceptRunEvent(p.run_id)) return;
@@ -123,11 +126,13 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setReasoningBoth("");
     setStatus("idle");
     runIdRef.current = null;
+    sendingRef.current = false;
   });
 
   const send = useCallback(async (text: string, images: CompanionImageAttachment[] = []) => {
     const trimmed = text.trim();
-    if (!trimmed || status === "streaming") return;
+    if (!trimmed || status === "streaming" || sendingRef.current) return;
+    sendingRef.current = true;
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setStatus("streaming");
     runIdRef.current = PENDING_RUN_ID;
@@ -152,6 +157,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
       setMessages((prev) => [...prev, { role: "assistant", content: String(e), errored: true }]);
       setStatus("idle");
       runIdRef.current = null;
+      sendingRef.current = false;
     }
   }, [projectId, status, nodeIdRef, contextSelection, outlineStructure]);
 
@@ -168,6 +174,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setReasoningBoth("");
     setStatus("idle");
     runIdRef.current = null;
+    sendingRef.current = false;
     pendingProposalRef.current = null;
     pendingChoicesRef.current = null;
   }, [projectId]);
@@ -180,6 +187,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     setReasoningBoth("");
     setStatus("idle");
     runIdRef.current = null;
+    sendingRef.current = false;
     pendingProposalRef.current = null;
     pendingChoicesRef.current = null;
   }, [projectId]);

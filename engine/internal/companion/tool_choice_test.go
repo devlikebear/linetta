@@ -20,6 +20,9 @@ func TestCompanionToolChoiceForUserText_ForcesApplyOpsForDirectMutations(t *test
 		"1부를 몇 편의 세부 씬으로 나눠줘",
 		"이 씬을 더 구체화해서 비트로 확장해줘",
 		"막연한 문장을 바탕으로 전체 아웃라인을 세워줘",
+		"현재 본문을 캐릭터에 맞게 재작성해줘",
+		"현재 원고를 플롯에 맞춰 다듬어줘",
+		"문장을 더 자연스럽게 수정해줘",
 	} {
 		tool := companionForcedToolForUserText(text)
 		if tool != applyOpsToolName {

@@ -45,6 +45,10 @@ func validWebSearchProviders() []string { return []string{"brave", "perplexity"}
 
 func validLanguages() []string { return []string{"ko", "en", "ja"} }
 
+func validThemes() []string { return []string{"system", "light", "dark"} }
+
+func validCopyProfiles() []string { return []string{"plain", "munpia", "series", "joara"} }
+
 // ProviderConfig holds per-provider settings keyed by provider id in Config.Providers.
 type ProviderConfig struct {
 	Model       string `json:"model,omitempty"`         // selected model id; empty => provider default
@@ -73,6 +77,10 @@ type Config struct {
 	Providers                 map[string]ProviderConfig `json:"providers,omitempty"`
 	TypewriterDefault         bool                      `json:"typewriter_default"`
 	FocusDefault              bool                      `json:"focus_default"`
+	Theme                     string                    `json:"theme"`
+	EditorFontSize            int                       `json:"editor_font_size"`
+	EditorLineHeight          float64                   `json:"editor_line_height"`
+	CopyProfile               string                    `json:"copy_profile"`
 	BackupDir                 string                    `json:"backup_dir,omitempty"`
 	GitSyncDir                string                    `json:"git_sync_dir"`
 	GitSyncCommitTemplate     string                    `json:"git_sync_commit_template"`
@@ -91,6 +99,10 @@ type Patch struct {
 	Providers                 map[string]ProviderConfig `json:"providers,omitempty"`
 	TypewriterDefault         *bool                     `json:"typewriter_default,omitempty"`
 	FocusDefault              *bool                     `json:"focus_default,omitempty"`
+	Theme                     *string                   `json:"theme,omitempty"`
+	EditorFontSize            *int                      `json:"editor_font_size,omitempty"`
+	EditorLineHeight          *float64                  `json:"editor_line_height,omitempty"`
+	CopyProfile               *string                   `json:"copy_profile,omitempty"`
 	GitSyncDir                *string                   `json:"git_sync_dir,omitempty"`
 	GitSyncCommitTemplate     *string                   `json:"git_sync_commit_template,omitempty"`
 	SafetyChecklistDismissed  *bool                     `json:"safety_checklist_dismissed,omitempty"`
@@ -141,6 +153,10 @@ func defaults(home string) Config {
 		Provider:              ProviderOpenAICodex,
 		Providers:             map[string]ProviderConfig{ProviderOpenAICodex: {Model: DefaultOpenAICodexModel}},
 		TypewriterDefault:     false,
+		Theme:                 "system",
+		EditorFontSize:        20,
+		EditorLineHeight:      1.92,
+		CopyProfile:           "plain",
 		BackupDir:             filepath.Join(home, "backups"),
 		OnboardingTourEnabled: true,
 		WebSearchProvider:     "brave",
@@ -174,6 +190,18 @@ func (s *Store) load() error {
 	}
 	s.cfg.TypewriterDefault = disk.TypewriterDefault
 	s.cfg.FocusDefault = disk.FocusDefault
+	if disk.Theme != "" && slices.Contains(validThemes(), disk.Theme) {
+		s.cfg.Theme = disk.Theme
+	}
+	if disk.EditorFontSize >= 15 && disk.EditorFontSize <= 22 {
+		s.cfg.EditorFontSize = disk.EditorFontSize
+	}
+	if disk.EditorLineHeight >= 1.6 && disk.EditorLineHeight <= 2.2 {
+		s.cfg.EditorLineHeight = disk.EditorLineHeight
+	}
+	if disk.CopyProfile != "" && slices.Contains(validCopyProfiles(), disk.CopyProfile) {
+		s.cfg.CopyProfile = disk.CopyProfile
+	}
 	s.cfg.GitSyncDir = disk.GitSyncDir
 	s.cfg.GitSyncCommitTemplate = disk.GitSyncCommitTemplate
 	s.cfg.SafetyChecklistDismissed = disk.SafetyChecklistDismissed
@@ -329,6 +357,30 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.FocusDefault != nil {
 		next.FocusDefault = *p.FocusDefault
 	}
+	if p.Theme != nil {
+		if !slices.Contains(validThemes(), *p.Theme) {
+			return Config{}, fmt.Errorf("settings: unknown theme %q", *p.Theme)
+		}
+		next.Theme = *p.Theme
+	}
+	if p.EditorFontSize != nil {
+		if *p.EditorFontSize < 15 || *p.EditorFontSize > 22 {
+			return Config{}, fmt.Errorf("settings: editor_font_size out of range")
+		}
+		next.EditorFontSize = *p.EditorFontSize
+	}
+	if p.EditorLineHeight != nil {
+		if *p.EditorLineHeight < 1.6 || *p.EditorLineHeight > 2.2 {
+			return Config{}, fmt.Errorf("settings: editor_line_height out of range")
+		}
+		next.EditorLineHeight = *p.EditorLineHeight
+	}
+	if p.CopyProfile != nil {
+		if !slices.Contains(validCopyProfiles(), *p.CopyProfile) {
+			return Config{}, fmt.Errorf("settings: unknown copy_profile %q", *p.CopyProfile)
+		}
+		next.CopyProfile = *p.CopyProfile
+	}
 	if p.GitSyncDir != nil {
 		next.GitSyncDir = *p.GitSyncDir
 	}
@@ -362,6 +414,7 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if next.Language == "" {
 		next.Language = "ko"
 	}
+	next = normalizeEditorPreferences(next)
 
 	if err := s.persist(next); err != nil {
 		return Config{}, err
@@ -382,6 +435,10 @@ func (s *Store) persist(next Config) error {
 		Providers:                 next.Providers,
 		TypewriterDefault:         next.TypewriterDefault,
 		FocusDefault:              next.FocusDefault,
+		Theme:                     next.Theme,
+		EditorFontSize:            next.EditorFontSize,
+		EditorLineHeight:          next.EditorLineHeight,
+		CopyProfile:               next.CopyProfile,
 		GitSyncDir:                next.GitSyncDir,
 		GitSyncCommitTemplate:     next.GitSyncCommitTemplate,
 		SafetyChecklistDismissed:  next.SafetyChecklistDismissed,
@@ -484,7 +541,24 @@ func normalizeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig
 	return cfg
 }
 
+func normalizeEditorPreferences(c Config) Config {
+	if !slices.Contains(validThemes(), c.Theme) {
+		c.Theme = "system"
+	}
+	if c.EditorFontSize < 15 || c.EditorFontSize > 22 {
+		c.EditorFontSize = 20
+	}
+	if c.EditorLineHeight < 1.6 || c.EditorLineHeight > 2.2 {
+		c.EditorLineHeight = 1.92
+	}
+	if !slices.Contains(validCopyProfiles(), c.CopyProfile) {
+		c.CopyProfile = "plain"
+	}
+	return c
+}
+
 func (s *Store) redactedSettingsView(c Config) Config {
+	c = normalizeEditorPreferences(c)
 	c = sanitizeConfigForMemory(c)
 	providers := map[string]ProviderConfig{}
 	for id, cfg := range c.Providers {

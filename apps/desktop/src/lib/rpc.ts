@@ -12,6 +12,7 @@ import type {
   EngineStatus,
   Entity,
   ExportPayload,
+  ExportTextPayload,
   FactCard,
   GitSyncInitResult,
   GitSyncResult,
@@ -28,6 +29,7 @@ import type {
   NewRelationshipPairInput,
   NewThreadInput,
   NodeRow,
+  NodeStatus,
   Note,
   OpsStatus,
   PlotSpine,
@@ -51,6 +53,9 @@ import type {
   UpdateRelationshipInput,
   UpdateThreadInput,
   WebSearchTestResult,
+  WritingStatsDay,
+  WritingStatsSummary,
+  WritingStatsToday,
 } from "./types";
 
 // Tauri commands defined in src-tauri.
@@ -124,6 +129,8 @@ export const nodes = {
     rpcCall<NodeRow>("nodes.create_child", { parent_id: parentId, kind, label, title }),
   moveToParent: (id: string, parentId: string) =>
     rpcCall<{ ok: true }>("nodes.move_to_parent", { id, parent_id: parentId }),
+  moveTo: (id: string, parentId: string | null, ordinal: number) =>
+    rpcCall<{ ok: true }>("nodes.move_to", { id, parent_id: parentId, ordinal }),
   moveToRoot: (id: string) =>
     rpcCall<{ ok: true }>("nodes.move_to_root", { id }),
   convertToContainer: (id: string) =>
@@ -135,6 +142,16 @@ export const nodes = {
   delete: (id: string) => rpcCall<{ ok: true }>("nodes.delete", { id }),
   moveUp: (id: string) => rpcCall<{ ok: true }>("nodes.move_up", { id }),
   moveDown: (id: string) => rpcCall<{ ok: true }>("nodes.move_down", { id }),
+  setStatus: (id: string, status: NodeStatus) =>
+    rpcCall<{ ok: true }>("nodes.set_status", { id, status }),
+};
+
+export const stats = {
+  today: (projectId: string) => rpcCall<WritingStatsToday>("stats.today", { project_id: projectId }),
+  range: (projectId: string, fromDay: string, toDay: string) =>
+    rpcCall<WritingStatsDay[]>("stats.range", { project_id: projectId, from_day: fromDay, to_day: toDay }),
+  summary: (projectId: string) =>
+    rpcCall<WritingStatsSummary>("stats.summary", { project_id: projectId }),
 };
 
 export const snapshots = {
@@ -168,6 +185,8 @@ export const exportApi = {
     rpcCall<ExportPayload>("export.project", { project_id: projectId }),
   node: (nodeId: string) =>
     rpcCall<ExportPayload>("export.node", { node_id: nodeId }),
+  nodeText: (nodeId: string) =>
+    rpcCall<ExportTextPayload>("export.nodeText", { node_id: nodeId }),
 };
 
 export const imports = {
