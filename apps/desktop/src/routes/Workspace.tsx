@@ -41,6 +41,7 @@ import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useToast } from "../components/ToastProvider";
 import { displayNodeLabel, localeForLanguage, useI18n } from "../lib/i18n";
 import { outlineNumberLabel, outlinePresetById, outlineRoleName, repairOutlineTree, type OutlinePresetId } from "../lib/outlineRepair";
+import { findEpisodeNode } from "../lib/outlineEpisode";
 import { planChapterCreation, type CreateNodeStep } from "../lib/outlineCreate";
 import { normalizePlatformProfile, transformPlatformText } from "../lib/platformProfiles";
 import {
@@ -1310,12 +1311,11 @@ export function Workspace() {
   const episodeCharTarget = load?.project.episode_char_target ?? 5000;
   const currentEpisodeCharCount = useMemo(() => {
     if (!load || !isWebnovelProject) return charCount;
-    const byId = new Map(flatten(load.tree).map((n) => [n.id, n] as const));
-    const current = byId.get(load.node.id);
-    if (!current) return charCount;
-    const episode = current.parent_id ? byId.get(current.parent_id) ?? current : current;
+    const current = flatten(load.tree).find((n) => n.id === load.node.id);
+    const episode = findEpisodeNode(load.tree, load.node.id, outlinePreset);
+    if (!current || !episode) return charCount;
     return Math.max(0, sumLeafChars(episode) - current.word_count + charCount);
-  }, [charCount, isWebnovelProject, load]);
+  }, [charCount, isWebnovelProject, load, outlinePreset]);
   const episodeStock = useMemo(
     () => (load && isWebnovelProject ? countEpisodeStatus(load.tree) : null),
     [isWebnovelProject, load],

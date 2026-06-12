@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.14 - 2026-06-12
+
+- Fixed the "이번 화" character count in the editor footer and ZEN mode summing the whole 권 when writing in a leaf episode created directly under an arc.
+- Showed the episode character gauge on leaf episodes in the outline rail, matching container episodes.
+- Seeded new webnovel projects with a `1권 > 1화` outline instead of a root `씬 1` so the first keystroke lands in an episode.
+
 ## v0.4.12 - 2026-06-07
 
 - Fixed the Windows desktop build that broke in v0.4.11: bumped the bundled `tars` engine to v0.34.0, whose `claude-code-cli` process-teardown used unix-only syscalls. Updated to tars v0.34.1, which builds for Windows again. macOS and Linux were unaffected.

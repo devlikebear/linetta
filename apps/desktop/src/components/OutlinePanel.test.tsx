@@ -534,6 +534,60 @@ describe("OutlinePanel", () => {
     expect(screen.queryByText("1,500 / 1,500")).not.toBeInTheDocument();
   });
 
+  it("shows episode progress for direct leaf episodes under an arc", () => {
+    const episode: TreeNode = {
+      ...scene,
+      id: "episode-leaf",
+      parent_id: "arc-1",
+      label: "1화",
+      title: "경계의 틈",
+      word_count: 2500,
+    };
+    const arc: TreeNode = {
+      ...chapter,
+      id: "arc-1",
+      label: "1권",
+      children: [episode],
+    };
+
+    renderOutline({
+      tree: [arc],
+      currentId: "episode-leaf",
+      outlinePresetId: "webnovel",
+      episodeCharTarget: 5000,
+    });
+
+    expect(screen.getByText("2,500 / 5,000")).toBeInTheDocument();
+    expect(document.querySelector(".episode-meter-fill.is-complete")).not.toBeInTheDocument();
+  });
+
+  it("keeps the plain word count on scene leaves inside an episode", () => {
+    const episode: TreeNode = {
+      ...chapter,
+      id: "episode-1",
+      parent_id: "part-1",
+      label: "1화",
+      children: [{ ...scene, id: "scene-a", parent_id: "episode-1", word_count: 1200 }],
+    };
+    const part: TreeNode = {
+      ...chapter,
+      id: "part-1",
+      label: "1권",
+      children: [episode],
+    };
+
+    renderOutline({
+      tree: [part],
+      currentId: "scene-a",
+      outlinePresetId: "webnovel",
+      episodeCharTarget: 5000,
+    });
+
+    expect(screen.getByText("1200")).toBeInTheDocument();
+    expect(screen.getByText("1,200 / 5,000")).toBeInTheDocument();
+    expect(screen.queryAllByText(/\/ 5,000/)).toHaveLength(1);
+  });
+
   it("renders the outline chrome and menu actions in English when selected", async () => {
     const user = userEvent.setup();
     const onRename = vi.fn().mockResolvedValue(undefined);

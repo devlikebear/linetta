@@ -73,7 +73,25 @@ VALUES (?, ?, ?, ?, ?, '', '', ?, 0, ?, ?, ?)`,
 	}
 	// Empty Tiptap doc: single empty paragraph.
 	const emptyDoc = `{"type":"doc","content":[{"type":"paragraph"}]}`
-	if _, err := tx.ExecContext(ctx, `
+	if outlinePreset == OutlinePresetWebNovel {
+		// Webnovel projects open on a 1화 episode leaf under a 1권 arc so the
+		// outline matches the preset from the first keystroke.
+		arcID := uuid.NewString()
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
+                   content_doc, status, word_count, created_at, updated_at)
+VALUES (?, ?, NULL, 0, 'container', '1권', '', NULL, 'draft', 0, ?, ?)`,
+			arcID, projectID, now, now); err != nil {
+			return Project{}, err
+		}
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
+                   content_doc, status, word_count, created_at, updated_at)
+VALUES (?, ?, ?, 0, 'leaf', '1화', '', ?, 'draft', 0, ?, ?)`,
+			nodeID, projectID, arcID, emptyDoc, now, now); err != nil {
+			return Project{}, err
+		}
+	} else if _, err := tx.ExecContext(ctx, `
 INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
                    content_doc, status, word_count, created_at, updated_at)
 VALUES (?, ?, NULL, 0, 'leaf', '씬 1', '', ?, 'draft', 0, ?, ?)`,

@@ -304,6 +304,7 @@ export function OutlinePanel({
             canOpenMenu={canOpenMenu}
             showEpisodeProgress={showEpisodeProgress}
             episodeCharTarget={episodeCharTarget}
+            outlinePreset={outlinePreset}
             editingNodeId={editingNodeId}
             onCommitRename={onRename ? commitRename : undefined}
             onCancelRename={() => setEditingNodeId(null)}
@@ -504,6 +505,7 @@ function RailNode({
   canOpenMenu,
   showEpisodeProgress,
   episodeCharTarget,
+  outlinePreset,
   editingNodeId,
   onCommitRename,
   onCancelRename,
@@ -522,6 +524,7 @@ function RailNode({
   canOpenMenu: (n: TreeNode) => boolean;
   showEpisodeProgress: boolean;
   episodeCharTarget: number;
+  outlinePreset: OutlineStructurePreset;
   editingNodeId: string | null;
   onCommitRename?: (node: TreeNode, title: string) => Promise<void>;
   onCancelRename: () => void;
@@ -551,8 +554,34 @@ function RailNode({
     />
   );
 
+  // Episode-like nodes get the char gauge: non-root containers (화 holding
+  // scenes) and leaves whose label matches the preset's episode pattern
+  // (leaf 화 created directly under a 권 by the webnovel preset).
+  const isEpisode =
+    showEpisodeProgress &&
+    (node.kind === "leaf"
+      ? isStructuralChapterLabel(node.label, outlinePreset)
+      : depth > 0);
+  const episodeChars = isEpisode ? sumLeafChars(node) : 0;
+  const normalizedTarget = Math.max(1, episodeCharTarget);
+  const episodePercent = Math.min(100, Math.round((episodeChars / normalizedTarget) * 100));
+  const episodeProgress = isEpisode ? (
+    <span className="episode-progress">
+      <span className="episode-count">
+        {episodeChars.toLocaleString(language)} / {normalizedTarget.toLocaleString(language)}
+      </span>
+      <span className="episode-meter" aria-hidden="true">
+        <span
+          className={`episode-meter-fill${episodeChars >= normalizedTarget ? " is-complete" : ""}`}
+          style={{ width: `${episodePercent}%` }}
+        />
+      </span>
+    </span>
+  ) : null;
+
   if (node.kind === "leaf") {
     const active = node.id === currentId;
+    const trailing = episodeProgress ?? <span className="sc-words">{node.word_count}</span>;
     return (
       <div
         className={`tree-scene-row${active ? " active" : ""}${dragClass}`}
@@ -568,7 +597,7 @@ function RailNode({
             <StatusDot status={node.status} />
             <span className="sc-label">{label}</span>
             {titleEditor}
-            <span className="sc-words">{node.word_count}</span>
+            {trailing}
           </div>
         ) : (
           <button
@@ -579,7 +608,7 @@ function RailNode({
             <StatusDot status={node.status} />
             <span className="sc-label">{label}</span>
             <span className="sc-title">{node.title}</span>
-            <span className="sc-words">{node.word_count}</span>
+            {trailing}
           </button>
         )}
         {hasMenu && (
@@ -598,23 +627,6 @@ function RailNode({
   }
 
   // Containers: top-level → part header, otherwise chapter header.
-  const episodeChars = showEpisodeProgress && depth > 0 ? sumLeafChars(node) : 0;
-  const normalizedTarget = Math.max(1, episodeCharTarget);
-  const episodePercent = Math.min(100, Math.round((episodeChars / normalizedTarget) * 100));
-  const episodeProgress =
-    showEpisodeProgress && depth > 0 ? (
-      <span className="episode-progress">
-        <span className="episode-count">
-          {episodeChars.toLocaleString(language)} / {normalizedTarget.toLocaleString(language)}
-        </span>
-        <span className="episode-meter" aria-hidden="true">
-          <span
-            className={`episode-meter-fill${episodeChars >= normalizedTarget ? " is-complete" : ""}`}
-            style={{ width: `${episodePercent}%` }}
-          />
-        </span>
-      </span>
-    ) : null;
   const header =
     depth === 0 ? (
       <div
@@ -691,6 +703,7 @@ function RailNode({
           canOpenMenu={canOpenMenu}
           showEpisodeProgress={showEpisodeProgress}
           episodeCharTarget={episodeCharTarget}
+          outlinePreset={outlinePreset}
           editingNodeId={editingNodeId}
           onCommitRename={onCommitRename}
           onCancelRename={onCancelRename}

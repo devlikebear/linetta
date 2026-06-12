@@ -93,6 +93,76 @@ func TestRepo_Create_acceptsOutlinePreset(t *testing.T) {
 	}
 }
 
+func TestRepo_Create_webnovelSeedsArcAndEpisode(t *testing.T) {
+	s := openStore(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	p, err := r.Create(ctx, 1000, NewInput{
+		Title:         "연재작",
+		Genres:        []string{"현대판타지"},
+		LengthTarget:  "series",
+		DefaultPOV:    "third_limited",
+		OutlinePreset: OutlinePresetWebNovel,
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if p.LastOpenedNodeID == nil || *p.LastOpenedNodeID == "" {
+		t.Fatal("Create: last_opened_node_id should point to the seeded episode")
+	}
+
+	// The opened node is the 1화 leaf under a 1권 root container.
+	var (
+		episodeLabel, episodeKind string
+		episodeParent             *string
+	)
+	err = s.DB().QueryRowContext(ctx, `
+SELECT label, kind, parent_id FROM nodes WHERE id = ?`, *p.LastOpenedNodeID).
+		Scan(&episodeLabel, &episodeKind, &episodeParent)
+	if err != nil {
+		t.Fatalf("episode row: %v", err)
+	}
+	if episodeKind != "leaf" {
+		t.Errorf("episode.kind = %q, want leaf", episodeKind)
+	}
+	if episodeLabel != "1화" {
+		t.Errorf("episode.label = %q, want %q", episodeLabel, "1화")
+	}
+	if episodeParent == nil {
+		t.Fatal("episode.parent_id should reference the seeded arc container")
+	}
+
+	var (
+		arcLabel, arcKind string
+		arcParent         *string
+	)
+	err = s.DB().QueryRowContext(ctx, `
+SELECT label, kind, parent_id FROM nodes WHERE id = ?`, *episodeParent).
+		Scan(&arcLabel, &arcKind, &arcParent)
+	if err != nil {
+		t.Fatalf("arc row: %v", err)
+	}
+	if arcKind != "container" {
+		t.Errorf("arc.kind = %q, want container", arcKind)
+	}
+	if arcLabel != "1권" {
+		t.Errorf("arc.label = %q, want %q", arcLabel, "1권")
+	}
+	if arcParent != nil {
+		t.Errorf("arc.parent_id = %v, want root", *arcParent)
+	}
+
+	var nodeCount int
+	if err := s.DB().QueryRowContext(ctx, `
+SELECT COUNT(*) FROM nodes WHERE project_id = ?`, p.ID).Scan(&nodeCount); err != nil {
+		t.Fatalf("count nodes: %v", err)
+	}
+	if nodeCount != 2 {
+		t.Errorf("node count = %d, want 2", nodeCount)
+	}
+}
+
 func TestRepo_Create_rejectsInvalidLengthAndPOV(t *testing.T) {
 	s := openStore(t)
 	r := NewRepo(s)
