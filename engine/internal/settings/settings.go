@@ -496,7 +496,7 @@ func (s *Store) applyProviderSecretPatch(provider string, cfg *ProviderConfig) e
 		cfg.APIKeySet = true
 	default:
 		cfg.APIKey = ""
-		_, ok, err := s.secrets.Get(providerAPIKeySecretName(provider))
+		ok, err := s.secrets.Exists(providerAPIKeySecretName(provider))
 		if err != nil {
 			return err
 		}
@@ -562,7 +562,7 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	c = sanitizeConfigForMemory(c)
 	providers := map[string]ProviderConfig{}
 	for id, cfg := range c.Providers {
-		_, ok, err := s.secrets.Get(providerAPIKeySecretName(id))
+		ok, err := s.secrets.Exists(providerAPIKeySecretName(id))
 		if err == nil {
 			cfg.APIKeySet = ok
 		}
@@ -570,7 +570,7 @@ func (s *Store) redactedSettingsView(c Config) Config {
 		providers[id] = cfg
 	}
 	c.Providers = providers
-	_, webKeySet, err := s.secrets.Get(webSearchAPIKeySecretName)
+	webKeySet, err := s.secrets.Exists(webSearchAPIKeySecretName)
 	if err == nil {
 		c.WebSearchAPIKeySet = webKeySet
 	}

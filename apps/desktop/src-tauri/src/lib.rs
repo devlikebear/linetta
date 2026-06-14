@@ -2,8 +2,11 @@ mod engine;
 mod jsonrpc;
 
 use serde_json::Value;
+use std::time::Duration;
 use std::{process::Command, sync::Arc};
 use tauri::Manager;
+
+const ENGINE_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub fn run() {
     tauri::Builder::default()
@@ -101,7 +104,25 @@ async fn engine_status(state: tauri::State<'_, EngineState>) -> Result<EngineSta
             migration_count: None,
         });
     };
-    match client.call("diagnostics.version", None).await {
+    if let Err(e) = client
+        .call_with_timeout("ping", None, ENGINE_STATUS_TIMEOUT)
+        .await
+    {
+        return Ok(EngineStatus {
+            ok: false,
+            error: Some(e.to_string()),
+            version: None,
+            home: None,
+            db_path: None,
+            migration_version: None,
+            migration_count: None,
+        });
+    }
+
+    match client
+        .call_with_timeout("diagnostics.version", None, ENGINE_STATUS_TIMEOUT)
+        .await
+    {
         Ok(v) => Ok(EngineStatus {
             ok: true,
             error: None,
@@ -112,8 +133,8 @@ async fn engine_status(state: tauri::State<'_, EngineState>) -> Result<EngineSta
             migration_count: opt_i64(&v, "migration_count"),
         }),
         Err(e) => Ok(EngineStatus {
-            ok: false,
-            error: Some(e.to_string()),
+            ok: true,
+            error: Some(format!("diagnostics unavailable: {e}")),
             version: None,
             home: None,
             db_path: None,

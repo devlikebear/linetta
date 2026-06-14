@@ -80,10 +80,10 @@ func (s *Server) Handle(method string, h Handler) {
 	s.handlers[method] = h
 }
 
-// Serve reads one message at a time from r and writes responses to w. It
-// returns io.EOF when r is exhausted. Notifications (id == nil) never get a
-// response. Each request is dispatched on the calling goroutine — concurrency
-// is the writer's responsibility to add later if needed.
+// Serve reads messages from r and writes responses to w. It returns io.EOF when
+// r is exhausted. Notifications (id == nil) never get a response. Requests are
+// dispatched concurrently so a long-running handler cannot block unrelated
+// calls such as ping or diagnostics.
 func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	codec := NewCodec(r, w)
 	s.writeMu.Lock()
@@ -95,6 +95,7 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 		s.writeMu.Unlock()
 	}()
 
+	var wg sync.WaitGroup
 	write := func(m Message) {
 		s.writeMu.Lock()
 		defer s.writeMu.Unlock()
@@ -104,6 +105,7 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	for {
 		msg, err := codec.Read()
 		if errors.Is(err, io.EOF) {
+			wg.Wait()
 			return io.EOF
 		}
 		if err != nil {
@@ -123,19 +125,23 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 			continue
 		}
 
-		result, herr := h(ctx, msg.Params)
-		if isNotification {
-			continue
-		}
-		if herr != nil {
-			var me *MethodError
-			if errors.As(herr, &me) {
-				write(Message{ID: msg.ID, Error: &Error{Code: me.Code, Message: me.Message, Data: me.Data}})
-			} else {
-				write(Message{ID: msg.ID, Error: &Error{Code: CodeInternalError, Message: herr.Error()}})
+		wg.Add(1)
+		go func(id json.RawMessage, params json.RawMessage, notification bool, h Handler) {
+			defer wg.Done()
+			result, herr := h(ctx, params)
+			if notification {
+				return
 			}
-			continue
-		}
-		write(Message{ID: msg.ID, Result: result})
+			if herr != nil {
+				var me *MethodError
+				if errors.As(herr, &me) {
+					write(Message{ID: id, Error: &Error{Code: me.Code, Message: me.Message, Data: me.Data}})
+				} else {
+					write(Message{ID: id, Error: &Error{Code: CodeInternalError, Message: herr.Error()}})
+				}
+			} else {
+				write(Message{ID: id, Result: result})
+			}
+		}(msg.ID, msg.Params, isNotification, h)
 	}
 }

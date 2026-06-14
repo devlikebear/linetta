@@ -369,6 +369,36 @@ func TestSet_webSearchConfig_persists(t *testing.T) {
 	}
 }
 
+func TestGetUsesSecretPresenceWithoutReadingSecretValues(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	secrets := &countingSecretStore{data: map[string]string{
+		providerAPIKeySecretName(ProviderAnthropic): "provider-secret",
+		webSearchAPIKeySecretName:                   "web-secret",
+	}}
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("NewWithSecretStore: %v", err)
+	}
+	s.mu.Lock()
+	s.cfg.Providers[ProviderAnthropic] = ProviderConfig{Model: "claude-3"}
+	s.mu.Unlock()
+
+	got, err := s.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.Providers[ProviderAnthropic].APIKey != "" || got.WebSearchAPIKey != "" {
+		t.Fatalf("settings view leaked secrets: %+v", got)
+	}
+	if !got.Providers[ProviderAnthropic].APIKeySet || !got.WebSearchAPIKeySet {
+		t.Fatalf("secret presence flags missing: %+v", got)
+	}
+	if secrets.getCount != 0 {
+		t.Fatalf("Get read secret values %d times; settings view should only check presence", secrets.getCount)
+	}
+}
+
 func TestSet_rejectsUnknownWebSearchProvider(t *testing.T) {
 	s := newStoreOnTemp(t)
 	if _, err := s.Set(context.Background(), Patch{WebSearchProvider: strPtr("unknown")}); err == nil {
@@ -586,4 +616,44 @@ func TestSetClearsStoredSecrets(t *testing.T) {
 	if s.ProviderConfigFor("anthropic").APIKey != "" || s.WebSearchAPIKey() != "" {
 		t.Fatalf("runtime secrets not cleared")
 	}
+}
+
+type countingSecretStore struct {
+	mu          sync.Mutex
+	data        map[string]string
+	getCount    int
+	existsCount int
+}
+
+func (s *countingSecretStore) Get(name string) (string, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.getCount++
+	v, ok := s.data[name]
+	return v, ok, nil
+}
+
+func (s *countingSecretStore) Set(name, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.data == nil {
+		s.data = map[string]string{}
+	}
+	s.data[name] = value
+	return nil
+}
+
+func (s *countingSecretStore) Delete(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.data, name)
+	return nil
+}
+
+func (s *countingSecretStore) Exists(name string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.existsCount++
+	_, ok := s.data[name]
+	return ok, nil
 }

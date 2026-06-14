@@ -14,6 +14,7 @@ func providerAPIKeySecretName(provider string) string {
 // SecretStore persists credentials outside settings.json.
 type SecretStore interface {
 	Get(name string) (value string, ok bool, err error)
+	Exists(name string) (ok bool, err error)
 	Set(name, value string) error
 	Delete(name string) error
 }
@@ -33,6 +34,13 @@ func (m *memorySecretStore) Get(name string) (string, bool, error) {
 	defer m.mu.Unlock()
 	v, ok := m.data[name]
 	return v, ok, nil
+}
+
+func (m *memorySecretStore) Exists(name string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.data[name]
+	return ok, nil
 }
 
 func (m *memorySecretStore) Set(name, value string) error {

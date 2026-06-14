@@ -123,5 +123,6 @@ type failingSecretStore struct {
 }
 
 func (f failingSecretStore) Get(string) (string, bool, error) { return "", false, f.err }
+func (f failingSecretStore) Exists(string) (bool, error)      { return false, f.err }
 func (f failingSecretStore) Set(string, string) error         { return nil }
 func (f failingSecretStore) Delete(string) error              { return nil }

@@ -55,6 +55,15 @@ func (k keychainSecretStore) Get(name string) (string, bool, error) {
 	return string(C.GoBytes(passwordData, C.int(passwordLen))), true, nil
 }
 
+func (k keychainSecretStore) Exists(name string) (bool, error) {
+	item, ok, err := k.findItem(name)
+	if err != nil || !ok {
+		return ok, err
+	}
+	defer C.CFRelease(C.CFTypeRef(item))
+	return true, nil
+}
+
 func (k keychainSecretStore) Set(name, value string) error {
 	if value == "" {
 		return k.Delete(name)

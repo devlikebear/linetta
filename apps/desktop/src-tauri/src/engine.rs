@@ -207,8 +207,9 @@ mod tests {
             "linetta-engine-aarch64-apple-darwin",
         );
         assert!(
-            candidates.iter().any(|p| p
-                .ends_with("binaries/linetta-engine-aarch64-apple-darwin")),
+            candidates
+                .iter()
+                .any(|p| p.ends_with("binaries/linetta-engine-aarch64-apple-darwin")),
             "dev binaries path missing from candidates: {candidates:?}"
         );
     }

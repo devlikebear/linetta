@@ -131,6 +131,16 @@ impl Client {
     }
 
     pub async fn call(&self, method: &str, params: Option<Value>) -> Result<Value> {
+        self.call_with_timeout(method, params, self.call_timeout)
+            .await
+    }
+
+    pub async fn call_with_timeout(
+        &self,
+        method: &str,
+        params: Option<Value>,
+        timeout: Duration,
+    ) -> Result<Value> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
         self.pending.lock().await.insert(id, tx);
@@ -157,16 +167,13 @@ impl Client {
             }
         }
 
-        match tokio::time::timeout(self.call_timeout, rx).await {
+        match tokio::time::timeout(timeout, rx).await {
             Ok(Ok(Ok(v))) => Ok(v),
             Ok(Ok(Err(e))) => Err(anyhow!("rpc error {}: {}", e.code, e.message)),
             Ok(Err(_)) => Err(anyhow!("rpc channel closed before reply")),
             Err(_) => {
                 self.pending.lock().await.remove(&id);
-                Err(anyhow!(
-                    "rpc timeout after {}ms",
-                    self.call_timeout.as_millis()
-                ))
+                Err(anyhow!("rpc timeout after {}ms", timeout.as_millis()))
             }
         }
     }
@@ -258,6 +265,25 @@ mod tests {
 
         let err = client.call("slow", None).await.unwrap_err().to_string();
         assert!(err.contains("rpc timeout"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn call_with_timeout_uses_per_call_deadline() {
+        let (client_stdin, _engine_read) = duplex(1024);
+        let (_engine_write, client_stdout) = duplex(1024);
+        let client = Client::new_with_io(
+            client_stdin,
+            client_stdout,
+            noop_handler(),
+            Duration::from_secs(1),
+        );
+
+        let err = client
+            .call_with_timeout("status", None, Duration::from_millis(20))
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("rpc timeout after 20ms"), "{err}");
     }
 
     #[tokio::test]
