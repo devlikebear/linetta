@@ -5,7 +5,7 @@ import { extractApplyOpsProposal, stripProposalBlock } from "../lib/companionDis
 import type {
   CompanionMessage, CompanionProposal, CompanionChoices,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
-  CompanionApplied, CompanionThinking, CompanionReasoning, AIContextSelection, CompanionImageAttachment,
+  CompanionApplied, CompanionThinking, CompanionReasoning, AIContextSelection, CompanionImageAttachment, CompanionIntent,
 } from "../lib/types";
 
 export interface ChatMessage {
@@ -14,6 +14,7 @@ export interface ChatMessage {
   proposal?: CompanionProposal;
   choices?: CompanionChoices;
   errored?: boolean;
+  retryText?: string;
 }
 
 export type CompanionStatus = "idle" | "streaming";
@@ -38,7 +39,7 @@ type CompanionSessionSnapshot = Pick<
 interface CompanionSessionStore {
   state: CompanionSessionState;
   listeners: Set<(snapshot: CompanionSessionSnapshot) => void>;
-  appliedListeners: Set<() => void>;
+  appliedListeners: Set<(event: CompanionApplied) => void>;
   historyLoaded: boolean;
   historyLoading: boolean;
   historySeq: number;
@@ -211,7 +212,7 @@ function ensureEngineListeners() {
     if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
     const store = getStore(projectId);
     for (const listener of store.appliedListeners) {
-      listener();
+      listener(p);
     }
   });
   registerEngineEvent<CompanionDone>("companion-done", (p) => {
@@ -241,7 +242,7 @@ function ensureEngineListeners() {
     if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
     updateStore(projectId, (state) => ({
       ...state,
-      messages: [...state.messages, { role: "assistant", content: p.message, errored: true }],
+      messages: [...state.messages, { role: "assistant", content: p.message, errored: true, retryText: latestUserMessage(state.messages) }],
       streaming: "",
       thinking: "",
       reasoning: "",
@@ -269,6 +270,15 @@ function ensureEngineListeners() {
     }));
     runProjects.delete(p.run_id);
   });
+}
+
+function latestUserMessage(messages: ChatMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user" && messages[i].content.trim() !== "") {
+      return messages[i].content;
+    }
+  }
+  return undefined;
 }
 
 function projectIdForRunEvent(event: CompanionRunEvent): string | null {
@@ -303,7 +313,7 @@ function acceptRunEvent(projectId: string, runId: string): boolean {
   return false;
 }
 
-export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: () => void, contextSelection?: AIContextSelection, outlineStructure?: string) {
+export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: (event: CompanionApplied) => void, contextSelection?: AIContextSelection, outlineStructure?: string) {
   const [snapshot, setSnapshot] = useState<CompanionSessionSnapshot>(() => snapshotFromState(getStore(projectId).state));
 
   useEffect(() => {
@@ -321,7 +331,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
     };
   }, [onApplied, projectId]);
 
-  const send = useCallback(async (text: string, images: CompanionImageAttachment[] = []) => {
+  const send = useCallback(async (text: string, images: CompanionImageAttachment[] = [], intent?: CompanionIntent) => {
     ensureEngineListeners();
     const trimmed = text.trim();
     const store = getStore(projectId);
@@ -339,11 +349,12 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
       pendingChoices: null,
     }));
     try {
-      const payload = contextSelection || outlineStructure || images.length > 0
+      const payload = contextSelection || outlineStructure || images.length > 0 || intent
         ? {
             ...(contextSelection ? { context: contextSelection } : {}),
             ...(outlineStructure ? { outline_structure: outlineStructure } : {}),
             ...(images.length > 0 ? { images } : {}),
+            ...(intent ? { intent } : {}),
           }
         : undefined;
       const { run_id } = payload

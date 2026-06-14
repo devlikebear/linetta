@@ -420,6 +420,13 @@
 /* errored assistant bubble */
 .msg-bubble.errored { background: var(--accent-tint2); border: 1px solid var(--warn); color: var(--warn); }
 
+.companion-message-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 7px;
+}
+
 /* live streaming cursor sizing inside a bubble */
 .msg-bubble .ai-cursor { height: 1em; vertical-align: text-bottom; }
 

@@ -2,6 +2,7 @@ package companion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -49,10 +50,11 @@ type proposalPayload struct {
 	Error     string `json:"error,omitempty"`
 }
 type appliedPayload struct {
-	RunID     string `json:"run_id"`
-	ProjectID string `json:"project_id"`
-	Summary   string `json:"summary,omitempty"`
-	Applied   int    `json:"applied"`
+	RunID        string              `json:"run_id"`
+	ProjectID    string              `json:"project_id"`
+	Summary      string              `json:"summary,omitempty"`
+	Applied      int                 `json:"applied"`
+	ChangedNodes []AppliedNodeChange `json:"changed_nodes,omitempty"`
 }
 type choicesPayload struct {
 	RunID       string   `json:"run_id"`
@@ -98,7 +100,7 @@ func newRunner(svc *Service) *Runner {
 	return &Runner{svc: svc, active: map[string]context.CancelFunc{}}
 }
 
-func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, outlineStructure string, images []ImageAttachment, now func() int64) (string, error) {
+func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, outlineStructure string, requestIntent RequestIntent, images []ImageAttachment, now func() int64) (string, error) {
 	sess, err := r.svc.sessions.EnsureWorker(projectID)
 	if err != nil {
 		return "", err
@@ -150,7 +152,8 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, sele
 	r.active[runID] = cancel
 	r.mu.Unlock()
 
-	go r.run(runCtx, runID, projectID, nodeID, path, text, msgs, client, now)
+	intent := resolveCompanionIntent(text, requestIntent)
+	go r.run(runCtx, runID, projectID, nodeID, path, text, msgs, client, intent, now)
 	return runID, nil
 }
 
@@ -193,15 +196,17 @@ func (r *Runner) cancel(runID string) error {
 const maxQueryRounds = 3
 const applyOpsToolName = "linetta_apply_ops"
 
-func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userText string, msgs []llm.ChatMessage, client llm.Client, now func() int64) {
+func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userText string, msgs []llm.ChatMessage, client llm.Client, intent companionIntent, now func() int64) {
 	defer r.finish(runID)
 
-	registry := r.svc.buildToolRegistry(projectID, nodeID, now, runID, userText)
+	registry := r.svc.buildToolRegistryWithIntent(projectID, nodeID, now, intent, runID, userText)
 	dedup := streamdedup.New()
 	queryRounds := 0
-	forcedTool := companionForcedToolForUserText(userText)
+	forcedTool := companionForcedToolForIntent(intent)
 	forcedApplyOps := forcedTool == applyOpsToolName
 	applyOpsSucceeded := false
+	sceneTextSucceeded := false
+	var lastApplyOpsResult ApplyOpsResult
 	applyOpsCorrectionUsed := false
 	client = newFirstTurnToolChoiceClient(client, forcedTool)
 	loop := agentloop.New(client, registry, agentloop.HookFunc(func(ctx context.Context, evt agentloop.Event) {
@@ -211,6 +216,12 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 		case agentloop.EventAfterTool:
 			if evt.ToolName == "linetta_apply_ops" && !evt.ToolIsError {
 				applyOpsSucceeded = true
+				if result, ok := parseApplyOpsToolResult(evt.ToolResult); ok {
+					lastApplyOpsResult = result
+					if intent.RequiresSceneText() && applyOpsResultHasSceneTextChange(result) {
+						sceneTextSucceeded = true
+					}
+				}
 				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: "작품 설정을 갱신했습니다"})
 			}
 		}
@@ -263,9 +274,16 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, Message: err.Error()})
 		return
 	}
+	if intent.RequiresSceneText() && !sceneTextSucceeded {
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, Message: sceneTextApplyFailedMessage()})
+		return
+	}
 	full := resp.Message.Content
 	if full == "" {
 		full = dedup.Final()
+	}
+	if intent.RequiresSceneText() && sceneTextSucceeded {
+		full = sceneTextApplySuccessMessage(lastApplyOpsResult)
 	}
 
 	assistantAt := now()
@@ -307,23 +325,46 @@ func querySummary(qr QueryRequest) string {
 }
 
 func companionForcedToolForUserText(text string) string {
-	s := strings.ToLower(strings.TrimSpace(text))
-	if s == "" {
-		return ""
-	}
-	if containsAny(s, companionEducationalTerms) {
-		return ""
-	}
-	if containsAny(s, companionResearchTerms) {
-		return ""
-	}
-	if containsAny(s, companionDiscussionTerms) && !containsAny(s, companionDirectApplyTerms) {
-		return ""
-	}
-	if containsAny(s, companionStructureTerms) && containsAny(s, companionMutationTerms) {
+	return companionForcedToolForIntent(classifyCompanionIntent(text))
+}
+
+func companionForcedToolForIntent(intent companionIntent) string {
+	if intent.RequiresApplyOps() {
 		return applyOpsToolName
 	}
 	return ""
+}
+
+func parseApplyOpsToolResult(raw string) (ApplyOpsResult, bool) {
+	var result ApplyOpsResult
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return ApplyOpsResult{}, false
+	}
+	return result, true
+}
+
+func applyOpsResultHasSceneTextChange(result ApplyOpsResult) bool {
+	for _, change := range result.ChangedNodes {
+		if change.Op == "set_scene_text" && change.NodeID != "" && change.ContentVersion > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func sceneTextApplySuccessMessage(result ApplyOpsResult) string {
+	if len(result.ChangedNodes) == 0 {
+		return "현재 씬 본문을 반영했습니다."
+	}
+	change := result.ChangedNodes[0]
+	if change.CharCount > 0 {
+		return fmt.Sprintf("현재 씬 본문을 반영했습니다. (%d자)", change.CharCount)
+	}
+	return "현재 씬 본문을 반영했습니다."
+}
+
+func sceneTextApplyFailedMessage() string {
+	return "본문 변경이 만들어지지 않았습니다. 다시 시도하거나 현재 씬을 확인해주세요."
 }
 
 func directApplyCorrectionPrompt(userText string) string {

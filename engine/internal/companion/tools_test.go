@@ -183,6 +183,20 @@ func TestLinettaApplyOpsToolRewritesCurrentSceneText(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("tool result is error: %s", result.Text())
 	}
+	var applied ApplyOpsResult
+	if err := json.Unmarshal([]byte(result.Text()), &applied); err != nil {
+		t.Fatalf("decode result: %v\n%s", err, result.Text())
+	}
+	if applied.Applied != 1 || len(applied.ChangedNodes) != 1 {
+		t.Fatalf("changed nodes missing from result: %+v", applied)
+	}
+	if applied.ChangedNodes[0].NodeID != nodeID ||
+		applied.ChangedNodes[0].Op != "set_scene_text" ||
+		applied.ChangedNodes[0].ContentVersion == 0 ||
+		applied.ChangedNodes[0].CharCount == 0 ||
+		!strings.Contains(applied.ChangedNodes[0].TextPreview, "새 본문 첫 줄") {
+		t.Fatalf("unexpected changed node metadata: %+v", applied.ChangedNodes[0])
+	}
 
 	got, err := svc.nodes.Get(ctx, nodeID)
 	if err != nil {
@@ -196,6 +210,90 @@ func TestLinettaApplyOpsToolRewritesCurrentSceneText(t *testing.T) {
 	}
 	if got.WordCount == 0 {
 		t.Fatalf("word count should be recomputed: %+v", got)
+	}
+}
+
+func TestLinettaApplyOpsToolRequiresSceneTextForSceneIntent(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 2_000 }, "run-1", "아니 1장 1씬 작성해달라고")
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[
+	  {"op":"create_thread","ref":"t1","name":"감정선","summary":"주인공이 좌절한다"}
+	]`
+	params := json.RawMessage(`{
+	  "summary":"씬 작성",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected scene intent without set_scene_text to fail: %s", result.Text())
+	}
+	if !strings.Contains(result.Text(), "set_scene_text") {
+		t.Fatalf("error should tell the model to write scene text: %s", result.Text())
+	}
+}
+
+func TestLinettaApplyOpsToolRejectsAccidentalEmptySceneText(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 2_000 }, "run-1", "현재 씬 본문 작성해줘")
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[
+	  {"op":"set_scene_text","text":"","allow_empty":true}
+	]`
+	params := json.RawMessage(`{
+	  "summary":"현재 씬 작성",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected accidental empty scene write to fail: %s", result.Text())
+	}
+	if !strings.Contains(result.Text(), "empty") && !strings.Contains(result.Text(), "비우") {
+		t.Fatalf("error should explain empty scene text is not allowed: %s", result.Text())
+	}
+}
+
+func TestLinettaApplyOpsToolRejectsWrongSceneTextTarget(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	reg := svc.buildToolRegistry(projectID, nodeID, func() int64 { return 2_000 }, "run-1", "현재 씬 본문 재작성해줘")
+	tool, ok := reg.Get("linetta_apply_ops")
+	if !ok {
+		t.Fatal("linetta_apply_ops not registered")
+	}
+
+	opsJSON := `[
+	  {"op":"set_scene_text","node_id":"other-node","text":"다른 곳에 쓰면 안 되는 본문"}
+	]`
+	params := json.RawMessage(`{
+	  "summary":"현재 씬 재작성",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected wrong scene target to fail: %s", result.Text())
+	}
+	if !strings.Contains(result.Text(), "current scene") {
+		t.Fatalf("error should mention current scene target: %s", result.Text())
 	}
 }
 

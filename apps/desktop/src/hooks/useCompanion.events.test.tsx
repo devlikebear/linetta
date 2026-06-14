@@ -216,6 +216,19 @@ describe("useCompanion streaming", () => {
     });
   });
 
+  it("forwards an explicit companion intent when provided", async () => {
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("현재 씬 본문 써줘", [], { kind: "scene_write", target_node_id: "n1", apply_policy: "direct" });
+    });
+
+    expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "현재 씬 본문 써줘", {
+      intent: { kind: "scene_write", target_node_id: "n1", apply_policy: "direct" },
+    });
+  });
+
   it("accumulates companion-reasoning and clears it on done", async () => {
     const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
     await waitFor(() => expect(ev.listeners.has("companion-reasoning")).toBe(true));
@@ -232,6 +245,24 @@ describe("useCompanion streaming", () => {
     expect(result.current.reasoning).toBe("");
   });
 
+  it("stores the last user message for retry when a companion run errors", async () => {
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(ev.listeners.has("companion-error")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("현재 씬 본문 써줘");
+    });
+
+    fire("companion-error", { run_id: "r1", message: "본문 변경이 만들어지지 않았습니다." });
+    const last = result.current.messages[result.current.messages.length - 1];
+    expect(last).toMatchObject({
+      role: "assistant",
+      content: "본문 변경이 만들어지지 않았습니다.",
+      errored: true,
+      retryText: "현재 씬 본문 써줘",
+    });
+  });
+
   it("notifies the workspace when apply-ops changes the project", async () => {
     const onApplied = vi.fn();
     const { result } = renderHook(() => useCompanion("p1", { current: "n1" }, onApplied));
@@ -244,8 +275,15 @@ describe("useCompanion streaming", () => {
     fire("companion-applied", { run_id: "other", summary: "다른 실행", applied: 1 });
     expect(onApplied).not.toHaveBeenCalled();
 
-    fire("companion-applied", { run_id: "r1", summary: "아웃라인 수정", applied: 1 });
+    const appliedPayload = {
+      run_id: "r1",
+      summary: "아웃라인 수정",
+      applied: 1,
+      changed_nodes: [{ node_id: "n1", op: "set_scene_text", content_version: 2, char_count: 120 }],
+    };
+    fire("companion-applied", appliedPayload);
     expect(onApplied).toHaveBeenCalledOnce();
+    expect(onApplied).toHaveBeenCalledWith(appliedPayload);
   });
 
   it("clears transcript through rpc and local state", async () => {

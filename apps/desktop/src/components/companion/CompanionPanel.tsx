@@ -556,6 +556,13 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
                       t={t}
                     />
                   </div>
+                  {m.errored && m.retryText && (
+                    <div className="companion-message-actions">
+                      <button type="button" className="btn ghost sm" onClick={() => { void sendWithFreshContext(m.retryText ?? ""); }} disabled={isBusy}>
+                        {t("companion.retry")}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
               {m.proposal && (

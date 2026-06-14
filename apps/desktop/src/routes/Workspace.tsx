@@ -6,7 +6,7 @@ import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentio
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIContextPreview, AIOptions, ContextCounts, SearchResult, Settings as SettingsRow, NodeStatus } from "../lib/types";
+import type { NodeRow, Project, Entity, AIContextPreview, AIOptions, ContextCounts, SearchResult, Settings as SettingsRow, NodeStatus, CompanionApplied } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -383,6 +383,7 @@ export function Workspace() {
       if (!projectId) return;
       const fresh = await fetchTree(projectId, currentNodeId);
       setLoad(fresh);
+      setCharCount(fresh.node.word_count);
     },
     [projectId, fetchTree],
   );
@@ -1650,10 +1651,11 @@ export function Workspace() {
               setCompanionOpen(false);
               focusEditor();
             }}
-            onApplied={() => {
+            onApplied={(event?: CompanionApplied) => {
               if (!load) return;
               refreshTreeKeepNode(load.node.id);
-              refreshMentioned(load.node.id);
+              const changedCurrentNode = event?.changed_nodes?.find((change) => change.node_id === load.node.id);
+              refreshMentioned(changedCurrentNode?.node_id ?? load.node.id);
             }}
           />
         ) : factBookOpen && load ? (

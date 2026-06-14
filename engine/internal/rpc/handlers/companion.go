@@ -14,7 +14,7 @@ type companionSendParams struct {
 	ProjectID string                      `json:"project_id"`
 	NodeID    string                      `json:"node_id"`
 	Text      string                      `json:"text"`
-	Options   ai.Options                  `json:"options"`
+	Options   companion.SendOptions       `json:"options"`
 	Images    []companion.ImageAttachment `json:"images"`
 }
 
@@ -25,7 +25,7 @@ func CompanionSend(svc *companion.Service, now Clock) rpc.Handler {
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" || p.Text == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and text required"}
 		}
-		runID, err := svc.SendWithOptionsAndImages(ctx, p.ProjectID, p.NodeID, p.Text, p.Options, p.Images, func() int64 { return now() })
+		runID, err := svc.SendWithCompanionOptionsAndImages(ctx, p.ProjectID, p.NodeID, p.Text, p.Options, p.Images, func() int64 { return now() })
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

@@ -23,10 +23,11 @@ type webToolSource interface {
 }
 
 type ApplyOpsResult struct {
-	Summary  string            `json:"summary,omitempty"`
-	Applied  int               `json:"applied"`
-	Created  map[string]string `json:"created,omitempty"`
-	Failures []ApplyOpsFailure `json:"failures,omitempty"`
+	Summary      string              `json:"summary,omitempty"`
+	Applied      int                 `json:"applied"`
+	Created      map[string]string   `json:"created,omitempty"`
+	ChangedNodes []AppliedNodeChange `json:"changed_nodes,omitempty"`
+	Failures     []ApplyOpsFailure   `json:"failures,omitempty"`
 }
 
 type ApplyOpsFailure struct {
@@ -35,11 +36,27 @@ type ApplyOpsFailure struct {
 	Error string `json:"error"`
 }
 
+type AppliedNodeChange struct {
+	NodeID         string `json:"node_id"`
+	Op             string `json:"op"`
+	ContentVersion int    `json:"content_version"`
+	CharCount      int    `json:"char_count"`
+	TextPreview    string `json:"text_preview,omitempty"`
+}
+
 func (r ApplyOpsResult) isError() bool {
 	return len(r.Failures) > 0
 }
 
 func (s *Service) buildToolRegistry(projectID, nodeID string, now func() int64, runIDAndUserText ...string) *tarstools.Registry {
+	userText := ""
+	if len(runIDAndUserText) > 1 {
+		userText = runIDAndUserText[1]
+	}
+	return s.buildToolRegistryWithIntent(projectID, nodeID, now, classifyCompanionIntent(userText), runIDAndUserText...)
+}
+
+func (s *Service) buildToolRegistryWithIntent(projectID, nodeID string, now func() int64, intent companionIntent, runIDAndUserText ...string) *tarstools.Registry {
 	reg := tarstools.NewRegistryWithScope(tarstools.RegistryScopeUser)
 	reg.Register(tarstools.NewWebFetchTool(true))
 	reg.Register(s.buildWebSearchTool())
@@ -51,7 +68,7 @@ func (s *Service) buildToolRegistry(projectID, nodeID string, now func() int64, 
 	if len(runIDAndUserText) > 1 {
 		userText = runIDAndUserText[1]
 	}
-	reg.Register(s.buildApplyOpsTool(projectID, nodeID, activeRunID, userText, now))
+	reg.Register(s.buildApplyOpsTool(projectID, nodeID, activeRunID, userText, intent, now))
 	return reg
 }
 
@@ -77,7 +94,7 @@ func (s *Service) buildWebSearchTool() tarstools.Tool {
 	return tarstools.NewWebSearchToolWithOptions(opts)
 }
 
-func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, now func() int64) tarstools.Tool {
+func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, intent companionIntent, now func() int64) tarstools.Tool {
 	return tarstools.Tool{
 		Name:        "linetta_apply_ops",
 		Description: "Directly apply Linetta story mutations to the current project. Use set_scene_text to rewrite the current scene body, create_outline_node/create_scene for new left outline tree items, thread/beat ops for plot beats, entity/relationship ops for characters, places, items, skills, magic, abilities, and create_fact_card for source-backed Fact Book cards.",
@@ -88,7 +105,7 @@ func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, n
 				result := ApplyOpsResult{Failures: []ApplyOpsFailure{{Index: -1, Error: "invalid JSON: " + err.Error()}}}
 				return tarstools.JSONTextResult(result, true), nil
 			}
-			if err := validateApplyOpsIntent(p, companionApplyOpsIntent(userText)); err != nil {
+			if err := validateApplyOpsIntent(p, companionApplyOpsIntent(userText, nodeID, intent)); err != nil {
 				result := ApplyOpsResult{
 					Summary:  strings.TrimSpace(p.Summary),
 					Failures: []ApplyOpsFailure{{Index: -1, Error: err.Error()}},
@@ -98,10 +115,11 @@ func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, n
 			result := s.ApplyOps(ctx, projectID, nodeID, p, now)
 			if runID != "" && result.Applied > 0 && s.notify != nil {
 				_ = s.notify.Notify("companion.applied", appliedPayload{
-					RunID:     runID,
-					ProjectID: projectID,
-					Summary:   result.Summary,
-					Applied:   result.Applied,
+					RunID:        runID,
+					ProjectID:    projectID,
+					Summary:      result.Summary,
+					Applied:      result.Applied,
+					ChangedNodes: result.ChangedNodes,
 				})
 			}
 			return tarstools.JSONTextResult(result, result.isError()), nil
@@ -142,22 +160,25 @@ func decodeApplyOpsParams(params json.RawMessage) (Proposal, error) {
 }
 
 type applyOpsIntent struct {
-	RequireOutlineTree bool
+	RequireOutlineTree  bool
+	RequireSceneText    bool
+	AllowEmptySceneText bool
+	TargetNodeID        string
 }
 
-func companionApplyOpsIntent(text string) applyOpsIntent {
+func companionApplyOpsIntent(text, currentNodeID string, intent companionIntent) applyOpsIntent {
+	if intent.Kind == "" {
+		intent = classifyCompanionIntent(text)
+	}
+	if intent.Kind == companionIntentChat {
+		return applyOpsIntent{}
+	}
 	s := strings.ToLower(strings.TrimSpace(text))
-	if s == "" {
-		return applyOpsIntent{}
-	}
-	if containsAny(s, companionEducationalTerms) || containsAny(s, companionResearchTerms) {
-		return applyOpsIntent{}
-	}
-	if containsAny(s, companionDiscussionTerms) && !containsAny(s, companionDirectApplyTerms) {
-		return applyOpsIntent{}
-	}
 	return applyOpsIntent{
-		RequireOutlineTree: containsAny(s, companionOutlineTreeTerms) && containsAny(s, companionMutationTerms),
+		RequireOutlineTree:  !intent.RequiresSceneText() && containsAny(s, companionOutlineTreeTerms) && containsAny(s, companionMutationTerms),
+		RequireSceneText:    intent.RequiresSceneText(),
+		AllowEmptySceneText: intent.AllowEmptySceneText,
+		TargetNodeID:        firstNonEmpty(intent.TargetNodeID, currentNodeID),
 	}
 }
 
@@ -167,16 +188,37 @@ var companionOutlineTreeTerms = []string{
 }
 
 func validateApplyOpsIntent(p Proposal, intent applyOpsIntent) error {
-	if !intent.RequireOutlineTree {
-		return nil
-	}
-	for _, op := range p.Ops {
-		if op.Type == "create_outline_node" || op.Type == "create_scene" ||
-			op.Type == "rename_outline_node" || op.Type == "delete_outline_node" || op.Type == "move_outline_node" {
-			return nil
+	if intent.RequireSceneText {
+		foundSceneText := false
+		for _, op := range p.Ops {
+			if op.Type != "set_scene_text" {
+				continue
+			}
+			foundSceneText = true
+			if op.AllowEmpty && !intent.AllowEmptySceneText {
+				return fmt.Errorf("scene text requests must not use empty set_scene_text unless the user explicitly asked to clear the scene")
+			}
+			if strings.TrimSpace(op.Text) == "" && !intent.AllowEmptySceneText {
+				return fmt.Errorf("scene text requests must write non-empty text with set_scene_text")
+			}
+			if intent.TargetNodeID != "" && op.NodeID != "" && op.NodeID != intent.TargetNodeID {
+				return fmt.Errorf("set_scene_text target must match the requested current scene")
+			}
+		}
+		if !foundSceneText {
+			return fmt.Errorf("scene body writing/editing requests must apply set_scene_text; remember/create_thread/add_beat/set_outline do not change the manuscript body")
 		}
 	}
-	return fmt.Errorf("outline requests must update the visible left outline tree with create_outline_node or create_scene; create_thread/add_beat only update plot beats")
+	if intent.RequireOutlineTree {
+		for _, op := range p.Ops {
+			if op.Type == "create_outline_node" || op.Type == "create_scene" ||
+				op.Type == "rename_outline_node" || op.Type == "delete_outline_node" || op.Type == "move_outline_node" {
+				return nil
+			}
+		}
+		return fmt.Errorf("outline requests must update the visible left outline tree with create_outline_node or create_scene; create_thread/add_beat only update plot beats")
+	}
+	return nil
 }
 
 // ApplyOps applies a validated proposal op list directly to project state.
@@ -196,7 +238,7 @@ func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Prop
 	nodeInsertCursor := ""
 
 	for i, op := range p.Ops {
-		if err := s.applyOneOp(ctx, projectID, nodeID, op, now, threadRefs, entityRefs, nodeRefs, result.Created, &nodeInsertCursor); err != nil {
+		if err := s.applyOneOp(ctx, projectID, nodeID, op, now, threadRefs, entityRefs, nodeRefs, result.Created, &result.ChangedNodes, &nodeInsertCursor); err != nil {
 			result.Failures = append(result.Failures, ApplyOpsFailure{Index: i, Op: op.Type, Error: err.Error()})
 			continue
 		}
@@ -204,6 +246,9 @@ func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Prop
 	}
 	if len(result.Created) == 0 {
 		result.Created = nil
+	}
+	if len(result.ChangedNodes) == 0 {
+		result.ChangedNodes = nil
 	}
 	return result
 }
@@ -218,6 +263,7 @@ func (s *Service) applyOneOp(
 	entityRefs map[string]string,
 	nodeRefs map[string]string,
 	created map[string]string,
+	changedNodes *[]AppliedNodeChange,
 	nodeInsertCursor *string,
 ) error {
 	switch op.Type {
@@ -233,11 +279,40 @@ func (s *Service) applyOneOp(
 		if targetNodeID == nil || strings.TrimSpace(*targetNodeID) == "" {
 			return fmt.Errorf("set_scene_text requires a current node or node_id")
 		}
+		before, err := s.nodes.Get(ctx, *targetNodeID)
+		if err != nil {
+			return err
+		}
 		doc, err := plainTextToTiptapDoc(op.Text)
 		if err != nil {
 			return err
 		}
-		return s.nodes.UpdateContent(ctx, *targetNodeID, doc, now())
+		if err := s.nodes.UpdateContent(ctx, *targetNodeID, doc, now()); err != nil {
+			return err
+		}
+		after, err := s.nodes.Get(ctx, *targetNodeID)
+		if err != nil {
+			return fmt.Errorf("verify set_scene_text: %w", err)
+		}
+		gotText := normalizeSceneTextForVerify(plainTextFromDoc(after.ContentDoc))
+		wantText := normalizeSceneTextForVerify(op.Text)
+		if gotText != wantText {
+			return fmt.Errorf("verify set_scene_text: readback text mismatch")
+		}
+		if !op.AllowEmpty && strings.TrimSpace(gotText) == "" {
+			return fmt.Errorf("verify set_scene_text: readback text is empty")
+		}
+		if after.ContentVersion <= before.ContentVersion {
+			return fmt.Errorf("verify set_scene_text: content_version did not advance")
+		}
+		*changedNodes = append(*changedNodes, AppliedNodeChange{
+			NodeID:         after.ID,
+			Op:             "set_scene_text",
+			ContentVersion: after.ContentVersion,
+			CharCount:      after.WordCount,
+			TextPreview:    trimRunesLocal(strings.TrimSpace(plainTextFromDoc(after.ContentDoc)), 120),
+		})
+		return nil
 	case "create_thread":
 		th, err := s.threads.Create(ctx, thread.NewInput{ProjectID: projectID, Name: op.Name, Color: op.Color})
 		if err != nil {
@@ -490,6 +565,17 @@ type tiptapInline struct {
 }
 
 var paragraphBreakRE = regexp.MustCompile(`\n{2,}`)
+
+func normalizeSceneTextForVerify(text string) string {
+	normalized := strings.ReplaceAll(text, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = paragraphBreakRE.ReplaceAllString(normalized, "\n\n")
+	lines := strings.Split(normalized, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
 
 func plainTextToTiptapDoc(text string) (string, error) {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")

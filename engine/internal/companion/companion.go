@@ -48,6 +48,12 @@ type ImageAttachment struct {
 	Size      int    `json:"size,omitempty"`
 }
 
+type SendOptions struct {
+	Context          ai.ContextSelection `json:"context,omitempty"`
+	OutlineStructure string              `json:"outline_structure,omitempty"`
+	Intent           RequestIntent       `json:"intent,omitempty"`
+}
+
 // ClientFactory and ProviderSource are shared with the ai package so the same
 // settings adapter and default factory serve AI runs, companion, and summaries.
 type ClientFactory = ai.ClientFactory
@@ -537,11 +543,18 @@ func (s *Service) SendWithContextAndImages(ctx context.Context, projectID, nodeI
 // SendWithOptionsAndImages starts a companion turn with the full per-call
 // option payload used by the desktop client.
 func (s *Service) SendWithOptionsAndImages(ctx context.Context, projectID, nodeID, text string, opts ai.Options, images []ImageAttachment, now func() int64) (string, error) {
+	return s.SendWithCompanionOptionsAndImages(ctx, projectID, nodeID, text, SendOptions{
+		Context:          opts.Context,
+		OutlineStructure: opts.OutlineStructure,
+	}, images, now)
+}
+
+func (s *Service) SendWithCompanionOptionsAndImages(ctx context.Context, projectID, nodeID, text string, opts SendOptions, images []ImageAttachment, now func() int64) (string, error) {
 	normalized, err := normalizeImageAttachments(images)
 	if err != nil {
 		return "", err
 	}
-	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, normalized, now)
+	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, opts.Intent, normalized, now)
 }
 
 // Cancel cancels an in-flight run.

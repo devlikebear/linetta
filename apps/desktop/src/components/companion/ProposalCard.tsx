@@ -68,7 +68,9 @@ export function ProposalCard({ proposal, projectId, nodeIdRef, onApplied }: Prop
     try {
       const res = await applyProposal(chosen, projectId, nodeIdRef.current);
       setResult(res);
-      onApplied();
+      if (res.applied > 0) {
+        onApplied();
+      }
     } finally {
       setBusy(false);
     }

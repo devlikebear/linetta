@@ -153,6 +153,20 @@ export interface AIOptions {
   outline_structure?: string;
 }
 
+export type CompanionIntentKind =
+  | "scene_write"
+  | "scene_rewrite"
+  | "scene_proofread"
+  | "outline_mutation"
+  | "generic_mutation"
+  | "chat";
+
+export interface CompanionIntent {
+  kind: CompanionIntentKind;
+  target_node_id?: string;
+  apply_policy?: "direct" | "proposal";
+}
+
 export type AIContextKey =
   | "current_scene"
   | "overview"
@@ -679,10 +693,19 @@ export interface CompanionApplyOpsFailure {
   error: string;
 }
 
+export interface AppliedNodeChange {
+  node_id: string;
+  op: string;
+  content_version: number;
+  char_count: number;
+  text_preview?: string;
+}
+
 export interface CompanionApplyOpsResult {
   summary?: string;
   applied: number;
   created?: Record<string, string>;
+  changed_nodes?: AppliedNodeChange[];
   failures?: CompanionApplyOpsFailure[];
 }
 
@@ -691,7 +714,7 @@ export interface CompanionReset { run_id: string; project_id?: string; text: str
 export interface CompanionDone { run_id: string; project_id?: string; full_text: string; }
 export interface CompanionError { run_id: string; project_id?: string; message: string; }
 export interface CompanionCancelled { run_id: string; project_id?: string; }
-export interface CompanionApplied { run_id: string; project_id?: string; summary?: string; applied: number; }
+export interface CompanionApplied { run_id: string; project_id?: string; summary?: string; applied: number; changed_nodes?: AppliedNodeChange[]; }
 export interface CompanionThinking { run_id: string; project_id?: string; text: string; }
 export interface CompanionReasoning { run_id: string; project_id?: string; text: string; }
 export interface CompanionChoices {

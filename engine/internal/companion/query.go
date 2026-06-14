@@ -169,13 +169,16 @@ func plainTextFromDoc(raw *string) string {
 					sb.WriteString(s)
 				}
 			}
+			if t["type"] == "hardBreak" {
+				sb.WriteString("\n")
+			}
 			if c, ok := t["content"].([]interface{}); ok {
 				for _, ch := range c {
 					walk(ch)
 				}
 			}
 			if k, _ := t["type"].(string); k == "paragraph" || k == "heading" {
-				sb.WriteString("\n")
+				sb.WriteString("\n\n")
 			}
 		case []interface{}:
 			for _, ch := range t {

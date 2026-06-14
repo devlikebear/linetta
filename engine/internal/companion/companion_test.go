@@ -306,6 +306,72 @@ func TestSend_RetriesDirectMutationWhenModelOnlyClaimsApplied(t *testing.T) {
 	}
 }
 
+func TestSend_SceneTextApplyUsesVerifiedAppMessage(t *testing.T) {
+	client := &sceneTextApplyClient{}
+	svc, notif, projectID := newSvcWithClient(t, client)
+	proj, err := svc.projects.Get(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeID := *proj.LastOpenedNodeID
+
+	runID, err := svc.Send(context.Background(), projectID, nodeID, "아니 1장 1씬 작성해달라고", func() int64 { return 1000 })
+	if err != nil || runID == "" {
+		t.Fatalf("Send err=%v runID=%q", err, runID)
+	}
+	waitFor(t, notif, "companion.done")
+
+	if got := notif.get("companion.applied"); !strings.Contains(got, `"changed_nodes"`) || !strings.Contains(got, nodeID) {
+		t.Fatalf("applied event should include changed scene metadata: %s", got)
+	}
+	if got := notif.get("companion.done"); !strings.Contains(got, "현재 씬 본문을 반영했습니다") {
+		t.Fatalf("scene edit success should use verified app message, got %s", got)
+	}
+	n, err := svc.nodes.Get(context.Background(), nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.ContentDoc == nil || !strings.Contains(*n.ContentDoc, "새 원고 첫 문장") {
+		t.Fatalf("scene content was not applied: %+v", n)
+	}
+
+	client.mu.Lock()
+	sawToolResult := client.sawToolResult
+	client.mu.Unlock()
+	if !sawToolResult {
+		t.Fatal("expected final model turn to receive changed_nodes tool result")
+	}
+}
+
+func TestSend_SceneTextQuestionOnlyFailsInsteadOfClaimingDone(t *testing.T) {
+	client := &sceneQuestionOnlyClient{}
+	svc, notif, projectID := newSvcWithClient(t, client)
+	proj, err := svc.projects.Get(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runID, err := svc.Send(context.Background(), projectID, *proj.LastOpenedNodeID, "현재 씬 본문 써줘", func() int64 { return 1000 })
+	if err != nil || runID == "" {
+		t.Fatalf("Send err=%v runID=%q", err, runID)
+	}
+	waitFor(t, notif, "companion.error")
+
+	client.mu.Lock()
+	calls := client.calls
+	sawCorrection := client.sawCorrection
+	client.mu.Unlock()
+	if calls < 2 || !sawCorrection {
+		t.Fatalf("expected a corrective retry before failure, calls=%d sawCorrection=%v", calls, sawCorrection)
+	}
+	if got := notif.get("companion.error"); !strings.Contains(got, "본문 변경") {
+		t.Fatalf("error should explain scene text was not applied: %s", got)
+	}
+	if got := notif.get("companion.done"); got != "" {
+		t.Fatalf("question-only scene edit should not finish as done: %s", got)
+	}
+}
+
 type claimThenApplyClient struct {
 	mu            sync.Mutex
 	calls         int
@@ -350,6 +416,63 @@ func (c *claimThenApplyClient) Chat(_ context.Context, messages []llm.ChatMessag
 			Content: "아웃라인을 실제로 반영했습니다.",
 		}}, nil
 	}
+}
+
+type sceneTextApplyClient struct {
+	mu            sync.Mutex
+	calls         int
+	sawToolResult bool
+}
+
+func (c *sceneTextApplyClient) Ask(context.Context, string) (string, error) { return "", nil }
+
+func (c *sceneTextApplyClient) Chat(_ context.Context, messages []llm.ChatMessage, opts llm.ChatOptions) (llm.ChatResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	switch c.calls {
+	case 1:
+		if opts.ToolChoice == nil || opts.ToolChoice.Mode != llm.ToolChoiceModeRequired {
+			return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "tool choice missing"}}, nil
+		}
+		return llm.ChatResponse{Message: llm.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []llm.ToolCall{{
+				ID:        "call_scene",
+				Name:      applyOpsToolName,
+				Arguments: `{"summary":"현재 씬 작성","ops_json":"[{\"op\":\"set_scene_text\",\"text\":\"새 원고 첫 문장\\n새 원고 둘째 문장\"}]"}`,
+			}},
+		}}, nil
+	default:
+		if len(messages) > 0 && messages[len(messages)-1].Role == "tool" && strings.Contains(messages[len(messages)-1].Content, `"changed_nodes"`) {
+			c.sawToolResult = true
+		}
+		return llm.ChatResponse{Message: llm.ChatMessage{
+			Role:    "assistant",
+			Content: "적용했습니다.",
+		}}, nil
+	}
+}
+
+type sceneQuestionOnlyClient struct {
+	mu            sync.Mutex
+	calls         int
+	sawCorrection bool
+}
+
+func (c *sceneQuestionOnlyClient) Ask(context.Context, string) (string, error) { return "", nil }
+
+func (c *sceneQuestionOnlyClient) Chat(_ context.Context, messages []llm.ChatMessage, _ llm.ChatOptions) (llm.ChatResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	if len(messages) > 0 && strings.Contains(messages[len(messages)-1].Content, "실제 작품 상태 변경") {
+		c.sawCorrection = true
+	}
+	return llm.ChatResponse{Message: llm.ChatMessage{
+		Role:    "assistant",
+		Content: "어떤 분위기로 쓰면 될까요?",
+	}}, nil
 }
 
 func TestCancel_UnknownRunErrors(t *testing.T) {

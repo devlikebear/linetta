@@ -3,6 +3,7 @@
 _작성일: 2026-06-14_
 _속한 로드맵: [`roadmap.md`](./roadmap.md), [`phase-3-stats-platform.md`](./phase-3-stats-platform.md)의 AI 퇴고 후속 UX_
 _예상 소요: 1.5~2일_
+_후속 안정화: [`companion-scene-edit-reliability.md`](./companion-scene-edit-reliability.md)_
 
 ## Overview
 
