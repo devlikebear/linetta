@@ -125,6 +125,7 @@ _예상 소요: 3~4일_
 ## 참고 자료
 
 - 로드맵: [`roadmap.md`](./roadmap.md)
+- AI 퇴고 UX 후속 계획: [`companion-writing-actions.md`](./companion-writing-actions.md)
 - Phase 1 산출물: `engine/internal/stats/`, `export.nodeText`, 복사 UI
 - 컴패니언 rewrite 경로: `apps/desktop/src/routes/Workspace.tsx`의 `runSelectionCompanionRewrite` → `CompanionPanel.tsx` → `engine/internal/companion/`
 

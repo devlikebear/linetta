@@ -89,6 +89,7 @@ const PROPOSAL_OP_TYPES = new Set<ProposalOpType>([
   "update_beat",
   "delete_beat",
   "set_outline",
+  "set_scene_text",
   "remember",
   "create_entity",
   "update_entity",

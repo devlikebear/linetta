@@ -620,6 +620,7 @@ export type ProposalOpType =
   | "create_thread" | "update_thread"
   | "add_beat" | "update_beat" | "delete_beat"
   | "set_outline"
+  | "set_scene_text"
   | "remember"
   | "create_entity" | "update_entity" | "create_relationship"
   | "create_scene" | "create_outline_node"

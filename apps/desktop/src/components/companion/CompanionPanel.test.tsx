@@ -139,20 +139,20 @@ describe("CompanionPanel", () => {
     expect(screen.getByText("생각 중…")).toBeInTheDocument();
   });
 
-  it("shows prompt examples in the empty state and copies one into the draft", async () => {
+  it("shows writer actions in the empty state and copies one into the draft", async () => {
     const user = userEvent.setup();
     renderPanel();
 
     expect(screen.getByText("무엇부터 맡길까요?")).toBeInTheDocument();
-    expect(screen.getByText("프롬프트 예시")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /아웃라인/ })).toBeInTheDocument();
+    expect(screen.getByText("작가 액션")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /다음 문장 이어쓰기/ })).toBeInTheDocument();
 
-    const example = screen.getByRole("button", {
-      name: /최근 스페이스 오페라 장르 레퍼런스/,
+    const action = screen.getByRole("button", {
+      name: /다음 문장 이어쓰기/,
     });
-    await user.click(example);
+    await user.click(action);
 
-    expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("web_search");
+    expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("다음 3~5문장");
     expect(companionState.value.send).not.toHaveBeenCalled();
   });
 
@@ -237,7 +237,7 @@ describe("CompanionPanel", () => {
     Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
       configurable: true,
       get() {
-        return this.value.includes("아웃라인") ? 72 : 32;
+        return this.value.includes("현재 씬") ? 72 : 32;
       },
     });
 
@@ -246,9 +246,9 @@ describe("CompanionPanel", () => {
     const input = screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement;
     expect(input.style.height).toBe("32px");
 
-    await user.click(screen.getByRole("button", { name: /아웃라인/ }));
+    await user.click(screen.getByRole("button", { name: /장면 긴장 강화/ }));
 
-    expect(input.value).toContain("아웃라인");
+    expect(input.value).toContain("현재 씬");
     expect(input.style.height).toBe("72px");
   });
 
@@ -538,7 +538,8 @@ describe("CompanionPanel", () => {
     renderPanel();
 
     expect(await screen.findByText("Writing companion")).toBeInTheDocument();
-    expect(screen.getByText("Ask anything or shape the plot together.")).toBeInTheDocument();
+    expect(screen.getByText("Writer actions")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Continue the scene/ })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Message... (Enter to send, Shift+Enter for line break)")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });

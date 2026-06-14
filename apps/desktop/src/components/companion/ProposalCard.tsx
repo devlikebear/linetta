@@ -23,6 +23,7 @@ function opLabel(t: Translate, op: ProposalOp): string {
     case "update_beat": return t("companion.op.updateBeat", { label: op.label ?? "" });
     case "delete_beat": return t("companion.op.deleteBeat");
     case "set_outline": return t("companion.op.setOutline");
+    case "set_scene_text": return t("companion.op.setSceneText");
     case "remember": return t("companion.op.remember", { text: op.text ?? "" });
     case "create_entity": return t("companion.op.createEntity", { kind: entityKindLabel(t, op.kind), name: op.name ?? "" });
     case "update_entity": return t("companion.op.updateEntity");

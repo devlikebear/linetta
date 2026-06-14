@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.15 - 2026-06-14
+
+- Turned the companion empty state into a writer action palette for continuing a scene, smoothing dialogue, raising tension, checking continuity, shaping the next-episode hook, and finishing an episode.
+- Fixed companion proposal handling so `set_scene_text` scene-replacement ops from proofread/rewrite flows are preserved and labeled as current-scene text replacement instead of exposing raw op names.
+- Replaced raw companion tool capability chips with writer-facing labels while keeping search, URL reading, apply-ops, context, and image attachment controls available.
+
 ## v0.4.14 - 2026-06-12
 
 - Fixed the "이번 화" character count in the editor footer and ZEN mode summing the whole 권 when writing in a leaf episode created directly under an arc.

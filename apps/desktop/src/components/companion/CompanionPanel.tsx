@@ -13,6 +13,7 @@ import {
   Pencil,
   Search,
   Trash2,
+  type LucideIcon,
   X,
 } from "lucide-react";
 import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
@@ -58,13 +59,58 @@ function streamProse(text: string): string {
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
-const PROMPT_EXAMPLE_KEYS = [
-  "companion.example.conflict",
-  "companion.example.outline",
-  "companion.example.search",
-  "companion.example.fetch",
-  "companion.example.apply",
-] as const;
+interface CompanionActionPreset {
+  id: string;
+  icon: LucideIcon;
+  labelKey: string;
+  descriptionKey: string;
+  promptKey: string;
+}
+
+const COMPANION_ACTIONS: CompanionActionPreset[] = [
+  {
+    id: "continue-scene",
+    icon: Pencil,
+    labelKey: "companion.actions.continueScene.label",
+    descriptionKey: "companion.actions.continueScene.description",
+    promptKey: "companion.actions.continueScene.prompt",
+  },
+  {
+    id: "tighten-dialogue",
+    icon: MessageSquare,
+    labelKey: "companion.actions.tightenDialogue.label",
+    descriptionKey: "companion.actions.tightenDialogue.description",
+    promptKey: "companion.actions.tightenDialogue.prompt",
+  },
+  {
+    id: "raise-tension",
+    icon: Lightbulb,
+    labelKey: "companion.actions.raiseTension.label",
+    descriptionKey: "companion.actions.raiseTension.description",
+    promptKey: "companion.actions.raiseTension.prompt",
+  },
+  {
+    id: "check-continuity",
+    icon: Search,
+    labelKey: "companion.actions.checkContinuity.label",
+    descriptionKey: "companion.actions.checkContinuity.description",
+    promptKey: "companion.actions.checkContinuity.prompt",
+  },
+  {
+    id: "next-episode-hook",
+    icon: Book,
+    labelKey: "companion.actions.nextEpisodeHook.label",
+    descriptionKey: "companion.actions.nextEpisodeHook.description",
+    promptKey: "companion.actions.nextEpisodeHook.prompt",
+  },
+  {
+    id: "finish-episode",
+    icon: Check,
+    labelKey: "companion.actions.finishEpisode.label",
+    descriptionKey: "companion.actions.finishEpisode.description",
+    promptKey: "companion.actions.finishEpisode.prompt",
+  },
+];
 
 const EMPTY_CONTEXT_PREVIEW: AIContextPreview = {
   counts: {
@@ -136,25 +182,28 @@ function CompanionEmpty({
   onPick: (prompt: string) => void;
 }) {
   return (
-    <section className="companion-empty-card" aria-label={t("companion.examplesLabel")}>
+    <section className="companion-empty-card" aria-label={t("companion.actions.ariaLabel")}>
       <div className="companion-empty-kicker">
-        <Lightbulb size={14} />
-        <span>{t("companion.examplesTitle")}</span>
+        <Pencil size={14} />
+        <span>{t("companion.actions.title")}</span>
       </div>
       <h3>{t("companion.emptyTitle")}</h3>
       <p>{t("companion.empty")}</p>
-      <div className="companion-example-list">
-        {PROMPT_EXAMPLE_KEYS.map((key) => {
-          const prompt = t(key);
+      <div className="companion-action-list">
+        {COMPANION_ACTIONS.map((action) => {
+          const Icon = action.icon;
           return (
             <button
-              key={key}
+              key={action.id}
               type="button"
-              className="companion-example"
-              onClick={() => onPick(prompt)}
+              className="companion-action-preset"
+              onClick={() => onPick(t(action.promptKey))}
             >
-              <Lightbulb size={13} />
-              <span>{prompt}</span>
+              <Icon size={14} />
+              <span className="companion-action-copy">
+                <strong>{t(action.labelKey)}</strong>
+                <small>{t(action.descriptionKey)}</small>
+              </span>
             </button>
           );
         })}
@@ -612,9 +661,9 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
           >
             <ImagePlus size={13} />
           </button>
-          <span>web_search</span>
-          <span>web_fetch</span>
-          <span>linetta_apply_ops</span>
+          <span className="chip companion-tool-chip" title={t("companion.tool.webSearch")}>{t("companion.toolChip.webSearch")}</span>
+          <span className="chip companion-tool-chip" title={t("companion.tool.webFetch")}>{t("companion.toolChip.webFetch")}</span>
+          <span className="chip companion-tool-chip" title={t("companion.tool.applyOps")}>{t("companion.toolChip.applyOps")}</span>
           <button
             type="button"
             className={`chip ctx companion-context-chip${showContext ? " on" : ""}`}
