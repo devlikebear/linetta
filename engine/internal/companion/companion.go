@@ -52,6 +52,7 @@ type SendOptions struct {
 	Context          ai.ContextSelection `json:"context,omitempty"`
 	OutlineStructure string              `json:"outline_structure,omitempty"`
 	Intent           RequestIntent       `json:"intent,omitempty"`
+	Scope            string              `json:"scope,omitempty"`
 }
 
 // ClientFactory and ProviderSource are shared with the ai package so the same
@@ -77,6 +78,7 @@ type Service struct {
 	runner        *Runner
 	memBase       string
 	ops           *opsstatus.Repo
+	history       *HistoryRepo
 }
 
 // NewService constructs the companion service. sessionsDir is passed to
@@ -102,6 +104,11 @@ func NewService(
 
 func (s *Service) WithOpsStatus(repo *opsstatus.Repo) *Service {
 	s.ops = repo
+	return s
+}
+
+func (s *Service) WithHistory(repo *HistoryRepo) *Service {
+	s.history = repo
 	return s
 }
 
@@ -333,6 +340,38 @@ func (s *Service) History(ctx context.Context, projectID string) ([]session.Mess
 	return session.ReadMessages(s.sessions.TranscriptPath(sess.ID))
 }
 
+func (s *Service) HistoryView(ctx context.Context, q HistoryQuery) ([]HistoryMessage, error) {
+	if s.history == nil {
+		msgs, err := s.History(ctx, q.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		return sessionMessagesToHistoryMessages(q.ProjectID, msgs), nil
+	}
+	if err := s.importLegacyHistoryIfNeeded(ctx, q.ProjectID); err != nil {
+		return nil, err
+	}
+	return s.history.List(ctx, q)
+}
+
+func (s *Service) importLegacyHistoryIfNeeded(ctx context.Context, projectID string) error {
+	if s.history == nil {
+		return nil
+	}
+	count, err := s.history.ProjectMessageCount(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	msgs, err := s.History(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	return s.history.ImportLegacy(ctx, projectID, msgs, time.Now().UnixMilli())
+}
+
 // CompactHistory replaces a long companion transcript with one assistant
 // summary message so future turns keep the useful context without replaying
 // every prior exchange.
@@ -364,6 +403,53 @@ func (s *Service) CompactHistory(ctx context.Context, projectID string, now func
 	return compacted, nil
 }
 
+func (s *Service) CompactHistoryView(ctx context.Context, q HistoryQuery, now func() int64) ([]HistoryMessage, error) {
+	if s.history == nil {
+		msgs, err := s.CompactHistory(ctx, q.ProjectID, now)
+		if err != nil {
+			return nil, err
+		}
+		return sessionMessagesToHistoryMessages(q.ProjectID, msgs), nil
+	}
+	if err := s.importLegacyHistoryIfNeeded(ctx, q.ProjectID); err != nil {
+		return nil, err
+	}
+	msgs, err := s.history.List(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if len(msgs) == 0 {
+		return nil, nil
+	}
+	at := time.Now().UnixMilli()
+	if now != nil {
+		at = now()
+	}
+	summary := compactTranscriptSummary(historyMessagesToSessionMessages(msgs))
+	if err := s.history.Clear(ctx, q); err != nil {
+		return nil, err
+	}
+	scope := HistoryScopeProject
+	nodeID := ""
+	if normalizeHistoryView(q.Scope) == HistoryViewScene && strings.TrimSpace(q.NodeID) != "" {
+		scope = HistoryScopeScene
+		nodeID = strings.TrimSpace(q.NodeID)
+	}
+	compacted := HistoryMessage{
+		ProjectID: q.ProjectID,
+		NodeID:    nodeID,
+		Role:      "assistant",
+		Scope:     scope,
+		Status:    HistoryStatusCompacted,
+		Content:   summary,
+		CreatedAt: at,
+	}
+	if err := s.history.Append(ctx, compacted); err != nil {
+		return nil, err
+	}
+	return s.history.List(ctx, HistoryQuery{ProjectID: q.ProjectID, NodeID: nodeID, Scope: q.Scope, Limit: 1})
+}
+
 // ClearHistory removes all persisted companion transcript messages.
 func (s *Service) ClearHistory(ctx context.Context, projectID string) error {
 	sess, err := s.sessions.EnsureWorker(projectID)
@@ -371,6 +457,19 @@ func (s *Service) ClearHistory(ctx context.Context, projectID string) error {
 		return err
 	}
 	return session.RewriteMessages(s.sessions.TranscriptPath(sess.ID), nil)
+}
+
+func (s *Service) ClearHistoryView(ctx context.Context, q HistoryQuery) error {
+	if s.history == nil {
+		return s.ClearHistory(ctx, q.ProjectID)
+	}
+	if normalizeHistoryView(q.Scope) == HistoryViewScene && strings.TrimSpace(q.NodeID) != "" {
+		return s.history.Clear(ctx, q)
+	}
+	if err := s.history.Clear(ctx, HistoryQuery{ProjectID: q.ProjectID, Scope: HistoryViewProject}); err != nil {
+		return err
+	}
+	return s.ClearHistory(ctx, q.ProjectID)
 }
 
 // DeleteProjectData removes companion files tied to a permanently deleted
@@ -554,7 +653,7 @@ func (s *Service) SendWithCompanionOptionsAndImages(ctx context.Context, project
 	if err != nil {
 		return "", err
 	}
-	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, opts.Intent, normalized, now)
+	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, opts.Intent, opts.Scope, normalized, now)
 }
 
 // Cancel cancels an in-flight run.

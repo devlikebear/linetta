@@ -96,3 +96,48 @@ VALUES ('s1', 'f1', 'https://example.com', 'Example', 'short excerpt', 10)`)
 		t.Fatalf("source count after card delete = %d, want 0", sourceCount)
 	}
 }
+
+func TestApplyMigrations_createsCompanionMessagesWithProjectCascade(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys=ON`); err != nil {
+		t.Fatalf("pragma: %v", err)
+	}
+	if err := ApplyMigrations(ctx, db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	_, err = db.ExecContext(ctx, `
+INSERT INTO projects (id, title, genres, length_target, default_pov, created_at, updated_at)
+VALUES ('p1', 'Test', '["SF"]', 'novel', 'first', 0, 0)`)
+	if err != nil {
+		t.Fatalf("insert project: %v", err)
+	}
+	_, err = db.ExecContext(ctx, `
+INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title, content_doc, created_at, updated_at)
+VALUES ('n1', 'p1', NULL, 0, 'leaf', '씬 1', '시작', '{}', 0, 0)`)
+	if err != nil {
+		t.Fatalf("insert node: %v", err)
+	}
+	_, err = db.ExecContext(ctx, `
+INSERT INTO companion_messages (id, project_id, node_id, run_id, role, scope, intent, status, content, created_at)
+VALUES ('m1', 'p1', 'n1', 'r1', 'user', 'scene', 'scene_write', 'done', '써줘', 10)`)
+	if err != nil {
+		t.Fatalf("insert companion message: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM projects WHERE id = 'p1'`); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM companion_messages WHERE project_id = 'p1'`).Scan(&n); err != nil {
+		t.Fatalf("count companion messages: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("companion message count after project delete = %d, want 0", n)
+	}
+}

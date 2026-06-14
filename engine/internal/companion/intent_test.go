@@ -2,6 +2,39 @@ package companion
 
 import "testing"
 
+func TestResolveCompanionIntentPromotesSceneWriteFollowups(t *testing.T) {
+	previous := []conversationMessage{{
+		Role: "assistant",
+		Content: "원하시면 제가 바로 현재 씬 본문을 완성해서 적용할 수 있습니다. " +
+			"가능한 작업은 현재 씬 본문 작성, 현재 씬 확장, 연결부 작성입니다.",
+	}}
+
+	for _, text := range []string{"1번", "적용해줘", "좋아 바로 적용", "본문 작성"} {
+		got := resolveCompanionIntentWithConversation(text, RequestIntent{}, previous)
+		if got.Kind != companionIntentSceneWrite {
+			t.Fatalf("resolveCompanionIntentWithConversation(%q) = %q, want %q", text, got.Kind, companionIntentSceneWrite)
+		}
+	}
+}
+
+func TestResolveCompanionIntentDoesNotPromoteUnrelatedFollowups(t *testing.T) {
+	got := resolveCompanionIntentWithConversation("1번", RequestIntent{}, []conversationMessage{{
+		Role:    "assistant",
+		Content: "아이디어를 세 가지로 정리했습니다. 1번은 자료 조사, 2번은 설정 검토입니다.",
+	}})
+	if got.Kind != companionIntentChat {
+		t.Fatalf("unrelated numeric followup = %q, want chat", got.Kind)
+	}
+
+	got = resolveCompanionIntentWithConversation("적용해줘", RequestIntent{Kind: "chat"}, []conversationMessage{{
+		Role:    "assistant",
+		Content: "현재 씬 본문을 완성해서 적용할 수 있습니다.",
+	}})
+	if got.Kind != companionIntentChat {
+		t.Fatalf("explicit chat intent should not be promoted: %q", got.Kind)
+	}
+}
+
 func TestClassifyCompanionIntentDetectsSceneTextRequests(t *testing.T) {
 	for _, tc := range []struct {
 		text string

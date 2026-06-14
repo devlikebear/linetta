@@ -7,7 +7,6 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
-	"github.com/devlikebear/tars/pkg/session"
 )
 
 type companionSendParams struct {
@@ -57,12 +56,23 @@ func CompanionPreviewContext(svc *companion.Service) rpc.Handler {
 
 type companionHistoryParams struct {
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id"`
+	Scope     string `json:"scope"`
+	Limit     int    `json:"limit"`
 }
 
 type companionMessage struct {
+	ID        string `json:"id,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
+	NodeID    string `json:"node_id,omitempty"`
+	NodeLabel string `json:"node_label,omitempty"`
+	RunID     string `json:"run_id,omitempty"`
 	Role      string `json:"role"`
 	Content   string `json:"content"`
 	Timestamp int64  `json:"timestamp"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
+	Status    string `json:"status,omitempty"`
 }
 
 // CompanionHistory returns a handler for companion.history.
@@ -72,7 +82,12 @@ func CompanionHistory(svc *companion.Service) rpc.Handler {
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
 		}
-		msgs, err := svc.History(ctx, p.ProjectID)
+		msgs, err := svc.HistoryView(ctx, companion.HistoryQuery{
+			ProjectID: p.ProjectID,
+			NodeID:    p.NodeID,
+			Scope:     p.Scope,
+			Limit:     p.Limit,
+		})
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -87,7 +102,12 @@ func CompanionCompact(svc *companion.Service, now Clock) rpc.Handler {
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
 		}
-		msgs, err := svc.CompactHistory(ctx, p.ProjectID, func() int64 { return now() })
+		msgs, err := svc.CompactHistoryView(ctx, companion.HistoryQuery{
+			ProjectID: p.ProjectID,
+			NodeID:    p.NodeID,
+			Scope:     p.Scope,
+			Limit:     p.Limit,
+		}, func() int64 { return now() })
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -102,17 +122,33 @@ func CompanionClear(svc *companion.Service) rpc.Handler {
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
 		}
-		if err := svc.ClearHistory(ctx, p.ProjectID); err != nil {
+		if err := svc.ClearHistoryView(ctx, companion.HistoryQuery{
+			ProjectID: p.ProjectID,
+			NodeID:    p.NodeID,
+			Scope:     p.Scope,
+		}); err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.RawMessage(`{"ok":true}`), nil
 	}
 }
 
-func marshalCompanionMessages(msgs []session.Message) (json.RawMessage, error) {
+func marshalCompanionMessages(msgs []companion.HistoryMessage) (json.RawMessage, error) {
 	out := make([]companionMessage, 0, len(msgs))
 	for _, m := range msgs {
-		out = append(out, companionMessage{Role: m.Role, Content: m.Content, Timestamp: m.Timestamp.UnixMilli()})
+		out = append(out, companionMessage{
+			ID:        m.ID,
+			ProjectID: m.ProjectID,
+			NodeID:    m.NodeID,
+			NodeLabel: m.NodeLabel,
+			RunID:     m.RunID,
+			Role:      m.Role,
+			Content:   m.Content,
+			Timestamp: m.CreatedAt,
+			Scope:     m.Scope,
+			Intent:    m.Intent,
+			Status:    m.Status,
+		})
 	}
 	return json.Marshal(map[string][]companionMessage{"messages": out})
 }

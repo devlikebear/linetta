@@ -6,11 +6,18 @@ import type {
   CompanionMessage, CompanionProposal, CompanionChoices,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
   CompanionApplied, CompanionThinking, CompanionReasoning, AIContextSelection, CompanionImageAttachment, CompanionIntent,
+  CompanionHistoryScope,
 } from "../lib/types";
 
 export interface ChatMessage {
+  id?: string;
   role: "user" | "assistant";
   content: string;
+  nodeId?: string | null;
+  nodeLabel?: string;
+  runId?: string;
+  scope?: CompanionMessage["scope"];
+  status?: string;
   proposal?: CompanionProposal;
   choices?: CompanionChoices;
   errored?: boolean;
@@ -43,14 +50,17 @@ interface CompanionSessionStore {
   historyLoaded: boolean;
   historyLoading: boolean;
   historySeq: number;
+  historyRetryCount: number;
+  historyRetryTimer: ReturnType<typeof setTimeout> | null;
 }
 
-type CompanionRunEvent = { run_id: string; project_id?: string };
+type CompanionRunEvent = { run_id: string; project_id?: string; node_id?: string; scope?: CompanionMessage["scope"] };
+type CompanionStoreKey = string;
 
 const PENDING_RUN_ID = "__linetta_pending_run__";
 
-const stores = new Map<string, CompanionSessionStore>();
-const runProjects = new Map<string, string>();
+const stores = new Map<CompanionStoreKey, CompanionSessionStore>();
+const runStores = new Map<string, CompanionStoreKey>();
 let engineListenersStarted = false;
 let engineUnlisteners: UnlistenFn[] = [];
 let listenerGeneration = 0;
@@ -80,19 +90,33 @@ function snapshotFromState(state: CompanionSessionState): CompanionSessionSnapsh
 }
 
 function toChatMessage(m: CompanionMessage): ChatMessage {
+  const base = {
+    id: m.id,
+    nodeId: m.node_id,
+    nodeLabel: m.node_label,
+    runId: m.run_id,
+    scope: m.scope,
+    status: m.status,
+  };
   if (m.role !== "assistant") {
-    return { role: "user", content: m.content };
+    return { ...base, role: "user", content: m.content };
   }
-  const runId = `history-${m.timestamp}`;
+  const runId = m.run_id || `history-${m.timestamp}`;
   return {
+    ...base,
     role: "assistant",
     content: stripProposalBlock(m.content),
     proposal: extractApplyOpsProposal(m.content, runId) ?? undefined,
   };
 }
 
-function getStore(projectId: string): CompanionSessionStore {
-  let store = stores.get(projectId);
+function companionStoreKey(projectId: string, scope: CompanionHistoryScope, nodeId?: string | null): CompanionStoreKey {
+  if (scope === "scene" && nodeId) return `${projectId}:scene:${nodeId}`;
+  return `${projectId}:project:all`;
+}
+
+function getStore(key: CompanionStoreKey): CompanionSessionStore {
+  let store = stores.get(key);
   if (!store) {
     store = {
       state: initialState(),
@@ -101,8 +125,10 @@ function getStore(projectId: string): CompanionSessionStore {
       historyLoaded: false,
       historyLoading: false,
       historySeq: 0,
+      historyRetryCount: 0,
+      historyRetryTimer: null,
     };
-    stores.set(projectId, store);
+    stores.set(key, store);
   }
   return store;
 }
@@ -114,17 +140,17 @@ function notifyStore(store: CompanionSessionStore) {
   }
 }
 
-function updateStore(projectId: string, update: (state: CompanionSessionState) => CompanionSessionState) {
-  const store = getStore(projectId);
+function updateStore(key: CompanionStoreKey, update: (state: CompanionSessionState) => CompanionSessionState) {
+  const store = getStore(key);
   const next = update(store.state);
   if (next === store.state) return;
   store.state = next;
   notifyStore(store);
 }
 
-function subscribe(projectId: string, listener: (snapshot: CompanionSessionSnapshot) => void) {
+function subscribe(key: CompanionStoreKey, listener: (snapshot: CompanionSessionSnapshot) => void) {
   ensureEngineListeners();
-  const store = getStore(projectId);
+  const store = getStore(key);
   store.listeners.add(listener);
   listener(snapshotFromState(store.state));
   return () => {
@@ -132,31 +158,41 @@ function subscribe(projectId: string, listener: (snapshot: CompanionSessionSnaps
   };
 }
 
-function loadHistory(projectId: string) {
-  const store = getStore(projectId);
+function loadHistory(projectId: string, nodeId: string | null, scope: CompanionHistoryScope, key: CompanionStoreKey) {
+  const store = getStore(key);
   if (store.historyLoaded || store.historyLoading) return;
+  if (store.historyRetryTimer) {
+    clearTimeout(store.historyRetryTimer);
+    store.historyRetryTimer = null;
+  }
   store.historyLoading = true;
   const seq = ++store.historySeq;
-  companionApi.history(projectId)
+  companionApi.history(projectId, scope === "scene" ? nodeId : null, scope)
     .then((msgs: CompanionMessage[]) => {
-      const current = getStore(projectId);
+      const current = getStore(key);
       if (seq !== current.historySeq) return;
       current.historyLoading = false;
       current.historyLoaded = true;
-      updateStore(projectId, (state) => {
+      current.historyRetryCount = 0;
+      updateStore(key, (state) => {
         if (state.status === "streaming" || state.messages.length > 0) return state;
         return { ...state, messages: msgs.map(toChatMessage) };
       });
     })
     .catch(() => {
-      const current = getStore(projectId);
+      const current = getStore(key);
       if (seq !== current.historySeq) return;
       current.historyLoading = false;
-      current.historyLoaded = true;
-      updateStore(projectId, (state) => {
-        if (state.status === "streaming" || state.messages.length > 0) return state;
-        return { ...state, messages: [] };
-      });
+      current.historyLoaded = false;
+      if (current.historyRetryCount < 3) {
+        current.historyRetryCount += 1;
+        const delayMs = 250 * current.historyRetryCount;
+        current.historyRetryTimer = setTimeout(() => {
+          const retryStore = getStore(key);
+          retryStore.historyRetryTimer = null;
+          loadHistory(projectId, nodeId, scope, key);
+        }, delayMs);
+      }
     });
 }
 
@@ -178,47 +214,47 @@ function ensureEngineListeners() {
   if (engineListenersStarted) return;
   engineListenersStarted = true;
   registerEngineEvent<CompanionDelta>("companion-delta", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => ({ ...state, streaming: state.streaming + p.text }));
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({ ...state, streaming: state.streaming + p.text }));
   });
   registerEngineEvent<CompanionReset>("companion-reset", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => ({ ...state, streaming: p.text }));
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({ ...state, streaming: p.text }));
   });
   registerEngineEvent<CompanionThinking>("companion-thinking", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => ({ ...state, thinking: p.text }));
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({ ...state, thinking: p.text }));
   });
   registerEngineEvent<CompanionReasoning>("companion-reasoning", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => ({ ...state, reasoning: state.reasoning + p.text }));
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({ ...state, reasoning: state.reasoning + p.text }));
   });
   registerEngineEvent<CompanionProposal>("companion-proposal", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => ({ ...state, pendingProposal: p }));
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({ ...state, pendingProposal: p }));
   });
   registerEngineEvent<CompanionChoices>("companion-choices", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => ({ ...state, pendingChoices: p }));
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({ ...state, pendingChoices: p }));
   });
   registerEngineEvent<CompanionApplied>("companion-applied", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    const store = getStore(projectId);
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    const store = getStore(key);
     for (const listener of store.appliedListeners) {
       listener(p);
     }
   });
   registerEngineEvent<CompanionDone>("companion-done", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => {
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => {
       const prose = stripProposalBlock(p.full_text);
       const proposal = state.pendingProposal ?? extractApplyOpsProposal(p.full_text, p.run_id) ?? undefined;
       const choices = state.pendingChoices ?? undefined;
@@ -235,12 +271,12 @@ function ensureEngineListeners() {
         pendingChoices: null,
       };
     });
-    runProjects.delete(p.run_id);
+    runStores.delete(p.run_id);
   });
   registerEngineEvent<CompanionError>("companion-error", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => ({
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({
       ...state,
       messages: [...state.messages, { role: "assistant", content: p.message, errored: true, retryText: latestUserMessage(state.messages) }],
       streaming: "",
@@ -252,12 +288,12 @@ function ensureEngineListeners() {
       pendingProposal: null,
       pendingChoices: null,
     }));
-    runProjects.delete(p.run_id);
+    runStores.delete(p.run_id);
   });
   registerEngineEvent<CompanionCancelled>("companion-cancelled", (p) => {
-    const projectId = projectIdForRunEvent(p);
-    if (!projectId || !acceptRunEvent(projectId, p.run_id)) return;
-    updateStore(projectId, (state) => ({
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({
       ...state,
       streaming: "",
       thinking: "",
@@ -268,7 +304,7 @@ function ensureEngineListeners() {
       pendingProposal: null,
       pendingChoices: null,
     }));
-    runProjects.delete(p.run_id);
+    runStores.delete(p.run_id);
   });
 }
 
@@ -281,64 +317,85 @@ function latestUserMessage(messages: ChatMessage[]): string | undefined {
   return undefined;
 }
 
-function projectIdForRunEvent(event: CompanionRunEvent): string | null {
-  if (event.project_id) {
-    runProjects.set(event.run_id, event.project_id);
-    return event.project_id;
-  }
-  const known = runProjects.get(event.run_id);
+function storeKeyForRunEvent(event: CompanionRunEvent): CompanionStoreKey | null {
+  const known = runStores.get(event.run_id);
   if (known) return known;
+  if (event.project_id && (event.scope === "scene" || event.scope === "project")) {
+    const key = companionStoreKey(event.project_id, event.scope, event.node_id ?? null);
+    runStores.set(event.run_id, key);
+    return key;
+  }
 
   const candidates: string[] = [];
-  for (const [projectId, store] of stores.entries()) {
+  for (const [key, store] of stores.entries()) {
     if (store.state.runId === event.run_id || store.state.runId === PENDING_RUN_ID) {
-      candidates.push(projectId);
+      candidates.push(key);
     }
   }
   if (candidates.length !== 1) return null;
-  const projectId = candidates[0];
-  runProjects.set(event.run_id, projectId);
-  return projectId;
+  const key = candidates[0];
+  runStores.set(event.run_id, key);
+  return key;
 }
 
-function acceptRunEvent(projectId: string, runId: string): boolean {
-  const store = getStore(projectId);
+function acceptRunEvent(key: CompanionStoreKey, runId: string): boolean {
+  const store = getStore(key);
   if (store.state.runId === runId) return true;
+  if (!store.state.runId && runStores.get(runId) === key) {
+    store.state = { ...store.state, runId };
+    notifyStore(store);
+    return true;
+  }
   if (store.state.runId === PENDING_RUN_ID) {
     store.state = { ...store.state, runId };
-    runProjects.set(runId, projectId);
+    runStores.set(runId, key);
     notifyStore(store);
     return true;
   }
   return false;
 }
 
-export function useCompanion(projectId: string, nodeIdRef: { current: string | null }, onApplied?: (event: CompanionApplied) => void, contextSelection?: AIContextSelection, outlineStructure?: string) {
-  const [snapshot, setSnapshot] = useState<CompanionSessionSnapshot>(() => snapshotFromState(getStore(projectId).state));
+export function useCompanion(
+  projectId: string,
+  nodeIdRef: { current: string | null },
+  onApplied?: (event: CompanionApplied) => void,
+  contextSelection?: AIContextSelection,
+  outlineStructure?: string,
+  historyScope: CompanionHistoryScope = "scene",
+) {
+  const currentNodeId = nodeIdRef.current ?? null;
+  const effectiveScope: CompanionHistoryScope = historyScope === "scene" && currentNodeId ? "scene" : "project";
+  const storeKey = companionStoreKey(projectId, effectiveScope, currentNodeId);
+  const [snapshot, setSnapshot] = useState<CompanionSessionSnapshot>(() => snapshotFromState(getStore(storeKey).state));
 
   useEffect(() => {
-    const unsubscribe = subscribe(projectId, setSnapshot);
-    loadHistory(projectId);
+    const unsubscribe = subscribe(storeKey, setSnapshot);
+    loadHistory(projectId, currentNodeId, effectiveScope, storeKey);
     return unsubscribe;
-  }, [projectId]);
+  }, [currentNodeId, effectiveScope, projectId, storeKey]);
 
   useEffect(() => {
     if (!onApplied) return undefined;
-    const store = getStore(projectId);
+    const store = getStore(storeKey);
     store.appliedListeners.add(onApplied);
     return () => {
       store.appliedListeners.delete(onApplied);
     };
-  }, [onApplied, projectId]);
+  }, [onApplied, storeKey]);
 
   const send = useCallback(async (text: string, images: CompanionImageAttachment[] = [], intent?: CompanionIntent) => {
     ensureEngineListeners();
     const trimmed = text.trim();
-    const store = getStore(projectId);
+    const store = getStore(storeKey);
     if (!trimmed || store.state.status === "streaming" || store.state.sending) return;
-    updateStore(projectId, (state) => ({
+    updateStore(storeKey, (state) => ({
       ...state,
-      messages: [...state.messages, { role: "user", content: trimmed }],
+      messages: [...state.messages, {
+        role: "user",
+        content: trimmed,
+        nodeId: effectiveScope === "scene" ? currentNodeId : null,
+        scope: effectiveScope,
+      }],
       status: "streaming",
       runId: PENDING_RUN_ID,
       sending: true,
@@ -349,24 +406,25 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
       pendingChoices: null,
     }));
     try {
-      const payload = contextSelection || outlineStructure || images.length > 0 || intent
+      const payload = contextSelection || outlineStructure || images.length > 0 || intent || effectiveScope === "project"
         ? {
             ...(contextSelection ? { context: contextSelection } : {}),
             ...(outlineStructure ? { outline_structure: outlineStructure } : {}),
             ...(images.length > 0 ? { images } : {}),
             ...(intent ? { intent } : {}),
+            ...(effectiveScope === "project" ? { scope: "project" as const } : {}),
           }
         : undefined;
       const { run_id } = payload
-        ? await companionApi.send(projectId, nodeIdRef.current ?? "", trimmed, payload)
-        : await companionApi.send(projectId, nodeIdRef.current ?? "", trimmed);
-      updateStore(projectId, (state) => {
+        ? await companionApi.send(projectId, effectiveScope === "scene" ? currentNodeId ?? "" : "", trimmed, payload)
+        : await companionApi.send(projectId, currentNodeId ?? "", trimmed);
+      updateStore(storeKey, (state) => {
         if (state.runId !== PENDING_RUN_ID) return state;
-        runProjects.set(run_id, projectId);
+        runStores.set(run_id, storeKey);
         return { ...state, runId: run_id };
       });
     } catch (e) {
-      updateStore(projectId, (state) => ({
+      updateStore(storeKey, (state) => ({
         ...state,
         messages: [...state.messages, { role: "assistant", content: String(e), errored: true }],
         status: "idle",
@@ -374,25 +432,25 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
         sending: false,
       }));
     }
-  }, [projectId, nodeIdRef, contextSelection, outlineStructure]);
+  }, [contextSelection, currentNodeId, effectiveScope, outlineStructure, projectId, storeKey]);
 
   const cancel = useCallback(() => {
-    const id = getStore(projectId).state.runId;
+    const id = getStore(storeKey).state.runId;
     if (id && id !== PENDING_RUN_ID) companionApi.cancel(id).catch(() => {});
-  }, [projectId]);
+  }, [storeKey]);
 
   const clear = useCallback(async () => {
-    await companionApi.clear(projectId);
-    const store = getStore(projectId);
+    await companionApi.clear(projectId, effectiveScope === "scene" ? currentNodeId : null, effectiveScope);
+    const store = getStore(storeKey);
     store.historyLoaded = true;
-    updateStore(projectId, () => initialState());
-  }, [projectId]);
+    updateStore(storeKey, () => initialState());
+  }, [currentNodeId, effectiveScope, projectId, storeKey]);
 
   const compact = useCallback(async () => {
-    const msgs = await companionApi.compact(projectId);
-    const store = getStore(projectId);
+    const msgs = await companionApi.compact(projectId, effectiveScope === "scene" ? currentNodeId : null, effectiveScope);
+    const store = getStore(storeKey);
     store.historyLoaded = true;
-    updateStore(projectId, (state) => ({
+    updateStore(storeKey, (state) => ({
       ...state,
       messages: msgs.map(toChatMessage),
       streaming: "",
@@ -404,7 +462,7 @@ export function useCompanion(projectId: string, nodeIdRef: { current: string | n
       pendingProposal: null,
       pendingChoices: null,
     }));
-  }, [projectId]);
+  }, [currentNodeId, effectiveScope, projectId, storeKey]);
 
   return {
     messages: snapshot.messages,
@@ -426,6 +484,9 @@ export function __resetCompanionSessionStoreForTests() {
   }
   engineUnlisteners = [];
   engineListenersStarted = false;
+  for (const store of stores.values()) {
+    if (store.historyRetryTimer) clearTimeout(store.historyRetryTimer);
+  }
   stores.clear();
-  runProjects.clear();
+  runStores.clear();
 }

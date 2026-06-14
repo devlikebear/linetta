@@ -23,6 +23,11 @@ type companionIntent struct {
 	TargetNodeID        string
 }
 
+type conversationMessage struct {
+	Role    string
+	Content string
+}
+
 func (i companionIntent) RequiresApplyOps() bool {
 	return i.Kind == companionIntentGenericMutation || i.RequiresSceneText()
 }
@@ -33,6 +38,24 @@ func (i companionIntent) RequiresSceneText() bool {
 
 func classifyCompanionIntent(text string) companionIntent {
 	return resolveCompanionIntent(text, RequestIntent{})
+}
+
+func resolveCompanionIntentWithConversation(text string, request RequestIntent, history []conversationMessage) companionIntent {
+	if normalizeRequestIntentKind(request.Kind) != "" {
+		return resolveCompanionIntent(text, request)
+	}
+	intent := resolveCompanionIntent(text, request)
+	if intent.Kind != companionIntentChat {
+		return intent
+	}
+	if isSceneWriteFollowup(text) && recentAssistantOfferedSceneWrite(history) {
+		return companionIntent{
+			Kind:                companionIntentSceneWrite,
+			AllowEmptySceneText: containsAny(strings.ToLower(strings.TrimSpace(text)), companionSceneEmptyTerms),
+			TargetNodeID:        strings.TrimSpace(request.TargetNodeID),
+		}
+	}
+	return intent
 }
 
 func resolveCompanionIntent(text string, request RequestIntent) companionIntent {
@@ -107,6 +130,60 @@ func isSceneTextTarget(s string) bool {
 	return containsAny(s, companionSceneWriteTerms) || containsAny(s, companionSceneRewriteTerms)
 }
 
+func isSceneWriteFollowup(text string) bool {
+	s := strings.ToLower(strings.TrimSpace(text))
+	if s == "" {
+		return false
+	}
+	if isNumberedChoiceFollowup(s) {
+		return true
+	}
+	if len([]rune(s)) > 48 {
+		return false
+	}
+	if isSceneTextTarget(s) && containsAny(s, companionMutationTerms) {
+		return true
+	}
+	return containsAny(s, companionSceneFollowupTerms)
+}
+
+func isNumberedChoiceFollowup(s string) bool {
+	s = strings.TrimSpace(s)
+	s = strings.Trim(s, ".。．!！?？")
+	s = strings.ReplaceAll(s, " ", "")
+	for _, suffix := range []string{"번", "안", "번째", "째"} {
+		s = strings.TrimSuffix(s, suffix)
+	}
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func recentAssistantOfferedSceneWrite(history []conversationMessage) bool {
+	checked := 0
+	for i := len(history) - 1; i >= 0 && checked < 4; i-- {
+		msg := history[i]
+		if msg.Role != "assistant" {
+			continue
+		}
+		checked++
+		s := strings.ToLower(strings.TrimSpace(msg.Content))
+		if s == "" {
+			continue
+		}
+		if containsAny(s, companionSceneOfferTargetTerms) && containsAny(s, companionSceneOfferActionTerms) {
+			return true
+		}
+	}
+	return false
+}
+
 var companionSceneBodyTerms = []string{
 	"현재 씬", "현재 장면", "씬 본문", "장면 본문", "현재 본문", "현재 원고",
 	"본문", "원고", "문장", "다음 씬", "다음 장면",
@@ -118,6 +195,21 @@ var companionSceneWriteTerms = []string{
 
 var companionSceneRewriteTerms = []string{
 	"수정", "바꿔", "변경", "반영", "다듬", "고쳐", "재작성", "교정", "퇴고",
+}
+
+var companionSceneFollowupTerms = []string{
+	"적용", "진행", "바로", "좋아", "그걸로", "그대로", "작성해", "써줘", "써 줘",
+	"완성해", "본문 작성", "현재 씬 작성", "첫번째", "첫 번째", "1번",
+}
+
+var companionSceneOfferTargetTerms = []string{
+	"현재 씬 본문", "현재 장면 본문", "씬 본문", "장면 본문", "현재 원고",
+	"본문 작성", "현재 씬", "현재 장면",
+}
+
+var companionSceneOfferActionTerms = []string{
+	"작성", "써드", "써 드", "새로 씁", "완성", "적용", "이어", "확장",
+	"연결부", "문체", "톤 맞춰",
 }
 
 var companionSceneEmptyTerms = []string{

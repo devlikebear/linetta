@@ -169,7 +169,7 @@ func main() {
 		projects, threads, entities, relationships, plotBuilder,
 		s.Notifier(), companion.ClientFactory(ai.DefaultClientFactory), providerSrc, home,
 		nodes, beats,
-	).WithFacts(facts).WithOpsStatus(ops)
+	).WithFacts(facts).WithOpsStatus(ops).WithHistory(companion.NewHistoryRepo(st.DB()))
 
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, engineVersion))

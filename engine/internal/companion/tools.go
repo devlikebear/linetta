@@ -53,10 +53,10 @@ func (s *Service) buildToolRegistry(projectID, nodeID string, now func() int64, 
 	if len(runIDAndUserText) > 1 {
 		userText = runIDAndUserText[1]
 	}
-	return s.buildToolRegistryWithIntent(projectID, nodeID, now, classifyCompanionIntent(userText), runIDAndUserText...)
+	return s.buildToolRegistryWithIntent(projectID, nodeID, turnHistoryScope("", nodeID), now, classifyCompanionIntent(userText), runIDAndUserText...)
 }
 
-func (s *Service) buildToolRegistryWithIntent(projectID, nodeID string, now func() int64, intent companionIntent, runIDAndUserText ...string) *tarstools.Registry {
+func (s *Service) buildToolRegistryWithIntent(projectID, nodeID, scope string, now func() int64, intent companionIntent, runIDAndUserText ...string) *tarstools.Registry {
 	reg := tarstools.NewRegistryWithScope(tarstools.RegistryScopeUser)
 	reg.Register(tarstools.NewWebFetchTool(true))
 	reg.Register(s.buildWebSearchTool())
@@ -68,7 +68,7 @@ func (s *Service) buildToolRegistryWithIntent(projectID, nodeID string, now func
 	if len(runIDAndUserText) > 1 {
 		userText = runIDAndUserText[1]
 	}
-	reg.Register(s.buildApplyOpsTool(projectID, nodeID, activeRunID, userText, intent, now))
+	reg.Register(s.buildApplyOpsTool(projectID, nodeID, scope, activeRunID, userText, intent, now))
 	return reg
 }
 
@@ -94,7 +94,7 @@ func (s *Service) buildWebSearchTool() tarstools.Tool {
 	return tarstools.NewWebSearchToolWithOptions(opts)
 }
 
-func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, intent companionIntent, now func() int64) tarstools.Tool {
+func (s *Service) buildApplyOpsTool(projectID, nodeID, scope, runID, userText string, intent companionIntent, now func() int64) tarstools.Tool {
 	return tarstools.Tool{
 		Name:        "linetta_apply_ops",
 		Description: "Directly apply Linetta story mutations to the current project. Use set_scene_text to rewrite the current scene body, create_outline_node/create_scene for new left outline tree items, thread/beat ops for plot beats, entity/relationship ops for characters, places, items, skills, magic, abilities, and create_fact_card for source-backed Fact Book cards.",
@@ -117,6 +117,9 @@ func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, i
 				_ = s.notify.Notify("companion.applied", appliedPayload{
 					RunID:        runID,
 					ProjectID:    projectID,
+					NodeID:       nodeID,
+					Scope:        scope,
+					Intent:       string(intent.Kind),
 					Summary:      result.Summary,
 					Applied:      result.Applied,
 					ChangedNodes: result.ChangedNodes,

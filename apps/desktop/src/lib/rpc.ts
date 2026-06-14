@@ -3,6 +3,7 @@ import type {
   AIOptions,
   AIContextPreview,
   CompanionImageAttachment,
+  CompanionHistoryScope,
   CompanionIntent,
   CompanionApplyOpsResult,
   Beat,
@@ -321,14 +322,27 @@ export const companion = {
       "companion.preview_context",
       { project_id: projectId, node_id: nodeId, options: options ?? {} },
     ).then(mapContextPreviewResponse),
-  history: (projectId: string) =>
-    rpcCall<{ messages: CompanionMessage[] }>("companion.history", { project_id: projectId })
+  history: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope, limit?: number) =>
+    rpcCall<{ messages: CompanionMessage[] }>("companion.history", {
+      project_id: projectId,
+      ...(nodeId ? { node_id: nodeId } : {}),
+      ...(scope ? { scope } : {}),
+      ...(limit ? { limit } : {}),
+    })
       .then((r) => r.messages ?? []),
-  compact: (projectId: string) =>
-    rpcCall<{ messages: CompanionMessage[] }>("companion.compact", { project_id: projectId })
+  compact: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope) =>
+    rpcCall<{ messages: CompanionMessage[] }>("companion.compact", {
+      project_id: projectId,
+      ...(nodeId ? { node_id: nodeId } : {}),
+      ...(scope ? { scope } : {}),
+    })
       .then((r) => r.messages ?? []),
-  clear: (projectId: string) =>
-    rpcCall<{ ok: true }>("companion.clear", { project_id: projectId }),
+  clear: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope) =>
+    rpcCall<{ ok: true }>("companion.clear", {
+      project_id: projectId,
+      ...(nodeId ? { node_id: nodeId } : {}),
+      ...(scope ? { scope } : {}),
+    }),
   cancel: (runId: string) =>
     rpcCall<{ ok: true }>("companion.cancel", { run_id: runId }),
   remember: (projectId: string, text: string, category?: string) =>

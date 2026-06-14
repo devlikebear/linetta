@@ -20,7 +20,7 @@ import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { companion as companionApi } from "../../lib/rpc";
 import { stripProposalBlock } from "../../lib/companionDisplay";
-import type { AIContextPreview, AIContextSelection, CompanionImageAttachment } from "../../lib/types";
+import type { AIContextPreview, AIContextSelection, CompanionHistoryScope, CompanionImageAttachment } from "../../lib/types";
 import { AIDraftComposer, type AIDraftComposerProps } from "../ai/AIPanel";
 import { AIContextChecklistList, DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../ai/AIContextChecklist";
 import { ProposalCard } from "./ProposalCard";
@@ -299,7 +299,17 @@ function MessageCopyButton({
 export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, beforeSend, outlineStructure, aiDraft, selectionRewriteRequest }: Props) {
   const { t } = useI18n();
   const [contextSelection, setContextSelection] = useState<AIContextSelection>(DEFAULT_AI_CONTEXT_SELECTION);
-  const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(projectId, nodeIdRef, onApplied, contextSelection, outlineStructure);
+  const currentNodeId = nodeIdRef.current;
+  const [historyScope, setHistoryScope] = useState<CompanionHistoryScope>(() => currentNodeId ? "scene" : "project");
+  const effectiveHistoryScope: CompanionHistoryScope = currentNodeId ? historyScope : "project";
+  const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(
+    projectId,
+    nodeIdRef,
+    onApplied,
+    contextSelection,
+    outlineStructure,
+    effectiveHistoryScope,
+  );
   const [draft, setDraft] = useState("");
   const [flushing, setFlushing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -317,6 +327,12 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
   const loadedContextSelectionRef = useRef<AIContextSelection | null>(null);
   const lastSelectionRewriteRequestIdRef = useRef<string | null>(null);
   const focusInput = () => inputRef.current?.focus();
+
+  useEffect(() => {
+    if (!currentNodeId && historyScope === "scene") {
+      setHistoryScope("project");
+    }
+  }, [currentNodeId, historyScope]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -514,6 +530,28 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
         </div>
       </div>
 
+      {!aiDraft && (
+        <div className="companion-scope-tabs" role="group" aria-label={t("companion.scope.label")}>
+          <button
+            type="button"
+            className={effectiveHistoryScope === "scene" ? "is-active" : ""}
+            aria-pressed={effectiveHistoryScope === "scene"}
+            disabled={!currentNodeId}
+            onClick={() => setHistoryScope("scene")}
+          >
+            {t("companion.scope.scene")}
+          </button>
+          <button
+            type="button"
+            className={effectiveHistoryScope === "project" ? "is-active" : ""}
+            aria-pressed={effectiveHistoryScope === "project"}
+            onClick={() => setHistoryScope("project")}
+          >
+            {t("companion.scope.project")}
+          </button>
+        </div>
+      )}
+
       <div className="panel-scroll cmp-stream" ref={scrollRef}>
         {showHelp && <CompanionHelp t={t} />}
         {aiDraft ? (
@@ -524,9 +562,15 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
         {!aiDraft && messages.map((m, i) => {
           const isUser = m.role === "user";
           const messageKey = `${m.role}-${i}`;
+          const showSceneMeta = effectiveHistoryScope === "project" && !!m.nodeLabel;
           if (isUser) {
             return (
               <div key={i} className="msg user">
+                {showSceneMeta && (
+                  <div className="companion-message-meta">
+                    <span className="companion-scene-chip">{m.nodeLabel}</span>
+                  </div>
+                )}
                 <div className="msg-line">
                   <MessageCopyButton
                     text={m.content}
@@ -544,6 +588,11 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
             <div key={i} className="msg bot">
               {(m.content || !hasCard) && (
                 <>
+                  {showSceneMeta && (
+                    <div className="companion-message-meta">
+                      <span className="companion-scene-chip">{m.nodeLabel}</span>
+                    </div>
+                  )}
                   <span className="msg-who">companion</span>
                   <div className="msg-line">
                     <div className={`msg-bubble${m.errored ? " errored" : ""}`}>

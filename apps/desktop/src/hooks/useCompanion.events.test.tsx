@@ -160,6 +160,40 @@ describe("useCompanion streaming", () => {
     expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "이미지 참고해줘", { context: selection, images: [image] });
   });
 
+  it("loads persisted transcript separately for each scene scope", async () => {
+    rpc.history.mockImplementation((_projectId: string, nodeId?: string | null, scope?: string) => {
+      if (scope === "scene" && nodeId === "n1") {
+        return Promise.resolve([{ role: "assistant", content: "씬 1 대화", timestamp: 1, node_id: "n1", scope: "scene" }]);
+      }
+      if (scope === "scene" && nodeId === "n2") {
+        return Promise.resolve([{ role: "assistant", content: "씬 2 대화", timestamp: 2, node_id: "n2", scope: "scene" }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const first = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(first.result.current.messages[0]?.content).toBe("씬 1 대화"));
+
+    const second = renderHook(() => useCompanion("p1", { current: "n2" }));
+    await waitFor(() => expect(second.result.current.messages[0]?.content).toBe("씬 2 대화"));
+
+    expect(first.result.current.messages[0]?.content).toBe("씬 1 대화");
+    expect(rpc.history).toHaveBeenCalledWith("p1", "n1", "scene");
+    expect(rpc.history).toHaveBeenCalledWith("p1", "n2", "scene");
+  });
+
+  it("uses project scope without a node target when requested", async () => {
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }, undefined, undefined, undefined, "project"));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("작품 전체 플롯 봐줘");
+    });
+
+    expect(rpc.history).toHaveBeenCalledWith("p1", null, "project");
+    expect(rpc.send).toHaveBeenCalledWith("p1", "", "작품 전체 플롯 봐줘", { scope: "project" });
+  });
+
   it("passes the selected outline structure to companion turns", async () => {
     const selection = { ...DEFAULT_AI_CONTEXT_SELECTION };
     const outlineStructure = "웹소설: 권 > 화 > 씬 (예: 1권 > 1화 > 씬 1)";
@@ -295,7 +329,7 @@ describe("useCompanion streaming", () => {
       await result.current.clear();
     });
 
-    expect(rpc.clear).toHaveBeenCalledWith("p1");
+    expect(rpc.clear).toHaveBeenCalledWith("p1", "n1", "scene");
     expect(result.current.messages).toEqual([]);
     expect(result.current.status).toBe("idle");
   });
@@ -315,9 +349,32 @@ describe("useCompanion streaming", () => {
       await result.current.compact();
     });
 
-    expect(rpc.compact).toHaveBeenCalledWith("p1");
+    expect(rpc.compact).toHaveBeenCalledWith("p1", "n1", "scene");
     expect(result.current.messages).toEqual([
       { role: "assistant", content: "이전 컴패니언 대화 요약\n- 나: 긴 질문" },
     ]);
+  });
+
+  it("retries loading persisted transcript after an initial history failure", async () => {
+    rpc.history
+      .mockRejectedValueOnce(new Error("engine warming up"))
+      .mockResolvedValueOnce([
+        { role: "user", content: "재시작 전 질문", timestamp: 1 },
+        { role: "assistant", content: "재시작 후에도 보여야 하는 답", timestamp: 2 },
+      ]);
+
+    const first = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(rpc.history).toHaveBeenCalledTimes(1));
+    expect(first.result.current.messages).toEqual([]);
+    first.unmount();
+
+    const second = renderHook(() => useCompanion("p1", { current: "n1" }));
+
+    await waitFor(() => expect(second.result.current.messages).toHaveLength(2));
+    expect(rpc.history).toHaveBeenCalledTimes(2);
+    expect(second.result.current.messages[1]).toMatchObject({
+      role: "assistant",
+      content: "재시작 후에도 보여야 하는 답",
+    });
   });
 });

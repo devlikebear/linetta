@@ -20,30 +20,48 @@ import (
 type deltaPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
 	Text      string `json:"text"`
 }
 type resetPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
 	Text      string `json:"text"`
 }
 type donePayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
 	FullText  string `json:"full_text"`
 }
 type errorPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
 	Message   string `json:"message"`
 }
 type cancelledPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
 }
 type proposalPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
 	Valid     bool   `json:"valid"`
 	Summary   string `json:"summary,omitempty"`
 	Ops       []Op   `json:"ops,omitempty"`
@@ -52,6 +70,9 @@ type proposalPayload struct {
 type appliedPayload struct {
 	RunID        string              `json:"run_id"`
 	ProjectID    string              `json:"project_id"`
+	NodeID       string              `json:"node_id,omitempty"`
+	Scope        string              `json:"scope,omitempty"`
+	Intent       string              `json:"intent,omitempty"`
 	Summary      string              `json:"summary,omitempty"`
 	Applied      int                 `json:"applied"`
 	ChangedNodes []AppliedNodeChange `json:"changed_nodes,omitempty"`
@@ -59,6 +80,9 @@ type appliedPayload struct {
 type choicesPayload struct {
 	RunID       string   `json:"run_id"`
 	ProjectID   string   `json:"project_id"`
+	NodeID      string   `json:"node_id,omitempty"`
+	Scope       string   `json:"scope,omitempty"`
+	Intent      string   `json:"intent,omitempty"`
 	Prompt      string   `json:"prompt,omitempty"`
 	Options     []string `json:"options,omitempty"`
 	AllowCustom bool     `json:"allow_custom"`
@@ -66,11 +90,17 @@ type choicesPayload struct {
 type thinkingPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
 	Text      string `json:"text"`
 }
 type reasoningPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+	Scope     string `json:"scope,omitempty"`
+	Intent    string `json:"intent,omitempty"`
 	Text      string `json:"text"`
 }
 
@@ -100,7 +130,7 @@ func newRunner(svc *Service) *Runner {
 	return &Runner{svc: svc, active: map[string]context.CancelFunc{}}
 }
 
-func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, outlineStructure string, requestIntent RequestIntent, images []ImageAttachment, now func() int64) (string, error) {
+func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, outlineStructure string, requestIntent RequestIntent, requestedScope string, images []ImageAttachment, now func() int64) (string, error) {
 	sess, err := r.svc.sessions.EnsureWorker(projectID)
 	if err != nil {
 		return "", err
@@ -113,6 +143,29 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, sele
 	}
 	data.OutlineStructure = strings.TrimSpace(outlineStructure)
 	data = applyContextSelection(data, selection)
+
+	runID := uuid.NewString()
+	scope := turnHistoryScope(requestedScope, nodeID)
+	var conversation []conversationMessage
+	var promptHistory []llm.ChatMessage
+	if r.svc.history != nil {
+		if err := r.svc.importLegacyHistoryIfNeeded(ctx, projectID); err != nil {
+			return "", err
+		}
+		hist, err := r.svc.history.LoadForPrompt(ctx, HistoryQuery{
+			ProjectID: projectID,
+			NodeID:    nodeID,
+			Scope:     scope,
+			Limit:     24,
+		})
+		if err != nil {
+			return "", err
+		}
+		for _, m := range hist {
+			promptHistory = append(promptHistory, llm.ChatMessage{Role: m.Role, Content: m.Content})
+			conversation = append(conversation, conversationMessage{Role: m.Role, Content: m.Content})
+		}
+	}
 
 	// Persist the user turn before streaming so transcript failures are visible
 	// before the assistant starts generating against missing history.
@@ -129,13 +182,21 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, sele
 	if cctx := buildContext(data); cctx != "" {
 		msgs = append(msgs, llm.ChatMessage{Role: "user", Content: cctx})
 	}
-	if hist, err := session.LoadHistory(path, historyTokenBudget); err == nil {
+	if r.svc.history != nil {
+		msgs = append(msgs, promptHistory...)
+		current := llm.ChatMessage{Role: "user", Content: text}
+		if len(images) > 0 {
+			current.ContentBlocks = companionImageContentBlocks(text, images)
+		}
+		msgs = append(msgs, current)
+	} else if hist, err := session.LoadHistory(path, historyTokenBudget); err == nil {
 		for i, m := range hist {
 			msg := llm.ChatMessage{Role: m.Role, Content: m.Content}
 			if len(images) > 0 && i == len(hist)-1 && m.Role == "user" {
 				msg.ContentBlocks = companionImageContentBlocks(m.Content, images)
 			}
 			msgs = append(msgs, msg)
+			conversation = append(conversation, conversationMessage{Role: m.Role, Content: m.Content})
 		}
 	}
 
@@ -147,14 +208,43 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, sele
 	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
-	runID := uuid.NewString()
 	r.mu.Lock()
 	r.active[runID] = cancel
 	r.mu.Unlock()
 
-	intent := resolveCompanionIntent(text, requestIntent)
-	go r.run(runCtx, runID, projectID, nodeID, path, text, msgs, client, intent, now)
+	intent := resolveCompanionIntentWithConversation(text, requestIntent, conversation)
+	if r.svc.history != nil {
+		if err := r.svc.history.Append(ctx, HistoryMessage{
+			ProjectID: projectID,
+			NodeID:    nodeID,
+			RunID:     runID,
+			Role:      "user",
+			Scope:     scope,
+			Intent:    string(intent.Kind),
+			Status:    HistoryStatusDone,
+			Content:   text,
+			CreatedAt: userAt,
+		}); err != nil {
+			r.finish(runID)
+			return "", err
+		}
+	}
+	go r.run(runCtx, runID, projectID, nodeID, scope, path, text, msgs, client, intent, now)
 	return runID, nil
+}
+
+func turnHistoryScope(requestedScope, nodeID string) string {
+	switch strings.TrimSpace(requestedScope) {
+	case HistoryScopeProject:
+		return HistoryScopeProject
+	case HistoryScopeScene:
+		return normalizeHistoryScope(HistoryScopeScene, nodeID)
+	default:
+		if strings.TrimSpace(nodeID) != "" {
+			return HistoryScopeScene
+		}
+		return HistoryScopeProject
+	}
 }
 
 func companionImageContentBlocks(text string, images []ImageAttachment) []llm.ContentBlock {
@@ -196,10 +286,11 @@ func (r *Runner) cancel(runID string) error {
 const maxQueryRounds = 3
 const applyOpsToolName = "linetta_apply_ops"
 
-func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userText string, msgs []llm.ChatMessage, client llm.Client, intent companionIntent, now func() int64) {
+func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path, userText string, msgs []llm.ChatMessage, client llm.Client, intent companionIntent, now func() int64) {
 	defer r.finish(runID)
 
-	registry := r.svc.buildToolRegistryWithIntent(projectID, nodeID, now, intent, runID, userText)
+	intentName := string(intent.Kind)
+	registry := r.svc.buildToolRegistryWithIntent(projectID, nodeID, scope, now, intent, runID, userText)
 	dedup := streamdedup.New()
 	queryRounds := 0
 	forcedTool := companionForcedToolForIntent(intent)
@@ -212,7 +303,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 	loop := agentloop.New(client, registry, agentloop.HookFunc(func(ctx context.Context, evt agentloop.Event) {
 		switch evt.Type {
 		case agentloop.EventBeforeTool:
-			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: friendlyToolLabel(evt.ToolName)})
+			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(evt.ToolName)})
 		case agentloop.EventAfterTool:
 			if evt.ToolName == "linetta_apply_ops" && !evt.ToolIsError {
 				applyOpsSucceeded = true
@@ -222,7 +313,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 						sceneTextSucceeded = true
 					}
 				}
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: "작품 설정을 갱신했습니다"})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: "작품 설정을 갱신했습니다"})
 			}
 		}
 	}))
@@ -232,9 +323,9 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 		OnDelta: func(text string) {
 			switch act, payload := dedup.Observe(text); act {
 			case streamdedup.ActionEmit:
-				_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, ProjectID: projectID, Text: payload})
+				_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: payload})
 			case streamdedup.ActionReset:
-				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, Text: payload})
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: payload})
 			case streamdedup.ActionSkip:
 			}
 		},
@@ -242,23 +333,23 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 			if strings.TrimSpace(text) == "" {
 				return
 			}
-			_ = r.svc.notify.Notify("companion.reasoning", reasoningPayload{RunID: runID, ProjectID: projectID, Text: text})
+			_ = r.svc.notify.Notify("companion.reasoning", reasoningPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: text})
 		},
 		OnTurnEnd: func(ctx context.Context, lastResp llm.ChatResponse) (string, error) {
 			if forcedApplyOps && !applyOpsSucceeded && !applyOpsCorrectionUsed {
 				applyOpsCorrectionUsed = true
-				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, Text: ""})
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: friendlyToolLabel(applyOpsToolName)})
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: ""})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(applyOpsToolName)})
 				dedup = streamdedup.New()
-				return directApplyCorrectionPrompt(userText), nil
+				return directApplyCorrectionPrompt(userText, intent), nil
 			}
 			if queryRounds >= maxQueryRounds-1 {
 				return "", nil
 			}
 			full := lastResp.Message.Content
 			if qr, present, qerr := ParseQuery(full); present && qerr == nil {
-				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, Text: ""})
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: querySummary(qr)})
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: ""})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: querySummary(qr)})
 				queryRounds++
 				dedup = streamdedup.New()
 				return r.svc.runQueries(ctx, projectID, qr.Queries), nil
@@ -267,15 +358,19 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 		},
 	})
 	if ctx.Err() != nil {
-		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID, ProjectID: projectID})
+		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusCancelled, "요청을 중지했습니다.", now())
+		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName})
 		return
 	}
 	if err != nil {
-		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, Message: err.Error()})
+		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusFailed, err.Error(), now())
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: err.Error()})
 		return
 	}
 	if intent.RequiresSceneText() && !sceneTextSucceeded {
-		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, Message: sceneTextApplyFailedMessage()})
+		msg := sceneTextApplyFailedMessage()
+		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusFailed, msg, now())
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: msg})
 		return
 	}
 	full := resp.Message.Content
@@ -289,12 +384,17 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 	assistantAt := now()
 	if err := session.AppendMessage(path, session.Message{Role: "assistant", Content: full, Timestamp: time.UnixMilli(assistantAt)}); err != nil {
 		r.svc.recordPersistenceError(ctx, assistantAt, "assistant", path, err)
-		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, Message: "companion transcript: " + err.Error()})
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: "companion transcript: " + err.Error()})
 		return
 	}
 	r.svc.recordPersistenceOK(ctx, assistantAt, "assistant", path)
+	status := HistoryStatusDone
+	if intent.RequiresSceneText() && sceneTextSucceeded {
+		status = HistoryStatusApplied
+	}
+	r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, status, full, assistantAt)
 	if prop, present, perr := ParseProposal(full); present {
-		pp := proposalPayload{RunID: runID, ProjectID: projectID, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
+		pp := proposalPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
 		if perr != nil {
 			pp.Error = perr.Error()
 			pp.Ops = nil
@@ -307,12 +407,35 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 		_ = r.svc.notify.Notify("companion.choices", choicesPayload{
 			RunID:       runID,
 			ProjectID:   projectID,
+			NodeID:      nodeID,
+			Scope:       scope,
+			Intent:      intentName,
 			Prompt:      ch.Prompt,
 			Options:     ch.Options,
 			AllowCustom: ch.AllowCustom,
 		})
 	}
-	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, ProjectID: projectID, FullText: full})
+	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, FullText: full})
+}
+
+func (r *Runner) recordAssistantHistory(runID, projectID, nodeID, scope string, intent companionIntent, status, content string, at int64) {
+	if r.svc.history == nil {
+		return
+	}
+	if strings.TrimSpace(content) == "" {
+		return
+	}
+	_ = r.svc.history.Append(context.Background(), HistoryMessage{
+		ProjectID: projectID,
+		NodeID:    nodeID,
+		RunID:     runID,
+		Role:      "assistant",
+		Scope:     scope,
+		Intent:    string(intent.Kind),
+		Status:    status,
+		Content:   content,
+		CreatedAt: at,
+	})
 }
 
 // querySummary returns a short "조회 중: toolA, toolB" status string.
@@ -357,20 +480,49 @@ func sceneTextApplySuccessMessage(result ApplyOpsResult) string {
 		return "현재 씬 본문을 반영했습니다."
 	}
 	change := result.ChangedNodes[0]
+	var b strings.Builder
 	if change.CharCount > 0 {
-		return fmt.Sprintf("현재 씬 본문을 반영했습니다. (%d자)", change.CharCount)
+		fmt.Fprintf(&b, "현재 씬 본문을 반영했습니다. (%d자)", change.CharCount)
+	} else {
+		b.WriteString("현재 씬 본문을 반영했습니다.")
 	}
-	return "현재 씬 본문을 반영했습니다."
+	b.WriteString("\n\n작업 흐름\n")
+	if strings.TrimSpace(result.Summary) != "" {
+		b.WriteString("- 요청 처리: ")
+		b.WriteString(strings.TrimSpace(result.Summary))
+		b.WriteString("\n")
+	}
+	b.WriteString("- 현재 씬의 맥락과 사용자 지시를 바탕으로 본문을 작성했습니다.\n")
+	b.WriteString("- 작성한 원고를 현재 씬 본문으로 바로 적용했습니다.")
+	if preview := sceneTextPreviewForMessage(change.TextPreview); preview != "" {
+		b.WriteString("\n- 시작 부분: \"")
+		b.WriteString(preview)
+		b.WriteString("\"")
+	}
+	return b.String()
+}
+
+func sceneTextPreviewForMessage(preview string) string {
+	preview = strings.Join(strings.Fields(preview), " ")
+	return trimRunesLocal(preview, 80)
 }
 
 func sceneTextApplyFailedMessage() string {
 	return "본문 변경이 만들어지지 않았습니다. 다시 시도하거나 현재 씬을 확인해주세요."
 }
 
-func directApplyCorrectionPrompt(userText string) string {
+func directApplyCorrectionPrompt(userText string, intent companionIntent) string {
 	userText = strings.TrimSpace(userText)
 	if userText == "" {
 		userText = "(원문 없음)"
+	}
+	if intent.RequiresSceneText() {
+		return "방금 사용자 요청은 설명이나 제안이 아니라 실제 작품 상태 변경 요청입니다. " +
+			"현재 씬 본문을 작성/수정/확정해 달라는 요청이므로 추가 질문이나 선택지로 끝내지 마세요. " +
+			"이미 제공된 현재 씬, 앞뒤 흐름, 사용자 지시를 바탕으로 바로 읽을 수 있는 씬 본문을 쓰고, " +
+			"반드시 linetta_apply_ops의 set_scene_text로 실제 씬 원고를 교체하세요. " +
+			"변경했다고 말로만 답하지 말고 도구를 호출하세요.\n\n" +
+			"사용자 요청: " + userText
 	}
 	return "방금 사용자 요청은 설명이나 제안이 아니라 실제 작품 상태 변경 요청입니다. " +
 		"변경했다고 말로만 답하지 말고 linetta_apply_ops를 호출해 작품 상태에 적용하세요. " +

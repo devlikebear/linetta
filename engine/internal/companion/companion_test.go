@@ -170,6 +170,68 @@ func TestSend_StreamsDoneProposalAndPersists(t *testing.T) {
 	}
 }
 
+func TestSend_PersistsSceneScopedHistory(t *testing.T) {
+	client := &fakeClient{responses: []string{"장면 작업을 도와드릴게요."}}
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	threads := thread.NewRepo(st)
+	beats := beat.NewRepo(st)
+	entities := entity.NewRepo(st)
+	rels := relationship.NewRepo(st)
+	pb := plot.NewBuilder(nodes, beats, threads)
+	notif := &fakeNotifier{}
+	svc := NewService(t.TempDir(), projects, threads, entities, rels, pb, notif,
+		func(ai.ResolvedProvider) (llm.Client, error) { return client, nil }, fixedProvider("claude-code-cli"), "",
+		nodes, beats).WithHistory(NewHistoryRepo(st.DB()))
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "t", Genres: []string{"f"}, LengthTarget: "novel", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scene, err := nodes.CreateRoot(ctx, p.ID, node.KindLeaf, "씬 1", "식탁 위 고지서", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runID, err := svc.SendWithCompanionOptionsAndImages(ctx, p.ID, scene.ID, "이 씬 도와줘", SendOptions{Scope: HistoryViewScene}, nil, func() int64 { return 1000 })
+	if err != nil {
+		t.Fatalf("Send err=%v", err)
+	}
+	waitFor(t, notif, "companion.done")
+
+	msgs, err := svc.HistoryView(ctx, HistoryQuery{ProjectID: p.ID, NodeID: scene.ID, Scope: HistoryViewScene, Limit: 20})
+	if err != nil {
+		t.Fatalf("HistoryView: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("scene history len = %d, want 2: %+v", len(msgs), msgs)
+	}
+	for _, msg := range msgs {
+		if msg.NodeID != scene.ID {
+			t.Fatalf("history node_id = %q, want %q", msg.NodeID, scene.ID)
+		}
+		if msg.NodeLabel != "식탁 위 고지서" {
+			t.Fatalf("node label = %q, want title", msg.NodeLabel)
+		}
+		if msg.Scope != HistoryScopeScene {
+			t.Fatalf("scope = %q, want scene", msg.Scope)
+		}
+		if msg.RunID != runID {
+			t.Fatalf("run_id = %q, want %q", msg.RunID, runID)
+		}
+	}
+	if msgs[0].Role != "user" || msgs[1].Role != "assistant" || msgs[1].Content != "장면 작업을 도와드릴게요." {
+		t.Fatalf("unexpected history messages: %+v", msgs)
+	}
+}
+
 func TestSend_NoProposalWhenNoBlock(t *testing.T) {
 	svc, notif, projectID := newSvc(t, "그냥 수다입니다. 제안 없음.")
 	if _, err := svc.Send(context.Background(), projectID, "", "안녕", func() int64 { return 1 }); err != nil {
@@ -223,6 +285,79 @@ func TestSendWithContextAndImages_AttachesLatestUserMessageBlocks(t *testing.T) 
 	}
 }
 
+func TestSend_UsesCurrentSceneHistoryForPromptReplay(t *testing.T) {
+	client := &captureMessagesClient{}
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	st, err := store.Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	threads := thread.NewRepo(st)
+	beats := beat.NewRepo(st)
+	entities := entity.NewRepo(st)
+	rels := relationship.NewRepo(st)
+	pb := plot.NewBuilder(nodes, beats, threads)
+	notif := &fakeNotifier{}
+	history := NewHistoryRepo(st.DB())
+	svc := NewService(t.TempDir(), projects, threads, entities, rels, pb, notif,
+		func(ai.ResolvedProvider) (llm.Client, error) { return client, nil }, fixedProvider("claude-code-cli"), "",
+		nodes, beats).WithHistory(history)
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "t", Genres: []string{"f"}, LengthTarget: "novel", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sceneA, err := nodes.CreateRoot(ctx, p.ID, node.KindLeaf, "씬 1", "식탁 위 고지서", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sceneB, err := nodes.CreateRoot(ctx, p.ID, node.KindLeaf, "씬 2", "퇴근 선언", 110)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := history.Append(ctx, HistoryMessage{
+		ProjectID: p.ID, NodeID: sceneA.ID, RunID: "ra", Role: "assistant", Scope: HistoryScopeScene,
+		Status: HistoryStatusDone, Content: "씬 A에서 제안한 현재 씬 본문 작성 선택지", CreatedAt: 1000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := history.Append(ctx, HistoryMessage{
+		ProjectID: p.ID, NodeID: sceneB.ID, RunID: "rb", Role: "assistant", Scope: HistoryScopeScene,
+		Status: HistoryStatusDone, Content: "씬 B에서 제안한 다른 장면 선택지", CreatedAt: 1100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := svc.SendWithCompanionOptionsAndImages(ctx, p.ID, sceneA.ID, "이전 대화 참고해줘", SendOptions{
+		Scope:  HistoryViewScene,
+		Intent: RequestIntent{Kind: "chat"},
+	}, nil, func() int64 { return 2000 }); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, notif, "companion.done")
+
+	client.mu.Lock()
+	calls := append([][]llm.ChatMessage(nil), client.messages...)
+	client.mu.Unlock()
+	if len(calls) == 0 {
+		t.Fatal("expected one LLM chat call")
+	}
+	var prompt string
+	for _, msg := range calls[0] {
+		prompt += "\n" + msg.Content
+	}
+	if !strings.Contains(prompt, "씬 A에서 제안한 현재 씬 본문 작성 선택지") {
+		t.Fatalf("prompt missing current scene history:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "씬 B에서 제안한 다른 장면 선택지") {
+		t.Fatalf("prompt included other scene history:\n%s", prompt)
+	}
+}
+
 func TestRun_QueryThenFinal(t *testing.T) {
 	// round0: a linetta-query; round1: final answer with a proposal.
 	round0 := "찾아볼게요\n```linetta-query\n{\"queries\":[{\"tool\":\"list_scenes\",\"args\":{}}]}\n```"
@@ -246,6 +381,39 @@ func TestRun_QueryThenFinal(t *testing.T) {
 	msgs, _ := svc.History(context.Background(), projectID)
 	if len(msgs) != 2 {
 		t.Fatalf("want 2 transcript msgs (user+final assistant), got %d: %+v", len(msgs), msgs)
+	}
+}
+
+func TestHistoryPersistsAcrossServiceRestart(t *testing.T) {
+	home := t.TempDir()
+	projectID := "project-stable"
+	firstStore := session.NewStore(home)
+	first, err := firstStore.EnsureWorker(projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.UnixMilli(1000)
+	if err := session.AppendMessage(firstStore.TranscriptPath(first.ID), session.Message{Role: "user", Content: "앱 종료 전 질문", Timestamp: at}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.AppendMessage(firstStore.TranscriptPath(first.ID), session.Message{Role: "assistant", Content: "앱 재시작 후 복원될 답", Timestamp: at}); err != nil {
+		t.Fatal(err)
+	}
+
+	secondStore := session.NewStore(home)
+	second, err := secondStore.EnsureWorker(projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("worker session was not reused across restart: first=%s second=%s", first.ID, second.ID)
+	}
+	msgs, err := session.ReadMessages(secondStore.TranscriptPath(second.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 2 || msgs[0].Content != "앱 종료 전 질문" || msgs[1].Content != "앱 재시작 후 복원될 답" {
+		t.Fatalf("history not restored after restart: %+v", msgs)
 	}
 }
 
@@ -327,6 +495,12 @@ func TestSend_SceneTextApplyUsesVerifiedAppMessage(t *testing.T) {
 	if got := notif.get("companion.done"); !strings.Contains(got, "현재 씬 본문을 반영했습니다") {
 		t.Fatalf("scene edit success should use verified app message, got %s", got)
 	}
+	if got := notif.get("companion.done"); !strings.Contains(got, "작업 흐름") ||
+		!strings.Contains(got, "요청 처리: 현재 씬 작성") ||
+		!strings.Contains(got, "시작 부분") ||
+		!strings.Contains(got, "새 원고 첫 문장") {
+		t.Fatalf("scene edit success should include natural apply summary, got %s", got)
+	}
 	n, err := svc.nodes.Get(context.Background(), nodeID)
 	if err != nil {
 		t.Fatal(err)
@@ -340,6 +514,48 @@ func TestSend_SceneTextApplyUsesVerifiedAppMessage(t *testing.T) {
 	client.mu.Unlock()
 	if !sawToolResult {
 		t.Fatal("expected final model turn to receive changed_nodes tool result")
+	}
+}
+
+func TestSend_SceneTextFollowupApprovalAppliesCurrentScene(t *testing.T) {
+	client := &sceneTextApplyClient{}
+	svc, notif, projectID := newSvcWithClient(t, client)
+	proj, err := svc.projects.Get(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeID := *proj.LastOpenedNodeID
+	sess, err := svc.sessions.EnsureWorker(projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := svc.sessions.TranscriptPath(sess.ID)
+	at := time.UnixMilli(1000)
+	if err := session.AppendMessage(path, session.Message{Role: "user", Content: "1번", Timestamp: at}); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.AppendMessage(path, session.Message{Role: "assistant", Content: "원하시면 제가 바로 현재 씬 본문을 완성해서 적용할 수 있습니다.", Timestamp: at}); err != nil {
+		t.Fatal(err)
+	}
+
+	runID, err := svc.Send(context.Background(), projectID, nodeID, "적용해줘", func() int64 { return 2000 })
+	if err != nil || runID == "" {
+		t.Fatalf("Send err=%v runID=%q", err, runID)
+	}
+	waitFor(t, notif, "companion.done")
+
+	if got := notif.get("companion.done"); !strings.Contains(got, "현재 씬 본문을 반영했습니다") {
+		t.Fatalf("followup scene approval should use verified app message, got %s", got)
+	}
+	if got := notif.get("companion.done"); !strings.Contains(got, "작업 흐름") {
+		t.Fatalf("followup scene approval should include apply summary, got %s", got)
+	}
+	n, err := svc.nodes.Get(context.Background(), nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.ContentDoc == nil || !strings.Contains(*n.ContentDoc, "새 원고 첫 문장") {
+		t.Fatalf("scene followup did not apply content: %+v", n)
 	}
 }
 

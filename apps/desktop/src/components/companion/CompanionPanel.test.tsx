@@ -42,6 +42,8 @@ const companionState = vi.hoisted(() => ({
       content: string;
       proposal?: import("../../hooks/useCompanion").ChatMessage["proposal"];
       choices?: import("../../hooks/useCompanion").ChatMessage["choices"];
+      nodeLabel?: string;
+      scope?: "scene" | "project" | "global";
       errored?: boolean;
     }[],
     streaming: "",
@@ -52,6 +54,7 @@ const companionState = vi.hoisted(() => ({
     cancel: vi.fn(),
     clear: vi.fn(),
     compact: vi.fn(),
+    lastArgs: [] as unknown[],
   },
 }));
 const mocks = vi.hoisted(() => ({
@@ -60,7 +63,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../hooks/useCompanion", () => ({
-  useCompanion: () => companionState.value,
+  useCompanion: (...args: unknown[]) => {
+    companionState.value.lastArgs = args;
+    return companionState.value;
+  },
 }));
 
 vi.mock("../../lib/rpc", () => ({
@@ -126,6 +132,7 @@ describe("CompanionPanel", () => {
       cancel: vi.fn(),
       clear: vi.fn(),
       compact: vi.fn(),
+      lastArgs: [],
     };
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -154,6 +161,36 @@ describe("CompanionPanel", () => {
 
     expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("다음 3~5문장");
     expect(companionState.value.send).not.toHaveBeenCalled();
+  });
+
+  it("switches companion history scope between current scene and whole work", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(screen.getByRole("button", { name: "현재 씬" })).toHaveAttribute("aria-pressed", "true");
+    expect(companionState.value.lastArgs[5]).toBe("scene");
+
+    await user.click(screen.getByRole("button", { name: "작품 전체" }));
+
+    expect(screen.getByRole("button", { name: "작품 전체" })).toHaveAttribute("aria-pressed", "true");
+    expect(companionState.value.lastArgs[5]).toBe("project");
+  });
+
+  it("shows scene chips for project-wide transcript messages", async () => {
+    const user = userEvent.setup();
+    companionState.value = {
+      ...companionState.value,
+      messages: [
+        { role: "assistant", content: "현재 씬 본문을 반영했습니다.", nodeLabel: "식탁 위 고지서", scope: "scene" },
+      ],
+    };
+    renderPanel();
+
+    expect(screen.queryByText("식탁 위 고지서")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "작품 전체" }));
+
+    expect(screen.getByText("식탁 위 고지서")).toBeInTheDocument();
   });
 
   it("renders AI draft controls inside the companion panel", async () => {

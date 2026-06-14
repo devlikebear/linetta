@@ -167,6 +167,8 @@ export interface CompanionIntent {
   apply_policy?: "direct" | "proposal";
 }
 
+export type CompanionHistoryScope = "scene" | "project";
+
 export type AIContextKey =
   | "current_scene"
   | "overview"
@@ -618,9 +620,17 @@ export interface NoteBrief {
 
 // Companion (Phase 2) — mirrors engine companion.* payloads.
 export interface CompanionMessage {
+  id?: string;
+  project_id?: string;
+  node_id?: string | null;
+  node_label?: string;
+  run_id?: string;
   role: string;
   content: string;
   timestamp: number;
+  scope?: "scene" | "project" | "global";
+  intent?: string;
+  status?: string;
 }
 
 export interface CompanionImageAttachment {
@@ -709,17 +719,28 @@ export interface CompanionApplyOpsResult {
   failures?: CompanionApplyOpsFailure[];
 }
 
-export interface CompanionDelta { run_id: string; project_id?: string; text: string; }
-export interface CompanionReset { run_id: string; project_id?: string; text: string; }
-export interface CompanionDone { run_id: string; project_id?: string; full_text: string; }
-export interface CompanionError { run_id: string; project_id?: string; message: string; }
-export interface CompanionCancelled { run_id: string; project_id?: string; }
-export interface CompanionApplied { run_id: string; project_id?: string; summary?: string; applied: number; changed_nodes?: AppliedNodeChange[]; }
-export interface CompanionThinking { run_id: string; project_id?: string; text: string; }
-export interface CompanionReasoning { run_id: string; project_id?: string; text: string; }
+interface CompanionRunMeta {
+  run_id: string;
+  project_id?: string;
+  node_id?: string;
+  scope?: "scene" | "project" | "global";
+  intent?: string;
+}
+
+export interface CompanionDelta extends CompanionRunMeta { text: string; }
+export interface CompanionReset extends CompanionRunMeta { text: string; }
+export interface CompanionDone extends CompanionRunMeta { full_text: string; }
+export interface CompanionError extends CompanionRunMeta { message: string; }
+export interface CompanionCancelled extends CompanionRunMeta {}
+export interface CompanionApplied extends CompanionRunMeta { summary?: string; applied: number; changed_nodes?: AppliedNodeChange[]; }
+export interface CompanionThinking extends CompanionRunMeta { text: string; }
+export interface CompanionReasoning extends CompanionRunMeta { text: string; }
 export interface CompanionChoices {
   run_id: string;
   project_id?: string;
+  node_id?: string;
+  scope?: "scene" | "project" | "global";
+  intent?: string;
   prompt?: string;
   options: string[];
   allow_custom: boolean;
