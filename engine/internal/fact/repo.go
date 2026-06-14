@@ -104,20 +104,30 @@ LIMIT ?`, f.ProjectID, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	out := []Card{}
 	for rows.Next() {
 		card, err := scanCard(rows)
 		if err != nil {
-			return nil, err
-		}
-		card.Sources, err = r.listSources(ctx, card.ID)
-		if err != nil {
+			rows.Close()
 			return nil, err
 		}
 		out = append(out, card)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	// Close the outer cursor before issuing per-card source queries: the pool is
+	// capped at a single connection, so holding this Rows open while querying
+	// fact_sources would deadlock.
+	rows.Close()
+	for i := range out {
+		out[i].Sources, err = r.listSources(ctx, out[i].ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Card, error) {
