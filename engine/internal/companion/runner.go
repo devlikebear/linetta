@@ -17,49 +17,59 @@ import (
 )
 
 type deltaPayload struct {
-	RunID string `json:"run_id"`
-	Text  string `json:"text"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Text      string `json:"text"`
 }
 type resetPayload struct {
-	RunID string `json:"run_id"`
-	Text  string `json:"text"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Text      string `json:"text"`
 }
 type donePayload struct {
-	RunID    string `json:"run_id"`
-	FullText string `json:"full_text"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	FullText  string `json:"full_text"`
 }
 type errorPayload struct {
-	RunID   string `json:"run_id"`
-	Message string `json:"message"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Message   string `json:"message"`
 }
 type cancelledPayload struct {
-	RunID string `json:"run_id"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
 }
 type proposalPayload struct {
-	RunID   string `json:"run_id"`
-	Valid   bool   `json:"valid"`
-	Summary string `json:"summary,omitempty"`
-	Ops     []Op   `json:"ops,omitempty"`
-	Error   string `json:"error,omitempty"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Valid     bool   `json:"valid"`
+	Summary   string `json:"summary,omitempty"`
+	Ops       []Op   `json:"ops,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 type appliedPayload struct {
-	RunID   string `json:"run_id"`
-	Summary string `json:"summary,omitempty"`
-	Applied int    `json:"applied"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Summary   string `json:"summary,omitempty"`
+	Applied   int    `json:"applied"`
 }
 type choicesPayload struct {
 	RunID       string   `json:"run_id"`
+	ProjectID   string   `json:"project_id"`
 	Prompt      string   `json:"prompt,omitempty"`
 	Options     []string `json:"options,omitempty"`
 	AllowCustom bool     `json:"allow_custom"`
 }
 type thinkingPayload struct {
-	RunID string `json:"run_id"`
-	Text  string `json:"text"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Text      string `json:"text"`
 }
 type reasoningPayload struct {
-	RunID string `json:"run_id"`
-	Text  string `json:"text"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Text      string `json:"text"`
 }
 
 // friendlyToolLabel maps a tool name to a human-readable status shown while the
@@ -197,11 +207,11 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 	loop := agentloop.New(client, registry, agentloop.HookFunc(func(ctx context.Context, evt agentloop.Event) {
 		switch evt.Type {
 		case agentloop.EventBeforeTool:
-			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: friendlyToolLabel(evt.ToolName)})
+			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: friendlyToolLabel(evt.ToolName)})
 		case agentloop.EventAfterTool:
 			if evt.ToolName == "linetta_apply_ops" && !evt.ToolIsError {
 				applyOpsSucceeded = true
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: "작품 설정을 갱신했습니다"})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: "작품 설정을 갱신했습니다"})
 			}
 		}
 	}))
@@ -211,9 +221,9 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 		OnDelta: func(text string) {
 			switch act, payload := dedup.Observe(text); act {
 			case streamdedup.ActionEmit:
-				_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, Text: payload})
+				_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, ProjectID: projectID, Text: payload})
 			case streamdedup.ActionReset:
-				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: payload})
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, Text: payload})
 			case streamdedup.ActionSkip:
 			}
 		},
@@ -221,13 +231,13 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 			if strings.TrimSpace(text) == "" {
 				return
 			}
-			_ = r.svc.notify.Notify("companion.reasoning", reasoningPayload{RunID: runID, Text: text})
+			_ = r.svc.notify.Notify("companion.reasoning", reasoningPayload{RunID: runID, ProjectID: projectID, Text: text})
 		},
 		OnTurnEnd: func(ctx context.Context, lastResp llm.ChatResponse) (string, error) {
 			if forcedApplyOps && !applyOpsSucceeded && !applyOpsCorrectionUsed {
 				applyOpsCorrectionUsed = true
-				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: ""})
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: friendlyToolLabel(applyOpsToolName)})
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, Text: ""})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: friendlyToolLabel(applyOpsToolName)})
 				dedup = streamdedup.New()
 				return directApplyCorrectionPrompt(userText), nil
 			}
@@ -236,8 +246,8 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 			}
 			full := lastResp.Message.Content
 			if qr, present, qerr := ParseQuery(full); present && qerr == nil {
-				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, Text: ""})
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, Text: querySummary(qr)})
+				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, Text: ""})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, Text: querySummary(qr)})
 				queryRounds++
 				dedup = streamdedup.New()
 				return r.svc.runQueries(ctx, projectID, qr.Queries), nil
@@ -246,11 +256,11 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 		},
 	})
 	if ctx.Err() != nil {
-		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID})
+		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID, ProjectID: projectID})
 		return
 	}
 	if err != nil {
-		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: err.Error()})
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, Message: err.Error()})
 		return
 	}
 	full := resp.Message.Content
@@ -261,12 +271,12 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 	assistantAt := now()
 	if err := session.AppendMessage(path, session.Message{Role: "assistant", Content: full, Timestamp: time.UnixMilli(assistantAt)}); err != nil {
 		r.svc.recordPersistenceError(ctx, assistantAt, "assistant", path, err)
-		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, Message: "companion transcript: " + err.Error()})
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, Message: "companion transcript: " + err.Error()})
 		return
 	}
 	r.svc.recordPersistenceOK(ctx, assistantAt, "assistant", path)
 	if prop, present, perr := ParseProposal(full); present {
-		pp := proposalPayload{RunID: runID, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
+		pp := proposalPayload{RunID: runID, ProjectID: projectID, Valid: perr == nil, Summary: prop.Summary, Ops: prop.Ops}
 		if perr != nil {
 			pp.Error = perr.Error()
 			pp.Ops = nil
@@ -278,12 +288,13 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, path, userTe
 	if ch, present, cerr := ParseChoices(full); present && cerr == nil {
 		_ = r.svc.notify.Notify("companion.choices", choicesPayload{
 			RunID:       runID,
+			ProjectID:   projectID,
 			Prompt:      ch.Prompt,
 			Options:     ch.Options,
 			AllowCustom: ch.AllowCustom,
 		})
 	}
-	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, FullText: full})
+	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, ProjectID: projectID, FullText: full})
 }
 
 // querySummary returns a short "조회 중: toolA, toolB" status string.

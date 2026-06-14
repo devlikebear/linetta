@@ -98,9 +98,10 @@ func (s *Service) buildApplyOpsTool(projectID, nodeID, runID, userText string, n
 			result := s.ApplyOps(ctx, projectID, nodeID, p, now)
 			if runID != "" && result.Applied > 0 && s.notify != nil {
 				_ = s.notify.Notify("companion.applied", appliedPayload{
-					RunID:   runID,
-					Summary: result.Summary,
-					Applied: result.Applied,
+					RunID:     runID,
+					ProjectID: projectID,
+					Summary:   result.Summary,
+					Applied:   result.Applied,
 				})
 			}
 			return tarstools.JSONTextResult(result, result.isError()), nil

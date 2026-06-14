@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.16 - 2026-06-14
+
+- Kept long companion responses attached to the project session when the companion panel is closed or remounted, so completed replies and apply proposals are still visible when the writer returns.
+- Added project-aware companion stream events so background companion runs can be routed safely across panel and screen changes.
+- Serialized SQLite access through one connection and closed Fact Book cursors before nested source queries to avoid `SQLITE_BUSY` and single-connection deadlocks.
+
 ## v0.4.15 - 2026-06-14
 
 - Turned the companion empty state into a writer action palette for continuing a scene, smoothing dialogue, raising tension, checking continuity, shaping the next-episode hook, and finishing an episode.

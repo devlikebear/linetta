@@ -17,7 +17,7 @@ vi.mock("../lib/rpc", () => ({
 }));
 
 import { stripProposalBlock } from "../lib/companionDisplay";
-import { useCompanion } from "./useCompanion";
+import { __resetCompanionSessionStoreForTests, useCompanion } from "./useCompanion";
 
 function fire(event: string, payload: unknown) {
   const cb = ev.listeners.get(event);
@@ -42,6 +42,7 @@ describe("stripProposalBlock", () => {
 
 describe("useCompanion streaming", () => {
   beforeEach(() => {
+    __resetCompanionSessionStoreForTests();
     vi.clearAllMocks();
     ev.listeners.clear();
     rpc.history.mockResolvedValue([]);
@@ -72,6 +73,30 @@ describe("useCompanion streaming", () => {
       role: "assistant",
       content: "안녕하세요! 반가워요.",
     });
+  });
+
+  it("keeps a running companion response when the panel unmounts before done", async () => {
+    const first = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));
+
+    await act(async () => {
+      await first.result.current.send("긴 응답 부탁해");
+    });
+    expect(first.result.current.status).toBe("streaming");
+
+    first.unmount();
+
+    fire("companion-delta", { project_id: "p1", run_id: "r1", text: "계속 " });
+    fire("companion-done", { project_id: "p1", run_id: "r1", full_text: "계속 완성했어요." });
+
+    const second = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => {
+      expect(second.result.current.messages[second.result.current.messages.length - 1]).toMatchObject({
+        role: "assistant",
+        content: "계속 완성했어요.",
+      });
+    });
+    expect(second.result.current.status).toBe("idle");
   });
 
   it("recovers leaked apply-ops JSON into a proposal when finalizing a turn", async () => {

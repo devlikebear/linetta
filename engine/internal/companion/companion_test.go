@@ -152,8 +152,14 @@ func TestSend_StreamsDoneProposalAndPersists(t *testing.T) {
 	if !strings.Contains(notif.get("companion.done"), "복수 서사") {
 		t.Fatalf("done missing full text: %s", notif.get("companion.done"))
 	}
+	if !strings.Contains(notif.get("companion.done"), `"project_id":"`+projectID+`"`) {
+		t.Fatalf("done missing project_id: %s", notif.get("companion.done"))
+	}
 	if !strings.Contains(notif.get("companion.proposal"), "\"valid\":true") {
 		t.Fatalf("expected valid proposal: %s", notif.get("companion.proposal"))
+	}
+	if !strings.Contains(notif.get("companion.proposal"), `"project_id":"`+projectID+`"`) {
+		t.Fatalf("proposal missing project_id: %s", notif.get("companion.proposal"))
 	}
 	msgs, err := svc.History(context.Background(), projectID)
 	if err != nil {
@@ -277,6 +283,9 @@ func TestSend_RetriesDirectMutationWhenModelOnlyClaimsApplied(t *testing.T) {
 	}
 	if got := notif.get("companion.applied"); !strings.Contains(got, `"applied":2`) {
 		t.Fatalf("expected applied event, got %s", got)
+	}
+	if got := notif.get("companion.applied"); !strings.Contains(got, `"project_id":"`+projectID+`"`) {
+		t.Fatalf("applied event missing project_id: %s", got)
 	}
 	nodes, err := svc.nodes.ListByProject(context.Background(), projectID)
 	if err != nil {

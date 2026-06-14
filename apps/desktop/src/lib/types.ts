@@ -666,6 +666,7 @@ export interface ProposalOp {
 
 export interface CompanionProposal {
   run_id: string;
+  project_id?: string;
   valid: boolean;
   summary?: string;
   ops?: ProposalOp[];
@@ -685,16 +686,17 @@ export interface CompanionApplyOpsResult {
   failures?: CompanionApplyOpsFailure[];
 }
 
-export interface CompanionDelta { run_id: string; text: string; }
-export interface CompanionReset { run_id: string; text: string; }
-export interface CompanionDone { run_id: string; full_text: string; }
-export interface CompanionError { run_id: string; message: string; }
-export interface CompanionCancelled { run_id: string; }
-export interface CompanionApplied { run_id: string; summary?: string; applied: number; }
-export interface CompanionThinking { run_id: string; text: string; }
-export interface CompanionReasoning { run_id: string; text: string; }
+export interface CompanionDelta { run_id: string; project_id?: string; text: string; }
+export interface CompanionReset { run_id: string; project_id?: string; text: string; }
+export interface CompanionDone { run_id: string; project_id?: string; full_text: string; }
+export interface CompanionError { run_id: string; project_id?: string; message: string; }
+export interface CompanionCancelled { run_id: string; project_id?: string; }
+export interface CompanionApplied { run_id: string; project_id?: string; summary?: string; applied: number; }
+export interface CompanionThinking { run_id: string; project_id?: string; text: string; }
+export interface CompanionReasoning { run_id: string; project_id?: string; text: string; }
 export interface CompanionChoices {
   run_id: string;
+  project_id?: string;
   prompt?: string;
   options: string[];
   allow_custom: boolean;
