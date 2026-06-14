@@ -41,7 +41,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
-const engineVersion = "0.4.16"
+const engineVersion = "0.4.17"
 
 // providerSource adapts *settings.Store to ai.ProviderSource. The adapter lives
 // here so the settings package has no dependency on ai.

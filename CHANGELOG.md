@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.17 - 2026-06-14
+
+- Made companion scene-writing and scene-edit requests transactional, so current-scene text changes require verified `set_scene_text` application instead of accepting model-only success claims.
+- Added explicit companion scene intents, apply readback metadata, and current-editor refresh from verified changed-node events.
+- Added retry handling for failed companion scene edits and kept failed proposal applications from refreshing as successful.
+
 ## v0.4.16 - 2026-06-14
 
 - Kept long companion responses attached to the project session when the companion panel is closed or remounted, so completed replies and apply proposals are still visible when the writer returns.
