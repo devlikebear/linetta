@@ -80,10 +80,11 @@ describe("ContextualEditPanel", () => {
     renderPanel({ editorRef: ref });
 
     await user.type(screen.getByLabelText("찾을 단어"), "민호");
-    await waitFor(() => expect(ref.current?.findText).toHaveBeenCalledWith("민호"));
+    await waitFor(() => expect(ref.current?.findText).toHaveBeenLastCalledWith("민호", { select: false }));
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "다음" }));
+    expect(ref.current?.findText).toHaveBeenLastCalledWith("민호", { select: true });
     expect(ref.current?.nextMatch).toHaveBeenCalled();
 
     await user.type(screen.getByLabelText("바꿀 단어"), "민준");
@@ -92,6 +93,32 @@ describe("ContextualEditPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "이 씬 전체 바꾸기" }));
     expect(ref.current?.replaceAllMatches).toHaveBeenCalledWith("민호", "민준");
+  });
+
+  it("keeps focus in the scene query input while passively counting matches", async () => {
+    const user = userEvent.setup();
+    const editorFocusTarget = document.createElement("button");
+    document.body.appendChild(editorFocusTarget);
+    const ref = editorRef({
+      findText: vi.fn((_query, options) => {
+        if (options?.select !== false) editorFocusTarget.focus();
+        return { count: 2, activeIndex: 0 };
+      }),
+    });
+    renderPanel({ editorRef: ref });
+
+    const input = screen.getByLabelText("찾을 단어");
+    await user.click(input);
+    await user.type(input, "저");
+
+    await waitFor(() => expect(ref.current?.findText).toHaveBeenLastCalledWith("저", { select: false }));
+    expect(input).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(ref.current?.findText).toHaveBeenLastCalledWith("저", { select: true }));
+    expect(editorFocusTarget).toHaveFocus();
+
+    editorFocusTarget.remove();
   });
 
   it("searches the whole manuscript and navigates to a result", async () => {

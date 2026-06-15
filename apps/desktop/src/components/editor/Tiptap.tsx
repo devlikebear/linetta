@@ -13,8 +13,8 @@ export interface TiptapHandle {
   getSelection: () => { from: number; to: number } | null;
   /** Set the ProseMirror selection (clamped to doc size) and focus the view. */
   setSelection: (sel: { from: number; to: number }) => void;
-  /** Find text matches inside the current scene and select the first match. */
-  findText: (query: string) => TiptapFindResult;
+  /** Find text matches inside the current scene, optionally selecting the first match. */
+  findText: (query: string, options?: TiptapFindOptions) => TiptapFindResult;
   /** Select the next current-scene match, wrapping at the end. */
   nextMatch: () => void;
   /** Select the previous current-scene match, wrapping at the start. */
@@ -35,6 +35,10 @@ export interface TiptapHandle {
 export interface TiptapFindResult {
   count: number;
   activeIndex: number;
+}
+
+export interface TiptapFindOptions {
+  select?: boolean;
 }
 
 interface TextMatch {
@@ -167,13 +171,13 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         editor.commands.setTextSelection({ from, to });
         editor.view.focus();
       },
-      findText: (query) => {
+      findText: (query, options) => {
         if (!editor) return { count: 0, activeIndex: -1 };
         const matches = findTextMatches(editor, query);
         matchesRef.current = matches;
         activeMatchRef.current = matches.length > 0 ? 0 : -1;
         lastFindQueryRef.current = query;
-        selectMatch(editor, matches, activeMatchRef.current);
+        if (options?.select !== false) selectMatch(editor, matches, activeMatchRef.current);
         return { count: matches.length, activeIndex: activeMatchRef.current };
       },
       nextMatch: () => {

@@ -57,6 +57,7 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
   const [sceneQuery, setSceneQuery] = useState("");
   const [replacement, setReplacement] = useState("");
   const [findResult, setFindResult] = useState<TiptapFindResult>({ count: 0, activeIndex: -1 });
+  const [sceneFindCommitted, setSceneFindCommitted] = useState(false);
   const [notice, setNotice] = useState("");
   const [projectQuery, setProjectQuery] = useState("");
   const [projectResults, setProjectResults] = useState<ManuscriptSearchHit[]>([]);
@@ -79,6 +80,7 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
     setNotice("");
     setSceneQuery("");
     setReplacement("");
+    setSceneFindCommitted(false);
     setProjectQuery("");
     setProjectResults([]);
     setProjectError("");
@@ -89,10 +91,12 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
     const query = sceneQuery.trim();
     if (!query) {
       setFindResult({ count: 0, activeIndex: -1 });
+      setSceneFindCommitted(false);
       setNotice("");
       return;
     }
-    setFindResult(editorRef.current?.findText(query) ?? { count: 0, activeIndex: -1 });
+    setFindResult(editorRef.current?.findText(query, { select: false }) ?? { count: 0, activeIndex: -1 });
+    setSceneFindCommitted(false);
   }, [editorRef, open, sceneQuery, scope]);
 
   useEffect(() => {
@@ -140,23 +144,48 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
 
   if (!open) return null;
 
+  const commitSceneFind = () => {
+    const query = sceneQuery.trim();
+    if (!query) {
+      const empty = { count: 0, activeIndex: -1 };
+      setFindResult(empty);
+      setSceneFindCommitted(false);
+      return empty;
+    }
+    const result = editorRef.current?.findText(query, { select: true }) ?? { count: 0, activeIndex: -1 };
+    setFindResult(result);
+    setSceneFindCommitted(result.count > 0);
+    setNotice("");
+    return result;
+  };
+
   const runNext = () => {
     if (findResult.count <= 0) return;
+    const base = sceneFindCommitted ? findResult : commitSceneFind();
+    if (base.count <= 0) return;
     editorRef.current?.nextMatch();
-    setFindResult((prev) => ({ ...prev, activeIndex: (prev.activeIndex + 1) % prev.count }));
+    setFindResult({ count: base.count, activeIndex: (base.activeIndex + 1) % base.count });
+    setSceneFindCommitted(true);
   };
 
   const runPrev = () => {
     if (findResult.count <= 0) return;
+    const base = sceneFindCommitted ? findResult : commitSceneFind();
+    if (base.count <= 0) return;
     editorRef.current?.prevMatch();
-    setFindResult((prev) => ({ ...prev, activeIndex: (prev.activeIndex - 1 + prev.count) % prev.count }));
+    setFindResult({ count: base.count, activeIndex: (base.activeIndex - 1 + base.count) % base.count });
+    setSceneFindCommitted(true);
   };
 
   const replaceCurrent = () => {
     if (!sceneQuery.trim() || findResult.count <= 0) return;
+    const base = sceneFindCommitted ? findResult : commitSceneFind();
+    if (base.count <= 0) return;
     const updated = editorRef.current?.replaceActiveMatch(replacement);
     if (!updated) return;
-    setFindResult(editorRef.current?.findText(sceneQuery) ?? { count: 0, activeIndex: -1 });
+    const result = editorRef.current?.findText(sceneQuery, { select: true }) ?? { count: 0, activeIndex: -1 };
+    setFindResult(result);
+    setSceneFindCommitted(result.count > 0);
     setNotice(t("contextual.replace.currentDone"));
   };
 
@@ -164,7 +193,9 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
     if (!sceneQuery.trim()) return;
     const updated = editorRef.current?.replaceAllMatches(sceneQuery, replacement);
     if (!updated) return;
-    setFindResult(editorRef.current?.findText(sceneQuery) ?? { count: 0, activeIndex: -1 });
+    const result = editorRef.current?.findText(sceneQuery, { select: true }) ?? { count: 0, activeIndex: -1 };
+    setFindResult(result);
+    setSceneFindCommitted(result.count > 0);
     setNotice(t("contextual.replace.sceneAllDone"));
   };
 
@@ -210,6 +241,11 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
                 value={sceneQuery}
                 placeholder={t("contextual.find.placeholder")}
                 onChange={(event) => setSceneQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  commitSceneFind();
+                }}
               />
             </label>
             <div className="contextual-match-row">

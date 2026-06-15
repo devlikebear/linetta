@@ -147,6 +147,27 @@ describe("TiptapEditor", () => {
     expect(ref.current?.getSelection()).toEqual({ from: 1, to: 3 });
   });
 
+  it("can count text matches without moving the editor selection", async () => {
+    const ref = createRef<TiptapHandle>();
+    render(<TiptapEditor ref={ref} initialDoc={{
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "민호는 웃었다. 민호는 고개를 들었다." }] }],
+    }} onChange={vi.fn()} />);
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+
+    act(() => {
+      ref.current?.setSelection({ from: 1, to: 1 });
+    });
+
+    let result: { count: number; activeIndex: number } | undefined;
+    act(() => {
+      result = ref.current?.findText("민호", { select: false });
+    });
+
+    expect(result).toEqual({ count: 2, activeIndex: 0 });
+    expect(ref.current?.getSelection()).toEqual({ from: 1, to: 1 });
+  });
+
   it("replaces the active match and all matches in the current scene", async () => {
     const ref = createRef<TiptapHandle>();
     const onChange = vi.fn();
