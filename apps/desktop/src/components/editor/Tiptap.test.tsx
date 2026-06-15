@@ -149,7 +149,7 @@ describe("TiptapEditor", () => {
 
   it("can count text matches without moving the editor selection", async () => {
     const ref = createRef<TiptapHandle>();
-    render(<TiptapEditor ref={ref} initialDoc={{
+    const { container } = render(<TiptapEditor ref={ref} initialDoc={{
       type: "doc",
       content: [{ type: "paragraph", content: [{ type: "text", text: "민호는 웃었다. 민호는 고개를 들었다." }] }],
     }} onChange={vi.fn()} />);
@@ -166,6 +166,27 @@ describe("TiptapEditor", () => {
 
     expect(result).toEqual({ count: 2, activeIndex: 0 });
     expect(ref.current?.getSelection()).toEqual({ from: 1, to: 1 });
+    expect(container.querySelectorAll(".tiptap-search-match")).toHaveLength(2);
+    expect(container.querySelectorAll(".tiptap-search-match-active")).toHaveLength(1);
+  });
+
+  it("clears text match highlights when the query is empty", async () => {
+    const ref = createRef<TiptapHandle>();
+    const { container } = render(<TiptapEditor ref={ref} initialDoc={{
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "민호는 웃었다. 민호는 고개를 들었다." }] }],
+    }} onChange={vi.fn()} />);
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+
+    act(() => {
+      ref.current?.findText("민호", { select: false });
+    });
+    expect(container.querySelectorAll(".tiptap-search-match")).toHaveLength(2);
+
+    act(() => {
+      ref.current?.findText("", { select: false });
+    });
+    expect(container.querySelectorAll(".tiptap-search-match")).toHaveLength(0);
   });
 
   it("replaces the active match and all matches in the current scene", async () => {

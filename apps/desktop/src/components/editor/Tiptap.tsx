@@ -2,6 +2,7 @@ import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FocusExtension } from "./FocusExtension";
+import { SearchHighlightExtension, SearchHighlightPluginKey } from "./SearchHighlightExtension";
 import "./Tiptap.css";
 
 export interface TiptapHandle {
@@ -89,6 +90,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
     {
       extensions: [
         StarterKit.configure({}),
+        SearchHighlightExtension,
         ...(extensions ?? []),
         ...(focus ? [FocusExtension] : []),
       ],
@@ -177,17 +179,20 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         matchesRef.current = matches;
         activeMatchRef.current = matches.length > 0 ? 0 : -1;
         lastFindQueryRef.current = query;
+        setSearchHighlights(editor, matches, activeMatchRef.current);
         if (options?.select !== false) selectMatch(editor, matches, activeMatchRef.current);
         return { count: matches.length, activeIndex: activeMatchRef.current };
       },
       nextMatch: () => {
         if (!editor || matchesRef.current.length === 0) return;
         activeMatchRef.current = (activeMatchRef.current + 1) % matchesRef.current.length;
+        setSearchHighlights(editor, matchesRef.current, activeMatchRef.current);
         selectMatch(editor, matchesRef.current, activeMatchRef.current);
       },
       prevMatch: () => {
         if (!editor || matchesRef.current.length === 0) return;
         activeMatchRef.current = (activeMatchRef.current - 1 + matchesRef.current.length) % matchesRef.current.length;
+        setSearchHighlights(editor, matchesRef.current, activeMatchRef.current);
         selectMatch(editor, matchesRef.current, activeMatchRef.current);
       },
       replaceActiveMatch: (replacement) => {
@@ -201,6 +206,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         const matches = findTextMatches(editor, lastFindQueryRef.current);
         matchesRef.current = matches;
         activeMatchRef.current = matches.length > 0 ? Math.min(previousIndex, matches.length - 1) : -1;
+        setSearchHighlights(editor, matches, activeMatchRef.current);
         selectMatch(editor, matches, activeMatchRef.current);
         return editor.getJSON();
       },
@@ -218,6 +224,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         matchesRef.current = findTextMatches(editor, query);
         activeMatchRef.current = matchesRef.current.length > 0 ? 0 : -1;
         lastFindQueryRef.current = query;
+        setSearchHighlights(editor, matchesRef.current, activeMatchRef.current);
         selectMatch(editor, matchesRef.current, activeMatchRef.current);
         return editor.getJSON();
       },
@@ -338,6 +345,13 @@ function selectMatch(editor: Editor, matches: TextMatch[], activeIndex: number) 
   if (!match) return;
   editor.commands.setTextSelection({ from: match.from, to: match.to });
   editor.view.focus();
+}
+
+function setSearchHighlights(editor: Editor, matches: TextMatch[], activeIndex: number) {
+  editor.view.dispatch(editor.state.tr.setMeta(SearchHighlightPluginKey, {
+    matches,
+    activeIndex,
+  }));
 }
 
 /** Lightweight TS port of engine/internal/node.CountChars. */

@@ -120,6 +120,7 @@ export function ContextualEditPanel({
     if (!open || scope !== "scene") return;
     const query = sceneQuery.trim();
     if (!query) {
+      editorRef.current?.findText("", { select: false });
       setFindResult({ count: 0, activeIndex: -1 });
       setSceneFindCommitted(false);
       setNotice("");
@@ -128,6 +129,11 @@ export function ContextualEditPanel({
     setFindResult(editorRef.current?.findText(query, { select: false }) ?? { count: 0, activeIndex: -1 });
     setSceneFindCommitted(false);
   }, [editorRef, open, sceneQuery, scope]);
+
+  useEffect(() => {
+    if (open && scope === "scene") return;
+    editorRef.current?.findText("", { select: false });
+  }, [editorRef, open, scope]);
 
   useEffect(() => {
     if (!open || scope !== "project") return;

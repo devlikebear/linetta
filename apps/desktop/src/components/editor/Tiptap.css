@@ -85,3 +85,14 @@
   opacity: 0.32;
   transition: opacity 0.3s ease;
 }
+
+.tiptap-editor .ProseMirror .tiptap-search-match {
+  background: var(--accent-tint);
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--accent-tint2);
+}
+
+.tiptap-editor .ProseMirror .tiptap-search-match-active {
+  background: color-mix(in oklch, var(--accent) 28%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 32%, transparent);
+}
