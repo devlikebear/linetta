@@ -185,6 +185,7 @@ func main() {
 	s.Handle("ops_status.get", handlers.GetOpsStatus(ops))
 	s.Handle("ops_status.clear_error", handlers.ClearOpsStatusError(ops))
 	s.Handle("search.query", handlers.Search(searchRepo))
+	s.Handle("manuscript.search", handlers.SearchManuscript(manuscriptSearcher))
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
 	s.Handle("projects.list", handlers.ListProjects(projects))
 	s.Handle("projects.get", handlers.GetProject(projects))

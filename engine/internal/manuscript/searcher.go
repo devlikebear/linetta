@@ -16,6 +16,7 @@ type Hit struct {
 	NodeID     string `json:"node_id"`
 	Breadcrumb string `json:"breadcrumb"`
 	Snippet    string `json:"snippet"`
+	UpdatedAt  int64  `json:"updated_at,omitempty"`
 }
 
 type Searcher struct {
@@ -132,6 +133,7 @@ func (s *Searcher) addBreadcrumbs(ctx context.Context, projectID string, hits []
 	for i := range hits {
 		if n, ok := byID[hits[i].NodeID]; ok {
 			hits[i].Breadcrumb = node.BreadcrumbLabel(byID, n)
+			hits[i].UpdatedAt = n.UpdatedAt
 		}
 	}
 }

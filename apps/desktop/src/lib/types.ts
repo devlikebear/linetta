@@ -73,6 +73,13 @@ export interface SearchResult {
   updated_at: number;
 }
 
+export interface ManuscriptSearchHit {
+  node_id: string;
+  breadcrumb: string;
+  snippet: string;
+  updated_at?: number;
+}
+
 export interface NodeRow {
   id: string;
   project_id: string;

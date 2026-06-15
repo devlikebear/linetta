@@ -120,4 +120,52 @@ describe("TiptapEditor", () => {
 
     expect(onSelectionContextMenu).not.toHaveBeenCalled();
   });
+
+  it("finds and navigates text matches in the current scene", async () => {
+    const ref = createRef<TiptapHandle>();
+    render(<TiptapEditor ref={ref} initialDoc={{
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "민호는 웃었다. 민호는 고개를 들었다." }] }],
+    }} onChange={vi.fn()} />);
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+
+    let result: { count: number; activeIndex: number } | undefined;
+    act(() => {
+      result = ref.current?.findText("민호");
+    });
+    expect(result).toEqual({ count: 2, activeIndex: 0 });
+    expect(ref.current?.getSelection()).toEqual({ from: 1, to: 3 });
+
+    act(() => {
+      ref.current?.nextMatch();
+    });
+    expect(ref.current?.getSelection()).toEqual({ from: 10, to: 12 });
+
+    act(() => {
+      ref.current?.prevMatch();
+    });
+    expect(ref.current?.getSelection()).toEqual({ from: 1, to: 3 });
+  });
+
+  it("replaces the active match and all matches in the current scene", async () => {
+    const ref = createRef<TiptapHandle>();
+    const onChange = vi.fn();
+    render(<TiptapEditor ref={ref} initialDoc={{
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "민호는 민호의 시계를 보았다." }] }],
+    }} onChange={onChange} />);
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+
+    act(() => {
+      ref.current?.findText("민호");
+      ref.current?.replaceActiveMatch("민준");
+    });
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(ref.current?.editor?.state.doc.textContent).toBe("민준는 민호의 시계를 보았다.");
+
+    act(() => {
+      ref.current?.replaceAllMatches("민호", "민준");
+    });
+    await waitFor(() => expect(ref.current?.editor?.state.doc.textContent).toBe("민준는 민준의 시계를 보았다."));
+  });
 });

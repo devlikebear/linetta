@@ -1,0 +1,237 @@
+.contextual-panel {
+  min-width: 0;
+}
+
+.contextual-panel * {
+  min-width: 0;
+}
+
+.contextual-scope {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.contextual-scope button {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.contextual-scope button.on {
+  border-color: transparent;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
+
+.contextual-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.contextual-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.contextual-section h4 {
+  margin: 0 0 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.contextual-input {
+  display: grid;
+  gap: 7px;
+}
+
+.contextual-input span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.contextual-input input {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  padding: 0 11px;
+  outline: none;
+}
+
+.contextual-input input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint2);
+}
+
+.contextual-match-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.contextual-count {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.contextual-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.contextual-nav button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+}
+
+.contextual-nav button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.contextual-nav button:disabled {
+  opacity: 0.45;
+}
+
+.contextual-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.contextual-actions button,
+.contextual-disabled-action {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.contextual-actions button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.contextual-actions button:disabled,
+.contextual-disabled-action:disabled {
+  opacity: 0.5;
+}
+
+.contextual-notice {
+  margin: 10px 0 0;
+  color: var(--ok);
+  font-size: 12px;
+}
+
+.contextual-disabled-action {
+  width: 100%;
+  margin-top: 11px;
+  text-align: center;
+}
+
+.contextual-results {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0 18px;
+}
+
+.contextual-result {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  text-align: left;
+  padding: 12px 16px;
+  color: var(--ink-soft);
+}
+
+.contextual-result:hover {
+  background: var(--surface);
+}
+
+.contextual-result-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.contextual-breadcrumb {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--accent-deep);
+}
+
+.contextual-date {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted-2);
+}
+
+.contextual-snippet {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.contextual-snippet mark {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.contextual-empty {
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.contextual-empty.error {
+  color: var(--warn);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Sparkles } from "lucide-react";
+import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Replace, Sparkles } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi, stats as statsApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
@@ -22,6 +22,7 @@ import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CompanionPanel, type SelectionRewriteKind } from "../components/companion/CompanionPanel";
 import { FactBookPanel } from "../components/FactBookPanel";
+import { ContextualEditPanel } from "../components/contextual/ContextualEditPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { InlineEditableText } from "../components/InlineEditableText";
 import { CommandPalette, type Command } from "../components/CommandPalette";
@@ -129,6 +130,7 @@ export function Workspace() {
   const aiOpenedCompanionRef = useRef(false);
   useEffect(() => { companionOpenRef.current = companionOpen; }, [companionOpen]);
   const [factBookOpen, setFactBookOpen] = useState(false);
+  const [contextualEditOpen, setContextualEditOpen] = useState(false);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
   const outlinePreset = useMemo(() => outlinePresetById(load?.project.outline_preset), [load?.project.outline_preset]);
@@ -662,6 +664,7 @@ export function Workspace() {
           { type: "mention", attrs: { id: created.id, label: created.name } },
           { type: "text", text: " " },
         ]).run();
+        setContextualEditOpen(false);
         setEntitySheetId(created.id);
       } catch (err) {
         showToast(t("workspace.toast.entityCreateFailed", { error: String(err) }));
@@ -671,7 +674,7 @@ export function Workspace() {
     return () => window.removeEventListener("linetta:mention-pick-new", handler);
   }, [projectId, showToast, t]);
 
-  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+I companion draft mode.
+  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+Shift+F contextual edit + Cmd+I companion draft mode.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -688,6 +691,16 @@ export function Workspace() {
       } else if (e.key.toLowerCase() === "f") {
         if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
+        if (e.shiftKey) {
+          setSearchOpen(false);
+          setFactBookOpen(false);
+          setCompanionOpen(false);
+          setEntitySheetId(null);
+          setThreadSheetId(null);
+          closeAIModalRef.current?.();
+          setContextualEditOpen((v) => !v);
+          return;
+        }
         setSearchOpen(true);
       } else if (e.key.toLowerCase() === "i") {
         e.preventDefault();
@@ -700,6 +713,7 @@ export function Workspace() {
         if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
         setFactBookOpen(false);
+        setContextualEditOpen(false);
         setCompanionOpen((v) => !v);
       }
     };
@@ -876,6 +890,7 @@ export function Workspace() {
     aiOpenedCompanionRef.current = !companionOpenRef.current;
     setCompanionOpen(true);
     setFactBookOpen(false);
+    setContextualEditOpen(false);
     setEntitySheetId(null);
     setThreadSheetId(null);
     if (selectionOverride) {
@@ -910,6 +925,22 @@ export function Workspace() {
       const next = !v;
       if (next) {
         setCompanionOpen(false);
+        setContextualEditOpen(false);
+        setEntitySheetId(null);
+        setThreadSheetId(null);
+        closeAIModalRef.current?.();
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleContextualEdit = useCallback(() => {
+    setContextualEditOpen((v) => {
+      const next = !v;
+      if (next) {
+        setFactBookSelectedClaimRequest(null);
+        setFactBookOpen(false);
+        setCompanionOpen(false);
         setEntitySheetId(null);
         setThreadSheetId(null);
         closeAIModalRef.current?.();
@@ -923,6 +954,7 @@ export function Workspace() {
     editorRef.current?.setSelection({ from: selectionMenu.from, to: selectionMenu.to });
     setSelectionMenu(null);
     setCompanionOpen(false);
+    setContextualEditOpen(false);
     setEntitySheetId(null);
     setThreadSheetId(null);
     closeAIModalRef.current?.();
@@ -939,6 +971,7 @@ export function Workspace() {
     editorRef.current?.setSelection(sel);
     setSelectionMenu(null);
     setFactBookOpen(false);
+    setContextualEditOpen(false);
     setEntitySheetId(null);
     setThreadSheetId(null);
     closeAIModalRef.current?.();
@@ -1266,12 +1299,20 @@ export function Workspace() {
       run: () => setFocus((v) => !v),
     });
     cmds.push({
+      id: "toggle-contextual-edit",
+      section: sectionView,
+      label: t("workspace.command.contextualEdit"),
+      hint: "Cmd+Shift+F",
+      run: toggleContextualEdit,
+    });
+    cmds.push({
       id: "toggle-companion",
       section: "AI",
       label: companionOpen ? t("workspace.command.closeCompanion") : t("workspace.command.openWritingCompanion"),
       hint: "Cmd+J",
       run: () => {
         setFactBookOpen(false);
+        setContextualEditOpen(false);
         setCompanionOpen((v) => !v);
       },
     });
@@ -1288,7 +1329,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1375,6 +1416,7 @@ export function Workspace() {
       tourOpen ||
       aiModal !== null ||
       companionOpen ||
+      contextualEditOpen ||
       entitySheetId !== null ||
       threadSheetId !== null ||
       versionSheetNodeId !== null ||
@@ -1393,6 +1435,7 @@ export function Workspace() {
   }, [
     aiModal,
     companionOpen,
+    contextualEditOpen,
     dialog,
     entitySheetId,
     load,
@@ -1473,11 +1516,20 @@ export function Workspace() {
                 return;
               }
               setFactBookOpen(false);
+              setContextualEditOpen(false);
               setCompanionOpen((v) => !v);
             }}
             data-tour="workspace-companion"
           >
             <MessageCircle size={15} /> {t("workspace.companion")} <span className="kbd">⌘J</span>
+          </button>
+          <button
+            type="button"
+            className={`ws-tool${contextualEditOpen ? " is-active" : ""}`}
+            onClick={toggleContextualEdit}
+            title={t("workspace.command.contextualEdit")}
+          >
+            <Replace size={15} /> {t("contextual.title")}
           </button>
           <button
             type="button"
@@ -1495,7 +1547,7 @@ export function Workspace() {
       </header>
 
       <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
-        (aiModal || companionOpen || factBookOpen) ? " right-wide" : ""
+        (aiModal || companionOpen || factBookOpen || contextualEditOpen) ? " right-wide" : ""
       }${companionOpen ? " right-xwide" : ""}`}>
         <OutlinePanel
           tree={load.tree}
@@ -1554,7 +1606,10 @@ export function Workspace() {
                 NoteMarkerExtension,
                 AITargetExtension,
               ]}
-              onMentionDoubleClick={(id) => setEntitySheetId(id)}
+              onMentionDoubleClick={(id) => {
+                setContextualEditOpen(false);
+                setEntitySheetId(id);
+              }}
               onSelectionContextMenu={openEditorSelectionMenu}
             />
             {selectionMenu && (
@@ -1676,6 +1731,20 @@ export function Workspace() {
             }}
             onChanged={() => {
               refreshTreeKeepNode(load.node.id);
+            }}
+          />
+        ) : contextualEditOpen && load ? (
+          <ContextualEditPanel
+            open={contextualEditOpen}
+            projectId={load.project.id}
+            currentNodeId={load.node.id}
+            editorRef={editorRef}
+            onNavigateNode={(nodeId) => {
+              void navigateToNode({ id: nodeId } as NodeRow);
+            }}
+            onClose={() => {
+              setContextualEditOpen(false);
+              focusEditor();
             }}
           />
         ) : entitySheetId ? (

@@ -24,6 +24,7 @@ import type {
   ImportMarkdownResult,
   ImportPreviewResult,
   ListProjectsParams,
+  ManuscriptSearchHit,
   NewBeatInput,
   NewEntityInput,
   NewFactFromUrlInput,
@@ -230,6 +231,11 @@ export const diagnostics = {
 export const search = {
   query: (query: string, limit = 20) =>
     rpcCall<SearchResult[]>("search.query", { query, limit }),
+};
+
+export const manuscript = {
+  search: (projectId: string, query: string, limit = 20) =>
+    rpcCall<ManuscriptSearchHit[]>("manuscript.search", { project_id: projectId, query, limit }),
 };
 
 export const entities = {

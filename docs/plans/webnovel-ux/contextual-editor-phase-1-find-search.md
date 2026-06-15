@@ -55,7 +55,7 @@ _예상 소요: 1.5~2일_
 
 ## Engine tasks
 
-- [ ] **1.1 `manuscript.Searcher` 결과 확장**
+- [x] **1.1 `manuscript.Searcher` 결과 확장**
   - 파일: `engine/internal/manuscript/searcher.go`
   - `Hit`에 `Preview`, `UpdatedAt`이 필요하면 추가한다. 기존 `Snippet`을 그대로 써도 된다.
   - `Query(ctx, projectID, q, limit)`는 project scope를 유지한다.
@@ -63,7 +63,7 @@ _예상 소요: 1.5~2일_
     - `engine/internal/manuscript/manuscript_test.go`
     - 한국어 검색, 2자 이름 fallback, breadcrumb 포함.
 
-- [ ] **1.2 RPC handler 추가**
+- [x] **1.2 RPC handler 추가**
   - 파일: `engine/internal/rpc/handlers/manuscript.go` 신규
   - 메서드: `manuscript.search`
   - params:
@@ -78,13 +78,13 @@ _예상 소요: 1.5~2일_
   - 테스트:
     - `engine/internal/rpc/handlers/manuscript_test.go`
 
-- [ ] **1.3 engine main 연결**
+- [x] **1.3 engine main 연결**
   - 파일: `engine/cmd/linetta-engine/main.go`
   - 기존 Manuscript RAG wiring의 `manuscriptSearcher`를 `s.Handle("manuscript.search", handlers.SearchManuscript(manuscriptSearcher))`에 연결한다.
 
 ## Frontend tasks
 
-- [ ] **1.4 타입/RPC 추가**
+- [x] **1.4 타입/RPC 추가**
   - 파일: `apps/desktop/src/lib/types.ts`
   - 타입:
     ```ts
@@ -104,7 +104,7 @@ _예상 소요: 1.5~2일_
     };
     ```
 
-- [ ] **1.5 Tiptap current-scene find API**
+- [x] **1.5 Tiptap current-scene find API**
   - 파일: `apps/desktop/src/components/editor/Tiptap.tsx`
   - `TiptapHandle`에 다음을 추가한다.
     - `findText(query: string): { count: number; activeIndex: number }`
@@ -121,7 +121,7 @@ _예상 소요: 1.5~2일_
     - `apps/desktop/src/components/editor/Tiptap.test.tsx`
     - 검색 count, next/prev selection 이동, current replace, scene replace all.
 
-- [ ] **1.6 `ContextualEditPanel` 추가**
+- [x] **1.6 `ContextualEditPanel` 추가**
   - 파일: `apps/desktop/src/components/contextual/ContextualEditPanel.tsx`
   - 파일: `apps/desktop/src/components/contextual/ContextualEditPanel.css`
   - props:
@@ -147,7 +147,7 @@ _예상 소요: 1.5~2일_
     - whole work 검색 input -> RPC 호출
     - 결과 클릭 -> `onNavigateNode`
 
-- [ ] **1.7 Workspace 연결**
+- [x] **1.7 Workspace 연결**
   - 파일: `apps/desktop/src/routes/Workspace.tsx`
   - state: `const [contextualEditOpen, setContextualEditOpen] = useState(false)`
   - Command Palette에 `맥락 편집 열기` 추가.
@@ -156,7 +156,7 @@ _예상 소요: 1.5~2일_
     - 새 단축키는 MVP에서 지정하지 않거나 `Cmd+Shift+F`로 시작한다.
   - 오른쪽 패널 공간에서 `CompanionPanel`/`FactBookPanel`과 충돌하지 않게 하나를 열면 다른 편집 보조 패널은 닫는다.
 
-- [ ] **1.8 i18n 추가**
+- [x] **1.8 i18n 추가**
   - 파일: `apps/desktop/src/lib/i18n.tsx`
   - ko/en/ja:
     - `contextual.title`
@@ -173,10 +173,10 @@ _예상 소요: 1.5~2일_
 
 **자동 검증**
 
-- [ ] `cd engine && go test ./internal/manuscript ./internal/rpc/handlers ./cmd/linetta-engine`
-- [ ] `pnpm --dir apps/desktop test -- ContextualEditPanel.test.tsx Tiptap.test.tsx --run`
-- [ ] `pnpm --dir apps/desktop exec tsc --noEmit`
-- [ ] `git diff --check`
+- [x] `cd engine && go test ./internal/manuscript ./internal/rpc/handlers ./cmd/linetta-engine`
+- [x] `pnpm --dir apps/desktop test -- ContextualEditPanel.test.tsx Tiptap.test.tsx --run`
+- [x] `pnpm --dir apps/desktop exec tsc --noEmit`
+- [x] `git diff --check`
 
 **수동 검증**
 

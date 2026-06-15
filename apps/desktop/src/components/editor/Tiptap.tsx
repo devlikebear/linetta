@@ -13,6 +13,16 @@ export interface TiptapHandle {
   getSelection: () => { from: number; to: number } | null;
   /** Set the ProseMirror selection (clamped to doc size) and focus the view. */
   setSelection: (sel: { from: number; to: number }) => void;
+  /** Find text matches inside the current scene and select the first match. */
+  findText: (query: string) => TiptapFindResult;
+  /** Select the next current-scene match, wrapping at the end. */
+  nextMatch: () => void;
+  /** Select the previous current-scene match, wrapping at the start. */
+  prevMatch: () => void;
+  /** Replace the selected current-scene match and return the updated doc. */
+  replaceActiveMatch: (replacement: string) => object | null;
+  /** Replace every current-scene text match and return the updated doc. */
+  replaceAllMatches: (query: string, replacement: string) => object | null;
   /** Insert a note-marker atom at the current selection. */
   addNoteMarker: (noteId: string) => void;
   /** Remove the first note-marker atom with the given noteId. */
@@ -20,6 +30,16 @@ export interface TiptapHandle {
   /** Underlying Tiptap Editor instance (null until first mount). Used by
    *  ghost-text + Cmd+I AI prompt bar to read selection and dispatch commands. */
   editor: Editor | null;
+}
+
+export interface TiptapFindResult {
+  count: number;
+  activeIndex: number;
+}
+
+interface TextMatch {
+  from: number;
+  to: number;
 }
 
 export interface TiptapSelectionMenuPayload {
@@ -57,6 +77,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
   // Stable reference for the initial doc to avoid resetting on every render.
   const initialKey = useMemo(() => JSON.stringify(initialDoc).length, [initialDoc]);
   const [emptyFocused, setEmptyFocused] = useState(false);
+  const matchesRef = useRef<TextMatch[]>([]);
+  const activeMatchRef = useRef(-1);
+  const lastFindQueryRef = useRef("");
 
   const editor = useEditor(
     {
@@ -143,6 +166,56 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         const to = Math.min(Math.max(from, sel.to), size);
         editor.commands.setTextSelection({ from, to });
         editor.view.focus();
+      },
+      findText: (query) => {
+        if (!editor) return { count: 0, activeIndex: -1 };
+        const matches = findTextMatches(editor, query);
+        matchesRef.current = matches;
+        activeMatchRef.current = matches.length > 0 ? 0 : -1;
+        lastFindQueryRef.current = query;
+        selectMatch(editor, matches, activeMatchRef.current);
+        return { count: matches.length, activeIndex: activeMatchRef.current };
+      },
+      nextMatch: () => {
+        if (!editor || matchesRef.current.length === 0) return;
+        activeMatchRef.current = (activeMatchRef.current + 1) % matchesRef.current.length;
+        selectMatch(editor, matchesRef.current, activeMatchRef.current);
+      },
+      prevMatch: () => {
+        if (!editor || matchesRef.current.length === 0) return;
+        activeMatchRef.current = (activeMatchRef.current - 1 + matchesRef.current.length) % matchesRef.current.length;
+        selectMatch(editor, matchesRef.current, activeMatchRef.current);
+      },
+      replaceActiveMatch: (replacement) => {
+        if (!editor) return null;
+        const match = matchesRef.current[activeMatchRef.current];
+        if (!match) return null;
+
+        const previousIndex = activeMatchRef.current;
+        editor.commands.insertContentAt({ from: match.from, to: match.to }, replacement);
+
+        const matches = findTextMatches(editor, lastFindQueryRef.current);
+        matchesRef.current = matches;
+        activeMatchRef.current = matches.length > 0 ? Math.min(previousIndex, matches.length - 1) : -1;
+        selectMatch(editor, matches, activeMatchRef.current);
+        return editor.getJSON();
+      },
+      replaceAllMatches: (query, replacement) => {
+        if (!editor) return null;
+        const matches = findTextMatches(editor, query);
+        if (matches.length === 0) return null;
+
+        let tr = editor.state.tr;
+        for (const match of [...matches].reverse()) {
+          tr = tr.insertText(replacement, match.from, match.to);
+        }
+        editor.view.dispatch(tr);
+
+        matchesRef.current = findTextMatches(editor, query);
+        activeMatchRef.current = matchesRef.current.length > 0 ? 0 : -1;
+        lastFindQueryRef.current = query;
+        selectMatch(editor, matchesRef.current, activeMatchRef.current);
+        return editor.getJSON();
       },
       addNoteMarker: (noteId: string) => {
         (editor?.commands as any)?.addNoteMarker?.(noteId);
@@ -234,6 +307,33 @@ function findScrollableParent(el: HTMLElement | null): HTMLElement | null {
     el = el.parentElement;
   }
   return null;
+}
+
+function findTextMatches(editor: Editor, query: string): TextMatch[] {
+  const needle = query.trim();
+  if (!needle) return [];
+
+  const normalizedNeedle = needle.toLocaleLowerCase();
+  const matches: TextMatch[] = [];
+
+  editor.state.doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) return;
+    const normalizedText = node.text.toLocaleLowerCase();
+    let index = normalizedText.indexOf(normalizedNeedle);
+    while (index >= 0) {
+      matches.push({ from: pos + index, to: pos + index + needle.length });
+      index = normalizedText.indexOf(normalizedNeedle, index + normalizedNeedle.length);
+    }
+  });
+
+  return matches;
+}
+
+function selectMatch(editor: Editor, matches: TextMatch[], activeIndex: number) {
+  const match = matches[activeIndex];
+  if (!match) return;
+  editor.commands.setTextSelection({ from: match.from, to: match.to });
+  editor.view.focus();
 }
 
 /** Lightweight TS port of engine/internal/node.CountChars. */
