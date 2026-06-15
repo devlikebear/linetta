@@ -220,6 +220,14 @@ function referenceScopeOf(ref: CompanionReference): ReferenceScopeDraft {
   return ref.node_id ? "scene" : "project";
 }
 
+function companionPendingSteps(t: Translate): string[] {
+  return [
+    t("companion.preparing.step.intent"),
+    t("companion.preparing.step.context"),
+    t("companion.preparing.step.draft"),
+  ];
+}
+
 function contextBudgetLevel(tokens: number): "normal" | "large" | "too-large" {
   if (tokens > 24000) return "too-large";
   if (tokens >= 12000) return "large";
@@ -678,6 +686,7 @@ export function CompanionPanel({
   // instead of jumping. The completed message still uses the full text.
   const smoothStreaming = useSmoothStream(streaming, isStreaming);
   const liveProse = streamProse(smoothStreaming);
+  const showPendingPreparation = isStreaming && !thinking && !liveProse;
   const hasTranscript = messages.length > 0 || liveProse.trim().length > 0;
   const contextItemCount = totalContextItems(contextPreview, contextSelection);
   const contextTokenCount = totalContextTokens(contextPreview, contextSelection);
@@ -860,7 +869,7 @@ export function CompanionPanel({
             <span className="msg-who">companion</span>
             <div className="companion-thinking">
               <span className="ai-working-dot" aria-hidden="true" />
-              {thinking || (liveProse ? t("companion.writing") : t("companion.thinking"))}
+              {thinking || (liveProse ? t("companion.writing") : t("companion.preparing"))}
             </div>
             {reasoning && (
               <details className="companion-reasoning">
@@ -868,7 +877,15 @@ export function CompanionPanel({
                 <div className="companion-reasoning-body">{reasoning}</div>
               </details>
             )}
-            <div className="msg-bubble">{liveProse ? <Markdown text={liveProse} /> : <span className="ai-cursor">&nbsp;</span>}</div>
+            {showPendingPreparation ? (
+              <div className="companion-preparing" aria-label={t("companion.preparing")}>
+                {companionPendingSteps(t).map((step) => (
+                  <span key={step}>{step}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="msg-bubble">{liveProse ? <Markdown text={liveProse} /> : <span className="ai-cursor">&nbsp;</span>}</div>
+            )}
           </div>
         )}
       </div>

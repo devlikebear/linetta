@@ -183,10 +183,15 @@ describe("CompanionPanel", () => {
     });
   });
 
-  it("shows a working indicator while streaming even before any prose", () => {
+  it("shows preparation steps while streaming even before any prose", () => {
     companionState.value = { ...companionState.value, status: "streaming", streaming: "", thinking: "" };
-    renderPanel();
-    expect(screen.getByText("생각 중…")).toBeInTheDocument();
+    const { container } = renderPanel();
+
+    expect(screen.getByText("응답 준비 중…")).toBeInTheDocument();
+    expect(screen.getByText("요청 의도 확인")).toBeInTheDocument();
+    expect(screen.getByText("현재 씬 맥락 정리")).toBeInTheDocument();
+    expect(screen.getByText("초안 문장 구성")).toBeInTheDocument();
+    expect(container.querySelector(".msg-bubble")).toBeNull();
   });
 
   it("shows writer actions in the empty state and copies one into the draft", async () => {
