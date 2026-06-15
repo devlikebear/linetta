@@ -309,12 +309,12 @@ export const plot = {
 };
 
 export const companion = {
-  send: (projectId: string, nodeId: string, text: string, options?: Pick<AIOptions, "context" | "outline_structure"> & { images?: CompanionImageAttachment[]; intent?: CompanionIntent }) =>
+  send: (projectId: string, nodeId: string, text: string, options?: Pick<AIOptions, "context" | "outline_structure"> & { images?: CompanionImageAttachment[]; intent?: CompanionIntent; scope?: CompanionHistoryScope }) =>
     rpcCall<{ run_id: string }>("companion.send", {
       project_id: projectId,
       node_id: nodeId,
       text,
-      options: options ? { context: options.context, outline_structure: options.outline_structure, intent: options.intent } : {},
+      options: options ? { context: options.context, outline_structure: options.outline_structure, intent: options.intent, scope: options.scope } : {},
       images: options?.images ?? [],
     }),
   previewContext: (projectId: string, nodeId: string, options?: Pick<AIOptions, "context">): Promise<AIContextPreview> =>

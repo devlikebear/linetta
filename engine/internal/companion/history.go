@@ -182,24 +182,36 @@ func (r *HistoryRepo) ImportLegacy(ctx context.Context, projectID string, msgs [
 	if r == nil {
 		return nil
 	}
+	legacy := nonEmptySessionMessages(msgs)
+	if len(legacy) == 0 {
+		return nil
+	}
 	var done int
 	if err := r.db.QueryRowContext(ctx,
 		`SELECT COUNT(1) FROM companion_history_imports WHERE project_id = ?`, projectID).Scan(&done); err != nil {
 		return err
 	}
 	if done > 0 {
-		return nil
+		count, err := r.ProjectMessageCount(ctx, projectID)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return nil
+		}
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	for _, m := range msgs {
-		content := strings.TrimSpace(m.Content)
-		if content == "" {
-			continue
+	if done > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM companion_history_imports WHERE project_id = ?`, projectID); err != nil {
+			return err
 		}
+	}
+	for _, m := range legacy {
 		createdAt := m.Timestamp.UnixMilli()
 		if createdAt <= 0 {
 			createdAt = importedAt
@@ -221,6 +233,17 @@ VALUES(?, ?)`, projectID, importedAt); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func nonEmptySessionMessages(msgs []session.Message) []session.Message {
+	out := make([]session.Message, 0, len(msgs))
+	for _, m := range msgs {
+		if strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 func (r *HistoryRepo) ProjectMessageCount(ctx context.Context, projectID string) (int, error) {

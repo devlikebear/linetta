@@ -182,6 +182,26 @@ describe("useCompanion streaming", () => {
     expect(rpc.history).toHaveBeenCalledWith("p1", "n2", "scene");
   });
 
+  it("switches from project history to scene history when the current node id becomes available", async () => {
+    rpc.history.mockImplementation((_projectId: string, nodeId?: string | null, scope?: string) => {
+      if (scope === "scene" && nodeId === "n1") {
+        return Promise.resolve([{ role: "assistant", content: "복원된 씬 대화", timestamp: 1, node_id: "n1", scope: "scene" }]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const hook = renderHook(
+      ({ nodeId }) => useCompanion("p1", nodeId, undefined, undefined, undefined, "scene"),
+      { initialProps: { nodeId: null as string | null } },
+    );
+    await waitFor(() => expect(rpc.history).toHaveBeenCalledWith("p1", null, "project"));
+
+    hook.rerender({ nodeId: "n1" });
+
+    await waitFor(() => expect(rpc.history).toHaveBeenCalledWith("p1", "n1", "scene"));
+    await waitFor(() => expect(hook.result.current.messages[0]?.content).toBe("복원된 씬 대화"));
+  });
+
   it("uses project scope without a node target when requested", async () => {
     const { result } = renderHook(() => useCompanion("p1", { current: "n1" }, undefined, undefined, undefined, "project"));
     await waitFor(() => expect(ev.listeners.has("companion-done")).toBe(true));

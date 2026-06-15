@@ -34,6 +34,7 @@ export type SelectionRewriteKind = "rewrite" | "proofread";
 interface Props {
   projectId: string;
   nodeIdRef: { current: string | null };
+  currentNodeId?: string | null;
   onClose: () => void;
   onApplied: () => void;
   beforeSend?: () => Promise<void> | void;
@@ -296,15 +297,25 @@ function MessageCopyButton({
   );
 }
 
-export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, beforeSend, outlineStructure, aiDraft, selectionRewriteRequest }: Props) {
+export function CompanionPanel({
+  projectId,
+  nodeIdRef,
+  currentNodeId: currentNodeIdProp,
+  onClose,
+  onApplied,
+  beforeSend,
+  outlineStructure,
+  aiDraft,
+  selectionRewriteRequest,
+}: Props) {
   const { t } = useI18n();
   const [contextSelection, setContextSelection] = useState<AIContextSelection>(DEFAULT_AI_CONTEXT_SELECTION);
-  const currentNodeId = nodeIdRef.current;
+  const currentNodeId = currentNodeIdProp ?? nodeIdRef.current;
   const [historyScope, setHistoryScope] = useState<CompanionHistoryScope>(() => currentNodeId ? "scene" : "project");
   const effectiveHistoryScope: CompanionHistoryScope = currentNodeId ? historyScope : "project";
   const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(
     projectId,
-    nodeIdRef,
+    currentNodeId,
     onApplied,
     contextSelection,
     outlineStructure,
@@ -358,7 +369,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
     setContextLoading(true);
     try {
       if (flushEditor) await beforeSend?.();
-      const preview = await companionApi.previewContext(projectId, nodeIdRef.current ?? "", { context: selection });
+      const preview = await companionApi.previewContext(projectId, currentNodeId ?? "", { context: selection });
       if (reqId === contextReqIdRef.current) {
         setContextPreview(preview);
       }
@@ -371,7 +382,7 @@ export function CompanionPanel({ projectId, nodeIdRef, onClose, onApplied, befor
         setContextLoading(false);
       }
     }
-  }, [beforeSend, nodeIdRef, projectId]);
+  }, [beforeSend, currentNodeId, projectId]);
 
   useEffect(() => {
     if (!showContext) return;

@@ -1598,6 +1598,7 @@ export function Workspace() {
           <CompanionPanel
             projectId={load.project.id}
             nodeIdRef={companionNodeRef}
+            currentNodeId={load.node.id}
             beforeSend={flushEditorBeforeCompanionSend}
             outlineStructure={outlineStructure}
             selectionRewriteRequest={companionRewriteRequest}

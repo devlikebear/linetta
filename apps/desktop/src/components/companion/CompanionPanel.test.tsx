@@ -176,6 +176,17 @@ describe("CompanionPanel", () => {
     expect(companionState.value.lastArgs[5]).toBe("project");
   });
 
+  it("uses an explicit current node id for history even before the mutable ref catches up", () => {
+    renderPanel({
+      currentNodeId: "n1",
+      nodeIdRef: { current: null },
+    });
+
+    expect(companionState.value.lastArgs[1]).toBe("n1");
+    expect(companionState.value.lastArgs[5]).toBe("scene");
+    expect(screen.getByRole("button", { name: "현재 씬" })).not.toBeDisabled();
+  });
+
   it("shows scene chips for project-wide transcript messages", async () => {
     const user = userEvent.setup();
     companionState.value = {

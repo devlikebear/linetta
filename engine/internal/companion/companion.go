@@ -337,7 +337,7 @@ func (s *Service) History(ctx context.Context, projectID string) ([]session.Mess
 	if err != nil {
 		return nil, err
 	}
-	return session.ReadMessages(s.sessions.TranscriptPath(sess.ID))
+	return readSessionMessages(s.sessions.TranscriptPath(sess.ID))
 }
 
 func (s *Service) HistoryView(ctx context.Context, q HistoryQuery) ([]HistoryMessage, error) {
@@ -381,7 +381,7 @@ func (s *Service) CompactHistory(ctx context.Context, projectID string, now func
 		return nil, err
 	}
 	path := s.sessions.TranscriptPath(sess.ID)
-	msgs, err := session.ReadMessages(path)
+	msgs, err := readSessionMessages(path)
 	if err != nil {
 		return nil, err
 	}

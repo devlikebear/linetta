@@ -417,6 +417,56 @@ func TestHistoryPersistsAcrossServiceRestart(t *testing.T) {
 	}
 }
 
+func TestHistoryViewImportsLongLegacyTranscriptLine(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	threads := thread.NewRepo(st)
+	beats := beat.NewRepo(st)
+	entities := entity.NewRepo(st)
+	rels := relationship.NewRepo(st)
+	pb := plot.NewBuilder(nodes, beats, threads)
+	notif := &fakeNotifier{}
+	svc := NewService(filepath.Join(home, "companion"), projects, threads, entities, rels, pb, notif,
+		func(ai.ResolvedProvider) (llm.Client, error) { return &fakeClient{}, nil }, fixedProvider("claude-code-cli"), home,
+		nodes, beats).WithHistory(NewHistoryRepo(st.DB()))
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "t", Genres: []string{"f"}, LengthTarget: "novel", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sess, err := svc.sessions.EnsureWorker(p.ID)
+	if err != nil {
+		t.Fatalf("ensure worker: %v", err)
+	}
+	longReply := strings.Repeat("긴 원고 응답입니다. ", 5000)
+	if len(longReply) <= 64*1024 {
+		t.Fatalf("test fixture too short: %d", len(longReply))
+	}
+	if err := session.AppendMessage(svc.sessions.TranscriptPath(sess.ID), session.Message{
+		Role:      "assistant",
+		Content:   longReply,
+		Timestamp: time.UnixMilli(1000).UTC(),
+	}); err != nil {
+		t.Fatalf("append long legacy message: %v", err)
+	}
+
+	msgs, err := svc.HistoryView(ctx, HistoryQuery{ProjectID: p.ID, Scope: HistoryViewProject, Limit: 10})
+	if err != nil {
+		t.Fatalf("HistoryView: %v", err)
+	}
+	if len(msgs) != 1 || msgs[0].Content != longReply {
+		t.Fatalf("long legacy message not imported: len=%d", len(msgs))
+	}
+}
+
 func TestSend_RetriesDirectMutationWhenModelOnlyClaimsApplied(t *testing.T) {
 	client := &claimThenApplyClient{}
 	svc, notif, projectID := newSvcWithClient(t, client)

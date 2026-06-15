@@ -56,6 +56,7 @@ interface CompanionSessionStore {
 
 type CompanionRunEvent = { run_id: string; project_id?: string; node_id?: string; scope?: CompanionMessage["scope"] };
 type CompanionStoreKey = string;
+type CompanionNodeTarget = { current: string | null } | string | null | undefined;
 
 const PENDING_RUN_ID = "__linetta_pending_run__";
 
@@ -113,6 +114,12 @@ function toChatMessage(m: CompanionMessage): ChatMessage {
 function companionStoreKey(projectId: string, scope: CompanionHistoryScope, nodeId?: string | null): CompanionStoreKey {
   if (scope === "scene" && nodeId) return `${projectId}:scene:${nodeId}`;
   return `${projectId}:project:all`;
+}
+
+function currentNodeIdFrom(target: CompanionNodeTarget): string | null {
+  if (typeof target === "string") return target || null;
+  if (target && typeof target === "object" && "current" in target) return target.current ?? null;
+  return null;
 }
 
 function getStore(key: CompanionStoreKey): CompanionSessionStore {
@@ -357,13 +364,13 @@ function acceptRunEvent(key: CompanionStoreKey, runId: string): boolean {
 
 export function useCompanion(
   projectId: string,
-  nodeIdRef: { current: string | null },
+  nodeTarget: CompanionNodeTarget,
   onApplied?: (event: CompanionApplied) => void,
   contextSelection?: AIContextSelection,
   outlineStructure?: string,
   historyScope: CompanionHistoryScope = "scene",
 ) {
-  const currentNodeId = nodeIdRef.current ?? null;
+  const currentNodeId = currentNodeIdFrom(nodeTarget);
   const effectiveScope: CompanionHistoryScope = historyScope === "scene" && currentNodeId ? "scene" : "project";
   const storeKey = companionStoreKey(projectId, effectiveScope, currentNodeId);
   const [snapshot, setSnapshot] = useState<CompanionSessionSnapshot>(() => snapshotFromState(getStore(storeKey).state));
