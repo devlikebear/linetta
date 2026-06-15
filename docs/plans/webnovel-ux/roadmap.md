@@ -96,6 +96,10 @@ Phase 1 (연재 핵심 단위)
 **병렬 가능성**: Phase 2와 Phase 3은 Phase 1 완료 후 독립적으로 진행 가능.
 단, Phase 3의 통계 대시보드는 Phase 1의 `writing_stats` 데이터가 쌓여 있어야 의미 있는 화면이 나온다.
 
+## 후속 로드맵
+
+- [`contextual-editor-roadmap.md`](./contextual-editor-roadmap.md) — 현재 씬 찾기/바꾸기, 작품 전체 본문 검색, 안전한 일괄 변경, 캐릭터·장소·소품·설정 변경을 다루는 맥락 편집 워크벤치. Phase 3의 AI 퇴고와 `companion-writing-actions.md` 이후에 이어지는 편집기 강화 축이다.
+
 ## 페이즈 간 전환 규칙
 
 각 페이즈는 다음 조건을 만족해야 완료로 간주:
