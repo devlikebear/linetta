@@ -6,3 +6,26 @@
   box-shadow: var(--shadow-md);
   z-index: 60;
 }
+
+.ai-context-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  flex: none;
+}
+
+.ai-context-meta .n {
+  margin-left: 0;
+}
+
+.ai-token-badge {
+  padding: 2px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 82%, var(--surface-2));
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+}

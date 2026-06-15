@@ -74,6 +74,9 @@ const FALLBACK_CONTEXT_PREVIEW: AIContextPreview = {
   counts: FALLBACK_COUNTS,
   sections: [],
   selectedItemCount: 0,
+  selectedCharCount: 0,
+  selectedTokenEstimate: 0,
+  budgetTokenEstimate: 0,
 };
 
 interface LoadState {

@@ -26,6 +26,7 @@ type PromptData struct {
 	Relationships    []relationship.Relationship
 	Facts            []fact.Card
 	Memories         []string
+	References       []Reference
 }
 
 // OutlineNode is a compact view of the left outline tree with node ids.
@@ -147,6 +148,27 @@ func buildContext(d PromptData) string {
 		}
 		b.WriteString("\n")
 	}
+	if len(d.References) > 0 {
+		b.WriteString("## 추가 레퍼런스\n")
+		b.WriteString("작가가 이번 요청에 참고하라고 직접 추가한 자료입니다. 목적 지시를 우선해서 사용하세요.\n")
+		for _, r := range d.References {
+			if r.Status == ReferenceStatusDisabled {
+				continue
+			}
+			text := strings.TrimSpace(referencePromptText(r))
+			if text == "" {
+				continue
+			}
+			b.WriteString(fmt.Sprintf("### %s — %s\n", purposeLabel(r.Purpose), strings.TrimSpace(r.Title)))
+			b.WriteString(referencePurposeInstruction(r.Purpose))
+			b.WriteString("\n")
+			if r.Status == ReferenceStatusSummarized {
+				b.WriteString("(요약 사용 중)\n")
+			}
+			b.WriteString(text)
+			b.WriteString("\n\n")
+		}
+	}
 	if len(d.SceneExcerpts) > 0 {
 		b.WriteString("## 작성된 본문 발췌\n")
 		for _, s := range d.SceneExcerpts {
@@ -251,6 +273,9 @@ func applyContextSelection(d PromptData, selection ai.ContextSelection) PromptDa
 	if !selection.Enabled(ai.ContextKeyMemories) {
 		d.Memories = nil
 	}
+	if !selection.Enabled(ai.ContextKeyReferences) {
+		d.References = nil
+	}
 	return d
 }
 
@@ -258,13 +283,16 @@ func previewFromPromptData(d PromptData, selection ai.ContextSelection) ai.Conte
 	sections := []ai.PreviewSection{}
 	add := func(id ai.ContextKey, label string, count int, preview string) {
 		present := count > 0 || strings.TrimSpace(preview) != ""
+		trimmed := trimPreview(strings.TrimSpace(preview))
 		sections = append(sections, ai.PreviewSection{
-			ID:       id,
-			Label:    label,
-			Present:  present,
-			Selected: present && selection.Enabled(id),
-			Count:    count,
-			Preview:  trimPreview(strings.TrimSpace(preview)),
+			ID:            id,
+			Label:         label,
+			Present:       present,
+			Selected:      present && selection.Enabled(id),
+			Count:         count,
+			Preview:       trimmed,
+			CharCount:     ai.EstimateChars(preview),
+			TokenEstimate: ai.EstimateTokens(preview),
 		})
 	}
 
@@ -278,9 +306,16 @@ func previewFromPromptData(d PromptData, selection ai.ContextSelection) ai.Conte
 	add(ai.ContextKeyEntities, "세계관 요소", len(d.Entities), renderCompanionEntitiesPreview(d.Entities))
 	add(ai.ContextKeyRelationships, "관계", len(d.Relationships), renderCompanionRelationshipsPreview(d.Entities, d.Relationships))
 	add(ai.ContextKeyMemories, "컴패니언 기억", len(d.Memories), renderMemoriesPreview(d.Memories))
+	add(ai.ContextKeyReferences, "추가 레퍼런스", len(activeReferences(d.References)), renderReferencesPreview(d.References))
 
 	selectedCount := 0
+	selectedChars := 0
+	selectedTokens := 0
+	budgetTokens := 0
 	for _, section := range sections {
+		if section.Present {
+			budgetTokens += section.TokenEstimate
+		}
 		if !section.Selected {
 			continue
 		}
@@ -289,6 +324,8 @@ func previewFromPromptData(d PromptData, selection ai.ContextSelection) ai.Conte
 		} else {
 			selectedCount++
 		}
+		selectedChars += section.CharCount
+		selectedTokens += section.TokenEstimate
 	}
 
 	return ai.ContextPreview{
@@ -300,8 +337,11 @@ func previewFromPromptData(d PromptData, selection ai.ContextSelection) ai.Conte
 			PlotBeats:     companionPlotCount(d),
 			Notes:         len(d.Memories),
 		},
-		Sections:          sections,
-		SelectedItemCount: selectedCount,
+		Sections:              sections,
+		SelectedItemCount:     selectedCount,
+		SelectedCharCount:     selectedChars,
+		SelectedTokenEstimate: selectedTokens,
+		BudgetTokenEstimate:   budgetTokens,
 	}
 }
 
@@ -484,6 +524,57 @@ func renderMemoriesPreview(memories []string) string {
 		b.WriteString("- " + m + "\n")
 	}
 	return b.String()
+}
+
+func activeReferences(refs []Reference) []Reference {
+	out := make([]Reference, 0, len(refs))
+	for _, r := range refs {
+		if r.Status != ReferenceStatusDisabled && strings.TrimSpace(referencePromptText(r)) != "" {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func renderReferencesPreview(refs []Reference) string {
+	var b strings.Builder
+	for _, r := range activeReferences(refs) {
+		b.WriteString(fmt.Sprintf("- %s · %s", purposeLabel(r.Purpose), strings.TrimSpace(r.Title)))
+		if r.Status == ReferenceStatusSummarized {
+			b.WriteString(" · 요약")
+		}
+		b.WriteString(fmt.Sprintf(" · 약 %d tokens\n", ai.EstimateTokens(referencePromptText(r))))
+		if text := strings.TrimSpace(referencePromptText(r)); text != "" {
+			b.WriteString("  " + trimPreview(text) + "\n")
+		}
+	}
+	return b.String()
+}
+
+func referencePurposeInstruction(purpose string) string {
+	switch normalizeReferencePurpose(purpose) {
+	case ReferencePurposeStyle:
+		return "목적: 문체 참고. 문장 리듬, 어휘, 시점, 거리감만 참고하고 내용이나 고유 표현을 그대로 복사하지 마세요."
+	case ReferencePurposeCanon:
+		return "목적: 설정/세계관. 작품 내부의 사실로 우선 반영하되, 현재 씬 본문과 충돌하면 충돌을 짧게 알리세요."
+	case ReferencePurposeConstraint:
+		return "목적: 금지/주의사항. 아래 제한을 우선 지키고, 어길 수밖에 없으면 먼저 설명하세요."
+	default:
+		return "목적: 내용 참고. 장면, 사실, 정서적 맥락을 근거로 활용하세요."
+	}
+}
+
+func purposeLabel(purpose string) string {
+	switch normalizeReferencePurpose(purpose) {
+	case ReferencePurposeStyle:
+		return "문체 참고"
+	case ReferencePurposeCanon:
+		return "설정/세계관"
+	case ReferencePurposeConstraint:
+		return "금지/주의"
+	default:
+		return "내용 참고"
+	}
 }
 
 func trimPreview(s string) string {

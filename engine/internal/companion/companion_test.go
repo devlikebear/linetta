@@ -1013,6 +1013,60 @@ func TestPreviewFromPromptData_RendersSelectableCompanionSections(t *testing.T) 
 	if !sawScene || !sawFact {
 		t.Fatalf("missing expected sections in preview: %+v", preview.Sections)
 	}
+	if preview.SelectedTokenEstimate == 0 || preview.BudgetTokenEstimate == 0 {
+		t.Fatalf("expected token estimates in preview: %+v", preview)
+	}
+}
+
+func TestBuildContext_RendersReferencesByPurpose(t *testing.T) {
+	data := PromptData{
+		References: []Reference{
+			{
+				ID:      "r1",
+				Purpose: ReferencePurposeStyle,
+				Title:   "자서전 문체",
+				Content: "그는 한참 뒤에야 그 문장을 이해했다.",
+				Status:  ReferenceStatusActive,
+			},
+			{
+				ID:      "r2",
+				Purpose: ReferencePurposeConstraint,
+				Title:   "금지 톤",
+				Content: "가족을 악인처럼 단정하지 않는다.",
+				Status:  ReferenceStatusActive,
+			},
+		},
+	}
+	text := buildContext(data)
+	for _, want := range []string{
+		"## 추가 레퍼런스",
+		"문체 참고",
+		"문장 리듬",
+		"고유 표현을 그대로 복사하지 마세요",
+		"금지/주의",
+		"가족을 악인처럼 단정하지 않는다",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("context missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestApplyContextSelection_RemovesReferences(t *testing.T) {
+	off := false
+	data := PromptData{
+		References: []Reference{{
+			ID:      "r1",
+			Purpose: ReferencePurposeContent,
+			Title:   "참고",
+			Content: "프롬프트에 들어가면 안 되는 레퍼런스",
+			Status:  ReferenceStatusActive,
+		}},
+	}
+	text := buildContext(applyContextSelection(data, ai.ContextSelection{References: &off}))
+	if strings.Contains(text, "프롬프트에 들어가면 안 되는") {
+		t.Fatalf("unchecked reference still rendered:\n%s", text)
+	}
 }
 
 func TestSend_surfacesTranscriptPersistenceError(t *testing.T) {

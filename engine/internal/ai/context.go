@@ -661,12 +661,14 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 		present := forcePresent || count > 0 || strings.TrimSpace(preview) != ""
 		selected := present && selection.Enabled(id)
 		section := PreviewSection{
-			ID:       id,
-			Label:    label,
-			Present:  present,
-			Selected: selected,
-			Count:    count,
-			Preview:  trimRunes(strings.TrimSpace(preview), 1200),
+			ID:            id,
+			Label:         label,
+			Present:       present,
+			Selected:      selected,
+			Count:         count,
+			Preview:       trimRunes(strings.TrimSpace(preview), 1200),
+			CharCount:     EstimateChars(preview),
+			TokenEstimate: EstimateTokens(preview),
 		}
 		sections = append(sections, section)
 	}
@@ -693,7 +695,13 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 	add(ContextKeyStyleNotes, "작가 style notes", boolCount(strings.TrimSpace(c.StyleNotes) != ""), c.StyleNotes, false)
 
 	selectedCount := 0
+	selectedChars := 0
+	selectedTokens := 0
+	budgetTokens := 0
 	for _, section := range sections {
+		if section.Present {
+			budgetTokens += section.TokenEstimate
+		}
 		if !section.Selected {
 			continue
 		}
@@ -702,12 +710,17 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 		} else {
 			selectedCount++
 		}
+		selectedChars += section.CharCount
+		selectedTokens += section.TokenEstimate
 	}
 
 	return ContextPreview{
-		PreviewCounts:     CountsFromContext(c),
-		Sections:          sections,
-		SelectedItemCount: selectedCount,
+		PreviewCounts:         CountsFromContext(c),
+		Sections:              sections,
+		SelectedItemCount:     selectedCount,
+		SelectedCharCount:     selectedChars,
+		SelectedTokenEstimate: selectedTokens,
+		BudgetTokenEstimate:   budgetTokens,
 	}
 }
 

@@ -41,6 +41,7 @@ const (
 	ContextKeyStyleNotes    ContextKey = "style_notes"
 	ContextKeyFacts         ContextKey = "facts"
 	ContextKeyMemories      ContextKey = "memories"
+	ContextKeyReferences    ContextKey = "references"
 )
 
 // ContextSelection mirrors the AI panel checklist. Nil means "use the default",
@@ -59,6 +60,7 @@ type ContextSelection struct {
 	StyleNotes    *bool `json:"style_notes,omitempty"`
 	Facts         *bool `json:"facts,omitempty"`
 	Memories      *bool `json:"memories,omitempty"`
+	References    *bool `json:"references,omitempty"`
 }
 
 // DefaultContextSelection returns the nil-pointer default: every section is on.
@@ -92,6 +94,8 @@ func (s ContextSelection) Enabled(key ContextKey) bool {
 		return enabledByDefault(s.Facts)
 	case ContextKeyMemories:
 		return enabledByDefault(s.Memories)
+	case ContextKeyReferences:
+		return enabledByDefault(s.References)
 	default:
 		return true
 	}
@@ -130,20 +134,25 @@ type PreviewCounts struct {
 
 // PreviewSection is one context section shown in the AI panel before a run.
 type PreviewSection struct {
-	ID       ContextKey `json:"id"`
-	Label    string     `json:"label"`
-	Present  bool       `json:"present"`
-	Selected bool       `json:"selected"`
-	Count    int        `json:"count"`
-	Preview  string     `json:"preview"`
+	ID            ContextKey `json:"id"`
+	Label         string     `json:"label"`
+	Present       bool       `json:"present"`
+	Selected      bool       `json:"selected"`
+	Count         int        `json:"count"`
+	Preview       string     `json:"preview"`
+	CharCount     int        `json:"char_count"`
+	TokenEstimate int        `json:"token_estimate"`
 }
 
 // ContextPreview keeps the historical top-level counts and adds inspectable
 // sections so the UI can show what is actually being injected.
 type ContextPreview struct {
 	PreviewCounts
-	Sections          []PreviewSection `json:"sections"`
-	SelectedItemCount int              `json:"selected_item_count"`
+	Sections              []PreviewSection `json:"sections"`
+	SelectedItemCount     int              `json:"selected_item_count"`
+	SelectedCharCount     int              `json:"selected_char_count"`
+	SelectedTokenEstimate int              `json:"selected_token_estimate"`
+	BudgetTokenEstimate   int              `json:"budget_token_estimate"`
 }
 
 // Context is the structured payload that prompts.go renders into the

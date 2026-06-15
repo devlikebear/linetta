@@ -92,3 +92,20 @@ func TestCompanionApplyOpsInvalidParams(t *testing.T) {
 		}
 	}
 }
+
+func TestCompanionReferencesInvalidParams(t *testing.T) {
+	clock := func() int64 { return 0 }
+	checkInvalid := func(name string, h rpc.Handler, params json.RawMessage) {
+		t.Helper()
+		_, err := h(context.Background(), params)
+		var me *rpc.MethodError
+		if !errors.As(err, &me) || me.Code != rpc.CodeInvalidParams {
+			t.Fatalf("%s: expected InvalidParams, got %T %v", name, err, err)
+		}
+	}
+
+	checkInvalid("list", CompanionReferencesList(nil), json.RawMessage(`{}`))
+	checkInvalid("create", CompanionReferencesCreate(nil, clock), json.RawMessage(`{"project_id":"p"}`))
+	checkInvalid("update", CompanionReferencesUpdate(nil, clock), json.RawMessage(`{"project_id":"p"}`))
+	checkInvalid("delete", CompanionReferencesDelete(nil), json.RawMessage(`{"project_id":"p"}`))
+}

@@ -169,7 +169,10 @@ func main() {
 		projects, threads, entities, relationships, plotBuilder,
 		s.Notifier(), companion.ClientFactory(ai.DefaultClientFactory), providerSrc, home,
 		nodes, beats,
-	).WithFacts(facts).WithOpsStatus(ops).WithHistory(companion.NewHistoryRepo(st.DB()))
+	).WithFacts(facts).
+		WithOpsStatus(ops).
+		WithHistory(companion.NewHistoryRepo(st.DB())).
+		WithReferences(companion.NewReferenceRepo(st.DB()))
 
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, engineVersion))
@@ -252,6 +255,10 @@ func main() {
 	s.Handle("companion.cancel", handlers.CompanionCancel(companionSvc))
 	s.Handle("companion.remember", handlers.CompanionRemember(companionSvc))
 	s.Handle("companion.apply_ops", handlers.CompanionApplyOps(companionSvc, clock))
+	s.Handle("companion.references.list", handlers.CompanionReferencesList(companionSvc))
+	s.Handle("companion.references.create", handlers.CompanionReferencesCreate(companionSvc, clock))
+	s.Handle("companion.references.update", handlers.CompanionReferencesUpdate(companionSvc, clock))
+	s.Handle("companion.references.delete", handlers.CompanionReferencesDelete(companionSvc))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
 	s.Handle("providers.list_models", handlers.ListModels(settingsStore, modelcatalog.Default()))

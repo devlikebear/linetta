@@ -79,6 +79,7 @@ type Service struct {
 	memBase       string
 	ops           *opsstatus.Repo
 	history       *HistoryRepo
+	references    *ReferenceRepo
 }
 
 // NewService constructs the companion service. sessionsDir is passed to
@@ -109,6 +110,11 @@ func (s *Service) WithOpsStatus(repo *opsstatus.Repo) *Service {
 
 func (s *Service) WithHistory(repo *HistoryRepo) *Service {
 	s.history = repo
+	return s
+}
+
+func (s *Service) WithReferences(repo *ReferenceRepo) *Service {
+	s.references = repo
 	return s
 }
 
@@ -183,6 +189,15 @@ func (s *Service) gatherContext(ctx context.Context, projectID, nodeID, query st
 		}
 		if facts, err := s.facts.List(ctx, filter); err == nil {
 			d.Facts = facts
+		}
+	}
+	if s.references != nil {
+		if refs, err := s.references.List(ctx, ReferenceQuery{
+			ProjectID: projectID,
+			NodeID:    resolvedNode,
+			Limit:     40,
+		}); err == nil {
+			d.References = refs
 		}
 	}
 	// Keyword memory can't do topical matching (SearchExperiences matches
@@ -493,6 +508,42 @@ func (s *Service) PreviewContext(ctx context.Context, projectID, nodeID string, 
 		return ai.ContextPreview{}, err
 	}
 	return previewFromPromptData(data, selection), nil
+}
+
+func (s *Service) ListReferences(ctx context.Context, q ReferenceQuery) ([]Reference, error) {
+	if s.references == nil {
+		return nil, nil
+	}
+	return s.references.List(ctx, q)
+}
+
+func (s *Service) CreateReference(ctx context.Context, input ReferenceInput, now func() int64) (Reference, error) {
+	if s.references == nil {
+		return Reference{}, fmt.Errorf("reference repo unavailable")
+	}
+	at := time.Now().UnixMilli()
+	if now != nil {
+		at = now()
+	}
+	return s.references.Create(ctx, input, at)
+}
+
+func (s *Service) UpdateReference(ctx context.Context, patch ReferencePatch, now func() int64) (Reference, error) {
+	if s.references == nil {
+		return Reference{}, fmt.Errorf("reference repo unavailable")
+	}
+	at := time.Now().UnixMilli()
+	if now != nil {
+		at = now()
+	}
+	return s.references.Update(ctx, patch, at)
+}
+
+func (s *Service) DeleteReference(ctx context.Context, projectID, id string) error {
+	if s.references == nil {
+		return nil
+	}
+	return s.references.Delete(ctx, projectID, id)
 }
 
 func compactTranscriptSummary(msgs []session.Message) string {

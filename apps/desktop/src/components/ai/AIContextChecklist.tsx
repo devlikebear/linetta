@@ -22,6 +22,7 @@ export const DEFAULT_AI_CONTEXT_SELECTION: AIContextSelection = {
   style_notes: true,
   facts: true,
   memories: true,
+  references: true,
 };
 
 interface Props {
@@ -61,7 +62,10 @@ export function AIContextChecklistList({ preview, selection, onSelectionChange, 
                 />
                 <span>{section.label}</span>
               </label>
-              {section.count > 0 && <span className="n">{formatCount(section, t)}</span>}
+              <span className="ai-context-meta">
+                {section.count > 0 && <span className="n">{formatCount(section, t)}</span>}
+                {section.tokenEstimate > 0 && <span className="ai-token-badge">{formatTokenEstimate(section.tokenEstimate)}</span>}
+              </span>
               <button
                 type="button"
                 className="ai-preview-toggle"
@@ -113,4 +117,18 @@ export function totalContextItems(preview: AIContextPreview, selection: AIContex
     if (!section.present || !selection[section.id]) return sum;
     return sum + Math.max(section.count, 1);
   }, 0);
+}
+
+export function totalContextTokens(preview: AIContextPreview, selection: AIContextSelection): number {
+  return preview.sections.reduce((sum, section) => {
+    if (!section.present || !selection[section.id]) return sum;
+    return sum + Math.max(section.tokenEstimate ?? 0, 0);
+  }, 0);
+}
+
+export function formatTokenEstimate(tokens: number): string {
+  if (!Number.isFinite(tokens) || tokens <= 0) return "~0";
+  if (tokens < 1000) return `~${tokens}`;
+  if (tokens < 10000) return `~${(tokens / 1000).toFixed(1)}k`;
+  return `~${Math.round(tokens / 1000)}k`;
 }

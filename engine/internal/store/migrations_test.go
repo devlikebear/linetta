@@ -141,3 +141,43 @@ VALUES ('m1', 'p1', 'n1', 'r1', 'user', 'scene', 'scene_write', 'done', '써줘'
 		t.Fatalf("companion message count after project delete = %d, want 0", n)
 	}
 }
+
+func TestApplyMigrations_createsCompanionReferencesWithProjectCascade(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys=ON`); err != nil {
+		t.Fatalf("pragma: %v", err)
+	}
+	if err := ApplyMigrations(ctx, db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	_, err = db.ExecContext(ctx, `
+INSERT INTO projects (id, title, genres, length_target, default_pov, created_at, updated_at)
+VALUES ('p1', 'Test', '["SF"]', 'novel', 'first', 0, 0)`)
+	if err != nil {
+		t.Fatalf("insert project: %v", err)
+	}
+	_, err = db.ExecContext(ctx, `
+INSERT INTO companion_references
+  (id, project_id, source_type, purpose, title, content, summary, char_count, token_estimate, status, created_at, updated_at)
+VALUES ('r1', 'p1', 'text', 'style', 'Tone', 'body', '', 4, 2, 'active', 10, 10)`)
+	if err != nil {
+		t.Fatalf("insert companion reference: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM projects WHERE id = 'p1'`); err != nil {
+		t.Fatalf("delete project: %v", err)
+	}
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM companion_references WHERE project_id = 'p1'`).Scan(&n); err != nil {
+		t.Fatalf("count companion references: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("companion reference count after project delete = %d, want 0", n)
+	}
+}

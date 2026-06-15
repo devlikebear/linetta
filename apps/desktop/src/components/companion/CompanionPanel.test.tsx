@@ -23,6 +23,9 @@ const aiCounts: ContextCounts = {
 const aiPreview: AIContextPreview = {
   counts: aiCounts,
   selectedItemCount: 1,
+  selectedCharCount: 10,
+  selectedTokenEstimate: 4,
+  budgetTokenEstimate: 4,
   sections: [
     {
       id: "current_scene",
@@ -31,6 +34,8 @@ const aiPreview: AIContextPreview = {
       selected: true,
       count: 1,
       preview: "현재 씬 본문입니다.",
+      charCount: 10,
+      tokenEstimate: 4,
     },
   ],
 };
@@ -60,6 +65,10 @@ const companionState = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   companionPreviewContext: vi.fn(),
+  companionReferencesList: vi.fn(),
+  companionReferencesCreate: vi.fn(),
+  companionReferencesUpdate: vi.fn(),
+  companionReferencesDelete: vi.fn(),
 }));
 
 vi.mock("../../hooks/useCompanion", () => ({
@@ -75,6 +84,12 @@ vi.mock("../../lib/rpc", () => ({
   },
   companion: {
     previewContext: mocks.companionPreviewContext,
+    references: {
+      list: mocks.companionReferencesList,
+      create: mocks.companionReferencesCreate,
+      update: mocks.companionReferencesUpdate,
+      delete: mocks.companionReferencesDelete,
+    },
   },
 }));
 
@@ -110,6 +125,8 @@ describe("CompanionPanel", () => {
           selected: true,
           count: 1,
           preview: "씬 1\n인간의 개별성은 무엇일까?",
+          charCount: 18,
+          tokenEstimate: 6,
         },
         {
           id: "overview",
@@ -118,10 +135,33 @@ describe("CompanionPanel", () => {
           selected: true,
           count: 1,
           preview: "자의식을 다루는 소설",
+          charCount: 11,
+          tokenEstimate: 4,
         },
       ],
       selectedItemCount: 2,
+      selectedCharCount: 29,
+      selectedTokenEstimate: 10,
+      budgetTokenEstimate: 10,
     });
+    mocks.companionReferencesList.mockResolvedValue([]);
+    mocks.companionReferencesCreate.mockResolvedValue({
+      id: "r1",
+      project_id: "p1",
+      node_id: "n1",
+      source_type: "clipboard",
+      purpose: "style",
+      title: "클립보드 레퍼런스",
+      content: "담담한 문체",
+      summary: "",
+      char_count: 6,
+      token_estimate: 2,
+      status: "active",
+      created_at: 1,
+      updated_at: 1,
+    });
+    mocks.companionReferencesUpdate.mockResolvedValue({});
+    mocks.companionReferencesDelete.mockResolvedValue({ ok: true });
     companionState.value = {
       messages: [],
       streaming: "",
@@ -136,7 +176,10 @@ describe("CompanionPanel", () => {
     };
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+        readText: vi.fn().mockResolvedValue("담담하고 절제된 문체를 참고해줘."),
+      },
     });
   });
 
@@ -341,6 +384,87 @@ describe("CompanionPanel", () => {
           current_scene: false,
         },
       });
+    });
+  });
+
+  it("shows token estimates in the context panel and chip", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "컨텍스트 확인" }));
+
+    expect(await screen.findByText("선택 컨텍스트 ~10")).toBeInTheDocument();
+    expect(screen.getByText("2개 항목")).toBeInTheDocument();
+    expect(screen.getByText("~6")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "컨텍스트 확인" })).toHaveTextContent("ctx ~10");
+  });
+
+  it("offers quick actions when the selected context is large", async () => {
+    const user = userEvent.setup();
+    mocks.companionPreviewContext.mockResolvedValueOnce({
+      counts: {
+        nearbyScenes: 1,
+        hasOutline: true,
+        hasSynopsis: false,
+        relatedScenes: 0,
+        entities: 0,
+        relationships: 0,
+        plotBeats: 0,
+        notes: 0,
+        projectMetaFields: 0,
+        hasStyleNotes: false,
+      },
+      sections: [{
+        id: "current_scene",
+        label: "작성된 본문 발췌",
+        present: true,
+        selected: true,
+        count: 1,
+        preview: "긴 본문",
+        charCount: 39000,
+        tokenEstimate: 13000,
+      }],
+      selectedItemCount: 1,
+      selectedCharCount: 39000,
+      selectedTokenEstimate: 13000,
+      budgetTokenEstimate: 13000,
+    });
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "컨텍스트 확인" }));
+
+    expect(await screen.findByText("현재 씬만")).toBeInTheDocument();
+    expect(screen.getByText("레퍼런스 요약")).toBeInTheDocument();
+    expect(screen.getByText("대화 요약")).toBeInTheDocument();
+  });
+
+  it("adds a clipboard reference for the current scene", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+        readText: vi.fn().mockResolvedValue("담담하고 절제된 문체를 참고해줘."),
+      },
+    });
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "컨텍스트 확인" }));
+    await user.click(await screen.findByRole("button", { name: "클립보드" }));
+
+    expect(await screen.findByLabelText("레퍼런스 내용")).toHaveValue("담담하고 절제된 문체를 참고해줘.");
+    expect(screen.getByLabelText("레퍼런스 목적")).toHaveValue("style");
+
+    await user.click(screen.getByRole("button", { name: "레퍼런스 추가" }));
+
+    await waitFor(() => {
+      expect(mocks.companionReferencesCreate).toHaveBeenCalledWith(expect.objectContaining({
+        project_id: "p1",
+        node_id: "n1",
+        source_type: "clipboard",
+        purpose: "style",
+        content: "담담하고 절제된 문체를 참고해줘.",
+      }));
     });
   });
 

@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { readTextFile } from "@tauri-apps/plugin-fs";
 import {
   Archive,
   Book,
   Check,
+  Clipboard,
   Copy,
   CornerDownLeft,
+  FileText,
   HelpCircle,
   ImagePlus,
   Layers,
@@ -20,9 +24,18 @@ import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { companion as companionApi } from "../../lib/rpc";
 import { stripProposalBlock } from "../../lib/companionDisplay";
-import type { AIContextPreview, AIContextSelection, CompanionHistoryScope, CompanionImageAttachment } from "../../lib/types";
+import type {
+  AIContextPreview,
+  AIContextSelection,
+  CompanionHistoryScope,
+  CompanionImageAttachment,
+  CompanionReference,
+  CompanionReferencePurpose,
+  CompanionReferenceSource,
+  CompanionReferenceStatus,
+} from "../../lib/types";
 import { AIDraftComposer, type AIDraftComposerProps } from "../ai/AIPanel";
-import { AIContextChecklistList, DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../ai/AIContextChecklist";
+import { AIContextChecklistList, DEFAULT_AI_CONTEXT_SELECTION, formatTokenEstimate, totalContextItems, totalContextTokens } from "../ai/AIContextChecklist";
 import { ProposalCard } from "./ProposalCard";
 import { ChoiceCard } from "./ChoiceCard";
 import { Markdown } from "./Markdown";
@@ -128,16 +141,22 @@ const EMPTY_CONTEXT_PREVIEW: AIContextPreview = {
   },
   sections: [],
   selectedItemCount: 0,
+  selectedCharCount: 0,
+  selectedTokenEstimate: 0,
+  budgetTokenEstimate: 0,
 };
 
 const MAX_COMPANION_IMAGES = 4;
 const MAX_COMPANION_IMAGE_BYTES = 8 * 1024 * 1024;
 const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const REFERENCE_PURPOSES: CompanionReferencePurpose[] = ["content", "style", "canon", "constraint"];
 
 type CompanionImageDraft = CompanionImageAttachment & {
   id: string;
   previewUrl: string;
 };
+
+type ReferenceScopeDraft = "project" | "scene";
 
 function readAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -173,6 +192,29 @@ function formatAttachmentSize(size?: number): string {
   if (size < 1024) return `${size}B`;
   if (size < 1024 * 1024) return `${Math.round(size / 1024)}KB`;
   return `${(size / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function referencePurposeLabel(t: Translate, purpose: CompanionReferencePurpose): string {
+  return t(`companion.reference.purpose.${purpose}`);
+}
+
+function referenceStatusLabel(t: Translate, status: CompanionReferenceStatus): string {
+  return t(`companion.reference.status.${status}`);
+}
+
+function referenceScopeOf(ref: CompanionReference): ReferenceScopeDraft {
+  return ref.node_id ? "scene" : "project";
+}
+
+function contextBudgetLevel(tokens: number): "normal" | "large" | "too-large" {
+  if (tokens > 24000) return "too-large";
+  if (tokens >= 12000) return "large";
+  return "normal";
+}
+
+function markdownTitleFromPath(path: string): string {
+  const name = path.split(/[\\/]/).filter(Boolean).pop() ?? "reference.md";
+  return name.replace(/\.(md|markdown|txt)$/i, "");
 }
 
 function CompanionEmpty({
@@ -329,6 +371,16 @@ export function CompanionPanel({
   const [showContext, setShowContext] = useState(false);
   const [contextPreview, setContextPreview] = useState<AIContextPreview>(EMPTY_CONTEXT_PREVIEW);
   const [contextLoading, setContextLoading] = useState(false);
+  const [references, setReferences] = useState<CompanionReference[]>([]);
+  const [referencesLoading, setReferencesLoading] = useState(false);
+  const [referenceDraftOpen, setReferenceDraftOpen] = useState(false);
+  const [referenceTitle, setReferenceTitle] = useState("");
+  const [referenceText, setReferenceText] = useState("");
+  const [referencePurpose, setReferencePurpose] = useState<CompanionReferencePurpose>("content");
+  const [referenceSource, setReferenceSource] = useState<CompanionReferenceSource>("text");
+  const [referenceScope, setReferenceScope] = useState<ReferenceScopeDraft>(() => currentNodeId ? "scene" : "project");
+  const [referenceSaving, setReferenceSaving] = useState(false);
+  const [referenceNotice, setReferenceNotice] = useState("");
   const [attachments, setAttachments] = useState<CompanionImageDraft[]>([]);
   const [attachmentNotice, setAttachmentNotice] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -344,6 +396,12 @@ export function CompanionPanel({
       setHistoryScope("project");
     }
   }, [currentNodeId, historyScope]);
+
+  useEffect(() => {
+    if (!currentNodeId && referenceScope === "scene") {
+      setReferenceScope("project");
+    }
+  }, [currentNodeId, referenceScope]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -384,6 +442,20 @@ export function CompanionPanel({
     }
   }, [beforeSend, currentNodeId, projectId]);
 
+  const loadReferences = useCallback(async () => {
+    setReferencesLoading(true);
+    try {
+      const refs = await companionApi.references.list(projectId, currentNodeId ?? null, true);
+      setReferences(refs);
+      setReferenceNotice("");
+    } catch {
+      setReferenceNotice(t("companion.reference.loadFailed"));
+      setReferences([]);
+    } finally {
+      setReferencesLoading(false);
+    }
+  }, [currentNodeId, projectId, t]);
+
   useEffect(() => {
     if (!showContext) return;
     if (loadedContextSelectionRef.current === contextSelection) return;
@@ -391,15 +463,137 @@ export function CompanionPanel({
     void loadContextPreview(contextSelection);
   }, [contextSelection, loadContextPreview, showContext]);
 
+  useEffect(() => {
+    if (!showContext) return;
+    void loadReferences();
+  }, [loadReferences, showContext]);
+
   const toggleContext = () => {
     setShowContext((open) => {
       const next = !open;
       if (next) {
         loadedContextSelectionRef.current = contextSelection;
         void loadContextPreview(contextSelection, true);
+        void loadReferences();
       }
       return next;
     });
+  };
+
+  const refreshContextAfterReferenceChange = async () => {
+    await loadReferences();
+    await loadContextPreview(contextSelection);
+  };
+
+  const openTextReference = () => {
+    setReferenceSource("text");
+    setReferencePurpose("content");
+    setReferenceTitle("");
+    setReferenceText("");
+    setReferenceScope(currentNodeId ? "scene" : "project");
+    setReferenceDraftOpen(true);
+    setReferenceNotice("");
+  };
+
+  const openClipboardReference = async () => {
+    if (!navigator.clipboard?.readText) {
+      setReferenceNotice(t("companion.reference.clipboardUnavailable"));
+      return;
+    }
+    const text = (await navigator.clipboard.readText()).trim();
+    if (!text) {
+      setReferenceNotice(t("companion.reference.clipboardEmpty"));
+      return;
+    }
+    setReferenceSource("clipboard");
+    setReferencePurpose("style");
+    setReferenceTitle(t("companion.reference.clipboardTitle"));
+    setReferenceText(text);
+    setReferenceScope(currentNodeId ? "scene" : "project");
+    setReferenceDraftOpen(true);
+    setReferenceNotice("");
+  };
+
+  const openMarkdownReference = async () => {
+    const picked = await openDialog({
+      multiple: false,
+      filters: [{ name: "Text", extensions: ["md", "markdown", "txt"] }],
+    });
+    const path = Array.isArray(picked) ? picked[0] : picked;
+    if (!path) return;
+    const text = (await readTextFile(path)).trim();
+    if (!text) {
+      setReferenceNotice(t("companion.reference.fileEmpty"));
+      return;
+    }
+    const source: CompanionReferenceSource = /\.(md|markdown)$/i.test(path) ? "markdown" : "file";
+    setReferenceSource(source);
+    setReferencePurpose("content");
+    setReferenceTitle(markdownTitleFromPath(path));
+    setReferenceText(text);
+    setReferenceScope(currentNodeId ? "scene" : "project");
+    setReferenceDraftOpen(true);
+    setReferenceNotice("");
+  };
+
+  const saveReference = async () => {
+    const content = referenceText.trim();
+    if (!content || referenceSaving) return;
+    setReferenceSaving(true);
+    try {
+      await companionApi.references.create({
+        project_id: projectId,
+        ...(referenceScope === "scene" && currentNodeId ? { node_id: currentNodeId } : {}),
+        source_type: referenceSource,
+        purpose: referencePurpose,
+        title: referenceTitle.trim() || undefined,
+        content,
+      });
+      setReferenceDraftOpen(false);
+      setReferenceTitle("");
+      setReferenceText("");
+      await refreshContextAfterReferenceChange();
+    } catch {
+      setReferenceNotice(t("companion.reference.saveFailed"));
+    } finally {
+      setReferenceSaving(false);
+    }
+  };
+
+  const updateReferenceStatus = async (ref: CompanionReference, status: CompanionReferenceStatus) => {
+    await companionApi.references.update({ project_id: projectId, id: ref.id, status });
+    await refreshContextAfterReferenceChange();
+  };
+
+  const summarizeActiveReferences = async () => {
+    const targets = references.filter((ref) => ref.status === "active");
+    if (targets.length === 0) return;
+    await Promise.all(targets.map((ref) => companionApi.references.update({ project_id: projectId, id: ref.id, status: "summarized" })));
+    await refreshContextAfterReferenceChange();
+  };
+
+  const keepCurrentSceneOnly = () => {
+    setContextSelection({
+      current_scene: true,
+      overview: false,
+      synopsis: false,
+      nearby_scenes: false,
+      related_scenes: false,
+      plot: false,
+      entities: false,
+      relationships: false,
+      notes: false,
+      project_meta: false,
+      style_notes: false,
+      facts: false,
+      memories: false,
+      references: false,
+    });
+  };
+
+  const deleteReference = async (ref: CompanionReference) => {
+    await companionApi.references.delete(projectId, ref.id);
+    await refreshContextAfterReferenceChange();
   };
 
   const addImageFiles = useCallback(async (files: File[]) => {
@@ -472,6 +666,8 @@ export function CompanionPanel({
   const liveProse = streamProse(smoothStreaming);
   const hasTranscript = messages.length > 0 || liveProse.trim().length > 0;
   const contextItemCount = totalContextItems(contextPreview, contextSelection);
+  const contextTokenCount = totalContextTokens(contextPreview, contextSelection);
+  const budgetLevel = contextBudgetLevel(contextTokenCount);
 
   const copyTranscript = async () => {
     const text = formatTranscript(messages, liveProse, t);
@@ -590,6 +786,17 @@ export function CompanionPanel({
                     t={t}
                   />
                   <div className={`msg-bubble${m.errored ? " errored" : ""}`}>{m.content}</div>
+                </div>
+              </div>
+            );
+          }
+          if (m.status === "compacted") {
+            return (
+              <div key={i} className="companion-compacted-message">
+                <Archive size={13} />
+                <div>
+                  <strong>{t("companion.compactedSummary")}</strong>
+                  <Markdown text={m.content} />
                 </div>
               </div>
             );
@@ -740,7 +947,7 @@ export function CompanionPanel({
             title={t("companion.context")}
           >
             <Layers size={13} />
-            ctx {contextLoading ? "…" : (contextPreview.sections.length > 0 ? contextItemCount : "")}
+            ctx {contextLoading ? "…" : (contextTokenCount > 0 ? formatTokenEstimate(contextTokenCount) : "")}
           </button>
         </div>
         {showContext && (
@@ -748,8 +955,30 @@ export function CompanionPanel({
             <div className="companion-context-title">
               <Layers size={15} />
               <span>{t("companion.contextTitle")}</span>
-              <span className="companion-context-count">{contextItemCount}</span>
+              <span className="companion-context-count">{formatTokenEstimate(contextTokenCount)}</span>
             </div>
+            <div className={`companion-context-budget ${budgetLevel}`}>
+              <span>{t("companion.contextBudget", { tokens: formatTokenEstimate(contextTokenCount) })}</span>
+              <span>{t("companion.contextItems", { count: contextItemCount })}</span>
+            </div>
+            {budgetLevel !== "normal" && (
+              <div className="companion-context-quick-actions">
+                <button type="button" className="btn ghost sm" onClick={keepCurrentSceneOnly}>
+                  {t("companion.contextQuick.currentScene")}
+                </button>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() => { void summarizeActiveReferences(); }}
+                  disabled={references.every((ref) => ref.status !== "active")}
+                >
+                  {t("companion.contextQuick.summarizeRefs")}
+                </button>
+                <button type="button" className="btn ghost sm" onClick={() => { void compact(); }} disabled={!hasTranscript || isStreaming}>
+                  {t("companion.contextQuick.compactChat")}
+                </button>
+              </div>
+            )}
             {contextLoading ? (
               <div className="companion-context-loading">
                 <span className="ai-working-dot" aria-hidden="true" />
@@ -763,6 +992,108 @@ export function CompanionPanel({
                 disabled={isBusy}
               />
             )}
+            <div className="companion-reference-panel">
+              <div className="companion-reference-head">
+                <span>{t("companion.reference.title")}</span>
+                <div className="companion-reference-actions">
+                  <button type="button" className="chip" onClick={openClipboardReference} disabled={isBusy}>
+                    <Clipboard size={12} />
+                    {t("companion.reference.addClipboard")}
+                  </button>
+                  <button type="button" className="chip" onClick={openTextReference} disabled={isBusy}>
+                    <MessageSquare size={12} />
+                    {t("companion.reference.addText")}
+                  </button>
+                  <button type="button" className="chip" onClick={openMarkdownReference} disabled={isBusy}>
+                    <FileText size={12} />
+                    {t("companion.reference.addFile")}
+                  </button>
+                </div>
+              </div>
+              {referenceNotice && <div className="companion-reference-notice" aria-live="polite">{referenceNotice}</div>}
+              {referenceDraftOpen && (
+                <div className="companion-reference-editor">
+                  <input
+                    value={referenceTitle}
+                    onChange={(e) => setReferenceTitle(e.target.value)}
+                    placeholder={t("companion.reference.titlePlaceholder")}
+                    aria-label={t("companion.reference.titleInput")}
+                  />
+                  <div className="companion-reference-controls">
+                    <select
+                      value={referencePurpose}
+                      onChange={(e) => setReferencePurpose(e.target.value as CompanionReferencePurpose)}
+                      aria-label={t("companion.reference.purposeLabel")}
+                    >
+                      {REFERENCE_PURPOSES.map((purpose) => (
+                        <option key={purpose} value={purpose}>{referencePurposeLabel(t, purpose)}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={referenceScope}
+                      onChange={(e) => setReferenceScope(e.target.value as ReferenceScopeDraft)}
+                      aria-label={t("companion.reference.scopeLabel")}
+                    >
+                      <option value="project">{t("companion.reference.scope.project")}</option>
+                      <option value="scene" disabled={!currentNodeId}>{t("companion.reference.scope.scene")}</option>
+                    </select>
+                  </div>
+                  <textarea
+                    value={referenceText}
+                    onChange={(e) => setReferenceText(e.target.value)}
+                    placeholder={t("companion.reference.contentPlaceholder")}
+                    aria-label={t("companion.reference.contentInput")}
+                    rows={5}
+                  />
+                  <div className="companion-reference-editor-actions">
+                    <button type="button" className="btn ghost sm" onClick={() => setReferenceDraftOpen(false)} disabled={referenceSaving}>
+                      {t("common.cancel")}
+                    </button>
+                    <button type="button" className="btn primary sm" onClick={() => { void saveReference(); }} disabled={!referenceText.trim() || referenceSaving}>
+                      {t("companion.reference.save")}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {referencesLoading ? (
+                <div className="companion-reference-empty">
+                  <span className="ai-working-dot" aria-hidden="true" />
+                  {t("companion.reference.loading")}
+                </div>
+              ) : references.length === 0 ? (
+                <div className="companion-reference-empty">{t("companion.reference.empty")}</div>
+              ) : (
+                <ul className="companion-reference-list">
+                  {references.map((ref) => (
+                    <li key={ref.id} className={ref.status === "disabled" ? "is-disabled" : ""}>
+                      <div className="companion-reference-row-main">
+                        <span className="companion-reference-purpose">{referencePurposeLabel(t, ref.purpose)}</span>
+                        <strong title={ref.title}>{ref.title}</strong>
+                        <span className="companion-reference-scope">{t(`companion.reference.scope.${referenceScopeOf(ref)}`)}</span>
+                        <span className="companion-reference-token">{formatTokenEstimate(ref.token_estimate)}</span>
+                      </div>
+                      <div className="companion-reference-row-sub">
+                        <span>{referenceStatusLabel(t, ref.status)}</span>
+                        <span>{ref.char_count.toLocaleString()} chars</span>
+                      </div>
+                      <div className="companion-reference-row-actions">
+                        {ref.status === "disabled" ? (
+                          <button type="button" className="btn ghost sm" onClick={() => { void updateReferenceStatus(ref, "active"); }}>{t("companion.reference.enable")}</button>
+                        ) : (
+                          <button type="button" className="btn ghost sm" onClick={() => { void updateReferenceStatus(ref, "disabled"); }}>{t("companion.reference.disable")}</button>
+                        )}
+                        {ref.status === "summarized" ? (
+                          <button type="button" className="btn ghost sm" onClick={() => { void updateReferenceStatus(ref, "active"); }}>{t("companion.reference.useOriginal")}</button>
+                        ) : (
+                          <button type="button" className="btn ghost sm" onClick={() => { void updateReferenceStatus(ref, "summarized"); }}>{t("companion.reference.useSummary")}</button>
+                        )}
+                        <button type="button" className="btn ghost sm danger" onClick={() => { void deleteReference(ref); }}>{t("common.delete")}</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </section>
         )}
       </div>

@@ -32,6 +32,9 @@ const counts: ContextCounts = {
 const preview: AIContextPreview = {
   counts,
   selectedItemCount: 4,
+  selectedCharCount: 48,
+  selectedTokenEstimate: 16,
+  budgetTokenEstimate: 16,
   sections: [
     {
       id: "current_scene",
@@ -40,6 +43,8 @@ const preview: AIContextPreview = {
       selected: true,
       count: 1,
       preview: "현재 씬 본문입니다.",
+      charCount: 10,
+      tokenEstimate: 4,
     },
     {
       id: "plot",
@@ -48,6 +53,8 @@ const preview: AIContextPreview = {
       selected: true,
       count: 3,
       preview: "[현재 씬]\n  · [첫 장면] #1 마지막 기회 — 장소로 향한다",
+      charCount: 38,
+      tokenEstimate: 12,
     },
   ],
 };

@@ -5,6 +5,9 @@ import type {
   CompanionImageAttachment,
   CompanionHistoryScope,
   CompanionIntent,
+  CompanionReference,
+  CompanionReferenceInput,
+  CompanionReferencePatch,
   CompanionApplyOpsResult,
   Beat,
   CompanionMessage,
@@ -100,8 +103,13 @@ function mapContextPreviewResponse(r: ContextPreviewResponse): AIContextPreview 
       selected: s.selected,
       count: s.count,
       preview: s.preview,
+      charCount: s.char_count ?? 0,
+      tokenEstimate: s.token_estimate ?? 0,
     })),
     selectedItemCount: r.selected_item_count ?? 0,
+    selectedCharCount: r.selected_char_count ?? 0,
+    selectedTokenEstimate: r.selected_token_estimate ?? 0,
+    budgetTokenEstimate: r.budget_token_estimate ?? 0,
   };
 }
 
@@ -354,4 +362,18 @@ export const companion = {
       summary,
       ops,
     }),
+  references: {
+    list: (projectId: string, nodeId?: string | null, includeDisabled = true) =>
+      rpcCall<{ references: CompanionReference[] }>("companion.references.list", {
+        project_id: projectId,
+        ...(nodeId ? { node_id: nodeId } : {}),
+        include_disabled: includeDisabled,
+      }).then((r) => r.references ?? []),
+    create: (input: CompanionReferenceInput) =>
+      rpcCall<CompanionReference>("companion.references.create", input),
+    update: (input: CompanionReferencePatch) =>
+      rpcCall<CompanionReference>("companion.references.update", input),
+    delete: (projectId: string, id: string) =>
+      rpcCall<{ ok: true }>("companion.references.delete", { project_id: projectId, id }),
+  },
 };

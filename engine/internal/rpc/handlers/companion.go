@@ -212,3 +212,121 @@ func CompanionApplyOps(svc *companion.Service, now Clock) rpc.Handler {
 		return json.Marshal(result)
 	}
 }
+
+type companionReferencesListParams struct {
+	ProjectID       string `json:"project_id"`
+	NodeID          string `json:"node_id"`
+	IncludeDisabled bool   `json:"include_disabled"`
+	Limit           int    `json:"limit"`
+}
+
+// CompanionReferencesList returns user-managed companion references.
+func CompanionReferencesList(svc *companion.Service) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionReferencesListParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		refs, err := svc.ListReferences(ctx, companion.ReferenceQuery{
+			ProjectID:       p.ProjectID,
+			NodeID:          p.NodeID,
+			IncludeDisabled: p.IncludeDisabled,
+			Limit:           p.Limit,
+		})
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(map[string][]companion.Reference{"references": refs})
+	}
+}
+
+type companionReferencesCreateParams struct {
+	ProjectID  string `json:"project_id"`
+	NodeID     string `json:"node_id"`
+	SourceType string `json:"source_type"`
+	Purpose    string `json:"purpose"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	Summary    string `json:"summary"`
+	Status     string `json:"status"`
+}
+
+// CompanionReferencesCreate persists one user-managed reference.
+func CompanionReferencesCreate(svc *companion.Service, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionReferencesCreateParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" || p.Content == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and content required"}
+		}
+		ref, err := svc.CreateReference(ctx, companion.ReferenceInput{
+			ProjectID:  p.ProjectID,
+			NodeID:     p.NodeID,
+			SourceType: p.SourceType,
+			Purpose:    p.Purpose,
+			Title:      p.Title,
+			Content:    p.Content,
+			Summary:    p.Summary,
+			Status:     p.Status,
+		}, func() int64 { return now() })
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(ref)
+	}
+}
+
+type companionReferencesUpdateParams struct {
+	ProjectID  string  `json:"project_id"`
+	ID         string  `json:"id"`
+	NodeID     *string `json:"node_id"`
+	SourceType *string `json:"source_type"`
+	Purpose    *string `json:"purpose"`
+	Title      *string `json:"title"`
+	Content    *string `json:"content"`
+	Summary    *string `json:"summary"`
+	Status     *string `json:"status"`
+}
+
+// CompanionReferencesUpdate patches one user-managed reference.
+func CompanionReferencesUpdate(svc *companion.Service, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionReferencesUpdateParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and id required"}
+		}
+		ref, err := svc.UpdateReference(ctx, companion.ReferencePatch{
+			ProjectID:  p.ProjectID,
+			ID:         p.ID,
+			NodeID:     p.NodeID,
+			SourceType: p.SourceType,
+			Purpose:    p.Purpose,
+			Title:      p.Title,
+			Content:    p.Content,
+			Summary:    p.Summary,
+			Status:     p.Status,
+		}, func() int64 { return now() })
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(ref)
+	}
+}
+
+type companionReferencesDeleteParams struct {
+	ProjectID string `json:"project_id"`
+	ID        string `json:"id"`
+}
+
+// CompanionReferencesDelete removes one user-managed reference.
+func CompanionReferencesDelete(svc *companion.Service) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionReferencesDeleteParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id and id required"}
+		}
+		if err := svc.DeleteReference(ctx, p.ProjectID, p.ID); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}

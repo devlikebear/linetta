@@ -182,7 +182,8 @@ export type AIContextKey =
   | "project_meta"
   | "style_notes"
   | "facts"
-  | "memories";
+  | "memories"
+  | "references";
 
 export type AIContextSelection = Record<AIContextKey, boolean>;
 
@@ -255,6 +256,9 @@ export interface ContextPreviewResponse {
   has_style_notes: boolean;
   sections?: ContextPreviewSectionResponse[];
   selected_item_count?: number;
+  selected_char_count?: number;
+  selected_token_estimate?: number;
+  budget_token_estimate?: number;
 }
 
 export interface ContextPreviewSectionResponse {
@@ -264,6 +268,8 @@ export interface ContextPreviewSectionResponse {
   selected: boolean;
   count: number;
   preview: string;
+  char_count?: number;
+  token_estimate?: number;
 }
 
 /** Camel-case context-payload counts surfaced by the FE. Wire shape is
@@ -288,12 +294,17 @@ export interface AIContextSection {
   selected: boolean;
   count: number;
   preview: string;
+  charCount: number;
+  tokenEstimate: number;
 }
 
 export interface AIContextPreview {
   counts: ContextCounts;
   sections: AIContextSection[];
   selectedItemCount: number;
+  selectedCharCount: number;
+  selectedTokenEstimate: number;
+  budgetTokenEstimate: number;
 }
 
 export interface GitSyncResult {
@@ -638,6 +649,49 @@ export interface CompanionImageAttachment {
   media_type: string;
   data: string;
   size?: number;
+}
+
+export type CompanionReferenceSource = "text" | "clipboard" | "markdown" | "file";
+export type CompanionReferencePurpose = "style" | "content" | "canon" | "constraint";
+export type CompanionReferenceStatus = "active" | "summarized" | "disabled";
+
+export interface CompanionReference {
+  id: string;
+  project_id: string;
+  node_id?: string;
+  source_type: CompanionReferenceSource;
+  purpose: CompanionReferencePurpose;
+  title: string;
+  content: string;
+  summary: string;
+  char_count: number;
+  token_estimate: number;
+  status: CompanionReferenceStatus;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface CompanionReferenceInput {
+  project_id: string;
+  node_id?: string;
+  source_type: CompanionReferenceSource;
+  purpose: CompanionReferencePurpose;
+  title?: string;
+  content: string;
+  summary?: string;
+  status?: CompanionReferenceStatus;
+}
+
+export interface CompanionReferencePatch {
+  project_id: string;
+  id: string;
+  node_id?: string;
+  source_type?: CompanionReferenceSource;
+  purpose?: CompanionReferencePurpose;
+  title?: string;
+  content?: string;
+  summary?: string;
+  status?: CompanionReferenceStatus;
 }
 
 export type ProposalOpType =
