@@ -28,6 +28,15 @@ func TestBuildSystem_MentionsWebTools(t *testing.T) {
 	}
 }
 
+func TestBuildSystem_MentionsManuscriptSearchTool(t *testing.T) {
+	s := buildSystem()
+	for _, want := range []string{"search_manuscript", "get_scene_text", "본문 전체", "node_id"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("buildSystem missing manuscript search guidance %q", want)
+		}
+	}
+}
+
 func TestBuildSystem_MentionsProofreadRules(t *testing.T) {
 	s := buildSystem()
 	for _, want := range []string{"맞춤법", "고유명사", "대사 톤", "변경 목록"} {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/google/uuid"
@@ -33,11 +34,19 @@ type WritingStatsRecorder interface {
 	RecordNodeDelta(ctx context.Context, tx *sql.Tx, projectID string, oldCount int, newCount int, nowMillis int64) error
 }
 
+// ManuscriptIndexer is maintained best-effort after content changes. Failures
+// must not block manuscript writes.
+type ManuscriptIndexer interface {
+	Upsert(ctx context.Context, projectID, nodeID, contentDoc string) error
+	Delete(ctx context.Context, nodeID string) error
+}
+
 // Repo persists Nodes in SQLite and keeps derived counts on projects in sync.
 type Repo struct {
 	s       *store.Store
 	resync  MentionResyncer
 	writing WritingStatsRecorder
+	indexer ManuscriptIndexer
 }
 
 // NewRepo returns a Repo backed by the given Store.
@@ -52,6 +61,10 @@ func (r *Repo) SetMentionResyncer(fn MentionResyncer) {
 // SetWritingStatsRecorder wires the optional daily progress recorder.
 func (r *Repo) SetWritingStatsRecorder(rec WritingStatsRecorder) {
 	r.writing = rec
+}
+
+func (r *Repo) SetManuscriptIndexer(indexer ManuscriptIndexer) {
+	r.indexer = indexer
 }
 
 // Get returns a single node by id.
@@ -143,6 +156,7 @@ UPDATE projects
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	r.indexUpsertBestEffort(ctx, projectID, id, doc)
 	if r.resync != nil {
 		if err := r.resync(ctx, id, doc); err != nil {
 			return err
@@ -478,6 +492,10 @@ func (r *Repo) Delete(ctx context.Context, id string, now int64) error {
 		}
 		return err
 	}
+	deletedIDs, err := nodeAndDescendantIDs(ctx, tx, id)
+	if err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE id = ?`, id); err != nil {
 		return err
 	}
@@ -488,7 +506,54 @@ UPDATE projects
  WHERE id = ?`, projectID, now, projectID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	for _, deletedID := range deletedIDs {
+		r.indexDeleteBestEffort(ctx, deletedID)
+	}
+	return nil
+}
+
+func nodeAndDescendantIDs(ctx context.Context, tx *sql.Tx, id string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `
+WITH RECURSIVE deleted(id) AS (
+  SELECT id FROM nodes WHERE id = ?
+  UNION ALL
+  SELECT n.id FROM nodes n JOIN deleted d ON n.parent_id = d.id
+)
+SELECT id FROM deleted`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var deletedID string
+		if err := rows.Scan(&deletedID); err != nil {
+			return nil, err
+		}
+		ids = append(ids, deletedID)
+	}
+	return ids, rows.Err()
+}
+
+func (r *Repo) indexUpsertBestEffort(ctx context.Context, projectID, nodeID, doc string) {
+	if r.indexer == nil {
+		return
+	}
+	if err := r.indexer.Upsert(ctx, projectID, nodeID, doc); err != nil {
+		log.Printf("manuscript index upsert failed for node %s: %v", nodeID, err)
+	}
+}
+
+func (r *Repo) indexDeleteBestEffort(ctx context.Context, nodeID string) {
+	if r.indexer == nil {
+		return
+	}
+	if err := r.indexer.Delete(ctx, nodeID); err != nil {
+		log.Printf("manuscript index delete failed for node %s: %v", nodeID, err)
+	}
 }
 
 // MoveUp swaps the node with its previous sibling (same parent_id). No-op if
@@ -781,7 +846,11 @@ UPDATE projects
  WHERE id = ?`, cur.ProjectID, now, cur.ProjectID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	r.indexDeleteBestEffort(ctx, cur.ID)
+	return nil
 }
 
 // RestoreOutline restores a previous outline topology for a project.

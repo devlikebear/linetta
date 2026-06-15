@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
@@ -87,6 +88,34 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 			return "(본문 없음)"
 		}
 		return txt
+	case "search_manuscript":
+		query := strings.TrimSpace(q.Args["query"])
+		if query == "" {
+			return "(오류: query 필요)"
+		}
+		if s.manuscript == nil {
+			return "(오류: 본문 검색을 사용할 수 없음)"
+		}
+		hits, err := s.manuscript.Query(ctx, projectID, query, parseQueryLimit(q.Args["limit"], 5, 20))
+		if err != nil {
+			return "(오류: " + err.Error() + ")"
+		}
+		if len(hits) == 0 {
+			return "(검색 결과 없음)"
+		}
+		var sb strings.Builder
+		for _, h := range hits {
+			label := h.Breadcrumb
+			if label == "" {
+				label = h.NodeID
+			}
+			sb.WriteString("- [" + h.NodeID + "] " + label)
+			if h.Snippet != "" {
+				sb.WriteString(": " + h.Snippet)
+			}
+			sb.WriteString("\n")
+		}
+		return strings.TrimRight(sb.String(), "\n")
 	case "list_scenes":
 		all, err := s.nodes.ListByProject(ctx, projectID)
 		if err != nil {
@@ -141,6 +170,17 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 	default:
 		return "(오류: 알 수 없는 도구 " + q.Tool + ")"
 	}
+}
+
+func parseQueryLimit(raw string, fallback, max int) int {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	if n > max {
+		return max
+	}
+	return n
 }
 
 func plainTextFromDoc(raw *string) string {

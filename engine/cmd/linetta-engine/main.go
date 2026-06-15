@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/gitsync"
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/modelcatalog"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -105,6 +106,8 @@ func main() {
 	notes := note.NewRepo(st)
 	relationships := relationship.NewRepo(st)
 	facts := fact.NewRepo(st)
+	manuscriptIndexer := manuscript.NewIndexer(st.DB())
+	manuscriptSearcher := manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer)
 	plotBuilder := plot.NewBuilder(nodes, beats, threads)
 	ops := opsstatus.NewRepo(st)
 	searchRepo := search.NewRepo(st)
@@ -115,6 +118,7 @@ func main() {
 		return mentions.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
 	})
 	nodes.SetWritingStatsRecorder(writingStats)
+	nodes.SetManuscriptIndexer(manuscriptIndexer)
 
 	settingsStore, err := settings.New()
 	if err != nil {
@@ -172,7 +176,8 @@ func main() {
 	).WithFacts(facts).
 		WithOpsStatus(ops).
 		WithHistory(companion.NewHistoryRepo(st.DB())).
-		WithReferences(companion.NewReferenceRepo(st.DB()))
+		WithReferences(companion.NewReferenceRepo(st.DB())).
+		WithManuscript(manuscriptSearcher)
 
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, engineVersion))

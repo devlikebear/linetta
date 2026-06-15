@@ -14,6 +14,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -80,6 +81,7 @@ type Service struct {
 	ops           *opsstatus.Repo
 	history       *HistoryRepo
 	references    *ReferenceRepo
+	manuscript    *manuscript.Searcher
 }
 
 // NewService constructs the companion service. sessionsDir is passed to
@@ -115,6 +117,11 @@ func (s *Service) WithHistory(repo *HistoryRepo) *Service {
 
 func (s *Service) WithReferences(repo *ReferenceRepo) *Service {
 	s.references = repo
+	return s
+}
+
+func (s *Service) WithManuscript(searcher *manuscript.Searcher) *Service {
+	s.manuscript = searcher
 	return s
 }
 

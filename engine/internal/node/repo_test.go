@@ -2,7 +2,9 @@ package node
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -90,6 +92,29 @@ func TestRepo_UpdateContent_updatesWordCount_andProjectCount(t *testing.T) {
 	}
 	if pp.UpdatedAt != 9999 {
 		t.Errorf("project.updated_at = %d, want 9999", pp.UpdatedAt)
+	}
+}
+
+func TestRepo_UpdateContent_manuscriptIndexFailureDoesNotBlockSave(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	hook := &fakeManuscriptIndexer{upsertErr: errors.New("index unavailable")}
+	r.SetManuscriptIndexer(hook)
+	ctx := context.Background()
+
+	doc := textDoc("인덱싱이 실패해도 본문은 저장된다")
+	if err := r.UpdateContent(ctx, *p.LastOpenedNodeID, doc, 9999); err != nil {
+		t.Fatalf("UpdateContent should ignore manuscript index errors: %v", err)
+	}
+	got, err := r.Get(ctx, *p.LastOpenedNodeID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ContentDoc == nil || *got.ContentDoc != doc {
+		t.Fatalf("content was not saved: %+v", got.ContentDoc)
+	}
+	if len(hook.upserts) != 1 || hook.upserts[0].nodeID != *p.LastOpenedNodeID {
+		t.Fatalf("upserts = %+v, want node %s", hook.upserts, *p.LastOpenedNodeID)
 	}
 }
 
@@ -402,6 +427,56 @@ func TestRepo_Delete_removesNode_andUpdatesProjectWordCount(t *testing.T) {
 	if pcount != 0 {
 		t.Errorf("project.word_count = %d, want 0", pcount)
 	}
+}
+
+func TestRepo_Delete_callsManuscriptIndexForDeletedSubtree(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	hook := &fakeManuscriptIndexer{}
+	r.SetManuscriptIndexer(hook)
+	ctx := context.Background()
+
+	part, err := r.CreateSibling(ctx, *p.LastOpenedNodeID, KindContainer, "1부", "", 2000)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+	scene, err := r.CreateChild(ctx, part.ID, KindLeaf, "씬 2", "", 3000)
+	if err != nil {
+		t.Fatalf("CreateChild: %v", err)
+	}
+	if err := r.Delete(ctx, part.ID, 4000); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	want := []string{part.ID, scene.ID}
+	if !reflect.DeepEqual(hook.deletes, want) {
+		t.Fatalf("deletes = %+v, want %+v", hook.deletes, want)
+	}
+}
+
+type fakeManuscriptIndexer struct {
+	upsertErr error
+	deleteErr error
+	upserts   []struct {
+		projectID string
+		nodeID    string
+		doc       string
+	}
+	deletes []string
+}
+
+func (f *fakeManuscriptIndexer) Upsert(ctx context.Context, projectID, nodeID, contentDoc string) error {
+	f.upserts = append(f.upserts, struct {
+		projectID string
+		nodeID    string
+		doc       string
+	}{projectID: projectID, nodeID: nodeID, doc: contentDoc})
+	return f.upsertErr
+}
+
+func (f *fakeManuscriptIndexer) Delete(ctx context.Context, nodeID string) error {
+	f.deletes = append(f.deletes, nodeID)
+	return f.deleteErr
 }
 
 func TestRepo_MoveUp_andMoveDown(t *testing.T) {

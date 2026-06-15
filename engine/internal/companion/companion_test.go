@@ -16,6 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -129,11 +130,14 @@ func newSvcWithClient(t *testing.T, client llm.Client) (*Service, *fakeNotifier,
 	beats := beat.NewRepo(st)
 	entities := entity.NewRepo(st)
 	rels := relationship.NewRepo(st)
+	manuscriptIndexer := manuscript.NewIndexer(st.DB())
+	nodes.SetManuscriptIndexer(manuscriptIndexer)
 	pb := plot.NewBuilder(nodes, beats, threads)
 	notif := &fakeNotifier{}
 	svc := NewService(t.TempDir(), projects, threads, entities, rels, pb, notif,
 		func(ai.ResolvedProvider) (llm.Client, error) { return client, nil }, fixedProvider("claude-code-cli"), "",
-		nodes, beats)
+		nodes, beats).
+		WithManuscript(manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer))
 	p, err := projects.Create(context.Background(), 1, project.NewInput{Title: "t", Genres: []string{"f"}, LengthTarget: "novel", DefaultPOV: "first"})
 	if err != nil {
 		t.Fatal(err)

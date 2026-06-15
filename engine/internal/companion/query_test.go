@@ -81,3 +81,32 @@ func TestRunQueries_ListScenes(t *testing.T) {
 		t.Fatalf("list_scenes should list the first scene id %q:\n%s", firstSceneID, out)
 	}
 }
+
+func TestRunQueries_SearchManuscript(t *testing.T) {
+	svc, _, projectID := newSvc(t, "안녕")
+	ctx := context.Background()
+
+	p, err := svc.projects.Get(ctx, projectID)
+	if err != nil {
+		t.Fatalf("get project: %v", err)
+	}
+	if p.LastOpenedNodeID == nil {
+		t.Fatal("project has no LastOpenedNodeID")
+	}
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"수아의 눈동자는 진홍빛이었다."}]}]}`
+	if err := svc.nodes.UpdateContent(ctx, *p.LastOpenedNodeID, doc, 1000); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+
+	out := svc.runOneQuery(ctx, projectID, Query{Tool: "search_manuscript", Args: map[string]string{
+		"query": "진홍빛",
+	}})
+	if !strings.Contains(out, *p.LastOpenedNodeID) || !strings.Contains(out, "진홍빛") {
+		t.Fatalf("search_manuscript output missing node id or snippet:\n%s", out)
+	}
+
+	out = svc.runOneQuery(ctx, projectID, Query{Tool: "search_manuscript", Args: map[string]string{}})
+	if !strings.Contains(out, "query 필요") {
+		t.Fatalf("empty query should return parameter error, got:\n%s", out)
+	}
+}

@@ -181,3 +181,38 @@ VALUES ('r1', 'p1', 'text', 'style', 'Tone', 'body', '', 4, 2, 'active', 10, 10)
 		t.Fatalf("companion reference count after project delete = %d, want 0", n)
 	}
 }
+
+func TestApplyMigrations_createsManuscriptFTS(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	if err := ApplyMigrations(ctx, db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	var sqlText string
+	if err := db.QueryRowContext(ctx, `
+SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'manuscript_fts'`).Scan(&sqlText); err != nil {
+		t.Fatalf("manuscript_fts schema: %v", err)
+	}
+	if sqlText == "" {
+		t.Fatal("manuscript_fts schema is empty")
+	}
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO manuscript_fts (plain, node_id, project_id)
+VALUES ('진홍빛 눈동자', 'n1', 'p1')`); err != nil {
+		t.Fatalf("insert manuscript_fts: %v", err)
+	}
+	var nodeID string
+	if err := db.QueryRowContext(ctx, `
+SELECT node_id FROM manuscript_fts WHERE manuscript_fts MATCH '진홍빛'`).Scan(&nodeID); err != nil {
+		t.Fatalf("match manuscript_fts: %v", err)
+	}
+	if nodeID != "n1" {
+		t.Fatalf("nodeID = %q, want n1", nodeID)
+	}
+}
