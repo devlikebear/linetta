@@ -195,8 +195,8 @@ type ApplyReplaceResult struct {
 - [x] `cd engine && go test ./internal/manuscriptedit ./internal/rpc/handlers ./internal/node ./internal/snapshot`
 - [x] `pnpm --dir apps/desktop test -- ContextualEditPanel.test.tsx BatchReplaceReview.test.tsx --run`
 - [x] `pnpm --dir apps/desktop exec tsc --noEmit`
-- [ ] `make test`
-- [ ] `git diff --check`
+- [x] `make test`
+- [x] `git diff --check`
 
 **수동 검증**
 

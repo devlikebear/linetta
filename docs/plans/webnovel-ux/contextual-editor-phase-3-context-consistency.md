@@ -258,8 +258,8 @@ interface ConsistencyReport {
 - [x] `cd engine && go test ./internal/contextualedit ./internal/rpc/handlers ./internal/manuscriptedit`
 - [x] `pnpm --dir apps/desktop test -- ContextChangeWizard.test.tsx ContextualEditPanel.test.tsx EntitySheet.test.tsx FactBookPanel.test.tsx --run`
 - [x] `pnpm --dir apps/desktop exec tsc --noEmit`
-- [ ] `make test`
-- [ ] `git diff --check`
+- [x] `make test`
+- [x] `git diff --check`
 
 **수동 검증**
 
@@ -271,6 +271,6 @@ interface ConsistencyReport {
 
 **Final**
 
-- [ ] `LINETTA_HOME=/tmp/linetta-contextual-editor ./scripts/dev.sh`
+- [x] `LINETTA_HOME=/tmp/linetta-contextual-editor ./scripts/dev.sh`
 - [ ] 실제 Tauri 앱에서 현재 씬 편집, 작품 전체 preview/apply, 맥락 변경 wizard, consistency report를 한 흐름으로 확인한다.
-- [ ] 사용자가 확인하면 릴리즈 전 `make validate-distribution`을 추가로 실행한다.
+- [x] 사용자가 확인하면 릴리즈 전 `make validate-distribution`을 추가로 실행한다.
