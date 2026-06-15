@@ -42,6 +42,8 @@ import type {
   Project,
   ProposalOp,
   Relationship,
+  ReplacePlan,
+  ApplyReplaceResult,
   SceneMention,
   SearchResult,
   ProviderID,
@@ -236,6 +238,15 @@ export const search = {
 export const manuscript = {
   search: (projectId: string, query: string, limit = 20) =>
     rpcCall<ManuscriptSearchHit[]>("manuscript.search", { project_id: projectId, query, limit }),
+  replacePreview: (projectId: string, query: string, replacement: string, nodeIds: string[] = []) =>
+    rpcCall<ReplacePlan>("manuscript.replace_preview", {
+      project_id: projectId,
+      query,
+      replacement,
+      node_ids: nodeIds,
+    }),
+  replaceApply: (plan: ReplacePlan, candidateIds: string[]) =>
+    rpcCall<ApplyReplaceResult>("manuscript.replace_apply", { plan, candidate_ids: candidateIds }),
 };
 
 export const entities = {

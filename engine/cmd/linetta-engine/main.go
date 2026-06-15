@@ -22,6 +22,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/gitsync"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/modelcatalog"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -108,6 +109,7 @@ func main() {
 	facts := fact.NewRepo(st)
 	manuscriptIndexer := manuscript.NewIndexer(st.DB())
 	manuscriptSearcher := manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer)
+	manuscriptEditor := manuscriptedit.NewService(nodes, snaps)
 	plotBuilder := plot.NewBuilder(nodes, beats, threads)
 	ops := opsstatus.NewRepo(st)
 	searchRepo := search.NewRepo(st)
@@ -186,6 +188,8 @@ func main() {
 	s.Handle("ops_status.clear_error", handlers.ClearOpsStatusError(ops))
 	s.Handle("search.query", handlers.Search(searchRepo))
 	s.Handle("manuscript.search", handlers.SearchManuscript(manuscriptSearcher))
+	s.Handle("manuscript.replace_preview", handlers.ReplacePreview(manuscriptEditor))
+	s.Handle("manuscript.replace_apply", handlers.ReplaceApply(manuscriptEditor, clock))
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
 	s.Handle("projects.list", handlers.ListProjects(projects))
 	s.Handle("projects.get", handlers.GetProject(projects))

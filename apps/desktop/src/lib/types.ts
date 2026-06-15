@@ -80,6 +80,40 @@ export interface ManuscriptSearchHit {
   updated_at?: number;
 }
 
+export interface ReplaceCandidate {
+  id: string;
+  node_id: string;
+  breadcrumb: string;
+  before: string;
+  after: string;
+  occurrences: number;
+  selected: boolean;
+  preview_version: number;
+}
+
+export interface ReplacePlan {
+  project_id: string;
+  query: string;
+  replacement: string;
+  candidates: ReplaceCandidate[];
+  generated_at?: number;
+}
+
+export interface ApplyFailure {
+  candidate_id: string;
+  node_id?: string;
+  breadcrumb?: string;
+  reason: string;
+  message: string;
+}
+
+export interface ApplyReplaceResult {
+  applied: number;
+  skipped: number;
+  failures: ApplyFailure[];
+  changed_node_ids: string[];
+}
+
 export interface NodeRow {
   id: string;
   project_id: string;

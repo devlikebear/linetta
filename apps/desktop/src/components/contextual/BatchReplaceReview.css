@@ -1,0 +1,148 @@
+.batch-review {
+  border-top: 1px solid var(--line-soft);
+}
+
+.batch-review-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px 8px;
+}
+
+.batch-review-head h4 {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.batch-review-head span,
+.batch-candidate-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+
+.batch-review-tools {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 16px 10px;
+}
+
+.batch-review-tools button,
+.batch-apply {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.batch-review-tools button:hover,
+.batch-apply:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.batch-candidates {
+  display: flex;
+  flex-direction: column;
+}
+
+.batch-candidate {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+  padding: 12px 16px;
+}
+
+.batch-candidate:hover,
+.batch-candidate.is-selected {
+  background: var(--surface);
+}
+
+.batch-candidate-check {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: center;
+  color: var(--accent-deep);
+  padding-top: 2px;
+}
+
+.batch-candidate-body {
+  display: grid;
+  gap: 8px;
+}
+
+.batch-candidate-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.batch-candidate-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--accent-deep);
+}
+
+.batch-diff {
+  display: grid;
+  gap: 6px;
+}
+
+.batch-before,
+.batch-after {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.batch-before {
+  color: var(--muted);
+}
+
+.batch-after {
+  color: var(--ink);
+}
+
+.batch-apply {
+  width: calc(100% - 32px);
+  margin: 12px 16px 14px;
+}
+
+.batch-apply:disabled {
+  opacity: 0.5;
+}
+
+.batch-result {
+  margin: 0;
+  padding: 0 16px 14px;
+  color: var(--ok);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.batch-result.has-failures {
+  color: var(--warn);
+}

@@ -1742,6 +1742,10 @@ export function Workspace() {
             onNavigateNode={(nodeId) => {
               void navigateToNode({ id: nodeId } as NodeRow);
             }}
+            onBatchApplied={() => {
+              void refreshTreeKeepNode(load.node.id);
+              setSaveStatus({ kind: "saved", at: Date.now() });
+            }}
             onClose={() => {
               setContextualEditOpen(false);
               focusEditor();

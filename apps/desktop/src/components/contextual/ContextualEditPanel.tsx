@@ -2,9 +2,10 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { ChevronLeft, ChevronRight, FileText, Replace, Search, X } from "lucide-react";
 import { manuscript } from "../../lib/rpc";
-import type { ManuscriptSearchHit } from "../../lib/types";
+import type { ApplyReplaceResult, ManuscriptSearchHit, ReplacePlan } from "../../lib/types";
 import { localeForLanguage, useI18n } from "../../lib/i18n";
 import type { TiptapFindResult, TiptapHandle } from "../editor/Tiptap";
+import { BatchReplaceReview } from "./BatchReplaceReview";
 import "./ContextualEditPanel.css";
 
 type Scope = "scene" | "project";
@@ -15,6 +16,7 @@ interface Props {
   currentNodeId: string;
   editorRef: RefObject<TiptapHandle>;
   onNavigateNode: (nodeId: string) => void;
+  onBatchApplied?: (changedNodeIds: string[]) => void;
   onClose: () => void;
 }
 
@@ -51,7 +53,7 @@ function formatUpdatedAt(language: ReturnType<typeof useI18n>["language"], value
   }).format(new Date(value * 1000));
 }
 
-export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef, onNavigateNode, onClose }: Props) {
+export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef, onNavigateNode, onBatchApplied, onClose }: Props) {
   const { language, t } = useI18n();
   const [scope, setScope] = useState<Scope>("scene");
   const [sceneQuery, setSceneQuery] = useState("");
@@ -63,6 +65,11 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
   const [projectResults, setProjectResults] = useState<ManuscriptSearchHit[]>([]);
   const [projectLoading, setProjectLoading] = useState(false);
   const [projectError, setProjectError] = useState("");
+  const [projectReplacement, setProjectReplacement] = useState("");
+  const [replacePlan, setReplacePlan] = useState<ReplacePlan | null>(null);
+  const [replacePreviewLoading, setReplacePreviewLoading] = useState(false);
+  const [replaceApplying, setReplaceApplying] = useState(false);
+  const [replaceResult, setReplaceResult] = useState<ApplyReplaceResult | null>(null);
   const sceneInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,6 +91,9 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
     setProjectQuery("");
     setProjectResults([]);
     setProjectError("");
+    setProjectReplacement("");
+    setReplacePlan(null);
+    setReplaceResult(null);
   }, [currentNodeId, open]);
 
   useEffect(() => {
@@ -133,6 +143,11 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
       window.clearTimeout(timer);
     };
   }, [open, projectId, projectQuery, scope]);
+
+  useEffect(() => {
+    setReplacePlan(null);
+    setReplaceResult(null);
+  }, [projectQuery, projectReplacement]);
 
   const matchLabel = useMemo(() => {
     if (findResult.count <= 0) return t("contextual.find.noMatches");
@@ -197,6 +212,34 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
     setFindResult(result);
     setSceneFindCommitted(result.count > 0);
     setNotice(t("contextual.replace.sceneAllDone"));
+  };
+
+  const previewProjectReplace = () => {
+    const query = projectQuery.trim();
+    if (!query || !projectReplacement.trim()) return;
+    setReplacePreviewLoading(true);
+    setProjectError("");
+    setReplaceResult(null);
+    manuscript.replacePreview(projectId, query, projectReplacement)
+      .then((plan) => setReplacePlan(plan))
+      .catch((err) => {
+        setReplacePlan(null);
+        setProjectError(String(err));
+      })
+      .finally(() => setReplacePreviewLoading(false));
+  };
+
+  const applyProjectReplace = (candidateIds: string[]) => {
+    if (!replacePlan || candidateIds.length === 0) return;
+    setReplaceApplying(true);
+    setProjectError("");
+    manuscript.replaceApply(replacePlan, candidateIds)
+      .then((result) => {
+        setReplaceResult(result);
+        if (result.changed_node_ids.length > 0) onBatchApplied?.(result.changed_node_ids);
+      })
+      .catch((err) => setProjectError(String(err)))
+      .finally(() => setReplaceApplying(false));
   };
 
   const showProjectEmpty = !projectLoading && !projectError && projectQuery.trim() && projectResults.length === 0;
@@ -297,8 +340,22 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
                 onChange={(event) => setProjectQuery(event.target.value)}
               />
             </label>
-            <button type="button" className="contextual-disabled-action" disabled>
-              {t("contextual.projectReplace.disabled")}
+            <label className="contextual-input contextual-project-replacement">
+              <span>{t("contextual.replace.inputLabel")}</span>
+              <input
+                aria-label={t("contextual.replace.inputLabel")}
+                value={projectReplacement}
+                placeholder={t("contextual.replace.placeholder")}
+                onChange={(event) => setProjectReplacement(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="contextual-primary-action"
+              disabled={!projectQuery.trim() || !projectReplacement.trim() || replacePreviewLoading}
+              onClick={previewProjectReplace}
+            >
+              {replacePreviewLoading ? t("contextual.project.loading") : t("contextual.preview")}
             </button>
           </section>
 
@@ -322,6 +379,14 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
               </button>
             ))}
           </div>
+          {replacePlan && (
+            <BatchReplaceReview
+              plan={replacePlan}
+              applying={replaceApplying}
+              result={replaceResult}
+              onApply={applyProjectReplace}
+            />
+          )}
         </div>
       )}
     </aside>
