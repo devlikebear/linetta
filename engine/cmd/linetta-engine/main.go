@@ -18,6 +18,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/contextualedit"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/gitsync"
@@ -110,6 +111,7 @@ func main() {
 	manuscriptIndexer := manuscript.NewIndexer(st.DB())
 	manuscriptSearcher := manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer)
 	manuscriptEditor := manuscriptedit.NewService(nodes, snaps)
+	contextualEditor := contextualedit.NewService(entities, facts, relationships, manuscriptEditor, nodes)
 	plotBuilder := plot.NewBuilder(nodes, beats, threads)
 	ops := opsstatus.NewRepo(st)
 	searchRepo := search.NewRepo(st)
@@ -190,6 +192,10 @@ func main() {
 	s.Handle("manuscript.search", handlers.SearchManuscript(manuscriptSearcher))
 	s.Handle("manuscript.replace_preview", handlers.ReplacePreview(manuscriptEditor))
 	s.Handle("manuscript.replace_apply", handlers.ReplaceApply(manuscriptEditor, clock))
+	s.Handle("contextual.resolve_target", handlers.ContextualResolveTarget(contextualEditor))
+	s.Handle("contextual.plan_change", handlers.ContextualPlanChange(contextualEditor))
+	s.Handle("contextual.apply_change", handlers.ContextualApplyChange(contextualEditor, clock))
+	s.Handle("contextual.check_consistency", handlers.ContextualCheckConsistency(contextualEditor))
 	s.Handle("projects.create", handlers.CreateProject(projects, clock))
 	s.Handle("projects.list", handlers.ListProjects(projects))
 	s.Handle("projects.get", handlers.GetProject(projects))

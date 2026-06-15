@@ -137,6 +137,18 @@ describe("FactBookPanel", () => {
     await waitFor(() => expect(mocks.factsList.mock.calls.length).toBeGreaterThanOrEqual(2));
   });
 
+  it("opens impact check for a saved fact card", async () => {
+    const user = userEvent.setup();
+    const onImpactCheck = vi.fn();
+    renderPanel({ onImpactCheck });
+
+    await screen.findByText("런던 일반 경찰은 항상 총기를 휴대한다");
+    await user.click(screen.getByRole("button", { name: "영향 확인" }));
+
+    expect(onImpactCheck).toHaveBeenCalledWith(expect.stringContaining("런던 일반 경찰은 항상 총기를 휴대한다"));
+    expect(onImpactCheck).toHaveBeenCalledWith(expect.stringContaining("일반 경찰은 통상 비무장 근무"));
+  });
+
   it("flushes the editor and asks companion for choice-only fact candidates", async () => {
     const user = userEvent.setup();
     const beforeReview = vi.fn().mockResolvedValue(undefined);

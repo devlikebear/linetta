@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Entity } from "../lib/types";
 import { I18nProvider } from "../lib/i18n";
@@ -48,9 +49,9 @@ describe("EntitySheet", () => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
   });
 
-  const renderSheet = () => render(
+  const renderSheet = (props: Partial<ComponentProps<typeof EntitySheet>> = {}) => render(
     <I18nProvider>
-      <EntitySheet entityId="entity-1" onClose={vi.fn()} />
+      <EntitySheet entityId="entity-1" onClose={vi.fn()} {...props} />
     </I18nProvider>,
   );
 
@@ -115,5 +116,18 @@ describe("EntitySheet", () => {
     expect(screen.getByRole("button", { name: "스킬" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "발동 조건" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "비용" })).toBeInTheDocument();
+  });
+
+  it("opens contextual change for the current entity", async () => {
+    const user = userEvent.setup();
+    const onContextChange = vi.fn();
+    mocks.entities.get.mockResolvedValue(baseEntity);
+
+    renderSheet({ onContextChange });
+
+    await screen.findByDisplayValue("해진");
+    await user.click(screen.getByRole("button", { name: "작품 전체 변경" }));
+
+    expect(onContextChange).toHaveBeenCalledWith("entity-1");
   });
 });

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps, RefObject } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../../lib/i18n";
-import type { ManuscriptSearchHit, ReplacePlan } from "../../lib/types";
+import type { ContextChangePlan, Entity, ManuscriptSearchHit, ReplacePlan } from "../../lib/types";
 import type { TiptapHandle } from "../editor/Tiptap";
 import { ContextualEditPanel } from "./ContextualEditPanel";
 
@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   manuscriptSearch: vi.fn(),
   manuscriptReplacePreview: vi.fn(),
   manuscriptReplaceApply: vi.fn(),
+  contextualPlanChange: vi.fn(),
+  contextualApplyChange: vi.fn(),
+  contextualCheckConsistency: vi.fn(),
+  entitiesSearch: vi.fn(),
   settingsGet: vi.fn(),
 }));
 
@@ -22,6 +26,14 @@ vi.mock("../../lib/rpc", () => ({
     search: mocks.manuscriptSearch,
     replacePreview: mocks.manuscriptReplacePreview,
     replaceApply: mocks.manuscriptReplaceApply,
+  },
+  contextual: {
+    planChange: mocks.contextualPlanChange,
+    applyChange: mocks.contextualApplyChange,
+    checkConsistency: mocks.contextualCheckConsistency,
+  },
+  entities: {
+    search: mocks.entitiesSearch,
   },
 }));
 
@@ -100,6 +112,78 @@ describe("ContextualEditPanel", () => {
       skipped: 0,
       failures: [],
       changed_node_ids: ["scene-2"],
+    });
+    mocks.entitiesSearch.mockResolvedValue([
+      {
+        id: "entity-1",
+        project_id: "project-1",
+        kind: "character",
+        name: "민호",
+        aliases: [],
+        role: "주인공",
+        summary: "",
+        attributes: {},
+        created_at: 1,
+        updated_at: 1,
+      } satisfies Entity,
+    ]);
+    mocks.contextualPlanChange.mockResolvedValue({
+      id: "context-1",
+      project_id: "project-1",
+      target: {
+        canonical_name: "민호",
+        kind: "character",
+        entity_ids: ["entity-1"],
+      },
+      type: "rename",
+      old_terms: ["민호"],
+      new_terms: ["민준"],
+      metadata_candidates: [
+        {
+          id: "entity:entity-1:name",
+          kind: "entity_name",
+          target_id: "entity-1",
+          label: "자료집 이름",
+          before: "민호",
+          after: "민준",
+          selected: true,
+        },
+      ],
+      manuscript_plans: [
+        {
+          id: "replace-minho",
+          project_id: "project-1",
+          query: "민호",
+          replacement: "민준",
+          candidates: [
+            {
+              id: "scene-1:1",
+              node_id: "scene-1",
+              breadcrumb: "1부 / 1장 / 씬 1",
+              before: "민호는 식탁에 앉았다.",
+              after: "민준은 식탁에 앉았다.",
+              occurrences: 1,
+              selected: true,
+              preview_version: 1,
+            },
+          ],
+        },
+      ],
+      review_candidates: [],
+    } satisfies ContextChangePlan);
+    mocks.contextualApplyChange.mockResolvedValue({
+      metadata_applied: 1,
+      manuscript: {
+        applied: 1,
+        skipped: 0,
+        failures: [],
+        changed_node_ids: ["scene-1"],
+      },
+      failures: [],
+    });
+    mocks.contextualCheckConsistency.mockResolvedValue({
+      ok: true,
+      issues: [],
     });
   });
 
@@ -185,5 +269,42 @@ describe("ContextualEditPanel", () => {
     ));
     expect(onBatchApplied).toHaveBeenCalledWith(["scene-2"]);
     expect(await screen.findByText("1개 씬에 적용했습니다.")).toBeInTheDocument();
+  });
+
+  it("plans and applies contextual changes with fact-book metadata", async () => {
+    const user = userEvent.setup();
+    const onBatchApplied = vi.fn();
+    renderPanel({ onBatchApplied });
+
+    await user.click(screen.getByRole("tab", { name: "맥락 변경" }));
+    await user.type(screen.getByLabelText("기존 이름/설정"), "민호");
+    await waitFor(() => expect(mocks.entitiesSearch).toHaveBeenCalledWith("project-1", "민호", 8));
+    await user.click(await screen.findByRole("button", { name: /민호/ }));
+    await user.type(screen.getByLabelText("새 이름/설정"), "민준");
+    await user.click(screen.getByRole("button", { name: "후보 생성" }));
+
+    await waitFor(() => expect(mocks.contextualPlanChange).toHaveBeenCalledWith(expect.objectContaining({
+      project_id: "project-1",
+      entity_id: "entity-1",
+      new_terms: ["민준"],
+    })));
+    expect(await screen.findByText("자료집 이름")).toBeInTheDocument();
+    expect(screen.getByText("민준은 식탁에 앉았다.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "선택 적용" }));
+    await waitFor(() => expect(mocks.contextualApplyChange).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "context-1" }),
+      {
+        metadata_candidate_ids: ["entity:entity-1:name"],
+        manuscript_candidate_ids: { "replace-minho": ["scene-1:1"] },
+      },
+    ));
+    expect(mocks.contextualCheckConsistency).toHaveBeenCalledWith(expect.objectContaining({
+      project_id: "project-1",
+      old_terms: ["민호"],
+      new_terms: ["민준"],
+    }));
+    expect(onBatchApplied).toHaveBeenCalledWith(["scene-1"]);
+    expect(await screen.findByText("남은 이전 표현을 찾지 못했습니다.")).toBeInTheDocument();
   });
 });

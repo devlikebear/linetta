@@ -96,7 +96,9 @@ Step:
 
 ## Engine tasks
 
-- [ ] **3.1 Context target resolver**
+구현 메모: MVP에서는 resolver/planner/apply/consistency를 `engine/internal/contextualedit/contextualedit.go`에 통합 구현했다.
+
+- [x] **3.1 Context target resolver**
   - 파일: `engine/internal/contextualedit/resolver.go` 신규
   - 입력:
     - `project_id`
@@ -114,7 +116,7 @@ Step:
     - `fact.Repo`
     - `relationship.Repo`
 
-- [ ] **3.2 Context change planner**
+- [x] **3.2 Context change planner**
   - 파일: `engine/internal/contextualedit/planner.go`
   - 함수:
     ```go
@@ -131,7 +133,7 @@ Step:
     - fact card의 `claim/result` 변경은 자동 적용하지 않고 review candidate로 둔다.
     - relationship notes는 MVP에서 자동 변경하지 않는다. 검색 결과로 노출한다.
 
-- [ ] **3.3 Context change apply**
+- [x] **3.3 Context change apply**
   - 파일: `engine/internal/contextualedit/apply.go`
   - metadata apply:
     - `entities.Update`
@@ -143,7 +145,7 @@ Step:
     - manuscript applied
     - failures
 
-- [ ] **3.4 Consistency check**
+- [x] **3.4 Consistency check**
   - 파일: `engine/internal/contextualedit/consistency.go`
   - 함수:
     ```go
@@ -156,7 +158,7 @@ Step:
     - manuscript search has conflicting nearby snippets.
   - MVP는 deterministic report다. LLM 해석은 별도 "컴패니언에게 검토 요청" 버튼으로 넘긴다.
 
-- [ ] **3.5 RPC handlers**
+- [x] **3.5 RPC handlers**
   - 파일: `engine/internal/rpc/handlers/contextual_edit.go`
   - 메서드:
     - `contextual.resolve_target`
@@ -168,7 +170,7 @@ Step:
 
 ## Frontend tasks
 
-- [ ] **3.6 ContextChangeWizard 추가**
+- [x] **3.6 ContextChangeWizard 추가**
   - 파일: `apps/desktop/src/components/contextual/ContextChangeWizard.tsx`
   - 파일: `apps/desktop/src/components/contextual/ContextChangeWizard.css`
   - props:
@@ -189,18 +191,18 @@ Step:
     - applying
     - consistency report
 
-- [ ] **3.7 EntitySheet 연결**
+- [x] **3.7 EntitySheet 연결**
   - 파일: `apps/desktop/src/components/EntitySheet.tsx`
   - `작품 전체 변경...` button 추가.
   - 클릭 시 Workspace에 `contextualEditOpen` + `initialEntityId` 전달.
   - 기존 entity edit form과 충돌하지 않게 wizard는 별도 panel state로 둔다.
 
-- [ ] **3.8 FactBookPanel 연결**
+- [x] **3.8 FactBookPanel 연결**
   - 파일: `apps/desktop/src/components/FactBookPanel.tsx`
   - fact card menu에 `영향 확인` 추가.
   - 자동 수정이 아니라 consistency report를 먼저 보여준다.
 
-- [ ] **3.9 Companion action 연결**
+- [x] **3.9 Companion action 연결**
   - 파일: `apps/desktop/src/components/companion/CompanionPanel.tsx`
   - 액션 프리셋이 있다면:
     - `작품 전체 이름 변경`
@@ -208,7 +210,7 @@ Step:
   - MVP에서 컴패니언은 wizard를 직접 열 수 없으면 prompt만 채운다.
   - 프롬프트는 `search_manuscript` 사용을 유도하되, 실제 적용은 ContextualEditPanel로 하도록 안내한다.
 
-- [ ] **3.10 i18n**
+- [x] **3.10 i18n**
   - 파일: `apps/desktop/src/lib/i18n.tsx`
   - keys:
     - `contextual.change.title`
@@ -253,9 +255,9 @@ interface ConsistencyReport {
 
 **자동 검증**
 
-- [ ] `cd engine && go test ./internal/contextualedit ./internal/rpc/handlers ./internal/manuscriptedit`
-- [ ] `pnpm --dir apps/desktop test -- ContextChangeWizard.test.tsx ContextualEditPanel.test.tsx EntitySheet.test.tsx FactBookPanel.test.tsx --run`
-- [ ] `pnpm --dir apps/desktop exec tsc --noEmit`
+- [x] `cd engine && go test ./internal/contextualedit ./internal/rpc/handlers ./internal/manuscriptedit`
+- [x] `pnpm --dir apps/desktop test -- ContextChangeWizard.test.tsx ContextualEditPanel.test.tsx EntitySheet.test.tsx FactBookPanel.test.tsx --run`
+- [x] `pnpm --dir apps/desktop exec tsc --noEmit`
 - [ ] `make test`
 - [ ] `git diff --check`
 

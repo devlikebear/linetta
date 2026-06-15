@@ -18,6 +18,7 @@ interface Props {
   beforeReview?: () => Promise<void> | void;
   onClose: () => void;
   onChanged?: () => void;
+  onImpactCheck?: (text: string) => void;
 }
 
 function buildReviewPrompt(sceneLabel: string): string {
@@ -126,7 +127,7 @@ function extractFactCardProposal(text: string, runId = "fact-book-inline-apply-o
   return proposal;
 }
 
-export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequest, beforeReview, onClose, onChanged }: Props) {
+export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequest, beforeReview, onClose, onChanged, onImpactCheck }: Props) {
   const { t } = useI18n();
   const [cards, setCards] = useState<FactCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -415,6 +416,17 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
             <div className="fact-card-head">
               <span className={`fact-status ${card.status}`}>{t(statusKey(card.status))}</span>
               <span className="fact-scope">{card.node_id ? t("factBook.currentScene") : t("factBook.projectWide")}</span>
+              {onImpactCheck && (
+                <button
+                  type="button"
+                  className="panel-close"
+                  onClick={() => onImpactCheck([card.claim, card.result].filter(Boolean).join(" "))}
+                  aria-label={t("factBook.impactCheck")}
+                  title={t("factBook.impactCheck")}
+                >
+                  <Search size={14} />
+                </button>
+              )}
               <button type="button" className="panel-close" onClick={() => { void deleteCard(card.id); }} aria-label={t("factBook.delete")} title={t("factBook.delete")}>
                 <Trash2 size={14} />
               </button>

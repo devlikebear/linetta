@@ -111,6 +111,20 @@ const COMPANION_ACTIONS: CompanionActionPreset[] = [
     promptKey: "companion.actions.checkContinuity.prompt",
   },
   {
+    id: "rename-across-work",
+    icon: Search,
+    labelKey: "companion.actions.renameAcrossWork.label",
+    descriptionKey: "companion.actions.renameAcrossWork.description",
+    promptKey: "companion.actions.renameAcrossWork.prompt",
+  },
+  {
+    id: "setting-impact",
+    icon: Lightbulb,
+    labelKey: "companion.actions.settingImpact.label",
+    descriptionKey: "companion.actions.settingImpact.description",
+    promptKey: "companion.actions.settingImpact.prompt",
+  },
+  {
     id: "next-episode-hook",
     icon: Book,
     labelKey: "companion.actions.nextEpisodeHook.label",

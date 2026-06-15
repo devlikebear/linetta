@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput } from "../lib/types";
 import { entities, relationships } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
-import { X, Plus, User, MapPin, Box, Lightbulb } from "../lib/icons";
+import { X, Plus, User, MapPin, Box, Lightbulb, Search } from "../lib/icons";
 import { displayNodeLabel, entityAttributePresets, entityKindLabel, entityRolePresets, useI18n } from "../lib/i18n";
 import "./EntitySheet.css";
 
@@ -11,6 +11,7 @@ interface Props {
   onClose: () => void;
   onSaved?: (entity: Entity) => void;
   onNavigate?: (nodeId: string) => void;
+  onContextChange?: (entityId: string) => void;
 }
 
 const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
@@ -20,7 +21,7 @@ const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
   concept: { color: "var(--t-plum)", Icon: Lightbulb },
 };
 
-export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
+export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextChange }: Props) {
   const { language, t } = useI18n();
   const [entity, setEntity] = useState<Entity | null>(null);
   const [draft, setDraft] = useState<UpdateEntityInput | null>(null);
@@ -152,6 +153,13 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate }: Props) {
         <>
           <div className="panel-scroll">
             <div className="sec">
+              <button
+                type="button"
+                className="es-context-action"
+                onClick={() => onContextChange?.(entity.id)}
+              >
+                <Search size={13} /> {t("entity.contextChange")}
+              </button>
               <div className="es-id">
                 <span className="es-av" style={{ "--av": meta.color } as React.CSSProperties}>
                   {(draft.name ?? entity.name).slice(0, 1) || "?"}

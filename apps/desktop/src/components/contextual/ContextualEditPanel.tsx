@@ -6,15 +6,19 @@ import type { ApplyReplaceResult, ManuscriptSearchHit, ReplacePlan } from "../..
 import { localeForLanguage, useI18n } from "../../lib/i18n";
 import type { TiptapFindResult, TiptapHandle } from "../editor/Tiptap";
 import { BatchReplaceReview } from "./BatchReplaceReview";
+import { ContextChangeWizard } from "./ContextChangeWizard";
 import "./ContextualEditPanel.css";
 
-type Scope = "scene" | "project";
+type Scope = "scene" | "project" | "context";
 
 interface Props {
   open: boolean;
   projectId: string;
   currentNodeId: string;
   editorRef: RefObject<TiptapHandle>;
+  initialEntityId?: string | null;
+  initialText?: string | null;
+  autoCheckInitialText?: boolean;
   onNavigateNode: (nodeId: string) => void;
   onBatchApplied?: (changedNodeIds: string[]) => void;
   onClose: () => void;
@@ -53,7 +57,18 @@ function formatUpdatedAt(language: ReturnType<typeof useI18n>["language"], value
   }).format(new Date(value * 1000));
 }
 
-export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef, onNavigateNode, onBatchApplied, onClose }: Props) {
+export function ContextualEditPanel({
+  open,
+  projectId,
+  currentNodeId,
+  editorRef,
+  initialEntityId,
+  initialText,
+  autoCheckInitialText,
+  onNavigateNode,
+  onBatchApplied,
+  onClose,
+}: Props) {
   const { language, t } = useI18n();
   const [scope, setScope] = useState<Scope>("scene");
   const [sceneQuery, setSceneQuery] = useState("");
@@ -75,9 +90,14 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
 
   useEffect(() => {
     if (!open) return;
+    if (initialEntityId || initialText) setScope("context");
+  }, [initialEntityId, initialText, open]);
+
+  useEffect(() => {
+    if (!open) return;
     window.setTimeout(() => {
       if (scope === "scene") sceneInputRef.current?.focus();
-      else projectInputRef.current?.focus();
+      if (scope === "project") projectInputRef.current?.focus();
     }, 0);
   }, [open, scope]);
 
@@ -270,6 +290,15 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
         >
           <Search size={14} /> {t("contextual.scope.project")}
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={scope === "context"}
+          className={scope === "context" ? "on" : ""}
+          onClick={() => setScope("context")}
+        >
+          <Replace size={14} /> {t("contextual.scope.context")}
+        </button>
       </div>
 
       {scope === "scene" ? (
@@ -326,7 +355,7 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
             {notice && <p className="contextual-notice">{notice}</p>}
           </section>
         </div>
-      ) : (
+      ) : scope === "project" ? (
         <div className="panel-scroll contextual-scroll">
           <section className="contextual-section">
             <h4>{t("contextual.project.title")}</h4>
@@ -388,6 +417,16 @@ export function ContextualEditPanel({ open, projectId, currentNodeId, editorRef,
             />
           )}
         </div>
+      ) : (
+        <ContextChangeWizard
+          projectId={projectId}
+          initialEntityId={initialEntityId}
+          initialText={initialText}
+          autoCheck={autoCheckInitialText}
+          onApplied={(changedNodeIds) => {
+            onBatchApplied?.(changedNodeIds);
+          }}
+        />
       )}
     </aside>
   );

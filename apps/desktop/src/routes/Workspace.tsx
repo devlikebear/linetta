@@ -131,6 +131,7 @@ export function Workspace() {
   useEffect(() => { companionOpenRef.current = companionOpen; }, [companionOpen]);
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
+  const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
   const outlinePreset = useMemo(() => outlinePresetById(load?.project.outline_preset), [load?.project.outline_preset]);
@@ -938,6 +939,7 @@ export function Workspace() {
     setContextualEditOpen((v) => {
       const next = !v;
       if (next) {
+        setContextualSeed(null);
         setFactBookSelectedClaimRequest(null);
         setFactBookOpen(false);
         setCompanionOpen(false);
@@ -1724,6 +1726,15 @@ export function Workspace() {
             sceneLabel={currentSceneTitle}
             selectedClaimRequest={factBookSelectedClaimRequest}
             beforeReview={flushEditorBeforeCompanionSend}
+            onImpactCheck={(text) => {
+              setContextualSeed({ text, autoCheck: true });
+              setFactBookOpen(false);
+              setCompanionOpen(false);
+              setEntitySheetId(null);
+              setThreadSheetId(null);
+              closeAIModalRef.current?.();
+              setContextualEditOpen(true);
+            }}
             onClose={() => {
               setFactBookOpen(false);
               setFactBookSelectedClaimRequest(null);
@@ -1739,6 +1750,9 @@ export function Workspace() {
             projectId={load.project.id}
             currentNodeId={load.node.id}
             editorRef={editorRef}
+            initialEntityId={contextualSeed?.entityId ?? null}
+            initialText={contextualSeed?.text ?? null}
+            autoCheckInitialText={Boolean(contextualSeed?.autoCheck)}
             onNavigateNode={(nodeId) => {
               void navigateToNode({ id: nodeId } as NodeRow);
             }}
@@ -1748,6 +1762,7 @@ export function Workspace() {
             }}
             onClose={() => {
               setContextualEditOpen(false);
+              setContextualSeed(null);
               focusEditor();
             }}
           />
@@ -1761,6 +1776,15 @@ export function Workspace() {
             }}
             onSaved={() => {
               if (load) refreshMentioned(load.node.id);
+            }}
+            onContextChange={(entityId) => {
+              setContextualSeed({ entityId });
+              setEntitySheetId(null);
+              setFactBookOpen(false);
+              setCompanionOpen(false);
+              setThreadSheetId(null);
+              closeAIModalRef.current?.();
+              setContextualEditOpen(true);
             }}
             onNavigate={(nodeId) => {
               setEntitySheetId(null);

@@ -81,3 +81,23 @@
   border-color: var(--accent-tint);
   color: var(--ink-soft);
 }
+
+.es-context-action {
+  width: 100%;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.es-context-action:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

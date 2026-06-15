@@ -25,12 +25,12 @@ const (
 )
 
 type ReplacePlanRequest struct {
-	ProjectID    string   `json:"project_id"`
-	Query        string   `json:"query"`
-	Replacement  string   `json:"replacement"`
-	NodeIDs      []string `json:"node_ids,omitempty"`
-	MatchCase    bool     `json:"match_case,omitempty"`
-	WholeWord    bool     `json:"whole_word,omitempty"`
+	ProjectID     string   `json:"project_id"`
+	Query         string   `json:"query"`
+	Replacement   string   `json:"replacement"`
+	NodeIDs       []string `json:"node_ids,omitempty"`
+	MatchCase     bool     `json:"match_case,omitempty"`
+	WholeWord     bool     `json:"whole_word,omitempty"`
 	MaxCandidates int      `json:"max_candidates,omitempty"`
 }
 
@@ -46,13 +46,14 @@ type ReplaceCandidate struct {
 }
 
 type ReplacePlan struct {
-	ProjectID    string             `json:"project_id"`
-	Query        string             `json:"query"`
-	Replacement  string             `json:"replacement"`
-	Candidates   []ReplaceCandidate `json:"candidates"`
-	GeneratedAt  int64              `json:"generated_at,omitempty"`
-	MatchCase    bool               `json:"match_case,omitempty"`
-	WholeWord    bool               `json:"whole_word,omitempty"`
+	ID            string             `json:"id,omitempty"`
+	ProjectID     string             `json:"project_id"`
+	Query         string             `json:"query"`
+	Replacement   string             `json:"replacement"`
+	Candidates    []ReplaceCandidate `json:"candidates"`
+	GeneratedAt   int64              `json:"generated_at,omitempty"`
+	MatchCase     bool               `json:"match_case,omitempty"`
+	WholeWord     bool               `json:"whole_word,omitempty"`
 	MaxCandidates int                `json:"max_candidates,omitempty"`
 }
 
@@ -110,13 +111,14 @@ func (s *Service) PlanReplace(ctx context.Context, req ReplacePlanRequest) (Repl
 	}
 
 	plan := ReplacePlan{
-		ProjectID:    projectID,
-		Query:        query,
-		Replacement:  req.Replacement,
-		MatchCase:    req.MatchCase,
-		WholeWord:    req.WholeWord,
+		ID:            planID(query, req.Replacement),
+		ProjectID:     projectID,
+		Query:         query,
+		Replacement:   req.Replacement,
+		MatchCase:     req.MatchCase,
+		WholeWord:     req.WholeWord,
 		MaxCandidates: req.MaxCandidates,
-		Candidates:   []ReplaceCandidate{},
+		Candidates:    []ReplaceCandidate{},
 	}
 	for _, n := range nodes {
 		if n.Kind != node.KindLeaf || n.ContentDoc == nil {
@@ -271,6 +273,10 @@ func (s *Service) candidateNodes(ctx context.Context, projectID string, nodeIDs 
 
 func candidateID(nodeID string, contentVersion int) string {
 	return nodeID + ":" + strconv.Itoa(contentVersion)
+}
+
+func planID(query string, replacement string) string {
+	return "replace:" + strconv.QuoteToASCII(query) + "->" + strconv.QuoteToASCII(replacement)
 }
 
 type docReplaceResult struct {

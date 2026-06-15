@@ -9,10 +9,17 @@ import type {
   CompanionReferenceInput,
   CompanionReferencePatch,
   CompanionApplyOpsResult,
+  ApplyContextResult,
+  ApplyContextSelection,
   Beat,
   CompanionMessage,
+  ConsistencyInput,
+  ConsistencyReport,
+  ContextChangeInput,
+  ContextChangePlan,
   ContextCounts,
   ContextPreviewResponse,
+  ContextTarget,
   DiagnosticsSnapshot,
   EngineStatus,
   Entity,
@@ -42,6 +49,7 @@ import type {
   Project,
   ProposalOp,
   Relationship,
+  ResolveTargetInput,
   ReplacePlan,
   ApplyReplaceResult,
   SceneMention,
@@ -247,6 +255,17 @@ export const manuscript = {
     }),
   replaceApply: (plan: ReplacePlan, candidateIds: string[]) =>
     rpcCall<ApplyReplaceResult>("manuscript.replace_apply", { plan, candidate_ids: candidateIds }),
+};
+
+export const contextual = {
+  resolveTarget: (input: ResolveTargetInput) =>
+    rpcCall<ContextTarget>("contextual.resolve_target", input),
+  planChange: (input: ContextChangeInput) =>
+    rpcCall<ContextChangePlan>("contextual.plan_change", input),
+  applyChange: (plan: ContextChangePlan, selection: ApplyContextSelection) =>
+    rpcCall<ApplyContextResult>("contextual.apply_change", { plan, selection }),
+  checkConsistency: (input: ConsistencyInput) =>
+    rpcCall<ConsistencyReport>("contextual.check_consistency", input),
 };
 
 export const entities = {

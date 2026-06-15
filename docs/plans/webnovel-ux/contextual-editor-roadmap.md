@@ -1,7 +1,7 @@
 # 맥락 편집 워크벤치 — 로드맵
 
 _작성일: 2026-06-15_
-_상태: 기획 완료 / 구현 대기_
+_상태: Phase 1~3 구현 완료 / 릴리즈 검증 중_
 _관련: [`companion-writing-actions.md`](./companion-writing-actions.md), [`companion-scene-edit-reliability.md`](./companion-scene-edit-reliability.md), [`../../superpowers/specs/2026-06-15-manuscript-rag-continuity-design.md`](../../superpowers/specs/2026-06-15-manuscript-rag-continuity-design.md)_
 _전제: `engine/internal/manuscript` FTS5 기반 본문 검색이 main에 포함되어 있거나 현재 작업 브랜치에 존재한다._
 
@@ -94,12 +94,12 @@ Linetta는 이미 작품 구조, 씬 단위 저장, entity/fact/relationship, �
 
 ### Now
 
-1. Phase 1 — 현재 씬 찾기/바꾸기 + 작품 검색 RPC
+1. Phase 1 — 현재 씬 찾기/바꾸기 + 작품 검색 RPC ✅
    - 현재 씬 안의 안전한 편집 기본기를 만든다.
    - `manuscript.search` RPC로 작품 내부 본문 검색을 UI에서 쓸 수 있게 한다.
-2. Phase 2 — 작품 전체 바꾸기 preview/apply
+2. Phase 2 — 작품 전체 바꾸기 preview/apply ✅
    - 장면별 후보, diff, 선택 적용, snapshot을 만든다.
-3. Phase 3 — 맥락 변경 마법사 + 일관성 재검사
+3. Phase 3 — 맥락 변경 마법사 + 일관성 재검사 ✅
    - entity/fact/manuscript를 묶어 이름/장소/아이템/설정 변경을 작품 전체 작업으로 만든다.
 
 ### Next

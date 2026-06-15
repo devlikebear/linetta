@@ -92,6 +92,7 @@ export interface ReplaceCandidate {
 }
 
 export interface ReplacePlan {
+  id?: string;
   project_id: string;
   query: string;
   replacement: string;
@@ -112,6 +113,96 @@ export interface ApplyReplaceResult {
   skipped: number;
   failures: ApplyFailure[];
   changed_node_ids: string[];
+}
+
+export type ContextChangeType = "rename" | "setting";
+
+export interface ContextTarget {
+  canonical_name: string;
+  aliases?: string[];
+  kind: string;
+  entity_ids?: string[];
+  fact_ids?: string[];
+  relationship_ids?: string[];
+}
+
+export interface ResolveTargetInput {
+  project_id: string;
+  entity_id?: string;
+  fact_id?: string;
+  selected_text?: string;
+  query?: string;
+}
+
+export interface ContextChangeInput extends ResolveTargetInput {
+  type: ContextChangeType;
+  old_terms?: string[];
+  new_terms?: string[];
+  review_only?: boolean;
+}
+
+export interface MetadataCandidate {
+  id: string;
+  kind: string;
+  target_id: string;
+  label: string;
+  before: string;
+  after: string;
+  selected: boolean;
+}
+
+export interface ReviewCandidate {
+  id: string;
+  kind: string;
+  target_id: string;
+  label: string;
+  snippet: string;
+  selected: boolean;
+}
+
+export interface ContextChangePlan {
+  id: string;
+  project_id: string;
+  target: ContextTarget;
+  type: ContextChangeType;
+  old_terms: string[];
+  new_terms: string[];
+  metadata_candidates: MetadataCandidate[];
+  manuscript_plans: ReplacePlan[];
+  review_candidates: ReviewCandidate[];
+  warnings?: string[];
+}
+
+export interface ApplyContextSelection {
+  metadata_candidate_ids?: string[];
+  manuscript_candidate_ids?: Record<string, string[]>;
+}
+
+export interface ApplyContextResult {
+  metadata_applied: number;
+  manuscript: ApplyReplaceResult;
+  failures?: ApplyFailure[];
+}
+
+export interface ConsistencyInput {
+  project_id: string;
+  old_terms: string[];
+  new_terms?: string[];
+  changed_entity_ids?: string[];
+}
+
+export interface ConsistencyIssue {
+  severity: string;
+  kind: string;
+  node_id?: string;
+  breadcrumb?: string;
+  snippet?: string;
+  message: string;
+}
+
+export interface ConsistencyReport {
+  ok: boolean;
+  issues: ConsistencyIssue[];
 }
 
 export interface NodeRow {

@@ -92,7 +92,7 @@ type ApplyReplaceResult struct {
 
 ## Engine tasks
 
-- [ ] **2.1 `manuscriptedit` 패키지 추가**
+- [x] **2.1 `manuscriptedit` 패키지 추가**
   - 파일: `engine/internal/manuscriptedit/replace.go`
   - 함수:
     - `PlanReplace(ctx, projectID, query, replacement string, nodeIDs []string) (ReplacePlan, error)`
@@ -108,7 +108,7 @@ type ApplyReplaceResult struct {
     - content_version mismatch는 failure.
     - snapshot 생성 확인.
 
-- [ ] **2.2 RPC 추가**
+- [x] **2.2 RPC 추가**
   - 파일: `engine/internal/rpc/handlers/manuscript_edit.go`
   - 메서드:
     - `manuscript.replace_preview`
@@ -121,13 +121,13 @@ type ApplyReplaceResult struct {
     - preview returns candidates.
     - apply returns applied count and failures.
 
-- [ ] **2.3 main wiring**
+- [x] **2.3 main wiring**
   - 파일: `engine/cmd/linetta-engine/main.go`
   - `manuscriptedit.NewService(nodes, snaps, manuscriptSearcher)` 형태로 연결한다.
 
 ## Frontend tasks
 
-- [ ] **2.4 타입/RPC 추가**
+- [x] **2.4 타입/RPC 추가**
   - 파일: `apps/desktop/src/lib/types.ts`
   - 타입:
     - `ReplaceCandidate`
@@ -138,7 +138,7 @@ type ApplyReplaceResult struct {
     - `manuscript.replacePreview(...)`
     - `manuscript.replaceApply(...)`
 
-- [ ] **2.5 Batch review UI 추가**
+- [x] **2.5 Batch review UI 추가**
   - 파일: `apps/desktop/src/components/contextual/BatchReplaceReview.tsx`
   - 파일: `apps/desktop/src/components/contextual/BatchReplaceReview.css`
   - 기능:
@@ -154,7 +154,7 @@ type ApplyReplaceResult struct {
     - 긴 본문은 2~4줄 clamp.
     - diff는 삭제/추가 색상을 과하게 쓰지 않는다.
 
-- [ ] **2.6 ContextualEditPanel에 project replace 활성화**
+- [x] **2.6 ContextualEditPanel에 project replace 활성화**
   - 파일: `apps/desktop/src/components/contextual/ContextualEditPanel.tsx`
   - `작품 전체` + `바꾸기` mode에서:
     - 검색어와 replacement 입력.
@@ -162,14 +162,14 @@ type ApplyReplaceResult struct {
     - candidate review 표시.
     - apply 완료 시 현재 열려 있는 node가 바뀌었으면 Workspace reload.
 
-- [ ] **2.7 Workspace refresh**
+- [x] **2.7 Workspace refresh**
   - 파일: `apps/desktop/src/routes/Workspace.tsx`
   - batch apply 후:
     - 현재 node가 변경된 경우 `nodes.get(currentNodeId)`로 reload.
     - tree의 word_count/updated_at이 바뀌면 `nodes.listTree(projectId)` refresh.
     - 저장 상태는 `saved` 또는 별도 toast로 표시.
 
-- [ ] **2.8 i18n**
+- [x] **2.8 i18n**
   - 파일: `apps/desktop/src/lib/i18n.tsx`
   - keys:
     - `contextual.preview`
@@ -192,9 +192,9 @@ type ApplyReplaceResult struct {
 
 **자동 검증**
 
-- [ ] `cd engine && go test ./internal/manuscriptedit ./internal/rpc/handlers ./internal/node ./internal/snapshot`
-- [ ] `pnpm --dir apps/desktop test -- ContextualEditPanel.test.tsx BatchReplaceReview.test.tsx --run`
-- [ ] `pnpm --dir apps/desktop exec tsc --noEmit`
+- [x] `cd engine && go test ./internal/manuscriptedit ./internal/rpc/handlers ./internal/node ./internal/snapshot`
+- [x] `pnpm --dir apps/desktop test -- ContextualEditPanel.test.tsx BatchReplaceReview.test.tsx --run`
+- [x] `pnpm --dir apps/desktop exec tsc --noEmit`
 - [ ] `make test`
 - [ ] `git diff --check`
 
