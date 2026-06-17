@@ -19,6 +19,7 @@ SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
 if [ -z "${SIGNING_IDENTITY}" ] && [ -f "${CONFIG_FILE}" ]; then
   # shellcheck disable=SC1090
   set -a; . "${CONFIG_FILE}"; set +a
+  SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-${SIGNING_IDENTITY}}"
 fi
 if [ -z "${SIGNING_IDENTITY}" ]; then
   SIGNING_IDENTITY="$(
