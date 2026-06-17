@@ -19,7 +19,7 @@ func TestDiagnosticsVersion(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	got, err := DiagnosticsVersion(st, "test-version")(context.Background(), nil)
+	got, err := DiagnosticsVersion(st, "test-version", nil)(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("DiagnosticsVersion: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestDiagnosticsGetIncludesOpsStatus(t *testing.T) {
 		t.Fatalf("ops.Record: %v", err)
 	}
 
-	got, err := DiagnosticsGet(st, ops, "test-version")(context.Background(), nil)
+	got, err := DiagnosticsGet(st, ops, "test-version", nil)(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("DiagnosticsGet: %v", err)
 	}

@@ -2,7 +2,10 @@
 
 package ai
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // unavailableMASProviders cannot function in the App Store (sandboxed) build:
 //   - claude-code-cli spawns the `claude` binary (subprocess exec is blocked)
@@ -19,4 +22,15 @@ func guardProvider(provider string) error {
 		return fmt.Errorf("the %q provider is not available in the App Store build", provider)
 	}
 	return nil
+}
+
+// UnavailableProviders returns the sandboxed build's unusable providers, sorted
+// for deterministic output, so the UI can hide them.
+func UnavailableProviders() []string {
+	out := make([]string, 0, len(unavailableMASProviders))
+	for p := range unavailableMASProviders {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
 }

@@ -12,11 +12,12 @@ import (
 )
 
 type diagnosticsPayload struct {
-	Version          string `json:"version"`
-	Home             string `json:"home"`
-	DBPath           string `json:"db_path"`
-	MigrationVersion int    `json:"migration_version"`
-	MigrationCount   int    `json:"migration_count"`
+	Version              string   `json:"version"`
+	Home                 string   `json:"home"`
+	DBPath               string   `json:"db_path"`
+	MigrationVersion     int      `json:"migration_version"`
+	MigrationCount       int      `json:"migration_count"`
+	UnavailableProviders []string `json:"unavailable_providers,omitempty"`
 }
 
 type diagnosticsGetPayload struct {
@@ -26,7 +27,7 @@ type diagnosticsGetPayload struct {
 
 // DiagnosticsVersion returns side-effect-free runtime metadata for the shell
 // startup gate and support screens.
-func DiagnosticsVersion(st *store.Store, version string) rpc.Handler {
+func DiagnosticsVersion(st *store.Store, version string, unavailableProviders []string) rpc.Handler {
 	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
 		home, err := paths.Home()
 		if err != nil {
@@ -43,19 +44,20 @@ func DiagnosticsVersion(st *store.Store, version string) rpc.Handler {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		payload := diagnosticsPayload{
-			Version:          version,
-			Home:             home,
-			DBPath:           dbPath,
-			MigrationVersion: int(latest.Int64),
-			MigrationCount:   int(count.Int64),
+			Version:              version,
+			Home:                 home,
+			DBPath:               dbPath,
+			MigrationVersion:     int(latest.Int64),
+			MigrationCount:       int(count.Int64),
+			UnavailableProviders: unavailableProviders,
 		}
 		return json.Marshal(payload)
 	}
 }
 
-func DiagnosticsGet(st *store.Store, ops *opsstatus.Repo, version string) rpc.Handler {
+func DiagnosticsGet(st *store.Store, ops *opsstatus.Repo, version string, unavailableProviders []string) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
-		raw, err := DiagnosticsVersion(st, version)(ctx, params)
+		raw, err := DiagnosticsVersion(st, version, unavailableProviders)(ctx, params)
 		if err != nil {
 			return nil, err
 		}

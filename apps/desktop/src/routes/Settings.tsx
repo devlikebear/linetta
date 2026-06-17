@@ -8,6 +8,7 @@ import {
   opsStatus as opsStatusApi,
   providers as providersApi,
   webSearch as webSearchApi,
+  diagnostics as diagnosticsApi,
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import {
@@ -188,8 +189,15 @@ function setupGuideLinks(t: Translate, id: GuideID): SetupGuide["links"] {
 export function Settings() {
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
-  const providers = useMemo(() => buildProviders(t), [t]);
-  const setupGuides = useMemo(() => buildSetupGuides(t), [t]);
+  const [unavailableProviders, setUnavailableProviders] = useState<string[]>([]);
+  const providers = useMemo(
+    () => buildProviders(t).filter((p) => !unavailableProviders.includes(p.id)),
+    [t, unavailableProviders],
+  );
+  const setupGuides = useMemo(
+    () => buildSetupGuides(t).filter((g) => !unavailableProviders.includes(g.provider)),
+    [t, unavailableProviders],
+  );
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -223,8 +231,8 @@ export function Settings() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([settingsApi.get(), opsStatusApi.get()])
-      .then(([s, rows]) => {
+    Promise.all([settingsApi.get(), opsStatusApi.get(), diagnosticsApi.get()])
+      .then(([s, rows, diag]) => {
         if (cancelled) return;
         setCurrent(s);
         setLanguage(s.language);
@@ -234,6 +242,7 @@ export function Settings() {
         setEditorFontSizeDraft(String(s.editor_font_size ?? 20));
         setEditorLineHeightDraft(String(s.editor_line_height ?? 1.92));
         setOpsRows(rows);
+        setUnavailableProviders(diag.unavailable_providers ?? []);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };

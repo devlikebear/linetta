@@ -371,6 +371,7 @@ export interface DiagnosticsSnapshot {
   migration_version: number;
   migration_count: number;
   ops_status: OpsStatus[];
+  unavailable_providers?: string[];
 }
 
 // Wire shape from ai.preview_context RPC. Mirrors engine PreviewCounts JSON.

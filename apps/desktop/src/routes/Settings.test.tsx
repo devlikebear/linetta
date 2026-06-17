@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   providersDetectCli: vi.fn(),
   providersTest: vi.fn(),
   webSearchTest: vi.fn(),
+  diagnosticsGet: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -36,6 +37,9 @@ vi.mock("../lib/rpc", () => ({
   },
   webSearch: {
     test: mocks.webSearchTest,
+  },
+  diagnostics: {
+    get: mocks.diagnosticsGet,
   },
 }));
 
@@ -113,6 +117,15 @@ describe("Settings", () => {
       }
       state = { ...state, ...nextPatch, providers };
       return Promise.resolve({ ...state });
+    });
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
     });
     mocks.providersListModels.mockResolvedValue({ models: [] });
     mocks.providersDetectCli.mockResolvedValue({ path: "" });
@@ -467,5 +480,49 @@ describe("Settings", () => {
     await waitFor(() => expect(mocks.webSearchTest).toHaveBeenCalled());
     expect(mocks.settingsSet).not.toHaveBeenCalledWith({ web_search_api_key: undefined });
     expect(await screen.findByText("web_search 연결 성공: 검색 결과 1건 응답")).toBeInTheDocument();
+  });
+
+  it("hides sandbox-unavailable providers and their setup guides when diagnostics reports them", async () => {
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: ["claude-code-cli", "openai-codex"],
+    });
+    renderSettings();
+
+    // Wait for the settings to load
+    await screen.findByText("AI 연결 마법사");
+
+    // claude-code-cli provider toggle must NOT be rendered
+    expect(screen.queryByText(/Claude Code CLI/)).not.toBeInTheDocument();
+    // openai-codex setup guide button must NOT be rendered
+    expect(screen.queryByRole("button", { name: /ChatGPT 구독으로 연결/ })).not.toBeInTheDocument();
+
+    // Other providers must still be visible (Claude API setup guide button)
+    expect(screen.getByRole("button", { name: /Claude API 키로 연결/ })).toBeInTheDocument();
+  });
+
+  it("shows all providers when diagnostics returns an empty unavailable list", async () => {
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+    });
+    renderSettings();
+
+    await screen.findByText("AI 연결 마법사");
+
+    // Both sandbox-only providers must be visible in non-MAS build
+    // (claude-code-cli appears as a provider toggle button; openai-codex as a setup guide button)
+    expect(screen.getByRole("button", { name: /Claude Code CLI/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
   });
 });

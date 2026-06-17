@@ -182,8 +182,8 @@ func main() {
 		WithManuscript(manuscriptSearcher)
 
 	s.Handle("ping", handlers.Ping)
-	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, engineVersion))
-	s.Handle("diagnostics.get", handlers.DiagnosticsGet(st, ops, engineVersion))
+	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, engineVersion, ai.UnavailableProviders()))
+	s.Handle("diagnostics.get", handlers.DiagnosticsGet(st, ops, engineVersion, ai.UnavailableProviders()))
 	s.Handle("ops_status.get", handlers.GetOpsStatus(ops))
 	s.Handle("ops_status.clear_error", handlers.ClearOpsStatusError(ops))
 	s.Handle("search.query", handlers.Search(searchRepo))
