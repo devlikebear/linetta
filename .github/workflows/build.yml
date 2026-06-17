@@ -168,6 +168,30 @@ jobs:
           APPLE_TEAM_ID: ${{ steps.apple_signing.outputs.configured == 'true' && secrets.APPLE_TEAM_ID || '' }}
         run: pnpm tauri bundle --bundles "${{ matrix.bundles }}"
 
+      - name: Notarize and staple dmg
+        if: runner.os == 'macOS' && steps.apple_signing.outputs.configured == 'true'
+        shell: bash
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ steps.apple_assets.outputs.api_key_path }}
+        run: |
+          set -euo pipefail
+          # Tauri signs + notarizes + staples the .app, but the .dmg is only
+          # signed. Notarize and staple it explicitly so Gatekeeper accepts the
+          # installer offline.
+          dmg="$(find apps/desktop/src-tauri/target/release/bundle/dmg -maxdepth 1 -name '*.dmg' | head -n1)"
+          if [ -z "${dmg}" ]; then
+            echo "::error::no dmg found to notarize" >&2
+            exit 1
+          fi
+          xcrun notarytool submit "${dmg}" \
+            --key "${APPLE_API_KEY_PATH}" \
+            --key-id "${APPLE_API_KEY}" \
+            --issuer "${APPLE_API_ISSUER}" \
+            --wait
+          xcrun stapler staple "${dmg}"
+
       - name: Verify macOS signing
         if: runner.os == 'macOS' && steps.apple_signing.outputs.configured == 'true'
         shell: bash

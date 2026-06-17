@@ -64,6 +64,15 @@ BUNDLE_DIR="${ROOT}/apps/desktop/src-tauri/target/release/bundle"
 APP_PATH="${BUNDLE_DIR}/macos/Linetta.app"
 DMG_PATH="$(find "${BUNDLE_DIR}/dmg" -maxdepth 1 -name '*.dmg' 2>/dev/null | head -n1 || true)"
 
+# Tauri signs + notarizes + staples the .app, but only signs the .dmg.
+# Notarize and staple the dmg explicitly so Gatekeeper accepts it offline.
+if [ -n "${DMG_PATH}" ]; then
+  echo "Notarizing + stapling dmg: ${DMG_PATH}"
+  xcrun notarytool submit "${DMG_PATH}" \
+    --keychain-profile "${NOTARY_PROFILE:-linetta-notary}" --wait
+  xcrun stapler staple "${DMG_PATH}"
+fi
+
 echo "=== Verification ==="
 codesign --verify --deep --strict --verbose=2 "${APP_PATH}"
 spctl --assess --type exec -vvv "${APP_PATH}"
