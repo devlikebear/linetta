@@ -16,6 +16,8 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
+const gitSyncAvailable = true
+
 // setupGitSync constructs the real git syncer, registers its RPC handlers, and
 // returns the daily syncer used by the backup retention loop.
 func setupGitSync(

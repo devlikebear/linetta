@@ -190,6 +190,7 @@ export function Settings() {
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
   const [unavailableProviders, setUnavailableProviders] = useState<string[]>([]);
+  const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
   const providers = useMemo(
     () => buildProviders(t).filter((p) => !unavailableProviders.includes(p.id)),
     [t, unavailableProviders],
@@ -243,6 +244,7 @@ export function Settings() {
         setEditorLineHeightDraft(String(s.editor_line_height ?? 1.92));
         setOpsRows(rows);
         setUnavailableProviders(diag.unavailable_providers ?? []);
+        setGitSyncAvailable(diag.git_sync_available ?? true);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
@@ -911,6 +913,7 @@ export function Settings() {
               </div>
             </section>
 
+            {gitSyncAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
               <p className="sd">{t("settings.git.description")}</p>
@@ -1006,6 +1009,7 @@ export function Settings() {
                 language={language}
               />
             </section>
+            )}
 
             <section className="settings-section">
               <h3>{t("settings.backup.title")}</h3>

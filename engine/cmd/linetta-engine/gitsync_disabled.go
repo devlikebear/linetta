@@ -15,6 +15,8 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
+const gitSyncAvailable = false
+
 // setupGitSync registers git_sync handlers that report the feature is
 // unavailable and returns a no-op syncer. The gitsync package (which shells out
 // to git) is never compiled into the mas build.

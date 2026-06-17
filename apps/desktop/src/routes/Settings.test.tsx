@@ -126,6 +126,7 @@ describe("Settings", () => {
       migration_count: 0,
       ops_status: [],
       unavailable_providers: [],
+      git_sync_available: true,
     });
     mocks.providersListModels.mockResolvedValue({ models: [] });
     mocks.providersDetectCli.mockResolvedValue({ path: "" });
@@ -547,6 +548,7 @@ describe("Settings", () => {
       migration_count: 0,
       ops_status: [],
       unavailable_providers: [],
+      git_sync_available: true,
     });
     renderSettings();
 
@@ -556,5 +558,47 @@ describe("Settings", () => {
     // (claude-code-cli appears as a provider toggle button; openai-codex as a setup guide button)
     expect(screen.getByRole("button", { name: /Claude Code CLI/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
+  });
+
+  it("hides Git Sync section when git_sync_available is false and shows it when true", async () => {
+    // When git_sync_available is false, the section heading must NOT be rendered.
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: false,
+    });
+    const { unmount } = render(
+      <MemoryRouter>
+        <I18nProvider>
+          <Settings />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+
+    // Wait for settings to load (some other element that's always present)
+    await screen.findByText("AI 연결 마법사");
+    expect(screen.queryByText("GitHub 동기화")).not.toBeInTheDocument();
+    unmount();
+
+    // When git_sync_available is true, the section heading IS rendered.
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: true,
+    });
+    renderSettings();
+
+    await screen.findByText("AI 연결 마법사");
+    expect(screen.getByText("GitHub 동기화")).toBeInTheDocument();
   });
 });

@@ -372,6 +372,7 @@ export interface DiagnosticsSnapshot {
   migration_count: number;
   ops_status: OpsStatus[];
   unavailable_providers?: string[];
+  git_sync_available?: boolean;
 }
 
 // Wire shape from ai.preview_context RPC. Mirrors engine PreviewCounts JSON.

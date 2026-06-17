@@ -11,6 +11,12 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
+// Capabilities describes build-variant feature availability surfaced to the UI.
+type Capabilities struct {
+	UnavailableProviders []string
+	GitSyncAvailable     bool
+}
+
 type diagnosticsPayload struct {
 	Version              string   `json:"version"`
 	Home                 string   `json:"home"`
@@ -18,6 +24,7 @@ type diagnosticsPayload struct {
 	MigrationVersion     int      `json:"migration_version"`
 	MigrationCount       int      `json:"migration_count"`
 	UnavailableProviders []string `json:"unavailable_providers,omitempty"`
+	GitSyncAvailable     bool     `json:"git_sync_available"`
 }
 
 type diagnosticsGetPayload struct {
@@ -27,7 +34,7 @@ type diagnosticsGetPayload struct {
 
 // DiagnosticsVersion returns side-effect-free runtime metadata for the shell
 // startup gate and support screens.
-func DiagnosticsVersion(st *store.Store, version string, unavailableProviders []string) rpc.Handler {
+func DiagnosticsVersion(st *store.Store, version string, caps Capabilities) rpc.Handler {
 	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
 		home, err := paths.Home()
 		if err != nil {
@@ -49,15 +56,16 @@ func DiagnosticsVersion(st *store.Store, version string, unavailableProviders []
 			DBPath:               dbPath,
 			MigrationVersion:     int(latest.Int64),
 			MigrationCount:       int(count.Int64),
-			UnavailableProviders: unavailableProviders,
+			UnavailableProviders: caps.UnavailableProviders,
+			GitSyncAvailable:     caps.GitSyncAvailable,
 		}
 		return json.Marshal(payload)
 	}
 }
 
-func DiagnosticsGet(st *store.Store, ops *opsstatus.Repo, version string, unavailableProviders []string) rpc.Handler {
+func DiagnosticsGet(st *store.Store, ops *opsstatus.Repo, version string, caps Capabilities) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
-		raw, err := DiagnosticsVersion(st, version, unavailableProviders)(ctx, params)
+		raw, err := DiagnosticsVersion(st, version, caps)(ctx, params)
 		if err != nil {
 			return nil, err
 		}
