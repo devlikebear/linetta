@@ -21,9 +21,15 @@ App Sandbox 호환성 감사 결과 요약:
   사이드카 바이너리는 앱 번들 내장.
 - **엔타이틀먼트 선언 필요**: LLM/웹검색 아웃바운드 네트워크, Keychain 읽기,
   사용자 선택 파일 읽기/쓰기.
-- **근본적 비호환 (코드 변경 필요)**: Git Sync — 엔진이 사용자가 설정한 임의
-  경로(`GitSyncDir`)에 `os.WriteFile`하고 `git` 외부 프로세스를 spawn한다.
-  샌드박스에서 둘 다 차단되며, `git` 실행은 엔타이틀먼트로도 풀 수 없다.
+- **근본적 비호환 (코드 변경 필요)**:
+  - Git Sync — 엔진이 사용자가 설정한 임의 경로(`GitSyncDir`)에 `os.WriteFile`하고
+    `git` 외부 프로세스를 spawn한다. 샌드박스에서 둘 다 차단되며, `git` 실행은
+    엔타이틀먼트로도 풀 수 없다.
+  - **CLI 기반 프로바이더 (구현 중 추가 발견)**: `claude-code-cli` 프로바이더가
+    `claude` 바이너리를 spawn하고, `providers.detect_cli`(`clidetect`)가 로그인
+    셸을 spawn한다. 둘 다 샌드박스에서 EPERM. → mas 빌드에서 `claude-code-cli`는
+    팩토리에서 거부하고 `clidetect.Detect`는 빈 결과를 반환하도록 제외.
+    (HTTP 기반 프로바이더 anthropic/openai/gemini-native/openai-codex는 유지.)
 
 ## 결정 사항 (확정)
 
