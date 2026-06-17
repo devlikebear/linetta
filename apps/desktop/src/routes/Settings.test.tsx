@@ -506,6 +506,38 @@ describe("Settings", () => {
     expect(screen.getByRole("button", { name: /Claude API 키로 연결/ })).toBeInTheDocument();
   });
 
+  it("resets setup guide to first available when stored provider is hidden in MAS build", async () => {
+    // Stored provider is openai-codex, which is in the unavailable list — its guide
+    // (chatgpt-subscription) gets filtered out. The component should fall back to
+    // the first available guide without crashing.
+    mocks.settingsGet.mockResolvedValue({
+      ...baseSettings,
+      provider: "openai-codex",
+    });
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: ["claude-code-cli", "openai-codex"],
+    });
+
+    renderSettings();
+
+    await screen.findByText("AI 연결 마법사");
+
+    // The chatgpt-subscription guide button must NOT be shown (filtered out)
+    expect(screen.queryByRole("button", { name: /ChatGPT 구독으로 연결/ })).not.toBeInTheDocument();
+    // The detail panel must show one of the available guides — confirm by checking
+    // the action button text rendered inside .setup-guide (not the choice list).
+    // openai-api is the first available guide after filtering, so its action button appears.
+    const actionBtn = document.querySelector(".setup-guide button");
+    expect(actionBtn).not.toBeNull();
+    expect(actionBtn!.textContent).toMatch(/선택|API 키로 연결/u);
+  });
+
   it("shows all providers when diagnostics returns an empty unavailable list", async () => {
     mocks.diagnosticsGet.mockResolvedValue({
       version: "",

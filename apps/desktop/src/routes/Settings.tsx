@@ -266,6 +266,15 @@ export function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProvider]);
 
+  // If the stored provider's guide has been filtered out (e.g. sandboxed MAS
+  // build hides openai-codex / claude-code-cli), reset guideId to the first
+  // available guide so the detail panel always shows a coherent selection.
+  useEffect(() => {
+    if (setupGuides.length && !setupGuides.some((g) => g.id === guideId)) {
+      setGuideId(setupGuides[0].id);
+    }
+  }, [setupGuides, guideId]);
+
   const opsByJob = useMemo(() => {
     return new Map(opsRows.map((row) => [row.job_name, row]));
   }, [opsRows]);
