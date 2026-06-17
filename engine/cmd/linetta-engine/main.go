@@ -21,7 +21,6 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/contextualedit"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
-	"github.com/devlikebear/linetta/engine/internal/gitsync"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -149,8 +148,7 @@ func main() {
 	if err != nil {
 		fail("home: %v", err)
 	}
-	syncer := gitsync.New(settingsStore, projects, nodes, entities, relationships)
-	syncer.Ops = ops
+	syncer := setupGitSync(s, settingsStore, projects, nodes, entities, relationships, ops)
 	retentionFn := func(ctx context.Context) error {
 		if err := snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli()); err != nil {
 			return err
@@ -288,8 +286,6 @@ func main() {
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
-	s.Handle("git_sync.run", handlers.RunGitSync(syncer))
-	s.Handle("git_sync.init", handlers.InitGitSync(syncer))
 
 	if err := s.Serve(ctx, os.Stdin, os.Stdout); err != nil && !errors.Is(err, io.EOF) {
 		fail("serve: %v", err)
