@@ -3,7 +3,7 @@ mod jsonrpc;
 
 use serde_json::Value;
 use std::time::Duration;
-use std::{process::Command, sync::Arc};
+use std::sync::Arc;
 use tauri::Manager;
 
 const ENGINE_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
@@ -13,6 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let handle = app.handle().clone();
             tauri::async_runtime::block_on(async move {
@@ -145,30 +146,15 @@ async fn engine_status(state: tauri::State<'_, EngineState>) -> Result<EngineSta
 }
 
 #[tauri::command]
-async fn open_path(path: String) -> Result<(), String> {
+async fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
     let path = path.trim();
     if path.is_empty() {
         return Err("path required".to_string());
     }
-    let mut cmd = if cfg!(target_os = "macos") {
-        let mut c = Command::new("open");
-        c.arg(path);
-        c
-    } else if cfg!(target_os = "windows") {
-        let mut c = Command::new("explorer");
-        c.arg(path);
-        c
-    } else {
-        let mut c = Command::new("xdg-open");
-        c.arg(path);
-        c
-    };
-    let status = cmd.status().map_err(|e| e.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("open path exited with {status}"))
-    }
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 fn engine_client(state: &EngineState) -> Result<Arc<jsonrpc::Client>, String> {
