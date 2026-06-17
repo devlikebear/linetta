@@ -1,4 +1,4 @@
-.PHONY: help dev test test-go test-desktop test-tauri validate-distribution build-engine build-desktop bump-version ci
+.PHONY: help dev test test-go test-desktop test-tauri validate-distribution build-engine build-desktop release-macos-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -27,6 +27,9 @@ build-engine: ## Build the Go sidecar into the Tauri binaries directory
 
 build-desktop: build-engine ## Build the desktop release binary for the current OS
 	cd apps/desktop && pnpm tauri build --no-bundle
+
+release-macos-local: ## Build, sign, notarize, and staple the macOS app + dmg locally
+	bash scripts/release-macos-local.sh
 
 bump-version: ## Bump app versions. Usage: make bump-version VERSION=0.2.0
 	@test -n "$(VERSION)" || (echo "VERSION is required, for example: make bump-version VERSION=0.2.0" >&2; exit 2)
