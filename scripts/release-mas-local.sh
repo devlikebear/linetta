@@ -7,6 +7,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIR="${HOME}/.linetta/apple"
 CONFIG="${LINETTA_APPLE_CONFIG:-${DIR}/config.env}"
+[ -f "${CONFIG}" ] || { echo "missing config: ${CONFIG}" >&2; exit 1; }
 # shellcheck disable=SC1090
 set -a; . "${CONFIG}"; set +a
 
