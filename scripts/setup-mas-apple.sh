@@ -7,14 +7,21 @@
 #
 # If any API call is rejected (some cert types can be account-holder-only), the
 # script prints the error and the manual web-portal fallback for that step.
+#
+# This is a one-time setup script. Apple enforces a per-account cap on
+# distribution certificates (currently 2); re-running creates new certs and may
+# eventually hit that cap (the POST then fails and the script aborts). Revoke
+# stale certs in the portal before re-running if you hit the limit.
 set -euo pipefail
+trap 'rm -f /tmp/bundleid.json /tmp/cert.json /tmp/profile.json' EXIT
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIR="${HOME}/.linetta/apple"
+mkdir -p "${DIR}"
 CONFIG="${LINETTA_APPLE_CONFIG:-${DIR}/config.env}"
 # shellcheck disable=SC1090
 set -a; . "${CONFIG}"; set +a
-: "${APPLE_TEAM_ID:?}" "${APP_STORE_CONNECT_KEY_ID:?}" "${APP_STORE_CONNECT_ISSUER_ID:?}"
+: "${APPLE_TEAM_ID:?}" "${APP_STORE_CONNECT_KEY_ID:?}" "${APP_STORE_CONNECT_ISSUER_ID:?}" "${AUTH_KEY_PATH:?}"
 
 BUNDLE_ID="com.devlikebear.linetta"
 api() { ( cd "${ROOT}/scripts/ascapi" && go run . "$@" ); }
@@ -36,7 +43,7 @@ fi
 create_cert() {
   local ctype="$1" base="$2" pass="$3"
   local key="${DIR}/${base}.key" csr="${DIR}/${base}.csr" cer="${DIR}/${base}.cer" p12="${DIR}/${base}.p12"
-  if [ ! -f "${key}" ]; then
+  if [ ! -f "${key}" ] || [ ! -f "${csr}" ]; then
     openssl req -new -newkey rsa:2048 -nodes -keyout "${key}" \
       -out "${csr}" -subj "/CN=Linetta ${ctype}/O=${APPLE_TEAM_ID}/C=US"
     chmod 600 "${key}"
@@ -70,7 +77,6 @@ api POST /v1/profiles /tmp/profile.json | jq -r '.data.attributes.profileContent
   | base64 --decode > "${DIR}/linetta-mas.provisionprofile"
 echo "wrote profile: ${DIR}/linetta-mas.provisionprofile"
 
-rm -f /tmp/bundleid.json /tmp/cert.json /tmp/profile.json
 echo ""
 echo "Done. Verify identities:"
 echo "  security find-identity -v -p codesigning | grep -E 'Apple Distribution|Mac Installer|3rd Party Mac'"
