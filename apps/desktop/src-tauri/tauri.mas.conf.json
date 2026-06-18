@@ -1,8 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
+    "category": "Productivity",
     "macOS": {
-      "entitlements": "entitlements/linetta.entitlements"
+      "entitlements": "entitlements/linetta.entitlements",
+      "minimumSystemVersion": "12.0"
     }
   }
 }
