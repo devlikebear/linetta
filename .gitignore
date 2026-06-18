@@ -31,3 +31,6 @@ apps/desktop/src-tauri/gen/
 
 # Engine binary built into the repo root by accident
 /engine/linetta-engine
+
+# ascapi helper build artifact
+scripts/ascapi/ascapi
