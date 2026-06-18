@@ -29,6 +29,9 @@ func main() {
 		fail("usage: ascapi METHOD PATH [bodyFile]")
 	}
 	method, path := os.Args[1], os.Args[2]
+	if !strings.HasPrefix(path, "/") {
+		fail("PATH must start with '/' (e.g. /v1/apps)")
+	}
 	var body io.Reader
 	if len(os.Args) > 3 {
 		b, err := os.ReadFile(os.Args[3])
