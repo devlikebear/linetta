@@ -1,4 +1,4 @@
-.PHONY: help dev test test-go test-desktop test-tauri validate-distribution build-engine build-desktop release-macos-local build-mas-local bump-version ci
+.PHONY: help dev test test-go test-desktop test-tauri validate-distribution build-engine build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -33,6 +33,9 @@ release-macos-local: ## Build, sign, notarize, and staple the macOS app + dmg lo
 
 build-mas-local: ## Build + sign a sandboxed macOS app locally (MAS prep, Developer ID signed)
 	bash scripts/build-mas-local.sh
+
+release-mas-local: ## Build + sign + package the Mac App Store .pkg locally
+	bash scripts/release-mas-local.sh
 
 bump-version: ## Bump app versions. Usage: make bump-version VERSION=0.2.0
 	@test -n "$(VERSION)" || (echo "VERSION is required, for example: make bump-version VERSION=0.2.0" >&2; exit 2)
