@@ -69,9 +69,14 @@ esac
 
 OUT="${OUT_DIR}/linetta-engine-${TRIPLE}${EXT}"
 
-echo "Building engine -> ${OUT}"
+TAGS="${LINETTA_BUILD_TAGS:-}"
+echo "Building engine -> ${OUT}${TAGS:+ (tags: ${TAGS})}"
 (
   cd "${ROOT}/engine"
-  GOOS="${GOOS}" GOARCH="${GOARCH}" go build -o "${OUT}" ./cmd/linetta-engine
+  if [ -n "${TAGS}" ]; then
+    GOOS="${GOOS}" GOARCH="${GOARCH}" go build -tags "${TAGS}" -o "${OUT}" ./cmd/linetta-engine
+  else
+    GOOS="${GOOS}" GOARCH="${GOARCH}" go build -o "${OUT}" ./cmd/linetta-engine
+  fi
 )
 echo "ok"

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Replace, Sparkles } from "lucide-react";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi, stats as statsApi } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
@@ -147,6 +147,7 @@ export function Workspace() {
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const companionNodeRef = useRef<string | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
+  const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
   const [tourOpen, setTourOpen] = useState(false);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [autoMentionBusy, setAutoMentionBusy] = useState(false);
@@ -319,6 +320,9 @@ export function Workspace() {
         setFocus(s.focus_default);
       })
       .catch(() => { /* benign */ });
+    diagnosticsApi.get()
+      .then((d) => { if (!cancelled) setGitSyncAvailable(d.git_sync_available ?? true); })
+      .catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -1258,35 +1262,37 @@ export function Workspace() {
       label: t("workspace.command.openSettings"),
       run: () => navigate("/settings"),
     });
-    cmds.push({
-      id: "git-sync-now",
-      section: sectionProject,
-      label: t("workspace.command.syncNow"),
-      run: async () => {
-        try {
-          const res = await gitSync.run();
-          if (res.skipped) {
-            showToast(t("workspace.toast.syncDisabled"));
-            return;
+    if (gitSyncAvailable) {
+      cmds.push({
+        id: "git-sync-now",
+        section: sectionProject,
+        label: t("workspace.command.syncNow"),
+        run: async () => {
+          try {
+            const res = await gitSync.run();
+            if (res.skipped) {
+              showToast(t("workspace.toast.syncDisabled"));
+              return;
+            }
+            if (res.error) {
+              showToast(t("workspace.toast.syncError", { error: res.error }));
+              return;
+            }
+            if (!res.committed) {
+              showToast(t("workspace.toast.syncNoChanges", { count: res.files_written }));
+              return;
+            }
+            if (res.pushed) {
+              showToast(t("workspace.toast.syncPushed", { count: res.files_written }));
+            } else {
+              showToast(t("workspace.toast.syncCommittedPushFailed", { count: res.files_written }));
+            }
+          } catch (e) {
+            showToast(t("workspace.toast.syncFailed", { error: String(e) }));
           }
-          if (res.error) {
-            showToast(t("workspace.toast.syncError", { error: res.error }));
-            return;
-          }
-          if (!res.committed) {
-            showToast(t("workspace.toast.syncNoChanges", { count: res.files_written }));
-            return;
-          }
-          if (res.pushed) {
-            showToast(t("workspace.toast.syncPushed", { count: res.files_written }));
-          } else {
-            showToast(t("workspace.toast.syncCommittedPushFailed", { count: res.files_written }));
-          }
-        } catch (e) {
-          showToast(t("workspace.toast.syncFailed", { error: String(e) }));
-        }
-      },
-    });
+        },
+      });
+    }
     cmds.push({
       id: "enter-zen",
       section: sectionView,
@@ -1331,7 +1337,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit]);
+  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, gitSyncAvailable]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {

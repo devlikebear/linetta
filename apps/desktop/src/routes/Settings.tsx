@@ -8,6 +8,7 @@ import {
   opsStatus as opsStatusApi,
   providers as providersApi,
   webSearch as webSearchApi,
+  diagnostics as diagnosticsApi,
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import {
@@ -188,8 +189,16 @@ function setupGuideLinks(t: Translate, id: GuideID): SetupGuide["links"] {
 export function Settings() {
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
-  const providers = useMemo(() => buildProviders(t), [t]);
-  const setupGuides = useMemo(() => buildSetupGuides(t), [t]);
+  const [unavailableProviders, setUnavailableProviders] = useState<string[]>([]);
+  const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
+  const providers = useMemo(
+    () => buildProviders(t).filter((p) => !unavailableProviders.includes(p.id)),
+    [t, unavailableProviders],
+  );
+  const setupGuides = useMemo(
+    () => buildSetupGuides(t).filter((g) => !unavailableProviders.includes(g.provider)),
+    [t, unavailableProviders],
+  );
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -223,8 +232,8 @@ export function Settings() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([settingsApi.get(), opsStatusApi.get()])
-      .then(([s, rows]) => {
+    Promise.all([settingsApi.get(), opsStatusApi.get(), diagnosticsApi.get()])
+      .then(([s, rows, diag]) => {
         if (cancelled) return;
         setCurrent(s);
         setLanguage(s.language);
@@ -234,6 +243,8 @@ export function Settings() {
         setEditorFontSizeDraft(String(s.editor_font_size ?? 20));
         setEditorLineHeightDraft(String(s.editor_line_height ?? 1.92));
         setOpsRows(rows);
+        setUnavailableProviders(diag.unavailable_providers ?? []);
+        setGitSyncAvailable(diag.git_sync_available ?? true);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
@@ -256,6 +267,15 @@ export function Settings() {
     setProviderTestMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProvider]);
+
+  // If the stored provider's guide has been filtered out (e.g. sandboxed MAS
+  // build hides openai-codex / claude-code-cli), reset guideId to the first
+  // available guide so the detail panel always shows a coherent selection.
+  useEffect(() => {
+    if (setupGuides.length && !setupGuides.some((g) => g.id === guideId)) {
+      setGuideId(setupGuides[0].id);
+    }
+  }, [setupGuides, guideId]);
 
   const opsByJob = useMemo(() => {
     return new Map(opsRows.map((row) => [row.job_name, row]));
@@ -893,6 +913,7 @@ export function Settings() {
               </div>
             </section>
 
+            {gitSyncAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
               <p className="sd">{t("settings.git.description")}</p>
@@ -988,6 +1009,7 @@ export function Settings() {
                 language={language}
               />
             </section>
+            )}
 
             <section className="settings-section">
               <h3>{t("settings.backup.title")}</h3>

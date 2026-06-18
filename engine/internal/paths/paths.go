@@ -14,6 +14,11 @@ const AppIdentifier = "com.devlikebear.linetta"
 
 // Home returns the directory under which Linetta stores its database, settings,
 // and backups. Honors LINETTA_HOME if non-empty; otherwise uses the OS default.
+//
+// Under the macOS App Sandbox (App Store build) os.UserHomeDir resolves to the
+// app's container, so the default path stays inside the sandbox. A LINETTA_HOME
+// override that points outside the container will fail at write time — it is a
+// power-user escape hatch only meaningful for the non-sandboxed build.
 func Home() (string, error) {
 	if v := os.Getenv("LINETTA_HOME"); v != "" {
 		return v, nil

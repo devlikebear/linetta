@@ -27,6 +27,9 @@ type ClientFactory func(p ResolvedProvider) (llm.Client, error)
 // configured CLI path via the CLAUDE_CODE_CLI_PATH env var that tars reads
 // (NewClaudeCodeCLIClient has no path parameter, so the env var is the only hook).
 func DefaultClientFactory(p ResolvedProvider) (llm.Client, error) {
+	if err := guardProvider(p.Provider); err != nil {
+		return nil, err
+	}
 	if p.Provider == "claude-code-cli" {
 		if path := strings.TrimSpace(p.CliPath); path != "" {
 			_ = os.Setenv("CLAUDE_CODE_CLI_PATH", path)

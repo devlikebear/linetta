@@ -19,7 +19,8 @@ func TestDiagnosticsVersion(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	got, err := DiagnosticsVersion(st, "test-version")(context.Background(), nil)
+	caps := Capabilities{GitSyncAvailable: true}
+	got, err := DiagnosticsVersion(st, "test-version", caps)(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("DiagnosticsVersion: %v", err)
 	}
@@ -39,6 +40,9 @@ func TestDiagnosticsVersion(t *testing.T) {
 	if payload.MigrationVersion == 0 || payload.MigrationCount == 0 {
 		t.Fatalf("migration metadata not populated: %+v", payload)
 	}
+	if !payload.GitSyncAvailable {
+		t.Fatalf("git_sync_available = false, want true")
+	}
 }
 
 func TestDiagnosticsGetIncludesOpsStatus(t *testing.T) {
@@ -54,7 +58,7 @@ func TestDiagnosticsGetIncludesOpsStatus(t *testing.T) {
 		t.Fatalf("ops.Record: %v", err)
 	}
 
-	got, err := DiagnosticsGet(st, ops, "test-version")(context.Background(), nil)
+	got, err := DiagnosticsGet(st, ops, "test-version", Capabilities{GitSyncAvailable: true})(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("DiagnosticsGet: %v", err)
 	}
