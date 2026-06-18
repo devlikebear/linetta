@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # One-time Mac App Store Apple-side setup via the App Store Connect API:
 #   - register the App ID (bundle id) if missing
-#   - create the Apple Distribution + Mac Installer Distribution certificates
+#   - create the Mac App Distribution + Mac Installer Distribution certificates
+#   - install the Apple WWDR G3 intermediate so the chain validates
 #   - create a MAC_APP_STORE provisioning profile
 # Private keys and the profile are written to ~/.linetta/apple/ (never committed).
 #
@@ -39,7 +40,7 @@ JSON
   echo "registered bundle id: ${BID}"
 fi
 
-# create_cert <DISTRIBUTION|MAC_INSTALLER_DISTRIBUTION> <basename> <p12-pass>
+# create_cert <MAC_APP_DISTRIBUTION|MAC_INSTALLER_DISTRIBUTION> <basename> <p12-pass>
 create_cert() {
   local ctype="$1" base="$2" pass="$3"
   local key="${DIR}/${base}.key" csr="${DIR}/${base}.csr" cer="${DIR}/${base}.cer" p12="${DIR}/${base}.p12"
@@ -62,14 +63,26 @@ create_cert() {
   echo "imported ${ctype}: ${p12}"
 }
 
-echo "== 2. Apple Distribution cert =="
-create_cert DISTRIBUTION mas_app_distribution linetta-mas-app
+echo "== 2. Mac App Distribution cert =="
+# MAC_APP_DISTRIBUTION ("3rd Party Mac Developer Application") is the app-signing
+# cert MAC_APP_STORE profiles require. The unified DISTRIBUTION (Apple
+# Distribution) cert is NOT accepted for Mac App Store profiles.
+create_cert MAC_APP_DISTRIBUTION mas_app_distribution linetta-mas-app
 echo "== 3. Mac Installer Distribution cert =="
 create_cert MAC_INSTALLER_DISTRIBUTION mas_installer_distribution linetta-mas-installer
 
-echo "== 4. Provisioning profile =="
-# Apple Distribution cert id (most recent DISTRIBUTION cert for this team)
-CERTID="$(api GET "/v1/certificates?filter[certificateType]=DISTRIBUTION&sort=-createdDate&limit=1" | jq -r '.data[0].id')"
+echo "== 4. Apple WWDR G3 intermediate =="
+# Without the WWDR intermediate the cert chain is incomplete and the identities
+# do not appear under `security find-identity -v`.
+curl -fsSL -o /tmp/AppleWWDRCAG3.cer https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+security import /tmp/AppleWWDRCAG3.cer -k "${HOME}/Library/Keychains/login.keychain-db" 2>/dev/null || true
+rm -f /tmp/AppleWWDRCAG3.cer
+
+echo "== 5. Provisioning profile =="
+# The certificateType query filter rejects these enum values, so list all certs
+# and pick the newest MAC_APP_DISTRIBUTION client-side.
+CERTID="$(api GET "/v1/certificates?limit=200" \
+  | jq -r '[.data[] | select(.attributes.certificateType=="MAC_APP_DISTRIBUTION")] | sort_by(.attributes.createdDate) | last | .id')"
 cat > /tmp/profile.json <<JSON
 {"data":{"type":"profiles","attributes":{"name":"Linetta MAS","profileType":"MAC_APP_STORE"},"relationships":{"bundleId":{"data":{"type":"bundleIds","id":"${BID}"}},"certificates":{"data":[{"type":"certificates","id":"${CERTID}"}]}}}}
 JSON
