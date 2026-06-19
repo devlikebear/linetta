@@ -33,7 +33,7 @@ echo "Installer identity: ${INST_ID}"
 echo "Building engine (mas) + Tauri app"
 LINETTA_BUILD_TAGS=mas bash "${ROOT}/scripts/build-engine.sh"
 cd "${ROOT}/apps/desktop"
-pnpm tauri build --config src-tauri/tauri.mas.conf.json --bundles app
+pnpm tauri build --config src-tauri/tauri.mas.conf.json --bundles app --features mas
 
 APP="${ROOT}/apps/desktop/src-tauri/target/release/bundle/macos/Linetta.app"
 SIDECAR="${APP}/Contents/MacOS/linetta-engine"
