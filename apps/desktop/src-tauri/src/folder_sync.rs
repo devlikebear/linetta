@@ -3,6 +3,8 @@ use std::path::Path;
 use crate::EngineState;
 
 /// Copy each named file from `staging` into `target`. Returns the count copied.
+/// Used by the MAS orchestration path and by tests; unused in plain non-MAS builds.
+#[allow(dead_code)]
 pub(crate) fn copy_files(staging: &Path, target: &Path, files: &[String]) -> Result<usize, String> {
     let mut n = 0usize;
     for f in files {
@@ -14,6 +16,7 @@ pub(crate) fn copy_files(staging: &Path, target: &Path, files: &[String]) -> Res
     Ok(n)
 }
 
+#[cfg(all(target_os = "macos", feature = "mas"))]
 fn now_millis() -> i64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()
