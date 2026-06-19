@@ -450,6 +450,13 @@ export interface GitSyncResult {
   error: string;
 }
 
+export interface FolderSyncResult {
+  skipped: boolean;
+  files_copied: number;
+  message: string;
+  error: string;
+}
+
 export interface GitSyncInitResult {
   skipped: boolean;
   already_repo: boolean;
@@ -505,6 +512,8 @@ export interface Settings {
   copy_profile: PlatformProfileId;
   git_sync_dir: string;
   git_sync_commit_template: string;
+  folder_sync_dir: string;
+  folder_sync_enabled: boolean;
   backup_dir: string;
   safety_checklist_dismissed: boolean;
   onboarding_tour_enabled: boolean;
@@ -526,6 +535,8 @@ export interface SettingsPatch {
   copy_profile?: PlatformProfileId;
   git_sync_dir?: string;
   git_sync_commit_template?: string;
+  folder_sync_dir?: string;
+  folder_sync_enabled?: boolean;
   safety_checklist_dismissed?: boolean;
   onboarding_tour_enabled?: boolean;
   onboarding_tour_seen_version?: string;
