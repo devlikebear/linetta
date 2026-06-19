@@ -26,6 +26,7 @@ import type {
   ExportPayload,
   ExportTextPayload,
   FactCard,
+  FolderSyncResult,
   GitSyncInitResult,
   GitSyncResult,
   ImportMarkdownResult,
@@ -86,6 +87,14 @@ export async function engineStatus(): Promise<EngineStatus> {
 
 export async function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
+}
+
+export async function setFolderSyncDir(path: string): Promise<void> {
+  return invoke<void>("set_folder_sync_dir", { path });
+}
+
+export async function folderSyncNow(): Promise<FolderSyncResult> {
+  return invoke<FolderSyncResult>("folder_sync_now");
 }
 
 export async function rpcCall<T>(method: string, params?: unknown): Promise<T> {
