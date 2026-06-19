@@ -84,6 +84,8 @@ type Config struct {
 	BackupDir                 string                    `json:"backup_dir,omitempty"`
 	GitSyncDir                string                    `json:"git_sync_dir"`
 	GitSyncCommitTemplate     string                    `json:"git_sync_commit_template"`
+	FolderSyncDir             string                    `json:"folder_sync_dir"`
+	FolderSyncEnabled         bool                      `json:"folder_sync_enabled"`
 	SafetyChecklistDismissed  bool                      `json:"safety_checklist_dismissed"`
 	OnboardingTourEnabled     bool                      `json:"onboarding_tour_enabled"`
 	OnboardingTourSeenVersion string                    `json:"onboarding_tour_seen_version"`
@@ -105,6 +107,8 @@ type Patch struct {
 	CopyProfile               *string                   `json:"copy_profile,omitempty"`
 	GitSyncDir                *string                   `json:"git_sync_dir,omitempty"`
 	GitSyncCommitTemplate     *string                   `json:"git_sync_commit_template,omitempty"`
+	FolderSyncDir             *string                   `json:"folder_sync_dir,omitempty"`
+	FolderSyncEnabled         *bool                     `json:"folder_sync_enabled,omitempty"`
 	SafetyChecklistDismissed  *bool                     `json:"safety_checklist_dismissed,omitempty"`
 	OnboardingTourEnabled     *bool                     `json:"onboarding_tour_enabled,omitempty"`
 	OnboardingTourSeenVersion *string                   `json:"onboarding_tour_seen_version,omitempty"`
@@ -204,6 +208,8 @@ func (s *Store) load() error {
 	}
 	s.cfg.GitSyncDir = disk.GitSyncDir
 	s.cfg.GitSyncCommitTemplate = disk.GitSyncCommitTemplate
+	s.cfg.FolderSyncDir = disk.FolderSyncDir
+	s.cfg.FolderSyncEnabled = disk.FolderSyncEnabled
 	s.cfg.SafetyChecklistDismissed = disk.SafetyChecklistDismissed
 	if _, ok := raw["onboarding_tour_enabled"]; ok {
 		s.cfg.OnboardingTourEnabled = disk.OnboardingTourEnabled
@@ -387,6 +393,12 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.GitSyncCommitTemplate != nil {
 		next.GitSyncCommitTemplate = *p.GitSyncCommitTemplate
 	}
+	if p.FolderSyncDir != nil {
+		next.FolderSyncDir = *p.FolderSyncDir
+	}
+	if p.FolderSyncEnabled != nil {
+		next.FolderSyncEnabled = *p.FolderSyncEnabled
+	}
 	if p.SafetyChecklistDismissed != nil {
 		next.SafetyChecklistDismissed = *p.SafetyChecklistDismissed
 	}
@@ -441,6 +453,8 @@ func (s *Store) persist(next Config) error {
 		CopyProfile:               next.CopyProfile,
 		GitSyncDir:                next.GitSyncDir,
 		GitSyncCommitTemplate:     next.GitSyncCommitTemplate,
+		FolderSyncDir:             next.FolderSyncDir,
+		FolderSyncEnabled:         next.FolderSyncEnabled,
 		SafetyChecklistDismissed:  next.SafetyChecklistDismissed,
 		OnboardingTourEnabled:     next.OnboardingTourEnabled,
 		OnboardingTourSeenVersion: next.OnboardingTourSeenVersion,
