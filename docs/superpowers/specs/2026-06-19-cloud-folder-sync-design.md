@@ -243,3 +243,7 @@ staging만 하고 전달이 안 되는 상황을 막기 위해 Rust 타이머가
 - 동시 다중 폴더 타깃 (iCloud + GDrive 동시)
 - Folder Sync CI 연동
 - Google Drive REST API 직접 업로드(데스크톱 클라이언트 불필요)
+- **Stale bookmark 자동 갱신** (MAS): 사용자가 폴더를 이동/리네임하면 security-scoped
+  bookmark가 stale 상태가 된다. 현재는 resolve는 되지만 갱신본을 다시 저장하지 않아 장기적으로
+  접근이 끊길 수 있다. `URLByResolvingBookmarkData`의 `isStale`가 true면 FFI로 갱신된 bookmark
+  데이터를 반환해 재저장하는 처리를 후속에 추가한다. (접근 완전 실패 시엔 이미 "다시 선택" 안내됨.)
