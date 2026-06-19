@@ -83,15 +83,23 @@ Folder Sync은 동일한 "마크다운 단방향 내보내기" 모델을, git �
 
 ### MAS (샌드박스)
 
+**Tauri(Rust)가 오케스트레이션한다.** 엔진은 staging export(`folder_sync.stage`)와
+ops 기록(`folder_sync.report`)만 제공하고, 스케줄링/복사는 Rust가 담당한다. 엔진→Tauri
+알림(notification) 메커니즘은 쓰지 않는다.
+
 ```
-엔진 스케줄러(일일) 또는 수동
-  → 엔진: 각 프로젝트 export → 컨테이너 내부 staging 폴더에 쓰기 (권한 OK)
-  → 엔진: `folder_sync.deliver` 알림 발행 {staging_dir, files[]}
-  → Tauri(Rust): 저장된 security-scoped bookmark 해제 → startAccessingSecurityScopedResource
+일일 타이머(Rust, 앱 시작 시 + 24h 주기) 또는 수동 버튼
+  → Rust: settings 확인(enabled? dir?) — 비활성/미설정이면 no-op
+  → Rust → 엔진 `folder_sync.stage`: 각 프로젝트 export → 컨테이너 staging 폴더에 쓰기
+      → {staging_dir, files[]} 반환
+  → Rust: 저장된 security-scoped bookmark 해제 → startAccessingSecurityScopedResource
       → staging → 대상 폴더 복사 → stopAccessing
-  → Tauri: `folder_sync.report` RPC 회신 {ok, files_copied, error}
-  → 엔진: ops_status 최종 기록
+  → Rust → 엔진 `folder_sync.report` {started_at, finished_at, ok, files_copied, error}
+      → 엔진: ops_status(job=folder_sync) 기록
 ```
+
+엔진의 일일 스케줄러는 MAS 빌드에서 folder sync를 돌리지 않는다(no-op `dailySyncer`).
+staging만 하고 전달이 안 되는 상황을 막기 위해 Rust 타이머가 유일한 구동원이다.
 
 핵심 원칙: **샌드박스 밖 쓰기는 북마크를 가진 Tauri 프로세스에서만** 수행한다(접근법 A).
 
@@ -102,32 +110,37 @@ Folder Sync은 동일한 "마크다운 단방향 내보내기" 모델을, git �
 ### 엔진 (Go)
 
 - `engine/internal/foldersync/foldersync.go` — `Syncer`. `gitsync.go`와 평행 구조.
-  비-아카이브 프로젝트를 export. `ResultSummary{FilesWritten, Delivered, Error}`.
-  `RunOnce(ctx) (ResultSummary, error)`. 전달 동작은 빌드 태그로 주입되는 `deliverer`에 위임.
-- `engine/cmd/linetta-engine/foldersync_direct.go` (`//go:build !mas`) — `deliverer`가 대상
-  폴더에 직접 쓰기. `const folderSyncStaged = false`.
-- `engine/cmd/linetta-engine/foldersync_staged.go` (`//go:build mas`) — `deliverer`가 컨테이너
-  staging에 쓰고 `folder_sync.deliver` 알림 발행. `const folderSyncStaged = true`.
-  `folder_sync.report` 핸들러로 복사 결과 수신·ops_status 마무리.
+  공통 헬퍼 `exportAll(ctx, destDir) (filesWritten int, err error)`로 비-아카이브 프로젝트를
+  export. `RunOnce(ctx) (ResultSummary, error)` = `exportAll(FolderSyncDir)` 직접 쓰기 +
+  ops 기록(비-MAS용). `Stage(ctx) (StageResult, error)` = `exportAll(stagingDir)` + 경로 목록
+  반환(MAS용). `Report(ctx, ReportInput) error` = ops 기록(MAS 완료 후).
+  `ResultSummary{Skipped, FilesWritten, FilesCopied, Message, Error}`.
+- `engine/cmd/linetta-engine/foldersync_direct.go` (`//go:build !mas`) — `setupFolderSync`가
+  `folder_sync.run` 핸들러(→ RunOnce 직접 쓰기) 등록, 실제 `dailySyncer` 반환(엔진 스케줄러가
+  일일 구동).
+- `engine/cmd/linetta-engine/foldersync_staged.go` (`//go:build mas`) — `setupFolderSync`가
+  `folder_sync.stage`(→ Stage)·`folder_sync.report`(→ Report) 핸들러 등록, **no-op**
+  `dailySyncer` 반환(Rust 타이머가 구동하므로 엔진 스케줄러는 folder sync 미실행).
 - `engine/cmd/linetta-engine/sync.go` — 스케줄러가 git sync + folder sync 둘 다 순차
   실행하도록 `dailySyncer`를 다중화(현재 단일 syncer → 여러 syncer 순차 호출).
-- `engine/internal/rpc/handlers/foldersync.go` — `folder_sync.run`(수동 트리거),
-  `folder_sync.report`(MAS 회신; `!mas`에서는 CodeMethodNotFound).
+- `engine/internal/rpc/handlers/foldersync.go` — `RunFolderSync`(수동, 비-MAS),
+  `StageFolderSync`·`ReportFolderSync`(MAS). 핸들러 본문은 빌드 태그 setup에서 등록 여부 결정.
 - `engine/internal/settings/settings.go` — `Config`에 `FolderSyncDir string`,
   `FolderSyncEnabled bool` 추가. `Patch`에 대응 필드 + 검증.
 - `engine/internal/opsstatus/` — job 상수 `JobFolderSync = "folder_sync"` 추가.
 
 ### Tauri (Rust)
 
-- `apps/desktop/src-tauri/src/folder_sync.rs` — 커맨드 `pick_folder_sync_dir`(디렉터리
-  다이얼로그 → 경로 반환; MAS 빌드면 추가로 북마크 생성·저장). `folder_sync.deliver` 알림
-  핸들러(북마크 해제 → 복사 → `folder_sync.report` 회신).
-- `apps/desktop/src-tauri/src/macos_bookmarks.rs` (`#[cfg(feature = "mas")]`) — ObjC FFI로
-  `bookmarkData(options: .withSecurityScope)` 생성/해제,
+- `apps/desktop/src-tauri/src/folder_sync.rs` — 커맨드 `set_folder_sync_dir(path)`(항상 엔진
+  settings에 경로 저장; MAS 빌드면 추가로 북마크 생성·저장)와 `folder_sync_now()`
+  (비-MAS: 엔진 `folder_sync.run` 포워드 / MAS: settings 확인 → `folder_sync.stage` →
+  북마크로 staging→대상 복사 → `folder_sync.report`). 복사 헬퍼 + (MAS) 일일 타이머.
+- `apps/desktop/src-tauri/src/macos_bookmarks.rs` (`#[cfg(all(target_os="macos", feature="mas"))]`)
+  — ObjC FFI로 `bookmarkData(options: .withSecurityScope)` 생성, resolve +
   `startAccessingSecurityScopedResource`/`stopAccessingSecurityScopedResource`. 북마크 blob은
-  앱 컨테이너 내 파일(`folder-sync.bookmark`)에 저장. 앱 실행 시 1회 해제해 핸들 보유.
-- `apps/desktop/src-tauri/src/lib.rs` — `pick_folder_sync_dir` 커맨드 등록
-  (`generate_handler!`). `engine.rs` 알림 라우터에 `folder_sync.deliver` 분기 추가.
+  앱 컨테이너 내 파일(`folder-sync.bookmark`)에 저장.
+- `apps/desktop/src-tauri/src/lib.rs` — `set_folder_sync_dir`·`folder_sync_now` 커맨드 등록
+  (`generate_handler!`), (MAS) 일일 타이머 spawn. 엔진 알림 라우팅 변경 없음.
 - `apps/desktop/src-tauri/Cargo.toml` — cargo feature `mas` 추가(+ ObjC FFI용 `objc2`/`block2`
   등 크레이트, MAS 빌드에서만). `objc2` 계열 사용.
 - MAS 빌드 배선:
@@ -139,8 +152,9 @@ Folder Sync은 동일한 "마크다운 단방향 내보내기" 모델을, git �
 
 ### 프론트엔드
 
-- `apps/desktop/src/lib/rpc.ts` — `folderSync.run()`, `pickFolderSyncDir()`(Tauri invoke),
-  settings patch에 `folder_sync_dir`/`folder_sync_enabled`.
+- `apps/desktop/src/lib/rpc.ts` — `folderSyncNow()`·`setFolderSyncDir(path)`(Tauri invoke),
+  settings patch에 `folder_sync_dir`/`folder_sync_enabled`. 프론트는 빌드 종류를 모르고 항상
+  이 Tauri 커맨드만 호출한다(빌드 분기는 Rust cfg가 흡수).
 - `apps/desktop/src/lib/types.ts` — `FolderSyncResult`, Config 타입 확장.
 - `apps/desktop/src/routes/Settings.tsx` — Git Sync 섹션 옆에 "Folder Sync" 섹션:
   폴더 선택 버튼(`pickFolderSyncDir`), 활성 토글, "지금 내보내기" 버튼,
@@ -151,12 +165,12 @@ Folder Sync은 동일한 "마크다운 단방향 내보내기" 모델을, git �
 
 ## 폴더 선택 · 북마크 · 설정
 
-- 폴더 선택은 **항상 Rust 커맨드 `pick_folder_sync_dir` 경유**(프론트가 빌드 종류를 몰라도
-  됨):
-  - 모든 빌드: 디렉터리 다이얼로그 → 선택 경로 반환 → 엔진 settings `folder_sync_dir`에
-    저장(표시 및 비-MAS 직접 쓰기용).
-  - MAS만: 추가로 security-scoped bookmark 생성 → 컨테이너에 저장. 앱 실행 시 1회 해제해
-    핸들을 보유, deliver 때 start/stop.
+- 폴더 선택: 프론트가 기존 패턴(`openDialog({ directory: true })`)으로 다이얼로그를 열어
+  경로를 얻은 뒤, **Rust 커맨드 `set_folder_sync_dir(path)`** 를 호출(프론트가 빌드 종류를
+  몰라도 됨):
+  - 모든 빌드: 엔진 settings `folder_sync_dir`에 저장(표시 및 비-MAS 직접 쓰기용).
+  - MAS만: 추가로 방금 선택해 접근 권한이 있는 경로로부터 security-scoped bookmark 생성 →
+    컨테이너에 저장. 이후 `folder_sync_now`/타이머가 복사 시 resolve→start/stop.
 - **iCloud/Google Drive 편의(선택)**: 다이얼로그 기본 위치를 감지된 클라우드 경로로 점프.
   - iCloud Drive: `~/Library/Mobile Documents/com~apple~CloudDocs/`
   - Google Drive(신형 macOS): `~/Library/CloudStorage/GoogleDrive-*`
@@ -182,10 +196,10 @@ Folder Sync은 동일한 "마크다운 단방향 내보내기" 모델을, git �
 
 - 엔진 `Syncer.RunOnce`(`!mas`): 임시 디렉터리에 프로젝트 export·직접 쓰기 검증. projects
   repo 모킹/인메모리. files_written 카운트, 덮어쓰기, 폴더 미설정 no-op.
-- 엔진 `mas` 빌드: staging 디렉터리에 쓰기 + `folder_sync.deliver` 알림 payload(staging_dir,
-  files[]) 검증. `folder_sync.report` 핸들러가 ops_status를 마무리하는지.
-- 엔진 핸들러: `folder_sync.run` 결과 직렬화, `!mas`에서 `folder_sync.report` →
-  CodeMethodNotFound.
+- 엔진 `mas` 빌드: `Stage`가 staging 디렉터리에 쓰고 {staging_dir, files[]}를 반환하는지,
+  `Report`가 ops_status를 기록하는지.
+- 엔진 핸들러: `folder_sync.run`(비-MAS)·`folder_sync.stage`/`folder_sync.report`(MAS) 결과
+  직렬화.
 - Rust: staging→target 복사 로직 임시 디렉터리 round-trip 테스트. 북마크 ObjC 래퍼는
   단위테스트 어려움 → 얇은 래퍼로 격리 + 수동 QA(실제 MAS 빌드에서 iCloud/GDrive 폴더로
   내보내기 확인).
@@ -196,9 +210,10 @@ Folder Sync은 동일한 "마크다운 단방향 내보내기" 모델을, git �
 ## 산출물
 
 - 엔진 `foldersync` 패키지 + 빌드 태그 분기(`foldersync_direct.go` / `foldersync_staged.go`)
-- `folder_sync.run` / `folder_sync.report` RPC 핸들러
+- `folder_sync.run`(비-MAS) / `folder_sync.stage` · `folder_sync.report`(MAS) RPC 핸들러
 - settings `FolderSyncDir` / `FolderSyncEnabled`
-- Tauri `pick_folder_sync_dir` 커맨드 + `macos_bookmarks.rs`(cfg mas) + deliver 알림 핸들러
+- Tauri `set_folder_sync_dir` · `folder_sync_now` 커맨드 + `macos_bookmarks.rs`(cfg mas) +
+  (MAS) 일일 타이머
 - cargo feature `mas` 배선 + `bookmarks.app-scope` 엔타이틀먼트 + MAS conf 엔타이틀먼트 수정
 - Settings UI "Folder Sync" 섹션
 - 테스트(엔진 direct/staged, Rust 복사, 프론트 렌더)
@@ -215,8 +230,9 @@ Folder Sync은 동일한 "마크다운 단방향 내보내기" 모델을, git �
 
 - **security-scoped bookmark FFI 정확성** — 가장 위험. resolve/start/stop 순서, 만료/staleness
   처리. ObjC 래퍼를 작게 유지하고 수동 QA로 검증.
-- **엔진↔Tauri deliver 핸드오프 타이밍** — 알림 발행 후 Tauri 복사·회신까지 비동기. ops_status
-  마무리가 report 콜백에 의존. report 누락 시 "진행 중"으로 남지 않도록 타임아웃/폴백 고려.
+- **MAS 일일 타이머 신뢰성** — Rust 타이머는 앱 실행 중에만 동작(엔진 스케줄러와 동일 제약).
+  앱 시작 시 1회 + 24h 주기로 구동해 "하루 한 번"을 보장. ops_status는 `folder_sync.report`
+  에서만 기록되므로 stage 후 복사 실패 시에도 report로 에러를 남긴다.
 - **MAS cargo feature 배선** — Rust `mas` feature와 Go `mas` 빌드 태그가 함께 켜져야 함.
   release-mas-local.sh에서 둘 다 보장.
 - **Google Drive 폴더 경로 가변성** — 신/구 macOS, Windows 드라이브 문자 등. 자동 감지는
