@@ -1,5 +1,8 @@
 mod engine;
 mod jsonrpc;
+mod folder_sync;
+#[cfg(all(target_os = "macos", feature = "mas"))]
+mod macos_bookmarks;
 
 use serde_json::Value;
 use std::time::Duration;
@@ -35,22 +38,38 @@ pub fn run() {
                 };
                 handle.manage(state);
             });
+            #[cfg(all(target_os = "macos", feature = "mas"))]
+            {
+                let timer_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri::Manager;
+                    // Let the engine settle after launch, then run daily.
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                    loop {
+                        let state = timer_handle.state::<EngineState>();
+                        let _ = folder_sync::run_folder_sync_mas(&timer_handle, state.inner()).await;
+                        tokio::time::sleep(std::time::Duration::from_secs(86_400)).await;
+                    }
+                });
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             engine_ping,
             engine_call,
             engine_status,
-            open_path
+            open_path,
+            folder_sync::set_folder_sync_dir,
+            folder_sync::folder_sync_now
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
-struct EngineState {
-    client: Option<Arc<jsonrpc::Client>>,
-    startup_error: Option<String>,
-    _engine: Option<Arc<engine::EngineHandle>>,
+pub(crate) struct EngineState {
+    pub(crate) client: Option<Arc<jsonrpc::Client>>,
+    pub(crate) startup_error: Option<String>,
+    pub(crate) _engine: Option<Arc<engine::EngineHandle>>,
 }
 
 #[derive(serde::Serialize)]
@@ -157,7 +176,7 @@ async fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-fn engine_client(state: &EngineState) -> Result<Arc<jsonrpc::Client>, String> {
+pub(crate) fn engine_client(state: &EngineState) -> Result<Arc<jsonrpc::Client>, String> {
     state.client.clone().ok_or_else(|| {
         state
             .startup_error
