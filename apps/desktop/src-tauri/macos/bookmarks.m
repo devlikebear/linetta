@@ -45,7 +45,12 @@ void *linetta_bookmark_start(const void *data, size_t len, char **out_path) {
             [url stopAccessingSecurityScopedResource];
             return NULL;
         }
-        *out_path = strdup(fsr);
+        char *copy = strdup(fsr);
+        if (copy == NULL) {
+            [url stopAccessingSecurityScopedResource];
+            return NULL;
+        }
+        *out_path = copy;
         return (void *)CFBridgingRetain(url);
     }
 }
