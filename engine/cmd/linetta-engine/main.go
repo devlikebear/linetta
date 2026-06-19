@@ -148,18 +148,22 @@ func main() {
 	if err != nil {
 		fail("home: %v", err)
 	}
-	syncer := setupGitSync(s, settingsStore, projects, nodes, entities, relationships, ops)
+	gitSyncer := setupGitSync(s, settingsStore, projects, nodes, entities, relationships, ops)
+	folderSyncer := setupFolderSync(s, settingsStore, projects, nodes, entities, relationships, ops)
+	syncers := []dailySyncer{gitSyncer, folderSyncer}
 	retentionFn := func(ctx context.Context) error {
 		if err := snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli()); err != nil {
 			return err
 		}
-		res, err := syncer.RunOnce(ctx)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "gitsync (daily): %v\n", err)
-			return nil // never block the scheduler
-		}
-		if res.Error != "" {
-			fmt.Fprintf(os.Stderr, "gitsync (daily): %s\n", res.Error)
+		for _, sy := range syncers {
+			res, err := sy.RunOnce(ctx)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "daily sync: %v\n", err)
+				continue
+			}
+			if res.Error != "" {
+				fmt.Fprintf(os.Stderr, "daily sync: %s\n", res.Error)
+			}
 		}
 		return nil
 	}
