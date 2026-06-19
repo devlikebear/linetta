@@ -85,6 +85,38 @@ func TestRunOnceSkipsWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestReportRecordsOps(t *testing.T) {
+	s, _, _ := newFixture(t)
+	ctx := context.Background()
+	fixed := time.Date(2026, 6, 19, 9, 0, 0, 0, time.UTC)
+	in := ReportInput{
+		StartedAt:   fixed.UnixMilli(),
+		FinishedAt:  fixed.Add(2 * time.Second).UnixMilli(),
+		Ok:          true,
+		FilesCopied: 2,
+	}
+	if err := s.Report(ctx, in); err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	rows, err := s.Ops.Get(ctx)
+	if err != nil {
+		t.Fatalf("ops.Get: %v", err)
+	}
+	var found *opsstatus.Status
+	for i := range rows {
+		if rows[i].JobName == opsstatus.JobFolderSync {
+			found = &rows[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no folder_sync row in ops_status")
+	}
+	if !found.LastOK {
+		t.Fatalf("expected LastOK=true, got %+v", found)
+	}
+}
+
 func TestStageWritesToContainer(t *testing.T) {
 	s, st, home := newFixture(t)
 	target := t.TempDir()

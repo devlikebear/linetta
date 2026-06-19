@@ -5,6 +5,7 @@ package foldersync
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,11 +76,13 @@ func (s *Syncer) exportAll(ctx context.Context, destDir string) (int, error) {
 	for _, p := range projs {
 		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID)
 		if err != nil {
-			return written, err
+			fmt.Fprintf(os.Stderr, "folder sync: project %s: %v\n", p.ID, err)
+			continue
 		}
 		dest := filepath.Join(destDir, payload.SuggestedFilename)
 		if err := os.WriteFile(dest, []byte(payload.Markdown), 0o644); err != nil {
-			return written, err
+			fmt.Fprintf(os.Stderr, "folder sync: project %s: %v\n", p.ID, err)
+			continue
 		}
 		written++
 	}
