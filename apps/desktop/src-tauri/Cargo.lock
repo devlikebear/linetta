@@ -1941,6 +1941,7 @@ name = "linetta-desktop"
 version = "0.4.24"
 dependencies = [
  "anyhow",
+ "cc",
  "once_cell",
  "serde",
  "serde_json",
