@@ -38,6 +38,24 @@ VALUES (?, ?, ?, ?, ?)`, id, nodeID, doc, reason, now); err != nil {
 	return Snapshot{ID: id, NodeID: nodeID, ContentDoc: doc, Reason: reason, CreatedAt: now}, nil
 }
 
+// CreateIfChanged inserts a snapshot only when the node's most recent snapshot
+// differs from doc. Autosave and companion-before callers share this content
+// dedup guard.
+func (r *Repo) CreateIfChanged(ctx context.Context, nodeID, doc, reason string, now int64) (Snapshot, bool, error) {
+	latest, err := r.LatestForNode(ctx, nodeID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Snapshot{}, false, err
+	}
+	if err == nil && latest.ContentDoc == doc {
+		return Snapshot{}, false, nil
+	}
+	snap, err := r.Create(ctx, nodeID, doc, reason, now)
+	if err != nil {
+		return Snapshot{}, false, err
+	}
+	return snap, true, nil
+}
+
 // LatestForNode returns the most recent snapshot for the node (any reason).
 func (r *Repo) LatestForNode(ctx context.Context, nodeID string) (Snapshot, error) {
 	row := r.s.DB().QueryRowContext(ctx, `
@@ -168,20 +186,4 @@ func trimRunes(s string, max int) string {
 		return s
 	}
 	return string(r[:max]) + "…"
-}
-
-// LatestAutosaveTime returns (created_at, true) of the most recent autosave
-// for the node, or (0, false) if none.
-func (r *Repo) LatestAutosaveTime(ctx context.Context, nodeID string) (int64, bool, error) {
-	var t sql.NullInt64
-	err := r.s.DB().QueryRowContext(ctx, `
-SELECT MAX(created_at) FROM node_snapshots
- WHERE node_id = ? AND reason = 'autosave'`, nodeID).Scan(&t)
-	if err != nil {
-		return 0, false, err
-	}
-	if !t.Valid {
-		return 0, false, nil
-	}
-	return t.Int64, true, nil
 }

@@ -49,7 +49,7 @@ func TestSmokeCreateSaveSnapshotExport(t *testing.T) {
 
 	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"첫 문장을 저장한다."}]}]}`
 	saveParams, _ := json.Marshal(map[string]string{"id": *created.LastOpenedNodeID, "doc": doc})
-	if _, err := UpdateNodeContent(nodes, snaps, func() int64 { return 2000 }, nil)(ctx, saveParams); err != nil {
+	if _, err := UpdateNodeContent(nodes, func() int64 { return 2000 }, nil)(ctx, saveParams); err != nil {
 		t.Fatalf("save content: %v", err)
 	}
 

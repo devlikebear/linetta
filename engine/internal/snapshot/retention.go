@@ -5,8 +5,8 @@ import (
 	"database/sql"
 )
 
-// Thin enforces autosave retention. Manual and ai-replace snapshots are never
-// touched. Autosaves:
+// Thin enforces autosave retention. Manual and companion-before snapshots are
+// never touched. Autosaves:
 //   - < 24h ago: keep all
 //   - 24h–30d: one per (node_id, hour bucket)
 //   - > 30d:   one per (node_id, day bucket)

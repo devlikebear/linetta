@@ -60,61 +60,6 @@ func TestGetNodeHandler(t *testing.T) {
 	}
 }
 
-func TestUpdateNodeContentHandler_createsAutosaveSnapshotOnFirstSave(t *testing.T) {
-	f := newNodeFixture(t)
-	clock := int64(10_000)
-	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return clock }, nil)
-
-	res, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"파도 소리\"}]}]}"}`))
-	if err != nil {
-		t.Fatalf("handler: %v", err)
-	}
-	var out node.Node
-	if err := json.Unmarshal(res, &out); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if out.WordCount != 5 {
-		t.Errorf("word_count = %d, want 5", out.WordCount)
-	}
-
-	// First save → snapshot must be created.
-	at, ok, err := f.snaps.LatestAutosaveTime(context.Background(), f.nID)
-	if err != nil || !ok {
-		t.Fatalf("expected an autosave snapshot to exist; ok=%v err=%v", ok, err)
-	}
-	if at != 10_000 {
-		t.Errorf("autosave at = %d, want 10000", at)
-	}
-}
-
-func TestUpdateNodeContentHandler_noSnapshotWithin60s(t *testing.T) {
-	f := newNodeFixture(t)
-	clock := int64(10_000)
-	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return clock }, nil)
-
-	if _, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{}"}`)); err != nil {
-		t.Fatalf("save 1: %v", err)
-	}
-	clock = 30_000 // 20 seconds later
-	if _, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{}"}`)); err != nil {
-		t.Fatalf("save 2: %v", err)
-	}
-	// Should still only be the first snapshot (no new one within 60s).
-	at, _, _ := f.snaps.LatestAutosaveTime(context.Background(), f.nID)
-	if at != 10_000 {
-		t.Errorf("autosave at = %d, want 10000 (snapshot should not have been refreshed)", at)
-	}
-
-	clock = 80_000 // > 60s after last snapshot
-	if _, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{}"}`)); err != nil {
-		t.Fatalf("save 3: %v", err)
-	}
-	at, _, _ = f.snaps.LatestAutosaveTime(context.Background(), f.nID)
-	if at != 80_000 {
-		t.Errorf("autosave at = %d, want 80000", at)
-	}
-}
-
 func TestSetLastOpenedHandler(t *testing.T) {
 	f := newNodeFixture(t)
 	h := SetLastOpened(f.nodes, func() int64 { return 9999 })
@@ -362,7 +307,7 @@ func TestUpdateNodeContentHandler_callsPostUpdateAfterSuccess(t *testing.T) {
 	f := newNodeFixture(t)
 	var got []string
 	hook := func(id string) { got = append(got, id) }
-	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return 10_000 }, hook)
+	h := UpdateNodeContent(f.nodes, func() int64 { return 10_000 }, hook)
 	if _, err := h(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{\"type\":\"doc\"}"}`)); err != nil {
 		t.Fatalf("handler: %v", err)
 	}
@@ -375,7 +320,7 @@ func TestUpdateNodeContentHandler_doesNotCallPostUpdateOnError(t *testing.T) {
 	f := newNodeFixture(t)
 	called := 0
 	hook := func(id string) { called++ }
-	h := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return 10_000 }, hook)
+	h := UpdateNodeContent(f.nodes, func() int64 { return 10_000 }, hook)
 	if _, err := h(context.Background(), json.RawMessage(`{"id":"no-such","doc":"{}"}`)); err == nil {
 		t.Fatal("expected error")
 	}
@@ -397,7 +342,7 @@ func TestNodeHandlers_returnInvalidParamsForIntegrityErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSibling container: %v", err)
 	}
-	updateContent := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return 3 }, nil)
+	updateContent := UpdateNodeContent(f.nodes, func() int64 { return 3 }, nil)
 	if _, err := updateContent(ctx, json.RawMessage(`{"id":"`+chapter.ID+`","doc":"{}"}`)); !rpcErrorCode(err, rpc.CodeInvalidParams) {
 		t.Fatalf("UpdateContent err = %v, want invalid params", err)
 	}

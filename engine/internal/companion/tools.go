@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	tarstools "github.com/devlikebear/tars/pkg/tools"
 )
@@ -285,6 +286,15 @@ func (s *Service) applyOneOp(
 		before, err := s.nodes.Get(ctx, *targetNodeID)
 		if err != nil {
 			return err
+		}
+		if s.snaps != nil {
+			beforeDoc := ""
+			if before.ContentDoc != nil {
+				beforeDoc = *before.ContentDoc
+			}
+			if _, _, err := s.snaps.CreateIfChanged(ctx, *targetNodeID, beforeDoc, snapshot.ReasonCompanionBefore, now()); err != nil {
+				return fmt.Errorf("companion-before snapshot: %w", err)
+			}
 		}
 		doc, err := plainTextToTiptapDoc(op.Text)
 		if err != nil {

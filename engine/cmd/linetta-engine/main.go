@@ -183,7 +183,8 @@ func main() {
 		WithOpsStatus(ops).
 		WithHistory(companion.NewHistoryRepo(st.DB())).
 		WithReferences(companion.NewReferenceRepo(st.DB())).
-		WithManuscript(manuscriptSearcher)
+		WithManuscript(manuscriptSearcher).
+		WithSnapshots(snaps)
 
 	caps := handlers.Capabilities{
 		UnavailableProviders: ai.UnavailableProviders(),
@@ -212,12 +213,13 @@ func main() {
 	s.Handle("projects.rewrite_synopsis", handlers.RewriteProjectSynopsis(projects, contextBuilder, clock))
 	s.Handle("projects.clear_synopsis", handlers.ClearProjectSynopsis(projects, clock))
 	s.Handle("nodes.get", handlers.GetNode(nodes))
-	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, snaps, clock, summ.Enqueue))
+	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, clock, summ.Enqueue))
 	s.Handle("stats.today", handlers.TodayStats(writingStats))
 	s.Handle("stats.range", handlers.RangeStats(writingStats))
 	s.Handle("stats.summary", handlers.SummaryStats(writingStats))
 	s.Handle("nodes.set_last_opened", handlers.SetLastOpened(nodes, clock))
 	s.Handle("snapshots.create_manual", handlers.CreateManualSnapshot(snaps, clock))
+	s.Handle("snapshots.create_auto", handlers.CreateAutoSnapshot(snaps, clock))
 	s.Handle("nodes.list_tree", handlers.ListTree(nodes))
 	s.Handle("nodes.create_sibling", handlers.CreateSibling(nodes, clock))
 	s.Handle("nodes.create_child", handlers.CreateChild(nodes, clock))

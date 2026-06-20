@@ -30,6 +30,45 @@ func TestCreateManualSnapshotHandler(t *testing.T) {
 	}
 }
 
+func TestCreateAutoSnapshotHandler_dedups(t *testing.T) {
+	f := newNodeFixture(t)
+	h := CreateAutoSnapshot(f.snaps, func() int64 { return 5000 })
+
+	doc := `{"v":1}`
+	raw, _ := json.Marshal(map[string]string{"node_id": f.nID, "doc": doc})
+
+	if _, err := h(context.Background(), raw); err != nil {
+		t.Fatalf("first create_auto: %v", err)
+	}
+	res, err := h(context.Background(), raw)
+	if err != nil {
+		t.Fatalf("second create_auto: %v", err)
+	}
+	var skipped struct {
+		Skipped bool `json:"skipped"`
+	}
+	if err := json.Unmarshal(res, &skipped); err != nil {
+		t.Fatalf("unmarshal skipped response: %v", err)
+	}
+	if !skipped.Skipped {
+		t.Fatalf("expected skipped response, got %s", string(res))
+	}
+
+	entries, err := f.snaps.ListForNode(context.Background(), f.nID)
+	if err != nil {
+		t.Fatalf("ListForNode: %v", err)
+	}
+	autoCount := 0
+	for _, e := range entries {
+		if e.Reason == snapshot.ReasonAutosave {
+			autoCount++
+		}
+	}
+	if autoCount != 1 {
+		t.Errorf("expected exactly 1 autosave snapshot after dedup, got %d", autoCount)
+	}
+}
+
 func TestListForNodeHandler(t *testing.T) {
 	f := newNodeFixture(t)
 	ctx := context.Background()

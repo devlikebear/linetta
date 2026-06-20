@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/tars/pkg/session"
 )
@@ -82,6 +83,7 @@ type Service struct {
 	history       *HistoryRepo
 	references    *ReferenceRepo
 	manuscript    *manuscript.Searcher
+	snaps         *snapshot.Repo
 }
 
 // NewService constructs the companion service. sessionsDir is passed to
@@ -122,6 +124,13 @@ func (s *Service) WithReferences(repo *ReferenceRepo) *Service {
 
 func (s *Service) WithManuscript(searcher *manuscript.Searcher) *Service {
 	s.manuscript = searcher
+	return s
+}
+
+// WithSnapshots wires the node-snapshot repo so companion edits can record a
+// companion-before checkpoint before mutating scene text.
+func (s *Service) WithSnapshots(snaps *snapshot.Repo) *Service {
+	s.snaps = snaps
 	return s
 }
 

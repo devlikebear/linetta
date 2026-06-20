@@ -222,7 +222,7 @@ export interface NodeRow {
 }
 
 // Mirrors engine/internal/snapshot Snapshot struct.
-export type SnapshotReason = "manual" | "autosave" | "ai-replace";
+export type SnapshotReason = "manual" | "autosave" | "companion-before";
 
 export interface Snapshot {
   id: string;
@@ -546,7 +546,7 @@ export interface SettingsPatch {
 
 export interface SnapshotEntry {
   id: string;
-  reason: "manual" | "autosave" | "ai-replace";
+  reason: "manual" | "autosave" | "companion-before";
   created_at: number;
   doc_preview: string;
 }

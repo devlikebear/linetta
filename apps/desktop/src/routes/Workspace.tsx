@@ -38,6 +38,7 @@ import {
   shouldAutoStartOnboarding,
 } from "../components/onboarding/onboardingState";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { useIdleTimer } from "../hooks/useIdleTimer";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { useToast } from "../components/ToastProvider";
 import { displayNodeLabel, localeForLanguage, useI18n } from "../lib/i18n";
@@ -56,6 +57,7 @@ import {
 } from "../hooks/useFirstLeaf";
 
 const SAVE_DEBOUNCE_MS = 800;
+const IDLE_CHECKPOINT_MS = 120_000;
 const LAST_OPENED_THROTTLE_MS = 5000;
 
 const FALLBACK_COUNTS: ContextCounts = {
@@ -121,6 +123,10 @@ export function Workspace() {
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [versionSheetNodeId, setVersionSheetNodeId] = useState<string | null>(null);
   const [zenOpen, setZenOpen] = useState(false);
+  const zenOpenRef = useRef(false);
+  useEffect(() => {
+    zenOpenRef.current = zenOpen;
+  }, [zenOpen]);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
@@ -742,6 +748,29 @@ export function Workspace() {
     [load, refreshMentioned],
   );
   const debouncedSave = useDebouncedCallback(saveNow, SAVE_DEBOUNCE_MS);
+  const idleDirtyRef = useRef(false);
+  const handleIdleCheckpoint = useCallback(async () => {
+    if (!idleDirtyRef.current) return;
+    const currentLoad = loadRef.current;
+    const doc = zenOpenRef.current
+      ? zenEditorRef.current?.getDoc()
+      : editorRef.current?.getDoc();
+    if (!currentLoad || !doc) return;
+    idleDirtyRef.current = false;
+    try {
+      await snapshots.createAuto(currentLoad.node.id, JSON.stringify(doc));
+    } catch {
+      /* benign: idle checkpoints are best-effort */
+    }
+  }, []);
+  const { markActivity, cancel: cancelIdleCheckpoint } = useIdleTimer(
+    IDLE_CHECKPOINT_MS,
+    handleIdleCheckpoint,
+  );
+  useEffect(() => {
+    idleDirtyRef.current = false;
+    cancelIdleCheckpoint();
+  }, [load?.node.id, cancelIdleCheckpoint]);
   const flushEditorBeforeCompanionSend = useCallback(async () => {
     const currentLoad = loadRef.current;
     const doc = editorRef.current?.getDoc();
@@ -1603,6 +1632,8 @@ export function Workspace() {
               initialDoc={load.initialDoc}
               onChange={(doc) => {
                 debouncedSave(doc);
+                idleDirtyRef.current = true;
+                markActivity();
                 throttledLastOpened();
               }}
               onCharCount={setCharCount}
@@ -1881,7 +1912,11 @@ export function Workspace() {
           episodeCharCount={currentEpisodeCharCount}
           sceneLabel={currentNodeLabel}
           target={isWebnovelProject ? episodeCharTarget : 0}
-          onChange={(doc) => { debouncedSave(doc); }}
+          onChange={(doc) => {
+            debouncedSave(doc);
+            idleDirtyRef.current = true;
+            markActivity();
+          }}
           onCharCount={setCharCount}
           onManualSave={handleManualSave}
           onMountEditor={(h) => { zenEditorRef.current = h; }}

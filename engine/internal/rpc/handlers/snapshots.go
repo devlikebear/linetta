@@ -29,6 +29,30 @@ func CreateManualSnapshot(snaps *snapshot.Repo, now Clock) rpc.Handler {
 	}
 }
 
+type autoSnapshotParams struct {
+	NodeID string `json:"node_id"`
+	Doc    string `json:"doc"`
+}
+
+// CreateAutoSnapshot returns a handler for snapshots.create_auto. It records an
+// autosave snapshot only when content changed since the node's latest snapshot.
+func CreateAutoSnapshot(snaps *snapshot.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p autoSnapshotParams
+		if err := json.Unmarshal(params, &p); err != nil || p.NodeID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node_id and doc required"}
+		}
+		got, created, err := snaps.CreateIfChanged(ctx, p.NodeID, p.Doc, snapshot.ReasonAutosave, now())
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		if !created {
+			return json.RawMessage(`{"skipped":true}`), nil
+		}
+		return json.Marshal(got)
+	}
+}
+
 type listSnapshotsParams struct {
 	NodeID string `json:"node_id"`
 }

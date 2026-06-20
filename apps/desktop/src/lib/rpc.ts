@@ -187,6 +187,8 @@ export const stats = {
 export const snapshots = {
   createManual: (nodeId: string, doc: string) =>
     rpcCall<Snapshot>("snapshots.create_manual", { node_id: nodeId, doc }),
+  createAuto: (nodeId: string, doc: string) =>
+    rpcCall<Snapshot | { skipped: true }>("snapshots.create_auto", { node_id: nodeId, doc }),
   listForNode: (nodeId: string) =>
     rpcCall<SnapshotEntry[]>("snapshots.list_for_node", { node_id: nodeId }),
   restore: (snapshotId: string) =>

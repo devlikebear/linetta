@@ -79,27 +79,29 @@ func TestLatestForNode_emptyReturnsNotFound(t *testing.T) {
 	}
 }
 
-func TestLatestAutosaveTime(t *testing.T) {
-	r, nodeID := newRepoWithNode(t)
+func TestCreateIfChanged_skipsDuplicate(t *testing.T) {
 	ctx := context.Background()
-	// Mix of reasons; only the most recent autosave matters.
-	_, _ = r.Create(ctx, nodeID, "{}", ReasonManual, 1000)
-	_, _ = r.Create(ctx, nodeID, "{}", ReasonAutosave, 2000)
-	_, _ = r.Create(ctx, nodeID, "{}", ReasonManual, 3000)
-	_, _ = r.Create(ctx, nodeID, "{}", ReasonAutosave, 4000)
+	r, nodeID := newRepoWithNode(t)
 
-	got, ok, err := r.LatestAutosaveTime(ctx, nodeID)
-	if err != nil {
-		t.Fatalf("LatestAutosaveTime: %v", err)
+	first, created, err := r.CreateIfChanged(ctx, nodeID, `{"v":1}`, ReasonAutosave, 1000)
+	if err != nil || !created {
+		t.Fatalf("first CreateIfChanged: created=%v err=%v", created, err)
 	}
-	if !ok || got != 4000 {
-		t.Errorf("got %d ok=%v, want 4000 true", got, ok)
+	if first.ID == "" {
+		t.Fatalf("expected a created snapshot")
 	}
 
-	r2, otherNode := newRepoWithNode(t)
-	_, _, err = r2.LatestAutosaveTime(context.Background(), otherNode)
+	_, created2, err := r.CreateIfChanged(ctx, nodeID, `{"v":1}`, ReasonAutosave, 2000)
 	if err != nil {
-		t.Fatalf("LatestAutosaveTime empty: %v", err)
+		t.Fatalf("second CreateIfChanged: %v", err)
+	}
+	if created2 {
+		t.Errorf("expected skip on identical content, got created=true")
+	}
+
+	_, created3, err := r.CreateIfChanged(ctx, nodeID, `{"v":2}`, ReasonAutosave, 3000)
+	if err != nil || !created3 {
+		t.Errorf("expected create on changed content: created=%v err=%v", created3, err)
 	}
 }
 
@@ -108,7 +110,7 @@ func TestListForNode_orderedDesc(t *testing.T) {
 	ctx := context.Background()
 	_, _ = r.Create(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"오래된"}]}]}`, ReasonAutosave, 1000)
 	_, _ = r.Create(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"중간"}]}]}`, ReasonManual, 2000)
-	_, _ = r.Create(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"새 거"}]}]}`, ReasonAIReplace, 3000)
+	_, _ = r.Create(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"새 거"}]}]}`, ReasonCompanionBefore, 3000)
 
 	got, err := r.ListForNode(context.Background(), nodeID)
 	if err != nil {
@@ -117,7 +119,7 @@ func TestListForNode_orderedDesc(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("len = %d", len(got))
 	}
-	if got[0].Reason != ReasonAIReplace || got[2].Reason != ReasonAutosave {
+	if got[0].Reason != ReasonCompanionBefore || got[2].Reason != ReasonAutosave {
 		t.Errorf("ordering wrong: %+v", got)
 	}
 	if got[0].DocPreview != "새 거\n" {

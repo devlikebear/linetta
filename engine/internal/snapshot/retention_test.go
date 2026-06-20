@@ -59,13 +59,13 @@ func TestThin_thinsToOnePerDayBeyond30d(t *testing.T) {
 	}
 }
 
-func TestThin_preservesManualAndAIReplace(t *testing.T) {
+func TestThin_preservesManualAndCompanionBefore(t *testing.T) {
 	r, nodeID := newRepoWithNode(t)
 	ctx := context.Background()
 	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC).UnixMilli()
 	old := now - int64(60*24*time.Hour/time.Millisecond)
 	_, _ = r.Create(ctx, nodeID, "{}", ReasonManual, old)
-	_, _ = r.Create(ctx, nodeID, "{}", ReasonAIReplace, old+1000)
+	_, _ = r.Create(ctx, nodeID, "{}", ReasonCompanionBefore, old+1000)
 	if err := Thin(ctx, r.s.DB(), now); err != nil {
 		t.Fatalf("Thin: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestThin_preservesManualAndAIReplace(t *testing.T) {
 		t.Fatalf("count: %v", err)
 	}
 	if n != 2 {
-		t.Errorf("manual+ai-replace kept count = %d, want 2", n)
+		t.Errorf("manual+companion-before kept count = %d, want 2", n)
 	}
 }
 

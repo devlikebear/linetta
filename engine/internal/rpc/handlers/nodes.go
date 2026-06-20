@@ -7,12 +7,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
-	"github.com/devlikebear/linetta/engine/internal/snapshot"
 )
-
-// AutosaveIntervalMillis controls how often UpdateNodeContent inserts a fresh
-// autosave snapshot. Exposed for tests; production passes time.Now().UnixMilli.
-const AutosaveIntervalMillis int64 = 60_000
 
 type updateContentParams struct {
 	ID  string `json:"id"`
@@ -37,10 +32,10 @@ func GetNode(nodes *node.Repo) rpc.Handler {
 	}
 }
 
-// UpdateNodeContent returns a handler for nodes.update_content. After saving,
-// if more than AutosaveIntervalMillis have elapsed since the last autosave for
-// this node, a fresh autosave snapshot is inserted.
-func UpdateNodeContent(nodes *node.Repo, snaps *snapshot.Repo, now Clock, postUpdate func(nodeID string)) rpc.Handler {
+// UpdateNodeContent returns a handler for nodes.update_content. Version
+// snapshots are no longer created here; autosave checkpoints are idle-triggered
+// from the renderer via snapshots.create_auto.
+func UpdateNodeContent(nodes *node.Repo, now Clock, postUpdate func(nodeID string)) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p updateContentParams
 		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
@@ -55,12 +50,6 @@ func UpdateNodeContent(nodes *node.Repo, snaps *snapshot.Repo, now Clock, postUp
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
-		}
-
-		// Maybe-snapshot.
-		last, ok, err := snaps.LatestAutosaveTime(ctx, p.ID)
-		if err == nil && (!ok || t-last >= AutosaveIntervalMillis) {
-			_, _ = snaps.Create(ctx, p.ID, p.Doc, snapshot.ReasonAutosave, t)
 		}
 
 		got, err := nodes.Get(ctx, p.ID)

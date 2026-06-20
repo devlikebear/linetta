@@ -43,7 +43,7 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
   if (!nodeId) return null;
   const selected = entries?.find((e) => e.id === selectedId) ?? null;
   const reasonLabel = (reason: SnapshotEntry["reason"]) => {
-    if (reason === "ai-replace") return t("version.reason.aiReplace");
+    if (reason === "companion-before") return t("version.reason.companionBefore");
     return t(`version.reason.${reason}`);
   };
 
@@ -62,7 +62,7 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
     }
   };
 
-  // Group: "주요" (manual + ai-replace) on top, then autosaves grouped by YYYY-MM-DD.
+  // Group: "주요" (manual + companion-before) on top, then autosaves by YYYY-MM-DD.
   const major: SnapshotEntry[] = [];
   const auto: SnapshotEntry[] = [];
   (entries ?? []).forEach((e) => {

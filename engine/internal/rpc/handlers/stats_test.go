@@ -15,7 +15,7 @@ func TestTodayStatsHandler_returnsTodaysAddedChars(t *testing.T) {
 	statRepo := stats.NewRepoWithClock(f.store, time.UTC, func() time.Time { return now })
 	f.nodes.SetWritingStatsRecorder(statRepo)
 
-	update := UpdateNodeContent(f.nodes, f.snaps, func() int64 { return now.UnixMilli() }, nil)
+	update := UpdateNodeContent(f.nodes, func() int64 { return now.UnixMilli() }, nil)
 	if _, err := update(context.Background(), json.RawMessage(`{"id":"`+f.nID+`","doc":"{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"오늘 작성\"}]}]}"}`)); err != nil {
 		t.Fatalf("update: %v", err)
 	}

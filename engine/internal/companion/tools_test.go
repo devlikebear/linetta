@@ -16,6 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -48,7 +49,8 @@ func newToolSvc(t *testing.T) (*Service, string, string) {
 	svc := &Service{
 		projects: projects, threads: threads, entities: entities,
 		relationships: rels, facts: facts, plot: pb, nodes: nodes, beats: beats,
-		src: toolConfigSource{},
+		snaps: snapshot.NewRepo(st),
+		src:   toolConfigSource{},
 	}
 	p, err := projects.Create(ctx, 1_000, project.NewInput{
 		Title: "도구 테스트", Genres: []string{"mystery"}, LengthTarget: "short", DefaultPOV: "first",
@@ -210,6 +212,36 @@ func TestLinettaApplyOpsToolRewritesCurrentSceneText(t *testing.T) {
 	}
 	if got.WordCount == 0 {
 		t.Fatalf("word count should be recomputed: %+v", got)
+	}
+}
+
+func TestLinettaApplyOpsToolSnapshotsBeforeSceneText(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+
+	originalDoc, err := plainTextToTiptapDoc("원본 본문")
+	if err != nil {
+		t.Fatalf("plainTextToTiptapDoc: %v", err)
+	}
+	if err := svc.nodes.UpdateContent(ctx, nodeID, originalDoc, 500); err != nil {
+		t.Fatalf("seed content: %v", err)
+	}
+
+	p := Proposal{Ops: []Op{{Type: "set_scene_text", Text: "AI가 바꾼 본문"}}}
+	res := svc.ApplyOps(ctx, projectID, nodeID, p, func() int64 { return 1000 })
+	if res.Applied != 1 || len(res.Failures) != 0 {
+		t.Fatalf("apply set_scene_text failed: %+v", res)
+	}
+
+	snap, err := svc.snaps.LatestForNode(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("LatestForNode: %v", err)
+	}
+	if snap.Reason != snapshot.ReasonCompanionBefore {
+		t.Errorf("reason = %q, want companion-before", snap.Reason)
+	}
+	if snap.ContentDoc != originalDoc {
+		t.Errorf("snapshot did not capture pre-AI content; got %q", snap.ContentDoc)
 	}
 }
 
