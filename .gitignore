@@ -34,3 +34,6 @@ apps/desktop/src-tauri/gen/
 
 # ascapi helper build artifact
 scripts/ascapi/ascapi
+
+# Serena tool workspace
+.serena/
