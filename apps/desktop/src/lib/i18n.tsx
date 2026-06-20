@@ -189,11 +189,20 @@ type MessageKey = string
   | "settings.git.commitTemplateHelp"
   | "settings.git.runNow"
   | "settings.git.init"
+  | "settings.folder.title"
+  | "settings.folder.description"
+  | "settings.folder.folder"
+  | "settings.folder.folderPlaceholder"
+  | "settings.folder.pickFolder"
+  | "settings.folder.enable"
+  | "settings.folder.help"
+  | "settings.folder.runNow"
   | "settings.backup.title"
   | "settings.backup.description"
   | "settings.backup.folder"
   | "settings.ops.backupStatus"
   | "settings.ops.gitStatus"
+  | "settings.ops.folderStatus"
   | "settings.ops.summarizerStatus"
   | "settings.ops.companionStatus"
   | "settings.ops.summarizerRecentFailure"
@@ -204,6 +213,7 @@ type MessageKey = string
   | "settings.ops.ok"
   | "settings.ops.failed"
   | "settings.ops.gitOk"
+  | "settings.ops.folderOk"
   | "settings.ops.backupOk"
   | "settings.ops.summarizerOk"
   | "settings.ops.companionOk"
@@ -1073,11 +1083,20 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.git.commitTemplateHelp": "{date}는 동기화 날짜로 바뀝니다.",
     "settings.git.runNow": "지금 동기화",
     "settings.git.init": "초기화",
+    "settings.folder.title": "폴더 동기화",
+    "settings.folder.description": "하루 한 번 모든 작품을 마크다운으로 내보내 지정한 폴더에 복사합니다. git 없이 일반 폴더(예: 클라우드 드라이브 폴더)에 그대로 미러링합니다.",
+    "settings.folder.folder": "동기화 폴더",
+    "settings.folder.folderPlaceholder": "예: /Users/me/Dropbox/linetta",
+    "settings.folder.pickFolder": "폴더 선택",
+    "settings.folder.enable": "폴더 동기화 사용",
+    "settings.folder.help": "사용을 끄거나 폴더를 비워두면 동기화가 실행되지 않습니다.",
+    "settings.folder.runNow": "지금 동기화",
     "settings.backup.title": "백업",
     "settings.backup.description": "Linetta는 로컬 라이브러리를 매일 한 번 자동 백업합니다.",
     "settings.backup.folder": "백업 폴더",
     "settings.ops.backupStatus": "최근 백업 상태",
     "settings.ops.gitStatus": "GitHub 동기화 상태",
+    "settings.ops.folderStatus": "폴더 동기화 상태",
     "settings.ops.summarizerStatus": "요약기 상태",
     "settings.ops.companionStatus": "컴패니언 상태",
     "settings.ops.summarizerRecentFailure": "최근 요약 실패",
@@ -1088,6 +1107,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.ops.ok": "성공",
     "settings.ops.failed": "실패",
     "settings.ops.gitOk": "Git 동기화 성공",
+    "settings.ops.folderOk": "폴더 동기화 성공",
     "settings.ops.backupOk": "백업 성공",
     "settings.ops.summarizerOk": "요약 정상",
     "settings.ops.companionOk": "기록 정상",
@@ -1973,11 +1993,20 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.git.commitTemplateHelp": "{date} is replaced with the sync date.",
     "settings.git.runNow": "Sync now",
     "settings.git.init": "Initialize",
+    "settings.folder.title": "Folder Sync",
+    "settings.folder.description": "Once a day, export every work to Markdown and copy it into the selected folder. This mirrors the files to a plain folder (for example a cloud drive folder) without using git.",
+    "settings.folder.folder": "Sync folder",
+    "settings.folder.folderPlaceholder": "Example: /Users/me/Dropbox/linetta",
+    "settings.folder.pickFolder": "Choose folder",
+    "settings.folder.enable": "Enable folder sync",
+    "settings.folder.help": "Sync does not run while it is disabled or the folder is empty.",
+    "settings.folder.runNow": "Sync now",
     "settings.backup.title": "Backup",
     "settings.backup.description": "Linetta automatically backs up the local library once per day.",
     "settings.backup.folder": "Backup folder",
     "settings.ops.backupStatus": "Recent backup status",
     "settings.ops.gitStatus": "GitHub sync status",
+    "settings.ops.folderStatus": "Folder sync status",
     "settings.ops.summarizerStatus": "Summarizer status",
     "settings.ops.companionStatus": "Companion status",
     "settings.ops.summarizerRecentFailure": "Recent summarizer failure",
@@ -1988,6 +2017,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.ops.ok": "OK",
     "settings.ops.failed": "Failed",
     "settings.ops.gitOk": "Git sync succeeded",
+    "settings.ops.folderOk": "Folder sync succeeded",
     "settings.ops.backupOk": "Backup succeeded",
     "settings.ops.summarizerOk": "Summarizer OK",
     "settings.ops.companionOk": "Companion logging OK",
@@ -2873,11 +2903,20 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.git.commitTemplateHelp": "{date} は同期日に置き換えられます。",
     "settings.git.runNow": "今すぐ同期",
     "settings.git.init": "初期化",
+    "settings.folder.title": "フォルダ同期",
+    "settings.folder.description": "1 日 1 回すべての作品を Markdown に書き出し、指定したフォルダにコピーします。git を使わず、通常のフォルダ（例: クラウドドライブのフォルダ）にそのままミラーリングします。",
+    "settings.folder.folder": "同期フォルダ",
+    "settings.folder.folderPlaceholder": "例: /Users/me/Dropbox/linetta",
+    "settings.folder.pickFolder": "フォルダを選択",
+    "settings.folder.enable": "フォルダ同期を有効にする",
+    "settings.folder.help": "無効のときやフォルダが空のときは同期は実行されません。",
+    "settings.folder.runNow": "今すぐ同期",
     "settings.backup.title": "バックアップ",
     "settings.backup.description": "Linetta はローカルライブラリを 1 日 1 回自動バックアップします。",
     "settings.backup.folder": "バックアップフォルダ",
     "settings.ops.backupStatus": "最近のバックアップ状態",
     "settings.ops.gitStatus": "GitHub 同期状態",
+    "settings.ops.folderStatus": "フォルダ同期状態",
     "settings.ops.summarizerStatus": "要約機能の状態",
     "settings.ops.companionStatus": "コンパニオン状態",
     "settings.ops.summarizerRecentFailure": "最近の要約失敗",
@@ -2888,6 +2927,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.ops.ok": "成功",
     "settings.ops.failed": "失敗",
     "settings.ops.gitOk": "Git 同期成功",
+    "settings.ops.folderOk": "フォルダ同期成功",
     "settings.ops.backupOk": "バックアップ成功",
     "settings.ops.summarizerOk": "要約機能は正常",
     "settings.ops.companionOk": "記録は正常",

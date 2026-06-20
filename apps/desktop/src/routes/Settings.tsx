@@ -5,6 +5,8 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   settings as settingsApi,
   gitSync,
+  setFolderSyncDir,
+  folderSyncNow,
   opsStatus as opsStatusApi,
   providers as providersApi,
   webSearch as webSearchApi,
@@ -31,6 +33,7 @@ import type {
 
 const JOB_BACKUP = "backup.daily";
 const JOB_GIT_SYNC = "git_sync";
+const JOB_FOLDER_SYNC = "folder_sync";
 const JOB_SUMMARIZER = "summarizer";
 const JOB_COMPANION = "companion.persistence";
 
@@ -209,6 +212,7 @@ export function Settings() {
   // typing. We commit to the engine on blur (or when the folder picker
   // returns), not on every keystroke.
   const [gitDirDraft, setGitDirDraft] = useState("");
+  const [folderDirDraft, setFolderDirDraft] = useState("");
   const [gitTmplDraft, setGitTmplDraft] = useState("");
   const [webSearchKeyDraft, setWebSearchKeyDraft] = useState("");
   const [editorFontSizeDraft, setEditorFontSizeDraft] = useState("20");
@@ -238,6 +242,7 @@ export function Settings() {
         setCurrent(s);
         setLanguage(s.language);
         setGitDirDraft(s.git_sync_dir);
+        setFolderDirDraft(s.folder_sync_dir);
         setGitTmplDraft(s.git_sync_commit_template);
         setWebSearchKeyDraft(s.web_search_api_key ?? "");
         setEditorFontSizeDraft(String(s.editor_font_size ?? 20));
@@ -1010,6 +1015,83 @@ export function Settings() {
               />
             </section>
             )}
+
+            <section className="settings-section">
+              <h3>{t("settings.folder.title")}</h3>
+              <p className="sd">{t("settings.folder.description")}</p>
+              <div className="modal-field">
+                <label htmlFor="folder-dir">{t("settings.folder.folder")}</label>
+                <div className="set-field-row">
+                  <input
+                    id="folder-dir"
+                    type="text"
+                    value={folderDirDraft}
+                    readOnly
+                    placeholder={t("settings.folder.folderPlaceholder")}
+                  />
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    onClick={async () => {
+                      const picked = await openDialog({ directory: true, multiple: false });
+                      if (typeof picked === "string") {
+                        try {
+                          await setFolderSyncDir(picked);
+                          setFolderDirDraft(picked);
+                          await apply({ folder_sync_dir: picked });
+                        } catch (e) {
+                          setError(String(e));
+                        }
+                      }
+                    }}
+                    disabled={saving}
+                  >
+                    {t("settings.folder.pickFolder")}
+                  </button>
+                </div>
+              </div>
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={current?.folder_sync_enabled ?? false}
+                  onChange={(e) => apply({ folder_sync_enabled: e.target.checked })}
+                  disabled={saving}
+                />
+                {t("settings.folder.enable")}
+              </label>
+              <p className="sd">{t("settings.folder.help")}</p>
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={async () => {
+                  try {
+                    const res = await folderSyncNow();
+                    if (res.error) {
+                      setError(res.error);
+                      return;
+                    }
+                    setError(null);
+                    setSavedAt(Date.now());
+                    await refreshOps();
+                  } catch (e) {
+                    setError(String(e));
+                  }
+                }}
+                disabled={saving}
+              >
+                {t("settings.folder.runNow")}
+              </button>
+              <OpsStatusCard
+                title={t("settings.ops.folderStatus")}
+                status={opsByJob.get(JOB_FOLDER_SYNC)}
+                okText={t("settings.ops.folderOk")}
+                idleText={t("settings.ops.noRuns")}
+                onClearError={() => clearOpsError(JOB_FOLDER_SYNC)}
+                disabled={saving}
+                t={t}
+                language={language}
+              />
+            </section>
 
             <section className="settings-section">
               <h3>{t("settings.backup.title")}</h3>
