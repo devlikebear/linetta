@@ -11,6 +11,20 @@ type Snapshot struct {
 	CreatedAt  int64  `json:"created_at"`
 }
 
+// CompareSide is a plaintext view of one snapshot in a two-version comparison.
+type CompareSide struct {
+	ID        string `json:"id"`
+	Reason    string `json:"reason"`
+	CreatedAt int64  `json:"created_at"`
+	Plaintext string `json:"plaintext"`
+}
+
+// CompareResult returns the two selected snapshots in caller-specified order.
+type CompareResult struct {
+	Left  CompareSide `json:"left"`
+	Right CompareSide `json:"right"`
+}
+
 // Reasons.
 const (
 	ReasonManual          = "manual"

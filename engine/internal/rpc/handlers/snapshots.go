@@ -75,6 +75,47 @@ func ListSnapshotsForNode(snaps *snapshot.Repo) rpc.Handler {
 	}
 }
 
+type compareSnapshotsParams struct {
+	LeftID  string `json:"left_id"`
+	RightID string `json:"right_id"`
+}
+
+// CompareSnapshots returns plaintext bodies for two snapshots from the same node.
+func CompareSnapshots(snaps *snapshot.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p compareSnapshotsParams
+		if err := json.Unmarshal(params, &p); err != nil || p.LeftID == "" || p.RightID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "left_id and right_id required"}
+		}
+		left, err := snaps.GetByID(ctx, p.LeftID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		right, err := snaps.GetByID(ctx, p.RightID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		if left.NodeID != right.NodeID {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "snapshots belong to different nodes"}
+		}
+		got := snapshot.CompareResult{
+			Left: snapshot.CompareSide{
+				ID:        left.ID,
+				Reason:    left.Reason,
+				CreatedAt: left.CreatedAt,
+				Plaintext: snapshot.PlaintextFromDoc(left.ContentDoc),
+			},
+			Right: snapshot.CompareSide{
+				ID:        right.ID,
+				Reason:    right.Reason,
+				CreatedAt: right.CreatedAt,
+				Plaintext: snapshot.PlaintextFromDoc(right.ContentDoc),
+			},
+		}
+		return json.Marshal(got)
+	}
+}
+
 type restoreSnapshotParams struct {
 	SnapshotID string `json:"snapshot_id"`
 }

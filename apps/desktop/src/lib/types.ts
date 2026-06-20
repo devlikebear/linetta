@@ -232,6 +232,18 @@ export interface Snapshot {
   created_at: number;
 }
 
+export interface SnapshotCompareSide {
+  id: string;
+  reason: SnapshotReason;
+  created_at: number;
+  plaintext: string;
+}
+
+export interface SnapshotCompareResult {
+  left: SnapshotCompareSide;
+  right: SnapshotCompareSide;
+}
+
 // Mirrors engine/internal/entity Entity struct.
 export type EntityKind = "character" | "place" | "item" | "concept";
 
@@ -546,7 +558,7 @@ export interface SettingsPatch {
 
 export interface SnapshotEntry {
   id: string;
-  reason: "manual" | "autosave" | "companion-before";
+  reason: SnapshotReason;
   created_at: number;
   doc_preview: string;
 }

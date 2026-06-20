@@ -3,6 +3,7 @@
 
 .vs-loading, .vs-error { padding: 18px 16px; margin: 0; color: var(--muted); font-size: 13px; }
 .vs-error { color: var(--warn); }
+.vs-loading.inline, .vs-error.inline { padding: 0; margin: 8px 0 0; }
 
 .vs-timeline { display: flex; flex-direction: column; gap: 4px; }
 .vs-group + .vs-group { margin-top: 10px; }
@@ -15,11 +16,10 @@
 }
 .vs-row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: stretch;
+  gap: 6px;
   width: 100%;
-  padding: 7px 10px;
+  padding: 6px;
   background: var(--surface);
   border: 1px solid var(--line-soft);
   border-radius: var(--r-sm);
@@ -27,8 +27,62 @@
 }
 .vs-row:hover { border-color: var(--line); }
 .vs-row.sel { border-color: var(--accent); background: var(--accent-tint2); }
+.vs-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 1px 2px 1px 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
 .vs-reason { font-size: 13px; color: var(--ink); font-family: var(--font-serif); }
 .vs-time { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.vs-compare-picks {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.vs-slot {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.vs-slot:hover { border-color: var(--line); color: var(--ink); }
+.vs-slot.on { border-color: var(--accent); color: var(--accent); background: var(--accent-tint2); }
+
+.vs-view-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.vs-view-tabs button {
+  min-height: 30px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 12px;
+}
+.vs-view-tabs button.on {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: var(--accent-tint2);
+}
 
 .vs-preview {
   margin: 0;
@@ -44,3 +98,43 @@
   max-height: 320px;
   overflow-y: auto;
 }
+
+.vs-compare { display: flex; flex-direction: column; gap: 8px; }
+.vs-compare-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.vs-compare-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vs-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.vs-diff {
+  margin: 0;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.vs-diff-line {
+  display: block;
+  padding: 2px 8px;
+  white-space: pre-wrap;
+}
+.vs-diff-line.added { background: rgba(28, 142, 85, 0.12); color: var(--ink); }
+.vs-diff-line.removed { background: rgba(186, 73, 73, 0.12); color: var(--ink); }
+.vs-diff-line.same { color: var(--muted); }

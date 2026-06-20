@@ -290,6 +290,7 @@ func main() {
 	s.Handle("providers.test", handlers.TestProvider(settingsStore, ai.DefaultClientFactory))
 	s.Handle("web_search.test", handlers.TestWebSearch(settingsStore, handlers.DefaultWebSearchTester))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
+	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities, relationships))
 	s.Handle("export.node", handlers.ExportNode(nodes))

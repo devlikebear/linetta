@@ -109,7 +109,7 @@ SELECT id, content_doc, reason, created_at
 			ID:         id,
 			Reason:     reason,
 			CreatedAt:  createdAt,
-			DocPreview: trimRunes(plaintextFromDoc(doc), 200),
+			DocPreview: trimRunes(PlaintextFromDoc(doc), 200),
 		})
 	}
 	return out, rows.Err()
@@ -131,10 +131,10 @@ SELECT id, node_id, content_doc, reason, created_at
 	return s, nil
 }
 
-// plaintextFromDoc walks the Tiptap doc and concatenates text. Mentions render
+// PlaintextFromDoc walks the Tiptap doc and concatenates text. Mentions render
 // as @label; paragraph/heading/blockquote insert "\n". Same shape as
 // ai.docToPlainText but inlined here to avoid an import cycle.
-func plaintextFromDoc(raw string) string {
+func PlaintextFromDoc(raw string) string {
 	if raw == "" {
 		return ""
 	}

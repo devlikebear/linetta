@@ -60,6 +60,7 @@ import type {
   Settings,
   SettingsPatch,
   Snapshot,
+  SnapshotCompareResult,
   SnapshotEntry,
   Thread,
   UpdateBeatInput,
@@ -191,6 +192,8 @@ export const snapshots = {
     rpcCall<Snapshot | { skipped: true }>("snapshots.create_auto", { node_id: nodeId, doc }),
   listForNode: (nodeId: string) =>
     rpcCall<SnapshotEntry[]>("snapshots.list_for_node", { node_id: nodeId }),
+  compare: (leftId: string, rightId: string) =>
+    rpcCall<SnapshotCompareResult>("snapshots.compare", { left_id: leftId, right_id: rightId }),
   restore: (snapshotId: string) =>
     rpcCall<NodeRow>("snapshots.restore", { snapshot_id: snapshotId }),
 };

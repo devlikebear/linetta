@@ -89,6 +89,36 @@ func TestListForNodeHandler(t *testing.T) {
 	}
 }
 
+func TestCompareSnapshotsHandler_returnsPlaintextForTwoVersions(t *testing.T) {
+	f := newNodeFixture(t)
+	ctx := context.Background()
+	left, _ := f.snaps.Create(ctx, f.nID,
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"첫 문장"}]},{"type":"paragraph","content":[{"type":"text","text":"삭제될 문장"}]}]}`,
+		snapshot.ReasonManual, 1000)
+	right, _ := f.snaps.Create(ctx, f.nID,
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"첫 문장"}]},{"type":"paragraph","content":[{"type":"text","text":"새 문장"}]}]}`,
+		snapshot.ReasonAutosave, 2000)
+
+	params, _ := json.Marshal(map[string]string{"left_id": left.ID, "right_id": right.ID})
+	res, err := CompareSnapshots(f.snaps)(ctx, params)
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got snapshot.CompareResult
+	if err := json.Unmarshal(res, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Left.ID != left.ID || got.Right.ID != right.ID {
+		t.Fatalf("ids = %q/%q, want %q/%q", got.Left.ID, got.Right.ID, left.ID, right.ID)
+	}
+	if !strings.Contains(got.Left.Plaintext, "삭제될 문장") {
+		t.Fatalf("left plaintext = %q", got.Left.Plaintext)
+	}
+	if !strings.Contains(got.Right.Plaintext, "새 문장") {
+		t.Fatalf("right plaintext = %q", got.Right.Plaintext)
+	}
+}
+
 func TestRestoreSnapshotHandler_writesCurrentAsManualThenRestores(t *testing.T) {
 	f := newNodeFixture(t)
 	ctx := context.Background()
