@@ -51,6 +51,7 @@ if [[ -f "${KEYSTORE_PROPS}" ]]; then
 fi
 
 if [[ ! -f "${ANDROID_GEN}/app/build.gradle.kts" ]]; then
+  rm -rf "${ANDROID_GEN}"
   (cd "${ROOT}/apps/desktop" && pnpm tauri android init --ci --skip-targets-install)
 fi
 
