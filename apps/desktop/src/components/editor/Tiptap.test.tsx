@@ -96,11 +96,11 @@ describe("TiptapEditor", () => {
 
     expect(onSelectionContextMenu).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ from: 1, to: 8, text: expect.stringContaining("비 온 뒤") }),
+      expect.objectContaining({ kind: "selection", from: 1, to: 8, text: expect.stringContaining("비 온 뒤") }),
     );
   });
 
-  it("does not emit the editor context menu for an empty selection", async () => {
+  it("emits cursor details from the editor context menu for an empty selection", async () => {
     const ref = createRef<TiptapHandle>();
     const onSelectionContextMenu = vi.fn();
     const { container } = render(
@@ -118,7 +118,10 @@ describe("TiptapEditor", () => {
     });
     fireEvent.contextMenu(container.querySelector(".ProseMirror")!);
 
-    expect(onSelectionContextMenu).not.toHaveBeenCalled();
+    expect(onSelectionContextMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kind: "cursor", from: 1, to: 1, text: "" }),
+    );
   });
 
   it("finds and navigates text matches in the current scene", async () => {

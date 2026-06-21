@@ -1002,7 +1002,7 @@ export function Workspace() {
   }, []);
 
   const runSelectionFactCheck = useCallback(() => {
-    if (!selectionMenu) return;
+    if (!selectionMenu || selectionMenu.kind !== "selection") return;
     editorRef.current?.setSelection({ from: selectionMenu.from, to: selectionMenu.to });
     setSelectionMenu(null);
     setCompanionOpen(false);
@@ -1018,7 +1018,7 @@ export function Workspace() {
   }, [selectionMenu]);
 
   const runSelectionCompanionRequest = useCallback((kind: SelectionRewriteKind) => {
-    if (!selectionMenu) return;
+    if (!selectionMenu || selectionMenu.kind !== "selection") return;
     const sel = { from: selectionMenu.from, to: selectionMenu.to };
     editorRef.current?.setSelection(sel);
     setSelectionMenu(null);
@@ -1042,6 +1042,13 @@ export function Workspace() {
   const runSelectionCompanionProofread = useCallback(() => {
     runSelectionCompanionRequest("proofread");
   }, [runSelectionCompanionRequest]);
+
+  const runCursorAIGeneration = useCallback(() => {
+    if (!selectionMenu || selectionMenu.kind !== "cursor") return;
+    const sel = { from: selectionMenu.from, to: selectionMenu.to };
+    setSelectionMenu(null);
+    openAIModal(sel);
+  }, [openAIModal, selectionMenu]);
 
   const copyNodeText = useCallback(async (node: Pick<TreeNode, "id">) => {
     try {
@@ -1698,15 +1705,23 @@ export function Workspace() {
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
-                <button type="button" role="menuitem" onClick={runSelectionFactCheck}>
-                  <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
-                </button>
-                <button type="button" role="menuitem" onClick={runSelectionCompanionRewrite}>
-                  <MessageCircle size={13} /> {t("workspace.selectionMenu.companionRewrite")}
-                </button>
-                <button type="button" role="menuitem" onClick={runSelectionCompanionProofread}>
-                  <Sparkles size={13} /> {t("workspace.selectionMenu.aiProofread")}
-                </button>
+                {selectionMenu.kind === "cursor" ? (
+                  <button type="button" role="menuitem" onClick={runCursorAIGeneration}>
+                    <Sparkles size={13} /> {t("workspace.selectionMenu.continueHere")}
+                  </button>
+                ) : (
+                  <>
+                    <button type="button" role="menuitem" onClick={runSelectionFactCheck}>
+                      <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
+                    </button>
+                    <button type="button" role="menuitem" onClick={runSelectionCompanionRewrite}>
+                      <MessageCircle size={13} /> {t("workspace.selectionMenu.companionRewrite")}
+                    </button>
+                    <button type="button" role="menuitem" onClick={runSelectionCompanionProofread}>
+                      <Sparkles size={13} /> {t("workspace.selectionMenu.aiProofread")}
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

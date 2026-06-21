@@ -47,11 +47,9 @@ interface TextMatch {
   to: number;
 }
 
-export interface TiptapSelectionMenuPayload {
-  from: number;
-  to: number;
-  text: string;
-}
+export type TiptapSelectionMenuPayload =
+  | { kind: "selection"; from: number; to: number; text: string }
+  | { kind: "cursor"; from: number; to: number; text: "" };
 
 interface Props {
   /** Tiptap JSON doc — controls the editor's initial state. The component is
@@ -71,7 +69,7 @@ interface Props {
   onMentionDoubleClick?: (entityId: string) => void;
   /** Focus mode: dim every paragraph except the one containing the cursor. */
   focus?: boolean;
-  /** Fired when the writer right-clicks a non-empty editor selection. */
+  /** Fired when the writer right-clicks the editor selection or cursor. */
   onSelectionContextMenu?: (event: React.MouseEvent, payload: TiptapSelectionMenuPayload) => void;
 }
 
@@ -251,12 +249,19 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
   const onWrapContextMenu = (e: React.MouseEvent) => {
     if (!editor || !onSelectionContextMenu) return;
     if (!(e.target as HTMLElement).closest(".ProseMirror")) return;
+    const menuPos = clampDocPosition(editor, contextMenuPos(editor, e));
     const { from, to, empty } = editor.state.selection;
-    if (empty || from === to) return;
-    const text = editor.state.doc.textBetween(from, to, "\n").trim();
-    if (!text) return;
     e.preventDefault();
-    onSelectionContextMenu(e, { from, to, text });
+    if (!empty && from !== to && menuPos >= from && menuPos <= to) {
+      const text = editor.state.doc.textBetween(from, to, "\n").trim();
+      if (text) {
+        onSelectionContextMenu(e, { kind: "selection", from, to, text });
+        return;
+      }
+    }
+    editor.commands.setTextSelection(menuPos);
+    editor.view.focus();
+    onSelectionContextMenu(e, { kind: "cursor", from: menuPos, to: menuPos, text: "" });
   };
 
   return (
@@ -277,6 +282,19 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
     </div>
   );
 });
+
+function contextMenuPos(editor: Editor, e: React.MouseEvent): number {
+  try {
+    return editor.view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos ?? editor.state.selection.from;
+  } catch {
+    return editor.state.selection.from;
+  }
+}
+
+function clampDocPosition(editor: Editor, pos: number): number {
+  const size = editor.state.doc.content.size;
+  return Math.min(Math.max(0, pos), size);
+}
 
 /** Scrolls the editor so the current cursor line stays near the column's center.
  *  Scrolls only the editor's nearest scrollable ancestor (never the page),
