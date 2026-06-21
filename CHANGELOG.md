@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.1 - 2026-06-21
+
+- Restored Windows desktop CI packaging with NSIS and MSI installers.
+- Build the embedded Go engine as `linetta_engine_ffi.dll` on Windows and load it at runtime to avoid MSVC c-archive link failures.
+- Documented the Windows embedded-engine packaging path and added distribution validation coverage for the DLL bundle.
+
 ## v0.8.0 - 2026-06-21
 
 - Embedded the Go engine in-process through a C ABI for desktop and mobile builds, removing the packaged desktop sidecar path.
