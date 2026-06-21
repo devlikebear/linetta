@@ -33,11 +33,13 @@ pub(crate) async fn set_folder_sync_dir(
     app: tauri::AppHandle,
     path: String,
 ) -> Result<(), String> {
-    let client = crate::engine_client(&state)?;
-    client
-        .call("settings.set", Some(serde_json::json!({ "folder_sync_dir": path })))
-        .await
-        .map_err(|e| e.to_string())?;
+    let engine = crate::engine_handle(state.inner())?;
+    crate::call_engine(
+        engine,
+        "settings.set".to_string(),
+        Some(serde_json::json!({ "folder_sync_dir": path })),
+    )
+    .await?;
 
     #[cfg(all(target_os = "macos", feature = "mas"))]
     {
@@ -69,11 +71,8 @@ pub(crate) async fn folder_sync_now(
     #[cfg(not(all(target_os = "macos", feature = "mas")))]
     {
         let _ = &app;
-        let client = crate::engine_client(&state)?;
-        client
-            .call("folder_sync.run", None)
-            .await
-            .map_err(|e| e.to_string())
+        let engine = crate::engine_handle(state.inner())?;
+        crate::call_engine(engine, "folder_sync.run".to_string(), None).await
     }
 }
 
@@ -90,15 +89,18 @@ pub(crate) async fn run_folder_sync_mas(
     app: &tauri::AppHandle,
     state: &EngineState,
 ) -> Result<serde_json::Value, String> {
-    let client = crate::engine_client(state)?;
+    let engine = crate::engine_handle(state)?;
     let started = now_millis();
 
-    let stage = client
-        .call("folder_sync.stage", None)
-        .await
-        .map_err(|e| e.to_string())?;
-    if stage.get("skipped").and_then(|v| v.as_bool()).unwrap_or(false) {
-        return Ok(serde_json::json!({ "skipped": true, "files_copied": 0, "message": "", "error": "" }));
+    let stage = crate::call_engine(engine.clone(), "folder_sync.stage".to_string(), None).await?;
+    if stage
+        .get("skipped")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
+    {
+        return Ok(
+            serde_json::json!({ "skipped": true, "files_copied": 0, "message": "", "error": "" }),
+        );
     }
     let staging = stage
         .get("staging_dir")
@@ -108,7 +110,11 @@ pub(crate) async fn run_folder_sync_mas(
     let files: Vec<String> = stage
         .get("files")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     let store = bookmark_store_path(app)?;
@@ -125,20 +131,22 @@ pub(crate) async fn run_folder_sync_mas(
         Err(e) => (false, 0usize, e),
     };
 
-    let _ = client
-        .call(
-            "folder_sync.report",
-            Some(serde_json::json!({
-                "started_at": started,
-                "finished_at": now_millis(),
-                "ok": ok,
-                "files_copied": copied,
-                "error": errmsg,
-            })),
-        )
-        .await;
+    let _ = crate::call_engine(
+        engine,
+        "folder_sync.report".to_string(),
+        Some(serde_json::json!({
+            "started_at": started,
+            "finished_at": now_millis(),
+            "ok": ok,
+            "files_copied": copied,
+            "error": errmsg,
+        })),
+    )
+    .await;
 
-    Ok(serde_json::json!({ "skipped": false, "files_copied": copied, "message": "", "error": errmsg }))
+    Ok(
+        serde_json::json!({ "skipped": false, "files_copied": copied, "message": "", "error": errmsg }),
+    )
 }
 
 #[cfg(test)]
@@ -154,8 +162,14 @@ mod tests {
         let files = vec!["a.md".to_string(), "b.md".to_string()];
         let n = copy_files(&staging, &target, &files).unwrap();
         assert_eq!(n, 2);
-        assert_eq!(std::fs::read_to_string(target.join("a.md")).unwrap(), "hello");
-        assert_eq!(std::fs::read_to_string(target.join("b.md")).unwrap(), "world");
+        assert_eq!(
+            std::fs::read_to_string(target.join("a.md")).unwrap(),
+            "hello"
+        );
+        assert_eq!(
+            std::fs::read_to_string(target.join("b.md")).unwrap(),
+            "world"
+        );
     }
 
     fn tempdir() -> std::path::PathBuf {
@@ -166,7 +180,11 @@ mod tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        p.push(format!("linetta-fs-test-{}-{}", n, C.fetch_add(1, Ordering::Relaxed)));
+        p.push(format!(
+            "linetta-fs-test-{}-{}",
+            n,
+            C.fetch_add(1, Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(&p).unwrap();
         p
     }

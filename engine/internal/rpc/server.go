@@ -24,11 +24,23 @@ type serverNotifier struct{ s *Server }
 func (n *serverNotifier) Notify(method string, params any) error {
 	var raw json.RawMessage
 	if params != nil {
-		b, err := json.Marshal(params)
-		if err != nil {
-			return err
+		switch v := params.(type) {
+		case json.RawMessage:
+			raw = append(json.RawMessage(nil), v...)
+		default:
+			b, err := json.Marshal(params)
+			if err != nil {
+				return err
+			}
+			raw = b
 		}
-		raw = b
+	}
+	n.s.notifyMu.RLock()
+	notify := n.s.notify
+	n.s.notifyMu.RUnlock()
+	if notify != nil {
+		notify(method, raw)
+		return nil
 	}
 	n.s.writeMu.Lock()
 	defer n.s.writeMu.Unlock()
@@ -63,6 +75,8 @@ type Server struct {
 	handlers map[string]Handler
 	writeMu  sync.Mutex
 	codec    *Codec // set during Serve; nil otherwise
+	notifyMu sync.RWMutex
+	notify   func(method string, params json.RawMessage)
 }
 
 // NewServer returns a Server with no handlers registered.
@@ -72,12 +86,33 @@ func NewServer() *Server { return &Server{handlers: map[string]Handler{}} }
 // The same handle is valid across multiple Serve calls.
 func (s *Server) Notifier() Notifier { return &serverNotifier{s: s} }
 
+// SetNotifier routes server notifications to fn instead of the active stdio
+// codec. Passing nil restores the stdio-backed notifier behavior.
+func (s *Server) SetNotifier(fn func(method string, params json.RawMessage)) {
+	s.notifyMu.Lock()
+	defer s.notifyMu.Unlock()
+	s.notify = fn
+}
+
 // Handle registers a handler for a method. Overwrites previous registrations
 // silently — registration happens once at boot.
 func (s *Server) Handle(method string, h Handler) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.handlers[method] = h
+}
+
+// HandleMessage dispatches one JSONRPC request and returns the marshalled
+// response. Notifications return nil, nil.
+func (s *Server) HandleMessage(ctx context.Context, request []byte) ([]byte, error) {
+	var msg Message
+	if err := json.Unmarshal(request, &msg); err != nil {
+		return marshalMessage(Message{
+			ID:    json.RawMessage(`null`),
+			Error: &Error{Code: CodeParseError, Message: err.Error()},
+		})
+	}
+	return s.handleMessage(ctx, msg)
 }
 
 // Serve reads messages from r and writes responses to w. It returns io.EOF when
@@ -113,35 +148,61 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 			continue
 		}
 
-		isNotification := len(msg.ID) == 0
-		s.mu.RLock()
-		h, ok := s.handlers[msg.Method]
-		s.mu.RUnlock()
-
-		if !ok {
-			if !isNotification {
-				write(Message{ID: msg.ID, Error: &Error{Code: CodeMethodNotFound, Message: "method not found: " + msg.Method}})
-			}
-			continue
-		}
-
 		wg.Add(1)
-		go func(id json.RawMessage, params json.RawMessage, notification bool, h Handler) {
+		go func(msg Message) {
 			defer wg.Done()
-			result, herr := h(ctx, params)
-			if notification {
+			resp, err := s.handleMessage(ctx, msg)
+			if err != nil || resp == nil {
 				return
 			}
-			if herr != nil {
-				var me *MethodError
-				if errors.As(herr, &me) {
-					write(Message{ID: id, Error: &Error{Code: me.Code, Message: me.Message, Data: me.Data}})
-				} else {
-					write(Message{ID: id, Error: &Error{Code: CodeInternalError, Message: herr.Error()}})
-				}
-			} else {
-				write(Message{ID: id, Result: result})
+			var out Message
+			if err := json.Unmarshal(resp, &out); err != nil {
+				return
 			}
-		}(msg.ID, msg.Params, isNotification, h)
+			write(out)
+		}(msg)
 	}
+}
+
+func (s *Server) handleMessage(ctx context.Context, msg Message) ([]byte, error) {
+	isNotification := len(msg.ID) == 0
+	s.mu.RLock()
+	h, ok := s.handlers[msg.Method]
+	s.mu.RUnlock()
+
+	if !ok {
+		if isNotification {
+			return nil, nil
+		}
+		return marshalMessage(Message{
+			ID:    msg.ID,
+			Error: &Error{Code: CodeMethodNotFound, Message: "method not found: " + msg.Method},
+		})
+	}
+
+	result, err := h(ctx, msg.Params)
+	if isNotification {
+		return nil, nil
+	}
+	if err != nil {
+		var me *MethodError
+		if errors.As(err, &me) {
+			return marshalMessage(Message{
+				ID:    msg.ID,
+				Error: &Error{Code: me.Code, Message: me.Message, Data: me.Data},
+			})
+		}
+		return marshalMessage(Message{
+			ID:    msg.ID,
+			Error: &Error{Code: CodeInternalError, Message: err.Error()},
+		})
+	}
+	return marshalMessage(Message{ID: msg.ID, Result: result})
+}
+
+func marshalMessage(m Message) ([]byte, error) {
+	if m.JSONRPC == "" {
+		m.JSONRPC = "2.0"
+	}
+	return json.Marshal(m)
 }

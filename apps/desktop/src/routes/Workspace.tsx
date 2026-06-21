@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Replace, Sparkles } from "lucide-react";
+import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Replace, Sparkles, Menu } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
@@ -59,6 +59,13 @@ import {
 const SAVE_DEBOUNCE_MS = 800;
 const IDLE_CHECKPOINT_MS = 120_000;
 const LAST_OPENED_THROTTLE_MS = 5000;
+const COMPACT_WORKSPACE_QUERY = "(max-width: 860px)";
+
+function isCompactWorkspace() {
+  return typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia(COMPACT_WORKSPACE_QUERY).matches;
+}
 
 const FALLBACK_COUNTS: ContextCounts = {
   nearbyScenes: 0,
@@ -115,7 +122,7 @@ export function Workspace() {
   const [todayChars, setTodayChars] = useState<number | null>(null);
   const [typewriter, setTypewriter] = useState(false);
   const [focus, setFocus] = useState(false);
-  const [railCollapsed, setRailCollapsed] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(() => isCompactWorkspace());
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const saveCompletedAt = saveStatus.kind === "saved" ? saveStatus.at : null;
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -180,6 +187,16 @@ export function Workspace() {
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const media = window.matchMedia(COMPACT_WORKSPACE_QUERY);
+    const onChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setRailCollapsed(true);
+    };
+    media.addEventListener("change", onChange);
+    if (media.matches) setRailCollapsed(true);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
   const refreshTodayChars = useCallback(async (targetProjectId?: string) => {
     const id = targetProjectId ?? loadRef.current?.project.id;
     if (!id) return;
@@ -1506,6 +1523,10 @@ export function Workspace() {
 
   const currentNodeLabel = displayNodeLabel(language, load.node.label);
   const currentSceneTitle = load.node.title || currentNodeLabel;
+  const handleOutlineSelect = (n: TreeNode) => {
+    navigateToNode(n);
+    if (isCompactWorkspace()) setRailCollapsed(true);
+  };
 
   return (
     <main className="workspace">
@@ -1528,6 +1549,14 @@ export function Workspace() {
           </span>
         </Link>
         <div className="ws-top-actions" data-tour="workspace-navigation">
+          <button
+            type="button"
+            className="ws-tool icon-only mobile-outline-toggle"
+            title={t("workspace.outline")}
+            onClick={() => setRailCollapsed((v) => !v)}
+          >
+            <Menu size={16} />
+          </button>
           <button
             type="button"
             className="ws-tool icon-only"
@@ -1587,12 +1616,20 @@ export function Workspace() {
       <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
         (aiModal || companionOpen || factBookOpen || contextualEditOpen) ? " right-wide" : ""
       }${companionOpen ? " right-xwide" : ""}${versionSheetNodeId ? " right-history" : ""}`}>
+        {!railCollapsed && (
+          <button
+            type="button"
+            className="mobile-rail-backdrop"
+            aria-label={t("workspace.outlineCollapse")}
+            onClick={() => setRailCollapsed(true)}
+          />
+        )}
         <OutlinePanel
           tree={load.tree}
           currentId={load.node.id}
           collapsed={railCollapsed}
           onToggleCollapse={() => setRailCollapsed((v) => !v)}
-          onSelect={(n) => navigateToNode(n)}
+          onSelect={handleOutlineSelect}
           onRename={handleRenameNode}
           renameRequest={outlineRenameRequest}
           onCreateScene={handleCreateSceneFromOutline}

@@ -1,4 +1,4 @@
-//go:build !mas
+//go:build !mas && !mobile
 
 package clidetect
 

@@ -1,0 +1,226 @@
+name: Build Mobile Engine
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-engine.yml"
+      - "engine/**"
+      - "apps/desktop/src-tauri/scripts/build-engine-*.sh"
+      - "apps/desktop/src-tauri/build.rs"
+      - "apps/desktop/src-tauri/src/ffi.rs"
+      - "apps/desktop/src/**"
+      - "apps/desktop/package.json"
+      - "apps/desktop/pnpm-lock.yaml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mobile-engine.yml"
+      - "engine/**"
+      - "apps/desktop/src-tauri/scripts/build-engine-*.sh"
+      - "apps/desktop/src-tauri/build.rs"
+      - "apps/desktop/src-tauri/src/ffi.rs"
+      - "apps/desktop/src/**"
+      - "apps/desktop/package.json"
+      - "apps/desktop/pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_NDK_VERSION: "27.2.12479018"
+
+jobs:
+  mobile-tag-tests:
+    name: Go mobile tag tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Test mobile build tag
+        run: cd engine && go test -tags mobile ./...
+
+      - name: Verify host c-archive
+        run: |
+          set -euo pipefail
+          cd engine
+          CGO_ENABLED=1 go build -tags mobile -buildmode=c-archive -o /tmp/linetta-ffi-mobile.a ./cmd/linetta-ffi
+          test "$(grep -Ec 'LinettaEngine(Start|Call|Stop|FreeCString|SetNotifyCallback)' /tmp/linetta-ffi-mobile.h)" -eq 5
+
+  ios-engine:
+    name: iOS xcframework
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.3.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 25
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Build iOS engine xcframework
+        run: apps/desktop/src-tauri/scripts/build-engine-ios.sh /tmp/linetta-ios
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend assets
+        working-directory: apps/desktop
+        run: pnpm build
+
+      - name: Verify iOS exports
+        run: |
+          set -euo pipefail
+          test -d /tmp/linetta-ios/LinettaEngine.xcframework
+          test "$(grep -Ec 'LinettaEngine(Start|Call|Stop|FreeCString|SetNotifyCallback)' /tmp/linetta-ios/liblinetta.h)" -eq 5
+          mkdir -p /tmp/linetta-ios/check-device /tmp/linetta-ios/check-sim
+          (
+            cd /tmp/linetta-ios/check-device
+            ar x ../device/liblinetta.a
+            obj="$(find . -maxdepth 1 -type f -name '*.o' -print -quit)"
+            test -n "${obj}"
+            vtool -show "${obj}" | grep -i 'platform IOS'
+          )
+          (
+            cd /tmp/linetta-ios/check-sim
+            ar x ../sim/liblinetta.a
+            obj="$(find . -maxdepth 1 -type f -name '*.o' -print -quit)"
+            test -n "${obj}"
+            vtool -show "${obj}" | grep -i 'platform IOSSIMULATOR'
+          )
+
+      - name: Verify iOS Rust target links embedded engine
+        working-directory: apps/desktop/src-tauri
+        run: |
+          set -euo pipefail
+          SDKROOT="$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            cargo build --lib --target aarch64-apple-ios-sim
+
+      - name: Upload iOS engine artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: LinettaEngine-ios
+          path: |
+            /tmp/linetta-ios/LinettaEngine.xcframework
+            /tmp/linetta-ios/liblinetta.h
+          if-no-files-found: error
+
+  android-engine:
+    name: Android shared libraries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.3.0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 25
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          { yes || true; } | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "ndk;${ANDROID_NDK_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Build Android engine shared libraries
+        run: apps/desktop/src-tauri/scripts/build-engine-android.sh /tmp/linetta-android
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend assets
+        working-directory: apps/desktop
+        run: pnpm build
+
+      - name: Verify Android exports
+        run: |
+          set -euo pipefail
+          file /tmp/linetta-android/arm64-v8a/liblinetta.so | grep -i 'aarch64'
+          count="$(nm -D /tmp/linetta-android/arm64-v8a/liblinetta.so 2>/dev/null | grep -c LinettaEngine)"
+          test "${count}" -ge 5
+
+      - name: Verify Android Rust target links embedded engine
+        working-directory: apps/desktop/src-tauri
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+          cargo build --lib --target aarch64-linux-android
+
+      - name: Initialize Tauri Android project
+        working-directory: apps/desktop
+        run: |
+          rm -rf src-tauri/gen/android
+          pnpm tauri android init --ci --skip-targets-install
+
+      - name: Verify Android app debug APK packaging
+        working-directory: apps/desktop
+        run: pnpm tauri android build --debug --apk --target aarch64 --ci
+
+      - name: Verify Android debug APK artifact
+        run: |
+          set -euo pipefail
+          artifact="apps/desktop/src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk"
+          test -f "${artifact}"
+          test -s "${artifact}"
+
+      - name: Upload Android engine artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: LinettaEngine-android
+          path: /tmp/linetta-android
+          if-no-files-found: error
