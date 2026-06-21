@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package gitsync exports every non-archived project as a markdown file into a
 // user-chosen git repo and then runs `git add -A && git commit && git push`.
 // Authentication is delegated entirely to whatever the user's shell already

@@ -134,11 +134,26 @@ func New() (*Store, error) {
 // NewWithSecretStore constructs a Store using an explicit secret backend.
 // Tests inject an in-memory store; production uses the macOS Keychain backend.
 func NewWithSecretStore(secrets SecretStore) (*Store, error) {
-	if err := paths.EnsureHome(); err != nil {
-		return nil, err
-	}
 	home, err := paths.Home()
 	if err != nil {
+		return nil, err
+	}
+	return NewForHomeWithSecretStore(home, secrets)
+}
+
+// NewForHome constructs a Store rooted at home. Engine embedding uses this to
+// keep tests and in-process runtimes from falling back to the process default.
+func NewForHome(home string) (*Store, error) {
+	return NewForHomeWithSecretStore(home, defaultSecretStore())
+}
+
+// NewForHomeWithSecretStore constructs a Store rooted at home using an
+// explicit secret backend.
+func NewForHomeWithSecretStore(home string, secrets SecretStore) (*Store, error) {
+	if home == "" {
+		return NewWithSecretStore(secrets)
+	}
+	if err := os.MkdirAll(home, 0o700); err != nil {
 		return nil, err
 	}
 	if secrets == nil {

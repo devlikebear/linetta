@@ -1,6 +1,6 @@
 //go:build !mas && !mobile
 
-package main
+package engineapp
 
 import (
 	"context"
@@ -18,8 +18,6 @@ import (
 
 const gitSyncAvailable = true
 
-// setupGitSync constructs the real git syncer, registers its RPC handlers, and
-// returns the daily syncer used by the backup retention loop.
 func setupGitSync(
 	s *rpc.Server,
 	settingsStore *settings.Store,
@@ -33,12 +31,12 @@ func setupGitSync(
 	syncer.Ops = ops
 	s.Handle("git_sync.run", handlers.RunGitSync(syncer))
 	s.Handle("git_sync.init", handlers.InitGitSync(syncer))
-	return realSyncer{syncer}
+	return realGitSyncer{syncer}
 }
 
-type realSyncer struct{ s *gitsync.Syncer }
+type realGitSyncer struct{ s *gitsync.Syncer }
 
-func (r realSyncer) RunOnce(ctx context.Context) (syncResult, error) {
+func (r realGitSyncer) RunOnce(ctx context.Context) (syncResult, error) {
 	res, err := r.s.RunOnce(ctx)
 	return syncResult{Error: res.Error}, err
 }

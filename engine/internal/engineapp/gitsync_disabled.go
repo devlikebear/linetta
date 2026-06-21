@@ -1,6 +1,6 @@
 //go:build mas || mobile
 
-package main
+package engineapp
 
 import (
 	"context"
@@ -17,9 +17,6 @@ import (
 
 const gitSyncAvailable = false
 
-// setupGitSync registers git_sync handlers that report the feature is
-// unavailable and returns a no-op syncer. The gitsync package (which shells out
-// to git) is never compiled into the mas or mobile builds.
 func setupGitSync(
 	s *rpc.Server,
 	_ *settings.Store,
@@ -32,14 +29,16 @@ func setupGitSync(
 	unavailable := func(context.Context, json.RawMessage) (json.RawMessage, error) {
 		return nil, &rpc.MethodError{
 			Code:    rpc.CodeMethodNotFound,
-			Message: "git sync is not available in the App Store build",
+			Message: "git sync is not available in this build",
 		}
 	}
 	s.Handle("git_sync.run", unavailable)
 	s.Handle("git_sync.init", unavailable)
-	return noopSyncer{}
+	return noopGitSyncer{}
 }
 
-type noopSyncer struct{}
+type noopGitSyncer struct{}
 
-func (noopSyncer) RunOnce(context.Context) (syncResult, error) { return syncResult{}, nil }
+func (noopGitSyncer) RunOnce(context.Context) (syncResult, error) {
+	return syncResult{}, nil
+}

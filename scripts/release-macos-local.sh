@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local macOS release: build the engine + Tauri app, then sign (Developer ID),
+# Local macOS release: build the Tauri app with embedded engine FFI, then sign (Developer ID),
 # notarize, and staple the .app and .dmg using credentials kept outside the repo.
 #
 # Requirements:
@@ -52,9 +52,6 @@ export APPLE_SIGNING_IDENTITY="${SIGNING_IDENTITY}"
 export APPLE_API_ISSUER="${APP_STORE_CONNECT_ISSUER_ID}"
 export APPLE_API_KEY="${APP_STORE_CONNECT_KEY_ID}"
 export APPLE_API_KEY_PATH="${AUTH_KEY_PATH}"
-
-echo "Building engine sidecar"
-bash "${ROOT}/scripts/build-engine.sh"
 
 echo "Building, signing, notarizing, and stapling the macOS app + dmg"
 cd "${ROOT}/apps/desktop"

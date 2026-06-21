@@ -145,10 +145,6 @@ jobs:
           rm -f "${cert_path}"
           echo "api_key_path=${key_path}" >> "${GITHUB_OUTPUT}"
 
-      - name: Build engine sidecar
-        shell: bash
-        run: bash scripts/build-engine.sh
-
       - name: Build Tauri app
         shell: bash
         working-directory: apps/desktop

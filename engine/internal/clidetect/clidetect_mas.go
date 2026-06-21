@@ -1,9 +1,9 @@
-//go:build mas
+//go:build mas || mobile
 
 package clidetect
 
 import "context"
 
-// Detect always reports "not found" in the App Store build: locating the CLI
-// requires spawning a login shell, which the sandbox forbids.
+// Detect always reports "not found" in restricted builds: locating the CLI
+// requires spawning a login shell, which MAS and mobile runtimes forbid.
 func Detect(context.Context) string { return "" }

@@ -1,0 +1,315 @@
+name: Release Mobile Apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Mobile platform to build
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - ios
+          - android
+      release_tag:
+        description: Optional existing GitHub Release tag to upload artifacts to, for example v0.5.0
+        required: false
+        type: string
+      ios_export_method:
+        description: iOS export method passed to tauri ios build
+        required: true
+        default: release-testing
+        type: choice
+        options:
+          - release-testing
+          - app-store-connect
+          - debugging
+      android_format:
+        description: Android package format
+        required: true
+        default: aab
+        type: choice
+        options:
+          - aab
+          - apk
+      build_number:
+        description: Optional iOS build number / Android version code. Defaults to the workflow run number.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  ANDROID_NDK_VERSION: "27.2.12479018"
+
+jobs:
+  ios-release:
+    name: iOS release artifact
+    if: ${{ inputs.platform == 'ios' || inputs.platform == 'both' }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build embedded iOS engine
+        run: apps/desktop/src-tauri/scripts/build-engine-ios.sh /tmp/linetta-ios-engine
+
+      - name: Check Apple mobile signing secrets
+        shell: bash
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_BASE64 APPLE_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("${name}")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf 'Missing Apple mobile signing secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Import App Store Connect API key
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          key_path="${RUNNER_TEMP}/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "${APPLE_API_KEY_BASE64}" | base64 --decode > "${key_path}"
+          echo "APPLE_API_KEY_PATH=${key_path}" >> "${GITHUB_ENV}"
+
+      - name: Initialize Tauri iOS project
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        working-directory: apps/desktop
+        run: pnpm tauri ios init --ci --skip-targets-install
+
+      - name: Build iOS app
+        shell: bash
+        working-directory: apps/desktop
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          build_number="${{ inputs.build_number }}"
+          if [ -z "${build_number}" ]; then
+            build_number="${GITHUB_RUN_NUMBER}"
+          fi
+          pnpm tauri ios build \
+            --ci \
+            --export-method "${{ inputs.ios_export_method }}" \
+            --build-number "${build_number}"
+
+      - name: Collect iOS release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/mobile/ios
+          find apps/desktop/src-tauri/gen -type f -name '*.ipa' -exec cp {} dist/mobile/ios/ \;
+          find apps/desktop/src-tauri/target -type f -name '*.ipa' -exec cp {} dist/mobile/ios/ \; 2>/dev/null || true
+          test "$(find dist/mobile/ios -type f -name '*.ipa' | wc -l | tr -d ' ')" -gt 0
+          find dist/mobile/ios -type f -print | sort
+
+      - name: Upload iOS workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Linetta-ios
+          path: dist/mobile/ios/
+          if-no-files-found: error
+
+      - name: Upload iOS artifact to GitHub release
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${{ inputs.release_tag }}" dist/mobile/ios/* --clobber
+
+  android-release:
+    name: Android release artifact
+    if: ${{ inputs.platform == 'android' || inputs.platform == 'both' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install Android NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "ndk;${ANDROID_NDK_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${ANDROID_NDK_VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build embedded Android engine
+        run: apps/desktop/src-tauri/scripts/build-engine-android.sh /tmp/linetta-android-engine
+
+      - name: Check Android signing secrets
+        shell: bash
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in ANDROID_KEY_BASE64 ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("${name}")
+            fi
+          done
+          if [ "${#missing[@]}" -ne 0 ]; then
+            printf 'Missing Android signing secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Initialize Tauri Android project
+        working-directory: apps/desktop
+        run: pnpm tauri android init --ci --skip-targets-install
+
+      - name: Configure Android signing
+        shell: bash
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keystore="${RUNNER_TEMP}/linetta-upload.jks"
+          printf '%s' "${ANDROID_KEY_BASE64}" | base64 --decode > "${keystore}"
+          mkdir -p apps/desktop/src-tauri/gen/android
+          cat > apps/desktop/src-tauri/gen/android/keystore.properties <<EOF
+          keyAlias=${ANDROID_KEY_ALIAS}
+          password=${ANDROID_KEY_PASSWORD}
+          storeFile=${keystore}
+          EOF
+
+      - name: Patch Android Gradle signing hook
+        run: bash scripts/patch-tauri-android-signing.sh
+
+      - name: Verify Android Gradle signing hook
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle_file="apps/desktop/src-tauri/gen/android/app/build.gradle.kts"
+          test -f "${gradle_file}"
+          if ! grep -Fq "keystore.properties" "${gradle_file}"; then
+            echo "::error::Android release signing is not wired into ${gradle_file}. Complete the Phase 6 Gradle signing hook before running the mobile release workflow."
+            exit 1
+          fi
+
+      - name: Build Android app
+        shell: bash
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          build_number="${{ inputs.build_number }}"
+          if [ -z "${build_number}" ]; then
+            build_number="${GITHUB_RUN_NUMBER}"
+          fi
+          case "${build_number}" in
+            *[!0-9]*)
+              echo "Android versionCode must be numeric, got: ${build_number}" >&2
+              exit 1
+              ;;
+          esac
+          package_flag="--${{ inputs.android_format }}"
+          pnpm tauri android build \
+            --ci \
+            "${package_flag}" \
+            --config "{\"bundle\":{\"android\":{\"versionCode\":${build_number}}}}"
+
+      - name: Collect Android release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/mobile/android
+          find apps/desktop/src-tauri/gen -type f \( -name '*.aab' -o -name '*.apk' \) -exec cp {} dist/mobile/android/ \;
+          find apps/desktop/src-tauri/target -type f \( -name '*.aab' -o -name '*.apk' \) -exec cp {} dist/mobile/android/ \; 2>/dev/null || true
+          test "$(find dist/mobile/android -type f \( -name '*.aab' -o -name '*.apk' \) | wc -l | tr -d ' ')" -gt 0
+          find dist/mobile/android -type f -print | sort
+
+      - name: Upload Android workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Linetta-android
+          path: dist/mobile/android/
+          if-no-files-found: error
+
+      - name: Upload Android artifact to GitHub release
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${{ inputs.release_tag }}" dist/mobile/android/* --clobber

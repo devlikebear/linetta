@@ -1,12 +1,12 @@
-//go:build !mas && !mobile
+//go:build !mas
 
-package main
+package engineapp
 
 import (
 	"context"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
-	"github.com/devlikebear/linetta/engine/internal/gitsync"
+	"github.com/devlikebear/linetta/engine/internal/foldersync"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -16,11 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
-const gitSyncAvailable = true
-
-// setupGitSync constructs the real git syncer, registers its RPC handlers, and
-// returns the daily syncer used by the backup retention loop.
-func setupGitSync(
+func setupFolderSync(
 	s *rpc.Server,
 	settingsStore *settings.Store,
 	projects *project.Repo,
@@ -29,16 +25,15 @@ func setupGitSync(
 	relationships *relationship.Repo,
 	ops *opsstatus.Repo,
 ) dailySyncer {
-	syncer := gitsync.New(settingsStore, projects, nodes, entities, relationships)
+	syncer := foldersync.New(settingsStore, projects, nodes, entities, relationships)
 	syncer.Ops = ops
-	s.Handle("git_sync.run", handlers.RunGitSync(syncer))
-	s.Handle("git_sync.init", handlers.InitGitSync(syncer))
-	return realSyncer{syncer}
+	s.Handle("folder_sync.run", handlers.RunFolderSync(syncer))
+	return realFolderSyncer{syncer}
 }
 
-type realSyncer struct{ s *gitsync.Syncer }
+type realFolderSyncer struct{ s *foldersync.Syncer }
 
-func (r realSyncer) RunOnce(ctx context.Context) (syncResult, error) {
+func (r realFolderSyncer) RunOnce(ctx context.Context) (syncResult, error) {
 	res, err := r.s.RunOnce(ctx)
 	return syncResult{Error: res.Error}, err
 }

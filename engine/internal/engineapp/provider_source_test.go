@@ -1,4 +1,4 @@
-package main
+package engineapp
 
 import (
 	"context"
@@ -8,10 +8,9 @@ import (
 )
 
 func TestProviderSourceDelegatesWebSearchSettings(t *testing.T) {
-	t.Setenv("LINETTA_HOME", t.TempDir())
-	store, err := settings.NewWithSecretStore(settings.NewMemorySecretStore())
+	store, err := settings.NewForHomeWithSecretStore(t.TempDir(), settings.NewMemorySecretStore())
 	if err != nil {
-		t.Fatalf("NewWithSecretStore: %v", err)
+		t.Fatalf("NewForHomeWithSecretStore: %v", err)
 	}
 	provider := "perplexity"
 	apiKey := "pplx-test"

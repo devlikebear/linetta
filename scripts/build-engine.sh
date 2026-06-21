@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# Build the Go engine into apps/desktop/src-tauri/binaries/ with the target-triple
-# suffix Tauri's externalBin expects.
+# Build the standalone Go JSONRPC engine for debug and compatibility checks.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="${ROOT}/apps/desktop/src-tauri/binaries"
+OUT_DIR="${ROOT}/engine/bin"
 mkdir -p "${OUT_DIR}"
 
-# Determine the host target triple Tauri uses for sidecars.
+# Determine the host target triple for the compatibility binary suffix.
 TRIPLE=""
 if command -v rustc >/dev/null 2>&1; then
   TRIPLE="$(rustc --print host-tuple 2>/dev/null || true)"

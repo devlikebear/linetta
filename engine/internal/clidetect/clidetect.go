@@ -1,4 +1,4 @@
-//go:build !mas
+//go:build !mas && !mobile
 
 // Package clidetect locates the Claude Code CLI executable when it is not on
 // the process PATH. macOS GUI apps inherit a minimal PATH (not the user's login

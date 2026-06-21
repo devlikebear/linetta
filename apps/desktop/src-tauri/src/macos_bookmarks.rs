@@ -47,7 +47,9 @@ where
     if handle.is_null() {
         return Err("폴더 접근 권한을 잃었습니다. 다시 선택하세요".into());
     }
-    let path = unsafe { CStr::from_ptr(out_path) }.to_string_lossy().into_owned();
+    let path = unsafe { CStr::from_ptr(out_path) }
+        .to_string_lossy()
+        .into_owned();
     unsafe { linetta_free(out_path as *mut c_void) };
     let result = f(Path::new(&path));
     unsafe { linetta_bookmark_stop(handle) };

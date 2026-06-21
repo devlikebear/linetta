@@ -35,8 +35,8 @@ perl -0pi -e 's/(^\[package\]\nname = "linetta-desktop"\nversion = ")[^"]+(")/$1
   "${ROOT}/apps/desktop/src-tauri/Cargo.toml"
 perl -0pi -e 's/(name = "linetta-desktop"\nversion = ")[^"]+(")/$1$ENV{VERSION}$2/m' \
   "${ROOT}/apps/desktop/src-tauri/Cargo.lock"
-perl -0pi -e 's/(const engineVersion = ")[^"]+(")/$1$ENV{VERSION}$2/' \
-  "${ROOT}/engine/cmd/linetta-engine/main.go"
+perl -0pi -e 's/(const DefaultVersion = ")[^"]+(")/$1$ENV{VERSION}$2/' \
+  "${ROOT}/engine/internal/engineapp/engineapp.go"
 perl -0pi -e 's/(^\s*tag: v)[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?/$1$ENV{VERSION}/m' \
   "${ROOT}/packaging/flathub/com.devlikebear.linetta.yml"
 

@@ -1,16 +1,16 @@
-mod engine;
-mod jsonrpc;
+mod ffi;
 mod folder_sync;
 #[cfg(all(target_os = "macos", feature = "mas"))]
 mod macos_bookmarks;
 
 use serde_json::Value;
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::Manager;
 
 const ENGINE_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -19,25 +19,22 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let handle = app.handle().clone();
-            tauri::async_runtime::block_on(async move {
-                let state = match engine::spawn(&handle).await {
-                    Ok(engine_handle) => EngineState {
-                        client: Some(engine_handle.client.clone()),
-                        startup_error: None,
-                        _engine: Some(Arc::new(engine_handle)),
-                    },
-                    Err(e) => {
-                        let msg = format!("{e:#}");
-                        eprintln!("[linetta] failed to spawn engine: {msg}");
-                        EngineState {
-                            client: None,
-                            startup_error: Some(msg),
-                            _engine: None,
-                        }
+            let state = match mobile_engine_home(&handle)
+                .and_then(|home| ffi::Engine::start(&handle, home.as_deref()))
+            {
+                Ok(engine) => EngineState {
+                    engine: Some(Arc::new(engine)),
+                    startup_error: None,
+                },
+                Err(e) => {
+                    eprintln!("[linetta] failed to start engine: {e}");
+                    EngineState {
+                        engine: None,
+                        startup_error: Some(e),
                     }
-                };
-                handle.manage(state);
-            });
+                }
+            };
+            handle.manage(state);
             #[cfg(all(target_os = "macos", feature = "mas"))]
             {
                 let timer_handle = app.handle().clone();
@@ -47,7 +44,8 @@ pub fn run() {
                     tokio::time::sleep(std::time::Duration::from_secs(30)).await;
                     loop {
                         let state = timer_handle.state::<EngineState>();
-                        let _ = folder_sync::run_folder_sync_mas(&timer_handle, state.inner()).await;
+                        let _ =
+                            folder_sync::run_folder_sync_mas(&timer_handle, state.inner()).await;
                         tokio::time::sleep(std::time::Duration::from_secs(86_400)).await;
                     }
                 });
@@ -67,9 +65,8 @@ pub fn run() {
 }
 
 pub(crate) struct EngineState {
-    pub(crate) client: Option<Arc<jsonrpc::Client>>,
+    pub(crate) engine: Option<Arc<ffi::Engine>>,
     pub(crate) startup_error: Option<String>,
-    pub(crate) _engine: Option<Arc<engine::EngineHandle>>,
 }
 
 #[derive(serde::Serialize)]
@@ -85,8 +82,8 @@ struct EngineStatus {
 
 #[tauri::command]
 async fn engine_ping(state: tauri::State<'_, EngineState>) -> Result<String, String> {
-    let client = engine_client(&state)?;
-    let result = client.call("ping", None).await.map_err(|e| e.to_string())?;
+    let engine = engine_handle(state.inner())?;
+    let result = call_engine(engine, "ping".to_string(), None).await?;
     result
         .as_str()
         .map(|s| s.to_string())
@@ -99,16 +96,13 @@ async fn engine_call(
     method: String,
     params: Option<Value>,
 ) -> Result<Value, String> {
-    let client = engine_client(&state)?;
-    client
-        .call(&method, params)
-        .await
-        .map_err(|e| e.to_string())
+    let engine = engine_handle(state.inner())?;
+    call_engine(engine, method, params).await
 }
 
 #[tauri::command]
 async fn engine_status(state: tauri::State<'_, EngineState>) -> Result<EngineStatus, String> {
-    let Some(client) = state.client.clone() else {
+    let Some(engine) = state.engine.clone() else {
         return Ok(EngineStatus {
             ok: false,
             error: Some(
@@ -124,9 +118,13 @@ async fn engine_status(state: tauri::State<'_, EngineState>) -> Result<EngineSta
             migration_count: None,
         });
     };
-    if let Err(e) = client
-        .call_with_timeout("ping", None, ENGINE_STATUS_TIMEOUT)
-        .await
+    if let Err(e) = call_engine_with_timeout(
+        engine.clone(),
+        "ping".to_string(),
+        None,
+        ENGINE_STATUS_TIMEOUT,
+    )
+    .await
     {
         return Ok(EngineStatus {
             ok: false,
@@ -139,9 +137,13 @@ async fn engine_status(state: tauri::State<'_, EngineState>) -> Result<EngineSta
         });
     }
 
-    match client
-        .call_with_timeout("diagnostics.version", None, ENGINE_STATUS_TIMEOUT)
-        .await
+    match call_engine_with_timeout(
+        engine,
+        "diagnostics.version".to_string(),
+        None,
+        ENGINE_STATUS_TIMEOUT,
+    )
+    .await
     {
         Ok(v) => Ok(EngineStatus {
             ok: true,
@@ -176,13 +178,35 @@ async fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-pub(crate) fn engine_client(state: &EngineState) -> Result<Arc<jsonrpc::Client>, String> {
-    state.client.clone().ok_or_else(|| {
+pub(crate) fn engine_handle(state: &EngineState) -> Result<Arc<ffi::Engine>, String> {
+    state.engine.clone().ok_or_else(|| {
         state
             .startup_error
             .clone()
             .unwrap_or_else(|| "engine unavailable".to_string())
     })
+}
+
+pub(crate) async fn call_engine(
+    engine: Arc<ffi::Engine>,
+    method: String,
+    params: Option<Value>,
+) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || engine.call(&method, params))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+async fn call_engine_with_timeout(
+    engine: Arc<ffi::Engine>,
+    method: String,
+    params: Option<Value>,
+    timeout: Duration,
+) -> Result<Value, String> {
+    match tokio::time::timeout(timeout, call_engine(engine, method, params)).await {
+        Ok(result) => result,
+        Err(_) => Err(format!("engine timeout after {}ms", timeout.as_millis())),
+    }
 }
 
 fn opt_string(v: &Value, key: &str) -> Option<String> {
@@ -191,4 +215,18 @@ fn opt_string(v: &Value, key: &str) -> Option<String> {
 
 fn opt_i64(v: &Value, key: &str) -> Option<i64> {
     v.get(key).and_then(|x| x.as_i64())
+}
+
+fn mobile_engine_home(app: &tauri::AppHandle) -> Result<Option<String>, String> {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        Ok(Some(dir.to_string_lossy().into_owned()))
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let _ = app;
+        Ok(None)
+    }
 }

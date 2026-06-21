@@ -5,7 +5,7 @@ Linetta is a local-first desktop writing app for long-form fiction. The app keep
 ## Stack
 
 - Tauri 2 Rust shell + React 18 + Vite + TypeScript
-- Go engine over JSONRPC stdio
+- Embedded Go engine through a C ABI, with JSONRPC envelopes kept as the internal request contract
 - SQLite under the local Linetta data directory
 - `github.com/devlikebear/tars` for LLM provider integration
 
@@ -44,19 +44,21 @@ cd apps/desktop
 pnpm install
 ```
 
-Build the sidecar engine and start the desktop app:
+Start the desktop app:
 
 ```sh
 make dev
 ```
 
-This wraps `scripts/dev.sh`, which builds the Go engine once and then launches `tauri dev`.
+This wraps `scripts/dev.sh`, which launches `tauri dev`. Cargo links the embedded Go engine through `apps/desktop/src-tauri/build.rs`.
 
-Build only the sidecar engine:
+Build the standalone JSONRPC engine for debugging:
 
 ```sh
 make build-engine
 ```
+
+The debug binary is written under `engine/bin/` and is not bundled into the Tauri app.
 
 Build the desktop release binary for the current operating system:
 
@@ -90,9 +92,44 @@ Useful narrower checks:
 make test-go
 make test-desktop
 make test-tauri
+make test-mobile-engine
 ```
 
 `make test` runs Go tests, frontend Vitest tests, the Vite production build, and Rust `cargo check`.
+`make test-mobile-engine` runs the Go engine suite with the `mobile` build tag so the iOS/Android-safe stubs stay covered.
+
+Mobile engine artifacts can be built directly when the platform toolchains are installed:
+
+```sh
+make build-mobile-engine-ios
+make build-mobile-engine-android
+```
+
+The iOS target requires Xcode's iOS SDK. The Android target requires `ANDROID_NDK_HOME`.
+
+The ignored Tauri mobile native projects can be regenerated with:
+
+```sh
+make mobile-ios-init
+make mobile-android-init
+```
+
+For local iOS simulator smoke testing, install Xcode's matching iOS simulator
+runtime and run:
+
+```sh
+make build-mobile-ios-sim
+make smoke-mobile-ios-sim
+```
+
+For local Android smoke testing, install the Android SDK/NDK and run:
+
+```sh
+make build-mobile-android-debug
+make build-mobile-android-release-smoke
+```
+
+The iOS simulator build target creates a no-sign `.app` bundle and links the embedded Go engine into it. The iOS simulator smoke target also installs and launches the app in an available iPhone simulator, verifies the embedded engine symbols, and checks that `library.db` is created in the simulator app container. The Android debug target creates a Tauri APK and links the embedded Go engine into the Android app. The Android release smoke target creates a temporary local keystore, patches the generated Gradle signing hook, builds both release APK and Play-style AAB artifacts, verifies that both native libraries are packaged, checks APK Signature Scheme v2, and verifies the signed AAB without using real upload credentials. iOS signed app export is handled by the manual mobile release workflow because it depends on Apple team/signing credentials.
 
 ## Versioning And Builds
 
@@ -102,12 +139,14 @@ Keep all app version surfaces aligned with:
 make bump-version VERSION=0.2.0
 ```
 
-This updates the desktop `package.json`, Tauri config, Cargo metadata, lockfile package entry, and Go engine diagnostics version.
+This updates the desktop `package.json`, Tauri config, Cargo metadata, lockfile package entry, and embedded engine diagnostics version.
 
 GitHub Actions:
 
 - `.github/workflows/ci.yml`: runs `make test` on PRs and pushes to `main`.
 - `.github/workflows/build.yml`: builds OS-specific Tauri artifacts on `workflow_dispatch` and `v*` tags for macOS, Linux, and Windows.
+- `.github/workflows/mobile-engine.yml`: verifies the mobile-tagged embedded engine, checks Android debug APK packaging, and uploads iOS/Android engine artifacts.
+- `.github/workflows/mobile-release.yml`: manual iOS/Android release path for signed Tauri artifacts; it initializes the ignored mobile projects, applies Android signing wiring, builds `.ipa` / `.aab` / `.apk` artifacts, and can upload them to an existing GitHub Release tag.
 
 ## Data And Safety
 
@@ -133,7 +172,7 @@ Git sync is optional. When configured in Settings, Linetta exports active projec
 ## Troubleshooting
 
 - Engine startup failure: the desktop shell shows an engine diagnostic screen with retry and copy-diagnostics actions.
-- Missing sidecar binary: run `make build-engine`, then restart the app.
+- Embedded engine link failure: run `cd apps/desktop/src-tauri && cargo build` and inspect the Go archive build output from `build.rs`.
 - AI provider errors: check Settings for the selected provider and confirm the corresponding CLI credentials work in the same shell environment.
 - Backup or Git sync failures: open Settings and check the operation status cards for the latest error and timestamp.
 

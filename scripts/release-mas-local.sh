@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build, sign, and package the Mac App Store .pkg locally (no upload).
-#   engine (mas tag) -> Tauri build (mas config) -> embed provisioning profile ->
-#   sign sidecar+app (Apple Distribution) -> productbuild (Mac Installer) -> validate
+#   Tauri build with embedded engine FFI (mas feature) -> embed provisioning
+#   profile -> sign app (Apple Distribution) -> productbuild (Mac Installer) -> validate
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,7 +12,6 @@ CONFIG="${LINETTA_APPLE_CONFIG:-${DIR}/config.env}"
 set -a; . "${CONFIG}"; set +a
 
 ENT_APP="${ROOT}/apps/desktop/src-tauri/entitlements/linetta-mas.entitlements"
-ENT_SIDECAR="${ROOT}/apps/desktop/src-tauri/entitlements/linetta-sidecar.entitlements"
 PROFILE="${MAS_PROFILE_PATH:-${DIR}/linetta-mas.provisionprofile}"
 
 # Resolve identities (override via config.env MAS_APP_IDENTITY / MAS_INSTALLER_IDENTITY).
@@ -30,20 +29,17 @@ fi
 echo "App identity:       ${APP_ID}"
 echo "Installer identity: ${INST_ID}"
 
-echo "Building engine (mas) + Tauri app"
-LINETTA_BUILD_TAGS=mas bash "${ROOT}/scripts/build-engine.sh"
+echo "Building Tauri app"
 cd "${ROOT}/apps/desktop"
 pnpm tauri build --config src-tauri/tauri.mas.conf.json --bundles app --features mas
 
 APP="${ROOT}/apps/desktop/src-tauri/target/release/bundle/macos/Linetta.app"
-SIDECAR="${APP}/Contents/MacOS/linetta-engine"
 PKG="${ROOT}/apps/desktop/src-tauri/target/release/bundle/macos/Linetta.pkg"
 
 echo "Embedding provisioning profile"
 cp "${PROFILE}" "${APP}/Contents/embedded.provisionprofile"
 
-echo "Signing sidecar then app (Apple Distribution, MAS entitlements)"
-codesign --force --timestamp --sign "${APP_ID}" --entitlements "${ENT_SIDECAR}" "${SIDECAR}"
+echo "Signing app (Apple Distribution, MAS entitlements)"
 codesign --force --timestamp --sign "${APP_ID}" --entitlements "${ENT_APP}" "${APP}"
 
 echo "Building installer package"
