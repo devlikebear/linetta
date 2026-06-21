@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.0 - 2026-06-21
+
+- Embedded the Go engine in-process through a C ABI for desktop and mobile builds, removing the packaged desktop sidecar path.
+- Added iOS xcframework and Android shared-library build scripts, mobile engine CI, and manual mobile release workflows.
+- Added responsive Workspace coverage for mobile-sized screens and release smoke tooling for iOS simulator and Android APK/AAB packaging.
+
 ## v0.4.17 - 2026-06-14
 
 - Made companion scene-writing and scene-edit requests transactional, so current-scene text changes require verified `set_scene_text` application instead of accepting model-only success claims.
