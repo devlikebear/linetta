@@ -25,10 +25,6 @@ jobs:
             os: ubuntu-latest
             artifact: linux
             bundles: appimage,deb,rpm
-          - name: Windows
-            os: windows-latest
-            artifact: windows
-            bundles: nsis,msi
 
     steps:
       - name: Checkout
@@ -275,22 +271,22 @@ jobs:
         run: |
           set -euo pipefail
           windows_installer="$(find dist -maxdepth 1 -type f -name '*-setup.exe' | sort | head -n 1)"
-          if [ -z "${windows_installer}" ]; then
-            echo "Windows NSIS installer is required for winget metadata" >&2
-            exit 1
-          fi
-          windows_sha="$(shasum -a 256 "${windows_installer}" | awk '{print $1}')"
 
           rm -rf release-metadata
-          mkdir -p release-metadata/winget
-          scripts/render-winget-manifest.sh \
-            "${VERSION}" \
-            "${RELEASE_URL_BASE}" \
-            "$(basename "${windows_installer}")" \
-            "${windows_sha}" \
-            release-metadata/winget
-
-          tar -czf dist/Linetta-winget-manifests.tar.gz -C release-metadata winget
+          mkdir -p release-metadata
+          if [ -n "${windows_installer}" ]; then
+            windows_sha="$(shasum -a 256 "${windows_installer}" | awk '{print $1}')"
+            mkdir -p release-metadata/winget
+            scripts/render-winget-manifest.sh \
+              "${VERSION}" \
+              "${RELEASE_URL_BASE}" \
+              "$(basename "${windows_installer}")" \
+              "${windows_sha}" \
+              release-metadata/winget
+            tar -czf dist/Linetta-winget-manifests.tar.gz -C release-metadata winget
+          else
+            echo "::warning::Windows installer not found; skipping winget metadata."
+          fi
           cp packaging/flathub/com.devlikebear.linetta.yml dist/Linetta-flathub-manifest.yml
 
           find dist -maxdepth 1 -type f ! -name SHA256SUMS -print | LC_ALL=C sort | while IFS= read -r asset; do
