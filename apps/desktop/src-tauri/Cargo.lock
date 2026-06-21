@@ -1942,6 +1942,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "cc",
+ "libloading",
  "once_cell",
  "serde",
  "serde_json",

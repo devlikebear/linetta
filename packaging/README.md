@@ -4,14 +4,16 @@ Linetta uses GitHub Releases as the canonical source for desktop installers.
 The release workflow publishes:
 
 - macOS app archive for the Homebrew cask
+- Windows NSIS installer and MSI bundle
 - Linux AppImage, deb, and rpm bundles
 - `SHA256SUMS`
+- a tarball of rendered winget manifests
 - a Flathub manifest starter
 
-Windows desktop bundles are temporarily excluded from the canonical release
-workflow while the embedded Go engine archive is resolved for the MSVC linker.
-When a Windows NSIS installer is present in `dist`, the same workflow also
-renders `Linetta-winget-manifests.tar.gz`.
+Windows desktop builds package the embedded Go engine as
+`linetta_engine_ffi.dll` and load it at runtime from the Tauri resource
+directory. This avoids linking Go's `c-archive` output into the MSVC Tauri
+binary while preserving the embedded-engine runtime boundary.
 
 ## macOS Homebrew cask
 
@@ -50,11 +52,10 @@ openssl base64 -A -in DeveloperIDApplication.p12 -out certificate-base64.txt
 
 ## Windows winget
 
-When a Windows NSIS installer is included in the GitHub Release assets, the
-release workflow renders `Linetta-winget-manifests.tar.gz` from the templates in
-`packaging/winget`. After the first public Windows release, unpack that tarball
-into a fork of `microsoft/winget-pkgs` under the package path selected by
-`wingetcreate`, validate it, and open the upstream pull request.
+The release workflow renders `Linetta-winget-manifests.tar.gz` from the
+templates in `packaging/winget`. After the first public Windows release, unpack
+that tarball into a fork of `microsoft/winget-pkgs` under the package path
+selected by `wingetcreate`, validate it, and open the upstream pull request.
 
 Manual render example:
 

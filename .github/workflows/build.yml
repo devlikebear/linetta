@@ -21,10 +21,17 @@ jobs:
             os: macos-latest
             artifact: macos
             bundles: app,dmg
+            tauri_config: ""
           - name: Linux
             os: ubuntu-latest
             artifact: linux
             bundles: appimage,deb,rpm
+            tauri_config: ""
+          - name: Windows
+            os: windows-latest
+            artifact: windows
+            bundles: nsis,msi
+            tauri_config: "--config src-tauri/tauri.windows.conf.json"
 
     steps:
       - name: Checkout
@@ -144,7 +151,7 @@ jobs:
       - name: Build Tauri app
         shell: bash
         working-directory: apps/desktop
-        run: pnpm tauri build --no-bundle
+        run: pnpm tauri build --no-bundle ${{ matrix.tauri_config }}
 
       - name: Bundle app
         shell: bash
@@ -158,7 +165,7 @@ jobs:
           APPLE_API_KEY: ${{ steps.apple_signing.outputs.configured == 'true' && secrets.APPLE_API_KEY || '' }}
           APPLE_API_KEY_PATH: ${{ steps.apple_assets.outputs.api_key_path }}
           APPLE_TEAM_ID: ${{ steps.apple_signing.outputs.configured == 'true' && secrets.APPLE_TEAM_ID || '' }}
-        run: pnpm tauri bundle --bundles "${{ matrix.bundles }}"
+        run: pnpm tauri bundle --bundles "${{ matrix.bundles }}" ${{ matrix.tauri_config }}
 
       - name: Notarize and staple dmg
         if: runner.os == 'macOS' && steps.apple_signing.outputs.configured == 'true'

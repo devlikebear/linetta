@@ -24,6 +24,7 @@ fn build_go_engine() {
     let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let engine_dir = manifest.join("../../../engine");
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let target = env::var("TARGET").unwrap_or_default();
 
     let mut tags: Vec<&str> = Vec::new();
     if env::var("CARGO_FEATURE_MAS").is_ok() {
@@ -36,15 +37,13 @@ fn build_go_engine() {
     match target_os.as_str() {
         "android" => build_android_engine(&engine_dir, &manifest, &out_dir, &tags),
         "ios" => build_apple_engine(&engine_dir, &out_dir, &tags, true),
+        "windows" => build_windows_engine(&engine_dir, &out_dir, &target, &tags),
         _ => build_apple_engine(&engine_dir, &out_dir, &tags, false),
     }
 
     if matches!(target_os.as_str(), "macos" | "ios") {
         println!("cargo:rustc-link-lib=framework=Security");
         println!("cargo:rustc-link-lib=framework=CoreFoundation");
-    }
-    if target_os == "windows" {
-        println!("cargo:rustc-link-lib=legacy_stdio_definitions");
     }
     println!(
         "cargo:rerun-if-changed={}",
@@ -140,6 +139,32 @@ fn build_go_engine() {
         println!("cargo:rustc-link-lib=dylib=linetta");
     }
 
+    fn build_windows_engine(engine_dir: &Path, out_dir: &Path, target: &str, tags: &[&str]) {
+        let dll = out_dir.join("linetta_engine_ffi.dll");
+        let mut cmd = go_build_command(engine_dir, tags);
+        cmd.env("CGO_ENABLED", "1")
+            .env("GOOS", "windows")
+            .env("GOARCH", windows_goarch(target))
+            .arg("-buildmode=c-shared")
+            .arg("-o")
+            .arg(&dll)
+            .arg("./cmd/linetta-ffi");
+        run_go_build(&mut cmd, "go c-shared build failed");
+
+        let profile_dir = cargo_profile_dir(out_dir);
+        let profile_dll = profile_dir.join("linetta_engine_ffi.dll");
+        fs::copy(&dll, &profile_dll).unwrap_or_else(|e| {
+            panic!(
+                "copy Windows engine DLL to {} failed: {e}",
+                profile_dll.display()
+            )
+        });
+        println!(
+            "cargo:rustc-env=LINETTA_ENGINE_DLL_BUILD_PATH={}",
+            profile_dll.display()
+        );
+    }
+
     fn go_build_command(engine_dir: &Path, tags: &[&str]) -> Command {
         let mut cmd = Command::new("go");
         cmd.current_dir(engine_dir).arg("build");
@@ -147,6 +172,23 @@ fn build_go_engine() {
             cmd.arg(format!("-tags={}", tags.join(",")));
         }
         cmd
+    }
+
+    fn cargo_profile_dir(out_dir: &Path) -> PathBuf {
+        out_dir
+            .ancestors()
+            .nth(3)
+            .unwrap_or_else(|| panic!("unexpected OUT_DIR layout: {}", out_dir.display()))
+            .to_path_buf()
+    }
+
+    fn windows_goarch(target: &str) -> &'static str {
+        match target {
+            "x86_64-pc-windows-msvc" => "amd64",
+            "aarch64-pc-windows-msvc" => "arm64",
+            "i686-pc-windows-msvc" => "386",
+            _ => panic!("unsupported Windows target: {target}"),
+        }
     }
 
     fn run_go_build(cmd: &mut Command, message: &str) {
