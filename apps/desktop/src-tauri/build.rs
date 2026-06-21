@@ -43,6 +43,9 @@ fn build_go_engine() {
         println!("cargo:rustc-link-lib=framework=Security");
         println!("cargo:rustc-link-lib=framework=CoreFoundation");
     }
+    if target_os == "windows" {
+        println!("cargo:rustc-link-lib=legacy_stdio_definitions");
+    }
     println!(
         "cargo:rerun-if-changed={}",
         engine_dir.join("cmd/linetta-ffi").display()
@@ -232,15 +235,15 @@ fn build_go_engine() {
         );
     }
 
-    fn make_executable(path: &Path) {
+    fn make_executable(_path: &Path) {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(path)
+            let mut perms = fs::metadata(_path)
                 .expect("clang wrapper metadata")
                 .permissions();
             perms.set_mode(0o755);
-            fs::set_permissions(path, perms).expect("chmod clang wrapper");
+            fs::set_permissions(_path, perms).expect("chmod clang wrapper");
         }
     }
 }
