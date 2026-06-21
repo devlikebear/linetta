@@ -55,4 +55,32 @@ describe("CommandPalette", () => {
 
     expect(run).not.toHaveBeenCalled();
   });
+
+  it("finds commands by hint and keywords", async () => {
+    const user = userEvent.setup();
+    const runHistory = vi.fn();
+    const runSettings = vi.fn();
+    renderPalette([
+      {
+        id: "history",
+        section: "프로젝트",
+        label: "편집 히스토리 / 버전 비교",
+        hint: "버전 · 복원 · diff",
+        keywords: ["rollback"],
+        run: runHistory,
+      },
+      { id: "settings", section: "프로젝트", label: "설정 열기", run: runSettings },
+    ]);
+
+    await user.type(screen.getByPlaceholderText("명령 검색…"), "복원");
+    expect(screen.getByText("편집 히스토리 / 버전 비교")).toBeInTheDocument();
+    expect(screen.queryByText("설정 열기")).not.toBeInTheDocument();
+
+    await user.clear(screen.getByPlaceholderText("명령 검색…"));
+    await user.type(screen.getByPlaceholderText("명령 검색…"), "rollback");
+    await user.keyboard("{Enter}");
+
+    expect(runHistory).toHaveBeenCalledOnce();
+    expect(runSettings).not.toHaveBeenCalled();
+  });
 });

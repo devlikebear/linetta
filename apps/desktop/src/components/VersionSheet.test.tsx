@@ -37,6 +37,23 @@ beforeEach(() => {
 });
 
 describe("VersionSheet", () => {
+  it("renders a wide review area for version preview and comparison", async () => {
+    const { container } = render(
+      <I18nProvider>
+        <VersionSheet nodeId="scene-1" onClose={vi.fn()} onRestored={vi.fn()} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".vs-preview")).toHaveTextContent("새 문장");
+    });
+
+    expect(container.querySelector("aside")).toHaveClass("history-panel");
+    expect(container.querySelector(".vs-review-sec")).toBeInTheDocument();
+    expect(container.querySelector(".vs-review")).toBeInTheDocument();
+    expect(container.querySelector(".vs-preview")).toBeInTheDocument();
+  });
+
   it("compares two selected versions in the side panel", async () => {
     const user = userEvent.setup();
     render(

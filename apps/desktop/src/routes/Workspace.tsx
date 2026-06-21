@@ -1240,7 +1240,8 @@ export function Workspace() {
       id: "version-restore",
       section: sectionProject,
       label: t("workspace.command.sceneVersions"),
-      hint: t("workspace.command.restore"),
+      hint: t("workspace.command.sceneVersionsHint"),
+      keywords: ["history", "rollback", "diff", "version", "restore", "히스토리", "버전", "복원", "비교"],
       run: () => setVersionSheetNodeId(load.node.id),
     });
     cmds.push({
@@ -1585,7 +1586,7 @@ export function Workspace() {
 
       <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
         (aiModal || companionOpen || factBookOpen || contextualEditOpen) ? " right-wide" : ""
-      }${companionOpen ? " right-xwide" : ""}`}>
+      }${companionOpen ? " right-xwide" : ""}${versionSheetNodeId ? " right-history" : ""}`}>
         <OutlinePanel
           tree={load.tree}
           currentId={load.node.id}
@@ -1691,7 +1692,21 @@ export function Workspace() {
             )}
           </div>
         </section>
-        {(aiModal || companionOpen) && load ? (
+        {versionSheetNodeId && load ? (
+          <VersionSheet
+            nodeId={versionSheetNodeId}
+            onClose={() => {
+              setVersionSheetNodeId(null);
+              focusEditor();
+            }}
+            onRestored={(updatedNode) => {
+              const docStr = updatedNode.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`;
+              setLoad((prev) => prev ? { ...prev, node: updatedNode, initialDoc: JSON.parse(docStr) } : prev);
+              setCharCount(updatedNode.word_count);
+              showToast(t("workspace.toast.versionRestored"));
+            }}
+          />
+        ) : (aiModal || companionOpen) && load ? (
           <CompanionPanel
             projectId={load.project.id}
             nodeIdRef={companionNodeRef}
@@ -1884,22 +1899,6 @@ export function Workspace() {
           onClose={() => {
             setDialog(null);
             focusEditor();
-          }}
-        />
-      )}
-
-      {versionSheetNodeId && (
-        <VersionSheet
-          nodeId={versionSheetNodeId}
-          onClose={() => {
-            setVersionSheetNodeId(null);
-            focusEditor();
-          }}
-          onRestored={(updatedNode) => {
-            const docStr = updatedNode.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`;
-            setLoad((prev) => prev ? { ...prev, node: updatedNode, initialDoc: JSON.parse(docStr) } : prev);
-            setCharCount(updatedNode.word_count);
-            showToast(t("workspace.toast.versionRestored"));
           }}
         />
       )}

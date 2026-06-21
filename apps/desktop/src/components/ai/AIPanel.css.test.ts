@@ -35,7 +35,7 @@ describe("AI panel presentation and defaults", () => {
     expect(workspace).not.toContain("runSelectionAIReplace");
     expect(workspace).not.toContain("workspace.selectionMenu.aiReplace");
     expect(workspace).toContain("setCompanionOpen(true)");
-    expect(workspace).toContain("{(aiModal || companionOpen) && load ?");
+    expect(workspace).toContain("(aiModal || companionOpen) && load ?");
     expect(workspace).toContain('className={`ws-tool${companionOpen || aiModal ? " is-active" : ""}`}');
     expect(workspace).toContain("aiDraft={aiModal ?");
     expect(workspace).toContain("finishAIModalPanelState();");

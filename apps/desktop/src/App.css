@@ -468,6 +468,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .ws-body.rail-collapsed { --rail: 52px; }
 .ws-body.right-wide { --right: 420px; }
 .ws-body.right-xwide { --right: 468px; }
+.ws-body.right-history { --right: clamp(520px, 54vw, 760px); }
 
 /* ---- Outline rail ---- */
 .rail {

@@ -8,6 +8,7 @@ export interface Command {
   section: string;
   label: string;
   hint?: string;          // right-side text (shortcut hint, etc.)
+  keywords?: string[];
   disabled?: boolean;
   run: () => void | Promise<void>;
 }
@@ -36,7 +37,12 @@ export function CommandPalette({ open, onClose, commands }: Props) {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return commands;
-    return commands.filter((c) => c.label.toLowerCase().includes(q) || c.section.toLowerCase().includes(q));
+    return commands.filter((c) => {
+      const haystack = [c.label, c.section, c.hint ?? "", ...(c.keywords ?? [])]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
   }, [commands, query]);
 
   useEffect(() => {

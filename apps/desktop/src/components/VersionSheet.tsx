@@ -204,7 +204,7 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
   };
 
   return (
-    <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
+    <aside className="panel history-panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
         <span className="ttl">{t("version.title")}</span>
         <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}>
@@ -215,7 +215,7 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
       {error && <p className="vs-error">{error}</p>}
       {!entries && !error && <p className="vs-loading">{t("common.loading")}</p>}
       {entries && entries.length === 0 && (
-        <div className="panel-scroll">
+        <div className="panel-scroll vs-empty-scroll">
           <div className="sec"><p className="sec-empty">{t("version.empty")}</p></div>
         </div>
       )}
@@ -223,7 +223,7 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
       {entries && entries.length > 0 && (
         <>
           <div className="panel-scroll">
-            <div className="sec">
+            <div className="sec vs-timeline-sec">
               <h4>{t("version.timeline")}</h4>
               <div className="vs-timeline">
                 {major.length > 0 && (
@@ -241,7 +241,7 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
               </div>
             </div>
 
-            <div className="sec">
+            <div className="sec vs-review-sec">
               <div className="vs-view-tabs" role="tablist" aria-label={t("version.viewMode")}>
                 <button
                   type="button"
@@ -263,36 +263,38 @@ export function VersionSheet({ nodeId, onClose, onRestored }: Props) {
                 </button>
               </div>
 
-              {viewMode === "preview" && (
-                <pre className="vs-preview">{selected?.doc_preview || t("version.emptyBody")}</pre>
-              )}
+              <div className="vs-review">
+                {viewMode === "preview" && (
+                  <pre className="vs-preview">{selected?.doc_preview || t("version.emptyBody")}</pre>
+                )}
 
-              {viewMode === "compare" && (
-                <div className="vs-compare">
-                  <div className="vs-compare-head">
-                    <span>{t("version.compare.a", { time: compareLeft ? formatTime(compareLeft.created_at) : "-" })}</span>
-                    <span>{t("version.compare.b", { time: compareRight ? formatTime(compareRight.created_at) : "-" })}</span>
+                {viewMode === "compare" && (
+                  <div className="vs-compare">
+                    <div className="vs-compare-head">
+                      <span>{t("version.compare.a", { time: compareLeft ? formatTime(compareLeft.created_at) : "-" })}</span>
+                      <span>{t("version.compare.b", { time: compareRight ? formatTime(compareRight.created_at) : "-" })}</span>
+                    </div>
+                    {!canCompare && <p className="vs-hint">{t("version.compare.needTwo")}</p>}
+                    {compareError && <p className="vs-error inline">{compareError}</p>}
+                    {canCompare && comparing && <p className="vs-loading inline">{t("version.compare.loading")}</p>}
+                    {canCompare && !comparing && comparison && !hasChanges && (
+                      <p className="vs-hint">{t("version.compare.same")}</p>
+                    )}
+                    {canCompare && !comparing && comparison && hasChanges && (
+                      <pre className="vs-diff" aria-label={t("version.compare.diffLabel")}>
+                        {diff.map((line, idx) => {
+                          const prefix = line.kind === "removed" ? "- " : line.kind === "added" ? "+ " : "  ";
+                          return (
+                            <span key={`${idx}-${line.kind}`} className={`vs-diff-line ${line.kind}`}>
+                              {prefix}{line.text || " "}
+                            </span>
+                          );
+                        })}
+                      </pre>
+                    )}
                   </div>
-                  {!canCompare && <p className="vs-hint">{t("version.compare.needTwo")}</p>}
-                  {compareError && <p className="vs-error inline">{compareError}</p>}
-                  {canCompare && comparing && <p className="vs-loading inline">{t("version.compare.loading")}</p>}
-                  {canCompare && !comparing && comparison && !hasChanges && (
-                    <p className="vs-hint">{t("version.compare.same")}</p>
-                  )}
-                  {canCompare && !comparing && comparison && hasChanges && (
-                    <pre className="vs-diff" aria-label={t("version.compare.diffLabel")}>
-                      {diff.map((line, idx) => {
-                        const prefix = line.kind === "removed" ? "- " : line.kind === "added" ? "+ " : "  ";
-                        return (
-                          <span key={`${idx}-${line.kind}`} className={`vs-diff-line ${line.kind}`}>
-                            {prefix}{line.text || " "}
-                          </span>
-                        );
-                      })}
-                    </pre>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
