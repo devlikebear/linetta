@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Tauri Linux dependencies
         run: |
@@ -23,18 +23,18 @@ jobs:
             patchelf
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: engine/go.mod
           cache-dependency-path: engine/go.sum
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 11.3.0
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 25
           cache: pnpm
@@ -53,4 +53,4 @@ jobs:
           workspaces: apps/desktop/src-tauri
 
       - name: Verify
-        run: make test
+        run: make ci

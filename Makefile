@@ -1,4 +1,4 @@
-.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine validate-distribution build-engine build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine validate-actions-runtime validate-distribution build-engine build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -8,7 +8,7 @@ dev: ## Start the desktop app in dev mode
 
 test: test-go test-desktop test-tauri ## Run all local verification
 
-ci: test ## Alias for the CI verification contract
+ci: validate-actions-runtime test ## Run the CI verification contract
 
 test-go: ## Run Go engine tests
 	cd engine && go test ./...
@@ -21,6 +21,9 @@ test-tauri: ## Type-check the Tauri shell
 
 test-mobile-engine: ## Run the Go engine suite under the mobile build tag
 	cd engine && go test -tags mobile ./...
+
+validate-actions-runtime: ## Validate GitHub Actions use non-deprecated runtimes
+	bash scripts/validate-actions-runtime.sh
 
 validate-distribution: ## Validate release packaging metadata
 	bash scripts/validate-distribution.sh
