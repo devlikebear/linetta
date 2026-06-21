@@ -57,6 +57,9 @@ import type {
   SearchResult,
   ProviderID,
   ProviderTestResult,
+  OpenRouterKeyInfo,
+  OpenRouterOAuthFinish,
+  OpenRouterOAuthStart,
   Settings,
   SettingsPatch,
   Snapshot,
@@ -209,6 +212,13 @@ export const providers = {
   detectCli: () => rpcCall<{ path: string }>("providers.detect_cli"),
   test: (provider: ProviderID) =>
     rpcCall<ProviderTestResult>("providers.test", { provider }),
+};
+
+export const openRouter = {
+  keyInfo: () => rpcCall<OpenRouterKeyInfo>("openrouter.key_info"),
+  oauthStart: () => rpcCall<OpenRouterOAuthStart>("openrouter.oauth_start"),
+  oauthFinish: (requestId: string) =>
+    rpcCall<OpenRouterOAuthFinish>("openrouter.oauth_finish", { request_id: requestId }),
 };
 
 export const webSearch = {

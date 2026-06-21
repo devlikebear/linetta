@@ -24,6 +24,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/modelcatalog"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
+	"github.com/devlikebear/linetta/engine/internal/openrouter"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -308,9 +309,13 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("companion.references.delete", handlers.CompanionReferencesDelete(companionSvc))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
+	openRouterOAuth := openrouter.NewOAuthManager(openrouter.OAuthConfig{})
 	s.Handle("providers.list_models", handlers.ListModels(settingsStore, modelcatalog.Default()))
 	s.Handle("providers.detect_cli", handlers.DetectCLI())
 	s.Handle("providers.test", handlers.TestProvider(settingsStore, ai.DefaultClientFactory))
+	s.Handle("openrouter.oauth_start", handlers.OpenRouterOAuthStart(openRouterOAuth))
+	s.Handle("openrouter.oauth_finish", handlers.OpenRouterOAuthFinish(settingsStore, openRouterOAuth))
+	s.Handle("openrouter.key_info", handlers.OpenRouterKeyInfo(settingsStore, nil))
 	s.Handle("web_search.test", handlers.TestWebSearch(settingsStore, handlers.DefaultWebSearchTester))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))

@@ -23,6 +23,7 @@ const (
 	ProviderOpenAICodex   = "openai-codex"
 	ProviderAnthropic     = "anthropic"
 	ProviderOpenAI        = "openai"
+	ProviderOpenRouter    = "openrouter"
 	ProviderGeminiNative  = "gemini-native"
 )
 
@@ -31,12 +32,22 @@ const (
 // supported for API-backed Codex and returns 400 for ChatGPT account auth.
 const DefaultOpenAICodexModel = "gpt-5.3-codex-spark"
 
+// OpenRouterBaseURL is the OpenAI-compatible API endpoint documented by
+// OpenRouter. The app keeps "openrouter" as a user-facing provider and maps it
+// to OpenAI-compatible calls only at the tars boundary.
+const OpenRouterBaseURL = "https://openrouter.ai/api/v1"
+
+// DefaultOpenRouterModel lets first-time users test OpenRouter without picking a
+// model id. OpenRouter resolves this auto route server-side.
+const DefaultOpenRouterModel = "openrouter/auto"
+
 func validProviders() []string {
 	return []string{
 		ProviderClaudeCodeCLI,
 		ProviderOpenAICodex,
 		ProviderAnthropic,
 		ProviderOpenAI,
+		ProviderOpenRouter,
 		ProviderGeminiNative,
 	}
 }
@@ -566,6 +577,14 @@ func (s *Store) runtimeProviderConfig(provider string, cfg ProviderConfig) Provi
 func normalizeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig {
 	if provider == ProviderOpenAICodex && (cfg.Model == "" || cfg.Model == "gpt-5.3-codex") {
 		cfg.Model = DefaultOpenAICodexModel
+	}
+	if provider == ProviderOpenRouter {
+		if cfg.Model == "" {
+			cfg.Model = DefaultOpenRouterModel
+		}
+		if cfg.BaseURL == "" {
+			cfg.BaseURL = OpenRouterBaseURL
+		}
 	}
 	return cfg
 }

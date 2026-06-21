@@ -525,6 +525,33 @@ func TestResolveReturnsActiveProviderConfig(t *testing.T) {
 	}
 }
 
+func TestResolveReturnsOpenRouterDefaults(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	active := ProviderOpenRouter
+	if _, err := s.Set(ctx, Patch{
+		Provider: &active,
+		Providers: map[string]ProviderConfig{
+			ProviderOpenRouter: {APIKey: "or-test"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rp := s.Resolve()
+	if rp.Provider != ProviderOpenRouter {
+		t.Fatalf("provider=%q, want %q", rp.Provider, ProviderOpenRouter)
+	}
+	if rp.BaseURL != OpenRouterBaseURL {
+		t.Fatalf("base_url=%q, want %q", rp.BaseURL, OpenRouterBaseURL)
+	}
+	if rp.Model != DefaultOpenRouterModel {
+		t.Fatalf("model=%q, want %q", rp.Model, DefaultOpenRouterModel)
+	}
+	if rp.APIKey != "or-test" {
+		t.Fatalf("api_key=%q, want stored key", rp.APIKey)
+	}
+}
+
 func TestSecretsAreNotWrittenToSettingsJSON(t *testing.T) {
 	s := newStoreOnTemp(t)
 	ctx := context.Background()

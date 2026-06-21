@@ -11,6 +11,7 @@ import {
   FileText,
   HelpCircle,
   ImagePlus,
+  KeyRound,
   Layers,
   Lightbulb,
   MessageSquare,
@@ -22,7 +23,7 @@ import {
 } from "lucide-react";
 import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
-import { companion as companionApi } from "../../lib/rpc";
+import { companion as companionApi, settings as settingsApi } from "../../lib/rpc";
 import { stripProposalBlock } from "../../lib/companionDisplay";
 import type {
   AIContextPreview,
@@ -33,9 +34,12 @@ import type {
   CompanionReferencePurpose,
   CompanionReferenceSource,
   CompanionReferenceStatus,
+  AISetupIssue,
+  ProviderID,
 } from "../../lib/types";
 import { AIDraftComposer, type AIDraftComposerProps } from "../ai/AIPanel";
 import { AIContextChecklistList, DEFAULT_AI_CONTEXT_SELECTION, formatTokenEstimate, totalContextItems, totalContextTokens } from "../ai/AIContextChecklist";
+import { AISetupStart, guideForProvider, type GuideID } from "../ai/AISetupStart";
 import { ProposalCard } from "./ProposalCard";
 import { ChoiceCard } from "./ChoiceCard";
 import { Markdown } from "./Markdown";
@@ -361,6 +365,73 @@ function MessageCopyButton({
   );
 }
 
+function aiSetupBodyKey(issue: AISetupIssue): string {
+  switch (issue) {
+    case "missing_key":
+      return "companion.aiSetup.body.missingKey";
+    case "auth_required":
+      return "companion.aiSetup.body.authRequired";
+    case "model_unavailable":
+      return "companion.aiSetup.body.modelUnavailable";
+    case "rate_or_spend_limit":
+      return "companion.aiSetup.body.rateOrSpendLimit";
+    case "unknown_provider_error":
+    default:
+      return "companion.aiSetup.body.unknownProviderError";
+  }
+}
+
+function CompanionAISetupCard({
+  message,
+  t,
+  isBusy,
+  onRetry,
+  onOpenSetup,
+}: {
+  message: ChatMessage;
+  t: Translate;
+  isBusy: boolean;
+  onRetry: () => void;
+  onOpenSetup: (path: "easy" | "subscription" | "direct") => void;
+}) {
+  if (!message.aiSetupIssue) return null;
+  return (
+    <section className="companion-ai-setup-card" aria-label={t("companion.aiSetup.title")}>
+      <div className="companion-ai-setup-title">
+        <KeyRound size={15} />
+        <strong>{t("companion.aiSetup.title")}</strong>
+      </div>
+      <p>{t(aiSetupBodyKey(message.aiSetupIssue))}</p>
+      <div className="companion-ai-setup-actions">
+        <button type="button" className="btn primary sm" onClick={() => onOpenSetup("easy")}>
+          {t("companion.aiSetup.connectEasy")}
+        </button>
+        <button type="button" className="btn ghost sm" onClick={() => onOpenSetup("subscription")}>
+          {t("companion.aiSetup.connectSubscription")}
+        </button>
+        <button type="button" className="btn ghost sm" onClick={() => onOpenSetup("direct")}>
+          {t("companion.aiSetup.connectDirect")}
+        </button>
+        {message.retryText && (
+          <button type="button" className="btn ghost sm" onClick={onRetry} disabled={isBusy}>
+            {t("companion.aiSetup.retryLast")}
+          </button>
+        )}
+      </div>
+      <div className="companion-ai-setup-notes">
+        <span>{t("companion.aiSetup.keychain")}</span>
+        <span>{t("companion.aiSetup.limit")}</span>
+      </div>
+      {message.rawError && (
+        <details className="companion-ai-setup-details">
+          <summary>{t("companion.aiSetup.details")}</summary>
+          <code>{message.rawError}</code>
+        </details>
+      )}
+    </section>
+  );
+}
+
 export function CompanionPanel({
   projectId,
   nodeIdRef,
@@ -405,6 +476,9 @@ export function CompanionPanel({
   const [referenceNotice, setReferenceNotice] = useState("");
   const [attachments, setAttachments] = useState<CompanionImageDraft[]>([]);
   const [attachmentNotice, setAttachmentNotice] = useState("");
+  const [aiSetupOpen, setAISetupOpen] = useState(false);
+  const [aiSetupGuideId, setAISetupGuideId] = useState<GuideID>("chatgpt-subscription");
+  const [aiSetupProvider, setAISetupProvider] = useState<ProviderID>("openai-codex");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -711,6 +785,28 @@ export function CompanionPanel({
     window.requestAnimationFrame(() => focusInput());
   };
 
+  const openAISetup = (path: "easy" | "subscription" | "direct") => {
+    const guideId: GuideID =
+      path === "easy" ? "openrouter-safe" : path === "subscription" ? "chatgpt-subscription" : "openai-api";
+    const provider: ProviderID =
+      path === "easy" ? "openrouter" : path === "subscription" ? "openai-codex" : "openai";
+    setAISetupProvider(provider);
+    setAISetupGuideId(guideId);
+    setAISetupOpen(true);
+  };
+
+  const selectAISetupProvider = async (provider: ProviderID) => {
+    setAISetupProvider(provider);
+    setAISetupGuideId(guideForProvider(provider));
+    try {
+      const next = await settingsApi.set({ provider });
+      window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+    } catch {
+      // The inline setup sheet is an entry point; Settings remains the detailed
+      // surface for showing provider-specific save/test errors.
+    }
+  };
+
   return (
     <aside className="panel" onMouseDown={(e) => e.stopPropagation()}>
       <div className="panel-head">
@@ -825,6 +921,25 @@ export function CompanionPanel({
             );
           }
           const hasCard = !!m.proposal || !!m.choices;
+          if (m.errored && m.aiSetupIssue) {
+            return (
+              <div key={i} className="msg bot">
+                {showSceneMeta && (
+                  <div className="companion-message-meta">
+                    <span className="companion-scene-chip">{m.nodeLabel}</span>
+                  </div>
+                )}
+                <span className="msg-who">companion</span>
+                <CompanionAISetupCard
+                  message={m}
+                  t={t}
+                  isBusy={isBusy}
+                  onOpenSetup={openAISetup}
+                  onRetry={() => { void sendWithFreshContext(m.retryText ?? ""); }}
+                />
+              </div>
+            );
+          }
           return (
             <div key={i} className="msg bot">
               {(m.content || !hasCard) && (
@@ -1128,6 +1243,26 @@ export function CompanionPanel({
           </section>
         )}
       </div>
+      )}
+      {aiSetupOpen && (
+        <div className="modal-backdrop center companion-ai-setup-backdrop" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="modal companion-ai-setup-modal" role="dialog" aria-modal="true" aria-labelledby="ai-setup-start-title">
+            <AISetupStart
+              variant="modal"
+              currentProvider={aiSetupProvider}
+              currentProviderLabel={t(`settings.provider.${aiSetupProvider === "openai-codex" ? "openaiCodex" : aiSetupProvider === "anthropic" ? "anthropic" : aiSetupProvider === "openrouter" ? "openrouter" : aiSetupProvider === "gemini-native" ? "gemini" : aiSetupProvider === "claude-code-cli" ? "claudeCli" : "openai"}.label`)}
+              credentialState={t("settings.provider.stateNeedsConnection")}
+              unavailableProviders={[]}
+              selectedGuideId={aiSetupGuideId}
+              onGuideIdChange={setAISetupGuideId}
+              onSelectProvider={(provider) => { void selectAISetupProvider(provider); }}
+              onClose={() => {
+                setAISetupOpen(false);
+                window.requestAnimationFrame(() => focusInput());
+              }}
+            />
+          </div>
+        </div>
       )}
     </aside>
   );

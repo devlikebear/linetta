@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -27,7 +28,8 @@ type ClientFactory func(p ResolvedProvider) (llm.Client, error)
 // configured CLI path via the CLAUDE_CODE_CLI_PATH env var that tars reads
 // (NewClaudeCodeCLIClient has no path parameter, so the env var is the only hook).
 func DefaultClientFactory(p ResolvedProvider) (llm.Client, error) {
-	if err := guardProvider(p.Provider); err != nil {
+	opts := providerOptionsForTars(p)
+	if err := guardProvider(opts.Provider); err != nil {
 		return nil, err
 	}
 	if p.Provider == "claude-code-cli" {
@@ -35,11 +37,23 @@ func DefaultClientFactory(p ResolvedProvider) (llm.Client, error) {
 			_ = os.Setenv("CLAUDE_CODE_CLI_PATH", path)
 		}
 	}
-	return llm.NewProvider(llm.ProviderOptions{
-		Provider: p.Provider,
+	return llm.NewProvider(opts)
+}
+
+func providerOptionsForTars(p ResolvedProvider) llm.ProviderOptions {
+	provider := p.Provider
+	baseURL := p.BaseURL
+	if provider == settings.ProviderOpenRouter {
+		provider = settings.ProviderOpenAI
+		if strings.TrimSpace(baseURL) == "" {
+			baseURL = settings.OpenRouterBaseURL
+		}
+	}
+	return llm.ProviderOptions{
+		Provider: provider,
 		Model:    p.Model,
 		APIKey:   p.APIKey,
-		BaseURL:  p.BaseURL,
+		BaseURL:  baseURL,
 		WorkDir:  p.WorkDir,
-	})
+	}
 }

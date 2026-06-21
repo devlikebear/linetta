@@ -482,8 +482,16 @@ export type ProviderID =
   | "openai-codex"
   | "anthropic"
   | "openai"
+  | "openrouter"
   | "gemini-native";
 export type WebSearchProvider = "brave" | "perplexity";
+
+export type AISetupIssue =
+  | "missing_key"
+  | "auth_required"
+  | "model_unavailable"
+  | "rate_or_spend_limit"
+  | "unknown_provider_error";
 
 export type AppLanguage = "ko" | "en" | "ja";
 
@@ -500,6 +508,39 @@ export interface ProviderTestResult {
   ok: boolean;
   provider: ProviderID;
   model?: string;
+  message: string;
+}
+
+export interface OpenRouterKeyInfo {
+  ok: boolean;
+  provider: "openrouter";
+  label?: string;
+  limit?: number | null;
+  limit_reset?: string | null;
+  limit_remaining?: number | null;
+  include_byok_in_limit?: boolean;
+  usage?: number;
+  usage_daily?: number;
+  usage_weekly?: number;
+  usage_monthly?: number;
+  byok_usage?: number;
+  byok_usage_daily?: number;
+  byok_usage_weekly?: number;
+  byok_usage_monthly?: number;
+  is_free_tier?: boolean;
+}
+
+export interface OpenRouterOAuthStart {
+  request_id: string;
+  auth_url: string;
+  callback_url: string;
+  expires_at: number;
+}
+
+export interface OpenRouterOAuthFinish {
+  ok: boolean;
+  provider: "openrouter";
+  model: string;
   message: string;
 }
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -35,6 +36,12 @@ func Default() *Catalog { return &Catalog{fetcher: llm.NewModelFetcher()} }
 func (c *Catalog) List(ctx context.Context, provider, apiKey, baseURL string) ([]string, error) {
 	if strings.TrimSpace(provider) == "claude-code-cli" {
 		return []string{}, nil
+	}
+	if strings.TrimSpace(provider) == settings.ProviderOpenRouter {
+		provider = settings.ProviderOpenAI
+		if strings.TrimSpace(baseURL) == "" {
+			baseURL = settings.OpenRouterBaseURL
+		}
 	}
 	models, err := c.fetcher.FetchModels(ctx, llm.ProviderOptions{
 		Provider: provider,

@@ -50,6 +50,9 @@ const companionState = vi.hoisted(() => ({
       nodeLabel?: string;
       scope?: "scene" | "project" | "global";
       errored?: boolean;
+      retryText?: string;
+      aiSetupIssue?: import("../../lib/types").AISetupIssue;
+      rawError?: string;
     }[],
     streaming: "",
     thinking: "",
@@ -64,6 +67,7 @@ const companionState = vi.hoisted(() => ({
 }));
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
+  settingsSet: vi.fn(),
   companionPreviewContext: vi.fn(),
   companionReferencesList: vi.fn(),
   companionReferencesCreate: vi.fn(),
@@ -81,6 +85,7 @@ vi.mock("../../hooks/useCompanion", () => ({
 vi.mock("../../lib/rpc", () => ({
   settings: {
     get: mocks.settingsGet,
+    set: mocks.settingsSet,
   },
   companion: {
     previewContext: mocks.companionPreviewContext,
@@ -104,6 +109,7 @@ function renderPanel(props: Partial<ComponentProps<typeof CompanionPanel>> = {})
 describe("CompanionPanel", () => {
   beforeEach(() => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
+    mocks.settingsSet.mockImplementation((patch: unknown) => Promise.resolve(patch));
     mocks.companionPreviewContext.mockResolvedValue({
       counts: {
         nearbyScenes: 1,
@@ -493,6 +499,67 @@ describe("CompanionPanel", () => {
     await user.click(screen.getByRole("button", { name: "전송" }));
 
     expect(companionState.value.send).toHaveBeenCalledWith("도와줘");
+  });
+
+  it("renders AI setup provider errors as a rescue card instead of a raw error bubble", async () => {
+    const user = userEvent.setup();
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "api key is required for auth mode api-key",
+        rawError: "api key is required for auth mode api-key",
+        errored: true,
+        aiSetupIssue: "missing_key",
+        retryText: "현재 씬 본문 써줘",
+      }],
+    };
+    const { container } = renderPanel();
+
+    expect(screen.getByText("AI 연결이 필요해요")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "가장 쉬운 방법으로 연결" })).toBeInTheDocument();
+    expect(container.querySelector(".msg-bubble.errored")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "방금 질문 다시 보내기" }));
+
+    expect(companionState.value.send).toHaveBeenCalledWith("현재 씬 본문 써줘");
+  });
+
+  it("opens the shared AI setup modal from a rescue card", async () => {
+    const user = userEvent.setup();
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "401 unauthorized",
+        rawError: "401 unauthorized",
+        errored: true,
+        aiSetupIssue: "auth_required",
+      }],
+    };
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "가장 쉬운 방법으로 연결" }));
+
+    expect(screen.getByRole("dialog", { name: "AI 연결 마법사" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
+  });
+
+  it("keeps non-setup companion errors in the existing errored bubble", () => {
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "본문 변경이 만들어지지 않았습니다.",
+        errored: true,
+        retryText: "현재 씬 본문 써줘",
+      }],
+    };
+    const { container } = renderPanel();
+
+    expect(screen.getByText("본문 변경이 만들어지지 않았습니다.")).toBeInTheDocument();
+    expect(screen.queryByText("AI 연결이 필요해요")).not.toBeInTheDocument();
+    expect(container.querySelector(".msg-bubble.errored")).not.toBeNull();
   });
 
   it("attaches an image from the file picker and sends it with the prompt", async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronLeft, ExternalLink } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   settings as settingsApi,
@@ -9,6 +9,7 @@ import {
   folderSyncNow,
   opsStatus as opsStatusApi,
   providers as providersApi,
+  openRouter as openRouterApi,
   webSearch as webSearchApi,
   diagnostics as diagnosticsApi,
 } from "../lib/rpc";
@@ -19,10 +20,12 @@ import {
   clearStoredPhase,
   storePhase,
 } from "../components/onboarding/onboardingState";
+import { AISetupStart, guideForProvider, type GuideID } from "../components/ai/AISetupStart";
 import "./Settings.css";
 import type {
   AppLanguage,
   OpsStatus,
+  OpenRouterKeyInfo,
   PlatformProfileId,
   ProviderConfig,
   ProviderID,
@@ -48,145 +51,17 @@ interface ProviderMeta {
   legacy?: boolean;
 }
 
-type GuideID = "chatgpt-subscription" | "openai-api" | "claude-api" | "gemini-api";
-
-interface SetupGuide {
-  id: GuideID;
-  provider: ProviderID;
-  title: string;
-  badge: string;
-  summary: string;
-  policy: string;
-  steps: string[];
-  action: string;
-  links: Array<{ label: string; href: string }>;
-}
-
-const SETUP_GUIDE_LINKS: Record<GuideID, Array<{ labelKey: string; href: string }>> = {
-  "chatgpt-subscription": [
-    { labelKey: "settings.setup.chatgpt.linkCodexCli", href: "https://developers.openai.com/codex/cli" },
-    { labelKey: "settings.setup.chatgpt.linkBilling", href: "https://help.openai.com/en/articles/9039756-managing-billing-settings-on-chatgpt-web-and-platform" },
-  ],
-  "openai-api": [
-    { labelKey: "settings.setup.openai.linkApiKey", href: "https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key" },
-    { labelKey: "settings.setup.openai.linkPricing", href: "https://openai.com/api/pricing/" },
-  ],
-  "claude-api": [
-    { labelKey: "settings.setup.claude.linkAccess", href: "https://support.claude.com/en/articles/8114521-how-can-i-access-the-claude-api" },
-    { labelKey: "settings.setup.claude.linkAuth", href: "https://platform.claude.com/docs/en/manage-claude/authentication" },
-    { labelKey: "settings.setup.claude.linkPolicy", href: "https://code.claude.com/docs/en/legal-and-compliance" },
-  ],
-  "gemini-api": [
-    { labelKey: "settings.setup.gemini.linkApiKey", href: "https://ai.google.dev/gemini-api/docs/api-key" },
-    { labelKey: "settings.setup.gemini.linkBilling", href: "https://ai.google.dev/gemini-api/docs/billing" },
-  ],
-};
-
-function guideForProvider(provider: ProviderID): GuideID {
-  switch (provider) {
-    case "openai":
-      return "openai-api";
-    case "anthropic":
-      return "claude-api";
-    case "gemini-native":
-      return "gemini-api";
-    case "openai-codex":
-    case "claude-code-cli":
-    default:
-      return "chatgpt-subscription";
-  }
-}
-
 type Translate = ReturnType<typeof useI18n>["t"];
 
 function buildProviders(t: Translate): ProviderMeta[] {
   return [
     { id: "openai-codex", label: t("settings.provider.openaiCodex.label"), desc: t("settings.provider.openaiCodex.desc"), credential: "oauth" },
+    { id: "openrouter", label: t("settings.provider.openrouter.label"), desc: t("settings.provider.openrouter.desc"), credential: "key" },
     { id: "openai", label: t("settings.provider.openai.label"), desc: t("settings.provider.openai.desc"), credential: "key", endpoint: true },
     { id: "anthropic", label: t("settings.provider.anthropic.label"), desc: t("settings.provider.anthropic.desc"), credential: "key", endpoint: true },
     { id: "gemini-native", label: t("settings.provider.gemini.label"), desc: t("settings.provider.gemini.desc"), credential: "key", endpoint: true },
     { id: "claude-code-cli", label: t("settings.provider.claudeCli.label"), desc: t("settings.provider.claudeCli.desc"), credential: "cli", legacy: true },
   ];
-}
-
-function buildSetupGuides(t: Translate): SetupGuide[] {
-  return [
-    {
-      id: "chatgpt-subscription",
-      provider: "openai-codex",
-      title: t("settings.setup.chatgpt.title"),
-      badge: t("settings.setup.chatgpt.badge"),
-      summary: t("settings.setup.chatgpt.summary"),
-      policy: t("settings.setup.chatgpt.policy"),
-      action: t("settings.setup.chatgpt.action"),
-      steps: [
-        t("settings.setup.chatgpt.step1"),
-        t("settings.setup.chatgpt.step2"),
-        t("settings.setup.chatgpt.step3"),
-        t("settings.setup.chatgpt.step4"),
-        t("settings.setup.chatgpt.step5"),
-      ],
-      links: setupGuideLinks(t, "chatgpt-subscription"),
-    },
-    {
-      id: "openai-api",
-      provider: "openai",
-      title: t("settings.setup.openai.title"),
-      badge: t("settings.setup.openai.badge"),
-      summary: t("settings.setup.openai.summary"),
-      policy: t("settings.setup.openai.policy"),
-      action: t("settings.setup.openai.action"),
-      steps: [
-        t("settings.setup.openai.step1"),
-        t("settings.setup.openai.step2"),
-        t("settings.setup.openai.step3"),
-        t("settings.setup.openai.step4"),
-        t("settings.setup.openai.step5"),
-      ],
-      links: setupGuideLinks(t, "openai-api"),
-    },
-    {
-      id: "claude-api",
-      provider: "anthropic",
-      title: t("settings.setup.claude.title"),
-      badge: t("settings.setup.claude.badge"),
-      summary: t("settings.setup.claude.summary"),
-      policy: t("settings.setup.claude.policy"),
-      action: t("settings.setup.claude.action"),
-      steps: [
-        t("settings.setup.claude.step1"),
-        t("settings.setup.claude.step2"),
-        t("settings.setup.claude.step3"),
-        t("settings.setup.claude.step4"),
-        t("settings.setup.claude.step5"),
-      ],
-      links: setupGuideLinks(t, "claude-api"),
-    },
-    {
-      id: "gemini-api",
-      provider: "gemini-native",
-      title: t("settings.setup.gemini.title"),
-      badge: t("settings.setup.gemini.badge"),
-      summary: t("settings.setup.gemini.summary"),
-      policy: t("settings.setup.gemini.policy"),
-      action: t("settings.setup.gemini.action"),
-      steps: [
-        t("settings.setup.gemini.step1"),
-        t("settings.setup.gemini.step2"),
-        t("settings.setup.gemini.step3"),
-        t("settings.setup.gemini.step4"),
-        t("settings.setup.gemini.step5"),
-      ],
-      links: setupGuideLinks(t, "gemini-api"),
-    },
-  ];
-}
-
-function setupGuideLinks(t: Translate, id: GuideID): SetupGuide["links"] {
-  return SETUP_GUIDE_LINKS[id].map((link) => ({
-    label: t(link.labelKey),
-    href: link.href,
-  }));
 }
 
 export function Settings() {
@@ -196,10 +71,6 @@ export function Settings() {
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
   const providers = useMemo(
     () => buildProviders(t).filter((p) => !unavailableProviders.includes(p.id)),
-    [t, unavailableProviders],
-  );
-  const setupGuides = useMemo(
-    () => buildSetupGuides(t).filter((g) => !unavailableProviders.includes(g.provider)),
     [t, unavailableProviders],
   );
   const [current, setCurrent] = useState<SettingsRow | null>(null);
@@ -231,6 +102,12 @@ export function Settings() {
   const [guideId, setGuideId] = useState<GuideID>("chatgpt-subscription");
   const [providerTesting, setProviderTesting] = useState(false);
   const [providerTestMsg, setProviderTestMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [openRouterKeyInfo, setOpenRouterKeyInfo] = useState<OpenRouterKeyInfo | null>(null);
+  const [openRouterKeyInfoLoading, setOpenRouterKeyInfoLoading] = useState(false);
+  const [openRouterKeyInfoError, setOpenRouterKeyInfoError] = useState("");
+  const [openRouterOAuthBusy, setOpenRouterOAuthBusy] = useState(false);
+  const [openRouterOAuthURL, setOpenRouterOAuthURL] = useState("");
+  const [openRouterOAuthError, setOpenRouterOAuthError] = useState("");
   const [webSearchTesting, setWebSearchTesting] = useState(false);
   const [webSearchTestMsg, setWebSearchTestMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
@@ -272,15 +149,6 @@ export function Settings() {
     setProviderTestMsg(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeProvider]);
-
-  // If the stored provider's guide has been filtered out (e.g. sandboxed MAS
-  // build hides openai-codex / claude-code-cli), reset guideId to the first
-  // available guide so the detail panel always shows a coherent selection.
-  useEffect(() => {
-    if (setupGuides.length && !setupGuides.some((g) => g.id === guideId)) {
-      setGuideId(setupGuides[0].id);
-    }
-  }, [setupGuides, guideId]);
 
   const opsByJob = useMemo(() => {
     return new Map(opsRows.map((row) => [row.job_name, row]));
@@ -439,9 +307,69 @@ export function Settings() {
 
   const activeMeta = current ? providers.find((m) => m.id === current.provider) : undefined;
   const activeConfig = current?.providers?.[current.provider] ?? {};
-  const selectedGuide = setupGuides.find((g) => g.id === guideId) ?? setupGuides[0];
   const credentialState = getCredentialState(t, activeMeta, activeConfig);
   const webSearchKeyPlaceholder = current ? getWebSearchKeyPlaceholder(t, current) : t("settings.tools.keyPlaceholder");
+
+  const refreshOpenRouterKeyInfo = async () => {
+    const cfg = current?.providers?.openrouter;
+    if (!cfg?.api_key_set) {
+      setOpenRouterKeyInfo(null);
+      setOpenRouterKeyInfoError("");
+      return;
+    }
+    setOpenRouterKeyInfoLoading(true);
+    setOpenRouterKeyInfoError("");
+    try {
+      setOpenRouterKeyInfo(await openRouterApi.keyInfo());
+    } catch (e) {
+      setOpenRouterKeyInfo(null);
+      setOpenRouterKeyInfoError(String(e));
+    } finally {
+      setOpenRouterKeyInfoLoading(false);
+    }
+  };
+
+  const connectOpenRouterOAuth = async () => {
+    setOpenRouterOAuthBusy(true);
+    setOpenRouterOAuthError("");
+    setOpenRouterOAuthURL("");
+    setProviderTestMsg(null);
+    try {
+      const started = await openRouterApi.oauthStart();
+      setOpenRouterOAuthURL(started.auth_url);
+      window.open(started.auth_url, "_blank", "noopener,noreferrer");
+      setProviderTestMsg({ kind: "ok", text: t("settings.setup.openrouter.oauthStarted") });
+      const finished = await openRouterApi.oauthFinish(started.request_id);
+      const next = await settingsApi.get();
+      setCurrent(next);
+      setLanguage(next.language);
+      setGuideId("openrouter-safe");
+      setProviderTestMsg({ kind: "ok", text: t("settings.provider.testOk", { message: finished.message }) });
+      window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+      setSavedAt(Date.now());
+      try {
+        setOpenRouterKeyInfo(await openRouterApi.keyInfo());
+      } catch {
+        setOpenRouterKeyInfo(null);
+      }
+    } catch (e) {
+      const message = String(e);
+      setOpenRouterOAuthError(t("settings.setup.openrouter.oauthError", { message }));
+      setProviderTestMsg({ kind: "error", text: t("settings.setup.openrouter.oauthError", { message }) });
+    } finally {
+      setOpenRouterOAuthBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!current || (current.provider !== "openrouter" && guideId !== "openrouter-safe")) return;
+    if (!current.providers?.openrouter?.api_key_set) {
+      setOpenRouterKeyInfo(null);
+      setOpenRouterKeyInfoError("");
+      return;
+    }
+    void refreshOpenRouterKeyInfo();
+  }, [current?.provider, current?.providers?.openrouter?.api_key_set, guideId]);
 
   const replayOnboardingTour = () => {
     clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
@@ -485,64 +413,24 @@ export function Settings() {
               </div>
             </section>
 
-            <section className="settings-section">
-              <div className="settings-section-head">
-                <h3>{t("settings.aiWizard.title")}</h3>
-                <span className="setup-pill">{t("settings.aiWizard.badge")}</span>
-              </div>
-              <p className="sd">{t("settings.aiWizard.description")}</p>
-              <div className="setup-current">
-                <span>
-                  {t("settings.aiWizard.current")}: <strong>{activeMeta?.label ?? current.provider}</strong>
-                </span>
-                <span>{credentialState}</span>
-              </div>
-              <div className="setup-policy">{t("settings.aiWizard.policy")}</div>
-              <div className="setup-choice-list">
-                {setupGuides.map((guide) => (
-                  <button
-                    key={guide.id}
-                    type="button"
-                    className={`setup-choice${guide.id === guideId ? " is-selected" : ""}`}
-                    onClick={() => setGuideId(guide.id)}
-                  >
-                    <span className="setup-choice-main">
-                      <span className="setup-choice-title">{guide.title}</span>
-                      <span className="setup-choice-summary">{guide.summary}</span>
-                    </span>
-                    <span className="setup-choice-badge">{guide.badge}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="setup-guide">
-                <div className="setup-guide-head">
-                  <div>
-                    <h4>{selectedGuide.title}</h4>
-                    <p>{selectedGuide.policy}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn sm"
-                    onClick={() => !saving && apply({ provider: selectedGuide.provider })}
-                    disabled={saving}
-                  >
-                    {current.provider === selectedGuide.provider ? t("settings.aiWizard.selected") : selectedGuide.action}
-                  </button>
-                </div>
-                <ol className="setup-steps">
-                  {selectedGuide.steps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-                <div className="setup-links" aria-label={`${selectedGuide.title} ${t("settings.aiWizard.officialGuide")}`}>
-                  {selectedGuide.links.map((link) => (
-                    <a key={link.href} href={link.href} target="_blank" rel="noreferrer">
-                      <ExternalLink size={13} /> {link.label}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            </section>
+            <AISetupStart
+              currentProvider={current.provider}
+              currentProviderLabel={activeMeta?.label ?? current.provider}
+              credentialState={credentialState}
+              unavailableProviders={unavailableProviders}
+              selectedGuideId={guideId}
+              onGuideIdChange={setGuideId}
+              onSelectProvider={(provider) => { void apply({ provider }); }}
+              openRouterKeyInfo={openRouterKeyInfo}
+              openRouterKeyInfoLoading={openRouterKeyInfoLoading}
+              openRouterKeyInfoError={openRouterKeyInfoError}
+              onRefreshOpenRouterKeyInfo={() => { void refreshOpenRouterKeyInfo(); }}
+              onConnectOpenRouterOAuth={() => { void connectOpenRouterOAuth(); }}
+              openRouterOAuthBusy={openRouterOAuthBusy}
+              openRouterOAuthURL={openRouterOAuthURL}
+              openRouterOAuthError={openRouterOAuthError}
+              saving={saving}
+            />
 
             <section className="settings-section">
               <h3>{t("settings.aiAdvanced.title")}</h3>

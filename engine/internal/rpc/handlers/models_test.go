@@ -68,6 +68,43 @@ func TestProviderHandler_usesRequestedProviderConfig(t *testing.T) {
 	}
 }
 
+func TestProviderHandler_usesOpenRouterConfig(t *testing.T) {
+	ctx := context.Background()
+	store := newSettingsFixture(t)
+	provider := settings.ProviderOpenRouter
+	apiKey := "or-test"
+	if _, err := store.Set(ctx, settings.Patch{
+		Provider: &provider,
+		Providers: map[string]settings.ProviderConfig{
+			provider: {APIKey: apiKey},
+		},
+	}); err != nil {
+		t.Fatalf("settings.Set: %v", err)
+	}
+
+	client := &providerTestFakeClient{}
+	var captured ai.ResolvedProvider
+	handler := TestProvider(store, func(p ai.ResolvedProvider) (llm.Client, error) {
+		captured = p
+		return client, nil
+	})
+
+	raw, err := handler(ctx, json.RawMessage(`{"provider":"openrouter"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got testProviderResult
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Provider != provider || got.Model != settings.DefaultOpenRouterModel {
+		t.Fatalf("result = %+v", got)
+	}
+	if captured.Provider != provider || captured.APIKey != apiKey || captured.Model != settings.DefaultOpenRouterModel || captured.BaseURL != settings.OpenRouterBaseURL {
+		t.Fatalf("captured provider = %+v", captured)
+	}
+}
+
 func TestProviderHandler_usesOpenAICodexDefaultModel(t *testing.T) {
 	store := newSettingsFixture(t)
 	var captured ai.ResolvedProvider

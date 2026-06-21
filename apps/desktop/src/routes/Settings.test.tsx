@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   providersListModels: vi.fn(),
   providersDetectCli: vi.fn(),
   providersTest: vi.fn(),
+  openRouterKeyInfo: vi.fn(),
+  openRouterOAuthStart: vi.fn(),
+  openRouterOAuthFinish: vi.fn(),
   webSearchTest: vi.fn(),
   diagnosticsGet: vi.fn(),
 }));
@@ -34,6 +37,11 @@ vi.mock("../lib/rpc", () => ({
     listModels: mocks.providersListModels,
     detectCli: mocks.providersDetectCli,
     test: mocks.providersTest,
+  },
+  openRouter: {
+    keyInfo: mocks.openRouterKeyInfo,
+    oauthStart: mocks.openRouterOAuthStart,
+    oauthFinish: mocks.openRouterOAuthFinish,
   },
   webSearch: {
     test: mocks.webSearchTest,
@@ -136,6 +144,26 @@ describe("Settings", () => {
       model: "claude-sonnet-4-6",
       message: "연결되었습니다",
     });
+    mocks.openRouterKeyInfo.mockResolvedValue({
+      ok: true,
+      provider: "openrouter",
+      label: "Linetta",
+      limit: 10,
+      limit_remaining: 8,
+      usage_monthly: 2,
+    });
+    mocks.openRouterOAuthStart.mockResolvedValue({
+      request_id: "req-1",
+      auth_url: "https://openrouter.ai/auth?callback_url=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback",
+      callback_url: "http://127.0.0.1:1234/callback",
+      expires_at: 1,
+    });
+    mocks.openRouterOAuthFinish.mockResolvedValue({
+      ok: true,
+      provider: "openrouter",
+      model: "openrouter/auto",
+      message: "OpenRouter 연결이 완료되었습니다.",
+    });
     mocks.webSearchTest.mockResolvedValue({
       ok: true,
       provider: "brave",
@@ -187,12 +215,44 @@ describe("Settings", () => {
     renderSettings();
 
     expect(await screen.findByText("AI 연결 마법사")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /가장 쉬운 시작/ })).toBeInTheDocument();
     expect(screen.getByText(/Claude와 Gemini 구독 로그인은/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /OpenAI Codex CLI 안내/ })).toHaveAttribute(
       "href",
       "https://developers.openai.com/codex/cli",
     );
+  });
+
+  it("selecting the OpenRouter beginner guide persists the OpenRouter provider", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: /가장 쉬운 시작/ }));
+    await user.click(await screen.findByRole("button", { name: "OpenRouter 선택" }));
+
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ provider: "openrouter" }),
+    );
+  });
+
+  it("starts and finishes the OpenRouter OAuth connect flow", async () => {
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: /가장 쉬운 시작/ }));
+    await user.click(await screen.findByRole("button", { name: "OpenRouter로 연결" }));
+
+    await waitFor(() => expect(mocks.openRouterOAuthStart).toHaveBeenCalled());
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://openrouter.ai/auth?callback_url=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    await waitFor(() => expect(mocks.openRouterOAuthFinish).toHaveBeenCalledWith("req-1"));
+    await waitFor(() => expect(screen.getByText(/OpenRouter 연결이 완료되었습니다/)).toBeInTheDocument());
+    openSpy.mockRestore();
   });
 
   it("defaults to Korean and switches the settings UI to English", async () => {
@@ -536,7 +596,7 @@ describe("Settings", () => {
     // openai-api is the first available guide after filtering, so its action button appears.
     const actionBtn = document.querySelector(".setup-guide button");
     expect(actionBtn).not.toBeNull();
-    expect(actionBtn!.textContent).toMatch(/선택|API 키로 연결/u);
+    expect(actionBtn!.textContent).toMatch(/선택|API 키로 연결|OpenRouter로 연결/u);
   });
 
   it("shows all providers when diagnostics returns an empty unavailable list", async () => {

@@ -6,7 +6,7 @@ import type {
   CompanionMessage, CompanionProposal, CompanionChoices,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
   CompanionApplied, CompanionThinking, CompanionReasoning, AIContextSelection, CompanionImageAttachment, CompanionIntent,
-  CompanionHistoryScope,
+  CompanionHistoryScope, AISetupIssue,
 } from "../lib/types";
 
 export interface ChatMessage {
@@ -22,6 +22,8 @@ export interface ChatMessage {
   choices?: CompanionChoices;
   errored?: boolean;
   retryText?: string;
+  aiSetupIssue?: AISetupIssue;
+  rawError?: string;
 }
 
 export type CompanionStatus = "idle" | "streaming";
@@ -108,6 +110,73 @@ function toChatMessage(m: CompanionMessage): ChatMessage {
     role: "assistant",
     content: stripProposalBlock(m.content),
     proposal: extractApplyOpsProposal(m.content, runId) ?? undefined,
+  };
+}
+
+export function classifyAISetupIssue(message: string): AISetupIssue | undefined {
+  const text = message.toLowerCase();
+  if (!text.trim()) return undefined;
+  if (
+    text.includes("api key is required") ||
+    text.includes("auth mode api-key") ||
+    text.includes("missing api key") ||
+    text.includes("api_key is required") ||
+    text.includes("credential") && text.includes("required")
+  ) {
+    return "missing_key";
+  }
+  if (
+    /\b(401|403)\b/.test(text) ||
+    text.includes("unauthorized") ||
+    text.includes("forbidden") ||
+    text.includes("invalid api key") ||
+    text.includes("invalid token")
+  ) {
+    return "auth_required";
+  }
+  if (
+    text.includes("model not found") ||
+    text.includes("invalid model") ||
+    text.includes("unknown model") ||
+    text.includes("model_unavailable")
+  ) {
+    return "model_unavailable";
+  }
+  if (
+    text.includes("rate limit") ||
+    text.includes("quota") ||
+    text.includes("insufficient credits") ||
+    text.includes("spend limit") ||
+    text.includes("billing hard limit") ||
+    text.includes("exceeded your current quota")
+  ) {
+    return "rate_or_spend_limit";
+  }
+  if (
+    text.includes("provider") ||
+    text.includes("llm") ||
+    text.includes("openai") ||
+    text.includes("anthropic") ||
+    text.includes("gemini") ||
+    text.includes("claude") ||
+    text.includes("codex") ||
+    text.includes("openrouter") ||
+    text.includes("api ") ||
+    text.includes(" api")
+  ) {
+    return "unknown_provider_error";
+  }
+  return undefined;
+}
+
+function setupErrorMessage(message: string, retryText?: string): ChatMessage {
+  const issue = classifyAISetupIssue(message);
+  return {
+    role: "assistant",
+    content: message,
+    errored: true,
+    ...(retryText ? { retryText } : {}),
+    ...(issue ? { aiSetupIssue: issue, rawError: message } : {}),
   };
 }
 
@@ -285,7 +354,7 @@ function ensureEngineListeners() {
     if (!key || !acceptRunEvent(key, p.run_id)) return;
     updateStore(key, (state) => ({
       ...state,
-      messages: [...state.messages, { role: "assistant", content: p.message, errored: true, retryText: latestUserMessage(state.messages) }],
+      messages: [...state.messages, setupErrorMessage(p.message, latestUserMessage(state.messages))],
       streaming: "",
       thinking: "",
       reasoning: "",
@@ -433,7 +502,7 @@ export function useCompanion(
     } catch (e) {
       updateStore(storeKey, (state) => ({
         ...state,
-        messages: [...state.messages, { role: "assistant", content: String(e), errored: true }],
+        messages: [...state.messages, setupErrorMessage(String(e), latestUserMessage(state.messages))],
         status: "idle",
         runId: null,
         sending: false,

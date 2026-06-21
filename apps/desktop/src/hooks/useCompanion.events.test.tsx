@@ -17,7 +17,7 @@ vi.mock("../lib/rpc", () => ({
 }));
 
 import { stripProposalBlock } from "../lib/companionDisplay";
-import { __resetCompanionSessionStoreForTests, useCompanion } from "./useCompanion";
+import { __resetCompanionSessionStoreForTests, classifyAISetupIssue, useCompanion } from "./useCompanion";
 
 function fire(event: string, payload: unknown) {
   const cb = ev.listeners.get(event);
@@ -37,6 +37,19 @@ describe("stripProposalBlock", () => {
     expect(stripProposalBlock(
       '{"count":5,"provider":"brave","query":"blacksmith historical role"}좋아, 확인된 출처를 기준으로 처리했어요.',
     )).toBe("좋아, 확인된 출처를 기준으로 처리했어요.");
+  });
+});
+
+describe("classifyAISetupIssue", () => {
+  it("classifies missing key, auth, model, and spend-limit provider failures", () => {
+    expect(classifyAISetupIssue("api key is required for auth mode api-key")).toBe("missing_key");
+    expect(classifyAISetupIssue("401 unauthorized")).toBe("auth_required");
+    expect(classifyAISetupIssue("model not found: latest-writing-model")).toBe("model_unavailable");
+    expect(classifyAISetupIssue("insufficient credits or spend limit reached")).toBe("rate_or_spend_limit");
+  });
+
+  it("leaves non-setup companion failures unclassified", () => {
+    expect(classifyAISetupIssue("본문 변경이 만들어지지 않았습니다.")).toBeUndefined();
   });
 });
 
@@ -313,6 +326,26 @@ describe("useCompanion streaming", () => {
       role: "assistant",
       content: "본문 변경이 만들어지지 않았습니다.",
       errored: true,
+      retryText: "현재 씬 본문 써줘",
+    });
+  });
+
+  it("marks provider setup errors without losing the raw message or retry text", async () => {
+    const { result } = renderHook(() => useCompanion("p1", { current: "n1" }));
+    await waitFor(() => expect(ev.listeners.has("companion-error")).toBe(true));
+
+    await act(async () => {
+      await result.current.send("현재 씬 본문 써줘");
+    });
+
+    fire("companion-error", { run_id: "r1", message: "api key is required for auth mode api-key" });
+    const last = result.current.messages[result.current.messages.length - 1];
+    expect(last).toMatchObject({
+      role: "assistant",
+      content: "api key is required for auth mode api-key",
+      rawError: "api key is required for auth mode api-key",
+      errored: true,
+      aiSetupIssue: "missing_key",
       retryText: "현재 씬 본문 써줘",
     });
   });

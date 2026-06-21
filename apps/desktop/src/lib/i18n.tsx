@@ -149,6 +149,8 @@ type MessageKey = string
   | "settings.provider.openaiCodex.desc"
   | "settings.provider.openai.label"
   | "settings.provider.openai.desc"
+  | "settings.provider.openrouter.label"
+  | "settings.provider.openrouter.desc"
   | "settings.provider.anthropic.label"
   | "settings.provider.anthropic.desc"
   | "settings.provider.gemini.label"
@@ -218,6 +220,30 @@ type MessageKey = string
   | "settings.ops.summarizerOk"
   | "settings.ops.companionOk"
   | "settings.saved"
+  | "settings.setup.openrouter.title"
+  | "settings.setup.openrouter.badge"
+  | "settings.setup.openrouter.summary"
+  | "settings.setup.openrouter.policy"
+  | "settings.setup.openrouter.action"
+  | "settings.setup.openrouter.step1"
+  | "settings.setup.openrouter.step2"
+  | "settings.setup.openrouter.step3"
+  | "settings.setup.openrouter.step4"
+  | "settings.setup.openrouter.step5"
+  | "settings.setup.openrouter.linkKeys"
+  | "settings.setup.openrouter.linkLimits"
+  | "settings.setup.openrouter.keyInfoTitle"
+  | "settings.setup.openrouter.keyInfoRefresh"
+  | "settings.setup.openrouter.keyInfoLoading"
+  | "settings.setup.openrouter.keyInfoUnavailable"
+  | "settings.setup.openrouter.keyInfoRemaining"
+  | "settings.setup.openrouter.keyInfoLimit"
+  | "settings.setup.openrouter.keyInfoMonthlyUsage"
+  | "settings.setup.openrouter.oauthAction"
+  | "settings.setup.openrouter.oauthWaiting"
+  | "settings.setup.openrouter.oauthManualLink"
+  | "settings.setup.openrouter.oauthStarted"
+  | "settings.setup.openrouter.oauthError"
   | "settings.setup.chatgpt.title"
   | "settings.setup.chatgpt.badge"
   | "settings.setup.chatgpt.summary"
@@ -665,6 +691,19 @@ const messages: Record<AppLanguage, Messages> = {
     "companion.stop": "중지",
     "companion.send": "전송",
     "companion.retry": "다시 시도",
+    "companion.aiSetup.title": "AI 연결이 필요해요",
+    "companion.aiSetup.body.missingKey": "아직 이 AI 연결에 필요한 키가 저장되지 않았습니다. 몇 번만 눌러 안전한 시작 경로를 고를 수 있어요.",
+    "companion.aiSetup.body.authRequired": "저장된 인증 정보가 만료됐거나 권한이 부족합니다. 다시 연결하면 방금 질문을 이어서 보낼 수 있어요.",
+    "companion.aiSetup.body.modelUnavailable": "선택한 모델을 지금 사용할 수 없습니다. 모델 이름을 몰라도 되는 시작 경로로 바꿔볼게요.",
+    "companion.aiSetup.body.rateOrSpendLimit": "사용량 한도나 크레딧 제한에 걸린 것 같습니다. 한도를 확인한 뒤 같은 질문을 다시 보낼 수 있어요.",
+    "companion.aiSetup.body.unknownProviderError": "AI 제공자 쪽 설정을 확인해야 합니다. 원문 오류는 세부정보에 남겨둘게요.",
+    "companion.aiSetup.connectEasy": "가장 쉬운 방법으로 연결",
+    "companion.aiSetup.connectSubscription": "구독으로 연결",
+    "companion.aiSetup.connectDirect": "API 키 직접 입력",
+    "companion.aiSetup.retryLast": "방금 질문 다시 보내기",
+    "companion.aiSetup.details": "기술 세부정보",
+    "companion.aiSetup.keychain": "Linetta는 키를 macOS Keychain에 저장합니다.",
+    "companion.aiSetup.limit": "OpenRouter 같은 연결은 키마다 지출 한도를 걸 수 있습니다.",
     "companion.transcript.user": "나",
     "companion.transcript.assistant": "컴패니언",
     "companion.choice.custom": "직접 입력",
@@ -1046,6 +1085,8 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.provider.openaiCodex.desc": "공식 Codex 로그인으로 연결 · API 키 복붙 없음",
     "settings.provider.openai.label": "OpenAI API",
     "settings.provider.openai.desc": "OpenAI API 키 또는 호환 엔드포인트(Kimi, MiniMax 등)",
+    "settings.provider.openrouter.label": "OpenRouter",
+    "settings.provider.openrouter.desc": "무료/저가 모델과 키별 한도로 시작하는 추천 경로",
     "settings.provider.anthropic.label": "Claude API",
     "settings.provider.anthropic.desc": "Anthropic Console API 키로 연결",
     "settings.provider.gemini.label": "Gemini API",
@@ -1131,6 +1172,30 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.ops.metadata.backupRan": "새 백업 생성",
     "settings.ops.metadata.failures": "연속 실패 {count}회",
     "settings.saved": "저장됨",
+    "settings.setup.openrouter.title": "가장 쉬운 시작",
+    "settings.setup.openrouter.badge": "추천",
+    "settings.setup.openrouter.summary": "OpenRouter 키를 넣고 무료/저가 모델을 한도 안에서 씁니다.",
+    "settings.setup.openrouter.policy": "OpenRouter는 키마다 크레딧 한도와 사용량 확인을 둘 수 있어 초보자가 비용을 통제하기 쉽습니다.",
+    "settings.setup.openrouter.action": "OpenRouter 선택",
+    "settings.setup.openrouter.step1": "OpenRouter 계정을 만들고 Credits 또는 Limits에서 작은 한도를 먼저 정합니다.",
+    "settings.setup.openrouter.step2": "Keys 페이지에서 새 API 키를 만듭니다.",
+    "settings.setup.openrouter.step3": "Linetta에서 OpenRouter를 선택합니다.",
+    "settings.setup.openrouter.step4": "API 키 입력란에 키를 붙여넣고 저장합니다.",
+    "settings.setup.openrouter.step5": "기본 모델은 자동 라우터로 두고 연결 테스트를 누릅니다.",
+    "settings.setup.openrouter.linkKeys": "OpenRouter 키 만들기",
+    "settings.setup.openrouter.linkLimits": "OpenRouter 한도 확인",
+    "settings.setup.openrouter.keyInfoTitle": "OpenRouter 한도 상태",
+    "settings.setup.openrouter.keyInfoRefresh": "한도 확인",
+    "settings.setup.openrouter.keyInfoLoading": "확인 중...",
+    "settings.setup.openrouter.keyInfoUnavailable": "키를 저장하면 남은 크레딧과 한도를 여기에서 확인할 수 있습니다.",
+    "settings.setup.openrouter.keyInfoRemaining": "남은 크레딧",
+    "settings.setup.openrouter.keyInfoLimit": "키 한도",
+    "settings.setup.openrouter.keyInfoMonthlyUsage": "이번 달 사용",
+    "settings.setup.openrouter.oauthAction": "OpenRouter로 연결",
+    "settings.setup.openrouter.oauthWaiting": "브라우저 승인 대기 중...",
+    "settings.setup.openrouter.oauthManualLink": "브라우저가 열리지 않으면 이 링크 열기",
+    "settings.setup.openrouter.oauthStarted": "브라우저에서 OpenRouter 승인을 완료하면 Linetta가 자동으로 돌아옵니다.",
+    "settings.setup.openrouter.oauthError": "OpenRouter 연결 실패: {message}",
     "settings.setup.chatgpt.title": "ChatGPT 구독으로 연결",
     "settings.setup.chatgpt.badge": "가장 쉬움",
     "settings.setup.chatgpt.summary": "ChatGPT 계정을 OpenAI Codex에 로그인해 Linetta에서 사용합니다.",
@@ -1588,6 +1653,19 @@ const messages: Record<AppLanguage, Messages> = {
     "companion.stop": "Stop",
     "companion.send": "Send",
     "companion.retry": "Retry",
+    "companion.aiSetup.title": "AI connection needed",
+    "companion.aiSetup.body.missingKey": "This AI connection does not have a saved key yet. Choose a safe starter path in a few clicks.",
+    "companion.aiSetup.body.authRequired": "The saved credentials are expired or do not have enough permission. Reconnect, then retry the same question.",
+    "companion.aiSetup.body.modelUnavailable": "The selected model is not available right now. Switch to a starter path that does not require model names.",
+    "companion.aiSetup.body.rateOrSpendLimit": "A usage, quota, or credit limit appears to be blocking the request. Check the limit, then retry.",
+    "companion.aiSetup.body.unknownProviderError": "The AI provider setup needs review. The raw error is kept in details.",
+    "companion.aiSetup.connectEasy": "Connect the easiest way",
+    "companion.aiSetup.connectSubscription": "Connect subscription",
+    "companion.aiSetup.connectDirect": "Enter API key directly",
+    "companion.aiSetup.retryLast": "Retry last question",
+    "companion.aiSetup.details": "Technical details",
+    "companion.aiSetup.keychain": "Linetta stores keys in macOS Keychain.",
+    "companion.aiSetup.limit": "Connections such as OpenRouter can set a spend limit per key.",
     "companion.transcript.user": "Me",
     "companion.transcript.assistant": "Companion",
     "companion.choice.custom": "Custom",
@@ -1969,6 +2047,8 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.provider.openaiCodex.desc": "Connect with official Codex login - no API key paste",
     "settings.provider.openai.label": "OpenAI API",
     "settings.provider.openai.desc": "OpenAI API key or compatible endpoint such as Kimi or MiniMax",
+    "settings.provider.openrouter.label": "OpenRouter",
+    "settings.provider.openrouter.desc": "Recommended starter path with free/low-cost models and per-key limits",
     "settings.provider.anthropic.label": "Claude API",
     "settings.provider.anthropic.desc": "Connect with an Anthropic Console API key",
     "settings.provider.gemini.label": "Gemini API",
@@ -2054,6 +2134,30 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.ops.metadata.backupRan": "New backup created",
     "settings.ops.metadata.failures": "{count} consecutive failures",
     "settings.saved": "Saved",
+    "settings.setup.openrouter.title": "Easiest start",
+    "settings.setup.openrouter.badge": "Recommended",
+    "settings.setup.openrouter.summary": "Paste an OpenRouter key and use free or low-cost models within a limit.",
+    "settings.setup.openrouter.policy": "OpenRouter lets you set per-key credit limits and review usage, which makes cost control easier for beginners.",
+    "settings.setup.openrouter.action": "Select OpenRouter",
+    "settings.setup.openrouter.step1": "Create an OpenRouter account and set a small limit in Credits or Limits first.",
+    "settings.setup.openrouter.step2": "Create a new API key on the Keys page.",
+    "settings.setup.openrouter.step3": "Select OpenRouter in Linetta.",
+    "settings.setup.openrouter.step4": "Paste the key into the API key field and save it.",
+    "settings.setup.openrouter.step5": "Keep the default model on the auto router, then run the connection test.",
+    "settings.setup.openrouter.linkKeys": "Create an OpenRouter key",
+    "settings.setup.openrouter.linkLimits": "Review OpenRouter limits",
+    "settings.setup.openrouter.keyInfoTitle": "OpenRouter limit status",
+    "settings.setup.openrouter.keyInfoRefresh": "Check limits",
+    "settings.setup.openrouter.keyInfoLoading": "Checking...",
+    "settings.setup.openrouter.keyInfoUnavailable": "After saving a key, Linetta can show remaining credits and limits here.",
+    "settings.setup.openrouter.keyInfoRemaining": "Remaining credits",
+    "settings.setup.openrouter.keyInfoLimit": "Key limit",
+    "settings.setup.openrouter.keyInfoMonthlyUsage": "This month",
+    "settings.setup.openrouter.oauthAction": "Connect with OpenRouter",
+    "settings.setup.openrouter.oauthWaiting": "Waiting for browser approval...",
+    "settings.setup.openrouter.oauthManualLink": "Open this link if the browser did not open",
+    "settings.setup.openrouter.oauthStarted": "Finish approval in your browser and Linetta will return automatically.",
+    "settings.setup.openrouter.oauthError": "OpenRouter connection failed: {message}",
     "settings.setup.chatgpt.title": "Connect with ChatGPT subscription",
     "settings.setup.chatgpt.badge": "Easiest",
     "settings.setup.chatgpt.summary": "Sign in to OpenAI Codex with your ChatGPT account and use it in Linetta.",
@@ -2511,6 +2615,19 @@ const messages: Record<AppLanguage, Messages> = {
     "companion.stop": "停止",
     "companion.send": "送信",
     "companion.retry": "再試行",
+    "companion.aiSetup.title": "AI 接続が必要です",
+    "companion.aiSetup.body.missingKey": "この AI 接続に必要なキーがまだ保存されていません。安全な開始方法を数クリックで選べます。",
+    "companion.aiSetup.body.authRequired": "保存済みの認証情報が期限切れ、または権限不足です。再接続してから同じ質問を再送できます。",
+    "companion.aiSetup.body.modelUnavailable": "選択したモデルは現在利用できません。モデル名を知らなくても使える開始方法に切り替えられます。",
+    "companion.aiSetup.body.rateOrSpendLimit": "使用量、クォータ、またはクレジット制限に達した可能性があります。上限を確認してから再試行できます。",
+    "companion.aiSetup.body.unknownProviderError": "AI provider の設定確認が必要です。元のエラーは詳細に残します。",
+    "companion.aiSetup.connectEasy": "いちばん簡単な方法で接続",
+    "companion.aiSetup.connectSubscription": "サブスクリプションで接続",
+    "companion.aiSetup.connectDirect": "API キーを直接入力",
+    "companion.aiSetup.retryLast": "直前の質問を再送",
+    "companion.aiSetup.details": "技術詳細",
+    "companion.aiSetup.keychain": "Linetta はキーを macOS Keychain に保存します。",
+    "companion.aiSetup.limit": "OpenRouter などの接続ではキーごとに利用上限を設定できます。",
     "companion.transcript.user": "自分",
     "companion.transcript.assistant": "コンパニオン",
     "companion.choice.custom": "直接入力",
@@ -2892,6 +3009,8 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.provider.openaiCodex.desc": "公式 Codex ログインで接続 - API キー貼り付け不要",
     "settings.provider.openai.label": "OpenAI API",
     "settings.provider.openai.desc": "OpenAI API キーまたは Kimi、MiniMax などの互換エンドポイント",
+    "settings.provider.openrouter.label": "OpenRouter",
+    "settings.provider.openrouter.desc": "無料/低価格モデルとキー別上限で始める推奨ルート",
     "settings.provider.anthropic.label": "Claude API",
     "settings.provider.anthropic.desc": "Anthropic Console API キーで接続",
     "settings.provider.gemini.label": "Gemini API",
@@ -2977,6 +3096,30 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.ops.metadata.backupRan": "新しいバックアップを作成",
     "settings.ops.metadata.failures": "連続失敗 {count}回",
     "settings.saved": "保存済み",
+    "settings.setup.openrouter.title": "最も簡単に始める",
+    "settings.setup.openrouter.badge": "推奨",
+    "settings.setup.openrouter.summary": "OpenRouter キーを貼り付け、無料/低価格モデルを上限内で使います。",
+    "settings.setup.openrouter.policy": "OpenRouter はキーごとのクレジット上限と使用量確認ができるため、初心者でも費用を管理しやすくなります。",
+    "settings.setup.openrouter.action": "OpenRouter を選択",
+    "settings.setup.openrouter.step1": "OpenRouter アカウントを作り、Credits または Limits で小さな上限を先に設定します。",
+    "settings.setup.openrouter.step2": "Keys ページで新しい API キーを作成します。",
+    "settings.setup.openrouter.step3": "Linetta で OpenRouter を選択します。",
+    "settings.setup.openrouter.step4": "API キー入力欄にキーを貼り付けて保存します。",
+    "settings.setup.openrouter.step5": "既定モデルは自動ルーターのまま、接続テストを押します。",
+    "settings.setup.openrouter.linkKeys": "OpenRouter キーを作成",
+    "settings.setup.openrouter.linkLimits": "OpenRouter の上限を確認",
+    "settings.setup.openrouter.keyInfoTitle": "OpenRouter 上限状態",
+    "settings.setup.openrouter.keyInfoRefresh": "上限を確認",
+    "settings.setup.openrouter.keyInfoLoading": "確認中...",
+    "settings.setup.openrouter.keyInfoUnavailable": "キーを保存すると、残りクレジットと上限をここで確認できます。",
+    "settings.setup.openrouter.keyInfoRemaining": "残りクレジット",
+    "settings.setup.openrouter.keyInfoLimit": "キー上限",
+    "settings.setup.openrouter.keyInfoMonthlyUsage": "今月の使用量",
+    "settings.setup.openrouter.oauthAction": "OpenRouter で接続",
+    "settings.setup.openrouter.oauthWaiting": "ブラウザ承認を待っています...",
+    "settings.setup.openrouter.oauthManualLink": "ブラウザが開かない場合はこのリンクを開く",
+    "settings.setup.openrouter.oauthStarted": "ブラウザで OpenRouter の承認を完了すると、Linetta が自動で戻ります。",
+    "settings.setup.openrouter.oauthError": "OpenRouter 接続失敗: {message}",
     "settings.setup.chatgpt.title": "ChatGPT サブスクリプションで接続",
     "settings.setup.chatgpt.badge": "最も簡単",
     "settings.setup.chatgpt.summary": "ChatGPT アカウントで OpenAI Codex にログインし、Linetta で使用します。",

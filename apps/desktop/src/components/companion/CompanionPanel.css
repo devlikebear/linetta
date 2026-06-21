@@ -6,7 +6,8 @@
 .companion-empty-card,
 .companion-help-card,
 .companion-context-card,
-.companion-ai-draft-card {
+.companion-ai-draft-card,
+.companion-ai-setup-card {
   background: color-mix(in srgb, var(--surface) 82%, var(--surface-2));
   border: 1px solid var(--line-soft);
   border-radius: var(--r-md);
@@ -33,7 +34,8 @@
 .companion-empty-kicker,
 .companion-help-title,
 .companion-context-title,
-.companion-ai-draft-title {
+.companion-ai-draft-title,
+.companion-ai-setup-title {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -47,8 +49,73 @@
 .companion-empty-kicker svg,
 .companion-help-title svg,
 .companion-ai-draft-title svg,
+.companion-ai-setup-title svg,
 .companion-tool-row svg {
   flex: none;
+}
+
+.companion-ai-setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line-soft));
+  background: color-mix(in srgb, var(--accent-tint2) 42%, var(--surface));
+}
+
+.companion-ai-setup-title strong {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.companion-ai-setup-card p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.companion-ai-setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.companion-ai-setup-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.companion-ai-setup-details {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 8px;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+}
+
+.companion-ai-setup-details summary {
+  cursor: pointer;
+}
+
+.companion-ai-setup-details code {
+  display: block;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .companion-action-list,
