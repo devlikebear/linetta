@@ -72,8 +72,28 @@ jobs:
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
       - name: Build iOS engine xcframework
         run: apps/desktop/src-tauri/scripts/build-engine-ios.sh /tmp/linetta-ios
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend assets
+        working-directory: apps/desktop
+        run: pnpm build
 
       - name: Verify iOS exports
         run: |
@@ -162,6 +182,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
+
+      - name: Build frontend assets
+        working-directory: apps/desktop
+        run: pnpm build
 
       - name: Verify Android exports
         run: |
