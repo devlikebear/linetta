@@ -5,29 +5,14 @@ package engineapp
 import (
 	"context"
 
-	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/foldersync"
-	"github.com/devlikebear/linetta/engine/internal/node"
-	"github.com/devlikebear/linetta/engine/internal/opsstatus"
-	"github.com/devlikebear/linetta/engine/internal/project"
-	"github.com/devlikebear/linetta/engine/internal/relationship"
-	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
-	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
-func setupFolderSync(
-	s *rpc.Server,
-	settingsStore *settings.Store,
-	projects *project.Repo,
-	nodes *node.Repo,
-	entities *entity.Repo,
-	relationships *relationship.Repo,
-	ops *opsstatus.Repo,
-) dailySyncer {
-	syncer := foldersync.New(settingsStore, projects, nodes, entities, relationships)
-	syncer.Ops = ops
-	s.Handle("folder_sync.run", handlers.RunFolderSync(syncer))
+func setupFolderSync(deps syncDeps) dailySyncer {
+	syncer := foldersync.New(deps.settingsStore, deps.projects, deps.nodes, deps.entities, deps.relationships)
+	syncer.Ops = deps.ops
+	deps.server.Handle("folder_sync.run", handlers.RunFolderSync(syncer))
 	return realFolderSyncer{syncer}
 }
 

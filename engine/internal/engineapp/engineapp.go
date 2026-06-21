@@ -159,8 +159,17 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ)
 
-	gitSyncer := setupGitSync(s, settingsStore, projects, nodes, entities, relationships, ops)
-	folderSyncer := setupFolderSync(s, settingsStore, projects, nodes, entities, relationships, ops)
+	syncDeps := syncDeps{
+		server:        s,
+		settingsStore: settingsStore,
+		projects:      projects,
+		nodes:         nodes,
+		entities:      entities,
+		relationships: relationships,
+		ops:           ops,
+	}
+	gitSyncer := setupGitSync(syncDeps)
+	folderSyncer := setupFolderSync(syncDeps)
 	syncers := []dailySyncer{gitSyncer, folderSyncer}
 	retentionFn := func(ctx context.Context) error {
 		if err := snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli()); err != nil {
