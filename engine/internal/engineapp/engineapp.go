@@ -41,7 +41,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
-const DefaultVersion = "0.8.2"
+const DefaultVersion = "0.8.3"
 
 // Options configures an embedded engine instance.
 type Options struct {

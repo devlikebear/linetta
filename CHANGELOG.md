@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.3 - 2026-06-21
+
+- Replaced raw companion AI setup failures with a guided recovery card that preserves the blocked prompt for retry.
+- Added a reusable AI setup surface with a beginner OpenRouter path, subscription guidance, and advanced direct-key options.
+- Added OpenRouter provider support with OAuth PKCE connection, Keychain-backed key storage, model defaults, and key limit/credit status checks.
+
 ## v0.8.1 - 2026-06-21
 
 - Restored Windows desktop CI packaging with NSIS and MSI installers.
