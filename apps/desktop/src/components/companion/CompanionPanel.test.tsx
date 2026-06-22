@@ -68,6 +68,9 @@ const companionState = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
+  providersListModels: vi.fn(),
+  providersTest: vi.fn(),
+  openRouterKeyInfo: vi.fn(),
   companionPreviewContext: vi.fn(),
   companionReferencesList: vi.fn(),
   companionReferencesCreate: vi.fn(),
@@ -86,6 +89,13 @@ vi.mock("../../lib/rpc", () => ({
   settings: {
     get: mocks.settingsGet,
     set: mocks.settingsSet,
+  },
+  providers: {
+    listModels: mocks.providersListModels,
+    test: mocks.providersTest,
+  },
+  openRouter: {
+    keyInfo: mocks.openRouterKeyInfo,
   },
   companion: {
     previewContext: mocks.companionPreviewContext,
@@ -110,6 +120,21 @@ describe("CompanionPanel", () => {
   beforeEach(() => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
     mocks.settingsSet.mockImplementation((patch: unknown) => Promise.resolve(patch));
+    mocks.providersListModels.mockResolvedValue({ models: ["openrouter/auto"] });
+    mocks.providersTest.mockResolvedValue({
+      ok: true,
+      provider: "openrouter",
+      model: "openrouter/auto",
+      message: "연결되었습니다",
+    });
+    mocks.openRouterKeyInfo.mockResolvedValue({
+      ok: true,
+      provider: "openrouter",
+      label: "Linetta",
+      limit: 10,
+      limit_remaining: 8,
+      usage_monthly: 2,
+    });
     mocks.companionPreviewContext.mockResolvedValue({
       counts: {
         nearbyScenes: 1,
@@ -542,7 +567,8 @@ describe("CompanionPanel", () => {
     await user.click(screen.getByRole("button", { name: "가장 쉬운 방법으로 연결" }));
 
     expect(screen.getByRole("dialog", { name: "AI 연결 마법사" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "AI 연결 방식" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
   });
 
   it("keeps non-setup companion errors in the existing errored bubble", () => {

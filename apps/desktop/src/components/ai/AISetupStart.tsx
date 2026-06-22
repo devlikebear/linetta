@@ -175,6 +175,20 @@ interface AISetupStartProps {
   openRouterOAuthBusy?: boolean;
   openRouterOAuthURL?: string;
   openRouterOAuthError?: string;
+  openRouterAPIKeyDraft?: string;
+  openRouterAPIKeySaved?: boolean;
+  openRouterModelDraft?: string;
+  openRouterModelOptions?: string[];
+  openRouterModelsLoading?: boolean;
+  openRouterModelsError?: string;
+  openRouterSetupBusy?: boolean;
+  openRouterTestMessage?: { kind: "ok" | "error"; text: string } | null;
+  onOpenRouterAPIKeyChange?: (value: string) => void;
+  onOpenRouterModelChange?: (value: string) => void;
+  onSaveOpenRouter?: () => void;
+  onClearOpenRouterAPIKey?: () => void;
+  onRefreshOpenRouterModels?: () => void;
+  onTestOpenRouter?: () => void;
   saving?: boolean;
   onClose?: () => void;
 }
@@ -196,16 +210,55 @@ export function AISetupStart({
   openRouterOAuthBusy = false,
   openRouterOAuthURL = "",
   openRouterOAuthError = "",
+  openRouterAPIKeyDraft = "",
+  openRouterAPIKeySaved = false,
+  openRouterModelDraft = "openrouter/auto",
+  openRouterModelOptions = [],
+  openRouterModelsLoading = false,
+  openRouterModelsError = "",
+  openRouterSetupBusy = false,
+  openRouterTestMessage = null,
+  onOpenRouterAPIKeyChange,
+  onOpenRouterModelChange,
+  onSaveOpenRouter,
+  onClearOpenRouterAPIKey,
+  onRefreshOpenRouterModels,
+  onTestOpenRouter,
   saving = false,
   onClose,
 }: AISetupStartProps) {
   const { t } = useI18n();
+  const isModal = variant === "modal";
   const setupGuides = useMemo(
     () => buildSetupGuides(t).filter((g) => !unavailableProviders.includes(g.provider)),
     [t, unavailableProviders],
   );
   const selectedGuide = setupGuides.find((g) => g.id === selectedGuideId) ?? setupGuides[0];
   if (!selectedGuide) return null;
+
+  const steps = <SetupSteps guide={selectedGuide} collapsed={isModal} label={t("settings.aiWizard.stepsSummary")} />;
+  const openRouterInlineSetup = selectedGuide.id === "openrouter-safe" ? (
+    <OpenRouterInlineSetup
+      variant={variant}
+      apiKeyDraft={openRouterAPIKeyDraft}
+      apiKeySaved={openRouterAPIKeySaved}
+      modelDraft={openRouterModelDraft}
+      modelOptions={openRouterModelOptions}
+      modelsLoading={openRouterModelsLoading}
+      modelsError={openRouterModelsError}
+      busy={saving || openRouterSetupBusy}
+      testMessage={openRouterTestMessage}
+      onAPIKeyChange={onOpenRouterAPIKeyChange}
+      onModelChange={onOpenRouterModelChange}
+      onSave={onSaveOpenRouter}
+      onClearAPIKey={onClearOpenRouterAPIKey}
+      onRefreshModels={onRefreshOpenRouterModels}
+      onTest={onTestOpenRouter}
+    />
+  ) : null;
+  const showOpenRouterKeyInfo =
+    selectedGuide.id === "openrouter-safe" &&
+    (!isModal || openRouterKeyInfo || openRouterKeyInfoLoading || openRouterKeyInfoError);
 
   return (
     <section className={`ai-setup-start ${variant === "settings" ? "settings-section" : "is-modal"}`}>
@@ -228,19 +281,25 @@ export function AISetupStart({
         <span>{credentialState}</span>
       </div>
       <div className="setup-policy">{t("settings.aiWizard.policy")}</div>
-      <div className="setup-choice-list">
+      <div
+        className={isModal ? "setup-choice-tabs" : "setup-choice-list"}
+        role={isModal ? "tablist" : undefined}
+        aria-label={isModal ? t("settings.aiWizard.choiceTabs") : undefined}
+      >
         {setupGuides.map((guide) => (
           <button
             key={guide.id}
             type="button"
-            className={`setup-choice${guide.id === selectedGuide.id ? " is-selected" : ""}`}
+            role={isModal ? "tab" : undefined}
+            aria-selected={isModal ? guide.id === selectedGuide.id : undefined}
+            className={`${isModal ? "setup-tab" : "setup-choice"}${guide.id === selectedGuide.id ? " is-selected" : ""}`}
             onClick={() => onGuideIdChange(guide.id)}
           >
             <span className="setup-choice-main">
               <span className="setup-choice-title">{guide.title}</span>
-              <span className="setup-choice-summary">{guide.summary}</span>
+              {!isModal && <span className="setup-choice-summary">{guide.summary}</span>}
             </span>
-            <span className="setup-choice-badge">{guide.badge}</span>
+            {!isModal && <span className="setup-choice-badge">{guide.badge}</span>}
           </button>
         ))}
       </div>
@@ -281,18 +340,17 @@ export function AISetupStart({
             )}
           </div>
         )}
-        <ol className="setup-steps">
-          {selectedGuide.steps.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        {selectedGuide.id === "openrouter-safe" && (
-          <OpenRouterKeyInfoPanel
-            info={openRouterKeyInfo}
-            loading={openRouterKeyInfoLoading}
-            error={openRouterKeyInfoError}
-            onRefresh={onRefreshOpenRouterKeyInfo}
-          />
+        {isModal ? openRouterInlineSetup : steps}
+        {isModal ? steps : openRouterInlineSetup}
+        {showOpenRouterKeyInfo && (
+          <>
+            <OpenRouterKeyInfoPanel
+              info={openRouterKeyInfo}
+              loading={openRouterKeyInfoLoading}
+              error={openRouterKeyInfoError}
+              onRefresh={onRefreshOpenRouterKeyInfo}
+            />
+          </>
         )}
         <div className="setup-links" aria-label={`${selectedGuide.title} ${t("settings.aiWizard.officialGuide")}`}>
           {selectedGuide.links.map((link) => (
@@ -303,6 +361,130 @@ export function AISetupStart({
         </div>
       </div>
     </section>
+  );
+}
+
+function SetupSteps({ guide, collapsed, label }: { guide: SetupGuide; collapsed: boolean; label: string }) {
+  const list = (
+    <ol className="setup-steps">
+      {guide.steps.map((step) => (
+        <li key={step}>{step}</li>
+      ))}
+    </ol>
+  );
+  if (!collapsed) return list;
+  return (
+    <details className="setup-steps-disclosure">
+      <summary>{label}</summary>
+      {list}
+    </details>
+  );
+}
+
+function OpenRouterInlineSetup({
+  variant,
+  apiKeyDraft,
+  apiKeySaved,
+  modelDraft,
+  modelOptions,
+  modelsLoading,
+  modelsError,
+  busy,
+  testMessage,
+  onAPIKeyChange,
+  onModelChange,
+  onSave,
+  onClearAPIKey,
+  onRefreshModels,
+  onTest,
+}: {
+  variant: "settings" | "modal";
+  apiKeyDraft: string;
+  apiKeySaved: boolean;
+  modelDraft: string;
+  modelOptions: string[];
+  modelsLoading: boolean;
+  modelsError: string;
+  busy: boolean;
+  testMessage: { kind: "ok" | "error"; text: string } | null;
+  onAPIKeyChange?: (value: string) => void;
+  onModelChange?: (value: string) => void;
+  onSave?: () => void;
+  onClearAPIKey?: () => void;
+  onRefreshModels?: () => void;
+  onTest?: () => void;
+}) {
+  const { t } = useI18n();
+  if (!onAPIKeyChange && !onSave && !onRefreshModels && !onTest) return null;
+  const modelListId = `openrouter-model-options-${variant}`;
+  const apiKeyId = `openrouter-api-key-${variant}`;
+  const modelId = `openrouter-model-${variant}`;
+  return (
+    <div className="setup-inline-config">
+      <div className="modal-field">
+        <label htmlFor={apiKeyId}>{t("settings.setup.openrouter.apiKeyLabel")}</label>
+        <div className="set-field-row">
+          <input
+            id={apiKeyId}
+            type="password"
+            value={apiKeyDraft}
+            onChange={(e) => onAPIKeyChange?.(e.currentTarget.value)}
+            placeholder={
+              apiKeySaved
+                ? t("settings.setup.openrouter.apiKeySavedPlaceholder")
+                : t("settings.setup.openrouter.apiKeyPlaceholder")
+            }
+            autoComplete="off"
+            disabled={busy}
+          />
+          {apiKeySaved && onClearAPIKey && (
+            <button type="button" className="btn ghost sm" onClick={onClearAPIKey} disabled={busy}>
+              {t("common.deleteKey")}
+            </button>
+          )}
+          {onSave && (
+            <button type="button" className="btn sm" onClick={onSave} disabled={busy || !apiKeyDraft.trim()}>
+              {t("settings.setup.openrouter.saveKey")}
+            </button>
+          )}
+        </div>
+        <p className="sd">{t("settings.setup.openrouter.inlineHelp")}</p>
+      </div>
+      <div className="modal-field">
+        <label htmlFor={modelId}>{t("settings.setup.openrouter.modelLabel")}</label>
+        <div className="set-field-row">
+          <input
+            id={modelId}
+            type="text"
+            list={modelListId}
+            value={modelDraft}
+            onChange={(e) => onModelChange?.(e.currentTarget.value)}
+            placeholder="openrouter/auto"
+            disabled={busy}
+          />
+          <datalist id={modelListId}>
+            {modelOptions.map((model) => (
+              <option key={model} value={model} />
+            ))}
+          </datalist>
+          {onRefreshModels && (
+            <button type="button" className="btn ghost sm" onClick={onRefreshModels} disabled={busy || modelsLoading}>
+              {modelsLoading ? t("settings.setup.openrouter.modelsLoading") : t("settings.setup.openrouter.refreshModels")}
+            </button>
+          )}
+          {onTest && (
+            <button type="button" className="btn ghost sm" onClick={onTest} disabled={busy}>
+              {t("settings.provider.test")}
+            </button>
+          )}
+        </div>
+        <p className="sd">{t("settings.setup.openrouter.modelHelp")}</p>
+        {modelsError ? <p className="error">{modelsError}</p> : null}
+        {testMessage ? (
+          <p className={testMessage.kind === "ok" ? "provider-test-ok" : "provider-test-error"}>{testMessage.text}</p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

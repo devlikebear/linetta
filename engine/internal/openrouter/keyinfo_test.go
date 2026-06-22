@@ -40,3 +40,27 @@ func TestClientKeyInfoRequiresAPIKey(t *testing.T) {
 		t.Fatal("expected missing key error")
 	}
 }
+
+func TestClientModelsFetchesModelIDs(t *testing.T) {
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		if r.URL.Path != "/models" {
+			t.Fatalf("path=%q, want /models", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"anthropic/claude-sonnet-4","name":"Claude Sonnet 4"},{"id":"openai/gpt-4o","name":"GPT-4o"},{"id":"","name":"broken"}]}`))
+	}))
+	defer srv.Close()
+
+	got, err := NewClient(srv.URL, srv.Client()).Models(context.Background(), "or-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if auth != "Bearer or-test" {
+		t.Fatalf("Authorization=%q", auth)
+	}
+	if len(got) != 2 || got[0].ID != "anthropic/claude-sonnet-4" || got[1].ID != "openai/gpt-4o" {
+		t.Fatalf("models mismatch: %+v", got)
+	}
+}

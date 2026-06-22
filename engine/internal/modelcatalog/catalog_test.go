@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/openrouter"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -47,17 +48,23 @@ func TestListPassesProviderAndKey(t *testing.T) {
 }
 
 func TestListMapsOpenRouterToOpenAICompatible(t *testing.T) {
-	f := &fakeFetcher{models: []string{"openrouter/auto"}}
-	c := New(f)
+	var gotKey string
+	c := NewWithOpenRouter(&fakeFetcher{models: []string{"should-not-fetch"}}, func(_ context.Context, apiKey string) ([]openrouter.Model, error) {
+		gotKey = apiKey
+		return []openrouter.Model{
+			{ID: "anthropic/claude-sonnet-4", Name: "Claude Sonnet 4"},
+			{ID: "openai/gpt-4o", Name: "GPT-4o"},
+		}, nil
+	})
 	got, err := c.List(context.Background(), "openrouter", "or-test", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0] != "openrouter/auto" {
-		t.Fatalf("got %v", got)
+	if gotKey != "or-test" {
+		t.Fatalf("api key = %q", gotKey)
 	}
-	if f.gotOptions.Provider != "openai" || f.gotOptions.APIKey != "or-test" || f.gotOptions.BaseURL != "https://openrouter.ai/api/v1" {
-		t.Fatalf("options mismatch: %+v", f.gotOptions)
+	if len(got) != 3 || got[0] != "openrouter/auto" || got[1] != "anthropic/claude-sonnet-4" || got[2] != "openai/gpt-4o" {
+		t.Fatalf("got %v", got)
 	}
 }
 

@@ -9,18 +9,30 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/openrouter"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
 // Catalog wraps a tars model fetcher.
-type Catalog struct{ fetcher llm.ModelFetcher }
+type Catalog struct {
+	fetcher          llm.ModelFetcher
+	openRouterModels func(context.Context, string) ([]openrouter.Model, error)
+}
 
 // New builds a Catalog over an explicit fetcher (used in tests).
-func New(f llm.ModelFetcher) *Catalog { return &Catalog{fetcher: f} }
+func New(f llm.ModelFetcher) *Catalog { return NewWithOpenRouter(f, openrouter.FetchModels) }
+
+// NewWithOpenRouter builds a Catalog with an explicit OpenRouter fetcher.
+func NewWithOpenRouter(f llm.ModelFetcher, openRouterModels func(context.Context, string) ([]openrouter.Model, error)) *Catalog {
+	if openRouterModels == nil {
+		openRouterModels = openrouter.FetchModels
+	}
+	return &Catalog{fetcher: f, openRouterModels: openRouterModels}
+}
 
 // Default builds a Catalog backed by tars' live model fetcher.
-func Default() *Catalog { return &Catalog{fetcher: llm.NewModelFetcher()} }
+func Default() *Catalog { return New(llm.NewModelFetcher()) }
 
 // List returns model ids for a provider. claude-code-cli has no list API and
 // returns an empty slice (callers fall back to free-text entry). baseURL is the
@@ -38,10 +50,7 @@ func (c *Catalog) List(ctx context.Context, provider, apiKey, baseURL string) ([
 		return []string{}, nil
 	}
 	if strings.TrimSpace(provider) == settings.ProviderOpenRouter {
-		provider = settings.ProviderOpenAI
-		if strings.TrimSpace(baseURL) == "" {
-			baseURL = settings.OpenRouterBaseURL
-		}
+		return c.listOpenRouter(ctx, apiKey)
 	}
 	models, err := c.fetcher.FetchModels(ctx, llm.ProviderOptions{
 		Provider: provider,
@@ -56,4 +65,26 @@ func (c *Catalog) List(ctx context.Context, provider, apiKey, baseURL string) ([
 		return nil, err
 	}
 	return models, nil
+}
+
+func (c *Catalog) listOpenRouter(ctx context.Context, apiKey string) ([]string, error) {
+	models, err := c.openRouterModels(ctx, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(models)+1)
+	seen := map[string]bool{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			return
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	add(settings.DefaultOpenRouterModel)
+	for _, model := range models {
+		add(model.ID)
+	}
+	return ids, nil
 }

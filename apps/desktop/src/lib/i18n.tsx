@@ -109,6 +109,8 @@ type MessageKey = string
   | "settings.aiWizard.policy"
   | "settings.aiWizard.officialGuide"
   | "settings.aiWizard.selected"
+  | "settings.aiWizard.choiceTabs"
+  | "settings.aiWizard.stepsSummary"
   | "settings.aiAdvanced.title"
   | "settings.aiAdvanced.description"
   | "settings.aiAdvanced.changeNote"
@@ -244,6 +246,16 @@ type MessageKey = string
   | "settings.setup.openrouter.oauthManualLink"
   | "settings.setup.openrouter.oauthStarted"
   | "settings.setup.openrouter.oauthError"
+  | "settings.setup.openrouter.apiKeyLabel"
+  | "settings.setup.openrouter.apiKeyPlaceholder"
+  | "settings.setup.openrouter.apiKeySavedPlaceholder"
+  | "settings.setup.openrouter.saveKey"
+  | "settings.setup.openrouter.saved"
+  | "settings.setup.openrouter.inlineHelp"
+  | "settings.setup.openrouter.modelLabel"
+  | "settings.setup.openrouter.modelHelp"
+  | "settings.setup.openrouter.refreshModels"
+  | "settings.setup.openrouter.modelsLoading"
   | "settings.setup.chatgpt.title"
   | "settings.setup.chatgpt.badge"
   | "settings.setup.chatgpt.summary"
@@ -1045,6 +1057,8 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.aiWizard.policy": "Claude와 Gemini 구독 로그인은 각 회사의 공식 제품 안에서 쓰는 흐름이라 Linetta에서는 제공하지 않습니다. ChatGPT 구독은 OpenAI Codex 공식 로그인만 지원하고, Claude/Gemini는 API 키로 연결합니다.",
     "settings.aiWizard.officialGuide": "공식 가이드",
     "settings.aiWizard.selected": "선택됨",
+    "settings.aiWizard.choiceTabs": "AI 연결 방식",
+    "settings.aiWizard.stepsSummary": "연결 단계",
     "settings.aiAdvanced.title": "고급 AI 설정",
     "settings.aiAdvanced.description": "마법사에서 선택한 연결 방식의 실제 provider, API 키, 모델 값을 조정합니다. 초보자는 위 순서대로 진행한 뒤 필요한 칸만 채우면 됩니다.",
     "settings.aiAdvanced.changeNote": "변경은 다음 AI 호출부터 적용됩니다.",
@@ -1196,6 +1210,16 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.setup.openrouter.oauthManualLink": "브라우저가 열리지 않으면 이 링크 열기",
     "settings.setup.openrouter.oauthStarted": "브라우저에서 OpenRouter 승인을 완료하면 Linetta가 자동으로 돌아옵니다.",
     "settings.setup.openrouter.oauthError": "OpenRouter 연결 실패: {message}",
+    "settings.setup.openrouter.apiKeyLabel": "OpenRouter API 키",
+    "settings.setup.openrouter.apiKeyPlaceholder": "or-...",
+    "settings.setup.openrouter.apiKeySavedPlaceholder": "저장된 OpenRouter 키 있음 · 새 키를 붙여넣으면 교체",
+    "settings.setup.openrouter.saveKey": "키 저장",
+    "settings.setup.openrouter.saved": "OpenRouter 키를 저장했습니다.",
+    "settings.setup.openrouter.inlineHelp": "키는 macOS Keychain에 저장하고 다시 표시하지 않습니다. 새 키를 붙여넣으면 기존 키를 교체합니다.",
+    "settings.setup.openrouter.modelLabel": "OpenRouter 모델",
+    "settings.setup.openrouter.modelHelp": "모델을 모르겠다면 openrouter/auto를 그대로 두세요. 모델 가져오기는 OpenRouter에서 현재 모델 목록을 불러옵니다.",
+    "settings.setup.openrouter.refreshModels": "모델 가져오기",
+    "settings.setup.openrouter.modelsLoading": "가져오는 중...",
     "settings.setup.chatgpt.title": "ChatGPT 구독으로 연결",
     "settings.setup.chatgpt.badge": "가장 쉬움",
     "settings.setup.chatgpt.summary": "ChatGPT 계정을 OpenAI Codex에 로그인해 Linetta에서 사용합니다.",
@@ -2007,6 +2031,8 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.aiWizard.policy": "Claude and Gemini subscription logins are designed for each company's official products, so Linetta does not provide them. ChatGPT subscriptions are supported only through official OpenAI Codex login, while Claude/Gemini use API keys.",
     "settings.aiWizard.officialGuide": "official guide",
     "settings.aiWizard.selected": "Selected",
+    "settings.aiWizard.choiceTabs": "AI connection options",
+    "settings.aiWizard.stepsSummary": "Connection steps",
     "settings.aiAdvanced.title": "Advanced AI Settings",
     "settings.aiAdvanced.description": "Adjust the actual provider, API key, and model used by the setup wizard. New users can follow the wizard first and fill only the fields they need.",
     "settings.aiAdvanced.changeNote": "Changes apply to the next AI call.",
@@ -2158,6 +2184,16 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.setup.openrouter.oauthManualLink": "Open this link if the browser did not open",
     "settings.setup.openrouter.oauthStarted": "Finish approval in your browser and Linetta will return automatically.",
     "settings.setup.openrouter.oauthError": "OpenRouter connection failed: {message}",
+    "settings.setup.openrouter.apiKeyLabel": "OpenRouter API key",
+    "settings.setup.openrouter.apiKeyPlaceholder": "or-...",
+    "settings.setup.openrouter.apiKeySavedPlaceholder": "Saved OpenRouter key present - paste a new key to replace it",
+    "settings.setup.openrouter.saveKey": "Save key",
+    "settings.setup.openrouter.saved": "Saved the OpenRouter key.",
+    "settings.setup.openrouter.inlineHelp": "Linetta stores the key in macOS Keychain and never shows it again. Pasting a new key replaces the old one.",
+    "settings.setup.openrouter.modelLabel": "OpenRouter model",
+    "settings.setup.openrouter.modelHelp": "Leave this as openrouter/auto if you are unsure. Fetch models loads the current model list from OpenRouter.",
+    "settings.setup.openrouter.refreshModels": "Fetch models",
+    "settings.setup.openrouter.modelsLoading": "Fetching...",
     "settings.setup.chatgpt.title": "Connect with ChatGPT subscription",
     "settings.setup.chatgpt.badge": "Easiest",
     "settings.setup.chatgpt.summary": "Sign in to OpenAI Codex with your ChatGPT account and use it in Linetta.",
@@ -2969,6 +3005,8 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.aiWizard.policy": "Claude と Gemini のサブスクリプションログインは各社公式製品内の利用フローなので、Linetta では提供しません。ChatGPT サブスクリプションは OpenAI Codex の公式ログインのみ対応し、Claude/Gemini は API キーで接続します。",
     "settings.aiWizard.officialGuide": "公式ガイド",
     "settings.aiWizard.selected": "選択済み",
+    "settings.aiWizard.choiceTabs": "AI 接続方式",
+    "settings.aiWizard.stepsSummary": "接続手順",
     "settings.aiAdvanced.title": "詳細 AI 設定",
     "settings.aiAdvanced.description": "ウィザードで選んだ接続方式の実際の provider、API キー、モデル値を調整します。初めて使う場合は上の手順を進めて、必要な欄だけ入力してください。",
     "settings.aiAdvanced.changeNote": "変更は次回の AI 呼び出しから反映されます。",
@@ -3120,6 +3158,16 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.setup.openrouter.oauthManualLink": "ブラウザが開かない場合はこのリンクを開く",
     "settings.setup.openrouter.oauthStarted": "ブラウザで OpenRouter の承認を完了すると、Linetta が自動で戻ります。",
     "settings.setup.openrouter.oauthError": "OpenRouter 接続失敗: {message}",
+    "settings.setup.openrouter.apiKeyLabel": "OpenRouter API キー",
+    "settings.setup.openrouter.apiKeyPlaceholder": "or-...",
+    "settings.setup.openrouter.apiKeySavedPlaceholder": "保存済み OpenRouter キーあり - 新しいキーを貼り付けると置き換え",
+    "settings.setup.openrouter.saveKey": "キーを保存",
+    "settings.setup.openrouter.saved": "OpenRouter キーを保存しました。",
+    "settings.setup.openrouter.inlineHelp": "キーは macOS Keychain に保存され、再表示されません。新しいキーを貼り付けると既存キーを置き換えます。",
+    "settings.setup.openrouter.modelLabel": "OpenRouter モデル",
+    "settings.setup.openrouter.modelHelp": "迷ったら openrouter/auto のままで大丈夫です。モデル取得は OpenRouter から現在のモデル一覧を読み込みます。",
+    "settings.setup.openrouter.refreshModels": "モデルを取得",
+    "settings.setup.openrouter.modelsLoading": "取得中...",
     "settings.setup.chatgpt.title": "ChatGPT サブスクリプションで接続",
     "settings.setup.chatgpt.badge": "最も簡単",
     "settings.setup.chatgpt.summary": "ChatGPT アカウントで OpenAI Codex にログインし、Linetta で使用します。",

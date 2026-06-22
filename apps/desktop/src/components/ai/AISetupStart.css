@@ -6,13 +6,16 @@
 
 .ai-setup-start.is-modal {
   display: block;
+  max-height: calc(88vh - 52px);
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .ai-setup-start.is-modal > .sd {
   font-size: 12px;
   color: var(--muted);
-  margin: 6px 0 12px;
-  line-height: 1.55;
+  margin: 4px 0 8px;
+  line-height: 1.45;
 }
 
 .ai-setup-start .settings-section-head,
@@ -76,14 +79,20 @@
   margin: 12px 0;
 }
 
-.ai-setup-start .setup-choice {
+.ai-setup-start .setup-choice-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+
+.ai-setup-start .setup-choice,
+.ai-setup-start .setup-tab {
   min-width: 0;
-  min-height: 86px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: 12px;
   border: 1px solid var(--line-soft);
   border-radius: var(--r-sm);
   background: var(--surface);
@@ -93,7 +102,23 @@
   text-align: left;
 }
 
-.ai-setup-start .setup-choice.is-selected {
+.ai-setup-start .setup-choice {
+  min-height: 86px;
+  padding: 12px;
+}
+
+.ai-setup-start .setup-tab {
+  flex: 1 1 132px;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.ai-setup-start .setup-choice.is-selected,
+.ai-setup-start .setup-tab.is-selected {
   border-color: var(--t-sienna);
   background: color-mix(in oklch, var(--t-sienna) 8%, var(--surface));
 }
@@ -109,6 +134,11 @@
   font-size: 13px;
   font-weight: 700;
   color: var(--ink);
+}
+
+.ai-setup-start .setup-tab .setup-choice-title {
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .ai-setup-start .setup-choice-summary {
@@ -164,6 +194,43 @@
 
 .ai-setup-start .setup-steps li + li {
   margin-top: 4px;
+}
+
+.ai-setup-start .setup-steps-disclosure {
+  margin-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.ai-setup-start .setup-steps-disclosure summary {
+  cursor: pointer;
+  padding-top: 9px;
+  font-weight: 650;
+}
+
+.ai-setup-start .setup-inline-config {
+  margin-top: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: 12px;
+  background: var(--surface);
+}
+
+.ai-setup-start .setup-inline-config .modal-field + .modal-field {
+  margin-top: 12px;
+}
+
+.ai-setup-start .set-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ai-setup-start .set-field-row input {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .ai-setup-start .setup-links {
@@ -222,6 +289,60 @@
 .ai-setup-start .setup-key-info-grid dd {
   margin: 0;
   font-weight: 700;
+}
+
+.ai-setup-start.is-modal .setup-current {
+  margin: 8px 0;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.ai-setup-start.is-modal .setup-policy {
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.ai-setup-start.is-modal .setup-guide {
+  margin-top: 8px;
+  padding: 12px;
+}
+
+.ai-setup-start.is-modal .setup-guide-head {
+  align-items: flex-start;
+}
+
+.ai-setup-start.is-modal .setup-guide-head p {
+  display: none;
+}
+
+.ai-setup-start.is-modal .setup-guide-actions {
+  gap: 6px;
+}
+
+.ai-setup-start.is-modal .setup-inline-config {
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.ai-setup-start.is-modal .setup-inline-config .modal-field {
+  margin-bottom: 10px;
+}
+
+.ai-setup-start.is-modal .setup-inline-config .modal-field + .modal-field {
+  margin-top: 10px;
+}
+
+.ai-setup-start.is-modal .setup-inline-config .sd,
+.ai-setup-start.is-modal .setup-key-info .sd {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.ai-setup-start.is-modal .setup-links {
+  margin-top: 10px;
 }
 
 @media (max-width: 720px) {

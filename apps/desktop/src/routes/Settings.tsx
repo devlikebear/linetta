@@ -105,11 +105,28 @@ export function Settings() {
   const [openRouterKeyInfo, setOpenRouterKeyInfo] = useState<OpenRouterKeyInfo | null>(null);
   const [openRouterKeyInfoLoading, setOpenRouterKeyInfoLoading] = useState(false);
   const [openRouterKeyInfoError, setOpenRouterKeyInfoError] = useState("");
+  const [openRouterAPIKeyDraft, setOpenRouterAPIKeyDraft] = useState("");
+  const [openRouterModelDraft, setOpenRouterModelDraft] = useState("openrouter/auto");
+  const [openRouterModelOptions, setOpenRouterModelOptions] = useState<string[]>(["openrouter/auto"]);
+  const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
+  const [openRouterModelsError, setOpenRouterModelsError] = useState("");
+  const [openRouterSetupBusy, setOpenRouterSetupBusy] = useState(false);
+  const [openRouterSetupMsg, setOpenRouterSetupMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [openRouterOAuthBusy, setOpenRouterOAuthBusy] = useState(false);
   const [openRouterOAuthURL, setOpenRouterOAuthURL] = useState("");
   const [openRouterOAuthError, setOpenRouterOAuthError] = useState("");
   const [webSearchTesting, setWebSearchTesting] = useState(false);
   const [webSearchTestMsg, setWebSearchTestMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
+  const syncOpenRouterDrafts = (s: SettingsRow) => {
+    const cfg = s.providers?.openrouter;
+    setOpenRouterAPIKeyDraft(cfg?.api_key ?? "");
+    setOpenRouterModelDraft(cfg?.model?.trim() || "openrouter/auto");
+    if (s.provider === "openrouter") {
+      setApiKeyDraft(cfg?.api_key ?? "");
+      setModelDraft(cfg?.model?.trim() || "");
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +144,7 @@ export function Settings() {
         setOpsRows(rows);
         setUnavailableProviders(diag.unavailable_providers ?? []);
         setGitSyncAvailable(diag.git_sync_available ?? true);
+        syncOpenRouterDrafts(s);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
@@ -329,6 +347,107 @@ export function Settings() {
     }
   };
 
+  const persistOpenRouterGuide = async (options: { clearAPIKey?: boolean; quiet?: boolean } = {}) => {
+    const model = openRouterModelDraft.trim() || "openrouter/auto";
+    const config: ProviderConfig = { model };
+    const key = openRouterAPIKeyDraft.trim();
+    if (key !== "") {
+      config.api_key = key;
+    }
+    if (options.clearAPIKey) {
+      config.clear_api_key = true;
+    }
+    const next = await settingsApi.set({
+      provider: "openrouter",
+      providers: { openrouter: config },
+    });
+    setCurrent(next);
+    setLanguage(next.language);
+    setGuideId("openrouter-safe");
+    syncOpenRouterDrafts(next);
+    window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+    setSavedAt(Date.now());
+    if (!options.quiet) {
+      setOpenRouterSetupMsg({ kind: "ok", text: t("settings.setup.openrouter.saved") });
+    }
+    return next;
+  };
+
+  const saveOpenRouterFromGuide = async () => {
+    setOpenRouterSetupBusy(true);
+    setOpenRouterSetupMsg(null);
+    setError(null);
+    try {
+      await persistOpenRouterGuide();
+      try {
+        setOpenRouterKeyInfo(await openRouterApi.keyInfo());
+      } catch {
+        setOpenRouterKeyInfo(null);
+      }
+    } catch (e) {
+      setOpenRouterSetupMsg({ kind: "error", text: String(e) });
+    } finally {
+      setOpenRouterSetupBusy(false);
+    }
+  };
+
+  const clearOpenRouterKeyFromGuide = async () => {
+    setOpenRouterSetupBusy(true);
+    setOpenRouterSetupMsg(null);
+    setError(null);
+    try {
+      await persistOpenRouterGuide({ clearAPIKey: true, quiet: true });
+      setOpenRouterKeyInfo(null);
+      setOpenRouterKeyInfoError("");
+      setOpenRouterSetupMsg({ kind: "ok", text: t("settings.setup.openrouter.saved") });
+    } catch (e) {
+      setOpenRouterSetupMsg({ kind: "error", text: String(e) });
+    } finally {
+      setOpenRouterSetupBusy(false);
+    }
+  };
+
+  const refreshOpenRouterModels = async () => {
+    setOpenRouterModelsLoading(true);
+    setOpenRouterModelsError("");
+    setOpenRouterSetupMsg(null);
+    try {
+      await persistOpenRouterGuide({ quiet: true });
+      const res = await providersApi.listModels("openrouter");
+      setOpenRouterModelOptions(res.models);
+      if (!openRouterModelDraft.trim() && res.models[0]) {
+        setOpenRouterModelDraft(res.models[0]);
+      }
+      if (current?.provider === "openrouter") {
+        setModelOptions(res.models);
+      }
+    } catch (e) {
+      setOpenRouterModelsError(String(e));
+    } finally {
+      setOpenRouterModelsLoading(false);
+    }
+  };
+
+  const testOpenRouterFromGuide = async () => {
+    setOpenRouterSetupBusy(true);
+    setOpenRouterSetupMsg(null);
+    setError(null);
+    try {
+      await persistOpenRouterGuide({ quiet: true });
+      const res = await providersApi.test("openrouter");
+      setOpenRouterSetupMsg({ kind: "ok", text: t("settings.provider.testOk", { message: res.message }) });
+      try {
+        setOpenRouterKeyInfo(await openRouterApi.keyInfo());
+      } catch {
+        setOpenRouterKeyInfo(null);
+      }
+    } catch (e) {
+      setOpenRouterSetupMsg({ kind: "error", text: t("settings.provider.testError", { message: String(e) }) });
+    } finally {
+      setOpenRouterSetupBusy(false);
+    }
+  };
+
   const connectOpenRouterOAuth = async () => {
     setOpenRouterOAuthBusy(true);
     setOpenRouterOAuthError("");
@@ -343,6 +462,7 @@ export function Settings() {
       const next = await settingsApi.get();
       setCurrent(next);
       setLanguage(next.language);
+      syncOpenRouterDrafts(next);
       setGuideId("openrouter-safe");
       setProviderTestMsg({ kind: "ok", text: t("settings.provider.testOk", { message: finished.message }) });
       window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
@@ -429,6 +549,26 @@ export function Settings() {
               openRouterOAuthBusy={openRouterOAuthBusy}
               openRouterOAuthURL={openRouterOAuthURL}
               openRouterOAuthError={openRouterOAuthError}
+              openRouterAPIKeyDraft={openRouterAPIKeyDraft}
+              openRouterAPIKeySaved={current.providers?.openrouter?.api_key_set ?? false}
+              openRouterModelDraft={openRouterModelDraft}
+              openRouterModelOptions={openRouterModelOptions}
+              openRouterModelsLoading={openRouterModelsLoading}
+              openRouterModelsError={openRouterModelsError}
+              openRouterSetupBusy={openRouterSetupBusy}
+              openRouterTestMessage={openRouterSetupMsg}
+              onOpenRouterAPIKeyChange={(value) => {
+                setOpenRouterAPIKeyDraft(value);
+                setOpenRouterSetupMsg(null);
+              }}
+              onOpenRouterModelChange={(value) => {
+                setOpenRouterModelDraft(value);
+                setOpenRouterSetupMsg(null);
+              }}
+              onSaveOpenRouter={() => { void saveOpenRouterFromGuide(); }}
+              onClearOpenRouterAPIKey={() => { void clearOpenRouterKeyFromGuide(); }}
+              onRefreshOpenRouterModels={() => { void refreshOpenRouterModels(); }}
+              onTestOpenRouter={() => { void testOpenRouterFromGuide(); }}
               saving={saving}
             />
 

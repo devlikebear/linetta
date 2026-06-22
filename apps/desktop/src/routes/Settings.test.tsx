@@ -255,6 +255,36 @@ describe("Settings", () => {
     openSpy.mockRestore();
   });
 
+  it("saves an OpenRouter key and refreshes OpenRouter models inside the setup guide", async () => {
+    mocks.providersListModels.mockResolvedValue({
+      models: ["openrouter/auto", "anthropic/claude-sonnet-4"],
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByRole("button", { name: /가장 쉬운 시작/ }));
+    await user.type(await screen.findByLabelText("OpenRouter API 키"), "or-test");
+    await user.click(screen.getByRole("button", { name: "키 저장" }));
+    await user.click(screen.getByRole("button", { name: "모델 가져오기" }));
+
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({
+        provider: "openrouter",
+        providers: {
+          openrouter: expect.objectContaining({
+            api_key: "or-test",
+          }),
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(mocks.providersListModels).toHaveBeenCalledWith("openrouter"),
+    );
+    await waitFor(() =>
+      expect(document.querySelector('option[value="anthropic/claude-sonnet-4"]')).not.toBeNull(),
+    );
+  });
+
   it("defaults to Korean and switches the settings UI to English", async () => {
     const user = userEvent.setup();
     renderSettings();

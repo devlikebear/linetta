@@ -99,4 +99,70 @@ describe("AISetupStart", () => {
 
     expect(onConnectOpenRouterOAuth).toHaveBeenCalled();
   });
+
+  it("uses compact tabs and collapsed steps in modal variant", () => {
+    renderSetup({
+      variant: "modal",
+      selectedGuideId: "openrouter-safe",
+      currentProvider: "openrouter",
+      currentProviderLabel: "OpenRouter",
+    });
+
+    expect(screen.getByRole("tablist", { name: "AI 연결 방식" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /가장 쉬운 시작/ })).toHaveAttribute("aria-selected", "true");
+    expect(document.querySelector(".setup-choice")).toBeNull();
+    const steps = document.querySelector(".setup-steps-disclosure") as HTMLDetailsElement | null;
+    expect(steps).not.toBeNull();
+    expect(steps?.open).toBe(false);
+  });
+
+  it("lets the OpenRouter guide save a pasted key, refresh models, and run a test", async () => {
+    const user = userEvent.setup();
+    const onOpenRouterAPIKeyChange = vi.fn();
+    const onSaveOpenRouter = vi.fn();
+    const onRefreshOpenRouterModels = vi.fn();
+    const onTestOpenRouter = vi.fn();
+    function Harness() {
+      const [apiKeyDraft, setAPIKeyDraft] = useState("");
+      return (
+        <AISetupStart
+          currentProvider="openrouter"
+          currentProviderLabel="OpenRouter"
+          credentialState="연결 필요"
+          unavailableProviders={[]}
+          selectedGuideId="openrouter-safe"
+          onGuideIdChange={vi.fn()}
+          onSelectProvider={vi.fn()}
+          saving={false}
+          openRouterAPIKeyDraft={apiKeyDraft}
+          openRouterModelDraft="openrouter/auto"
+          openRouterModelOptions={["openrouter/auto", "anthropic/claude-sonnet-4"]}
+          onOpenRouterAPIKeyChange={(value) => {
+            onOpenRouterAPIKeyChange(value);
+            setAPIKeyDraft(value);
+          }}
+          onOpenRouterModelChange={vi.fn()}
+          onSaveOpenRouter={onSaveOpenRouter}
+          onRefreshOpenRouterModels={onRefreshOpenRouterModels}
+          onTestOpenRouter={onTestOpenRouter}
+        />
+      );
+    }
+    render(
+      <I18nProvider>
+        <Harness />
+      </I18nProvider>,
+    );
+
+    await user.type(screen.getByLabelText("OpenRouter API 키"), "or-test");
+    await user.click(screen.getByRole("button", { name: "키 저장" }));
+    await user.click(screen.getByRole("button", { name: "모델 가져오기" }));
+    await user.click(screen.getByRole("button", { name: "연결 테스트" }));
+
+    expect(onOpenRouterAPIKeyChange).toHaveBeenLastCalledWith("or-test");
+    expect(onSaveOpenRouter).toHaveBeenCalled();
+    expect(onRefreshOpenRouterModels).toHaveBeenCalled();
+    expect(onTestOpenRouter).toHaveBeenCalled();
+    expect(document.querySelector('option[value="anthropic/claude-sonnet-4"]')).not.toBeNull();
+  });
 });

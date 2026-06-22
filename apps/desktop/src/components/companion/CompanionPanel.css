@@ -118,6 +118,13 @@
   line-height: 1.45;
 }
 
+.companion-ai-setup-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  padding: 20px;
+}
+
 .companion-action-list,
 .companion-example-list,
 .companion-tool-list {

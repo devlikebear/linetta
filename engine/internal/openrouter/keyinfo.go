@@ -32,6 +32,13 @@ type KeyInfo struct {
 	IsFreeTier         bool     `json:"is_free_tier"`
 }
 
+type Model struct {
+	ID            string            `json:"id"`
+	Name          string            `json:"name"`
+	ContextLength int               `json:"context_length,omitempty"`
+	Pricing       map[string]string `json:"pricing,omitempty"`
+}
+
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
@@ -50,6 +57,10 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 
 func FetchKeyInfo(ctx context.Context, apiKey string) (KeyInfo, error) {
 	return NewClient(settings.OpenRouterBaseURL, nil).KeyInfo(ctx, apiKey)
+}
+
+func FetchModels(ctx context.Context, apiKey string) ([]Model, error) {
+	return NewClient(settings.OpenRouterBaseURL, nil).Models(ctx, apiKey)
 }
 
 func (c *Client) KeyInfo(ctx context.Context, apiKey string) (KeyInfo, error) {
@@ -84,4 +95,46 @@ func (c *Client) KeyInfo(ctx context.Context, apiKey string) (KeyInfo, error) {
 		return KeyInfo{}, err
 	}
 	return payload.Data, nil
+}
+
+func (c *Client) Models(ctx context.Context, apiKey string) ([]Model, error) {
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return nil, errors.New("openrouter api key is required")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 512))
+		msg := strings.TrimSpace(string(body))
+		if msg == "" {
+			msg = res.Status
+		}
+		return nil, fmt.Errorf("openrouter models failed: %s", msg)
+	}
+	var payload struct {
+		Data []Model `json:"data"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	models := make([]Model, 0, len(payload.Data))
+	for _, model := range payload.Data {
+		model.ID = strings.TrimSpace(model.ID)
+		if model.ID == "" {
+			continue
+		}
+		models = append(models, model)
+	}
+	return models, nil
 }

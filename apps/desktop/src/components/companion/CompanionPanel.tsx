@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
-import { companion as companionApi, settings as settingsApi } from "../../lib/rpc";
+import { companion as companionApi, openRouter as openRouterApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import { stripProposalBlock } from "../../lib/companionDisplay";
 import type {
   AIContextPreview,
@@ -35,6 +35,8 @@ import type {
   CompanionReferenceSource,
   CompanionReferenceStatus,
   AISetupIssue,
+  OpenRouterKeyInfo,
+  ProviderConfig,
   ProviderID,
 } from "../../lib/types";
 import { AIDraftComposer, type AIDraftComposerProps } from "../ai/AIPanel";
@@ -479,6 +481,17 @@ export function CompanionPanel({
   const [aiSetupOpen, setAISetupOpen] = useState(false);
   const [aiSetupGuideId, setAISetupGuideId] = useState<GuideID>("chatgpt-subscription");
   const [aiSetupProvider, setAISetupProvider] = useState<ProviderID>("openai-codex");
+  const [aiSetupOpenRouterKeyDraft, setAISetupOpenRouterKeyDraft] = useState("");
+  const [aiSetupOpenRouterKeySaved, setAISetupOpenRouterKeySaved] = useState(false);
+  const [aiSetupOpenRouterModelDraft, setAISetupOpenRouterModelDraft] = useState("openrouter/auto");
+  const [aiSetupOpenRouterModels, setAISetupOpenRouterModels] = useState<string[]>(["openrouter/auto"]);
+  const [aiSetupOpenRouterModelsLoading, setAISetupOpenRouterModelsLoading] = useState(false);
+  const [aiSetupOpenRouterModelsError, setAISetupOpenRouterModelsError] = useState("");
+  const [aiSetupOpenRouterBusy, setAISetupOpenRouterBusy] = useState(false);
+  const [aiSetupOpenRouterMsg, setAISetupOpenRouterMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [aiSetupOpenRouterKeyInfo, setAISetupOpenRouterKeyInfo] = useState<OpenRouterKeyInfo | null>(null);
+  const [aiSetupOpenRouterKeyInfoLoading, setAISetupOpenRouterKeyInfoLoading] = useState(false);
+  const [aiSetupOpenRouterKeyInfoError, setAISetupOpenRouterKeyInfoError] = useState("");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -804,6 +817,109 @@ export function CompanionPanel({
     } catch {
       // The inline setup sheet is an entry point; Settings remains the detailed
       // surface for showing provider-specific save/test errors.
+    }
+  };
+
+  const persistAISetupOpenRouter = async (options: { clearAPIKey?: boolean; quiet?: boolean } = {}) => {
+    const config: ProviderConfig = {
+      model: aiSetupOpenRouterModelDraft.trim() || "openrouter/auto",
+    };
+    const key = aiSetupOpenRouterKeyDraft.trim();
+    if (key !== "") {
+      config.api_key = key;
+    }
+    if (options.clearAPIKey) {
+      config.clear_api_key = true;
+    }
+    const next = await settingsApi.set({
+      provider: "openrouter",
+      providers: { openrouter: config },
+    });
+    setAISetupProvider("openrouter");
+    setAISetupGuideId("openrouter-safe");
+    setAISetupOpenRouterKeyDraft(next.providers?.openrouter?.api_key ?? "");
+    setAISetupOpenRouterKeySaved(next.providers?.openrouter?.api_key_set ?? false);
+    setAISetupOpenRouterModelDraft(next.providers?.openrouter?.model?.trim() || "openrouter/auto");
+    window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+    if (!options.quiet) {
+      setAISetupOpenRouterMsg({ kind: "ok", text: t("settings.setup.openrouter.saved") });
+    }
+    return next;
+  };
+
+  const refreshAISetupOpenRouterKeyInfo = async () => {
+    setAISetupOpenRouterKeyInfoLoading(true);
+    setAISetupOpenRouterKeyInfoError("");
+    try {
+      setAISetupOpenRouterKeyInfo(await openRouterApi.keyInfo());
+    } catch (e) {
+      setAISetupOpenRouterKeyInfo(null);
+      setAISetupOpenRouterKeyInfoError(String(e));
+    } finally {
+      setAISetupOpenRouterKeyInfoLoading(false);
+    }
+  };
+
+  const saveAISetupOpenRouter = async () => {
+    setAISetupOpenRouterBusy(true);
+    setAISetupOpenRouterMsg(null);
+    try {
+      const next = await persistAISetupOpenRouter();
+      if (next.providers?.openrouter?.api_key_set) {
+        await refreshAISetupOpenRouterKeyInfo();
+      }
+    } catch (e) {
+      setAISetupOpenRouterMsg({ kind: "error", text: String(e) });
+    } finally {
+      setAISetupOpenRouterBusy(false);
+    }
+  };
+
+  const clearAISetupOpenRouterKey = async () => {
+    setAISetupOpenRouterBusy(true);
+    setAISetupOpenRouterMsg(null);
+    try {
+      await persistAISetupOpenRouter({ clearAPIKey: true, quiet: true });
+      setAISetupOpenRouterKeySaved(false);
+      setAISetupOpenRouterKeyInfo(null);
+      setAISetupOpenRouterMsg({ kind: "ok", text: t("settings.setup.openrouter.saved") });
+    } catch (e) {
+      setAISetupOpenRouterMsg({ kind: "error", text: String(e) });
+    } finally {
+      setAISetupOpenRouterBusy(false);
+    }
+  };
+
+  const refreshAISetupOpenRouterModels = async () => {
+    setAISetupOpenRouterModelsLoading(true);
+    setAISetupOpenRouterModelsError("");
+    setAISetupOpenRouterMsg(null);
+    try {
+      await persistAISetupOpenRouter({ quiet: true });
+      const res = await providersApi.listModels("openrouter");
+      setAISetupOpenRouterModels(res.models);
+      if (!aiSetupOpenRouterModelDraft.trim() && res.models[0]) {
+        setAISetupOpenRouterModelDraft(res.models[0]);
+      }
+    } catch (e) {
+      setAISetupOpenRouterModelsError(String(e));
+    } finally {
+      setAISetupOpenRouterModelsLoading(false);
+    }
+  };
+
+  const testAISetupOpenRouter = async () => {
+    setAISetupOpenRouterBusy(true);
+    setAISetupOpenRouterMsg(null);
+    try {
+      await persistAISetupOpenRouter({ quiet: true });
+      const res = await providersApi.test("openrouter");
+      setAISetupOpenRouterMsg({ kind: "ok", text: t("settings.provider.testOk", { message: res.message }) });
+      await refreshAISetupOpenRouterKeyInfo();
+    } catch (e) {
+      setAISetupOpenRouterMsg({ kind: "error", text: t("settings.provider.testError", { message: String(e) }) });
+    } finally {
+      setAISetupOpenRouterBusy(false);
     }
   };
 
@@ -1256,6 +1372,30 @@ export function CompanionPanel({
               selectedGuideId={aiSetupGuideId}
               onGuideIdChange={setAISetupGuideId}
               onSelectProvider={(provider) => { void selectAISetupProvider(provider); }}
+              openRouterKeyInfo={aiSetupOpenRouterKeyInfo}
+              openRouterKeyInfoLoading={aiSetupOpenRouterKeyInfoLoading}
+              openRouterKeyInfoError={aiSetupOpenRouterKeyInfoError}
+              onRefreshOpenRouterKeyInfo={() => { void refreshAISetupOpenRouterKeyInfo(); }}
+              openRouterAPIKeyDraft={aiSetupOpenRouterKeyDraft}
+              openRouterAPIKeySaved={aiSetupOpenRouterKeySaved}
+              openRouterModelDraft={aiSetupOpenRouterModelDraft}
+              openRouterModelOptions={aiSetupOpenRouterModels}
+              openRouterModelsLoading={aiSetupOpenRouterModelsLoading}
+              openRouterModelsError={aiSetupOpenRouterModelsError}
+              openRouterSetupBusy={aiSetupOpenRouterBusy}
+              openRouterTestMessage={aiSetupOpenRouterMsg}
+              onOpenRouterAPIKeyChange={(value) => {
+                setAISetupOpenRouterKeyDraft(value);
+                setAISetupOpenRouterMsg(null);
+              }}
+              onOpenRouterModelChange={(value) => {
+                setAISetupOpenRouterModelDraft(value);
+                setAISetupOpenRouterMsg(null);
+              }}
+              onSaveOpenRouter={() => { void saveAISetupOpenRouter(); }}
+              onClearOpenRouterAPIKey={() => { void clearAISetupOpenRouterKey(); }}
+              onRefreshOpenRouterModels={() => { void refreshAISetupOpenRouterModels(); }}
+              onTestOpenRouter={() => { void testAISetupOpenRouter(); }}
               onClose={() => {
                 setAISetupOpen(false);
                 window.requestAnimationFrame(() => focusInput());
