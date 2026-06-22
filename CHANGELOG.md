@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.4 - 2026-06-22
+
+- Added inline OpenRouter API key entry, model selection, model refresh, and connection testing to the beginner AI setup wizard.
+- Loaded available OpenRouter models from the OpenRouter API while keeping `openrouter/auto` as the safe default.
+- Compacted the companion AI setup dialog with tabbed setup choices, collapsed steps, and bounded modal height so it no longer gets cut off.
+
 ## v0.8.3 - 2026-06-21
 
 - Replaced raw companion AI setup failures with a guided recovery card that preserves the blocked prompt for retry.
