@@ -17,6 +17,21 @@ func TestResolveCompanionIntentPromotesSceneWriteFollowups(t *testing.T) {
 	}
 }
 
+func TestResolveCompanionIntentPromotesNumberedSceneChoiceApply(t *testing.T) {
+	previous := []conversationMessage{{
+		Role: "assistant",
+		Content: "## 1권 / 1화 씬에 이어질 문장 제안\n\n" +
+			"**제안 1 (추천):** 어둠이 짙게 깔린 밤, 낡은 창고의 삐걱이는 문틈으로 스며든 공기가 그의 뺨을 스쳤다.\n\n" +
+			"**제안 2:** 싸늘한 밤공기를 가르며 낡은 창고 문이 삐걱였다.\n\n" +
+			"어떤 제안이 마음에 드시나요?",
+	}}
+
+	got := resolveCompanionIntentWithConversation("1안으로 적용", RequestIntent{}, previous)
+	if got.Kind != companionIntentSceneWrite {
+		t.Fatalf("numbered scene choice apply = %q, want %q", got.Kind, companionIntentSceneWrite)
+	}
+}
+
 func TestResolveCompanionIntentDoesNotPromoteUnrelatedFollowups(t *testing.T) {
 	got := resolveCompanionIntentWithConversation("1번", RequestIntent{}, []conversationMessage{{
 		Role:    "assistant",

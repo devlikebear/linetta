@@ -1,8 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/ToastProvider";
+import { CURRENT_ONBOARDING_TOUR_VERSION } from "../components/onboarding/onboardingState";
 import { I18nProvider } from "../lib/i18n";
 import { Library } from "./Library";
 
@@ -68,6 +69,7 @@ function renderLibrary() {
 describe("Library", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
     mocks.projectsList.mockResolvedValue([
       {
         id: "project-1",
@@ -147,6 +149,54 @@ describe("Library", () => {
     await user.click(screen.getByRole("button", { name: "다시 보지 않기" }));
 
     expect(await screen.findByRole("heading", { name: "Linetta 둘러보기" })).toBeInTheDocument();
+  });
+
+  it("does not reopen the onboarding tour while skip persistence is pending", async () => {
+    const user = userEvent.setup();
+    let resolveSettings: (value: unknown) => void = () => {};
+    mocks.settingsGet.mockResolvedValue({
+      language: "ko",
+      provider: "claude-code-cli",
+      typewriter_default: false,
+      focus_default: false,
+      git_sync_dir: "",
+      git_sync_commit_template: "",
+      backup_dir: "/tmp/linetta/backups",
+      safety_checklist_dismissed: true,
+      onboarding_tour_enabled: true,
+      onboarding_tour_seen_version: "",
+    });
+    mocks.settingsSet.mockImplementation(
+      () => new Promise((resolve) => {
+        resolveSettings = resolve;
+      }),
+    );
+    renderLibrary();
+
+    expect(await screen.findByRole("heading", { name: "Linetta 둘러보기" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "건너뛰기" }));
+
+    expect(mocks.settingsSet).toHaveBeenCalledWith({ onboarding_tour_seen_version: CURRENT_ONBOARDING_TOUR_VERSION });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "온보딩 투어" })).not.toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: "Linetta 둘러보기" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSettings({
+        language: "ko",
+        provider: "claude-code-cli",
+        typewriter_default: false,
+        focus_default: false,
+        git_sync_dir: "",
+        git_sync_commit_template: "",
+        backup_dir: "/tmp/linetta/backups",
+        safety_checklist_dismissed: true,
+        onboarding_tour_enabled: true,
+        onboarding_tour_seen_version: CURRENT_ONBOARDING_TOUR_VERSION,
+      });
+    });
   });
 
   it("opens the data folder from the library menu", async () => {

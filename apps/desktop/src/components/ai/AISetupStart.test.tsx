@@ -135,8 +135,8 @@ describe("AISetupStart", () => {
           onSelectProvider={vi.fn()}
           saving={false}
           openRouterAPIKeyDraft={apiKeyDraft}
-          openRouterModelDraft="openrouter/auto"
-          openRouterModelOptions={["openrouter/auto", "anthropic/claude-sonnet-4"]}
+          openRouterModelDraft="openai/gpt-5.4"
+          openRouterModelOptions={["openai/gpt-5.4", "openrouter/auto", "anthropic/claude-sonnet-4"]}
           onOpenRouterAPIKeyChange={(value) => {
             onOpenRouterAPIKeyChange(value);
             setAPIKeyDraft(value);
@@ -163,6 +163,54 @@ describe("AISetupStart", () => {
     expect(onSaveOpenRouter).toHaveBeenCalled();
     expect(onRefreshOpenRouterModels).toHaveBeenCalled();
     expect(onTestOpenRouter).toHaveBeenCalled();
+    expect(screen.getByLabelText("OpenRouter 모델")).toHaveValue("openai/gpt-5.4");
+    expect(document.querySelector('option[value="openai/gpt-5.4"]')).not.toBeNull();
     expect(document.querySelector('option[value="anthropic/claude-sonnet-4"]')).not.toBeNull();
+  });
+
+  it("shows curated OpenRouter writing model presets and hides media-only fetched models", async () => {
+    const user = userEvent.setup();
+    const onOpenRouterModelChange = vi.fn();
+    function Harness() {
+      const [modelDraft, setModelDraft] = useState("openai/gpt-5.4");
+      return (
+        <AISetupStart
+          currentProvider="openrouter"
+          currentProviderLabel="OpenRouter"
+          credentialState="연결 필요"
+          unavailableProviders={[]}
+          selectedGuideId="openrouter-safe"
+          onGuideIdChange={vi.fn()}
+          onSelectProvider={vi.fn()}
+          saving={false}
+          openRouterAPIKeyDraft=""
+          openRouterModelDraft={modelDraft}
+          openRouterModelOptions={[
+            "openai/gpt-5.4",
+            "google/gemini-3-flash-preview",
+            "google/gemini-3.1-flash-image",
+            "google/gemini-3.1-flash-tts-preview",
+          ]}
+          onOpenRouterAPIKeyChange={vi.fn()}
+          onOpenRouterModelChange={(value) => {
+            onOpenRouterModelChange(value);
+            setModelDraft(value);
+          }}
+        />
+      );
+    }
+    render(
+      <I18nProvider>
+        <Harness />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText("추천 모델")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /빠르고 비용 효율/ }));
+
+    expect(onOpenRouterModelChange).toHaveBeenCalledWith("google/gemini-3-flash-preview");
+    expect(screen.getByLabelText("OpenRouter 모델")).toHaveValue("google/gemini-3-flash-preview");
+    expect(document.querySelector('option[value="google/gemini-3.1-flash-image"]')).toBeNull();
+    expect(document.querySelector('option[value="google/gemini-3.1-flash-tts-preview"]')).toBeNull();
   });
 });

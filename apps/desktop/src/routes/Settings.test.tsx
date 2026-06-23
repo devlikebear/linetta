@@ -161,7 +161,7 @@ describe("Settings", () => {
     mocks.openRouterOAuthFinish.mockResolvedValue({
       ok: true,
       provider: "openrouter",
-      model: "openrouter/auto",
+      model: "openai/gpt-5.4",
       message: "OpenRouter 연결이 완료되었습니다.",
     });
     mocks.webSearchTest.mockResolvedValue({
@@ -257,7 +257,13 @@ describe("Settings", () => {
 
   it("saves an OpenRouter key and refreshes OpenRouter models inside the setup guide", async () => {
     mocks.providersListModels.mockResolvedValue({
-      models: ["openrouter/auto", "anthropic/claude-sonnet-4"],
+      models: [
+        "openai/gpt-5.4",
+        "google/gemini-3-flash-preview",
+        "openrouter/auto",
+        "anthropic/claude-sonnet-4",
+        "google/gemini-3.1-flash-image",
+      ],
     });
     const user = userEvent.setup();
     renderSettings();
@@ -283,6 +289,7 @@ describe("Settings", () => {
     await waitFor(() =>
       expect(document.querySelector('option[value="anthropic/claude-sonnet-4"]')).not.toBeNull(),
     );
+    expect(document.querySelector('option[value="google/gemini-3.1-flash-image"]')).toBeNull();
   });
 
   it("defaults to Korean and switches the settings UI to English", async () => {

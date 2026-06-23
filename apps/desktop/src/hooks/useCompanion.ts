@@ -143,12 +143,18 @@ export function classifyAISetupIssue(message: string): AISetupIssue | undefined 
     return "model_unavailable";
   }
   if (
+    /\b402\b/.test(text) ||
     text.includes("rate limit") ||
     text.includes("quota") ||
+    text.includes("credit") ||
+    text.includes("credits") ||
     text.includes("insufficient credits") ||
     text.includes("spend limit") ||
     text.includes("billing hard limit") ||
-    text.includes("exceeded your current quota")
+    text.includes("exceeded your current quota") ||
+    text.includes("크레딧") ||
+    text.includes("키 한도") ||
+    text.includes("한도가 부족")
   ) {
     return "rate_or_spend_limit";
   }

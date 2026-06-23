@@ -1,9 +1,11 @@
 package companion
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 
@@ -151,16 +153,57 @@ type applyOpsParams struct {
 
 func decodeApplyOpsParams(params json.RawMessage) (Proposal, error) {
 	var in applyOpsParams
-	if err := json.Unmarshal(params, &in); err != nil {
+	if err := unmarshalApplyOpsJSONValue(params, &in); err != nil {
 		return Proposal{}, err
 	}
 	ops := in.Ops
 	if strings.TrimSpace(in.OpsJSON) != "" {
-		if err := json.Unmarshal([]byte(in.OpsJSON), &ops); err != nil {
+		if err := unmarshalApplyOpsJSONValue([]byte(in.OpsJSON), &ops); err != nil {
 			return Proposal{}, fmt.Errorf("invalid ops_json: %w", err)
 		}
 	}
 	return Proposal{Summary: in.Summary, Ops: ops}, nil
+}
+
+func unmarshalApplyOpsJSONValue(data []byte, dst any) error {
+	err := json.Unmarshal(data, dst)
+	if err == nil {
+		return nil
+	}
+	if !strings.Contains(err.Error(), "after top-level value") {
+		return err
+	}
+	reader := bytes.NewReader(data)
+	dec := json.NewDecoder(reader)
+	if fallbackErr := dec.Decode(dst); fallbackErr != nil {
+		return err
+	}
+	if trailing := strings.TrimSpace(remainingDecoderBytes(dec, reader)); trailing != "" && !isExtraJSONCloseDelimiterTrail(trailing) {
+		return err
+	}
+	return nil
+}
+
+func remainingDecoderBytes(dec *json.Decoder, reader *bytes.Reader) string {
+	var out []byte
+	if buffered := dec.Buffered(); buffered != nil {
+		chunk, _ := io.ReadAll(buffered)
+		out = append(out, chunk...)
+	}
+	if reader.Len() > 0 {
+		chunk, _ := io.ReadAll(reader)
+		out = append(out, chunk...)
+	}
+	return string(out)
+}
+
+func isExtraJSONCloseDelimiterTrail(s string) bool {
+	for _, r := range s {
+		if r != '}' && r != ']' {
+			return false
+		}
+	}
+	return true
 }
 
 type applyOpsIntent struct {

@@ -52,7 +52,9 @@ func TestListMapsOpenRouterToOpenAICompatible(t *testing.T) {
 	c := NewWithOpenRouter(&fakeFetcher{models: []string{"should-not-fetch"}}, func(_ context.Context, apiKey string) ([]openrouter.Model, error) {
 		gotKey = apiKey
 		return []openrouter.Model{
+			{ID: "google/gemini-3.1-flash-image", Name: "Gemini 3.1 Flash Image"},
 			{ID: "anthropic/claude-sonnet-4", Name: "Claude Sonnet 4"},
+			{ID: "google/gemini-3.1-flash-tts-preview", Name: "Gemini 3.1 Flash TTS Preview"},
 			{ID: "openai/gpt-4o", Name: "GPT-4o"},
 		}, nil
 	})
@@ -63,7 +65,12 @@ func TestListMapsOpenRouterToOpenAICompatible(t *testing.T) {
 	if gotKey != "or-test" {
 		t.Fatalf("api key = %q", gotKey)
 	}
-	if len(got) != 3 || got[0] != "openrouter/auto" || got[1] != "anthropic/claude-sonnet-4" || got[2] != "openai/gpt-4o" {
+	if len(got) != 5 ||
+		got[0] != "openai/gpt-5.4" ||
+		got[1] != "google/gemini-3-flash-preview" ||
+		got[2] != "openrouter/auto" ||
+		got[3] != "anthropic/claude-sonnet-4" ||
+		got[4] != "openai/gpt-4o" {
 		t.Fatalf("got %v", got)
 	}
 }

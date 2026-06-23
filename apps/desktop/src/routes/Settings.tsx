@@ -15,6 +15,11 @@ import {
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import {
+  OPENROUTER_DEFAULT_MODEL_OPTIONS,
+  OPENROUTER_SMART_DEFAULT_MODEL,
+  organizeOpenRouterModelOptions,
+} from "../lib/openRouterDefaults";
+import {
   MANUAL_PHASE_STORAGE_KEY,
   WORKSPACE_PENDING_STORAGE_KEY,
   clearStoredPhase,
@@ -106,8 +111,8 @@ export function Settings() {
   const [openRouterKeyInfoLoading, setOpenRouterKeyInfoLoading] = useState(false);
   const [openRouterKeyInfoError, setOpenRouterKeyInfoError] = useState("");
   const [openRouterAPIKeyDraft, setOpenRouterAPIKeyDraft] = useState("");
-  const [openRouterModelDraft, setOpenRouterModelDraft] = useState("openrouter/auto");
-  const [openRouterModelOptions, setOpenRouterModelOptions] = useState<string[]>(["openrouter/auto"]);
+  const [openRouterModelDraft, setOpenRouterModelDraft] = useState(OPENROUTER_SMART_DEFAULT_MODEL);
+  const [openRouterModelOptions, setOpenRouterModelOptions] = useState<string[]>(OPENROUTER_DEFAULT_MODEL_OPTIONS);
   const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
   const [openRouterModelsError, setOpenRouterModelsError] = useState("");
   const [openRouterSetupBusy, setOpenRouterSetupBusy] = useState(false);
@@ -121,7 +126,7 @@ export function Settings() {
   const syncOpenRouterDrafts = (s: SettingsRow) => {
     const cfg = s.providers?.openrouter;
     setOpenRouterAPIKeyDraft(cfg?.api_key ?? "");
-    setOpenRouterModelDraft(cfg?.model?.trim() || "openrouter/auto");
+    setOpenRouterModelDraft(cfg?.model?.trim() || OPENROUTER_SMART_DEFAULT_MODEL);
     if (s.provider === "openrouter") {
       setApiKeyDraft(cfg?.api_key ?? "");
       setModelDraft(cfg?.model?.trim() || "");
@@ -348,7 +353,7 @@ export function Settings() {
   };
 
   const persistOpenRouterGuide = async (options: { clearAPIKey?: boolean; quiet?: boolean } = {}) => {
-    const model = openRouterModelDraft.trim() || "openrouter/auto";
+    const model = openRouterModelDraft.trim() || OPENROUTER_SMART_DEFAULT_MODEL;
     const config: ProviderConfig = { model };
     const key = openRouterAPIKeyDraft.trim();
     if (key !== "") {
@@ -414,12 +419,13 @@ export function Settings() {
     try {
       await persistOpenRouterGuide({ quiet: true });
       const res = await providersApi.listModels("openrouter");
-      setOpenRouterModelOptions(res.models);
-      if (!openRouterModelDraft.trim() && res.models[0]) {
-        setOpenRouterModelDraft(res.models[0]);
+      const models = organizeOpenRouterModelOptions(res.models);
+      setOpenRouterModelOptions(models);
+      if (!openRouterModelDraft.trim() && models[0]) {
+        setOpenRouterModelDraft(models[0]);
       }
       if (current?.provider === "openrouter") {
-        setModelOptions(res.models);
+        setModelOptions(models);
       }
     } catch (e) {
       setOpenRouterModelsError(String(e));

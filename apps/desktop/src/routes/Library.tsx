@@ -289,6 +289,9 @@ export function Library() {
   const skipLibraryTour = async () => {
     clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
     clearStoredPhase(MANUAL_PHASE_STORAGE_KEY);
+    setSettingsRow((current) => current
+      ? { ...current, onboarding_tour_seen_version: CURRENT_ONBOARDING_TOUR_VERSION }
+      : current);
     setTourOpen(false);
     try {
       const next = await settingsApi.set({ onboarding_tour_seen_version: CURRENT_ONBOARDING_TOUR_VERSION });

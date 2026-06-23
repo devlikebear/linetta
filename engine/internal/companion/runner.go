@@ -295,17 +295,22 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 	queryRounds := 0
 	forcedTool := companionForcedToolForIntent(intent)
 	forcedApplyOps := forcedTool == applyOpsToolName
+	applyOpsAttempted := false
 	applyOpsSucceeded := false
 	sceneTextSucceeded := false
+	applyOpsFallbackApplied := false
 	var lastApplyOpsResult ApplyOpsResult
 	applyOpsCorrectionUsed := false
 	client = newFirstTurnToolChoiceClient(client, forcedTool)
 	loop := agentloop.New(client, registry, agentloop.HookFunc(func(ctx context.Context, evt agentloop.Event) {
 		switch evt.Type {
 		case agentloop.EventBeforeTool:
+			if evt.ToolName == applyOpsToolName {
+				applyOpsAttempted = true
+			}
 			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(evt.ToolName)})
 		case agentloop.EventAfterTool:
-			if evt.ToolName == "linetta_apply_ops" && !evt.ToolIsError {
+			if evt.ToolName == applyOpsToolName && !evt.ToolIsError {
 				applyOpsSucceeded = true
 				if result, ok := parseApplyOpsToolResult(evt.ToolResult); ok {
 					lastApplyOpsResult = result
@@ -367,18 +372,36 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: err.Error()})
 		return
 	}
+	full := resp.Message.Content
+	if full == "" {
+		full = dedup.Final()
+	}
+	if forcedApplyOps && !applyOpsSucceeded {
+		if result, ok := r.applyDirectProposalFallback(ctx, runID, projectID, nodeID, scope, userText, full, intent, now); ok {
+			applyOpsFallbackApplied = true
+			applyOpsSucceeded = true
+			lastApplyOpsResult = result
+			if intent.RequiresSceneText() && applyOpsResultHasSceneTextChange(result) {
+				sceneTextSucceeded = true
+			}
+		}
+	}
+	if applyOpsAttempted && !applyOpsSucceeded && strings.TrimSpace(full) == "" {
+		msg := applyOpsFailedMessage()
+		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusFailed, msg, now())
+		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: msg})
+		return
+	}
 	if intent.RequiresSceneText() && !sceneTextSucceeded {
 		msg := sceneTextApplyFailedMessage()
 		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusFailed, msg, now())
 		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: msg})
 		return
 	}
-	full := resp.Message.Content
-	if full == "" {
-		full = dedup.Final()
-	}
 	if intent.RequiresSceneText() && sceneTextSucceeded {
 		full = sceneTextApplySuccessMessage(lastApplyOpsResult)
+	} else if applyOpsFallbackApplied {
+		full = applyOpsFallbackSuccessMessage(lastApplyOpsResult)
 	}
 
 	assistantAt := now()
@@ -416,6 +439,36 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 		})
 	}
 	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, FullText: full})
+}
+
+func (r *Runner) applyDirectProposalFallback(ctx context.Context, runID, projectID, nodeID, scope, userText, full string, intent companionIntent, now func() int64) (ApplyOpsResult, bool) {
+	prop, present, err := ParseProposal(full)
+	if !present || err != nil {
+		return ApplyOpsResult{}, false
+	}
+	if err := validateApplyOpsIntent(prop, companionApplyOpsIntent(userText, nodeID, intent)); err != nil {
+		return ApplyOpsResult{}, false
+	}
+	intentName := string(intent.Kind)
+	_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(applyOpsToolName)})
+	result := r.svc.ApplyOps(ctx, projectID, nodeID, prop, now)
+	if result.Applied > 0 {
+		_ = r.svc.notify.Notify("companion.applied", appliedPayload{
+			RunID:        runID,
+			ProjectID:    projectID,
+			NodeID:       nodeID,
+			Scope:        scope,
+			Intent:       intentName,
+			Summary:      result.Summary,
+			Applied:      result.Applied,
+			ChangedNodes: result.ChangedNodes,
+		})
+	}
+	if result.Applied == 0 || result.isError() {
+		return result, false
+	}
+	_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: "작품 설정을 갱신했습니다"})
+	return result, true
 }
 
 func (r *Runner) recordAssistantHistory(runID, projectID, nodeID, scope string, intent companionIntent, status, content string, at int64) {
@@ -502,6 +555,24 @@ func sceneTextApplySuccessMessage(result ApplyOpsResult) string {
 	return b.String()
 }
 
+func applyOpsFallbackSuccessMessage(result ApplyOpsResult) string {
+	count := result.Applied
+	if count <= 0 {
+		return "작품 상태를 반영했습니다."
+	}
+	var b strings.Builder
+	if count == 1 {
+		b.WriteString("작품 상태를 반영했습니다.")
+	} else {
+		fmt.Fprintf(&b, "작품 상태에 %d개 변경을 반영했습니다.", count)
+	}
+	if strings.TrimSpace(result.Summary) != "" {
+		b.WriteString("\n\n작업 흐름\n- 요청 처리: ")
+		b.WriteString(strings.TrimSpace(result.Summary))
+	}
+	return b.String()
+}
+
 func sceneTextPreviewForMessage(preview string) string {
 	preview = strings.Join(strings.Fields(preview), " ")
 	return trimRunesLocal(preview, 80)
@@ -509,6 +580,10 @@ func sceneTextPreviewForMessage(preview string) string {
 
 func sceneTextApplyFailedMessage() string {
 	return "본문 변경이 만들어지지 않았습니다. 다시 시도하거나 현재 씬을 확인해주세요."
+}
+
+func applyOpsFailedMessage() string {
+	return "작품 변경을 적용하지 못했습니다. 다시 시도해주세요."
 }
 
 func directApplyCorrectionPrompt(userText string, intent companionIntent) string {

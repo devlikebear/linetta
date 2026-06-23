@@ -35,4 +35,23 @@ func TestProviderOptionsForTarsMapsOpenRouterToOpenAICompatible(t *testing.T) {
 	if got.BaseURL != settings.OpenRouterBaseURL || got.Model != settings.DefaultOpenRouterModel || got.APIKey != "or-test" {
 		t.Fatalf("options mismatch: %+v", got)
 	}
+	if got.MaxTokens != settings.OpenRouterDefaultMaxTokens {
+		t.Fatalf("max tokens=%d, want %d", got.MaxTokens, settings.OpenRouterDefaultMaxTokens)
+	}
+}
+
+func TestProviderOptionsForTarsPreservesExplicitOpenRouterMaxTokens(t *testing.T) {
+	got := providerOptionsForTars(ResolvedProvider{
+		Provider:  settings.ProviderOpenRouter,
+		Model:     settings.DefaultOpenRouterModel,
+		APIKey:    "or-test",
+		BaseURL:   settings.OpenRouterBaseURL,
+		MaxTokens: 64,
+	})
+	if got.Provider != settings.ProviderOpenAI {
+		t.Fatalf("provider=%q, want openai", got.Provider)
+	}
+	if got.MaxTokens != 64 {
+		t.Fatalf("max tokens=%d, want 64", got.MaxTokens)
+	}
 }

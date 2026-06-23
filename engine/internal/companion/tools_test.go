@@ -89,6 +89,37 @@ func TestApplyOpsSchemaUsesOpsJSONString(t *testing.T) {
 	}
 }
 
+func TestDecodeApplyOpsParamsToleratesTrailingOpsJSONValueJunk(t *testing.T) {
+	opsJSON := `[{"op":"set_scene_text","text":"새 원고 첫 문장"}]}`
+	params := json.RawMessage(`{
+	  "summary":"현재 씬 본문 업데이트",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+
+	prop, err := decodeApplyOpsParams(params)
+	if err != nil {
+		t.Fatalf("decodeApplyOpsParams: %v", err)
+	}
+	if prop.Summary != "현재 씬 본문 업데이트" ||
+		len(prop.Ops) != 1 ||
+		prop.Ops[0].Type != "set_scene_text" ||
+		prop.Ops[0].Text != "새 원고 첫 문장" {
+		t.Fatalf("unexpected proposal: %+v", prop)
+	}
+}
+
+func TestDecodeApplyOpsParamsRejectsTrailingOpsJSONText(t *testing.T) {
+	opsJSON := `[{"op":"set_scene_text","text":"새 원고 첫 문장"}] trailing`
+	params := json.RawMessage(`{
+	  "summary":"현재 씬 본문 업데이트",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+
+	if _, err := decodeApplyOpsParams(params); err == nil {
+		t.Fatal("expected trailing non-delimiter text to remain invalid")
+	}
+}
+
 func TestLinettaApplyOpsToolMutatesProjectStructure(t *testing.T) {
 	ctx := context.Background()
 	svc, projectID, nodeID := newToolSvc(t)

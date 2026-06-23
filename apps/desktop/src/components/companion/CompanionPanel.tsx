@@ -46,6 +46,11 @@ import { ProposalCard } from "./ProposalCard";
 import { ChoiceCard } from "./ChoiceCard";
 import { Markdown } from "./Markdown";
 import { useI18n } from "../../lib/i18n";
+import {
+  OPENROUTER_DEFAULT_MODEL_OPTIONS,
+  OPENROUTER_SMART_DEFAULT_MODEL,
+  organizeOpenRouterModelOptions,
+} from "../../lib/openRouterDefaults";
 import "./CompanionPanel.css";
 
 export type SelectionRewriteKind = "rewrite" | "proofread";
@@ -81,22 +86,33 @@ type Translate = ReturnType<typeof useI18n>["t"];
 
 interface CompanionActionPreset {
   id: string;
+  scope: "scene" | "work";
   icon: LucideIcon;
   labelKey: string;
   descriptionKey: string;
   promptKey: string;
 }
 
-const COMPANION_ACTIONS: CompanionActionPreset[] = [
+const COMPANION_SCENE_ACTIONS: CompanionActionPreset[] = [
   {
     id: "continue-scene",
+    scope: "scene",
     icon: Pencil,
     labelKey: "companion.actions.continueScene.label",
     descriptionKey: "companion.actions.continueScene.description",
     promptKey: "companion.actions.continueScene.prompt",
   },
   {
+    id: "rewrite-scene",
+    scope: "scene",
+    icon: FileText,
+    labelKey: "companion.actions.rewriteScene.label",
+    descriptionKey: "companion.actions.rewriteScene.description",
+    promptKey: "companion.actions.rewriteScene.prompt",
+  },
+  {
     id: "tighten-dialogue",
+    scope: "scene",
     icon: MessageSquare,
     labelKey: "companion.actions.tightenDialogue.label",
     descriptionKey: "companion.actions.tightenDialogue.description",
@@ -104,34 +120,15 @@ const COMPANION_ACTIONS: CompanionActionPreset[] = [
   },
   {
     id: "raise-tension",
+    scope: "scene",
     icon: Lightbulb,
     labelKey: "companion.actions.raiseTension.label",
     descriptionKey: "companion.actions.raiseTension.description",
     promptKey: "companion.actions.raiseTension.prompt",
   },
   {
-    id: "check-continuity",
-    icon: Search,
-    labelKey: "companion.actions.checkContinuity.label",
-    descriptionKey: "companion.actions.checkContinuity.description",
-    promptKey: "companion.actions.checkContinuity.prompt",
-  },
-  {
-    id: "rename-across-work",
-    icon: Search,
-    labelKey: "companion.actions.renameAcrossWork.label",
-    descriptionKey: "companion.actions.renameAcrossWork.description",
-    promptKey: "companion.actions.renameAcrossWork.prompt",
-  },
-  {
-    id: "setting-impact",
-    icon: Lightbulb,
-    labelKey: "companion.actions.settingImpact.label",
-    descriptionKey: "companion.actions.settingImpact.description",
-    promptKey: "companion.actions.settingImpact.prompt",
-  },
-  {
     id: "next-episode-hook",
+    scope: "scene",
     icon: Book,
     labelKey: "companion.actions.nextEpisodeHook.label",
     descriptionKey: "companion.actions.nextEpisodeHook.description",
@@ -139,12 +136,60 @@ const COMPANION_ACTIONS: CompanionActionPreset[] = [
   },
   {
     id: "finish-episode",
+    scope: "scene",
     icon: Check,
     labelKey: "companion.actions.finishEpisode.label",
     descriptionKey: "companion.actions.finishEpisode.description",
     promptKey: "companion.actions.finishEpisode.prompt",
   },
 ];
+
+const COMPANION_WORK_ACTIONS: CompanionActionPreset[] = [
+  {
+    id: "plot-structure",
+    scope: "work",
+    icon: Layers,
+    labelKey: "companion.actions.plotStructure.label",
+    descriptionKey: "companion.actions.plotStructure.description",
+    promptKey: "companion.actions.plotStructure.prompt",
+  },
+  {
+    id: "outline-structure",
+    scope: "work",
+    icon: FileText,
+    labelKey: "companion.actions.outlineStructure.label",
+    descriptionKey: "companion.actions.outlineStructure.description",
+    promptKey: "companion.actions.outlineStructure.prompt",
+  },
+  {
+    id: "check-continuity",
+    scope: "work",
+    icon: Search,
+    labelKey: "companion.actions.checkContinuity.label",
+    descriptionKey: "companion.actions.checkContinuity.description",
+    promptKey: "companion.actions.checkContinuity.prompt",
+  },
+  {
+    id: "rename-across-work",
+    scope: "work",
+    icon: Search,
+    labelKey: "companion.actions.renameAcrossWork.label",
+    descriptionKey: "companion.actions.renameAcrossWork.description",
+    promptKey: "companion.actions.renameAcrossWork.prompt",
+  },
+  {
+    id: "setting-impact",
+    scope: "work",
+    icon: Lightbulb,
+    labelKey: "companion.actions.settingImpact.label",
+    descriptionKey: "companion.actions.settingImpact.description",
+    promptKey: "companion.actions.settingImpact.prompt",
+  },
+];
+
+function companionActionsForScope(scope: CompanionHistoryScope): CompanionActionPreset[] {
+  return scope === "project" ? COMPANION_WORK_ACTIONS : COMPANION_SCENE_ACTIONS;
+}
 
 const EMPTY_CONTEXT_PREVIEW: AIContextPreview = {
   counts: {
@@ -247,11 +292,34 @@ function markdownTitleFromPath(path: string): string {
 
 function CompanionEmpty({
   t,
-  onPick,
+  scope,
+  onPickAction,
 }: {
   t: Translate;
-  onPick: (prompt: string) => void;
+  scope: CompanionHistoryScope;
+  onPickAction: (action: CompanionActionPreset) => void;
 }) {
+  const actions = companionActionsForScope(scope);
+  const titleKey = scope === "project" ? "companion.actions.workTitle" : "companion.actions.sceneTitle";
+  const descriptionKey = scope === "project" ? "companion.actions.workDescription" : "companion.actions.sceneDescription";
+  const renderAction = (action: CompanionActionPreset) => {
+    const Icon = action.icon;
+    return (
+      <button
+        key={action.id}
+        type="button"
+        className="companion-action-preset"
+        onClick={() => onPickAction(action)}
+      >
+        <Icon size={14} />
+        <span className="companion-action-copy">
+          <strong>{t(action.labelKey)}</strong>
+          <small>{t(action.descriptionKey)}</small>
+        </span>
+      </button>
+    );
+  };
+
   return (
     <section className="companion-empty-card" aria-label={t("companion.actions.ariaLabel")}>
       <div className="companion-empty-kicker">
@@ -261,25 +329,49 @@ function CompanionEmpty({
       <h3>{t("companion.emptyTitle")}</h3>
       <p>{t("companion.empty")}</p>
       <div className="companion-action-list">
-        {COMPANION_ACTIONS.map((action) => {
-          const Icon = action.icon;
-          return (
-            <button
-              key={action.id}
-              type="button"
-              className="companion-action-preset"
-              onClick={() => onPick(t(action.promptKey))}
-            >
-              <Icon size={14} />
-              <span className="companion-action-copy">
-                <strong>{t(action.labelKey)}</strong>
-                <small>{t(action.descriptionKey)}</small>
-              </span>
-            </button>
-          );
-        })}
+        <div className="companion-action-section">
+          <div className="companion-action-section-head">
+            <span>{t(titleKey)}</span>
+            <small>{t(descriptionKey)}</small>
+          </div>
+          <div className="companion-action-grid">
+            {actions.map(renderAction)}
+          </div>
+        </div>
       </div>
     </section>
+  );
+}
+
+function CompanionCuratedActions({
+  t,
+  actions,
+  onPickAction,
+  disabled,
+}: {
+  t: Translate;
+  actions: CompanionActionPreset[];
+  onPickAction: (action: CompanionActionPreset) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="companion-curated-actions" role="group" aria-label={t("companion.actions.curatedLabel")}>
+      {actions.map((action) => {
+        const Icon = action.icon;
+        return (
+          <button
+            key={action.id}
+            type="button"
+            className="chip companion-curated-action"
+            onClick={() => onPickAction(action)}
+            disabled={disabled}
+          >
+            <Icon size={12} />
+            <span>{t(action.labelKey)}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -464,6 +556,7 @@ export function CompanionPanel({
   const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const [showContext, setShowContext] = useState(false);
+  const [actionTrayTouched, setActionTrayTouched] = useState(false);
   const [contextPreview, setContextPreview] = useState<AIContextPreview>(EMPTY_CONTEXT_PREVIEW);
   const [contextLoading, setContextLoading] = useState(false);
   const [references, setReferences] = useState<CompanionReference[]>([]);
@@ -483,8 +576,8 @@ export function CompanionPanel({
   const [aiSetupProvider, setAISetupProvider] = useState<ProviderID>("openai-codex");
   const [aiSetupOpenRouterKeyDraft, setAISetupOpenRouterKeyDraft] = useState("");
   const [aiSetupOpenRouterKeySaved, setAISetupOpenRouterKeySaved] = useState(false);
-  const [aiSetupOpenRouterModelDraft, setAISetupOpenRouterModelDraft] = useState("openrouter/auto");
-  const [aiSetupOpenRouterModels, setAISetupOpenRouterModels] = useState<string[]>(["openrouter/auto"]);
+  const [aiSetupOpenRouterModelDraft, setAISetupOpenRouterModelDraft] = useState(OPENROUTER_SMART_DEFAULT_MODEL);
+  const [aiSetupOpenRouterModels, setAISetupOpenRouterModels] = useState<string[]>(OPENROUTER_DEFAULT_MODEL_OPTIONS);
   const [aiSetupOpenRouterModelsLoading, setAISetupOpenRouterModelsLoading] = useState(false);
   const [aiSetupOpenRouterModelsError, setAISetupOpenRouterModelsError] = useState("");
   const [aiSetupOpenRouterBusy, setAISetupOpenRouterBusy] = useState(false);
@@ -778,6 +871,8 @@ export function CompanionPanel({
   const contextItemCount = totalContextItems(contextPreview, contextSelection);
   const contextTokenCount = totalContextTokens(contextPreview, contextSelection);
   const budgetLevel = contextBudgetLevel(contextTokenCount);
+  const curatedActions = companionActionsForScope(effectiveHistoryScope).slice(0, 3);
+  const showCuratedActions = actionTrayTouched || hasTranscript || effectiveHistoryScope === "project";
 
   const copyTranscript = async () => {
     const text = formatTranscript(messages, liveProse, t);
@@ -793,8 +888,14 @@ export function CompanionPanel({
     setCopiedMessageKey(key);
   };
 
-  const pickExample = (prompt: string) => {
-    setDraft(prompt);
+  const pickAction = (action: CompanionActionPreset) => {
+    if (action.scope === "work") {
+      setHistoryScope("project");
+    } else if (currentNodeId) {
+      setHistoryScope("scene");
+    }
+    setActionTrayTouched(true);
+    setDraft(t(action.promptKey));
     window.requestAnimationFrame(() => focusInput());
   };
 
@@ -822,7 +923,7 @@ export function CompanionPanel({
 
   const persistAISetupOpenRouter = async (options: { clearAPIKey?: boolean; quiet?: boolean } = {}) => {
     const config: ProviderConfig = {
-      model: aiSetupOpenRouterModelDraft.trim() || "openrouter/auto",
+      model: aiSetupOpenRouterModelDraft.trim() || OPENROUTER_SMART_DEFAULT_MODEL,
     };
     const key = aiSetupOpenRouterKeyDraft.trim();
     if (key !== "") {
@@ -839,7 +940,7 @@ export function CompanionPanel({
     setAISetupGuideId("openrouter-safe");
     setAISetupOpenRouterKeyDraft(next.providers?.openrouter?.api_key ?? "");
     setAISetupOpenRouterKeySaved(next.providers?.openrouter?.api_key_set ?? false);
-    setAISetupOpenRouterModelDraft(next.providers?.openrouter?.model?.trim() || "openrouter/auto");
+    setAISetupOpenRouterModelDraft(next.providers?.openrouter?.model?.trim() || OPENROUTER_SMART_DEFAULT_MODEL);
     window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
     if (!options.quiet) {
       setAISetupOpenRouterMsg({ kind: "ok", text: t("settings.setup.openrouter.saved") });
@@ -897,9 +998,10 @@ export function CompanionPanel({
     try {
       await persistAISetupOpenRouter({ quiet: true });
       const res = await providersApi.listModels("openrouter");
-      setAISetupOpenRouterModels(res.models);
-      if (!aiSetupOpenRouterModelDraft.trim() && res.models[0]) {
-        setAISetupOpenRouterModelDraft(res.models[0]);
+      const models = organizeOpenRouterModelOptions(res.models);
+      setAISetupOpenRouterModels(models);
+      if (!aiSetupOpenRouterModelDraft.trim() && models[0]) {
+        setAISetupOpenRouterModelDraft(models[0]);
       }
     } catch (e) {
       setAISetupOpenRouterModelsError(String(e));
@@ -979,7 +1081,10 @@ export function CompanionPanel({
             className={effectiveHistoryScope === "scene" ? "is-active" : ""}
             aria-pressed={effectiveHistoryScope === "scene"}
             disabled={!currentNodeId}
-            onClick={() => setHistoryScope("scene")}
+            onClick={() => {
+              setHistoryScope("scene");
+              setActionTrayTouched(true);
+            }}
           >
             {t("companion.scope.scene")}
           </button>
@@ -987,7 +1092,10 @@ export function CompanionPanel({
             type="button"
             className={effectiveHistoryScope === "project" ? "is-active" : ""}
             aria-pressed={effectiveHistoryScope === "project"}
-            onClick={() => setHistoryScope("project")}
+            onClick={() => {
+              setHistoryScope("project");
+              setActionTrayTouched(true);
+            }}
           >
             {t("companion.scope.project")}
           </button>
@@ -999,7 +1107,7 @@ export function CompanionPanel({
         {aiDraft ? (
           <AIDraftComposer {...aiDraft} />
         ) : messages.length === 0 && (
-          <CompanionEmpty t={t} onPick={pickExample} />
+          <CompanionEmpty t={t} scope={effectiveHistoryScope} onPickAction={pickAction} />
         )}
         {!aiDraft && messages.map((m, i) => {
           const isUser = m.role === "user";
@@ -1123,6 +1231,14 @@ export function CompanionPanel({
 
       {!aiDraft && (
       <div className="cmp-input-wrap">
+        {showCuratedActions && (
+          <CompanionCuratedActions
+            t={t}
+            actions={curatedActions}
+            onPickAction={pickAction}
+            disabled={isBusy}
+          />
+        )}
         {attachments.length > 0 && (
           <div className="companion-attachments" aria-label={t("companion.attachments")}>
             {attachments.map((item) => (

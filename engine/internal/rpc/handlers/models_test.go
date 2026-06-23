@@ -82,8 +82,8 @@ func TestProviderHandler_usesOpenRouterConfig(t *testing.T) {
 		t.Fatalf("settings.Set: %v", err)
 	}
 
-	client := &providerTestFakeClient{}
 	var captured ai.ResolvedProvider
+	client := &providerTestFakeClient{}
 	handler := TestProvider(store, func(p ai.ResolvedProvider) (llm.Client, error) {
 		captured = p
 		return client, nil
@@ -102,6 +102,12 @@ func TestProviderHandler_usesOpenRouterConfig(t *testing.T) {
 	}
 	if captured.Provider != provider || captured.APIKey != apiKey || captured.Model != settings.DefaultOpenRouterModel || captured.BaseURL != settings.OpenRouterBaseURL {
 		t.Fatalf("captured provider = %+v", captured)
+	}
+	if captured.MaxTokens != 64 {
+		t.Fatalf("max tokens = %d, want 64", captured.MaxTokens)
+	}
+	if len(client.messages) != 2 || client.messages[1].Content == "" {
+		t.Fatalf("test prompt not sent: %+v", client.messages)
 	}
 }
 

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -120,11 +120,11 @@ describe("CompanionPanel", () => {
   beforeEach(() => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
     mocks.settingsSet.mockImplementation((patch: unknown) => Promise.resolve(patch));
-    mocks.providersListModels.mockResolvedValue({ models: ["openrouter/auto"] });
+    mocks.providersListModels.mockResolvedValue({ models: ["openai/gpt-5.4", "openrouter/auto"] });
     mocks.providersTest.mockResolvedValue({
       ok: true,
       provider: "openrouter",
-      model: "openrouter/auto",
+      model: "openai/gpt-5.4",
       message: "연결되었습니다",
     });
     mocks.openRouterKeyInfo.mockResolvedValue({
@@ -230,8 +230,12 @@ describe("CompanionPanel", () => {
     renderPanel();
 
     expect(screen.getByText("무엇부터 맡길까요?")).toBeInTheDocument();
-    expect(screen.getByText("작가 액션")).toBeInTheDocument();
+    expect(screen.getByText("현재 씬 액션")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /현재 씬 전체 재작성/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /다음 문장 이어쓰기/ })).toBeInTheDocument();
+    expect(screen.queryByText("작품 전체 액션")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /플롯 구성하기/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /아웃라인 구성하기/ })).not.toBeInTheDocument();
 
     const action = screen.getByRole("button", {
       name: /다음 문장 이어쓰기/,
@@ -240,6 +244,48 @@ describe("CompanionPanel", () => {
 
     expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("다음 3~5문장");
     expect(companionState.value.send).not.toHaveBeenCalled();
+  });
+
+  it("shows only whole-work actions in the empty state when project scope is selected", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "작품 전체" }));
+
+    const emptyActions = screen.getByLabelText("컴패니언 작가 액션");
+    expect(within(emptyActions).getByText("작품 전체 액션")).toBeInTheDocument();
+    expect(within(emptyActions).getByRole("button", { name: /플롯 구성하기/ })).toBeInTheDocument();
+    expect(within(emptyActions).getByRole("button", { name: /아웃라인 구성하기/ })).toBeInTheDocument();
+    expect(within(emptyActions).queryByText("현재 씬 액션")).not.toBeInTheDocument();
+    expect(within(emptyActions).queryByRole("button", { name: /현재 씬 전체 재작성/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps curated action buttons available after an action is picked", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: /다음 문장 이어쓰기/ }));
+
+    const curated = screen.getByRole("group", { name: "추천 액션" });
+    expect(within(curated).getByRole("button", { name: /다음 문장 이어쓰기/ })).toBeInTheDocument();
+    expect(within(curated).getByRole("button", { name: /현재 씬 전체 재작성/ })).toBeInTheDocument();
+    expect(within(curated).getByRole("button", { name: /대사 자연스럽게/ })).toBeInTheDocument();
+  });
+
+  it("shows project-wide curated actions when the companion scope is whole work", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "작품 전체" }));
+
+    const curated = screen.getByRole("group", { name: "추천 액션" });
+    expect(within(curated).getByRole("button", { name: /플롯 구성하기/ })).toBeInTheDocument();
+    expect(within(curated).getByRole("button", { name: /아웃라인 구성하기/ })).toBeInTheDocument();
+
+    await user.click(within(curated).getByRole("button", { name: /아웃라인 구성하기/ }));
+
+    expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("작품 전체 아웃라인");
+    expect(companionState.value.lastArgs[5]).toBe("project");
   });
 
   it("switches companion history scope between current scene and whole work", async () => {

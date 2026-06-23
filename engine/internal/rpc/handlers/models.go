@@ -70,6 +70,8 @@ type testProviderResult struct {
 	Message  string `json:"message"`
 }
 
+const providerTestMaxTokens = 64
+
 // TestProvider sends a tiny, context-free prompt through the selected provider.
 // It is intentionally separate from ai.run so Settings can verify credentials
 // before the writer creates or opens a scene.
@@ -99,12 +101,15 @@ func TestProvider(store *settings.Store, factory ai.ClientFactory) rpc.Handler {
 			BaseURL:  resolved.BaseURL,
 			CliPath:  resolved.CliPath,
 		}
+		if rp.Provider == settings.ProviderOpenRouter {
+			rp.MaxTokens = providerTestMaxTokens
+		}
+		testCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		defer cancel()
 		client, err := factory(rp)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		testCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-		defer cancel()
 		resp, err := client.Chat(testCtx, []llm.ChatMessage{
 			{Role: "system", Content: "당신은 Linetta의 AI 연결 테스트입니다. 아주 짧게 한국어로만 답하세요."},
 			{Role: "user", Content: "연결 테스트입니다. '연결되었습니다'라고만 답하세요."},

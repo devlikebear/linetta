@@ -76,15 +76,45 @@ func (c *Catalog) listOpenRouter(ctx context.Context, apiKey string) ([]string, 
 	seen := map[string]bool{}
 	add := func(id string) {
 		id = strings.TrimSpace(id)
-		if id == "" || seen[id] {
+		if id == "" || seen[id] || isOpenRouterNonTextModel(id) {
 			return
 		}
 		seen[id] = true
 		ids = append(ids, id)
 	}
 	add(settings.DefaultOpenRouterModel)
+	add(settings.OpenRouterFastModel)
+	add(settings.OpenRouterAutoModel)
 	for _, model := range models {
 		add(model.ID)
 	}
 	return ids, nil
+}
+
+func isOpenRouterNonTextModel(id string) bool {
+	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" {
+		return true
+	}
+	mediaMarkers := []string{
+		"image",
+		"img",
+		"tts",
+		"audio",
+		"speech",
+		"music",
+		"video",
+		"veo",
+		"lyria",
+		"stable-diffusion",
+		"flux",
+		"dall-e",
+		"midjourney",
+	}
+	for _, marker := range mediaMarkers {
+		if strings.Contains(id, marker) {
+			return true
+		}
+	}
+	return false
 }

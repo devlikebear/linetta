@@ -1,6 +1,12 @@
 import { ExternalLink, X } from "lucide-react";
 import { useMemo } from "react";
 import { useI18n } from "../../lib/i18n";
+import {
+  OPENROUTER_DEFAULT_MODEL_OPTIONS,
+  OPENROUTER_RECOMMENDED_MODELS,
+  OPENROUTER_SMART_DEFAULT_MODEL,
+  organizeOpenRouterModelOptions,
+} from "../../lib/openRouterDefaults";
 import type { OpenRouterKeyInfo, ProviderID } from "../../lib/types";
 import "./AISetupStart.css";
 
@@ -212,8 +218,8 @@ export function AISetupStart({
   openRouterOAuthError = "",
   openRouterAPIKeyDraft = "",
   openRouterAPIKeySaved = false,
-  openRouterModelDraft = "openrouter/auto",
-  openRouterModelOptions = [],
+  openRouterModelDraft = OPENROUTER_SMART_DEFAULT_MODEL,
+  openRouterModelOptions = OPENROUTER_DEFAULT_MODEL_OPTIONS,
   openRouterModelsLoading = false,
   openRouterModelsError = "",
   openRouterSetupBusy = false,
@@ -419,6 +425,7 @@ function OpenRouterInlineSetup({
   const modelListId = `openrouter-model-options-${variant}`;
   const apiKeyId = `openrouter-api-key-${variant}`;
   const modelId = `openrouter-model-${variant}`;
+  const organizedModelOptions = organizeOpenRouterModelOptions(modelOptions);
   return (
     <div className="setup-inline-config">
       <div className="modal-field">
@@ -452,6 +459,24 @@ function OpenRouterInlineSetup({
       </div>
       <div className="modal-field">
         <label htmlFor={modelId}>{t("settings.setup.openrouter.modelLabel")}</label>
+        <div className="openrouter-model-presets" aria-label={t("settings.setup.openrouter.recommendedModels")}>
+          <span className="openrouter-model-presets-title">{t("settings.setup.openrouter.recommendedModels")}</span>
+          <div className="openrouter-model-preset-grid">
+            {OPENROUTER_RECOMMENDED_MODELS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={modelDraft.trim() === preset.id ? "openrouter-model-preset is-selected" : "openrouter-model-preset"}
+                onClick={() => onModelChange?.(preset.id)}
+                disabled={busy}
+              >
+                <span className="openrouter-model-preset-title">{t(preset.titleKey)}</span>
+                <span className="openrouter-model-preset-summary">{t(preset.summaryKey)}</span>
+                <code>{preset.id}</code>
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="set-field-row">
           <input
             id={modelId}
@@ -459,11 +484,11 @@ function OpenRouterInlineSetup({
             list={modelListId}
             value={modelDraft}
             onChange={(e) => onModelChange?.(e.currentTarget.value)}
-            placeholder="openrouter/auto"
+            placeholder={OPENROUTER_SMART_DEFAULT_MODEL}
             disabled={busy}
           />
           <datalist id={modelListId}>
-            {modelOptions.map((model) => (
+            {organizedModelOptions.map((model) => (
               <option key={model} value={model} />
             ))}
           </datalist>

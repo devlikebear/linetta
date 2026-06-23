@@ -46,6 +46,7 @@ describe("classifyAISetupIssue", () => {
     expect(classifyAISetupIssue("401 unauthorized")).toBe("auth_required");
     expect(classifyAISetupIssue("model not found: latest-writing-model")).toBe("model_unavailable");
     expect(classifyAISetupIssue("insufficient credits or spend limit reached")).toBe("rate_or_spend_limit");
+    expect(classifyAISetupIssue("openrouter status 402: OpenRouter 크레딧 또는 키 한도가 부족합니다.")).toBe("rate_or_spend_limit");
   });
 
   it("leaves non-setup companion failures unclassified", () => {

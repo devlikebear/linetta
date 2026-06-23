@@ -37,9 +37,23 @@ const DefaultOpenAICodexModel = "gpt-5.3-codex-spark"
 // to OpenAI-compatible calls only at the tars boundary.
 const OpenRouterBaseURL = "https://openrouter.ai/api/v1"
 
-// DefaultOpenRouterModel lets first-time users test OpenRouter without picking a
-// model id. OpenRouter resolves this auto route server-side.
-const DefaultOpenRouterModel = "openrouter/auto"
+// DefaultOpenRouterModel favors trustable first answers over the cheapest route.
+// Webnovel planning, outlining, and scene rewrites are quality-sensitive, so the
+// beginner default should be an explicit frontier model instead of OpenRouter's
+// cost/quality auto router.
+const DefaultOpenRouterModel = "openai/gpt-5.4"
+
+// OpenRouterFastModel is a curated cheaper writing fallback shown near the top
+// of OpenRouter model lists.
+const OpenRouterFastModel = "google/gemini-3-flash-preview"
+
+// OpenRouterAutoModel remains available as an advanced, cost-sensitive option.
+const OpenRouterAutoModel = "openrouter/auto"
+
+// OpenRouterDefaultMaxTokens keeps first-run GPT-5.4 requests under a small
+// OpenRouter key limit. Without an explicit max_tokens, OpenRouter can reserve a
+// model-scale output budget and reject even tiny prompts with 402.
+const OpenRouterDefaultMaxTokens = 2048
 
 func validProviders() []string {
 	return []string{

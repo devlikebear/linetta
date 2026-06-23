@@ -151,9 +151,28 @@ func isNumberedChoiceFollowup(s string) bool {
 	s = strings.TrimSpace(s)
 	s = strings.Trim(s, ".。．!！?？")
 	s = strings.ReplaceAll(s, " ", "")
-	for _, suffix := range []string{"번", "안", "번째", "째"} {
-		s = strings.TrimSuffix(s, suffix)
+	if isASCIIDigits(s) {
+		return true
 	}
+	for _, marker := range []string{"번째", "번", "안", "째"} {
+		before, after, ok := strings.Cut(s, marker)
+		if !ok || !isASCIIDigits(before) {
+			continue
+		}
+		if after == "" {
+			return true
+		}
+		if strings.HasPrefix(after, "으로") {
+			after = strings.TrimPrefix(after, "으로")
+		}
+		if after == "" || containsAny(after, companionSceneFollowupTerms) || containsAny(after, companionDirectApplyTerms) {
+			return true
+		}
+	}
+	return false
+}
+
+func isASCIIDigits(s string) bool {
 	if s == "" {
 		return false
 	}
@@ -204,7 +223,7 @@ var companionSceneFollowupTerms = []string{
 
 var companionSceneOfferTargetTerms = []string{
 	"현재 씬 본문", "현재 장면 본문", "씬 본문", "장면 본문", "현재 원고",
-	"본문 작성", "현재 씬", "현재 장면",
+	"본문 작성", "현재 씬", "현재 장면", "이어질 문장", "문장 제안",
 }
 
 var companionSceneOfferActionTerms = []string{

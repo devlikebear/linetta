@@ -613,6 +613,39 @@ func TestSend_SceneTextFollowupApprovalAppliesCurrentScene(t *testing.T) {
 	}
 }
 
+func TestSend_SceneTextProposalFallbackAppliesAfterToolCallFailure(t *testing.T) {
+	client := &fakeClient{responses: []string{
+		"현재 씬 본문을 반영했습니다.",
+		"```linetta-proposal\n{\"summary\":\"현재 씬 작성\",\"ops\":[{\"op\":\"set_scene_text\",\"text\":\"새 원고 첫 문장\\n새 원고 둘째 문장\"}]}\n```",
+	}}
+	svc, notif, projectID := newSvcWithClient(t, client)
+	proj, err := svc.projects.Get(context.Background(), projectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeID := *proj.LastOpenedNodeID
+
+	runID, err := svc.Send(context.Background(), projectID, nodeID, "현재 씬 본문 써줘", func() int64 { return 1000 })
+	if err != nil || runID == "" {
+		t.Fatalf("Send err=%v runID=%q", err, runID)
+	}
+	waitFor(t, notif, "companion.done")
+
+	if got := notif.get("companion.error"); got != "" {
+		t.Fatalf("fallback should not emit error: %s", got)
+	}
+	if got := notif.get("companion.applied"); !strings.Contains(got, `"applied":1`) || !strings.Contains(got, nodeID) {
+		t.Fatalf("expected fallback to apply proposal ops: %s", got)
+	}
+	n, err := svc.nodes.Get(context.Background(), nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.ContentDoc == nil || !strings.Contains(*n.ContentDoc, "새 원고 첫 문장") {
+		t.Fatalf("scene proposal fallback did not apply content: %+v", n)
+	}
+}
+
 func TestSend_SceneTextQuestionOnlyFailsInsteadOfClaimingDone(t *testing.T) {
 	client := &sceneQuestionOnlyClient{}
 	svc, notif, projectID := newSvcWithClient(t, client)
@@ -639,6 +672,36 @@ func TestSend_SceneTextQuestionOnlyFailsInsteadOfClaimingDone(t *testing.T) {
 	}
 	if got := notif.get("companion.done"); got != "" {
 		t.Fatalf("question-only scene edit should not finish as done: %s", got)
+	}
+}
+
+func TestSend_ApplyToolFailureThenBlankResponseDoesNotFinishDone(t *testing.T) {
+	client := &malformedApplyThenBlankClient{}
+	svc, notif, projectID := newSvcWithClient(t, client)
+
+	runID, err := svc.Send(context.Background(), projectID, "", "아웃라인에 반영해줘", func() int64 { return 1000 })
+	if err != nil || runID == "" {
+		t.Fatalf("Send err=%v runID=%q", err, runID)
+	}
+	for i := 0; i < 200; i++ {
+		if notif.get("companion.error") != "" || notif.get("companion.done") != "" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := notif.get("companion.done"); got != "" {
+		t.Fatalf("tool failure followed by blank model response should not finish as done: %s", got)
+	}
+	if got := notif.get("companion.error"); !strings.Contains(got, "작품 변경") {
+		t.Fatalf("error should explain apply failure, got %s", got)
+	}
+
+	client.mu.Lock()
+	calls := client.calls
+	sawToolFailure := client.sawToolFailure
+	client.mu.Unlock()
+	if calls < 2 || !sawToolFailure {
+		t.Fatalf("expected blank final turn after tool failure, calls=%d sawToolFailure=%v", calls, sawToolFailure)
 	}
 }
 
@@ -743,6 +806,39 @@ func (c *sceneQuestionOnlyClient) Chat(_ context.Context, messages []llm.ChatMes
 		Role:    "assistant",
 		Content: "어떤 분위기로 쓰면 될까요?",
 	}}, nil
+}
+
+type malformedApplyThenBlankClient struct {
+	mu             sync.Mutex
+	calls          int
+	sawToolFailure bool
+}
+
+func (c *malformedApplyThenBlankClient) Ask(context.Context, string) (string, error) { return "", nil }
+
+func (c *malformedApplyThenBlankClient) Chat(_ context.Context, messages []llm.ChatMessage, _ llm.ChatOptions) (llm.ChatResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	switch c.calls {
+	case 1:
+		return llm.ChatResponse{Message: llm.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []llm.ToolCall{{
+				ID:        "call_bad_apply",
+				Name:      applyOpsToolName,
+				Arguments: `{"summary":"아웃라인 반영","ops_json":"[{\"op\":\"set_outline\",\"outline\":\"새 개요\"} invalid]"}`,
+			}},
+		}}, nil
+	default:
+		if len(messages) > 0 && messages[len(messages)-1].Role == "tool" && strings.Contains(messages[len(messages)-1].Content, "invalid JSON") {
+			c.sawToolFailure = true
+		}
+		return llm.ChatResponse{Message: llm.ChatMessage{
+			Role:    "assistant",
+			Content: "",
+		}}, nil
+	}
 }
 
 func TestCancel_UnknownRunErrors(t *testing.T) {

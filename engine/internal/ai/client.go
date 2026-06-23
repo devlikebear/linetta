@@ -12,12 +12,13 @@ import (
 // the active provider id plus its model, credential, optional CLI path override,
 // and the working directory.
 type ResolvedProvider struct {
-	Provider string
-	Model    string
-	APIKey   string
-	BaseURL  string
-	CliPath  string
-	WorkDir  string
+	Provider  string
+	Model     string
+	APIKey    string
+	BaseURL   string
+	CliPath   string
+	WorkDir   string
+	MaxTokens int
 }
 
 // ClientFactory creates an llm.Client from a resolved provider config. Wraps
@@ -28,10 +29,10 @@ type ClientFactory func(p ResolvedProvider) (llm.Client, error)
 // configured CLI path via the CLAUDE_CODE_CLI_PATH env var that tars reads
 // (NewClaudeCodeCLIClient has no path parameter, so the env var is the only hook).
 func DefaultClientFactory(p ResolvedProvider) (llm.Client, error) {
-	opts := providerOptionsForTars(p)
-	if err := guardProvider(opts.Provider); err != nil {
+	if err := guardProvider(p.Provider); err != nil {
 		return nil, err
 	}
+	opts := providerOptionsForTars(p)
 	if p.Provider == "claude-code-cli" {
 		if path := strings.TrimSpace(p.CliPath); path != "" {
 			_ = os.Setenv("CLAUDE_CODE_CLI_PATH", path)
@@ -43,17 +44,22 @@ func DefaultClientFactory(p ResolvedProvider) (llm.Client, error) {
 func providerOptionsForTars(p ResolvedProvider) llm.ProviderOptions {
 	provider := p.Provider
 	baseURL := p.BaseURL
+	maxTokens := p.MaxTokens
 	if provider == settings.ProviderOpenRouter {
 		provider = settings.ProviderOpenAI
 		if strings.TrimSpace(baseURL) == "" {
 			baseURL = settings.OpenRouterBaseURL
 		}
+		if maxTokens <= 0 {
+			maxTokens = settings.OpenRouterDefaultMaxTokens
+		}
 	}
 	return llm.ProviderOptions{
-		Provider: provider,
-		Model:    p.Model,
-		APIKey:   p.APIKey,
-		BaseURL:  baseURL,
-		WorkDir:  p.WorkDir,
+		Provider:  provider,
+		Model:     p.Model,
+		APIKey:    p.APIKey,
+		BaseURL:   baseURL,
+		WorkDir:   p.WorkDir,
+		MaxTokens: maxTokens,
 	}
 }
