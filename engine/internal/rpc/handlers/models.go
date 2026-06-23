@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -72,6 +74,11 @@ type testProviderResult struct {
 
 const providerTestMaxTokens = 64
 
+var (
+	openRouterWorkspaceURLPattern = regexp.MustCompile(`https://openrouter\.ai/workspaces/[^\s"']+`)
+	openRouterUserIDPattern       = regexp.MustCompile(`user_[A-Za-z0-9]+`)
+)
+
 // TestProvider sends a tiny, context-free prompt through the selected provider.
 // It is intentionally separate from ai.run so Settings can verify credentials
 // before the writer creates or opens a scene.
@@ -115,7 +122,7 @@ func TestProvider(store *settings.Store, factory ai.ClientFactory) rpc.Handler {
 			{Role: "user", Content: "연결 테스트입니다. '연결되었습니다'라고만 답하세요."},
 		}, llm.ChatOptions{})
 		if err != nil {
-			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: providerTestErrorMessage(rp, err)}
 		}
 		msg := strings.TrimSpace(resp.Message.Content)
 		if msg == "" {
@@ -128,4 +135,33 @@ func TestProvider(store *settings.Store, factory ai.ClientFactory) rpc.Handler {
 			Message:  msg,
 		})
 	}
+}
+
+func providerTestErrorMessage(provider ai.ResolvedProvider, err error) string {
+	msg := strings.TrimSpace(err.Error())
+	if provider.Provider != settings.ProviderOpenRouter {
+		return msg
+	}
+	if isOpenRouterCreditLimitError(err, msg) {
+		return "OpenRouter 크레딧 또는 키 한도가 부족합니다. OpenRouter에서 키의 total limit을 올리거나 더 짧은 요청으로 다시 시도하세요. Linetta 연결 테스트는 최대 64토큰만 요청합니다."
+	}
+	return redactOpenRouterProviderError(msg)
+}
+
+func isOpenRouterCreditLimitError(err error, msg string) bool {
+	lower := strings.ToLower(msg)
+	var providerErr *llm.ProviderError
+	if errors.As(err, &providerErr) && providerErr.StatusCode == 402 {
+		return true
+	}
+	return strings.Contains(lower, "status 402") ||
+		strings.Contains(lower, "more credits") ||
+		strings.Contains(lower, "can only afford") ||
+		strings.Contains(lower, "fewer max_tokens")
+}
+
+func redactOpenRouterProviderError(msg string) string {
+	msg = openRouterWorkspaceURLPattern.ReplaceAllString(msg, "OpenRouter 키 설정 페이지")
+	msg = openRouterUserIDPattern.ReplaceAllString(msg, "user_[redacted]")
+	return msg
 }

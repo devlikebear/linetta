@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
 type providerTestFakeClient struct {
 	messages []llm.ChatMessage
+	err      error
 }
 
 func (f *providerTestFakeClient) Ask(context.Context, string) (string, error) {
@@ -21,6 +24,9 @@ func (f *providerTestFakeClient) Ask(context.Context, string) (string, error) {
 
 func (f *providerTestFakeClient) Chat(_ context.Context, messages []llm.ChatMessage, _ llm.ChatOptions) (llm.ChatResponse, error) {
 	f.messages = messages
+	if f.err != nil {
+		return llm.ChatResponse{}, f.err
+	}
 	return llm.ChatResponse{
 		Message: llm.ChatMessage{Role: "assistant", Content: "연결되었습니다"},
 	}, nil
@@ -143,5 +149,44 @@ func TestProviderHandler_returnsFactoryError(t *testing.T) {
 
 	if _, err := handler(context.Background(), json.RawMessage(`{"provider":"openai"}`)); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestProviderHandler_sanitizesOpenRouterCreditLimitError(t *testing.T) {
+	ctx := context.Background()
+	store := newSettingsFixture(t)
+	provider := settings.ProviderOpenRouter
+	if _, err := store.Set(ctx, settings.Patch{
+		Provider: &provider,
+		Providers: map[string]settings.ProviderConfig{
+			provider: {APIKey: "or-test"},
+		},
+	}); err != nil {
+		t.Fatalf("settings.Set: %v", err)
+	}
+
+	rawErr := errors.New(`openai status 402: {"error":{"message":"This request requires more credits, or fewer max_tokens. You requested up to 65536 tokens, but can only afford 2487. To increase, visit https://openrouter.ai/workspaces/default/keys/3b58c93c9d00cdc7b06afea22e6f1a66b956dd70fc03affef8a099605cb7dffb and adjust the key's total limit","code":402},"user_id":"user_3FRaYxdFVnEeX3jxWwN7Kn5pVbE"}`)
+	handler := TestProvider(store, func(ai.ResolvedProvider) (llm.Client, error) {
+		return &providerTestFakeClient{err: rawErr}, nil
+	})
+
+	_, err := handler(ctx, json.RawMessage(`{"provider":"openrouter"}`))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var methodErr *rpc.MethodError
+	if !errors.As(err, &methodErr) {
+		t.Fatalf("error type=%T, want MethodError", err)
+	}
+	if !strings.Contains(methodErr.Message, "OpenRouter 크레딧 또는 키 한도가 부족합니다") {
+		t.Fatalf("message=%q, want friendly OpenRouter credit guidance", methodErr.Message)
+	}
+	if !strings.Contains(methodErr.Message, "64토큰") {
+		t.Fatalf("message=%q, want connection-test token limit hint", methodErr.Message)
+	}
+	for _, leaked := range []string{"workspaces/default/keys", "3b58c93c9d00cdc7", "user_3FRaY"} {
+		if strings.Contains(methodErr.Message, leaked) {
+			t.Fatalf("message leaked %q: %s", leaked, methodErr.Message)
+		}
 	}
 }
