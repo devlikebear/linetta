@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.5 - 2026-06-23
+
+- Improved the companion action picker with clearer current-scene and whole-work action scopes, plus persistent curated actions after a choice is used.
+- Refined the OpenRouter beginner path with smarter model presets, friendlier credit/key-limit errors, and connection tests that avoid leaking raw provider JSON.
+- Fixed Tauri dev/build invalidation so embedded Go engine changes are rebuilt when internal engine files change.
+
 ## v0.8.4 - 2026-06-22
 
 - Added inline OpenRouter API key entry, model selection, model refresh, and connection testing to the beginner AI setup wizard.
