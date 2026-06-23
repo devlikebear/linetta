@@ -26,6 +26,8 @@ fn build_go_engine() {
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target = env::var("TARGET").unwrap_or_default();
 
+    emit_go_engine_rerun_paths(&engine_dir);
+
     let mut tags: Vec<&str> = Vec::new();
     if env::var("CARGO_FEATURE_MAS").is_ok() {
         tags.push("mas");
@@ -45,18 +47,42 @@ fn build_go_engine() {
         println!("cargo:rustc-link-lib=framework=Security");
         println!("cargo:rustc-link-lib=framework=CoreFoundation");
     }
-    println!(
-        "cargo:rerun-if-changed={}",
-        engine_dir.join("cmd/linetta-ffi").display()
-    );
-    println!(
-        "cargo:rerun-if-changed={}",
-        engine_dir.join("internal/engineapp").display()
-    );
     println!("cargo:rerun-if-env-changed=ANDROID_HOME");
     println!("cargo:rerun-if-env-changed=ANDROID_NDK_HOME");
     println!("cargo:rerun-if-env-changed=NDK_HOME");
     println!("cargo:rerun-if-env-changed=SDKROOT");
+
+    fn emit_go_engine_rerun_paths(engine_dir: &Path) {
+        for file in ["go.mod", "go.sum"] {
+            let path = engine_dir.join(file);
+            if path.exists() {
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
+        }
+        for dir in ["cmd/linetta-ffi", "internal"] {
+            emit_go_file_rerun_paths(&engine_dir.join(dir));
+        }
+    }
+
+    fn emit_go_file_rerun_paths(path: &Path) {
+        if path.is_file() {
+            if path.extension().and_then(|ext| ext.to_str()) == Some("go") {
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
+            return;
+        }
+        let entries = match fs::read_dir(path) {
+            Ok(entries) => entries,
+            Err(_) => return,
+        };
+        let mut children: Vec<PathBuf> = entries
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        children.sort();
+        for child in children {
+            emit_go_file_rerun_paths(&child);
+        }
+    }
 
     fn build_apple_engine(engine_dir: &Path, out_dir: &Path, tags: &[&str], ios: bool) {
         let archive = out_dir.join("liblinetta_engine_ffi.a");
