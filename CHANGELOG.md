@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.0 - 2026-06-24
+
+- Promoted desktop distribution to a public release: the macOS app is Developer ID signed and notarized through the Homebrew tap, with Windows (NSIS/MSI) and Linux (AppImage/deb/rpm) prebuilt installers published on every GitHub Release.
+- Updated the README install guide to document the notarized macOS path and removed the obsolete quarantine workaround.
+
 ## v0.8.5 - 2026-06-23
 
 - Improved the companion action picker with clearer current-scene and whole-work action scopes, plus persistent curated actions after a choice is used.

@@ -20,20 +20,14 @@ brew install --cask linetta
 
 The fully qualified `devlikebear/tap/linetta` cask name also works in a single `brew install` without a separate `brew tap` step.
 
-Linetta is not notarized yet. The Homebrew cask clears the quarantine attribute after install so macOS can launch the app while the project is still a hobby release. If macOS reports that an older app is damaged, reinstall the latest cask first:
+The macOS build is signed with an Apple Developer ID and notarized by Apple, so Gatekeeper accepts it without any quarantine workaround. To upgrade:
 
 ```sh
 brew update
 brew reinstall --cask linetta
 ```
 
-If you are intentionally running an older cask before the post-install fix, clear the quarantine attribute once:
-
-```sh
-xattr -dr com.apple.quarantine "/Applications/Linetta.app"
-```
-
-Other platforms (Linux, Windows) and Intel Macs are not yet covered by a prebuilt download — build from source with `make build-desktop` (see below).
+Windows and Linux prebuilt installers are published on each [GitHub Release](https://github.com/devlikebear/linetta/releases): a Windows NSIS installer (`*_x64-setup.exe`) and MSI (`*_x64_en-US.msi`), and Linux AppImage, `.deb`, and `.rpm` packages. Intel Macs are not covered by a prebuilt download — build from source with `make build-desktop` (see below).
 
 ## Development
 
