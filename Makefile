@@ -1,4 +1,4 @@
-.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine validate-actions-runtime validate-distribution build-engine build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine validate-actions-runtime validate-distribution build-engine build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -49,6 +49,10 @@ build-mobile-ios-sim: ## Build a no-sign iOS simulator app bundle
 
 smoke-mobile-ios-sim: ## Build, install, launch, and verify the iOS simulator app
 	bash scripts/smoke-ios-simulator.sh
+
+IOS_SIM ?= iPad Pro 11-inch (M4)
+dev-mobile-ios: build-mobile-engine-ios ## Run the app on an iOS simulator with live reload (override sim: make dev-mobile-ios IOS_SIM="iPhone 16")
+	cd apps/desktop && pnpm tauri ios dev "$(IOS_SIM)"
 
 build-mobile-android-debug: ## Build a local Android debug APK for arm64
 	cd apps/desktop && pnpm tauri android build --debug --apk --target aarch64 --ci

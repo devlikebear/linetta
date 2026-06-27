@@ -67,7 +67,7 @@ function seedRailCollapsed(): boolean {
   // Collapsed on phone-compact and on iPad portrait; expanded on iPad landscape + desktop.
   const compactish = window.matchMedia("(max-width: 860px)").matches;
   const ipadPortrait =
-    window.matchMedia("(min-width: 701px) and (max-width: 1180px) and (pointer: coarse)")
+    window.matchMedia("(min-width: 701px) and (max-width: 1180px) and (any-pointer: coarse)")
       .matches && window.matchMedia("(orientation: portrait)").matches;
   return compactish || ipadPortrait;
 }
@@ -214,7 +214,7 @@ export function Workspace() {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const compact = window.matchMedia("(max-width: 860px)");
     const ipadPortrait = window.matchMedia(
-      "(min-width: 701px) and (max-width: 1180px) and (pointer: coarse) and (orientation: portrait)",
+      "(min-width: 701px) and (max-width: 1180px) and (any-pointer: coarse) and (orientation: portrait)",
     );
     const onChange = () => {
       if (compact.matches || ipadPortrait.matches) setRailCollapsed(true);

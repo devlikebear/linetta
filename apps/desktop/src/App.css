@@ -1629,9 +1629,12 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 
 /* iPad tier: touch, 701–1180px wide, ≥600px tall. Layered AFTER the compact
-   (max-width: 860px) block so coarse-pointer devices in the 701–860 overlap get
-   these rules, while fine-pointer desktop windows keep the compact rules. */
-@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (pointer: coarse) {
+   (max-width: 860px) block so touch devices in the 701–860 overlap get these
+   rules, while mouse-only desktop windows keep the compact rules. Uses
+   `any-pointer: coarse` (touch input present) rather than `pointer: coarse`
+   (primary pointer) so an attached trackpad / the iOS Simulator don't fall back
+   to the desktop layout. */
+@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (any-pointer: coarse) {
   /* Outline: inline collapsible sidebar that pushes the editor (no modal). */
   .mobile-rail-backdrop {
     display: none;

@@ -2,9 +2,14 @@ import { useEffect, useState } from "react";
 
 export type SizeClass = "compact" | "ipad" | "desktop";
 
-export const DESKTOP_QUERY = "(min-width: 1181px), (pointer: fine)";
+// Touch capability is detected with `any-pointer: coarse` (true when ANY
+// available input is touch), NOT `pointer: coarse` (the PRIMARY pointer). A
+// Magic Keyboard trackpad — and the iOS Simulator — make the primary pointer
+// `fine`, so `pointer: coarse` wrongly drops the iPad to the desktop layout.
+// `not (any-pointer: coarse)` therefore identifies a real mouse-only desktop.
+export const DESKTOP_QUERY = "(min-width: 1181px), (not (any-pointer: coarse))";
 export const IPAD_QUERY =
-  "(min-width: 701px) and (min-height: 600px) and (pointer: coarse)";
+  "(min-width: 701px) and (min-height: 600px) and (any-pointer: coarse)";
 
 export function resolveSizeClass(matches: {
   desktop: boolean;

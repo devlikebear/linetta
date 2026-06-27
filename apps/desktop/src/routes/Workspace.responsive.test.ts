@@ -49,7 +49,7 @@ describe("Workspace compact layout", () => {
     const css = await readSource("App.css");
 
     const ipadAt =
-      "@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (pointer: coarse)";
+      "@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (any-pointer: coarse)";
     expect(css).toContain(ipadAt);
     // ipad block must come AFTER the compact block so it overrides it
     expect(css.indexOf(ipadAt)).toBeGreaterThan(css.indexOf("@media (max-width: 860px)"));
