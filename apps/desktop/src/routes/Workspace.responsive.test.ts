@@ -44,4 +44,17 @@ describe("Workspace compact layout", () => {
     expect(css).toContain(".thread-view .panel.thread-lane");
     expect(css).toContain(".settings .set-row");
   });
+
+  it("adds an ipad-tier layout block layered after the compact block", async () => {
+    const css = await readSource("App.css");
+
+    const ipadAt =
+      "@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (pointer: coarse)";
+    expect(css).toContain(ipadAt);
+    // ipad block must come AFTER the compact block so it overrides it
+    expect(css.indexOf(ipadAt)).toBeGreaterThan(css.indexOf("@media (max-width: 860px)"));
+    // inline pushing sidebar (no modal backdrop), right inspector
+    expect(css).toContain(".mobile-rail-backdrop {\n    display: none;");
+    expect(css).toContain("/* ipad: right-side slide-over inspector */");
+  });
 });

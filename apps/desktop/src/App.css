@@ -1627,3 +1627,70 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
     width: min(100% - 28px, 520px);
   }
 }
+
+/* iPad tier: touch, 701–1180px wide, ≥600px tall. Layered AFTER the compact
+   (max-width: 860px) block so coarse-pointer devices in the 701–860 overlap get
+   these rules, while fine-pointer desktop windows keep the compact rules. */
+@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (pointer: coarse) {
+  /* Outline: inline collapsible sidebar that pushes the editor (no modal). */
+  .mobile-rail-backdrop {
+    display: none;
+  }
+
+  .ws-body,
+  .ws-body.rail-collapsed,
+  .ws-body.right-wide,
+  .ws-body.right-xwide,
+  .ws-body.right-history {
+    grid-template-columns: var(--rail) minmax(0, 1fr) var(--right);
+    --rail: 264px;
+    --right: 0px;
+  }
+
+  .ws-body.rail-collapsed {
+    --rail: 0px;
+  }
+
+  .workspace .rail {
+    position: relative;
+    top: auto;
+    bottom: auto;
+    left: auto;
+    z-index: auto;
+    width: 264px;
+    box-shadow: none;
+    transform: none;
+    transition: width 0.18s ease;
+  }
+
+  .ws-body.rail-collapsed .rail {
+    width: 0;
+    overflow: hidden;
+    transform: none;
+  }
+
+  /* ipad: right-side slide-over inspector */
+  .workspace .panel {
+    left: auto;
+    top: calc(51px + env(safe-area-inset-top));
+    right: 0;
+    bottom: 0;
+    width: min(380px, 60vw);
+    height: auto;
+    border-left: 1px solid var(--line);
+    border-top: 0;
+    border-radius: 0;
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Landscape safe areas + touch targets */
+  .ws-top {
+    padding-left: calc(10px + env(safe-area-inset-left));
+    padding-right: calc(10px + env(safe-area-inset-right));
+  }
+
+  .ws-tool {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
