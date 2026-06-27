@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Replace, Sparkles, Menu } from "lucide-react";
+import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Replace, Sparkles, Menu, Keyboard } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
@@ -225,6 +225,24 @@ export function Workspace() {
     return () => {
       compact.removeEventListener("change", onChange);
       ipadPortrait.removeEventListener("change", onChange);
+    };
+  }, []);
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const root = document.documentElement;
+    const update = () => {
+      // How much of the layout viewport the soft keyboard covers at the bottom.
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      root.style.setProperty("--kbd-inset", `${Math.round(inset)}px`);
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    update();
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+      root.style.removeProperty("--kbd-inset");
     };
   }, []);
   const refreshTodayChars = useCallback(async (targetProjectId?: string) => {
@@ -1613,6 +1631,16 @@ export function Workspace() {
           >
             <CommandIcon size={16} />
           </button>
+          {sizeClass === "ipad" && (
+            <button
+              type="button"
+              className="ws-tool icon-only ipad-shortcuts-toggle"
+              aria-label={t("shortcuts.helpLabel")}
+              onClick={() => setShortcutsOpen(true)}
+            >
+              <Keyboard size={16} />
+            </button>
+          )}
           <div className="ws-sep" />
           <button
             type="button"

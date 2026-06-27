@@ -1637,6 +1637,10 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
     display: none;
   }
 
+  .ws-editor {
+    padding-bottom: var(--kbd-inset, 0px);
+  }
+
   .ws-body,
   .ws-body.rail-collapsed,
   .ws-body.right-wide,
