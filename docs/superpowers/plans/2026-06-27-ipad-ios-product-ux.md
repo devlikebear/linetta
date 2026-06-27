@@ -816,9 +816,9 @@ Append to `apps/desktop/src/routes/Workspace.responsive.test.ts`:
   it("maps representative viewports to the right tier", async () => {
     const { resolveSizeClass } = await import("../hooks/useSizeClass");
 
-    // iPhone portrait (≤700, coarse): compact
-    expect(resolveSizeClass({ desktop: false, ipad: false })).toBe("compact");
-    // iPhone landscape (height < 600): excluded from ipad by min-height → compact
+    // iPhone portrait (≤700, coarse) AND iPhone landscape (height < 600, excluded
+    // from ipad by the min-height guard) both resolve the same way: neither query
+    // matches → compact.
     expect(resolveSizeClass({ desktop: false, ipad: false })).toBe("compact");
     // iPad 11" portrait 834x1194 coarse: ipad
     expect(resolveSizeClass({ desktop: false, ipad: true })).toBe("ipad");
