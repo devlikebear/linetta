@@ -1678,6 +1678,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
     width: min(380px, 60vw);
     height: auto;
     border-left: 1px solid var(--line);
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.08);
     border-top: 0;
     border-radius: 0;
     padding-right: env(safe-area-inset-right);

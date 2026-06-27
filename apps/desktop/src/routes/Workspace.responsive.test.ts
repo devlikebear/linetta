@@ -55,6 +55,6 @@ describe("Workspace compact layout", () => {
     expect(css.indexOf(ipadAt)).toBeGreaterThan(css.indexOf("@media (max-width: 860px)"));
     // inline pushing sidebar (no modal backdrop), right inspector
     expect(css).toContain(".mobile-rail-backdrop {\n    display: none;");
-    expect(css).toContain("/* ipad: right-side slide-over inspector */");
+    expect(css).toContain("width: min(380px, 60vw)");
   });
 });
