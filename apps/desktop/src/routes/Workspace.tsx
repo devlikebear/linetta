@@ -37,6 +37,9 @@ import {
   readStoredPhase,
   shouldAutoStartOnboarding,
 } from "../components/onboarding/onboardingState";
+import { useSizeClass } from "../hooks/useSizeClass";
+import { reconcileInspector } from "../hooks/inspector";
+import type { InspectorState } from "../hooks/inspector";
 import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useIdleTimer } from "../hooks/useIdleTimer";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
@@ -59,12 +62,14 @@ import {
 const SAVE_DEBOUNCE_MS = 800;
 const IDLE_CHECKPOINT_MS = 120_000;
 const LAST_OPENED_THROTTLE_MS = 5000;
-const COMPACT_WORKSPACE_QUERY = "(max-width: 860px)";
-
-function isCompactWorkspace() {
-  return typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia(COMPACT_WORKSPACE_QUERY).matches;
+function seedRailCollapsed(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  // Collapsed on phone-compact and on iPad portrait; expanded on iPad landscape + desktop.
+  const compactish = window.matchMedia("(max-width: 700px)").matches;
+  const ipadPortrait =
+    window.matchMedia("(min-width: 701px) and (max-width: 1180px) and (pointer: coarse)")
+      .matches && window.matchMedia("(orientation: portrait)").matches;
+  return compactish || ipadPortrait;
 }
 
 const FALLBACK_COUNTS: ContextCounts = {
@@ -111,6 +116,7 @@ function snapshotOutlineTree(tree: TreeNode[]): NodeRow[] {
 
 export function Workspace() {
   const { projectId } = useParams();
+  const sizeClass = useSizeClass();
   const navigate = useNavigate();
   const location = useLocation();
   const [load, setLoad] = useState<LoadState | null>(null);
@@ -122,7 +128,7 @@ export function Workspace() {
   const [todayChars, setTodayChars] = useState<number | null>(null);
   const [typewriter, setTypewriter] = useState(false);
   const [focus, setFocus] = useState(false);
-  const [railCollapsed, setRailCollapsed] = useState(() => isCompactWorkspace());
+  const [railCollapsed, setRailCollapsed] = useState(() => seedRailCollapsed());
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
   const saveCompletedAt = saveStatus.kind === "saved" ? saveStatus.at : null;
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -144,6 +150,23 @@ export function Workspace() {
   useEffect(() => { companionOpenRef.current = companionOpen; }, [companionOpen]);
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
+  const prevInspectorRef = useRef<InspectorState>({
+    companion: false,
+    factBook: false,
+    contextual: false,
+  });
+  useEffect(() => {
+    const next: InspectorState = {
+      companion: companionOpen,
+      factBook: factBookOpen,
+      contextual: contextualEditOpen,
+    };
+    const corrected = reconcileInspector(prevInspectorRef.current, next, sizeClass);
+    if (corrected.companion !== next.companion) setCompanionOpen(corrected.companion);
+    if (corrected.factBook !== next.factBook) setFactBookOpen(corrected.factBook);
+    if (corrected.contextual !== next.contextual) setContextualEditOpen(corrected.contextual);
+    prevInspectorRef.current = corrected;
+  }, [sizeClass, companionOpen, factBookOpen, contextualEditOpen]);
   const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
@@ -189,13 +212,20 @@ export function Workspace() {
   }, [load]);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
-    const media = window.matchMedia(COMPACT_WORKSPACE_QUERY);
-    const onChange = (event: MediaQueryListEvent) => {
-      if (event.matches) setRailCollapsed(true);
+    const compact = window.matchMedia("(max-width: 700px)");
+    const ipadPortrait = window.matchMedia(
+      "(min-width: 701px) and (max-width: 1180px) and (pointer: coarse) and (orientation: portrait)",
+    );
+    const onChange = () => {
+      if (compact.matches || ipadPortrait.matches) setRailCollapsed(true);
     };
-    media.addEventListener("change", onChange);
-    if (media.matches) setRailCollapsed(true);
-    return () => media.removeEventListener("change", onChange);
+    compact.addEventListener("change", onChange);
+    ipadPortrait.addEventListener("change", onChange);
+    onChange();
+    return () => {
+      compact.removeEventListener("change", onChange);
+      ipadPortrait.removeEventListener("change", onChange);
+    };
   }, []);
   const refreshTodayChars = useCallback(async (targetProjectId?: string) => {
     const id = targetProjectId ?? loadRef.current?.project.id;
@@ -1535,7 +1565,7 @@ export function Workspace() {
   const currentSceneTitle = load.node.title || currentNodeLabel;
   const handleOutlineSelect = (n: TreeNode) => {
     navigateToNode(n);
-    if (isCompactWorkspace()) setRailCollapsed(true);
+    if (sizeClass !== "desktop") setRailCollapsed(true);
   };
 
   return (

@@ -11,15 +11,14 @@ async function readSource(path: string) {
 }
 
 describe("Workspace compact layout", () => {
-  it("auto-collapses the outline and closes it after mobile outline selection", async () => {
+  it("derives the size tier and seeds the outline rail per tier", async () => {
     const workspace = await readSource("routes/Workspace.tsx");
 
-    expect(workspace).toContain('const COMPACT_WORKSPACE_QUERY = "(max-width: 860px)"');
-    expect(workspace).toContain("const [railCollapsed, setRailCollapsed] = useState(() => isCompactWorkspace())");
-    expect(workspace).toContain("window.matchMedia(COMPACT_WORKSPACE_QUERY)");
+    expect(workspace).toContain('import { useSizeClass } from "../hooks/useSizeClass"');
+    expect(workspace).toContain("const sizeClass = useSizeClass()");
+    expect(workspace).toContain('import { reconcileInspector } from "../hooks/inspector"');
+    expect(workspace).toContain("reconcileInspector(");
     expect(workspace).toContain('className="ws-tool icon-only mobile-outline-toggle"');
-    expect(workspace).toContain('className="mobile-rail-backdrop"');
-    expect(workspace).toContain("if (isCompactWorkspace()) setRailCollapsed(true)");
   });
 
   it("keeps the mobile workspace inside the viewport with drawer and bottom sheet panels", async () => {
