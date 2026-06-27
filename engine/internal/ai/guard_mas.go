@@ -7,7 +7,7 @@ import (
 	"sort"
 )
 
-// unavailableMASProviders cannot function in the App Store (sandboxed) build:
+// unavailableMASProviders cannot function in the App Store or mobile (sandboxed) builds:
 //   - claude-code-cli spawns the `claude` binary (subprocess exec is blocked)
 //   - openai-codex reads ~/.codex/auth.json, which under the sandbox resolves to
 //     the app container and so cannot reach the user's real Codex credentials
@@ -19,7 +19,7 @@ var unavailableMASProviders = map[string]struct{}{
 // guardProvider rejects providers that cannot function in the sandboxed build.
 func guardProvider(provider string) error {
 	if _, blocked := unavailableMASProviders[provider]; blocked {
-		return fmt.Errorf("the %q provider is not available in the App Store build", provider)
+		return fmt.Errorf("the %q provider is not available in App Store or mobile builds", provider)
 	}
 	return nil
 }

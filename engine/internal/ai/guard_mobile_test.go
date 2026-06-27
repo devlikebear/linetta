@@ -18,4 +18,7 @@ func TestMobileBlocksCLIAndCodex(t *testing.T) {
 	if err := guardProvider("claude-code-cli"); err == nil {
 		t.Fatal("guardProvider(claude-code-cli) = nil, want error on mobile build")
 	}
+	if err := guardProvider("openai-codex"); err == nil {
+		t.Fatal("guardProvider(openai-codex) = nil, want error on mobile build")
+	}
 }
