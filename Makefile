@@ -52,7 +52,7 @@ smoke-mobile-ios-sim: ## Build, install, launch, and verify the iOS simulator ap
 
 IOS_SIM ?= iPad Pro 11-inch (M4)
 dev-mobile-ios: build-mobile-engine-ios ## Run the app on an iOS simulator with live reload (override sim: make dev-mobile-ios IOS_SIM="iPhone 16")
-	cd apps/desktop && pnpm tauri ios dev "$(IOS_SIM)"
+	bash scripts/dev-mobile-ios.sh "$(IOS_SIM)"
 
 build-mobile-android-debug: ## Build a local Android debug APK for arm64
 	cd apps/desktop && pnpm tauri android build --debug --apk --target aarch64 --ci

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { resolveSizeClass } from "./useSizeClass";
+import { DESKTOP_QUERY, IPAD_QUERY, resolveSizeClass } from "./useSizeClass";
 
 describe("resolveSizeClass", () => {
+  it("keeps touch-capable iPad widths in the iPad tier", () => {
+    expect(IPAD_QUERY).toContain("(max-width: 1366px)");
+    expect(IPAD_QUERY).toContain("(any-pointer: coarse)");
+    expect(DESKTOP_QUERY).toContain("(min-width: 1367px)");
+    expect(DESKTOP_QUERY).toContain("(not (any-pointer: coarse))");
+  });
+
   it("prefers desktop when desktop query matches", () => {
     expect(resolveSizeClass({ desktop: true, ipad: false })).toBe("desktop");
-    // a 12.9" iPad in landscape matches BOTH (min-width:1181) and coarse → desktop wins
+    // A very wide external display can match both; desktop wins at that point.
     expect(resolveSizeClass({ desktop: true, ipad: true })).toBe("desktop");
   });
 

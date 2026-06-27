@@ -215,8 +215,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		GitSyncAvailable:     gitSyncAvailable,
 	}
 	s.Handle("ping", handlers.Ping)
-	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, DefaultVersion, caps))
-	s.Handle("diagnostics.get", handlers.DiagnosticsGet(st, ops, DefaultVersion, caps))
+	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, home, DefaultVersion, caps))
+	s.Handle("diagnostics.get", handlers.DiagnosticsGet(st, ops, home, DefaultVersion, caps))
 	s.Handle("ops_status.get", handlers.GetOpsStatus(ops))
 	s.Handle("ops_status.clear_error", handlers.ClearOpsStatusError(ops))
 	s.Handle("search.query", handlers.Search(searchRepo))

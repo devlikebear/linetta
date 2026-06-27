@@ -64,12 +64,12 @@ const IDLE_CHECKPOINT_MS = 120_000;
 const LAST_OPENED_THROTTLE_MS = 5000;
 function seedRailCollapsed(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
-  // Collapsed on phone-compact and on iPad portrait; expanded on iPad landscape + desktop.
+  // Collapsed on touch/mobile tiers so the first workspace view is the editor.
   const compactish = window.matchMedia("(max-width: 860px)").matches;
-  const ipadPortrait =
-    window.matchMedia("(min-width: 701px) and (max-width: 1180px) and (any-pointer: coarse)")
-      .matches && window.matchMedia("(orientation: portrait)").matches;
-  return compactish || ipadPortrait;
+  const ipadTouch = window.matchMedia(
+    "(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)",
+  ).matches;
+  return compactish || ipadTouch;
 }
 
 const FALLBACK_COUNTS: ContextCounts = {
@@ -213,18 +213,18 @@ export function Workspace() {
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const compact = window.matchMedia("(max-width: 860px)");
-    const ipadPortrait = window.matchMedia(
-      "(min-width: 701px) and (max-width: 1180px) and (any-pointer: coarse) and (orientation: portrait)",
+    const ipadTouch = window.matchMedia(
+      "(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)",
     );
     const onChange = () => {
-      if (compact.matches || ipadPortrait.matches) setRailCollapsed(true);
+      if (compact.matches || ipadTouch.matches) setRailCollapsed(true);
     };
     compact.addEventListener("change", onChange);
-    ipadPortrait.addEventListener("change", onChange);
+    ipadTouch.addEventListener("change", onChange);
     onChange();
     return () => {
       compact.removeEventListener("change", onChange);
-      ipadPortrait.removeEventListener("change", onChange);
+      ipadTouch.removeEventListener("change", onChange);
     };
   }, []);
   useEffect(() => {
@@ -1967,7 +1967,7 @@ export function Workspace() {
               /* PlotPanel self-reloads */
             }}
           />
-        ) : (
+        ) : sizeClass === "desktop" ? (
           <ContextPanel
             project={load.project}
             node={load.node}
@@ -1989,7 +1989,7 @@ export function Workspace() {
             }
             tourTarget="workspace-context"
           />
-        )}
+        ) : null}
       </div>
 
       <CommandPalette

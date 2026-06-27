@@ -7,9 +7,11 @@ export type SizeClass = "compact" | "ipad" | "desktop";
 // Magic Keyboard trackpad — and the iOS Simulator — make the primary pointer
 // `fine`, so `pointer: coarse` wrongly drops the iPad to the desktop layout.
 // `not (any-pointer: coarse)` therefore identifies a real mouse-only desktop.
-export const DESKTOP_QUERY = "(min-width: 1181px), (not (any-pointer: coarse))";
+// Touch-capable iPads stay in the iPad tier through the largest regular iPad
+// landscape width (1366 CSS px); wider external displays can use desktop.
+export const DESKTOP_QUERY = "(min-width: 1367px), (not (any-pointer: coarse))";
 export const IPAD_QUERY =
-  "(min-width: 701px) and (min-height: 600px) and (any-pointer: coarse)";
+  "(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)";
 
 export function resolveSizeClass(matches: {
   desktop: boolean;

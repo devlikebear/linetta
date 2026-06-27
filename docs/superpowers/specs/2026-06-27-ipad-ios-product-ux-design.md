@@ -41,20 +41,21 @@ The current architecture is **render-once + CSS reshapes**: Workspace components
 
 ### Size-class model (intent-based, 3 tiers)
 
-Width alone cannot separate iPad portrait (768px) from a phone, so tiers combine **width + `(pointer: coarse)`** (finger input):
+Width alone cannot separate iPad portrait (768px) from a phone, so tiers combine **width + `(any-pointer: coarse)`** (touch capability):
 
 | Tier | Condition | Targets | Layout |
 |---|---|---|---|
 | **Compact** | `≤ 700px`, or narrow multitasking slot | iPhone, Slide Over | Existing drawer + bottom sheets (unchanged) |
-| **iPad** (new) | `701–1180px` **and `(pointer: coarse)`** | iPad portrait + small landscape | New adaptive layout (below) |
-| **Desktop** | `≥ 1180px`, or `(pointer: fine)` | Mac, 12.9" landscape, narrow desktop windows | Existing multi-pane (unchanged) |
+| **iPad** (new) | `701–1366px`, `≥600px` tall, **and `(any-pointer: coarse)`** | iPad portrait + landscape | New adaptive layout (below) |
+| **Desktop** | `≥ 1367px`, or no touch input | Mac, external-display iPad widths, narrow desktop windows | Existing multi-pane (unchanged) |
 
-Rationale for `(pointer: coarse)`: a 1100px iPad needs touch tuning; a 1100px desktop window needs hover affordances. Same width, different input → must split by pointer type. The Magic Keyboard trackpad reports `fine` — an accepted edge case since pointer is not a first-class target this round.
+Rationale for `(any-pointer: coarse)`: a 1100px iPad needs touch tuning; a 1100px desktop window needs hover affordances. Same width, different input → must split by touch capability. Magic Keyboard trackpads and the iOS Simulator can make the primary pointer `fine`; `any-pointer` keeps those iPads in the touch-tuned tier.
 
 ### iPad-tier layout model (the new design)
 
-- **Outline:** an inline collapsible sidebar that **pushes** the editor (not a modal overlay). Default collapsed in portrait, expanded in landscape.
+- **Outline:** an inline collapsible sidebar that **pushes** the editor (not a modal overlay). Default collapsed on initial iPhone/iPad workspace entry so writing is always the first visible surface; writers can open it from the toolbar.
 - **Editor (TipTap):** always central and first-class; reading-width max constraint retained.
+- **Initial mobile workspace:** iPhone and iPad open directly to the writing editor. The desktop-default context panel must not auto-render over the manuscript on touch/mobile tiers.
 - **Auxiliary panels (companion / context / fact book / contextual edit):** **one at a time**, as a right-side slide-over **inspector** (~360px) — not a bottom sheet, not a desktop fixed multi-column. Keeps the manuscript visible while writing.
 - **Sheets (Entity / Thread / Version):** **centered modals** on iPad (not full-screen bottom sheets).
 
@@ -65,12 +66,12 @@ No component-tree rewrite. The work is CSS plus thin JS state generalization.
 ### 1. Size-class generalization (JS) — `routes/Workspace.tsx`
 
 - Replace the binary `isCompactWorkspace()` (lines ~64–67) with a `useSizeClass(): "compact" | "ipad" | "desktop"` hook that subscribes to three `matchMedia` queries (generalizing the listener at line ~192).
-- `railCollapsed` seeding (lines ~125, ~1538): iPad-portrait → collapsed, iPad-landscape → expanded, compact → collapsed.
+- `railCollapsed` seeding (lines ~125, ~1538): compact/iPhone and iPad touch tiers → collapsed on entry; desktop → expanded.
 - New **`useInspector` orchestration**: in the iPad tier only, opening one auxiliary panel closes the others (mutual exclusion over `companionOpen` / fact book / contextual edit). Desktop and compact behavior unchanged (panels independent).
 
 ### 2. iPad-tier styles (CSS) — `App.css` (+ per-panel `.css`)
 
-- New `@media (min-width: 701px) and (max-width: 1180px) and (pointer: coarse)` block.
+- New `@media (min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)` block.
 - Outline: neutralize the compact `position: fixed` overlay/backdrop rules; render as an inline collapsible sidebar that pushes the editor.
 - Auxiliary panels: override the compact bottom-sheet rules → right-side slide-over inspector (fixed ~360px width).
 - Sheets: override full-screen bottom-sheet rules → centered modal.
@@ -99,13 +100,13 @@ The existing "responsive test" (`routes/Workspace.responsive.test.ts`) is a **so
 
 ### Unit tests (vitest)
 
-- `useSizeClass`: tier resolution across boundary widths (700/701, 1180/1181) × `pointer` coarse/fine, via `matchMedia` mock.
+- `useSizeClass`: tier resolution across boundary widths (700/701, 1366/1367) × touch/no-touch, via `matchMedia` mock.
 - `useInspector`: iPad mutual exclusion (opening one panel closes others); desktop/compact independence preserved.
-- CSS guard (matching existing convention): assert the new `@media … (pointer: coarse)` block and its key rules exist.
+- CSS guard (matching existing convention): assert the new `@media … (any-pointer: coarse)` block and its key rules exist.
 
 ### Render / layout checks
 
-- Zero horizontal overflow + correct layout mode at representative iPad widths **834 (11" portrait), 1194 (11" landscape), 1024 (12.9" portrait)** with `pointer: coarse` emulation (reuse the existing Chrome-metric approach; promote to a single Playwright case if practical).
+- Zero horizontal overflow + correct layout mode at representative iPad widths **834 (11" portrait), 1194 (11" landscape), 1024 (12.9" portrait)** with `any-pointer: coarse` emulation (reuse the existing Chrome-metric approach; promote to a single Playwright case if practical).
 - Assert per-width: outline pushes (not overlays), right inspector slides over, sheets render as centered modals.
 
 ### iOS feature-reduction checks
@@ -128,5 +129,5 @@ This is **sub-project A** of three for the iPhone + iPad launch:
 ## Risks
 
 - **TipTap/ProseMirror input handling** is the main interaction risk overall, but the Scribble portion is deferred to B. Within A, the risk is keyboard-event delivery in WKWebView for all 14 handlers — verified on real device in the QA gate.
-- `(pointer: coarse)` misclassification when a Magic Keyboard trackpad is attached (reports `fine`); accepted this round since pointer is a non-goal.
+- External-display or future iPad widths above 1366px intentionally fall back to desktop unless a later Split View / Stage Manager pass revisits that boundary.
 - Width-tier boundaries vs. real iPad multitasking slot widths: the layout must degrade gracefully into Compact in narrow slots (covered by the Compact tier) even though Split View is a non-goal.

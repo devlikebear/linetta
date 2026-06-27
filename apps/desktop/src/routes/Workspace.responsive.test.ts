@@ -19,6 +19,20 @@ describe("Workspace compact layout", () => {
     expect(workspace).toContain('import { reconcileInspector } from "../hooks/inspector"');
     expect(workspace).toContain("reconcileInspector(");
     expect(workspace).toContain('className="ws-tool icon-only mobile-outline-toggle"');
+    expect(workspace).toContain(
+      "(max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)",
+    );
+  });
+
+  it("keeps the first mobile and ipad workspace view focused on the editor", async () => {
+    const workspace = await readSource("routes/Workspace.tsx");
+
+    expect(workspace).toContain("const ipadTouch =");
+    expect(workspace).toContain("return compactish || ipadTouch");
+    expect(workspace).not.toContain("expanded on iPad landscape");
+    expect(workspace).toContain(') : sizeClass === "desktop" ? (');
+    expect(workspace).toContain("<ContextPanel");
+    expect(workspace).toContain('tourTarget="workspace-context"');
   });
 
   it("keeps the mobile workspace inside the viewport with drawer and bottom sheet panels", async () => {
@@ -49,12 +63,13 @@ describe("Workspace compact layout", () => {
     const css = await readSource("App.css");
 
     const ipadAt =
-      "@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (any-pointer: coarse)";
+      "@media (min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)";
     expect(css).toContain(ipadAt);
     // ipad block must come AFTER the compact block so it overrides it
     expect(css.indexOf(ipadAt)).toBeGreaterThan(css.indexOf("@media (max-width: 860px)"));
     // inline pushing sidebar (no modal backdrop), right inspector
     expect(css).toContain(".mobile-rail-backdrop {\n    display: none;");
+    expect(css).toContain(".ws-editor {\n    grid-column: 2;");
     expect(css).toContain("width: min(380px, 60vw)");
   });
 

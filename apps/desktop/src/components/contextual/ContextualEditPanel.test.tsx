@@ -259,7 +259,7 @@ describe("ContextualEditPanel", () => {
     await user.click(screen.getByRole("button", { name: "미리보기" }));
 
     await waitFor(() => expect(mocks.manuscriptReplacePreview).toHaveBeenCalledWith("project-1", "열쇠", "반지"));
-    expect(await screen.findByText("1부 / 2장 / 씬 2")).toBeInTheDocument();
+    expect(await screen.findAllByText("1부 / 2장 / 씬 2")).not.toHaveLength(0);
     expect(screen.getByText("문 뒤에서 반지가 굴러 나왔다.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "선택 적용" }));

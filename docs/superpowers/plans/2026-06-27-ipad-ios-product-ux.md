@@ -4,7 +4,7 @@
 
 **Goal:** Make Linetta a first-class iPad app (Universal iPhone+iPad) by adding a touch-tuned iPad layout tier and finishing the iOS feature-reduction UX, without rewriting the component tree.
 
-**Architecture:** Keep the existing "render-once + CSS reshapes" model. Add a third size tier (`compact | ipad | desktop`) resolved by width + `(pointer: coarse)`, a thin "one inspector at a time" orchestration for iPad, a new iPad `@media` block layered after the compact block, and corrected iOS feature-gating (CLI providers + git-sync) surfaced as explicit UX rather than silent removal.
+**Architecture:** Keep the existing "render-once + CSS reshapes" model. Add a third size tier (`compact | ipad | desktop`) resolved by width + `(any-pointer: coarse)`, a thin "one inspector at a time" orchestration for iPad, a new iPad `@media` block layered after the compact block, and corrected iOS feature-gating (CLI providers + git-sync) surfaced as explicit UX rather than silent removal.
 
 **Tech Stack:** React 18 + TypeScript + Vite, Tauri 2 (iOS), vitest, Go 1.26 engine (build tags `mas`/`mobile`), CSS `@media` with `pointer`/`env(safe-area-inset-*)`.
 
@@ -12,10 +12,11 @@
 
 - Spec: `docs/superpowers/specs/2026-06-27-ipad-ios-product-ux-design.md`.
 - Size tiers (intent-based, evaluated desktop → ipad → compact):
-  - **desktop**: `(min-width: 1181px), (pointer: fine)`
-  - **ipad**: `(min-width: 701px) and (min-height: 600px) and (pointer: coarse)` — the `min-height: 600px` guard excludes iPhone landscape (height ≤ 430px), which must stay **compact**.
+  - **desktop**: `(min-width: 1367px), (not (any-pointer: coarse))`
+  - **ipad**: `(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)` — the `min-height: 600px` guard excludes iPhone landscape (height ≤ 430px), which must stay **compact**.
   - **compact**: neither of the above (fallback).
-- The existing compact CSS block `@media (max-width: 860px)` stays **untouched**; the new iPad block is layered **after** it so coarse-pointer devices in the 701–860 overlap get iPad rules while fine-pointer desktop windows keep compact rules.
+- The existing compact CSS block `@media (max-width: 860px)` stays **untouched**; the new iPad block is layered **after** it so touch-capable devices in the 701–860 overlap get iPad rules while mouse-only desktop windows keep compact rules.
+- On iPhone/iPad tiers, the default desktop `ContextPanel` is not rendered and the outline rail is collapsed on first workspace entry; the first visible surface after selecting a work is the editor.
 - Out of scope (other sub-projects): Apple Pencil/Scribble (B); signing/provisioning/`keychain-access-groups`/TestFlight/App Store Connect (C); native `UIKeyCommand` HUD; first-class trackpad/pointer and Split View/Stage Manager.
 - Engine module path: `github.com/devlikebear/linetta/engine`. Build tags compose: `mas` and `mobile` are orthogonal; never break the `mas` build.
 - All new frontend files use the repo's existing import style and 2-space indentation. Run frontend tests with `cd apps/desktop && pnpm test`. Run engine tests with `cd engine && go test ...`.
@@ -108,8 +109,8 @@ git commit -m "feat(engine): report CLI/codex providers unavailable on mobile bu
 - Consumes: nothing.
 - Produces:
   - `type SizeClass = "compact" | "ipad" | "desktop"`
-  - `const DESKTOP_QUERY = "(min-width: 1181px), (pointer: fine)"`
-  - `const IPAD_QUERY = "(min-width: 701px) and (min-height: 600px) and (pointer: coarse)"`
+  - `const DESKTOP_QUERY = "(min-width: 1367px), (not (any-pointer: coarse))"`
+  - `const IPAD_QUERY = "(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)"`
   - `function resolveSizeClass(matches: { desktop: boolean; ipad: boolean }): SizeClass`
   - `function useSizeClass(): SizeClass`
 
@@ -123,7 +124,7 @@ import { resolveSizeClass } from "./useSizeClass";
 describe("resolveSizeClass", () => {
   it("prefers desktop when desktop query matches", () => {
     expect(resolveSizeClass({ desktop: true, ipad: false })).toBe("desktop");
-    // a 12.9" iPad in landscape matches BOTH (min-width:1181) and coarse → desktop wins
+    // A very wide external display can match both; desktop wins at that point.
     expect(resolveSizeClass({ desktop: true, ipad: true })).toBe("desktop");
   });
 
@@ -150,9 +151,9 @@ import { useEffect, useState } from "react";
 
 export type SizeClass = "compact" | "ipad" | "desktop";
 
-export const DESKTOP_QUERY = "(min-width: 1181px), (pointer: fine)";
+export const DESKTOP_QUERY = "(min-width: 1367px), (not (any-pointer: coarse))";
 export const IPAD_QUERY =
-  "(min-width: 701px) and (min-height: 600px) and (pointer: coarse)";
+  "(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)";
 
 export function resolveSizeClass(matches: {
   desktop: boolean;
@@ -315,7 +316,7 @@ git commit -m "feat(workspace): add reconcileInspector for ipad single-inspector
 
 ## Task 4: Wire `Workspace.tsx` to the size tier + inspector rule
 
-Replace the binary `isCompactWorkspace()`/`COMPACT_WORKSPACE_QUERY` rail seeding with the tier hook, seed the outline rail by iPad orientation (portrait collapsed, landscape expanded), and apply `reconcileInspector` in an effect. Then update the existing source-assertion responsive test so it reflects the new code.
+Replace the binary `isCompactWorkspace()`/`COMPACT_WORKSPACE_QUERY` rail seeding with the tier hook, seed the outline rail collapsed on compact/iPhone and iPad touch tiers, and apply `reconcileInspector` in an effect. Then update the existing source-assertion responsive test so it reflects the new code.
 
 **Files:**
 - Modify: `apps/desktop/src/routes/Workspace.tsx` (lines ~62–68 query/helper; ~125 rail state; ~141–147 panel state; ~190–199 matchMedia effect)
@@ -376,10 +377,10 @@ import { reconcileInspector, type InspectorState } from "../hooks/inspector";
 ```ts
 function seedRailCollapsed(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
-  // Collapsed on phone-compact and on iPad portrait; expanded on iPad landscape + desktop.
+  // Collapsed on touch/mobile tiers so the first workspace view is the editor.
   const compactish = window.matchMedia("(max-width: 700px)").matches;
   const ipadPortrait =
-    window.matchMedia("(min-width: 701px) and (max-width: 1180px) and (pointer: coarse)")
+    window.matchMedia("(min-width: 701px) and (max-width: 1366px) and (any-pointer: coarse)")
       .matches && window.matchMedia("(orientation: portrait)").matches;
   return compactish || ipadPortrait;
 }
@@ -392,7 +393,7 @@ function seedRailCollapsed(): boolean {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const compact = window.matchMedia("(max-width: 700px)");
     const ipadPortrait = window.matchMedia(
-      "(min-width: 701px) and (max-width: 1180px) and (pointer: coarse) and (orientation: portrait)",
+      "(min-width: 701px) and (max-width: 1366px) and (any-pointer: coarse) and (orientation: portrait)",
     );
     const onChange = () => {
       if (compact.matches || ipadPortrait.matches) setRailCollapsed(true);
@@ -474,7 +475,7 @@ Append to `apps/desktop/src/routes/Workspace.responsive.test.ts`:
     const css = await readSource("App.css");
 
     const ipadAt =
-      "@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (pointer: coarse)";
+      "@media (min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)";
     expect(css).toContain(ipadAt);
     // ipad block must come AFTER the compact block so it overrides it
     expect(css.indexOf(ipadAt)).toBeGreaterThan(css.indexOf("@media (max-width: 860px)"));
@@ -494,10 +495,10 @@ Expected: FAIL — the iPad block is not present.
 Add to the end of `apps/desktop/src/App.css` (after line 1629):
 
 ```css
-/* iPad tier: touch, 701–1180px wide, ≥600px tall. Layered AFTER the compact
-   (max-width: 860px) block so coarse-pointer devices in the 701–860 overlap get
-   these rules, while fine-pointer desktop windows keep the compact rules. */
-@media (min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (pointer: coarse) {
+/* iPad tier: touch, 701–1366px wide, ≥600px tall. Layered AFTER the compact
+   (max-width: 860px) block so touch devices in the 701–860 overlap get these
+   rules, while mouse-only desktop windows keep the compact rules. */
+@media (min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse) {
   /* Outline: inline collapsible sidebar that pushes the editor (no modal). */
   .mobile-rail-backdrop {
     display: none;
@@ -822,8 +823,8 @@ Append to `apps/desktop/src/routes/Workspace.responsive.test.ts`:
     expect(resolveSizeClass({ desktop: false, ipad: false })).toBe("compact");
     // iPad 11" portrait 834x1194 coarse: ipad
     expect(resolveSizeClass({ desktop: false, ipad: true })).toBe("ipad");
-    // iPad 12.9" landscape 1366 (≥1181): desktop wins even though coarse
-    expect(resolveSizeClass({ desktop: true, ipad: true })).toBe("desktop");
+    // iPad 12.9" landscape 1366 coarse: ipad
+    expect(resolveSizeClass({ desktop: false, ipad: true })).toBe("ipad");
     // Mac/desktop window (pointer: fine): desktop
     expect(resolveSizeClass({ desktop: true, ipad: false })).toBe("desktop");
   });
@@ -868,7 +869,7 @@ Run on a physical iPad (and an iPhone for regression) before sub-project C submi
 ## Self-Review
 
 **Spec coverage:**
-- 3-tier size model (width + `pointer: coarse`) → Tasks 2, 4, 8 (+ `min-height` guard for iPhone-landscape, added in Global Constraints).
+- 3-tier size model (width + `any-pointer: coarse`) → Tasks 2, 4, 8 (+ `min-height` guard for iPhone-landscape, added in Global Constraints).
 - New iPad layout: inline pushing outline + right slide-over inspector + centered-modal sheets → Task 5; one-inspector-at-a-time → Tasks 3, 4.
 - Keyboard shortcuts inherited + iPad discoverability + soft/hard keyboard height → Task 7 (+ manual QA).
 - iOS feature-reduction UX (providers + git-sync, explicit not silent) → Task 6; correct engine gating so the data is actually right on iOS → Task 1.
@@ -876,6 +877,6 @@ Run on a physical iPad (and an iPhone for regression) before sub-project C submi
 
 **Placeholder scan:** No "TBD/TODO/handle edge cases". The two "match the sibling wrapper class" notes in Task 6 (Steps 3) and the lucide icon-reuse note in Task 7 depend on reading current source and give the concrete fallback to copy; not placeholders for logic.
 
-**Type consistency:** `SizeClass` (`compact|ipad|desktop`) consistent across Tasks 2/3/4/8. `InspectorState` (`companion|factBook|contextual` booleans) consistent across Tasks 3/4. `reconcileInspector(prev, next, sizeClass)` signature identical in Tasks 3 and 4. i18n keys `settings.git.unavailableNote` / `settings.provider.restrictedNote` identical across Task 6 steps and test. CSS query string `(min-width: 701px) and (max-width: 1180px) and (min-height: 600px) and (pointer: coarse)` identical in Tasks 5 (CSS + guard) and matches the JS queries' intent in Tasks 2/4.
+**Type consistency:** `SizeClass` (`compact|ipad|desktop`) consistent across Tasks 2/3/4/8. `InspectorState` (`companion|factBook|contextual` booleans) consistent across Tasks 3/4. `reconcileInspector(prev, next, sizeClass)` signature identical in Tasks 3 and 4. i18n keys `settings.git.unavailableNote` / `settings.provider.restrictedNote` identical across Task 6 steps and test. CSS query string `(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)` identical in Tasks 5 (CSS + guard) and matches the JS queries' intent in Tasks 2/4.
 
 **Biggest residual risk:** The source-assertion guard tests (Tasks 4–7) verify code shape, not rendered behavior — real layout/keyboard correctness is covered only by the manual QA gate on a physical iPad. That is an accepted constraint of the repo's current (non-browser) test setup, mirrored from the existing `Workspace.responsive.test.ts`.

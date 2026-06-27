@@ -12,7 +12,8 @@ import (
 
 func TestDiagnosticsVersion(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("LINETTA_HOME", home)
+	staleHome := t.TempDir()
+	t.Setenv("LINETTA_HOME", staleHome)
 	st, err := store.Open(context.Background(), filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
@@ -20,7 +21,7 @@ func TestDiagnosticsVersion(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	caps := Capabilities{GitSyncAvailable: true}
-	got, err := DiagnosticsVersion(st, "test-version", caps)(context.Background(), nil)
+	got, err := DiagnosticsVersion(st, home, "test-version", caps)(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("DiagnosticsVersion: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestDiagnosticsVersion(t *testing.T) {
 
 func TestDiagnosticsGetIncludesOpsStatus(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("LINETTA_HOME", home)
+	t.Setenv("LINETTA_HOME", t.TempDir())
 	st, err := store.Open(context.Background(), filepath.Join(home, "library.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
@@ -58,7 +59,7 @@ func TestDiagnosticsGetIncludesOpsStatus(t *testing.T) {
 		t.Fatalf("ops.Record: %v", err)
 	}
 
-	got, err := DiagnosticsGet(st, ops, "test-version", Capabilities{GitSyncAvailable: true})(context.Background(), nil)
+	got, err := DiagnosticsGet(st, ops, home, "test-version", Capabilities{GitSyncAvailable: true})(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("DiagnosticsGet: %v", err)
 	}

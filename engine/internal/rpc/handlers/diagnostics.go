@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"path/filepath"
 
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/paths"
@@ -34,16 +35,13 @@ type diagnosticsGetPayload struct {
 
 // DiagnosticsVersion returns side-effect-free runtime metadata for the shell
 // startup gate and support screens.
-func DiagnosticsVersion(st *store.Store, version string, caps Capabilities) rpc.Handler {
+func DiagnosticsVersion(st *store.Store, home string, version string, caps Capabilities) rpc.Handler {
 	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
-		home, err := paths.Home()
+		resolvedHome, err := diagnosticsHome(home)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		dbPath, err := paths.DBPath()
-		if err != nil {
-			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
-		}
+		dbPath := filepath.Join(resolvedHome, "library.db")
 
 		var latest, count sql.NullInt64
 		if err := st.DB().QueryRowContext(ctx,
@@ -52,7 +50,7 @@ func DiagnosticsVersion(st *store.Store, version string, caps Capabilities) rpc.
 		}
 		payload := diagnosticsPayload{
 			Version:              version,
-			Home:                 home,
+			Home:                 resolvedHome,
 			DBPath:               dbPath,
 			MigrationVersion:     int(latest.Int64),
 			MigrationCount:       int(count.Int64),
@@ -63,9 +61,9 @@ func DiagnosticsVersion(st *store.Store, version string, caps Capabilities) rpc.
 	}
 }
 
-func DiagnosticsGet(st *store.Store, ops *opsstatus.Repo, version string, caps Capabilities) rpc.Handler {
+func DiagnosticsGet(st *store.Store, ops *opsstatus.Repo, home string, version string, caps Capabilities) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
-		raw, err := DiagnosticsVersion(st, version, caps)(ctx, params)
+		raw, err := DiagnosticsVersion(st, home, version, caps)(ctx, params)
 		if err != nil {
 			return nil, err
 		}
@@ -82,4 +80,11 @@ func DiagnosticsGet(st *store.Store, ops *opsstatus.Repo, version string, caps C
 			OpsStatus:          statuses,
 		})
 	}
+}
+
+func diagnosticsHome(home string) (string, error) {
+	if home != "" {
+		return home, nil
+	}
+	return paths.Home()
 }
