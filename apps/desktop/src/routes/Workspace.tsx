@@ -65,7 +65,7 @@ const LAST_OPENED_THROTTLE_MS = 5000;
 function seedRailCollapsed(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
   // Collapsed on phone-compact and on iPad portrait; expanded on iPad landscape + desktop.
-  const compactish = window.matchMedia("(max-width: 700px)").matches;
+  const compactish = window.matchMedia("(max-width: 860px)").matches;
   const ipadPortrait =
     window.matchMedia("(min-width: 701px) and (max-width: 1180px) and (pointer: coarse)")
       .matches && window.matchMedia("(orientation: portrait)").matches;
@@ -212,7 +212,7 @@ export function Workspace() {
   }, [load]);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
-    const compact = window.matchMedia("(max-width: 700px)");
+    const compact = window.matchMedia("(max-width: 860px)");
     const ipadPortrait = window.matchMedia(
       "(min-width: 701px) and (max-width: 1180px) and (pointer: coarse) and (orientation: portrait)",
     );
@@ -1583,7 +1583,7 @@ export function Workspace() {
   const currentSceneTitle = load.node.title || currentNodeLabel;
   const handleOutlineSelect = (n: TreeNode) => {
     navigateToNode(n);
-    if (sizeClass !== "desktop") setRailCollapsed(true);
+    if (window.matchMedia("(max-width: 860px)").matches || sizeClass === "ipad") setRailCollapsed(true);
   };
 
   return (
