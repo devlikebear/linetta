@@ -159,6 +159,7 @@ type MessageKey = string
   | "settings.provider.gemini.desc"
   | "settings.provider.claudeCli.label"
   | "settings.provider.claudeCli.desc"
+  | "settings.provider.restrictedNote"
   | "settings.writing.title"
   | "settings.writing.typewriter"
   | "settings.writing.typewriterDescription"
@@ -193,6 +194,7 @@ type MessageKey = string
   | "settings.git.commitTemplateHelp"
   | "settings.git.runNow"
   | "settings.git.init"
+  | "settings.git.unavailableNote"
   | "settings.folder.title"
   | "settings.folder.description"
   | "settings.folder.folder"
@@ -1128,6 +1130,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.provider.gemini.desc": "Google AI Studio API 키로 연결",
     "settings.provider.claudeCli.label": "Claude Code CLI (기존/고급)",
     "settings.provider.claudeCli.desc": "기존 설정 유지용 · 신규 사용자는 Claude API 키 권장",
+    "settings.provider.restrictedNote": "이 기기에서는 API 키 방식의 공급자만 사용할 수 있습니다. (CLI/로컬 인증 공급자는 제외됩니다.)",
     "settings.writing.title": "집필",
     "settings.writing.typewriter": "타자기 모드 기본값",
     "settings.writing.typewriterDescription": "새 씬을 열 때 타이프라이터 스크롤 켜기",
@@ -1172,6 +1175,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.git.commitTemplateHelp": "{date}는 동기화 날짜로 바뀝니다.",
     "settings.git.runNow": "지금 동기화",
     "settings.git.init": "초기화",
+    "settings.git.unavailableNote": "Git 동기화는 이 기기(iOS)에서 지원되지 않습니다. 데스크톱 앱을 이용해 주세요.",
     "settings.folder.title": "폴더 동기화",
     "settings.folder.description": "하루 한 번 모든 작품을 마크다운으로 내보내 지정한 폴더에 복사합니다. git 없이 일반 폴더(예: 클라우드 드라이브 폴더)에 그대로 미러링합니다.",
     "settings.folder.folder": "동기화 폴더",
@@ -2123,6 +2127,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.provider.gemini.desc": "Connect with a Google AI Studio API key",
     "settings.provider.claudeCli.label": "Claude Code CLI (legacy/advanced)",
     "settings.provider.claudeCli.desc": "Kept for existing setups - new users should prefer Claude API",
+    "settings.provider.restrictedNote": "This device supports API-key providers only. (CLI and local-auth providers are excluded.)",
     "settings.writing.title": "Writing",
     "settings.writing.typewriter": "Typewriter mode default",
     "settings.writing.typewriterDescription": "Turn on typewriter scrolling when opening a new scene",
@@ -2167,6 +2172,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.git.commitTemplateHelp": "{date} is replaced with the sync date.",
     "settings.git.runNow": "Sync now",
     "settings.git.init": "Initialize",
+    "settings.git.unavailableNote": "Git sync is not supported on this device (iOS). Please use the desktop app for Git sync.",
     "settings.folder.title": "Folder Sync",
     "settings.folder.description": "Once a day, export every work to Markdown and copy it into the selected folder. This mirrors the files to a plain folder (for example a cloud drive folder) without using git.",
     "settings.folder.folder": "Sync folder",
@@ -3118,6 +3124,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.provider.gemini.desc": "Google AI Studio API キーで接続",
     "settings.provider.claudeCli.label": "Claude Code CLI (既存/上級)",
     "settings.provider.claudeCli.desc": "既存設定維持用 - 新規ユーザーには Claude API キーを推奨",
+    "settings.provider.restrictedNote": "このデバイスはAPIキー方式のプロバイダーのみ対応しています。（CLI/ローカル認証プロバイダーは除外されます。）",
     "settings.writing.title": "執筆",
     "settings.writing.typewriter": "タイプライターモードの既定値",
     "settings.writing.typewriterDescription": "新しいシーンを開くときタイプライタースクロールを有効にする",
@@ -3162,6 +3169,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.git.commitTemplateHelp": "{date} は同期日に置き換えられます。",
     "settings.git.runNow": "今すぐ同期",
     "settings.git.init": "初期化",
+    "settings.git.unavailableNote": "Git同期はこのデバイス（iOS）ではサポートされていません。Git同期にはデスクトップアプリをご利用ください。",
     "settings.folder.title": "フォルダ同期",
     "settings.folder.description": "1 日 1 回すべての作品を Markdown に書き出し、指定したフォルダにコピーします。git を使わず、通常のフォルダ（例: クラウドドライブのフォルダ）にそのままミラーリングします。",
     "settings.folder.folder": "同期フォルダ",

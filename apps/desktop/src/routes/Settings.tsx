@@ -539,6 +539,10 @@ export function Settings() {
               </div>
             </section>
 
+            {unavailableProviders.length > 0 && (
+              <p className="sd">{t("settings.provider.restrictedNote")}</p>
+            )}
+
             <AISetupStart
               currentProvider={current.provider}
               currentProviderLabel={activeMeta?.label ?? current.provider}
@@ -951,6 +955,13 @@ export function Settings() {
                 )}
               </div>
             </section>
+
+            {!gitSyncAvailable && (
+            <section className="settings-section">
+              <h3>{t("settings.git.title")}</h3>
+              <p className="sd">{t("settings.git.unavailableNote")}</p>
+            </section>
+            )}
 
             {gitSyncAvailable && (
             <section className="settings-section">

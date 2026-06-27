@@ -657,8 +657,9 @@ describe("Settings", () => {
     expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
   });
 
-  it("hides Git Sync section when git_sync_available is false and shows it when true", async () => {
-    // When git_sync_available is false, the section heading must NOT be rendered.
+  it("shows Git Sync section as disabled (with note) when git_sync_available is false, and full section when true", async () => {
+    // When git_sync_available is false, the section heading IS rendered but only with the unavailable note,
+    // not with the full git-sync form (e.g. no folder input).
     mocks.diagnosticsGet.mockResolvedValue({
       version: "",
       home: "",
@@ -679,10 +680,13 @@ describe("Settings", () => {
 
     // Wait for settings to load (some other element that's always present)
     await screen.findByText("AI 연결 마법사");
-    expect(screen.queryByText("GitHub 동기화")).not.toBeInTheDocument();
+    // Title is shown in the disabled state section
+    expect(screen.getByText("GitHub 동기화")).toBeInTheDocument();
+    // The full form (folder input) must NOT appear
+    expect(screen.queryByLabelText("git 폴더")).not.toBeInTheDocument();
     unmount();
 
-    // When git_sync_available is true, the section heading IS rendered.
+    // When git_sync_available is true, the full section (with folder input) IS rendered.
     mocks.diagnosticsGet.mockResolvedValue({
       version: "",
       home: "",
@@ -697,5 +701,6 @@ describe("Settings", () => {
 
     await screen.findByText("AI 연결 마법사");
     expect(screen.getByText("GitHub 동기화")).toBeInTheDocument();
+    expect(screen.getByLabelText("git 폴더")).toBeInTheDocument();
   });
 });
