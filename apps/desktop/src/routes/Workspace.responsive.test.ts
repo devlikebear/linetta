@@ -57,4 +57,13 @@ describe("Workspace compact layout", () => {
     expect(css).toContain(".mobile-rail-backdrop {\n    display: none;");
     expect(css).toContain("width: min(380px, 60vw)");
   });
+
+  it("locks size-tier coverage for representative viewports", async () => {
+    const { resolveSizeClass } = await import("../hooks/useSizeClass");
+
+    expect(resolveSizeClass({ desktop: false, ipad: false })).toBe("compact");
+    expect(resolveSizeClass({ desktop: false, ipad: true })).toBe("ipad");
+    expect(resolveSizeClass({ desktop: true, ipad: true })).toBe("desktop");
+    expect(resolveSizeClass({ desktop: true, ipad: false })).toBe("desktop");
+  });
 });
