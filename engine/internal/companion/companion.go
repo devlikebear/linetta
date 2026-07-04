@@ -55,6 +55,7 @@ type SendOptions struct {
 	OutlineStructure string              `json:"outline_structure,omitempty"`
 	Intent           RequestIntent       `json:"intent,omitempty"`
 	Scope            string              `json:"scope,omitempty"`
+	Language         string              `json:"language,omitempty"`
 }
 
 // ClientFactory and ProviderSource are shared with the ai package so the same
@@ -720,7 +721,7 @@ func (s *Service) SendWithCompanionOptionsAndImages(ctx context.Context, project
 	if err != nil {
 		return "", err
 	}
-	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, opts.Intent, opts.Scope, normalized, now)
+	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, opts.Intent, opts.Scope, normalized, opts.Language, now)
 }
 
 // Cancel cancels an in-flight run.

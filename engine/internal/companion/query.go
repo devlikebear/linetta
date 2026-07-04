@@ -64,7 +64,7 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 		}
 		var sb strings.Builder
 		for _, e := range ents {
-			sb.WriteString(fmt.Sprintf("- [%s] (%s) %s", e.ID, kindLabel(e.Kind), e.Name))
+			sb.WriteString(fmt.Sprintf("- [%s] (%s) %s", e.ID, kindLabel(e.Kind, ""), e.Name))
 			if e.Role != "" {
 				sb.WriteString(" / " + e.Role)
 			}

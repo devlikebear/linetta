@@ -1,6 +1,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useState } from "react";
 import { companion as companionApi } from "../lib/rpc";
+import { useI18n } from "../lib/i18n";
 import { extractApplyOpsProposal, stripProposalBlock } from "../lib/companionDisplay";
 import type {
   CompanionMessage, CompanionProposal, CompanionChoices,
@@ -445,6 +446,7 @@ export function useCompanion(
   outlineStructure?: string,
   historyScope: CompanionHistoryScope = "scene",
 ) {
+  const { language } = useI18n();
   const currentNodeId = currentNodeIdFrom(nodeTarget);
   const effectiveScope: CompanionHistoryScope = historyScope === "scene" && currentNodeId ? "scene" : "project";
   const storeKey = companionStoreKey(projectId, effectiveScope, currentNodeId);
@@ -488,18 +490,16 @@ export function useCompanion(
       pendingChoices: null,
     }));
     try {
-      const payload = contextSelection || outlineStructure || images.length > 0 || intent || effectiveScope === "project"
-        ? {
-            ...(contextSelection ? { context: contextSelection } : {}),
-            ...(outlineStructure ? { outline_structure: outlineStructure } : {}),
-            ...(images.length > 0 ? { images } : {}),
-            ...(intent ? { intent } : {}),
-            ...(effectiveScope === "project" ? { scope: "project" as const } : {}),
-          }
-        : undefined;
-      const { run_id } = payload
-        ? await companionApi.send(projectId, effectiveScope === "scene" ? currentNodeId ?? "" : "", trimmed, payload)
-        : await companionApi.send(projectId, currentNodeId ?? "", trimmed);
+      const payload = {
+        ...(contextSelection ? { context: contextSelection } : {}),
+        ...(outlineStructure ? { outline_structure: outlineStructure } : {}),
+        ...(images.length > 0 ? { images } : {}),
+        ...(intent ? { intent } : {}),
+        ...(effectiveScope === "project" ? { scope: "project" as const } : {}),
+        language,
+      };
+      const nodeArg = effectiveScope === "scene" ? currentNodeId ?? "" : "";
+      const { run_id } = await companionApi.send(projectId, nodeArg, trimmed, payload);
       updateStore(storeKey, (state) => {
         if (state.runId !== PENDING_RUN_ID) return state;
         runStores.set(run_id, storeKey);
@@ -514,7 +514,7 @@ export function useCompanion(
         sending: false,
       }));
     }
-  }, [contextSelection, currentNodeId, effectiveScope, outlineStructure, projectId, storeKey]);
+  }, [contextSelection, currentNodeId, effectiveScope, language, outlineStructure, projectId, storeKey]);
 
   const cancel = useCallback(() => {
     const id = getStore(storeKey).state.runId;

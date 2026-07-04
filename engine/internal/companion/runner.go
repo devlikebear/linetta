@@ -130,7 +130,7 @@ func newRunner(svc *Service) *Runner {
 	return &Runner{svc: svc, active: map[string]context.CancelFunc{}}
 }
 
-func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, outlineStructure string, requestIntent RequestIntent, requestedScope string, images []ImageAttachment, now func() int64) (string, error) {
+func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, outlineStructure string, requestIntent RequestIntent, requestedScope string, images []ImageAttachment, language string, now func() int64) (string, error) {
 	sess, err := r.svc.sessions.EnsureWorker(projectID)
 	if err != nil {
 		return "", err
@@ -178,8 +178,8 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, sele
 
 	// Build the message list: system + context + history (history already
 	// includes the just-appended user turn as its last item).
-	msgs := []llm.ChatMessage{{Role: "system", Content: buildSystem()}}
-	if cctx := buildContext(data); cctx != "" {
+	msgs := []llm.ChatMessage{{Role: "system", Content: buildSystem(language)}}
+	if cctx := buildContext(data, language); cctx != "" {
 		msgs = append(msgs, llm.ChatMessage{Role: "user", Content: cctx})
 	}
 	if r.svc.history != nil {

@@ -49,7 +49,14 @@ type SceneExcerpt struct {
 }
 
 // buildSystem returns the companion persona + tool/proposal rules.
-func buildSystem() string {
+func isEnglish(lang string) bool {
+	return strings.HasPrefix(lang, "en")
+}
+
+func buildSystem(language string) string {
+	if isEnglish(language) {
+		return buildSystemEn()
+	}
 	var b strings.Builder
 	b.WriteString("당신은 한국어 소설 작가의 집필 동료입니다. 작가와 자연스럽게 대화하며 플롯·인물·전개를 함께 구상합니다.\n\n")
 	b.WriteString("도구가 제공되면 적극적으로 사용하세요: web_search는 최신 자료나 장르 레퍼런스를 찾고, web_fetch는 특정 URL 내용을 확인하며, linetta_apply_ops는 작품의 개요·시놉시스·아웃라인 트리·스토리라인·비트·세계관 요소(캐릭터·장소·아이템·스킬·마법·능력)·관계·씬·기억·팩트 자료집을 직접 갱신합니다.\n")
@@ -92,22 +99,72 @@ func buildSystem() string {
 	return b.String()
 }
 
+// buildSystemEn is the English-language variant of buildSystem.
+func buildSystemEn() string {
+	var b strings.Builder
+	b.WriteString("You are a writing companion for a fiction writer. You converse naturally with the writer to develop plots, characters, and story structure together.\n\n")
+	b.WriteString("When tools are available, use them actively: web_search finds current references and genre materials; web_fetch retrieves specific URLs; linetta_apply_ops directly updates the work's synopsis, outline tree, storylines, beats, world-building elements (characters, places, items, skills, abilities), relationships, scenes, memories, and fact cards.\n")
+	b.WriteString("When internal evidence is needed, call search_entities, search_manuscript(query, limit?), get_scene_text(node_id), list_scenes, list_beats, or recall_memory inside a ```linetta-query``` block. search_manuscript finds passages containing named entities or world-building descriptions across the full manuscript. Use the returned node_id with get_scene_text to read the full text; try synonym searches if exact matches are sparse.\n")
+	b.WriteString("The 'Written Manuscript Excerpts' in context are already-written, real manuscript text. When analysing characters, relationships, world-building, or plot, treat this text as primary evidence — do not say there is none when it is provided.\n")
+	b.WriteString("Terminology: 'outline/part/chapter/scene structure' refers to the left outline tree, updated with create_outline_node/create_scene/rename_outline_node/delete_outline_node/move_outline_node. 'Scene text/manuscript/actual prose' is updated with set_scene_text. 'Work synopsis/overview' text is updated with set_outline. 'Plot/storyline/beats' are updated with create_thread/add_beat.\n")
+	b.WriteString("For proofreading requests (spelling, spacing, grammar, awkward phrasing), preserve the original meaning, voice, proper nouns, and dialogue tone — make only necessary corrections. After applying, briefly list what changed.\n")
+	b.WriteString("If the writer has approved an idea, or explicitly asks to write/revise/add/generate/expand/save the synopsis, outline, storylines, beats, world-building elements, characters, relationships, places, items, scenes, or memories — do not just explain: call linetta_apply_ops. After applying, briefly state what changed; ask first if anything is uncertain.\n")
+	b.WriteString("Help sculpt the story: given a rough synopsis or a single sentence, use set_outline to set the work overview, create_outline_node/create_scene to build a visible outline tree, and add create_thread/add_beat to attach plot beats to those scenes. For a specific part/chapter/act, refine outline nodes and connect beats. For a scene rewrite/revision/expansion, replace the real scene prose with set_scene_text — do not just save a memory or beat.\n\n")
+	b.WriteString("Only when no tools are available, or when the writer wants a proposal to review, suggest concrete changes (outline tree creation/revision, storyline creation/revision, beat additions) using **exactly one** fenced block in this format. For simple conversation or Q&A, omit the block.\n\n")
+	b.WriteString("```linetta-proposal\n")
+	b.WriteString(`{"summary":"<one-line summary>","ops":[ ... ]}` + "\n")
+	b.WriteString("```\n\n")
+	b.WriteString("Op types: create_outline_node{ref?,kind:container|leaf,label,title?,parent_node_id?|parent_node_ref?,after_node_id?|after_node_ref?}, rename_outline_node{node_id|node_ref,label?,title?}, delete_outline_node{node_id|node_ref}, move_outline_node{node_id|node_ref,direction:up|down}, create_scene{ref?,label,title?,after_node_id?|after_node_ref?}, set_scene_text{text,node_id?|node_ref?,allow_empty?}, create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id?|node_ref?,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}, create_entity{ref?,kind,name,role?,summary?,attributes?}, update_entity{entity_id,name?,role?,summary?,attributes?}, create_relationship{from|from_ref,to|to_ref,label,inverse_label?,notes?}, create_fact_card{ref?,claim,result,status,category?,node_id?|node_ref?,sources:[{url,title?,snippet?,accessed_at?}]}.\n")
+	b.WriteString("- Fact card rules: use create_fact_card only when at least one source URL exists. Do not save facts without sources[].url. Mark freshness/confidence with status (verified|uncertain|intentional_fiction|stale). Use short snippet summaries, not long quotes.\n")
+	b.WriteString("- ID rules (important): only use IDs actually present in the context's 'Scenes', 'Storylines', or 'World Elements & Relationships' lists. Never invent IDs.\n")
+	b.WriteString("- To rewrite/revise/expand the current scene, use set_scene_text{text:\"...\"}. Omit node_id to target the current scene. Only supply a node_id from context when modifying a different scene. Use allow_empty:true only when explicitly asked to clear the text.\n")
+	b.WriteString("- add_beat.node_id must be a node_id from the 'Scenes' list above. Omitting it attaches the beat to the current scene.\n")
+	b.WriteString("- Beats must belong to a storyline. Use an existing thread_id if one exists; for a new storyline, include create_thread (with ref) earlier in the same proposal and reference it with add_beat.thread_ref. Never guess thread_id.\n")
+	b.WriteString("- World elements and relationships follow the same rule. Reference existing elements by their id from the 'World Elements & Relationships' list; for new elements, use create_entity (with ref), then from_ref/to_ref in create_relationship.\n")
+	b.WriteString("- create_entity.kind must be one of character|place|item|concept (defaults to character). Use character for people, place for locations, item for objects/artefacts, concept for skills/magic/abilities/world rules. Put mechanics (effects, costs, constraints, weaknesses) in attributes as key-value pairs.\n")
+	b.WriteString("- Outline cleanup: if the context's 'Outline Tree' already has a node_id for a part/chapter/scene, do not recreate it — use rename_outline_node/delete_outline_node/move_outline_node instead. Only use create_outline_node (with ref) when adding new structure.\n")
+	b.WriteString("- When building new structure, follow the 'Outline Structure Preset' in context for hierarchy and label conventions. Create parent→child levels using parent_node_ref, then attach beats to created scenes with add_beat.node_ref. A create_outline_node without parent/after goes to the root.\n")
+	b.WriteString("- To add a single scene next to the current one, use create_scene (with ref), then add_beat.node_ref to attach beats (omit node_id for the current scene). For bidirectional relationships, supply inverse_label in create_relationship.\n")
+	b.WriteString("Examples:\n")
+	b.WriteString("```\n")
+	b.WriteString(`{"summary":"Rewrite current scene","ops":[{"op":"set_scene_text","text":"First paragraph of new scene\nContinuing sentence\n\nNext paragraph"}]}` + "\n")
+	b.WriteString(`{"summary":"Add revenge storyline","ops":[{"op":"create_thread","ref":"t1","name":"Revenge"},{"op":"add_beat","thread_ref":"t1","label":"Resolution","description":"The protagonist decides to seek revenge"}]}` + "\n")
+	b.WriteString(`{"summary":"Draft Part 1 outline with plot beats","ops":[{"op":"create_outline_node","ref":"p1","kind":"container","label":"Part 1","title":"The Pursuit Begins"},{"op":"create_outline_node","ref":"c1","kind":"container","parent_node_ref":"p1","label":"Chapter 1"},{"op":"create_outline_node","ref":"s1","kind":"leaf","parent_node_ref":"c1","label":"Scene 1","title":"The Missing Message"},{"op":"create_thread","ref":"t1","name":"Part 1 Chase Line"},{"op":"add_beat","thread_ref":"t1","node_ref":"s1","label":"Clue Found","description":"The protagonist discovers the first clue in a deleted message"}]}` + "\n")
+	b.WriteString("```\n")
+	b.WriteString("The tool schema and proposal-block op schema are identical. linetta_apply_ops takes summary and ops_json; ops_json is the op array as a JSON string. Follow the same ID/ref rules when using linetta_apply_ops — never invent IDs.\n")
+	b.WriteString("What you learned about the work's setting and the writer's preferences in previous turns is given below under 'Memories'. If a new fact worth keeping emerges (writer preference, world rule, etc.) and the writer's intent is clear, save it with a remember op in linetta_apply_ops; otherwise, propose it.\n\n")
+	b.WriteString("When offering the writer a choice among candidates (titles, names, plot directions, tone, etc.), do not list them inline — use **exactly one** fenced block in the format below so the writer can select with a button.\n")
+	b.WriteString("```linetta-choices\n")
+	b.WriteString(`{"prompt":"<one line describing what is being chosen>","options":["option1","option2","option3"],"allow_custom":true}` + "\n")
+	b.WriteString("```\n")
+	b.WriteString("- Provide at least two options; the writer sends the chosen text back verbatim, so keep options short and clear.\n")
+	b.WriteString("- When allow_custom is true, a 'write your own' button is shown as well (set true when the writer may supply their own answer).\n")
+	b.WriteString("- Add brief context/reasoning before the block, but do not repeat the option list in prose. Never use linetta-choices and linetta-proposal in the same turn (a choice is your turn to ask the writer back). Omit the block for plain conversation or explanation.\n")
+	return b.String()
+}
+
 // buildContext renders the project state as a single user-role message body.
-func buildContext(d PromptData) string {
+func buildContext(d PromptData, language string) string {
+	lbl := func(ko, en string) string {
+		if isEnglish(language) {
+			return en
+		}
+		return ko
+	}
 	var b strings.Builder
 	if s := strings.TrimSpace(d.Outline); s != "" {
-		b.WriteString("## 작품 개요\n")
+		b.WriteString(lbl("## 작품 개요\n", "## Synopsis\n"))
 		b.WriteString(s)
 		b.WriteString("\n\n")
 	}
 	if s := strings.TrimSpace(d.OutlineStructure); s != "" {
-		b.WriteString("## 아웃라인 구조 프리셋\n")
+		b.WriteString(lbl("## 아웃라인 구조 프리셋\n", "## Outline Structure Preset\n"))
 		b.WriteString(s)
 		b.WriteString("\n")
-		b.WriteString("아웃라인 트리를 새로 만들거나 정리할 때 이 계층과 라벨 예시를 따르세요.\n\n")
+		b.WriteString(lbl("아웃라인 트리를 새로 만들거나 정리할 때 이 계층과 라벨 예시를 따르세요.\n\n", "Follow these hierarchy levels and label examples when creating or reorganizing the outline tree.\n\n"))
 	}
 	if len(d.OutlineNodes) > 0 {
-		b.WriteString("## 아웃라인 트리 (기존 구조 — node_id)\n")
+		b.WriteString(lbl("## 아웃라인 트리 (기존 구조 — node_id)\n", "## Outline Tree (existing structure — node_id)\n"))
 		for _, n := range d.OutlineNodes {
 			indent := strings.Repeat("  ", n.Depth)
 			line := fmt.Sprintf("%s- [%s] (%s) %s", indent, n.ID, n.Kind, n.Label)
@@ -119,14 +176,14 @@ func buildContext(d PromptData) string {
 		b.WriteString("\n")
 	}
 	if len(d.Memories) > 0 {
-		b.WriteString("## 기억\n")
+		b.WriteString(lbl("## 기억\n", "## Memories\n"))
 		for _, m := range d.Memories {
 			b.WriteString("- " + m + "\n")
 		}
 		b.WriteString("\n")
 	}
 	if len(d.Facts) > 0 {
-		b.WriteString("## 팩트 자료집\n")
+		b.WriteString(lbl("## 팩트 자료집\n", "## Fact Dossier\n"))
 		for _, f := range d.Facts {
 			line := fmt.Sprintf("- [%s] (%s) %s", f.ID, f.Status, f.Claim)
 			if strings.TrimSpace(f.Category) != "" {
@@ -150,8 +207,8 @@ func buildContext(d PromptData) string {
 		b.WriteString("\n")
 	}
 	if len(d.References) > 0 {
-		b.WriteString("## 추가 레퍼런스\n")
-		b.WriteString("작가가 이번 요청에 참고하라고 직접 추가한 자료입니다. 목적 지시를 우선해서 사용하세요.\n")
+		b.WriteString(lbl("## 추가 레퍼런스\n", "## Additional References\n"))
+		b.WriteString(lbl("작가가 이번 요청에 참고하라고 직접 추가한 자료입니다. 목적 지시를 우선해서 사용하세요.\n", "These materials were added by the writer for this request. Prioritize the purpose instructions.\n"))
 		for _, r := range d.References {
 			if r.Status == ReferenceStatusDisabled {
 				continue
@@ -160,25 +217,25 @@ func buildContext(d PromptData) string {
 			if text == "" {
 				continue
 			}
-			b.WriteString(fmt.Sprintf("### %s — %s\n", purposeLabel(r.Purpose), strings.TrimSpace(r.Title)))
-			b.WriteString(referencePurposeInstruction(r.Purpose))
+			b.WriteString(fmt.Sprintf("### %s — %s\n", purposeLabel(r.Purpose, language), strings.TrimSpace(r.Title)))
+			b.WriteString(referencePurposeInstruction(r.Purpose, language))
 			b.WriteString("\n")
 			if r.Status == ReferenceStatusSummarized {
-				b.WriteString("(요약 사용 중)\n")
+				b.WriteString(lbl("(요약 사용 중)\n", "(summary in use)\n"))
 			}
 			b.WriteString(text)
 			b.WriteString("\n\n")
 		}
 	}
 	if len(d.SceneExcerpts) > 0 {
-		b.WriteString("## 작성된 본문 발췌\n")
+		b.WriteString(lbl("## 작성된 본문 발췌\n", "## Written Manuscript Excerpts\n"))
 		for _, s := range d.SceneExcerpts {
 			if strings.TrimSpace(s.Text) == "" {
 				continue
 			}
 			current := ""
 			if s.IsCurrent {
-				current = " (현재 씬)"
+				current = lbl(" (현재 씬)", " (current scene)")
 			}
 			b.WriteString(fmt.Sprintf("### [%s] %s%s\n", s.NodeID, s.Label, current))
 			b.WriteString(strings.TrimSpace(s.Text))
@@ -186,25 +243,25 @@ func buildContext(d PromptData) string {
 		}
 	}
 	if d.HasSpine && hasSpineBeats(d.Spine) {
-		b.WriteString("## 플롯\n")
-		writeScene(&b, "[이전 씬]", d.Spine.Prev)
-		writeSceneVal(&b, "[현재 씬]", d.Spine.Current)
-		writeScene(&b, "[다음 씬]", d.Spine.Next)
+		b.WriteString(lbl("## 플롯\n", "## Plot\n"))
+		writeScene(&b, lbl("[이전 씬]", "[prev scene]"), d.Spine.Prev)
+		writeSceneVal(&b, lbl("[현재 씬]", "[current scene]"), d.Spine.Current)
+		writeScene(&b, lbl("[다음 씬]", "[next scene]"), d.Spine.Next)
 		b.WriteString("\n")
 	}
 	if d.HasSpine {
-		b.WriteString("## 씬 (비트를 붙일 수 있는 실제 씬 — node_id)\n")
+		b.WriteString(lbl("## 씬 (비트를 붙일 수 있는 실제 씬 — node_id)\n", "## Scenes (actual scenes that can have beats attached — node_id)\n"))
 		if d.Spine.Prev != nil {
-			b.WriteString(fmt.Sprintf("- [%s] %s (이전 씬)\n", d.Spine.Prev.NodeID, d.Spine.Prev.Label))
+			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(이전 씬)", "(prev scene)")+"\n", d.Spine.Prev.NodeID, d.Spine.Prev.Label))
 		}
-		b.WriteString(fmt.Sprintf("- [%s] %s (현재 씬)\n", d.Spine.Current.NodeID, d.Spine.Current.Label))
+		b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(현재 씬)", "(current scene)")+"\n", d.Spine.Current.NodeID, d.Spine.Current.Label))
 		if d.Spine.Next != nil {
-			b.WriteString(fmt.Sprintf("- [%s] %s (다음 씬)\n", d.Spine.Next.NodeID, d.Spine.Next.Label))
+			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(다음 씬)", "(next scene)")+"\n", d.Spine.Next.NodeID, d.Spine.Next.Label))
 		}
 		b.WriteString("\n")
 	}
 	if len(d.Threads) > 0 {
-		b.WriteString("## 스토리라인\n")
+		b.WriteString(lbl("## 스토리라인\n", "## Storylines\n"))
 		for _, t := range d.Threads {
 			line := fmt.Sprintf("- [%s] %s", t.ID, t.Name)
 			if t.Summary != "" {
@@ -215,11 +272,11 @@ func buildContext(d PromptData) string {
 		b.WriteString("\n")
 	}
 	if len(d.Entities) > 0 || len(d.Relationships) > 0 {
-		b.WriteString("## 세계관 요소·관계\n")
+		b.WriteString(lbl("## 세계관 요소·관계\n", "## World Elements & Relationships\n"))
 		nameByID := map[string]string{}
 		for _, e := range d.Entities {
 			nameByID[e.ID] = e.Name
-			line := fmt.Sprintf("- [%s] (%s) %s", e.ID, kindLabel(e.Kind), e.Name)
+			line := fmt.Sprintf("- [%s] (%s) %s", e.ID, kindLabel(e.Kind, language), e.Name)
 			if e.Role != "" {
 				line += " / " + e.Role
 			}
@@ -455,7 +512,7 @@ func renderCompanionPlotPreview(d PromptData) string {
 func renderCompanionEntitiesPreview(entities []entity.Entity) string {
 	var b strings.Builder
 	for _, e := range entities {
-		line := fmt.Sprintf("- [%s] (%s) %s", e.ID, kindLabel(e.Kind), e.Name)
+		line := fmt.Sprintf("- [%s] (%s) %s", e.ID, kindLabel(e.Kind, ""), e.Name)
 		if e.Role != "" {
 			line += " / " + e.Role
 		}
@@ -540,7 +597,7 @@ func activeReferences(refs []Reference) []Reference {
 func renderReferencesPreview(refs []Reference) string {
 	var b strings.Builder
 	for _, r := range activeReferences(refs) {
-		b.WriteString(fmt.Sprintf("- %s · %s", purposeLabel(r.Purpose), strings.TrimSpace(r.Title)))
+		b.WriteString(fmt.Sprintf("- %s · %s", purposeLabel(r.Purpose, ""), strings.TrimSpace(r.Title)))
 		if r.Status == ReferenceStatusSummarized {
 			b.WriteString(" · 요약")
 		}
@@ -552,7 +609,19 @@ func renderReferencesPreview(refs []Reference) string {
 	return b.String()
 }
 
-func referencePurposeInstruction(purpose string) string {
+func referencePurposeInstruction(purpose string, lang string) string {
+	if isEnglish(lang) {
+		switch normalizeReferencePurpose(purpose) {
+		case ReferencePurposeStyle:
+			return "Purpose: Style reference. Borrow only sentence rhythm, vocabulary, POV, and narrative distance — do not copy content or unique expressions verbatim."
+		case ReferencePurposeCanon:
+			return "Purpose: Canon/worldbuilding. Treat as established in-universe fact; if it conflicts with the current scene, note the conflict briefly."
+		case ReferencePurposeConstraint:
+			return "Purpose: Prohibition/caution. Observe the restrictions below first; if you must break them, explain why before proceeding."
+		default:
+			return "Purpose: Content reference. Use as evidence for scenes, facts, and emotional context."
+		}
+	}
 	switch normalizeReferencePurpose(purpose) {
 	case ReferencePurposeStyle:
 		return "목적: 문체 참고. 문장 리듬, 어휘, 시점, 거리감만 참고하고 내용이나 고유 표현을 그대로 복사하지 마세요."
@@ -565,7 +634,19 @@ func referencePurposeInstruction(purpose string) string {
 	}
 }
 
-func purposeLabel(purpose string) string {
+func purposeLabel(purpose string, lang string) string {
+	if isEnglish(lang) {
+		switch normalizeReferencePurpose(purpose) {
+		case ReferencePurposeStyle:
+			return "Style ref."
+		case ReferencePurposeCanon:
+			return "Canon"
+		case ReferencePurposeConstraint:
+			return "Constraint"
+		default:
+			return "Content ref."
+		}
+	}
 	switch normalizeReferencePurpose(purpose) {
 	case ReferencePurposeStyle:
 		return "문체 참고"
@@ -614,7 +695,10 @@ func writeSceneVal(b *strings.Builder, tag string, s plot.SceneBeats) {
 	}
 }
 
-func kindLabel(k string) string {
+func kindLabel(k string, lang string) string {
+	if isEnglish(lang) {
+		return k
+	}
 	switch k {
 	case "character":
 		return "인물"
