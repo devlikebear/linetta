@@ -3345,6 +3345,18 @@ export function displayNodeLabel(language: AppLanguage, label: string): string {
       number: chapter[1] ?? chapter[2] ?? chapter[3] ?? "",
     });
   }
+  const webNovelPart = trimmed.match(/^(?:(\d+)권|Arc\s+(\d+)|第(\d+)巻)$/i);
+  if (webNovelPart) {
+    return translate(language, "workspace.webNovelPartNumber", {
+      number: webNovelPart[1] ?? webNovelPart[2] ?? webNovelPart[3] ?? "",
+    });
+  }
+  const webNovelChapter = trimmed.match(/^(?:(\d+)화|Episode\s+(\d+)|第(\d+)話)$/i);
+  if (webNovelChapter) {
+    return translate(language, "workspace.webNovelChapterNumber", {
+      number: webNovelChapter[1] ?? webNovelChapter[2] ?? webNovelChapter[3] ?? "",
+    });
+  }
   return label;
 }
 
