@@ -25,7 +25,7 @@ interface Props {
 type CandidateSelection = Record<string, Set<string>>;
 
 export function ContextChangeWizard({ projectId, initialEntityId, initialText, autoCheck, onApplied }: Props) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [oldTerm, setOldTerm] = useState("");
   const [newTerm, setNewTerm] = useState("");
   const [entityMatches, setEntityMatches] = useState<Entity[]>([]);
@@ -74,7 +74,7 @@ export function ContextChangeWizard({ projectId, initialEntityId, initialText, a
     if (!autoCheck || !term || autoCheckKey === term) return;
     setAutoCheckKey(term);
     setReport(null);
-    contextual.checkConsistency({ project_id: projectId, old_terms: [term] })
+    contextual.checkConsistency({ project_id: projectId, old_terms: [term], language })
       .then((nextReport) => setReport(nextReport))
       .catch((err) => setError(String(err)));
   }, [autoCheck, autoCheckKey, initialText, projectId]);
@@ -146,6 +146,7 @@ export function ContextChangeWizard({ projectId, initialEntityId, initialText, a
     contextual.planChange({
       project_id: projectId,
       type: "rename",
+      language,
       ...(selectedEntityId
         ? { entity_id: selectedEntityId }
         : { selected_text: from, old_terms: [from] }),
@@ -184,6 +185,7 @@ export function ContextChangeWizard({ projectId, initialEntityId, initialText, a
           old_terms: plan.old_terms,
           new_terms: plan.new_terms,
           changed_entity_ids: plan.target.entity_ids ?? [],
+          language,
         });
         setReport(nextReport);
       })

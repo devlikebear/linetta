@@ -863,7 +863,7 @@ func TestCompactHistory_RewritesTranscriptAsSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	msgs, err := svc.CompactHistory(context.Background(), projectID, func() int64 { return 2000 })
+	msgs, err := svc.CompactHistory(context.Background(), projectID, "", func() int64 { return 2000 })
 	if err != nil {
 		t.Fatal(err)
 	}

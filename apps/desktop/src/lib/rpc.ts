@@ -398,11 +398,12 @@ export const companion = {
       ...(limit ? { limit } : {}),
     })
       .then((r) => r.messages ?? []),
-  compact: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope) =>
+  compact: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope, language?: string) =>
     rpcCall<{ messages: CompanionMessage[] }>("companion.compact", {
       project_id: projectId,
       ...(nodeId ? { node_id: nodeId } : {}),
       ...(scope ? { scope } : {}),
+      ...(language ? { language } : {}),
     })
       .then((r) => r.messages ?? []),
   clear: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope) =>

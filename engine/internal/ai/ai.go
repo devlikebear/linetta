@@ -22,6 +22,7 @@ type Options struct {
 	ShortForm        bool             `json:"short_form"` // ask for one-paragraph length
 	Context          ContextSelection `json:"context,omitempty"`
 	OutlineStructure string           `json:"outline_structure,omitempty"`
+	Language         string           `json:"language,omitempty"` // app UI language; "en*" switches prompts to English (Korean default)
 }
 
 // ContextKey identifies one independently toggleable context section.

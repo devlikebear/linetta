@@ -53,12 +53,21 @@ func isEnglish(lang string) bool {
 	return strings.HasPrefix(lang, "en")
 }
 
+// pickLang returns en when lang is English, otherwise ko (the default).
+func pickLang(lang, ko, en string) string {
+	if isEnglish(lang) {
+		return en
+	}
+	return ko
+}
+
 func buildSystem(language string) string {
 	if isEnglish(language) {
 		return buildSystemEn()
 	}
 	var b strings.Builder
-	b.WriteString("당신은 한국어 소설 작가의 집필 동료입니다. 작가와 자연스럽게 대화하며 플롯·인물·전개를 함께 구상합니다.\n\n")
+	b.WriteString("당신은 한국어 소설 작가의 집필 동료입니다. 작가와 자연스럽게 대화하며 플롯·인물·전개를 함께 구상합니다.\n")
+	b.WriteString("이전 대화나 원고가 다른 언어여도 항상 한국어로 답하세요. 필요하면 원고 인용만 원문 언어로 하세요.\n\n")
 	b.WriteString("도구가 제공되면 적극적으로 사용하세요: web_search는 최신 자료나 장르 레퍼런스를 찾고, web_fetch는 특정 URL 내용을 확인하며, linetta_apply_ops는 작품의 개요·시놉시스·아웃라인 트리·스토리라인·비트·세계관 요소(캐릭터·장소·아이템·스킬·마법·능력)·관계·씬·기억·팩트 자료집을 직접 갱신합니다.\n")
 	b.WriteString("작품 내부 근거가 필요하면 ```linetta-query``` 블록으로 search_entities, search_manuscript(query, limit?), get_scene_text(node_id), list_scenes, list_beats, recall_memory를 호출하세요. search_manuscript는 본문 전체에서 고유명사·설정 묘사가 나오는 대목을 찾습니다. 결과의 node_id로 get_scene_text를 호출해 전문을 확인하고, 패러프레이즈에 약하므로 동의어가 의심되면 여러 표현으로 검색하세요.\n")
 	b.WriteString("컨텍스트의 '작성된 본문 발췌'는 이미 작성된 실제 원고입니다. 캐릭터·관계·세계관 요소·전개 분석 요청에서는 이 본문을 우선 근거로 삼고, 본문이 제공되어 있는데 없다고 말하지 마세요.\n")
@@ -102,7 +111,8 @@ func buildSystem(language string) string {
 // buildSystemEn is the English-language variant of buildSystem.
 func buildSystemEn() string {
 	var b strings.Builder
-	b.WriteString("You are a writing companion for a fiction writer. You converse naturally with the writer to develop plots, characters, and story structure together.\n\n")
+	b.WriteString("You are a writing companion for a fiction writer. You converse naturally with the writer to develop plots, characters, and story structure together.\n")
+	b.WriteString("Always respond in English, even if earlier conversation turns or the manuscript are written in another language. Quote manuscript text in its original language when needed.\n\n")
 	b.WriteString("When tools are available, use them actively: web_search finds current references and genre materials; web_fetch retrieves specific URLs; linetta_apply_ops directly updates the work's synopsis, outline tree, storylines, beats, world-building elements (characters, places, items, skills, abilities), relationships, scenes, memories, and fact cards.\n")
 	b.WriteString("When internal evidence is needed, call search_entities, search_manuscript(query, limit?), get_scene_text(node_id), list_scenes, list_beats, or recall_memory inside a ```linetta-query``` block. search_manuscript finds passages containing named entities or world-building descriptions across the full manuscript. Use the returned node_id with get_scene_text to read the full text; try synonym searches if exact matches are sparse.\n")
 	b.WriteString("The 'Written Manuscript Excerpts' in context are already-written, real manuscript text. When analysing characters, relationships, world-building, or plot, treat this text as primary evidence — do not say there is none when it is provided.\n")

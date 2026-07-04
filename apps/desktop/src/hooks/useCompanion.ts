@@ -529,7 +529,7 @@ export function useCompanion(
   }, [currentNodeId, effectiveScope, projectId, storeKey]);
 
   const compact = useCallback(async () => {
-    const msgs = await companionApi.compact(projectId, effectiveScope === "scene" ? currentNodeId : null, effectiveScope);
+    const msgs = await companionApi.compact(projectId, effectiveScope === "scene" ? currentNodeId : null, effectiveScope, language);
     const store = getStore(storeKey);
     store.historyLoaded = true;
     updateStore(storeKey, (state) => ({
@@ -544,7 +544,7 @@ export function useCompanion(
       pendingProposal: null,
       pendingChoices: null,
     }));
-  }, [currentNodeId, effectiveScope, projectId, storeKey]);
+  }, [currentNodeId, effectiveScope, language, projectId, storeKey]);
 
   return {
     messages: snapshot.messages,

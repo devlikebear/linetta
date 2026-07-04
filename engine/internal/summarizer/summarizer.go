@@ -21,8 +21,11 @@ const queueSize = 256
 const minRunesForLLM = 60
 const containerSummaryMaxRunes = 4000
 const maxSummarizeDepth = 6
-const systemPrompt = "다음 한국어 본문을 3~5문장으로 요약하라. 등장인물·장소·핵심 사건은 반드시 보존하라. 새 정보 추가 금지."
-const containerSystemPrompt = "다음은 한국어 소설의 하위 단위 요약들이다. 이 단위 전체를 3~5문장으로 요약하라. 등장인물·장소·핵심 사건은 반드시 보존하라. 새 정보 추가 금지."
+
+// Summaries run in the background with no UI-language signal, so the prompt
+// asks the model to follow the manuscript's own language instead.
+const systemPrompt = "다음 본문을 본문과 같은 언어로 3~5문장으로 요약하라. 등장인물·장소·핵심 사건은 반드시 보존하라. 새 정보 추가 금지. (Summarize the passage below in 3-5 sentences, in the same language as the passage. Preserve characters, places, and key events. Do not add new information.)"
+const containerSystemPrompt = "다음은 소설의 하위 단위 요약들이다. 이 단위 전체를 요약들과 같은 언어로 3~5문장으로 요약하라. 등장인물·장소·핵심 사건은 반드시 보존하라. 새 정보 추가 금지. (The lines below are summaries of a fiction unit's children. Summarize the whole unit in 3-5 sentences, in the same language as those summaries. Preserve characters, places, and key events. Do not add new information.)"
 
 type Summarizer struct {
 	nodes   *node.Repo

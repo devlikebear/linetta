@@ -41,30 +41,30 @@ func ParseQuery(full string) (QueryRequest, bool, error) {
 }
 
 // runQueries executes each read tool, returning a human-readable result block.
-func (s *Service) runQueries(ctx context.Context, projectID string, qs []Query) string {
+func (s *Service) runQueries(ctx context.Context, projectID string, qs []Query, lang string) string {
 	var b strings.Builder
-	b.WriteString("## 조회 결과\n")
+	b.WriteString(pickLang(lang, "## 조회 결과\n", "## Query Results\n"))
 	for _, q := range qs {
 		b.WriteString("### " + q.Tool + "\n")
-		b.WriteString(s.runOneQuery(ctx, projectID, q))
+		b.WriteString(s.runOneQuery(ctx, projectID, q, lang))
 		b.WriteString("\n")
 	}
 	return strings.TrimSpace(b.String())
 }
 
-func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) string {
+func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query, lang string) string {
 	switch q.Tool {
 	case "search_entities":
 		ents, err := s.entities.Search(ctx, projectID, q.Args["query"], 20)
 		if err != nil {
-			return "(오류: " + err.Error() + ")"
+			return pickLang(lang, "(오류: ", "(error: ") + err.Error() + ")"
 		}
 		if len(ents) == 0 {
-			return "(결과 없음)"
+			return pickLang(lang, "(결과 없음)", "(no results)")
 		}
 		var sb strings.Builder
 		for _, e := range ents {
-			sb.WriteString(fmt.Sprintf("- [%s] (%s) %s", e.ID, kindLabel(e.Kind, ""), e.Name))
+			sb.WriteString(fmt.Sprintf("- [%s] (%s) %s", e.ID, kindLabel(e.Kind, lang), e.Name))
 			if e.Role != "" {
 				sb.WriteString(" / " + e.Role)
 			}
@@ -77,31 +77,31 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 	case "get_scene_text":
 		id := q.Args["node_id"]
 		if id == "" {
-			return "(오류: node_id 필요)"
+			return pickLang(lang, "(오류: node_id 필요)", "(error: node_id required)")
 		}
 		n, err := s.nodes.Get(ctx, id)
 		if err != nil {
-			return "(오류: " + err.Error() + ")"
+			return pickLang(lang, "(오류: ", "(error: ") + err.Error() + ")"
 		}
 		txt := trimRunesLocal(plainTextFromDoc(n.ContentDoc), sceneTextMaxRunes)
 		if txt == "" {
-			return "(본문 없음)"
+			return pickLang(lang, "(본문 없음)", "(no scene text)")
 		}
 		return txt
 	case "search_manuscript":
 		query := strings.TrimSpace(q.Args["query"])
 		if query == "" {
-			return "(오류: query 필요)"
+			return pickLang(lang, "(오류: query 필요)", "(error: query required)")
 		}
 		if s.manuscript == nil {
-			return "(오류: 본문 검색을 사용할 수 없음)"
+			return pickLang(lang, "(오류: 본문 검색을 사용할 수 없음)", "(error: manuscript search unavailable)")
 		}
 		hits, err := s.manuscript.Query(ctx, projectID, query, parseQueryLimit(q.Args["limit"], 5, 20))
 		if err != nil {
-			return "(오류: " + err.Error() + ")"
+			return pickLang(lang, "(오류: ", "(error: ") + err.Error() + ")"
 		}
 		if len(hits) == 0 {
-			return "(검색 결과 없음)"
+			return pickLang(lang, "(검색 결과 없음)", "(no search hits)")
 		}
 		var sb strings.Builder
 		for _, h := range hits {
@@ -119,7 +119,7 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 	case "list_scenes":
 		all, err := s.nodes.ListByProject(ctx, projectID)
 		if err != nil {
-			return "(오류: " + err.Error() + ")"
+			return pickLang(lang, "(오류: ", "(error: ") + err.Error() + ")"
 		}
 		byID := map[string]node.Node{}
 		for _, n := range all {
@@ -133,7 +133,7 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 			sb.WriteString("- [" + n.ID + "] " + node.BreadcrumbLabel(byID, n) + "\n")
 		}
 		if sb.Len() == 0 {
-			return "(씬 없음)"
+			return pickLang(lang, "(씬 없음)", "(no scenes)")
 		}
 		return strings.TrimRight(sb.String(), "\n")
 	case "list_beats":
@@ -144,13 +144,13 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 		} else if tid := q.Args["thread_id"]; tid != "" {
 			bs, err = s.beats.ListByThread(ctx, tid)
 		} else {
-			return "(오류: node_id 또는 thread_id 필요)"
+			return pickLang(lang, "(오류: node_id 또는 thread_id 필요)", "(error: node_id or thread_id required)")
 		}
 		if err != nil {
-			return "(오류: " + err.Error() + ")"
+			return pickLang(lang, "(오류: ", "(error: ") + err.Error() + ")"
 		}
 		if len(bs) == 0 {
-			return "(비트 없음)"
+			return pickLang(lang, "(비트 없음)", "(no beats)")
 		}
 		var sb strings.Builder
 		for _, bt := range bs {
@@ -164,11 +164,11 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query) st
 	case "recall_memory":
 		hits := s.Recall(projectID, q.Args["query"], recallLimit)
 		if len(hits) == 0 {
-			return "(기억 없음)"
+			return pickLang(lang, "(기억 없음)", "(no memories)")
 		}
 		return "- " + strings.Join(hits, "\n- ")
 	default:
-		return "(오류: 알 수 없는 도구 " + q.Tool + ")"
+		return pickLang(lang, "(오류: 알 수 없는 도구 ", "(error: unknown tool ") + q.Tool + ")"
 	}
 }
 

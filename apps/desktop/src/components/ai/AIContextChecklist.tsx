@@ -38,9 +38,28 @@ interface ListProps {
   selection: AIContextSelection;
   onSelectionChange: (next: AIContextSelection) => void;
   disabled?: boolean;
+  /** Which feature owns this checklist; picks feature-specific section labels. */
+  variant?: "ai" | "companion";
 }
 
-export function AIContextChecklistList({ preview, selection, onSelectionChange, disabled = false }: ListProps) {
+type Translate = ReturnType<typeof useI18n>["t"];
+
+/** Section labels are translated in the frontend by stable section id; the
+ *  engine-provided label is only a fallback for unknown ids. */
+export function contextSectionLabel(
+  t: Translate,
+  id: AIContextKey,
+  variant: "ai" | "companion",
+  fallback: string,
+): string {
+  const key = id === "current_scene" && variant === "companion"
+    ? "ai.context.section.current_scene.companion"
+    : `ai.context.section.${id}`;
+  const label = t(key);
+  return label === key ? fallback : label;
+}
+
+export function AIContextChecklistList({ preview, selection, onSelectionChange, disabled = false, variant = "ai" }: ListProps) {
   const { t } = useI18n();
   const [openId, setOpenId] = useState<AIContextKey | null>(null);
 
@@ -49,6 +68,7 @@ export function AIContextChecklistList({ preview, selection, onSelectionChange, 
       {preview.sections.map((section) => {
         const checked = section.present && selection[section.id];
         const canToggle = section.present && !disabled;
+        const label = contextSectionLabel(t, section.id, variant, section.label);
         return (
           <li key={section.id} className={section.present ? "" : "off"}>
             <div className="ai-context-row">
@@ -60,7 +80,7 @@ export function AIContextChecklistList({ preview, selection, onSelectionChange, 
                   disabled={!canToggle}
                   onChange={(e) => onSelectionChange({ ...selection, [section.id]: e.target.checked })}
                 />
-                <span>{section.label}</span>
+                <span>{label}</span>
               </label>
               <span className="ai-context-meta">
                 {section.count > 0 && <span className="n">{formatCount(section, t)}</span>}
@@ -71,7 +91,7 @@ export function AIContextChecklistList({ preview, selection, onSelectionChange, 
                 className="ai-preview-toggle"
                 onClick={() => setOpenId((id) => (id === section.id ? null : section.id))}
                 disabled={!section.present}
-                aria-label={t("ai.context.preview", { label: section.label })}
+                aria-label={t("ai.context.preview", { label })}
               >
                 {openId === section.id ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
               </button>

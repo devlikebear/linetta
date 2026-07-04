@@ -1368,6 +1368,7 @@ export function CompanionPanel({
                 selection={contextSelection}
                 onSelectionChange={setContextSelection}
                 disabled={isBusy}
+                variant="companion"
               />
             )}
             <div className="companion-reference-panel">

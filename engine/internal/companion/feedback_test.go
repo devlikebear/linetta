@@ -10,7 +10,7 @@ func TestFriendlyToolLabel(t *testing.T) {
 		"something_else":    "도구 실행 중: something_else",
 	}
 	for name, want := range cases {
-		if got := friendlyToolLabel(name); got != want {
+		if got := friendlyToolLabel(name, ""); got != want {
 			t.Errorf("friendlyToolLabel(%q) = %q, want %q", name, got, want)
 		}
 	}

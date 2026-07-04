@@ -1858,7 +1858,9 @@ export function Workspace() {
                 const args = {
                   nodeId: load.node.id,
                   prompt: promptText,
-                  options: aiOptions,
+                  // Inject the current UI language at send time so the engine
+                  // builds prompts (and the AI responds) in that language.
+                  options: { ...aiOptions, language },
                   selectionText,
                 };
                 if (variationsOn) gen.startVariations(args, 3);

@@ -59,6 +59,7 @@ type companionHistoryParams struct {
 	NodeID    string `json:"node_id"`
 	Scope     string `json:"scope"`
 	Limit     int    `json:"limit"`
+	Language  string `json:"language"`
 }
 
 type companionMessage struct {
@@ -107,7 +108,7 @@ func CompanionCompact(svc *companion.Service, now Clock) rpc.Handler {
 			NodeID:    p.NodeID,
 			Scope:     p.Scope,
 			Limit:     p.Limit,
-		}, func() int64 { return now() })
+		}, p.Language, func() int64 { return now() })
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

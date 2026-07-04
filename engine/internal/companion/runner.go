@@ -106,7 +106,19 @@ type reasoningPayload struct {
 
 // friendlyToolLabel maps a tool name to a human-readable status shown while the
 // companion is working, so the user sees what the AI is doing.
-func friendlyToolLabel(name string) string {
+func friendlyToolLabel(name, lang string) string {
+	if isEnglish(lang) {
+		switch name {
+		case "web_search":
+			return "Searching the web…"
+		case "web_fetch":
+			return "Reading a web page…"
+		case "linetta_apply_ops":
+			return "Applying story changes…"
+		default:
+			return "Running tool: " + name
+		}
+	}
 	switch name {
 	case "web_search":
 		return "웹 검색 중…"
@@ -117,6 +129,24 @@ func friendlyToolLabel(name string) string {
 	default:
 		return "도구 실행 중: " + name
 	}
+}
+
+// appliedStatusText is the transient status shown after linetta_apply_ops
+// finishes during a run.
+func appliedStatusText(lang string) string {
+	if isEnglish(lang) {
+		return "Story state updated"
+	}
+	return "작품 설정을 갱신했습니다"
+}
+
+// cancelledMessage is the assistant history entry recorded when a run is
+// cancelled by the user.
+func cancelledMessage(lang string) string {
+	if isEnglish(lang) {
+		return "Request stopped."
+	}
+	return "요청을 중지했습니다."
 }
 
 // Runner manages companion run lifecycle + cancellation.
@@ -229,7 +259,7 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, sele
 			return "", err
 		}
 	}
-	go r.run(runCtx, runID, projectID, nodeID, scope, path, text, msgs, client, intent, now)
+	go r.run(runCtx, runID, projectID, nodeID, scope, path, text, msgs, client, intent, language, now)
 	return runID, nil
 }
 
@@ -286,7 +316,7 @@ func (r *Runner) cancel(runID string) error {
 const maxQueryRounds = 3
 const applyOpsToolName = "linetta_apply_ops"
 
-func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path, userText string, msgs []llm.ChatMessage, client llm.Client, intent companionIntent, now func() int64) {
+func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path, userText string, msgs []llm.ChatMessage, client llm.Client, intent companionIntent, language string, now func() int64) {
 	defer r.finish(runID)
 
 	intentName := string(intent.Kind)
@@ -308,7 +338,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 			if evt.ToolName == applyOpsToolName {
 				applyOpsAttempted = true
 			}
-			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(evt.ToolName)})
+			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(evt.ToolName, language)})
 		case agentloop.EventAfterTool:
 			if evt.ToolName == applyOpsToolName && !evt.ToolIsError {
 				applyOpsSucceeded = true
@@ -318,7 +348,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 						sceneTextSucceeded = true
 					}
 				}
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: "작품 설정을 갱신했습니다"})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: appliedStatusText(language)})
 			}
 		}
 	}))
@@ -344,9 +374,9 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 			if forcedApplyOps && !applyOpsSucceeded && !applyOpsCorrectionUsed {
 				applyOpsCorrectionUsed = true
 				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: ""})
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(applyOpsToolName)})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(applyOpsToolName, language)})
 				dedup = streamdedup.New()
-				return directApplyCorrectionPrompt(userText, intent), nil
+				return directApplyCorrectionPrompt(userText, intent, language), nil
 			}
 			if queryRounds >= maxQueryRounds-1 {
 				return "", nil
@@ -354,16 +384,16 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 			full := lastResp.Message.Content
 			if qr, present, qerr := ParseQuery(full); present && qerr == nil {
 				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: ""})
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: querySummary(qr)})
+				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: querySummary(qr, language)})
 				queryRounds++
 				dedup = streamdedup.New()
-				return r.svc.runQueries(ctx, projectID, qr.Queries), nil
+				return r.svc.runQueries(ctx, projectID, qr.Queries, language), nil
 			}
 			return "", nil
 		},
 	})
 	if ctx.Err() != nil {
-		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusCancelled, "요청을 중지했습니다.", now())
+		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusCancelled, cancelledMessage(language), now())
 		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName})
 		return
 	}
@@ -377,7 +407,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 		full = dedup.Final()
 	}
 	if forcedApplyOps && !applyOpsSucceeded {
-		if result, ok := r.applyDirectProposalFallback(ctx, runID, projectID, nodeID, scope, userText, full, intent, now); ok {
+		if result, ok := r.applyDirectProposalFallback(ctx, runID, projectID, nodeID, scope, userText, full, intent, language, now); ok {
 			applyOpsFallbackApplied = true
 			applyOpsSucceeded = true
 			lastApplyOpsResult = result
@@ -387,21 +417,21 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 		}
 	}
 	if applyOpsAttempted && !applyOpsSucceeded && strings.TrimSpace(full) == "" {
-		msg := applyOpsFailedMessage()
+		msg := applyOpsFailedMessage(language)
 		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusFailed, msg, now())
 		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: msg})
 		return
 	}
 	if intent.RequiresSceneText() && !sceneTextSucceeded {
-		msg := sceneTextApplyFailedMessage()
+		msg := sceneTextApplyFailedMessage(language)
 		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusFailed, msg, now())
 		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: msg})
 		return
 	}
 	if intent.RequiresSceneText() && sceneTextSucceeded {
-		full = sceneTextApplySuccessMessage(lastApplyOpsResult)
+		full = sceneTextApplySuccessMessage(lastApplyOpsResult, language)
 	} else if applyOpsFallbackApplied {
-		full = applyOpsFallbackSuccessMessage(lastApplyOpsResult)
+		full = applyOpsFallbackSuccessMessage(lastApplyOpsResult, language)
 	}
 
 	assistantAt := now()
@@ -441,7 +471,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 	_ = r.svc.notify.Notify("companion.done", donePayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, FullText: full})
 }
 
-func (r *Runner) applyDirectProposalFallback(ctx context.Context, runID, projectID, nodeID, scope, userText, full string, intent companionIntent, now func() int64) (ApplyOpsResult, bool) {
+func (r *Runner) applyDirectProposalFallback(ctx context.Context, runID, projectID, nodeID, scope, userText, full string, intent companionIntent, language string, now func() int64) (ApplyOpsResult, bool) {
 	prop, present, err := ParseProposal(full)
 	if !present || err != nil {
 		return ApplyOpsResult{}, false
@@ -450,7 +480,7 @@ func (r *Runner) applyDirectProposalFallback(ctx context.Context, runID, project
 		return ApplyOpsResult{}, false
 	}
 	intentName := string(intent.Kind)
-	_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(applyOpsToolName)})
+	_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(applyOpsToolName, language)})
 	result := r.svc.ApplyOps(ctx, projectID, nodeID, prop, now)
 	if result.Applied > 0 {
 		_ = r.svc.notify.Notify("companion.applied", appliedPayload{
@@ -467,7 +497,7 @@ func (r *Runner) applyDirectProposalFallback(ctx context.Context, runID, project
 	if result.Applied == 0 || result.isError() {
 		return result, false
 	}
-	_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: "작품 설정을 갱신했습니다"})
+	_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: appliedStatusText(language)})
 	return result, true
 }
 
@@ -492,10 +522,13 @@ func (r *Runner) recordAssistantHistory(runID, projectID, nodeID, scope string, 
 }
 
 // querySummary returns a short "조회 중: toolA, toolB" status string.
-func querySummary(qr QueryRequest) string {
+func querySummary(qr QueryRequest, lang string) string {
 	names := make([]string, 0, len(qr.Queries))
 	for _, q := range qr.Queries {
 		names = append(names, q.Tool)
+	}
+	if isEnglish(lang) {
+		return "Looking up: " + strings.Join(names, ", ")
 	}
 	return "조회 중: " + strings.Join(names, ", ")
 }
@@ -528,7 +561,33 @@ func applyOpsResultHasSceneTextChange(result ApplyOpsResult) bool {
 	return false
 }
 
-func sceneTextApplySuccessMessage(result ApplyOpsResult) string {
+func sceneTextApplySuccessMessage(result ApplyOpsResult, lang string) string {
+	if isEnglish(lang) {
+		if len(result.ChangedNodes) == 0 {
+			return "Applied the current scene text."
+		}
+		change := result.ChangedNodes[0]
+		var b strings.Builder
+		if change.CharCount > 0 {
+			fmt.Fprintf(&b, "Applied the current scene text. (%d chars)", change.CharCount)
+		} else {
+			b.WriteString("Applied the current scene text.")
+		}
+		b.WriteString("\n\nWork log\n")
+		if strings.TrimSpace(result.Summary) != "" {
+			b.WriteString("- Request: ")
+			b.WriteString(strings.TrimSpace(result.Summary))
+			b.WriteString("\n")
+		}
+		b.WriteString("- Wrote the prose from the current scene's context and your instructions.\n")
+		b.WriteString("- Applied the draft directly as the current scene text.")
+		if preview := sceneTextPreviewForMessage(change.TextPreview); preview != "" {
+			b.WriteString("\n- Opening: \"")
+			b.WriteString(preview)
+			b.WriteString("\"")
+		}
+		return b.String()
+	}
 	if len(result.ChangedNodes) == 0 {
 		return "현재 씬 본문을 반영했습니다."
 	}
@@ -555,8 +614,24 @@ func sceneTextApplySuccessMessage(result ApplyOpsResult) string {
 	return b.String()
 }
 
-func applyOpsFallbackSuccessMessage(result ApplyOpsResult) string {
+func applyOpsFallbackSuccessMessage(result ApplyOpsResult, lang string) string {
 	count := result.Applied
+	if isEnglish(lang) {
+		if count <= 0 {
+			return "Applied the story state changes."
+		}
+		var b strings.Builder
+		if count == 1 {
+			b.WriteString("Applied the story state changes.")
+		} else {
+			fmt.Fprintf(&b, "Applied %d changes to the story state.", count)
+		}
+		if strings.TrimSpace(result.Summary) != "" {
+			b.WriteString("\n\nWork log\n- Request: ")
+			b.WriteString(strings.TrimSpace(result.Summary))
+		}
+		return b.String()
+	}
 	if count <= 0 {
 		return "작품 상태를 반영했습니다."
 	}
@@ -578,16 +653,41 @@ func sceneTextPreviewForMessage(preview string) string {
 	return trimRunesLocal(preview, 80)
 }
 
-func sceneTextApplyFailedMessage() string {
+func sceneTextApplyFailedMessage(lang string) string {
+	if isEnglish(lang) {
+		return "No text change was produced. Try again or check the current scene."
+	}
 	return "본문 변경이 만들어지지 않았습니다. 다시 시도하거나 현재 씬을 확인해주세요."
 }
 
-func applyOpsFailedMessage() string {
+func applyOpsFailedMessage(lang string) string {
+	if isEnglish(lang) {
+		return "Could not apply the story changes. Please try again."
+	}
 	return "작품 변경을 적용하지 못했습니다. 다시 시도해주세요."
 }
 
-func directApplyCorrectionPrompt(userText string, intent companionIntent) string {
+func directApplyCorrectionPrompt(userText string, intent companionIntent, lang string) string {
 	userText = strings.TrimSpace(userText)
+	if isEnglish(lang) {
+		if userText == "" {
+			userText = "(no original text)"
+		}
+		if intent.RequiresSceneText() {
+			return "The user's last request is an actual story-state change request, not a question or proposal. " +
+				"It asks you to write/revise/finalize the current scene text, so do not end with more questions or options. " +
+				"Write readable scene prose from the current scene, surrounding flow, and the user's instructions, " +
+				"and you MUST replace the actual scene text via linetta_apply_ops set_scene_text. " +
+				"Do not merely claim you changed it — call the tool.\n\n" +
+				"User request: " + userText
+		}
+		return "The user's last request is an actual story-state change request, not a question or proposal. " +
+			"Do not merely claim you changed it — call linetta_apply_ops to apply it to the story state. " +
+			"If it asks to rewrite/revise/expand/polish the current scene text, replace the actual prose via set_scene_text. " +
+			"If it is an outline/table-of-contents request, build the left outline tree with create_outline_node or create_scene, attaching create_thread/add_beat to those nodes as needed. " +
+			"If you cannot apply it with the information at hand, do not apply — ask one sentence for the missing detail.\n\n" +
+			"User request: " + userText
+	}
 	if userText == "" {
 		userText = "(원문 없음)"
 	}
@@ -612,6 +712,10 @@ var companionStructureTerms = []string{
 	"장소", "씬", "장면", "개요", "요약", "기억", "설정", "세계관",
 	"시놉시스", "아웃라인", "얼개", "구조", "챕터", "막", "파트",
 	"에피소드", "회차", "본문", "원고", "문장",
+	// English equivalents (input is lower-cased before matching).
+	"storyline", "plot", "beat", "character", "relationship", "place",
+	"scene", "overview", "synopsis", "outline", "structure", "chapter",
+	"episode", "manuscript", "prose", "draft", "worldbuilding", "lore",
 }
 
 var companionMutationTerms = []string{
@@ -620,15 +724,24 @@ var companionMutationTerms = []string{
 	"써", "짜", "구성", "잡아", "세워", "완성", "나눠", "나누",
 	"쪼개", "분할", "세분", "구체화", "확장", "전개", "다듬",
 	"고쳐", "재작성", "초기화", "비워", "채워",
+	// English equivalents.
+	"write", "add", "create", "make", "change", "update", "save",
+	"delete", "remove", "revise", "rewrite", "expand", "split",
+	"refine", "organize", "polish", "fill in", "clear", "edit",
 }
 
 var companionEducationalTerms = []string{
 	"작성법", "방법", "어떻게", "가이드",
+	// English equivalents.
+	"how to", "how do", "how can", "guide", "method",
 }
 
 var companionResearchTerms = []string{
 	"검색", "찾아", "조사", "웹", "web", "url", "링크", "자료", "최신",
 	"레퍼런스",
+	// English equivalents.
+	"search", "find", "look up", "research", "link", "reference",
+	"latest", "source",
 }
 
 var companionDirectApplyTerms = []string{
@@ -637,11 +750,17 @@ var companionDirectApplyTerms = []string{
 	"짜줘", "짜 줘", "구성해", "잡아줘", "잡아 줘", "세워줘", "세워 줘",
 	"나눠줘", "나눠 줘", "쪼개줘", "쪼개 줘", "구체화해", "확장해",
 	"전개해", "다듬어", "고쳐줘", "고쳐 줘", "재작성해",
+	// English direct-request markers.
+	"please", "go ahead", "do it", "apply it", "write it", "make it",
+	"add it", "save it", "update it", "just write", "just apply",
 }
 
 var companionDiscussionTerms = []string{
 	"어때", "추천", "아이디어", "설명", "알려", "검토", "브레인스토밍",
 	"가능할까", "괜찮을까",
+	// English equivalents.
+	"what do you think", "recommend", "suggestion", "idea", "explain",
+	"tell me", "review", "brainstorm", "what if", "thoughts",
 }
 
 func containsAny(s string, terms []string) bool {

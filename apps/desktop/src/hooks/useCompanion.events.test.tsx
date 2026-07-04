@@ -1,4 +1,5 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook as baseRenderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_AI_CONTEXT_SELECTION } from "../components/ai/AIContextChecklist";
 
@@ -11,13 +12,20 @@ vi.mock("@tauri-apps/api/event", () => ({
   },
 }));
 
-const rpc = vi.hoisted(() => ({ history: vi.fn(), send: vi.fn(), cancel: vi.fn(), clear: vi.fn(), compact: vi.fn() }));
+const rpc = vi.hoisted(() => ({ history: vi.fn(), send: vi.fn(), cancel: vi.fn(), clear: vi.fn(), compact: vi.fn(), settingsGet: vi.fn() }));
 vi.mock("../lib/rpc", () => ({
   companion: { history: rpc.history, send: rpc.send, cancel: rpc.cancel, clear: rpc.clear, compact: rpc.compact },
+  settings: { get: rpc.settingsGet },
 }));
 
 import { stripProposalBlock } from "../lib/companionDisplay";
+import { I18nProvider } from "../lib/i18n";
 import { __resetCompanionSessionStoreForTests, classifyAISetupIssue, useCompanion } from "./useCompanion";
+
+// useCompanion reads the app language via useI18n, so every hook render
+// needs the provider. Shadow renderHook to inject it once.
+const i18nWrapper = ({ children }: { children: ReactNode }) => <I18nProvider>{children}</I18nProvider>;
+const renderHook: typeof baseRenderHook = (cb, options) => baseRenderHook(cb, { wrapper: i18nWrapper, ...options });
 
 function fire(event: string, payload: unknown) {
   const cb = ev.listeners.get(event);
@@ -59,6 +67,7 @@ describe("useCompanion streaming", () => {
     __resetCompanionSessionStoreForTests();
     vi.clearAllMocks();
     ev.listeners.clear();
+    rpc.settingsGet.mockResolvedValue({ language: "ko" });
     rpc.history.mockResolvedValue([]);
     rpc.send.mockResolvedValue({ run_id: "r1" });
     rpc.cancel.mockResolvedValue({ ok: true });
@@ -153,7 +162,7 @@ describe("useCompanion streaming", () => {
       await result.current.send("본문은 빼고 봐줘");
     });
 
-    expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "본문은 빼고 봐줘", { context: selection });
+    expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "본문은 빼고 봐줘", { context: selection, language: "ko" });
   });
 
   it("passes companion image attachments with the selected context", async () => {
@@ -171,7 +180,7 @@ describe("useCompanion streaming", () => {
       await result.current.send("이미지 참고해줘", [image]);
     });
 
-    expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "이미지 참고해줘", { context: selection, images: [image] });
+    expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "이미지 참고해줘", { context: selection, images: [image], language: "ko" });
   });
 
   it("loads persisted transcript separately for each scene scope", async () => {
@@ -225,7 +234,7 @@ describe("useCompanion streaming", () => {
     });
 
     expect(rpc.history).toHaveBeenCalledWith("p1", null, "project");
-    expect(rpc.send).toHaveBeenCalledWith("p1", "", "작품 전체 플롯 봐줘", { scope: "project" });
+    expect(rpc.send).toHaveBeenCalledWith("p1", "", "작품 전체 플롯 봐줘", { scope: "project", language: "ko" });
   });
 
   it("passes the selected outline structure to companion turns", async () => {
@@ -241,6 +250,7 @@ describe("useCompanion streaming", () => {
     expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "아웃라인 작성해줘", {
       context: selection,
       outline_structure: outlineStructure,
+      language: "ko",
     });
   });
 
@@ -294,6 +304,7 @@ describe("useCompanion streaming", () => {
 
     expect(rpc.send).toHaveBeenCalledWith("p1", "n1", "현재 씬 본문 써줘", {
       intent: { kind: "scene_write", target_node_id: "n1", apply_policy: "direct" },
+      language: "ko",
     });
   });
 
@@ -403,7 +414,7 @@ describe("useCompanion streaming", () => {
       await result.current.compact();
     });
 
-    expect(rpc.compact).toHaveBeenCalledWith("p1", "n1", "scene");
+    expect(rpc.compact).toHaveBeenCalledWith("p1", "n1", "scene", "ko");
     expect(result.current.messages).toEqual([
       { role: "assistant", content: "이전 컴패니언 대화 요약\n- 나: 긴 질문" },
     ]);
