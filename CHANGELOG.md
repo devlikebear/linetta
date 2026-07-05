@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.1 - 2026-07-05
+
+- Localized every AI surface for the selected app language (Korean/English/Japanese): the companion, inline editor AI, contextual edit, and Fact Book now build prompts and reply in the app language, including tool status text, apply results, and query outputs.
+- Translated canonical outline node labels (부/장/씬, 권/화) in AI prompts and the workspace UI, so an English or Japanese UI shows Arc 1/Episode 1 or 第1巻/第1話 instead of raw Korean labels.
+- Added English and Japanese keywords to the companion's intent detection so requests like "rewrite this scene" or 「書き直して」 apply changes directly, matching the Korean behavior.
+- Added an English (U.S.) App Store listing.
+
 ## v0.9.0 - 2026-06-24
 
 - Promoted desktop distribution to a public release: the macOS app is Developer ID signed and notarized through the Homebrew tap, with Windows (NSIS/MSI) and Linux (AppImage/deb/rpm) prebuilt installers published on every GitHub Release.
