@@ -22,6 +22,12 @@ describe("displayNodeLabel", () => {
     expect(displayNodeLabel("en", "1장")).toBe("Chapter 1");
   });
 
+  it("translates novel part labels", () => {
+    expect(displayNodeLabel("en", "1부")).toBe("Part 1");
+    expect(displayNodeLabel("ja", "2부")).toBe("第2部");
+    expect(displayNodeLabel("ko", "1부")).toBe("1부");
+  });
+
   it("passes through unknown labels unchanged", () => {
     expect(displayNodeLabel("en", "Prologue")).toBe("Prologue");
   });

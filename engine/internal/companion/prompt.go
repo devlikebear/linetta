@@ -8,6 +8,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -229,7 +230,7 @@ func buildContext(d PromptData, language string) string {
 		b.WriteString(lbl("## 아웃라인 트리 (기존 구조 — node_id)\n", "## Outline Tree (existing structure — node_id)\n", "## アウトラインツリー（既存構造 — node_id）\n"))
 		for _, n := range d.OutlineNodes {
 			indent := strings.Repeat("  ", n.Depth)
-			line := fmt.Sprintf("%s- [%s] (%s) %s", indent, n.ID, n.Kind, n.Label)
+			line := fmt.Sprintf("%s- [%s] (%s) %s", indent, n.ID, n.Kind, node.DisplayLabel(n.Label, language))
 			if strings.TrimSpace(n.Title) != "" {
 				line += " — " + strings.TrimSpace(n.Title)
 			}
@@ -299,7 +300,7 @@ func buildContext(d PromptData, language string) string {
 			if s.IsCurrent {
 				current = lbl(" (현재 씬)", " (current scene)", "（現在のシーン）")
 			}
-			b.WriteString(fmt.Sprintf("### [%s] %s%s\n", s.NodeID, s.Label, current))
+			b.WriteString(fmt.Sprintf("### [%s] %s%s\n", s.NodeID, node.DisplayLabel(s.Label, language), current))
 			b.WriteString(strings.TrimSpace(s.Text))
 			b.WriteString("\n\n")
 		}
@@ -314,11 +315,11 @@ func buildContext(d PromptData, language string) string {
 	if d.HasSpine {
 		b.WriteString(lbl("## 씬 (비트를 붙일 수 있는 실제 씬 — node_id)\n", "## Scenes (actual scenes that can have beats attached — node_id)\n", "## シーン（ビートを付けられる実際のシーン — node_id）\n"))
 		if d.Spine.Prev != nil {
-			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(이전 씬)", "(prev scene)", "（前のシーン）")+"\n", d.Spine.Prev.NodeID, d.Spine.Prev.Label))
+			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(이전 씬)", "(prev scene)", "（前のシーン）")+"\n", d.Spine.Prev.NodeID, node.DisplayLabel(d.Spine.Prev.Label, language)))
 		}
-		b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(현재 씬)", "(current scene)", "（現在のシーン）")+"\n", d.Spine.Current.NodeID, d.Spine.Current.Label))
+		b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(현재 씬)", "(current scene)", "（現在のシーン）")+"\n", d.Spine.Current.NodeID, node.DisplayLabel(d.Spine.Current.Label, language)))
 		if d.Spine.Next != nil {
-			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(다음 씬)", "(next scene)", "（次のシーン）")+"\n", d.Spine.Next.NodeID, d.Spine.Next.Label))
+			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(다음 씬)", "(next scene)", "（次のシーン）")+"\n", d.Spine.Next.NodeID, node.DisplayLabel(d.Spine.Next.Label, language)))
 		}
 		b.WriteString("\n")
 	}

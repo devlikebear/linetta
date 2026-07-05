@@ -105,7 +105,7 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query, la
 		}
 		var sb strings.Builder
 		for _, h := range hits {
-			label := h.Breadcrumb
+			label := node.DisplayBreadcrumb(h.Breadcrumb, lang)
 			if label == "" {
 				label = h.NodeID
 			}
@@ -130,7 +130,7 @@ func (s *Service) runOneQuery(ctx context.Context, projectID string, q Query, la
 			if n.Kind != "leaf" {
 				continue
 			}
-			sb.WriteString("- [" + n.ID + "] " + node.BreadcrumbLabel(byID, n) + "\n")
+			sb.WriteString("- [" + n.ID + "] " + node.DisplayBreadcrumb(node.BreadcrumbLabel(byID, n), lang) + "\n")
 		}
 		if sb.Len() == 0 {
 			return pickLang(lang, "(씬 없음)", "(no scenes)", "（シーンなし）")

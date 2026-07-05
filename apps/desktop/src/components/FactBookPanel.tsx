@@ -21,49 +21,31 @@ interface Props {
   onImpactCheck?: (text: string) => void;
 }
 
-function buildReviewPrompt(sceneLabel: string): string {
-  return [
-    `현재 씬 "${sceneLabel}"에서 웹검색 팩트체크가 필요한 현실 주장 후보를 찾아줘.`,
-    "아직 web_search나 web_fetch를 실행하지 마.",
-    "후보가 있으면 설명은 짧게 하고 linetta-choices 블록 하나로만 보여줘.",
-    "각 options 항목은 반드시 `검색 후 자료집에 저장: <주장>` 형식으로 작성해.",
-    "작가가 후보를 선택하면 그때 web_search와 web_fetch로 출처 URL을 확인하고, create_fact_card로 자료집에 저장해.",
-    "web_fetch가 404/403/본문 부족이면 그 URL은 저장 후보에서 제외하고 대체 출처를 더 찾아.",
-    "web_search API 키가 없어 실패하면 포기하지 말고 작가에게 출처 URL 직접 입력을 요청해. 작가가 URL을 입력하면 web_fetch로 확인한 뒤 저장해.",
-    "출처 URL 없는 create_fact_card는 금지야. 후보가 없으면 짧게 이유만 말해.",
-  ].join("\n");
+// The fact-check flows send user-turn prompts to the companion, so they are
+// localized like every other frontend string; the choice-prefix strip accepts
+// all supported languages because a transcript can mix them.
+type Translate = ReturnType<typeof useI18n>["t"];
+
+function buildReviewPrompt(t: Translate, sceneLabel: string): string {
+  return t("factBook.ai.review", { sceneLabel, savePrefix: t("factBook.ai.savePrefix") });
 }
 
+const CHOICE_SAVE_PREFIXES = /^(?:검색 후 자료집에 저장|Save to dossier after search|検索して資料集に保存):\s*/i;
+
 function claimFromChoice(text: string): string {
-  return text.replace(/^검색 후 자료집에 저장:\s*/i, "").trim();
+  return text.replace(CHOICE_SAVE_PREFIXES, "").trim();
 }
 
 function normalizeClaim(text: string): string {
   return text.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function buildFactCheckPrompt(claim: string): string {
-  return [
-    `선택한 주장: ${claim}`,
-    "지금 바로 web_search로 신뢰 가능한 출처 후보를 찾고, 최소 1개 URL은 web_fetch로 본문 접근을 확인해.",
-    "web_fetch가 404/403/본문 부족이면 그 URL은 저장 후보에서 제외하고 같은 턴에 대체 출처를 더 검색해.",
-    "확인된 출처 URL이 있으면 같은 턴에 linetta_apply_ops의 create_fact_card로 자료집에 저장해.",
-    "create_fact_card 호출 없이 저장 완료라고 말하지 마. 저장이 실패하면 실패 이유와 필요한 다음 행동만 짧게 말해.",
-    "web_search나 web_fetch가 실패하면 포기하지 말고 출처 URL 직접 입력을 요청해.",
-  ].join("\n");
+function buildFactCheckPrompt(t: Translate, claim: string): string {
+  return t("factBook.ai.factCheck", { claim });
 }
 
-function buildAlternativeSourcePrompt(claim: string, failedURL: string, error: string): string {
-  return [
-    `선택한 주장: ${claim}`,
-    `방금 이 출처 URL은 앱의 저장 경로에서 실패했습니다: ${failedURL}`,
-    `실패 이유: ${error}`,
-    "이 URL은 저장 후보에서 제외해.",
-    "지금 바로 web_search로 신뢰 가능한 대체 출처 후보를 찾고, 최소 1개 URL은 web_fetch로 본문 접근을 확인해.",
-    "web_fetch가 404/403/본문 부족이면 그 URL도 저장 후보에서 제외하고 같은 턴에 대체 출처를 더 검색해.",
-    "확인된 출처 URL이 있으면 같은 턴에 linetta_apply_ops의 create_fact_card로 자료집에 저장해.",
-    "확인된 대체 출처가 없으면 저장했다고 말하지 말고, 출처 URL 직접 입력만 요청해.",
-  ].join("\n");
+function buildAlternativeSourcePrompt(t: Translate, claim: string, failedURL: string, error: string): string {
+  return t("factBook.ai.altSource", { claim, failedURL, error });
 }
 
 function firstURL(text: string): string {
@@ -260,7 +242,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     setReviewing(true);
     try {
       await beforeReview?.();
-      await send(buildReviewPrompt(sceneLabel));
+      await send(buildReviewPrompt(t, sceneLabel));
     } finally {
       setReviewing(false);
     }
@@ -278,7 +260,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     markFeedbackStart();
     void (async () => {
       await beforeReview?.();
-      await send(buildFactCheckPrompt(claim));
+      await send(buildFactCheckPrompt(t, claim));
     })();
   }, [beforeReview, busy, directSaving, selectedClaimRequest, send]);
 
@@ -308,7 +290,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     setSourceRetry(null);
     setAwaitingFactSave(Boolean(claim));
     markFeedbackStart();
-    void send(claim ? buildFactCheckPrompt(claim) : text);
+    void send(claim ? buildFactCheckPrompt(t, claim) : text);
   };
 
   const retryAlternativeSource = () => {
@@ -321,7 +303,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     markFeedbackStart();
     setFeedbackKind("ok");
     setFeedbackNote(t("factBook.retryingSource"));
-    void send(buildAlternativeSourcePrompt(retry.claim, retry.url, retry.error));
+    void send(buildAlternativeSourcePrompt(t, retry.claim, retry.url, retry.error));
   };
 
   const focusReplyInput = () => {

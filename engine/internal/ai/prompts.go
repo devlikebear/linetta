@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/tars/pkg/llm"
 )
@@ -197,7 +198,7 @@ func buildUser(c Context) string {
 	if len(c.Hierarchical.NearbyLeafSummaries) > 0 {
 		b.WriteString(langPick(lang, "## 직전·직후 씬 발췌\n", "## Adjacent Scene Excerpts\n", "## 前後シーンの抜粋\n"))
 		for _, ss := range c.Hierarchical.NearbyLeafSummaries {
-			b.WriteString(fmt.Sprintf("- [%s] %s\n", ss.Label, ss.Body))
+			b.WriteString(fmt.Sprintf("- [%s] %s\n", node.DisplayBreadcrumb(ss.Label, lang), ss.Body))
 		}
 		b.WriteString("\n")
 	}
@@ -205,13 +206,13 @@ func buildUser(c Context) string {
 	if len(c.RelatedScenes) > 0 {
 		b.WriteString(langPick(lang, "## 관련 과거 씬\n", "## Related Past Scenes\n", "## 関連する過去シーン\n"))
 		for _, ss := range c.RelatedScenes {
-			b.WriteString(fmt.Sprintf("- [%s] %s\n", ss.Label, ss.Body))
+			b.WriteString(fmt.Sprintf("- [%s] %s\n", node.DisplayBreadcrumb(ss.Label, lang), ss.Body))
 		}
 		b.WriteString("\n")
 	}
 
 	if strings.TrimSpace(c.SceneText) != "" {
-		b.WriteString(fmt.Sprintf(langPick(lang, "## 현재 씬: %s\n", "## Current Scene: %s\n", "## 現在のシーン: %s\n"), c.SceneLabel))
+		b.WriteString(fmt.Sprintf(langPick(lang, "## 현재 씬: %s\n", "## Current Scene: %s\n", "## 現在のシーン: %s\n"), node.DisplayBreadcrumb(c.SceneLabel, lang)))
 		b.WriteString(c.SceneText)
 		b.WriteString("\n\n")
 	}
