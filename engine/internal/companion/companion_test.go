@@ -863,7 +863,7 @@ func TestCompactHistory_RewritesTranscriptAsSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	msgs, err := svc.CompactHistory(context.Background(), projectID, func() int64 { return 2000 })
+	msgs, err := svc.CompactHistory(context.Background(), projectID, "", func() int64 { return 2000 })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1056,7 +1056,7 @@ func TestApplyContextSelection_RemovesUncheckedCompanionSections(t *testing.T) {
 		Memories:      &off,
 	}
 
-	text := buildContext(applyContextSelection(data, selection))
+	text := buildContext(applyContextSelection(data, selection), "")
 	for _, blocked := range []string{
 		"자의식에 관한 작품 개요",
 		"인간의 개별성",
@@ -1137,7 +1137,7 @@ func TestBuildContext_RendersReferencesByPurpose(t *testing.T) {
 			},
 		},
 	}
-	text := buildContext(data)
+	text := buildContext(data, "")
 	for _, want := range []string{
 		"## 추가 레퍼런스",
 		"문체 참고",
@@ -1163,7 +1163,7 @@ func TestApplyContextSelection_RemovesReferences(t *testing.T) {
 			Status:  ReferenceStatusActive,
 		}},
 	}
-	text := buildContext(applyContextSelection(data, ai.ContextSelection{References: &off}))
+	text := buildContext(applyContextSelection(data, ai.ContextSelection{References: &off}), "")
 	if strings.Contains(text, "프롬프트에 들어가면 안 되는") {
 		t.Fatalf("unchecked reference still rendered:\n%s", text)
 	}

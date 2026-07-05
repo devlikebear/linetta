@@ -54,7 +54,7 @@ func TestRunQueries(t *testing.T) {
 	out := svc.runQueries(ctx, projectID, []Query{
 		{Tool: "search_entities", Args: map[string]string{"query": "하나"}},
 		{Tool: "bogus"},
-	})
+	}, "")
 	if !strings.Contains(out, "하나") {
 		t.Fatalf("expected entity name in output: %s", out)
 	}
@@ -76,7 +76,7 @@ func TestRunQueries_ListScenes(t *testing.T) {
 	}
 	firstSceneID := *p.LastOpenedNodeID
 
-	out := svc.runOneQuery(ctx, projectID, Query{Tool: "list_scenes"})
+	out := svc.runOneQuery(ctx, projectID, Query{Tool: "list_scenes"}, "")
 	if !strings.Contains(out, firstSceneID) {
 		t.Fatalf("list_scenes should list the first scene id %q:\n%s", firstSceneID, out)
 	}
@@ -100,12 +100,12 @@ func TestRunQueries_SearchManuscript(t *testing.T) {
 
 	out := svc.runOneQuery(ctx, projectID, Query{Tool: "search_manuscript", Args: map[string]string{
 		"query": "진홍빛",
-	}})
+	}}, "")
 	if !strings.Contains(out, *p.LastOpenedNodeID) || !strings.Contains(out, "진홍빛") {
 		t.Fatalf("search_manuscript output missing node id or snippet:\n%s", out)
 	}
 
-	out = svc.runOneQuery(ctx, projectID, Query{Tool: "search_manuscript", Args: map[string]string{}})
+	out = svc.runOneQuery(ctx, projectID, Query{Tool: "search_manuscript", Args: map[string]string{}}, "")
 	if !strings.Contains(out, "query 필요") {
 		t.Fatalf("empty query should return parameter error, got:\n%s", out)
 	}

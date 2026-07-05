@@ -139,6 +139,7 @@ export interface ContextChangeInput extends ResolveTargetInput {
   old_terms?: string[];
   new_terms?: string[];
   review_only?: boolean;
+  language?: string;
 }
 
 export interface MetadataCandidate {
@@ -189,6 +190,7 @@ export interface ConsistencyInput {
   old_terms: string[];
   new_terms?: string[];
   changed_entity_ids?: string[];
+  language?: string;
 }
 
 export interface ConsistencyIssue {
@@ -295,6 +297,8 @@ export interface AIOptions {
   short_form: boolean;
   context?: AIContextSelection;
   outline_structure?: string;
+  /** App UI language; the engine switches AI prompts to English for "en". */
+  language?: string;
 }
 
 export type CompanionIntentKind =

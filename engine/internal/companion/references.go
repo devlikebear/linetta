@@ -316,7 +316,7 @@ func deterministicReferenceSummary(ref Reference) string {
 		return ""
 	}
 	return fmt.Sprintf("%s · %s · 원문 %d자 중 발췌 요약\n%s",
-		purposeLabel(ref.Purpose), ref.Title, ref.CharCount, body)
+		purposeLabel(ref.Purpose, ""), ref.Title, ref.CharCount, body)
 }
 
 func referencePromptText(ref Reference) string {

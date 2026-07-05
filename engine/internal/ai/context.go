@@ -687,7 +687,7 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 	add(ContextKeyEntities, "세계관 요소", len(c.Entities), renderEntitiesPreview(c.Entities), false)
 	add(ContextKeyRelationships, "관계", len(c.Relationships), renderRelationshipsPreview(c.Relationships), false)
 	add(ContextKeyNotes, "작가 주석", len(c.Notes), renderNotesPreview(c.Notes), false)
-	if meta := renderProjectMeta(c.Project); meta != "" {
+	if meta := renderProjectMeta(c.Project, ""); meta != "" {
 		add(ContextKeyProjectMeta, "작품 설정 (장르/분량/시점)", countProjectMeta(c.Project), meta, false)
 	} else {
 		add(ContextKeyProjectMeta, "작품 설정 (장르/분량/시점)", 0, "", false)
@@ -794,7 +794,7 @@ func renderPlotPreview(spine plot.Spine) string {
 func renderEntitiesPreview(entities []EntityBrief) string {
 	var b strings.Builder
 	for _, e := range entities {
-		b.WriteString(fmt.Sprintf("- @%s — %s", e.Name, kindLabel(e.Kind)))
+		b.WriteString(fmt.Sprintf("- @%s — %s", e.Name, kindLabel(e.Kind, "")))
 		if e.Role != "" {
 			b.WriteString(" / " + e.Role)
 		}

@@ -32,6 +32,17 @@ var (
 	ErrInvalidPlan  = errors.New("invalid contextual edit plan")
 )
 
+// langPick returns the string for the app language; Korean is the default.
+func langPick(lang, ko, en, ja string) string {
+	if strings.HasPrefix(lang, "en") {
+		return en
+	}
+	if strings.HasPrefix(lang, "ja") {
+		return ja
+	}
+	return ko
+}
+
 type ResolveTargetInput struct {
 	ProjectID    string `json:"project_id"`
 	EntityID     string `json:"entity_id,omitempty"`
@@ -59,6 +70,7 @@ type ChangeInput struct {
 	OldTerms     []string `json:"old_terms,omitempty"`
 	NewTerms     []string `json:"new_terms,omitempty"`
 	ReviewOnly   bool     `json:"review_only,omitempty"`
+	Language     string   `json:"language,omitempty"`
 }
 
 type MetadataCandidate struct {
@@ -109,6 +121,7 @@ type ConsistencyInput struct {
 	OldTerms         []string `json:"old_terms"`
 	NewTerms         []string `json:"new_terms,omitempty"`
 	ChangedEntityIDs []string `json:"changed_entity_ids,omitempty"`
+	Language         string   `json:"language,omitempty"`
 }
 
 type ConsistencyIssue struct {
@@ -242,7 +255,7 @@ func (s *Service) PlanContextChange(ctx context.Context, in ChangeInput) (Change
 			ID:       "entity:" + target.EntityIDs[0] + ":name",
 			Kind:     metadataKindEntityName,
 			TargetID: target.EntityIDs[0],
-			Label:    "자료집 이름",
+			Label:    langPick(in.Language, "자료집 이름", "Dossier name", "資料集の名前"),
 			Before:   target.CanonicalName,
 			After:    newTerms[0],
 			Selected: true,
@@ -273,7 +286,7 @@ func (s *Service) PlanContextChange(ctx context.Context, in ChangeInput) (Change
 	}
 	plan.ReviewCandidates = review
 	if len(plan.MetadataCandidates) == 0 && len(plan.ManuscriptPlans) == 0 && len(plan.ReviewCandidates) == 0 {
-		plan.Warnings = append(plan.Warnings, "변경 후보를 찾지 못했습니다.")
+		plan.Warnings = append(plan.Warnings, langPick(in.Language, "변경 후보를 찾지 못했습니다.", "No change candidates were found.", "変更候補が見つかりませんでした。"))
 	}
 	return plan, nil
 }
@@ -345,7 +358,7 @@ func (s *Service) CheckAfterChange(ctx context.Context, in ConsistencyInput) (Co
 				NodeID:     n.ID,
 				Breadcrumb: node.BreadcrumbLabel(byID, n),
 				Snippet:    snippetAround(plain, term),
-				Message:    "원고에 이전 표현이 남아 있습니다.",
+				Message:    langPick(in.Language, "원고에 이전 표현이 남아 있습니다.", "The old term still appears in the manuscript.", "原稿に以前の表現が残っています。"),
 			})
 		}
 	}
@@ -360,7 +373,7 @@ func (s *Service) CheckAfterChange(ctx context.Context, in ConsistencyInput) (Co
 				Severity: "warning",
 				Kind:     IssueMetadataStale,
 				Snippet:  snippetAround(text, term),
-				Message:  "자료집 항목에 이전 표현이 남아 있습니다.",
+				Message:  langPick(in.Language, "자료집 항목에 이전 표현이 남아 있습니다.", "The old term still appears in a dossier entry.", "資料集の項目に以前の表現が残っています。"),
 			})
 		}
 	}
@@ -375,7 +388,7 @@ func (s *Service) CheckAfterChange(ctx context.Context, in ConsistencyInput) (Co
 				Severity: "info",
 				Kind:     IssueReviewNeeded,
 				Snippet:  snippetAround(text, term),
-				Message:  "팩트 카드가 변경 후에도 맞는지 확인이 필요합니다.",
+				Message:  langPick(in.Language, "팩트 카드가 변경 후에도 맞는지 확인이 필요합니다.", "Check whether this fact card is still correct after the change.", "変更後もこのファクトカードが正しいか確認が必要です。"),
 			})
 		}
 	}

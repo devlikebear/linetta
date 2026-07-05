@@ -377,12 +377,12 @@ export const plot = {
 };
 
 export const companion = {
-  send: (projectId: string, nodeId: string, text: string, options?: Pick<AIOptions, "context" | "outline_structure"> & { images?: CompanionImageAttachment[]; intent?: CompanionIntent; scope?: CompanionHistoryScope }) =>
+  send: (projectId: string, nodeId: string, text: string, options?: Pick<AIOptions, "context" | "outline_structure"> & { images?: CompanionImageAttachment[]; intent?: CompanionIntent; scope?: CompanionHistoryScope; language?: string }) =>
     rpcCall<{ run_id: string }>("companion.send", {
       project_id: projectId,
       node_id: nodeId,
       text,
-      options: options ? { context: options.context, outline_structure: options.outline_structure, intent: options.intent, scope: options.scope } : {},
+      options: options ? { context: options.context, outline_structure: options.outline_structure, intent: options.intent, scope: options.scope, language: options.language } : {},
       images: options?.images ?? [],
     }),
   previewContext: (projectId: string, nodeId: string, options?: Pick<AIOptions, "context">): Promise<AIContextPreview> =>
@@ -398,11 +398,12 @@ export const companion = {
       ...(limit ? { limit } : {}),
     })
       .then((r) => r.messages ?? []),
-  compact: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope) =>
+  compact: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope, language?: string) =>
     rpcCall<{ messages: CompanionMessage[] }>("companion.compact", {
       project_id: projectId,
       ...(nodeId ? { node_id: nodeId } : {}),
       ...(scope ? { scope } : {}),
+      ...(language ? { language } : {}),
     })
       .then((r) => r.messages ?? []),
   clear: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope) =>

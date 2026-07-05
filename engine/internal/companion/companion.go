@@ -55,6 +55,7 @@ type SendOptions struct {
 	OutlineStructure string              `json:"outline_structure,omitempty"`
 	Intent           RequestIntent       `json:"intent,omitempty"`
 	Scope            string              `json:"scope,omitempty"`
+	Language         string              `json:"language,omitempty"`
 }
 
 // ClientFactory and ProviderSource are shared with the ai package so the same
@@ -406,7 +407,7 @@ func (s *Service) importLegacyHistoryIfNeeded(ctx context.Context, projectID str
 // CompactHistory replaces a long companion transcript with one assistant
 // summary message so future turns keep the useful context without replaying
 // every prior exchange.
-func (s *Service) CompactHistory(ctx context.Context, projectID string, now func() int64) ([]session.Message, error) {
+func (s *Service) CompactHistory(ctx context.Context, projectID, lang string, now func() int64) ([]session.Message, error) {
 	sess, err := s.sessions.EnsureWorker(projectID)
 	if err != nil {
 		return nil, err
@@ -425,7 +426,7 @@ func (s *Service) CompactHistory(ctx context.Context, projectID string, now func
 	}
 	compacted := []session.Message{{
 		Role:      "assistant",
-		Content:   compactTranscriptSummary(msgs),
+		Content:   compactTranscriptSummary(msgs, lang),
 		Timestamp: at,
 	}}
 	if err := session.RewriteMessages(path, compacted); err != nil {
@@ -434,9 +435,9 @@ func (s *Service) CompactHistory(ctx context.Context, projectID string, now func
 	return compacted, nil
 }
 
-func (s *Service) CompactHistoryView(ctx context.Context, q HistoryQuery, now func() int64) ([]HistoryMessage, error) {
+func (s *Service) CompactHistoryView(ctx context.Context, q HistoryQuery, lang string, now func() int64) ([]HistoryMessage, error) {
 	if s.history == nil {
-		msgs, err := s.CompactHistory(ctx, q.ProjectID, now)
+		msgs, err := s.CompactHistory(ctx, q.ProjectID, lang, now)
 		if err != nil {
 			return nil, err
 		}
@@ -456,7 +457,7 @@ func (s *Service) CompactHistoryView(ctx context.Context, q HistoryQuery, now fu
 	if now != nil {
 		at = now()
 	}
-	summary := compactTranscriptSummary(historyMessagesToSessionMessages(msgs))
+	summary := compactTranscriptSummary(historyMessagesToSessionMessages(msgs), lang)
 	if err := s.history.Clear(ctx, q); err != nil {
 		return nil, err
 	}
@@ -562,17 +563,28 @@ func (s *Service) DeleteReference(ctx context.Context, projectID, id string) err
 	return s.references.Delete(ctx, projectID, id)
 }
 
-func compactTranscriptSummary(msgs []session.Message) string {
+func compactTranscriptSummary(msgs []session.Message, lang string) string {
 	start := 0
 	if len(msgs) > compactHistoryMaxMessages {
 		start = len(msgs) - compactHistoryMaxMessages
 	}
 	var b strings.Builder
-	b.WriteString("이전 컴패니언 대화 요약\n\n")
+	b.WriteString(pickLang(lang, "이전 컴패니언 대화 요약\n\n", "Summary of the previous companion conversation\n\n", "以前のコンパニオン会話の要約\n\n"))
 	if start > 0 {
-		b.WriteString("- 이전 메시지 ")
-		b.WriteString(strconv.Itoa(start))
-		b.WriteString("개는 생략됨\n")
+		switch {
+		case isEnglish(lang):
+			b.WriteString("- ")
+			b.WriteString(strconv.Itoa(start))
+			b.WriteString(" earlier messages omitted\n")
+		case isJapanese(lang):
+			b.WriteString("- 以前のメッセージ ")
+			b.WriteString(strconv.Itoa(start))
+			b.WriteString(" 件は省略\n")
+		default:
+			b.WriteString("- 이전 메시지 ")
+			b.WriteString(strconv.Itoa(start))
+			b.WriteString("개는 생략됨\n")
+		}
 	}
 	for _, msg := range msgs[start:] {
 		text := compactSnippet(stripCompanionControlBlocks(msg.Content))
@@ -580,7 +592,7 @@ func compactTranscriptSummary(msgs []session.Message) string {
 			continue
 		}
 		b.WriteString("- ")
-		b.WriteString(displayRole(msg.Role))
+		b.WriteString(displayRole(msg.Role, lang))
 		b.WriteString(": ")
 		b.WriteString(text)
 		b.WriteString("\n")
@@ -588,15 +600,15 @@ func compactTranscriptSummary(msgs []session.Message) string {
 	return strings.TrimSpace(b.String())
 }
 
-func displayRole(role string) string {
+func displayRole(role, lang string) string {
 	switch strings.TrimSpace(role) {
 	case "assistant":
-		return "컴패니언"
+		return pickLang(lang, "컴패니언", "Companion", "コンパニオン")
 	case "user":
-		return "나"
+		return pickLang(lang, "나", "Me", "私")
 	default:
 		if strings.TrimSpace(role) == "" {
-			return "기록"
+			return pickLang(lang, "기록", "Log", "記録")
 		}
 		return strings.TrimSpace(role)
 	}
@@ -720,7 +732,7 @@ func (s *Service) SendWithCompanionOptionsAndImages(ctx context.Context, project
 	if err != nil {
 		return "", err
 	}
-	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, opts.Intent, opts.Scope, normalized, now)
+	return s.runner.start(ctx, projectID, nodeID, text, opts.Context, opts.OutlineStructure, opts.Intent, opts.Scope, normalized, opts.Language, now)
 }
 
 // Cancel cancels an in-flight run.

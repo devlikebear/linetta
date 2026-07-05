@@ -775,6 +775,10 @@ const messages: Record<AppLanguage, Messages> = {
     "factBook.reviewing": "검토 중…",
     "factBook.reviewHint": "현재 씬에서 현실 자료 확인이 필요한 후보를 먼저 고르고, 선택한 항목만 웹검색으로 저장합니다.",
     "factBook.applied": "자료집을 새로고침했습니다.",
+    "factBook.ai.savePrefix": "검색 후 자료집에 저장",
+    "factBook.ai.review": "현재 씬 \"{sceneLabel}\"에서 웹검색 팩트체크가 필요한 현실 주장 후보를 찾아줘.\n아직 web_search나 web_fetch를 실행하지 마.\n후보가 있으면 설명은 짧게 하고 linetta-choices 블록 하나로만 보여줘.\n각 options 항목은 반드시 `{savePrefix}: <주장>` 형식으로 작성해.\n작가가 후보를 선택하면 그때 web_search와 web_fetch로 출처 URL을 확인하고, create_fact_card로 자료집에 저장해.\nweb_fetch가 404/403/본문 부족이면 그 URL은 저장 후보에서 제외하고 대체 출처를 더 찾아.\nweb_search API 키가 없어 실패하면 포기하지 말고 작가에게 출처 URL 직접 입력을 요청해. 작가가 URL을 입력하면 web_fetch로 확인한 뒤 저장해.\n출처 URL 없는 create_fact_card는 금지야. 후보가 없으면 짧게 이유만 말해.",
+    "factBook.ai.factCheck": "선택한 주장: {claim}\n지금 바로 web_search로 신뢰 가능한 출처 후보를 찾고, 최소 1개 URL은 web_fetch로 본문 접근을 확인해.\nweb_fetch가 404/403/본문 부족이면 그 URL은 저장 후보에서 제외하고 같은 턴에 대체 출처를 더 검색해.\n확인된 출처 URL이 있으면 같은 턴에 linetta_apply_ops의 create_fact_card로 자료집에 저장해.\ncreate_fact_card 호출 없이 저장 완료라고 말하지 마. 저장이 실패하면 실패 이유와 필요한 다음 행동만 짧게 말해.\nweb_search나 web_fetch가 실패하면 포기하지 말고 출처 URL 직접 입력을 요청해.",
+    "factBook.ai.altSource": "선택한 주장: {claim}\n방금 이 출처 URL은 앱의 저장 경로에서 실패했습니다: {failedURL}\n실패 이유: {error}\n이 URL은 저장 후보에서 제외해.\n지금 바로 web_search로 신뢰 가능한 대체 출처 후보를 찾고, 최소 1개 URL은 web_fetch로 본문 접근을 확인해.\nweb_fetch가 404/403/본문 부족이면 그 URL도 저장 후보에서 제외하고 같은 턴에 대체 출처를 더 검색해.\n확인된 출처 URL이 있으면 같은 턴에 linetta_apply_ops의 create_fact_card로 자료집에 저장해.\n확인된 대체 출처가 없으면 저장했다고 말하지 말고, 출처 URL 직접 입력만 요청해.",
     "factBook.autoSaving": "응답에서 출처 URL을 찾아 자료집에 저장하는 중입니다.",
     "factBook.saveNotApplied": "아직 자료집 저장 이벤트가 확인되지 않았습니다. 출처 URL을 입력하면 바로 저장할 수 있습니다.",
     "factBook.directSaved": "출처 URL을 확인하고 자료집에 저장했습니다.",
@@ -825,6 +829,21 @@ const messages: Record<AppLanguage, Messages> = {
     "ai.context.preview": "{label} 미리보기",
     "ai.context.empty": "전달할 내용이 없습니다.",
     "ai.context.count": "{count}개",
+    "ai.context.section.current_scene": "현재 씬 본문",
+    "ai.context.section.current_scene.companion": "작성된 본문 발췌",
+    "ai.context.section.overview": "작품 개요",
+    "ai.context.section.synopsis": "작품 시놉시스",
+    "ai.context.section.nearby_scenes": "직전·직후 씬 발췌",
+    "ai.context.section.related_scenes": "관련 과거 씬 (멘션 RAG)",
+    "ai.context.section.plot": "플롯 (스토리라인&비트)",
+    "ai.context.section.entities": "세계관 요소",
+    "ai.context.section.relationships": "관계",
+    "ai.context.section.notes": "작가 주석",
+    "ai.context.section.project_meta": "작품 설정 (장르/분량/시점)",
+    "ai.context.section.style_notes": "작가 style notes",
+    "ai.context.section.facts": "팩트 자료집",
+    "ai.context.section.memories": "컴패니언 기억",
+    "ai.context.section.references": "추가 레퍼런스",
     "engine.checking": "엔진 상태를 확인하는 중...",
     "engine.failedTitle": "엔진을 시작하지 못했습니다",
     "engine.failedDescription": "Linetta의 내장 Go 엔진이 응답하지 않습니다. 앱을 다시 시도하거나 아래 진단 정보를 확인하세요.",
@@ -1772,6 +1791,10 @@ const messages: Record<AppLanguage, Messages> = {
     "factBook.reviewing": "Reviewing…",
     "factBook.reviewHint": "Pick claims that need real-world checking first; only the selected claim is searched and saved.",
     "factBook.applied": "Fact Book refreshed.",
+    "factBook.ai.savePrefix": "Save to dossier after search",
+    "factBook.ai.review": "Find real-world claims in the current scene \"{sceneLabel}\" that would benefit from a web-search fact check.\nDo not run web_search or web_fetch yet.\nIf there are candidates, keep the explanation short and present them in exactly one linetta-choices block.\nEvery options item must be written as `{savePrefix}: <claim>`.\nWhen the writer picks a candidate, verify source URLs with web_search and web_fetch, then save it to the dossier with create_fact_card.\nIf web_fetch returns 404/403 or too little text, drop that URL as a source candidate and find alternatives.\nIf web_search fails because no API key is set, do not give up — ask the writer to paste a source URL directly; verify it with web_fetch before saving.\ncreate_fact_card without a source URL is forbidden. If there are no candidates, briefly say why.",
+    "factBook.ai.factCheck": "Selected claim: {claim}\nRight now, use web_search to find trustworthy source candidates and verify body access for at least one URL with web_fetch.\nIf web_fetch returns 404/403 or too little text, drop that URL and search for alternatives in the same turn.\nOnce a verified source URL exists, save it to the dossier with linetta_apply_ops create_fact_card in the same turn.\nNever claim it is saved without calling create_fact_card. If saving fails, state only the failure reason and the next step, briefly.\nIf web_search or web_fetch fails, do not give up — ask for a source URL to be pasted directly.",
+    "factBook.ai.altSource": "Selected claim: {claim}\nThis source URL just failed in the app's save path: {failedURL}\nFailure reason: {error}\nExclude this URL from the save candidates.\nRight now, use web_search to find trustworthy alternative sources and verify body access for at least one URL with web_fetch.\nIf web_fetch returns 404/403 or too little text, drop that URL too and search for more alternatives in the same turn.\nOnce a verified source URL exists, save it to the dossier with linetta_apply_ops create_fact_card in the same turn.\nIf no verified alternative exists, do not claim it was saved — only ask for a source URL to be pasted directly.",
     "factBook.autoSaving": "Saving the source URL found in the response to the Fact Book.",
     "factBook.saveNotApplied": "No Fact Book save event was confirmed yet. Enter a source URL to save it directly.",
     "factBook.directSaved": "Source URL checked and saved to the Fact Book.",
@@ -1822,6 +1845,21 @@ const messages: Record<AppLanguage, Messages> = {
     "ai.context.preview": "{label} preview",
     "ai.context.empty": "No content to send.",
     "ai.context.count": "{count}",
+    "ai.context.section.current_scene": "Current scene text",
+    "ai.context.section.current_scene.companion": "Written manuscript excerpts",
+    "ai.context.section.overview": "Work overview",
+    "ai.context.section.synopsis": "Synopsis",
+    "ai.context.section.nearby_scenes": "Adjacent scene excerpts",
+    "ai.context.section.related_scenes": "Related past scenes (mention RAG)",
+    "ai.context.section.plot": "Plot (storylines & beats)",
+    "ai.context.section.entities": "World elements",
+    "ai.context.section.relationships": "Relationships",
+    "ai.context.section.notes": "Author notes",
+    "ai.context.section.project_meta": "Project settings (genre/length/POV)",
+    "ai.context.section.style_notes": "Author style notes",
+    "ai.context.section.facts": "Fact dossier",
+    "ai.context.section.memories": "Companion memories",
+    "ai.context.section.references": "Additional references",
     "engine.checking": "Checking engine status...",
     "engine.failedTitle": "Could not start the engine",
     "engine.failedDescription": "Linetta's embedded Go engine is not responding. Try again or check the diagnostics below.",
@@ -2769,6 +2807,10 @@ const messages: Record<AppLanguage, Messages> = {
     "factBook.reviewing": "確認中…",
     "factBook.reviewHint": "現実資料の確認が必要な候補を先に選び、選んだ項目だけをWeb検索して保存します。",
     "factBook.applied": "資料集を更新しました。",
+    "factBook.ai.savePrefix": "検索して資料集に保存",
+    "factBook.ai.review": "現在のシーン「{sceneLabel}」から、ウェブ検索でのファクトチェックが必要な現実の主張候補を見つけて。\nまだ web_search や web_fetch は実行しないで。\n候補があれば説明は短くし、linetta-choices ブロック一つだけで提示して。\n各 options 項目は必ず `{savePrefix}: <主張>` の形式で書いて。\n作家が候補を選んだら、そのとき web_search と web_fetch で出典 URL を確認し、create_fact_card で資料集に保存して。\nweb_fetch が 404/403/本文不足の場合、その URL は保存候補から除外し、代替出典をさらに探して。\nweb_search が API キー不足で失敗しても諦めず、作家に出典 URL の直接入力を依頼して。作家が URL を入力したら web_fetch で確認してから保存して。\n出典 URL の無い create_fact_card は禁止。候補が無ければ理由だけ短く伝えて。",
+    "factBook.ai.factCheck": "選択した主張: {claim}\n今すぐ web_search で信頼できる出典候補を探し、少なくとも1つの URL は web_fetch で本文アクセスを確認して。\nweb_fetch が 404/403/本文不足の場合、その URL は保存候補から除外し、同じターンで代替出典をさらに検索して。\n確認済みの出典 URL があれば、同じターンで linetta_apply_ops の create_fact_card で資料集に保存して。\ncreate_fact_card を呼ばずに保存完了と言わないで。保存に失敗したら失敗理由と必要な次の行動だけ短く伝えて。\nweb_search や web_fetch が失敗しても諦めず、出典 URL の直接入力を依頼して。",
+    "factBook.ai.altSource": "選択した主張: {claim}\nこの出典 URL はアプリの保存経路で失敗しました: {failedURL}\n失敗理由: {error}\nこの URL は保存候補から除外して。\n今すぐ web_search で信頼できる代替出典候補を探し、少なくとも1つの URL は web_fetch で本文アクセスを確認して。\nweb_fetch が 404/403/本文不足の場合、その URL も保存候補から除外し、同じターンで代替出典をさらに検索して。\n確認済みの出典 URL があれば、同じターンで linetta_apply_ops の create_fact_card で資料集に保存して。\n確認済みの代替出典が無ければ保存したと言わず、出典 URL の直接入力だけ依頼して。",
     "factBook.autoSaving": "応答内の出典URLを資料集に保存しています。",
     "factBook.saveNotApplied": "資料集への保存イベントはまだ確認できません。出典URLを入力すると直接保存できます。",
     "factBook.directSaved": "出典URLを確認し、資料集に保存しました。",
@@ -2819,6 +2861,21 @@ const messages: Record<AppLanguage, Messages> = {
     "ai.context.preview": "{label} プレビュー",
     "ai.context.empty": "送信する内容がありません。",
     "ai.context.count": "{count}件",
+    "ai.context.section.current_scene": "現在のシーン本文",
+    "ai.context.section.current_scene.companion": "執筆済み本文の抜粋",
+    "ai.context.section.overview": "作品概要",
+    "ai.context.section.synopsis": "作品シノプシス",
+    "ai.context.section.nearby_scenes": "前後シーンの抜粋",
+    "ai.context.section.related_scenes": "関連する過去シーン（メンションRAG）",
+    "ai.context.section.plot": "プロット（ストーリーライン＆ビート）",
+    "ai.context.section.entities": "世界観要素",
+    "ai.context.section.relationships": "関係",
+    "ai.context.section.notes": "作家メモ",
+    "ai.context.section.project_meta": "作品設定（ジャンル/分量/視点）",
+    "ai.context.section.style_notes": "作家スタイルノート",
+    "ai.context.section.facts": "ファクト資料集",
+    "ai.context.section.memories": "コンパニオンの記憶",
+    "ai.context.section.references": "追加リファレンス",
     "engine.checking": "エンジン状態を確認中...",
     "engine.failedTitle": "エンジンを開始できませんでした",
     "engine.failedDescription": "Linetta の内蔵 Go エンジンが応答していません。再試行するか、下の診断情報を確認してください。",
@@ -3343,6 +3400,24 @@ export function displayNodeLabel(language: AppLanguage, label: string): string {
   if (chapter) {
     return translate(language, "workspace.chapterNumber", {
       number: chapter[1] ?? chapter[2] ?? chapter[3] ?? "",
+    });
+  }
+  const part = trimmed.match(/^(?:(\d+)부|Part\s+(\d+)|第(\d+)部)$/i);
+  if (part) {
+    return translate(language, "workspace.partNumber", {
+      number: part[1] ?? part[2] ?? part[3] ?? "",
+    });
+  }
+  const webNovelPart = trimmed.match(/^(?:(\d+)권|Arc\s+(\d+)|第(\d+)巻)$/i);
+  if (webNovelPart) {
+    return translate(language, "workspace.webNovelPartNumber", {
+      number: webNovelPart[1] ?? webNovelPart[2] ?? webNovelPart[3] ?? "",
+    });
+  }
+  const webNovelChapter = trimmed.match(/^(?:(\d+)화|Episode\s+(\d+)|第(\d+)話)$/i);
+  if (webNovelChapter) {
+    return translate(language, "workspace.webNovelChapterNumber", {
+      number: webNovelChapter[1] ?? webNovelChapter[2] ?? webNovelChapter[3] ?? "",
     });
   }
   return label;
