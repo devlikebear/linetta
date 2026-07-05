@@ -121,7 +121,7 @@ func isSceneTextTarget(s string) bool {
 	if containsAny(s, companionSceneBodyTerms) {
 		return true
 	}
-	if !containsAny(s, []string{"씬", "장면", "scene"}) {
+	if !containsAny(s, []string{"씬", "장면", "scene", "シーン", "場面"}) {
 		return false
 	}
 	if containsAny(s, companionNonBodySceneTerms) {
@@ -209,12 +209,17 @@ var companionSceneBodyTerms = []string{
 	// English equivalents (input is lower-cased before matching).
 	"current scene", "this scene", "scene text", "the scene",
 	"manuscript", "prose", "the text", "next scene", "draft",
+	// Japanese equivalents.
+	"現在のシーン", "シーン本文", "場面の本文", "本文", "原稿", "文章",
+	"次のシーン", "現在の場面",
 }
 
 var companionSceneWriteTerms = []string{
 	"작성", "써", "쓰", "이어", "계속", "채워", "완성",
 	// English equivalents.
 	"write", "continue", "keep going", "finish", "fill", "complete", "draft",
+	// Japanese equivalents.
+	"書いて", "執筆", "続き", "続けて", "埋めて", "完成", "仕上げ",
 }
 
 var companionSceneRewriteTerms = []string{
@@ -222,6 +227,8 @@ var companionSceneRewriteTerms = []string{
 	// English equivalents.
 	"rewrite", "revise", "edit", "fix", "polish", "proofread", "refine",
 	"improve", "tighten",
+	// Japanese equivalents.
+	"修正", "書き直", "変更", "反映", "推敲", "校正", "直して", "リライト",
 }
 
 var companionSceneFollowupTerms = []string{
@@ -230,6 +237,8 @@ var companionSceneFollowupTerms = []string{
 	// English equivalents.
 	"apply", "go ahead", "do it", "sounds good", "that one", "option 1",
 	"the first one", "proceed", "yes please",
+	// Japanese equivalents.
+	"適用", "進めて", "それで", "そのまま", "お願いします", "一番目", "1番",
 }
 
 var companionSceneOfferTargetTerms = []string{
@@ -238,6 +247,8 @@ var companionSceneOfferTargetTerms = []string{
 	// English equivalents.
 	"current scene", "scene text", "the scene", "next sentences",
 	"continuation",
+	// Japanese equivalents.
+	"現在のシーン本文", "シーン本文", "続きの文", "文の提案",
 }
 
 var companionSceneOfferActionTerms = []string{
@@ -246,12 +257,16 @@ var companionSceneOfferActionTerms = []string{
 	// English equivalents.
 	"write", "draft", "continue", "expand", "extend", "apply",
 	"match the tone",
+	// Japanese equivalents.
+	"書き", "適用", "続け", "拡張", "文体", "トーンに合わせ",
 }
 
 var companionSceneEmptyTerms = []string{
 	"비워", "초기화", "비우", "삭제", "지워",
 	// English equivalents.
 	"clear", "empty", "erase", "reset", "wipe", "delete",
+	// Japanese equivalents.
+	"空にして", "初期化", "削除", "消して", "クリア",
 }
 
 var companionNonBodySceneTerms = []string{
@@ -259,4 +274,6 @@ var companionNonBodySceneTerms = []string{
 	// English equivalents.
 	"beat", "plot", "outline", "structure", "split", "divide",
 	"table of contents",
+	// Japanese equivalents.
+	"ビート", "プロット", "アウトライン", "目次", "構成", "分割", "分けて",
 }

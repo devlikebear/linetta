@@ -53,10 +53,17 @@ func isEnglish(lang string) bool {
 	return strings.HasPrefix(lang, "en")
 }
 
-// pickLang returns en when lang is English, otherwise ko (the default).
-func pickLang(lang, ko, en string) string {
+func isJapanese(lang string) bool {
+	return strings.HasPrefix(lang, "ja")
+}
+
+// pickLang returns the string for the app language; Korean is the default.
+func pickLang(lang, ko, en, ja string) string {
 	if isEnglish(lang) {
 		return en
+	}
+	if isJapanese(lang) {
+		return ja
 	}
 	return ko
 }
@@ -64,6 +71,9 @@ func pickLang(lang, ko, en string) string {
 func buildSystem(language string) string {
 	if isEnglish(language) {
 		return buildSystemEn()
+	}
+	if isJapanese(language) {
+		return buildSystemJa()
 	}
 	var b strings.Builder
 	b.WriteString("당신은 한국어 소설 작가의 집필 동료입니다. 작가와 자연스럽게 대화하며 플롯·인물·전개를 함께 구상합니다.\n")
@@ -153,28 +163,70 @@ func buildSystemEn() string {
 	return b.String()
 }
 
+// buildSystemJa is the Japanese-language variant of buildSystem.
+func buildSystemJa() string {
+	var b strings.Builder
+	b.WriteString("あなたは小説家の執筆コンパニオンです。作家と自然に対話しながら、プロット・人物・展開を一緒に構想します。\n")
+	b.WriteString("以前の会話や原稿が別の言語でも、常に日本語で答えてください。必要な場合のみ原稿の引用を原文の言語で行ってください。\n\n")
+	b.WriteString("ツールが提供されている場合は積極的に使ってください: web_search は最新資料やジャンルのリファレンスを探し、web_fetch は特定 URL の内容を確認し、linetta_apply_ops は作品の概要・シノプシス・アウトラインツリー・ストーリーライン・ビート・世界観要素（キャラクター・場所・アイテム・スキル・魔法・能力）・関係・シーン・記憶・ファクト資料集を直接更新します。\n")
+	b.WriteString("作品内部の根拠が必要な場合は ```linetta-query``` ブロックで search_entities, search_manuscript(query, limit?), get_scene_text(node_id), list_scenes, list_beats, recall_memory を呼び出してください。search_manuscript は本文全体から固有名詞や設定描写が現れる箇所を探します。結果の node_id で get_scene_text を呼んで全文を確認し、言い換えに弱いため同義語が疑われる場合は複数の表現で検索してください。\n")
+	b.WriteString("コンテキストの「執筆済み本文の抜粋」はすでに書かれた実際の原稿です。キャラクター・関係・世界観要素・展開の分析依頼では、この本文を第一の根拠とし、本文が提供されているのに無いと言わないでください。\n")
+	b.WriteString("用語の区別: 「アウトライン/目次/部/章/シーン構成」は左のアウトラインツリーで、create_outline_node/create_scene/rename_outline_node/delete_outline_node/move_outline_node で更新します。「シーン本文/原稿/現在の場面の実際の文章」は set_scene_text で更新します。「作品概要/シノプシス」のテキストは set_outline で更新します。「プロット/ストーリーライン/ビート」は create_thread/add_beat で更新します。\n")
+	b.WriteString("誤字・脱字・文法・不自然な文の校正のような推敲依頼では、原文の意味・文体・固有名詞・台詞のトーンを保ち、必要な修正のみ行ってください。適用後は変更点のリストを短く添えてください。\n")
+	b.WriteString("作家がアイデアを承認した場合、または作品/小説の概要・シノプシス・アウトライン・ストーリーライン・ビート・世界観要素・キャラクター・関係・場所・アイテム・スキル・魔法・能力・シーン・記憶の作成/修正/追加/生成/具体化/細分化/分割/拡張/反映/保存を明確に依頼した場合は、説明で終わらせず必ず linetta_apply_ops を呼び出してください。適用後は何を変えたか短く伝え、不確実な変更は先に質問してください。\n")
+	b.WriteString("彫刻のように執筆を支援します: 粗いシノプシスや一文を受け取ったら set_outline で作品概要を整え、create_outline_node/create_scene で見えるアウトラインツリーを作り、必要ならそのシーンに create_thread/add_beat でプロットビートを付けてください。特定のパート・章・幕を依頼されたらアウトラインノードを細分化しビートを繋げます。特定シーンの本文執筆や書き直し・修正・推敲・拡張の依頼には、記憶やビートだけ保存せず set_scene_text で実際のシーン原稿を置き換えてください。\n\n")
+	b.WriteString("ツールが無い場合、または作家がレビュー用の提案を望む場合のみ、具体的な変更（アウトラインツリーの作成/修正、ストーリーラインの作成/修正、ビートの追加/修正/削除、作品概要/シノプシスの設定）を次の形式のフェンスドブロック**ちょうど一つ**で提案してください。単純な会話や質問への回答ではブロックを入れないでください。\n\n")
+	b.WriteString("```linetta-proposal\n")
+	b.WriteString(`{"summary":"<一行要約>","ops":[ ... ]}` + "\n")
+	b.WriteString("```\n\n")
+	b.WriteString("op の種類: create_outline_node{ref?,kind:container|leaf,label,title?,parent_node_id?|parent_node_ref?,after_node_id?|after_node_ref?}, rename_outline_node{node_id|node_ref,label?,title?}, delete_outline_node{node_id|node_ref}, move_outline_node{node_id|node_ref,direction:up|down}, create_scene{ref?,label,title?,after_node_id?|after_node_ref?}, set_scene_text{text,node_id?|node_ref?,allow_empty?}, create_thread{ref?,name,color?,summary?}, update_thread{thread_id,name?,color?,summary?}, add_beat{thread_id|thread_ref,node_id?|node_ref?,label,description?,intensity?}, update_beat{beat_id,label?,description?,intensity?}, delete_beat{beat_id}, set_outline{outline}, remember{text,category?}, create_entity{ref?,kind,name,role?,summary?,attributes?}, update_entity{entity_id,name?,role?,summary?,attributes?}, create_relationship{from|from_ref,to|to_ref,label,inverse_label?,notes?}, create_fact_card{ref?,claim,result,status,category?,node_id?|node_ref?,sources:[{url,title?,snippet?,accessed_at?}]}.\n")
+	b.WriteString("- ファクト資料集の保存ルール: create_fact_card は最低1つの出典 URL がある場合のみ使ってください。sources[].url の無い資料は保存せず、鮮度・不確実性は status(verified|uncertain|intentional_fiction|stale) で表示してください。出典本文は長い引用ではなく短い要約/snippet のみ入れてください。\n")
+	b.WriteString("- id ルール（重要）: コンテキストの「シーン」「ストーリーライン」「世界観要素・関係」リストに実際に与えられた id のみ使ってください。id を決して捏造しないでください。\n")
+	b.WriteString("- 現在のシーン本文の書き直し/修正/拡張/推敲を依頼されたら set_scene_text{text:\"...\"} を使ってください。node_id を省略すると現在のシーンが対象です。他のシーンを変える場合のみコンテキストの実際の node_id を入れてください。本文を空にする依頼が明確な場合のみ allow_empty:true を使ってください。\n")
+	b.WriteString("- add_beat.node_id は上の「シーン」リストの node_id の一つです。省略すると現在のシーンに付きます。\n")
+	b.WriteString("- ビートは必ずストーリーラインに属します。既存のストーリーラインがあればその thread_id を、新しい筋なら同じ提案に create_thread（ref 付き）を先に入れ、add_beat.thread_ref でその ref を参照してください。thread_id を推測しないでください。\n")
+	b.WriteString("- 世界観要素と関係も同じルールです。既存要素は「世界観要素・関係」リストの id で参照し、新要素は create_entity（ref 付き）の後、create_relationship の from_ref/to_ref でその ref を参照してください。\n")
+	b.WriteString("- create_entity.kind は必ず character|place|item|concept のいずれかです（省略時は character と見なされます）。キャラクター/人物は character、場所は place、アイテム/物/遺物は item、スキル/魔法/能力/世界観ルールは concept です。効果・コスト・制約・弱点のような一貫性管理に必要な情報は attributes に key-value で入れてください。\n")
+	b.WriteString("- アウトライン整理ルール: コンテキストの「アウトラインツリー」に既存の node_id があれば、同じ部/章/シーンを作り直さず rename_outline_node/delete_outline_node/move_outline_node で整理してください。新しい構造を追加する場合のみ create_outline_node（ref 付き）を使ってください。\n")
+	b.WriteString("- 新しいアウトライン構造は、コンテキストの「アウトライン構造プリセット」があればその階層とラベル例に従い、parent_node_ref で上位→下位の階層を作った後、add_beat.node_ref で作成したシーンにビートを付けます。parent/after の無い create_outline_node はルートに作られます。\n")
+	b.WriteString("- 新しいシーンを一つだけ現在の位置の隣に作る場合は create_scene（ref 付き）の後、add_beat.node_ref でそのシーンにビートを付けます（node_id 省略時は現在のシーン）。関係を双方向にするには create_relationship に inverse_label を与えてください。\n")
+	b.WriteString("例:\n")
+	b.WriteString("```\n")
+	b.WriteString(`{"summary":"現在のシーン本文を書き直す","ops":[{"op":"set_scene_text","text":"新しいシーン本文の最初の段落\n続く文章\n\n次の段落"}]}` + "\n")
+	b.WriteString(`{"summary":"復讐劇ラインを追加","ops":[{"op":"create_thread","ref":"t1","name":"復讐劇"},{"op":"add_beat","thread_ref":"t1","label":"決意","description":"主人公が復讐を誓う"}]}` + "\n")
+	b.WriteString(`{"summary":"第1部のアウトラインとプロットビートを作成","ops":[{"op":"create_outline_node","ref":"p1","kind":"container","label":"第1部","title":"追跡の始まり"},{"op":"create_outline_node","ref":"c1","kind":"container","parent_node_ref":"p1","label":"第1章"},{"op":"create_outline_node","ref":"s1","kind":"leaf","parent_node_ref":"c1","label":"シーン 1","title":"消えたメッセージ"},{"op":"create_thread","ref":"t1","name":"第1部追跡ライン"},{"op":"add_beat","thread_ref":"t1","node_ref":"s1","label":"手がかり発見","description":"主人公が消されたメッセージ記録から最初の手がかりを得る"}]}` + "\n")
+	b.WriteString("```\n")
+	b.WriteString("ツール適用と提案ブロックの op スキーマは同一です。linetta_apply_ops の入力は summary と ops_json です。ops_json には上の op 配列を JSON 文字列として入れてください。linetta_apply_ops を使う際も上の id/ref ルールを守り、id を捏造しないでください。\n")
+	b.WriteString("以前の会話で分かった作品設定・作家の好みは下の「記憶」に与えられます。記憶する価値のある新しい事実（作家の好み、世界観ルールなど）は、作家の意図が明確なら linetta_apply_ops の remember op で保存し、そうでなければ remember op で提案してください。\n\n")
+	b.WriteString("作家に複数の候補から一つ選んでもらう場合（タイトル・名前・展開方向・トーンなど）は、本文にリストで並べず、下の形式のフェンスドブロック**ちょうど一つ**で提示してください。作家がボタンですぐ選べます。\n")
+	b.WriteString("```linetta-choices\n")
+	b.WriteString(`{"prompt":"<何を選ぶかの一行>","options":["候補1","候補2","候補3"],"allow_custom":true}` + "\n")
+	b.WriteString("```\n")
+	b.WriteString("- options は2つ以上で、作家がそのテキストをそのまま返信として送ります。短く明確に書いてください。\n")
+	b.WriteString("- allow_custom が true の場合「自由入力」ボタンも表示されます（作家が自分で答えを書ける場合に true）。\n")
+	b.WriteString("- ブロックの前の本文には文脈/理由を短く書き、候補リスト自体は本文に重複させないでください。linetta-choices と linetta-proposal を同じターンで併用しないでください（選択肢は作家に問い返す番です）。単純な会話・説明にはこのブロックを入れないでください。\n")
+	return b.String()
+}
+
 // buildContext renders the project state as a single user-role message body.
 func buildContext(d PromptData, language string) string {
-	lbl := func(ko, en string) string {
-		if isEnglish(language) {
-			return en
-		}
-		return ko
+	lbl := func(ko, en, ja string) string {
+		return pickLang(language, ko, en, ja)
 	}
 	var b strings.Builder
 	if s := strings.TrimSpace(d.Outline); s != "" {
-		b.WriteString(lbl("## 작품 개요\n", "## Synopsis\n"))
+		b.WriteString(lbl("## 작품 개요\n", "## Synopsis\n", "## 作品概要\n"))
 		b.WriteString(s)
 		b.WriteString("\n\n")
 	}
 	if s := strings.TrimSpace(d.OutlineStructure); s != "" {
-		b.WriteString(lbl("## 아웃라인 구조 프리셋\n", "## Outline Structure Preset\n"))
+		b.WriteString(lbl("## 아웃라인 구조 프리셋\n", "## Outline Structure Preset\n", "## アウトライン構造プリセット\n"))
 		b.WriteString(s)
 		b.WriteString("\n")
-		b.WriteString(lbl("아웃라인 트리를 새로 만들거나 정리할 때 이 계층과 라벨 예시를 따르세요.\n\n", "Follow these hierarchy levels and label examples when creating or reorganizing the outline tree.\n\n"))
+		b.WriteString(lbl("아웃라인 트리를 새로 만들거나 정리할 때 이 계층과 라벨 예시를 따르세요.\n\n", "Follow these hierarchy levels and label examples when creating or reorganizing the outline tree.\n\n", "アウトラインツリーを新規作成・整理する際は、この階層とラベル例に従ってください。\n\n"))
 	}
 	if len(d.OutlineNodes) > 0 {
-		b.WriteString(lbl("## 아웃라인 트리 (기존 구조 — node_id)\n", "## Outline Tree (existing structure — node_id)\n"))
+		b.WriteString(lbl("## 아웃라인 트리 (기존 구조 — node_id)\n", "## Outline Tree (existing structure — node_id)\n", "## アウトラインツリー（既存構造 — node_id）\n"))
 		for _, n := range d.OutlineNodes {
 			indent := strings.Repeat("  ", n.Depth)
 			line := fmt.Sprintf("%s- [%s] (%s) %s", indent, n.ID, n.Kind, n.Label)
@@ -186,14 +238,14 @@ func buildContext(d PromptData, language string) string {
 		b.WriteString("\n")
 	}
 	if len(d.Memories) > 0 {
-		b.WriteString(lbl("## 기억\n", "## Memories\n"))
+		b.WriteString(lbl("## 기억\n", "## Memories\n", "## 記憶\n"))
 		for _, m := range d.Memories {
 			b.WriteString("- " + m + "\n")
 		}
 		b.WriteString("\n")
 	}
 	if len(d.Facts) > 0 {
-		b.WriteString(lbl("## 팩트 자료집\n", "## Fact Dossier\n"))
+		b.WriteString(lbl("## 팩트 자료집\n", "## Fact Dossier\n", "## ファクト資料集\n"))
 		for _, f := range d.Facts {
 			line := fmt.Sprintf("- [%s] (%s) %s", f.ID, f.Status, f.Claim)
 			if strings.TrimSpace(f.Category) != "" {
@@ -217,8 +269,8 @@ func buildContext(d PromptData, language string) string {
 		b.WriteString("\n")
 	}
 	if len(d.References) > 0 {
-		b.WriteString(lbl("## 추가 레퍼런스\n", "## Additional References\n"))
-		b.WriteString(lbl("작가가 이번 요청에 참고하라고 직접 추가한 자료입니다. 목적 지시를 우선해서 사용하세요.\n", "These materials were added by the writer for this request. Prioritize the purpose instructions.\n"))
+		b.WriteString(lbl("## 추가 레퍼런스\n", "## Additional References\n", "## 追加リファレンス\n"))
+		b.WriteString(lbl("작가가 이번 요청에 참고하라고 직접 추가한 자료입니다. 목적 지시를 우선해서 사용하세요.\n", "These materials were added by the writer for this request. Prioritize the purpose instructions.\n", "作家がこのリクエストのために直接追加した資料です。目的の指示を優先して使ってください。\n"))
 		for _, r := range d.References {
 			if r.Status == ReferenceStatusDisabled {
 				continue
@@ -231,21 +283,21 @@ func buildContext(d PromptData, language string) string {
 			b.WriteString(referencePurposeInstruction(r.Purpose, language))
 			b.WriteString("\n")
 			if r.Status == ReferenceStatusSummarized {
-				b.WriteString(lbl("(요약 사용 중)\n", "(summary in use)\n"))
+				b.WriteString(lbl("(요약 사용 중)\n", "(summary in use)\n", "（要約使用中）\n"))
 			}
 			b.WriteString(text)
 			b.WriteString("\n\n")
 		}
 	}
 	if len(d.SceneExcerpts) > 0 {
-		b.WriteString(lbl("## 작성된 본문 발췌\n", "## Written Manuscript Excerpts\n"))
+		b.WriteString(lbl("## 작성된 본문 발췌\n", "## Written Manuscript Excerpts\n", "## 執筆済み本文の抜粋\n"))
 		for _, s := range d.SceneExcerpts {
 			if strings.TrimSpace(s.Text) == "" {
 				continue
 			}
 			current := ""
 			if s.IsCurrent {
-				current = lbl(" (현재 씬)", " (current scene)")
+				current = lbl(" (현재 씬)", " (current scene)", "（現在のシーン）")
 			}
 			b.WriteString(fmt.Sprintf("### [%s] %s%s\n", s.NodeID, s.Label, current))
 			b.WriteString(strings.TrimSpace(s.Text))
@@ -253,25 +305,25 @@ func buildContext(d PromptData, language string) string {
 		}
 	}
 	if d.HasSpine && hasSpineBeats(d.Spine) {
-		b.WriteString(lbl("## 플롯\n", "## Plot\n"))
-		writeScene(&b, lbl("[이전 씬]", "[prev scene]"), d.Spine.Prev)
-		writeSceneVal(&b, lbl("[현재 씬]", "[current scene]"), d.Spine.Current)
-		writeScene(&b, lbl("[다음 씬]", "[next scene]"), d.Spine.Next)
+		b.WriteString(lbl("## 플롯\n", "## Plot\n", "## プロット\n"))
+		writeScene(&b, lbl("[이전 씬]", "[prev scene]", "[前のシーン]"), d.Spine.Prev)
+		writeSceneVal(&b, lbl("[현재 씬]", "[current scene]", "[現在のシーン]"), d.Spine.Current)
+		writeScene(&b, lbl("[다음 씬]", "[next scene]", "[次のシーン]"), d.Spine.Next)
 		b.WriteString("\n")
 	}
 	if d.HasSpine {
-		b.WriteString(lbl("## 씬 (비트를 붙일 수 있는 실제 씬 — node_id)\n", "## Scenes (actual scenes that can have beats attached — node_id)\n"))
+		b.WriteString(lbl("## 씬 (비트를 붙일 수 있는 실제 씬 — node_id)\n", "## Scenes (actual scenes that can have beats attached — node_id)\n", "## シーン（ビートを付けられる実際のシーン — node_id）\n"))
 		if d.Spine.Prev != nil {
-			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(이전 씬)", "(prev scene)")+"\n", d.Spine.Prev.NodeID, d.Spine.Prev.Label))
+			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(이전 씬)", "(prev scene)", "（前のシーン）")+"\n", d.Spine.Prev.NodeID, d.Spine.Prev.Label))
 		}
-		b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(현재 씬)", "(current scene)")+"\n", d.Spine.Current.NodeID, d.Spine.Current.Label))
+		b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(현재 씬)", "(current scene)", "（現在のシーン）")+"\n", d.Spine.Current.NodeID, d.Spine.Current.Label))
 		if d.Spine.Next != nil {
-			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(다음 씬)", "(next scene)")+"\n", d.Spine.Next.NodeID, d.Spine.Next.Label))
+			b.WriteString(fmt.Sprintf("- [%s] %s "+lbl("(다음 씬)", "(next scene)", "（次のシーン）")+"\n", d.Spine.Next.NodeID, d.Spine.Next.Label))
 		}
 		b.WriteString("\n")
 	}
 	if len(d.Threads) > 0 {
-		b.WriteString(lbl("## 스토리라인\n", "## Storylines\n"))
+		b.WriteString(lbl("## 스토리라인\n", "## Storylines\n", "## ストーリーライン\n"))
 		for _, t := range d.Threads {
 			line := fmt.Sprintf("- [%s] %s", t.ID, t.Name)
 			if t.Summary != "" {
@@ -282,7 +334,7 @@ func buildContext(d PromptData, language string) string {
 		b.WriteString("\n")
 	}
 	if len(d.Entities) > 0 || len(d.Relationships) > 0 {
-		b.WriteString(lbl("## 세계관 요소·관계\n", "## World Elements & Relationships\n"))
+		b.WriteString(lbl("## 세계관 요소·관계\n", "## World Elements & Relationships\n", "## 世界観要素・関係\n"))
 		nameByID := map[string]string{}
 		for _, e := range d.Entities {
 			nameByID[e.ID] = e.Name
@@ -620,6 +672,18 @@ func renderReferencesPreview(refs []Reference) string {
 }
 
 func referencePurposeInstruction(purpose string, lang string) string {
+	if isJapanese(lang) {
+		switch normalizeReferencePurpose(purpose) {
+		case ReferencePurposeStyle:
+			return "目的: 文体参考。文のリズム、語彙、視点、距離感のみ参考にし、内容や固有の表現をそのまま複製しないでください。"
+		case ReferencePurposeCanon:
+			return "目的: 設定/世界観。作品内部の事実として優先的に反映し、現在のシーン本文と矛盾する場合は矛盾を短く伝えてください。"
+		case ReferencePurposeConstraint:
+			return "目的: 禁止/注意事項。以下の制限を優先的に守り、破らざるを得ない場合は先に説明してください。"
+		default:
+			return "目的: 内容参考。場面、事実、感情的文脈の根拠として活用してください。"
+		}
+	}
 	if isEnglish(lang) {
 		switch normalizeReferencePurpose(purpose) {
 		case ReferencePurposeStyle:
@@ -645,6 +709,18 @@ func referencePurposeInstruction(purpose string, lang string) string {
 }
 
 func purposeLabel(purpose string, lang string) string {
+	if isJapanese(lang) {
+		switch normalizeReferencePurpose(purpose) {
+		case ReferencePurposeStyle:
+			return "文体参考"
+		case ReferencePurposeCanon:
+			return "設定/世界観"
+		case ReferencePurposeConstraint:
+			return "禁止/注意"
+		default:
+			return "内容参考"
+		}
+	}
 	if isEnglish(lang) {
 		switch normalizeReferencePurpose(purpose) {
 		case ReferencePurposeStyle:
@@ -707,6 +783,19 @@ func writeSceneVal(b *strings.Builder, tag string, s plot.SceneBeats) {
 
 func kindLabel(k string, lang string) string {
 	if isEnglish(lang) {
+		return k
+	}
+	if isJapanese(lang) {
+		switch k {
+		case "character":
+			return "人物"
+		case "place":
+			return "場所"
+		case "item":
+			return "アイテム"
+		case "concept":
+			return "概念"
+		}
 		return k
 	}
 	switch k {

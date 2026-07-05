@@ -569,13 +569,18 @@ func compactTranscriptSummary(msgs []session.Message, lang string) string {
 		start = len(msgs) - compactHistoryMaxMessages
 	}
 	var b strings.Builder
-	b.WriteString(pickLang(lang, "이전 컴패니언 대화 요약\n\n", "Summary of the previous companion conversation\n\n"))
+	b.WriteString(pickLang(lang, "이전 컴패니언 대화 요약\n\n", "Summary of the previous companion conversation\n\n", "以前のコンパニオン会話の要約\n\n"))
 	if start > 0 {
-		if isEnglish(lang) {
+		switch {
+		case isEnglish(lang):
 			b.WriteString("- ")
 			b.WriteString(strconv.Itoa(start))
 			b.WriteString(" earlier messages omitted\n")
-		} else {
+		case isJapanese(lang):
+			b.WriteString("- 以前のメッセージ ")
+			b.WriteString(strconv.Itoa(start))
+			b.WriteString(" 件は省略\n")
+		default:
 			b.WriteString("- 이전 메시지 ")
 			b.WriteString(strconv.Itoa(start))
 			b.WriteString("개는 생략됨\n")
@@ -598,12 +603,12 @@ func compactTranscriptSummary(msgs []session.Message, lang string) string {
 func displayRole(role, lang string) string {
 	switch strings.TrimSpace(role) {
 	case "assistant":
-		return pickLang(lang, "컴패니언", "Companion")
+		return pickLang(lang, "컴패니언", "Companion", "コンパニオン")
 	case "user":
-		return pickLang(lang, "나", "Me")
+		return pickLang(lang, "나", "Me", "私")
 	default:
 		if strings.TrimSpace(role) == "" {
-			return pickLang(lang, "기록", "Log")
+			return pickLang(lang, "기록", "Log", "記録")
 		}
 		return strings.TrimSpace(role)
 	}

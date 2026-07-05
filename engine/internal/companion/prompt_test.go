@@ -47,6 +47,34 @@ func TestBuildContext_EnglishLabels(t *testing.T) {
 	}
 }
 
+func TestBuildSystem_JapaneseLanguage(t *testing.T) {
+	s := buildSystem("ja")
+	for _, want := range []string{"執筆コンパニオン", "常に日本語で答えて", "linetta-proposal", "create_thread", "add_beat", "linetta_apply_ops"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("japanese system missing %q", want)
+		}
+	}
+	if strings.Contains(s, "집필 동료") {
+		t.Fatal("japanese system prompt still contains Korean persona line")
+	}
+}
+
+func TestBuildContext_JapaneseLabels(t *testing.T) {
+	d := PromptData{
+		Outline:  "探偵が消えたメッセージを追う。",
+		Memories: []string{"作家は短い文を好む。"},
+	}
+	out := buildContext(d, "ja")
+	for _, want := range []string{"## 作品概要", "## 記憶"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("japanese context missing %q", want)
+		}
+	}
+	if strings.Contains(out, "## 작품 개요") || strings.Contains(out, "## 기억") {
+		t.Fatalf("japanese context still contains Korean headers: %q", out)
+	}
+}
+
 func TestBuildSystem_MentionsWebTools(t *testing.T) {
 	s := buildSystem("")
 	for _, want := range []string{"web_search", "web_fetch"} {

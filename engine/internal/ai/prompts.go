@@ -13,10 +13,18 @@ func langIsEnglish(lang string) bool {
 	return strings.HasPrefix(lang, "en")
 }
 
-// langPick returns en when lang is English, otherwise ko (the default).
-func langPick(lang, ko, en string) string {
+// langIsJapanese reports whether the app UI language selects Japanese prompts.
+func langIsJapanese(lang string) bool {
+	return strings.HasPrefix(lang, "ja")
+}
+
+// langPick returns the string for the app language; Korean is the default.
+func langPick(lang, ko, en, ja string) string {
 	if langIsEnglish(lang) {
 		return en
+	}
+	if langIsJapanese(lang) {
+		return ja
 	}
 	return ko
 }
@@ -67,6 +75,36 @@ func BuildMessages(c Context) []llm.ChatMessage {
 
 func buildSystem(c Context) string {
 	lang := c.Options.Language
+	if langIsJapanese(lang) {
+		var b strings.Builder
+		b.WriteString("あなたは小説家のインラインエディタです。")
+		b.WriteString("作家の依頼した作業を本文の流れに合わせて行ってください。")
+		b.WriteString("日本語で答えてください。出力はマークダウンの見出しなしで、純粋な本文のみ書いてください。\n\n")
+		switch c.Options.Tone {
+		case TonePresetMy:
+			if strings.TrimSpace(c.StyleNotes) != "" {
+				b.WriteString("作家のスタイルノート（必ず従うこと）:\n")
+				b.WriteString(c.StyleNotes)
+				b.WriteString("\n\n")
+			}
+		case TonePresetCool:
+			b.WriteString("今回の出力は冷たく距離感のあるトーンを保ってください。\n\n")
+		case TonePresetSensory:
+			b.WriteString("今回の出力は視覚・聴覚・触覚の描写を積極的に使う感覚的なトーンを保ってください。\n\n")
+		case TonePresetDry:
+			b.WriteString("今回の出力は形容詞を減らし、事実中心の乾いたトーンを保ってください。\n\n")
+		case TonePresetTense:
+			b.WriteString("今回の出力は短い文と切れ味で緊張感を生かしたトーンを保ってください。\n\n")
+		case TonePresetLyrical:
+			b.WriteString("今回の出力はリズムの生きた叙情的なトーンを保ってください。\n\n")
+		case TonePresetHumor:
+			b.WriteString("今回の出力は軽くウィットのあるトーンを保ってください。\n\n")
+		}
+		if c.Options.ShortForm {
+			b.WriteString("出力は一段落以内、500字以内で短く書いてください。\n")
+		}
+		return b.String()
+	}
 	if langIsEnglish(lang) {
 		var b strings.Builder
 		b.WriteString("You are an inline editor for a fiction writer. ")
@@ -137,27 +175,27 @@ func buildUser(c Context) string {
 	// length target, and default POV. Sits above everything else so the model
 	// frames the entire context within the writer's stated intent.
 	if meta := renderProjectMeta(c.Project, lang); meta != "" {
-		b.WriteString(langPick(lang, "## 작품 설정\n", "## Project Settings\n"))
+		b.WriteString(langPick(lang, "## 작품 설정\n", "## Project Settings\n", "## 作品設定\n"))
 		b.WriteString(meta)
 		b.WriteString("\n\n")
 	}
 
 	overview := strings.TrimSpace(c.Outline)
 	if overview != "" {
-		b.WriteString(langPick(lang, "## 작품 개요\n", "## Work Overview\n"))
+		b.WriteString(langPick(lang, "## 작품 개요\n", "## Work Overview\n", "## 作品概要\n"))
 		b.WriteString(overview)
 		b.WriteString("\n\n")
 	}
 
 	synopsis := strings.TrimSpace(c.Project.Synopsis)
 	if synopsis != "" {
-		b.WriteString(langPick(lang, "## 작품 시놉시스\n", "## Synopsis\n"))
+		b.WriteString(langPick(lang, "## 작품 시놉시스\n", "## Synopsis\n", "## 作品シノプシス\n"))
 		b.WriteString(synopsis)
 		b.WriteString("\n\n")
 	}
 
 	if len(c.Hierarchical.NearbyLeafSummaries) > 0 {
-		b.WriteString(langPick(lang, "## 직전·직후 씬 발췌\n", "## Adjacent Scene Excerpts\n"))
+		b.WriteString(langPick(lang, "## 직전·직후 씬 발췌\n", "## Adjacent Scene Excerpts\n", "## 前後シーンの抜粋\n"))
 		for _, ss := range c.Hierarchical.NearbyLeafSummaries {
 			b.WriteString(fmt.Sprintf("- [%s] %s\n", ss.Label, ss.Body))
 		}
@@ -165,7 +203,7 @@ func buildUser(c Context) string {
 	}
 
 	if len(c.RelatedScenes) > 0 {
-		b.WriteString(langPick(lang, "## 관련 과거 씬\n", "## Related Past Scenes\n"))
+		b.WriteString(langPick(lang, "## 관련 과거 씬\n", "## Related Past Scenes\n", "## 関連する過去シーン\n"))
 		for _, ss := range c.RelatedScenes {
 			b.WriteString(fmt.Sprintf("- [%s] %s\n", ss.Label, ss.Body))
 		}
@@ -173,19 +211,19 @@ func buildUser(c Context) string {
 	}
 
 	if strings.TrimSpace(c.SceneText) != "" {
-		b.WriteString(fmt.Sprintf(langPick(lang, "## 현재 씬: %s\n", "## Current Scene: %s\n"), c.SceneLabel))
+		b.WriteString(fmt.Sprintf(langPick(lang, "## 현재 씬: %s\n", "## Current Scene: %s\n", "## 現在のシーン: %s\n"), c.SceneLabel))
 		b.WriteString(c.SceneText)
 		b.WriteString("\n\n")
 	}
 
 	if strings.TrimSpace(c.SelectionText) != "" {
-		b.WriteString(langPick(lang, "## 선택 영역\n", "## Selected Text\n"))
+		b.WriteString(langPick(lang, "## 선택 영역\n", "## Selected Text\n", "## 選択範囲\n"))
 		b.WriteString(c.SelectionText)
 		b.WriteString("\n\n")
 	}
 
 	if len(c.Entities) > 0 {
-		b.WriteString(langPick(lang, "## 세계관 요소\n", "## World Elements\n"))
+		b.WriteString(langPick(lang, "## 세계관 요소\n", "## World Elements\n", "## 世界観要素\n"))
 		for _, e := range c.Entities {
 			b.WriteString(fmt.Sprintf("- @%s — %s", e.Name, kindLabel(e.Kind, lang)))
 			if e.Role != "" {
@@ -218,7 +256,7 @@ func buildUser(c Context) string {
 		b.WriteString("\n")
 	}
 	if hasPlot(c.Plot) {
-		b.WriteString(langPick(lang, "## 플롯\n", "## Plot\n"))
+		b.WriteString(langPick(lang, "## 플롯\n", "## Plot\n", "## プロット\n"))
 		writeScene := func(tag string, s *plot.SceneBeats) {
 			if s == nil || len(s.Beats) == 0 {
 				return
@@ -234,13 +272,13 @@ func buildUser(c Context) string {
 				b.WriteString("\n")
 			}
 		}
-		writeScene(langPick(lang, "[이전 씬]", "[prev scene]"), c.Plot.Prev)
-		writeScene(langPick(lang, "[현재 씬]", "[current scene]"), &c.Plot.Current)
-		writeScene(langPick(lang, "[다음 씬]", "[next scene]"), c.Plot.Next)
+		writeScene(langPick(lang, "[이전 씬]", "[prev scene]", "[前のシーン]"), c.Plot.Prev)
+		writeScene(langPick(lang, "[현재 씬]", "[current scene]", "[現在のシーン]"), &c.Plot.Current)
+		writeScene(langPick(lang, "[다음 씬]", "[next scene]", "[次のシーン]"), c.Plot.Next)
 		b.WriteString("\n")
 	}
 	if len(c.Relationships) > 0 {
-		b.WriteString(langPick(lang, "## 관계\n", "## Relationships\n"))
+		b.WriteString(langPick(lang, "## 관계\n", "## Relationships\n", "## 関係\n"))
 		for _, r := range c.Relationships {
 			arrow := "→"
 			if r.Bidirectional {
@@ -256,7 +294,7 @@ func buildUser(c Context) string {
 		b.WriteString("\n")
 	}
 	if len(c.Notes) > 0 {
-		b.WriteString(langPick(lang, "## 작가 주석\n", "## Author Notes\n"))
+		b.WriteString(langPick(lang, "## 작가 주석\n", "## Author Notes\n", "## 作家メモ（注釈）\n"))
 		for _, n := range c.Notes {
 			b.WriteString("- ")
 			b.WriteString(n.Body)
@@ -265,11 +303,11 @@ func buildUser(c Context) string {
 		b.WriteString("\n")
 	}
 	if c.Options.Tone != TonePresetMy && strings.TrimSpace(c.StyleNotes) != "" {
-		b.WriteString(langPick(lang, "## 작가 메모\n", "## Author Memo\n"))
+		b.WriteString(langPick(lang, "## 작가 메모\n", "## Author Memo\n", "## 作家メモ\n"))
 		b.WriteString(c.StyleNotes)
 		b.WriteString("\n\n")
 	}
-	b.WriteString(langPick(lang, "## 작가의 지시\n", "## Writer's Instruction\n"))
+	b.WriteString(langPick(lang, "## 작가의 지시\n", "## Writer's Instruction\n", "## 作家の指示\n"))
 	b.WriteString(strings.TrimSpace(c.UserPrompt))
 	return b.String()
 }
@@ -280,18 +318,34 @@ func buildUser(c Context) string {
 func renderProjectMeta(m ProjectMeta, lang string) string {
 	parts := []string{}
 	if len(m.Genres) > 0 {
-		parts = append(parts, langPick(lang, "장르: ", "Genres: ")+strings.Join(m.Genres, ", "))
+		parts = append(parts, langPick(lang, "장르: ", "Genres: ", "ジャンル: ")+strings.Join(m.Genres, ", "))
 	}
 	if m.LengthTarget != "" {
-		parts = append(parts, langPick(lang, "분량: ", "Length: ")+mapLengthTarget(m.LengthTarget, lang))
+		parts = append(parts, langPick(lang, "분량: ", "Length: ", "分量: ")+mapLengthTarget(m.LengthTarget, lang))
 	}
 	if m.DefaultPOV != "" {
-		parts = append(parts, langPick(lang, "시점: ", "POV: ")+mapDefaultPOV(m.DefaultPOV, lang))
+		parts = append(parts, langPick(lang, "시점: ", "POV: ", "視点: ")+mapDefaultPOV(m.DefaultPOV, lang))
 	}
 	return strings.Join(parts, " · ")
 }
 
 func mapLengthTarget(v, lang string) string {
+	if langIsJapanese(lang) {
+		switch v {
+		case "flash":
+			return "フラッシュ"
+		case "short":
+			return "短編"
+		case "novella":
+			return "中編"
+		case "novel":
+			return "長編"
+		case "series":
+			return "シリーズ"
+		default:
+			return v
+		}
+	}
 	if langIsEnglish(lang) {
 		switch v {
 		case "flash":
@@ -325,6 +379,18 @@ func mapLengthTarget(v, lang string) string {
 }
 
 func mapDefaultPOV(v, lang string) string {
+	if langIsJapanese(lang) {
+		switch v {
+		case "first":
+			return "一人称"
+		case "third_limited":
+			return "三人称限定"
+		case "omniscient":
+			return "全知"
+		default:
+			return v
+		}
+	}
 	if langIsEnglish(lang) {
 		switch v {
 		case "first":
@@ -351,6 +417,19 @@ func mapDefaultPOV(v, lang string) string {
 
 func kindLabel(k, lang string) string {
 	if langIsEnglish(lang) {
+		return k
+	}
+	if langIsJapanese(lang) {
+		switch k {
+		case "character":
+			return "人物"
+		case "place":
+			return "場所"
+		case "item":
+			return "アイテム"
+		case "concept":
+			return "概念"
+		}
 		return k
 	}
 	switch k {

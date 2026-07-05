@@ -107,6 +107,18 @@ type reasoningPayload struct {
 // friendlyToolLabel maps a tool name to a human-readable status shown while the
 // companion is working, so the user sees what the AI is doing.
 func friendlyToolLabel(name, lang string) string {
+	if isJapanese(lang) {
+		switch name {
+		case "web_search":
+			return "ウェブ検索中…"
+		case "web_fetch":
+			return "ウェブページを読み込み中…"
+		case "linetta_apply_ops":
+			return "作品設定を反映中…"
+		default:
+			return "ツール実行中: " + name
+		}
+	}
 	if isEnglish(lang) {
 		switch name {
 		case "web_search":
@@ -137,6 +149,9 @@ func appliedStatusText(lang string) string {
 	if isEnglish(lang) {
 		return "Story state updated"
 	}
+	if isJapanese(lang) {
+		return "作品設定を更新しました"
+	}
 	return "작품 설정을 갱신했습니다"
 }
 
@@ -145,6 +160,9 @@ func appliedStatusText(lang string) string {
 func cancelledMessage(lang string) string {
 	if isEnglish(lang) {
 		return "Request stopped."
+	}
+	if isJapanese(lang) {
+		return "リクエストを中止しました。"
 	}
 	return "요청을 중지했습니다."
 }
@@ -530,6 +548,9 @@ func querySummary(qr QueryRequest, lang string) string {
 	if isEnglish(lang) {
 		return "Looking up: " + strings.Join(names, ", ")
 	}
+	if isJapanese(lang) {
+		return "照会中: " + strings.Join(names, ", ")
+	}
 	return "조회 중: " + strings.Join(names, ", ")
 }
 
@@ -562,6 +583,32 @@ func applyOpsResultHasSceneTextChange(result ApplyOpsResult) bool {
 }
 
 func sceneTextApplySuccessMessage(result ApplyOpsResult, lang string) string {
+	if isJapanese(lang) {
+		if len(result.ChangedNodes) == 0 {
+			return "現在のシーン本文を反映しました。"
+		}
+		change := result.ChangedNodes[0]
+		var b strings.Builder
+		if change.CharCount > 0 {
+			fmt.Fprintf(&b, "現在のシーン本文を反映しました。（%d字）", change.CharCount)
+		} else {
+			b.WriteString("現在のシーン本文を反映しました。")
+		}
+		b.WriteString("\n\n作業の流れ\n")
+		if strings.TrimSpace(result.Summary) != "" {
+			b.WriteString("- リクエスト処理: ")
+			b.WriteString(strings.TrimSpace(result.Summary))
+			b.WriteString("\n")
+		}
+		b.WriteString("- 現在のシーンの文脈とご指示に基づいて本文を執筆しました。\n")
+		b.WriteString("- 執筆した原稿を現在のシーン本文として直接適用しました。")
+		if preview := sceneTextPreviewForMessage(change.TextPreview); preview != "" {
+			b.WriteString("\n- 冒頭: \"")
+			b.WriteString(preview)
+			b.WriteString("\"")
+		}
+		return b.String()
+	}
 	if isEnglish(lang) {
 		if len(result.ChangedNodes) == 0 {
 			return "Applied the current scene text."
@@ -616,6 +663,22 @@ func sceneTextApplySuccessMessage(result ApplyOpsResult, lang string) string {
 
 func applyOpsFallbackSuccessMessage(result ApplyOpsResult, lang string) string {
 	count := result.Applied
+	if isJapanese(lang) {
+		if count <= 0 {
+			return "作品の状態を反映しました。"
+		}
+		var b strings.Builder
+		if count == 1 {
+			b.WriteString("作品の状態を反映しました。")
+		} else {
+			fmt.Fprintf(&b, "作品の状態に %d 件の変更を反映しました。", count)
+		}
+		if strings.TrimSpace(result.Summary) != "" {
+			b.WriteString("\n\n作業の流れ\n- リクエスト処理: ")
+			b.WriteString(strings.TrimSpace(result.Summary))
+		}
+		return b.String()
+	}
 	if isEnglish(lang) {
 		if count <= 0 {
 			return "Applied the story state changes."
@@ -657,6 +720,9 @@ func sceneTextApplyFailedMessage(lang string) string {
 	if isEnglish(lang) {
 		return "No text change was produced. Try again or check the current scene."
 	}
+	if isJapanese(lang) {
+		return "本文の変更が作成されませんでした。再試行するか、現在のシーンを確認してください。"
+	}
 	return "본문 변경이 만들어지지 않았습니다. 다시 시도하거나 현재 씬을 확인해주세요."
 }
 
@@ -664,11 +730,33 @@ func applyOpsFailedMessage(lang string) string {
 	if isEnglish(lang) {
 		return "Could not apply the story changes. Please try again."
 	}
+	if isJapanese(lang) {
+		return "作品の変更を適用できませんでした。もう一度お試しください。"
+	}
 	return "작품 변경을 적용하지 못했습니다. 다시 시도해주세요."
 }
 
 func directApplyCorrectionPrompt(userText string, intent companionIntent, lang string) string {
 	userText = strings.TrimSpace(userText)
+	if isJapanese(lang) {
+		if userText == "" {
+			userText = "（原文なし）"
+		}
+		if intent.RequiresSceneText() {
+			return "直前のユーザーリクエストは説明や提案ではなく、実際の作品状態の変更リクエストです。" +
+				"現在のシーン本文の執筆/修正/確定を求めているため、追加の質問や選択肢で終わらせないでください。" +
+				"すでに提供されている現在のシーン、前後の流れ、ユーザーの指示に基づいてすぐ読めるシーン本文を書き、" +
+				"必ず linetta_apply_ops の set_scene_text で実際のシーン原稿を置き換えてください。" +
+				"変更したと言葉だけで答えず、ツールを呼び出してください。\n\n" +
+				"ユーザーリクエスト: " + userText
+		}
+		return "直前のユーザーリクエストは説明や提案ではなく、実際の作品状態の変更リクエストです。" +
+			"変更したと言葉だけで答えず、linetta_apply_ops を呼び出して作品状態に適用してください。" +
+			"現在のシーン本文の書き直し/修正/拡張/推敲のリクエストなら set_scene_text で実際のシーン原稿を置き換えてください。" +
+			"アウトライン/目次のリクエストなら create_outline_node または create_scene で左のアウトラインツリーを作り、必要に応じてそのノードに create_thread/add_beat を繋げてください。" +
+			"現在の情報だけで適用できない場合は適用せず、足りない情報を一文で質問してください。\n\n" +
+			"ユーザーリクエスト: " + userText
+	}
 	if isEnglish(lang) {
 		if userText == "" {
 			userText = "(no original text)"
@@ -716,6 +804,11 @@ var companionStructureTerms = []string{
 	"storyline", "plot", "beat", "character", "relationship", "place",
 	"scene", "overview", "synopsis", "outline", "structure", "chapter",
 	"episode", "manuscript", "prose", "draft", "worldbuilding", "lore",
+	// Japanese equivalents.
+	"ストーリーライン", "プロット", "ビート", "キャラクター", "人物",
+	"関係", "場所", "シーン", "場面", "概要", "あらすじ", "記憶", "設定",
+	"世界観", "シノプシス", "アウトライン", "構成", "章", "パート",
+	"エピソード", "本文", "原稿", "文章",
 }
 
 var companionMutationTerms = []string{
@@ -728,12 +821,19 @@ var companionMutationTerms = []string{
 	"write", "add", "create", "make", "change", "update", "save",
 	"delete", "remove", "revise", "rewrite", "expand", "split",
 	"refine", "organize", "polish", "fill in", "clear", "edit",
+	// Japanese equivalents.
+	"修正", "追加", "作成", "作って", "変えて", "変更", "反映", "保存",
+	"入れて", "整理", "更新", "削除", "消して", "執筆", "書いて",
+	"完成", "分けて", "分割", "具体化", "拡張", "展開", "整えて",
+	"直して", "書き直", "初期化", "埋めて",
 }
 
 var companionEducationalTerms = []string{
 	"작성법", "방법", "어떻게", "가이드",
 	// English equivalents.
 	"how to", "how do", "how can", "guide", "method",
+	// Japanese equivalents.
+	"書き方", "方法", "どうやって", "ガイド",
 }
 
 var companionResearchTerms = []string{
@@ -742,6 +842,8 @@ var companionResearchTerms = []string{
 	// English equivalents.
 	"search", "find", "look up", "research", "link", "reference",
 	"latest", "source",
+	// Japanese equivalents.
+	"検索", "調べて", "調査", "リンク", "資料", "最新", "リファレンス",
 }
 
 var companionDirectApplyTerms = []string{
@@ -753,6 +855,9 @@ var companionDirectApplyTerms = []string{
 	// English direct-request markers.
 	"please", "go ahead", "do it", "apply it", "write it", "make it",
 	"add it", "save it", "update it", "just write", "just apply",
+	// Japanese direct-request markers.
+	"してください", "してくれ", "お願いします", "反映して", "保存して",
+	"追加して", "書いて", "作成して", "適用して", "作って",
 }
 
 var companionDiscussionTerms = []string{
@@ -761,6 +866,9 @@ var companionDiscussionTerms = []string{
 	// English equivalents.
 	"what do you think", "recommend", "suggestion", "idea", "explain",
 	"tell me", "review", "brainstorm", "what if", "thoughts",
+	// Japanese equivalents.
+	"どう思う", "おすすめ", "アイデア", "説明", "教えて", "レビュー",
+	"ブレインストーミング", "可能かな", "大丈夫かな",
 }
 
 func containsAny(s string, terms []string) bool {
