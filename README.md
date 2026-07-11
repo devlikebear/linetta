@@ -1,37 +1,131 @@
+<div align="center">
+  <img src="apps/desktop/src-tauri/icons/icon.png" width="112" alt="Linetta app icon" />
+
 # Linetta
 
-Linetta is a local-first desktop writing app for long-form fiction. The app keeps the writer in a focused Tauri workspace while a bundled Go engine handles SQLite persistence, snapshots, markdown import/export, AI generation, companion chat, background summaries, daily backups, and optional Git sync.
+### A calm, local-first writing studio for long-form fiction
 
-## Stack
+Plan your story, keep your world consistent, write scene by scene, and work with an optional AI companion — without giving up control of your manuscript.
 
-- Tauri 2 Rust shell + React 18 + Vite + TypeScript
-- Embedded Go engine through a C ABI, with JSONRPC envelopes kept as the internal request contract
-- SQLite under the local Linetta data directory
-- `github.com/devlikebear/tars` for LLM provider integration
+[![Latest release](https://img.shields.io/github/v/release/devlikebear/linetta?style=flat-square)](https://github.com/devlikebear/linetta/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/devlikebear/linetta/ci.yml?branch=main&style=flat-square&label=build)](https://github.com/devlikebear/linetta/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/devlikebear/linetta?style=flat-square)](LICENSE)
 
-## Install
+[Mac App Store](https://apps.apple.com/app/id6781664781) · [Download for Windows or Linux](https://github.com/devlikebear/linetta/releases/latest) · [Report an issue](https://github.com/devlikebear/linetta/issues)
 
-On macOS (Apple Silicon) install the prebuilt app from the Homebrew tap:
+English · 한국어 · 日本語
+</div>
+
+![Linetta editor with the writing companion open](docs/assets/screenshots/companion.png)
+
+## One workspace for the whole story
+
+Linetta is made for novelists and web-fiction writers who want their manuscript, outline, characters, places, relationships, and research close at hand — without turning writing into project management.
+
+- **Write with focus.** Work scene by scene in a quiet editor with your outline always within reach.
+- **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
+- **Stay in control of AI.** Ask the optional companion to read the current scene or the whole work. It can suggest drafts and structured changes, but you decide what gets applied.
+- **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
+- **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
+
+## See Linetta in action
+
+| Build with context | Research without leaving the scene |
+| --- | --- |
+| The companion can use your manuscript and story structure to offer continuations, revisions, and proposals. | Fact Book keeps source-backed notes next to the writing that needs them. |
+| ![Linetta writing companion](docs/assets/screenshots/companion.png) | ![Linetta Fact Book](docs/assets/screenshots/fact-book.png) |
+
+Your projects stay organized in a library built for multiple works:
+
+![Linetta project library](docs/assets/screenshots/library.png)
+
+## Get Linetta
+
+### Mac App Store
+
+Linetta is free on the [Mac App Store](https://apps.apple.com/app/id6781664781).
+
+### Homebrew on Apple Silicon
+
+The direct macOS build is signed with an Apple Developer ID and notarized by Apple.
 
 ```sh
-brew tap devlikebear/tap
-brew install --cask linetta
+brew install --cask devlikebear/tap/linetta
 ```
 
-The fully qualified `devlikebear/tap/linetta` cask name also works in a single `brew install` without a separate `brew tap` step.
-
-The macOS build is signed with an Apple Developer ID and notarized by Apple, so Gatekeeper accepts it without any quarantine workaround. To upgrade:
+Upgrade an existing Homebrew installation with:
 
 ```sh
 brew update
 brew reinstall --cask linetta
 ```
 
-Windows and Linux prebuilt installers are published on each [GitHub Release](https://github.com/devlikebear/linetta/releases): a Windows NSIS installer (`*_x64-setup.exe`) and MSI (`*_x64_en-US.msi`), and Linux AppImage, `.deb`, and `.rpm` packages. Intel Macs are not covered by a prebuilt download — build from source with `make build-desktop` (see below).
+### Windows and Linux
 
-## Development
+Every [GitHub release](https://github.com/devlikebear/linetta/releases/latest) includes Windows NSIS and MSI installers plus Linux AppImage, `.deb`, and `.rpm` packages.
 
-Install dependencies in the desktop app once:
+Intel Mac users can [build from source](#build-from-source).
+
+## AI is optional
+
+Linetta is a complete writing app without AI. If you choose to connect a supported provider, credentials are stored locally and manuscript text is sent only when you make an AI request.
+
+The `Cmd/Ctrl+J` companion can:
+
+- discuss the current scene or the whole work;
+- suggest continuations and rewrites;
+- inspect story context with built-in read tools;
+- propose structured updates to scenes, outlines, characters, relationships, places, summaries, and memories;
+- search or fetch web sources when you explicitly configure and use those tools.
+
+Changes follow a **propose → review → apply** flow so the writer remains the final editor.
+
+## Data and safety
+
+Linetta stores writing data on your device:
+
+```text
+macOS    ~/Library/Application Support/com.devlikebear.linetta
+Linux    ${XDG_DATA_HOME:-~/.local/share}/com.devlikebear.linetta
+Windows  %APPDATA%\com.devlikebear.linetta
+```
+
+Important data includes:
+
+- `library.db`: projects, scenes, story data, and version snapshots;
+- `backups/YYYY-MM-DD/`: daily database backups, kept for 14 days;
+- `companion/`: local companion transcripts and memories;
+- `settings.json`: app preferences and provider configuration.
+
+Manual and AI-replace snapshots are retained indefinitely. Autosave snapshots are thinned over time, from every save during the first day to daily snapshots after 30 days.
+
+## Frequently asked questions
+
+### Does Linetta require an account or subscription?
+
+No. Writing, organization, import/export, snapshots, and backups work without a Linetta account or subscription.
+
+### Do I have to use AI?
+
+No. AI features are optional and remain inactive until you connect a provider.
+
+### Can I bring an existing manuscript?
+
+Yes. Linetta supports Markdown import and export so your writing is not locked into the app.
+
+### Is my work uploaded to a Linetta cloud?
+
+No. Linetta has no mandatory cloud. Optional AI and Git features communicate only with services you configure and invoke.
+
+## For contributors
+
+Linetta uses a Tauri 2 Rust shell, React 18, Vite, TypeScript, an embedded Go engine, and SQLite. The shell and engine communicate through JSON-RPC envelopes across a C ABI.
+
+See the [development guide](docs/DEVELOPMENT.md) for architecture notes, versioning, mobile build targets, CI workflows, and troubleshooting.
+
+### Build from source
+
+Install the desktop dependencies once:
 
 ```sh
 cd apps/desktop
@@ -44,35 +138,19 @@ Start the desktop app:
 make dev
 ```
 
-This wraps `scripts/dev.sh`, which launches `tauri dev`. Cargo links the embedded Go engine through `apps/desktop/src-tauri/build.rs`.
-
-Build the standalone JSONRPC engine for debugging:
-
-```sh
-make build-engine
-```
-
-The debug binary is written under `engine/bin/` and is not bundled into the Tauri app.
-
-Build the desktop release binary for the current operating system:
+Build a desktop release for the current operating system:
 
 ```sh
 make build-desktop
 ```
 
-Search is available from the Library search button, the Library menu, the Workspace command palette, and `Cmd+F` / `Ctrl+F` in the Workspace. Results search visible projects by project title, scene label/title, and scene body text.
+Build the standalone JSON-RPC engine for debugging:
 
-## AI Companion Tools
+```sh
+make build-engine
+```
 
-The `cmd+j` companion chat runs through the TARS agent loop. When the active provider supports tool calls, Linetta exposes these built-in tools:
-
-- `web_search`: searches the web through Brave Search or Perplexity Sonar.
-- `web_fetch`: fetches a URL and returns extracted text with SSRF protection.
-- `linetta_apply_ops`: updates Linetta story state directly, including outline, storylines, beats, characters, relationships, places, scenes, summaries, and memories.
-
-Configure `web_search` in Settings under **LLM 도구**. The provider and API key are stored locally in `settings.json`; `web_fetch` does not require a key.
-
-## Verification
+### Verification
 
 Run the full local gate:
 
@@ -80,7 +158,7 @@ Run the full local gate:
 make test
 ```
 
-Useful narrower checks:
+Useful focused checks:
 
 ```sh
 make test-go
@@ -89,10 +167,11 @@ make test-tauri
 make test-mobile-engine
 ```
 
-`make test` runs Go tests, frontend Vitest tests, the Vite production build, and Rust `cargo check`.
-`make test-mobile-engine` runs the Go engine suite with the `mobile` build tag so the iOS/Android-safe stubs stay covered.
+`make test` runs the Go test suite, frontend Vitest tests, the Vite production build, and Rust `cargo check`.
 
-Mobile engine artifacts can be built directly when the platform toolchains are installed:
+### Mobile engine development
+
+The repository also builds the embedded engine for iOS and Android. These targets are intended for contributors working on the mobile runtime:
 
 ```sh
 make build-mobile-engine-ios
@@ -101,77 +180,12 @@ make build-mobile-engine-android
 
 The iOS target requires Xcode's iOS SDK. The Android target requires `ANDROID_NDK_HOME`.
 
-The ignored Tauri mobile native projects can be regenerated with:
+## Contributing and feedback
 
-```sh
-make mobile-ios-init
-make mobile-android-init
-```
+Linetta is in active development. Bug reports, writing-workflow feedback, localization fixes, and focused pull requests are welcome through [GitHub Issues](https://github.com/devlikebear/linetta/issues).
 
-For local iOS simulator smoke testing, install Xcode's matching iOS simulator
-runtime and run:
-
-```sh
-make build-mobile-ios-sim
-make smoke-mobile-ios-sim
-```
-
-For local Android smoke testing, install the Android SDK/NDK and run:
-
-```sh
-make build-mobile-android-debug
-make build-mobile-android-release-smoke
-```
-
-The iOS simulator build target creates a no-sign `.app` bundle and links the embedded Go engine into it. The iOS simulator smoke target also installs and launches the app in an available iPhone simulator, verifies the embedded engine symbols, and checks that `library.db` is created in the simulator app container. The Android debug target creates a Tauri APK and links the embedded Go engine into the Android app. The Android release smoke target creates a temporary local keystore, patches the generated Gradle signing hook, builds both release APK and Play-style AAB artifacts, verifies that both native libraries are packaged, checks APK Signature Scheme v2, and verifies the signed AAB without using real upload credentials. iOS signed app export is handled by the manual mobile release workflow because it depends on Apple team/signing credentials.
-
-## Versioning And Builds
-
-Keep all app version surfaces aligned with:
-
-```sh
-make bump-version VERSION=0.2.0
-```
-
-This updates the desktop `package.json`, Tauri config, Cargo metadata, lockfile package entry, and embedded engine diagnostics version.
-
-GitHub Actions:
-
-- `.github/workflows/ci.yml`: runs `make test` on PRs and pushes to `main`.
-- `.github/workflows/build.yml`: builds OS-specific Tauri artifacts on `workflow_dispatch` and `v*` tags for macOS, Linux, and Windows.
-- `.github/workflows/mobile-engine.yml`: verifies the mobile-tagged embedded engine, checks Android debug APK packaging, and uploads iOS/Android engine artifacts.
-- `.github/workflows/mobile-release.yml`: manual iOS/Android release path for signed Tauri artifacts; it initializes the ignored mobile projects, applies Android signing wiring, builds `.ipa` / `.aab` / `.apk` artifacts, and can upload them to an existing GitHub Release tag.
-
-## Data And Safety
-
-Linetta stores all writing data locally. Set `LINETTA_HOME` to override the data directory; otherwise the per-OS defaults are:
-
-```text
-macOS    ~/Library/Application Support/com.devlikebear.linetta
-Linux    ${XDG_DATA_HOME:-~/.local/share}/com.devlikebear.linetta
-Windows  %APPDATA%\com.devlikebear.linetta
-```
-
-Important files and folders:
-
-- `library.db`: main SQLite database (projects, scenes, entities, and version snapshots)
-- `settings.json`: app preferences
-- `backups/YYYY-MM-DD/library-HHMMSS.db`: daily full-database backups, kept for 14 days
-- `companion/`: companion transcript and memory files
-
-Linetta keeps two layers of history. Daily backups (above) snapshot the whole database; scene-level **version snapshots** live inside `library.db`. Manual and AI-replace snapshots are kept indefinitely, while autosave snapshots are thinned over time (all kept for the first 24 hours, then one per hour up to 30 days, then one per day).
-
-Git sync is optional. When configured in Settings, Linetta exports active projects as markdown into the selected Git repository, then runs `git add`, `git commit`, and `git push` using the system Git credentials.
-
-## Troubleshooting
-
-- Engine startup failure: the desktop shell shows an engine diagnostic screen with retry and copy-diagnostics actions.
-- Embedded engine link failure: run `cd apps/desktop/src-tauri && cargo build` and inspect the Go archive build output from `build.rs`.
-- AI provider errors: check Settings for the selected provider and confirm the corresponding CLI credentials work in the same shell environment.
-- Backup or Git sync failures: open Settings and check the operation status cards for the latest error and timestamp.
+If you are a novelist trying Linetta on a real project, feedback about where the app helps or interrupts your flow is especially valuable.
 
 ## License
 
-Linetta is licensed under the GNU Affero General Public License version 3 only
-(`AGPL-3.0-only`). See [LICENSE](LICENSE) and [LICENSE-NOTICE.md](LICENSE-NOTICE.md)
-for details, including commercial licensing options.
+Linetta is licensed under the GNU Affero General Public License version 3 only (`AGPL-3.0-only`). See [LICENSE](LICENSE) and [LICENSE-NOTICE.md](LICENSE-NOTICE.md) for details, including commercial licensing options.
