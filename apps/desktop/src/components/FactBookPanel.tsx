@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, CornerDownLeft, ExternalLink, Search, Trash2, X } from "lucide-react";
 import { facts as factsApi } from "../lib/rpc";
 import type { CompanionProposal, FactCard, FactStatus } from "../lib/types";
-import { useI18n } from "../lib/i18n";
+import { useI18n, type MessageKey } from "../lib/i18n";
 import { extractApplyOpsProposal, stripProposalBlock } from "../lib/companionDisplay";
 import { useCompanion } from "../hooks/useCompanion";
 import { ChoiceCard } from "./companion/ChoiceCard";
@@ -93,7 +93,7 @@ function isRejectedSourceContext(context: string): boolean {
   ].some((pattern) => pattern.test(context));
 }
 
-function statusKey(status: FactStatus): string {
+function statusKey(status: FactStatus): MessageKey {
   switch (status) {
     case "verified": return "factBook.status.verified";
     case "intentional_fiction": return "factBook.status.intentionalFiction";
@@ -227,11 +227,11 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     setFeedbackNote(t("factBook.saveNotApplied"));
   }, [awaitingFactSave, busy, directFactClaim, directSaving, feedbackNote, isNewFeedback, latestAssistant, latestProposal, saveDirectURL, t]);
 
-  const markFeedbackStart = () => {
+  const markFeedbackStart = useCallback(() => {
     setFeedbackAnchor(messages.length);
     setFeedbackNote("");
     setFeedbackKind("ok");
-  };
+  }, [messages.length]);
 
   const startReview = async () => {
     if (reviewing || status === "streaming") return;
@@ -262,7 +262,7 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
       await beforeReview?.();
       await send(buildFactCheckPrompt(t, claim));
     })();
-  }, [beforeReview, busy, directSaving, selectedClaimRequest, send]);
+  }, [beforeReview, busy, directSaving, markFeedbackStart, selectedClaimRequest, send, t]);
 
   const submitReply = async () => {
     const text = replyDraft.trim();

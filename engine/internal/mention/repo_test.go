@@ -15,6 +15,7 @@ type fixture struct {
 	store *store.Store
 	mr    *Repo
 	er    *entity.Repo
+	nr    *node.Repo
 	pID   string
 	nID   string
 }
@@ -31,7 +32,7 @@ func newFixture(t *testing.T) fixture {
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "short", DefaultPOV: "first",
 	})
-	return fixture{store: s, mr: NewRepo(s), er: entity.NewRepo(s), pID: p.ID, nID: *p.LastOpenedNodeID}
+	return fixture{store: s, mr: NewRepo(s), er: entity.NewRepo(s), nr: node.NewRepo(s), pID: p.ID, nID: *p.LastOpenedNodeID}
 }
 
 func TestResyncForNode_insertsValidMentions_dropsUnknown(t *testing.T) {
@@ -67,6 +68,30 @@ func TestResyncForNode_replacesPreviousSet(t *testing.T) {
 	got, _ := f.mr.ListForNode(ctx, f.nID)
 	if len(got) != 1 || got[0].EntityID != b.ID {
 		t.Errorf("after re-resync: %+v", got)
+	}
+}
+
+func TestRebuildAll_restoresMentionsFromPersistedDocuments(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	e, err := f.er.Create(ctx, 1, entity.NewInput{ProjectID: f.pID, Name: "해진", Kind: entity.KindCharacter})
+	if err != nil {
+		t.Fatalf("create entity: %v", err)
+	}
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"mention","attrs":{"id":"` + e.ID + `","label":"해진"}}]}]}`
+	if err := f.nr.UpdateContent(ctx, f.nID, doc, 2); err != nil {
+		t.Fatalf("update content: %v", err)
+	}
+	if got, err := f.mr.ListForNode(ctx, f.nID); err != nil || len(got) != 0 {
+		t.Fatalf("mentions should start empty: got=%v err=%v", got, err)
+	}
+
+	if err := f.mr.RebuildAll(ctx); err != nil {
+		t.Fatalf("RebuildAll: %v", err)
+	}
+	got, err := f.mr.ListForNode(ctx, f.nID)
+	if err != nil || len(got) != 1 || got[0].EntityID != e.ID {
+		t.Fatalf("rebuilt mentions = %+v, err=%v", got, err)
 	}
 }
 

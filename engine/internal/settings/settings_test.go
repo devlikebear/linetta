@@ -288,6 +288,54 @@ func TestSet_safetyChecklistDismissed_persists(t *testing.T) {
 	}
 }
 
+func TestSet_aiDataSharingConsent_persistsAndCanBeWithdrawn(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	version := AIDataSharingConsentVersion
+	consentedAt := int64(1_720_000_000_000)
+	if _, err := s.Set(ctx, Patch{
+		AIDataSharingConsentVersion: &version,
+		AIDataSharingConsentedAt:    &consentedAt,
+	}); err != nil {
+		t.Fatalf("grant consent: %v", err)
+	}
+	if !s.HasAIDataSharingConsent() {
+		t.Fatal("consent should be active")
+	}
+	nextProvider := ProviderOpenRouter
+	if _, err := s.Set(ctx, Patch{Provider: &nextProvider}); err != nil {
+		t.Fatalf("change provider: %v", err)
+	}
+	if s.HasAIDataSharingConsent() {
+		t.Fatal("changing the data recipient should require renewed consent")
+	}
+	if _, err := s.Set(ctx, Patch{
+		AIDataSharingConsentVersion: &version,
+		AIDataSharingConsentedAt:    &consentedAt,
+	}); err != nil {
+		t.Fatalf("renew consent: %v", err)
+	}
+	reloaded, err := NewWithSecretStore(s.secrets)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	got, _ := reloaded.Get(ctx)
+	if got.AIDataSharingConsentVersion != version || got.AIDataSharingConsentedAt != consentedAt {
+		t.Fatalf("consent not persisted: %+v", got)
+	}
+	withdrawn := 0
+	zeroTime := int64(0)
+	if _, err := reloaded.Set(ctx, Patch{
+		AIDataSharingConsentVersion: &withdrawn,
+		AIDataSharingConsentedAt:    &zeroTime,
+	}); err != nil {
+		t.Fatalf("withdraw consent: %v", err)
+	}
+	if reloaded.HasAIDataSharingConsent() {
+		t.Fatal("consent should be withdrawn")
+	}
+}
+
 func TestLoad_legacyFileDefaultsOnboardingTourEnabled(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LINETTA_HOME", dir)

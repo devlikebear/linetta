@@ -1,4 +1,5 @@
 import { Node, mergeAttributes, type RawCommands } from "@tiptap/core";
+import { dispatchAppEvent } from "../../lib/appEvents";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -49,21 +50,15 @@ export const NoteMarkerExtension = Node.create({
       dom.textContent = "☘︎";
 
       const onEnter = () => {
-        window.dispatchEvent(new CustomEvent("linetta:note-hover", {
-          detail: { noteId: node.attrs.noteId, target: dom },
-        }));
+        dispatchAppEvent("linetta:note-hover", { noteId: node.attrs.noteId, target: dom });
       };
       const onLeave = () => {
-        window.dispatchEvent(new CustomEvent("linetta:note-hover-end", {
-          detail: { noteId: node.attrs.noteId },
-        }));
+        dispatchAppEvent("linetta:note-hover-end", { noteId: node.attrs.noteId });
       };
       const onClick = (e: MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        window.dispatchEvent(new CustomEvent("linetta:note-click", {
-          detail: { noteId: node.attrs.noteId, target: dom },
-        }));
+        dispatchAppEvent("linetta:note-click", { noteId: node.attrs.noteId, target: dom });
       };
 
       dom.addEventListener("mouseenter", onEnter);

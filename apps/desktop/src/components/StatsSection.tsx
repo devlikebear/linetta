@@ -80,7 +80,7 @@ export function StatsSection({ project, refreshKey = null, episodeCharTarget = 5
     };
   }, [project.id, refreshKey]);
 
-  const days = snapshot?.days ?? [];
+  const days = useMemo(() => snapshot?.days ?? [], [snapshot?.days]);
   const summary = snapshot?.summary ?? emptySummary();
   const maxChars = useMemo(
     () => days.reduce((max, day) => Math.max(max, day.chars_added), 0),

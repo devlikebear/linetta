@@ -216,3 +216,9 @@ func slugify(s string) string {
 	}
 	return out
 }
+
+// SyncFilename returns the collision-resistant filename used by unattended
+// folder and Git sync. Manual exports keep the shorter SuggestedFilename.
+func SyncFilename(title, projectID string) string {
+	return slugify(title) + "--" + slugify(projectID) + ".md"
+}

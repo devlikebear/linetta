@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { entities, relationships } from "../lib/rpc";
 import type { Entity } from "../lib/types";
 import { X, Plus } from "../lib/icons";
@@ -31,7 +31,7 @@ export function RelationshipPicker({
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
 
-  const hide = new Set([fromEntityId, ...excludeIds]);
+  const hide = useMemo(() => new Set([fromEntityId, ...excludeIds]), [excludeIds, fromEntityId]);
   const labelPresets = relationshipLabelPresets(language);
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function RelationshipPicker({
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [query, projectId, fromEntityId]);
+  }, [hide, projectId, query]);
 
   const onSave = async () => {
     if (!target || label.trim() === "") return;

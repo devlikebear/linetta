@@ -14,6 +14,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -226,7 +227,7 @@ func TestBuildContext_plotBeatsForCurrentNode(t *testing.T) {
 
 	// Thread bound to the current node via two beats.
 	th, _ := tr.Create(context.Background(), thread.NewInput{ProjectID: p.ID, Name: "잃어버린 시간", Color: "#c08a3e"})
-	_ = tr.Update(context.Background(), thread.UpdateInput{ID: th.ID, Summary: "요약"})
+	_ = tr.Update(context.Background(), thread.UpdateInput{ID: th.ID, Summary: ptrutil.To("요약")})
 	nID := *p.LastOpenedNodeID
 	_, _ = br.Create(context.Background(), beat.NewInput{ThreadID: th.ID, NodeID: &nID, Label: "마디 1"})
 	_, _ = br.Create(context.Background(), beat.NewInput{ThreadID: th.ID, NodeID: &nID, Label: "마디 2"})

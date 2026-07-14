@@ -40,15 +40,17 @@ import {
 import { useSizeClass } from "../hooks/useSizeClass";
 import { reconcileInspector } from "../hooks/inspector";
 import type { InspectorState } from "../hooks/inspector";
-import { useDebouncedCallback } from "../hooks/useDebouncedCallback";
+import { useKeyedDebouncedCallback } from "../hooks/useDebouncedCallback";
 import { useIdleTimer } from "../hooks/useIdleTimer";
 import { useThrottledCallback } from "../hooks/useThrottledCallback";
+import { subscribeAppEvent, type LinettaEventMap } from "../lib/appEvents";
 import { useToast } from "../components/ToastProvider";
 import { displayNodeLabel, localeForLanguage, useI18n } from "../lib/i18n";
 import { outlineNumberLabel, outlinePresetById, outlineRoleName, repairOutlineTree, type OutlinePresetId } from "../lib/outlineRepair";
 import { findEpisodeNode } from "../lib/outlineEpisode";
 import { planChapterCreation, type CreateNodeStep } from "../lib/outlineCreate";
 import { normalizePlatformProfile, transformPlatformText } from "../lib/platformProfiles";
+import { SceneSaveQueue } from "../lib/sceneSaveQueue";
 import {
   buildTree,
   countEpisodeStatus,
@@ -176,7 +178,15 @@ export function Workspace() {
     const part = outlineRoleName(outlinePreset, "part", t);
     const chapter = outlineRoleName(outlinePreset, "chapter", t);
     const scene = outlineRoleName(outlinePreset, "scene", t);
-    return `${t(outlinePreset.nameKey)}: ${part} > ${chapter} > ${scene} (예: ${outlineNumberLabel(outlinePreset, "part", 1, t)} > ${outlineNumberLabel(outlinePreset, "chapter", 1, t)} > ${outlineNumberLabel(outlinePreset, "scene", 1, t)})`;
+    return t("workspace.outlineStructureFormat", {
+      preset: t(outlinePreset.nameKey),
+      part,
+      chapter,
+      scene,
+      partExample: outlineNumberLabel(outlinePreset, "part", 1, t),
+      chapterExample: outlineNumberLabel(outlinePreset, "chapter", 1, t),
+      sceneExample: outlineNumberLabel(outlinePreset, "scene", 1, t),
+    });
   }, [outlinePreset, t]);
   const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
   const [companionRewriteRequest, setCompanionRewriteRequest] = useState<{ id: string; text: string; kind?: SelectionRewriteKind } | null>(null);
@@ -207,9 +217,18 @@ export function Workspace() {
   const factBookSelectionSeqRef = useRef(0);
   const companionRewriteSeqRef = useRef(0);
   const loadRef = useRef<LoadState | null>(null);
+  const sceneSaveQueueRef = useRef<SceneSaveQueue<NodeRow> | null>(null);
+  if (!sceneSaveQueueRef.current) {
+    sceneSaveQueueRef.current = new SceneSaveQueue((nodeId, doc, expectedVersion) =>
+      nodes.updateContent(nodeId, doc, expectedVersion));
+  }
+  const sceneSaveQueue = sceneSaveQueueRef.current;
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+  useEffect(() => {
+    if (load) sceneSaveQueue.seed(load.node.id, load.node.content_version ?? 0);
+  }, [load, sceneSaveQueue]);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const compact = window.matchMedia("(max-width: 860px)");
@@ -279,33 +298,30 @@ export function Workspace() {
   } | null>(null);
 
   useEffect(() => {
-    const onHover = (e: Event) => {
-      const ce = e as CustomEvent<{ noteId: string; target: HTMLElement }>;
+    const onHover = (detail: LinettaEventMap["linetta:note-hover"]) => {
       setNotePopover((cur) => {
-        if (cur && cur.mode === "edit" && cur.noteId === ce.detail.noteId) return cur;
-        return { noteId: ce.detail.noteId, targetEl: ce.detail.target, mode: "read" };
+        if (cur && cur.mode === "edit" && cur.noteId === detail.noteId) return cur;
+        return { noteId: detail.noteId, targetEl: detail.target, mode: "read" };
       });
     };
-    const onHoverEnd = (e: Event) => {
-      const ce = e as CustomEvent<{ noteId: string }>;
+    const onHoverEnd = (detail: LinettaEventMap["linetta:note-hover-end"]) => {
       setNotePopover((cur) => {
         if (!cur) return null;
         if (cur.mode === "edit") return cur;
-        if (cur.noteId !== ce.detail.noteId) return cur;
+        if (cur.noteId !== detail.noteId) return cur;
         return null;
       });
     };
-    const onClick = (e: Event) => {
-      const ce = e as CustomEvent<{ noteId: string; target: HTMLElement }>;
-      setNotePopover({ noteId: ce.detail.noteId, targetEl: ce.detail.target, mode: "edit" });
+    const onClick = (detail: LinettaEventMap["linetta:note-click"]) => {
+      setNotePopover({ noteId: detail.noteId, targetEl: detail.target, mode: "edit" });
     };
-    window.addEventListener("linetta:note-hover", onHover);
-    window.addEventListener("linetta:note-hover-end", onHoverEnd);
-    window.addEventListener("linetta:note-click", onClick);
+    const unsubscribeHover = subscribeAppEvent("linetta:note-hover", onHover);
+    const unsubscribeHoverEnd = subscribeAppEvent("linetta:note-hover-end", onHoverEnd);
+    const unsubscribeClick = subscribeAppEvent("linetta:note-click", onClick);
     return () => {
-      window.removeEventListener("linetta:note-hover", onHover);
-      window.removeEventListener("linetta:note-hover-end", onHoverEnd);
-      window.removeEventListener("linetta:note-click", onClick);
+      unsubscribeHover();
+      unsubscribeHoverEnd();
+      unsubscribeClick();
     };
   }, []);
 
@@ -722,18 +738,18 @@ export function Workspace() {
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, fetchTree]);
+  }, [fetchTree, location.pathname, location.state, navigate, projectId]);
 
+  const activeMentionNodeId = load?.node.id;
   // Refresh mentioned entities when the active node changes.
   useEffect(() => {
-    if (load) refreshMentioned(load.node.id);
-  }, [load?.node.id, refreshMentioned]);
+    if (activeMentionNodeId) refreshMentioned(activeMentionNodeId);
+  }, [activeMentionNodeId, refreshMentioned]);
 
   // Listen for "new entity" event dispatched by MentionExtension.
   useEffect(() => {
     if (!projectId) return;
-    const handler = async (e: Event) => {
-      const detail = (e as CustomEvent).detail as { query: string; range: { from: number; to: number }; editor: any };
+    const handler = async (detail: LinettaEventMap["linetta:mention-pick-new"]) => {
       try {
         const created = await entitiesApi.create({ project_id: projectId, kind: "character", name: detail.query });
         detail.editor.chain().focus().deleteRange(detail.range).insertContent([
@@ -746,8 +762,7 @@ export function Workspace() {
         showToast(t("workspace.toast.entityCreateFailed", { error: String(err) }));
       }
     };
-    window.addEventListener("linetta:mention-pick-new", handler);
-    return () => window.removeEventListener("linetta:mention-pick-new", handler);
+    return subscribeAppEvent("linetta:mention-pick-new", handler);
   }, [projectId, showToast, t]);
 
   // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+Shift+F contextual edit + Cmd+I companion draft mode.
@@ -798,21 +813,23 @@ export function Workspace() {
   }, []);
 
   const saveNow = useCallback(
-    async (doc: object) => {
-      if (!load) return;
-      setSaveStatus({ kind: "saving" });
+    async (nodeId: string, doc: object) => {
+      const isActive = () => loadRef.current?.node.id === nodeId;
+      if (isActive()) setSaveStatus({ kind: "saving" });
       try {
-        await nodes.updateContent(load.node.id, JSON.stringify(doc));
-        setSaveStatus({ kind: "saved", at: Date.now() });
-        refreshMentioned(load.node.id);
+        await sceneSaveQueue.save(nodeId, JSON.stringify(doc));
+        if (isActive()) setSaveStatus({ kind: "saved", at: Date.now() });
+        refreshMentioned(nodeId);
       } catch (e) {
-        setSaveStatus({ kind: "error", message: String(e) });
-        setError(String(e));
+        if (isActive()) {
+          setSaveStatus({ kind: "error", message: String(e) });
+          setError(String(e));
+        }
       }
     },
-    [load, refreshMentioned],
+    [refreshMentioned, sceneSaveQueue],
   );
-  const debouncedSave = useDebouncedCallback(saveNow, SAVE_DEBOUNCE_MS);
+  const debouncedSave = useKeyedDebouncedCallback(saveNow, SAVE_DEBOUNCE_MS);
   const idleDirtyRef = useRef(false);
   const handleIdleCheckpoint = useCallback(async () => {
     if (!idleDirtyRef.current) return;
@@ -840,9 +857,10 @@ export function Workspace() {
     const currentLoad = loadRef.current;
     const doc = editorRef.current?.getDoc();
     if (!currentLoad || !doc) return;
+    debouncedSave.cancel(currentLoad.node.id);
     setSaveStatus({ kind: "saving" });
     try {
-      const updated = await nodes.updateContent(currentLoad.node.id, JSON.stringify(doc));
+      const updated = await sceneSaveQueue.save(currentLoad.node.id, JSON.stringify(doc));
       setLoad((prev) => {
         if (!prev || prev.node.id !== updated.id) return prev;
         return { ...prev, node: updated, initialDoc: doc };
@@ -855,7 +873,7 @@ export function Workspace() {
       setError(String(e));
       throw e;
     }
-  }, [refreshMentioned]);
+  }, [debouncedSave, refreshMentioned, sceneSaveQueue]);
   const throttledLastOpened = useThrottledCallback(
     useCallback(() => {
       if (!load) return;
@@ -883,9 +901,10 @@ export function Workspace() {
   const handleManualSave = useCallback(
     async (doc: object) => {
       if (!load) return;
+      debouncedSave.cancel(load.node.id);
       setSaveStatus({ kind: "saving" });
       try {
-        await nodes.updateContent(load.node.id, JSON.stringify(doc));
+        await sceneSaveQueue.save(load.node.id, JSON.stringify(doc));
         await snapshots.createManual(load.node.id, JSON.stringify(doc));
         setSaveStatus({ kind: "saved", at: Date.now() });
         showToast(t("workspace.toast.snapshotSaved"));
@@ -894,7 +913,7 @@ export function Workspace() {
         setError(String(e));
       }
     },
-    [load, showToast, t],
+    [debouncedSave, load, sceneSaveQueue, showToast, t],
   );
 
   const handleAutoMentionScene = useCallback(async () => {
@@ -911,8 +930,9 @@ export function Workspace() {
         return;
       }
       setSaveStatus({ kind: "saving" });
+      debouncedSave.cancel(load.node.id);
       editor.commands.setContent(result.doc);
-      const updated = await nodes.updateContent(load.node.id, JSON.stringify(result.doc));
+      const updated = await sceneSaveQueue.save(load.node.id, JSON.stringify(result.doc));
       setLoad((prev) => (prev ? { ...prev, node: updated, initialDoc: result.doc } : prev));
       setCharCount(updated.word_count);
       await refreshMentioned(load.node.id);
@@ -924,7 +944,7 @@ export function Workspace() {
     } finally {
       setAutoMentionBusy(false);
     }
-  }, [load, refreshMentioned, showToast, t]);
+  }, [debouncedSave, load, refreshMentioned, sceneSaveQueue, showToast, t]);
 
   const handleSceneTitleCommit = useCallback(
     async (title: string) => {
@@ -1439,7 +1459,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, refreshTreeAndNavigateTo, refreshTreeKeepNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, gitSyncAvailable]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, gitSyncAvailable]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1737,7 +1757,7 @@ export function Workspace() {
               ref={editorRef}
               initialDoc={load.initialDoc}
               onChange={(doc) => {
-                debouncedSave(doc);
+                debouncedSave(load.node.id, doc);
                 idleDirtyRef.current = true;
                 markActivity();
                 throttledLastOpened();
@@ -1813,6 +1833,8 @@ export function Workspace() {
               focusEditor();
             }}
             onRestored={(updatedNode) => {
+              debouncedSave.cancel(updatedNode.id);
+              sceneSaveQueue.seed(updatedNode.id, updatedNode.content_version ?? 0);
               const docStr = updatedNode.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`;
               setLoad((prev) => prev ? { ...prev, node: updatedNode, initialDoc: JSON.parse(docStr) } : prev);
               setCharCount(updatedNode.word_count);
@@ -1883,6 +1905,10 @@ export function Workspace() {
               if (!load) return;
               refreshTreeKeepNode(load.node.id);
               const changedCurrentNode = event?.changed_nodes?.find((change) => change.node_id === load.node.id);
+              if (changedCurrentNode) {
+                debouncedSave.cancel(changedCurrentNode.node_id);
+                sceneSaveQueue.seed(changedCurrentNode.node_id, changedCurrentNode.content_version);
+              }
               refreshMentioned(changedCurrentNode?.node_id ?? load.node.id);
             }}
           />
@@ -2027,7 +2053,7 @@ export function Workspace() {
           sceneLabel={currentNodeLabel}
           target={isWebnovelProject ? episodeCharTarget : 0}
           onChange={(doc) => {
-            debouncedSave(doc);
+            debouncedSave(load.node.id, doc);
             idleDirtyRef.current = true;
             markActivity();
           }}

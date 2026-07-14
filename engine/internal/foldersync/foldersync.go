@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/atomicfile"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -73,18 +74,37 @@ func (s *Syncer) exportAll(ctx context.Context, destDir string) (int, error) {
 		return 0, err
 	}
 	written := 0
+	failures := make([]string, 0)
 	for _, p := range projs {
 		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "folder sync: project %s: %v\n", p.ID, err)
+			msg := fmt.Sprintf("project %s export: %v", p.ID, err)
+			fmt.Fprintf(os.Stderr, "folder sync: %s\n", msg)
+			failures = append(failures, msg)
 			continue
 		}
-		dest := filepath.Join(destDir, payload.SuggestedFilename)
-		if err := os.WriteFile(dest, []byte(payload.Markdown), 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "folder sync: project %s: %v\n", p.ID, err)
+		dest := filepath.Join(destDir, export.SyncFilename(p.Title, p.ID))
+		if err := atomicfile.Write(dest, []byte(payload.Markdown), 0o644); err != nil {
+			msg := fmt.Sprintf("project %s write: %v", p.ID, err)
+			fmt.Fprintf(os.Stderr, "folder sync: %s\n", msg)
+			failures = append(failures, msg)
 			continue
 		}
 		written++
+	}
+	if len(failures) > 0 {
+		return written, fmt.Errorf("%d project(s) failed: %s", len(failures), strings.Join(failures, "; "))
+	}
+	nowFn := s.Now
+	if nowFn == nil {
+		nowFn = time.Now
+	}
+	manifest, err := export.BuildSyncManifest(projs, nowFn())
+	if err != nil {
+		return written, fmt.Errorf("build sync manifest: %w", err)
+	}
+	if err := atomicfile.Write(filepath.Join(destDir, export.SyncManifestFilename), manifest, 0o644); err != nil {
+		return written, fmt.Errorf("write sync manifest: %w", err)
 	}
 	return written, nil
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -14,6 +14,7 @@ import {
   diagnostics as diagnosticsApi,
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
+import { dispatchAppEvent } from "../lib/appEvents";
 import {
   OPENROUTER_DEFAULT_MODEL_OPTIONS,
   OPENROUTER_SMART_DEFAULT_MODEL,
@@ -44,6 +45,8 @@ const JOB_GIT_SYNC = "git_sync";
 const JOB_FOLDER_SYNC = "folder_sync";
 const JOB_SUMMARIZER = "summarizer";
 const JOB_COMPANION = "companion.persistence";
+const AI_DATA_SHARING_CONSENT_VERSION = 1;
+const PRIVACY_POLICY_URL = "https://github.com/devlikebear/linetta/blob/main/docs/privacy-policy.md";
 
 interface ProviderMeta {
   id: ProviderID;
@@ -153,7 +156,7 @@ export function Settings() {
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
-  }, []);
+  }, [setLanguage]);
 
   // Reset the per-provider drafts whenever the active provider changes (or on
   // first load) so each provider's stored config shows in the fields.
@@ -206,7 +209,7 @@ export function Settings() {
       setLanguage(next.language);
       setEditorFontSizeDraft(String(next.editor_font_size ?? 20));
       setEditorLineHeightDraft(String(next.editor_line_height ?? 1.92));
-      window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+      dispatchAppEvent("linetta:settings-updated", next);
       setSavedAt(Date.now());
     } catch (e) {
       setError(String(e));
@@ -333,9 +336,9 @@ export function Settings() {
   const credentialState = getCredentialState(t, activeMeta, activeConfig);
   const webSearchKeyPlaceholder = current ? getWebSearchKeyPlaceholder(t, current) : t("settings.tools.keyPlaceholder");
 
-  const refreshOpenRouterKeyInfo = async () => {
-    const cfg = current?.providers?.openrouter;
-    if (!cfg?.api_key_set) {
+  const openRouterKeySet = current?.providers?.openrouter?.api_key_set ?? false;
+  const refreshOpenRouterKeyInfo = useCallback(async () => {
+    if (!openRouterKeySet) {
       setOpenRouterKeyInfo(null);
       setOpenRouterKeyInfoError("");
       return;
@@ -350,7 +353,7 @@ export function Settings() {
     } finally {
       setOpenRouterKeyInfoLoading(false);
     }
-  };
+  }, [openRouterKeySet]);
 
   const persistOpenRouterGuide = async (options: { clearAPIKey?: boolean; quiet?: boolean } = {}) => {
     const model = openRouterModelDraft.trim() || OPENROUTER_SMART_DEFAULT_MODEL;
@@ -370,7 +373,7 @@ export function Settings() {
     setLanguage(next.language);
     setGuideId("openrouter-safe");
     syncOpenRouterDrafts(next);
-    window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+    dispatchAppEvent("linetta:settings-updated", next);
     setSavedAt(Date.now());
     if (!options.quiet) {
       setOpenRouterSetupMsg({ kind: "ok", text: t("settings.setup.openrouter.saved") });
@@ -471,7 +474,7 @@ export function Settings() {
       syncOpenRouterDrafts(next);
       setGuideId("openrouter-safe");
       setProviderTestMsg({ kind: "ok", text: t("settings.provider.testOk", { message: finished.message }) });
-      window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+      dispatchAppEvent("linetta:settings-updated", next);
       setSavedAt(Date.now());
       try {
         setOpenRouterKeyInfo(await openRouterApi.keyInfo());
@@ -489,13 +492,13 @@ export function Settings() {
 
   useEffect(() => {
     if (!current || (current.provider !== "openrouter" && guideId !== "openrouter-safe")) return;
-    if (!current.providers?.openrouter?.api_key_set) {
+    if (!openRouterKeySet) {
       setOpenRouterKeyInfo(null);
       setOpenRouterKeyInfoError("");
       return;
     }
     void refreshOpenRouterKeyInfo();
-  }, [current?.provider, current?.providers?.openrouter?.api_key_set, guideId]);
+  }, [current, guideId, openRouterKeySet, refreshOpenRouterKeyInfo]);
 
   const replayOnboardingTour = () => {
     clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
@@ -542,6 +545,51 @@ export function Settings() {
             {unavailableProviders.length > 0 && (
               <p className="sd">{t("settings.provider.restrictedNote")}</p>
             )}
+
+            <section className="settings-section">
+              <h3>{t("settings.aiConsent.title")}</h3>
+              <p className="sd">
+                {t("settings.aiConsent.description", {
+                  provider: activeMeta?.label ?? current.provider,
+                })}
+              </p>
+              <p className="sd">{t("settings.aiConsent.control")}</p>
+              <p className="sd">
+                <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">
+                  {t("settings.aiConsent.privacyLink")}
+                </a>
+              </p>
+              <p>
+                {current.ai_data_sharing_consent_version === AI_DATA_SHARING_CONSENT_VERSION
+                  ? t("settings.aiConsent.statusGranted")
+                  : t("settings.aiConsent.statusRequired")}
+              </p>
+              {current.ai_data_sharing_consent_version === AI_DATA_SHARING_CONSENT_VERSION ? (
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  disabled={saving}
+                  onClick={() => apply({
+                    ai_data_sharing_consent_version: 0,
+                    ai_data_sharing_consented_at: 0,
+                  })}
+                >
+                  {t("settings.aiConsent.withdraw")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn sm"
+                  disabled={saving}
+                  onClick={() => apply({
+                    ai_data_sharing_consent_version: AI_DATA_SHARING_CONSENT_VERSION,
+                    ai_data_sharing_consented_at: Date.now(),
+                  })}
+                >
+                  {t("settings.aiConsent.grant")}
+                </button>
+              )}
+            </section>
 
             <AISetupStart
               currentProvider={current.provider}

@@ -1,4 +1,4 @@
-.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine validate-actions-runtime validate-distribution build-engine build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -10,11 +10,22 @@ test: test-go test-desktop test-tauri ## Run all local verification
 
 ci: validate-actions-runtime test ## Run the CI verification contract
 
+audit: audit-go audit-desktop audit-rust ## Check reachable and locked dependency vulnerabilities
+
+audit-go: ## Check reachable Go vulnerabilities (requires govulncheck)
+	cd engine && govulncheck ./...
+
+audit-desktop: ## Check production frontend dependencies
+	cd apps/desktop && pnpm audit --prod
+
+audit-rust: ## Check RustSec advisories (requires cargo-audit)
+	cd apps/desktop/src-tauri && cargo audit
+
 test-go: ## Run Go engine tests
 	cd engine && go test ./...
 
 test-desktop: ## Run desktop frontend tests and production build
-	cd apps/desktop && pnpm test && pnpm build
+	cd apps/desktop && pnpm lint && pnpm test && pnpm build
 
 test-tauri: ## Type-check the Tauri shell
 	cd apps/desktop/src-tauri && cargo check

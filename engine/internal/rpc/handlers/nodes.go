@@ -10,8 +10,9 @@ import (
 )
 
 type updateContentParams struct {
-	ID  string `json:"id"`
-	Doc string `json:"doc"`
+	ID                     string `json:"id"`
+	Doc                    string `json:"doc"`
+	ExpectedContentVersion *int   `json:"expected_content_version"`
 }
 
 // GetNode returns a handler for nodes.get.
@@ -42,12 +43,21 @@ func UpdateNodeContent(nodes *node.Repo, now Clock, postUpdate func(nodeID strin
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id and doc required"}
 		}
 		t := now()
-		if err := nodes.UpdateContent(ctx, p.ID, p.Doc, t); err != nil {
+		var err error
+		if p.ExpectedContentVersion != nil {
+			err = nodes.UpdateContentIfVersion(ctx, p.ID, p.Doc, *p.ExpectedContentVersion, t)
+		} else {
+			err = nodes.UpdateContent(ctx, p.ID, p.Doc, t)
+		}
+		if err != nil {
 			if errors.Is(err, node.ErrNotFound) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
 			}
 			if errors.Is(err, node.ErrContentOnContainer) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
+			if errors.Is(err, node.ErrContentConflict) {
+				return nil, &rpc.MethodError{Code: rpc.CodeContentConflict, Message: err.Error()}
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

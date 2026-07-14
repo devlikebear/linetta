@@ -72,6 +72,34 @@ func TestImportMarkdownHandler_createsProjectFromContent(t *testing.T) {
 	}
 }
 
+func TestImportMarkdownHandler_removesPartialProjectWhenMetadataRestoreFails(t *testing.T) {
+	pr, nr, er, rr := setupImportFixtureFull(t)
+	h := ImportMarkdown(pr, nr, er, rr, func() int64 { return 5000 })
+	ctx := context.Background()
+	md := "---\n" +
+		"linetta:\n" +
+		"  version: 1\n" +
+		"  entities:\n" +
+		"    - id: first\n" +
+		"      name: 중복 이름\n" +
+		"    - id: second\n" +
+		"      name: 중복 이름\n" +
+		"---\n\n" +
+		"# 실패해야 하는 가져오기\n## 1부\n### 씬 1\n본문\n"
+	params, _ := json.Marshal(map[string]any{"file_name": "broken.md", "content": md})
+
+	if _, err := h(ctx, params); err == nil {
+		t.Fatal("expected metadata restore failure")
+	}
+	projects, err := pr.List(ctx, project.ListFilter{IncludeArchived: true, Limit: 10})
+	if err != nil {
+		t.Fatalf("list projects: %v", err)
+	}
+	if len(projects) != 0 {
+		t.Fatalf("partial import remained after failure: %+v", projects)
+	}
+}
+
 func TestImportMarkdownHandler_restoresLinettaMetadataWithoutAppendixNodes(t *testing.T) {
 	pr, nr, er, rr := setupImportFixtureFull(t)
 	h := ImportMarkdown(pr, nr, er, rr, func() int64 { return 5000 })

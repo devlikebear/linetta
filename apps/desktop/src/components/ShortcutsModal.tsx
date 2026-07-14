@@ -1,10 +1,10 @@
 import { useEffect } from "react";
-import { useI18n } from "../lib/i18n";
+import { useI18n, type MessageKey } from "../lib/i18n";
 import "./ShortcutsModal.css";
 
 interface Shortcut {
   keys: string;
-  labelKey: string;
+  labelKey: MessageKey;
 }
 
 const SHORTCUTS: Shortcut[] = [

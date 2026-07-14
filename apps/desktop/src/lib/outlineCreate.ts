@@ -1,8 +1,9 @@
 import type { TreeNode } from "../hooks/useFirstLeaf";
+import type { MessageKey } from "./i18n";
 import { flatten } from "../hooks/useFirstLeaf";
 import { outlineNumberLabel, type OutlineStructurePreset } from "./outlineRepair";
 
-type Labeler = (key: string, values?: Record<string, string | number>) => string;
+type Labeler = (key: MessageKey, values?: Record<string, string | number>) => string;
 type NodeKind = "leaf" | "container";
 
 export type CreateNodeStep =

@@ -194,12 +194,20 @@ extern "C" fn notify_trampoline(method: *const c_char, params: *const c_char) {
                 .to_string_lossy()
                 .into_owned()
         };
-        let payload: Value = serde_json::from_str(&params_str).unwrap_or(Value::Null);
+        let payload: Value = match serde_json::from_str(&params_str) {
+            Ok(payload) => payload,
+            Err(error) => {
+                eprintln!("[linetta] ignored invalid {method} notification payload: {error}");
+                return;
+            }
+        };
         let Some(event) = notification_event(&method) else {
             return;
         };
         if let Some(app) = NOTIFY_APP.get() {
-            let _ = app.emit(event, payload);
+            if let Err(error) = app.emit(event, payload) {
+                eprintln!("[linetta] failed to emit {method} notification: {error}");
+            }
         }
     });
 }
@@ -238,6 +246,36 @@ pub struct Engine {
     next_id: AtomicI64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct EngineCallError {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<i64>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<i64>,
+}
+
+impl EngineCallError {
+    fn transport(message: impl Into<String>, request_id: Option<i64>) -> Self {
+        Self {
+            code: None,
+            message: message.into(),
+            data: None,
+            request_id,
+        }
+    }
+}
+
+impl std::fmt::Display for EngineCallError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.message)
+    }
+}
+
+impl std::error::Error for EngineCallError {}
+
 impl Engine {
     pub fn start(app: &AppHandle, home: Option<&str>) -> Result<Engine, String> {
         let _ = NOTIFY_APP.set(app.clone());
@@ -263,7 +301,7 @@ impl Engine {
         })
     }
 
-    pub fn call(&self, method: &str, params: Option<Value>) -> Result<Value, String> {
+    pub fn call(&self, method: &str, params: Option<Value>) -> Result<Value, EngineCallError> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let request = Request {
             jsonrpc: "2.0",
@@ -271,23 +309,32 @@ impl Engine {
             method,
             params: params.as_ref(),
         };
-        let body = serde_json::to_string(&request).map_err(|e| e.to_string())?;
-        let c_req = CString::new(body).map_err(|e| e.to_string())?;
-        let ptr = engine_abi::call(c_req.as_ptr())?;
+        let body = serde_json::to_string(&request)
+            .map_err(|e| EngineCallError::transport(e.to_string(), Some(id)))?;
+        let c_req =
+            CString::new(body).map_err(|e| EngineCallError::transport(e.to_string(), Some(id)))?;
+        let ptr = engine_abi::call(c_req.as_ptr())
+            .map_err(|e| EngineCallError::transport(e, Some(id)))?;
         if ptr.is_null() {
-            return Err("engine returned null".to_string());
+            return Err(EngineCallError::transport("engine returned null", Some(id)));
         }
         let resp_str = unsafe { CStr::from_ptr(ptr) }
             .to_string_lossy()
             .into_owned();
-        engine_abi::free_cstring(ptr)?;
-        let resp: Value = serde_json::from_str(&resp_str).map_err(|e| e.to_string())?;
+        engine_abi::free_cstring(ptr).map_err(|e| EngineCallError::transport(e, Some(id)))?;
+        let resp: Value = serde_json::from_str(&resp_str)
+            .map_err(|e| EngineCallError::transport(e.to_string(), Some(id)))?;
         if let Some(err) = resp.get("error") {
             let msg = err
                 .get("message")
                 .and_then(|m| m.as_str())
                 .unwrap_or("engine error");
-            return Err(msg.to_string());
+            return Err(EngineCallError {
+                code: err.get("code").and_then(Value::as_i64),
+                message: msg.to_string(),
+                data: err.get("data").cloned(),
+                request_id: resp.get("id").and_then(Value::as_i64).or(Some(id)),
+            });
         }
         Ok(resp.get("result").cloned().unwrap_or(Value::Null))
     }
@@ -332,6 +379,19 @@ mod tests {
             v.get("version").and_then(|x| x.as_str()).is_some(),
             "version missing: {v}"
         );
+    }
+
+    #[test]
+    fn jsonrpc_error_preserves_code_data_and_request_id() {
+        let _guard = test_lock();
+        let tmp = std::env::temp_dir().join(format!("linetta-ffi-error-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let eng = Engine::start_raw(tmp.to_str().unwrap()).unwrap();
+        let error = eng.call("method.that.does.not.exist", None).unwrap_err();
+
+        assert_eq!(error.code, Some(-32601));
+        assert!(error.message.contains("method not found"));
+        assert!(error.request_id.is_some());
     }
 
     #[cfg(target_os = "windows")]

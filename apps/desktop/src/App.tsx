@@ -6,6 +6,7 @@ import { EngineGate } from "./components/EngineGate";
 import { I18nProvider, useI18n } from "./lib/i18n";
 import { settings as settingsApi } from "./lib/rpc";
 import type { Settings } from "./lib/types";
+import { subscribeAppEvent } from "./lib/appEvents";
 
 const LibraryAll = lazy(() =>
   import("./routes/LibraryAll").then((m) => ({ default: m.LibraryAll })),
@@ -72,14 +73,13 @@ function SettingsVisualBridge() {
       .catch(() => {
         if (!cancelled) applyVisualSettings({ theme: "system", editor_font_size: 20, editor_line_height: 1.92 });
       });
-    const onSettings = (event: Event) => {
-      const detail = (event as CustomEvent<Settings>).detail;
+    const onSettings = (detail: Settings) => {
       if (detail) applyVisualSettings(detail);
     };
-    window.addEventListener("linetta:settings-updated", onSettings);
+    const unsubscribe = subscribeAppEvent("linetta:settings-updated", onSettings);
     return () => {
       cancelled = true;
-      window.removeEventListener("linetta:settings-updated", onSettings);
+      unsubscribe();
     };
   }, []);
   return null;

@@ -118,6 +118,23 @@ func TestRepo_UpdateContent_manuscriptIndexFailureDoesNotBlockSave(t *testing.T)
 	}
 }
 
+func TestRepo_UpdateContent_mentionResyncFailureDoesNotReportCommittedSaveAsFailed(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	r.SetMentionResyncer(func(context.Context, string, string) error {
+		return errors.New("mention index unavailable")
+	})
+	doc := textDoc("본문은 먼저 커밋된다")
+
+	if err := r.UpdateContent(context.Background(), *p.LastOpenedNodeID, doc, 9999); err != nil {
+		t.Fatalf("committed content returned error: %v", err)
+	}
+	got, err := r.Get(context.Background(), *p.LastOpenedNodeID)
+	if err != nil || got.ContentDoc == nil || *got.ContentDoc != doc {
+		t.Fatalf("content was not committed: node=%+v err=%v", got, err)
+	}
+}
+
 func TestValidStatus_allowsPublished(t *testing.T) {
 	if !ValidStatus(StatusPublished) {
 		t.Fatalf("published status should be valid")
@@ -289,6 +306,33 @@ func TestRepo_UpdateContent_rejectsContainerNode(t *testing.T) {
 	err = r.UpdateContent(context.Background(), chapter.ID, `{"type":"doc"}`, 3)
 	if err != ErrContentOnContainer {
 		t.Errorf("err = %v, want ErrContentOnContainer", err)
+	}
+}
+
+func TestRepo_UpdateContentIfVersion_rejectsStaleWriteWithoutChangingContent(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+	nodeID := *p.LastOpenedNodeID
+
+	first := textDoc("복원된 최신 본문")
+	if err := r.UpdateContentIfVersion(ctx, nodeID, first, 0, 1000); err != nil {
+		t.Fatalf("first versioned update: %v", err)
+	}
+	stale := textDoc("지연된 자동 저장")
+	if err := r.UpdateContentIfVersion(ctx, nodeID, stale, 0, 2000); !errors.Is(err, ErrContentConflict) {
+		t.Fatalf("stale update err = %v, want ErrContentConflict", err)
+	}
+
+	got, err := r.Get(ctx, nodeID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ContentDoc == nil || *got.ContentDoc != first {
+		t.Fatalf("stale update changed content: %v", got.ContentDoc)
+	}
+	if got.ContentVersion != 1 {
+		t.Fatalf("content_version = %d, want 1", got.ContentVersion)
 	}
 }
 

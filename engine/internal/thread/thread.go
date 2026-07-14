@@ -19,10 +19,11 @@ type NewInput struct {
 	Color     string `json:"color"`
 }
 
-// UpdateInput holds a partial patch. Empty strings leave fields alone.
+// UpdateInput holds a partial patch. Nil leaves a field unchanged; a pointer to
+// an empty string explicitly clears optional text.
 type UpdateInput struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Color   string `json:"color"`
-	Summary string `json:"summary"`
+	ID      string  `json:"id"`
+	Name    *string `json:"name,omitempty"`
+	Color   *string `json:"color,omitempty"`
+	Summary *string `json:"summary,omitempty"`
 }

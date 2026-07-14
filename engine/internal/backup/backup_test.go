@@ -1,12 +1,15 @@
-package backup
+package backup_test
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
@@ -32,7 +35,7 @@ func openSeededStore(t *testing.T) (*store.Store, string) {
 func TestRunDailyIfNeeded_createsBackupFileFirstTime(t *testing.T) {
 	s, home := openSeededStore(t)
 	now := time.Date(2026, 5, 26, 9, 15, 30, 0, time.UTC)
-	path, did, err := RunDailyIfNeeded(context.Background(), s.DB(), home, now)
+	path, did, err := backup.RunDailyIfNeeded(context.Background(), s.DB(), home, now)
 	if err != nil {
 		t.Fatalf("RunDaily: %v", err)
 	}
@@ -57,17 +60,111 @@ func TestRunDailyIfNeeded_createsBackupFileFirstTime(t *testing.T) {
 func TestRunDailyIfNeeded_skipsWhenTodayDirExists(t *testing.T) {
 	s, home := openSeededStore(t)
 	now := time.Date(2026, 5, 26, 9, 0, 0, 0, time.UTC)
-	if _, _, err := RunDailyIfNeeded(context.Background(), s.DB(), home, now); err != nil {
+	if _, _, err := backup.RunDailyIfNeeded(context.Background(), s.DB(), home, now); err != nil {
 		t.Fatalf("first: %v", err)
 	}
 	// Same day, later time.
 	later := time.Date(2026, 5, 26, 18, 0, 0, 0, time.UTC)
-	_, did, err := RunDailyIfNeeded(context.Background(), s.DB(), home, later)
+	_, did, err := backup.RunDailyIfNeeded(context.Background(), s.DB(), home, later)
 	if err != nil {
 		t.Fatalf("second: %v", err)
 	}
 	if did {
 		t.Error("did=true on second same-day run")
+	}
+}
+
+func TestRunDailyIfNeeded_retriesSameDayAfterFailedAttempt(t *testing.T) {
+	s, home := openSeededStore(t)
+	now := time.Date(2026, 5, 26, 9, 0, 0, 0, time.UTC)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, did, err := backup.RunDailyIfNeeded(cancelled, s.DB(), home, now); err == nil || did {
+		t.Fatalf("cancelled backup = did %v, err %v; want failure", did, err)
+	}
+
+	path, did, err := backup.RunDailyIfNeeded(context.Background(), s.DB(), home, now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if !did || path == "" {
+		t.Fatalf("retry = path %q, did %v; want completed backup", path, did)
+	}
+}
+
+func TestRunDailyIfNeeded_retriesWhenCompletedFileIsMissing(t *testing.T) {
+	s, home := openSeededStore(t)
+	now := time.Date(2026, 5, 26, 9, 0, 0, 0, time.UTC)
+	path, _, err := backup.RunDailyIfNeeded(context.Background(), s.DB(), home, now)
+	if err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove completed file: %v", err)
+	}
+
+	retryPath, did, err := backup.RunDailyIfNeeded(context.Background(), s.DB(), home, now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if !did || retryPath == path {
+		t.Fatalf("retry = %q, did %v; want a new completed backup", retryPath, did)
+	}
+}
+
+func TestRunPreMigration_createsDiscoverableCompletedBackup(t *testing.T) {
+	s, home := openSeededStore(t)
+	now := time.Date(2026, 5, 26, 8, 30, 0, 0, time.UTC)
+
+	path, err := backup.RunPreMigration(context.Background(), s.DB(), home, 15, now)
+	if err != nil {
+		t.Fatalf("RunPreMigration: %v", err)
+	}
+	if filepath.Base(path) != "library-pre-migration-v0015-083000.db" {
+		t.Fatalf("backup path = %q", path)
+	}
+	marker, err := os.ReadFile(filepath.Join(filepath.Dir(path), ".complete"))
+	if err != nil {
+		t.Fatalf("read marker: %v", err)
+	}
+	if string(marker) != filepath.Base(path)+"\n" {
+		t.Fatalf("marker = %q", marker)
+	}
+}
+
+func TestRunManualRecovery_createsVersionedFullLibraryArchive(t *testing.T) {
+	s, home := openSeededStore(t)
+	now := time.Date(2026, 7, 12, 23, 50, 0, 0, time.UTC)
+
+	result, err := backup.RunManualRecovery(context.Background(), s.DB(), home, now)
+	if err != nil {
+		t.Fatalf("RunManualRecovery: %v", err)
+	}
+	if result.FormatVersion != 1 || filepath.Ext(result.Path) != ".linetta" {
+		t.Fatalf("result = %+v", result)
+	}
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(result.Path), ".complete"))
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatalf("manifest JSON: %v", err)
+	}
+	if manifest["format"] != "linetta-library-backup" || manifest["database"] != filepath.Base(result.Path) {
+		t.Fatalf("manifest = %#v", manifest)
+	}
+	restored, err := sql.Open("sqlite", "file:"+result.Path+"?mode=ro")
+	if err != nil {
+		t.Fatalf("open archive read-only: %v", err)
+	}
+	defer restored.Close()
+	var projectCount int
+	if err := restored.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM projects`).Scan(&projectCount); err != nil {
+		t.Fatalf("query archive: %v", err)
+	}
+	if projectCount != 1 {
+		t.Fatalf("project count in archive = %d, want 1", projectCount)
 	}
 }
 
@@ -80,7 +177,7 @@ func TestPrune_removesDirsOlderThan14Days(t *testing.T) {
 		}
 	}
 	now := time.Date(2026, 5, 26, 0, 0, 0, 0, time.UTC)
-	if err := Prune(home, now); err != nil {
+	if err := backup.Prune(home, now); err != nil {
 		t.Fatalf("Prune: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "2026-05-26")); err != nil {
@@ -108,7 +205,7 @@ func TestStart_runsImmediatelyAndCallsRetention(t *testing.T) {
 		}
 		return nil
 	}
-	onTick := func(result TickResult) {
+	onTick := func(result backup.TickResult) {
 		if !result.OK() {
 			t.Errorf("unexpected tick error: %+v", result)
 		}
@@ -120,10 +217,13 @@ func TestStart_runsImmediatelyAndCallsRetention(t *testing.T) {
 		default:
 		}
 	}
-	sleepFn := func(d time.Duration) { time.Sleep(10 * time.Millisecond) }
-	stop := Start(context.Background(), s.DB(), home, retention,
+	waitFn := func(context.Context, time.Duration) bool {
+		time.Sleep(10 * time.Millisecond)
+		return true
+	}
+	stop := backup.Start(context.Background(), s.DB(), home, retention,
 		func() time.Time { return time.Date(2026, 5, 26, 23, 59, 59, 0, time.Local) },
-		sleepFn,
+		waitFn,
 		onTick)
 	defer stop()
 
@@ -150,11 +250,14 @@ func TestStartReportsBackupErrorsToOnTick(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	calls := make(chan TickResult, 1)
-	stop := Start(context.Background(), s.DB(), home, nil,
+	calls := make(chan backup.TickResult, 1)
+	stop := backup.Start(context.Background(), s.DB(), home, nil,
 		func() time.Time { return time.Date(2026, 5, 26, 9, 0, 0, 0, time.Local) },
-		func(time.Duration) { time.Sleep(10 * time.Millisecond) },
-		func(result TickResult) { calls <- result })
+		func(context.Context, time.Duration) bool {
+			time.Sleep(10 * time.Millisecond)
+			return true
+		},
+		func(result backup.TickResult) { calls <- result })
 	defer stop()
 
 	select {
@@ -167,5 +270,34 @@ func TestStartReportsBackupErrorsToOnTick(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("immediate run did not report tick result")
+	}
+}
+
+func TestStartStopCancelsLongWait(t *testing.T) {
+	s, home := openSeededStore(t)
+	waiting := make(chan struct{})
+	stop := backup.Start(context.Background(), s.DB(), home, nil,
+		func() time.Time { return time.Date(2026, 5, 26, 9, 0, 0, 0, time.Local) },
+		func(ctx context.Context, _ time.Duration) bool {
+			close(waiting)
+			<-ctx.Done()
+			return false
+		},
+		nil)
+
+	select {
+	case <-waiting:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not enter wait")
+	}
+	done := make(chan struct{})
+	go func() {
+		stop()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stop did not cancel scheduler wait within one second")
 	}
 }

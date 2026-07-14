@@ -1,4 +1,5 @@
 import Mention from "@tiptap/extension-mention";
+import { dispatchAppEvent } from "../../lib/appEvents";
 
 export interface MentionItem {
   /** Existing entity id, or undefined for the "new entity" sentinel. */
@@ -100,11 +101,11 @@ export function buildMentionExtension(opts: BuildOpts) {
           } else {
             // Hand off to the Workspace via a custom DOM event so it can create
             // the entity, then splice in the mention.
-            window.dispatchEvent(
-              new CustomEvent("linetta:mention-pick-new", {
-                detail: { query: item.name, range: currentRange, editor: currentEditor },
-              }),
-            );
+            dispatchAppEvent("linetta:mention-pick-new", {
+              query: item.name,
+              range: currentRange,
+              editor: currentEditor,
+            });
             opts.onStateChange(null);
           }
         };

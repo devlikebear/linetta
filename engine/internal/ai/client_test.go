@@ -5,6 +5,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -19,11 +20,19 @@ func TestDefaultClientFactorySetsClaudeCliPath(t *testing.T) {
 	// claude-code-cli with a bogus path: NewProvider may fail to find the binary,
 	// but the env var must be set first — that is the behavior under test.
 	_, _ = DefaultClientFactory(ResolvedProvider{
-		Provider: "claude-code-cli",
-		CliPath:  "/tmp/does-not-exist-claude",
+		Provider:           "claude-code-cli",
+		CliPath:            "/tmp/does-not-exist-claude",
+		DataSharingConsent: true,
 	})
 	if got := os.Getenv("CLAUDE_CODE_CLI_PATH"); got != "/tmp/does-not-exist-claude" {
 		t.Fatalf("CLAUDE_CODE_CLI_PATH=%q, want /tmp/does-not-exist-claude", got)
+	}
+}
+
+func TestDefaultClientFactoryRejectsMissingDataSharingConsent(t *testing.T) {
+	_, err := DefaultClientFactory(ResolvedProvider{Provider: settings.ProviderOpenAI})
+	if !errors.Is(err, ErrDataSharingConsentRequired) {
+		t.Fatalf("err = %v, want ErrDataSharingConsentRequired", err)
 	}
 }
 
@@ -79,11 +88,12 @@ func TestDefaultClientFactoryOpenRouterSendsMaxTokens(t *testing.T) {
 	defer server.Close()
 
 	client, err := DefaultClientFactory(ResolvedProvider{
-		Provider:  settings.ProviderOpenRouter,
-		Model:     settings.DefaultOpenRouterModel,
-		APIKey:    "or-test",
-		BaseURL:   server.URL + "/v1",
-		MaxTokens: 64,
+		Provider:           settings.ProviderOpenRouter,
+		Model:              settings.DefaultOpenRouterModel,
+		APIKey:             "or-test",
+		BaseURL:            server.URL + "/v1",
+		MaxTokens:          64,
+		DataSharingConsent: true,
 	})
 	if err != nil {
 		t.Fatalf("DefaultClientFactory: %v", err)

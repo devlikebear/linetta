@@ -9,6 +9,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/mdmeta"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 )
 
@@ -68,7 +69,7 @@ func BuildProject(ctx context.Context, pr *project.Repo, nr *node.Repo, now int6
 	for _, root := range outline.Roots {
 		created, err := insertNode(ctx, nr, now, root, "", refID, &res)
 		if err != nil {
-			return BuildResult{}, err
+			return res, err
 		}
 		// Chain off the most-recently-inserted root so outline order is preserved
 		// (CreateSibling inserts immediately after refID; without chaining, roots
@@ -76,11 +77,11 @@ func BuildProject(ctx context.Context, pr *project.Repo, nr *node.Repo, now int6
 		refID = created.ID
 	}
 	if err := nr.Delete(ctx, seedID, now); err != nil {
-		return BuildResult{}, err
+		return res, err
 	}
 	final, err := pr.Get(ctx, p.ID)
 	if err != nil {
-		return BuildResult{}, err
+		return res, err
 	}
 	res.Project = final
 	return res, nil
@@ -197,10 +198,10 @@ func RestoreMetadata(ctx context.Context, er *entity.Repo, rr *relationship.Repo
 		if in.Summary != "" || len(attrs) > 0 {
 			if err := er.Update(ctx, now, entity.UpdateInput{
 				ID:         created.ID,
-				Kind:       kind,
-				Name:       name,
-				Role:       stringsTrim(in.Role),
-				Summary:    stringsTrim(in.Summary),
+				Kind:       ptrutil.To(kind),
+				Name:       ptrutil.To(name),
+				Role:       ptrutil.To(stringsTrim(in.Role)),
+				Summary:    ptrutil.To(stringsTrim(in.Summary)),
 				Attributes: &attrs,
 			}); err != nil {
 				return err

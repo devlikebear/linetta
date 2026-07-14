@@ -20,13 +20,79 @@ func (i *Indexer) Upsert(ctx context.Context, projectID, nodeID, contentDoc stri
 	if i == nil || i.db == nil {
 		return nil
 	}
-	if _, err := i.db.ExecContext(ctx, `DELETE FROM manuscript_fts WHERE node_id = ?`, nodeID); err != nil {
+	tx, err := i.db.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	_, err := i.db.ExecContext(ctx, `
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM manuscript_fts WHERE node_id = ?`, nodeID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 INSERT INTO manuscript_fts (plain, node_id, project_id)
-VALUES (?, ?, ?)`, docToPlainText(contentDoc), nodeID, projectID)
-	return err
+VALUES (?, ?, ?)`, docToPlainText(contentDoc), nodeID, projectID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// RebuildAll reconciles the entire derived FTS index from committed leaf
+// content. It is safe to run at startup and removes orphaned rows left by an
+// interrupted or older best-effort indexing path.
+func (i *Indexer) RebuildAll(ctx context.Context) error {
+	if i == nil || i.db == nil {
+		return nil
+	}
+	rows, err := i.db.QueryContext(ctx, `
+SELECT id, project_id, COALESCE(content_doc, '')
+  FROM nodes
+ WHERE kind = 'leaf'
+ ORDER BY project_id, ordinal`)
+	if err != nil {
+		return err
+	}
+	type entry struct {
+		nodeID    string
+		projectID string
+		doc       string
+	}
+	entries := []entry{}
+	for rows.Next() {
+		var item entry
+		if err := rows.Scan(&item.nodeID, &item.projectID, &item.doc); err != nil {
+			rows.Close()
+			return err
+		}
+		entries = append(entries, item)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	tx, err := i.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM manuscript_fts`); err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `
+INSERT INTO manuscript_fts (plain, node_id, project_id)
+VALUES (?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, item := range entries {
+		if _, err := stmt.ExecContext(ctx, docToPlainText(item.doc), item.nodeID, item.projectID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (i *Indexer) Delete(ctx context.Context, nodeID string) error {

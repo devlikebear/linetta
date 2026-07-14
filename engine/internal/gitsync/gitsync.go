@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/atomicfile"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -116,20 +117,38 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 		return ResultSummary{}, fmt.Errorf("projects.List: %w", err)
 	}
 	written := 0
+	failures := make([]string, 0)
 	for _, p := range projs {
 		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "gitsync: export project %s: %v\n", p.ID, err)
+			msg := fmt.Sprintf("project %s export: %v", p.ID, err)
+			fmt.Fprintf(os.Stderr, "gitsync: %s\n", msg)
+			failures = append(failures, msg)
 			continue
 		}
-		target := filepath.Join(dir, payload.SuggestedFilename)
-		if err := os.WriteFile(target, []byte(payload.Markdown), 0o644); err != nil {
-			fmt.Fprintf(os.Stderr, "gitsync: write %s: %v\n", target, err)
+		target := filepath.Join(dir, export.SyncFilename(p.Title, p.ID))
+		if err := atomicfile.Write(target, []byte(payload.Markdown), 0o644); err != nil {
+			msg := fmt.Sprintf("project %s write: %v", p.ID, err)
+			fmt.Fprintf(os.Stderr, "gitsync: %s\n", msg)
+			failures = append(failures, msg)
 			continue
 		}
 		written++
 	}
 	summary = ResultSummary{FilesWritten: written}
+	if len(failures) > 0 {
+		summary.Error = fmt.Sprintf("%d project(s) failed: %s", len(failures), strings.Join(failures, "; "))
+		return summary, nil
+	}
+	manifest, err := export.BuildSyncManifest(projs, nowFn())
+	if err != nil {
+		summary.Error = "build sync manifest: " + err.Error()
+		return summary, nil
+	}
+	if err := atomicfile.Write(filepath.Join(dir, export.SyncManifestFilename), manifest, 0o644); err != nil {
+		summary.Error = "write sync manifest: " + err.Error()
+		return summary, nil
+	}
 	run := s.Run
 	if run == nil {
 		run = runGitProd
