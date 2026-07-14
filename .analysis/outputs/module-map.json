@@ -1,0 +1,10 @@
+{
+  "frontend": {"path":"apps/desktop/src","responsibility":"React UI, editor state, localization, typed RPC wrappers","key_files":["apps/desktop/src/routes/Workspace.tsx","apps/desktop/src/lib/rpc.ts","apps/desktop/src/lib/types.ts","apps/desktop/src/lib/i18n.tsx"]},
+  "tauri_shell": {"path":"apps/desktop/src-tauri","responsibility":"Desktop security boundary, command exposure, Go FFI lifecycle","key_files":["apps/desktop/src-tauri/src/lib.rs","apps/desktop/src-tauri/src/ffi.rs","apps/desktop/src-tauri/capabilities/default.json","apps/desktop/src-tauri/tauri.conf.json"]},
+  "engine_composition": {"path":"engine/internal/engineapp","responsibility":"Construct services, register RPC methods, run background jobs","key_files":["engine/internal/engineapp/engineapp.go"]},
+  "rpc": {"path":"engine/internal/rpc","responsibility":"JSON-RPC dispatch and input/output adapters","key_files":["engine/internal/rpc/server.go","engine/internal/rpc/handlers"]},
+  "persistence": {"path":"engine/internal/store","responsibility":"SQLite connection, migrations, shared repositories","key_files":["engine/internal/store/store.go","engine/internal/store/migrations.go"]},
+  "domain": {"path":"engine/internal","responsibility":"Project, node, entity, thread, plot, fact, snapshot, AI and companion behavior","key_files":["engine/internal/node/repo.go","engine/internal/project/repo.go","engine/internal/companion/companion.go"]},
+  "recovery_export": {"path":"engine/internal","responsibility":"Backup, Markdown import/export, folder and Git sync","key_files":["engine/internal/backup/backup.go","engine/internal/export/project.go","engine/internal/importmd/builder.go","engine/internal/foldersync/foldersync.go","engine/internal/gitsync/gitsync.go"]},
+  "distribution": {"path":"scripts","responsibility":"Build, sign, notarize, MAS package and distribution validation","key_files":["scripts/release-mas-local.sh","scripts/release-macos-local.sh","scripts/validate-distribution.sh"]}
+}

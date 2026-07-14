@@ -1,0 +1,14 @@
+{
+  "apps/desktop/src/routes/Workspace.tsx":["apps/desktop/src/lib/rpc.ts","apps/desktop/src/components/editor/Tiptap.tsx","apps/desktop/src/hooks/useDebouncedCallback.ts"],
+  "apps/desktop/src/lib/rpc.ts":["apps/desktop/src-tauri/src/lib.rs"],
+  "apps/desktop/src-tauri/src/lib.rs":["apps/desktop/src-tauri/src/ffi.rs","apps/desktop/src-tauri/src/folder_sync.rs"],
+  "apps/desktop/src-tauri/src/ffi.rs":["engine/cmd/linetta-ffi/ffi.go"],
+  "engine/cmd/linetta-ffi/ffi.go":["engine/internal/engineapp/engineapp.go"],
+  "engine/internal/engineapp/engineapp.go":["engine/internal/rpc/server.go","engine/internal/rpc/handlers","engine/internal/store/store.go","engine/internal/backup","engine/internal/companion"],
+  "engine/internal/rpc/handlers":["engine/internal/project","engine/internal/node","engine/internal/entity","engine/internal/thread","engine/internal/export","engine/internal/importmd"],
+  "engine/internal/project":["engine/internal/store/store.go"],
+  "engine/internal/node":["engine/internal/store/store.go","engine/internal/manuscript","engine/internal/mention"],
+  "engine/internal/backup":["engine/internal/store/store.go"],
+  "engine/internal/foldersync":["engine/internal/export"],
+  "engine/internal/gitsync":["engine/internal/export"]
+}
