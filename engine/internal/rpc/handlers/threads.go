@@ -102,7 +102,10 @@ func CloseThread(repo *thread.Repo, now Clock) rpc.Handler {
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		got, _ := repo.Get(ctx, p.ID)
+		got, err := repo.Get(ctx, p.ID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
 		return json.Marshal(got)
 	}
 }
@@ -120,7 +123,10 @@ func ReopenThread(repo *thread.Repo) rpc.Handler {
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		got, _ := repo.Get(ctx, p.ID)
+		got, err := repo.Get(ctx, p.ID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
 		return json.Marshal(got)
 	}
 }

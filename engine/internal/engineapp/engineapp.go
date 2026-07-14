@@ -41,7 +41,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
-const DefaultVersion = "0.9.1"
+const DefaultVersion = "0.9.2"
 
 // Options configures an embedded engine instance.
 type Options struct {
@@ -63,11 +63,12 @@ type providerSource struct{ store *settings.Store }
 func (p providerSource) Resolve() ai.ResolvedProvider {
 	r := p.store.Resolve()
 	return ai.ResolvedProvider{
-		Provider: r.Provider,
-		Model:    r.Model,
-		APIKey:   r.APIKey,
-		BaseURL:  r.BaseURL,
-		CliPath:  r.CliPath,
+		Provider:           r.Provider,
+		Model:              r.Model,
+		APIKey:             r.APIKey,
+		BaseURL:            r.BaseURL,
+		CliPath:            r.CliPath,
+		DataSharingConsent: p.store.HasAIDataSharingConsent(),
 	}
 }
 
@@ -139,6 +140,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	})
 	nodes.SetWritingStatsRecorder(writingStats)
 	nodes.SetManuscriptIndexer(manuscriptIndexer)
+	if err := manuscriptIndexer.RebuildAll(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "manuscript index rebuild: %v\n", err)
+	}
+	if err := mentions.RebuildAll(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "mention rebuild: %v\n", err)
+	}
 
 	settingsStore, err := settings.NewForHome(home)
 	if err != nil {
@@ -189,7 +196,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		return nil
 	}
 	stopBackup := backup.Start(ctx, st.DB(), home, retentionFn,
-		time.Now, time.Sleep, func(result backup.TickResult) {
+		time.Now, backup.Wait, func(result backup.TickResult) {
 			_ = ops.Record(ctx, opsstatus.JobBackup, result.StartedAt, result.FinishedAt,
 				result.OK(), result.Error(), result)
 		})
@@ -219,6 +226,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("diagnostics.get", handlers.DiagnosticsGet(st, ops, home, DefaultVersion, caps))
 	s.Handle("ops_status.get", handlers.GetOpsStatus(ops))
 	s.Handle("ops_status.clear_error", handlers.ClearOpsStatusError(ops))
+	s.Handle("backup.create_recovery", handlers.CreateRecoveryBackup(st, home, clock))
 	s.Handle("search.query", handlers.Search(searchRepo))
 	s.Handle("manuscript.search", handlers.SearchManuscript(manuscriptSearcher))
 	s.Handle("manuscript.replace_preview", handlers.ReplacePreview(manuscriptEditor))

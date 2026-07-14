@@ -1,4 +1,5 @@
 import type { TreeNode } from "../hooks/useFirstLeaf";
+import type { MessageKey } from "./i18n";
 import type { NodeRow } from "./types";
 
 type OutlineKind = "leaf" | "container";
@@ -23,19 +24,19 @@ export type OutlineRepairRPC = {
   rename: (id: string, label: string, title: string) => Promise<{ ok: true }>;
 };
 
-type Labeler = (key: string, values?: Record<string, string | number>) => string;
+type Labeler = (key: MessageKey, values?: Record<string, string | number>) => string;
 type OutlineRole = "part" | "chapter" | "scene";
 
 type OutlineLevelSpec = {
-  numberKey: string;
-  nameKey: string;
+  numberKey: MessageKey;
+  nameKey: MessageKey;
   structuralPatterns: RegExp[];
   titlePatterns: RegExp[];
 };
 
 export type OutlineStructurePreset = {
   id: "novel" | "webnovel";
-  nameKey: string;
+  nameKey: MessageKey;
   levels: Record<OutlineRole, OutlineLevelSpec>;
 };
 

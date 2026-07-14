@@ -72,7 +72,8 @@ func (r *Repo) ListByProject(ctx context.Context, projectID string, includeClose
 	return out, rows.Err()
 }
 
-// Update applies a partial input. Empty strings leave fields alone.
+// Update applies a partial input. Non-nil pointers overwrite fields, including
+// clearing the summary with an explicit empty value.
 func (r *Repo) Update(ctx context.Context, in UpdateInput) error {
 	if in.ID == "" {
 		return fmt.Errorf("update thread: id required")
@@ -90,13 +91,15 @@ func (r *Repo) Update(ctx context.Context, in UpdateInput) error {
 		}
 		return err
 	}
-	if in.Name != "" {
-		cur.Name = in.Name
+	if in.Name != nil {
+		cur.Name = *in.Name
 	}
-	if in.Color != "" {
-		cur.Color = in.Color
+	if in.Color != nil {
+		cur.Color = *in.Color
 	}
-	cur.Summary = in.Summary
+	if in.Summary != nil {
+		cur.Summary = *in.Summary
+	}
 	if _, err := tx.ExecContext(ctx, `
 UPDATE threads SET name = ?, color = ?, summary = ? WHERE id = ?`,
 		cur.Name, cur.Color, cur.Summary, in.ID); err != nil {

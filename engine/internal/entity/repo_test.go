@@ -2,10 +2,12 @@ package entity
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
@@ -88,7 +90,7 @@ func TestRepo_Update_partial(t *testing.T) {
 	ctx := context.Background()
 	e, _ := r.Create(ctx, 100, NewInput{ProjectID: p.ID, Kind: KindCharacter, Name: "해진"})
 	attrs := map[string]string{"나이": "32", "직업": "사진작가"}
-	if err := r.Update(ctx, 200, UpdateInput{ID: e.ID, Role: "POV", Summary: "사진을 찍는 사람", Attributes: &attrs}); err != nil {
+	if err := r.Update(ctx, 200, UpdateInput{ID: e.ID, Role: ptrutil.To("POV"), Summary: ptrutil.To("사진을 찍는 사람"), Attributes: &attrs}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	got, _ := r.Get(ctx, e.ID)
@@ -97,6 +99,41 @@ func TestRepo_Update_partial(t *testing.T) {
 	}
 	if got.Attributes["나이"] != "32" {
 		t.Errorf("attributes not stored: %+v", got.Attributes)
+	}
+}
+
+func TestRepo_Update_JSONPatchDistinguishesOmittedAndExplicitEmpty(t *testing.T) {
+	s, p := openStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+	e, _ := r.Create(ctx, 100, NewInput{ProjectID: p.ID, Kind: KindCharacter, Name: "해진", Role: "POV"})
+	seedSummary := "사진을 찍는 사람"
+	if err := r.Update(ctx, 150, UpdateInput{ID: e.ID, Summary: &seedSummary}); err != nil {
+		t.Fatalf("seed summary: %v", err)
+	}
+
+	var omitted UpdateInput
+	if err := json.Unmarshal([]byte(`{"id":"`+e.ID+`","name":"새 이름"}`), &omitted); err != nil {
+		t.Fatalf("unmarshal omitted patch: %v", err)
+	}
+	if err := r.Update(ctx, 200, omitted); err != nil {
+		t.Fatalf("update omitted patch: %v", err)
+	}
+	got, _ := r.Get(ctx, e.ID)
+	if got.Role != "POV" || got.Summary != seedSummary {
+		t.Fatalf("omitted fields were overwritten: %+v", got)
+	}
+
+	var clear UpdateInput
+	if err := json.Unmarshal([]byte(`{"id":"`+e.ID+`","role":"","summary":""}`), &clear); err != nil {
+		t.Fatalf("unmarshal clear patch: %v", err)
+	}
+	if err := r.Update(ctx, 300, clear); err != nil {
+		t.Fatalf("clear patch: %v", err)
+	}
+	got, _ = r.Get(ctx, e.ID)
+	if got.Role != "" || got.Summary != "" {
+		t.Fatalf("explicit empty values did not clear fields: %+v", got)
 	}
 }
 

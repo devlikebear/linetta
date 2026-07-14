@@ -84,7 +84,10 @@ func UpdateBeat(repo *beat.Repo) rpc.Handler {
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		got, _ := repo.Get(ctx, in.ID)
+		got, err := repo.Get(ctx, in.ID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
 		return json.Marshal(got)
 	}
 }

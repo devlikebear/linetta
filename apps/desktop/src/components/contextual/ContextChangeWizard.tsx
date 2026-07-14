@@ -77,7 +77,7 @@ export function ContextChangeWizard({ projectId, initialEntityId, initialText, a
     contextual.checkConsistency({ project_id: projectId, old_terms: [term], language })
       .then((nextReport) => setReport(nextReport))
       .catch((err) => setError(String(err)));
-  }, [autoCheck, autoCheckKey, initialText, projectId]);
+  }, [autoCheck, autoCheckKey, initialText, language, projectId]);
 
   useEffect(() => {
     const query = oldTerm.trim();

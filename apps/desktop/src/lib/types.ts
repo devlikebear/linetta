@@ -363,12 +363,12 @@ export interface AICancelled {
 
 export interface EngineStatus {
   ok: boolean;
-  error?: string;
-  version?: string;
-  home?: string;
-  db_path?: string;
-  migration_version?: number;
-  migration_count?: number;
+  error: string | null;
+  version: string | null;
+  home: string | null;
+  db_path: string | null;
+  migration_version: number | null;
+  migration_count: number | null;
 }
 
 export interface OpsStatus {
@@ -575,6 +575,8 @@ export interface Settings {
   safety_checklist_dismissed: boolean;
   onboarding_tour_enabled: boolean;
   onboarding_tour_seen_version: string;
+  ai_data_sharing_consent_version?: number;
+  ai_data_sharing_consented_at?: number;
   web_search_provider: WebSearchProvider;
   web_search_api_key: string;
   web_search_api_key_set?: boolean;
@@ -597,6 +599,8 @@ export interface SettingsPatch {
   safety_checklist_dismissed?: boolean;
   onboarding_tour_enabled?: boolean;
   onboarding_tour_seen_version?: string;
+  ai_data_sharing_consent_version?: number;
+  ai_data_sharing_consented_at?: number;
   web_search_provider?: WebSearchProvider;
   web_search_api_key?: string;
 }

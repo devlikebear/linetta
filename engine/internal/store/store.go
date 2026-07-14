@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
+	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/backup"
 	_ "modernc.org/sqlite"
 )
 
@@ -37,6 +40,16 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		if _, err := db.ExecContext(ctx, pragma); err != nil {
 			_ = db.Close()
 			return nil, fmt.Errorf("pragma %q: %w", pragma, err)
+		}
+	}
+	if pending, targetVersion, err := migrationPending(ctx, db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("inspect migrations: %w", err)
+	} else if pending {
+		home := filepath.Dir(path)
+		if _, err := backup.RunPreMigration(ctx, db, home, targetVersion, time.Now()); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("pre-migration backup: %w", err)
 		}
 	}
 	if err := ApplyMigrations(ctx, db); err != nil {

@@ -45,7 +45,8 @@ import { AISetupStart, guideForProvider, type GuideID } from "../ai/AISetupStart
 import { ProposalCard } from "./ProposalCard";
 import { ChoiceCard } from "./ChoiceCard";
 import { Markdown } from "./Markdown";
-import { useI18n } from "../../lib/i18n";
+import { localeForLanguage, useI18n, type MessageKey } from "../../lib/i18n";
+import { dispatchAppEvent } from "../../lib/appEvents";
 import {
   OPENROUTER_DEFAULT_MODEL_OPTIONS,
   OPENROUTER_SMART_DEFAULT_MODEL,
@@ -88,9 +89,9 @@ interface CompanionActionPreset {
   id: string;
   scope: "scene" | "work";
   icon: LucideIcon;
-  labelKey: string;
-  descriptionKey: string;
-  promptKey: string;
+  labelKey: MessageKey;
+  descriptionKey: MessageKey;
+  promptKey: MessageKey;
 }
 
 const COMPANION_SCENE_ACTIONS: CompanionActionPreset[] = [
@@ -459,7 +460,7 @@ function MessageCopyButton({
   );
 }
 
-function aiSetupBodyKey(issue: AISetupIssue): string {
+function aiSetupBodyKey(issue: AISetupIssue): MessageKey {
   switch (issue) {
     case "missing_key":
       return "companion.aiSetup.body.missingKey";
@@ -537,7 +538,7 @@ export function CompanionPanel({
   aiDraft,
   selectionRewriteRequest,
 }: Props) {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [contextSelection, setContextSelection] = useState<AIContextSelection>(DEFAULT_AI_CONTEXT_SELECTION);
   const currentNodeId = currentNodeIdProp ?? nodeIdRef.current;
   const [historyScope, setHistoryScope] = useState<CompanionHistoryScope>(() => currentNodeId ? "scene" : "project");
@@ -914,7 +915,7 @@ export function CompanionPanel({
     setAISetupGuideId(guideForProvider(provider));
     try {
       const next = await settingsApi.set({ provider });
-      window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+      dispatchAppEvent("linetta:settings-updated", next);
     } catch {
       // The inline setup sheet is an entry point; Settings remains the detailed
       // surface for showing provider-specific save/test errors.
@@ -941,7 +942,7 @@ export function CompanionPanel({
     setAISetupOpenRouterKeyDraft(next.providers?.openrouter?.api_key ?? "");
     setAISetupOpenRouterKeySaved(next.providers?.openrouter?.api_key_set ?? false);
     setAISetupOpenRouterModelDraft(next.providers?.openrouter?.model?.trim() || OPENROUTER_SMART_DEFAULT_MODEL);
-    window.dispatchEvent(new CustomEvent("linetta:settings-updated", { detail: next }));
+    dispatchAppEvent("linetta:settings-updated", next);
     if (!options.quiet) {
       setAISetupOpenRouterMsg({ kind: "ok", text: t("settings.setup.openrouter.saved") });
     }
@@ -1153,7 +1154,7 @@ export function CompanionPanel({
                     <span className="companion-scene-chip">{m.nodeLabel}</span>
                   </div>
                 )}
-                <span className="msg-who">companion</span>
+                <span className="msg-who">{t("companion.speaker")}</span>
                 <CompanionAISetupCard
                   message={m}
                   t={t}
@@ -1173,7 +1174,7 @@ export function CompanionPanel({
                       <span className="companion-scene-chip">{m.nodeLabel}</span>
                     </div>
                   )}
-                  <span className="msg-who">companion</span>
+                  <span className="msg-who">{t("companion.speaker")}</span>
                   <div className="msg-line">
                     <div className={`msg-bubble${m.errored ? " errored" : ""}`}>
                       {m.errored ? m.content : <Markdown text={m.content} />}
@@ -1205,7 +1206,7 @@ export function CompanionPanel({
         })}
         {!aiDraft && isStreaming && (
           <div className="msg bot">
-            <span className="msg-who">companion</span>
+            <span className="msg-who">{t("companion.speaker")}</span>
             <div className="companion-thinking">
               <span className="ai-working-dot" aria-hidden="true" />
               {thinking || (liveProse ? t("companion.writing") : t("companion.preparing"))}
@@ -1453,7 +1454,9 @@ export function CompanionPanel({
                       </div>
                       <div className="companion-reference-row-sub">
                         <span>{referenceStatusLabel(t, ref.status)}</span>
-                        <span>{ref.char_count.toLocaleString()} chars</span>
+                        <span>{t("companion.reference.charCount", {
+                          count: ref.char_count.toLocaleString(localeForLanguage(language)),
+                        })}</span>
                       </div>
                       <div className="companion-reference-row-actions">
                         {ref.status === "disabled" ? (

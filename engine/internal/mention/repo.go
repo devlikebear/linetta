@@ -43,6 +43,45 @@ VALUES (?, ?, ?, ?, ?)`, uuid.NewString(), nodeID, f.EntityID, f.Position, f.Sur
 	return tx.Commit()
 }
 
+// RebuildAll reconstructs the derived mention table from every persisted leaf
+// document. Documents are loaded before writes begin because the store uses a
+// single SQLite connection.
+func (r *Repo) RebuildAll(ctx context.Context) error {
+	rows, err := r.s.DB().QueryContext(ctx, `
+SELECT id, content_doc
+  FROM nodes
+ WHERE kind = 'leaf' AND content_doc IS NOT NULL`)
+	if err != nil {
+		return err
+	}
+	type document struct {
+		nodeID string
+		doc    string
+	}
+	documents := make([]document, 0)
+	for rows.Next() {
+		var item document
+		if err := rows.Scan(&item.nodeID, &item.doc); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		documents = append(documents, item)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, item := range documents {
+		if err := r.ResyncForNode(ctx, item.nodeID, Collect([]byte(item.doc))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ListForNode returns raw mention rows ordered by position.
 func (r *Repo) ListForNode(ctx context.Context, nodeID string) ([]Mention, error) {
 	rows, err := r.s.DB().QueryContext(ctx, `

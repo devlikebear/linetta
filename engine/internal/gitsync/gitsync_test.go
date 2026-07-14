@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -181,6 +182,10 @@ func TestRunOnce_writesFilesAndCommitsAndPushes(t *testing.T) {
 	if !foundMD {
 		t.Errorf("expected a .md file in %s, got entries=%v", repoDir, entries)
 	}
+	manifest, err := os.ReadFile(filepath.Join(repoDir, export.SyncManifestFilename))
+	if err != nil || !strings.Contains(string(manifest), `"format_version": 1`) {
+		t.Fatalf("sync manifest missing or invalid: %s err=%v", manifest, err)
+	}
 	// Verify git calls in order.
 	gotNames := runner.cmdNames()
 	wantNames := []string{"add", "status", "commit", "push"}
@@ -191,6 +196,33 @@ func TestRunOnce_writesFilesAndCommitsAndPushes(t *testing.T) {
 		if gotNames[i] != n {
 			t.Errorf("git call[%d] = %q, want %q (all=%v)", i, gotNames[i], n, gotNames)
 		}
+	}
+}
+
+func TestRunOnce_stopsBeforeGitWhenProjectWriteFails(t *testing.T) {
+	s, runner, repoDir, _ := newFixture(t)
+	ctx := context.Background()
+	projs, err := s.Projects.List(ctx, project.ListFilter{Limit: 10})
+	if err != nil || len(projs) != 1 {
+		t.Fatalf("projects = %v, err = %v", projs, err)
+	}
+	blocked := filepath.Join(repoDir, export.SyncFilename(projs[0].Title, projs[0].ID))
+	if err := os.Mkdir(blocked, 0o755); err != nil {
+		t.Fatalf("block target: %v", err)
+	}
+	if _, err := s.Settings.Set(ctx, settings.Patch{GitSyncDir: strPtr(repoDir)}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	res, err := s.RunOnce(ctx)
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if res.Error == "" || res.FilesWritten != 0 {
+		t.Fatalf("write failure reported as success: %+v", res)
+	}
+	if calls := runner.cmdNames(); len(calls) != 0 {
+		t.Fatalf("git ran after partial export failure: %v", calls)
 	}
 }
 
@@ -215,7 +247,11 @@ func TestRunOnce_writesOutlinePresetMetadata(t *testing.T) {
 	if _, err := s.RunOnce(ctx); err != nil {
 		t.Fatalf("RunOnce: %v", err)
 	}
-	body, err := os.ReadFile(filepath.Join(repoDir, "quiet-city.md"))
+	matches, err := filepath.Glob(filepath.Join(repoDir, "quiet-city--*.md"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("find exported markdown: matches=%v err=%v", matches, err)
+	}
+	body, err := os.ReadFile(matches[0])
 	if err != nil {
 		t.Fatalf("read exported markdown: %v", err)
 	}

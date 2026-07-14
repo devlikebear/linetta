@@ -2,10 +2,12 @@ package thread
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
@@ -85,12 +87,47 @@ func TestRepo_Update_partial(t *testing.T) {
 	r := NewRepo(s)
 	ctx := context.Background()
 	th, _ := r.Create(ctx, NewInput{ProjectID: p.ID, Name: "원본"})
-	if err := r.Update(ctx, UpdateInput{ID: th.ID, Name: "수정됨", Summary: "요약 한 줄"}); err != nil {
+	if err := r.Update(ctx, UpdateInput{ID: th.ID, Name: ptrutil.To("수정됨"), Summary: ptrutil.To("요약 한 줄")}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 	got, _ := r.Get(ctx, th.ID)
 	if got.Name != "수정됨" || got.Summary != "요약 한 줄" || got.Color != "#666" {
 		t.Errorf("update missed: %+v", got)
+	}
+}
+
+func TestRepo_Update_JSONPatchDistinguishesOmittedAndExplicitEmpty(t *testing.T) {
+	s, p := openStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+	th, _ := r.Create(ctx, NewInput{ProjectID: p.ID, Name: "원본", Color: "#123456"})
+	seedSummary := "기존 요약"
+	if err := r.Update(ctx, UpdateInput{ID: th.ID, Summary: &seedSummary}); err != nil {
+		t.Fatalf("seed summary: %v", err)
+	}
+
+	var omitted UpdateInput
+	if err := json.Unmarshal([]byte(`{"id":"`+th.ID+`","name":"수정됨"}`), &omitted); err != nil {
+		t.Fatalf("unmarshal omitted patch: %v", err)
+	}
+	if err := r.Update(ctx, omitted); err != nil {
+		t.Fatalf("update omitted patch: %v", err)
+	}
+	got, _ := r.Get(ctx, th.ID)
+	if got.Color != "#123456" || got.Summary != seedSummary {
+		t.Fatalf("omitted fields were overwritten: %+v", got)
+	}
+
+	var clear UpdateInput
+	if err := json.Unmarshal([]byte(`{"id":"`+th.ID+`","summary":""}`), &clear); err != nil {
+		t.Fatalf("unmarshal clear patch: %v", err)
+	}
+	if err := r.Update(ctx, clear); err != nil {
+		t.Fatalf("clear patch: %v", err)
+	}
+	got, _ = r.Get(ctx, th.ID)
+	if got.Summary != "" {
+		t.Fatalf("explicit empty summary did not clear field: %+v", got)
 	}
 }
 

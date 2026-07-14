@@ -18,6 +18,7 @@ var (
 	ErrInvalidKind         = errors.New("invalid node kind")
 	ErrInvalidStatus       = errors.New("invalid node status")
 	ErrContentOnContainer  = errors.New("cannot update content for a container node")
+	ErrContentConflict     = errors.New("node content changed since it was loaded")
 	ErrNodeProjectMismatch = errors.New("node does not belong to project")
 	ErrInvalidMove         = errors.New("invalid node move")
 )
@@ -81,6 +82,17 @@ func (r *Repo) Get(ctx context.Context, id string) (Node, error) {
 // updates `projects.word_count` (= sum of leaf word_counts in that project),
 // and touches `updated_at` on both rows.
 func (r *Repo) UpdateContent(ctx context.Context, id string, doc string, now int64) error {
+	return r.updateContent(ctx, id, doc, nil, now)
+}
+
+// UpdateContentIfVersion applies a content change only while the persisted
+// version still matches expectedVersion. It prevents delayed autosaves from
+// overwriting a newer restore, companion edit, or save from another window.
+func (r *Repo) UpdateContentIfVersion(ctx context.Context, id string, doc string, expectedVersion int, now int64) error {
+	return r.updateContent(ctx, id, doc, &expectedVersion, now)
+}
+
+func (r *Repo) updateContent(ctx context.Context, id string, doc string, expectedVersion *int, now int64) error {
 	count := CountChars([]byte(doc))
 
 	tx, err := r.s.DB().BeginTx(ctx, nil)
@@ -90,11 +102,12 @@ func (r *Repo) UpdateContent(ctx context.Context, id string, doc string, now int
 	defer tx.Rollback()
 
 	var (
-		kind          string
-		projectID     string
-		previousCount int
+		kind           string
+		projectID      string
+		previousCount  int
+		currentVersion int
 	)
-	if err := tx.QueryRowContext(ctx, `SELECT kind, project_id, word_count FROM nodes WHERE id = ?`, id).Scan(&kind, &projectID, &previousCount); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT kind, project_id, word_count, content_version FROM nodes WHERE id = ?`, id).Scan(&kind, &projectID, &previousCount, &currentVersion); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -103,17 +116,29 @@ func (r *Repo) UpdateContent(ctx context.Context, id string, doc string, now int
 	if kind != KindLeaf {
 		return ErrContentOnContainer
 	}
+	if expectedVersion != nil && currentVersion != *expectedVersion {
+		return ErrContentConflict
+	}
 
-	res, err := tx.ExecContext(ctx, `
+	updateSQL := `
 UPDATE nodes
    SET content_doc = ?, word_count = ?, updated_at = ?,
        content_version = content_version + 1
- WHERE id = ?`, doc, count, now, id)
+	WHERE id = ?`
+	args := []any{doc, count, now, id}
+	if expectedVersion != nil {
+		updateSQL += ` AND content_version = ?`
+		args = append(args, *expectedVersion)
+	}
+	res, err := tx.ExecContext(ctx, updateSQL, args...)
 	if err != nil {
 		return err
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
+		if expectedVersion != nil {
+			return ErrContentConflict
+		}
 		return ErrNotFound
 	}
 
@@ -159,7 +184,7 @@ UPDATE projects
 	r.indexUpsertBestEffort(ctx, projectID, id, doc)
 	if r.resync != nil {
 		if err := r.resync(ctx, id, doc); err != nil {
-			return err
+			log.Printf("mention resync failed for node %s: %v", id, err)
 		}
 	}
 	return nil

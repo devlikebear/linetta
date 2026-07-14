@@ -52,11 +52,12 @@ func (n *serverNotifier) Notify(method string, params any) error {
 
 // Standard JSONRPC error codes (subset).
 const (
-	CodeParseError     = -32700
-	CodeInvalidRequest = -32600
-	CodeMethodNotFound = -32601
-	CodeInvalidParams  = -32602
-	CodeInternalError  = -32603
+	CodeParseError      = -32700
+	CodeInvalidRequest  = -32600
+	CodeMethodNotFound  = -32601
+	CodeInvalidParams   = -32602
+	CodeInternalError   = -32603
+	CodeContentConflict = -32009
 )
 
 // MethodError lets a handler return a typed JSONRPC error.

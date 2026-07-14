@@ -11,304 +11,7 @@ export const APP_LANGUAGES: Array<{ value: AppLanguage; label: string; nativeLab
   { value: "ja", label: "Japanese", nativeLabel: "日本語" },
 ];
 
-type MessageKey = string
-  | "app.loading"
-  | "common.loading"
-  | "common.cancel"
-  | "common.save"
-  | "common.saving"
-  | "common.close"
-  | "common.deleteKey"
-  | "project.length.flash"
-  | "project.length.short"
-  | "project.length.novella"
-  | "project.length.novel"
-  | "project.length.series"
-  | "project.pov.first"
-  | "project.pov.thirdLimited"
-  | "project.pov.omniscient"
-  | "project.words.empty"
-  | "project.words.count"
-  | "project.words.compact"
-  | "library.menu.label"
-  | "library.menu.dataFolder"
-  | "library.menu.backupFolder"
-  | "library.menu.importMarkdown"
-  | "library.menu.search"
-  | "library.menu.settings"
-  | "library.menu.diagnostics"
-  | "library.brand"
-  | "library.tagline"
-  | "library.projectCount"
-  | "library.noExternalTransfer"
-  | "library.dataLocal"
-  | "library.newProject"
-  | "library.importing"
-  | "library.recentProjects"
-  | "library.allProjects"
-  | "library.archiveBox"
-  | "library.startNewProject"
-  | "library.projectActionsLabel"
-  | "library.projectBackup"
-  | "library.deleteProject"
-  | "library.active"
-  | "library.archived"
-  | "library.itemCount"
-  | "library.empty"
-  | "library.archive"
-  | "library.restore"
-  | "library.confirm.deleteProject"
-  | "library.safety.title"
-  | "library.safety.data"
-  | "library.safety.backup"
-  | "library.safety.checking"
-  | "library.safety.configured"
-  | "library.safety.disabled"
-  | "library.safety.gitSettings"
-  | "library.safety.dismiss"
-  | "library.diagnostics.title"
-  | "library.toast.appStateFailed"
-  | "library.toast.importFailed"
-  | "library.toast.importComplete"
-  | "library.toast.importEmpty"
-  | "library.toast.importWarnings"
-  | "library.toast.openBackupFailed"
-  | "library.toast.openDataFailed"
-  | "library.toast.diagnosticsFailed"
-  | "library.toast.safetySaveFailed"
-  | "library.toast.projectBackupComplete"
-  | "library.toast.projectBackupFailed"
-  | "library.toast.projectArchiveSuccess"
-  | "library.toast.projectArchiveFailed"
-  | "library.toast.projectDeleteSuccess"
-  | "library.toast.projectDeleteFailed"
-  | "newProject.defaultGenre.scifi"
-  | "newProject.defaultGenre.fantasy"
-  | "newProject.defaultGenre.mystery"
-  | "newProject.defaultGenre.literary"
-  | "newProject.title"
-  | "newProject.subtitle"
-  | "newProject.titleLabel"
-  | "newProject.titlePlaceholder"
-  | "newProject.genres"
-  | "newProject.length"
-  | "newProject.pov"
-  | "newProject.titleRequired"
-  | "newProject.creating"
-  | "newProject.create"
-  | "settings.backToLibrary"
-  | "settings.brand"
-  | "settings.title"
-  | "settings.language.title"
-  | "settings.language.description"
-  | "settings.language.label"
-  | "settings.aiWizard.title"
-  | "settings.aiWizard.badge"
-  | "settings.aiWizard.description"
-  | "settings.aiWizard.current"
-  | "settings.aiWizard.policy"
-  | "settings.aiWizard.officialGuide"
-  | "settings.aiWizard.selected"
-  | "settings.aiWizard.choiceTabs"
-  | "settings.aiWizard.stepsSummary"
-  | "settings.aiAdvanced.title"
-  | "settings.aiAdvanced.description"
-  | "settings.aiAdvanced.changeNote"
-  | "settings.provider.apiKey"
-  | "settings.provider.apiKeySavedPlaceholder"
-  | "settings.provider.apiKeyPlaceholder"
-  | "settings.provider.apiKeyHelp"
-  | "settings.provider.baseUrl"
-  | "settings.provider.baseUrlPlaceholder"
-  | "settings.provider.cliPath"
-  | "settings.provider.cliPathPlaceholder"
-  | "settings.provider.cliDetecting"
-  | "settings.provider.cliDetect"
-  | "settings.provider.cliHelp"
-  | "settings.provider.model"
-  | "settings.provider.modelPlaceholder"
-  | "settings.provider.refreshingModels"
-  | "settings.provider.refreshModels"
-  | "settings.provider.cliNoModels"
-  | "settings.provider.oauthNoModels"
-  | "settings.provider.modelHelp"
-  | "settings.provider.storageHelp"
-  | "settings.provider.test"
-  | "settings.provider.testing"
-  | "settings.provider.testHelp"
-  | "settings.provider.detectFound"
-  | "settings.provider.detectMissing"
-  | "settings.provider.testOk"
-  | "settings.provider.testError"
-  | "settings.provider.stateNeedsConnection"
-  | "settings.provider.stateCodexLogin"
-  | "settings.provider.stateApiSaved"
-  | "settings.provider.stateApiNeeded"
-  | "settings.provider.stateCliSaved"
-  | "settings.provider.stateCliLegacy"
-  | "settings.provider.stateNeedsSettings"
-  | "settings.provider.openaiCodex.label"
-  | "settings.provider.openaiCodex.desc"
-  | "settings.provider.openai.label"
-  | "settings.provider.openai.desc"
-  | "settings.provider.openrouter.label"
-  | "settings.provider.openrouter.desc"
-  | "settings.provider.anthropic.label"
-  | "settings.provider.anthropic.desc"
-  | "settings.provider.gemini.label"
-  | "settings.provider.gemini.desc"
-  | "settings.provider.claudeCli.label"
-  | "settings.provider.claudeCli.desc"
-  | "settings.provider.restrictedNote"
-  | "settings.writing.title"
-  | "settings.writing.typewriter"
-  | "settings.writing.typewriterDescription"
-  | "settings.writing.focus"
-  | "settings.writing.focusDescription"
-  | "settings.editor.title"
-  | "settings.editor.theme"
-  | "settings.editor.themeSystem"
-  | "settings.editor.themeLight"
-  | "settings.editor.themeDark"
-  | "settings.editor.fontSize"
-  | "settings.editor.lineHeight"
-  | "settings.tools.title"
-  | "settings.tools.description"
-  | "settings.tools.webSearchProvider"
-  | "settings.tools.webSearchApiKey"
-  | "settings.tools.keySavedPlaceholder"
-  | "settings.tools.keyPlaceholder"
-  | "settings.tools.keyHelp"
-  | "settings.tools.webSearchTest"
-  | "settings.tools.webSearchTesting"
-  | "settings.tools.webSearchTestHelp"
-  | "settings.tools.webSearchTestOk"
-  | "settings.tools.webSearchTestError"
-  | "settings.git.title"
-  | "settings.git.description"
-  | "settings.git.folder"
-  | "settings.git.folderPlaceholder"
-  | "settings.git.pickFolder"
-  | "settings.git.commitTemplate"
-  | "settings.git.commitTemplatePlaceholder"
-  | "settings.git.commitTemplateHelp"
-  | "settings.git.runNow"
-  | "settings.git.init"
-  | "settings.git.unavailableNote"
-  | "settings.folder.title"
-  | "settings.folder.description"
-  | "settings.folder.folder"
-  | "settings.folder.folderPlaceholder"
-  | "settings.folder.pickFolder"
-  | "settings.folder.enable"
-  | "settings.folder.help"
-  | "settings.folder.runNow"
-  | "settings.backup.title"
-  | "settings.backup.description"
-  | "settings.backup.folder"
-  | "settings.ops.backupStatus"
-  | "settings.ops.gitStatus"
-  | "settings.ops.folderStatus"
-  | "settings.ops.summarizerStatus"
-  | "settings.ops.companionStatus"
-  | "settings.ops.summarizerRecentFailure"
-  | "settings.ops.companionRecentFailure"
-  | "settings.ops.lastRun"
-  | "settings.ops.clearError"
-  | "settings.ops.noRuns"
-  | "settings.ops.ok"
-  | "settings.ops.failed"
-  | "settings.ops.gitOk"
-  | "settings.ops.folderOk"
-  | "settings.ops.backupOk"
-  | "settings.ops.summarizerOk"
-  | "settings.ops.companionOk"
-  | "settings.saved"
-  | "settings.setup.openrouter.title"
-  | "settings.setup.openrouter.badge"
-  | "settings.setup.openrouter.summary"
-  | "settings.setup.openrouter.policy"
-  | "settings.setup.openrouter.action"
-  | "settings.setup.openrouter.step1"
-  | "settings.setup.openrouter.step2"
-  | "settings.setup.openrouter.step3"
-  | "settings.setup.openrouter.step4"
-  | "settings.setup.openrouter.step5"
-  | "settings.setup.openrouter.linkKeys"
-  | "settings.setup.openrouter.linkLimits"
-  | "settings.setup.openrouter.keyInfoTitle"
-  | "settings.setup.openrouter.keyInfoRefresh"
-  | "settings.setup.openrouter.keyInfoLoading"
-  | "settings.setup.openrouter.keyInfoUnavailable"
-  | "settings.setup.openrouter.keyInfoRemaining"
-  | "settings.setup.openrouter.keyInfoLimit"
-  | "settings.setup.openrouter.keyInfoMonthlyUsage"
-  | "settings.setup.openrouter.oauthAction"
-  | "settings.setup.openrouter.oauthWaiting"
-  | "settings.setup.openrouter.oauthManualLink"
-  | "settings.setup.openrouter.oauthStarted"
-  | "settings.setup.openrouter.oauthError"
-  | "settings.setup.openrouter.apiKeyLabel"
-  | "settings.setup.openrouter.apiKeyPlaceholder"
-  | "settings.setup.openrouter.apiKeySavedPlaceholder"
-  | "settings.setup.openrouter.saveKey"
-  | "settings.setup.openrouter.saved"
-  | "settings.setup.openrouter.inlineHelp"
-  | "settings.setup.openrouter.modelLabel"
-  | "settings.setup.openrouter.modelHelp"
-  | "settings.setup.openrouter.recommendedModels"
-  | "settings.setup.openrouter.modelPreset.quality"
-  | "settings.setup.openrouter.modelPreset.qualityHelp"
-  | "settings.setup.openrouter.modelPreset.fast"
-  | "settings.setup.openrouter.modelPreset.fastHelp"
-  | "settings.setup.openrouter.modelPreset.auto"
-  | "settings.setup.openrouter.modelPreset.autoHelp"
-  | "settings.setup.openrouter.refreshModels"
-  | "settings.setup.openrouter.modelsLoading"
-  | "settings.setup.chatgpt.title"
-  | "settings.setup.chatgpt.badge"
-  | "settings.setup.chatgpt.summary"
-  | "settings.setup.chatgpt.policy"
-  | "settings.setup.chatgpt.action"
-  | "settings.setup.chatgpt.step1"
-  | "settings.setup.chatgpt.step2"
-  | "settings.setup.chatgpt.step3"
-  | "settings.setup.chatgpt.step4"
-  | "settings.setup.chatgpt.step5"
-  | "settings.setup.openai.title"
-  | "settings.setup.openai.badge"
-  | "settings.setup.openai.summary"
-  | "settings.setup.openai.policy"
-  | "settings.setup.openai.action"
-  | "settings.setup.openai.step1"
-  | "settings.setup.openai.step2"
-  | "settings.setup.openai.step3"
-  | "settings.setup.openai.step4"
-  | "settings.setup.openai.step5"
-  | "settings.setup.claude.title"
-  | "settings.setup.claude.badge"
-  | "settings.setup.claude.summary"
-  | "settings.setup.claude.policy"
-  | "settings.setup.claude.action"
-  | "settings.setup.claude.step1"
-  | "settings.setup.claude.step2"
-  | "settings.setup.claude.step3"
-  | "settings.setup.claude.step4"
-  | "settings.setup.claude.step5"
-  | "settings.setup.gemini.title"
-  | "settings.setup.gemini.badge"
-  | "settings.setup.gemini.summary"
-  | "settings.setup.gemini.policy"
-  | "settings.setup.gemini.action"
-  | "settings.setup.gemini.step1"
-  | "settings.setup.gemini.step2"
-  | "settings.setup.gemini.step3"
-  | "settings.setup.gemini.step4"
-  | "settings.setup.gemini.step5";
-
-type Messages = Record<MessageKey, string>;
-
-const messages: Record<AppLanguage, Messages> = {
+const messages = {
   ko: {
     "app.loading": "불러오는 중…",
     "common.loading": "불러오는 중…",
@@ -444,7 +147,7 @@ const messages: Record<AppLanguage, Messages> = {
     "workspace.addBeat": "비트 추가",
     "workspace.addBeatToNextScene": "다음 씬에 비트",
     "workspace.noStorylineHint": "스토리라인이 없어요. 명령 팔레트에서 \"{command}\"로 시작하세요.",
-    "workspace.markSceneAsThread": "이 씬을 새 Thread로 표시",
+    "workspace.markSceneAsThread": "이 씬을 새 스토리라인으로 등록",
     "workspace.searchShortcut": "검색 (Cmd+F)",
     "workspace.commandPaletteShortcut": "명령 팔레트 (Cmd+P)",
     "workspace.companion": "컴패니언",
@@ -518,10 +221,11 @@ const messages: Record<AppLanguage, Messages> = {
     "workspace.command.renameNode": "이름 바꾸기",
     "workspace.command.moveSceneUp": "이 씬 위로",
     "workspace.command.moveSceneDown": "이 씬 아래로",
-    "workspace.command.flowThreadView": "흐름 (Thread View)",
+    "workspace.command.flowThreadView": "스토리라인 보기",
     "workspace.command.sceneVersions": "편집 히스토리 / 버전 비교",
     "workspace.command.sceneVersionsHint": "버전 · 복원 · diff",
     "workspace.command.restore": "복원",
+    "workspace.outlineStructureFormat": "{preset}: {part} > {chapter} > {scene} (예: {partExample} > {chapterExample} > {sceneExample})",
     "workspace.command.exportProject": "프로젝트 (.md)",
     "workspace.command.exportScene": "이 씬 (.md)",
     "workspace.command.copyEpisodeText": "이 화 본문 복사",
@@ -725,6 +429,8 @@ const messages: Record<AppLanguage, Messages> = {
     "companion.placeholder": "메시지… (Enter 전송, Shift+Enter 줄바꿈)",
     "companion.stop": "중지",
     "companion.send": "전송",
+    "companion.speaker": "컴패니언",
+    "companion.reference.charCount": "{count}자",
     "companion.retry": "다시 시도",
     "companion.aiSetup.title": "AI 연결이 필요해요",
     "companion.aiSetup.body.missingKey": "아직 이 AI 연결에 필요한 키가 저장되지 않았습니다. 몇 번만 눌러 안전한 시작 경로를 고를 수 있어요.",
@@ -849,6 +555,12 @@ const messages: Record<AppLanguage, Messages> = {
     "engine.failedDescription": "Linetta의 내장 Go 엔진이 응답하지 않습니다. 앱을 다시 시도하거나 아래 진단 정보를 확인하세요.",
     "engine.retry": "다시 시도",
     "engine.copyDiagnostics": "진단 복사",
+    "engine.recoveryDescription": "엔진을 시작할 수 없어도 백업 폴더를 열거나 완료된 최신 DB 백업으로 복구할 수 있습니다.",
+    "engine.openBackupFolder": "백업 폴더 열기",
+    "engine.restoreLatest": "최신 백업으로 복구",
+    "engine.restoreConfirm": "현재 library.db를 격리 보관하고 완료된 최신 백업으로 교체할까요? 복구 후 앱을 다시 시작해야 합니다.",
+    "engine.restoreComplete": "{path}에서 복구했습니다. 앱을 다시 시작해 주세요.",
+    "engine.recoveryFailed": "복구 작업 실패: {error}",
     "threadView.workspace": "작업실",
     "threadView.title": "흐름",
     "threadView.empty": "아직 스토리라인이 없어요. Cmd+P → \"{command}\"로 시작하세요.",
@@ -1011,6 +723,7 @@ const messages: Record<AppLanguage, Messages> = {
     "library.menu.label": "라이브러리 옵션",
     "library.menu.dataFolder": "데이터 폴더 열기",
     "library.menu.backupFolder": "백업 폴더 열기",
+    "library.menu.createRecoveryBackup": "전체 복구 백업 만들기",
     "library.menu.importMarkdown": "가져오기 (.md)",
     "library.menu.search": "검색",
     "library.menu.settings": "설정",
@@ -1018,7 +731,7 @@ const messages: Record<AppLanguage, Messages> = {
     "library.brand": "local-first writing",
     "library.tagline": "한 줄에서 한 권으로. 당신의 컴퓨터 안에서만 자라는 장편소설 작업실.",
     "library.projectCount": "작품",
-    "library.noExternalTransfer": "외부 전송 없음",
+    "library.noExternalTransfer": "기본 데이터는 로컬 저장",
     "library.dataLocal": "데이터 · {local}",
     "library.local": "로컬",
     "library.newProject": "새 작품",
@@ -1028,7 +741,7 @@ const messages: Record<AppLanguage, Messages> = {
     "library.archiveBox": "보관함",
     "library.startNewProject": "새 작품 시작",
     "library.projectActionsLabel": "{title} 작품 옵션",
-    "library.projectBackup": "작품 백업 (.md)",
+    "library.projectBackup": "읽기용 Markdown 내보내기",
     "library.deleteProject": "작품 삭제",
     "library.active": "진행 중",
     "library.archived": "보관됨",
@@ -1044,6 +757,7 @@ const messages: Record<AppLanguage, Messages> = {
     "library.safety.configured": "설정됨",
     "library.safety.disabled": "비활성",
     "library.safety.gitSettings": "Git sync 설정",
+    "library.safety.gitSync": "Git 동기화",
     "library.safety.dismiss": "다시 보지 않기",
     "library.diagnostics.title": "진단 정보",
     "library.toast.appStateFailed": "앱 상태 불러오기 실패: {error}",
@@ -1055,8 +769,10 @@ const messages: Record<AppLanguage, Messages> = {
     "library.toast.openDataFailed": "데이터 폴더 열기 실패: {error}",
     "library.toast.diagnosticsFailed": "진단 정보 불러오기 실패: {error}",
     "library.toast.safetySaveFailed": "체크리스트 저장 실패: {error}",
-    "library.toast.projectBackupComplete": "작품 백업 저장됨",
-    "library.toast.projectBackupFailed": "작품 백업 실패: {error}",
+    "library.toast.projectBackupComplete": "읽기용 Markdown을 저장했습니다",
+    "library.toast.projectBackupFailed": "Markdown 내보내기 실패: {error}",
+    "library.toast.recoveryBackupComplete": "전체 라이브러리 복구 백업을 만들었습니다",
+    "library.toast.recoveryBackupFailed": "복구 백업 실패: {error}",
     "library.toast.projectArchiveSuccess": "작품을 보관했습니다",
     "library.toast.projectArchiveFailed": "작품 보관 실패: {error}",
     "library.toast.projectDeleteSuccess": "작품을 삭제했습니다",
@@ -1097,6 +813,14 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.aiWizard.description": "API 키나 모델 이름을 몰라도 괜찮습니다. 아래에서 쓰고 싶은 AI를 고르면 Linetta가 필요한 단계만 보여줍니다.",
     "settings.aiWizard.current": "현재 선택",
     "settings.aiWizard.policy": "Claude와 Gemini 구독 로그인은 각 회사의 공식 제품 안에서 쓰는 흐름이라 Linetta에서는 제공하지 않습니다. ChatGPT 구독은 OpenAI Codex 공식 로그인만 지원하고, Claude/Gemini는 API 키로 연결합니다.",
+    "settings.aiConsent.title": "AI 데이터 전송 동의",
+    "settings.aiConsent.description": "AI 기능을 사용하면 프롬프트, 선택한 원고와 주변 문맥, 작품 설정·레퍼런스, 첨부 이미지가 현재 선택한 제3자 AI 공급자({provider})에게 전송됩니다. 개발자는 이 데이터를 받지 않으며, 공급자가 자체 정책에 따라 처리·보관할 수 있습니다.",
+    "settings.aiConsent.control": "동의 전에는 원고를 AI 공급자에게 보내지 않습니다. 공급자나 사용자 지정 서버를 바꾸면 다시 동의해야 하며, 언제든 여기서 철회할 수 있습니다.",
+    "settings.aiConsent.privacyLink": "개인정보 처리방침 보기",
+    "settings.aiConsent.statusGranted": "현재 공급자에 대한 전송 동의가 활성화되어 있습니다.",
+    "settings.aiConsent.statusRequired": "AI를 사용하려면 제3자 전송에 명시적으로 동의해야 합니다.",
+    "settings.aiConsent.grant": "동의하고 AI 사용",
+    "settings.aiConsent.withdraw": "동의 철회",
     "settings.aiWizard.officialGuide": "공식 가이드",
     "settings.aiWizard.selected": "선택됨",
     "settings.aiWizard.choiceTabs": "AI 연결 방식",
@@ -1458,9 +1182,9 @@ const messages: Record<AppLanguage, Messages> = {
     "workspace.noStoryline": "No storyline",
     "workspace.beatTitleEnter": "Beat title (Enter)",
     "workspace.addBeat": "Add beat",
-    "workspace.addBeatToNextScene": "Beat in next scene",
+    "workspace.addBeatToNextScene": "Add beat to next scene",
     "workspace.noStorylineHint": "No storyline yet. Start with \"{command}\" in the command palette.",
-    "workspace.markSceneAsThread": "Mark this scene as a new Thread",
+    "workspace.markSceneAsThread": "Register this scene as a new storyline",
     "workspace.searchShortcut": "Search (Cmd+F)",
     "workspace.commandPaletteShortcut": "Command palette (Cmd+P)",
     "workspace.companion": "Companion",
@@ -1534,10 +1258,11 @@ const messages: Record<AppLanguage, Messages> = {
     "workspace.command.renameNode": "Rename",
     "workspace.command.moveSceneUp": "Move this scene up",
     "workspace.command.moveSceneDown": "Move this scene down",
-    "workspace.command.flowThreadView": "Thread View",
+    "workspace.command.flowThreadView": "Storyline view",
     "workspace.command.sceneVersions": "Edit history / version compare",
     "workspace.command.sceneVersionsHint": "Versions · restore · diff",
     "workspace.command.restore": "Restore",
+    "workspace.outlineStructureFormat": "{preset}: {part} > {chapter} > {scene} (example: {partExample} > {chapterExample} > {sceneExample})",
     "workspace.command.exportProject": "Project (.md)",
     "workspace.command.exportScene": "This scene (.md)",
     "workspace.command.copyEpisodeText": "Copy this episode text",
@@ -1673,14 +1398,14 @@ const messages: Record<AppLanguage, Messages> = {
     "companion.scope.label": "Companion conversation scope",
     "companion.scope.scene": "Current scene",
     "companion.scope.project": "Whole work",
-    "companion.empty": "Hand off a stuck point or explore the next move for this scene.",
+    "companion.empty": "Bring me a sticking point, or explore what comes next in this scene.",
     "companion.emptyTitle": "What should we work on first?",
     "companion.actions.ariaLabel": "Companion writer actions",
     "companion.actions.title": "Writer actions",
     "companion.actions.sceneTitle": "Current scene actions",
     "companion.actions.sceneDescription": "Work on this scene's prose, voice, dialogue, and tension.",
     "companion.actions.workTitle": "Whole-work actions",
-    "companion.actions.workDescription": "Plan plot, outline, settings, and other work-wide changes.",
+    "companion.actions.workDescription": "Plan the plot, outline, story world, and other work-wide changes.",
     "companion.actions.curatedLabel": "Recommended actions",
     "companion.actions.continueScene.label": "Continue the scene",
     "companion.actions.continueScene.description": "Carry forward the current voice and tension.",
@@ -1741,9 +1466,11 @@ const messages: Record<AppLanguage, Messages> = {
     "companion.placeholder": "Message... (Enter to send, Shift+Enter for line break)",
     "companion.stop": "Stop",
     "companion.send": "Send",
+    "companion.speaker": "Companion",
+    "companion.reference.charCount": "{count} chars",
     "companion.retry": "Retry",
     "companion.aiSetup.title": "AI connection needed",
-    "companion.aiSetup.body.missingKey": "This AI connection does not have a saved key yet. Choose a safe starter path in a few clicks.",
+    "companion.aiSetup.body.missingKey": "This AI connection does not have a saved key yet. Choose a setup option to connect an AI provider.",
     "companion.aiSetup.body.authRequired": "The saved credentials are expired or do not have enough permission. Reconnect, then retry the same question.",
     "companion.aiSetup.body.modelUnavailable": "The selected model is not available right now. Switch to a starter path that does not require model names.",
     "companion.aiSetup.body.rateOrSpendLimit": "A usage, quota, or credit limit appears to be blocking the request. Check the limit, then retry.",
@@ -1791,7 +1518,7 @@ const messages: Record<AppLanguage, Messages> = {
     "factBook.reviewing": "Reviewing…",
     "factBook.reviewHint": "Pick claims that need real-world checking first; only the selected claim is searched and saved.",
     "factBook.applied": "Fact Book refreshed.",
-    "factBook.ai.savePrefix": "Save to dossier after search",
+    "factBook.ai.savePrefix": "Check sources, then save to Fact Book",
     "factBook.ai.review": "Find real-world claims in the current scene \"{sceneLabel}\" that would benefit from a web-search fact check.\nDo not run web_search or web_fetch yet.\nIf there are candidates, keep the explanation short and present them in exactly one linetta-choices block.\nEvery options item must be written as `{savePrefix}: <claim>`.\nWhen the writer picks a candidate, verify source URLs with web_search and web_fetch, then save it to the dossier with create_fact_card.\nIf web_fetch returns 404/403 or too little text, drop that URL as a source candidate and find alternatives.\nIf web_search fails because no API key is set, do not give up — ask the writer to paste a source URL directly; verify it with web_fetch before saving.\ncreate_fact_card without a source URL is forbidden. If there are no candidates, briefly say why.",
     "factBook.ai.factCheck": "Selected claim: {claim}\nRight now, use web_search to find trustworthy source candidates and verify body access for at least one URL with web_fetch.\nIf web_fetch returns 404/403 or too little text, drop that URL and search for alternatives in the same turn.\nOnce a verified source URL exists, save it to the dossier with linetta_apply_ops create_fact_card in the same turn.\nNever claim it is saved without calling create_fact_card. If saving fails, state only the failure reason and the next step, briefly.\nIf web_search or web_fetch fails, do not give up — ask for a source URL to be pasted directly.",
     "factBook.ai.altSource": "Selected claim: {claim}\nThis source URL just failed in the app's save path: {failedURL}\nFailure reason: {error}\nExclude this URL from the save candidates.\nRight now, use web_search to find trustworthy alternative sources and verify body access for at least one URL with web_fetch.\nIf web_fetch returns 404/403 or too little text, drop that URL too and search for more alternatives in the same turn.\nOnce a verified source URL exists, save it to the dossier with linetta_apply_ops create_fact_card in the same turn.\nIf no verified alternative exists, do not claim it was saved — only ask for a source URL to be pasted directly.",
@@ -1857,7 +1584,7 @@ const messages: Record<AppLanguage, Messages> = {
     "ai.context.section.notes": "Author notes",
     "ai.context.section.project_meta": "Project settings (genre/length/POV)",
     "ai.context.section.style_notes": "Author style notes",
-    "ai.context.section.facts": "Fact dossier",
+    "ai.context.section.facts": "Fact Book",
     "ai.context.section.memories": "Companion memories",
     "ai.context.section.references": "Additional references",
     "engine.checking": "Checking engine status...",
@@ -1865,6 +1592,12 @@ const messages: Record<AppLanguage, Messages> = {
     "engine.failedDescription": "Linetta's embedded Go engine is not responding. Try again or check the diagnostics below.",
     "engine.retry": "Retry",
     "engine.copyDiagnostics": "Copy diagnostics",
+    "engine.recoveryDescription": "Even when the engine cannot start, you can open the backup folder or restore the latest completed database backup.",
+    "engine.openBackupFolder": "Open backup folder",
+    "engine.restoreLatest": "Restore latest backup",
+    "engine.restoreConfirm": "Quarantine the current library.db and replace it with the latest completed backup? Restart the app after recovery.",
+    "engine.restoreComplete": "Restored from {path}. Restart the app to continue.",
+    "engine.recoveryFailed": "Recovery failed: {error}",
     "threadView.workspace": "Workspace",
     "threadView.title": "Flow",
     "threadView.empty": "No storylines yet. Start with Cmd+P → \"{command}\".",
@@ -2027,6 +1760,7 @@ const messages: Record<AppLanguage, Messages> = {
     "library.menu.label": "Library options",
     "library.menu.dataFolder": "Open data folder",
     "library.menu.backupFolder": "Open backup folder",
+    "library.menu.createRecoveryBackup": "Create full recovery backup",
     "library.menu.importMarkdown": "Import (.md)",
     "library.menu.search": "Search",
     "library.menu.settings": "Settings",
@@ -2034,17 +1768,17 @@ const messages: Record<AppLanguage, Messages> = {
     "library.brand": "local-first writing",
     "library.tagline": "From one line to a full book. A long-form fiction studio that grows only on your computer.",
     "library.projectCount": "projects",
-    "library.noExternalTransfer": "No external transfer",
+    "library.noExternalTransfer": "Core data stays local",
     "library.dataLocal": "Data · {local}",
     "library.local": "local",
     "library.newProject": "New project",
     "library.importing": "Importing...",
     "library.recentProjects": "Recent projects",
-    "library.allProjects": "All library →",
+    "library.allProjects": "View all projects →",
     "library.archiveBox": "Archive",
     "library.startNewProject": "Start a new project",
     "library.projectActionsLabel": "{title} project options",
-    "library.projectBackup": "Back up project (.md)",
+    "library.projectBackup": "Export readable Markdown",
     "library.deleteProject": "Delete project",
     "library.active": "Active",
     "library.archived": "Archived",
@@ -2060,6 +1794,7 @@ const messages: Record<AppLanguage, Messages> = {
     "library.safety.configured": "Configured",
     "library.safety.disabled": "Disabled",
     "library.safety.gitSettings": "Git sync settings",
+    "library.safety.gitSync": "Git sync",
     "library.safety.dismiss": "Do not show again",
     "library.diagnostics.title": "Diagnostics",
     "library.toast.appStateFailed": "Failed to load app state: {error}",
@@ -2071,8 +1806,10 @@ const messages: Record<AppLanguage, Messages> = {
     "library.toast.openDataFailed": "Failed to open data folder: {error}",
     "library.toast.diagnosticsFailed": "Failed to load diagnostics: {error}",
     "library.toast.safetySaveFailed": "Failed to save checklist: {error}",
-    "library.toast.projectBackupComplete": "Project backup saved",
-    "library.toast.projectBackupFailed": "Project backup failed: {error}",
+    "library.toast.projectBackupComplete": "Readable Markdown exported",
+    "library.toast.projectBackupFailed": "Markdown export failed: {error}",
+    "library.toast.recoveryBackupComplete": "Full library recovery backup created",
+    "library.toast.recoveryBackupFailed": "Recovery backup failed: {error}",
     "library.toast.projectArchiveSuccess": "Project archived",
     "library.toast.projectArchiveFailed": "Failed to archive project: {error}",
     "library.toast.projectDeleteSuccess": "Project deleted",
@@ -2113,6 +1850,14 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.aiWizard.description": "You do not need to know API keys or model names yet. Pick the AI you want to use and Linetta will show only the steps you need.",
     "settings.aiWizard.current": "Current selection",
     "settings.aiWizard.policy": "Claude and Gemini subscription logins are designed for each company's official products, so Linetta does not provide them. ChatGPT subscriptions are supported only through official OpenAI Codex login, while Claude/Gemini use API keys.",
+    "settings.aiConsent.title": "AI Data Sharing Consent",
+    "settings.aiConsent.description": "When you use AI features, prompts, selected manuscript and surrounding context, story settings and references, and attached images are sent to the selected third-party AI provider ({provider}). The developer does not receive this data; the provider may process and retain it under its own policy.",
+    "settings.aiConsent.control": "No manuscript is sent before consent. Changing the provider or a custom server requires renewed consent, and you can withdraw consent here at any time.",
+    "settings.aiConsent.privacyLink": "View Privacy Policy",
+    "settings.aiConsent.statusGranted": "Data-sharing consent is active for the current provider.",
+    "settings.aiConsent.statusRequired": "Explicit consent to third-party transfer is required before using AI.",
+    "settings.aiConsent.grant": "Consent and enable AI",
+    "settings.aiConsent.withdraw": "Withdraw consent",
     "settings.aiWizard.officialGuide": "official guide",
     "settings.aiWizard.selected": "Selected",
     "settings.aiWizard.choiceTabs": "AI connection options",
@@ -2314,7 +2059,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.setup.claude.title": "Connect with Claude API key",
     "settings.setup.claude.badge": "API only",
     "settings.setup.claude.summary": "Use an Anthropic Console API key instead of Claude subscription login.",
-    "settings.setup.claude.policy": "Claude subscription harnesses are not supported in Linetta. To avoid policy risk, Linetta guides only API-key usage.",
+    "settings.setup.claude.policy": "Claude subscription sign-in is not supported in Linetta. Linetta supports Claude through API keys only.",
     "settings.setup.claude.action": "Select Claude API",
     "settings.setup.claude.step1": "Open Anthropic Console.",
     "settings.setup.claude.step2": "Complete billing or credit setup.",
@@ -2357,16 +2102,16 @@ const messages: Record<AppLanguage, Messages> = {
     "onboarding.previous": "前へ",
     "onboarding.next": "次へ",
     "onboarding.finish": "完了",
-    "onboarding.library.brand.title": "Linettaを案内",
+    "onboarding.library.brand.title": "Linettaを見てみる",
     "onboarding.library.brand.body": "ライブラリは作品を始め、戻ってくる場所です。原稿と設定はこのコンピュータ内に保管されます。",
     "onboarding.library.new.title": "新しい作品を始める",
     "onboarding.library.new.body": "ジャンル、分量、視点を決めるだけで、すぐ最初のシーンに入れます。",
     "onboarding.library.import.title": "既存原稿を取り込む",
-    "onboarding.library.import.body": "Markdownを読み込み、作品とシーン構造に分けて、これまでの原稿を続けられます。",
+    "onboarding.library.import.body": "Markdownを読み込み、作品とシーン構造に分けて、既存の原稿もそのまま執筆を続けられます。",
     "onboarding.library.search.title": "作品全体を検索",
     "onboarding.library.search.body": "タイトル、シーン、本文をまとめて検索します。覚えている一語から長い原稿へ戻れます。",
     "onboarding.library.settings.title": "設定とバックアップ",
-    "onboarding.library.settings.body": "言語、AI接続、GitHub sync、バックアップ場所、このツアーは設定で管理します。",
+    "onboarding.library.settings.body": "言語、AI接続、GitHub同期、バックアップ場所、このツアーは設定で管理します。",
     "onboarding.workspace.outline.title": "アウトライン",
     "onboarding.workspace.outline.body": "左側で章とシーンを管理します。追加、名前変更、移動、削除はここから始めます。",
     "onboarding.workspace.editor.title": "執筆エディタ",
@@ -2406,16 +2151,16 @@ const messages: Record<AppLanguage, Messages> = {
     "workspace.projectOverview": "作品概要",
     "workspace.projectOverviewPlaceholder": "ログライン、テーマ、大きな流れ",
     "workspace.synopsis": "シノプシス",
-    "workspace.rewriting": "再作成中",
-    "workspace.rewrite": "再作成",
+    "workspace.rewriting": "書き直し中",
+    "workspace.rewrite": "書き直す",
     "workspace.clear": "クリア",
     "workspace.copyText": "本文をコピー",
     "workspace.projectSynopsis": "作品シノプシス",
     "workspace.synopsisPlaceholder": "現在のあらすじ要約",
-    "workspace.mentions": "登場",
+    "workspace.mentions": "メンション",
     "workspace.scanning": "スキャン中",
     "workspace.scanScene": "シーンをスキャン",
-    "workspace.noMentionedEntities": "このシーンに紐づいた人物はありません",
+    "workspace.noMentionedEntities": "このシーンでメンションされた世界観要素はありません",
     "workspace.saved": "保存済み",
     "workspace.justSaved": "今保存しました",
     "workspace.savedSecondsAgo": "{seconds}秒前に保存",
@@ -2474,9 +2219,9 @@ const messages: Record<AppLanguage, Messages> = {
     "workspace.noStoryline": "ストーリーラインなし",
     "workspace.beatTitleEnter": "ビートタイトル (Enter)",
     "workspace.addBeat": "ビート追加",
-    "workspace.addBeatToNextScene": "次のシーンにビート",
+    "workspace.addBeatToNextScene": "次のシーンにビートを追加",
     "workspace.noStorylineHint": "ストーリーラインがありません。コマンドパレットで「{command}」から始めてください。",
-    "workspace.markSceneAsThread": "このシーンを新しい Thread としてマーク",
+    "workspace.markSceneAsThread": "このシーンを新しいストーリーラインとして登録",
     "workspace.searchShortcut": "検索 (Cmd+F)",
     "workspace.commandPaletteShortcut": "コマンドパレット (Cmd+P)",
     "workspace.companion": "コンパニオン",
@@ -2550,10 +2295,11 @@ const messages: Record<AppLanguage, Messages> = {
     "workspace.command.renameNode": "名前を変更",
     "workspace.command.moveSceneUp": "このシーンを上へ",
     "workspace.command.moveSceneDown": "このシーンを下へ",
-    "workspace.command.flowThreadView": "Thread View",
+    "workspace.command.flowThreadView": "ストーリーライン表示",
     "workspace.command.sceneVersions": "編集履歴 / バージョン比較",
-    "workspace.command.sceneVersionsHint": "バージョン · 復元 · diff",
+    "workspace.command.sceneVersionsHint": "バージョン · 復元 · 差分",
     "workspace.command.restore": "復元",
+    "workspace.outlineStructureFormat": "{preset}: {part} > {chapter} > {scene}（例：{partExample} > {chapterExample} > {sceneExample}）",
     "workspace.command.exportProject": "プロジェクト (.md)",
     "workspace.command.exportScene": "このシーン (.md)",
     "workspace.command.copyEpisodeText": "この話の本文をコピー",
@@ -2562,8 +2308,8 @@ const messages: Record<AppLanguage, Messages> = {
     "workspace.command.syncNow": "今すぐ GitHub に同期",
     "workspace.command.openZen": "ZEN モードを開く",
     "workspace.command.exitEsc": "ESCで終了",
-    "workspace.command.toggleFocusOn": "Focus モードをオン",
-    "workspace.command.toggleFocusOff": "Focus モードをオフ",
+    "workspace.command.toggleFocusOn": "集中モードをオン",
+    "workspace.command.toggleFocusOff": "集中モードをオフ",
     "workspace.command.closeCompanion": "コンパニオンを閉じる",
     "workspace.command.openWritingCompanion": "執筆コンパニオンを開く",
     "workspace.command.contextualEdit": "文脈編集を開く",
@@ -2757,13 +2503,15 @@ const messages: Record<AppLanguage, Messages> = {
     "companion.placeholder": "メッセージ... (Enterで送信、Shift+Enterで改行)",
     "companion.stop": "停止",
     "companion.send": "送信",
+    "companion.speaker": "コンパニオン",
+    "companion.reference.charCount": "{count}字",
     "companion.retry": "再試行",
     "companion.aiSetup.title": "AI 接続が必要です",
     "companion.aiSetup.body.missingKey": "この AI 接続に必要なキーがまだ保存されていません。安全な開始方法を数クリックで選べます。",
     "companion.aiSetup.body.authRequired": "保存済みの認証情報が期限切れ、または権限不足です。再接続してから同じ質問を再送できます。",
     "companion.aiSetup.body.modelUnavailable": "選択したモデルは現在利用できません。モデル名を知らなくても使える開始方法に切り替えられます。",
     "companion.aiSetup.body.rateOrSpendLimit": "使用量、クォータ、またはクレジット制限に達した可能性があります。上限を確認してから再試行できます。",
-    "companion.aiSetup.body.unknownProviderError": "AI provider の設定確認が必要です。元のエラーは詳細に残します。",
+    "companion.aiSetup.body.unknownProviderError": "AIプロバイダーの設定確認が必要です。元のエラーは詳細に残します。",
     "companion.aiSetup.connectEasy": "いちばん簡単な方法で接続",
     "companion.aiSetup.connectSubscription": "サブスクリプションで接続",
     "companion.aiSetup.connectDirect": "API キーを直接入力",
@@ -2881,6 +2629,12 @@ const messages: Record<AppLanguage, Messages> = {
     "engine.failedDescription": "Linetta の内蔵 Go エンジンが応答していません。再試行するか、下の診断情報を確認してください。",
     "engine.retry": "再試行",
     "engine.copyDiagnostics": "診断をコピー",
+    "engine.recoveryDescription": "エンジンを開始できない場合でも、バックアップフォルダを開くか、完了済みの最新データベースバックアップから復元できます。",
+    "engine.openBackupFolder": "バックアップフォルダを開く",
+    "engine.restoreLatest": "最新バックアップから復元",
+    "engine.restoreConfirm": "現在の library.db を隔離して、完了済みの最新バックアップに置き換えますか？復元後にアプリを再起動してください。",
+    "engine.restoreComplete": "{path} から復元しました。アプリを再起動してください。",
+    "engine.recoveryFailed": "復元に失敗しました：{error}",
     "threadView.workspace": "作業場",
     "threadView.title": "流れ",
     "threadView.empty": "まだストーリーラインがありません。Cmd+P →「{command}」から始めてください。",
@@ -2895,7 +2649,7 @@ const messages: Record<AppLanguage, Messages> = {
     "shortcuts.globalSearch": "全体検索を開く",
     "shortcuts.exitZenDialog": "ZEN モード終了 / ダイアログをキャンセル",
     "shortcuts.escape": "ダイアログを閉じる · ZEN 終了 · 選択解除",
-    "shortcuts.focusToggle": "Focus モード切替",
+    "shortcuts.focusToggle": "集中モード切替",
     "shortcuts.undoBody": "本文を元に戻す",
     "shortcuts.redoBody": "本文をやり直す",
     "shortcuts.mentionSearch": "世界観要素メンション検索",
@@ -3037,12 +2791,13 @@ const messages: Record<AppLanguage, Messages> = {
     "project.pov.first": "一人称",
     "project.pov.thirdLimited": "三人称限定",
     "project.pov.omniscient": "全知視点",
-    "project.words.empty": "下書き前",
+    "project.words.empty": "まだ原稿がありません",
     "project.words.count": "{count}字",
     "project.words.compact": "{count}k字",
     "library.menu.label": "ライブラリオプション",
     "library.menu.dataFolder": "データフォルダを開く",
     "library.menu.backupFolder": "バックアップフォルダを開く",
+    "library.menu.createRecoveryBackup": "ライブラリ全体の復旧バックアップを作成",
     "library.menu.importMarkdown": "インポート (.md)",
     "library.menu.search": "検索",
     "library.menu.settings": "設定",
@@ -3050,17 +2805,17 @@ const messages: Record<AppLanguage, Messages> = {
     "library.brand": "local-first writing",
     "library.tagline": "一行から一冊へ。あなたのコンピュータの中だけで育つ長編小説スタジオ。",
     "library.projectCount": "作品",
-    "library.noExternalTransfer": "外部送信なし",
+    "library.noExternalTransfer": "基本データはローカル保存",
     "library.dataLocal": "データ · {local}",
     "library.local": "ローカル",
     "library.newProject": "新しい作品",
     "library.importing": "インポート中...",
     "library.recentProjects": "最近の作品",
-    "library.allProjects": "全ライブラリ →",
-    "library.archiveBox": "保管箱",
+    "library.allProjects": "すべての作品を見る →",
+    "library.archiveBox": "アーカイブ",
     "library.startNewProject": "新しい作品を始める",
     "library.projectActionsLabel": "{title} の作品オプション",
-    "library.projectBackup": "作品をバックアップ (.md)",
+    "library.projectBackup": "閲覧用Markdownを書き出す",
     "library.deleteProject": "作品を削除",
     "library.active": "進行中",
     "library.archived": "保管済み",
@@ -3076,6 +2831,7 @@ const messages: Record<AppLanguage, Messages> = {
     "library.safety.configured": "設定済み",
     "library.safety.disabled": "無効",
     "library.safety.gitSettings": "Git sync 設定",
+    "library.safety.gitSync": "Git同期",
     "library.safety.dismiss": "今後表示しない",
     "library.diagnostics.title": "診断情報",
     "library.toast.appStateFailed": "アプリ状態の読み込みに失敗: {error}",
@@ -3087,8 +2843,10 @@ const messages: Record<AppLanguage, Messages> = {
     "library.toast.openDataFailed": "データフォルダを開けませんでした: {error}",
     "library.toast.diagnosticsFailed": "診断情報の読み込みに失敗: {error}",
     "library.toast.safetySaveFailed": "チェックリスト保存失敗: {error}",
-    "library.toast.projectBackupComplete": "作品バックアップを保存しました",
-    "library.toast.projectBackupFailed": "作品バックアップに失敗: {error}",
+    "library.toast.projectBackupComplete": "閲覧用Markdownを書き出しました",
+    "library.toast.projectBackupFailed": "Markdownの書き出しに失敗しました：{error}",
+    "library.toast.recoveryBackupComplete": "ライブラリ全体の復旧バックアップを作成しました",
+    "library.toast.recoveryBackupFailed": "復旧バックアップに失敗しました：{error}",
     "library.toast.projectArchiveSuccess": "作品を保管しました",
     "library.toast.projectArchiveFailed": "作品の保管に失敗: {error}",
     "library.toast.projectDeleteSuccess": "作品を削除しました",
@@ -3129,12 +2887,20 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.aiWizard.description": "API キーやモデル名が分からなくても大丈夫です。使いたい AI を選ぶと、Linetta が必要な手順だけを表示します。",
     "settings.aiWizard.current": "現在の選択",
     "settings.aiWizard.policy": "Claude と Gemini のサブスクリプションログインは各社公式製品内の利用フローなので、Linetta では提供しません。ChatGPT サブスクリプションは OpenAI Codex の公式ログインのみ対応し、Claude/Gemini は API キーで接続します。",
+    "settings.aiConsent.title": "AIデータ送信への同意",
+    "settings.aiConsent.description": "AI機能を使用すると、プロンプト、選択した原稿と周辺コンテキスト、作品設定・参考資料、添付画像が、現在選択中の第三者AIプロバイダー（{provider}）へ送信されます。開発者はこのデータを受け取りませんが、プロバイダーが自社のポリシーに従って処理・保存する場合があります。",
+    "settings.aiConsent.control": "同意するまでは原稿をAIプロバイダーへ送信しません。プロバイダーまたはカスタムサーバーを変更した場合は再同意が必要で、ここからいつでも撤回できます。",
+    "settings.aiConsent.privacyLink": "プライバシーポリシーを見る",
+    "settings.aiConsent.statusGranted": "現在のプロバイダーへのデータ送信に同意済みです。",
+    "settings.aiConsent.statusRequired": "AIを使用するには、第三者への送信に明示的に同意する必要があります。",
+    "settings.aiConsent.grant": "同意してAIを使用",
+    "settings.aiConsent.withdraw": "同意を撤回",
     "settings.aiWizard.officialGuide": "公式ガイド",
     "settings.aiWizard.selected": "選択済み",
     "settings.aiWizard.choiceTabs": "AI 接続方式",
     "settings.aiWizard.stepsSummary": "接続手順",
     "settings.aiAdvanced.title": "詳細 AI 設定",
-    "settings.aiAdvanced.description": "ウィザードで選んだ接続方式の実際の provider、API キー、モデル値を調整します。初めて使う場合は上の手順を進めて、必要な欄だけ入力してください。",
+    "settings.aiAdvanced.description": "ウィザードで選んだ接続方式の実際のプロバイダー、API キー、モデル値を調整します。初めて使う場合は上の手順を進めて、必要な欄だけ入力してください。",
     "settings.aiAdvanced.changeNote": "変更は次回の AI 呼び出しから反映されます。",
     "settings.provider.apiKey": "API キー",
     "settings.provider.apiKeySavedPlaceholder": "保存済み API キーあり - 新しいキーを貼り付けると置き換え",
@@ -3153,11 +2919,11 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.provider.refreshModels": "モデルを更新",
     "settings.provider.cliNoModels": "Claude Code CLI はモデル一覧取得に対応していません。手動で入力してください。",
     "settings.provider.oauthNoModels": "OpenAI Codex ログインはモデル一覧取得に対応していません。モデル ID を手動入力するか、空にして Codex の既定モデルを使えます。",
-    "settings.provider.modelHelp": "更新すると上の API キーで provider のモデル一覧を取得します。手動入力も可能です。",
+    "settings.provider.modelHelp": "更新すると上の API キーでプロバイダーのモデル一覧を取得します。手動入力も可能です。",
     "settings.provider.storageHelp": "API キーは macOS Keychain に保存されます。モデルや Base URL などの一般設定だけがローカル settings.json に保存されます。Claude Code CLI は既存ユーザー互換用で、新規ユーザーには Claude API 接続を推奨します。",
     "settings.provider.test": "接続テスト",
     "settings.provider.testing": "テスト中...",
-    "settings.provider.testHelp": "短い AI リクエストを 1 回送信します。API キー方式では provider のポリシーにより少量の使用量が記録される場合があります。",
+    "settings.provider.testHelp": "短い AI リクエストを 1 回送信します。API キー方式ではプロバイダーのポリシーにより少量の使用量が記録される場合があります。",
     "settings.provider.detectFound": "見つかりました: {path}",
     "settings.provider.detectMissing": "claude 実行ファイルを見つけられませんでした。パスを手動で入力してください。",
     "settings.provider.testOk": "接続成功: {message}",
@@ -3213,7 +2979,7 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.tools.keyHelp": "キーは macOS Keychain に保存されます。settings.json には保存有無だけが表示されます。",
     "settings.tools.webSearchTest": "web_search 接続テスト",
     "settings.tools.webSearchTesting": "テスト中...",
-    "settings.tools.webSearchTestHelp": "保存済みの web_search API キーで短い検索を 1 回実行します。provider のポリシーにより少量の使用量が記録される場合があります。",
+    "settings.tools.webSearchTestHelp": "保存済みの web_search API キーで短い検索を 1 回実行します。プロバイダーのポリシーにより少量の使用量が記録される場合があります。",
     "settings.tools.webSearchTestOk": "web_search 接続成功: {message}",
     "settings.tools.webSearchTestError": "web_search 接続失敗: {message}",
     "settings.git.title": "GitHub 同期",
@@ -3357,7 +3123,10 @@ const messages: Record<AppLanguage, Messages> = {
     "settings.git.errorInitFailed": "初期化失敗: {error}",
     "settings.git.alreadyRepo": "すでに git リポジトリです",
   },
-};
+} as const;
+
+export type MessageKey = keyof typeof messages.ko;
+export const messageCatalogs = messages;
 
 interface I18nContextValue {
   language: AppLanguage;
@@ -3372,8 +3141,8 @@ export function normalizeLanguage(value: unknown): AppLanguage {
 }
 
 export function translate(language: AppLanguage, key: MessageKey, values: Record<string, string | number> = {}) {
-  const template = messages[language][key] ?? messages[DEFAULT_LANGUAGE][key] ?? key;
-  return Object.entries(values).reduce(
+  const template: string = messages[language][key] ?? messages[DEFAULT_LANGUAGE][key] ?? key;
+  return Object.entries(values).reduce<string>(
     (out, [name, value]) => out.replaceAll(`{${name}}`, String(value)),
     template,
   );

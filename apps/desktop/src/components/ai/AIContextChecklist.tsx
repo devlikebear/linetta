@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import "./AIContextChecklist.css";
 import type { AIContextKey, AIContextPreview, AIContextSelection, ContextCounts } from "../../lib/types";
-import { useI18n } from "../../lib/i18n";
+import { useI18n, type MessageKey } from "../../lib/i18n";
 
 // Re-export so existing consumers that import { ContextCounts } from this file
 // continue to work without changes.
@@ -52,7 +52,7 @@ export function contextSectionLabel(
   variant: "ai" | "companion",
   fallback: string,
 ): string {
-  const key = id === "current_scene" && variant === "companion"
+  const key: MessageKey = id === "current_scene" && variant === "companion"
     ? "ai.context.section.current_scene.companion"
     : `ai.context.section.${id}`;
   const label = t(key);

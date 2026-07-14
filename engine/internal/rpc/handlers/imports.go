@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
@@ -42,14 +43,14 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relati
 		ts := now()
 		built, err := importmd.BuildProject(ctx, pr, nr, ts, doc.Outline, fallback)
 		if err != nil {
-			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+			return nil, importFailure(ctx, pr, built.Project.ID, err)
 		}
 		built.Warnings = append(doc.Warnings, built.Warnings...)
 		if err := restoreProjectOutlinePreset(ctx, pr, ts, doc.Metadata.OutlinePreset, &built); err != nil {
-			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+			return nil, importFailure(ctx, pr, built.Project.ID, err)
 		}
 		if err := importmd.RestoreMetadata(ctx, er, rr, ts, built.Project.ID, doc.Metadata, &built); err != nil {
-			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+			return nil, importFailure(ctx, pr, built.Project.ID, err)
 		}
 		out := importMarkdownResult{
 			ProjectID:         built.Project.ID,
@@ -64,6 +65,16 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relati
 		}
 		return json.Marshal(out)
 	}
+}
+
+func importFailure(ctx context.Context, pr *project.Repo, projectID string, cause error) *rpc.MethodError {
+	message := cause.Error()
+	if projectID != "" {
+		if err := pr.Delete(context.WithoutCancel(ctx), projectID); err != nil {
+			message = fmt.Sprintf("%s; rollback partial import: %v", message, err)
+		}
+	}
+	return &rpc.MethodError{Code: rpc.CodeInternalError, Message: message}
 }
 
 func restoreProjectOutlinePreset(ctx context.Context, pr *project.Repo, now int64, preset string, built *importmd.BuildResult) error {

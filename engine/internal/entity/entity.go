@@ -66,14 +66,14 @@ type NewInput struct {
 	Role      string `json:"role"`
 }
 
-// UpdateInput is what `entities.update` accepts. Fields with their zero value
-// are left unchanged. Use a nil map to leave attributes unchanged; use an empty
-// map to clear them.
+// UpdateInput is what `entities.update` accepts. Nil pointers leave fields
+// unchanged; pointers to empty strings explicitly clear optional text fields.
+// Use a nil map to leave attributes unchanged; use an empty map to clear them.
 type UpdateInput struct {
 	ID         string             `json:"id"`
-	Kind       string             `json:"kind"`
-	Name       string             `json:"name"`
-	Role       string             `json:"role"`
-	Summary    string             `json:"summary"`
+	Kind       *string            `json:"kind,omitempty"`
+	Name       *string            `json:"name,omitempty"`
+	Role       *string            `json:"role,omitempty"`
+	Summary    *string            `json:"summary,omitempty"`
 	Attributes *map[string]string `json:"attributes,omitempty"`
 }

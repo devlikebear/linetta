@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   diagnosticsGet: vi.fn(),
   searchQuery: vi.fn(),
   openPath: vi.fn(),
+  createRecoveryBackup: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -48,6 +49,9 @@ vi.mock("../lib/rpc", () => ({
     query: mocks.searchQuery,
   },
   openPath: mocks.openPath,
+  backupApi: {
+    createRecovery: mocks.createRecoveryBackup,
+  },
 }));
 
 vi.mock("../lib/exportSave", () => ({
@@ -93,6 +97,7 @@ describe("Library", () => {
       markdown: "# Quiet City\n",
     });
     mocks.saveExportedMarkdown.mockResolvedValue("/tmp/quiet-city.md");
+    mocks.createRecoveryBackup.mockResolvedValue({ path: "/tmp/library.linetta", format_version: 1 });
     mocks.settingsGet.mockResolvedValue({
       language: "ko",
       provider: "claude-code-cli",
@@ -221,6 +226,29 @@ describe("Library", () => {
     expect(mocks.openPath).toHaveBeenCalledWith("/tmp/linetta");
   });
 
+  it("creates a versioned full-library recovery backup from the library menu", async () => {
+    const user = userEvent.setup();
+    mocks.settingsGet.mockResolvedValue({
+      language: "ko",
+      provider: "claude-code-cli",
+      typewriter_default: false,
+      focus_default: false,
+      git_sync_dir: "",
+      git_sync_commit_template: "",
+      backup_dir: "/tmp/linetta/backups",
+      safety_checklist_dismissed: true,
+      onboarding_tour_enabled: true,
+      onboarding_tour_seen_version: "library-workspace-v1",
+    });
+    renderLibrary();
+
+    await user.click(await screen.findByLabelText("라이브러리 옵션"));
+    await user.click(screen.getByRole("menuitem", { name: "전체 복구 백업 만들기" }));
+
+    expect(mocks.createRecoveryBackup).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("전체 라이브러리 복구 백업을 만들었습니다")).toBeInTheDocument();
+  });
+
   it("always exposes the archive from the home shelf", async () => {
     mocks.projectsList.mockResolvedValue([]);
     mocks.settingsGet.mockResolvedValue({
@@ -248,7 +276,7 @@ describe("Library", () => {
     renderLibrary();
 
     await user.click(await screen.findByLabelText("Quiet City 작품 옵션"));
-    await user.click(screen.getByRole("menuitem", { name: "작품 백업 (.md)" }));
+    await user.click(screen.getByRole("menuitem", { name: "읽기용 Markdown 내보내기" }));
 
     expect(mocks.exportProject).toHaveBeenCalledWith("project-1");
     expect(mocks.saveExportedMarkdown).toHaveBeenCalledWith({

@@ -36,3 +36,9 @@ scripts/ascapi/ascapi
 
 # Serena tool workspace
 .serena/
+
+# Local audit working state (final reports live in .analysis/outputs)
+/.analysis/cache/
+/.analysis/sessions/
+/.analysis/AI_CONTEXT.md
+/.analysis/RESUME.md

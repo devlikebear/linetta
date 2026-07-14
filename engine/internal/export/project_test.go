@@ -134,6 +134,17 @@ func TestExportNode_returnsLeafBodyOnly(t *testing.T) {
 	}
 }
 
+func TestSyncFilename_keepsProjectsWithSameTitleDistinct(t *testing.T) {
+	first := SyncFilename("Quiet City", "11111111-1111-1111-1111-111111111111")
+	second := SyncFilename("Quiet City", "22222222-2222-2222-2222-222222222222")
+	if first == second {
+		t.Fatalf("sync filenames collided: %q", first)
+	}
+	if first != "quiet-city--11111111-1111-1111-1111-111111111111.md" {
+		t.Fatalf("first filename = %q", first)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

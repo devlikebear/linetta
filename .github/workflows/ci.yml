@@ -52,5 +52,13 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
+      - name: Install security scanners
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cargo install cargo-audit --locked
+
       - name: Verify
         run: make ci
+
+      - name: Audit dependencies
+        run: make audit

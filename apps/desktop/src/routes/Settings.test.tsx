@@ -79,6 +79,8 @@ const baseSettings = {
   web_search_provider: "brave" as const,
   web_search_api_key: "",
   web_search_api_key_set: true,
+  ai_data_sharing_consent_version: 0,
+  ai_data_sharing_consented_at: 0,
 };
 
 async function clickAdvancedProvider(user: ReturnType<typeof userEvent.setup>, label: RegExp, desc: string) {
@@ -222,6 +224,24 @@ describe("Settings", () => {
       "href",
       "https://developers.openai.com/codex/cli",
     );
+  });
+
+  it("records and withdraws explicit third-party AI data-sharing consent", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    expect(await screen.findByText("AI 데이터 전송 동의")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "동의하고 AI 사용" }));
+    expect(mocks.settingsSet).toHaveBeenCalledWith(expect.objectContaining({
+      ai_data_sharing_consent_version: 1,
+      ai_data_sharing_consented_at: expect.any(Number),
+    }));
+
+    await user.click(screen.getByRole("button", { name: "동의 철회" }));
+    expect(mocks.settingsSet).toHaveBeenLastCalledWith(expect.objectContaining({
+      ai_data_sharing_consent_version: 0,
+      ai_data_sharing_consented_at: 0,
+    }));
   });
 
   it("selecting the OpenRouter beginner guide persists the OpenRouter provider", async () => {

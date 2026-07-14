@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { engineStatus } from "../lib/rpc";
+import { engineStatus, openRecoveryFolder, restoreLatestBackup } from "../lib/rpc";
 import type { EngineStatus } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 
@@ -11,12 +11,22 @@ export function EngineGate({ children }: Props) {
   const { t } = useI18n();
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
 
   const refresh = () => {
     setLoading(true);
     engineStatus()
       .then(setStatus)
-      .catch((e) => setStatus({ ok: false, error: String(e) }))
+      .catch((e) => setStatus({
+        ok: false,
+        error: String(e),
+        version: null,
+        home: null,
+        db_path: null,
+        migration_version: null,
+        migration_count: null,
+      }))
       .finally(() => setLoading(false));
   };
 
@@ -42,6 +52,8 @@ export function EngineGate({ children }: Props) {
           {t("engine.failedDescription")}
         </p>
         {status?.error && <p className="error">{status.error}</p>}
+        {status?.home && <p className="hint">{t("engine.recoveryDescription")}</p>}
+        {recoveryMessage && <p className="hint">{recoveryMessage}</p>}
         <pre className="engine-diagnostics">{diagnostics}</pre>
         <div className="engine-gate-actions">
           <button type="button" onClick={refresh}>{t("engine.retry")}</button>
@@ -51,6 +63,38 @@ export function EngineGate({ children }: Props) {
           >
             {t("engine.copyDiagnostics")}
           </button>
+          {status?.home && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  openRecoveryFolder().catch((e) => {
+                    setRecoveryMessage(t("engine.recoveryFailed", { error: String(e) }));
+                  });
+                }}
+              >
+                {t("engine.openBackupFolder")}
+              </button>
+              <button
+                type="button"
+                disabled={recovering}
+                onClick={async () => {
+                  if (!window.confirm(t("engine.restoreConfirm"))) return;
+                  setRecovering(true);
+                  try {
+                    const restored = await restoreLatestBackup();
+                    setRecoveryMessage(t("engine.restoreComplete", { path: restored.backup_path }));
+                  } catch (e) {
+                    setRecoveryMessage(t("engine.recoveryFailed", { error: String(e) }));
+                  } finally {
+                    setRecovering(false);
+                  }
+                }}
+              >
+                {t("engine.restoreLatest")}
+              </button>
+            </>
+          )}
         </div>
       </main>
     );

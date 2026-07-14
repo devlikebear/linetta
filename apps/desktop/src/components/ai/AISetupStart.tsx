@@ -1,6 +1,6 @@
 import { ExternalLink, X } from "lucide-react";
 import { useMemo } from "react";
-import { useI18n } from "../../lib/i18n";
+import { useI18n, type MessageKey } from "../../lib/i18n";
 import {
   OPENROUTER_DEFAULT_MODEL_OPTIONS,
   OPENROUTER_RECOMMENDED_MODELS,
@@ -26,7 +26,7 @@ export interface SetupGuide {
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
-const SETUP_GUIDE_LINKS: Record<GuideID, Array<{ labelKey: string; href: string }>> = {
+const SETUP_GUIDE_LINKS: Record<GuideID, Array<{ labelKey: MessageKey; href: string }>> = {
   "openrouter-safe": [
     { labelKey: "settings.setup.openrouter.linkKeys", href: "https://openrouter.ai/keys" },
     { labelKey: "settings.setup.openrouter.linkLimits", href: "https://openrouter.ai/docs/api/reference/limits" },

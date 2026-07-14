@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -65,8 +67,38 @@ func TestRunOnceWritesMarkdown(t *testing.T) {
 		t.Fatalf("FilesWritten = %d, want 1", res.FilesWritten)
 	}
 	entries, _ := os.ReadDir(target)
-	if len(entries) != 1 {
-		t.Fatalf("target has %d files, want 1", len(entries))
+	if len(entries) != 2 {
+		t.Fatalf("target has %d files, want Markdown plus manifest", len(entries))
+	}
+	manifest, err := os.ReadFile(filepath.Join(target, export.SyncManifestFilename))
+	if err != nil || !strings.Contains(string(manifest), `"format_version": 1`) {
+		t.Fatalf("sync manifest missing or invalid: %s err=%v", manifest, err)
+	}
+}
+
+func TestRunOnceReportsProjectWriteFailure(t *testing.T) {
+	s, st, _ := newFixture(t)
+	ctx := context.Background()
+	target := t.TempDir()
+	projs, err := s.Projects.List(ctx, project.ListFilter{Limit: 10})
+	if err != nil || len(projs) != 1 {
+		t.Fatalf("projects = %v, err = %v", projs, err)
+	}
+	blocked := filepath.Join(target, export.SyncFilename(projs[0].Title, projs[0].ID))
+	if err := os.Mkdir(blocked, 0o755); err != nil {
+		t.Fatalf("block target: %v", err)
+	}
+	enabled := true
+	if _, err := st.Set(ctx, settings.Patch{FolderSyncDir: &target, FolderSyncEnabled: &enabled}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	res, err := s.RunOnce(ctx)
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if res.Error == "" || res.FilesWritten != 0 {
+		t.Fatalf("write failure reported as success: %+v", res)
 	}
 }
 
@@ -128,13 +160,20 @@ func TestStageWritesToContainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Stage: %v", err)
 	}
-	if len(res.Files) != 1 {
-		t.Fatalf("Files = %d, want 1", len(res.Files))
+	if len(res.Files) != 2 {
+		t.Fatalf("Files = %d, want Markdown plus manifest", len(res.Files))
 	}
 	if filepath.Dir(res.StagingDir) != home {
 		t.Fatalf("staging dir %q not under home %q", res.StagingDir, home)
 	}
 	if _, err := os.Stat(filepath.Join(res.StagingDir, res.Files[0])); err != nil {
 		t.Fatalf("staged file missing: %v", err)
+	}
+	foundManifest := false
+	for _, name := range res.Files {
+		foundManifest = foundManifest || name == export.SyncManifestFilename
+	}
+	if !foundManifest {
+		t.Fatalf("staged files missing manifest: %v", res.Files)
 	}
 }

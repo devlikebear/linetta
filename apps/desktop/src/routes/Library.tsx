@@ -6,6 +6,7 @@ import {
   settings as settingsApi,
   diagnostics as diagnosticsApi,
   exportApi,
+  backupApi,
   openPath,
 } from "../lib/rpc";
 import type {
@@ -162,6 +163,16 @@ export function Library() {
       await openPath(current.backup_dir);
     } catch (err) {
       showToast(t("library.toast.openBackupFailed", { error: String(err) }));
+    }
+  };
+
+  const createRecoveryBackup = async () => {
+    setMenuOpen(false);
+    try {
+      await backupApi.createRecovery();
+      showToast(t("library.toast.recoveryBackupComplete"));
+    } catch (err) {
+      showToast(t("library.toast.recoveryBackupFailed", { error: String(err) }));
     }
   };
 
@@ -334,6 +345,9 @@ export function Library() {
               <button type="button" role="menuitem" onClick={openBackupFolder}>
                 {t("library.menu.backupFolder")}
               </button>
+              <button type="button" role="menuitem" onClick={createRecoveryBackup}>
+                {t("library.menu.createRecoveryBackup")}
+              </button>
               <button type="button" role="menuitem" onClick={handleMenuImport}>
                 {t("library.menu.importMarkdown")}
               </button>
@@ -492,7 +506,7 @@ export function Library() {
                 <code>{settingsRow?.backup_dir ?? t("library.safety.checking")}</code>
               </li>
               <li>
-                <span>Git sync</span>
+                <span>{t("library.safety.gitSync")}</span>
                 <strong>{settingsRow?.git_sync_dir ? t("library.safety.configured") : t("library.safety.disabled")}</strong>
               </li>
             </ul>

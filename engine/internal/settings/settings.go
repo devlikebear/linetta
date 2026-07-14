@@ -27,6 +27,10 @@ const (
 	ProviderGeminiNative  = "gemini-native"
 )
 
+// AIDataSharingConsentVersion increments whenever the disclosed third-party
+// data-sharing terms materially change and renewed consent is required.
+const AIDataSharingConsentVersion = 1
+
 // DefaultOpenAICodexModel is the ChatGPT-account compatible Codex default.
 // Leaving the model empty lets tars fall back to gpt-5.3-codex, which is only
 // supported for API-backed Codex and returns 400 for ChatGPT account auth.
@@ -97,48 +101,52 @@ type ProviderSettings struct {
 // Config is the on-disk JSON. backup_dir is computed at Load time and not
 // persisted (the field is omitted from JSON marshalling on write).
 type Config struct {
-	Language                  string                    `json:"language"`
-	Provider                  string                    `json:"provider"`
-	Providers                 map[string]ProviderConfig `json:"providers,omitempty"`
-	TypewriterDefault         bool                      `json:"typewriter_default"`
-	FocusDefault              bool                      `json:"focus_default"`
-	Theme                     string                    `json:"theme"`
-	EditorFontSize            int                       `json:"editor_font_size"`
-	EditorLineHeight          float64                   `json:"editor_line_height"`
-	CopyProfile               string                    `json:"copy_profile"`
-	BackupDir                 string                    `json:"backup_dir,omitempty"`
-	GitSyncDir                string                    `json:"git_sync_dir"`
-	GitSyncCommitTemplate     string                    `json:"git_sync_commit_template"`
-	FolderSyncDir             string                    `json:"folder_sync_dir"`
-	FolderSyncEnabled         bool                      `json:"folder_sync_enabled"`
-	SafetyChecklistDismissed  bool                      `json:"safety_checklist_dismissed"`
-	OnboardingTourEnabled     bool                      `json:"onboarding_tour_enabled"`
-	OnboardingTourSeenVersion string                    `json:"onboarding_tour_seen_version"`
-	WebSearchProvider         string                    `json:"web_search_provider"`
-	WebSearchAPIKey           string                    `json:"web_search_api_key,omitempty"`     // write-only in settings.set; redacted from settings.get and disk
-	WebSearchAPIKeySet        bool                      `json:"web_search_api_key_set,omitempty"` // read-only presence flag for settings.get
+	Language                    string                    `json:"language"`
+	Provider                    string                    `json:"provider"`
+	Providers                   map[string]ProviderConfig `json:"providers,omitempty"`
+	TypewriterDefault           bool                      `json:"typewriter_default"`
+	FocusDefault                bool                      `json:"focus_default"`
+	Theme                       string                    `json:"theme"`
+	EditorFontSize              int                       `json:"editor_font_size"`
+	EditorLineHeight            float64                   `json:"editor_line_height"`
+	CopyProfile                 string                    `json:"copy_profile"`
+	BackupDir                   string                    `json:"backup_dir,omitempty"`
+	GitSyncDir                  string                    `json:"git_sync_dir"`
+	GitSyncCommitTemplate       string                    `json:"git_sync_commit_template"`
+	FolderSyncDir               string                    `json:"folder_sync_dir"`
+	FolderSyncEnabled           bool                      `json:"folder_sync_enabled"`
+	SafetyChecklistDismissed    bool                      `json:"safety_checklist_dismissed"`
+	OnboardingTourEnabled       bool                      `json:"onboarding_tour_enabled"`
+	OnboardingTourSeenVersion   string                    `json:"onboarding_tour_seen_version"`
+	AIDataSharingConsentVersion int                       `json:"ai_data_sharing_consent_version"`
+	AIDataSharingConsentedAt    int64                     `json:"ai_data_sharing_consented_at"`
+	WebSearchProvider           string                    `json:"web_search_provider"`
+	WebSearchAPIKey             string                    `json:"web_search_api_key,omitempty"`     // write-only in settings.set; redacted from settings.get and disk
+	WebSearchAPIKeySet          bool                      `json:"web_search_api_key_set,omitempty"` // read-only presence flag for settings.get
 }
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
 type Patch struct {
-	Language                  *string                   `json:"language,omitempty"`
-	Provider                  *string                   `json:"provider,omitempty"`
-	Providers                 map[string]ProviderConfig `json:"providers,omitempty"`
-	TypewriterDefault         *bool                     `json:"typewriter_default,omitempty"`
-	FocusDefault              *bool                     `json:"focus_default,omitempty"`
-	Theme                     *string                   `json:"theme,omitempty"`
-	EditorFontSize            *int                      `json:"editor_font_size,omitempty"`
-	EditorLineHeight          *float64                  `json:"editor_line_height,omitempty"`
-	CopyProfile               *string                   `json:"copy_profile,omitempty"`
-	GitSyncDir                *string                   `json:"git_sync_dir,omitempty"`
-	GitSyncCommitTemplate     *string                   `json:"git_sync_commit_template,omitempty"`
-	FolderSyncDir             *string                   `json:"folder_sync_dir,omitempty"`
-	FolderSyncEnabled         *bool                     `json:"folder_sync_enabled,omitempty"`
-	SafetyChecklistDismissed  *bool                     `json:"safety_checklist_dismissed,omitempty"`
-	OnboardingTourEnabled     *bool                     `json:"onboarding_tour_enabled,omitempty"`
-	OnboardingTourSeenVersion *string                   `json:"onboarding_tour_seen_version,omitempty"`
-	WebSearchProvider         *string                   `json:"web_search_provider,omitempty"`
-	WebSearchAPIKey           *string                   `json:"web_search_api_key,omitempty"`
+	Language                    *string                   `json:"language,omitempty"`
+	Provider                    *string                   `json:"provider,omitempty"`
+	Providers                   map[string]ProviderConfig `json:"providers,omitempty"`
+	TypewriterDefault           *bool                     `json:"typewriter_default,omitempty"`
+	FocusDefault                *bool                     `json:"focus_default,omitempty"`
+	Theme                       *string                   `json:"theme,omitempty"`
+	EditorFontSize              *int                      `json:"editor_font_size,omitempty"`
+	EditorLineHeight            *float64                  `json:"editor_line_height,omitempty"`
+	CopyProfile                 *string                   `json:"copy_profile,omitempty"`
+	GitSyncDir                  *string                   `json:"git_sync_dir,omitempty"`
+	GitSyncCommitTemplate       *string                   `json:"git_sync_commit_template,omitempty"`
+	FolderSyncDir               *string                   `json:"folder_sync_dir,omitempty"`
+	FolderSyncEnabled           *bool                     `json:"folder_sync_enabled,omitempty"`
+	SafetyChecklistDismissed    *bool                     `json:"safety_checklist_dismissed,omitempty"`
+	OnboardingTourEnabled       *bool                     `json:"onboarding_tour_enabled,omitempty"`
+	OnboardingTourSeenVersion   *string                   `json:"onboarding_tour_seen_version,omitempty"`
+	AIDataSharingConsentVersion *int                      `json:"ai_data_sharing_consent_version,omitempty"`
+	AIDataSharingConsentedAt    *int64                    `json:"ai_data_sharing_consented_at,omitempty"`
+	WebSearchProvider           *string                   `json:"web_search_provider,omitempty"`
+	WebSearchAPIKey             *string                   `json:"web_search_api_key,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -255,6 +263,8 @@ func (s *Store) load() error {
 		s.cfg.OnboardingTourEnabled = disk.OnboardingTourEnabled
 	}
 	s.cfg.OnboardingTourSeenVersion = disk.OnboardingTourSeenVersion
+	s.cfg.AIDataSharingConsentVersion = disk.AIDataSharingConsentVersion
+	s.cfg.AIDataSharingConsentedAt = disk.AIDataSharingConsentedAt
 	if disk.WebSearchProvider != "" {
 		s.cfg.WebSearchProvider = disk.WebSearchProvider
 	}
@@ -315,6 +325,13 @@ func (s *Store) Provider() string {
 	return s.cfg.Provider
 }
 
+func (s *Store) HasAIDataSharingConsent() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.AIDataSharingConsentVersion == AIDataSharingConsentVersion &&
+		s.cfg.AIDataSharingConsentedAt > 0
+}
+
 // Resolve returns the active provider plus its per-provider config. Consulted on
 // every AI call so settings changes take effect without an engine restart.
 func (s *Store) Resolve() ProviderSettings {
@@ -369,6 +386,7 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	s.mu.RLock()
 	next := s.cfg
 	s.mu.RUnlock()
+	previousRecipient := aiDataRecipient(next)
 
 	if p.Language != nil {
 		if !slices.Contains(validLanguages(), *p.Language) {
@@ -448,6 +466,23 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.OnboardingTourSeenVersion != nil {
 		next.OnboardingTourSeenVersion = *p.OnboardingTourSeenVersion
 	}
+	if p.AIDataSharingConsentVersion != nil {
+		if *p.AIDataSharingConsentVersion != 0 && *p.AIDataSharingConsentVersion != AIDataSharingConsentVersion {
+			return Config{}, fmt.Errorf("settings: unsupported ai data sharing consent version %d", *p.AIDataSharingConsentVersion)
+		}
+		next.AIDataSharingConsentVersion = *p.AIDataSharingConsentVersion
+	}
+	if p.AIDataSharingConsentedAt != nil {
+		if *p.AIDataSharingConsentedAt < 0 {
+			return Config{}, fmt.Errorf("settings: ai_data_sharing_consented_at must be non-negative")
+		}
+		next.AIDataSharingConsentedAt = *p.AIDataSharingConsentedAt
+	}
+	if next.AIDataSharingConsentVersion == 0 {
+		next.AIDataSharingConsentedAt = 0
+	} else if next.AIDataSharingConsentedAt == 0 {
+		return Config{}, fmt.Errorf("settings: consent timestamp required")
+	}
 	if p.WebSearchProvider != nil {
 		if !slices.Contains(validWebSearchProviders(), *p.WebSearchProvider) {
 			return Config{}, fmt.Errorf("settings: unknown web_search_provider %q", *p.WebSearchProvider)
@@ -466,6 +501,10 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if next.Language == "" {
 		next.Language = "ko"
 	}
+	if aiDataRecipient(next) != previousRecipient && p.AIDataSharingConsentVersion == nil {
+		next.AIDataSharingConsentVersion = 0
+		next.AIDataSharingConsentedAt = 0
+	}
 	next = normalizeEditorPreferences(next)
 
 	if err := s.persist(next); err != nil {
@@ -479,26 +518,34 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	return s.Get(ctx)
 }
 
+func aiDataRecipient(c Config) string {
+	provider := c.Provider
+	cfg := normalizeProviderConfig(provider, c.Providers[provider])
+	return provider + "\x00" + cfg.BaseURL
+}
+
 func (s *Store) persist(next Config) error {
 	next = sanitizeConfigForDisk(next)
 	persistable := Config{
-		Language:                  next.Language,
-		Provider:                  next.Provider,
-		Providers:                 next.Providers,
-		TypewriterDefault:         next.TypewriterDefault,
-		FocusDefault:              next.FocusDefault,
-		Theme:                     next.Theme,
-		EditorFontSize:            next.EditorFontSize,
-		EditorLineHeight:          next.EditorLineHeight,
-		CopyProfile:               next.CopyProfile,
-		GitSyncDir:                next.GitSyncDir,
-		GitSyncCommitTemplate:     next.GitSyncCommitTemplate,
-		FolderSyncDir:             next.FolderSyncDir,
-		FolderSyncEnabled:         next.FolderSyncEnabled,
-		SafetyChecklistDismissed:  next.SafetyChecklistDismissed,
-		OnboardingTourEnabled:     next.OnboardingTourEnabled,
-		OnboardingTourSeenVersion: next.OnboardingTourSeenVersion,
-		WebSearchProvider:         next.WebSearchProvider,
+		Language:                    next.Language,
+		Provider:                    next.Provider,
+		Providers:                   next.Providers,
+		TypewriterDefault:           next.TypewriterDefault,
+		FocusDefault:                next.FocusDefault,
+		Theme:                       next.Theme,
+		EditorFontSize:              next.EditorFontSize,
+		EditorLineHeight:            next.EditorLineHeight,
+		CopyProfile:                 next.CopyProfile,
+		GitSyncDir:                  next.GitSyncDir,
+		GitSyncCommitTemplate:       next.GitSyncCommitTemplate,
+		FolderSyncDir:               next.FolderSyncDir,
+		FolderSyncEnabled:           next.FolderSyncEnabled,
+		SafetyChecklistDismissed:    next.SafetyChecklistDismissed,
+		OnboardingTourEnabled:       next.OnboardingTourEnabled,
+		OnboardingTourSeenVersion:   next.OnboardingTourSeenVersion,
+		AIDataSharingConsentVersion: next.AIDataSharingConsentVersion,
+		AIDataSharingConsentedAt:    next.AIDataSharingConsentedAt,
+		WebSearchProvider:           next.WebSearchProvider,
 	}
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {

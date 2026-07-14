@@ -14,6 +14,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/thread"
@@ -375,7 +376,7 @@ func (s *Service) applyOneOp(
 			return err
 		}
 		if strings.TrimSpace(op.Summary) != "" {
-			if err := s.threads.Update(ctx, thread.UpdateInput{ID: th.ID, Summary: op.Summary}); err != nil {
+			if err := s.threads.Update(ctx, thread.UpdateInput{ID: th.ID, Summary: ptrutil.To(op.Summary)}); err != nil {
 				return err
 			}
 		}
@@ -385,13 +386,15 @@ func (s *Service) applyOneOp(
 		}
 		return nil
 	case "update_thread":
-		in := thread.UpdateInput{ID: op.ThreadID, Name: op.Name, Color: op.Color, Summary: op.Summary}
-		if strings.TrimSpace(op.Summary) == "" {
-			cur, err := s.threads.Get(ctx, op.ThreadID)
-			if err != nil {
-				return err
-			}
-			in.Summary = cur.Summary
+		in := thread.UpdateInput{ID: op.ThreadID}
+		if strings.TrimSpace(op.Name) != "" {
+			in.Name = ptrutil.To(op.Name)
+		}
+		if strings.TrimSpace(op.Color) != "" {
+			in.Color = ptrutil.To(op.Color)
+		}
+		if strings.TrimSpace(op.Summary) != "" {
+			in.Summary = ptrutil.To(op.Summary)
 		}
 		return s.threads.Update(ctx, in)
 	case "add_beat":
@@ -457,14 +460,11 @@ func (s *Service) applyOneOp(
 		}
 		attrs := cleanEntityAttributes(op.Attributes)
 		if strings.TrimSpace(op.Summary) != "" || len(attrs) > 0 {
-			if err := s.entities.Update(ctx, now(), entity.UpdateInput{
-				ID:         ent.ID,
-				Kind:       ent.Kind,
-				Name:       ent.Name,
-				Role:       ent.Role,
-				Summary:    op.Summary,
-				Attributes: optionalEntityAttributes(attrs),
-			}); err != nil {
+			in := entity.UpdateInput{ID: ent.ID, Attributes: optionalEntityAttributes(attrs)}
+			if strings.TrimSpace(op.Summary) != "" {
+				in.Summary = ptrutil.To(op.Summary)
+			}
+			if err := s.entities.Update(ctx, now(), in); err != nil {
 				return err
 			}
 		}
@@ -482,18 +482,18 @@ func (s *Service) applyOneOp(
 		if err != nil {
 			return err
 		}
-		in := entity.UpdateInput{ID: entityID, Kind: cur.Kind, Name: cur.Name, Role: cur.Role, Summary: cur.Summary}
+		in := entity.UpdateInput{ID: entityID}
 		if strings.TrimSpace(op.Kind) != "" {
-			in.Kind = op.Kind
+			in.Kind = ptrutil.To(op.Kind)
 		}
 		if strings.TrimSpace(op.Name) != "" {
-			in.Name = op.Name
+			in.Name = ptrutil.To(op.Name)
 		}
 		if strings.TrimSpace(op.Role) != "" {
-			in.Role = op.Role
+			in.Role = ptrutil.To(op.Role)
 		}
 		if strings.TrimSpace(op.Summary) != "" {
-			in.Summary = op.Summary
+			in.Summary = ptrutil.To(op.Summary)
 		}
 		if attrs := cleanEntityAttributes(op.Attributes); len(attrs) > 0 {
 			merged := mergeEntityAttributes(cur.Attributes, attrs)
@@ -748,7 +748,10 @@ func (s *Service) applyCreateOutlineNode(
 		if err := s.nodes.Rename(ctx, n.ID, n.Label, op.Title, now()); err != nil {
 			return err
 		}
-		n, _ = s.nodes.Get(ctx, n.ID)
+		n, err = s.nodes.Get(ctx, n.ID)
+		if err != nil {
+			return err
+		}
 	}
 	if op.Ref != "" {
 		nodeRefs[op.Ref] = n.ID

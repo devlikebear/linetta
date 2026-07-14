@@ -102,6 +102,33 @@ func TestIndexerRebuildIgnoresContainers(t *testing.T) {
 	}
 }
 
+func TestIndexerRebuildAllRestoresLeavesAndRemovesOrphans(t *testing.T) {
+	st, p, nr := manuscriptFixture(t)
+	ctx := context.Background()
+	indexer := NewIndexer(st.DB())
+	sceneID := *p.LastOpenedNodeID
+	if err := nr.UpdateContent(ctx, sceneID, tiptapDoc("복구할 은빛 원고"), 2000); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	if _, err := st.DB().ExecContext(ctx, `INSERT INTO manuscript_fts (plain, node_id, project_id) VALUES ('orphan', 'missing', 'missing')`); err != nil {
+		t.Fatalf("seed orphan: %v", err)
+	}
+
+	if err := indexer.RebuildAll(ctx); err != nil {
+		t.Fatalf("RebuildAll: %v", err)
+	}
+	var restored, orphan int
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM manuscript_fts WHERE node_id = ? AND plain LIKE '%은빛%'`, sceneID).Scan(&restored); err != nil {
+		t.Fatalf("count restored: %v", err)
+	}
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM manuscript_fts WHERE node_id = 'missing'`).Scan(&orphan); err != nil {
+		t.Fatalf("count orphan: %v", err)
+	}
+	if restored != 1 || orphan != 0 {
+		t.Fatalf("restored=%d orphan=%d, want 1/0", restored, orphan)
+	}
+}
+
 func TestBuildTrigramMatch(t *testing.T) {
 	got, ok := buildTrigramMatch("진홍빛 눈동자")
 	if !ok {

@@ -357,6 +357,20 @@ func TestNodeHandlers_returnInvalidParamsForIntegrityErrors(t *testing.T) {
 	}
 }
 
+func TestUpdateNodeContent_returnsConflictForStaleVersion(t *testing.T) {
+	f := newNodeFixture(t)
+	h := UpdateNodeContent(f.nodes, func() int64 { return 10_000 }, nil)
+	ctx := context.Background()
+
+	if _, err := h(ctx, json.RawMessage(`{"id":"`+f.nID+`","doc":"{}","expected_content_version":0}`)); err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+	_, err := h(ctx, json.RawMessage(`{"id":"`+f.nID+`","doc":"{\"stale\":true}","expected_content_version":0}`))
+	if !rpcErrorCode(err, rpc.CodeContentConflict) {
+		t.Fatalf("stale update err = %v, want content conflict", err)
+	}
+}
+
 func rpcErrorCode(err error, code int) bool {
 	if err == nil {
 		return false

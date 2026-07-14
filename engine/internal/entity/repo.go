@@ -54,8 +54,8 @@ func (r *Repo) Get(ctx context.Context, id string) (Entity, error) {
 	return e, err
 }
 
-// Update applies a partial input. Empty strings leave fields alone; an Attributes
-// pointer to a (possibly empty) map overwrites the JSON column.
+// Update applies a partial input. Non-nil pointers overwrite fields, including
+// clearing optional strings with an explicit empty value.
 func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) error {
 	if in.ID == "" {
 		return fmt.Errorf("update entity: id required")
@@ -76,14 +76,18 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) error {
 		return err
 	}
 
-	if in.Kind != "" {
-		cur.Kind = in.Kind
+	if in.Kind != nil {
+		cur.Kind = *in.Kind
 	}
-	if in.Name != "" {
-		cur.Name = in.Name
+	if in.Name != nil {
+		cur.Name = *in.Name
 	}
-	cur.Role = in.Role
-	cur.Summary = in.Summary
+	if in.Role != nil {
+		cur.Role = *in.Role
+	}
+	if in.Summary != nil {
+		cur.Summary = *in.Summary
+	}
 	if in.Attributes != nil {
 		cur.Attributes = *in.Attributes
 	}

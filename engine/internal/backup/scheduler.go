@@ -12,6 +12,11 @@ import (
 // out node_snapshots, etc.
 type RetentionFn func(ctx context.Context) error
 
+// WaitFn waits for the next run and returns false when the context is
+// cancelled. It is injectable so scheduler timing remains deterministic in
+// tests without making production shutdown depend on time.Sleep.
+type WaitFn func(ctx context.Context, duration time.Duration) bool
+
 type TickResult struct {
 	StartedAt      int64  `json:"started_at"`
 	FinishedAt     int64  `json:"finished_at"`
@@ -42,22 +47,29 @@ func (r TickResult) Error() string {
 // The returned stop func cancels the loop and waits for the current iteration
 // to finish.
 //
-// nowFn / sleepFn / onTick are injection points used by tests; production wires
-// them to time.Now, time.Sleep, and a no-op.
+// nowFn / waitFn / onTick are injection points used by tests.
 func Start(
 	ctx context.Context,
 	db *sql.DB,
 	home string,
 	retention RetentionFn,
 	nowFn func() time.Time,
-	sleepFn func(time.Duration),
+	waitFn WaitFn,
 	onTick func(TickResult),
 ) (stop func()) {
 	ctx, cancel := context.WithCancel(ctx)
+	if waitFn == nil {
+		waitFn = Wait
+	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			now := nowFn()
 			result := TickResult{StartedAt: now.UnixMilli()}
 			if path, didRun, err := RunDailyIfNeeded(ctx, db, home, now); err != nil {
@@ -83,22 +95,26 @@ func Start(
 			}
 			next := nextLocalMidnight(now)
 			wait := next.Sub(now) + time.Minute
-			select {
-			case <-ctx.Done():
+			if !waitFn(ctx, wait) {
 				return
-			default:
-			}
-			sleepFn(wait)
-			select {
-			case <-ctx.Done():
-				return
-			default:
 			}
 		}
 	}()
 	return func() {
 		cancel()
 		<-done
+	}
+}
+
+// Wait is the production context-aware timer used between daily runs.
+func Wait(ctx context.Context, duration time.Duration) bool {
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 

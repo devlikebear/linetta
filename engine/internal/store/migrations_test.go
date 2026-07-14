@@ -32,6 +32,24 @@ func TestApplyMigrations_appliesOnce(t *testing.T) {
 	}
 }
 
+func TestApplyMigrations_rejectsChangedAppliedMigrationChecksum(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := ApplyMigrations(ctx, db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE schema_migrations SET checksum = 'tampered' WHERE version = (SELECT MIN(version) FROM schema_migrations)`); err != nil {
+		t.Fatalf("tamper checksum: %v", err)
+	}
+	if err := ApplyMigrations(ctx, db); err == nil {
+		t.Fatal("expected changed migration checksum to be rejected")
+	}
+}
+
 func TestApplyMigrations_createsProjectsTable(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
@@ -214,5 +232,28 @@ SELECT node_id FROM manuscript_fts WHERE manuscript_fts MATCH '진홍빛'`).Scan
 	}
 	if nodeID != "n1" {
 		t.Fatalf("nodeID = %q, want n1", nodeID)
+	}
+}
+
+func TestMigrationPending_detectsMissingEmbeddedVersion(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if err := ApplyMigrations(ctx, db); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	pending, latest, err := migrationPending(ctx, db)
+	if err != nil || pending {
+		t.Fatalf("fully migrated = pending %v latest %d err %v", pending, latest, err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version = ?`, latest); err != nil {
+		t.Fatalf("delete latest version: %v", err)
+	}
+	pending, gotLatest, err := migrationPending(ctx, db)
+	if err != nil || !pending || gotLatest != latest {
+		t.Fatalf("missing migration = pending %v latest %d err %v", pending, gotLatest, err)
 	}
 }

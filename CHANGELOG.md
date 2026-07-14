@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.2 - 2026-07-14
+
+- Prevented stale autosaves from overwriting another scene by serializing per-scene writes and enforcing optimistic content-version checks.
+- Added verified daily and pre-migration backups, full-library `.linetta` recovery snapshots, startup restore controls, and atomic sync/import writes with partial-failure reporting.
+- Required explicit, revocable consent before manuscript content is sent to a selected AI provider, and aligned the in-app disclosure and Korean/English/Japanese privacy policy.
+- Narrowed renderer IPC and file-opening access, preserved structured RPC errors, aligned localization catalogs, and added lint and dependency-audit gates to CI.
+
 ## v0.9.1 - 2026-07-05
 
 - Localized every AI surface for the selected app language (Korean/English/Japanese): the companion, inline editor AI, contextual edit, and Fact Book now build prompts and reply in the app language, including tool status text, apply results, and query outputs.

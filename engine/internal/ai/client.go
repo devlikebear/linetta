@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"errors"
 	"os"
 	"strings"
 
@@ -8,17 +9,20 @@ import (
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
+var ErrDataSharingConsentRequired = errors.New("AI data sharing consent is required before sending manuscript content to a provider")
+
 // ResolvedProvider is the per-call provider configuration handed to the factory:
 // the active provider id plus its model, credential, optional CLI path override,
 // and the working directory.
 type ResolvedProvider struct {
-	Provider  string
-	Model     string
-	APIKey    string
-	BaseURL   string
-	CliPath   string
-	WorkDir   string
-	MaxTokens int
+	Provider           string
+	Model              string
+	APIKey             string
+	BaseURL            string
+	CliPath            string
+	WorkDir            string
+	MaxTokens          int
+	DataSharingConsent bool
 }
 
 // ClientFactory creates an llm.Client from a resolved provider config. Wraps
@@ -29,6 +33,9 @@ type ClientFactory func(p ResolvedProvider) (llm.Client, error)
 // configured CLI path via the CLAUDE_CODE_CLI_PATH env var that tars reads
 // (NewClaudeCodeCLIClient has no path parameter, so the env var is the only hook).
 func DefaultClientFactory(p ResolvedProvider) (llm.Client, error) {
+	if !p.DataSharingConsent {
+		return nil, ErrDataSharingConsentRequired
+	}
 	if err := guardProvider(p.Provider); err != nil {
 		return nil, err
 	}

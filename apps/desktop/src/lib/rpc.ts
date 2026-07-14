@@ -89,6 +89,17 @@ export async function engineStatus(): Promise<EngineStatus> {
   return invoke<EngineStatus>("engine_status");
 }
 
+export async function openRecoveryFolder(): Promise<void> {
+  return invoke<void>("open_recovery_folder");
+}
+
+export async function restoreLatestBackup(): Promise<{
+  backup_path: string;
+  quarantined_path: string | null;
+}> {
+  return invoke("restore_latest_backup");
+}
+
 export async function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
 }
@@ -101,8 +112,44 @@ export async function folderSyncNow(): Promise<FolderSyncResult> {
   return invoke<FolderSyncResult>("folder_sync_now");
 }
 
+export class RpcError extends Error {
+  readonly code?: number;
+  readonly data?: unknown;
+  readonly method: string;
+  readonly requestId?: number;
+
+  constructor(method: string, message: string, code?: number, data?: unknown, requestId?: number) {
+    super(message);
+    this.name = "RpcError";
+    this.method = method;
+    this.code = code;
+    this.data = data;
+    this.requestId = requestId;
+  }
+}
+
+function normalizeRpcError(method: string, error: unknown): RpcError {
+  if (error && typeof error === "object") {
+    const wire = error as { code?: unknown; message?: unknown; data?: unknown; request_id?: unknown };
+    if (typeof wire.message === "string") {
+      return new RpcError(
+        method,
+        wire.message,
+        typeof wire.code === "number" ? wire.code : undefined,
+        wire.data,
+        typeof wire.request_id === "number" ? wire.request_id : undefined,
+      );
+    }
+  }
+  return new RpcError(method, error instanceof Error ? error.message : String(error));
+}
+
 export async function rpcCall<T>(method: string, params?: unknown): Promise<T> {
-  return invoke<T>("engine_call", { method, params: params ?? null });
+  try {
+    return await invoke<T>("engine_call", { method, params: params ?? null });
+  } catch (error) {
+    throw normalizeRpcError(method, error);
+  }
 }
 
 function mapContextPreviewResponse(r: ContextPreviewResponse): AIContextPreview {
@@ -151,8 +198,14 @@ export const projects = {
 
 export const nodes = {
   get: (id: string) => rpcCall<NodeRow>("nodes.get", { id }),
-  updateContent: (id: string, doc: string) =>
-    rpcCall<NodeRow>("nodes.update_content", { id, doc }),
+  updateContent: (id: string, doc: string, expectedContentVersion?: number) =>
+    rpcCall<NodeRow>("nodes.update_content", {
+      id,
+      doc,
+      ...(expectedContentVersion === undefined
+        ? {}
+        : { expected_content_version: expectedContentVersion }),
+    }),
   setLastOpened: (projectId: string, nodeId: string) =>
     rpcCall<{ ok: true }>("nodes.set_last_opened", { project_id: projectId, node_id: nodeId }),
   listTree: (projectId: string) =>
@@ -204,6 +257,10 @@ export const snapshots = {
 export const settings = {
   get: () => rpcCall<Settings>("settings.get"),
   set: (patch: SettingsPatch) => rpcCall<Settings>("settings.set", patch),
+};
+
+export const backupApi = {
+  createRecovery: () => rpcCall<{ path: string; format_version: number }>("backup.create_recovery"),
 };
 
 export const providers = {

@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 )
 
@@ -410,10 +411,10 @@ func (s *Service) applyMetadata(ctx context.Context, c MetadataCandidate, projec
 	attrs := e.Attributes
 	return s.entities.Update(ctx, now, entity.UpdateInput{
 		ID:         e.ID,
-		Kind:       e.Kind,
-		Name:       c.After,
-		Role:       e.Role,
-		Summary:    e.Summary,
+		Kind:       ptrutil.To(e.Kind),
+		Name:       ptrutil.To(c.After),
+		Role:       ptrutil.To(e.Role),
+		Summary:    ptrutil.To(e.Summary),
 		Attributes: &attrs,
 	})
 }

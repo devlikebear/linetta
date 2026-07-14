@@ -1,0 +1,22 @@
+{
+  "session_id": "analyze-20260712-130508",
+  "mode": "analyze",
+  "scope": ".",
+  "status": "completed",
+  "commit": "1020096a14b65c7bd21ca081947f1747978e3b93",
+  "visited_count": 51,
+  "frontier_count": 0,
+  "modules": [],
+  "outputs": [
+    "full-audit.md",
+    "overview.md",
+    "architecture.md",
+    "technologies.md",
+    "glossary.md",
+    "module-map.json",
+    "dependency-graph.json",
+    "issue-candidates.md",
+    "implementation-checklist.md"
+  ],
+  "checkpoints_count": 2
+}
