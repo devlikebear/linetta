@@ -1,2 +1,7 @@
 allowBuilds:
   esbuild: true
+# This advisory only affects unstable RSC APIs. The Makefile audit guard fails
+# before applying this exception if Linetta ever starts using those APIs.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-qwww-vcr4-c8h2
