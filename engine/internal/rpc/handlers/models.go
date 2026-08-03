@@ -102,11 +102,12 @@ func TestProvider(store *settings.Store, factory ai.ClientFactory) rpc.Handler {
 			}
 		}
 		rp := ai.ResolvedProvider{
-			Provider: resolved.Provider,
-			Model:    resolved.Model,
-			APIKey:   resolved.APIKey,
-			BaseURL:  resolved.BaseURL,
-			CliPath:  resolved.CliPath,
+			Provider:           resolved.Provider,
+			Model:              resolved.Model,
+			APIKey:             resolved.APIKey,
+			BaseURL:            resolved.BaseURL,
+			CliPath:            resolved.CliPath,
+			DataSharingConsent: resolved.Provider == store.Provider() && store.HasAIDataSharingConsent(),
 		}
 		if rp.Provider == settings.ProviderOpenRouter {
 			rp.MaxTokens = providerTestMaxTokens

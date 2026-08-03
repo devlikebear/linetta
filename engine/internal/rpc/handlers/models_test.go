@@ -141,6 +141,45 @@ func TestProviderHandler_usesOpenAICodexDefaultModel(t *testing.T) {
 	}
 }
 
+func TestProviderHandler_propagatesConsentOnlyForActiveProvider(t *testing.T) {
+	ctx := context.Background()
+	store := newSettingsFixture(t)
+	version := settings.AIDataSharingConsentVersion
+	consentedAt := int64(1_720_000_000_000)
+	if _, err := store.Set(ctx, settings.Patch{
+		AIDataSharingConsentVersion: &version,
+		AIDataSharingConsentedAt:    &consentedAt,
+	}); err != nil {
+		t.Fatalf("grant consent: %v", err)
+	}
+
+	var captured []ai.ResolvedProvider
+	handler := TestProvider(store, func(p ai.ResolvedProvider) (llm.Client, error) {
+		captured = append(captured, p)
+		return &providerTestFakeClient{}, nil
+	})
+
+	for _, provider := range []string{settings.ProviderOpenAICodex, settings.ProviderAnthropic} {
+		params, err := json.Marshal(testProviderParams{Provider: provider})
+		if err != nil {
+			t.Fatalf("marshal params: %v", err)
+		}
+		if _, err := handler(ctx, params); err != nil {
+			t.Fatalf("test provider %q: %v", provider, err)
+		}
+	}
+
+	if len(captured) != 2 {
+		t.Fatalf("captured providers = %d, want 2", len(captured))
+	}
+	if !captured[0].DataSharingConsent {
+		t.Fatal("active provider should receive stored data-sharing consent")
+	}
+	if captured[1].DataSharingConsent {
+		t.Fatal("non-active provider must not reuse another provider's data-sharing consent")
+	}
+}
+
 func TestProviderHandler_returnsFactoryError(t *testing.T) {
 	store := newSettingsFixture(t)
 	handler := TestProvider(store, func(ai.ResolvedProvider) (llm.Client, error) {
