@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.3 - 2026-08-03
+
+- Fixed AI provider connection tests to honor explicit data-sharing consent for the active provider without reusing consent across providers.
+
 ## v0.9.2 - 2026-07-14
 
 - Prevented stale autosaves from overwriting another scene by serializing per-scene writes and enforcing optimistic content-version checks.
