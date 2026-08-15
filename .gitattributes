@@ -1,0 +1,27 @@
+# Keep the working tree on LF everywhere, including Windows checkouts.
+# The build (bash scripts run by the Makefile) and several source-text
+# assertions in the frontend test suite depend on LF line endings.
+* text=auto eol=lf
+
+# Scripts must stay LF even on Windows: bash rejects CRLF shebangs and bodies.
+*.sh text eol=lf
+
+# Windows-native scripts are the one exception.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Never touch binary assets.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.db binary
+*.sqlite binary
