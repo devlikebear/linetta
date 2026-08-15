@@ -39,7 +39,7 @@ fn build_go_engine() {
     match target_os.as_str() {
         "android" => build_android_engine(&engine_dir, &manifest, &out_dir, &tags),
         "ios" => build_apple_engine(&engine_dir, &out_dir, &tags, true),
-        "windows" => build_windows_engine(&engine_dir, &out_dir, &target, &tags),
+        "windows" => build_windows_engine(&engine_dir, &manifest, &out_dir, &target, &tags),
         _ => build_apple_engine(&engine_dir, &out_dir, &tags, false),
     }
 
@@ -165,7 +165,13 @@ fn build_go_engine() {
         println!("cargo:rustc-link-lib=dylib=linetta");
     }
 
-    fn build_windows_engine(engine_dir: &Path, out_dir: &Path, target: &str, tags: &[&str]) {
+    fn build_windows_engine(
+        engine_dir: &Path,
+        manifest: &Path,
+        out_dir: &Path,
+        target: &str,
+        tags: &[&str],
+    ) {
         let dll = out_dir.join("linetta_engine_ffi.dll");
         let mut cmd = go_build_command(engine_dir, tags);
         cmd.env("CGO_ENABLED", "1")
@@ -185,6 +191,26 @@ fn build_go_engine() {
                 profile_dll.display()
             )
         });
+        // The bundle resource path in `tauri.windows.conf.json` has to be a
+        // fixed, profile-independent location: Tauri merges the platform config
+        // for debug builds too, and fails the build script when the resource is
+        // missing. Keep a copy under `gen/` (already gitignored) so `cargo
+        // check`, `tauri dev`, and `tauri build` all resolve the same path.
+        let bundle_dir = manifest.join("gen/windows");
+        fs::create_dir_all(&bundle_dir).unwrap_or_else(|e| {
+            panic!(
+                "create Windows resource dir {} failed: {e}",
+                bundle_dir.display()
+            )
+        });
+        let bundle_dll = bundle_dir.join("linetta_engine_ffi.dll");
+        fs::copy(&dll, &bundle_dll).unwrap_or_else(|e| {
+            panic!(
+                "copy Windows engine DLL to {} failed: {e}",
+                bundle_dll.display()
+            )
+        });
+
         println!(
             "cargo:rustc-env=LINETTA_ENGINE_DLL_BUILD_PATH={}",
             profile_dll.display()
