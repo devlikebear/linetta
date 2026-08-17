@@ -8,6 +8,7 @@ import {
   organizeOpenRouterModelOptions,
 } from "../../lib/openRouterDefaults";
 import type { OpenRouterKeyInfo, ProviderID } from "../../lib/types";
+import { keyStoreLabelKey } from "../../lib/secretStore";
 import "./AISetupStart.css";
 
 export type GuideID = "openrouter-safe" | "chatgpt-subscription" | "openai-api" | "claude-api" | "gemini-api";
@@ -455,7 +456,11 @@ function OpenRouterInlineSetup({
             </button>
           )}
         </div>
-        <p className="sd">{t("settings.setup.openrouter.inlineHelp")}</p>
+        <p className="sd">
+          {keyStoreLabelKey()
+            ? t("settings.setup.openrouter.inlineHelp", { store: t(keyStoreLabelKey()!) })
+            : t("settings.setup.openrouter.inlineHelpUnsupported")}
+        </p>
       </div>
       <div className="modal-field">
         <label htmlFor={modelId}>{t("settings.setup.openrouter.modelLabel")}</label>

@@ -55,10 +55,13 @@ function AppRoutes() {
   );
 }
 
-export function applyVisualSettings(settings: Pick<Settings, "theme" | "editor_font_size" | "editor_line_height">) {
+export function applyVisualSettings(
+  settings: Pick<Settings, "theme" | "palette" | "editor_font_size" | "editor_line_height">,
+) {
   const root = document.documentElement;
   const theme = settings.theme || "system";
   root.dataset.theme = theme;
+  root.dataset.palette = settings.palette || "hanji";
   root.style.setProperty("--edit-size", `${settings.editor_font_size || 20}px`);
   root.style.setProperty("--edit-leading", `${settings.editor_line_height || 1.92}`);
 }
@@ -71,7 +74,14 @@ function SettingsVisualBridge() {
         if (!cancelled) applyVisualSettings(settings);
       })
       .catch(() => {
-        if (!cancelled) applyVisualSettings({ theme: "system", editor_font_size: 20, editor_line_height: 1.92 });
+        if (!cancelled) {
+          applyVisualSettings({
+            theme: "system",
+            palette: "hanji",
+            editor_font_size: 20,
+            editor_line_height: 1.92,
+          });
+        }
       });
     const onSettings = (detail: Settings) => {
       if (detail) applyVisualSettings(detail);

@@ -13,7 +13,7 @@ func (unsupportedSecretStore) Exists(string) (bool, error) {
 }
 
 func (unsupportedSecretStore) Set(string, string) error {
-	return errors.New("settings: secure secret storage is only available on macOS")
+	return errors.New("settings: secure secret storage is only available on macOS and Windows")
 }
 
 func (unsupportedSecretStore) Delete(string) error {

@@ -48,7 +48,7 @@
   padding: 2px 8px;
   border-radius: var(--r-sm);
 }
-.intensity-pick button.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+.intensity-pick button.sel { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 
 /* New-beat draft inputs. */
 .plot-add { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }

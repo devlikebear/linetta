@@ -555,6 +555,10 @@ export interface WebSearchTestResult {
 }
 
 export type ThemePreference = "system" | "light" | "dark";
+/** Which set of colours the UI uses. Orthogonal to ThemePreference,
+ *  which picks the light or dark end of whichever set is active.
+ *  "hanji" is the default; "paper" is the original burnt-sienna palette. */
+export type PalettePreference = "hanji" | "paper" | "bone" | "press";
 export type PlatformProfileId = "plain" | "munpia" | "series" | "joara";
 
 export interface Settings {
@@ -564,6 +568,7 @@ export interface Settings {
   typewriter_default: boolean;
   focus_default: boolean;
   theme: ThemePreference;
+  palette: PalettePreference;
   editor_font_size: number;
   editor_line_height: number;
   copy_profile: PlatformProfileId;
@@ -589,6 +594,7 @@ export interface SettingsPatch {
   typewriter_default?: boolean;
   focus_default?: boolean;
   theme?: ThemePreference;
+  palette?: PalettePreference;
   editor_font_size?: number;
   editor_line_height?: number;
   copy_profile?: PlatformProfileId;

@@ -176,8 +176,8 @@
   padding: 3px 10px;
   white-space: pre-wrap;
 }
-.vs-diff-line.added { background: rgba(28, 142, 85, 0.12); color: var(--ink); }
-.vs-diff-line.removed { background: rgba(186, 73, 73, 0.12); color: var(--ink); }
+.vs-diff-line.added { background: var(--diff-add); color: var(--ink); }
+.vs-diff-line.removed { background: var(--diff-del); color: var(--ink); }
 .vs-diff-line.same { color: var(--muted); }
 
 @media (max-width: 900px) {

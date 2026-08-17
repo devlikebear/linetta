@@ -15,6 +15,7 @@ import {
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
+import { keyStoreLabelKey } from "../lib/secretStore";
 import {
   OPENROUTER_DEFAULT_MODEL_OPTIONS,
   OPENROUTER_SMART_DEFAULT_MODEL,
@@ -36,6 +37,7 @@ import type {
   ProviderConfig,
   ProviderID,
   Settings as SettingsRow,
+  PalettePreference,
   ThemePreference,
   WebSearchProvider,
 } from "../lib/types";
@@ -75,6 +77,13 @@ function buildProviders(t: Translate): ProviderMeta[] {
 export function Settings() {
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
+  // Key-storage copy names the platform's store, or says a key cannot be kept
+  // at all where the engine has no backend. See lib/secretStore.ts.
+  const storeLabelKey = useMemo(() => keyStoreLabelKey(), []);
+  const storeVars = useMemo(
+    () => (storeLabelKey ? { store: t(storeLabelKey) } : undefined),
+    [storeLabelKey, t],
+  );
   const [unavailableProviders, setUnavailableProviders] = useState<string[]>([]);
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
   const providers = useMemo(
@@ -686,7 +695,11 @@ export function Settings() {
                             </button>
                           )}
                         </div>
-                        <p className="sd">{t("settings.provider.apiKeyHelp")}</p>
+                        <p className="sd">
+                          {storeLabelKey
+                            ? t("settings.provider.apiKeyHelp", storeVars)
+                            : t("settings.provider.apiKeyHelpUnsupported")}
+                        </p>
                       </div>
                     )}
                     {meta.endpoint && (
@@ -777,7 +790,11 @@ export function Settings() {
                       )}
                       {modelsError && <p className="error">{modelsError}</p>}
                     </div>
-                    <p className="sd">{t("settings.provider.storageHelp")}</p>
+                    <p className="sd">
+                      {storeLabelKey
+                        ? t("settings.provider.storageHelp", storeVars)
+                        : t("settings.provider.storageHelpUnsupported")}
+                    </p>
                     <div className="provider-test">
                       <button
                         type="button"
@@ -848,6 +865,37 @@ export function Settings() {
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="modal-field">
+                <label>{t("settings.editor.palette")}</label>
+                <div className="settings-palette" role="radiogroup" aria-label={t("settings.editor.palette")}>
+                  {([
+                    ["hanji", t("settings.editor.paletteHanji"), t("settings.editor.paletteHanjiDesc")],
+                    ["paper", t("settings.editor.palettePaper"), t("settings.editor.palettePaperDesc")],
+                    ["bone", t("settings.editor.paletteBone"), t("settings.editor.paletteBoneDesc")],
+                    ["press", t("settings.editor.palettePress"), t("settings.editor.palettePressDesc")],
+                  ] as Array<[PalettePreference, string, string]>).map(([palette, label, description]) => (
+                    <button
+                      key={palette}
+                      type="button"
+                      role="radio"
+                      aria-checked={current.palette === palette}
+                      data-palette={palette}
+                      className={`palette-card${current.palette === palette ? " is-selected" : ""}`}
+                      onClick={() => !saving && apply({ palette })}
+                      disabled={saving}
+                    >
+                      <span className="palette-chips" aria-hidden="true">
+                        <span className="palette-chip paper" />
+                        <span className="palette-chip ink" />
+                        <span className="palette-chip accent" />
+                      </span>
+                      <span className="palette-name">{label}</span>
+                      <span className="palette-desc">{description}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="palette-hint">{t("settings.editor.paletteHint")}</p>
               </div>
               <div className="settings-number-grid">
                 <div className="modal-field">
@@ -985,7 +1033,11 @@ export function Settings() {
                   )}
                 </div>
               </div>
-              <p className="sd">{t("settings.tools.keyHelp")}</p>
+              <p className="sd">
+                {storeLabelKey
+                  ? t("settings.tools.keyHelp", storeVars)
+                  : t("settings.tools.keyHelpUnsupported")}
+              </p>
               <div className="provider-test">
                 <button
                   type="button"
