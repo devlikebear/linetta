@@ -1,4 +1,5 @@
 import type { MessageKey } from "./i18n";
+import { platformKind } from "./platform";
 
 /**
  * Where the engine keeps an API key on this platform.
@@ -16,10 +17,8 @@ import type { MessageKey } from "./i18n";
 export type KeyStoreKind = "macos" | "windows" | "none";
 
 export function keyStoreKind(): KeyStoreKind {
-  const platform = navigator.platform.toLowerCase();
-  if (platform.includes("mac")) return "macos";
-  if (platform.includes("win")) return "windows";
-  return "none";
+  const platform = platformKind();
+  return platform === "other" ? "none" : platform;
 }
 
 export function hasSecureKeyStore(): boolean {

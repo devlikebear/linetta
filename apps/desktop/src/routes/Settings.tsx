@@ -15,6 +15,7 @@ import {
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
+import { isWindows } from "../lib/platform";
 import { keyStoreLabelKey } from "../lib/secretStore";
 import {
   OPENROUTER_DEFAULT_MODEL_OPTIONS,
@@ -746,7 +747,13 @@ export function Settings() {
                             {cliDetecting ? t("settings.provider.cliDetecting") : t("settings.provider.cliDetect")}
                           </button>
                         </div>
-                        <p className="sd">{t("settings.provider.cliHelp")}</p>
+                        <p className="sd">
+                          {t(
+                            isWindows()
+                              ? "settings.provider.cliHelpWindows"
+                              : "settings.provider.cliHelp",
+                          )}
+                        </p>
                         {cliDetectMsg && <p className="sd">{cliDetectMsg}</p>}
                       </div>
                     )}
