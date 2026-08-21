@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -52,7 +52,7 @@ vi.mock("../lib/rpc", () => ({
 }));
 
 function renderSettings() {
-  render(
+  return render(
     <MemoryRouter>
       <I18nProvider>
         <Settings />
@@ -67,6 +67,7 @@ const baseSettings = {
   typewriter_default: true,
   focus_default: false,
   theme: "system" as const,
+  palette: "hanji" as const,
   editor_font_size: 20,
   editor_line_height: 1.92,
   copy_profile: "plain" as const,
@@ -371,6 +372,55 @@ describe("Settings", () => {
     await user.selectOptions(screen.getByLabelText("복사 프로필"), "munpia");
     await waitFor(() =>
       expect(mocks.settingsSet).toHaveBeenCalledWith({ copy_profile: "munpia" }),
+    );
+  });
+
+  it("names the platform's own key store rather than always saying Keychain", async () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "platform");
+    const withPlatform = async (platform: string, assert: () => Promise<void> | void) => {
+      Object.defineProperty(navigator, "platform", { value: platform, configurable: true });
+      const view = renderSettings();
+      try {
+        await assert();
+      } finally {
+        view.unmount();
+      }
+    };
+    try {
+      await withPlatform("Win32", async () => {
+        expect(await screen.findByText(/키는 Windows 자격 증명 관리자에 저장됩니다/)).toBeInTheDocument();
+        expect(screen.queryByText(/macOS Keychain/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/키를 저장할 수 없습니다/)).not.toBeInTheDocument();
+      });
+      await withPlatform("MacIntel", async () => {
+        expect(await screen.findByText(/키는 macOS Keychain에 저장됩니다/)).toBeInTheDocument();
+      });
+      // Linux has no backend, so the copy must not name a place at all.
+      await withPlatform("Linux x86_64", async () => {
+        expect(await screen.findByText(/이 플랫폼에서는 키를 저장할 수 없습니다/)).toBeInTheDocument();
+        expect(screen.queryByText(/키는 .*에 저장됩니다/)).not.toBeInTheDocument();
+      });
+    } finally {
+      if (original) Object.defineProperty(navigator, "platform", original);
+    }
+  });
+
+  it("persists the colour palette separately from the light/dark theme", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    const group = await screen.findByRole("radiogroup", { name: "색 팔레트" });
+    const hanji = within(group).getByRole("radio", { name: /한지/ });
+    const press = within(group).getByRole("radio", { name: /프레스/ });
+    expect(hanji).toHaveAttribute("aria-checked", "true");
+
+    await user.click(press);
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ palette: "press" }),
+    );
+    await waitFor(() => expect(press).toHaveAttribute("aria-checked", "true"));
+    expect(mocks.settingsSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ theme: expect.anything() }),
     );
   });
 

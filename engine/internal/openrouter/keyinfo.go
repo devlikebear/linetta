@@ -33,10 +33,39 @@ type KeyInfo struct {
 }
 
 type Model struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name"`
-	ContextLength int               `json:"context_length,omitempty"`
-	Pricing       map[string]string `json:"pricing,omitempty"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	ContextLength int        `json:"context_length,omitempty"`
+	Pricing       PricingMap `json:"pricing,omitempty"`
+}
+
+// PricingMap holds the per-token price strings OpenRouter reports for a model.
+//
+// The object is not a flat string map: OpenRouter adds keys over time, and some
+// carry structured values rather than strings (for example "overrides", an
+// array of time-window price tables). Decoding straight into map[string]string
+// fails on those, and because the models endpoint returns one array, a single
+// unknown value shape discards the entire catalogue.
+//
+// Keep the string entries and skip everything else, so an unrecognised value
+// costs at most that one key.
+type PricingMap map[string]string
+
+func (p *PricingMap) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	out := make(PricingMap, len(raw))
+	for key, value := range raw {
+		var s string
+		if err := json.Unmarshal(value, &s); err != nil {
+			continue // structured or unexpected value: not a price string
+		}
+		out[key] = s
+	}
+	*p = out
+	return nil
 }
 
 type Client struct {

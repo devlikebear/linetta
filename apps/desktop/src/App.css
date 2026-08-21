@@ -7,34 +7,285 @@
    intentionally omitted.
    ============================================================ */
 
+/* ------------------------------------------------------------
+   Colour is two independent axes:
+
+     data-palette  hanji | paper | bone | press   (which colours)
+     data-theme    light | dark | system          (which end of them)
+
+   Each palette block below declares its own light set (--l-*) and
+   dark set (--d-*). The three mapping blocks that follow bind one
+   of those sets to the tokens the rest of the stylesheet uses, so
+   adding a palette means adding one block and nothing else.
+
+   The four families sit on deliberately separate hues so they stay
+   telling apart at a glance, in both directions:
+
+     hanji  sage green      paper  warm beige
+     bone   rose / mauve    press  cool blue-grey
+
+   The palette blocks are matched on [data-palette] rather than
+   :root[data-palette] so the settings swatches can carry a palette
+   other than the active one. Ordering matters: :root and
+   [data-palette="…"] have equal specificity, so the named blocks
+   must stay below the default (hanji) block to win.
+   ------------------------------------------------------------ */
+
+/* ---- hanji — sage-cast mulberry paper, celadon accent (default) ---- */
+:root,
+[data-palette="hanji"] {
+  --l-paper:      #d1dccd;
+  --l-surface:    #e9efe4;
+  --l-surface-2:  #c4d1bf;
+  --l-surface-3:  #b6c4b1;
+  --l-ink:        #182018;
+  --l-ink-soft:   #3e4a40;
+  --l-muted:      #556053;
+  --l-muted-2:    #737d6f;
+  --l-line:       #b8c5b3;
+  --l-line-soft:  #cbd6c6;
+  --l-accent:      #2d6f64;
+  --l-accent-deep: #23574f;
+  --l-on-accent:  #e9efe4;
+  /* Storyline thread colours */
+  --l-t-1: #2d6f64;
+  --l-t-2: #7d5a2e;
+  --l-t-3: #3f5f86;
+  --l-t-4: #7a4a63;
+  --l-t-5: #55632f;
+  --l-ok:     #2f6b45;
+  --l-warn:   #8d4a1c;
+  --l-danger: #9d3a34;
+  --l-book-fade: #dde5d8;
+  --l-shade:  24 32 24;
+
+  --d-paper:      #0a1c12;
+  --d-surface:    #12271b;
+  --d-surface-2:  #1c3325;
+  --d-surface-3:  #274030;
+  --d-ink:        #e8f1e7;
+  --d-ink-soft:   #c4d2c3;
+  --d-muted:      #90a091;
+  --d-muted-2:    #667667;
+  --d-line:       #2f4a37;
+  --d-line-soft:  #1f3527;
+  --d-accent:      #6fbaad;
+  --d-accent-deep: #8ccfc3;
+  --d-on-accent:  #06170e;
+  --d-t-1: #6fbaad;
+  --d-t-2: #c39a5f;
+  --d-t-3: #7fa3d4;
+  --d-t-4: #c08fae;
+  --d-t-5: #9bb175;
+  --d-ok:     #6fbb8b;
+  --d-warn:   #d99a5e;
+  --d-danger: #e08a83;
+  --d-book-fade: #0e2216;
+  --d-shade:  0 0 0;
+}
+
+/* ---- paper — warm stock, burnt sienna (the original palette) ---- */
+[data-palette="paper"] {
+  --l-paper:      #f0ece2;
+  --l-surface:    #faf7f0;
+  --l-surface-2:  #ebe5d8;   /* recessed panels */
+  --l-surface-3:  #e3dccc;
+  --l-ink:        #211e18;
+  --l-ink-soft:   #4d483e;
+  --l-muted:      #6f6959;
+  --l-muted-2:    #8e8776;
+  --l-line:       #d8d0bf;
+  --l-line-soft:  #e6dfd0;
+  --l-accent:      oklch(0.56 0.13 47);
+  --l-accent-deep: oklch(0.48 0.13 47);
+  --l-on-accent:  #ffffff;
+  --l-t-1: oklch(0.54 0.13 47);
+  --l-t-2: oklch(0.52 0.09 200);
+  --l-t-3: oklch(0.52 0.10 255);
+  --l-t-4: oklch(0.52 0.12 350);
+  --l-t-5: oklch(0.53 0.10 125);
+  --l-ok:     oklch(0.53 0.11 150);
+  --l-warn:   oklch(0.53 0.15 35);
+  --l-danger: #a13c32;
+  --l-book-fade: #f4efe4;
+  --l-shade:  33 30 24;
+
+  --d-paper:      #211a0c;
+  --d-surface:    #2c2413;
+  --d-surface-2:  #382e1c;
+  --d-surface-3:  #443925;
+  --d-ink:        #f4efe1;
+  --d-ink-soft:   #d9d1bd;
+  --d-muted:      #a89e88;
+  --d-muted-2:    #77705f;
+  --d-line:       #52462d;
+  --d-line-soft:  #3d331d;
+  --d-accent:      oklch(0.72 0.12 54);
+  --d-accent-deep: oklch(0.78 0.10 58);
+  --d-on-accent:  #241609;
+  --d-t-1: oklch(0.70 0.12 47);
+  --d-t-2: oklch(0.72 0.10 195);
+  --d-t-3: oklch(0.72 0.12 255);
+  --d-t-4: oklch(0.72 0.12 340);
+  --d-t-5: oklch(0.72 0.11 125);
+  --d-ok:     oklch(0.72 0.12 150);
+  --d-warn:   oklch(0.72 0.14 35);
+  --d-danger: #e59189;
+  --d-book-fade: #271f10;
+  --d-shade:  0 0 0;
+}
+
+/* ---- bone — rose-grey bone stock, fountain-pen indigo ---- */
+[data-palette="bone"] {
+  --l-paper:      #eedae2;
+  --l-surface:    #faf2f6;
+  --l-surface-2:  #e2cbd6;
+  --l-surface-3:  #d4bcc9;
+  --l-ink:        #1e171c;
+  --l-ink-soft:   #473f4b;
+  --l-muted:      #6a5e6a;
+  --l-muted-2:    #867b86;
+  --l-line:       #d7c2cd;
+  --l-line-soft:  #e6d5de;
+  --l-accent:      #2f3a70;
+  --l-accent-deep: #232c58;
+  --l-on-accent:  #faf2f6;
+  --l-t-1: #2f3a70;
+  --l-t-2: #85632c;
+  --l-t-3: #2c6a63;
+  --l-t-4: #7c3f56;
+  --l-t-5: #4f6338;
+  --l-ok:     #2f6b45;
+  --l-warn:   #8d4a1c;
+  --l-danger: #9d3a34;
+  --l-book-fade: #f3e6ec;
+  --l-shade:  30 23 28;
+
+  --d-paper:      #201126;
+  --d-surface:    #2b1a31;
+  --d-surface-2:  #37243d;
+  --d-surface-3:  #432e49;
+  --d-ink:        #f2ecf4;
+  --d-ink-soft:   #d3c9d6;
+  --d-muted:      #a094a4;
+  --d-muted-2:    #766a7a;
+  --d-line:       #4d3b53;
+  --d-line-soft:  #38273e;
+  --d-accent:      #9fabe8;
+  --d-accent-deep: #bcc6f2;
+  --d-on-accent:  #14172c;
+  --d-t-1: #9fabe8;
+  --d-t-2: #d2ab63;
+  --d-t-3: #6fbaad;
+  --d-t-4: #cf90ab;
+  --d-t-5: #9bb175;
+  --d-ok:     #6fbb8b;
+  --d-warn:   #d99a5e;
+  --d-danger: #e58f98;
+  --d-book-fade: #26152c;
+  --d-shade:  0 0 0;
+}
+
+/* ---- press — cool press sheet, oxblood accent ---- */
+[data-palette="press"] {
+  --l-paper:      #d8e2f2;
+  --l-surface:    #eef3fb;
+  --l-surface-2:  #c8d5ea;
+  --l-surface-3:  #b8c8e0;
+  --l-ink:        #141821;
+  --l-ink-soft:   #39414f;
+  --l-muted:      #58637b;
+  --l-muted-2:    #768094;
+  --l-line:       #bccbe2;
+  --l-line-soft:  #d0dcef;
+  --l-accent:      #7a2830;
+  --l-accent-deep: #5e1d24;
+  --l-on-accent:  #eef3fb;
+  --l-t-1: #7a2830;
+  --l-t-2: #2b5f6b;
+  --l-t-3: #3c4f7d;
+  --l-t-4: #6b4a74;
+  --l-t-5: #55603a;
+  --l-ok:     #2f6b45;
+  --l-warn:   #8d4a1c;
+  --l-danger: #b23c2e;
+  --l-book-fade: #e4ebf7;
+  --l-shade:  20 24 33;
+
+  --d-paper:      #091329;
+  --d-surface:    #101c35;
+  --d-surface-2:  #1a2743;
+  --d-surface-3:  #253352;
+  --d-ink:        #e8eef8;
+  --d-ink-soft:   #c3cddd;
+  --d-muted:      #8b97ae;
+  --d-muted-2:    #616c82;
+  --d-line:       #2c3a58;
+  --d-line-soft:  #1c2842;
+  --d-accent:      #d98a90;
+  --d-accent-deep: #e8a7ac;
+  --d-on-accent:  #2a1113;
+  --d-t-1: #d98a90;
+  --d-t-2: #79b6c2;
+  --d-t-3: #8ca4d8;
+  --d-t-4: #b892c4;
+  --d-t-5: #a1ad78;
+  --d-ok:     #6fbb8b;
+  --d-warn:   #d99a5e;
+  --d-danger: #e5928b;
+  --d-book-fade: #0d1730;
+  --d-shade:  0 0 0;
+}
+
+/* ---- Mapping: light ---- */
 :root {
-  /* ---- Palette: warm paper, ink, burnt-sienna accent ---- */
-  --paper:        #f0ece2;
-  --surface:      #faf7f0;
-  --surface-2:    #ebe5d8;   /* recessed panels */
-  --surface-3:    #e3dccc;
-  --ink:          #211e18;
-  --ink-soft:     #4d483e;
-  --muted:        #918a79;
-  --muted-2:      #b1a994;
-  --line:         #d8d0bf;
-  --line-soft:    #e6dfd0;
+  --paper:      var(--l-paper);
+  --surface:    var(--l-surface);
+  --surface-2:  var(--l-surface-2);
+  --surface-3:  var(--l-surface-3);
+  --ink:        var(--l-ink);
+  --ink-soft:   var(--l-ink-soft);
+  --muted:      var(--l-muted);
+  --muted-2:    var(--l-muted-2);
+  --line:       var(--l-line);
+  --line-soft:  var(--l-line-soft);
+  --accent:      var(--l-accent);
+  --accent-deep: var(--l-accent-deep);
+  --on-accent:   var(--l-on-accent);
+  --accent-tint:  color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-tint2: color-mix(in srgb, var(--accent) 6%, transparent);
+  --t-sienna: var(--l-t-1);
+  --t-teal:   var(--l-t-2);
+  --t-blue:   var(--l-t-3);
+  --t-plum:   var(--l-t-4);
+  --t-olive:  var(--l-t-5);
+  --ok:     var(--l-ok);
+  --warn:   var(--l-warn);
+  --danger: var(--l-danger);
+  --book-fade: var(--l-book-fade);
+  --shade:  var(--l-shade);
 
-  --accent:       oklch(0.56 0.13 47);     /* burnt sienna */
-  --accent-deep:  oklch(0.48 0.13 47);
-  --accent-tint:  oklch(0.56 0.13 47 / 0.12);
-  --accent-tint2: oklch(0.56 0.13 47 / 0.06);
+  --shadow-sm: 0 1px 2px rgb(var(--shade) / 0.06);
+  --shadow-md: 0 8px 28px -10px rgb(var(--shade) / 0.22);
+  --shadow-lg: 0 30px 80px -24px rgb(var(--shade) / 0.42);
+  --scroll-thumb:       rgb(var(--shade) / 0.14);
+  --scroll-thumb-hover: rgb(var(--shade) / 0.28);
+  --hover-wash: rgb(var(--shade) / 0.04);
 
-  /* ---- Storyline thread colors (shared L/C, varied hue) ---- */
-  --t-sienna: oklch(0.58 0.13 47);
-  --t-teal:   oklch(0.58 0.09 200);
-  --t-blue:   oklch(0.56 0.10 255);
-  --t-plum:   oklch(0.55 0.12 350);
-  --t-olive:  oklch(0.60 0.10 125);
+  color-scheme: light;
+}
 
-  --ok:    oklch(0.55 0.11 150);
-  --warn:  oklch(0.55 0.15 35);
+/* Derived once — these read correctly on either end of the ramp
+   because --ink already flips with the mode. */
+:root {
+  --danger-strong: color-mix(in srgb, var(--danger) 78%, var(--ink));
+  --danger-wash:   color-mix(in srgb, var(--danger) 12%, transparent);
+  --diff-add:      color-mix(in srgb, var(--ok) 14%, transparent);
+  --diff-del:      color-mix(in srgb, var(--danger) 13%, transparent);
+  --veil:          color-mix(in srgb, var(--surface) 58%, transparent);
+}
 
+:root {
   /* ---- Type ---- */
   --font-ui:    -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Pretendard", sans-serif;
   --font-serif: "Newsreader", "Nanum Myeongjo", "AppleMyungjo", "Apple SD Gothic Neo", Georgia, serif;
@@ -43,79 +294,90 @@
   --edit-size: 20px;
   --edit-leading: 1.92;
 
+  /* Eyebrow labels. Tracking this loose was set for uppercase Latin;
+     it wrecks Hangul, which never uppercases anyway. */
+  --label-case: none;
+  --label-track: 0.06em;
+
   /* ---- Geometry ---- */
   --r-sm: 6px;
   --r-md: 10px;
   --r-lg: 16px;
   --r-xl: 22px;
-  --shadow-sm: 0 1px 2px rgba(33,30,24,0.06);
-  --shadow-md: 0 8px 28px -10px rgba(33,30,24,0.22);
-  --shadow-lg: 0 30px 80px -24px rgba(33,30,24,0.42);
-
-  color-scheme: light;
 }
 
+/* ---- Mapping: dark ---- */
 :root[data-theme="dark"] {
-  --paper:        #171714;
-  --surface:      #22211d;
-  --surface-2:    #2c2a25;
-  --surface-3:    #37342d;
-  --ink:          #f3eee2;
-  --ink-soft:     #d7cfc0;
-  --muted:        #a69d8d;
-  --muted-2:      #756f64;
-  --line:         #454138;
-  --line-soft:    #343129;
+  --paper:      var(--d-paper);
+  --surface:    var(--d-surface);
+  --surface-2:  var(--d-surface-2);
+  --surface-3:  var(--d-surface-3);
+  --ink:        var(--d-ink);
+  --ink-soft:   var(--d-ink-soft);
+  --muted:      var(--d-muted);
+  --muted-2:    var(--d-muted-2);
+  --line:       var(--d-line);
+  --line-soft:  var(--d-line-soft);
+  --accent:      var(--d-accent);
+  --accent-deep: var(--d-accent-deep);
+  --on-accent:   var(--d-on-accent);
+  --accent-tint:  color-mix(in srgb, var(--accent) 18%, transparent);
+  --accent-tint2: color-mix(in srgb, var(--accent) 10%, transparent);
+  --t-sienna: var(--d-t-1);
+  --t-teal:   var(--d-t-2);
+  --t-blue:   var(--d-t-3);
+  --t-plum:   var(--d-t-4);
+  --t-olive:  var(--d-t-5);
+  --ok:     var(--d-ok);
+  --warn:   var(--d-warn);
+  --danger: var(--d-danger);
+  --book-fade: var(--d-book-fade);
+  --shade:  var(--d-shade);
 
-  --accent:       oklch(0.72 0.12 54);
-  --accent-deep:  oklch(0.78 0.10 58);
-  --accent-tint:  oklch(0.72 0.12 54 / 0.18);
-  --accent-tint2: oklch(0.72 0.12 54 / 0.10);
-
-  --t-sienna: oklch(0.70 0.12 47);
-  --t-teal:   oklch(0.72 0.10 195);
-  --t-blue:   oklch(0.72 0.12 255);
-  --t-plum:   oklch(0.72 0.12 340);
-  --t-olive:  oklch(0.72 0.11 125);
-
-  --ok:    oklch(0.72 0.12 150);
-  --warn:  oklch(0.72 0.14 35);
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.26);
-  --shadow-md: 0 8px 28px -10px rgba(0,0,0,0.55);
-  --shadow-lg: 0 30px 80px -24px rgba(0,0,0,0.72);
+  --shadow-sm: 0 1px 2px rgb(var(--shade) / 0.26);
+  --shadow-md: 0 8px 28px -10px rgb(var(--shade) / 0.55);
+  --shadow-lg: 0 30px 80px -24px rgb(var(--shade) / 0.72);
+  --scroll-thumb:       rgb(255 255 255 / 0.13);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.26);
+  --hover-wash: rgb(255 255 255 / 0.05);
 
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme="system"] {
-    --paper:        #171714;
-    --surface:      #22211d;
-    --surface-2:    #2c2a25;
-    --surface-3:    #37342d;
-    --ink:          #f3eee2;
-    --ink-soft:     #d7cfc0;
-    --muted:        #a69d8d;
-    --muted-2:      #756f64;
-    --line:         #454138;
-    --line-soft:    #343129;
+    --paper:      var(--d-paper);
+    --surface:    var(--d-surface);
+    --surface-2:  var(--d-surface-2);
+    --surface-3:  var(--d-surface-3);
+    --ink:        var(--d-ink);
+    --ink-soft:   var(--d-ink-soft);
+    --muted:      var(--d-muted);
+    --muted-2:    var(--d-muted-2);
+    --line:       var(--d-line);
+    --line-soft:  var(--d-line-soft);
+    --accent:      var(--d-accent);
+    --accent-deep: var(--d-accent-deep);
+    --on-accent:   var(--d-on-accent);
+    --accent-tint:  color-mix(in srgb, var(--accent) 18%, transparent);
+    --accent-tint2: color-mix(in srgb, var(--accent) 10%, transparent);
+    --t-sienna: var(--d-t-1);
+    --t-teal:   var(--d-t-2);
+    --t-blue:   var(--d-t-3);
+    --t-plum:   var(--d-t-4);
+    --t-olive:  var(--d-t-5);
+    --ok:     var(--d-ok);
+    --warn:   var(--d-warn);
+    --danger: var(--d-danger);
+    --book-fade: var(--d-book-fade);
+    --shade:  var(--d-shade);
 
-    --accent:       oklch(0.72 0.12 54);
-    --accent-deep:  oklch(0.78 0.10 58);
-    --accent-tint:  oklch(0.72 0.12 54 / 0.18);
-    --accent-tint2: oklch(0.72 0.12 54 / 0.10);
-
-    --t-sienna: oklch(0.70 0.12 47);
-    --t-teal:   oklch(0.72 0.10 195);
-    --t-blue:   oklch(0.72 0.12 255);
-    --t-plum:   oklch(0.72 0.12 340);
-    --t-olive:  oklch(0.72 0.11 125);
-
-    --ok:    oklch(0.72 0.12 150);
-    --warn:  oklch(0.72 0.14 35);
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.26);
-    --shadow-md: 0 8px 28px -10px rgba(0,0,0,0.55);
-    --shadow-lg: 0 30px 80px -24px rgba(0,0,0,0.72);
+    --shadow-sm: 0 1px 2px rgb(var(--shade) / 0.26);
+    --shadow-md: 0 8px 28px -10px rgb(var(--shade) / 0.55);
+    --shadow-lg: 0 30px 80px -24px rgb(var(--shade) / 0.72);
+    --scroll-thumb:       rgb(255 255 255 / 0.13);
+    --scroll-thumb-hover: rgb(255 255 255 / 0.26);
+    --hover-wash: rgb(255 255 255 / 0.05);
 
     color-scheme: dark;
   }
@@ -142,8 +404,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 /* Scrollbars */
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(33,30,24,0.14); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background: rgba(33,30,24,0.28); background-clip: padding-box; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); background-clip: padding-box; }
 
 /* Utility */
 .mono { font-family: var(--font-mono); }
@@ -175,8 +437,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   height: 100%;
   display: grid;
   grid-template-rows: auto 1fr;
-  background:
-    radial-gradient(120% 80% at 50% -10%, var(--surface) 0%, var(--paper) 55%);
+  background: var(--paper);
   overflow-y: auto;
 }
 
@@ -189,9 +450,9 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .lib-brandmark {
   font-family: var(--font-mono);
   font-size: 12px;
-  letter-spacing: 0.2em;
+  letter-spacing: var(--label-track);
   color: var(--muted);
-  text-transform: uppercase;
+  text-transform: var(--label-case);
 }
 .lib-top-actions { display: flex; gap: 6px; }
 
@@ -227,8 +488,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   text-align: left; border-radius: var(--r-sm);
 }
 .lib-menu button:hover { background: var(--surface-2); color: var(--ink); }
-.lib-menu button.danger { color: #a13c32; }
-.lib-menu button.danger:hover { color: #7f2e27; }
+.lib-menu button.danger { color: var(--danger); }
+.lib-menu button.danger:hover { color: var(--danger-strong); }
 
 .lib-body {
   width: min(1080px, 92%);
@@ -237,7 +498,11 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 
 /* ---- Hero ---- */
-.lib-hero { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 40px; }
+.lib-hero {
+  display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 40px;
+  padding-bottom: 20px;
+  border-bottom: 1.5px solid var(--ink);
+}
 .lib-wordmark {
   font-family: var(--font-edit);
   font-weight: 400;
@@ -247,7 +512,9 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   margin: 0;
   color: var(--ink);
 }
-.lib-wordmark .dot { color: var(--accent); }
+/* Reads as a full stop, not as a decoration. The masthead rule on
+   .lib-hero carries the structure the coloured dot used to. */
+.lib-wordmark .dot { color: var(--ink); }
 .lib-tagline {
   margin: 22px 0 0;
   font-family: var(--font-serif);
@@ -282,7 +549,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .btn:active { transform: translateY(0); }
 .btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 .btn.primary:hover { box-shadow: var(--shadow-md); }
-.btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .btn.accent:hover { background: var(--accent-deep); box-shadow: var(--shadow-md); }
 .btn.ghost { border-color: var(--line); color: var(--ink-soft); }
 .btn.ghost:hover { background: var(--surface); border-color: var(--line); color: var(--ink); }
@@ -305,7 +572,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 .lib-shelf-title {
   font-family: var(--font-mono);
-  font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  font-size: 11.5px; letter-spacing: var(--label-track); text-transform: var(--label-case);
   color: var(--muted);
 }
 .lib-shelf-links {
@@ -333,7 +600,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   width: 100%;
   height: 220px;
   padding: 20px 18px 16px 22px;
-  background: linear-gradient(180deg, var(--surface) 0%, #f4efe4 100%);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--book-fade) 100%);
   border: 1px solid var(--line);
   border-radius: 4px 10px 10px 4px;
   box-shadow: var(--shadow-sm);
@@ -348,7 +615,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 .book::after {
   content: ""; position: absolute; left: 6px; top: 0; bottom: 0; width: 10px;
-  background: linear-gradient(90deg, rgba(33,30,24,0.10), transparent);
+  background: linear-gradient(90deg, rgb(var(--shade) / 0.10), transparent);
 }
 .book:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
 .book-title {
@@ -481,7 +748,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 14px 10px;
 }
-.rail-head .lbl { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.rail-head .lbl { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted); }
 .rail-collapse {
   width: 26px; height: 26px; display: grid; place-items: center;
   border: 0; background: transparent; color: var(--muted); border-radius: var(--r-sm);
@@ -490,7 +757,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .rail-tree { overflow-y: auto; padding: 2px 8px 16px; flex: 1; }
 
 .tree-part {
-  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: var(--label-track); text-transform: var(--label-case);
   color: var(--muted-2); margin: 16px 8px 6px; min-width: 0; flex: 1;
 }
 .tree-part-row, .tree-chapter-row, .tree-scene-row {
@@ -498,7 +765,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   border-radius: var(--r-sm);
   position: relative;
 }
-.tree-part-row:hover, .tree-chapter-row:hover { background: rgba(33,30,24,0.04); }
+.tree-part-row:hover, .tree-chapter-row:hover { background: var(--hover-wash); }
 .tree-part-row.is-dragging,
 .tree-chapter-row.is-dragging,
 .tree-scene-row.is-dragging {
@@ -555,7 +822,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 .outline-menu button:hover { background: var(--surface-2); color: var(--ink); }
 .outline-menu button.danger { color: var(--warn); }
-.outline-menu button.danger:hover { background: rgba(151,64,32,0.10); color: var(--warn); }
+.outline-menu button.danger:hover { background: var(--danger-wash); color: var(--warn); }
 .outline-menu-sep { height: 1px; margin: 5px 3px; background: var(--line-soft); }
 .editor-selection-menu {
   position: fixed; z-index: 90; min-width: 148px; padding: 5px;
@@ -630,7 +897,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 .scene-marker {
   font-family: var(--font-mono);
-  font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  font-size: 11.5px; letter-spacing: var(--label-track); text-transform: var(--label-case);
   color: var(--muted); margin-bottom: 14px;
   display: flex; align-items: center; gap: 10px;
 }
@@ -648,7 +915,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 .inline-edit-input:focus {
   box-shadow: 0 0 0 3px var(--accent-tint2);
-  background: rgba(250,247,240,0.58);
+  background: var(--veil);
 }
 .scene-title-input {
   display: block; width: 100%; padding: 0 2px 2px;
@@ -702,7 +969,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 .zen-bar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 28px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+  padding: 18px 28px; font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case);
   color: var(--muted-2);
 }
 .zen-col { flex: 1; overflow-y: auto; }
@@ -735,7 +1002,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .sec { padding: 18px 16px; border-bottom: 1px solid var(--line-soft); }
 .sec h4 {
   margin: 0 0 12px; font-family: var(--font-mono);
-  font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+  font-size: 10.5px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted);
   display: flex; align-items: center; justify-content: space-between;
 }
 .sec-empty { margin: 0; color: var(--muted-2); font-size: 13px; font-style: italic; }
@@ -812,7 +1079,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .ent-av {
   width: 30px; height: 30px; border-radius: 50%; flex: none;
   display: grid; place-items: center;
-  font-family: var(--font-serif); font-size: 14px; color: #fff;
+  font-family: var(--font-serif); font-size: 14px; color: var(--on-accent);
   background: var(--av, var(--muted));
 }
 .ent-info { flex: 1; min-width: 0; }
@@ -948,7 +1215,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .msg-bubble { padding: 11px 14px; border-radius: var(--r-md); font-size: 13.5px; line-height: 1.62; }
 .msg.user .msg-bubble { background: var(--ink); color: var(--surface); border-bottom-right-radius: 4px; max-width: 84%; }
 .msg.bot .msg-bubble { background: var(--surface); border: 1px solid var(--line-soft); color: var(--ink); font-family: var(--font-serif); border-bottom-left-radius: 4px; }
-.msg-who { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--muted-2); text-transform: uppercase; }
+.msg-who { font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--label-track); color: var(--muted-2); text-transform: var(--label-case); }
 
 .tool-call { display: flex; align-items: center; gap: 9px; padding: 9px 12px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); font-size: 12px; color: var(--ink-soft); }
 .tool-call .ic { color: var(--accent); flex: none; }
@@ -969,7 +1236,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 .cmp-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint2); }
 .cmp-input textarea { flex: 1; border: 0; background: transparent; resize: none; outline: none; font-size: 13.5px; line-height: 1.5; max-height: 120px; }
-.cmp-send { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--r-sm); background: var(--accent); color: #fff; }
+.cmp-send { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); }
 .cmp-send:hover { background: var(--accent-deep); }
 .cmp-send:disabled { background: var(--surface-3); color: var(--muted-2); }
 .cmp-hint { font-family: var(--font-mono); font-size: 10px; color: var(--muted-2); margin: 7px 2px 0; display: flex; gap: 12px; }
@@ -978,7 +1245,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
    ENTITY SHEET
    ============================================================ */
 .es-id { display: flex; gap: 13px; align-items: center; }
-.es-av { width: 52px; height: 52px; border-radius: 50%; flex: none; display: grid; place-items: center; font-family: var(--font-edit); font-size: 24px; color: #fff; background: var(--av); }
+.es-av { width: 52px; height: 52px; border-radius: 50%; flex: none; display: grid; place-items: center; font-family: var(--font-edit); font-size: 24px; color: var(--on-accent); background: var(--av); }
 .es-name { font-family: var(--font-edit); font-size: 24px; color: var(--ink); border: 0; background: transparent; outline: none; width: 100%; padding: 0; }
 .es-name:focus { border-bottom: 1px solid var(--accent); }
 .es-kindrow { display: flex; gap: 7px; align-items: center; margin-top: 4px; }
@@ -1019,7 +1286,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
    ============================================================ */
 .backdrop {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(33,30,24,0.30);
+  background: rgb(var(--shade) / 0.30);
   backdrop-filter: blur(3px);
   display: flex; justify-content: center;
   animation: fadeIn .14s ease both;
@@ -1032,7 +1299,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   position: fixed;
   inset: 0;
   z-index: 110;
-  background: rgba(33,30,24,0.44);
+  background: rgb(var(--shade) / 0.44);
   pointer-events: auto;
   animation: tourLayerIn .14s ease both;
 }
@@ -1043,7 +1310,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   border: 2px solid var(--accent);
   border-radius: var(--r-md);
   background: color-mix(in oklch, var(--surface) 18%, transparent);
-  box-shadow: 0 0 0 9999px rgba(33,30,24,0.42), 0 12px 36px rgba(33,30,24,0.20);
+  box-shadow: 0 0 0 9999px rgb(var(--shade) / 0.42), 0 12px 36px rgb(var(--shade) / 0.20);
   pointer-events: none;
   transition: border-color .15s ease, background .15s ease;
 }
@@ -1066,8 +1333,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .tour-count {
   font-family: var(--font-mono);
   font-size: 10.5px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-case);
   color: var(--muted);
 }
 .tour-card h2 {
@@ -1119,7 +1386,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .palette-input::placeholder { color: var(--muted-2); }
 .palette-list { max-height: 52vh; overflow-y: auto; padding: 8px; }
 .palette-group { margin-bottom: 4px; }
-.palette-section { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted-2); padding: 10px 12px 5px; }
+.palette-section { font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted-2); padding: 10px 12px 5px; }
 .palette-row {
   display: flex; align-items: center; gap: 11px;
   width: 100%; padding: 9px 12px; border: 0; background: transparent; border-radius: var(--r-sm);
@@ -1160,7 +1427,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .modal h2 { margin: 0 0 4px; font-family: var(--font-edit); font-size: 26px; font-weight: 400; }
 .modal .modal-sub { margin: 0 0 22px; color: var(--muted); font-size: 13.5px; }
 .modal-field { margin-bottom: 16px; }
-.modal-field > label { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+.modal-field > label { display: block; font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted); margin-bottom: 7px; }
 .modal-field input, .modal-field textarea, .modal-field select {
   width: 100%; border: 1px solid var(--line); border-radius: var(--r-sm);
   background: var(--paper); padding: 10px 12px; font-size: 14px; outline: none; color: var(--ink);
@@ -1203,7 +1470,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .settings-inner { width: min(640px, 90%); margin: 0 auto; padding: 40px 0 80px; }
 .settings h1 { font-family: var(--font-edit); font-weight: 400; font-size: 38px; margin: 0 0 28px; }
 .settings-section { margin-bottom: 32px; }
-.settings-section h3 { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin: 0 0 14px; }
+.settings-section h3 { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted); margin: 0 0 14px; }
 .set-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
 .set-row .sk { font-size: 14px; color: var(--ink); }
 .set-row .sd { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -1246,7 +1513,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 /* Library safety + diagnostics modals (reuse .backdrop / .modal) */
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(33,30,24,0.30); backdrop-filter: blur(3px);
+  background: rgb(var(--shade) / 0.30); backdrop-filter: blur(3px);
   display: flex; align-items: center; justify-content: center; padding: 2rem;
   animation: fadeIn .14s ease both;
 }
@@ -1265,7 +1532,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 /* In-app prompt/confirm dialog (Tauri blocks window.prompt/confirm) */
 .dialog-backdrop {
   position: fixed; inset: 0; z-index: 60;
-  background: rgba(33,30,24,0.30); backdrop-filter: blur(3px);
+  background: rgb(var(--shade) / 0.30); backdrop-filter: blur(3px);
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn .14s ease both;
 }
@@ -1294,7 +1561,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 .dialog-actions button:hover, .modal-actions button:not(.btn):hover { background: var(--surface-2); color: var(--ink); transform: translateY(-1px); }
 .dialog-actions button.primary, .modal-actions button.primary {
-  background: var(--accent); border-color: var(--accent); color: #fff;
+  background: var(--accent); border-color: var(--accent); color: var(--on-accent);
 }
 .dialog-actions button.primary:hover, .modal-actions button.primary:hover { background: var(--accent-deep); }
 
@@ -1524,7 +1791,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
     left: 0;
     z-index: 24;
     border: 0;
-    background: rgba(33, 30, 24, 0.26);
+    background: rgb(var(--shade) / 0.26);
     backdrop-filter: blur(2px);
   }
 
@@ -1688,7 +1955,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
     width: min(380px, 60vw);
     height: auto;
     border-left: 1px solid var(--line);
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.08);
+    box-shadow: -2px 0 8px rgb(var(--shade) / 0.08);
     border-top: 0;
     border-radius: 0;
     padding-right: env(safe-area-inset-right);

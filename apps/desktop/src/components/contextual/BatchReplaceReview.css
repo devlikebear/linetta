@@ -14,8 +14,8 @@
   margin: 0;
   font-family: var(--font-mono);
   font-size: 10.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-case);
   color: var(--muted);
 }
 

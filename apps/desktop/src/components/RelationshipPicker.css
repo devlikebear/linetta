@@ -73,6 +73,6 @@
   color: var(--ink-soft);
 }
 .rel-chip:hover { border-color: var(--accent); color: var(--accent-deep); }
-.rel-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.rel-chip.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 
 .rel-picker-hint { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }

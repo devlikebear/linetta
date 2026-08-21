@@ -47,6 +47,9 @@ func TestLoad_missingFileReturnsDefaults(t *testing.T) {
 	if got.Theme != "system" {
 		t.Errorf("theme = %q, want system", got.Theme)
 	}
+	if got.Palette != "hanji" {
+		t.Errorf("palette = %q, want hanji", got.Palette)
+	}
 	if got.EditorFontSize != 20 {
 		t.Errorf("editor_font_size = %d, want 20", got.EditorFontSize)
 	}
@@ -194,6 +197,7 @@ func TestSet_editorPreferences_persistAndValidate(t *testing.T) {
 	ctx := context.Background()
 	if _, err := s.Set(ctx, Patch{
 		Theme:            strPtr("dark"),
+		Palette:          strPtr("press"),
 		EditorFontSize:   intPtr(18),
 		EditorLineHeight: floatPtr(2.05),
 		CopyProfile:      strPtr("munpia"),
@@ -204,6 +208,9 @@ func TestSet_editorPreferences_persistAndValidate(t *testing.T) {
 	if got.Theme != "dark" || got.EditorFontSize != 18 || got.EditorLineHeight != 2.05 || got.CopyProfile != "munpia" {
 		t.Fatalf("editor prefs not applied in memory: %+v", got)
 	}
+	if got.Palette != "press" {
+		t.Fatalf("palette not applied in memory: %+v", got)
+	}
 	s2, err := NewWithSecretStore(secrets)
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -212,8 +219,14 @@ func TestSet_editorPreferences_persistAndValidate(t *testing.T) {
 	if reloaded.Theme != "dark" || reloaded.EditorFontSize != 18 || reloaded.EditorLineHeight != 2.05 || reloaded.CopyProfile != "munpia" {
 		t.Fatalf("editor prefs not persisted: %+v", reloaded)
 	}
+	if reloaded.Palette != "press" {
+		t.Fatalf("palette not persisted: %+v", reloaded)
+	}
 	if _, err := s.Set(ctx, Patch{Theme: strPtr("sepia")}); err == nil {
 		t.Fatalf("expected invalid theme error")
+	}
+	if _, err := s.Set(ctx, Patch{Palette: strPtr("neon")}); err == nil {
+		t.Fatalf("expected invalid palette error")
 	}
 	if _, err := s.Set(ctx, Patch{EditorFontSize: intPtr(30)}); err == nil {
 		t.Fatalf("expected invalid font size error")

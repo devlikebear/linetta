@@ -47,6 +47,7 @@ import { ChoiceCard } from "./ChoiceCard";
 import { Markdown } from "./Markdown";
 import { localeForLanguage, useI18n, type MessageKey } from "../../lib/i18n";
 import { dispatchAppEvent } from "../../lib/appEvents";
+import { keyStoreLabelKey } from "../../lib/secretStore";
 import {
   OPENROUTER_DEFAULT_MODEL_OPTIONS,
   OPENROUTER_SMART_DEFAULT_MODEL,
@@ -514,7 +515,11 @@ function CompanionAISetupCard({
         )}
       </div>
       <div className="companion-ai-setup-notes">
-        <span>{t("companion.aiSetup.keychain")}</span>
+        <span>
+          {keyStoreLabelKey()
+            ? t("companion.aiSetup.keychain", { store: t(keyStoreLabelKey()!) })
+            : t("companion.aiSetup.keychainUnsupported")}
+        </span>
         <span>{t("companion.aiSetup.limit")}</span>
       </div>
       {message.rawError && (

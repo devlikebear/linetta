@@ -76,6 +76,13 @@ func validLanguages() []string { return []string{"ko", "en", "ja"} }
 
 func validThemes() []string { return []string{"system", "light", "dark"} }
 
+// Palettes pick which set of colours the UI uses; theme picks which end of
+// that set. The two are independent. "hanji" is the default; "paper" is the
+// original burnt-sienna palette, kept as an option.
+func validPalettes() []string { return []string{"hanji", "paper", "bone", "press"} }
+
+const defaultPalette = "hanji"
+
 func validCopyProfiles() []string { return []string{"plain", "munpia", "series", "joara"} }
 
 // ProviderConfig holds per-provider settings keyed by provider id in Config.Providers.
@@ -107,6 +114,7 @@ type Config struct {
 	TypewriterDefault           bool                      `json:"typewriter_default"`
 	FocusDefault                bool                      `json:"focus_default"`
 	Theme                       string                    `json:"theme"`
+	Palette                     string                    `json:"palette"`
 	EditorFontSize              int                       `json:"editor_font_size"`
 	EditorLineHeight            float64                   `json:"editor_line_height"`
 	CopyProfile                 string                    `json:"copy_profile"`
@@ -133,6 +141,7 @@ type Patch struct {
 	TypewriterDefault           *bool                     `json:"typewriter_default,omitempty"`
 	FocusDefault                *bool                     `json:"focus_default,omitempty"`
 	Theme                       *string                   `json:"theme,omitempty"`
+	Palette                     *string                   `json:"palette,omitempty"`
 	EditorFontSize              *int                      `json:"editor_font_size,omitempty"`
 	EditorLineHeight            *float64                  `json:"editor_line_height,omitempty"`
 	CopyProfile                 *string                   `json:"copy_profile,omitempty"`
@@ -206,6 +215,7 @@ func defaults(home string) Config {
 		Providers:             map[string]ProviderConfig{ProviderOpenAICodex: {Model: DefaultOpenAICodexModel}},
 		TypewriterDefault:     false,
 		Theme:                 "system",
+		Palette:               defaultPalette,
 		EditorFontSize:        20,
 		EditorLineHeight:      1.92,
 		CopyProfile:           "plain",
@@ -244,6 +254,9 @@ func (s *Store) load() error {
 	s.cfg.FocusDefault = disk.FocusDefault
 	if disk.Theme != "" && slices.Contains(validThemes(), disk.Theme) {
 		s.cfg.Theme = disk.Theme
+	}
+	if disk.Palette != "" && slices.Contains(validPalettes(), disk.Palette) {
+		s.cfg.Palette = disk.Palette
 	}
 	if disk.EditorFontSize >= 15 && disk.EditorFontSize <= 22 {
 		s.cfg.EditorFontSize = disk.EditorFontSize
@@ -427,6 +440,12 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		}
 		next.Theme = *p.Theme
 	}
+	if p.Palette != nil {
+		if !slices.Contains(validPalettes(), *p.Palette) {
+			return Config{}, fmt.Errorf("settings: unknown palette %q", *p.Palette)
+		}
+		next.Palette = *p.Palette
+	}
 	if p.EditorFontSize != nil {
 		if *p.EditorFontSize < 15 || *p.EditorFontSize > 22 {
 			return Config{}, fmt.Errorf("settings: editor_font_size out of range")
@@ -533,6 +552,7 @@ func (s *Store) persist(next Config) error {
 		TypewriterDefault:           next.TypewriterDefault,
 		FocusDefault:                next.FocusDefault,
 		Theme:                       next.Theme,
+		Palette:                     next.Palette,
 		EditorFontSize:              next.EditorFontSize,
 		EditorLineHeight:            next.EditorLineHeight,
 		CopyProfile:                 next.CopyProfile,
@@ -653,6 +673,9 @@ func normalizeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig
 func normalizeEditorPreferences(c Config) Config {
 	if !slices.Contains(validThemes(), c.Theme) {
 		c.Theme = "system"
+	}
+	if !slices.Contains(validPalettes(), c.Palette) {
+		c.Palette = defaultPalette
 	}
 	if c.EditorFontSize < 15 || c.EditorFontSize > 22 {
 		c.EditorFontSize = 20
