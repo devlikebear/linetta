@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,6 +58,12 @@ const companionState = vi.hoisted(() => ({
     thinking: "",
     reasoning: "",
     status: "idle",
+    progress: { phase: null, applied: 0, total: 0, startedAt: null } as {
+      phase: import("../../lib/types").CompanionPhase | null;
+      applied: number;
+      total: number;
+      startedAt: number | null;
+    },
     send: vi.fn(),
     cancel: vi.fn(),
     clear: vi.fn(),
@@ -200,6 +206,7 @@ describe("CompanionPanel", () => {
       thinking: "",
       reasoning: "",
       status: "idle",
+      progress: { phase: null, applied: 0, total: 0, startedAt: null },
       send: vi.fn(),
       cancel: vi.fn(),
       clear: vi.fn(),
@@ -215,15 +222,70 @@ describe("CompanionPanel", () => {
     });
   });
 
-  it("shows preparation steps while streaming even before any prose", () => {
-    companionState.value = { ...companionState.value, status: "streaming", streaming: "", thinking: "" };
-    const { container } = renderPanel();
+  it("shows the run steps while streaming even before any prose", () => {
+    companionState.value = {
+      ...companionState.value,
+      status: "streaming",
+      streaming: "",
+      thinking: "",
+      progress: { phase: "requesting", applied: 0, total: 0, startedAt: Date.now() },
+    };
+    renderPanel();
 
     expect(screen.getByText("응답 준비 중…")).toBeInTheDocument();
-    expect(screen.getByText("요청 의도 확인")).toBeInTheDocument();
-    expect(screen.getByText("현재 씬 맥락 정리")).toBeInTheDocument();
-    expect(screen.getByText("초안 문장 구성")).toBeInTheDocument();
-    expect(container.querySelector(".msg-bubble")).toBeNull();
+    for (const step of ["요청", "생성", "검증", "적용"]) {
+      expect(screen.getByText(step)).toBeInTheDocument();
+    }
+    expect(screen.getByText("요청")).toHaveAttribute("aria-current", "step");
+    expect(screen.getByText("생성")).not.toHaveAttribute("aria-current");
+  });
+
+  it("marks the step the run is actually on", () => {
+    companionState.value = {
+      ...companionState.value,
+      status: "streaming",
+      thinking: "작품 설정 반영 중…",
+      progress: { phase: "verifying", applied: 0, total: 0, startedAt: Date.now() },
+    };
+    renderPanel();
+
+    expect(screen.getByText("검증")).toHaveAttribute("aria-current", "step");
+    expect(screen.getByLabelText("AI 작업 진행 상태")).toHaveTextContent("작품 설정 반영 중…");
+  });
+
+  it("reports how many changes a long apply is writing", () => {
+    companionState.value = {
+      ...companionState.value,
+      status: "streaming",
+      thinking: "작품에 적용하는 중…",
+      progress: { phase: "applying", applied: 0, total: 24, startedAt: Date.now() },
+    };
+    renderPanel();
+
+    expect(screen.getByText("변경 24건 적용 중")).toBeInTheDocument();
+    expect(screen.getByText("적용")).toHaveAttribute("aria-current", "step");
+  });
+
+  it("counts up the elapsed time while the request is in flight", () => {
+    vi.useFakeTimers();
+    try {
+      companionState.value = {
+        ...companionState.value,
+        status: "streaming",
+        progress: { phase: "generating", applied: 0, total: 0, startedAt: Date.now() },
+      };
+      renderPanel();
+
+      expect(screen.getByText("0:00 경과")).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(65_000);
+      });
+
+      expect(screen.getByText("1:05 경과")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows writer actions in the empty state and copies one into the draft", async () => {

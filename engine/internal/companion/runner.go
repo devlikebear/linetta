@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
@@ -55,6 +56,9 @@ type cancelledPayload struct {
 	NodeID    string `json:"node_id,omitempty"`
 	Scope     string `json:"scope,omitempty"`
 	Intent    string `json:"intent,omitempty"`
+	// Applied reports whether a change had already finished applying when the
+	// stop arrived, so the UI can say the work was not left half-changed.
+	Applied bool `json:"applied,omitempty"`
 }
 type proposalPayload struct {
 	RunID     string `json:"run_id"`
@@ -94,7 +98,42 @@ type thinkingPayload struct {
 	Scope     string `json:"scope,omitempty"`
 	Intent    string `json:"intent,omitempty"`
 	Text      string `json:"text"`
+	// Phase names the step the run is on so the UI can show progress instead of
+	// one frozen status line; Applied/Total carry op counts for apply steps.
+	Phase   string `json:"phase,omitempty"`
+	Applied int    `json:"applied,omitempty"`
+	Total   int    `json:"total,omitempty"`
 }
+
+// Run phases surfaced to the UI. A long request walks requesting -> generating
+// -> verifying -> applying, with tool lookups reported along the way.
+const (
+	phaseRequesting = "requesting"
+	phaseGenerating = "generating"
+	phaseQuerying   = "querying"
+	phaseSearching  = "searching"
+	phaseFetching   = "fetching"
+	phaseVerifying  = "verifying"
+	phaseApplying   = "applying"
+	phaseApplied    = "applied"
+)
+
+// toolPhase maps a tool call to the phase it represents. Applying ops starts
+// with validation, so the apply tool reports "verifying" until the ops pass and
+// it switches to "applying" itself.
+func toolPhase(name string) string {
+	switch name {
+	case "web_search":
+		return phaseSearching
+	case "web_fetch":
+		return phaseFetching
+	case applyOpsToolName:
+		return phaseVerifying
+	default:
+		return phaseGenerating
+	}
+}
+
 type reasoningPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
@@ -153,6 +192,42 @@ func appliedStatusText(lang string) string {
 		return "作品設定を更新しました"
 	}
 	return "작품 설정을 갱신했습니다"
+}
+
+// requestingStatusText is the status shown between sending the request and the
+// first token coming back.
+func requestingStatusText(lang string) string {
+	return pickLang(lang, "요청 보내는 중…", "Sending the request…", "リクエストを送信中…")
+}
+
+// generatingStatusText is the status shown once the model starts answering.
+func generatingStatusText(lang string) string {
+	return pickLang(lang, "응답 생성 중…", "Writing the response…", "応答を生成中…")
+}
+
+// applyingStatusText is the status shown while validated ops are being written
+// to the project.
+func applyingStatusText(lang string) string {
+	return pickLang(lang, "작품에 적용하는 중…", "Applying to the work…", "作品に反映中…")
+}
+
+// timedOutMessage is the failure recorded when a run goes silent for longer
+// than companionStallTimeout, so the writer gets a retryable error instead of a
+// spinner that never ends.
+func timedOutMessage(lang string) string {
+	return pickLang(lang,
+		"모델 응답이 오랫동안 없어 요청을 중단했습니다. 적용된 변경은 없습니다. 다시 시도해 주세요.",
+		"The model stopped responding, so the request was aborted. Nothing was applied — please try again.",
+		"モデルの応答が長時間途絶えたためリクエストを中止しました。適用された変更はありません。もう一度お試しください。")
+}
+
+// cancelledAfterApplyMessage is recorded when the stop arrives after changes
+// were already written: the apply is never torn in half, so it stays.
+func cancelledAfterApplyMessage(lang string) string {
+	return pickLang(lang,
+		"요청을 중지했습니다. 중지 전에 적용이 끝난 변경은 그대로 유지됩니다.",
+		"Request stopped. Changes that finished applying before the stop are kept.",
+		"リクエストを中止しました。中止前に適用が完了した変更はそのまま残ります。")
 }
 
 // cancelledMessage is the assistant history entry recorded when a run is
@@ -313,6 +388,29 @@ func companionImageContentBlocks(text string, images []ImageAttachment) []llm.Co
 	return blocks
 }
 
+// watchForStall aborts a run that has gone completely silent. It marks the run
+// as timed out before cancelling so the caller reports a retryable error rather
+// than a user-requested stop.
+func (r *Runner) watchForStall(ctx context.Context, runID string, lastActivity *atomic.Int64, timedOut *atomic.Bool, done <-chan struct{}) {
+	ticker := time.NewTicker(companionStallCheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if time.Since(time.UnixMilli(lastActivity.Load())) < companionStallTimeout {
+				continue
+			}
+			timedOut.Store(true)
+			_ = r.cancel(runID)
+			return
+		}
+	}
+}
+
 func (r *Runner) finish(runID string) {
 	r.mu.Lock()
 	if c, ok := r.active[runID]; ok {
@@ -335,13 +433,36 @@ func (r *Runner) cancel(runID string) error {
 }
 
 const maxQueryRounds = 3
+
+// A run with no deltas, tool calls, or turn ends for this long is treated as a
+// dead connection rather than slow work: outline runs take minutes, but they
+// keep producing something. Vars so tests can shorten them.
+var (
+	companionStallTimeout       = 5 * time.Minute
+	companionStallCheckInterval = 15 * time.Second
+)
+
 const applyOpsToolName = "linetta_apply_ops"
 
 func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path, userText string, msgs []llm.ChatMessage, client llm.Client, intent companionIntent, language string, now func() int64) {
 	defer r.finish(runID)
 
 	intentName := string(intent.Kind)
-	registry := r.svc.buildToolRegistryWithIntent(projectID, nodeID, scope, now, intent, runID, userText)
+	registry := r.svc.buildToolRegistryWithIntent(projectID, nodeID, scope, now, intent, language, runID, userText)
+	notifyPhase := func(phase, text string, applied, total int) {
+		_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{
+			RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName,
+			Text: text, Phase: phase, Applied: applied, Total: total,
+		})
+	}
+	lastActivity := &atomic.Int64{}
+	lastActivity.Store(time.Now().UnixMilli())
+	touch := func() { lastActivity.Store(time.Now().UnixMilli()) }
+	var timedOut atomic.Bool
+	watchdogDone := make(chan struct{})
+	defer close(watchdogDone)
+	go r.watchForStall(ctx, runID, lastActivity, &timedOut, watchdogDone)
+	generatingAnnounced := false
 	dedup := streamdedup.New()
 	queryRounds := 0
 	forcedTool := companionForcedToolForIntent(intent)
@@ -356,27 +477,37 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 	loop := agentloop.New(client, registry, agentloop.HookFunc(func(ctx context.Context, evt agentloop.Event) {
 		switch evt.Type {
 		case agentloop.EventBeforeTool:
+			touch()
 			if evt.ToolName == applyOpsToolName {
 				applyOpsAttempted = true
 			}
-			_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(evt.ToolName, language)})
+			notifyPhase(toolPhase(evt.ToolName), friendlyToolLabel(evt.ToolName, language), 0, 0)
 		case agentloop.EventAfterTool:
+			touch()
 			if evt.ToolName == applyOpsToolName && !evt.ToolIsError {
 				applyOpsSucceeded = true
+				applied := 0
 				if result, ok := parseApplyOpsToolResult(evt.ToolResult); ok {
 					lastApplyOpsResult = result
+					applied = result.Applied
 					if intent.RequiresSceneText() && applyOpsResultHasSceneTextChange(result) {
 						sceneTextSucceeded = true
 					}
 				}
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: appliedStatusText(language)})
+				notifyPhase(phaseApplied, appliedStatusText(language), applied, applied)
 			}
 		}
 	}))
+	notifyPhase(phaseRequesting, requestingStatusText(language), 0, 0)
 	resp, err := loop.Run(ctx, msgs, agentloop.RunOptions{
 		MaxIterations: 8,
 		Tools:         registry.Schemas(),
 		OnDelta: func(text string) {
+			touch()
+			if !generatingAnnounced && strings.TrimSpace(text) != "" {
+				generatingAnnounced = true
+				notifyPhase(phaseGenerating, generatingStatusText(language), 0, 0)
+			}
 			switch act, payload := dedup.Observe(text); act {
 			case streamdedup.ActionEmit:
 				_ = r.svc.notify.Notify("companion.delta", deltaPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: payload})
@@ -386,17 +517,20 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 			}
 		},
 		OnReasoningDelta: func(text string) {
+			touch()
 			if strings.TrimSpace(text) == "" {
 				return
 			}
 			_ = r.svc.notify.Notify("companion.reasoning", reasoningPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: text})
 		},
 		OnTurnEnd: func(ctx context.Context, lastResp llm.ChatResponse) (string, error) {
+			touch()
 			if forcedApplyOps && !applyOpsSucceeded && !applyOpsCorrectionUsed {
 				applyOpsCorrectionUsed = true
 				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: ""})
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: friendlyToolLabel(applyOpsToolName, language)})
+				notifyPhase(phaseVerifying, friendlyToolLabel(applyOpsToolName, language), 0, 0)
 				dedup = streamdedup.New()
+				generatingAnnounced = false
 				return directApplyCorrectionPrompt(userText, intent, language), nil
 			}
 			if queryRounds >= maxQueryRounds-1 {
@@ -405,17 +539,30 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 			full := lastResp.Message.Content
 			if qr, present, qerr := ParseQuery(full); present && qerr == nil {
 				_ = r.svc.notify.Notify("companion.reset", resetPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: ""})
-				_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: querySummary(qr, language)})
+				notifyPhase(phaseQuerying, querySummary(qr, language), 0, 0)
 				queryRounds++
 				dedup = streamdedup.New()
+				generatingAnnounced = false
 				return r.svc.runQueries(ctx, projectID, qr.Queries, language), nil
 			}
 			return "", nil
 		},
 	})
 	if ctx.Err() != nil {
-		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusCancelled, cancelledMessage(language), now())
-		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName})
+		if timedOut.Load() {
+			msg := timedOutMessage(language)
+			r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusFailed, msg, now())
+			_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: msg})
+			return
+		}
+		// An apply that already started runs to completion (see buildApplyOpsTool),
+		// so a stop lands either before any change or after a whole one.
+		msg := cancelledMessage(language)
+		if applyOpsSucceeded {
+			msg = cancelledAfterApplyMessage(language)
+		}
+		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusCancelled, msg, now())
+		_ = r.svc.notify.Notify("companion.cancelled", cancelledPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Applied: applyOpsSucceeded})
 		return
 	}
 	if err != nil {

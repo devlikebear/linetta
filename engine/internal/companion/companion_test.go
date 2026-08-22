@@ -109,6 +109,12 @@ func (c *captureToolsClient) systemPrompt() string {
 type fakeNotifier struct {
 	mu     sync.Mutex
 	events map[string]string
+	log    []notifiedEvent
+}
+
+type notifiedEvent struct {
+	Method string
+	Params string
 }
 
 func (n *fakeNotifier) Notify(method string, params any) error {
@@ -119,7 +125,21 @@ func (n *fakeNotifier) Notify(method string, params any) error {
 	}
 	b, _ := json.Marshal(params)
 	n.events[method] = string(b)
+	n.log = append(n.log, notifiedEvent{Method: method, Params: string(b)})
 	return nil
+}
+
+// all returns every payload seen for a method, in order.
+func (n *fakeNotifier) all(method string) []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	var out []string
+	for _, e := range n.log {
+		if e.Method == method {
+			out = append(out, e.Params)
+		}
+	}
+	return out
 }
 func (n *fakeNotifier) get(method string) string {
 	n.mu.Lock()
@@ -1259,4 +1279,144 @@ func TestSend_ReadOnlyDiagnosisWithholdsMutationTool(t *testing.T) {
 	if recalled := svc.Recall(projectID, "문체", 5); len(recalled) != 0 {
 		t.Fatalf("read-only diagnosis wrote work memory: %v", recalled)
 	}
+}
+
+// phasesFrom pulls the phase names out of companion.thinking payloads in order,
+// collapsing repeats so the sequence reads like the UI stepper.
+func phasesFrom(t *testing.T, payloads []string) []string {
+	t.Helper()
+	var out []string
+	for _, raw := range payloads {
+		var p struct {
+			Phase string `json:"phase"`
+		}
+		if err := json.Unmarshal([]byte(raw), &p); err != nil {
+			t.Fatalf("thinking payload: %v", err)
+		}
+		if p.Phase == "" {
+			continue
+		}
+		if len(out) > 0 && out[len(out)-1] == p.Phase {
+			continue
+		}
+		out = append(out, p.Phase)
+	}
+	return out
+}
+
+func TestSend_ReportsRequestAndGenerationPhases(t *testing.T) {
+	svc, notif, projectID := newSvc(t, "이어질 문장을 제안합니다.")
+
+	if _, err := svc.Send(context.Background(), projectID, "", "다음 전개 아이디어 줘", func() int64 { return 1000 }); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	waitFor(t, notif, "companion.done")
+
+	got := phasesFrom(t, notif.all("companion.thinking"))
+	if len(got) < 2 || got[0] != phaseRequesting || got[1] != phaseGenerating {
+		t.Fatalf("phase sequence = %v, want requesting then generating", got)
+	}
+}
+
+func TestSend_ReportsVerifyApplyPhasesWithCounts(t *testing.T) {
+	client := &claimThenApplyClient{}
+	svc, notif, projectID := newSvcWithClient(t, client)
+
+	if _, err := svc.Send(context.Background(), projectID, "", "작품 전체 아웃라인 구성해줘", func() int64 { return 1000 }); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	waitFor(t, notif, "companion.done")
+
+	payloads := notif.all("companion.thinking")
+	got := phasesFrom(t, payloads)
+	for _, want := range []string{phaseRequesting, phaseVerifying, phaseApplying, phaseApplied} {
+		if !containsString(got, want) {
+			t.Fatalf("phase sequence %v missing %q", got, want)
+		}
+	}
+	if indexOfString(got, phaseVerifying) > indexOfString(got, phaseApplying) {
+		t.Fatalf("verify should come before apply: %v", got)
+	}
+	if !hasPayload(payloads, `"phase":"applying"`, `"total":2`) {
+		t.Fatalf("applying phase should carry the op count: %v", payloads)
+	}
+	if !hasPayload(payloads, `"phase":"applied"`, `"applied":2`) {
+		t.Fatalf("applied phase should carry how many ops landed: %v", payloads)
+	}
+}
+
+func TestSend_StallTimeoutReportsRetryableError(t *testing.T) {
+	restore := shortenStallWatchdog(t)
+	defer restore()
+
+	client := &blockingClient{released: make(chan struct{})}
+	svc, notif, projectID := newSvcWithClient(t, client)
+
+	if _, err := svc.Send(context.Background(), projectID, "", "긴 아웃라인 작업 해줘", func() int64 { return 1000 }); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	waitFor(t, notif, "companion.error")
+
+	got := notif.get("companion.error")
+	if !strings.Contains(got, "다시 시도") {
+		t.Fatalf("stalled run should fail with a retryable message: %s", got)
+	}
+	if notif.get("companion.cancelled") != "" {
+		t.Fatalf("a stall is not a user cancel: %s", notif.get("companion.cancelled"))
+	}
+}
+
+func shortenStallWatchdog(t *testing.T) func() {
+	t.Helper()
+	prevTimeout, prevInterval := companionStallTimeout, companionStallCheckInterval
+	companionStallTimeout = 60 * time.Millisecond
+	companionStallCheckInterval = 10 * time.Millisecond
+	return func() {
+		companionStallTimeout, companionStallCheckInterval = prevTimeout, prevInterval
+	}
+}
+
+// blockingClient never answers until the run context is cancelled, standing in
+// for a provider that accepted the request and went silent.
+type blockingClient struct {
+	released chan struct{}
+}
+
+func (c *blockingClient) Ask(context.Context, string) (string, error) { return "", nil }
+func (c *blockingClient) Chat(ctx context.Context, _ []llm.ChatMessage, _ llm.ChatOptions) (llm.ChatResponse, error) {
+	select {
+	case <-ctx.Done():
+		return llm.ChatResponse{}, ctx.Err()
+	case <-c.released:
+		return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "늦은 응답"}}, nil
+	}
+}
+
+func containsString(values []string, want string) bool {
+	return indexOfString(values, want) >= 0
+}
+
+func indexOfString(values []string, want string) int {
+	for i, v := range values {
+		if v == want {
+			return i
+		}
+	}
+	return -1
+}
+
+func hasPayload(payloads []string, needles ...string) bool {
+	for _, raw := range payloads {
+		matched := true
+		for _, needle := range needles {
+			if !strings.Contains(raw, needle) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }

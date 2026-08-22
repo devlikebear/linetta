@@ -538,6 +538,52 @@
 .companion-input-toolbar {
   align-items: center;
 }
+.companion-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.companion-progress-count {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.companion-elapsed {
+  margin-left: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.companion-run-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--muted);
+}
+.companion-run-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.companion-run-steps li + li::before {
+  content: "›";
+  color: var(--line);
+}
+.companion-run-steps li.is-done {
+  color: var(--ink-soft);
+}
+.companion-run-steps li.is-active {
+  color: var(--accent);
+  font-weight: 600;
+}
 .companion-curated-tray {
   margin-bottom: 8px;
 }

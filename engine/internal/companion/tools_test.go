@@ -653,7 +653,7 @@ func TestBuildToolRegistryOmitsApplyOpsForReadOnlyIntent(t *testing.T) {
 	if !intent.IsReadOnly() {
 		t.Fatalf("expected a read-only intent, got %q", intent.Kind)
 	}
-	reg := svc.buildToolRegistryWithIntent(projectID, nodeID, HistoryScopeScene, func() int64 { return 1 }, intent)
+	reg := svc.buildToolRegistryWithIntent(projectID, nodeID, HistoryScopeScene, func() int64 { return 1 }, intent, "")
 	var names []string
 	for _, schema := range reg.Schemas() {
 		names = append(names, schema.Function.Name)
@@ -677,7 +677,7 @@ func TestLinettaApplyOpsToolRejectsOpsForReadOnlyIntent(t *testing.T) {
 	svc.memBase = t.TempDir()
 	userText := "현재 1화 초안을 수정하지 말고 먼저 진단해줘. 문체와 개연성을 평가하고 수정 제안만 제시해줘."
 	intent := classifyCompanionIntent(userText)
-	tool := svc.buildApplyOpsTool(projectID, nodeID, HistoryScopeScene, "", userText, intent, func() int64 { return 1 })
+	tool := svc.buildApplyOpsTool(projectID, nodeID, HistoryScopeScene, "", userText, intent, "", func() int64 { return 1 })
 
 	params := json.RawMessage(`{
 	  "summary":"작품 기억 갱신",
@@ -702,5 +702,62 @@ func TestLinettaApplyOpsToolRejectsOpsForReadOnlyIntent(t *testing.T) {
 	}
 	if strings.TrimSpace(p.Outline) != "" {
 		t.Fatalf("read-only diagnosis changed the work outline: %q", p.Outline)
+	}
+}
+
+// A stop that lands before the first write must leave the project untouched
+// rather than half-applied.
+func TestLinettaApplyOpsToolRefusesToStartAfterCancel(t *testing.T) {
+	svc, projectID, nodeID := newToolSvc(t)
+	userText := "작품 전체 아웃라인 구성해줘"
+	intent := classifyCompanionIntent(userText)
+	tool := svc.buildApplyOpsTool(projectID, nodeID, HistoryScopeScene, "", userText, intent, "", func() int64 { return 1 })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	opsJSON := `[{"op":"create_outline_node","ref":"p1","kind":"container","label":"1부"}]`
+	params := json.RawMessage(`{
+	  "summary":"아웃라인 생성",
+	  "ops_json":` + strconv.Quote(opsJSON) + `
+	}`)
+	result, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("a cancelled run must not apply ops: %s", result.Text())
+	}
+	if !strings.Contains(result.Text(), "stopped before applying") {
+		t.Fatalf("failure should say nothing was changed: %s", result.Text())
+	}
+
+	nodes, err := svc.nodes.ListByProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("nodes.ListByProject: %v", err)
+	}
+	for _, n := range nodes {
+		if n.Label == "1부" {
+			t.Fatalf("cancelled apply still created outline nodes: %+v", nodes)
+		}
+	}
+}
+
+// Once the writes start they finish, so a stop never tears an apply in half.
+func TestApplyOpsCompletesWhenTheRunContextIsCancelledMidApply(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	svc, projectID, nodeID := newToolSvc(t)
+	cancel()
+
+	result := svc.ApplyOps(context.WithoutCancel(ctx), projectID, nodeID, Proposal{
+		Summary: "아웃라인 생성",
+		Ops: []Op{
+			{Type: "create_outline_node", Ref: "p1", Kind: "container", Label: "1부"},
+			{Type: "create_outline_node", Ref: "s1", Kind: "leaf", ParentNodeRef: "p1", Label: "씬 1"},
+		},
+	}, func() int64 { return 1 })
+
+	if result.Applied != 2 || result.isError() {
+		t.Fatalf("apply should run to completion: %+v", result)
 	}
 }

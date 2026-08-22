@@ -7,7 +7,7 @@ import type {
   CompanionMessage, CompanionProposal, CompanionChoices,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
   CompanionApplied, CompanionThinking, CompanionReasoning, AIContextSelection, CompanionImageAttachment, CompanionIntent,
-  CompanionHistoryScope, AISetupIssue,
+  CompanionHistoryScope, AISetupIssue, CompanionPhase,
 } from "../lib/types";
 
 export interface ChatMessage {
@@ -29,12 +29,25 @@ export interface ChatMessage {
 
 export type CompanionStatus = "idle" | "streaming";
 
+/** Live progress of the current run: which step, how far, since when. */
+export interface CompanionProgress {
+  phase: CompanionPhase | null;
+  applied: number;
+  total: number;
+  startedAt: number | null;
+}
+
+function idleProgress(): CompanionProgress {
+  return { phase: null, applied: 0, total: 0, startedAt: null };
+}
+
 interface CompanionSessionState {
   messages: ChatMessage[];
   streaming: string;
   thinking: string;
   reasoning: string;
   status: CompanionStatus;
+  progress: CompanionProgress;
   runId: string | null;
   sending: boolean;
   pendingProposal: CompanionProposal | null;
@@ -43,7 +56,7 @@ interface CompanionSessionState {
 
 type CompanionSessionSnapshot = Pick<
   CompanionSessionState,
-  "messages" | "streaming" | "thinking" | "reasoning" | "status"
+  "messages" | "streaming" | "thinking" | "reasoning" | "status" | "progress"
 >;
 
 interface CompanionSessionStore {
@@ -76,6 +89,7 @@ function initialState(): CompanionSessionState {
     thinking: "",
     reasoning: "",
     status: "idle",
+    progress: idleProgress(),
     runId: null,
     sending: false,
     pendingProposal: null,
@@ -90,6 +104,7 @@ function snapshotFromState(state: CompanionSessionState): CompanionSessionSnapsh
     thinking: state.thinking,
     reasoning: state.reasoning,
     status: state.status,
+    progress: state.progress,
   };
 }
 
@@ -309,7 +324,17 @@ function ensureEngineListeners() {
   registerEngineEvent<CompanionThinking>("companion-thinking", (p) => {
     const key = storeKeyForRunEvent(p);
     if (!key || !acceptRunEvent(key, p.run_id)) return;
-    updateStore(key, (state) => ({ ...state, thinking: p.text }));
+    updateStore(key, (state) => ({
+      ...state,
+      // Keep the last status line when a phase-only update arrives.
+      thinking: p.text || state.thinking,
+      progress: {
+        phase: p.phase ?? state.progress.phase,
+        applied: p.applied ?? 0,
+        total: p.total ?? 0,
+        startedAt: state.progress.startedAt,
+      },
+    }));
   });
   registerEngineEvent<CompanionReasoning>("companion-reasoning", (p) => {
     const key = storeKeyForRunEvent(p);
@@ -348,6 +373,7 @@ function ensureEngineListeners() {
         thinking: "",
         reasoning: "",
         status: "idle",
+        progress: idleProgress(),
         runId: null,
         sending: false,
         pendingProposal: null,
@@ -366,6 +392,7 @@ function ensureEngineListeners() {
       thinking: "",
       reasoning: "",
       status: "idle",
+      progress: idleProgress(),
       runId: null,
       sending: false,
       pendingProposal: null,
@@ -382,6 +409,7 @@ function ensureEngineListeners() {
       thinking: "",
       reasoning: "",
       status: "idle",
+      progress: idleProgress(),
       runId: null,
       sending: false,
       pendingProposal: null,
@@ -481,6 +509,7 @@ export function useCompanion(
         scope: effectiveScope,
       }],
       status: "streaming",
+      progress: { phase: "requesting", applied: 0, total: 0, startedAt: Date.now() },
       runId: PENDING_RUN_ID,
       sending: true,
       streaming: "",
@@ -510,6 +539,7 @@ export function useCompanion(
         ...state,
         messages: [...state.messages, setupErrorMessage(String(e), latestUserMessage(state.messages))],
         status: "idle",
+        progress: idleProgress(),
         runId: null,
         sending: false,
       }));
@@ -539,6 +569,7 @@ export function useCompanion(
       thinking: "",
       reasoning: "",
       status: "idle",
+      progress: idleProgress(),
       runId: null,
       sending: false,
       pendingProposal: null,
@@ -552,6 +583,7 @@ export function useCompanion(
     thinking: snapshot.thinking,
     reasoning: snapshot.reasoning,
     status: snapshot.status,
+    progress: snapshot.progress,
     send,
     cancel,
     clear,

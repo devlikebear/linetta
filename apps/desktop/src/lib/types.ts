@@ -998,9 +998,26 @@ export interface CompanionDelta extends CompanionRunMeta { text: string; }
 export interface CompanionReset extends CompanionRunMeta { text: string; }
 export interface CompanionDone extends CompanionRunMeta { full_text: string; }
 export interface CompanionError extends CompanionRunMeta { message: string; }
-export interface CompanionCancelled extends CompanionRunMeta {}
+export interface CompanionCancelled extends CompanionRunMeta { applied?: boolean; }
 export interface CompanionApplied extends CompanionRunMeta { summary?: string; applied: number; changed_nodes?: AppliedNodeChange[]; }
-export interface CompanionThinking extends CompanionRunMeta { text: string; }
+/** Steps a long companion run walks through, shown as progress in the panel. */
+export type CompanionPhase =
+  | "requesting"
+  | "generating"
+  | "querying"
+  | "searching"
+  | "fetching"
+  | "verifying"
+  | "applying"
+  | "applied";
+
+export interface CompanionThinking extends CompanionRunMeta {
+  text: string;
+  phase?: CompanionPhase;
+  /** Ops written so far, and how many the run set out to write. */
+  applied?: number;
+  total?: number;
+}
 export interface CompanionReasoning extends CompanionRunMeta { text: string; }
 export interface CompanionChoices {
   run_id: string;
