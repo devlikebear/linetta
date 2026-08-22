@@ -72,7 +72,12 @@ func (s *Service) buildToolRegistryWithIntent(projectID, nodeID, scope string, n
 	if len(runIDAndUserText) > 1 {
 		userText = runIDAndUserText[1]
 	}
-	reg.Register(s.buildApplyOpsTool(projectID, nodeID, scope, activeRunID, userText, intent, now))
+	// Read-only turns (diagnosis, review, critique) never get the mutation
+	// tool at all, so the model cannot silently persist anything. Anything
+	// worth keeping is offered as a linetta-proposal block instead.
+	if !intent.IsReadOnly() {
+		reg.Register(s.buildApplyOpsTool(projectID, nodeID, scope, activeRunID, userText, intent, now))
+	}
 	return reg
 }
 
@@ -208,6 +213,7 @@ func isExtraJSONCloseDelimiterTrail(s string) bool {
 }
 
 type applyOpsIntent struct {
+	ReadOnly            bool
 	RequireOutlineTree  bool
 	RequireSceneText    bool
 	AllowEmptySceneText bool
@@ -217,6 +223,9 @@ type applyOpsIntent struct {
 func companionApplyOpsIntent(text, currentNodeID string, intent companionIntent) applyOpsIntent {
 	if intent.Kind == "" {
 		intent = classifyCompanionIntent(text)
+	}
+	if intent.IsReadOnly() {
+		return applyOpsIntent{ReadOnly: true}
 	}
 	if intent.Kind == companionIntentChat {
 		return applyOpsIntent{}
@@ -236,6 +245,11 @@ var companionOutlineTreeTerms = []string{
 }
 
 func validateApplyOpsIntent(p Proposal, intent applyOpsIntent) error {
+	// Second line of defence for read-only turns: the tool is not registered
+	// for them, but the proposal fallback and any other caller go through here.
+	if intent.ReadOnly && len(p.Ops) > 0 {
+		return fmt.Errorf("read-only requests (diagnosis/review/critique) must not change the project; report the findings and offer a linetta-proposal block the writer can apply")
+	}
 	if intent.RequireSceneText {
 		foundSceneText := false
 		for _, op := range p.Ops {

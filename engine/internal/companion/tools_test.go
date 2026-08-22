@@ -646,3 +646,61 @@ func TestApplyOpsOutlineMaintenanceOps(t *testing.T) {
 		t.Fatalf("part2 should move above the initial root scene but keep deterministic order, got ordinal %d", got.Ordinal)
 	}
 }
+
+func TestBuildToolRegistryOmitsApplyOpsForReadOnlyIntent(t *testing.T) {
+	svc, projectID, nodeID := newToolSvc(t)
+	intent := classifyCompanionIntent("현재 1화 초안을 수정하지 말고 먼저 진단해줘. 수정 제안만 제시해줘.")
+	if !intent.IsReadOnly() {
+		t.Fatalf("expected a read-only intent, got %q", intent.Kind)
+	}
+	reg := svc.buildToolRegistryWithIntent(projectID, nodeID, HistoryScopeScene, func() int64 { return 1 }, intent)
+	var names []string
+	for _, schema := range reg.Schemas() {
+		names = append(names, schema.Function.Name)
+	}
+	got := strings.Join(names, ",")
+	if strings.Contains(got, applyOpsToolName) {
+		t.Fatalf("read-only turns must not be offered the mutation tool: %q", got)
+	}
+	for _, want := range []string{"web_fetch", "web_search"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("read-only turns should keep read tools, %q missing %s", got, want)
+		}
+	}
+}
+
+// Regression for the reported bug: a read-only diagnosis must not run remember
+// or settings ops, even if the model calls the tool anyway.
+func TestLinettaApplyOpsToolRejectsOpsForReadOnlyIntent(t *testing.T) {
+	ctx := context.Background()
+	svc, projectID, nodeID := newToolSvc(t)
+	svc.memBase = t.TempDir()
+	userText := "현재 1화 초안을 수정하지 말고 먼저 진단해줘. 문체와 개연성을 평가하고 수정 제안만 제시해줘."
+	intent := classifyCompanionIntent(userText)
+	tool := svc.buildApplyOpsTool(projectID, nodeID, HistoryScopeScene, "", userText, intent, func() int64 { return 1 })
+
+	params := json.RawMessage(`{
+	  "summary":"작품 기억 갱신",
+	  "ops_json":` + strconv.Quote(`[{"op":"remember","text":"주인공은 냉소적인 문체를 선호한다"},{"op":"set_outline","outline":"진단 결과 반영"}]`) + `
+	}`)
+	res, err := tool.Execute(ctx, params)
+	if err != nil {
+		t.Fatalf("tool.Execute: %v", err)
+	}
+	if !res.IsError {
+		t.Fatalf("read-only diagnosis must reject mutation ops: %+v", res)
+	}
+	if !strings.Contains(res.Text(), "read-only") {
+		t.Fatalf("failure should explain the read-only rule: %s", res.Text())
+	}
+	if recalled := svc.Recall(projectID, "문체", 5); len(recalled) != 0 {
+		t.Fatalf("read-only diagnosis wrote work memory: %v", recalled)
+	}
+	p, err := svc.projects.Get(ctx, projectID)
+	if err != nil {
+		t.Fatalf("projects.Get: %v", err)
+	}
+	if strings.TrimSpace(p.Outline) != "" {
+		t.Fatalf("read-only diagnosis changed the work outline: %q", p.Outline)
+	}
+}

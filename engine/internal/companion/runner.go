@@ -261,6 +261,9 @@ func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, sele
 	r.mu.Unlock()
 
 	intent := resolveCompanionIntentWithConversation(text, requestIntent, conversation)
+	if intent.IsReadOnly() && len(msgs) > 0 {
+		msgs[0].Content += "\n" + readOnlyTurnInstruction(language)
+	}
 	if r.svc.history != nil {
 		if err := r.svc.history.Append(ctx, HistoryMessage{
 			ProjectID: projectID,
