@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.6 - 2026-08-22
+
+- Fixed folder sync and backup restore on Windows, which failed on every write because the atomic-write flush ran on a read-only file handle.
+- Fixed the OpenRouter sign-in flow, which never opened a browser on Windows and left the writer to follow the fallback link by hand.
+- Ran the verification gate on Windows in CI, and included the Tauri shell's Rust unit tests in it, so platform regressions are caught before a release.
+
 ## v0.9.5 - 2026-08-22
 
 - Made Windows a working development and runtime target: LF checkouts, a debug-build fix for the embedded engine DLL, and Claude Code CLI detection that no longer relies on Unix permission bits.
