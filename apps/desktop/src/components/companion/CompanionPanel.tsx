@@ -25,6 +25,7 @@ import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { companion as companionApi, openRouter as openRouterApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import { stripProposalBlock } from "../../lib/companionDisplay";
+import { readStoredCompanionScope, storeCompanionScope } from "../../lib/companionScope";
 import type {
   AIContextPreview,
   AIContextSelection,
@@ -189,6 +190,10 @@ const COMPANION_WORK_ACTIONS: CompanionActionPreset[] = [
   },
 ];
 
+function scopeLabel(t: Translate, scope: CompanionHistoryScope): string {
+  return t(scope === "project" ? "companion.scope.project" : "companion.scope.scene");
+}
+
 function companionActionsForScope(scope: CompanionHistoryScope): CompanionActionPreset[] {
   return scope === "project" ? COMPANION_WORK_ACTIONS : COMPANION_SCENE_ACTIONS;
 }
@@ -306,12 +311,15 @@ function CompanionEmpty({
   const descriptionKey = scope === "project" ? "companion.actions.workDescription" : "companion.actions.sceneDescription";
   const renderAction = (action: CompanionActionPreset) => {
     const Icon = action.icon;
+    const fillLabel = t("companion.actions.fillAction", { label: t(action.labelKey) });
     return (
       <button
         key={action.id}
         type="button"
         className="companion-action-preset"
         onClick={() => onPickAction(action)}
+        aria-label={fillLabel}
+        title={fillLabel}
       >
         <Icon size={14} />
         <span className="companion-action-copy">
@@ -330,6 +338,7 @@ function CompanionEmpty({
       </div>
       <h3>{t("companion.emptyTitle")}</h3>
       <p>{t("companion.empty")}</p>
+      <p className="companion-empty-hint">{t("companion.actions.fillHint")}</p>
       <div className="companion-action-list">
         <div className="companion-action-section">
           <div className="companion-action-section-head">
@@ -348,31 +357,42 @@ function CompanionEmpty({
 function CompanionCuratedActions({
   t,
   actions,
+  scope,
   onPickAction,
   disabled,
 }: {
   t: Translate;
   actions: CompanionActionPreset[];
+  scope: CompanionHistoryScope;
   onPickAction: (action: CompanionActionPreset) => void;
   disabled: boolean;
 }) {
   return (
-    <div className="companion-curated-actions" role="group" aria-label={t("companion.actions.curatedLabel")}>
-      {actions.map((action) => {
-        const Icon = action.icon;
-        return (
-          <button
-            key={action.id}
-            type="button"
-            className="chip companion-curated-action"
-            onClick={() => onPickAction(action)}
-            disabled={disabled}
-          >
-            <Icon size={12} />
-            <span>{t(action.labelKey)}</span>
-          </button>
-        );
-      })}
+    <div className="companion-curated-tray">
+      <div className="companion-curated-head">
+        <span className="companion-curated-scope">{t("companion.scope.current", { scope: scopeLabel(t, scope) })}</span>
+        <span className="companion-curated-hint">{t("companion.actions.fillHint")}</span>
+      </div>
+      <div className="companion-curated-actions" role="group" aria-label={t("companion.actions.curatedLabel")}>
+        {actions.map((action) => {
+          const Icon = action.icon;
+          const fillLabel = t("companion.actions.fillAction", { label: t(action.labelKey) });
+          return (
+            <button
+              key={action.id}
+              type="button"
+              className="chip companion-curated-action"
+              onClick={() => onPickAction(action)}
+              disabled={disabled}
+              aria-label={fillLabel}
+              title={fillLabel}
+            >
+              <Icon size={12} />
+              <span>{t(action.labelKey)}</span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -546,7 +566,9 @@ export function CompanionPanel({
   const { language, t } = useI18n();
   const [contextSelection, setContextSelection] = useState<AIContextSelection>(DEFAULT_AI_CONTEXT_SELECTION);
   const currentNodeId = currentNodeIdProp ?? nodeIdRef.current;
-  const [historyScope, setHistoryScope] = useState<CompanionHistoryScope>(() => currentNodeId ? "scene" : "project");
+  const [historyScope, setHistoryScope] = useState<CompanionHistoryScope>(
+    () => readStoredCompanionScope(projectId) ?? (currentNodeId ? "scene" : "project"),
+  );
   const effectiveHistoryScope: CompanionHistoryScope = currentNodeId ? historyScope : "project";
   const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(
     projectId,
@@ -557,6 +579,7 @@ export function CompanionPanel({
     effectiveHistoryScope,
   );
   const [draft, setDraft] = useState("");
+  const [filledPrompt, setFilledPrompt] = useState<{ label: string; text: string } | null>(null);
   const [flushing, setFlushing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
@@ -599,11 +622,25 @@ export function CompanionPanel({
   const lastSelectionRewriteRequestIdRef = useRef<string | null>(null);
   const focusInput = () => inputRef.current?.focus();
 
+  // Only a deliberate scope choice is remembered; the coercion below is forced
+  // by a missing scene, not chosen by the writer.
+  const applyHistoryScope = useCallback((next: CompanionHistoryScope) => {
+    setHistoryScope(next);
+    storeCompanionScope(projectId, next);
+  }, [projectId]);
+
   useEffect(() => {
     if (!currentNodeId && historyScope === "scene") {
       setHistoryScope("project");
     }
   }, [currentNodeId, historyScope]);
+
+  const scopeProjectIdRef = useRef(projectId);
+  useEffect(() => {
+    if (scopeProjectIdRef.current === projectId) return;
+    scopeProjectIdRef.current = projectId;
+    setHistoryScope(readStoredCompanionScope(projectId) ?? (currentNodeId ? "scene" : "project"));
+  }, [currentNodeId, projectId]);
 
   useEffect(() => {
     if (!currentNodeId && referenceScope === "scene") {
@@ -860,6 +897,7 @@ export function CompanionPanel({
     void sendWithFreshContext(text, imageDrafts).then((sent) => {
       if (sent) {
         setDraft("");
+        setFilledPrompt(null);
         setAttachments([]);
         setAttachmentNotice("");
       }
@@ -878,6 +916,7 @@ export function CompanionPanel({
   const contextTokenCount = totalContextTokens(contextPreview, contextSelection);
   const budgetLevel = contextBudgetLevel(contextTokenCount);
   const curatedActions = companionActionsForScope(effectiveHistoryScope).slice(0, 3);
+  const showFilledPrompt = !!filledPrompt && draft === filledPrompt.text;
   const showCuratedActions = actionTrayTouched || hasTranscript || effectiveHistoryScope === "project";
 
   const copyTranscript = async () => {
@@ -896,12 +935,14 @@ export function CompanionPanel({
 
   const pickAction = (action: CompanionActionPreset) => {
     if (action.scope === "work") {
-      setHistoryScope("project");
+      applyHistoryScope("project");
     } else if (currentNodeId) {
-      setHistoryScope("scene");
+      applyHistoryScope("scene");
     }
     setActionTrayTouched(true);
-    setDraft(t(action.promptKey));
+    const prompt = t(action.promptKey);
+    setDraft(prompt);
+    setFilledPrompt({ label: t(action.labelKey), text: prompt });
     window.requestAnimationFrame(() => focusInput());
   };
 
@@ -1088,7 +1129,7 @@ export function CompanionPanel({
             aria-pressed={effectiveHistoryScope === "scene"}
             disabled={!currentNodeId}
             onClick={() => {
-              setHistoryScope("scene");
+              applyHistoryScope("scene");
               setActionTrayTouched(true);
             }}
           >
@@ -1099,7 +1140,7 @@ export function CompanionPanel({
             className={effectiveHistoryScope === "project" ? "is-active" : ""}
             aria-pressed={effectiveHistoryScope === "project"}
             onClick={() => {
-              setHistoryScope("project");
+              applyHistoryScope("project");
               setActionTrayTouched(true);
             }}
           >
@@ -1241,6 +1282,7 @@ export function CompanionPanel({
           <CompanionCuratedActions
             t={t}
             actions={curatedActions}
+            scope={effectiveHistoryScope}
             onPickAction={pickAction}
             disabled={isBusy}
           />
@@ -1266,7 +1308,13 @@ export function CompanionPanel({
           </div>
         )}
         {attachmentNotice && <div className="companion-attachment-notice" aria-live="polite">{attachmentNotice}</div>}
-        <div className="cmp-input">
+        {filledPrompt && showFilledPrompt && (
+          <div className="companion-prompt-filled" role="status" aria-live="polite">
+            <CornerDownLeft size={12} />
+            <span>{t("companion.actions.filledNotice", { label: filledPrompt.label })}</span>
+          </div>
+        )}
+        <div className={`cmp-input${showFilledPrompt ? " is-prompt-filled" : ""}`}>
           <textarea
             ref={inputRef}
             value={draft}
@@ -1319,6 +1367,9 @@ export function CompanionPanel({
           >
             <ImagePlus size={13} />
           </button>
+          <span className="chip companion-scope-chip" title={t("companion.scope.currentHint")}>
+            {t("companion.scope.current", { scope: scopeLabel(t, effectiveHistoryScope) })}
+          </span>
           <span className="chip companion-tool-chip" title={t("companion.tool.webSearch")}>{t("companion.toolChip.webSearch")}</span>
           <span className="chip companion-tool-chip" title={t("companion.tool.webFetch")}>{t("companion.toolChip.webFetch")}</span>
           <span className="chip companion-tool-chip" title={t("companion.tool.applyOps")}>{t("companion.toolChip.applyOps")}</span>

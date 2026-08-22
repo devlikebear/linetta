@@ -175,6 +175,7 @@ describe("CompanionPanel", () => {
       selectedTokenEstimate: 10,
       budgetTokenEstimate: 10,
     });
+    window.localStorage.clear();
     mocks.companionReferencesList.mockResolvedValue([]);
     mocks.companionReferencesCreate.mockResolvedValue({
       id: "r1",
@@ -286,6 +287,75 @@ describe("CompanionPanel", () => {
 
     expect((screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement).value).toContain("작품 전체 아웃라인");
     expect(companionState.value.lastArgs[5]).toBe("project");
+  });
+
+  it("keeps the last companion scope when the panel is reopened", async () => {
+    const user = userEvent.setup();
+    const first = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "작품 전체" }));
+    expect(companionState.value.lastArgs[5]).toBe("project");
+    first.unmount();
+
+    renderPanel();
+
+    expect(screen.getByRole("button", { name: "작품 전체" })).toHaveAttribute("aria-pressed", "true");
+    expect(companionState.value.lastArgs[5]).toBe("project");
+  });
+
+  it("does not carry one project's companion scope into another project", async () => {
+    const user = userEvent.setup();
+    const first = renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "작품 전체" }));
+    first.unmount();
+
+    renderPanel({ projectId: "p2" });
+
+    expect(screen.getByRole("button", { name: "현재 씬" })).toHaveAttribute("aria-pressed", "true");
+    expect(companionState.value.lastArgs[5]).toBe("scene");
+  });
+
+  it("shows the active scope next to the composer", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(screen.getByText("범위: 현재 씬")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "작품 전체" }));
+
+    expect(screen.getAllByText("범위: 작품 전체").length).toBeGreaterThan(0);
+  });
+
+  it("labels quick actions as filling the message box and points at the send step", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const action = screen.getByRole("button", { name: "다음 문장 이어쓰기 — 입력란에 요청 채우기" });
+    await user.click(action);
+
+    const input = screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement;
+    expect(input.value).toContain("다음 3~5문장");
+    expect(companionState.value.send).not.toHaveBeenCalled();
+
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("‘다음 문장 이어쓰기’ 요청을 입력란에 채웠어요. 전송을 누르면 실행됩니다.");
+    await waitFor(() => expect(document.activeElement).toBe(input));
+  });
+
+  it("clears the filled-prompt notice once the writer edits the draft", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByRole("button", { name: "다음 문장 이어쓰기 — 입력란에 요청 채우기" }));
+    expect(screen.getByRole("status")).toBeInTheDocument();
+
+    // Typing character by character re-renders the whole panel per keystroke,
+    // so the edit is applied as one change event.
+    const input = screen.getByPlaceholderText(/메시지/) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: `${input.value} 더 짧게` } });
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("switches companion history scope between current scene and whole work", async () => {
