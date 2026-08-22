@@ -10,6 +10,10 @@ export interface ApplyFailure {
 export interface ApplyResult {
   applied: number;
   failures: ApplyFailure[];
+  /** The batch failed partway and the outline was put back as it was. */
+  rolledBack: boolean;
+  /** Identifies the pre-change outline, for a one-step undo. */
+  undoBatchId?: string;
 }
 
 // applyProposal keeps the proposal-card UI thin. The engine owns op validation,
@@ -27,6 +31,8 @@ export async function applyProposal(
       op: resolveFailureOp(ops, failure.index, failure.op),
       error: failure.error,
     })),
+    rolledBack: result.rolled_back === true,
+    ...(result.undo_batch_id ? { undoBatchId: result.undo_batch_id } : {}),
   };
 }
 

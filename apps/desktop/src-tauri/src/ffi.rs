@@ -227,6 +227,7 @@ fn notification_event(method: &str) -> Option<&'static str> {
         "companion.proposal" => Some("companion-proposal"),
         "companion.choices" => Some("companion-choices"),
         "companion.applied" => Some("companion-applied"),
+        "companion.preview" => Some("companion-preview"),
         "companion.thinking" => Some("companion-thinking"),
         "companion.reasoning" => Some("companion-reasoning"),
         _ => None,

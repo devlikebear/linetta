@@ -984,6 +984,38 @@ export interface CompanionApplyOpsResult {
   created?: Record<string, string>;
   changed_nodes?: AppliedNodeChange[];
   failures?: CompanionApplyOpsFailure[];
+  /** Set when a structural batch failed partway and the outline was put back. */
+  rolled_back?: boolean;
+  /** Identifies the pre-change outline kept for a one-step undo. */
+  undo_batch_id?: string;
+}
+
+/** What a pending outline change would do to the tree. */
+export interface OutlineChangeCounts {
+  created: number;
+  renamed: number;
+  deleted: number;
+  moved: number;
+  /** Ops in the same batch that do not touch the tree (beats, world-building). */
+  other: number;
+}
+
+export interface OutlinePreviewNode {
+  ref?: string;
+  node_id?: string;
+  label?: string;
+  title?: string;
+  kind?: string;
+  depth: number;
+  action: "create" | "rename" | "delete" | "move";
+}
+
+export interface OutlineChangePreview {
+  summary?: string;
+  counts: OutlineChangeCounts;
+  tree?: OutlinePreviewNode[];
+  truncated?: number;
+  ops: ProposalOp[];
 }
 
 interface CompanionRunMeta {
@@ -999,7 +1031,13 @@ export interface CompanionReset extends CompanionRunMeta { text: string; }
 export interface CompanionDone extends CompanionRunMeta { full_text: string; }
 export interface CompanionError extends CompanionRunMeta { message: string; }
 export interface CompanionCancelled extends CompanionRunMeta { applied?: boolean; }
-export interface CompanionApplied extends CompanionRunMeta { summary?: string; applied: number; changed_nodes?: AppliedNodeChange[]; }
+export interface CompanionApplied extends CompanionRunMeta {
+  summary?: string;
+  applied: number;
+  changed_nodes?: AppliedNodeChange[];
+  undo_batch_id?: string;
+}
+export interface CompanionPreview extends CompanionRunMeta { preview: OutlineChangePreview; }
 /** Steps a long companion run walks through, shown as progress in the panel. */
 export type CompanionPhase =
   | "requesting"

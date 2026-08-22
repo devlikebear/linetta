@@ -32,6 +32,13 @@ type ApplyOpsResult struct {
 	Created      map[string]string   `json:"created,omitempty"`
 	ChangedNodes []AppliedNodeChange `json:"changed_nodes,omitempty"`
 	Failures     []ApplyOpsFailure   `json:"failures,omitempty"`
+	// PendingApproval means the batch was large enough to show the writer first,
+	// so nothing was applied and the ops are waiting in a preview.
+	PendingApproval bool `json:"pending_approval,omitempty"`
+	// RolledBack means an op failed partway and the outline was put back.
+	RolledBack bool `json:"rolled_back,omitempty"`
+	// UndoBatchID identifies the pre-change outline kept for a one-step undo.
+	UndoBatchID string `json:"undo_batch_id,omitempty"`
 }
 
 type ApplyOpsFailure struct {
@@ -131,6 +138,19 @@ func (s *Service) buildApplyOpsTool(projectID, nodeID, scope, runID, userText st
 				}
 				return tarstools.JSONTextResult(result, true), nil
 			}
+			// A batch that reshapes the outline goes to the writer first: they see
+			// the counts and the tree, then apply or discard it.
+			if runID != "" && s.notify != nil && needsOutlineApproval(p) {
+				preview := s.buildOutlinePreview(ctx, projectID, p)
+				_ = s.notify.Notify("companion.preview", previewPayload{
+					RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope,
+					Intent: string(intent.Kind), Preview: preview,
+				})
+				return tarstools.JSONTextResult(ApplyOpsResult{
+					Summary:         strings.TrimSpace(p.Summary),
+					PendingApproval: true,
+				}, false), nil
+			}
 			if runID != "" && s.notify != nil {
 				_ = s.notify.Notify("companion.thinking", thinkingPayload{
 					RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: string(intent.Kind),
@@ -148,6 +168,7 @@ func (s *Service) buildApplyOpsTool(projectID, nodeID, scope, runID, userText st
 					Summary:      result.Summary,
 					Applied:      result.Applied,
 					ChangedNodes: result.ChangedNodes,
+					UndoBatchID:  result.UndoBatchID,
 				})
 			}
 			return tarstools.JSONTextResult(result, result.isError()), nil
@@ -310,6 +331,15 @@ func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Prop
 		return result
 	}
 
+	// Structural batches are all-or-nothing: the outline is captured first so a
+	// failure halfway through can be put back, and a clean run leaves the writer
+	// one undo away from where they started.
+	structural := countOutlineChanges(p).Structural() > 0
+	var before []node.Node
+	if structural {
+		before = s.snapshotOutline(ctx, projectID)
+	}
+
 	threadRefs := map[string]string{}
 	entityRefs := map[string]string{}
 	nodeRefs := map[string]string{}
@@ -327,6 +357,20 @@ func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Prop
 	}
 	if len(result.ChangedNodes) == 0 {
 		result.ChangedNodes = nil
+	}
+	if structural && len(before) > 0 {
+		if result.isError() {
+			// Half a restructured outline is worse than none, so put the tree back
+			// and report the failure against an unchanged project.
+			if err := s.nodes.RestoreOutline(ctx, projectID, before, now()); err == nil {
+				result.RolledBack = true
+				result.Applied = 0
+				result.Created = nil
+				result.ChangedNodes = nil
+			}
+		} else if result.Applied > 0 {
+			result.UndoBatchID = s.rememberUndoBatch(projectID, before)
+		}
 	}
 	return result
 }

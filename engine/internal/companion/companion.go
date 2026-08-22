@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
@@ -85,6 +86,12 @@ type Service struct {
 	references    *ReferenceRepo
 	manuscript    *manuscript.Searcher
 	snaps         *snapshot.Repo
+
+	// Outline snapshots taken before a structural apply, kept so the writer can
+	// undo the change that just landed.
+	undoMu      sync.Mutex
+	undoBatches map[string]undoBatch
+	undoOrder   []string
 }
 
 // NewService constructs the companion service. sessionsDir is passed to

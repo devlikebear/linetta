@@ -28,7 +28,7 @@ describe("applyProposal", () => {
     const result = await applyProposal([...ops], "project-1", "scene-1");
 
     expect(mocks.applyOps).toHaveBeenCalledWith("project-1", "scene-1", "", ops);
-    expect(result).toEqual({ applied: 4, failures: [] });
+    expect(result).toEqual({ applied: 4, failures: [], rolledBack: false });
   });
 
   it("maps engine failure indexes back to the original ops for the proposal card", async () => {

@@ -71,6 +71,18 @@ type proposalPayload struct {
 	Ops       []Op   `json:"ops,omitempty"`
 	Error     string `json:"error,omitempty"`
 }
+
+// previewPayload carries a structural outline change to the writer for
+// approval instead of applying it.
+type previewPayload struct {
+	RunID     string               `json:"run_id"`
+	ProjectID string               `json:"project_id"`
+	NodeID    string               `json:"node_id,omitempty"`
+	Scope     string               `json:"scope,omitempty"`
+	Intent    string               `json:"intent,omitempty"`
+	Preview   OutlineChangePreview `json:"preview"`
+}
+
 type appliedPayload struct {
 	RunID        string              `json:"run_id"`
 	ProjectID    string              `json:"project_id"`
@@ -80,6 +92,7 @@ type appliedPayload struct {
 	Summary      string              `json:"summary,omitempty"`
 	Applied      int                 `json:"applied"`
 	ChangedNodes []AppliedNodeChange `json:"changed_nodes,omitempty"`
+	UndoBatchID  string              `json:"undo_batch_id,omitempty"`
 }
 type choicesPayload struct {
 	RunID       string   `json:"run_id"`
@@ -116,6 +129,9 @@ const (
 	phaseVerifying  = "verifying"
 	phaseApplying   = "applying"
 	phaseApplied    = "applied"
+	// phaseAwaitingApproval means a structural change is sitting in a preview,
+	// waiting for the writer to apply or discard it.
+	phaseAwaitingApproval = "awaiting_approval"
 )
 
 // toolPhase maps a tool call to the phase it represents. Applying ops starts
@@ -203,6 +219,15 @@ func requestingStatusText(lang string) string {
 // generatingStatusText is the status shown once the model starts answering.
 func generatingStatusText(lang string) string {
 	return pickLang(lang, "응답 생성 중…", "Writing the response…", "応答を生成中…")
+}
+
+// awaitingApprovalStatusText is the status shown when a structural change is
+// waiting for the writer to look at it.
+func awaitingApprovalStatusText(lang string) string {
+	return pickLang(lang,
+		"변경 미리보기를 준비했습니다",
+		"Prepared a preview of the change",
+		"変更のプレビューを用意しました")
 }
 
 // applyingStatusText is the status shown while validated ops are being written
@@ -463,6 +488,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 	defer close(watchdogDone)
 	go r.watchForStall(ctx, runID, lastActivity, &timedOut, watchdogDone)
 	generatingAnnounced := false
+	previewPending := false
 	dedup := streamdedup.New()
 	queryRounds := 0
 	forcedTool := companionForcedToolForIntent(intent)
@@ -487,12 +513,20 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 			if evt.ToolName == applyOpsToolName && !evt.ToolIsError {
 				applyOpsSucceeded = true
 				applied := 0
+				pending := false
 				if result, ok := parseApplyOpsToolResult(evt.ToolResult); ok {
 					lastApplyOpsResult = result
 					applied = result.Applied
+					pending = result.PendingApproval
 					if intent.RequiresSceneText() && applyOpsResultHasSceneTextChange(result) {
 						sceneTextSucceeded = true
 					}
+				}
+				if pending {
+					// The batch is waiting on the writer, so the run is done working.
+					previewPending = true
+					notifyPhase(phaseAwaitingApproval, awaitingApprovalStatusText(language), 0, 0)
+					return
 				}
 				notifyPhase(phaseApplied, appliedStatusText(language), applied, applied)
 			}
@@ -590,7 +624,7 @@ func (r *Runner) run(ctx context.Context, runID, projectID, nodeID, scope, path,
 		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: msg})
 		return
 	}
-	if intent.RequiresSceneText() && !sceneTextSucceeded {
+	if intent.RequiresSceneText() && !sceneTextSucceeded && !previewPending {
 		msg := sceneTextApplyFailedMessage(language)
 		r.recordAssistantHistory(runID, projectID, nodeID, scope, intent, HistoryStatusFailed, msg, now())
 		_ = r.svc.notify.Notify("companion.error", errorPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Message: msg})
@@ -660,6 +694,7 @@ func (r *Runner) applyDirectProposalFallback(ctx context.Context, runID, project
 			Summary:      result.Summary,
 			Applied:      result.Applied,
 			ChangedNodes: result.ChangedNodes,
+			UndoBatchID:  result.UndoBatchID,
 		})
 	}
 	if result.Applied == 0 || result.isError() {
