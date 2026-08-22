@@ -478,6 +478,8 @@ export const companion = {
     rpcCall<{ ok: true }>("companion.cancel", { run_id: runId }),
   remember: (projectId: string, text: string, category?: string) =>
     rpcCall<{ ok: true }>("companion.remember", { project_id: projectId, text, category }),
+  undoApply: (batchId: string) =>
+    rpcCall<{ ok: true }>("companion.undo_apply", { batch_id: batchId }),
   applyOps: (projectId: string, nodeId: string | null, summary: string, ops: ProposalOp[]) =>
     rpcCall<CompanionApplyOpsResult>("companion.apply_ops", {
       project_id: projectId,

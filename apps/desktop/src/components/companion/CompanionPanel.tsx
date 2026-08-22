@@ -45,6 +45,7 @@ import { AIDraftComposer, type AIDraftComposerProps } from "../ai/AIPanel";
 import { AIContextChecklistList, DEFAULT_AI_CONTEXT_SELECTION, formatTokenEstimate, totalContextItems, totalContextTokens } from "../ai/AIContextChecklist";
 import { AISetupStart, guideForProvider, type GuideID } from "../ai/AISetupStart";
 import { ProposalCard } from "./ProposalCard";
+import { OutlinePreviewCard } from "./OutlinePreviewCard";
 import { ChoiceCard } from "./ChoiceCard";
 import { Markdown } from "./Markdown";
 import { localeForLanguage, useI18n, type MessageKey } from "../../lib/i18n";
@@ -1295,6 +1296,9 @@ export function CompanionPanel({
                     </div>
                   )}
                 </>
+              )}
+              {m.preview && (
+                <OutlinePreviewCard preview={m.preview} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={onApplied} />
               )}
               {m.proposal && (
                 <ProposalCard proposal={m.proposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={onApplied} />

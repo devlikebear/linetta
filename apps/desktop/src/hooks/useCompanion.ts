@@ -7,7 +7,7 @@ import type {
   CompanionMessage, CompanionProposal, CompanionChoices,
   CompanionDelta, CompanionReset, CompanionDone, CompanionError, CompanionCancelled,
   CompanionApplied, CompanionThinking, CompanionReasoning, AIContextSelection, CompanionImageAttachment, CompanionIntent,
-  CompanionHistoryScope, AISetupIssue, CompanionPhase,
+  CompanionHistoryScope, AISetupIssue, CompanionPhase, CompanionPreview, OutlineChangePreview,
 } from "../lib/types";
 
 export interface ChatMessage {
@@ -20,6 +20,7 @@ export interface ChatMessage {
   scope?: CompanionMessage["scope"];
   status?: string;
   proposal?: CompanionProposal;
+  preview?: OutlineChangePreview;
   choices?: CompanionChoices;
   errored?: boolean;
   retryText?: string;
@@ -42,6 +43,8 @@ function idleProgress(): CompanionProgress {
 }
 
 interface CompanionSessionState {
+  // A structural outline change waiting for the writer to apply or discard it.
+  pendingPreview: OutlineChangePreview | null;
   messages: ChatMessage[];
   streaming: string;
   thinking: string;
@@ -94,6 +97,7 @@ function initialState(): CompanionSessionState {
     sending: false,
     pendingProposal: null,
     pendingChoices: null,
+    pendingPreview: null,
   };
 }
 
@@ -346,6 +350,11 @@ function ensureEngineListeners() {
     if (!key || !acceptRunEvent(key, p.run_id)) return;
     updateStore(key, (state) => ({ ...state, pendingProposal: p }));
   });
+  registerEngineEvent<CompanionPreview>("companion-preview", (p) => {
+    const key = storeKeyForRunEvent(p);
+    if (!key || !acceptRunEvent(key, p.run_id)) return;
+    updateStore(key, (state) => ({ ...state, pendingPreview: p.preview }));
+  });
   registerEngineEvent<CompanionChoices>("companion-choices", (p) => {
     const key = storeKeyForRunEvent(p);
     if (!key || !acceptRunEvent(key, p.run_id)) return;
@@ -366,9 +375,10 @@ function ensureEngineListeners() {
       const prose = stripProposalBlock(p.full_text);
       const proposal = state.pendingProposal ?? extractApplyOpsProposal(p.full_text, p.run_id) ?? undefined;
       const choices = state.pendingChoices ?? undefined;
+      const preview = state.pendingPreview ?? undefined;
       return {
         ...state,
-        messages: [...state.messages, { role: "assistant", content: prose, proposal, choices }],
+        messages: [...state.messages, { role: "assistant", content: prose, proposal, choices, preview }],
         streaming: "",
         thinking: "",
         reasoning: "",
@@ -378,6 +388,7 @@ function ensureEngineListeners() {
         sending: false,
         pendingProposal: null,
         pendingChoices: null,
+        pendingPreview: null,
       };
     });
     runStores.delete(p.run_id);
@@ -397,6 +408,7 @@ function ensureEngineListeners() {
       sending: false,
       pendingProposal: null,
       pendingChoices: null,
+      pendingPreview: null,
     }));
     runStores.delete(p.run_id);
   });
@@ -414,6 +426,7 @@ function ensureEngineListeners() {
       sending: false,
       pendingProposal: null,
       pendingChoices: null,
+      pendingPreview: null,
     }));
     runStores.delete(p.run_id);
   });
@@ -517,6 +530,7 @@ export function useCompanion(
       reasoning: "",
       pendingProposal: null,
       pendingChoices: null,
+      pendingPreview: null,
     }));
     try {
       const payload = {
@@ -574,6 +588,7 @@ export function useCompanion(
       sending: false,
       pendingProposal: null,
       pendingChoices: null,
+      pendingPreview: null,
     }));
   }, [currentNodeId, effectiveScope, language, projectId, storeKey]);
 

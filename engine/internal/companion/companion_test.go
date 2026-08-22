@@ -1420,3 +1420,78 @@ func hasPayload(payloads []string, needles ...string) bool {
 	}
 	return false
 }
+
+// bigOutlineApplyClient asks to build a whole book's outline in one tool call.
+type bigOutlineApplyClient struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (c *bigOutlineApplyClient) Ask(context.Context, string) (string, error) { return "", nil }
+func (c *bigOutlineApplyClient) Chat(_ context.Context, messages []llm.ChatMessage, _ llm.ChatOptions) (llm.ChatResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	if c.calls == 1 {
+		return llm.ChatResponse{Message: llm.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []llm.ToolCall{{
+				ID:        "call_outline",
+				Name:      applyOpsToolName,
+				Arguments: `{"summary":"전체 아웃라인","ops_json":"` + bigOutlineOpsEscaped + `"}`,
+			}},
+		}}, nil
+	}
+	return llm.ChatResponse{Message: llm.ChatMessage{
+		Role:    "assistant",
+		Content: "구조 변경안을 준비했습니다. 확인 후 적용해 주세요.",
+	}}, nil
+}
+
+// Eight outline creations: past the point where the writer gets a look first.
+const bigOutlineOpsEscaped = `[{\"op\":\"create_outline_node\",\"ref\":\"p1\",\"kind\":\"container\",\"label\":\"1부\"},` +
+	`{\"op\":\"create_outline_node\",\"ref\":\"s1\",\"kind\":\"leaf\",\"parent_node_ref\":\"p1\",\"label\":\"씬 1\"},` +
+	`{\"op\":\"create_outline_node\",\"ref\":\"s2\",\"kind\":\"leaf\",\"parent_node_ref\":\"p1\",\"label\":\"씬 2\"},` +
+	`{\"op\":\"create_outline_node\",\"ref\":\"s3\",\"kind\":\"leaf\",\"parent_node_ref\":\"p1\",\"label\":\"씬 3\"},` +
+	`{\"op\":\"create_outline_node\",\"ref\":\"s4\",\"kind\":\"leaf\",\"parent_node_ref\":\"p1\",\"label\":\"씬 4\"},` +
+	`{\"op\":\"create_outline_node\",\"ref\":\"s5\",\"kind\":\"leaf\",\"parent_node_ref\":\"p1\",\"label\":\"씬 5\"},` +
+	`{\"op\":\"create_outline_node\",\"ref\":\"s6\",\"kind\":\"leaf\",\"parent_node_ref\":\"p1\",\"label\":\"씬 6\"},` +
+	`{\"op\":\"create_outline_node\",\"ref\":\"s7\",\"kind\":\"leaf\",\"parent_node_ref\":\"p1\",\"label\":\"씬 7\"}]`
+
+// A whole-book restructure is shown to the writer instead of landing silently,
+// and the run still finishes normally.
+func TestSend_LargeOutlineChangeWaitsForApproval(t *testing.T) {
+	client := &bigOutlineApplyClient{}
+	svc, notif, projectID := newSvcWithClient(t, client)
+	before, err := svc.nodes.ListByProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("nodes.ListByProject: %v", err)
+	}
+
+	if _, err := svc.Send(context.Background(), projectID, "", "작품 전체 아웃라인 구성해줘", func() int64 { return 1000 }); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	waitFor(t, notif, "companion.done")
+
+	preview := notif.get("companion.preview")
+	if preview == "" {
+		t.Fatal("expected the change to be offered as a preview")
+	}
+	if !strings.Contains(preview, `"created":8`) {
+		t.Fatalf("preview should count what it would create: %s", preview)
+	}
+	if got := notif.get("companion.error"); got != "" {
+		t.Fatalf("waiting on the writer is not a failure: %s", got)
+	}
+	if got := notif.get("companion.applied"); got != "" {
+		t.Fatalf("nothing should have been applied yet: %s", got)
+	}
+
+	after, err := svc.nodes.ListByProject(context.Background(), projectID)
+	if err != nil {
+		t.Fatalf("nodes.ListByProject: %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("outline changed before approval: %d nodes before, %d after", len(before), len(after))
+	}
+}

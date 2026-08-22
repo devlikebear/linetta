@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/companion"
@@ -211,6 +213,28 @@ func CompanionApplyOps(svc *companion.Service, now Clock) rpc.Handler {
 			Ops:     p.Ops,
 		}, func() int64 { return now() })
 		return json.Marshal(result)
+	}
+}
+
+type companionUndoApplyParams struct {
+	BatchID string `json:"batch_id"`
+}
+
+// CompanionUndoApply returns a handler for companion.undo_apply, which puts the
+// outline back the way it was before an applied companion batch.
+func CompanionUndoApply(svc *companion.Service, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p companionUndoApplyParams
+		if err := json.Unmarshal(params, &p); err != nil || strings.TrimSpace(p.BatchID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "batch_id required"}
+		}
+		if err := svc.UndoApply(ctx, p.BatchID, func() int64 { return now() }); err != nil {
+			if errors.Is(err, companion.ErrUndoBatchNotFound) {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "undo is no longer available for this change"}
+			}
+			return nil, err
+		}
+		return json.Marshal(map[string]bool{"ok": true})
 	}
 }
 

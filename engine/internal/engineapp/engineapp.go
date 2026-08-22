@@ -311,6 +311,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("companion.cancel", handlers.CompanionCancel(companionSvc))
 	s.Handle("companion.remember", handlers.CompanionRemember(companionSvc))
 	s.Handle("companion.apply_ops", handlers.CompanionApplyOps(companionSvc, clock))
+	s.Handle("companion.undo_apply", handlers.CompanionUndoApply(companionSvc, clock))
 	s.Handle("companion.references.list", handlers.CompanionReferencesList(companionSvc))
 	s.Handle("companion.references.create", handlers.CompanionReferencesCreate(companionSvc, clock))
 	s.Handle("companion.references.update", handlers.CompanionReferencesUpdate(companionSvc, clock))

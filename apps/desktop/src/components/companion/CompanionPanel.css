@@ -538,6 +538,50 @@
 .companion-input-toolbar {
   align-items: center;
 }
+.outline-preview-card .outline-preview-counts {
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.outline-preview-tree {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.outline-preview-tree li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.outline-preview-action {
+  flex: none;
+  min-width: 44px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.outline-preview-action.is-delete {
+  color: var(--danger, #b3261e);
+}
+.outline-preview-label {
+  color: var(--ink);
+}
+.outline-preview-title,
+.outline-preview-truncated {
+  color: var(--muted);
+}
+.outline-preview-notice {
+  margin-bottom: 6px;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
 .companion-progress {
   display: flex;
   flex-direction: column;
