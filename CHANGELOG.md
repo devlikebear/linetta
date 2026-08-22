@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.5 - 2026-08-22
+
+- Made Windows a working development and runtime target: LF checkouts, a debug-build fix for the embedded engine DLL, and Claude Code CLI detection that no longer relies on Unix permission bits.
+- Added a Windows Credential Manager backend so API keys can be stored outside macOS; key-storage copy now names the platform's own store.
+- Fixed the OpenRouter model list, which returned nothing once the API began reporting structured pricing values.
+
 ## v0.9.4 - 2026-08-03
 
 - Updated React Router to address current client-routing security advisories and added a guard that rejects the RSC-only audit exception if RSC APIs are introduced.
