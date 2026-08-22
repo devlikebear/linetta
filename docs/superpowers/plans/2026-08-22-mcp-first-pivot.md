@@ -42,19 +42,19 @@
 
 **파일:** `engine/internal/storycontext/*`(신규), `engine/internal/ai/*`(축소), 호출부
 
-- [ ] `Context`, `ContextSelection`, `ContextBuilder`, 프롬프트 렌더링(`buildSystem`/`buildUser` 계열)을 `internal/storycontext`로 이동한다.
-- [ ] **렌더러는 평문 문자열을 반환하게 바꾼다** (`RenderSystem`/`RenderUser`). 현재 `ai.BuildMessages`는 반환 타입으로 `tars/pkg/llm.ChatMessage`를 쓰는데, 내부는 문자열 두 개를 만드는 것뿐이다. `internal/ai`에는 `llm.ChatMessage`로 감싸는 얇은 `BuildMessages` 어댑터만 남겨 컴패니언·AI 실행기가 전환 기간 동안 그대로 돌게 한다.
-- [ ] `storycontext`가 `tars/pkg/llm`을 import하지 않는지 `go list -deps`로 검증한다(테스트 또는 CI 스크립트).
-- [ ] 기존 `ai` 테스트를 함께 옮기고 전부 통과시킨다.
+- [x] `Context`, `ContextSelection`, `ContextBuilder`, 프롬프트 렌더링(`buildSystem`/`buildUser` 계열)을 `internal/storycontext`로 이동한다.
+- [x] **렌더러는 평문 문자열을 반환하게 바꾼다** (`RenderSystem`/`RenderUser`). 현재 `ai.BuildMessages`는 반환 타입으로 `tars/pkg/llm.ChatMessage`를 쓰는데, 내부는 문자열 두 개를 만드는 것뿐이다. `internal/ai`에는 `llm.ChatMessage`로 감싸는 얇은 `BuildMessages` 어댑터만 남겨 컴패니언·AI 실행기가 전환 기간 동안 그대로 돌게 한다.
+- [x] `storycontext`가 `tars/pkg/llm`을 import하지 않는지 `go list -deps`로 검증한다(테스트 또는 CI 스크립트).
+- [x] 기존 `ai` 테스트를 함께 옮기고 전부 통과시킨다.
 
 ### Task 1.2 — `internal/storyops` 추출
 
 **파일:** `engine/internal/storyops/*`(신규), `engine/internal/companion/*`(축소), 호출부
 
-- [ ] `Proposal`, `validateProposal`, `ApplyOps`, undo 배치, 메모리 기록(`remember`) 경로를 `internal/storyops`로 이동한다. `remember`가 쓰는 `tars/pkg/memory` 의존은 유지된다.
-- [ ] `companion.Service`는 새 `storyops`를 호출하도록 바꾼다. 컴패니언 동작은 변하지 않는다.
-- [ ] `companion.apply_ops` / `companion.undo_apply` 핸들러는 그대로 두되 내부적으로 `storyops`를 쓴다.
-- [ ] 기존 적용/되돌리기 테스트를 옮기고 전부 통과시킨다.
+- [x] `Proposal`, `validateProposal`, `ApplyOps`, undo 배치, 메모리 기록(`remember`) 경로를 `internal/storyops`로 이동한다. `remember`가 쓰는 `tars/pkg/memory` 의존은 유지된다.
+- [x] `companion.Service`는 새 `storyops`를 호출하도록 바꾼다. 컴패니언 동작은 변하지 않는다.
+- [x] `companion.apply_ops` / `companion.undo_apply` 핸들러는 그대로 두되 내부적으로 `storyops`를 쓴다.
+- [x] 기존 적용/되돌리기 테스트는 컴패니언에 남겨 위임 경로를 종단으로 검증하게 하고(이동보다 강한 검증), storyops에 적용/되돌리기/롤백/스냅샷/메모리 부재 가드를 직접 검증하는 단위 테스트를 새로 추가했다.
 
 ### Task 1.3 — 컨텍스트 병합: 팩트·메모리·레퍼런스
 
@@ -62,20 +62,22 @@
 
 **파일:** `engine/internal/storycontext/*`, `+ 테스트`
 
-- [ ] 컴패니언 `gatherContext`의 팩트(씬 필터 포함)·메모리(recall)·레퍼런스 수집을 `storycontext` 빌더의 선택적 섹션으로 이식한다.
-- [ ] `Context` 구조체에 `Facts`/`Memories`/`References` 필드를 추가하고 렌더러가 해당 섹션을 출력하게 한다(빈 섹션은 생략 — 기존 관례).
-- [ ] 기존 토글(`ContextSelection`)이 실제로 이 섹션들을 켜고 끄는지 테스트한다.
-- [ ] 컴패니언의 기존 프롬프트 조립은 건드리지 않는다 — 이 병합은 MCP 툴을 위한 것이고, 컴패니언은 6단계까지 자기 경로를 유지한다.
+- [x] 컴패니언 `gatherContext`의 팩트(씬 필터 포함)·메모리(recall)·레퍼런스 수집을 `storycontext` 빌더의 선택적 섹션으로 이식한다.
+- [x] `Context` 구조체에 `Facts`/`Memories`/`References` 필드를 추가하고 렌더러가 해당 섹션을 출력하게 한다(빈 섹션은 생략 — 기존 관례).
+- [x] 기존 토글(`ContextSelection`)이 실제로 이 섹션들을 켜고 끄는지 테스트한다.
+- [x] 컴패니언의 기존 프롬프트 조립은 건드리지 않는다 — 이 병합은 MCP 툴을 위한 것이고, 컴패니언은 6단계까지 자기 경로를 유지한다.
 
 ### Task 1.4 — 요약기 경계 정리
 
 **파일:** `engine/internal/summarizer/*`
 
-- [ ] 비-LLM 경로(`minRunesForLLM` 미만 평문 요약)와 LLM 경로를 파일 단위로 분리한다.
-- [ ] `nodes.SetSummary(id, summary, contentVersion)`를 외부에서 호출할 수 있는 형태로 정리한다(3단계의 `linetta_write_summary`가 쓴다).
-- [ ] `nodes.update_content`의 `postUpdate` 훅 구조는 유지한다 — 6단계에서 훅이 부르는 대상만 비-LLM 요약기로 바뀐다.
+- [x] 비-LLM 경로(`minRunesForLLM` 미만 평문 요약)와 LLM 경로를 파일 단위로 분리한다.
+- [x] `nodes.SetSummary(id, summary, contentVersion)`를 외부에서 호출할 수 있는 형태로 정리한다(3단계의 `linetta_write_summary`가 쓴다).
+- [x] `nodes.update_content`의 `postUpdate` 훅 구조는 유지한다 — 6단계에서 훅이 부르는 대상만 비-LLM 요약기로 바뀐다.
 
 **1단계 종료 조건:** `make test` 통과, 사용자에게 보이는 동작 변화 0, `storycontext`/`storyops`가 LLM 코드에 의존하지 않음이 `go list -deps`로 확인됨.
+
+> **완료 (2026-08-22):** 엔진 40개 패키지 테스트 전부 통과, `mas`/`mobile` 태그 빌드 통과, 두 신규 패키지의 tars 의존 0 확인. 렌더러는 `Render(c) (system, user string)`로 평문화됐고 `internal/ai`에는 `BuildMessages` 어댑터만 남았다. 이 머신의 Smart App Control이 cgo(gcc cc1)와 일부 신규 테스트 바이너리를 간헐 차단해 `cmd/linetta-ffi` 검증은 CI에 맡긴다.
 
 ---
 
