@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { companionScopeStorageKey, readStoredCompanionScope, storeCompanionScope } from "./companionScope";
 
+// The Storage prototype that owns getItem/setItem differs between jsdom and
+// Node's own web storage, so the failure cases replace the property itself.
+function withStorage(descriptor: PropertyDescriptor, run: () => void) {
+  const own = Object.getOwnPropertyDescriptor(window, "localStorage");
+  Object.defineProperty(window, "localStorage", { configurable: true, ...descriptor });
+  try {
+    run();
+  } finally {
+    if (own) Object.defineProperty(window, "localStorage", own);
+    else delete (window as { localStorage?: Storage }).localStorage;
+  }
+}
+
 describe("companion scope memory", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -26,15 +39,23 @@ describe("companion scope memory", () => {
     expect(readStoredCompanionScope("p1")).toBeNull();
   });
 
-  it("stays quiet when storage is unavailable", () => {
-    vi.spyOn(window.localStorage.__proto__, "setItem").mockImplementation(() => {
-      throw new Error("quota exceeded");
+  it("stays quiet when reading storage throws", () => {
+    // Private mode can make the property itself throw on access.
+    withStorage({ get() { throw new Error("storage blocked"); } }, () => {
+      expect(() => storeCompanionScope("p1", "project")).not.toThrow();
+      expect(readStoredCompanionScope("p1")).toBeNull();
     });
-    vi.spyOn(window.localStorage.__proto__, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
+  });
 
-    expect(() => storeCompanionScope("p1", "project")).not.toThrow();
-    expect(readStoredCompanionScope("p1")).toBeNull();
+  it("stays quiet when storage calls throw", () => {
+    const broken = {
+      getItem() { throw new Error("blocked"); },
+      setItem() { throw new Error("quota exceeded"); },
+    } as unknown as Storage;
+
+    withStorage({ value: broken }, () => {
+      expect(() => storeCompanionScope("p1", "project")).not.toThrow();
+      expect(readStoredCompanionScope("p1")).toBeNull();
+    });
   });
 });
