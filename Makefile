@@ -28,6 +28,7 @@ audit-rust: ## Check RustSec advisories (requires cargo-audit)
 
 test-go: ## Run Go engine tests
 	cd engine && go test ./...
+	bash scripts/validate-story-core-deps.sh
 
 test-desktop: ## Run desktop frontend tests and production build
 	cd apps/desktop && pnpm lint && pnpm test && pnpm build
