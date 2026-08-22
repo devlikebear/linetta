@@ -104,6 +104,11 @@ export async function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
 }
 
+/** Open an external URL in the OS browser. `window.open` cannot reach it. */
+export async function openExternalUrl(url: string): Promise<void> {
+  return invoke<void>("open_external_url", { url });
+}
+
 export async function setFolderSyncDir(path: string): Promise<void> {
   return invoke<void>("set_folder_sync_dir", { path });
 }

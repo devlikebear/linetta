@@ -179,6 +179,7 @@ pub fn run() {
             open_recovery_folder,
             restore_latest_backup,
             open_path,
+            open_external_url,
             folder_sync::set_folder_sync_dir,
             folder_sync::folder_sync_now
         ])
@@ -366,6 +367,46 @@ async fn open_path(
     let path = validate_open_path(Path::new(path.trim()), home)?;
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
+/// Hosts the renderer may ask the OS browser to open.
+///
+/// The renderer hands back a URL the engine produced, so this is a narrow
+/// allowlist rather than a general "open anything" primitive, matching the way
+/// `open_path` is confined to the app data directory.
+const EXTERNAL_URL_HOSTS: [&str; 1] = ["openrouter.ai"];
+
+fn validate_external_url(raw: &str) -> Result<String, String> {
+    let parsed = url::Url::parse(raw.trim()).map_err(|e| format!("invalid url: {e}"))?;
+    if parsed.scheme() != "https" {
+        return Err("only https urls can be opened".to_string());
+    }
+    // Reject credentials, which can make a hostile host look like an allowed
+    // one in the address bar (https://openrouter.ai@example.com/).
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        return Err("urls with credentials cannot be opened".to_string());
+    }
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    let allowed = EXTERNAL_URL_HOSTS
+        .iter()
+        .any(|candidate| host == *candidate || host.ends_with(&format!(".{candidate}")));
+    if !allowed {
+        return Err(format!("host is not allowed: {host}"));
+    }
+    Ok(parsed.to_string())
+}
+
+/// Open an external URL in the OS browser.
+///
+/// `window.open` does not reach the system browser from the webview, so the
+/// OAuth flow has to go through the opener plugin on the Rust side.
+#[tauri::command]
+async fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = validate_external_url(&url)?;
+    app.opener()
+        .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())
 }
 
@@ -636,7 +677,34 @@ mod recovery_tests {
 
 #[cfg(test)]
 mod security_boundary_tests {
-    use super::{is_renderer_engine_method, validate_open_path};
+    use super::{is_renderer_engine_method, validate_external_url, validate_open_path};
+
+    #[test]
+    fn external_url_allows_only_https_openrouter() {
+        assert!(validate_external_url("https://openrouter.ai/auth?callback=x").is_ok());
+        assert!(validate_external_url("https://api.openrouter.ai/v1").is_ok());
+        assert!(validate_external_url("  https://openrouter.ai/auth  ").is_ok());
+
+        assert!(validate_external_url("http://openrouter.ai/auth").is_err());
+        assert!(validate_external_url("https://example.com/").is_err());
+        assert!(validate_external_url("file:///C:/Windows/System32").is_err());
+        assert!(validate_external_url("javascript:alert(1)").is_err());
+        assert!(validate_external_url("not a url").is_err());
+        assert!(validate_external_url("").is_err());
+    }
+
+    #[test]
+    fn external_url_rejects_a_host_disguised_by_credentials() {
+        // https://openrouter.ai@example.com/ resolves to example.com.
+        assert!(validate_external_url("https://openrouter.ai@example.com/").is_err());
+        assert!(validate_external_url("https://user:pass@openrouter.ai/").is_err());
+    }
+
+    #[test]
+    fn external_url_rejects_a_lookalike_suffix() {
+        assert!(validate_external_url("https://notopenrouter.ai/").is_err());
+        assert!(validate_external_url("https://openrouter.ai.evil.test/").is_err());
+    }
 
     #[test]
     fn renderer_rpc_allowlist_rejects_internal_and_unknown_methods() {

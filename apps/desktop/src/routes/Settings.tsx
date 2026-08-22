@@ -12,6 +12,7 @@ import {
   openRouter as openRouterApi,
   webSearch as webSearchApi,
   diagnostics as diagnosticsApi,
+  openExternalUrl,
 } from "../lib/rpc";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
@@ -475,7 +476,7 @@ export function Settings() {
     try {
       const started = await openRouterApi.oauthStart();
       setOpenRouterOAuthURL(started.auth_url);
-      window.open(started.auth_url, "_blank", "noopener,noreferrer");
+      await openExternalUrl(started.auth_url);
       setProviderTestMsg({ kind: "ok", text: t("settings.setup.openrouter.oauthStarted") });
       const finished = await openRouterApi.oauthFinish(started.request_id);
       const next = await settingsApi.get();
