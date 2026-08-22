@@ -697,7 +697,7 @@ func (r *Runner) applyDirectProposalFallback(ctx context.Context, runID, project
 			UndoBatchID:  result.UndoBatchID,
 		})
 	}
-	if result.Applied == 0 || result.isError() {
+	if result.Applied == 0 || result.IsError() {
 		return result, false
 	}
 	_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: appliedStatusText(language)})

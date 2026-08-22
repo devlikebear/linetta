@@ -2,45 +2,26 @@ package companion
 
 import (
 	"context"
-	"errors"
 	"strings"
 
-	"github.com/devlikebear/linetta/engine/internal/node"
-	"github.com/google/uuid"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
-// ErrUndoBatchNotFound means the undo window has passed: the batch was already
-// undone, or fell out of the in-memory list.
-var ErrUndoBatchNotFound = errors.New("companion: undo batch not found")
+// ErrUndoBatchNotFound re-exports the storyops sentinel so existing handler
+// errors.Is checks keep matching.
+var ErrUndoBatchNotFound = storyops.ErrUndoBatchNotFound
+
+// OutlineChangeCounts moved to internal/storyops with the applier.
+type OutlineChangeCounts = storyops.OutlineChangeCounts
 
 // A batch that rearranges this many outline nodes is a structural change to the
 // work, not an edit: the writer sees it before it lands. Var so tests can move
 // the line.
 var largeOutlineChangeThreshold = 6
 
-// How many undo batches are kept in memory. The writer only ever undoes the
-// change they just watched land, so a short list is enough.
-const maxUndoBatches = 8
-
 // previewTreeLimit caps how many rows a preview carries; a 200-node rewrite is
 // already far past the point where more rows help the writer decide.
 const previewTreeLimit = 200
-
-// OutlineChangeCounts summarizes what a batch would do to the outline tree.
-type OutlineChangeCounts struct {
-	Created int `json:"created"`
-	Renamed int `json:"renamed"`
-	Deleted int `json:"deleted"`
-	Moved   int `json:"moved"`
-	// Other counts ops in the same batch that do not touch the tree (beats,
-	// storylines, world-building, memories).
-	Other int `json:"other"`
-}
-
-// Structural reports how many ops rearrange the outline tree.
-func (c OutlineChangeCounts) Structural() int {
-	return c.Created + c.Renamed + c.Deleted + c.Moved
-}
 
 // OutlinePreviewNode is one row of the preview tree.
 type OutlinePreviewNode struct {
@@ -62,45 +43,10 @@ type OutlineChangePreview struct {
 	Ops       []Op                 `json:"ops"`
 }
 
-func outlineOpAction(opType string) string {
-	switch opType {
-	case "create_outline_node", "create_scene":
-		return "create"
-	case "rename_outline_node":
-		return "rename"
-	case "delete_outline_node":
-		return "delete"
-	case "move_outline_node":
-		return "move"
-	default:
-		return ""
-	}
-}
-
-// countOutlineChanges tallies a proposal by what it does to the tree.
-func countOutlineChanges(p Proposal) OutlineChangeCounts {
-	var c OutlineChangeCounts
-	for _, op := range p.Ops {
-		switch outlineOpAction(op.Type) {
-		case "create":
-			c.Created++
-		case "rename":
-			c.Renamed++
-		case "delete":
-			c.Deleted++
-		case "move":
-			c.Moved++
-		default:
-			c.Other++
-		}
-	}
-	return c
-}
-
 // needsOutlineApproval reports whether a batch reshapes enough of the outline
 // that the writer should see it first.
 func needsOutlineApproval(p Proposal) bool {
-	return countOutlineChanges(p).Structural() >= largeOutlineChangeThreshold
+	return storyops.CountOutlineChanges(p).Structural() >= largeOutlineChangeThreshold
 }
 
 // buildOutlinePreview renders the batch as an indented list of what it would
@@ -109,12 +55,12 @@ func needsOutlineApproval(p Proposal) bool {
 func (s *Service) buildOutlinePreview(ctx context.Context, projectID string, p Proposal) OutlineChangePreview {
 	preview := OutlineChangePreview{
 		Summary: strings.TrimSpace(p.Summary),
-		Counts:  countOutlineChanges(p),
+		Counts:  storyops.CountOutlineChanges(p),
 		Ops:     p.Ops,
 	}
 	depthByRef := map[string]int{}
 	for _, op := range p.Ops {
-		action := outlineOpAction(op.Type)
+		action := storyops.OutlineOpAction(op.Type)
 		if action == "" {
 			continue
 		}
@@ -173,72 +119,7 @@ func (s *Service) outlineNodeLabel(ctx context.Context, projectID, nodeID string
 	return n.Label
 }
 
-// undoBatch is the outline as it stood before an applied change.
-type undoBatch struct {
-	projectID string
-	nodes     []node.Node
-}
-
-// rememberUndoBatch keeps the pre-change outline so the writer can put it back
-// with one action. Batches live in memory only: undo is for the change you just
-// watched land, not for history.
-func (s *Service) rememberUndoBatch(projectID string, before []node.Node) string {
-	if len(before) == 0 {
-		return ""
-	}
-	id := uuid.NewString()
-	s.undoMu.Lock()
-	defer s.undoMu.Unlock()
-	if s.undoBatches == nil {
-		s.undoBatches = map[string]undoBatch{}
-	}
-	s.undoBatches[id] = undoBatch{projectID: projectID, nodes: before}
-	s.undoOrder = append(s.undoOrder, id)
-	for len(s.undoOrder) > maxUndoBatches {
-		delete(s.undoBatches, s.undoOrder[0])
-		s.undoOrder = s.undoOrder[1:]
-	}
-	return id
-}
-
-func (s *Service) takeUndoBatch(id string) (undoBatch, bool) {
-	s.undoMu.Lock()
-	defer s.undoMu.Unlock()
-	batch, ok := s.undoBatches[id]
-	if !ok {
-		return undoBatch{}, false
-	}
-	delete(s.undoBatches, id)
-	for i, existing := range s.undoOrder {
-		if existing == id {
-			s.undoOrder = append(s.undoOrder[:i], s.undoOrder[i+1:]...)
-			break
-		}
-	}
-	return batch, true
-}
-
 // UndoApply puts the outline back the way it was before the applied batch.
 func (s *Service) UndoApply(ctx context.Context, batchID string, now func() int64) error {
-	batch, ok := s.takeUndoBatch(strings.TrimSpace(batchID))
-	if !ok {
-		return ErrUndoBatchNotFound
-	}
-	if s.nodes == nil {
-		return ErrUndoBatchNotFound
-	}
-	return s.nodes.RestoreOutline(ctx, batch.projectID, batch.nodes, now())
-}
-
-// snapshotOutline captures the tree so a failed batch can be rolled back and a
-// finished one can be undone.
-func (s *Service) snapshotOutline(ctx context.Context, projectID string) []node.Node {
-	if s.nodes == nil {
-		return nil
-	}
-	before, err := s.nodes.ListByProject(ctx, projectID)
-	if err != nil {
-		return nil
-	}
-	return before
+	return s.story.UndoApply(ctx, batchID, now)
 }

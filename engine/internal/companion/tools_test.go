@@ -18,6 +18,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -52,6 +53,10 @@ func newToolSvc(t *testing.T) (*Service, string, string) {
 		snaps: snapshot.NewRepo(st),
 		src:   toolConfigSource{},
 	}
+	svc.story = storyops.New(projects, nodes, threads, beats, entities, rels).
+		WithFacts(facts).
+		WithSnapshots(svc.snaps).
+		WithMemory(svc)
 	p, err := projects.Create(ctx, 1_000, project.NewInput{
 		Title: "도구 테스트", Genres: []string{"mystery"}, LengthTarget: "short", DefaultPOV: "first",
 	})
@@ -757,7 +762,7 @@ func TestApplyOpsCompletesWhenTheRunContextIsCancelledMidApply(t *testing.T) {
 		},
 	}, func() int64 { return 1 })
 
-	if result.Applied != 2 || result.isError() {
+	if result.Applied != 2 || result.IsError() {
 		t.Fatalf("apply should run to completion: %+v", result)
 	}
 }

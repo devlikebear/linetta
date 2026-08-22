@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
@@ -24,6 +23,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/tars/pkg/session"
 )
@@ -88,11 +88,9 @@ type Service struct {
 	manuscript    *manuscript.Searcher
 	snaps         *snapshot.Repo
 
-	// Outline snapshots taken before a structural apply, kept so the writer can
-	// undo the change that just landed.
-	undoMu      sync.Mutex
-	undoBatches map[string]undoBatch
-	undoOrder   []string
+	// story applies validated op batches and owns rollback/undo state; the
+	// companion delegates every mutation to it (see internal/storyops).
+	story *storyops.Service
 }
 
 // NewService constructs the companion service. sessionsDir is passed to
@@ -112,6 +110,8 @@ func NewService(
 		notify: notify, factory: factory, src: src, workDir: workDir,
 		memBase: filepath.Join(sessionsDir, "mem"),
 	}
+	s.story = storyops.New(projects, nodes, threads, beats, entities, relationships).
+		WithMemory(s)
 	s.runner = newRunner(s)
 	return s
 }
@@ -140,11 +140,13 @@ func (s *Service) WithManuscript(searcher *manuscript.Searcher) *Service {
 // companion-before checkpoint before mutating scene text.
 func (s *Service) WithSnapshots(snaps *snapshot.Repo) *Service {
 	s.snaps = snaps
+	s.story.WithSnapshots(snaps)
 	return s
 }
 
 func (s *Service) WithFacts(repo *fact.Repo) *Service {
 	s.facts = repo
+	s.story.WithFacts(repo)
 	return s
 }
 
