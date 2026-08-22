@@ -307,6 +307,7 @@ export type CompanionIntentKind =
   | "scene_proofread"
   | "outline_mutation"
   | "generic_mutation"
+  | "read_only"
   | "chat";
 
 export interface CompanionIntent {

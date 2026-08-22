@@ -12,6 +12,7 @@ type companionIntentKind string
 
 const (
 	companionIntentChat            companionIntentKind = "chat"
+	companionIntentReadOnly        companionIntentKind = "read_only"
 	companionIntentGenericMutation companionIntentKind = "generic_mutation"
 	companionIntentSceneWrite      companionIntentKind = "scene_write"
 	companionIntentSceneRewrite    companionIntentKind = "scene_rewrite"
@@ -26,6 +27,14 @@ type companionIntent struct {
 type conversationMessage struct {
 	Role    string
 	Content string
+}
+
+// IsReadOnly reports whether the writer explicitly asked for a diagnosis,
+// review, or critique without changing the work. Read-only turns must never
+// mutate project state: the companion answers in prose and, when a change is
+// worth making, offers it as a proposal block the writer applies.
+func (i companionIntent) IsReadOnly() bool {
+	return i.Kind == companionIntentReadOnly
 }
 
 func (i companionIntent) RequiresApplyOps() bool {
@@ -60,6 +69,16 @@ func resolveCompanionIntentWithConversation(text string, request RequestIntent, 
 
 func resolveCompanionIntent(text string, request RequestIntent) companionIntent {
 	s := strings.ToLower(strings.TrimSpace(text))
+	// The read-only check runs before the caller-supplied kind: an explicit
+	// "do not change it, just diagnose" in the writer's own words outranks an
+	// inferred or stale request kind, and refusing to mutate is recoverable
+	// while an unwanted mutation is not.
+	if isReadOnlyRequest(s) {
+		return companionIntent{
+			Kind:         companionIntentReadOnly,
+			TargetNodeID: strings.TrimSpace(request.TargetNodeID),
+		}
+	}
 	if kind := normalizeRequestIntentKind(request.Kind); kind != "" {
 		return companionIntent{
 			Kind:                kind,
@@ -103,6 +122,8 @@ func normalizeRequestIntentKind(kind string) companionIntentKind {
 		return companionIntentGenericMutation
 	case string(companionIntentChat):
 		return companionIntentChat
+	case string(companionIntentReadOnly), "readonly", "diagnose", "review":
+		return companionIntentReadOnly
 	default:
 		return ""
 	}
@@ -115,6 +136,15 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// isReadOnlyRequest matches turns where the writer either forbids changes
+// outright ("수정하지 말고") or asks for diagnosis/review only ("제안만").
+func isReadOnlyRequest(s string) bool {
+	if s == "" {
+		return false
+	}
+	return containsAny(s, companionReadOnlyGuardTerms) || containsAny(s, companionReadOnlyOnlyTerms)
 }
 
 func isSceneTextTarget(s string) bool {
@@ -276,4 +306,41 @@ var companionNonBodySceneTerms = []string{
 	"table of contents",
 	// Japanese equivalents.
 	"ビート", "プロット", "アウトライン", "目次", "構成", "分割", "分けて",
+}
+
+// companionReadOnlyGuardTerms are explicit "do not change it" markers. They
+// stay tied to mutation verbs so that an ordinary negation ("아직 하지 마세요")
+// does not disable applying.
+var companionReadOnlyGuardTerms = []string{
+	"수정하지 마", "수정하지마", "수정하지 말", "수정하지말",
+	"고치지 마", "고치지마", "고치지 말", "고치지말",
+	"바꾸지 마", "바꾸지마", "바꾸지 말", "바꾸지말",
+	"변경하지 마", "변경하지마", "변경하지 말", "변경하지말",
+	"적용하지 마", "적용하지마", "적용하지 말", "적용하지말",
+	"저장하지 마", "저장하지마", "저장하지 말", "저장하지말",
+	"반영하지 마", "반영하지마", "반영하지 말", "반영하지말",
+	"덮어쓰지 마", "덮어쓰지마", "건드리지 마", "건드리지마",
+	"읽기 전용", "읽기전용",
+	// English equivalents (input is lower-cased before matching).
+	"don't modify", "do not modify", "don't change", "do not change",
+	"don't edit", "do not edit", "don't rewrite", "do not rewrite",
+	"don't apply", "do not apply", "don't save", "do not save",
+	"without changing", "without modifying", "read-only", "read only",
+	// Japanese equivalents.
+	"修正しないで", "変更しないで", "書き換えないで", "適用しないで",
+	"保存しないで", "触らないで", "読み取り専用",
+}
+
+// companionReadOnlyOnlyTerms are "diagnosis/review only" markers: the writer
+// wants an assessment, not an edit.
+var companionReadOnlyOnlyTerms = []string{
+	"진단만", "평가만", "분석만", "검토만", "리뷰만", "비평만",
+	"제안만", "의견만", "피드백만", "지적만", "설명만",
+	// English equivalents.
+	"diagnose only", "diagnosis only", "review only", "analysis only",
+	"analyze only", "feedback only", "suggestions only", "critique only",
+	"just diagnose", "just review", "just analyze", "just critique",
+	// Japanese equivalents.
+	"診断だけ", "評価だけ", "分析だけ", "レビューだけ", "提案だけ",
+	"フィードバックだけ", "指摘だけ",
 }

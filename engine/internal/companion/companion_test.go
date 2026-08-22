@@ -66,6 +66,46 @@ func (c *captureMessagesClient) Chat(_ context.Context, messages []llm.ChatMessa
 	return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "확인했습니다."}}, nil
 }
 
+type captureToolsClient struct {
+	mu       sync.Mutex
+	reply    string
+	tools    []llm.ToolSchema
+	messages []llm.ChatMessage
+}
+
+func (c *captureToolsClient) Ask(context.Context, string) (string, error) { return "", nil }
+func (c *captureToolsClient) Chat(_ context.Context, messages []llm.ChatMessage, opts llm.ChatOptions) (llm.ChatResponse, error) {
+	c.mu.Lock()
+	c.tools = append([]llm.ToolSchema(nil), opts.Tools...)
+	c.messages = append([]llm.ChatMessage(nil), messages...)
+	c.mu.Unlock()
+	if opts.OnDelta != nil {
+		opts.OnDelta(c.reply)
+	}
+	return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: c.reply}}, nil
+}
+
+func (c *captureToolsClient) toolNames() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	names := make([]string, 0, len(c.tools))
+	for _, schema := range c.tools {
+		names = append(names, schema.Function.Name)
+	}
+	return names
+}
+
+func (c *captureToolsClient) systemPrompt() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, m := range c.messages {
+		if m.Role == "system" {
+			return m.Content
+		}
+	}
+	return ""
+}
+
 type fakeNotifier struct {
 	mu     sync.Mutex
 	events map[string]string
@@ -1189,5 +1229,34 @@ func TestSend_surfacesTranscriptPersistenceError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "transcript") {
 		t.Fatalf("expected transcript error, got %v", err)
+	}
+}
+
+// Regression for the reported bug: "diagnose it, do not change it" turns must
+// not even be offered the mutation tool, so no remember/settings op can run.
+func TestSend_ReadOnlyDiagnosisWithholdsMutationTool(t *testing.T) {
+	client := &captureToolsClient{reply: "1화 초안 진단 결과입니다. 문체는 안정적이고, 개연성은 후반부에서 약해집니다."}
+	svc, notif, projectID := newSvcWithClient(t, client)
+
+	_, err := svc.Send(context.Background(), projectID, "",
+		"현재 1화 초안을 수정하지 말고 먼저 진단해줘. 문체와 개연성을 평가하고 수정 제안만 제시해줘.",
+		func() int64 { return 1000 })
+	if err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	waitFor(t, notif, "companion.done")
+
+	names := strings.Join(client.toolNames(), ",")
+	if strings.Contains(names, applyOpsToolName) {
+		t.Fatalf("read-only diagnosis was offered the mutation tool: %q", names)
+	}
+	if !strings.Contains(client.systemPrompt(), "읽기 전용 요청입니다") {
+		t.Fatal("system prompt should carry the read-only turn instruction")
+	}
+	if !strings.Contains(notif.get("companion.done"), `"intent":"read_only"`) {
+		t.Fatalf("done payload should report the read-only intent: %s", notif.get("companion.done"))
+	}
+	if recalled := svc.Recall(projectID, "문체", 5); len(recalled) != 0 {
+		t.Fatalf("read-only diagnosis wrote work memory: %v", recalled)
 	}
 }

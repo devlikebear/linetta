@@ -95,3 +95,55 @@ func TestResolveCompanionIntentUsesExplicitRequestIntent(t *testing.T) {
 		t.Fatalf("explicit intent should preserve clear-text allowance: %+v", got)
 	}
 }
+
+// The reported case: a diagnosis-only request must never be treated as a
+// mutation turn, so the companion cannot silently update work memory.
+func TestResolveCompanionIntentDetectsReadOnlyRequests(t *testing.T) {
+	for _, text := range []string{
+		"현재 1화 초안을 수정하지 말고 먼저 진단해줘. 문체와 개연성을 평가하고 수정 제안만 제시해줘.",
+		"본문은 바꾸지 말고 개연성만 짚어줘",
+		"이 씬 고치지 말고 검토만 해줘",
+		"작품 기억에 저장하지 말고 의견만 말해줘",
+		"Review only: do not change the scene, just tell me what is weak.",
+		"シーン本文は修正しないで、診断だけしてください。",
+		"아직 적용하지 말고 진행해도 될지 알려줘",
+	} {
+		if got := classifyCompanionIntent(text); !got.IsReadOnly() {
+			t.Fatalf("classifyCompanionIntent(%q).Kind = %q, want read_only", text, got.Kind)
+		}
+	}
+}
+
+// An explicit read-only phrase in the writer's own words outranks a caller
+// supplied intent kind: refusing to mutate is recoverable, mutating is not.
+func TestResolveCompanionIntentReadOnlyOverridesRequestKind(t *testing.T) {
+	got := resolveCompanionIntent("본문을 수정하지 말고 진단만 해줘", RequestIntent{Kind: "scene_write", TargetNodeID: "node-1"})
+	if !got.IsReadOnly() {
+		t.Fatalf("read-only text with scene_write request = %q, want read_only", got.Kind)
+	}
+	if got.TargetNodeID != "node-1" {
+		t.Fatalf("read-only intent should keep the target node: %+v", got)
+	}
+	if got.RequiresApplyOps() || got.RequiresSceneText() {
+		t.Fatalf("read-only intent must not require apply ops: %+v", got)
+	}
+	if companionForcedToolForIntent(got) != "" {
+		t.Fatalf("read-only intent must not force the apply tool")
+	}
+}
+
+// Ordinary revise/apply requests must keep working.
+func TestResolveCompanionIntentKeepsMutationRequests(t *testing.T) {
+	for _, tc := range []struct {
+		text string
+		kind companionIntentKind
+	}{
+		{"현재 씬 본문 다듬어줘", companionIntentSceneRewrite},
+		{"현재 씬 본문 써줘", companionIntentSceneWrite},
+		{"이 씬을 더 구체화해서 비트로 확장해줘", companionIntentGenericMutation},
+	} {
+		if got := classifyCompanionIntent(tc.text); got.Kind != tc.kind {
+			t.Fatalf("classifyCompanionIntent(%q) = %q, want %q", tc.text, got.Kind, tc.kind)
+		}
+	}
+}

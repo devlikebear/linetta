@@ -85,6 +85,7 @@ func buildSystem(language string) string {
 	b.WriteString("용어 구분: '아웃라인/목차/부/장/씬 구성'은 왼쪽 아웃라인 트리이며 create_outline_node/create_scene/rename_outline_node/delete_outline_node/move_outline_node로 갱신합니다. '씬 본문/원고/현재 장면의 실제 문장'은 set_scene_text로 갱신합니다. '작품 개요/시놉시스' 텍스트는 set_outline으로 갱신합니다. '플롯/스토리라인/비트'는 create_thread/add_beat로 갱신합니다.\n")
 	b.WriteString("맞춤법·띄어쓰기·조사 오류·비문 교정 같은 퇴고 요청에서는 원문 의미·문체·고유명사·대사 톤을 유지하고 필요한 교정만 하세요. 적용 후에는 변경 목록을 짧게 함께 제시하세요.\n")
 	b.WriteString("작가가 아이디어를 승인했거나 작품/소설 개요·시놉시스·아웃라인·얼개·스토리라인·비트·세계관 요소·캐릭터·관계·장소·아이템·스킬·마법·능력·씬·기억의 작성/수정/추가/생성/구체화/세분화/분할/확장/반영/저장을 명확히 요청하면 설명으로 끝내지 말고 반드시 linetta_apply_ops를 호출하세요. 적용 후에는 무엇을 바꿨는지 짧게 말하고, 불확실한 변경은 먼저 질문하세요.\n")
+	b.WriteString("반대로 작가가 '수정하지 마', '진단만', '검토만'처럼 읽기 전용을 명시하면 linetta_apply_ops를 절대 호출하지 마세요(기억·설정 저장 포함). 분석 결과만 답하고, 반영할 가치가 있는 변경은 linetta-proposal 블록으로 제안해 작가가 직접 적용하게 하세요.\n")
 	b.WriteString("조각하듯 집필을 돕습니다: 거친 시놉시스나 한 문장을 받으면 set_outline으로 작품 개요를 정리하고 create_outline_node/create_scene으로 보이는 아웃라인 트리를 만들며, 필요하면 그 씬들에 create_thread/add_beat로 플롯 비트를 함께 붙이세요. 특정 파트·챕터·막을 요청받으면 아웃라인 노드를 세분화하고 비트를 연결합니다. 특정 씬의 본문을 써 달라거나 재작성·수정·다듬기·확장해 달라는 요청에는 기억이나 비트만 저장하지 말고 set_scene_text로 실제 씬 원고를 교체하세요.\n\n")
 	b.WriteString("도구가 없거나 작가가 검토용 제안을 원할 때만, 구체적인 변경(아웃라인 트리 생성/수정, 스토리라인 생성/수정, 비트 추가/수정/삭제, 작품 개요/시놉시스 설정)을 다음 형식의 펜스드 블록 **정확히 하나**로 제안하세요. 단순 대화·질문 응답이면 블록을 넣지 마세요.\n\n")
 	b.WriteString("```linetta-proposal\n")
@@ -130,6 +131,7 @@ func buildSystemEn() string {
 	b.WriteString("Terminology: 'outline/part/chapter/scene structure' refers to the left outline tree, updated with create_outline_node/create_scene/rename_outline_node/delete_outline_node/move_outline_node. 'Scene text/manuscript/actual prose' is updated with set_scene_text. 'Work synopsis/overview' text is updated with set_outline. 'Plot/storyline/beats' are updated with create_thread/add_beat.\n")
 	b.WriteString("For proofreading requests (spelling, spacing, grammar, awkward phrasing), preserve the original meaning, voice, proper nouns, and dialogue tone — make only necessary corrections. After applying, briefly list what changed.\n")
 	b.WriteString("If the writer has approved an idea, or explicitly asks to write/revise/add/generate/expand/save the synopsis, outline, storylines, beats, world-building elements, characters, relationships, places, items, scenes, or memories — do not just explain: call linetta_apply_ops. After applying, briefly state what changed; ask first if anything is uncertain.\n")
+	b.WriteString("Conversely, when the writer explicitly asks for a read-only pass (\"don't change it\", \"just diagnose\", \"review only\"), never call linetta_apply_ops — remember and settings ops included. Report the findings only, and offer anything worth keeping as a linetta-proposal block for the writer to apply.\n")
 	b.WriteString("Help sculpt the story: given a rough synopsis or a single sentence, use set_outline to set the work overview, create_outline_node/create_scene to build a visible outline tree, and add create_thread/add_beat to attach plot beats to those scenes. For a specific part/chapter/act, refine outline nodes and connect beats. For a scene rewrite/revision/expansion, replace the real scene prose with set_scene_text — do not just save a memory or beat.\n\n")
 	b.WriteString("Only when no tools are available, or when the writer wants a proposal to review, suggest concrete changes (outline tree creation/revision, storyline creation/revision, beat additions) using **exactly one** fenced block in this format. For simple conversation or Q&A, omit the block.\n\n")
 	b.WriteString("```linetta-proposal\n")
@@ -175,6 +177,7 @@ func buildSystemJa() string {
 	b.WriteString("用語の区別: 「アウトライン/目次/部/章/シーン構成」は左のアウトラインツリーで、create_outline_node/create_scene/rename_outline_node/delete_outline_node/move_outline_node で更新します。「シーン本文/原稿/現在の場面の実際の文章」は set_scene_text で更新します。「作品概要/シノプシス」のテキストは set_outline で更新します。「プロット/ストーリーライン/ビート」は create_thread/add_beat で更新します。\n")
 	b.WriteString("誤字・脱字・文法・不自然な文の校正のような推敲依頼では、原文の意味・文体・固有名詞・台詞のトーンを保ち、必要な修正のみ行ってください。適用後は変更点のリストを短く添えてください。\n")
 	b.WriteString("作家がアイデアを承認した場合、または作品/小説の概要・シノプシス・アウトライン・ストーリーライン・ビート・世界観要素・キャラクター・関係・場所・アイテム・スキル・魔法・能力・シーン・記憶の作成/修正/追加/生成/具体化/細分化/分割/拡張/反映/保存を明確に依頼した場合は、説明で終わらせず必ず linetta_apply_ops を呼び出してください。適用後は何を変えたか短く伝え、不確実な変更は先に質問してください。\n")
+	b.WriteString("逆に作家が「修正しないで」「診断だけ」「レビューだけ」のように読み取り専用を明示した場合は、linetta_apply_ops を絶対に呼び出さないでください（記憶・設定の保存を含む）。分析結果だけを答え、反映する価値のある変更は linetta-proposal ブロックで提案して作家自身が適用できるようにしてください。\n")
 	b.WriteString("彫刻のように執筆を支援します: 粗いシノプシスや一文を受け取ったら set_outline で作品概要を整え、create_outline_node/create_scene で見えるアウトラインツリーを作り、必要ならそのシーンに create_thread/add_beat でプロットビートを付けてください。特定のパート・章・幕を依頼されたらアウトラインノードを細分化しビートを繋げます。特定シーンの本文執筆や書き直し・修正・推敲・拡張の依頼には、記憶やビートだけ保存せず set_scene_text で実際のシーン原稿を置き換えてください。\n\n")
 	b.WriteString("ツールが無い場合、または作家がレビュー用の提案を望む場合のみ、具体的な変更（アウトラインツリーの作成/修正、ストーリーラインの作成/修正、ビートの追加/修正/削除、作品概要/シノプシスの設定）を次の形式のフェンスドブロック**ちょうど一つ**で提案してください。単純な会話や質問への回答ではブロックを入れないでください。\n\n")
 	b.WriteString("```linetta-proposal\n")
@@ -207,6 +210,19 @@ func buildSystemJa() string {
 	b.WriteString("- allow_custom が true の場合「自由入力」ボタンも表示されます（作家が自分で答えを書ける場合に true）。\n")
 	b.WriteString("- ブロックの前の本文には文脈/理由を短く書き、候補リスト自体は本文に重複させないでください。linetta-choices と linetta-proposal を同じターンで併用しないでください（選択肢は作家に問い返す番です）。単純な会話・説明にはこのブロックを入れないでください。\n")
 	return b.String()
+}
+
+// readOnlyTurnInstruction is appended to the system prompt when the writer
+// asked for a read-only pass, so the model reports findings instead of
+// claiming it saved anything.
+func readOnlyTurnInstruction(language string) string {
+	return pickLang(language,
+		"이번 턴은 읽기 전용 요청입니다. 씬 본문·아웃라인·설정·기억·팩트 자료집 등 작품 상태를 절대 변경하지 말고, 요청받은 진단·검토·평가 결과만 답하세요. "+
+			"반영할 가치가 있는 변경은 linetta-proposal 블록 하나로 제안해 작가가 직접 적용하게 하고, 저장했다거나 반영했다고 말하지 마세요.",
+		"This turn is a read-only request. Do not change any project state — scene text, outline, settings, memories, or fact cards. "+
+			"Report only the diagnosis/review/assessment that was asked for, offer anything worth applying as a single linetta-proposal block for the writer to apply, and never claim you saved or applied something.",
+		"このターンは読み取り専用の依頼です。シーン本文・アウトライン・設定・記憶・ファクト資料集など作品の状態を一切変更せず、依頼された診断・レビュー・評価の結果だけを答えてください。"+
+			"反映する価値のある変更は linetta-proposal ブロック一つで提案し作家自身が適用できるようにし、保存した・反映したとは決して言わないでください。")
 }
 
 // buildContext renders the project state as a single user-role message body.
