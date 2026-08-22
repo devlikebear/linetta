@@ -41,6 +41,19 @@ fn copy_files(staging: &Path, target: &Path, files: &[String]) -> Result<usize, 
     Ok(n)
 }
 
+/// Flush a file's contents to disk.
+///
+/// The handle has to be writable: on Windows `sync_all` maps to
+/// `FlushFileBuffers`, which requires write access and fails with
+/// ERROR_ACCESS_DENIED on the read-only handle `File::open` returns. On Unix
+/// `fsync` accepts a read-only descriptor, which is why this only broke here.
+pub(crate) fn sync_file(path: &Path) -> std::io::Result<()> {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)?
+        .sync_all()
+}
+
 fn copy_file_atomic(src: &Path, dst: &Path) -> Result<(), String> {
     let name = dst
         .file_name()
@@ -53,9 +66,7 @@ fn copy_file_atomic(src: &Path, dst: &Path) -> Result<(), String> {
     ));
     let result = (|| {
         std::fs::copy(src, &tmp).map_err(|e| e.to_string())?;
-        std::fs::File::open(&tmp)
-            .and_then(|file| file.sync_all())
-            .map_err(|e| e.to_string())?;
+        sync_file(&tmp).map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, dst).map_err(|e| e.to_string())
     })();
     if result.is_err() {
@@ -131,9 +142,7 @@ fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     ));
     let result = (|| {
         std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
-        std::fs::File::open(&tmp)
-            .and_then(|file| file.sync_all())
-            .map_err(|e| e.to_string())?;
+        sync_file(&tmp).map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, path).map_err(|e| e.to_string())
     })();
     if result.is_err() {
@@ -240,7 +249,27 @@ pub(crate) async fn run_folder_sync_mas(
 
 #[cfg(test)]
 mod tests {
-    use super::copy_files;
+    use super::{copy_files, sync_file};
+
+    // `File::open` hands back a read-only handle, and on Windows sync_all maps
+    // to FlushFileBuffers, which needs write access. Every atomic write in this
+    // module flushes before renaming, so a read-only handle broke folder sync
+    // and backup restore on Windows with ERROR_ACCESS_DENIED.
+    #[test]
+    fn sync_file_flushes_through_a_writable_handle() {
+        let dir = tempdir();
+        let path = dir.join("flushed.md");
+        std::fs::write(&path, b"contents").unwrap();
+
+        sync_file(&path).expect("sync_file must succeed on every platform");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "contents");
+    }
+
+    #[test]
+    fn sync_file_reports_a_missing_path() {
+        let dir = tempdir();
+        assert!(sync_file(&dir.join("absent.md")).is_err());
+    }
 
     #[test]
     fn copies_named_files() {

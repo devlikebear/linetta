@@ -60,7 +60,7 @@ make test-tauri
 make test-mobile-engine
 ```
 
-`make test` runs Go tests, frontend Vitest tests, the Vite production build, and Rust `cargo check`. `make test-mobile-engine` runs the Go engine suite with the `mobile` build tag so iOS- and Android-safe stubs stay covered.
+`make test` runs Go tests, frontend Vitest tests, the Vite production build, and the Tauri shell's `cargo check` and `cargo test`. `make test-mobile-engine` runs the Go engine suite with the `mobile` build tag so iOS- and Android-safe stubs stay covered.
 
 ## Mobile engine development
 

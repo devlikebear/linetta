@@ -587,9 +587,7 @@ fn restore_backup_database(home: &Path, backup: &Path) -> Result<Option<PathBuf>
     let tmp = home.join("library.db.restore.tmp");
     let _ = std::fs::remove_file(&tmp);
     std::fs::copy(backup, &tmp).map_err(|e| format!("copy recovery database: {e}"))?;
-    std::fs::File::open(&tmp)
-        .and_then(|file| file.sync_all())
-        .map_err(|e| format!("sync recovery database: {e}"))?;
+    folder_sync::sync_file(&tmp).map_err(|e| format!("sync recovery database: {e}"))?;
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
