@@ -21,7 +21,7 @@ import {
   type LucideIcon,
   X,
 } from "lucide-react";
-import { useCompanion, type ChatMessage } from "../../hooks/useCompanion";
+import { useCompanion, type ChatMessage, type CompanionProgress } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { companion as companionApi, openRouter as openRouterApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import { stripProposalBlock } from "../../lib/companionDisplay";
@@ -30,6 +30,7 @@ import type {
   AIContextPreview,
   AIContextSelection,
   CompanionHistoryScope,
+  CompanionPhase,
   CompanionImageAttachment,
   CompanionReference,
   CompanionReferencePurpose,
@@ -278,12 +279,65 @@ function referenceScopeOf(ref: CompanionReference): ReferenceScopeDraft {
   return ref.node_id ? "scene" : "project";
 }
 
-function companionPendingSteps(t: Translate): string[] {
-  return [
-    t("companion.preparing.step.intent"),
-    t("companion.preparing.step.context"),
-    t("companion.preparing.step.draft"),
-  ];
+// The four steps a long run walks through. Lookup and query phases belong to
+// generating: the model is still working out what to say.
+const COMPANION_RUN_STEPS: { id: CompanionPhase; labelKey: MessageKey; phases: CompanionPhase[] }[] = [
+  { id: "requesting", labelKey: "companion.phase.requesting", phases: ["requesting"] },
+  { id: "generating", labelKey: "companion.phase.generating", phases: ["generating", "querying", "searching", "fetching"] },
+  { id: "verifying", labelKey: "companion.phase.verifying", phases: ["verifying"] },
+  { id: "applying", labelKey: "companion.phase.applying", phases: ["applying", "applied"] },
+];
+
+function companionStepIndex(phase: CompanionPhase | null): number {
+  if (!phase) return 0;
+  const found = COMPANION_RUN_STEPS.findIndex((step) => step.phases.includes(phase));
+  return found < 0 ? 0 : found;
+}
+
+function formatElapsed(seconds: number): string {
+  const safe = Math.max(0, seconds);
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
+}
+
+// Ticks once a second while a run is in flight so the writer can tell a slow
+// request from a stuck one.
+function useElapsedSeconds(startedAt: number | null, active: boolean): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active || startedAt === null) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active, startedAt]);
+  if (startedAt === null) return 0;
+  return Math.floor((nowMs - startedAt) / 1000);
+}
+
+function CompanionRunSteps({ t, phase }: { t: Translate; phase: CompanionPhase | null }) {
+  const current = companionStepIndex(phase);
+  return (
+    <ol className="companion-run-steps">
+      {COMPANION_RUN_STEPS.map((step, index) => (
+        <li
+          key={step.id}
+          className={index < current ? "is-done" : index === current ? "is-active" : ""}
+          aria-current={index === current ? "step" : undefined}
+        >
+          {t(step.labelKey)}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function runProgressCount(t: Translate, progress: CompanionProgress): string {
+  if (progress.phase === "applying" && progress.total > 0) {
+    return t("companion.progress.applying", { total: String(progress.total) });
+  }
+  if (progress.phase === "applied" && progress.applied > 0) {
+    return t("companion.progress.applied", { applied: String(progress.applied) });
+  }
+  return "";
 }
 
 function contextBudgetLevel(tokens: number): "normal" | "large" | "too-large" {
@@ -570,7 +624,7 @@ export function CompanionPanel({
     () => readStoredCompanionScope(projectId) ?? (currentNodeId ? "scene" : "project"),
   );
   const effectiveHistoryScope: CompanionHistoryScope = currentNodeId ? historyScope : "project";
-  const { messages, streaming, thinking, reasoning, status, send, cancel, clear, compact } = useCompanion(
+  const { messages, streaming, thinking, reasoning, status, progress, send, cancel, clear, compact } = useCompanion(
     projectId,
     currentNodeId,
     onApplied,
@@ -910,7 +964,8 @@ export function CompanionPanel({
   // instead of jumping. The completed message still uses the full text.
   const smoothStreaming = useSmoothStream(streaming, isStreaming);
   const liveProse = streamProse(smoothStreaming);
-  const showPendingPreparation = isStreaming && !thinking && !liveProse;
+  const elapsedSeconds = useElapsedSeconds(progress.startedAt, isStreaming);
+  const progressCount = runProgressCount(t, progress);
   const hasTranscript = messages.length > 0 || liveProse.trim().length > 0;
   const contextItemCount = totalContextItems(contextPreview, contextSelection);
   const contextTokenCount = totalContextTokens(contextPreview, contextSelection);
@@ -1253,9 +1308,16 @@ export function CompanionPanel({
         {!aiDraft && isStreaming && (
           <div className="msg bot">
             <span className="msg-who">{t("companion.speaker")}</span>
-            <div className="companion-thinking">
-              <span className="ai-working-dot" aria-hidden="true" />
-              {thinking || (liveProse ? t("companion.writing") : t("companion.preparing"))}
+            <div className="companion-progress" aria-label={t("companion.progress.label")} aria-live="polite">
+              <div className="companion-thinking">
+                <span className="ai-working-dot" aria-hidden="true" />
+                <span>{thinking || (liveProse ? t("companion.writing") : t("companion.preparing"))}</span>
+                {progressCount && <span className="companion-progress-count">{progressCount}</span>}
+                <span className="companion-elapsed">
+                  {t("companion.progress.elapsed", { time: formatElapsed(elapsedSeconds) })}
+                </span>
+              </div>
+              <CompanionRunSteps t={t} phase={progress.phase} />
             </div>
             {reasoning && (
               <details className="companion-reasoning">
@@ -1263,15 +1325,7 @@ export function CompanionPanel({
                 <div className="companion-reasoning-body">{reasoning}</div>
               </details>
             )}
-            {showPendingPreparation ? (
-              <div className="companion-preparing" aria-label={t("companion.preparing")}>
-                {companionPendingSteps(t).map((step) => (
-                  <span key={step}>{step}</span>
-                ))}
-              </div>
-            ) : (
-              <div className="msg-bubble">{liveProse ? <Markdown text={liveProse} /> : <span className="ai-cursor">&nbsp;</span>}</div>
-            )}
+            <div className="msg-bubble">{liveProse ? <Markdown text={liveProse} /> : <span className="ai-cursor">&nbsp;</span>}</div>
           </div>
         )}
       </div>
