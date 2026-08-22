@@ -7,13 +7,34 @@ on:
 
 jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
+    name: Test (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux carries the dependency audit; it is platform-independent and
+          # there is no reason to pay for it twice.
+          - name: Linux
+            os: ubuntu-latest
+            audit: true
+          # Windows is a shipped target whose debug build, checkout, and
+          # platform-specific engine paths are not exercised anywhere else:
+          # the release workflow only builds Windows in release mode.
+          - name: Windows
+            os: windows-latest
+            audit: false
+
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Install Tauri Linux dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -51,8 +72,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
+          key: ${{ matrix.os }}
 
       - name: Install security scanners
+        if: matrix.audit
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           cargo install cargo-audit --locked
@@ -61,4 +84,5 @@ jobs:
         run: make ci
 
       - name: Audit dependencies
+        if: matrix.audit
         run: make audit

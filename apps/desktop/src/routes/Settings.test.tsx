@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   openRouterOAuthFinish: vi.fn(),
   webSearchTest: vi.fn(),
   diagnosticsGet: vi.fn(),
+  openExternalUrl: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -49,6 +50,7 @@ vi.mock("../lib/rpc", () => ({
   diagnostics: {
     get: mocks.diagnosticsGet,
   },
+  openExternalUrl: mocks.openExternalUrl,
 }));
 
 function renderSettings() {
@@ -259,21 +261,20 @@ describe("Settings", () => {
 
   it("starts and finishes the OpenRouter OAuth connect flow", async () => {
     const user = userEvent.setup();
-    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+
     renderSettings();
 
     await user.click(await screen.findByRole("button", { name: /가장 쉬운 시작/ }));
     await user.click(await screen.findByRole("button", { name: "OpenRouter로 연결" }));
 
     await waitFor(() => expect(mocks.openRouterOAuthStart).toHaveBeenCalled());
-    expect(openSpy).toHaveBeenCalledWith(
+    // window.open cannot reach the OS browser from the webview, so the flow
+    // has to go through the Rust opener command.
+    expect(mocks.openExternalUrl).toHaveBeenCalledWith(
       "https://openrouter.ai/auth?callback_url=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback",
-      "_blank",
-      "noopener,noreferrer",
     );
     await waitFor(() => expect(mocks.openRouterOAuthFinish).toHaveBeenCalledWith("req-1"));
     await waitFor(() => expect(screen.getByText(/OpenRouter 연결이 완료되었습니다/)).toBeInTheDocument());
-    openSpy.mockRestore();
   });
 
   it("saves an OpenRouter key and refreshes OpenRouter models inside the setup guide", async () => {
