@@ -34,13 +34,16 @@ func (noopRefresher) RefreshNow(context.Context, string) {}
 
 // ContextBuilder gathers the Context payload from the repos.
 type ContextBuilder struct {
-	projects      *project.Repo
-	nodes         *node.Repo
-	mentions      *mention.Repo
-	notes         *note.Repo
-	relationships *relationship.Repo
-	plot          *plot.Builder
-	refresher     SummaryRefresher
+	factSource      FactSource
+	memorySource    MemorySource
+	referenceSource ReferenceSource
+	projects        *project.Repo
+	nodes           *node.Repo
+	mentions        *mention.Repo
+	notes           *note.Repo
+	relationships   *relationship.Repo
+	plot            *plot.Builder
+	refresher       SummaryRefresher
 }
 
 // NewContextBuilder returns a builder that reads from the supplied repos.
@@ -73,6 +76,42 @@ func (b *ContextBuilder) WithSummaryRefresher(r SummaryRefresher) *ContextBuilde
 
 // Build assembles the context for the given leaf node + user prompt + options,
 // then removes sections disabled by Options.Context.
+// FactSource supplies Fact Book cards for the brief. Optional: without it
+// the Facts section stays empty. Today only the companion gathers facts; this
+// interface completes the existing ContextSelection toggles so the MCP story
+// brief carries them too (pivot #47, Task 1.3).
+type FactSource interface {
+	ContextFacts(ctx context.Context, projectID, nodeID string) ([]FactBrief, error)
+}
+
+// MemorySource supplies remembered writer/world facts for the brief. Optional.
+type MemorySource interface {
+	ContextMemories(projectID string) []string
+}
+
+// ReferenceSource supplies writer-attached reference material. Optional.
+type ReferenceSource interface {
+	ContextReferences(ctx context.Context, projectID, nodeID string) ([]ReferenceBrief, error)
+}
+
+// WithFactSource wires the optional Fact Book section.
+func (b *ContextBuilder) WithFactSource(s FactSource) *ContextBuilder {
+	b.factSource = s
+	return b
+}
+
+// WithMemorySource wires the optional memories section.
+func (b *ContextBuilder) WithMemorySource(s MemorySource) *ContextBuilder {
+	b.memorySource = s
+	return b
+}
+
+// WithReferenceSource wires the optional references section.
+func (b *ContextBuilder) WithReferenceSource(s ReferenceSource) *ContextBuilder {
+	b.referenceSource = s
+	return b
+}
+
 func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt, selectionText string, opts Options) (Context, error) {
 	c, err := b.BuildFull(ctx, nodeID, prompt, selectionText, opts)
 	if err != nil {
@@ -161,6 +200,26 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		}
 	}
 
+	// Optional sections are best-effort, matching the companion's rule that
+	// partial context beats aborting the turn: per-source errors leave the
+	// section empty.
+	var facts []FactBrief
+	if b.factSource != nil {
+		if got, err := b.factSource.ContextFacts(ctx, n.ProjectID, nodeID); err == nil {
+			facts = got
+		}
+	}
+	var memories []string
+	if b.memorySource != nil {
+		memories = b.memorySource.ContextMemories(n.ProjectID)
+	}
+	var references []ReferenceBrief
+	if b.referenceSource != nil {
+		if got, err := b.referenceSource.ContextReferences(ctx, n.ProjectID, nodeID); err == nil {
+			references = got
+		}
+	}
+
 	return Context{
 		ProjectID:   proj.ID,
 		NodeID:      n.ID,
@@ -180,6 +239,9 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		Relationships: relations,
 		Plot:          spine,
 		Notes:         noteBriefs,
+		Facts:         facts,
+		Memories:      memories,
+		References:    references,
 		StyleNotes:    proj.StyleNotes,
 		SelectionText: selectionText,
 		UserPrompt:    prompt,
@@ -248,6 +310,15 @@ func ApplyContextSelection(c Context) Context {
 	}
 	if !s.Enabled(ContextKeyStyleNotes) {
 		c.StyleNotes = ""
+	}
+	if !s.Enabled(ContextKeyFacts) {
+		c.Facts = nil
+	}
+	if !s.Enabled(ContextKeyMemories) {
+		c.Memories = nil
+	}
+	if !s.Enabled(ContextKeyReferences) {
+		c.References = nil
 	}
 	return c
 }
