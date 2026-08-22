@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
+
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -92,7 +94,7 @@ func TestRunner_streams_thenEmitsDone(t *testing.T) {
 	r := NewRunner(notif, runs, func(ResolvedProvider) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
-	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
+	c := storycontext.Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
 	runID, err := r.Start(context.Background(), c, now)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -141,7 +143,7 @@ func TestRunner_cancel_emitsCancelled_andPersistsCancelled(t *testing.T) {
 	r := NewRunner(notif, runs, func(ResolvedProvider) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
-	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
+	c := storycontext.Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
 	runID, err := r.Start(context.Background(), c, now)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -224,7 +226,7 @@ func TestRunner_readsProviderOnEachStart(t *testing.T) {
 	r := NewRunner(notif, runs, rf.build, src)
 	now := func() int64 { return 1 }
 
-	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
+	c := storycontext.Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
 	if _, err := r.Start(context.Background(), c, now); err != nil {
 		t.Fatalf("first start: %v", err)
 	}
@@ -265,7 +267,7 @@ func TestRunner_providerError_emitsError(t *testing.T) {
 	r := NewRunner(notif, runs, func(ResolvedProvider) (llm.Client, error) { return fake, nil }, fixedProvider("claude-code-cli"))
 	now := func() int64 { return 1234 }
 
-	c := Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
+	c := storycontext.Context{ProjectID: p.ID, NodeID: *p.LastOpenedNodeID, SceneLabel: "씬 1", UserPrompt: "안녕"}
 	if _, err := r.Start(context.Background(), c, now); err != nil {
 		t.Fatalf("Start: %v", err)
 	}

@@ -5,12 +5,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -386,64 +386,64 @@ func buildContext(d PromptData, language string) string {
 	return strings.TrimSpace(b.String())
 }
 
-func applyContextSelection(d PromptData, selection ai.ContextSelection) PromptData {
-	if !selection.Enabled(ai.ContextKeyCurrentScene) {
+func applyContextSelection(d PromptData, selection storycontext.ContextSelection) PromptData {
+	if !selection.Enabled(storycontext.ContextKeyCurrentScene) {
 		d.SceneExcerpts = nil
 	}
-	if !selection.Enabled(ai.ContextKeyOverview) {
+	if !selection.Enabled(storycontext.ContextKeyOverview) {
 		d.Outline = ""
 	}
-	if !selection.Enabled(ai.ContextKeyPlot) {
+	if !selection.Enabled(storycontext.ContextKeyPlot) {
 		d.HasSpine = false
 		d.Spine = plot.Spine{}
 		d.Threads = nil
 	}
-	if !selection.Enabled(ai.ContextKeyEntities) {
+	if !selection.Enabled(storycontext.ContextKeyEntities) {
 		d.Entities = nil
 	}
-	if !selection.Enabled(ai.ContextKeyRelationships) {
+	if !selection.Enabled(storycontext.ContextKeyRelationships) {
 		d.Relationships = nil
 	}
-	if !selection.Enabled(ai.ContextKeyFacts) {
+	if !selection.Enabled(storycontext.ContextKeyFacts) {
 		d.Facts = nil
 	}
-	if !selection.Enabled(ai.ContextKeyMemories) {
+	if !selection.Enabled(storycontext.ContextKeyMemories) {
 		d.Memories = nil
 	}
-	if !selection.Enabled(ai.ContextKeyReferences) {
+	if !selection.Enabled(storycontext.ContextKeyReferences) {
 		d.References = nil
 	}
 	return d
 }
 
-func previewFromPromptData(d PromptData, selection ai.ContextSelection) ai.ContextPreview {
-	sections := []ai.PreviewSection{}
-	add := func(id ai.ContextKey, label string, count int, preview string) {
+func previewFromPromptData(d PromptData, selection storycontext.ContextSelection) storycontext.ContextPreview {
+	sections := []storycontext.PreviewSection{}
+	add := func(id storycontext.ContextKey, label string, count int, preview string) {
 		present := count > 0 || strings.TrimSpace(preview) != ""
 		trimmed := trimPreview(strings.TrimSpace(preview))
-		sections = append(sections, ai.PreviewSection{
+		sections = append(sections, storycontext.PreviewSection{
 			ID:            id,
 			Label:         label,
 			Present:       present,
 			Selected:      present && selection.Enabled(id),
 			Count:         count,
 			Preview:       trimmed,
-			CharCount:     ai.EstimateChars(preview),
-			TokenEstimate: ai.EstimateTokens(preview),
+			CharCount:     storycontext.EstimateChars(preview),
+			TokenEstimate: storycontext.EstimateTokens(preview),
 		})
 	}
 
-	add(ai.ContextKeyCurrentScene, "작성된 본문 발췌", len(d.SceneExcerpts), renderSceneExcerptsPreview(d.SceneExcerpts))
+	add(storycontext.ContextKeyCurrentScene, "작성된 본문 발췌", len(d.SceneExcerpts), renderSceneExcerptsPreview(d.SceneExcerpts))
 
 	overview := strings.TrimSpace(d.Outline)
-	add(ai.ContextKeyOverview, "작품 개요", boolCount(overview != ""), overview)
+	add(storycontext.ContextKeyOverview, "작품 개요", boolCount(overview != ""), overview)
 
-	add(ai.ContextKeyFacts, "팩트 자료집", len(d.Facts), renderFactsPreview(d.Facts))
-	add(ai.ContextKeyPlot, "플롯 (스토리라인&비트)", companionPlotCount(d), renderCompanionPlotPreview(d))
-	add(ai.ContextKeyEntities, "세계관 요소", len(d.Entities), renderCompanionEntitiesPreview(d.Entities))
-	add(ai.ContextKeyRelationships, "관계", len(d.Relationships), renderCompanionRelationshipsPreview(d.Entities, d.Relationships))
-	add(ai.ContextKeyMemories, "컴패니언 기억", len(d.Memories), renderMemoriesPreview(d.Memories))
-	add(ai.ContextKeyReferences, "추가 레퍼런스", len(activeReferences(d.References)), renderReferencesPreview(d.References))
+	add(storycontext.ContextKeyFacts, "팩트 자료집", len(d.Facts), renderFactsPreview(d.Facts))
+	add(storycontext.ContextKeyPlot, "플롯 (스토리라인&비트)", companionPlotCount(d), renderCompanionPlotPreview(d))
+	add(storycontext.ContextKeyEntities, "세계관 요소", len(d.Entities), renderCompanionEntitiesPreview(d.Entities))
+	add(storycontext.ContextKeyRelationships, "관계", len(d.Relationships), renderCompanionRelationshipsPreview(d.Entities, d.Relationships))
+	add(storycontext.ContextKeyMemories, "컴패니언 기억", len(d.Memories), renderMemoriesPreview(d.Memories))
+	add(storycontext.ContextKeyReferences, "추가 레퍼런스", len(activeReferences(d.References)), renderReferencesPreview(d.References))
 
 	selectedCount := 0
 	selectedChars := 0
@@ -465,8 +465,8 @@ func previewFromPromptData(d PromptData, selection ai.ContextSelection) ai.Conte
 		selectedTokens += section.TokenEstimate
 	}
 
-	return ai.ContextPreview{
-		PreviewCounts: ai.PreviewCounts{
+	return storycontext.ContextPreview{
+		PreviewCounts: storycontext.PreviewCounts{
 			NearbyScenes:  len(d.SceneExcerpts),
 			HasOutline:    overview != "",
 			Entities:      len(d.Entities),
@@ -680,7 +680,7 @@ func renderReferencesPreview(refs []Reference) string {
 		if r.Status == ReferenceStatusSummarized {
 			b.WriteString(" · 요약")
 		}
-		b.WriteString(fmt.Sprintf(" · 약 %d tokens\n", ai.EstimateTokens(referencePromptText(r))))
+		b.WriteString(fmt.Sprintf(" · 약 %d tokens\n", storycontext.EstimateTokens(referencePromptText(r))))
 		if text := strings.TrimSpace(referencePromptText(r)); text != "" {
 			b.WriteString("  " + trimPreview(text) + "\n")
 		}

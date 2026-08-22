@@ -22,6 +22,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/tars/pkg/llm"
 	"github.com/devlikebear/tars/pkg/session"
@@ -312,7 +313,7 @@ func TestSendWithContextAndImages_AttachesLatestUserMessageBlocks(t *testing.T) 
 	svc, notif, projectID := newSvcWithClient(t, client)
 	imageData := base64.StdEncoding.EncodeToString([]byte{1, 2, 3})
 
-	runID, err := svc.SendWithContextAndImages(context.Background(), projectID, "", "이 장면 이미지를 참고해줘", ai.DefaultContextSelection(), []ImageAttachment{{
+	runID, err := svc.SendWithContextAndImages(context.Background(), projectID, "", "이 장면 이미지를 참고해줘", storycontext.DefaultContextSelection(), []ImageAttachment{{
 		Name:      "scene.png",
 		MediaType: "image/png",
 		Data:      imageData,
@@ -1106,7 +1107,7 @@ func TestApplyContextSelection_RemovesUncheckedCompanionSections(t *testing.T) {
 		Memories: []string{"작가는 철학적인 질문을 좋아한다"},
 	}
 
-	selection := ai.ContextSelection{
+	selection := storycontext.ContextSelection{
 		CurrentScene:  &off,
 		Overview:      &off,
 		Plot:          &off,
@@ -1153,17 +1154,17 @@ func TestPreviewFromPromptData_RendersSelectableCompanionSections(t *testing.T) 
 		Memories: []string{"작가는 모호한 결말을 선호한다"},
 	}
 
-	preview := previewFromPromptData(data, ai.ContextSelection{Facts: &off})
+	preview := previewFromPromptData(data, storycontext.ContextSelection{Facts: &off})
 
 	var sawScene, sawFact bool
 	for _, section := range preview.Sections {
-		if section.ID == ai.ContextKeyCurrentScene {
+		if section.ID == storycontext.ContextKeyCurrentScene {
 			sawScene = true
 			if !section.Selected || !strings.Contains(section.Preview, "인간의 개별성") {
 				t.Fatalf("scene preview not selected/rendered: %+v", section)
 			}
 		}
-		if section.ID == ai.ContextKeyFacts {
+		if section.ID == storycontext.ContextKeyFacts {
 			sawFact = true
 			if section.Selected || !strings.Contains(section.Preview, "일반 경찰") {
 				t.Fatalf("facts preview should be visible but unselected: %+v", section)
@@ -1223,7 +1224,7 @@ func TestApplyContextSelection_RemovesReferences(t *testing.T) {
 			Status:  ReferenceStatusActive,
 		}},
 	}
-	text := buildContext(applyContextSelection(data, ai.ContextSelection{References: &off}), "")
+	text := buildContext(applyContextSelection(data, storycontext.ContextSelection{References: &off}), "")
 	if strings.Contains(text, "프롬프트에 들어가면 안 되는") {
 		t.Fatalf("unchecked reference still rendered:\n%s", text)
 	}

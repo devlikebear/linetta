@@ -112,4 +112,3 @@ func (b *Builder) Build(ctx context.Context, nodeID string) (Spine, error) {
 	}
 	return out, nil
 }
-

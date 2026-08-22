@@ -36,9 +36,9 @@ func TestRepo_CreateRequiresSourceURL(t *testing.T) {
 	f := newFixture(t)
 	_, err := f.repo.Create(context.Background(), 10, NewInput{
 		ProjectID: f.projectID,
-		Claim:    "서울 지하철 막차는 보통 새벽까지 운행한다",
-		Result:   "노선별로 다르므로 최신 시간표 확인이 필요하다.",
-		Status:   StatusUncertain,
+		Claim:     "서울 지하철 막차는 보통 새벽까지 운행한다",
+		Result:    "노선별로 다르므로 최신 시간표 확인이 필요하다.",
+		Status:    StatusUncertain,
 	})
 	if err == nil {
 		t.Fatal("expected source-required error")
@@ -51,14 +51,14 @@ func TestRepo_CreateListUpdateDelete(t *testing.T) {
 	card, err := f.repo.Create(ctx, 10, NewInput{
 		ProjectID: f.projectID,
 		NodeID:    &f.nodeID,
-		Claim:    "런던 경찰은 제복 근무 중 총을 항상 휴대한다",
-		Result:   "일반 경찰은 통상 총기를 휴대하지 않는다.",
-		Status:   StatusVerified,
-		Category: "police",
+		Claim:     "런던 경찰은 제복 근무 중 총을 항상 휴대한다",
+		Result:    "일반 경찰은 통상 총기를 휴대하지 않는다.",
+		Status:    StatusVerified,
+		Category:  "police",
 		Sources: []SourceInput{{
-			URL:       "https://www.met.police.uk/",
-			Title:     "Met Police",
-			Snippet:   "Official policing reference",
+			URL:        "https://www.met.police.uk/",
+			Title:      "Met Police",
+			Snippet:    "Official policing reference",
 			AccessedAt: 10,
 		}},
 	})
@@ -100,10 +100,10 @@ func TestRepo_ListWithNodeIncludesProjectWideCards(t *testing.T) {
 	ctx := context.Background()
 	projectWide, err := f.repo.Create(ctx, 10, NewInput{
 		ProjectID: f.projectID,
-		Claim:    "프로젝트 전체 자료",
-		Result:   "전체 배경에 쓰는 자료",
-		Status:   StatusVerified,
-		Sources:  []SourceInput{{URL: "https://example.com/project", AccessedAt: 10}},
+		Claim:     "프로젝트 전체 자료",
+		Result:    "전체 배경에 쓰는 자료",
+		Status:    StatusVerified,
+		Sources:   []SourceInput{{URL: "https://example.com/project", AccessedAt: 10}},
 	})
 	if err != nil {
 		t.Fatalf("Create project-wide: %v", err)
@@ -111,10 +111,10 @@ func TestRepo_ListWithNodeIncludesProjectWideCards(t *testing.T) {
 	sceneCard, err := f.repo.Create(ctx, 20, NewInput{
 		ProjectID: f.projectID,
 		NodeID:    &f.nodeID,
-		Claim:    "현재 씬 자료",
-		Result:   "현재 씬에만 연결된 자료",
-		Status:   StatusUncertain,
-		Sources:  []SourceInput{{URL: "https://example.com/scene", AccessedAt: 20}},
+		Claim:     "현재 씬 자료",
+		Result:    "현재 씬에만 연결된 자료",
+		Status:    StatusUncertain,
+		Sources:   []SourceInput{{URL: "https://example.com/scene", AccessedAt: 20}},
 	})
 	if err != nil {
 		t.Fatalf("Create scene: %v", err)

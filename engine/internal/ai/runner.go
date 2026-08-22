@@ -8,6 +8,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/streamdedup"
 	"github.com/devlikebear/tars/pkg/llm"
 	"github.com/google/uuid"
@@ -50,7 +51,7 @@ func NewRunner(notify rpc.Notifier, runs *store.AIRunsRepo, factory ClientFactor
 
 // Start enqueues a run and returns its id immediately. The work happens on a
 // goroutine that emits notifications via the Notifier.
-func (r *Runner) Start(ctx context.Context, c Context, now Clock) (string, error) {
+func (r *Runner) Start(ctx context.Context, c storycontext.Context, now Clock) (string, error) {
 	runID := uuid.NewString()
 	startedAt := now()
 	ctxJSON, _ := json.Marshal(c)
@@ -92,7 +93,7 @@ func (r *Runner) Start(ctx context.Context, c Context, now Clock) (string, error
 	return runID, nil
 }
 
-func (r *Runner) run(ctx context.Context, runID string, c Context, client llm.Client, now Clock) {
+func (r *Runner) run(ctx context.Context, runID string, c storycontext.Context, client llm.Client, now Clock) {
 	defer func() {
 		r.mu.Lock()
 		delete(r.active, runID)

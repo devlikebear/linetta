@@ -23,6 +23,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/tars/pkg/session"
 )
@@ -52,11 +53,11 @@ type ImageAttachment struct {
 }
 
 type SendOptions struct {
-	Context          ai.ContextSelection `json:"context,omitempty"`
-	OutlineStructure string              `json:"outline_structure,omitempty"`
-	Intent           RequestIntent       `json:"intent,omitempty"`
-	Scope            string              `json:"scope,omitempty"`
-	Language         string              `json:"language,omitempty"`
+	Context          storycontext.ContextSelection `json:"context,omitempty"`
+	OutlineStructure string                        `json:"outline_structure,omitempty"`
+	Intent           RequestIntent                 `json:"intent,omitempty"`
+	Scope            string                        `json:"scope,omitempty"`
+	Language         string                        `json:"language,omitempty"`
 }
 
 // ClientFactory and ProviderSource are shared with the ai package so the same
@@ -526,10 +527,10 @@ func (s *Service) DeleteProjectData(ctx context.Context, projectID string) error
 
 // PreviewContext returns the same context sections a companion turn can inject,
 // with selected flags derived from the writer's current checklist choices.
-func (s *Service) PreviewContext(ctx context.Context, projectID, nodeID string, selection ai.ContextSelection) (ai.ContextPreview, error) {
+func (s *Service) PreviewContext(ctx context.Context, projectID, nodeID string, selection storycontext.ContextSelection) (storycontext.ContextPreview, error) {
 	data, err := s.gatherContext(ctx, projectID, nodeID, "")
 	if err != nil {
-		return ai.ContextPreview{}, err
+		return storycontext.ContextPreview{}, err
 	}
 	return previewFromPromptData(data, selection), nil
 }
@@ -710,24 +711,24 @@ func normalizeImageAttachments(images []ImageAttachment) ([]ImageAttachment, err
 // Send starts a companion turn; returns the run id. Streaming + proposal arrive
 // via notifications.
 func (s *Service) Send(ctx context.Context, projectID, nodeID, text string, now func() int64) (string, error) {
-	return s.SendWithContext(ctx, projectID, nodeID, text, ai.DefaultContextSelection(), now)
+	return s.SendWithContext(ctx, projectID, nodeID, text, storycontext.DefaultContextSelection(), now)
 }
 
 // SendWithContext starts a companion turn using the writer-selected context
 // checklist state.
-func (s *Service) SendWithContext(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, now func() int64) (string, error) {
+func (s *Service) SendWithContext(ctx context.Context, projectID, nodeID, text string, selection storycontext.ContextSelection, now func() int64) (string, error) {
 	return s.SendWithContextAndImages(ctx, projectID, nodeID, text, selection, nil, now)
 }
 
 // SendWithContextAndImages starts a companion turn with transient multimodal
 // images attached to the latest user message.
-func (s *Service) SendWithContextAndImages(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, images []ImageAttachment, now func() int64) (string, error) {
-	return s.SendWithOptionsAndImages(ctx, projectID, nodeID, text, ai.Options{Context: selection}, images, now)
+func (s *Service) SendWithContextAndImages(ctx context.Context, projectID, nodeID, text string, selection storycontext.ContextSelection, images []ImageAttachment, now func() int64) (string, error) {
+	return s.SendWithOptionsAndImages(ctx, projectID, nodeID, text, storycontext.Options{Context: selection}, images, now)
 }
 
 // SendWithOptionsAndImages starts a companion turn with the full per-call
 // option payload used by the desktop client.
-func (s *Service) SendWithOptionsAndImages(ctx context.Context, projectID, nodeID, text string, opts ai.Options, images []ImageAttachment, now func() int64) (string, error) {
+func (s *Service) SendWithOptionsAndImages(ctx context.Context, projectID, nodeID, text string, opts storycontext.Options, images []ImageAttachment, now func() int64) (string, error) {
 	return s.SendWithCompanionOptionsAndImages(ctx, projectID, nodeID, text, SendOptions{
 		Context:          opts.Context,
 		OutlineStructure: opts.OutlineStructure,

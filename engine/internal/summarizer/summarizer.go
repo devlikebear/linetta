@@ -93,7 +93,7 @@ func (s *Summarizer) summarizeOne(ctx context.Context, nodeID string) {
 }
 
 // RefreshNow synchronously summarizes the node (and any stale descendants).
-// Implements ai.SummaryRefresher so ContextBuilder can populate the
+// Implements storycontext.SummaryRefresher so ContextBuilder can populate the
 // hierarchical layer without waiting on the background queue.
 func (s *Summarizer) RefreshNow(ctx context.Context, nodeID string) {
 	s.summarizeOneDepth(ctx, nodeID, 0)

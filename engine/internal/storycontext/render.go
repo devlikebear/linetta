@@ -1,4 +1,4 @@
-package ai
+package storycontext
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
-	"github.com/devlikebear/tars/pkg/llm"
 )
 
 // langIsEnglish reports whether the app UI language selects English prompts.
@@ -54,24 +53,12 @@ func PresetSeed(p PresetID) string {
 	return ""
 }
 
-// BuildMessages converts a Context into the two-message system+user pair the
-// engine sends to tars. The system message governs tone and length; the user
-// message contains the structured context.
-//
-// Why msg.Content (string) and not msg.ContentBlocks: both claude-code-cli and
-// openai-codex providers in tars/pkg/llm read the plain `Content` field; the
-// openai-codex provider only puts system messages into the Responses API's
-// `instructions` field when `msg.Content` is non-empty, and claude-code-cli's
-// system-prompt assembler ignores ContentBlocks entirely. ContentBlocks is for
-// multimodal inputs (images, PDFs) which we don't send.
-func BuildMessages(c Context) []llm.ChatMessage {
+// Render applies the context selection and returns the final system and
+// user prompt texts. Callers that need chat-message envelopes wrap these
+// strings themselves (see internal/ai.BuildMessages).
+func Render(c Context) (system, user string) {
 	c = ApplyContextSelection(c)
-	system := buildSystem(c)
-	user := buildUser(c)
-	return []llm.ChatMessage{
-		{Role: "system", Content: system},
-		{Role: "user", Content: user},
-	}
+	return buildSystem(c), buildUser(c)
 }
 
 func buildSystem(c Context) string {
