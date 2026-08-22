@@ -116,14 +116,14 @@ func TestProvider(store *settings.Store, factory ai.ClientFactory) rpc.Handler {
 		defer cancel()
 		client, err := factory(rp)
 		if err != nil {
-			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+			return nil, providerMethodError(rp, err)
 		}
 		resp, err := client.Chat(testCtx, []llm.ChatMessage{
 			{Role: "system", Content: "당신은 Linetta의 AI 연결 테스트입니다. 아주 짧게 한국어로만 답하세요."},
 			{Role: "user", Content: "연결 테스트입니다. '연결되었습니다'라고만 답하세요."},
 		}, llm.ChatOptions{})
 		if err != nil {
-			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: providerTestErrorMessage(rp, err)}
+			return nil, providerMethodError(rp, err)
 		}
 		msg := strings.TrimSpace(resp.Message.Content)
 		if msg == "" {
@@ -135,6 +135,23 @@ func TestProvider(store *settings.Store, factory ai.ClientFactory) rpc.Handler {
 			Model:    rp.Model,
 			Message:  msg,
 		})
+	}
+}
+
+// providerMethodError tags failures the UI has to explain in the reader's own
+// language with a reason code, so the desktop app can translate rather than
+// showing the engine's English sentence.
+func providerMethodError(provider ai.ResolvedProvider, err error) *rpc.MethodError {
+	if errors.Is(err, ai.ErrDataSharingConsentRequired) {
+		return &rpc.MethodError{
+			Code:    rpc.CodeInternalError,
+			Message: err.Error(),
+			Data:    rpc.ReasonData(rpc.ReasonAIDataSharingConsentRequired),
+		}
+	}
+	return &rpc.MethodError{
+		Code:    rpc.CodeInternalError,
+		Message: providerTestErrorMessage(provider, err),
 	}
 }
 

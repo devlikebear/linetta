@@ -14,6 +14,7 @@ import {
   diagnostics as diagnosticsApi,
   openExternalUrl,
 } from "../lib/rpc";
+import { rpcErrorMessage } from "../lib/rpcMessage";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
 import { isWindows } from "../lib/platform";
@@ -261,7 +262,7 @@ export function Settings() {
       const res = await providersApi.listModels(id);
       setModelOptions(res.models);
     } catch (e) {
-      setModelsError(String(e));
+      setModelsError(rpcErrorMessage(e, t));
     } finally {
       setModelsLoading(false);
     }
@@ -296,7 +297,7 @@ export function Settings() {
       const res = await providersApi.test(meta.id);
       setProviderTestMsg({ kind: "ok", text: t("settings.provider.testOk", { message: res.message }) });
     } catch (e) {
-      setProviderTestMsg({ kind: "error", text: t("settings.provider.testError", { message: String(e) }) });
+      setProviderTestMsg({ kind: "error", text: t("settings.provider.testError", { message: rpcErrorMessage(e, t) }) });
     } finally {
       setProviderTesting(false);
     }
@@ -335,7 +336,7 @@ export function Settings() {
       const res = await webSearchApi.test();
       setWebSearchTestMsg({ kind: "ok", text: t("settings.tools.webSearchTestOk", { message: res.message }) });
     } catch (e) {
-      setWebSearchTestMsg({ kind: "error", text: t("settings.tools.webSearchTestError", { message: String(e) }) });
+      setWebSearchTestMsg({ kind: "error", text: t("settings.tools.webSearchTestError", { message: rpcErrorMessage(e, t) }) });
     } finally {
       setSaving(false);
       setWebSearchTesting(false);
@@ -493,7 +494,7 @@ export function Settings() {
         setOpenRouterKeyInfo(null);
       }
     } catch (e) {
-      const message = String(e);
+      const message = rpcErrorMessage(e, t);
       setOpenRouterOAuthError(t("settings.setup.openrouter.oauthError", { message }));
       setProviderTestMsg({ kind: "error", text: t("settings.setup.openrouter.oauthError", { message }) });
     } finally {
