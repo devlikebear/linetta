@@ -167,7 +167,7 @@ make test-tauri
 make test-mobile-engine
 ```
 
-`make test` runs the Go test suite, frontend Vitest tests, the Vite production build, and Rust `cargo check`.
+`make test` runs the Go test suite, frontend Vitest tests, the Vite production build, and the Tauri shell's `cargo check` and `cargo test`.
 
 ### Mobile engine development
 

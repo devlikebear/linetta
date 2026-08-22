@@ -32,8 +32,8 @@ test-go: ## Run Go engine tests
 test-desktop: ## Run desktop frontend tests and production build
 	cd apps/desktop && pnpm lint && pnpm test && pnpm build
 
-test-tauri: ## Type-check the Tauri shell
-	cd apps/desktop/src-tauri && cargo check
+test-tauri: ## Type-check the Tauri shell and run its unit tests
+	cd apps/desktop/src-tauri && cargo check && cargo test
 
 test-mobile-engine: ## Run the Go engine suite under the mobile build tag
 	cd engine && go test -tags mobile ./...
