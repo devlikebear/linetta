@@ -7,6 +7,10 @@ import (
 
 const webSearchAPIKeySecretName = "web_search.api_key"
 
+// mcpTokenSecretName holds the bearer token external MCP clients present to
+// the local server. Kept in the secret store, never in settings.json.
+const mcpTokenSecretName = "mcp.token"
+
 func providerAPIKeySecretName(provider string) string {
 	return "provider." + provider + ".api_key"
 }
