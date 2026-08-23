@@ -781,8 +781,14 @@ func PlainTextToTiptapDoc(text string) (string, error) {
 	return string(raw), nil
 }
 
-// plainTextFromDoc and trimRunes are duplicated from companion/query.go; the
-// companion copies die with that package in the pivot's removal phase.
+// PlainTextFromDoc renders a stored Tiptap document as plain text, resolving
+// mentions to their labels. Exported so the companion shares one copy rather
+// than carrying a byte-identical duplicate through the transition.
+func PlainTextFromDoc(raw *string) string { return plainTextFromDoc(raw) }
+
+// TrimRunes shortens s to max runes, appending an ellipsis when it cuts.
+func TrimRunes(s string, max int) string { return trimRunes(s, max) }
+
 func plainTextFromDoc(raw *string) string {
 	if raw == nil || *raw == "" {
 		return ""
