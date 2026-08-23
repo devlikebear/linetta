@@ -11,6 +11,8 @@ import "encoding/json"
 // into handlers leak Korean to English and Japanese readers.
 const (
 	ReasonAIDataSharingConsentRequired = "ai_data_sharing_consent_required"
+	ReasonMCPPortInUse                 = "mcp_port_in_use"
+	ReasonMCPConsentRequired           = "mcp_consent_required"
 )
 
 // ReasonData builds the MethodError Data payload carrying a reason code.

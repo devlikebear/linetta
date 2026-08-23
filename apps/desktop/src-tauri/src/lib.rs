@@ -180,6 +180,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             engine_ping,
             engine_call,
+            mcp_bridge_path,
             engine_status,
             open_recovery_folder,
             restore_latest_backup,
@@ -207,6 +208,26 @@ struct EngineStatus {
     db_path: Option<String>,
     migration_version: Option<i64>,
     migration_count: Option<i64>,
+}
+
+/// Absolute path to the bundled MCP bridge, or None when it is not present
+/// (the Mac App Store build ships without it, and a dev build may not have run
+/// the build script yet). The settings pane prints this into the writer's
+/// client config, so it must be the real installed path, not a guess.
+#[tauri::command]
+fn mcp_bridge_path(app: tauri::AppHandle) -> Option<String> {
+    let name = if cfg!(target_os = "windows") {
+        "linetta-mcp.exe"
+    } else {
+        "linetta-mcp"
+    };
+    let candidate = app.path().resource_dir().ok()?.join("resources").join(name);
+    if candidate.is_file() {
+        return Some(candidate.to_string_lossy().into_owned());
+    }
+    // Dev builds run from the crate directory rather than a bundle.
+    let dev = std::env::current_dir().ok()?.join("src-tauri/resources").join(name);
+    dev.is_file().then(|| dev.to_string_lossy().into_owned())
 }
 
 #[tauri::command]

@@ -10,6 +10,7 @@ const rpc = vi.hoisted(() => ({
   activity: vi.fn(),
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
+  bridgePath: vi.fn(),
 }));
 
 vi.mock("../../lib/rpc", () => ({
@@ -21,6 +22,8 @@ vi.mock("../../lib/rpc", () => ({
     activity: rpc.activity,
   },
   settings: { get: rpc.settingsGet, set: rpc.settingsSet },
+  // The pane asks the shell for the installed bridge path when none is given.
+  mcpBridgePath: rpc.bridgePath,
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -47,6 +50,7 @@ describe("McpSection", () => {
     rpc.settingsGet.mockResolvedValue(settingsWith());
     rpc.settingsSet.mockResolvedValue(settingsWith());
     rpc.activity.mockResolvedValue([]);
+    rpc.bridgePath.mockResolvedValue(null);
   });
 
   it("refuses to enable until the writer has explicitly consented", async () => {
@@ -140,5 +144,47 @@ describe("McpSection", () => {
     await userEvent.click(await screen.findByTestId("mcp-enable"));
     const error = await screen.findByTestId("mcp-error");
     expect(error.textContent).toContain("port in use");
+  });
+
+  it("says where to get the bridge on a build that ships without one", async () => {
+    rpc.status.mockResolvedValue(RUNNING);
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
+    rpc.bridgePath.mockResolvedValue(null);
+    render(<McpSection />);
+
+    // Mac App Store builds leave the bridge out, so the Desktop snippet points
+    // at a command the writer does not have yet. Saying so beats a silent fail.
+    await screen.findByTestId("mcp-bridge-missing");
+  });
+
+  it("stays quiet about the bridge when the build actually bundles one", async () => {
+    rpc.status.mockResolvedValue(RUNNING);
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
+    rpc.bridgePath.mockResolvedValue("/Applications/Linetta.app/resources/linetta-mcp");
+    render(<McpSection />);
+
+    const desktop = await screen.findByTestId("mcp-snippet-desktop");
+    await waitFor(() =>
+      expect(desktop.textContent).toContain("/Applications/Linetta.app/resources/linetta-mcp"),
+    );
+    expect(screen.queryByTestId("mcp-bridge-missing")).toBeNull();
+  });
+
+  it("names the taken port as something the writer can fix", async () => {
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
+    // The engine's English sentence says nothing about what to do next; the
+    // reason code is what turns it into "pick another port".
+    const refused = Object.assign(new Error("mcp port in use: 7391"), {
+      data: { reason: "mcp_port_in_use" },
+    });
+    rpc.enable.mockRejectedValue(refused);
+    render(<McpSection />);
+
+    await userEvent.click(await screen.findByTestId("mcp-enable"));
+    const error = await screen.findByTestId("mcp-error");
+    expect(error.textContent).toBe("errors.mcpPortInUse");
+
+    // The port field stays editable so the fix is one keystroke away.
+    expect(screen.getByLabelText("settings.mcp.port")).not.toBeDisabled();
   });
 });

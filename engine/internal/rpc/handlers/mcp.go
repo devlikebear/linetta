@@ -36,13 +36,13 @@ func mcpError(err error) error {
 		return &rpc.MethodError{
 			Code:    rpc.CodeInvalidParams,
 			Message: err.Error(),
-			Data:    rpc.ReasonData("mcp_port_in_use"),
+			Data:    rpc.ReasonData(rpc.ReasonMCPPortInUse),
 		}
 	case errors.Is(err, ErrMCPConsentRequired):
 		return &rpc.MethodError{
 			Code:    rpc.CodeInvalidParams,
 			Message: err.Error(),
-			Data:    rpc.ReasonData("mcp_consent_required"),
+			Data:    rpc.ReasonData(rpc.ReasonMCPConsentRequired),
 		}
 	default:
 		return &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}

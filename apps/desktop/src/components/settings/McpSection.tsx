@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
-import { mcp, settings as settingsApi } from "../../lib/rpc";
+import { mcp, mcpBridgePath, settings as settingsApi } from "../../lib/rpc";
+import { rpcErrorMessage } from "../../lib/rpcMessage";
 import type { McpActivityEntry, McpStatus } from "../../lib/types";
 
 /** Connect an external agent (MCP).
@@ -14,7 +15,8 @@ import type { McpActivityEntry, McpStatus } from "../../lib/types";
  */
 
 export type McpSectionProps = {
-  /** Absolute path to the bundled bridge, for the Claude Desktop snippet. */
+  /** Absolute path to the bundled bridge. Resolved from the shell when not
+   *  supplied; tests pass it directly. */
   bridgePath?: string;
 };
 
@@ -29,11 +31,18 @@ const MODES = ["read_only", "full"] as const;
 
 export function McpSection({ bridgePath }: McpSectionProps) {
   const { t } = useI18n();
+  // undefined until the shell answers, then a path or null. The difference
+  // matters: null means this build ships no bridge (Mac App Store), which the
+  // writer has to be told, and "not asked yet" must not look like that.
+  const [resolvedBridge, setResolvedBridge] = useState<string | null | undefined>(bridgePath);
   const [status, setStatus] = useState<McpStatus | null>(null);
   const [saved, setSaved] = useState<Saved>({ mode: "read_only", port: 7391, projectId: "", consented: false });
   const [token, setToken] = useState<string | null>(null);
   const [activity, setActivity] = useState<McpActivityEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  // The raw failure is kept and translated at render time: a reason code has
+  // no language of its own, and switching language should redraw the message
+  // rather than leave a stale sentence on screen.
+  const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -51,8 +60,15 @@ export function McpSection({ bridgePath }: McpSectionProps) {
   }, []);
 
   useEffect(() => {
-    void refresh().catch((e) => setError(String(e)));
+    void refresh().catch(setError);
   }, [refresh]);
+
+  useEffect(() => {
+    if (bridgePath) return;
+    void mcpBridgePath()
+      .then((path) => setResolvedBridge(path ?? null))
+      .catch(() => setResolvedBridge(null));
+  }, [bridgePath]);
 
   const guard = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -60,7 +76,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
     try {
       await fn();
     } catch (e) {
-      setError(String(e));
+      setError(e);
     } finally {
       setBusy(false);
     }
@@ -116,7 +132,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
         linetta: {
           type: "http",
           url: endpoint,
-          headersHelper: `${bridgePath ?? "linetta-mcp"} --print-headers`,
+          headersHelper: `${resolvedBridge ?? "linetta-mcp"} --print-headers`,
         },
       },
     },
@@ -124,7 +140,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
     2,
   );
   const desktopConfig = JSON.stringify(
-    { mcpServers: { linetta: { command: bridgePath ?? "linetta-mcp", args: [] } } },
+    { mcpServers: { linetta: { command: resolvedBridge ?? "linetta-mcp", args: [] } } },
     null,
     2,
   );
@@ -206,9 +222,11 @@ export function McpSection({ bridgePath }: McpSectionProps) {
         </>
       )}
 
-      {error && (
+      {error != null && (
         <p className="sd" role="alert" data-testid="mcp-error">
-          {error}
+          {/* A taken port is the one failure a writer can fix from this pane,
+              so the engine's reason code becomes a sentence naming the knob. */}
+          {rpcErrorMessage(error, t)}
         </p>
       )}
 
@@ -223,6 +241,11 @@ export function McpSection({ bridgePath }: McpSectionProps) {
           ) : (
             <p className="sd" data-testid="mcp-token-hidden">
               {t("settings.mcp.snippets.tokenHidden")}
+            </p>
+          )}
+          {resolvedBridge === null && (
+            <p className="sd" data-testid="mcp-bridge-missing">
+              {t("settings.mcp.snippets.bridgeMissing")}
             </p>
           )}
           <p className="sd">{t("settings.mcp.snippets.projectConfig")}</p>

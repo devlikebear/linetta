@@ -1,4 +1,4 @@
-.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -8,7 +8,7 @@ dev: ## Start the desktop app in dev mode
 
 test: test-go test-desktop test-tauri ## Run all local verification
 
-ci: validate-actions-runtime test ## Run the CI verification contract
+ci: validate-actions-runtime validate-distribution test ## Run the CI verification contract
 
 audit: audit-go audit-desktop audit-rust ## Check reachable and locked dependency vulnerabilities
 
@@ -48,6 +48,9 @@ validate-distribution: ## Validate release packaging metadata
 build-engine: ## Build the standalone JSONRPC debug engine
 	bash scripts/build-engine.sh
 
+build-mcp-bridge: ## Build the stdio MCP bridge Claude Desktop launches
+	bash scripts/build-mcp-bridge.sh
+
 build-mobile-engine-ios: ## Build the embedded Go engine xcframework for iOS
 	bash apps/desktop/src-tauri/scripts/build-engine-ios.sh
 
@@ -80,7 +83,7 @@ build-mobile-android-release-smoke: ## Build signed Android release APK/AAB with
 patch-mobile-android-signing: ## Patch generated Android Gradle signing from keystore.properties
 	bash scripts/patch-tauri-android-signing.sh
 
-build-desktop: ## Build the desktop release binary for the current OS
+build-desktop: build-mcp-bridge ## Build the desktop release binary for the current OS
 	cd apps/desktop && pnpm tauri build --no-bundle
 
 release-macos-local: ## Build, sign, notarize, and staple the macOS app + dmg locally

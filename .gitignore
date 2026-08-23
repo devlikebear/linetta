@@ -20,6 +20,9 @@ apps/desktop/vite.config.js
 # Rust / Tauri
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
+# Built by scripts/build-mcp-bridge.sh; the directory's README.md is committed.
+apps/desktop/src-tauri/resources/linetta-mcp
+apps/desktop/src-tauri/resources/linetta-mcp.exe
 
 # Local app data (engine writes here in dev when LINETTA_HOME=./.linetta)
 /.linetta/

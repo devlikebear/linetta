@@ -15,6 +15,8 @@ type Translate = ReturnType<typeof useI18n>["t"];
  */
 const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   ai_data_sharing_consent_required: "errors.aiDataSharingConsentRequired",
+  mcp_port_in_use: "errors.mcpPortInUse",
+  mcp_consent_required: "errors.mcpConsentRequired",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

@@ -9,6 +9,17 @@ The release workflow publishes:
 - `SHA256SUMS`
 - a tarball of rendered winget manifests
 - a Flathub manifest starter
+- `linetta-mcp-macos`, `linetta-mcp-linux`, `linetta-mcp-windows.exe`
+
+The `linetta-mcp` binaries are the stdio MCP bridge Claude Desktop launches.
+Direct-download builds already bundle it inside the app, and the settings pane
+prints that bundled path. It also ships standalone because Mac App Store builds
+deliberately leave it out: `tauri.mas.conf.json` clears `bundle.resources`, so a
+sandboxed install has nothing to point Claude Desktop at. Those writers download
+the binary here or install it from Homebrew.
+
+The standalone macOS binary is signed but not notarized, so a browser download
+carries a quarantine flag. Homebrew is the path that avoids it.
 
 Windows desktop builds package the embedded Go engine as
 `linetta_engine_ffi.dll` and load it at runtime from the Tauri resource
@@ -83,6 +94,26 @@ starter, not a direct submit-ready manifest. Before opening the Flathub PR:
 The release workflow uploads AppImage, deb, and rpm files. Those direct files
 are enough for the first Linux release. A signed apt/dnf repository can be added
 later without changing the Tauri bundle format.
+
+## Mac App Store review notes
+
+The sandboxed build carries `com.apple.security.network.server` because Linetta
+can open a local MCP endpoint for external agents. Points to make in the review
+notes, since a listening socket invites questions:
+
+- The listener binds `127.0.0.1` only. It is not reachable from another machine
+  and there is no remote or cloud component.
+- It is off by default and stays off until the user ticks an explicit consent
+  box in Settings and presses Enable. Turning it off stops the listener.
+- Every request must carry a bearer token the app generates locally. The user
+  can regenerate it at any time, which invalidates the old one.
+- It exists so the user can drive their own writing with a client they already
+  run on the same Mac, such as Claude Code or Claude Desktop.
+- App Store builds do not bundle the `linetta-mcp` bridge binary. Nothing is
+  downloaded or executed on the user's behalf.
+
+Sandbox verification still has to happen on a Mac: `make build-mas-local`, then
+enable MCP and confirm the loopback listener actually binds under the sandbox.
 
 ## Mobile app artifacts
 

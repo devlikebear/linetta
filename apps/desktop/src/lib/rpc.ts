@@ -103,6 +103,14 @@ export async function restoreLatestBackup(): Promise<{
   return invoke("restore_latest_backup");
 }
 
+/** Absolute path to the bundled MCP bridge, or null when this build ships
+ *  without it (Mac App Store) or the dev build has not run the build script.
+ *  The settings pane prints it into the writer's client config, so a guess
+ *  would produce a snippet that silently fails. */
+export async function mcpBridgePath(): Promise<string | null> {
+  return invoke<string | null>("mcp_bridge_path");
+}
+
 export async function openPath(path: string): Promise<void> {
   return invoke<void>("open_path", { path });
 }
