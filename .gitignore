@@ -31,8 +31,13 @@ apps/desktop/src-tauri/resources/linetta-mcp.exe
 .idea/
 .vscode/
 
-# Engine binary built into the repo root by accident
+# Binaries built into the engine directory by accident: `go build ./cmd/...`
+# without -o drops the output in the working directory. The .exe variants are
+# what a Windows checkout produces.
 /engine/linetta-engine
+/engine/linetta-engine.exe
+/engine/linetta-mcp
+/engine/linetta-mcp.exe
 
 # ascapi helper build artifact
 scripts/ascapi/ascapi
