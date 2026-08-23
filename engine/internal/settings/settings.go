@@ -131,6 +131,12 @@ type Config struct {
 	WebSearchProvider           string                    `json:"web_search_provider"`
 	WebSearchAPIKey             string                    `json:"web_search_api_key,omitempty"`     // write-only in settings.set; redacted from settings.get and disk
 	WebSearchAPIKeySet          bool                      `json:"web_search_api_key_set,omitempty"` // read-only presence flag for settings.get
+	MCPMode                     string                    `json:"mcp_mode"`                         // off | read_only | full; off means no listener binds
+	MCPPort                     int                       `json:"mcp_port"`                         // fixed so saved client configs survive restarts
+	MCPProjectID                string                    `json:"mcp_project_id"`                   // empty means every work is reachable
+	MCPConsentVersion           int                       `json:"mcp_consent_version"`
+	MCPConsentedAt              int64                     `json:"mcp_consented_at"`
+	MCPTokenSet                 bool                      `json:"mcp_token_set,omitempty"` // read-only presence flag for settings.get
 }
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
@@ -156,6 +162,11 @@ type Patch struct {
 	AIDataSharingConsentedAt    *int64                    `json:"ai_data_sharing_consented_at,omitempty"`
 	WebSearchProvider           *string                   `json:"web_search_provider,omitempty"`
 	WebSearchAPIKey             *string                   `json:"web_search_api_key,omitempty"`
+	MCPMode                     *string                   `json:"mcp_mode,omitempty"`
+	MCPPort                     *int                      `json:"mcp_port,omitempty"`
+	MCPProjectID                *string                   `json:"mcp_project_id,omitempty"`
+	MCPConsentVersion           *int                      `json:"mcp_consent_version,omitempty"`
+	MCPConsentedAt              *int64                    `json:"mcp_consented_at,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -222,6 +233,8 @@ func defaults(home string) Config {
 		BackupDir:             filepath.Join(home, "backups"),
 		OnboardingTourEnabled: true,
 		WebSearchProvider:     "brave",
+		MCPMode:               MCPModeOff,
+		MCPPort:               DefaultMCPPort,
 	}
 }
 
@@ -281,6 +294,20 @@ func (s *Store) load() error {
 	if disk.WebSearchProvider != "" {
 		s.cfg.WebSearchProvider = disk.WebSearchProvider
 	}
+	// MCP settings written by a newer build must survive a reload. Blank or
+	// out-of-range values (including a file written by a build that predates
+	// these keys) keep the defaults, and normalizeMCPPreferences below is the
+	// final guard that an unrecognized mode never becomes an open server.
+	if disk.MCPMode != "" {
+		s.cfg.MCPMode = disk.MCPMode
+	}
+	if disk.MCPPort != 0 {
+		s.cfg.MCPPort = disk.MCPPort
+	}
+	s.cfg.MCPProjectID = disk.MCPProjectID
+	s.cfg.MCPConsentVersion = disk.MCPConsentVersion
+	s.cfg.MCPConsentedAt = disk.MCPConsentedAt
+	s.cfg = normalizeMCPPreferences(s.cfg)
 	migratedProviderKeys, migratedWebKey, err := s.migrateLegacySecrets(&disk)
 	if err != nil {
 		s.mu.Unlock()
@@ -514,6 +541,27 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		}
 		next.WebSearchAPIKey = ""
 	}
+	if p.MCPMode != nil {
+		if !slices.Contains(ValidMCPModes(), *p.MCPMode) {
+			return Config{}, fmt.Errorf("settings: unknown mcp_mode %q", *p.MCPMode)
+		}
+		next.MCPMode = *p.MCPMode
+	}
+	if p.MCPPort != nil {
+		if *p.MCPPort < 1024 || *p.MCPPort > 65535 {
+			return Config{}, fmt.Errorf("settings: mcp_port %d out of range (1024-65535)", *p.MCPPort)
+		}
+		next.MCPPort = *p.MCPPort
+	}
+	if p.MCPProjectID != nil {
+		next.MCPProjectID = *p.MCPProjectID
+	}
+	if p.MCPConsentVersion != nil {
+		next.MCPConsentVersion = *p.MCPConsentVersion
+	}
+	if p.MCPConsentedAt != nil {
+		next.MCPConsentedAt = *p.MCPConsentedAt
+	}
 	if next.WebSearchProvider == "" {
 		next.WebSearchProvider = "brave"
 	}
@@ -566,6 +614,11 @@ func (s *Store) persist(next Config) error {
 		AIDataSharingConsentVersion: next.AIDataSharingConsentVersion,
 		AIDataSharingConsentedAt:    next.AIDataSharingConsentedAt,
 		WebSearchProvider:           next.WebSearchProvider,
+		MCPMode:                     next.MCPMode,
+		MCPPort:                     next.MCPPort,
+		MCPProjectID:                next.MCPProjectID,
+		MCPConsentVersion:           next.MCPConsentVersion,
+		MCPConsentedAt:              next.MCPConsentedAt,
 	}
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {
@@ -686,6 +739,20 @@ func normalizeEditorPreferences(c Config) Config {
 	if !slices.Contains(validCopyProfiles(), c.CopyProfile) {
 		c.CopyProfile = "plain"
 	}
+	return normalizeMCPPreferences(c)
+}
+
+// normalizeMCPPreferences keeps MCP settings safe by construction: an
+// unrecognized mode falls back to off (never to an open server), and an
+// out-of-range port falls back to the default so a bad value cannot make the
+// server unreachable in a way the writer cannot see.
+func normalizeMCPPreferences(c Config) Config {
+	if !slices.Contains(ValidMCPModes(), c.MCPMode) {
+		c.MCPMode = MCPModeOff
+	}
+	if c.MCPPort < 1024 || c.MCPPort > 65535 {
+		c.MCPPort = DefaultMCPPort
+	}
 	return c
 }
 
@@ -706,6 +773,9 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	if err == nil {
 		c.WebSearchAPIKeySet = webKeySet
 	}
+	// Presence only — never the value: settings.get must not read secrets, and
+	// the check has to see the 0600 file fallback too.
+	c.MCPTokenSet = s.MCPTokenExists()
 	return c
 }
 
@@ -724,6 +794,7 @@ func sanitizeConfigForMemory(c Config) Config {
 func sanitizeConfigForDisk(c Config) Config {
 	c = sanitizeConfigForMemory(c)
 	c.WebSearchAPIKeySet = false
+	c.MCPTokenSet = false
 	providers := map[string]ProviderConfig{}
 	for id, cfg := range c.Providers {
 		cfg.APIKeySet = false

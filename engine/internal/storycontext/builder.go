@@ -628,6 +628,11 @@ func (b *ContextBuilder) findPreviousLeaf(ctx context.Context, cur node.Node) (*
 
 // docToPlainText walks a Tiptap doc and concatenates text content. Mentions are
 // rendered as `@label`. Block boundaries become newlines.
+// PlainText renders a stored Tiptap document as plain text, the same way the
+// story brief does. Exported so MCP tools return prose rather than editor JSON
+// without duplicating the walker.
+func PlainText(rawDoc *string) string { return docToPlainText(rawDoc) }
+
 func docToPlainText(rawDoc *string) string {
 	if rawDoc == nil || *rawDoc == "" {
 		return ""
