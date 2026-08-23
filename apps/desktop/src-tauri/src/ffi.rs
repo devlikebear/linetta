@@ -230,6 +230,9 @@ fn notification_event(method: &str) -> Option<&'static str> {
         "companion.preview" => Some("companion-preview"),
         "companion.thinking" => Some("companion-thinking"),
         "companion.reasoning" => Some("companion-reasoning"),
+        // An external MCP client changed the manuscript. Without this the
+        // writer would keep looking at text the agent already replaced.
+        "mcp.changed" => Some("mcp-changed"),
         _ => None,
     }
 }
@@ -393,6 +396,14 @@ mod tests {
         assert_eq!(error.code, Some(-32601));
         assert!(error.message.contains("method not found"));
         assert!(error.request_id.is_some());
+    }
+
+    #[test]
+    fn mcp_changed_is_forwarded_to_the_renderer() {
+        // A notification the renderer never receives is a writer staring at
+        // text an external agent already replaced.
+        assert_eq!(notification_event("mcp.changed"), Some("mcp-changed"));
+        assert_eq!(notification_event("mcp.unmapped"), None);
     }
 
     #[cfg(target_os = "windows")]

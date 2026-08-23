@@ -81,6 +81,7 @@ func setupMCP(deps mcpDeps) (*mcpController, func() error) {
 
 		Snapshots:      deps.repos.snapshots,
 		Story:          deps.repos.story,
+		Limiter:        mcphost.NewLimiter(),
 		EnqueueSummary: deps.repos.enqueue,
 		Notify:         deps.repos.notify,
 		Clock:          deps.repos.clock,

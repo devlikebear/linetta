@@ -42,6 +42,7 @@ type ToolDeps struct {
 	// the running UI that something outside it changed the manuscript.
 	Snapshots      *snapshot.Repo
 	Story          *storyops.Service
+	Limiter        *limiter
 	EnqueueSummary func(nodeID string)
 	Notify         func(method string, params any)
 	Clock          func() int64
@@ -98,6 +99,7 @@ type scopedInput interface {
 // in the activity log the writer can inspect. Wrapping at registration time
 // means no tool can forget to report itself.
 func record[In, Out any](d ToolDeps, tool string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
+	h = limited(d.Limiter, h)
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 		res, out, err := h(ctx, req, in)
 
