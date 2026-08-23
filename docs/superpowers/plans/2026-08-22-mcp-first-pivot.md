@@ -92,59 +92,63 @@
 
 **파일:** `engine/go.mod`, `engine/go.sum`
 
-- [ ] `cd engine && go get github.com/modelcontextprotocol/go-sdk@v1.7.0`
-- [ ] `go build -tags mas ./...`가 SDK를 **링크하는지** 확인한다(MAS도 MCP를 쓴다).
-- [ ] `go test -tags mobile ./...`는 SDK를 링크하지 않아야 한다. `go list -deps -tags mobile ./... | grep modelcontextprotocol`이 비어야 한다.
+- [x] `cd engine && go get github.com/modelcontextprotocol/go-sdk@v1.7.0`
+- [x] `go build -tags mas ./...`가 SDK를 **링크하는지** 확인한다(MAS도 MCP를 쓴다).
+- [x] `go test -tags mobile ./...`는 SDK를 링크하지 않아야 한다. `go list -deps -tags mobile ./... | grep modelcontextprotocol`이 비어야 한다. **확인: 0건.**
 
 ### Task 2.2 — 설정 키와 시크릿 토큰
 
 **파일:** `engine/internal/settings/settings.go`, `secrets.go`, `+ 테스트`
 
-- [ ] `MCPMode`(`off`|`read_only`|`full`, 기본 `off`), `MCPPort`(기본 `7391`), `MCPProjectID`, `MCPConsentVersion`, `MCPConsentedAt`를 `Settings`와 `SettingsPatch`에 추가한다.
-- [ ] `MCPTokenSet bool`(읽기용 존재 플래그)과 시크릿 저장소를 통해 쓰는 `RegenerateMCPToken()`을 추가한다. 토큰 값 자체는 `settings.get`이 절대 반환하지 않는다 — `api_key` 처리 방식과 동일하다.
-- [ ] 테스트: `settings.get`이 토큰을 가리고 존재 플래그만 노출한다. 모드가 왕복한다. 알 수 없는 모드는 `off`로 떨어진다.
+- [x] `MCPMode`(`off`|`read_only`|`full`, 기본 `off`), `MCPPort`(기본 `7391`), `MCPProjectID`, `MCPConsentVersion`, `MCPConsentedAt`를 `Settings`와 `SettingsPatch`에 추가한다.
+- [x] `MCPTokenSet bool`(읽기용 존재 플래그)과 시크릿 저장소를 통해 쓰는 `RegenerateMCPToken()`을 추가한다. 토큰 값 자체는 `settings.get`이 절대 반환하지 않는다 — `api_key` 처리 방식과 동일하다.
+- [x] 테스트: `settings.get`이 토큰을 가리고 존재 플래그만 노출한다. 모드가 왕복한다. 알 수 없는 모드는 `off`로 떨어진다.
 
 ### Task 2.3 — `mcphost` 골격, 인증, 수명 주기
 
 **파일:** `engine/internal/mcphost/host.go`, `auth.go`, `discovery.go`, `+ 테스트`
 
-- [ ] `mcphost.New(deps)`가 `*mcp.Server`와 `http.Server`를 만들고 설정된 포트로 `net.Listen("tcp", "127.0.0.1:"+port)` 한다. 저장된 클라이언트 설정이 재시작을 견디도록 포트는 고정이다.
-- [ ] 포트가 이미 사용 중이면 설정 화면이 "7391 포트가 사용 중입니다 — 다른 포트를 선택하세요"로 렌더링할 수 있는 타입 에러를 반환한다. **다른 포트로 조용히 넘어가지 않는다.**
-- [ ] 인증 미들웨어: 상수 시간 베어러 비교, `Origin`이 있는데 루프백이 아니면 거부, `Host`가 루프백이 아니면 거부.
-- [ ] `Start()`가 `$LINETTA_HOME/mcp.json`(권한 0600, `{port, token, pid, started_at}`)을 쓰고, `Stop()`이 삭제하며 리스너를 내린다. 설정 파일 `settings.json`과는 별개 파일이다.
-- [ ] 테스트: 토큰 없음 → 401, 토큰 틀림 → 401, `Origin: https://evil.test` → 403, 포트 점유 → 타입 에러, POSIX에서 디스커버리 파일 권한 0600, `Stop` 후 파일 삭제.
+- [x] `mcphost.New(deps)`가 `*mcp.Server`와 `http.Server`를 만들고 설정된 포트로 `net.Listen("tcp", "127.0.0.1:"+port)` 한다. 저장된 클라이언트 설정이 재시작을 견디도록 포트는 고정이다.
+- [x] 포트가 이미 사용 중이면 설정 화면이 "7391 포트가 사용 중입니다 — 다른 포트를 선택하세요"로 렌더링할 수 있는 타입 에러를 반환한다. **다른 포트로 조용히 넘어가지 않는다.**
+- [x] 인증 미들웨어: 상수 시간 베어러 비교, `Origin`이 있는데 루프백이 아니면 거부, `Host`가 루프백이 아니면 거부.
+- [x] `Start()`가 `$LINETTA_HOME/mcp.json`(권한 0600, `{port, token, pid, started_at}`)을 쓰고, `Stop()`이 삭제하며 리스너를 내린다. 설정 파일 `settings.json`과는 별개 파일이다.
+- [x] 테스트: 토큰 없음 → 401, 토큰 틀림 → 401, `Origin: https://evil.test` → 403, 포트 점유 → 타입 에러, POSIX에서 디스커버리 파일 권한 0600, `Stop` 후 파일 삭제.
 
 ### Task 2.4 — `engineapp` 연결
 
 **파일:** `engine/internal/engineapp/mcp_enabled.go`(`//go:build !mobile`), `mcp_disabled.go`(`//go:build mobile`), `engineapp.go`, `+ 테스트`
 
-- [ ] `gitsync_enabled.go` / `gitsync_disabled.go` 패턴을 그대로 따른다: `const mcpAvailable`, `setupMCP(deps) mcpController`.
-- [ ] RPC `mcp.status`, `mcp.enable`, `mcp.disable`, `mcp.regenerate_token`, `mcp.activity`를 등록한다. 비활성 쌍둥이는 `CodeMethodNotFound`를 반환한다.
-- [ ] 호스트의 `Stop`을 `a.closers`에 넣어 앱과 함께 리스너가 죽게 한다.
-- [ ] `handlers.Capabilities`에 `MCPAvailable`을 추가하고 `diagnostics.version` / `diagnostics.get`으로 노출한다.
-- [ ] 테스트: 모드 `off`면 아무것도 바인딩하지 않음, `mcp.enable` 후 `mcp.status`가 포트를 보고함, `Close()`가 포트를 반납함.
+- [x] `gitsync_enabled.go` / `gitsync_disabled.go` 패턴을 그대로 따른다: `const mcpAvailable`, `setupMCP(deps) mcpController`.
+- [x] RPC `mcp.status`, `mcp.enable`, `mcp.disable`, `mcp.regenerate_token`, `mcp.activity`를 등록한다. 비활성 쌍둥이는 `CodeMethodNotFound`를 반환한다.
+- [x] 호스트의 `Stop`을 `a.closers`에 넣어 앱과 함께 리스너가 죽게 한다.
+- [x] `handlers.Capabilities`에 `MCPAvailable`을 추가하고 `diagnostics.version` / `diagnostics.get`으로 노출한다.
+- [x] 테스트: 모드 `off`면 아무것도 바인딩하지 않음, `mcp.enable` 후 `mcp.status`가 포트를 보고함, `Close()`가 포트를 반납함.
 
 ### Task 2.5 — 읽기 툴 9개
 
 **파일:** `engine/internal/mcphost/tools_read.go`, `+ 테스트`
 
-- [ ] 설계 문서 5절의 읽기 툴 9개를 `mcp.AddTool`로 등록한다. 입출력을 타입 구조체로 선언해 스키마가 생성되게 한다.
-- [ ] `linetta_get_story_context`는 병합된 `storycontext` 빌더(Task 1.3 완료가 전제)로 브리프를 조립하고, 평문 렌더러로 마크다운을 만들어 "무엇이 포함됐는지" 요약과 함께 반환한다.
-- [ ] `linetta_read_scene`은 `content_version`을 반환하고, 설명에 쓰기에는 이 값이 필요하다고 명시한다.
-- [ ] `MCPProjectID` 범위 제한은 툴마다가 아니라 공용 헬퍼 한 곳에서 강제한다.
-- [ ] 테스트: 씨드된 임시 스토어로 각 툴 검증, 범위 밖 `project_id` 차단, `read_only` 모드에서 정확히 이 9개만 등록됨, **LLM 프로바이더가 설정되지 않은 상태에서 `linetta_get_story_context`가 요약만 빈 채 팩트·메모리를 포함한 완전한 브리프를 에러 없이 반환함**(전환의 전제가 이 테스트에 달려 있다).
+- [x] 설계 문서 5절의 읽기 툴 9개를 `mcp.AddTool`로 등록한다. 입출력을 타입 구조체로 선언해 스키마가 생성되게 한다.
+- [x] `linetta_get_story_context`는 병합된 `storycontext` 빌더(Task 1.3 완료가 전제)로 브리프를 조립하고, 평문 렌더러로 마크다운을 만들어 "무엇이 포함됐는지" 요약과 함께 반환한다.
+- [x] `linetta_read_scene`은 `content_version`을 반환하고, 설명에 쓰기에는 이 값이 필요하다고 명시한다.
+- [x] `MCPProjectID` 범위 제한은 툴마다가 아니라 공용 헬퍼 한 곳에서 강제한다.
+- [x] 테스트: 씨드된 임시 스토어로 각 툴 검증, 범위 밖 `project_id` 차단, `read_only` 모드에서 정확히 이 9개만 등록됨, **LLM 프로바이더가 설정되지 않은 상태에서 `linetta_get_story_context`가 요약만 빈 채 팩트·메모리를 포함한 완전한 브리프를 에러 없이 반환함**(전환의 전제가 이 테스트에 달려 있다).
 
 ### Task 2.6 — 활동 로그
 
 **파일:** `engine/internal/store/migrations/*`, `engine/internal/mcphost/activity.go`, `+ 테스트`
 
-- [ ] `mcp_activity` 테이블 마이그레이션(`id, at, tool, project_id, target_id, ok, detail`).
-- [ ] 성공·실패 관계없이 모든 툴 호출을 기록하고, 기존 스냅샷 정리 잡에 보존 한도를 얹는다.
-- [ ] `mcp.activity` RPC가 최근 기록을 반환한다.
+- [x] `mcp_activity` 테이블 마이그레이션(`id, at, tool, project_id, target_id, ok, detail`).
+- [x] 성공·실패 관계없이 모든 툴 호출을 기록한다. **계획에서 이탈:** 보존 한도를 스냅샷 정리 잡에 얹지 않고 삽입 직후 자체 트리밍(500행)으로 처리했다 — 움직이는 부품이 하나 줄고, 앱이 유휴 상태가 되지 않아도 상한이 지켜진다.
+- [x] `mcp.activity` RPC가 최근 기록을 반환한다.
 
 **2단계 종료 조건:** `claude mcp add --transport http linetta http://127.0.0.1:7391/mcp --header "Authorization: Bearer <token>"`로 연결되고, 실제 Claude Code 세션이 작품 구조를 설명할 수 있다.
 
 ---
+
+> **완료 (2026-08-22):** 엔진 42개 패키지 통과, `mas`/`mobile` 빌드 통과, mobile의 SDK 의존 0건. 테스트가 실제 HTTP 엔드포인트를 외부 클라이언트처럼 구동한다(initialize → tools/list → tools/call, SSE 파싱). 툴 등록은 활동 로그 데코레이터로 감싸 Task 2.6을 같이 끝냈고, 범위 제한은 씬 id 우회까지 막는 것을 확인했다.
+>
+> **남은 종료 조건:** 실제 Claude Code에서 `claude mcp add`로 붙여 작품 구조를 읽는 왕복 — 사용자 기기에서 직접 해야 하는 단계다.
 
 ## Phase 3 — 쓰기 툴과 안전장치
 
