@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Replace, Sparkles, Menu, Keyboard } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
+import { McpIndicator } from "../components/McpIndicator";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
@@ -1627,6 +1628,7 @@ export function Workspace() {
           </span>
         </Link>
         <div className="ws-top-actions" data-tour="workspace-navigation">
+          <McpIndicator />
           <button
             type="button"
             className="ws-tool icon-only mobile-outline-toggle"

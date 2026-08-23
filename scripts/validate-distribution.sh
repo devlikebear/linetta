@@ -57,6 +57,31 @@ require_contains ".github/workflows/mobile-release.yml" "pnpm tauri android buil
 require_contains ".github/workflows/mobile-release.yml" "ANDROID_KEY_BASE64"
 require_contains ".github/workflows/mobile-release.yml" "patch-tauri-android-signing.sh"
 
+# The stdio MCP bridge is what Claude Desktop launches. A release without it
+# leaves Desktop users with no way to connect at all, so the packaging path is
+# checked the same way as the engine's.
+require_executable "scripts/build-mcp-bridge.sh"
+require_contains "Makefile" "build-mcp-bridge:"
+require_contains ".github/workflows/build.yml" "bash scripts/build-mcp-bridge.sh"
+# The local macOS release path bundles the bridge too, and an ad-hoc signed
+# Mach-O fails notarization for the whole app.
+require_contains "scripts/release-macos-local.sh" "build-mcp-bridge.sh"
+require_contains "scripts/release-macos-local.sh" "--options runtime"
+require_contains ".github/workflows/build.yml" "dist/linetta-mcp-windows.exe"
+require_contains ".github/workflows/build.yml" 'dist/linetta-mcp-${{ matrix.artifact }}'
+require_contains "apps/desktop/src-tauri/src/lib.rs" "mcp_bridge_path"
+require_contains "apps/desktop/src-tauri/tauri.conf.json" "resources/*"
+# Tauri merges configs with RFC 7386 semantics, so a platform override replaces
+# the resource list outright. Windows has to name the bridge in its own map or
+# the base glob never runs there.
+require_contains "apps/desktop/src-tauri/tauri.windows.conf.json" '"resources/*": "resources"'
+# Mac App Store builds ship without the bridge; those writers install it from
+# the release assets or Homebrew instead.
+require_contains "apps/desktop/src-tauri/tauri.mas.conf.json" '"resources": []'
+# A glob that matches nothing is a Tauri build error, so the directory keeps a
+# committed file even before the bridge is built.
+require_file "apps/desktop/src-tauri/resources/README.md"
+
 require_file "packaging/README.md"
 require_file "packaging/flathub/com.devlikebear.linetta.yml"
 require_contains "packaging/flathub/com.devlikebear.linetta.yml" "app-id: com.devlikebear.linetta"
