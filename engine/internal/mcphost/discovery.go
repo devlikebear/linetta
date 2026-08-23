@@ -48,9 +48,14 @@ func writeDiscoveryFile(home string, port int, token string) error {
 }
 
 // removeDiscoveryFile deletes the file on shutdown so a stale endpoint is
-// never advertised. A missing file is not an error.
+// never advertised — but only when this process is the one it points at.
+// Another engine instance shutting down must not retract a live server's
+// endpoint. A missing file is not an error.
 func removeDiscoveryFile(home string) {
 	if home == "" {
+		return
+	}
+	if d, err := ReadDiscoveryFile(home); err == nil && d.PID != os.Getpid() {
 		return
 	}
 	if err := os.Remove(discoveryPath(home)); err != nil && !os.IsNotExist(err) {

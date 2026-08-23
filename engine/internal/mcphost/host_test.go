@@ -270,3 +270,58 @@ func TestUnitOriginAndHostChecks(t *testing.T) {
 		}
 	}
 }
+
+// Regression: Stop removed the discovery file unconditionally, so an engine
+// that never served MCP — mode off, or a second instance sharing the home —
+// erased a live server's endpoint on its way out. The server kept serving
+// while the bridge had nothing left to read.
+func TestStopKeepsAnotherHostsDiscoveryFile(t *testing.T) {
+	live, _, home := newHost(t, settings.MCPModeReadOnly, true)
+	if err := live.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	path := filepath.Join(home, DiscoveryFileName)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("live server should have written a discovery file: %v", err)
+	}
+
+	// A second host over the same home that never starts (mode off).
+	idle := New(Deps{Settings: idleSettings(t, home), Home: home})
+	if err := idle.Start(context.Background()); err != nil {
+		t.Fatalf("idle Start: %v", err)
+	}
+	if err := idle.Stop(); err != nil {
+		t.Fatalf("idle Stop: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("an idle host's shutdown must not remove the live server's discovery file")
+	}
+	if !live.Status().Running {
+		t.Fatal("the live server should still be serving")
+	}
+
+	// The owner still retracts its own file.
+	if err := live.Stop(); err != nil {
+		t.Fatalf("live Stop: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatal("the owning host must remove its discovery file on shutdown")
+	}
+}
+
+// idleSettings returns a store over the same home with MCP off, standing in
+// for an engine instance that shares the data directory but never serves.
+func idleSettings(t *testing.T, home string) *settings.Store {
+	t.Helper()
+	t.Setenv("LINETTA_HOME", home)
+	s, err := settings.NewWithSecretStore(settings.NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("settings: %v", err)
+	}
+	off := settings.MCPModeOff
+	if _, err := s.Set(context.Background(), settings.Patch{MCPMode: &off}); err != nil {
+		t.Fatalf("settings.Set(off): %v", err)
+	}
+	return s
+}

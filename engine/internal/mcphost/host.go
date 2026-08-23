@@ -162,13 +162,20 @@ func (h *Host) Start(ctx context.Context) error {
 func (h *Host) Stop() error {
 	h.mu.Lock()
 	srv := h.httpSrv
+	wasRunning := h.running
 	h.httpSrv = nil
 	h.running = false
 	h.port = 0
 	h.token = ""
 	h.mu.Unlock()
 
-	removeDiscoveryFile(h.deps.Home)
+	// Only a host that actually served may retract the discovery file. An
+	// engine that never started MCP — mode off, or a second instance — would
+	// otherwise erase a live server's endpoint on its way out, leaving the
+	// bridge with nothing to read while the server is still up.
+	if wasRunning {
+		removeDiscoveryFile(h.deps.Home)
+	}
 	if srv == nil {
 		return nil
 	}
