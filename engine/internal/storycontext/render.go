@@ -1,4 +1,4 @@
-package ai
+package storycontext
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
-	"github.com/devlikebear/tars/pkg/llm"
 )
 
 // langIsEnglish reports whether the app UI language selects English prompts.
@@ -54,24 +53,12 @@ func PresetSeed(p PresetID) string {
 	return ""
 }
 
-// BuildMessages converts a Context into the two-message system+user pair the
-// engine sends to tars. The system message governs tone and length; the user
-// message contains the structured context.
-//
-// Why msg.Content (string) and not msg.ContentBlocks: both claude-code-cli and
-// openai-codex providers in tars/pkg/llm read the plain `Content` field; the
-// openai-codex provider only puts system messages into the Responses API's
-// `instructions` field when `msg.Content` is non-empty, and claude-code-cli's
-// system-prompt assembler ignores ContentBlocks entirely. ContentBlocks is for
-// multimodal inputs (images, PDFs) which we don't send.
-func BuildMessages(c Context) []llm.ChatMessage {
+// Render applies the context selection and returns the final system and
+// user prompt texts. Callers that need chat-message envelopes wrap these
+// strings themselves (see internal/ai.BuildMessages).
+func Render(c Context) (system, user string) {
 	c = ApplyContextSelection(c)
-	system := buildSystem(c)
-	user := buildUser(c)
-	return []llm.ChatMessage{
-		{Role: "system", Content: system},
-		{Role: "user", Content: user},
-	}
+	return buildSystem(c), buildUser(c)
 }
 
 func buildSystem(c Context) string {
@@ -307,6 +294,55 @@ func buildUser(c Context) string {
 		b.WriteString(langPick(lang, "## 작가 메모\n", "## Author Memo\n", "## 作家メモ\n"))
 		b.WriteString(c.StyleNotes)
 		b.WriteString("\n\n")
+	}
+	if len(c.Memories) > 0 {
+		b.WriteString(langPick(lang, "## 기억\n", "## Memories\n", "## 記憶\n"))
+		for _, m := range c.Memories {
+			b.WriteString("- " + m + "\n")
+		}
+		b.WriteString("\n")
+	}
+	if len(c.Facts) > 0 {
+		b.WriteString(langPick(lang, "## 팩트 자료집\n", "## Fact Dossier\n", "## ファクト資料集\n"))
+		for _, f := range c.Facts {
+			line := fmt.Sprintf("- [%s] (%s) %s", f.ID, f.Status, f.Claim)
+			if strings.TrimSpace(f.Category) != "" {
+				line += " / " + f.Category
+			}
+			if strings.TrimSpace(f.Result) != "" {
+				line += ": " + f.Result
+			}
+			b.WriteString(line + "\n")
+			for _, src := range f.Sources {
+				if strings.TrimSpace(src.URL) == "" {
+					continue
+				}
+				title := strings.TrimSpace(src.Title)
+				if title == "" {
+					title = src.URL
+				}
+				b.WriteString(fmt.Sprintf("  · %s — %s\n", title, src.URL))
+			}
+		}
+		b.WriteString("\n")
+	}
+	if len(c.References) > 0 {
+		b.WriteString(langPick(lang, "## 추가 레퍼런스\n", "## Additional References\n", "## 追加リファレンス\n"))
+		b.WriteString(langPick(lang,
+			"작가가 이번 요청에 참고하라고 직접 추가한 자료입니다.\n",
+			"These materials were added by the writer for this request.\n",
+			"作家がこのリクエストのために直接追加した資料です。\n"))
+		for _, r := range c.References {
+			if strings.TrimSpace(r.Body) == "" {
+				continue
+			}
+			title := strings.TrimSpace(r.Title)
+			if p := strings.TrimSpace(r.Purpose); p != "" {
+				title = p + " — " + title
+			}
+			b.WriteString("### " + title + "\n")
+			b.WriteString(strings.TrimSpace(r.Body) + "\n\n")
+		}
 	}
 	b.WriteString(langPick(lang, "## 작가의 지시\n", "## Writer's Instruction\n", "## 作家の指示\n"))
 	b.WriteString(strings.TrimSpace(c.UserPrompt))

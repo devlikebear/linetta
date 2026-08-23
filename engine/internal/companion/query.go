@@ -9,6 +9,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
 const queryFence = "linetta-query"
@@ -183,57 +184,9 @@ func parseQueryLimit(raw string, fallback, max int) int {
 	return n
 }
 
-func plainTextFromDoc(raw *string) string {
-	if raw == nil || *raw == "" {
-		return ""
-	}
-	var v interface{}
-	if err := json.Unmarshal([]byte(*raw), &v); err != nil {
-		return ""
-	}
-	var sb strings.Builder
-	var walk func(x interface{})
-	walk = func(x interface{}) {
-		switch t := x.(type) {
-		case map[string]interface{}:
-			if t["type"] == "mention" {
-				if attrs, ok := t["attrs"].(map[string]interface{}); ok {
-					if label, ok := attrs["label"].(string); ok {
-						sb.WriteString(label)
-					}
-				}
-				return
-			}
-			if t["type"] == "text" {
-				if s, ok := t["text"].(string); ok {
-					sb.WriteString(s)
-				}
-			}
-			if t["type"] == "hardBreak" {
-				sb.WriteString("\n")
-			}
-			if c, ok := t["content"].([]interface{}); ok {
-				for _, ch := range c {
-					walk(ch)
-				}
-			}
-			if k, _ := t["type"].(string); k == "paragraph" || k == "heading" {
-				sb.WriteString("\n\n")
-			}
-		case []interface{}:
-			for _, ch := range t {
-				walk(ch)
-			}
-		}
-	}
-	walk(v)
-	return strings.TrimSpace(sb.String())
-}
+// plainTextFromDoc and trimRunesLocal delegate to storyops, which owns the
+// canonical implementations. Local wrappers keep every call site unchanged
+// while the two packages coexist.
+func plainTextFromDoc(raw *string) string { return storyops.PlainTextFromDoc(raw) }
 
-func trimRunesLocal(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return string(r[:max]) + "…"
-}
+func trimRunesLocal(s string, max int) string { return storyops.TrimRunes(s, max) }

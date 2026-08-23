@@ -14,7 +14,6 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
-	"github.com/devlikebear/tars/pkg/llm"
 )
 
 const queueSize = 256
@@ -24,8 +23,6 @@ const maxSummarizeDepth = 6
 
 // Summaries run in the background with no UI-language signal, so the prompt
 // asks the model to follow the manuscript's own language instead.
-const systemPrompt = "다음 본문을 본문과 같은 언어로 3~5문장으로 요약하라. 등장인물·장소·핵심 사건은 반드시 보존하라. 새 정보 추가 금지. (Summarize the passage below in 3-5 sentences, in the same language as the passage. Preserve characters, places, and key events. Do not add new information.)"
-const containerSystemPrompt = "다음은 소설의 하위 단위 요약들이다. 이 단위 전체를 요약들과 같은 언어로 3~5문장으로 요약하라. 등장인물·장소·핵심 사건은 반드시 보존하라. 새 정보 추가 금지. (The lines below are summaries of a fiction unit's children. Summarize the whole unit in 3-5 sentences, in the same language as those summaries. Preserve characters, places, and key events. Do not add new information.)"
 
 type Summarizer struct {
 	nodes   *node.Repo
@@ -93,7 +90,7 @@ func (s *Summarizer) summarizeOne(ctx context.Context, nodeID string) {
 }
 
 // RefreshNow synchronously summarizes the node (and any stale descendants).
-// Implements ai.SummaryRefresher so ContextBuilder can populate the
+// Implements storycontext.SummaryRefresher so ContextBuilder can populate the
 // hierarchical layer without waiting on the background queue.
 func (s *Summarizer) RefreshNow(ctx context.Context, nodeID string) {
 	s.summarizeOneDepth(ctx, nodeID, 0)
@@ -146,27 +143,8 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 		return
 	}
 
-	rp := s.src.Resolve()
-	provider := rp.Provider
-	client, err := s.factory(rp)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "summarizer: factory(%s): %v\n", provider, err)
-		s.recordError(ctx, n.ID, err.Error())
-		return
-	}
-
-	msgs := []llm.ChatMessage{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: plain},
-	}
-	resp, err := client.Chat(ctx, msgs, llm.ChatOptions{})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "summarizer: Chat %s: %v\n", n.ID, err)
-		s.recordError(ctx, n.ID, err.Error())
-		return
-	}
-	summary := strings.TrimSpace(resp.Message.Content)
-	if summary == "" {
+	summary, ok := s.summarizeViaLLM(ctx, n.ID, "", systemPrompt, plain)
+	if !ok {
 		return
 	}
 	if err := s.nodes.SetSummary(ctx, n.ID, summary, capturedVersion); err != nil {
@@ -222,26 +200,8 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 		input = string(r[:containerSummaryMaxRunes])
 	}
 
-	rp := s.src.Resolve()
-	provider := rp.Provider
-	client, err := s.factory(rp)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "summarizer: factory(%s): %v\n", provider, err)
-		s.recordError(ctx, n.ID, err.Error())
-		return
-	}
-	msgs := []llm.ChatMessage{
-		{Role: "system", Content: containerSystemPrompt},
-		{Role: "user", Content: input},
-	}
-	resp, err := client.Chat(ctx, msgs, llm.ChatOptions{})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "summarizer: Chat (container) %s: %v\n", n.ID, err)
-		s.recordError(ctx, n.ID, err.Error())
-		return
-	}
-	summary := strings.TrimSpace(resp.Message.Content)
-	if summary == "" {
+	summary, ok := s.summarizeViaLLM(ctx, n.ID, " (container)", containerSystemPrompt, input)
+	if !ok {
 		return
 	}
 	if err := s.nodes.SetSummary(ctx, n.ID, summary, capturedVersion); err != nil {

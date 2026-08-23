@@ -18,6 +18,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/tars/pkg/llm"
 )
@@ -59,7 +60,7 @@ func (streamingFake) Chat(ctx context.Context, _ []llm.ChatMessage, opts llm.Cha
 	}, nil
 }
 
-func newAIFixture(t *testing.T) (*ai.Runner, *ai.ContextBuilder, string, string) {
+func newAIFixture(t *testing.T) (*ai.Runner, *storycontext.ContextBuilder, string, string) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, err := store.Open(context.Background(), dbPath)
@@ -76,7 +77,7 @@ func newAIFixture(t *testing.T) (*ai.Runner, *ai.ContextBuilder, string, string)
 	runs := store.NewAIRunsRepo(s)
 	notif := &capNotif{}
 	runner := ai.NewRunner(notif, runs, func(ai.ResolvedProvider) (llm.Client, error) { return streamingFake{}, nil }, fixedProvider("claude-code-cli"))
-	builder := ai.NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := storycontext.NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
 	return runner, builder, p.ID, *p.LastOpenedNodeID
 }
 

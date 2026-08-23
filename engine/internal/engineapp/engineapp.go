@@ -37,6 +37,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/stats"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/summarizer"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -164,7 +165,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		return nil
 	})
 
-	contextBuilder := ai.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
+	contextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ)
 
 	syncDeps := syncDeps{

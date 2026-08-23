@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/devlikebear/linetta/engine/internal/ai"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/streamdedup"
 	"github.com/devlikebear/tars/pkg/agentloop"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -278,7 +278,7 @@ func newRunner(svc *Service) *Runner {
 	return &Runner{svc: svc, active: map[string]context.CancelFunc{}}
 }
 
-func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection ai.ContextSelection, outlineStructure string, requestIntent RequestIntent, requestedScope string, images []ImageAttachment, language string, now func() int64) (string, error) {
+func (r *Runner) start(ctx context.Context, projectID, nodeID, text string, selection storycontext.ContextSelection, outlineStructure string, requestIntent RequestIntent, requestedScope string, images []ImageAttachment, language string, now func() int64) (string, error) {
 	sess, err := r.svc.sessions.EnsureWorker(projectID)
 	if err != nil {
 		return "", err
@@ -697,7 +697,7 @@ func (r *Runner) applyDirectProposalFallback(ctx context.Context, runID, project
 			UndoBatchID:  result.UndoBatchID,
 		})
 	}
-	if result.Applied == 0 || result.isError() {
+	if result.Applied == 0 || result.IsError() {
 		return result, false
 	}
 	_ = r.svc.notify.Notify("companion.thinking", thinkingPayload{RunID: runID, ProjectID: projectID, NodeID: nodeID, Scope: scope, Intent: intentName, Text: appliedStatusText(language)})

@@ -1,4 +1,4 @@
-package ai
+package storycontext
 
 import (
 	"context"
@@ -20,25 +20,71 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
-func TestBuildContext_projectMetaPopulated(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
+// ctxFixture is the store-and-repos setup every builder test needs. Sixteen
+// tests were each opening a store, wiring the mention resyncer, and
+// constructing the same seven repos by hand; the block is identical in twelve
+// of them and differs only in which repo handles a test keeps a name for.
+type ctxFixture struct {
+	store    *store.Store
+	projects *project.Repo
+	nodes    *node.Repo
+	mentions *mention.Repo
+	threads  *thread.Repo
+	beats    *beat.Repo
+	notes    *note.Repo
+	rels     *relationship.Repo
+}
+
+// newCtxFixture opens a temp store with the mention resyncer wired, exactly as
+// engineapp does, so entity mentions land the way they do in the real app.
+func newCtxFixture(t *testing.T) *ctxFixture {
+	t.Helper()
+	s, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
-	defer s.Close()
+	t.Cleanup(func() { _ = s.Close() })
 
-	pr := project.NewRepo(s)
-	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
-		Title: "t", Genres: []string{"판타지", "미스터리"}, LengthTarget: "novel", DefaultPOV: "first",
-	})
 	mr := mention.NewRepo(s)
 	nodes := node.NewRepo(s)
 	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
 		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
 	})
+	return &ctxFixture{
+		store: s, projects: project.NewRepo(s), nodes: nodes, mentions: mr,
+		threads: thread.NewRepo(s), beats: beat.NewRepo(s),
+		notes: note.NewRepo(s), rels: relationship.NewRepo(s),
+	}
+}
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+// builder returns a ContextBuilder over the fixture's repos.
+func (f *ctxFixture) builder() *ContextBuilder {
+	return NewContextBuilder(f.projects, f.nodes, f.mentions, f.threads, f.beats, f.notes, f.rels)
+}
+
+// project creates a work with the given options applied to a sane default.
+func (f *ctxFixture) project(t *testing.T, in project.NewInput) project.Project {
+	t.Helper()
+	if in.Title == "" {
+		in.Title = "t"
+	}
+	p, err := f.projects.Create(context.Background(), 1000, in)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	return p
+}
+
+func TestBuildContext_projectMetaPopulated(t *testing.T) {
+	f := newCtxFixture(t)
+	s := f.store
+
+	pr := project.NewRepo(s)
+	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+		Title: "t", Genres: []string{"판타지", "미스터리"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
+
+	builder := f.builder()
 	c, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "user prompt", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -55,12 +101,8 @@ func TestBuildContext_projectMetaPopulated(t *testing.T) {
 }
 
 func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
@@ -71,11 +113,7 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 	_, _ = s.DB().ExecContext(context.Background(), `UPDATE projects SET style_notes = ? WHERE id = ?`, "단문 위주", p.ID)
 
 	er := entity.NewRepo(s)
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	nodes := f.nodes
 
 	e, _ := er.Create(context.Background(), 1100, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진", Role: "POV"})
 
@@ -89,7 +127,7 @@ func TestBuildContext_includesSceneEntitiesAndStyleNotes(t *testing.T) {
 		t.Fatalf("UpdateContent: %v", err)
 	}
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := f.builder()
 	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "재작성", "", Options{Tone: TonePresetMy})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -164,22 +202,14 @@ func TestBuildContext_includesCoreEntitiesEvenWhenNotMentioned(t *testing.T) {
 }
 
 func TestBuildContext_prevSummary_trims300chars(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	nodes := f.nodes
 
 	// First leaf "씬 1" gets long content; add a second leaf "씬 2" and build
 	// context for it — should pull a 300-char trim of 씬 1 as prev_summary.
@@ -192,7 +222,7 @@ func TestBuildContext_prevSummary_trims300chars(t *testing.T) {
 
 	second, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "leaf", "씬 2", "", 1200)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := f.builder()
 	got, err := builder.Build(context.Background(), second.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -206,22 +236,14 @@ func TestBuildContext_prevSummary_trims300chars(t *testing.T) {
 }
 
 func TestBuildContext_plotBeatsForCurrentNode(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	mr, nodes := f.mentions, f.nodes
 	tr := thread.NewRepo(s)
 	br := beat.NewRepo(s)
 
@@ -252,22 +274,13 @@ func TestBuildContext_plotBeatsForCurrentNode(t *testing.T) {
 // the second leaf's id — shared by the three cache-path tests below.
 func setupPrevSummaryFixture(t *testing.T) (*store.Store, *project.Repo, *node.Repo, *mention.Repo, *thread.Repo, *beat.Repo, *note.Repo, *relationship.Repo, string, string) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-
-	pr := project.NewRepo(s)
-	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
+	f := newCtxFixture(t)
+	s := f.store
+	pr := f.projects
+	p := f.project(t, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	mr, nodes := f.mentions, f.nodes
 	var long strings.Builder
 	for i := 0; i < 400; i++ {
 		long.WriteString("가")
@@ -330,22 +343,14 @@ func TestBuildContext_prevSummary_fallsBackWhenEmpty(t *testing.T) {
 }
 
 func TestBuildContext_hierarchical_populatesNearbyAndSynopsis(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	nodes := f.nodes
 
 	// 1부 → 1장 → {씬 1, 씬 2, 씬 3 (current), 씬 4}, plus 2부 → 2장 → 씬 5.
 	part1, _ := nodes.CreateSibling(context.Background(), *p.LastOpenedNodeID, "container", "1부", "", 1100)
@@ -383,7 +388,7 @@ func TestBuildContext_hierarchical_populatesNearbyAndSynopsis(t *testing.T) {
 	seedFresh(chap2.ID, "2장 요약")
 	seedFresh(part2.ID, "2부 요약")
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := f.builder()
 	got, err := builder.Build(context.Background(), s3.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -417,23 +422,15 @@ func TestBuildContext_hierarchical_populatesNearbyAndSynopsis(t *testing.T) {
 }
 
 func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
 	er := entity.NewRepo(s)
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	nodes := f.nodes
 
 	e, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
 
@@ -451,7 +448,7 @@ func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T)
 	second, _ := nodes.CreateSibling(context.Background(), first, "leaf", "씬 2", "", 1200)
 	_ = nodes.UpdateContent(context.Background(), second.ID, doc("씬 2의 현재"), 1300)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := f.builder()
 	got, err := builder.Build(context.Background(), second.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -465,23 +462,15 @@ func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T)
 }
 
 func TestBuildContext_relatedScenes_returnsTopCoMentionScenes(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
 	er := entity.NewRepo(s)
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	nodes := f.nodes
 
 	e1, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
 	e2, _ := er.Create(context.Background(), 1060, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "민호"})
@@ -526,7 +515,7 @@ func TestBuildContext_relatedScenes_returnsTopCoMentionScenes(t *testing.T) {
 	cur := curN.ID
 	_ = nodes.UpdateContent(context.Background(), cur, withBoth("현재 — "), 1310)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := f.builder()
 	got, err := builder.Build(context.Background(), cur, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -537,22 +526,14 @@ func TestBuildContext_relatedScenes_returnsTopCoMentionScenes(t *testing.T) {
 }
 
 func TestBuildContext_includesNotesForNode(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	mr, nodes := f.mentions, f.nodes
 	nr := note.NewRepo(s)
 	_, _ = nr.Create(context.Background(), note.NewInput{NodeID: *p.LastOpenedNodeID, Anchor: 7, Body: "톤 바꾸기"}, 1000)
 
@@ -591,22 +572,14 @@ func (f *fakeRefresher) RefreshNow(ctx context.Context, nodeID string) {
 // leaves every container summary empty. The injected fakeRefresher fills the
 // stale container rollups synchronously, simulating the summarizer.
 func TestBuildContext_hierarchicalRetrieval(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	nodes := f.nodes
 
 	// 1부 → {1장 → [씬1, 씬2-current], 2장 → [씬3, 씬4]}
 	// 2부 → {3장 → [씬5, 씬6]}
@@ -652,7 +625,7 @@ func TestBuildContext_hierarchicalRetrieval(t *testing.T) {
 		},
 	}
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s)).
+	builder := f.builder().
 		WithSummaryRefresher(ref)
 	got, err := builder.Build(context.Background(), cur.ID, "확장", "", Options{})
 	if err != nil {
@@ -690,23 +663,15 @@ func TestBuildContext_hierarchicalRetrieval(t *testing.T) {
 // Three past leaves all mention 해진; build context against a 4th leaf that also
 // mentions 해진. Recent should hold the 3 prior first-lines, most-recent first.
 func TestBuildContext_entityDossier(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
 	er := entity.NewRepo(s)
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	nodes := f.nodes
 
 	e, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
 
@@ -738,7 +703,7 @@ func TestBuildContext_entityDossier(t *testing.T) {
 	leaf4, _ := nodes.CreateSibling(context.Background(), leaf3.ID, "leaf", "씬 4", "", 1130)
 	_ = nodes.UpdateContent(context.Background(), leaf4.ID, doc("현재"), 1400)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := f.builder()
 	got, err := builder.Build(context.Background(), leaf4.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -761,23 +726,15 @@ func TestBuildContext_entityDossier(t *testing.T) {
 // Two entities. Past leaf A mentions both. Current leaf mentions both. Other
 // past leaves mention only one (should NOT surface — k < 2).
 func TestBuildContext_topologyRAG(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
 	er := entity.NewRepo(s)
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
+	nodes := f.nodes
 
 	e1, _ := er.Create(context.Background(), 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
 	e2, _ := er.Create(context.Background(), 1060, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "민호"})
@@ -824,7 +781,7 @@ func TestBuildContext_topologyRAG(t *testing.T) {
 	curN, _ := nodes.CreateSibling(context.Background(), filler2.ID, "leaf", "현재", "", 1300)
 	_ = nodes.UpdateContent(context.Background(), curN.ID, withBoth("cur — "), 1310)
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := f.builder()
 	got, err := builder.Build(context.Background(), curN.ID, "확장", "", Options{})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -838,24 +795,15 @@ func TestBuildContext_topologyRAG(t *testing.T) {
 }
 
 func TestBuildContext_selectionTextPassesThrough(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(context.Background(), dbPath)
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	defer s.Close()
+	f := newCtxFixture(t)
+	s := f.store
 
 	pr := project.NewRepo(s)
 	p, _ := pr.Create(context.Background(), 1000, project.NewInput{
 		Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first",
 	})
-	mr := mention.NewRepo(s)
-	nodes := node.NewRepo(s)
-	nodes.SetMentionResyncer(func(ctx context.Context, nodeID, doc string) error {
-		return mr.ResyncForNode(ctx, nodeID, mention.Collect([]byte(doc)))
-	})
 
-	builder := NewContextBuilder(pr, nodes, mr, thread.NewRepo(s), beat.NewRepo(s), note.NewRepo(s), relationship.NewRepo(s))
+	builder := f.builder()
 	selectionText := "그녀는 천천히 고개를 들었다."
 	c, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "더 감각적으로 다시 써줘", selectionText, Options{})
 	if err != nil {

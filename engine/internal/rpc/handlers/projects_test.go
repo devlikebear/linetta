@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -15,6 +14,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -32,7 +32,7 @@ func newRepo(t *testing.T) *project.Repo {
 type projectSynopsisFixture struct {
 	projects *project.Repo
 	nodes    *node.Repo
-	builder  *ai.ContextBuilder
+	builder  *storycontext.ContextBuilder
 	project  project.Project
 	root     node.Node
 }
@@ -70,7 +70,7 @@ func newProjectSynopsisFixture(t *testing.T) projectSynopsisFixture {
 	if err != nil {
 		t.Fatalf("CreateSibling: %v", err)
 	}
-	builder := ai.NewContextBuilder(
+	builder := storycontext.NewContextBuilder(
 		projects,
 		nodes,
 		mention.NewRepo(s),

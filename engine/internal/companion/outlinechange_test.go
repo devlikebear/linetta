@@ -214,7 +214,7 @@ func TestApplyOpsUndoRestoresTheOutline(t *testing.T) {
 		},
 	}, func() int64 { return 2 })
 
-	if result.isError() || result.Applied != 2 {
+	if result.IsError() || result.Applied != 2 {
 		t.Fatalf("apply should succeed: %+v", result)
 	}
 	if result.UndoBatchID == "" {
@@ -253,7 +253,7 @@ func TestApplyOpsSkipsUndoForNonStructuralBatches(t *testing.T) {
 		Ops:     []Op{{Type: "set_outline", Outline: "복수 서사"}},
 	}, func() int64 { return 2 })
 
-	if result.isError() || result.Applied != 1 {
+	if result.IsError() || result.Applied != 1 {
 		t.Fatalf("apply should succeed: %+v", result)
 	}
 	if result.UndoBatchID != "" {

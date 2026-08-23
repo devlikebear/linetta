@@ -6,9 +6,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 )
 
 type companionSendParams struct {
@@ -35,9 +35,9 @@ func CompanionSend(svc *companion.Service, now Clock) rpc.Handler {
 }
 
 type companionPreviewContextParams struct {
-	ProjectID string     `json:"project_id"`
-	NodeID    string     `json:"node_id"`
-	Options   ai.Options `json:"options"`
+	ProjectID string               `json:"project_id"`
+	NodeID    string               `json:"node_id"`
+	Options   storycontext.Options `json:"options"`
 }
 
 // CompanionPreviewContext returns inspectable companion context sections before

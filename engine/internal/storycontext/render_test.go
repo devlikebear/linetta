@@ -1,4 +1,4 @@
-package ai
+package storycontext
 
 import (
 	"strings"
@@ -6,6 +6,15 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/plot"
 )
+
+// buildMessagesShim mirrors the old two-message shape so the assertions below
+// keep reading naturally; production message assembly lives in internal/ai.
+type renderedMsg struct{ Role, Content string }
+
+func BuildMessages(c Context) []renderedMsg {
+	system, user := Render(c)
+	return []renderedMsg{{Role: "system", Content: system}, {Role: "user", Content: user}}
+}
 
 func TestPresetSeed(t *testing.T) {
 	if PresetSeed(PresetRewrite) == "" {

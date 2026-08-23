@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/devlikebear/linetta/engine/internal/ai"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/google/uuid"
 )
 
@@ -256,8 +256,8 @@ func normalizeReference(ref Reference) Reference {
 	if ref.Title == "" {
 		ref.Title = defaultReferenceTitle(ref.SourceType)
 	}
-	ref.CharCount = ai.EstimateChars(ref.Content)
-	ref.TokenEstimate = ai.EstimateTokens(ref.Content)
+	ref.CharCount = storycontext.EstimateChars(ref.Content)
+	ref.TokenEstimate = storycontext.EstimateTokens(ref.Content)
 	if ref.Summary == "" && ref.CharCount > referenceAutoSummaryRunes {
 		ref.Summary = deterministicReferenceSummary(ref)
 		if ref.Status == ReferenceStatusActive {

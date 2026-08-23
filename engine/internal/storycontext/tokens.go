@@ -1,4 +1,4 @@
-package ai
+package storycontext
 
 // EstimateChars returns the visible rune count used for approximate context
 // budgeting. It intentionally avoids byte length so Korean text is not

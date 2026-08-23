@@ -6,18 +6,19 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 )
 
 type runAIParams struct {
-	NodeID        string     `json:"node_id"`
-	Prompt        string     `json:"prompt"`
-	SelectionText string     `json:"selection_text"`
-	Options       ai.Options `json:"options"`
+	NodeID        string               `json:"node_id"`
+	Prompt        string               `json:"prompt"`
+	SelectionText string               `json:"selection_text"`
+	Options       storycontext.Options `json:"options"`
 }
 
 // RunAI returns a handler for ai.run. It builds the Context via the supplied
 // ContextBuilder and asks the Runner to start; returns the run id immediately.
-func RunAI(builder *ai.ContextBuilder, runner *ai.Runner, now Clock) rpc.Handler {
+func RunAI(builder *storycontext.ContextBuilder, runner *ai.Runner, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p runAIParams
 		if err := json.Unmarshal(params, &p); err != nil || p.NodeID == "" {
@@ -54,14 +55,14 @@ func CancelAI(runner *ai.Runner) rpc.Handler {
 }
 
 type previewContextParams struct {
-	NodeID  string     `json:"node_id"`
-	Options ai.Options `json:"options"`
+	NodeID  string               `json:"node_id"`
+	Options storycontext.Options `json:"options"`
 }
 
 // PreviewContext returns a handler for ai.preview_context. It builds the full
 // Context for the given node and returns counts plus inspectable sections so
 // the frontend can show what will be injected before the user runs generation.
-func PreviewContext(builder *ai.ContextBuilder) rpc.Handler {
+func PreviewContext(builder *storycontext.ContextBuilder) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p previewContextParams
 		if err := json.Unmarshal(params, &p); err != nil || p.NodeID == "" {
@@ -71,6 +72,6 @@ func PreviewContext(builder *ai.ContextBuilder) rpc.Handler {
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		return json.Marshal(ai.PreviewFromContext(c, p.Options.Context))
+		return json.Marshal(storycontext.PreviewFromContext(c, p.Options.Context))
 	}
 }

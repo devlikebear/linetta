@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 )
 
 // Clock is an injected millisecond-precision source. Tests pass deterministic
@@ -116,7 +116,7 @@ func UpdateProject(repo *project.Repo, now Clock) rpc.Handler {
 
 // RewriteProjectSynopsis derives a fresh synopsis from the current root
 // container summaries and stores it on the project as the editable synopsis.
-func RewriteProjectSynopsis(repo *project.Repo, builder *ai.ContextBuilder, now Clock) rpc.Handler {
+func RewriteProjectSynopsis(repo *project.Repo, builder *storycontext.ContextBuilder, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p idParam
 		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {

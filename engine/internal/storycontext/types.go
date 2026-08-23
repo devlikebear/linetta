@@ -1,5 +1,8 @@
-// Package ai owns prompt assembly and run management for AI mode.
-package ai
+// Package storycontext assembles the curated story brief for one scene:
+// outline, hierarchical summaries, entity/relationship briefs, plot spine,
+// notes, and style targets. It performs no LLM calls and must not import
+// LLM client code; renderers return plain strings.
+package storycontext
 
 import "github.com/devlikebear/linetta/engine/internal/plot"
 
@@ -173,6 +176,9 @@ type Context struct {
 	Relationships []RelationBrief     `json:"relationships"`
 	Plot          plot.Spine          `json:"plot"`
 	Notes         []NoteBrief         `json:"notes"`
+	Facts         []FactBrief         `json:"facts,omitempty"`
+	Memories      []string            `json:"memories,omitempty"`
+	References    []ReferenceBrief    `json:"references,omitempty"`
 	StyleNotes    string              `json:"style_notes"`
 	SelectionText string              `json:"selection_text"`
 	UserPrompt    string              `json:"user_prompt"`
@@ -222,34 +228,27 @@ type EntityBrief struct {
 	Recent     []string          `json:"recent"` // Plan 16 layer 2 dossier — first lines of latest 5 leaf summaries
 }
 
-// DeltaPayload is the body of an "ai.delta" notification.
-type DeltaPayload struct {
-	RunID string `json:"run_id"`
-	Text  string `json:"text"`
+// FactBrief is one Fact Book card slice for the brief: the claim, its
+// verification status, and the sources backing it.
+type FactBrief struct {
+	ID       string            `json:"id"`
+	Status   string            `json:"status"`
+	Claim    string            `json:"claim"`
+	Category string            `json:"category,omitempty"`
+	Result   string            `json:"result,omitempty"`
+	Sources  []FactSourceBrief `json:"sources,omitempty"`
 }
 
-// DonePayload is the body of an "ai.done" notification.
-type DonePayload struct {
-	RunID    string `json:"run_id"`
-	FullText string `json:"full_text"`
+// FactSourceBrief is one source line under a fact card.
+type FactSourceBrief struct {
+	Title string `json:"title,omitempty"`
+	URL   string `json:"url"`
 }
 
-// ErrorPayload is the body of an "ai.error" notification.
-type ErrorPayload struct {
-	RunID   string `json:"run_id"`
-	Message string `json:"message"`
-}
-
-// CancelledPayload is the body of an "ai.cancelled" notification.
-type CancelledPayload struct {
-	RunID string `json:"run_id"`
-}
-
-// ResetPayload is the body of an "ai.reset" notification. Sent when the
-// streaming text needs to be REPLACED (not appended) — used when the upstream
-// provider's transparent retry produces deltas that diverge from earlier ones
-// and we need to reconcile the frontend's view to the deduplicated buffer.
-type ResetPayload struct {
-	RunID string `json:"run_id"`
-	Text  string `json:"text"`
+// ReferenceBrief is one writer-supplied reference: purpose-labelled material
+// the writer attached for the current request.
+type ReferenceBrief struct {
+	Title   string `json:"title"`
+	Purpose string `json:"purpose,omitempty"`
+	Body    string `json:"body"`
 }
