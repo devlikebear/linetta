@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 )
 
 // call sends one JSONRPC request through the app and returns the raw result.
@@ -64,6 +65,24 @@ func portFree(t *testing.T, port int) bool {
 	}
 	_ = ln.Close()
 	return true
+}
+
+// waitPortFree polls until the OS has actually released the port. Shutdown
+// returning does not guarantee the socket is instantly rebindable — on a
+// loaded machine the teardown lags — so asserting instantaneously is a flake,
+// not a stronger check. A port that never frees still fails here.
+func waitPortFree(t *testing.T, port int) bool {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if portFree(t, port) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // A fresh install must not open a port. MCP is opt-in.
@@ -138,7 +157,7 @@ func TestMCPEnableBindsAndCloseReleasesPort(t *testing.T) {
 	if err := app.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	if !portFree(t, free) {
+	if !waitPortFree(t, free) {
 		t.Fatal("Close must release the MCP port")
 	}
 }
@@ -160,7 +179,7 @@ func TestMCPDisableStopsListener(t *testing.T) {
 	if _, rpcErr := call(t, app, "mcp.disable", ""); rpcErr != nil {
 		t.Fatalf("mcp.disable: %+v", rpcErr)
 	}
-	if !portFree(t, free) {
+	if !waitPortFree(t, free) {
 		t.Fatal("mcp.disable must drop the listener")
 	}
 }
