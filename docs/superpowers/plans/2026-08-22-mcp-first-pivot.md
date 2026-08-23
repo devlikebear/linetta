@@ -223,11 +223,13 @@
 
 **파일:** `engine/cmd/linetta-mcp/main.go`, `+ 테스트`
 
-- [ ] `$LINETTA_HOME/mcp.json`을 읽고, 고급 설정을 위한 `--url` / `--token` 재정의를 지원한다.
-- [ ] SDK의 `StreamableClientTransport`(로컬 엔드포인트, 인증 헤더 부착)와 SDK의 `StdioTransport` 서버 쪽을 합성한다. **단순 바이트 펌프가 아니다** — SSE 응답 스트림, 서버 발신 메시지용 GET 스트림, `Mcp-Session-Id` 상태를 SDK가 처리하게 맡긴다.
-- [ ] `--print-header`를 추가한다. `Authorization` 헤더 값만 출력하고 종료하며, 생성된 `.mcp.json`이 `headersHelper`로 이걸 호출한다. 그래야 설정 파일에 리터럴 토큰이 남지 않는다.
-- [ ] Linetta가 실행 중이 아닐 때 사람이 읽을 수 있는 메시지로 종료한다("Linetta를 열고 설정에서 MCP를 켜세요"). 이 문자열이 사용자가 클라이언트에서 보게 될 문구다.
-- [ ] 테스트: 스텁 HTTP 서버 대상으로 스트리밍 응답 포함 왕복 1회, 디스커버리 파일 없음 → 안내 메시지와 0이 아닌 종료 코드, `--print-header`는 헤더 값만 출력.
+- [x] `$LINETTA_HOME/mcp.json`을 읽고, 고급 설정을 위한 `--url` / `--token` 재정의를 지원한다.
+- [x] SDK의 `StreamableClientTransport`(로컬 엔드포인트, 인증 헤더 부착)와 SDK의 `StdioTransport` 서버 쪽을 합성한다. **단순 바이트 펌프가 아니다** — SSE 응답 스트림, 서버 발신 메시지용 GET 스트림, `Mcp-Session-Id` 상태를 SDK가 처리하게 맡긴다.
+- [x] `--print-headers`를 추가한다. **JSON 헤더 객체**를 출력하고 종료하며, 생성된 `.mcp.json`이 `headersHelper`로 이걸 호출한다. 그래야 설정 파일에 리터럴 토큰이 남지 않는다.
+
+> **계획 정정:** 계획에는 "`Authorization` 헤더 값만 출력"이라고 적혀 있었으나, Claude Code 문서의 `headersHelper` 계약은 **"stdout에 문자열 키/값 JSON 객체"** 다(10초 제한, 절대 경로 권장). 헤더 값만 내보내면 셸은 통과하지만 인증이 조용히 실패한다. 플래그 이름도 복수형 `--print-headers`로 맞췄고, 출력 형태를 테스트로 고정했다.
+- [x] Linetta가 실행 중이 아닐 때 사람이 읽을 수 있는 메시지로 종료한다("Linetta를 열고 설정에서 MCP를 켜세요"). 이 문자열이 사용자가 클라이언트에서 보게 될 문구다.
+- [x] 테스트: 실제 MCP 서버(스텁) 대상으로 `tools/list` + `tools/call` 왕복, 디스커버리 파일 없음 → 안내 메시지, 헤더 헬퍼 출력이 JSON 객체로 파싱됨, RoundTripper가 원본 요청을 변형하지 않음.
 
 ### Task 4.2 — 빌드와 번들
 
