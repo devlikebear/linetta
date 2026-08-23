@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Command linetta-mcp bridges a stdio MCP client to Linetta's loopback HTTP
 // server.
 //
@@ -10,6 +12,10 @@
 // It is a message-level relay, not a byte pump: the SDK's transports own SSE
 // response streams, the standalone GET stream for server-initiated messages,
 // and Mcp-Session-Id state on their respective sides.
+//
+// The mobile tag excludes mcphost, and this binary links it for the discovery
+// file contract. There is no mobile client to bridge to, so the whole command
+// is tagged out rather than given a stub.
 package main
 
 import (
