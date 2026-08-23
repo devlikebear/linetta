@@ -6,18 +6,22 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/settings"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
 // ToolDeps carries everything the tool layer reads from. Every field is a repo
@@ -33,6 +37,43 @@ type ToolDeps struct {
 	Context    *storycontext.ContextBuilder
 	Settings   *settings.Store
 	Activity   *ActivityRepo
+
+	// Write-side collaborators. Snapshots make every body change revertible;
+	// EnqueueSummary keeps agent prose in the summarizer's queue; Notify tells
+	// the running UI that something outside it changed the manuscript.
+	Snapshots      *snapshot.Repo
+	Story          *storyops.Service
+	ManuscriptEdit *manuscriptedit.Service
+	Limiter        *limiter
+	EnqueueSummary func(nodeID string)
+	Notify         func(method string, params any)
+	Clock          func() int64
+}
+
+// now returns the wall clock the tools stamp writes with.
+func (d ToolDeps) now() int64 {
+	if d.Clock != nil {
+		return d.Clock()
+	}
+	return time.Now().UnixMilli()
+}
+
+// ChangedPayload is the body of an "mcp.changed" notification: what an external
+// agent just altered, so the UI can refetch instead of showing stale text.
+type ChangedPayload struct {
+	ProjectID string   `json:"project_id"`
+	Tool      string   `json:"tool"`
+	NodeIDs   []string `json:"node_ids,omitempty"`
+	BatchID   string   `json:"batch_id,omitempty"`
+}
+
+func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchID string) {
+	if d.Notify == nil {
+		return
+	}
+	d.Notify("mcp.changed", ChangedPayload{
+		ProjectID: projectID, Tool: tool, NodeIDs: nodeIDs, BatchID: batchID,
+	})
 }
 
 // Register installs the tool set for a mode. Read tools are always present;
@@ -45,7 +86,9 @@ type ToolDeps struct {
 // running server never serves a stale tool set.
 func (d ToolDeps) Register(s *mcp.Server, mode string) {
 	d.registerReadTools(s)
-	_ = mode // write tools land in Phase 3
+	if mode == settings.MCPModeFull {
+		d.registerWriteTools(s)
+	}
 }
 
 // scopedInput is implemented by tool inputs that name a work and/or a target,
@@ -58,6 +101,7 @@ type scopedInput interface {
 // in the activity log the writer can inspect. Wrapping at registration time
 // means no tool can forget to report itself.
 func record[In, Out any](d ToolDeps, tool string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandlerFor[In, Out] {
+	h = limited(d.Limiter, h)
 	return func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
 		res, out, err := h(ctx, req, in)
 

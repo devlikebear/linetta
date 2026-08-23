@@ -11,12 +11,15 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/settings"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
 // Mobile builds cannot host a local server, so MCP is compiled out entirely —
@@ -40,6 +43,12 @@ type mcpToolRepos struct {
 	plot       *plot.Builder
 	manuscript *manuscript.Searcher
 	context    *storycontext.ContextBuilder
+	snapshots  *snapshot.Repo
+	story      *storyops.Service
+	msEdit     *manuscriptedit.Service
+	enqueue    func(nodeID string)
+	notify     func(method string, params any)
+	clock      func() int64
 	db         *sql.DB
 }
 

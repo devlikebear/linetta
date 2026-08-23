@@ -38,6 +38,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/stats"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/summarizer"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -224,6 +225,14 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	// The tool layer gets its OWN context builder, wired with the fact,
 	// memory, and reference sources. The builder above stays untouched so
 	// ai.run and ai.preview_context keep producing byte-identical prompts.
+	// A storyops instance of its own: undo batches live in memory on the
+	// service, so an agent can undo only what it applied — never the writer's
+	// own companion batch.
+	mcpStory := storyops.New(projects, nodes, threads, beats, entities, relationships).
+		WithFacts(facts).
+		WithSnapshots(snaps).
+		WithMemory(companionSvc)
+
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
@@ -242,6 +251,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 			plot:       plotBuilder,
 			manuscript: manuscriptSearcher,
 			context:    mcpContextBuilder,
+			snapshots:  snaps,
+			story:      mcpStory,
+			msEdit:     manuscriptEditor,
+			enqueue:    summ.Enqueue,
+			notify:     func(method string, params any) { _ = s.Notifier().Notify(method, params) },
+			clock:      clock,
 			db:         st.DB(),
 		},
 	})

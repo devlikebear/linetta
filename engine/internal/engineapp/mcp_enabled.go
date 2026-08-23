@@ -12,6 +12,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -19,7 +20,9 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
 // MCP ships on desktop and on the Mac App Store. It is deliberately NOT gated
@@ -47,6 +50,12 @@ type mcpToolRepos struct {
 	plot       *plot.Builder
 	manuscript *manuscript.Searcher
 	context    *storycontext.ContextBuilder
+	snapshots  *snapshot.Repo
+	story      *storyops.Service
+	msEdit     *manuscriptedit.Service
+	enqueue    func(nodeID string)
+	notify     func(method string, params any)
+	clock      func() int64
 	db         *sql.DB
 }
 
@@ -71,6 +80,14 @@ func setupMCP(deps mcpDeps) (*mcpController, func() error) {
 		Context:    deps.repos.context,
 		Settings:   deps.settingsStore,
 		Activity:   activity,
+
+		Snapshots:      deps.repos.snapshots,
+		Story:          deps.repos.story,
+		ManuscriptEdit: deps.repos.msEdit,
+		Limiter:        mcphost.NewLimiter(),
+		EnqueueSummary: deps.repos.enqueue,
+		Notify:         deps.repos.notify,
+		Clock:          deps.repos.clock,
 	}
 	host := mcphost.New(mcphost.Deps{
 		Settings: deps.settingsStore,
