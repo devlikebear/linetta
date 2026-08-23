@@ -3,6 +3,9 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -209,5 +212,52 @@ func TestMCPSettingsSurviveReload(t *testing.T) {
 	}
 	if !reloaded.HasMCPConsent() {
 		t.Error("after reload consent was lost")
+	}
+}
+
+// Regression: Linux has no secure secret backend, so EnsureMCPToken failed and
+// MCP could not start at all. CI caught it; a Windows-only run never would.
+// The fallback keeps the server usable on that platform.
+func TestMCPTokenFallsBackToAFileWithoutASecureStore(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("LINETTA_HOME", home)
+	s, err := NewWithSecretStore(unsupportedSecretStore{})
+	if err != nil {
+		t.Fatalf("NewWithSecretStore: %v", err)
+	}
+
+	token, err := s.EnsureMCPToken()
+	if err != nil {
+		t.Fatalf("EnsureMCPToken without a secure store: %v", err)
+	}
+	if token == "" {
+		t.Fatal("a token must be minted even without a secure backend")
+	}
+	if got := s.MCPToken(); got != token {
+		t.Fatalf("MCPToken() = %q, want the token just minted", got)
+	}
+	if again, _ := s.EnsureMCPToken(); again != token {
+		t.Error("the fallback token must be reused, not reminted on every call")
+	}
+
+	path := filepath.Join(home, mcpTokenFileName)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat token file: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("token file mode = %o, want 600", perm)
+		}
+	}
+
+	if err := s.DeleteMCPToken(); err != nil {
+		t.Fatalf("DeleteMCPToken: %v", err)
+	}
+	if s.MCPToken() != "" {
+		t.Error("the fallback token should be gone after delete")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("the token file should be removed too")
 	}
 }

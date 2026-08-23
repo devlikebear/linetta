@@ -773,9 +773,9 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	if err == nil {
 		c.WebSearchAPIKeySet = webKeySet
 	}
-	if mcpTokenSet, err := s.secrets.Exists(mcpTokenSecretName); err == nil {
-		c.MCPTokenSet = mcpTokenSet
-	}
+	// Presence only — never the value: settings.get must not read secrets, and
+	// the check has to see the 0600 file fallback too.
+	c.MCPTokenSet = s.MCPTokenExists()
 	return c
 }
 
