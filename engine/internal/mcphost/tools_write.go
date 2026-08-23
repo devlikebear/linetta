@@ -1,0 +1,227 @@
+//go:build !mobile
+
+package mcphost
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
+)
+
+// WriteToolNames lists the write tools, in registration order. They are
+// registered only in settings.MCPModeFull, so read_only does not merely refuse
+// writes — the tools are absent from tools/list.
+var WriteToolNames = []string{
+	"linetta_write_scene",
+	"linetta_write_summary",
+}
+
+// maxSceneRunes caps one scene body. A runaway agent should hit a wall with a
+// clear message rather than commit a megabyte to the manuscript.
+const maxSceneRunes = 60000
+
+// ---------- linetta_write_scene ----------
+
+type writeSceneInput struct {
+	NodeID string `json:"node_id" jsonschema:"id of the scene to write"`
+	Text   string `json:"text" jsonschema:"the full scene body as plain prose; blank lines separate paragraphs"`
+	// ExpectedContentVersion is the content_version from linetta_read_scene.
+	// Required: it is what stops an agent from overwriting edits the writer
+	// made after the agent last read the scene.
+	// A pointer, not an int: a scene that has never been written has version 0,
+	// so "absent" and "zero" must stay distinguishable or the first draft can
+	// never be written.
+	ExpectedContentVersion *int `json:"expected_content_version" jsonschema:"the content_version returned by linetta_read_scene"`
+}
+
+func (in writeSceneInput) scope() (string, string) { return "", in.NodeID }
+
+type writeSceneOutput struct {
+	NodeID         string `json:"node_id"`
+	ContentVersion int    `json:"content_version"`
+	WordCount      int    `json:"word_count"`
+	// SnapshotID is the pre-write version. Reverting prose goes through this,
+	// not through linetta_undo_last_change's batch id: undoing a structural
+	// batch restores the outline and leaves scene bodies alone.
+	SnapshotID string `json:"snapshot_id,omitempty"`
+}
+
+// ---------- linetta_write_summary ----------
+
+type writeSummaryInput struct {
+	// Exactly one target. A scene or container summary feeds the story brief;
+	// the synopsis is the work-level blurb.
+	NodeID    string `json:"node_id,omitempty" jsonschema:"scene or container to summarize"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"work whose synopsis to write; omit when node_id is set"`
+	Summary   string `json:"summary" jsonschema:"3-5 sentences preserving characters, places, and key events"`
+	// ExpectedContentVersion is required for scenes only — containers and the
+	// synopsis have no version tracking their children's edits.
+	ExpectedContentVersion *int `json:"expected_content_version,omitempty" jsonschema:"for a scene, the content_version from linetta_read_scene"`
+}
+
+func (in writeSummaryInput) scope() (string, string) { return in.ProjectID, in.NodeID }
+
+type writeSummaryOutput struct {
+	Target    string `json:"target"` // scene | container | synopsis
+	NodeID    string `json:"node_id,omitempty"`
+	ProjectID string `json:"project_id,omitempty"`
+	Summary   string `json:"summary"`
+}
+
+// registerWriteTools installs the mutating tools. Only called for
+// settings.MCPModeFull.
+func (d ToolDeps) registerWriteTools(s *mcp.Server) {
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_write_scene",
+		Description: "Replace a scene's body with new prose. Call linetta_read_scene first and pass the " +
+			"content_version it returned: if the writer edited the scene since then the write is refused, " +
+			"so their work is never silently overwritten. The previous text is snapshotted first and the " +
+			"returned snapshot_id restores it.",
+	}, record(d, "linetta_write_scene", d.writeScene))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_write_summary",
+		Description: "Write the summary Linetta shows for a scene or chapter, or the work's synopsis. " +
+			"Summaries feed linetta_get_story_context, so writing one after drafting keeps later briefs " +
+			"accurate — when a brief reports an empty summary section, this is the tool that fills it. " +
+			"A scene summary needs the content_version from linetta_read_scene; chapters and the synopsis " +
+			"do not.",
+	}, record(d, "linetta_write_summary", d.writeSummary))
+}
+
+func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in writeSceneInput) (*mcp.CallToolResult, writeSceneOutput, error) {
+	n, errResult := d.requireNode(ctx, in.NodeID)
+	if errResult != nil {
+		return errResult, writeSceneOutput{}, nil
+	}
+	if n.Kind != node.KindLeaf {
+		return toolErr("node %q is a container (%s), not a scene; only scenes hold body text", n.ID, n.Label),
+			writeSceneOutput{}, nil
+	}
+	if in.ExpectedContentVersion == nil {
+		return toolErr("expected_content_version is required; call linetta_read_scene first and pass the value it returns"),
+			writeSceneOutput{}, nil
+	}
+	expected := *in.ExpectedContentVersion
+	if expected < 0 {
+		return toolErr("expected_content_version must not be negative"), writeSceneOutput{}, nil
+	}
+	if count := len([]rune(in.Text)); count > maxSceneRunes {
+		return toolErr("scene text is %d characters; the limit is %d — split it across scenes", count, maxSceneRunes),
+			writeSceneOutput{}, nil
+	}
+
+	// Snapshot before touching anything, so the previous text survives even if
+	// the write itself fails partway.
+	snapshotID := ""
+	if d.Snapshots != nil {
+		beforeDoc := ""
+		if n.ContentDoc != nil {
+			beforeDoc = *n.ContentDoc
+		}
+		snap, created, err := d.Snapshots.CreateIfChanged(ctx, n.ID, beforeDoc, snapshot.ReasonCompanionBefore, d.now())
+		if err != nil {
+			return toolErr("could not snapshot the current text: %v", err), writeSceneOutput{}, nil
+		}
+		if created {
+			snapshotID = snap.ID
+		}
+	}
+
+	doc, err := storyops.PlainTextToTiptapDoc(in.Text)
+	if err != nil {
+		return toolErr("could not convert the text: %v", err), writeSceneOutput{}, nil
+	}
+	if err := d.Nodes.UpdateContentIfVersion(ctx, n.ID, doc, expected, d.now()); err != nil {
+		if errors.Is(err, node.ErrContentConflict) {
+			return toolErr(
+				"the scene changed since you read it (you passed version %d). Call linetta_read_scene again, "+
+					"merge your changes into the current text, and retry with the fresh content_version.",
+				expected), writeSceneOutput{}, nil
+		}
+		return toolErr("could not write the scene: %v", err), writeSceneOutput{}, nil
+	}
+
+	after, err := d.Nodes.Get(ctx, n.ID)
+	if err != nil {
+		return toolErr("wrote the scene but could not read it back: %v", err), writeSceneOutput{}, nil
+	}
+	// The summarizer keeps the story brief honest; without this an agent's
+	// prose would never even get the short-scene plaintext summary.
+	if d.EnqueueSummary != nil {
+		d.EnqueueSummary(n.ID)
+	}
+	d.notifyChanged(n.ProjectID, "linetta_write_scene", []string{n.ID}, "")
+
+	return nil, writeSceneOutput{
+		NodeID:         after.ID,
+		ContentVersion: after.ContentVersion,
+		WordCount:      after.WordCount,
+		SnapshotID:     snapshotID,
+	}, nil
+}
+
+func (d ToolDeps) writeSummary(ctx context.Context, _ *mcp.CallToolRequest, in writeSummaryInput) (*mcp.CallToolResult, writeSummaryOutput, error) {
+	summary := strings.TrimSpace(in.Summary)
+	if summary == "" {
+		return toolErr("summary is required"), writeSummaryOutput{}, nil
+	}
+	nodeID := strings.TrimSpace(in.NodeID)
+	projectID := strings.TrimSpace(in.ProjectID)
+	if nodeID == "" && projectID == "" {
+		return toolErr("pass node_id to summarize a scene or chapter, or project_id to write the work's synopsis"),
+			writeSummaryOutput{}, nil
+	}
+	if nodeID != "" && projectID != "" {
+		return toolErr("pass either node_id or project_id, not both"), writeSummaryOutput{}, nil
+	}
+
+	if nodeID == "" {
+		p, errResult := d.requireProject(ctx, projectID)
+		if errResult != nil {
+			return errResult, writeSummaryOutput{}, nil
+		}
+		if _, err := d.Projects.Update(ctx, d.now(), project.UpdateInput{ID: p.ID, Synopsis: &summary}); err != nil {
+			return toolErr("could not write the synopsis: %v", err), writeSummaryOutput{}, nil
+		}
+		d.notifyChanged(p.ID, "linetta_write_summary", nil, "")
+		return nil, writeSummaryOutput{Target: "synopsis", ProjectID: p.ID, Summary: summary}, nil
+	}
+
+	n, errResult := d.requireNode(ctx, nodeID)
+	if errResult != nil {
+		return errResult, writeSummaryOutput{}, nil
+	}
+	target := "container"
+	forVersion := n.ContentVersion
+	if n.Kind == node.KindLeaf {
+		target = "scene"
+		// Scenes carry a version that tracks their own edits, so a summary
+		// written against stale text must be refused — otherwise the brief
+		// would report a fresh summary of prose that has since changed.
+		if in.ExpectedContentVersion == nil {
+			return toolErr("expected_content_version is required for a scene summary; call linetta_read_scene first"),
+				writeSummaryOutput{}, nil
+		}
+		if *in.ExpectedContentVersion != n.ContentVersion {
+			return toolErr(
+				"the scene changed since you read it (you passed version %d, current is %d). "+
+					"Re-read the scene and summarize the current text.",
+				*in.ExpectedContentVersion, n.ContentVersion), writeSummaryOutput{}, nil
+		}
+		forVersion = *in.ExpectedContentVersion
+	}
+
+	if err := d.Nodes.SetSummary(ctx, n.ID, summary, forVersion); err != nil {
+		return toolErr("could not write the summary: %v", err), writeSummaryOutput{}, nil
+	}
+	d.notifyChanged(n.ProjectID, "linetta_write_summary", []string{n.ID}, "")
+	return nil, writeSummaryOutput{Target: target, NodeID: n.ID, Summary: summary}, nil
+}

@@ -242,6 +242,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 			plot:       plotBuilder,
 			manuscript: manuscriptSearcher,
 			context:    mcpContextBuilder,
+			snapshots:  snaps,
+			enqueue:    summ.Enqueue,
+			notify:     func(method string, params any) { _ = s.Notifier().Notify(method, params) },
+			clock:      clock,
 			db:         st.DB(),
 		},
 	})

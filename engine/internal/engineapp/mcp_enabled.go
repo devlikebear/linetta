@@ -19,6 +19,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 )
 
@@ -47,6 +48,10 @@ type mcpToolRepos struct {
 	plot       *plot.Builder
 	manuscript *manuscript.Searcher
 	context    *storycontext.ContextBuilder
+	snapshots  *snapshot.Repo
+	enqueue    func(nodeID string)
+	notify     func(method string, params any)
+	clock      func() int64
 	db         *sql.DB
 }
 
@@ -71,6 +76,11 @@ func setupMCP(deps mcpDeps) (*mcpController, func() error) {
 		Context:    deps.repos.context,
 		Settings:   deps.settingsStore,
 		Activity:   activity,
+
+		Snapshots:      deps.repos.snapshots,
+		EnqueueSummary: deps.repos.enqueue,
+		Notify:         deps.repos.notify,
+		Clock:          deps.repos.clock,
 	}
 	host := mcphost.New(mcphost.Deps{
 		Settings: deps.settingsStore,
