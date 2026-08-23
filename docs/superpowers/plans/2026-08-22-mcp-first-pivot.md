@@ -26,11 +26,14 @@
 
 구현 전에 설계 문서 10절의 항목을 확정한다. 코드 작업 없음.
 
-- [ ] 컴패니언 제거 시점: MCP 실사용 검증 후 단계적 (권장)
-- [ ] 모바일에서 AI 기능이 완전히 사라지는 것을 수용할지 확인
-- [ ] `web_search` 설정 제거 여부 (`web_fetch`는 유지)
-- [ ] 목표 버전 1.0.0 확정
-- [ ] 결정 결과를 설계 문서 10절에 반영
+- [x] 컴패니언 제거 시점: **MCP 실사용 검증 후 단계적** (Phase 5 → 6)
+- [x] 모바일에서 AI 기능이 완전히 사라지는 것을 **수용**
+- [x] `web_search` 설정 **제거** (`web_fetch`는 유지)
+- [x] 목표 버전 **1.0.0** 확정
+- [x] 손으로 쓰는 요약 UI는 **미추가로 시작** (Phase 7에서 재검토)
+- [x] 결정 결과를 설계 문서 10절에 반영
+
+> **완료 (2026-08-22):** 다섯 항목 모두 권장안대로 확정. 이후 단계는 조건부 서술 없이 이 결정을 전제로 진행한다.
 
 ---
 
@@ -290,7 +293,7 @@
 - [ ] **RPC `projects.rewrite_synopsis` 제거.** 프로바이더 없는 상태에서 이 메서드는 컨테이너 요약을 지우고 빈 문자열을 돌려주는 파괴적 동작이 된다(설계 문서 3.3절). `projects.clear_synopsis`는 무해하므로 유지 여부만 판단.
 - [ ] 설정에서 `provider`, `providers`, `ai_data_sharing_consent_*` 제거. 마이그레이션은 기존 값을 무시하되 파괴하지 않는다.
 - [ ] `tars` 의존성은 **유지한다** — `pkg/tools`의 `web_fetch`가 팩트북 URL 캡처에 쓰이고(`handlers/facts.go:108`), `storyops`의 `remember`가 `pkg/memory`를 쓴다. `pkg/llm`, `pkg/agentloop`, `pkg/session` 사용만 사라진다.
-- [ ] Phase 0에서 `web_search` 제거를 택했다면 `handlers/websearch.go`, `web_search.test` RPC, `web_search_*` 설정도 함께 제거한다.
+- [ ] `handlers/websearch.go`, `web_search.test` RPC, `web_search_*` 설정을 제거한다(Phase 0 확정). `web_fetch`(`handlers/facts.go:108`, 키 불필요)는 남긴다.
 
 ### Task 6.2 — 프론트엔드 제거
 
@@ -320,7 +323,7 @@
 제거로 확보한 여력을 집필 기능에 투자한다. 이 계획의 범위 밖이지만 방향을 적어 둔다.
 
 - [ ] `contextualedit`(설정 변경 → 관련 씬 일괄 수정) 같은 결정론적 파워 기능 확장 — LLM 없이 동작하며 이 제품 방향의 대표 기능이다.
-- [ ] 손으로 쓰는 요약 UI (Phase 0 결정에 따라)
+- [ ] 손으로 쓰는 요약 UI — Phase 0에서 미추가로 시작하기로 확정했으므로, MCP 없이 쓰는 사용자 비중을 보고 여기서 재검토한다
 - [ ] 집필 통계, 원고 진행 관리, 퇴고 워크플로
 - [ ] MCP 프롬프트("다음 씬 초고", "연속성 점검")와 리소스(`linetta://work/{id}/scene/{id}`)
 - [ ] `--headless` 엔진 모드 — 앱을 열지 않고도 에이전트가 작업
