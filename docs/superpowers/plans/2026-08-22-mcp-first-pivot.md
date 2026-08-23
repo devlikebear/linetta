@@ -223,54 +223,72 @@
 
 **파일:** `engine/cmd/linetta-mcp/main.go`, `+ 테스트`
 
-- [ ] `$LINETTA_HOME/mcp.json`을 읽고, 고급 설정을 위한 `--url` / `--token` 재정의를 지원한다.
-- [ ] SDK의 `StreamableClientTransport`(로컬 엔드포인트, 인증 헤더 부착)와 SDK의 `StdioTransport` 서버 쪽을 합성한다. **단순 바이트 펌프가 아니다** — SSE 응답 스트림, 서버 발신 메시지용 GET 스트림, `Mcp-Session-Id` 상태를 SDK가 처리하게 맡긴다.
-- [ ] `--print-header`를 추가한다. `Authorization` 헤더 값만 출력하고 종료하며, 생성된 `.mcp.json`이 `headersHelper`로 이걸 호출한다. 그래야 설정 파일에 리터럴 토큰이 남지 않는다.
-- [ ] Linetta가 실행 중이 아닐 때 사람이 읽을 수 있는 메시지로 종료한다("Linetta를 열고 설정에서 MCP를 켜세요"). 이 문자열이 사용자가 클라이언트에서 보게 될 문구다.
-- [ ] 테스트: 스텁 HTTP 서버 대상으로 스트리밍 응답 포함 왕복 1회, 디스커버리 파일 없음 → 안내 메시지와 0이 아닌 종료 코드, `--print-header`는 헤더 값만 출력.
+- [x] `$LINETTA_HOME/mcp.json`을 읽고, 고급 설정을 위한 `--url` / `--token` 재정의를 지원한다.
+- [x] SDK의 `StreamableClientTransport`(로컬 엔드포인트, 인증 헤더 부착)와 SDK의 `StdioTransport` 서버 쪽을 합성한다. **단순 바이트 펌프가 아니다** — SSE 응답 스트림, 서버 발신 메시지용 GET 스트림, `Mcp-Session-Id` 상태를 SDK가 처리하게 맡긴다.
+- [x] `--print-headers`를 추가한다. **JSON 헤더 객체**를 출력하고 종료하며, 생성된 `.mcp.json`이 `headersHelper`로 이걸 호출한다. 그래야 설정 파일에 리터럴 토큰이 남지 않는다.
+
+> **계획 정정:** 계획에는 "`Authorization` 헤더 값만 출력"이라고 적혀 있었으나, Claude Code 문서의 `headersHelper` 계약은 **"stdout에 문자열 키/값 JSON 객체"** 다(10초 제한, 절대 경로 권장). 헤더 값만 내보내면 셸은 통과하지만 인증이 조용히 실패한다. 플래그 이름도 복수형 `--print-headers`로 맞췄고, 출력 형태를 테스트로 고정했다.
+- [x] Linetta가 실행 중이 아닐 때 사람이 읽을 수 있는 메시지로 종료한다("Linetta를 열고 설정에서 MCP를 켜세요"). 이 문자열이 사용자가 클라이언트에서 보게 될 문구다.
+- [x] 테스트: 실제 MCP 서버(스텁) 대상으로 `tools/list` + `tools/call` 왕복, 디스커버리 파일 없음 → 안내 메시지, 헤더 헬퍼 출력이 JSON 객체로 파싱됨, RoundTripper가 원본 요청을 변형하지 않음.
 
 ### Task 4.2 — 빌드와 번들
 
 **파일:** `scripts/build-mcp-bridge.sh`, `Makefile`, `apps/desktop/src-tauri/tauri.conf.json`, `.github/workflows/*`
 
-- [ ] `make build-mcp-bridge`가 호스트 OS용으로 빌드하고, CI가 플랫폼별 산출물을 만든다. 브리지는 cgo 없는 순수 Go라 크로스 컴파일이 쉽다.
-- [ ] 직접 배포 빌드에서는 Tauri 리소스로 번들하고 경로를 프론트엔드에 노출한다.
-- [ ] **MAS 빌드에서는 번들하지 않는다.** Homebrew/GitHub 릴리스로 별도 배포한다.
-- [ ] `scripts/validate-distribution.sh`를 확장해 브리지 없이 나가는 릴리스가 게이트에서 실패하게 한다.
+- [x] `make build-mcp-bridge`가 호스트 OS용으로 빌드하고, CI가 세 플랫폼 모두에서 같은 스크립트를 돌린다. 브리지는 cgo 없는 순수 Go라 `GOOS`/`GOARCH`만 넘기면 크로스 컴파일된다.
+- [x] 직접 배포 빌드에서는 Tauri 리소스로 번들하고, `mcp_bridge_path` 커맨드가 절대 경로를 프론트엔드에 노출한다.
+- [x] **MAS 빌드에서는 번들하지 않는다.** `tauri.mas.conf.json`이 `"resources": []`로 덮어쓴다. MAS 사용자는 릴리스 자산이나 Homebrew로 따로 받는다.
+- [x] CI가 `linetta-mcp-macos` / `linetta-mcp-linux` / `linetta-mcp-windows.exe`를 릴리스 자산으로 올린다. 복사가 실패하면 잡이 죽으므로, 이것 자체가 브리지 없는 릴리스를 막는 게이트다.
+- [x] 로컬 macOS 릴리스(`scripts/release-macos-local.sh`)도 브리지를 빌드하고 hardened runtime으로 서명한다. CI만 고쳐 두면 로컬 릴리스가 브리지 없이, 또는 공증에서 거부되는 상태로 나간다.
+- [x] `scripts/validate-distribution.sh`를 확장해 브리지 빌드/번들/자산 업로드 경로가 하나라도 빠지면 게이트에서 실패한다.
+
+> **계획 정정 1 — 플랫폼별 설정은 리소스 목록을 *합치지 않고 통째로 갈아끼운다.** Tauri는 `tauri.<platform>.conf.json`을 RFC 7386(JSON Merge Patch)로 병합하는데, 이 규칙에서 배열은 병합이 아니라 **교체**다. `tauri.windows.conf.json`이 이미 `bundle.resources`를 엔진 DLL 맵으로 정의하고 있었으므로, 베이스의 `"resources/*"`는 **윈도우에서 죽은 설정**이었다. 즉 개발 주력 플랫폼에서 브리지가 아예 번들되지 않는다. 윈도우 맵에 `"resources/*": "resources"`를 함께 넣어 다른 OS와 배치가 같아지도록 맞췄다. 반대로 이 성질 덕분에 MAS 제외는 `"resources": []` 한 줄로 끝난다.
+
+> **계획 정정 2 — 빈 글롭은 빌드 에러다.** `tauri-build`의 `copy_resources`는 `cargo build` 시점(build.rs)에 돌고, 매칭되는 파일이 하나도 없는 글롭은 `GlobPathNotFound`로 **실패**한다. 브리지를 아직 빌드하지 않은 새 체크아웃에서는 `pnpm tauri dev`조차 컴파일되지 않는다는 뜻이다. 그래서 `apps/desktop/src-tauri/resources/README.md`를 **의도적으로 커밋**해 글롭이 항상 하나는 잡게 했다. 파일 없이 체크아웃한 상태로 `cargo check`가 통과하는 것을 실제로 확인했다. **대가가 하나 있다**: 이 플레이스홀더 때문에 브리지가 없어도 번들이 조용히 성공한다. 그래서 "브리지 없는 릴리스"를 막는 실제 장치는 CI 수집 단계의 `cp` 실패이고, 로컬 macOS 릴리스 경로는 `scripts/release-macos-local.sh`가 직접 브리지를 빌드·서명하도록 했다.
+
+> **계획 정정 3 — macOS 번들 안의 브리지는 서명해야 한다.** 공증(notarytool)은 아카이브 안의 모든 Mach-O를 훑는데, Go가 darwin에 붙이는 ad-hoc 서명은 hardened runtime이 없어 공증에서 거부된다. CI의 브리지 빌드 단계에서 앱과 같은 Developer ID로 `--options runtime` 서명을 붙였다. 이 문제는 태그를 밀기 전까지는 드러나지 않는 종류라 미리 막았다.
+
+> **알려진 한계 — 리눅스 AppImage.** AppImage는 실행할 때마다 임시 마운트 지점에 풀리므로 설정 화면이 찍어 주는 브리지 절대 경로가 다음 실행에서 무효가 된다. deb/rpm/직접 다운로드는 문제없다. AppImage 사용자는 릴리스 자산의 `linetta-mcp-linux`를 고정 경로에 두고 쓰면 된다. Phase 4의 블로커는 아니다.
 
 ### Task 4.3 — MAS 엔타이틀먼트
 
 **파일:** `apps/desktop/src-tauri/*.entitlements`, `packaging/*`, `docs/`
 
-- [ ] MAS 엔타이틀먼트에 `com.apple.security.network.server`를 추가한다.
-- [ ] 샌드박스 빌드에서 루프백 리스너가 실제로 뜨는지 로컬 검증한다(`make build-mas-local`).
-- [ ] MAS에서는 브리지 없이 Claude Code HTTP 직접 연결 경로만 안내하고, 토큰 수동 붙여넣기 흐름을 문서화한다.
-- [ ] 심사 설명 문구를 준비한다: 로컬 루프백 전용, 사용자가 명시적으로 켜야 함, 원격 접속 없음.
+> **이 태스크는 macOS 실기 검증이 필요하다.** 현재 개발 환경이 윈도우라 아래 항목과 함께, Task 4.2에서 만든 MAS의 `"resources": []` 병합이 실제 `make build-mas-local` 산출물에서 브리지를 빼는지도 macOS에서 확인해야 한다.
+
+- [x] MAS 엔타이틀먼트에 `com.apple.security.network.server`를 추가한다.
+- [ ] 샌드박스 빌드에서 루프백 리스너가 실제로 뜨는지 로컬 검증한다(`make build-mas-local`). **macOS 실기 필요 — 남은 유일한 Phase 4 항목.**
+- [x] MAS에서는 브리지 없이 Claude Code HTTP 직접 연결 경로만 안내한다. `mcp_bridge_path`가 null을 돌려주면 설정 화면이 "이 빌드에는 브리지가 없다, 위의 `claude mcp add` 한 줄은 그대로 동작한다, Desktop을 쓰려면 릴리스나 Homebrew에서 받아라"를 3개 언어로 띄운다. 경로를 아직 물어보지 않은 상태(undefined)와 브리지가 없는 상태(null)를 구분해서, 로딩 중에 잘못된 안내가 깜빡이지 않는다.
+- [x] 심사 설명 문구를 준비한다: 로컬 루프백 전용, 사용자가 명시적으로 켜야 함, 원격 접속 없음. `packaging/README.md`의 "Mac App Store review notes"에 정리했다.
 
 ### Task 4.4 — 설정 화면
 
 **파일:** `apps/desktop/src/routes/Settings.tsx`, 신규 컴포넌트, `apps/desktop/src-tauri/src/lib.rs`, i18n 리소스
 
-- [ ] 토글, 모드 선택, 포트 입력, 작품 제한, 동의 문구, 토큰 재발급, 킬 스위치, 활동 목록.
-- [ ] 복사 가능한 스니펫 3종을 설정된 포트와 실제 브리지 경로로 생성한다. **리터럴 토큰은 `claude mcp add` 한 줄에만 담는다**(사용자 자기 기기에 쓰이므로). `.mcp.json` 스니펫은 `headersHelper` + `linetta-mcp --print-header`를 쓴다 — `.mcp.json`은 사람들이 커밋하는 파일이다.
-- [ ] 포트 점유 상태를 Task 2.3의 타입 에러로 렌더링하고 다른 포트를 고르게 한다.
-- [ ] `mcp.status`, `mcp.enable`, `mcp.disable`, `mcp.regenerate_token`, `mcp.activity`를 `RENDERER_ENGINE_METHODS`에 추가한다.
-- [ ] `capabilities.mcp_available`이 false면 화면 전체를 숨긴다.
-- [ ] 3개 언어 번역.
-- [ ] Vitest: 스니펫 렌더링, 동의 전에는 활성화가 막힘, 킬 스위치가 `mcp.disable`을 호출함.
+- [x] 토글, 모드 선택, 포트 입력, 작품 제한, 동의 문구, 토큰 재발급, 킬 스위치, 활동 목록.
+- [x] 복사 가능한 스니펫 3종을 설정된 포트와 실제 브리지 경로로 생성한다. **리터럴 토큰은 `claude mcp add` 한 줄에만 담는다**(사용자 자기 기기에 쓰이므로). `.mcp.json` 스니펫은 `headersHelper` + `linetta-mcp --print-headers`를 쓴다 — `.mcp.json`은 사람들이 커밋하는 파일이다.
+- [x] 포트 점유 상태를 Task 2.3의 타입 에러로 렌더링하고 다른 포트를 고르게 한다. 엔진이 붙이는 `mcp_port_in_use` / `mcp_consent_required` reason 코드를 `rpc.Reason*` 상수로 등록하고, 렌더러의 `rpcErrorMessage`가 ko/en/ja 문장으로 옮긴다. 서버가 꺼져 있는 동안 포트 입력이 계속 활성이라 고치는 데 키 입력 한 번이면 된다.
+- [x] `mcp.status`, `mcp.enable`, `mcp.disable`, `mcp.regenerate_token`, `mcp.activity`를 `RENDERER_ENGINE_METHODS`에 추가한다.
+- [x] `capabilities.mcp_available`이 false면 화면 전체를 숨긴다.
+- [x] 3개 언어 번역.
+- [x] Vitest: 스니펫 렌더링, 동의 전에는 활성화가 막힘, 킬 스위치가 `mcp.disable`을 호출함, 포트 점유가 실행 가능한 문장으로 바뀜.
 
 ### Task 4.5 — 연결 표시등
 
-- [ ] 세션이 활성인 동안 워크스페이스에 눈에 띄지 않는 표시등을 띄우고, 클릭하면 활동 로그로 간다. 작가가 "뭔가 다른 것이 내 원고를 고칠 수 있다"는 사실에 놀라는 일이 없어야 한다.
+- [x] 세션이 활성인 동안 워크스페이스에 눈에 띄지 않는 표시등을 띄우고, 클릭하면 활동 로그로 간다. 작가가 "뭔가 다른 것이 내 원고를 고칠 수 있다"는 사실에 놀라는 일이 없어야 한다.
 
 ### Task 4.6 — `.mcp.json`을 동기화에서 제외
 
 **파일:** `engine/internal/gitsync/*`, `engine/internal/foldersync/*`, `+ 테스트`
 
-- [ ] 두 내보내기 모두에서 `.mcp.json`을 제외한다.
-- [ ] 테스트: 동기화 디렉터리의 `.mcp.json`이 스테이징되지 않고 살아남는다.
+- [x] gitsync의 `git add -A`에 `:(exclude).mcp.json` 경로 지정을 붙인다.
+- [x] 테스트: 동기화 디렉터리의 `.mcp.json`이 스테이징되지 않고 살아남는다.
+
+> **계획 정정:** "두 내보내기 모두"라고 적었지만 코드를 읽어보니 **foldersync는 제외할 것이 없다.** `exportAll`은 자기가 만든 원고 파일과 매니페스트만 쓰고 디렉터리의 다른 파일은 읽지도 복사하지도 않는다. 실제 유출 경로는 gitsync의 `git add -A` 하나뿐이고, 거기만 막으면 된다. 작가의 `.gitignore`를 대신 수정하지 않은 것은 그 파일이 작가가 관리하는 파일이기 때문이다.
 
 **4단계 종료 조건:** 처음 쓰는 사용자가 MCP를 켜고 명령 한 줄을 붙여넣어 Claude Code 또는 Claude Desktop으로 자기 작품에 초고를 쓸 수 있다.
+
+**상태:** 직접 배포 빌드(macOS / Windows / Linux)에서는 충족. 설정에서 MCP를 켜면 실제 브리지 절대 경로가 박힌 스니펫 3종이 나오고, Claude Code는 `claude mcp add` 한 줄, Claude Desktop은 번들된 브리지로 바로 붙는다. MAS 빌드만 macOS 실기에서 샌드박스 리스너 확인이 남아 있다(Task 4.3).
 
 ---
 

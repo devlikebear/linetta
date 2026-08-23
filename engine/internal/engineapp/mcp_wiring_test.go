@@ -140,10 +140,20 @@ func TestMCPEnableBindsAndCloseReleasesPort(t *testing.T) {
 	if rpcErr != nil {
 		t.Fatalf("mcp.enable: %+v", rpcErr)
 	}
-	var st mcpStatus
-	if err := json.Unmarshal(result, &st); err != nil {
-		t.Fatalf("decode status: %v", err)
+	// Enable hands back the token with the status: it is minted server-side and
+	// settings.get redacts it forever after, so this is the settings pane's one
+	// chance to build a copyable client command.
+	var enabled struct {
+		Token  string    `json:"token"`
+		Status mcpStatus `json:"status"`
 	}
+	if err := json.Unmarshal(result, &enabled); err != nil {
+		t.Fatalf("decode enable: %v", err)
+	}
+	if enabled.Token == "" {
+		t.Error("mcp.enable must return the token so the settings pane can render a client command")
+	}
+	st := enabled.Status
 	if !st.Running || st.Port != free {
 		t.Fatalf("status = %+v, want running on port %d", st, free)
 	}

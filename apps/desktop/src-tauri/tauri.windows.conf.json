@@ -2,7 +2,8 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "resources": {
-      "gen/windows/linetta_engine_ffi.dll": "linetta_engine_ffi.dll"
+      "gen/windows/linetta_engine_ffi.dll": "linetta_engine_ffi.dll",
+      "resources/*": "resources"
     }
   }
 }

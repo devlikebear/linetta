@@ -148,6 +148,22 @@ jobs:
           rm -f "${cert_path}"
           echo "api_key_path=${key_path}" >> "${GITHUB_OUTPUT}"
 
+      - name: Build MCP bridge
+        shell: bash
+        env:
+          # Signed with the same Developer ID as the app: notarytool scans every
+          # Mach-O in the bundle, and Go's ad-hoc signature without a hardened
+          # runtime fails notarization.
+          APPLE_SIGNING_IDENTITY: ${{ steps.apple_signing.outputs.configured == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+        run: |
+          set -euo pipefail
+          bash scripts/build-mcp-bridge.sh
+          if [ "${RUNNER_OS}" = "macOS" ] && [ -n "${APPLE_SIGNING_IDENTITY}" ]; then
+            bridge=apps/desktop/src-tauri/resources/linetta-mcp
+            codesign --force --timestamp --options runtime --sign "${APPLE_SIGNING_IDENTITY}" "${bridge}"
+            codesign --verify --verbose=2 "${bridge}"
+          fi
+
       - name: Build Tauri app
         shell: bash
         working-directory: apps/desktop
@@ -212,6 +228,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+          # The bridge also ships standalone: Mac App Store builds do not bundle
+          # it, so those writers need a download. A missing file fails the job,
+          # which is the gate against releasing a bridge-less build.
+          bridge="../../../resources/linetta-mcp"
+          if [ "${{ matrix.artifact }}" = "windows" ]; then
+            cp "${bridge}.exe" "dist/linetta-mcp-windows.exe"
+          else
+            cp "${bridge}" "dist/linetta-mcp-${{ matrix.artifact }}"
+          fi
           case "${{ matrix.artifact }}" in
             macos)
               tar -czf dist/Linetta-macos.app.tar.gz -C macos Linetta.app

@@ -30,6 +30,9 @@
   },
   "bundle": {
     "active": true,
+    "resources": [
+      "resources/*"
+    ],
     "targets": [
       "app",
       "dmg"

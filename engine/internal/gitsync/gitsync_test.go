@@ -362,3 +362,40 @@ func TestRunOnce_recordsOpsStatusOnPushFailure(t *testing.T) {
 }
 
 func strPtr(v string) *string { return &v }
+
+// The recommended agent workflow puts .mcp.json in the synced folder so a
+// client can find the local server. That file can carry a bearer token, and
+// `git add -A` would push it to the remote. The exclusion is what stops it.
+func TestRunOnce_neverStagesTheMCPClientConfig(t *testing.T) {
+	s, runner, repoDir, _ := newFixture(t)
+	if _, err := s.Settings.Set(context.Background(), settings.Patch{GitSyncDir: strPtr(repoDir)}); err != nil {
+		t.Fatalf("set git_sync_dir: %v", err)
+	}
+	// The writer drops a client config next to the exported manuscript.
+	if err := os.WriteFile(filepath.Join(repoDir, MCPConfigFilename),
+		[]byte(`{"mcpServers":{"linetta":{"headers":{"Authorization":"Bearer SECRET"}}}}`), 0o600); err != nil {
+		t.Fatalf("write .mcp.json: %v", err)
+	}
+
+	if _, err := s.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+
+	var addCall []string
+	for _, c := range runner.calls {
+		if len(c) > 0 && c[0] == "add" {
+			addCall = c
+		}
+	}
+	if addCall == nil {
+		t.Fatal("git add was never called")
+	}
+	joined := strings.Join(addCall, " ")
+	if !strings.Contains(joined, ":(exclude)"+MCPConfigFilename) {
+		t.Fatalf("git add must exclude the MCP config; got %q", joined)
+	}
+	// The file itself must survive — excluding it from staging is not deleting it.
+	if _, err := os.Stat(filepath.Join(repoDir, MCPConfigFilename)); err != nil {
+		t.Fatalf("the writer's .mcp.json should still be there: %v", err)
+	}
+}

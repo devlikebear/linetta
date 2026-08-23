@@ -15,6 +15,7 @@ import {
   openExternalUrl,
 } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
+import { McpSection } from "../components/settings/McpSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
 import { isWindows } from "../lib/platform";
@@ -89,6 +90,8 @@ export function Settings() {
   );
   const [unavailableProviders, setUnavailableProviders] = useState<string[]>([]);
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
+  // Hidden entirely on builds without MCP (mobile), the same way git sync is.
+  const [mcpAvailable, setMcpAvailable] = useState(false);
   const providers = useMemo(
     () => buildProviders(t).filter((p) => !unavailableProviders.includes(p.id)),
     [t, unavailableProviders],
@@ -164,6 +167,7 @@ export function Settings() {
         setOpsRows(rows);
         setUnavailableProviders(diag.unavailable_providers ?? []);
         setGitSyncAvailable(diag.git_sync_available ?? true);
+        setMcpAvailable(diag.mcp_available ?? false);
         syncOpenRouterDrafts(s);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
@@ -1064,6 +1068,8 @@ export function Settings() {
                 )}
               </div>
             </section>
+
+            {mcpAvailable && <McpSection />}
 
             {!gitSyncAvailable && (
             <section className="settings-section">

@@ -153,7 +153,14 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 	if run == nil {
 		run = runGitProd
 	}
-	if _, err := run(ctx, dir, "add", "-A"); err != nil {
+	// `add -A` stages everything in the directory, including files Linetta did
+	// not write. The one we must never stage is an MCP client config: the
+	// recommended workflow puts .mcp.json in the synced folder so an agent can
+	// find the server, and a literal bearer token committed here would be
+	// pushed to the remote. Excluded at the staging call rather than by editing
+	// the writer's .gitignore, which is their file to manage.
+	addArgs := append([]string{"add", "-A", "--"}, excludeFromStaging...)
+	if _, err := run(ctx, dir, addArgs...); err != nil {
 		summary.Error = "git add: " + err.Error()
 		return summary, nil
 	}
@@ -183,6 +190,14 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 	summary.Pushed = true
 	return summary, nil
 }
+
+// MCPConfigFilename is the client config an agent-assisted writer may drop in
+// the synced folder. Named here so the exclusion is greppable from both sides.
+const MCPConfigFilename = ".mcp.json"
+
+// excludeFromStaging is the pathspec tail for `git add`: everything under the
+// sync dir except files that must never reach the remote.
+var excludeFromStaging = []string{".", ":(exclude)" + MCPConfigFilename}
 
 // runGitProd is the production CmdRunner. It runs git from `dir`, captures
 // stderr into the returned error, and enforces a per-call timeout.
