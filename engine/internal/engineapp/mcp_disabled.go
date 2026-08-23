@@ -4,10 +4,19 @@ package engineapp
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 
+	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/mention"
+	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/plot"
+	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/settings"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 )
 
 // Mobile builds cannot host a local server, so MCP is compiled out entirely —
@@ -17,7 +26,21 @@ const mcpAvailable = false
 type mcpDeps struct {
 	settingsStore *settings.Store
 	home          string
-	tools         any
+	repos         mcpToolRepos
+}
+
+// mcpToolRepos mirrors the enabled build's shape so register() compiles
+// unchanged; mobile never reads these.
+type mcpToolRepos struct {
+	projects   *project.Repo
+	nodes      *node.Repo
+	entities   *entity.Repo
+	mentions   *mention.Repo
+	facts      *fact.Repo
+	plot       *plot.Builder
+	manuscript *manuscript.Searcher
+	context    *storycontext.ContextBuilder
+	db         *sql.DB
 }
 
 // mcpController answers status queries with a disabled state and refuses

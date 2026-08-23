@@ -218,10 +218,33 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		WithManuscript(manuscriptSearcher).
 		WithSnapshots(snaps)
 
-	// The MCP host serves story tools to external agents. Tools are registered
-	// per session in a later task; the host binds only when the writer has
-	// turned MCP on and accepted its consent.
-	mcpCtrl, stopMCP := setupMCP(mcpDeps{settingsStore: settingsStore, home: home})
+	// The MCP host serves story tools to external agents. It binds only when
+	// the writer has turned MCP on and accepted its consent.
+	//
+	// The tool layer gets its OWN context builder, wired with the fact,
+	// memory, and reference sources. The builder above stays untouched so
+	// ai.run and ai.preview_context keep producing byte-identical prompts.
+	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
+		WithSummaryRefresher(summ).
+		WithFactSource(companionSvc).
+		WithMemorySource(companionSvc).
+		WithReferenceSource(companionSvc)
+
+	mcpCtrl, stopMCP := setupMCP(mcpDeps{
+		settingsStore: settingsStore,
+		home:          home,
+		repos: mcpToolRepos{
+			projects:   projects,
+			nodes:      nodes,
+			entities:   entities,
+			mentions:   mentions,
+			facts:      facts,
+			plot:       plotBuilder,
+			manuscript: manuscriptSearcher,
+			context:    mcpContextBuilder,
+			db:         st.DB(),
+		},
+	})
 	a.closers = append(a.closers, stopMCP)
 
 	caps := handlers.Capabilities{

@@ -4,15 +4,22 @@ package engineapp
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-
+	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
+	"github.com/devlikebear/linetta/engine/internal/mention"
+	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/plot"
+	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
+	"github.com/devlikebear/linetta/engine/internal/storycontext"
 )
 
 // MCP ships on desktop and on the Mac App Store. It is deliberately NOT gated
@@ -25,23 +32,52 @@ const mcpAvailable = true
 type mcpDeps struct {
 	settingsStore *settings.Store
 	home          string
-	tools         func(s *mcp.Server, mode string)
+	repos         mcpToolRepos
+}
+
+// mcpToolRepos collects what the tool layer reads from. The context builder is
+// a second instance wired with fact/memory/reference sources — the builder the
+// AI runner uses stays untouched so its prompts do not change.
+type mcpToolRepos struct {
+	projects   *project.Repo
+	nodes      *node.Repo
+	entities   *entity.Repo
+	mentions   *mention.Repo
+	facts      *fact.Repo
+	plot       *plot.Builder
+	manuscript *manuscript.Searcher
+	context    *storycontext.ContextBuilder
+	db         *sql.DB
 }
 
 // mcpController adapts *mcphost.Host to handlers.MCPController, translating
 // host errors into the sentinels the RPC layer turns into reason codes.
 type mcpController struct {
-	host *mcphost.Host
-	set  *settings.Store
+	host     *mcphost.Host
+	set      *settings.Store
+	activity *mcphost.ActivityRepo
 }
 
 func setupMCP(deps mcpDeps) (*mcpController, func() error) {
+	activity := mcphost.NewActivityRepo(deps.repos.db)
+	tools := mcphost.ToolDeps{
+		Projects:   deps.repos.projects,
+		Nodes:      deps.repos.nodes,
+		Entities:   deps.repos.entities,
+		Mentions:   deps.repos.mentions,
+		Facts:      deps.repos.facts,
+		Plot:       deps.repos.plot,
+		Manuscript: deps.repos.manuscript,
+		Context:    deps.repos.context,
+		Settings:   deps.settingsStore,
+		Activity:   activity,
+	}
 	host := mcphost.New(mcphost.Deps{
 		Settings: deps.settingsStore,
 		Home:     deps.home,
-		Tools:    deps.tools,
+		Tools:    tools.Register,
 	})
-	ctrl := &mcpController{host: host, set: deps.settingsStore}
+	ctrl := &mcpController{host: host, set: deps.settingsStore, activity: activity}
 	// Start honors the persisted mode: a writer who left MCP on finds it
 	// running after a restart, and mode off binds nothing.
 	if err := host.Start(context.Background()); err != nil {
@@ -70,8 +106,9 @@ func (c *mcpController) RegenerateToken(ctx context.Context) (json.RawMessage, e
 	if err != nil {
 		return nil, err
 	}
-	// The listener holds the old token in memory, so it must be cycled for the
-	// new one to take effect.
+	// The listener holds the old token in memory and the discovery file still
+	// advertises it, so a running server must be cycled for the new token to
+	// take effect everywhere.
 	if c.host.Status().Running {
 		if err := c.host.Restart(ctx); err != nil {
 			return nil, translateMCPError(err)
@@ -84,9 +121,14 @@ func (c *mcpController) RegenerateToken(ctx context.Context) (json.RawMessage, e
 }
 
 func (c *mcpController) Activity(ctx context.Context, limit int) (json.RawMessage, error) {
-	// The activity log lands with the tool layer (Task 2.6); until then this
-	// reports an empty list rather than failing the settings pane.
-	return json.Marshal([]struct{}{})
+	if c.activity == nil {
+		return json.Marshal([]mcphost.ActivityEntry{})
+	}
+	entries, err := c.activity.List(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(entries)
 }
 
 func translateMCPError(err error) error {
