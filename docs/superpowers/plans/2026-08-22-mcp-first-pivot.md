@@ -239,11 +239,12 @@
 - [x] 직접 배포 빌드에서는 Tauri 리소스로 번들하고, `mcp_bridge_path` 커맨드가 절대 경로를 프론트엔드에 노출한다.
 - [x] **MAS 빌드에서는 번들하지 않는다.** `tauri.mas.conf.json`이 `"resources": []`로 덮어쓴다. MAS 사용자는 릴리스 자산이나 Homebrew로 따로 받는다.
 - [x] CI가 `linetta-mcp-macos` / `linetta-mcp-linux` / `linetta-mcp-windows.exe`를 릴리스 자산으로 올린다. 복사가 실패하면 잡이 죽으므로, 이것 자체가 브리지 없는 릴리스를 막는 게이트다.
+- [x] 로컬 macOS 릴리스(`scripts/release-macos-local.sh`)도 브리지를 빌드하고 hardened runtime으로 서명한다. CI만 고쳐 두면 로컬 릴리스가 브리지 없이, 또는 공증에서 거부되는 상태로 나간다.
 - [x] `scripts/validate-distribution.sh`를 확장해 브리지 빌드/번들/자산 업로드 경로가 하나라도 빠지면 게이트에서 실패한다.
 
 > **계획 정정 1 — 플랫폼별 설정은 리소스 목록을 *합치지 않고 통째로 갈아끼운다.** Tauri는 `tauri.<platform>.conf.json`을 RFC 7386(JSON Merge Patch)로 병합하는데, 이 규칙에서 배열은 병합이 아니라 **교체**다. `tauri.windows.conf.json`이 이미 `bundle.resources`를 엔진 DLL 맵으로 정의하고 있었으므로, 베이스의 `"resources/*"`는 **윈도우에서 죽은 설정**이었다. 즉 개발 주력 플랫폼에서 브리지가 아예 번들되지 않는다. 윈도우 맵에 `"resources/*": "resources"`를 함께 넣어 다른 OS와 배치가 같아지도록 맞췄다. 반대로 이 성질 덕분에 MAS 제외는 `"resources": []` 한 줄로 끝난다.
 
-> **계획 정정 2 — 빈 글롭은 빌드 에러다.** `tauri-build`의 `copy_resources`는 `cargo build` 시점(build.rs)에 돌고, 매칭되는 파일이 하나도 없는 글롭은 `GlobPathNotFound`로 **실패**한다. 브리지를 아직 빌드하지 않은 새 체크아웃에서는 `pnpm tauri dev`조차 컴파일되지 않는다는 뜻이다. 그래서 `apps/desktop/src-tauri/resources/README.md`를 **의도적으로 커밋**해 글롭이 항상 하나는 잡게 했다. 파일 없이 체크아웃한 상태로 `cargo check`가 통과하는 것을 실제로 확인했다.
+> **계획 정정 2 — 빈 글롭은 빌드 에러다.** `tauri-build`의 `copy_resources`는 `cargo build` 시점(build.rs)에 돌고, 매칭되는 파일이 하나도 없는 글롭은 `GlobPathNotFound`로 **실패**한다. 브리지를 아직 빌드하지 않은 새 체크아웃에서는 `pnpm tauri dev`조차 컴파일되지 않는다는 뜻이다. 그래서 `apps/desktop/src-tauri/resources/README.md`를 **의도적으로 커밋**해 글롭이 항상 하나는 잡게 했다. 파일 없이 체크아웃한 상태로 `cargo check`가 통과하는 것을 실제로 확인했다. **대가가 하나 있다**: 이 플레이스홀더 때문에 브리지가 없어도 번들이 조용히 성공한다. 그래서 "브리지 없는 릴리스"를 막는 실제 장치는 CI 수집 단계의 `cp` 실패이고, 로컬 macOS 릴리스 경로는 `scripts/release-macos-local.sh`가 직접 브리지를 빌드·서명하도록 했다.
 
 > **계획 정정 3 — macOS 번들 안의 브리지는 서명해야 한다.** 공증(notarytool)은 아카이브 안의 모든 Mach-O를 훑는데, Go가 darwin에 붙이는 ad-hoc 서명은 hardened runtime이 없어 공증에서 거부된다. CI의 브리지 빌드 단계에서 앱과 같은 Developer ID로 `--options runtime` 서명을 붙였다. 이 문제는 태그를 밀기 전까지는 드러나지 않는 종류라 미리 막았다.
 
@@ -265,7 +266,7 @@
 **파일:** `apps/desktop/src/routes/Settings.tsx`, 신규 컴포넌트, `apps/desktop/src-tauri/src/lib.rs`, i18n 리소스
 
 - [x] 토글, 모드 선택, 포트 입력, 작품 제한, 동의 문구, 토큰 재발급, 킬 스위치, 활동 목록.
-- [x] 복사 가능한 스니펫 3종을 설정된 포트와 실제 브리지 경로로 생성한다. **리터럴 토큰은 `claude mcp add` 한 줄에만 담는다**(사용자 자기 기기에 쓰이므로). `.mcp.json` 스니펫은 `headersHelper` + `linetta-mcp --print-header`를 쓴다 — `.mcp.json`은 사람들이 커밋하는 파일이다.
+- [x] 복사 가능한 스니펫 3종을 설정된 포트와 실제 브리지 경로로 생성한다. **리터럴 토큰은 `claude mcp add` 한 줄에만 담는다**(사용자 자기 기기에 쓰이므로). `.mcp.json` 스니펫은 `headersHelper` + `linetta-mcp --print-headers`를 쓴다 — `.mcp.json`은 사람들이 커밋하는 파일이다.
 - [x] 포트 점유 상태를 Task 2.3의 타입 에러로 렌더링하고 다른 포트를 고르게 한다. 엔진이 붙이는 `mcp_port_in_use` / `mcp_consent_required` reason 코드를 `rpc.Reason*` 상수로 등록하고, 렌더러의 `rpcErrorMessage`가 ko/en/ja 문장으로 옮긴다. 서버가 꺼져 있는 동안 포트 입력이 계속 활성이라 고치는 데 키 입력 한 번이면 된다.
 - [x] `mcp.status`, `mcp.enable`, `mcp.disable`, `mcp.regenerate_token`, `mcp.activity`를 `RENDERER_ENGINE_METHODS`에 추가한다.
 - [x] `capabilities.mcp_available`이 false면 화면 전체를 숨긴다.

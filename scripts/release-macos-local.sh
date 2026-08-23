@@ -53,6 +53,17 @@ export APPLE_API_ISSUER="${APP_STORE_CONNECT_ISSUER_ID}"
 export APPLE_API_KEY="${APP_STORE_CONNECT_KEY_ID}"
 export APPLE_API_KEY_PATH="${AUTH_KEY_PATH}"
 
+# The stdio MCP bridge is bundled as a Tauri resource, and notarytool scans
+# every Mach-O in the archive. Go's ad-hoc darwin signature has no hardened
+# runtime, so an unsigned bridge fails notarization for the whole app. Build it
+# here rather than relying on a previous run: the resource directory keeps a
+# committed README, so a missing bridge would bundle quietly instead of failing.
+echo "Building + signing the MCP bridge"
+bash "${ROOT}/scripts/build-mcp-bridge.sh"
+BRIDGE_PATH="${ROOT}/apps/desktop/src-tauri/resources/linetta-mcp"
+codesign --force --timestamp --options runtime --sign "${SIGNING_IDENTITY}" "${BRIDGE_PATH}"
+codesign --verify --verbose=2 "${BRIDGE_PATH}"
+
 echo "Building, signing, notarizing, and stapling the macOS app + dmg"
 cd "${ROOT}/apps/desktop"
 pnpm tauri build --bundles app,dmg

@@ -63,6 +63,10 @@ require_contains ".github/workflows/mobile-release.yml" "patch-tauri-android-sig
 require_executable "scripts/build-mcp-bridge.sh"
 require_contains "Makefile" "build-mcp-bridge:"
 require_contains ".github/workflows/build.yml" "bash scripts/build-mcp-bridge.sh"
+# The local macOS release path bundles the bridge too, and an ad-hoc signed
+# Mach-O fails notarization for the whole app.
+require_contains "scripts/release-macos-local.sh" "build-mcp-bridge.sh"
+require_contains "scripts/release-macos-local.sh" "--options runtime"
 require_contains ".github/workflows/build.yml" "dist/linetta-mcp-windows.exe"
 require_contains ".github/workflows/build.yml" 'dist/linetta-mcp-${{ matrix.artifact }}'
 require_contains "apps/desktop/src-tauri/src/lib.rs" "mcp_bridge_path"
