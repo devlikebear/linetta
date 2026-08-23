@@ -294,6 +294,20 @@ func (s *Store) load() error {
 	if disk.WebSearchProvider != "" {
 		s.cfg.WebSearchProvider = disk.WebSearchProvider
 	}
+	// MCP settings written by a newer build must survive a reload. Blank or
+	// out-of-range values (including a file written by a build that predates
+	// these keys) keep the defaults, and normalizeMCPPreferences below is the
+	// final guard that an unrecognized mode never becomes an open server.
+	if disk.MCPMode != "" {
+		s.cfg.MCPMode = disk.MCPMode
+	}
+	if disk.MCPPort != 0 {
+		s.cfg.MCPPort = disk.MCPPort
+	}
+	s.cfg.MCPProjectID = disk.MCPProjectID
+	s.cfg.MCPConsentVersion = disk.MCPConsentVersion
+	s.cfg.MCPConsentedAt = disk.MCPConsentedAt
+	s.cfg = normalizeMCPPreferences(s.cfg)
 	migratedProviderKeys, migratedWebKey, err := s.migrateLegacySecrets(&disk)
 	if err != nil {
 		s.mu.Unlock()
@@ -600,6 +614,11 @@ func (s *Store) persist(next Config) error {
 		AIDataSharingConsentVersion: next.AIDataSharingConsentVersion,
 		AIDataSharingConsentedAt:    next.AIDataSharingConsentedAt,
 		WebSearchProvider:           next.WebSearchProvider,
+		MCPMode:                     next.MCPMode,
+		MCPPort:                     next.MCPPort,
+		MCPProjectID:                next.MCPProjectID,
+		MCPConsentVersion:           next.MCPConsentVersion,
+		MCPConsentedAt:              next.MCPConsentedAt,
 	}
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {

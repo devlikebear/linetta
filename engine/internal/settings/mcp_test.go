@@ -167,3 +167,47 @@ func TestMCPProjectRestriction(t *testing.T) {
 		t.Errorf("project = %q, want %q", got, id)
 	}
 }
+
+// Regression: settings.Set returned the new mode in its response while
+// persist() silently dropped it, because persist copies an explicit field
+// list. MCP would come back off after every app restart, and no in-memory
+// assertion could catch it — the check has to survive a reload from disk.
+func TestMCPSettingsSurviveReload(t *testing.T) {
+	t.Setenv("LINETTA_HOME", t.TempDir())
+	secrets := NewMemorySecretStore()
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("NewWithSecretStore: %v", err)
+	}
+	mode := MCPModeReadOnly
+	port := 8321
+	projectID := "work-1"
+	version := MCPConsentVersion
+	at := int64(1_700_000_000_000)
+	if _, err := s.Set(context.Background(), Patch{
+		MCPMode:           &mode,
+		MCPPort:           &port,
+		MCPProjectID:      &projectID,
+		MCPConsentVersion: &version,
+		MCPConsentedAt:    &at,
+	}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	reloaded, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := reloaded.MCPMode(); got != mode {
+		t.Errorf("after reload mode = %q, want %q", got, mode)
+	}
+	if got := reloaded.MCPPort(); got != port {
+		t.Errorf("after reload port = %d, want %d", got, port)
+	}
+	if got := reloaded.MCPProjectID(); got != projectID {
+		t.Errorf("after reload project = %q, want %q", got, projectID)
+	}
+	if !reloaded.HasMCPConsent() {
+		t.Error("after reload consent was lost")
+	}
+}
