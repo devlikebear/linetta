@@ -20,6 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
 // ToolDeps carries everything the tool layer reads from. Every field is a repo
@@ -40,6 +41,7 @@ type ToolDeps struct {
 	// EnqueueSummary keeps agent prose in the summarizer's queue; Notify tells
 	// the running UI that something outside it changed the manuscript.
 	Snapshots      *snapshot.Repo
+	Story          *storyops.Service
 	EnqueueSummary func(nodeID string)
 	Notify         func(method string, params any)
 	Clock          func() int64

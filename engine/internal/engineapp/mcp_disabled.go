@@ -18,6 +18,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
 // Mobile builds cannot host a local server, so MCP is compiled out entirely —
@@ -42,6 +43,7 @@ type mcpToolRepos struct {
 	manuscript *manuscript.Searcher
 	context    *storycontext.ContextBuilder
 	snapshots  *snapshot.Repo
+	story      *storyops.Service
 	enqueue    func(nodeID string)
 	notify     func(method string, params any)
 	clock      func() int64

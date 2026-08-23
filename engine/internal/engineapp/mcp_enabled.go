@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
 // MCP ships on desktop and on the Mac App Store. It is deliberately NOT gated
@@ -49,6 +50,7 @@ type mcpToolRepos struct {
 	manuscript *manuscript.Searcher
 	context    *storycontext.ContextBuilder
 	snapshots  *snapshot.Repo
+	story      *storyops.Service
 	enqueue    func(nodeID string)
 	notify     func(method string, params any)
 	clock      func() int64
@@ -78,6 +80,7 @@ func setupMCP(deps mcpDeps) (*mcpController, func() error) {
 		Activity:   activity,
 
 		Snapshots:      deps.repos.snapshots,
+		Story:          deps.repos.story,
 		EnqueueSummary: deps.repos.enqueue,
 		Notify:         deps.repos.notify,
 		Clock:          deps.repos.clock,

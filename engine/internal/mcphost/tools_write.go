@@ -21,6 +21,9 @@ import (
 var WriteToolNames = []string{
 	"linetta_write_scene",
 	"linetta_write_summary",
+	"linetta_apply_story_ops",
+	"linetta_create_checkpoint",
+	"linetta_undo_last_change",
 }
 
 // maxSceneRunes caps one scene body. A runaway agent should hit a wall with a
@@ -94,6 +97,8 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"A scene summary needs the content_version from linetta_read_scene; chapters and the synopsis " +
 			"do not.",
 	}, record(d, "linetta_write_summary", d.writeSummary))
+
+	d.registerBatchTools(s)
 }
 
 func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in writeSceneInput) (*mcp.CallToolResult, writeSceneOutput, error) {
