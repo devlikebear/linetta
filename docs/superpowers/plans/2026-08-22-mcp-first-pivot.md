@@ -156,58 +156,66 @@
 
 **파일:** `engine/internal/mcphost/tools_write.go`, `+ 테스트`
 
-- [ ] 쓰기 전 스냅샷 저장소로 자동 스냅샷을 만들고 `nodes.UpdateContentIfVersion`을 호출한다.
-- [ ] `ErrContentConflict`는 "씬을 다시 읽고 최신 `content_version`으로 재시도하라"는 문구의 툴 에러가 된다.
-- [ ] 크기 상한을 넘는 본문은 명확한 메시지로 거부한다.
-- [ ] 테스트: 정상 경로가 쓰기와 스냅샷을 남김, 낡은 버전 → 충돌 에러이며 DB 불변, 초과 크기 → 거부.
+- [x] 쓰기 전 스냅샷 저장소로 자동 스냅샷을 만들고 `nodes.UpdateContentIfVersion`을 호출한다.
+- [x] `ErrContentConflict`는 "씬을 다시 읽고 최신 `content_version`으로 재시도하라"는 문구의 툴 에러가 된다.
+- [x] 크기 상한을 넘는 본문은 명확한 메시지로 거부한다.
+- [x] 테스트: 정상 경로가 쓰기와 스냅샷을 남김, 낡은 버전 → 충돌 에러이며 DB 불변, 초과 크기 → 거부.
 
 ### Task 3.2 — `linetta_revise_scene`
 
-- [ ] `manuscriptedit`의 미리보기 + 적용을 감싸 씬 전체를 재전송하지 않고 부분 수정한다.
-- [ ] 테스트: 정확한 범위에 적용되고 스냅샷이 남음, 일치 항목 없음은 쓸모 있는 에러를 반환.
+- [x] `manuscriptedit`의 미리보기 + 적용을 감싸 씬 전체를 재전송하지 않고 부분 수정한다.
+- [x] 테스트: 정확한 범위에 적용되고 스냅샷이 남음, 일치 항목 없음은 쓸모 있는 에러를 반환.
 
 ### Task 3.3 — `linetta_apply_story_ops`
 
-- [ ] 기존 `Proposal` 옵 어휘를 받아 `storyops.ApplyOps`를 그대로 호출한다.
-- [ ] **`set_scene_text` 옵은 거부하고 `linetta_write_scene`으로 안내한다.** 적용기의 `set_scene_text`는 `nodes.UpdateContent`(무조건 덮어쓰기)를 쓰므로, 이 툴로 통과시키면 `write_scene`의 버전 검사 계약을 우회하게 된다. 변경 종류마다 문은 하나여야 한다.
-- [ ] `batch_id`, 생성된 id, 옵별 실패를 컴패니언 결과와 동일한 형태로 반환한다.
-- [ ] 테스트: 아웃라인 배치가 적용되고 되돌릴 수 있음, 잘못된 옵은 배치를 실패시키고 아웃라인을 복원함.
+- [x] 기존 `Proposal` 옵 어휘를 받아 `storyops.ApplyOps`를 그대로 호출한다.
+- [x] **`set_scene_text` 옵은 거부하고 `linetta_write_scene`으로 안내한다.** 적용기의 `set_scene_text`는 `nodes.UpdateContent`(무조건 덮어쓰기)를 쓰므로, 이 툴로 통과시키면 `write_scene`의 버전 검사 계약을 우회하게 된다. 변경 종류마다 문은 하나여야 한다.
+- [x] `batch_id`, 생성된 id, 옵별 실패를 컴패니언 결과와 동일한 형태로 반환한다.
+- [x] 테스트: 아웃라인 배치가 적용되고 되돌릴 수 있음, 잘못된 옵은 배치를 실패시키고 아웃라인을 복원함.
 
 ### Task 3.4 — `linetta_write_summary`
 
 **전환의 급소다.** 설계 문서 6절 참조.
 
-- [ ] 대상을 셋 받는다: 씬(leaf) 요약, 컨테이너(부/장) 요약 — 계층 컨텍스트의 재료 — 그리고 작품 시놉시스(`project.Update`의 `Synopsis` 경유).
-- [ ] **버전 계약 확정:** 씬(leaf)만 `content_version`을 요구한다. 컨테이너와 시놉시스는 자식 편집을 추적하는 버전이 없으므로 요구하지 않고 마지막 쓰기가 이긴다 — 툴 설명에 명시한다.
-- [ ] 노드 요약은 에이전트가 읽은 시점의 `content_version`을 인자로 받아 `nodes.SetSummary(id, summary, contentVersion)`에 그대로 넘긴다. 이 낡음 감지는 **씬(leaf) 전용이다** — 컨테이너는 자식 편집을 추적하는 버전이 없다(기존 코드도 컨테이너에는 버전 0을 쓴다). 컨테이너 요약의 버전 의미는 구현 시 확정한다.
-- [ ] 테스트: 요약 저장 후 `SummaryForVersion == ContentVersion`, 이후 사람이 본문을 고치면 요약이 다시 낡은 것으로 표시됨, 낡은 `content_version`으로 온 요약은 거부됨, 시놉시스가 저장됨.
+- [x] 대상을 셋 받는다: 씬(leaf) 요약, 컨테이너(부/장) 요약 — 계층 컨텍스트의 재료 — 그리고 작품 시놉시스(`project.Update`의 `Synopsis` 경유).
+- [x] **버전 계약 확정:** 씬(leaf)만 `content_version`을 요구한다. 컨테이너와 시놉시스는 자식 편집을 추적하는 버전이 없으므로 요구하지 않고 마지막 쓰기가 이긴다 — 툴 설명에 명시한다.
+- [x] 노드 요약은 에이전트가 읽은 시점의 `content_version`을 인자로 받아 `nodes.SetSummary(id, summary, contentVersion)`에 그대로 넘긴다. 이 낡음 감지는 **씬(leaf) 전용이다** — 컨테이너는 자식 편집을 추적하는 버전이 없다(기존 코드도 컨테이너에는 버전 0을 쓴다). 컨테이너 요약의 버전 의미는 구현 시 확정한다.
+- [x] 테스트: 요약 저장 후 `SummaryForVersion == ContentVersion`, 이후 사람이 본문을 고치면 요약이 다시 낡은 것으로 표시됨, 낡은 `content_version`으로 온 요약은 거부됨, 시놉시스가 저장됨.
 
 ### Task 3.5 — 체크포인트와 되돌리기
 
-- [ ] `linetta_create_checkpoint`는 에이전트가 준 라벨로 `snapshots.create_manual`을 감싼다.
-- [ ] `linetta_undo_last_change`는 `batch_id`(구조 변경)와 `snapshot_id`(본문 변경) 두 가지를 받는다. 만료된 배치는 "되돌리기 기간이 지났습니다"라는 평이한 메시지를 반환한다.
+- [x] `linetta_create_checkpoint`는 에이전트가 준 라벨로 `snapshots.create_manual`을 감싼다.
+- [x] `linetta_undo_last_change`는 `batch_id`(구조 변경)와 `snapshot_id`(본문 변경) 두 가지를 받는다. 만료된 배치는 "되돌리기 기간이 지났습니다"라는 평이한 메시지를 반환한다.
 
 > **구현 중 확정 (계획 정정):** `storyops.UndoApply` → `nodes.RestoreOutline`은 `parent_id·ordinal·label·title·status`만 되돌리고 **`content_doc`은 건드리지 않는다**(삭제됐다가 복원되는 노드만 예외). 즉 구조 변경 undo는 씬 본문을 되돌리지 못한다. 본문 되돌리기는 스냅샷(버전 기록) 경로다. 툴이 이 차이를 감추면 에이전트에게 거짓 약속을 하게 되므로, `linetta_write_scene`은 결과에 `snapshot_id`를 실어 보내고 `linetta_undo_last_change`가 두 종류를 모두 받는다.
 
 ### Task 3.6 — 호출 한도와 모드 강제
 
-- [ ] 분당 호출 상한과 호출당 본문 상한을 기본값이 있는 상수로 둔다.
-- [ ] `read_only` 모드는 3.1~3.5의 어떤 툴도 등록하지 않는다. 모드별 `tools/list` 길이를 테스트로 못 박는다.
+- [x] 분당 호출 상한과 호출당 본문 상한을 기본값이 있는 상수로 둔다.
+- [x] `read_only` 모드는 3.1~3.5의 어떤 툴도 등록하지 않는다. 모드별 `tools/list` 길이를 테스트로 못 박는다.
 
 ### Task 3.7 — 변경 알림
 
 **파일:** `engine/internal/mcphost/*`, `apps/desktop/src-tauri/src/ffi.rs`, `apps/desktop/src/hooks/*`
 
-- [ ] 적용된 모든 변경 후 `mcp.changed`(`{project_id, node_ids, tool, batch_id}`)를 발신한다.
-- [ ] `notification_event`에 `"mcp.changed" => Some("mcp-changed")`를 추가한다.
-- [ ] 프론트엔드 리스너가 아웃라인 트리를 다시 가져오고, 열려 있는 씬이 영향을 받았고 편집 버퍼가 깨끗하면 본문도 갱신한다. **버퍼가 더러우면 덮어쓰지 않고 "에이전트가 이 씬을 변경했습니다" 배너를 띄운다.**
-- [ ] 테스트: 매핑에 대한 Rust 단위 테스트, 깨끗/더러움 분기에 대한 Vitest.
+- [x] 적용된 모든 변경 후 `mcp.changed`(`{project_id, node_ids, tool, batch_id}`)를 발신한다.
+- [x] `notification_event`에 `"mcp.changed" => Some("mcp-changed")`를 추가한다.
+- [x] 프론트엔드 리스너가 아웃라인 트리를 다시 가져오고, 열려 있는 씬이 영향을 받았고 편집 버퍼가 깨끗하면 본문도 갱신한다. **버퍼가 더러우면 덮어쓰지 않고 "에이전트가 이 씬을 변경했습니다" 배너를 띄운다.**
+- [x] 테스트: 매핑에 대한 Rust 단위 테스트, 깨끗/더러움 분기에 대한 Vitest.
 
-- [ ] 씬 쓰기 전 스냅샷은 당분간 `snapshot.ReasonCompanionBefore`를 재사용한다. 새 reason을 추가하려면 `ValidReason`과 프론트엔드 버전 시트 라벨을 함께 손봐야 하고, 컴패니언이 Phase 6에서 사라지면 이 reason은 사실상 "에이전트 변경 전"이 된다. 전용 reason 도입은 Phase 4의 UI 작업과 함께 판단한다.
+- [x] 씬 쓰기 전 스냅샷은 당분간 `snapshot.ReasonCompanionBefore`를 재사용한다. 새 reason을 추가하려면 `ValidReason`과 프론트엔드 버전 시트 라벨을 함께 손봐야 하고, 컴패니언이 Phase 6에서 사라지면 이 reason은 사실상 "에이전트 변경 전"이 된다. 전용 reason 도입은 Phase 4의 UI 작업과 함께 판단한다.
 
 **3단계 종료 조건:** 인메모리 종단 테스트가 `initialize` → `tools/call linetta_write_scene` → `tools/call linetta_undo_last_change`(반환된 `snapshot_id`로)를 구동하고 원고가 원래 바이트로 돌아온다. 구조 변경은 `linetta_apply_story_ops` → `undo_last_change`(`batch_id`)로 별도 검증한다.
 
 ---
+
+> **완료 (2026-08-23):** 툴 15개 완성(읽기 9 + 쓰기 6). `make test` 전체 통과, 엔진 42/42, `mas`/`mobile` 빌드 통과, mobile SDK 의존 0건.
+>
+> **계획에서 이탈한 두 가지:**
+> - `expected_content_version`을 `int`가 아니라 `*int`로 받는다. 새 씬은 버전이 0이라 "미제공"과 "0"을 구분하지 못하면 **첫 원고를 영영 쓸 수 없다.** 테스트가 잡았다.
+> - 씬 쓰기 전 스냅샷 reason은 `companion-before`를 재사용했다(위 결정 참조).
+>
+> **아직 남은 것:** `linetta_where_does_appear`는 명시적 @멘션만 집계하므로, 에이전트가 쓴 평문 원고에서는 등장인물 추적이 비게 된다. 이슈 #32와 같은 문제이고 Phase 3 이후 별도로 다룬다.
 
 ## Phase 4 — 브리지, 설정 UX, MAS
 
