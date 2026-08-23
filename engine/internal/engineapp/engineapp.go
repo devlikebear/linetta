@@ -218,9 +218,16 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		WithManuscript(manuscriptSearcher).
 		WithSnapshots(snaps)
 
+	// The MCP host serves story tools to external agents. Tools are registered
+	// per session in a later task; the host binds only when the writer has
+	// turned MCP on and accepted its consent.
+	mcpCtrl, stopMCP := setupMCP(mcpDeps{settingsStore: settingsStore, home: home})
+	a.closers = append(a.closers, stopMCP)
+
 	caps := handlers.Capabilities{
 		UnavailableProviders: ai.UnavailableProviders(),
 		GitSyncAvailable:     gitSyncAvailable,
+		MCPAvailable:         mcpAvailable,
 	}
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, home, DefaultVersion, caps))
@@ -319,6 +326,11 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("companion.references.delete", handlers.CompanionReferencesDelete(companionSvc))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
+	s.Handle("mcp.status", handlers.MCPStatus(mcpCtrl))
+	s.Handle("mcp.enable", handlers.MCPEnable(mcpCtrl))
+	s.Handle("mcp.disable", handlers.MCPDisable(mcpCtrl))
+	s.Handle("mcp.regenerate_token", handlers.MCPRegenerateToken(mcpCtrl))
+	s.Handle("mcp.activity", handlers.MCPActivity(mcpCtrl))
 	openRouterOAuth := openrouter.NewOAuthManager(openrouter.OAuthConfig{})
 	s.Handle("providers.list_models", handlers.ListModels(settingsStore, modelcatalog.Default()))
 	s.Handle("providers.detect_cli", handlers.DetectCLI())

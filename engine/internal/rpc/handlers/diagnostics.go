@@ -16,6 +16,7 @@ import (
 type Capabilities struct {
 	UnavailableProviders []string
 	GitSyncAvailable     bool
+	MCPAvailable         bool
 }
 
 type diagnosticsPayload struct {
@@ -26,6 +27,7 @@ type diagnosticsPayload struct {
 	MigrationCount       int      `json:"migration_count"`
 	UnavailableProviders []string `json:"unavailable_providers,omitempty"`
 	GitSyncAvailable     bool     `json:"git_sync_available"`
+	MCPAvailable         bool     `json:"mcp_available"`
 }
 
 type diagnosticsGetPayload struct {
@@ -56,6 +58,7 @@ func DiagnosticsVersion(st *store.Store, home string, version string, caps Capab
 			MigrationCount:       int(count.Int64),
 			UnavailableProviders: caps.UnavailableProviders,
 			GitSyncAvailable:     caps.GitSyncAvailable,
+			MCPAvailable:         caps.MCPAvailable,
 		}
 		return json.Marshal(payload)
 	}
