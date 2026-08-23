@@ -21,6 +21,7 @@ import (
 var WriteToolNames = []string{
 	"linetta_write_scene",
 	"linetta_write_summary",
+	"linetta_revise_scene",
 	"linetta_apply_story_ops",
 	"linetta_create_checkpoint",
 	"linetta_undo_last_change",
@@ -98,6 +99,7 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"do not.",
 	}, record(d, "linetta_write_summary", d.writeSummary))
 
+	d.registerReviseTool(s)
 	d.registerBatchTools(s)
 }
 

@@ -253,6 +253,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 			context:    mcpContextBuilder,
 			snapshots:  snaps,
 			story:      mcpStory,
+			msEdit:     manuscriptEditor,
 			enqueue:    summ.Enqueue,
 			notify:     func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 			clock:      clock,

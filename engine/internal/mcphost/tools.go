@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -42,6 +43,7 @@ type ToolDeps struct {
 	// the running UI that something outside it changed the manuscript.
 	Snapshots      *snapshot.Repo
 	Story          *storyops.Service
+	ManuscriptEdit *manuscriptedit.Service
 	Limiter        *limiter
 	EnqueueSummary func(nodeID string)
 	Notify         func(method string, params any)

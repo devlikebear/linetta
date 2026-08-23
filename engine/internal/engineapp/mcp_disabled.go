@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -44,6 +45,7 @@ type mcpToolRepos struct {
 	context    *storycontext.ContextBuilder
 	snapshots  *snapshot.Repo
 	story      *storyops.Service
+	msEdit     *manuscriptedit.Service
 	enqueue    func(nodeID string)
 	notify     func(method string, params any)
 	clock      func() int64
