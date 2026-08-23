@@ -390,6 +390,7 @@ export interface DiagnosticsSnapshot {
   ops_status: OpsStatus[];
   unavailable_providers?: string[];
   git_sync_available?: boolean;
+  mcp_available?: boolean;
 }
 
 // Wire shape from ai.preview_context RPC. Mirrors engine PreviewCounts JSON.
@@ -456,6 +457,34 @@ export interface AIContextPreview {
   selectedCharCount: number;
   selectedTokenEstimate: number;
   budgetTokenEstimate: number;
+}
+
+/** Live state of the local MCP server that external agents connect to. */
+export interface McpStatus {
+  running: boolean;
+  mode: string;
+  port?: number;
+  project_id?: string;
+  token_set: boolean;
+}
+
+/** Enabling and regenerating both hand back the bearer token once: it is
+ *  minted engine-side and settings.get redacts it forever after, so this is
+ *  the only moment the pane can build a copyable client command. */
+export interface McpTokenResult {
+  token: string;
+  status: McpStatus;
+}
+
+/** One recorded external tool call, shown in the activity list. */
+export interface McpActivityEntry {
+  id: string;
+  at: number;
+  tool: string;
+  project_id?: string;
+  target_id?: string;
+  ok: boolean;
+  detail?: string;
 }
 
 export interface GitSyncResult {
@@ -586,6 +615,13 @@ export interface Settings {
   web_search_provider: WebSearchProvider;
   web_search_api_key: string;
   web_search_api_key_set?: boolean;
+  mcp_mode?: string;
+  mcp_port?: number;
+  mcp_project_id?: string;
+  mcp_consent_version?: number;
+  mcp_consented_at?: number;
+  /** Presence flag only — the token itself never reaches the renderer here. */
+  mcp_token_set?: boolean;
 }
 
 export interface SettingsPatch {
@@ -610,6 +646,11 @@ export interface SettingsPatch {
   ai_data_sharing_consented_at?: number;
   web_search_provider?: WebSearchProvider;
   web_search_api_key?: string;
+  mcp_mode?: string;
+  mcp_port?: number;
+  mcp_project_id?: string;
+  mcp_consent_version?: number;
+  mcp_consented_at?: number;
 }
 
 export interface SnapshotEntry {

@@ -114,6 +114,20 @@ func (c *mcpController) Enable(ctx context.Context) error {
 	return nil
 }
 
+// EnableToken returns the bearer token alongside the status. Enabling mints
+// the token server-side, and settings.get redacts it forever after, so this is
+// the one moment the settings pane can put it into a copyable client command.
+// Mirrors RegenerateToken's response shape.
+func (c *mcpController) EnableToken(ctx context.Context) (json.RawMessage, error) {
+	if err := c.Enable(ctx); err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
+		Token  string         `json:"token"`
+		Status mcphost.Status `json:"status"`
+	}{Token: c.set.MCPToken(), Status: c.host.Status()})
+}
+
 func (c *mcpController) Disable(ctx context.Context) error {
 	return c.host.Stop()
 }

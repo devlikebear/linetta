@@ -29,6 +29,9 @@ import type {
   FolderSyncResult,
   GitSyncInitResult,
   GitSyncResult,
+  McpActivityEntry,
+  McpStatus,
+  McpTokenResult,
   ImportMarkdownResult,
   ImportPreviewResult,
   ListProjectsParams,
@@ -307,6 +310,14 @@ export const imports = {
       file_name: fileName,
       content,
     }),
+};
+
+export const mcp = {
+  status: () => rpcCall<McpStatus>("mcp.status"),
+  enable: () => rpcCall<McpTokenResult>("mcp.enable"),
+  disable: () => rpcCall<McpStatus>("mcp.disable"),
+  regenerateToken: () => rpcCall<McpTokenResult>("mcp.regenerate_token"),
+  activity: (limit?: number) => rpcCall<McpActivityEntry[]>("mcp.activity", { limit }),
 };
 
 export const gitSync = {

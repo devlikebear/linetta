@@ -70,7 +70,11 @@ func (c *mcpController) Status() (json.RawMessage, error) {
 	}{Running: false, Mode: "off"})
 }
 
-func (c *mcpController) Enable(context.Context) error  { return errMCPUnavailable }
+func (c *mcpController) Enable(context.Context) error { return errMCPUnavailable }
+
+func (c *mcpController) EnableToken(context.Context) (json.RawMessage, error) {
+	return nil, errMCPUnavailable
+}
 func (c *mcpController) Disable(context.Context) error { return nil }
 
 func (c *mcpController) RegenerateToken(context.Context) (json.RawMessage, error) {

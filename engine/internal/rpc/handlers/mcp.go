@@ -14,6 +14,9 @@ import (
 type MCPController interface {
 	Status() (json.RawMessage, error)
 	Enable(ctx context.Context) error
+	// EnableToken enables and returns the token with the status, so the
+	// settings pane can render a client command exactly once.
+	EnableToken(ctx context.Context) (json.RawMessage, error)
 	Disable(ctx context.Context) error
 	RegenerateToken(ctx context.Context) (json.RawMessage, error)
 	Activity(ctx context.Context, limit int) (json.RawMessage, error)
@@ -60,10 +63,7 @@ func MCPStatus(ctrl MCPController) rpc.Handler {
 // MCPEnable returns a handler for mcp.enable.
 func MCPEnable(ctrl MCPController) rpc.Handler {
 	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
-		if err := ctrl.Enable(ctx); err != nil {
-			return nil, mcpError(err)
-		}
-		out, err := ctrl.Status()
+		out, err := ctrl.EnableToken(ctx)
 		if err != nil {
 			return nil, mcpError(err)
 		}
