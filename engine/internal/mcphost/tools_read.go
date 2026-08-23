@@ -453,7 +453,10 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 		Status:         n.Status,
 		WordCount:      n.WordCount,
 		ContentVersion: n.ContentVersion,
-		Body:           storycontext.PlainText(n.ContentDoc),
+		// Trimmed at the tool boundary, not in PlainText: the brief's renderer
+		// depends on that function's exact output. An untouched empty scene
+		// otherwise arrives as "\n", which an agent can misread as content.
+		Body:           strings.TrimSpace(storycontext.PlainText(n.ContentDoc)),
 		Summary:        n.Summary,
 		SummaryIsStale: n.Summary == "" || n.SummaryForVersion != n.ContentVersion,
 	}, nil

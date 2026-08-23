@@ -350,3 +350,32 @@ func TestMCPProjectRestrictionBlocksOtherWorks(t *testing.T) {
 		t.Errorf("linetta_list_works dropped the allowed work: %s", body)
 	}
 }
+
+// An untouched scene holds a doc with one empty paragraph, which the brief's
+// walker renders as "\n". read_scene must hand the agent "" instead, or an
+// empty scene reads as if it had content.
+func TestMCPReadSceneTrimsEmptyBody(t *testing.T) {
+	app, c := startMCPServer(t)
+	created, rpcErr := call(t, app, "projects.create",
+		`{"title":"빈 씬","genres":["fantasy"],"length_target":"short","default_pov":"first"}`)
+	if rpcErr != nil {
+		t.Fatalf("projects.create: %+v", rpcErr)
+	}
+	var proj struct {
+		LastOpenedNodeID *string `json:"last_opened_node_id"`
+	}
+	if err := json.Unmarshal(created, &proj); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+
+	result := c.callTool("linetta_read_scene", map[string]any{"node_id": *proj.LastOpenedNodeID})
+	var out struct {
+		Body string `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(structuredJSON(t, result)), &out); err != nil {
+		t.Fatalf("decode read_scene: %v", err)
+	}
+	if out.Body != "" {
+		t.Fatalf("empty scene body = %q, want an empty string", out.Body)
+	}
+}
