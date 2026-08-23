@@ -267,8 +267,10 @@
 
 **파일:** `engine/internal/gitsync/*`, `engine/internal/foldersync/*`, `+ 테스트`
 
-- [ ] 두 내보내기 모두에서 `.mcp.json`을 제외한다.
-- [ ] 테스트: 동기화 디렉터리의 `.mcp.json`이 스테이징되지 않고 살아남는다.
+- [x] gitsync의 `git add -A`에 `:(exclude).mcp.json` 경로 지정을 붙인다.
+- [x] 테스트: 동기화 디렉터리의 `.mcp.json`이 스테이징되지 않고 살아남는다.
+
+> **계획 정정:** "두 내보내기 모두"라고 적었지만 코드를 읽어보니 **foldersync는 제외할 것이 없다.** `exportAll`은 자기가 만든 원고 파일과 매니페스트만 쓰고 디렉터리의 다른 파일은 읽지도 복사하지도 않는다. 실제 유출 경로는 gitsync의 `git add -A` 하나뿐이고, 거기만 막으면 된다. 작가의 `.gitignore`를 대신 수정하지 않은 것은 그 파일이 작가가 관리하는 파일이기 때문이다.
 
 **4단계 종료 조건:** 처음 쓰는 사용자가 MCP를 켜고 명령 한 줄을 붙여넣어 Claude Code 또는 Claude Desktop으로 자기 작품에 초고를 쓸 수 있다.
 
