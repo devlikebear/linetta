@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_AI_CONTEXT_SELECTION } from "../ai/AIContextChecklist";
 import { I18nProvider } from "../../lib/i18n";
@@ -72,6 +73,7 @@ const companionState = vi.hoisted(() => ({
   },
 }));
 const mocks = vi.hoisted(() => ({
+  diagnosticsGet: vi.fn(),
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   providersListModels: vi.fn(),
@@ -92,6 +94,7 @@ vi.mock("../../hooks/useCompanion", () => ({
 }));
 
 vi.mock("../../lib/rpc", () => ({
+  diagnostics: { get: mocks.diagnosticsGet },
   settings: {
     get: mocks.settingsGet,
     set: mocks.settingsSet,
@@ -116,15 +119,18 @@ vi.mock("../../lib/rpc", () => ({
 
 function renderPanel(props: Partial<ComponentProps<typeof CompanionPanel>> = {}) {
   return render(
-    <I18nProvider>
-      <CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} {...props} />
-    </I18nProvider>,
+    <MemoryRouter>
+      <I18nProvider>
+        <CompanionPanel projectId="p1" nodeIdRef={{ current: "n1" }} onClose={vi.fn()} onApplied={vi.fn()} {...props} />
+      </I18nProvider>
+    </MemoryRouter>,
   );
 }
 
 describe("CompanionPanel", () => {
   beforeEach(() => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
+    mocks.diagnosticsGet.mockResolvedValue({ mcp_available: true });
     mocks.settingsSet.mockImplementation((patch: unknown) => Promise.resolve(patch));
     mocks.providersListModels.mockResolvedValue({ models: ["openai/gpt-5.4", "openrouter/auto"] });
     mocks.providersTest.mockResolvedValue({
@@ -726,6 +732,47 @@ describe("CompanionPanel", () => {
     await user.click(screen.getByRole("button", { name: "방금 질문 다시 보내기" }));
 
     expect(companionState.value.send).toHaveBeenCalledWith("현재 씬 본문 써줘");
+  });
+
+  it("offers MCP ahead of provider setup when AI is not configured", async () => {
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "api key is required for auth mode api-key",
+        rawError: "api key is required for auth mode api-key",
+        errored: true,
+        aiSetupIssue: "missing_key",
+      }],
+    };
+    renderPanel();
+
+    // The card fires exactly when AI is unset, which is when the pivot's
+    // answer belongs on screen. It leads rather than replaces: the failing
+    // turn is already in the transcript by now, so no signal here can tell a
+    // newcomer from a long-time companion user.
+    const invite = await screen.findByTestId("companion-mcp-invite");
+    expect(invite.textContent).toContain("Claude Code");
+    expect(screen.getByRole("button", { name: "가장 쉬운 방법으로 연결" })).toBeInTheDocument();
+  });
+
+  it("does not advertise MCP on a build that cannot host it", async () => {
+    mocks.diagnosticsGet.mockResolvedValue({ mcp_available: false });
+    companionState.value = {
+      ...companionState.value,
+      messages: [{
+        role: "assistant",
+        content: "api key is required for auth mode api-key",
+        rawError: "api key is required for auth mode api-key",
+        errored: true,
+        aiSetupIssue: "missing_key",
+      }],
+    };
+    renderPanel();
+
+    await screen.findByText("AI 연결이 필요해요");
+    await waitFor(() => expect(mocks.diagnosticsGet).toHaveBeenCalled());
+    expect(screen.queryByTestId("companion-mcp-invite")).toBeNull();
   });
 
   it("opens the shared AI setup modal from a rescue card", async () => {

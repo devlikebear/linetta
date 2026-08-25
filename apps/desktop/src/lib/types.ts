@@ -391,6 +391,9 @@ export interface DiagnosticsSnapshot {
   unavailable_providers?: string[];
   git_sync_available?: boolean;
   mcp_available?: boolean;
+  /** Whether this library ever held a companion message. Drives the legacy
+   *  AI section; removed with the companion in Phase 6. */
+  companion_history_exists?: boolean;
 }
 
 // Wire shape from ai.preview_context RPC. Mirrors engine PreviewCounts JSON.

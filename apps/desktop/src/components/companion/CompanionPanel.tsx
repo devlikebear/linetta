@@ -23,7 +23,9 @@ import {
 } from "lucide-react";
 import { useCompanion, type ChatMessage, type CompanionProgress } from "../../hooks/useCompanion";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
-import { companion as companionApi, openRouter as openRouterApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
+import { Link } from "react-router-dom";
+
+import { companion as companionApi, diagnostics as diagnosticsApi, openRouter as openRouterApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import { stripProposalBlock } from "../../lib/companionDisplay";
 import { readStoredCompanionScope, storeCompanionScope } from "../../lib/companionScope";
 import type {
@@ -556,12 +558,14 @@ function CompanionAISetupCard({
   message,
   t,
   isBusy,
+  mcpAvailable,
   onRetry,
   onOpenSetup,
 }: {
   message: ChatMessage;
   t: Translate;
   isBusy: boolean;
+  mcpAvailable: boolean;
   onRetry: () => void;
   onOpenSetup: (path: "easy" | "subscription" | "direct") => void;
 }) {
@@ -572,6 +576,14 @@ function CompanionAISetupCard({
         <KeyRound size={15} />
         <strong>{t("companion.aiSetup.title")}</strong>
       </div>
+      {mcpAvailable && (
+        <div className="companion-mcp-invite" data-testid="companion-mcp-invite">
+          <p>{t("companion.aiSetup.mcpLead")}</p>
+          <Link to="/settings" className="btn primary sm">
+            {t("companion.aiSetup.mcpConnect")}
+          </Link>
+        </div>
+      )}
       <p>{t(aiSetupBodyKey(message.aiSetupIssue))}</p>
       <div className="companion-ai-setup-actions">
         <button type="button" className="btn primary sm" onClick={() => onOpenSetup("easy")}>
@@ -656,6 +668,9 @@ export function CompanionPanel({
   const [attachments, setAttachments] = useState<CompanionImageDraft[]>([]);
   const [attachmentNotice, setAttachmentNotice] = useState("");
   const [aiSetupOpen, setAISetupOpen] = useState(false);
+  // Whether this build can host an MCP server. The setup card leads with that
+  // path when it can; a build without MCP must not advertise it.
+  const [mcpAvailable, setMcpAvailable] = useState(false);
   const [aiSetupGuideId, setAISetupGuideId] = useState<GuideID>("chatgpt-subscription");
   const [aiSetupProvider, setAISetupProvider] = useState<ProviderID>("openai-codex");
   const [aiSetupOpenRouterKeyDraft, setAISetupOpenRouterKeyDraft] = useState("");
@@ -689,6 +704,14 @@ export function CompanionPanel({
       setHistoryScope("project");
     }
   }, [currentNodeId, historyScope]);
+
+  useEffect(() => {
+    // A build without MCP has no such field; staying false is correct.
+    void diagnosticsApi
+      .get()
+      .then((d) => setMcpAvailable(d.mcp_available ?? false))
+      .catch(() => setMcpAvailable(false));
+  }, []);
 
   const scopeProjectIdRef = useRef(projectId);
   useEffect(() => {
@@ -1261,6 +1284,7 @@ export function CompanionPanel({
                   message={m}
                   t={t}
                   isBusy={isBusy}
+                  mcpAvailable={mcpAvailable}
                   onOpenSetup={openAISetup}
                   onRetry={() => { void sendWithFreshContext(m.retryText ?? ""); }}
                 />

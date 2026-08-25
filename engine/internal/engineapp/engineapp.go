@@ -207,6 +207,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		return nil
 	})
 
+	// Named rather than inlined: the archive export reads the same transcript,
+	// and two repos over one table would be a needless second source.
+	companionHistory := companion.NewHistoryRepo(st.DB())
 	companionSvc := companion.NewService(
 		filepath.Join(home, "companion"),
 		projects, threads, entities, relationships, plotBuilder,
@@ -214,7 +217,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		nodes, beats,
 	).WithFacts(facts).
 		WithOpsStatus(ops).
-		WithHistory(companion.NewHistoryRepo(st.DB())).
+		WithHistory(companionHistory).
 		WithReferences(companion.NewReferenceRepo(st.DB())).
 		WithManuscript(manuscriptSearcher).
 		WithSnapshots(snaps)
@@ -383,6 +386,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities, relationships))
 	s.Handle("export.node", handlers.ExportNode(nodes))
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
+	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	return nil

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
@@ -24,6 +25,25 @@ func ExportProject(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relatio
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
 		}
 		out, err := export.ExportProject(ctx, pr, nr, er, rr, p.ProjectID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(out)
+	}
+}
+
+// ExportCompanionHistory returns a handler for export.companion_history.
+//
+// The pivot retires the built-in companion, so the writer gets a way to keep
+// the conversations before the removal lands. No parameters: this is an
+// archive of everything, not a per-project view.
+func ExportCompanionHistory(
+	pr *project.Repo,
+	history export.CompanionHistorySource,
+	mem export.CompanionMemorySource,
+) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		out, err := export.ExportCompanion(ctx, pr, history, mem, time.Now())
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

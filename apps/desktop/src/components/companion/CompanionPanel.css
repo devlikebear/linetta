@@ -7,6 +7,13 @@
 .companion-help-card,
 .companion-context-card,
 .companion-ai-draft-card,
+/* The pivot's recommendation, ahead of the provider buttons. The card fires
+   when AI is unset, which is exactly when the MCP path should be offered —
+   and the history signal cannot spot a newcomer here, because the failing
+   turn is already written to the transcript by the time this renders. */
+.companion-mcp-invite { margin: 12px 0; padding: 12px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.companion-mcp-invite p { margin: 0 0 10px; font-size: 13px; line-height: 1.6; }
+
 .companion-ai-setup-card {
   background: color-mix(in srgb, var(--surface) 82%, var(--surface-2));
   border: 1px solid var(--line-soft);
