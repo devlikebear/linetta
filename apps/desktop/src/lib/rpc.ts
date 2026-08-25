@@ -305,6 +305,10 @@ export const exportApi = {
     rpcCall<ExportPayload>("export.node", { node_id: nodeId }),
   nodeText: (nodeId: string) =>
     rpcCall<ExportTextPayload>("export.nodeText", { node_id: nodeId }),
+  /** Every project's companion transcript and remembered facts, in one
+   *  markdown archive. Exists so the companion's removal does not take the
+   *  writer's conversations with it. */
+  companionHistory: () => rpcCall<ExportPayload>("export.companion_history"),
 };
 
 export const imports = {

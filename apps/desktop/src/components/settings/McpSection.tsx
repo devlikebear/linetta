@@ -146,7 +146,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
   );
 
   return (
-    <section className="settings-section" data-testid="mcp-section">
+    <section className="settings-section" id="mcp-settings" data-testid="mcp-section">
       <h3>{t("settings.mcp.title")}</h3>
       <p className="sd">{t("settings.mcp.description")}</p>
 

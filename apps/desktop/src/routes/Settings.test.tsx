@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   openRouterOAuthFinish: vi.fn(),
   webSearchTest: vi.fn(),
   diagnosticsGet: vi.fn(),
+  exportCompanionHistory: vi.fn(),
   openExternalUrl: vi.fn(),
 }));
 
@@ -49,6 +50,9 @@ vi.mock("../lib/rpc", () => ({
   },
   diagnostics: {
     get: mocks.diagnosticsGet,
+  },
+  exportApi: {
+    companionHistory: mocks.exportCompanionHistory,
   },
   openExternalUrl: mocks.openExternalUrl,
 }));
@@ -140,6 +144,11 @@ describe("Settings", () => {
       ops_status: [],
       unavailable_providers: [],
       git_sync_available: true,
+      companion_history_exists: true,
+    });
+    mocks.exportCompanionHistory.mockResolvedValue({
+      markdown: "# 리네타 컴패니언 기록",
+      suggested_filename: "linetta-companion-20260825.md",
     });
     mocks.providersListModels.mockResolvedValue({ models: [] });
     mocks.providersDetectCli.mockResolvedValue({ path: "" });
@@ -773,5 +782,60 @@ describe("Settings", () => {
     await screen.findByText("AI 연결 마법사");
     expect(screen.getByText("GitHub 동기화")).toBeInTheDocument();
     expect(screen.getByLabelText("git 폴더")).toBeInTheDocument();
+  });
+
+  it("folds the built-in companion away for someone who never used it", async () => {
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings, ai_data_sharing_consented_at: 0 });
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: true,
+      companion_history_exists: false,
+    });
+    renderSettings();
+
+    const legacy = await screen.findByTestId("legacy-ai");
+    // Folded, not removed: the signal cannot separate a newcomer from someone
+    // who configured a provider and never spoke to it, and that person still
+    // needs a way back to their own settings.
+    await waitFor(() => expect(legacy).not.toHaveAttribute("open"));
+  });
+
+  it("opens the companion block for someone whose library holds a transcript", async () => {
+    renderSettings();
+    const legacy = await screen.findByTestId("legacy-ai");
+    await waitFor(() => expect(legacy).toHaveAttribute("open"));
+  });
+
+  it("opens it for a writer who consented but never sent a message", async () => {
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings, ai_data_sharing_consented_at: 1_700_000_000_000 });
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: true,
+      companion_history_exists: false,
+    });
+    renderSettings();
+
+    const legacy = await screen.findByTestId("legacy-ai");
+    await waitFor(() => expect(legacy).toHaveAttribute("open"));
+  });
+
+  it("hands the companion record back before the companion goes away", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("legacy-ai-export"));
+    await waitFor(() => expect(mocks.exportCompanionHistory).toHaveBeenCalledTimes(1));
   });
 });

@@ -22,6 +22,13 @@ func (s *Service) Remember(projectID, text, category string) error {
 	})
 }
 
+// MemoryRoot is where this project's remembered facts live on disk. Surfaced
+// so an export can point at the raw log: the file outlives the companion,
+// since storyops keeps writing to it after the pivot.
+func (s *Service) MemoryRoot(projectID string) string {
+	return memRoot(s.memBase, projectID)
+}
+
 // Recall returns up to limit remembered fact summaries matching query
 // (case-insensitive substring). Best-effort: returns nil on error/empty.
 func (s *Service) Recall(projectID, query string, limit int) []string {

@@ -12,9 +12,11 @@ import {
   openRouter as openRouterApi,
   webSearch as webSearchApi,
   diagnostics as diagnosticsApi,
+  exportApi,
   openExternalUrl,
 } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
+import { saveExportedMarkdown } from "../lib/exportSave";
 import { McpSection } from "../components/settings/McpSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
@@ -78,6 +80,16 @@ function buildProviders(t: Translate): ProviderMeta[] {
   ];
 }
 
+/** Jump from the legacy AI block down to the MCP pane.
+ *
+ *  A plain #hash would push a history entry the router then has to ignore;
+ *  scrolling the element is the same affordance with none of that. */
+const MCP_SETTINGS_ANCHOR = "mcp-settings";
+
+function scrollToMcpSettings() {
+  document.getElementById(MCP_SETTINGS_ANCHOR)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 export function Settings() {
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
@@ -89,6 +101,14 @@ export function Settings() {
     [storeLabelKey, t],
   );
   const [unavailableProviders, setUnavailableProviders] = useState<string[]>([]);
+  // Whether this install ever used the built-in companion. The engine answers
+  // the durable half (any companion message ever written); the consent
+  // timestamp below covers someone who set AI up but never sent anything.
+  // null while diagnostics is in flight — guessing either way for that moment
+  // would flash the legacy block open or shut before the answer lands.
+  const [companionHistoryExists, setCompanionHistoryExists] = useState<boolean | null>(null);
+  const [legacyOpen, setLegacyOpen] = useState(false);
+  const [companionExport, setCompanionExport] = useState<"idle" | "busy" | "saved">("idle");
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
   // Hidden entirely on builds without MCP (mobile), the same way git sync is.
   const [mcpAvailable, setMcpAvailable] = useState(false);
@@ -168,11 +188,34 @@ export function Settings() {
         setUnavailableProviders(diag.unavailable_providers ?? []);
         setGitSyncAvailable(diag.git_sync_available ?? true);
         setMcpAvailable(diag.mcp_available ?? false);
+        setCompanionHistoryExists(diag.companion_history_exists ?? true);
         syncOpenRouterDrafts(s);
       })
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
   }, [setLanguage]);
+
+  const exportCompanionHistory = async () => {
+    setCompanionExport("busy");
+    setError(null);
+    try {
+      const payload = await exportApi.companionHistory();
+      const path = await saveExportedMarkdown(payload);
+      setCompanionExport(path ? "saved" : "idle");
+    } catch (e) {
+      setError(rpcErrorMessage(e, t));
+      setCompanionExport("idle");
+    }
+  };
+
+  // Runs once the signals land, not on every render, so closing it sticks.
+  const legacyUser =
+    companionHistoryExists === null
+      ? null
+      : companionHistoryExists || (current?.ai_data_sharing_consented_at ?? 0) > 0;
+  useEffect(() => {
+    if (legacyUser === true) setLegacyOpen(true);
+  }, [legacyUser]);
 
   // Reset the per-provider drafts whenever the active provider changes (or on
   // first load) so each provider's stored config shows in the fields.
@@ -558,6 +601,47 @@ export function Settings() {
               </div>
             </section>
 
+            {/* Everything below, down to the closing </details>, is the built-in
+                AI companion: the pivot replaced it with MCP, so it is collapsed
+                by default and only springs open for someone who actually used
+                it. It is not hidden outright — the signal cannot tell a
+                newcomer from a writer who configured a provider and never
+                spoke to it, and locking that person out of their own provider
+                settings is the worse mistake. Phase 6 deletes this block. */}
+            <details
+              className="settings-legacy"
+              open={legacyOpen}
+              onToggle={(e) => setLegacyOpen(e.currentTarget.open)}
+              data-testid="legacy-ai"
+            >
+              <summary>{t("settings.legacyAI.title")}</summary>
+              <p className="sd">{t("settings.legacyAI.description")}</p>
+              {mcpAvailable && (
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() => scrollToMcpSettings()}
+                  data-testid="legacy-ai-to-mcp"
+                >
+                  {t("settings.legacyAI.toMcp")}
+                </button>
+              )}
+              <p className="sd">{t("settings.legacyAI.exportDescription")}</p>
+              <button
+                type="button"
+                className="btn ghost sm"
+                onClick={() => { void exportCompanionHistory(); }}
+                disabled={companionExport === "busy"}
+                data-testid="legacy-ai-export"
+              >
+                {companionExport === "busy"
+                  ? t("settings.legacyAI.exporting")
+                  : t("settings.legacyAI.export")}
+              </button>
+              {companionExport === "saved" && (
+                <p className="sd" data-testid="legacy-ai-exported">{t("settings.legacyAI.exported")}</p>
+              )}
+
             {unavailableProviders.length > 0 && (
               <p className="sd">{t("settings.provider.restrictedNote")}</p>
             )}
@@ -828,6 +912,7 @@ export function Settings() {
                 );
               })()}
             </section>
+            </details>
 
             <section className="settings-section">
               <h3>{t("settings.writing.title")}</h3>

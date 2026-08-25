@@ -47,6 +47,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "entities.scenes",
     "entities.search",
     "entities.update",
+    "export.companion_history",
     "export.node",
     "export.nodeText",
     "export.project",

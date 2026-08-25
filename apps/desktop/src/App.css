@@ -1476,6 +1476,15 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .set-row .sd { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .set-row .mono { font-size: 12px; color: var(--muted); }
 
+/* The built-in companion, demoted. Folded away by default so the writing
+   settings read as the whole surface, and unfolded for people who used it. */
+.settings-legacy { margin-bottom: 32px; border-top: 1px solid var(--line-soft); padding-top: 18px; }
+.settings-legacy > summary { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted); cursor: pointer; list-style: revert; }
+.settings-legacy > summary:hover { color: var(--ink); }
+.settings-legacy > .sd { margin: 12px 0; }
+.settings-legacy[open] > summary { margin-bottom: 4px; }
+.settings-legacy > .settings-section:first-of-type { margin-top: 24px; }
+
 /* ============================================================
    APP-SPECIFIC SCREENS — present in the real app but not in the
    redesign mockup (engine gate, in-app dialog, safety/diagnostics

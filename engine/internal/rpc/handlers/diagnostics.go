@@ -28,6 +28,15 @@ type diagnosticsPayload struct {
 	UnavailableProviders []string `json:"unavailable_providers,omitempty"`
 	GitSyncAvailable     bool     `json:"git_sync_available"`
 	MCPAvailable         bool     `json:"mcp_available"`
+
+	// CompanionHistoryExists says whether this library has ever held a
+	// companion message. It is the durable half of "is this an existing
+	// companion user" — the settings-side consent fields are not: switching
+	// provider zeroes both the consent version and its timestamp
+	// (settings.applyPatch), so a real user can look brand new. The UI ORs this
+	// with the consent timestamp it already holds. Transitional: Phase 6 of the
+	// MCP pivot removes the companion and this field with it.
+	CompanionHistoryExists bool `json:"companion_history_exists"`
 }
 
 type diagnosticsGetPayload struct {
@@ -50,6 +59,12 @@ func DiagnosticsVersion(st *store.Store, home string, version string, caps Capab
 			`SELECT MAX(version), COUNT(*) FROM schema_migrations`).Scan(&latest, &count); err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
+
+		var companionHistory bool
+		if err := st.DB().QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM companion_messages)`).Scan(&companionHistory); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
 		payload := diagnosticsPayload{
 			Version:              version,
 			Home:                 resolvedHome,
@@ -59,6 +74,8 @@ func DiagnosticsVersion(st *store.Store, home string, version string, caps Capab
 			UnavailableProviders: caps.UnavailableProviders,
 			GitSyncAvailable:     caps.GitSyncAvailable,
 			MCPAvailable:         caps.MCPAvailable,
+
+			CompanionHistoryExists: companionHistory,
 		}
 		return json.Marshal(payload)
 	}
