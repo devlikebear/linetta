@@ -362,7 +362,10 @@ func TestSummarizer_containerDepthCap_stopsBeyondDepth6(t *testing.T) {
 	}
 }
 
-func TestSummarizer_recordsLLMFailureInOpsStatus(t *testing.T) {
+// Once the summarizer falls back to a lead, a provider failure is no longer a
+// fault — the job produced a summary. It still has to be distinguishable from
+// a generated one, so the healthy status carries used_lead.
+func TestSummarizer_recordsLeadFallbackInOpsStatus(t *testing.T) {
 	st, nodes, p := newFixture(t)
 	ctx := context.Background()
 	body := ""
@@ -383,11 +386,11 @@ func TestSummarizer_recordsLLMFailureInOpsStatus(t *testing.T) {
 		statuses, _ := ops.Get(ctx)
 		for _, status := range statuses {
 			if status.JobName == opsstatus.JobSummarizer {
-				return strings.Contains(status.LastError, "provider unavailable")
+				return status.LastOK && strings.Contains(status.MetadataJSON, `"used_lead":true`)
 			}
 		}
 		return false
-	}, "summarizer status records LLM failure")
+	}, "summarizer status reports a healthy lead fallback")
 }
 
 func TestSummarizer_container_skipsLLMWhenChildrenFresh(t *testing.T) {

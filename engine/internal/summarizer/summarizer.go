@@ -139,20 +139,25 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 			s.recordError(ctx, n.ID, err.Error())
 			return
 		}
-		s.recordOK(ctx, n.ID)
+		s.recordOK(ctx, n.ID, false)
 		return
 	}
 
 	summary, ok := s.summarizeViaLLM(ctx, n.ID, "", systemPrompt, plain)
 	if !ok {
-		return
+		// No model, or the request failed. A scene with no summary at all
+		// leaves the story brief blank, which costs an agent the context it
+		// needs to write the next scene — so Linetta writes the opening
+		// instead and says so. This is the only path once the MCP pivot
+		// removes the provider plumbing (#47).
+		summary = leadSummary(plain)
 	}
 	if err := s.nodes.SetSummary(ctx, n.ID, summary, capturedVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: SetSummary %s: %v\n", n.ID, err)
 		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
-	s.recordOK(ctx, n.ID)
+	s.recordOK(ctx, n.ID, !ok)
 }
 
 // summarizeContainer rolls a container up from its children's Label+summary.
@@ -202,14 +207,17 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 
 	summary, ok := s.summarizeViaLLM(ctx, n.ID, " (container)", containerSystemPrompt, input)
 	if !ok {
-		return
+		// The rolled-up children are already the honest answer for a
+		// container: a chapter is what its scenes are. Without a model the
+		// unit keeps that list rather than going blank.
+		summary = input
 	}
 	if err := s.nodes.SetSummary(ctx, n.ID, summary, capturedVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: SetSummary (container) %s: %v\n", n.ID, err)
 		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
-	s.recordOK(ctx, n.ID)
+	s.recordOK(ctx, n.ID, !ok)
 }
 
 func (s *Summarizer) recordError(ctx context.Context, nodeID string, msg string) {
@@ -227,7 +235,10 @@ func (s *Summarizer) recordError(ctx context.Context, nodeID string, msg string)
 	})
 }
 
-func (s *Summarizer) recordOK(ctx context.Context, nodeID string) {
+// recordOK marks the job healthy. usedLead says the summary is Linetta's own
+// opening cut rather than a generated one — the job did its work, so this is
+// not a fault, but support needs to be able to tell the two apart.
+func (s *Summarizer) recordOK(ctx context.Context, nodeID string, usedLead bool) {
 	if s.ops == nil {
 		return
 	}
@@ -238,6 +249,7 @@ func (s *Summarizer) recordOK(ctx context.Context, nodeID string) {
 	_ = s.ops.Record(ctx, opsstatus.JobSummarizer, now, now, true, "", map[string]any{
 		"node_id":       nodeID,
 		"failure_count": 0,
+		"used_lead":     usedLead,
 	})
 }
 

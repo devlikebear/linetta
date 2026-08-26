@@ -55,6 +55,11 @@ type writeSceneOutput struct {
 	// not through linetta_undo_last_change's batch id: undoing a structural
 	// batch restores the outline and leaves scene bodies alone.
 	SnapshotID string `json:"snapshot_id,omitempty"`
+	// SummaryIsPlaceholder is always true after a write: Linetta fills the
+	// scene summary with the opening lines cut to length, which is a
+	// placeholder rather than a summary. Story briefs are built from these, so
+	// leaving it costs the next brief its accuracy.
+	SummaryIsPlaceholder bool `json:"summary_is_placeholder"`
 }
 
 // ---------- linetta_write_summary ----------
@@ -87,14 +92,18 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 		Description: "Replace a scene's body with new prose. Call linetta_read_scene first and pass the " +
 			"content_version it returned: if the writer edited the scene since then the write is refused, " +
 			"so their work is never silently overwritten. The previous text is snapshotted first and the " +
-			"returned snapshot_id restores it.",
+			"returned snapshot_id restores it. Linetta then files the scene's opening lines as a " +
+			"placeholder summary; call linetta_write_summary afterwards so the story brief carries a " +
+			"real one.",
 	}, record(d, "linetta_write_scene", d.writeScene))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_write_summary",
 		Description: "Write the summary Linetta shows for a scene or chapter, or the work's synopsis. " +
 			"Summaries feed linetta_get_story_context, so writing one after drafting keeps later briefs " +
-			"accurate — when a brief reports an empty summary section, this is the tool that fills it. " +
+			"accurate. Without one Linetta falls back to the opening lines cut to length, which says " +
+			"what a scene opens on but not what happens in it — replacing that placeholder is what " +
+			"this tool is for. " +
 			"A scene summary needs the content_version from linetta_read_scene; chapters and the synopsis " +
 			"do not.",
 	}, record(d, "linetta_write_summary", d.writeSummary))
@@ -168,10 +177,11 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 	d.notifyChanged(n.ProjectID, "linetta_write_scene", []string{n.ID}, "")
 
 	return nil, writeSceneOutput{
-		NodeID:         after.ID,
-		ContentVersion: after.ContentVersion,
-		WordCount:      after.WordCount,
-		SnapshotID:     snapshotID,
+		NodeID:               after.ID,
+		ContentVersion:       after.ContentVersion,
+		WordCount:            after.WordCount,
+		SnapshotID:           snapshotID,
+		SummaryIsPlaceholder: true,
 	}, nil
 }
 

@@ -331,18 +331,28 @@
 - [x] 컴패니언 대화 히스토리와 메모리를 마크다운 한 파일로 내보낸다. `export.companion_history` RPC가 전 작품을 하나의 아카이브로 만들고, 레거시 섹션의 버튼이 저장 대화상자로 넘긴다.
 - [ ] **테이블을 조용히 드롭하지 않는다.** 제거 후에도 데이터는 남고, 필요하면 읽을 수 있어야 한다. — 이 항목은 Phase 6의 제약이다. 여기서는 내보내기 경로만 만들었고, `companion_messages`를 실제로 남길지 지울지는 6.1에서 결정한다.
 
-**5단계 종료 조건:** MCP만으로 한 작품 분량의 실제 집필이 가능하다는 것이 확인됐고, 빠진 기능 목록이 비었거나 수용 가능하다.
+**5단계 종료 조건 (수정됨):** ~~MCP만으로 한 작품 분량의 실제 집필이 가능하다는 것이 확인됐고~~ → **구조적으로 대체됨.**
+
+> **계획 정정 — 5.2 실사용 검증을 Phase 6의 선행 조건에서 뺀다(사용자 결정).** 게이트가 실제로 지키고 있던 위험을 코드로 확인해 보니 하나였다: `summarizer.summarizeLeaf`가 60자 넘는 씬에 대해 `summarizeViaLLM` 실패 시 **요약을 아예 안 남기고 리턴**한다. 요약은 MCP 읽기 툴의 브리프, 이웃 씬 컨텍스트, 아웃라인 뷰가 모두 쓰는 값이라 에이전트가 작업 컨텍스트를 잃는다. 게다가 `recordError` 때문에 씬마다 영구 degraded 경고가 켜진다.
+>
+> 그런데 Phase 6은 `llm_path.go`를 삭제하므로 `summarizeLeaf`가 **컴파일되지 않는다.** 즉 "긴 씬을 어떻게 할 것인가"는 놓칠 수도 있는 위험이 아니라 Phase 6에서 **반드시 손대야 하는 코드**다. 에이전트의 자발적 행동을 기다릴 게 아니라 그 자리에서 닫는 편이 낫다.
+>
+> 대체 설계(두 겹): (1) **결정론적 리드 폴백** — 모델이 없으면 씬 도입부를 문장 경계에서 잘라 요약 자리에 넣는다. 브리프가 비지 않고, LLM이 없으며, degraded 경고도 사라진다(`used_lead` 메타데이터로 구분만 남긴다). (2) **에이전트에게 알리기** — `write_scene`이 `summary_is_placeholder: true`를 반환하고 두 쓰기 툴의 설명이 실제 동작을 말한다. 에이전트가 협조하면 진짜 요약이 리드를 덮고, 안 해도 브리프는 채워진다.
+>
+> 덮어쓰기 경쟁은 이미 막혀 있다 — `summarizeOneDepth`가 `Summary != "" && SummaryForVersion == ContentVersion`이면 건너뛰므로, 에이전트가 먼저 쓰면 워커가 손대지 않고, 워커가 먼저 쓰면 에이전트가 덮는다. 양쪽 순서 모두 옳게 끝난다.
+>
+> 실사용 기록지([2026-08-25-mcp-validation-log.md](2026-08-25-mcp-validation-log.md))는 남겨 둔다. 이제 진행을 막는 게이트가 아니라, 툴 설명 품질을 개선하고 싶을 때 쓰는 참고 자료다.
 
 ---
 
 ## Phase 6 — 제거와 1.0.0
 
-5단계 검증이 끝난 뒤에만 진행한다.
+~~5단계 검증이 끝난 뒤에만 진행한다.~~ 5.2의 실질 위험이 요약 폴백으로 구조적으로 닫혔으므로 바로 진행한다(위 계획 정정 참조).
 
 ### Task 6.1 — 엔진 제거
 
 - [ ] `internal/ai`의 LLM 클라이언트/실행기와 `BuildMessages` 어댑터, `internal/companion` 잔여(에이전트 루프·세션·스트리밍), `internal/modelcatalog`, `internal/openrouter`, `internal/clidetect` 삭제.
-- [ ] `internal/summarizer`의 LLM 경로 삭제. 비-LLM 짧은 씬 경로와 `nodes.update_content`의 `postUpdate` 훅은 유지 — 훅이 부르는 대상만 바뀐다.
+- [ ] `internal/summarizer`의 LLM 경로(`llm_path.go`) 삭제. 짧은 씬 평문 경로와 **긴 씬 리드 폴백**(`lead.go`)이 남아 유일한 경로가 된다. `nodes.update_content`의 훅은 유지 — 훅이 부르는 대상만 바뀐다.
 - [ ] RPC `ai.*`, `companion.*`, `providers.*`, `openrouter.*` 제거. `handlers.Capabilities`의 `UnavailableProviders` 정리.
 - [ ] **RPC `projects.rewrite_synopsis` 제거.** 프로바이더 없는 상태에서 이 메서드는 컨테이너 요약을 지우고 빈 문자열을 돌려주는 파괴적 동작이 된다(설계 문서 3.3절). `projects.clear_synopsis`는 무해하므로 유지 여부만 판단.
 - [ ] 설정에서 `provider`, `providers`, `ai_data_sharing_consent_*` 제거. 마이그레이션은 기존 값을 무시하되 파괴하지 않는다.
