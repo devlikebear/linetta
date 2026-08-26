@@ -52,6 +52,7 @@ import { findEpisodeNode } from "../lib/outlineEpisode";
 import { planChapterCreation, type CreateNodeStep } from "../lib/outlineCreate";
 import { normalizePlatformProfile, transformPlatformText } from "../lib/platformProfiles";
 import { SceneSaveQueue } from "../lib/sceneSaveQueue";
+import { useMcpChanges } from "../hooks/useMcpChanges";
 import {
   buildTree,
   countEpisodeStatus,
@@ -133,6 +134,9 @@ export function Workspace() {
   const [focus, setFocus] = useState(false);
   const [railCollapsed, setRailCollapsed] = useState(() => seedRailCollapsed());
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
+  // Whether the buffer holds edits the engine has not seen. An external
+  // agent must never replace those, so this gates the MCP scene refresh.
+  const [editorDirty, setEditorDirty] = useState(false);
   const saveCompletedAt = saveStatus.kind === "saved" ? saveStatus.at : null;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -476,6 +480,33 @@ export function Workspace() {
   );
 
   // Refresh the tree only (keep the active node where it is). Used by Move/Rename.
+  // An agent's change to structure. The open scene's buffer is deliberately
+  // left alone here — replacing it is onSceneChanged's job, and only when the
+  // writer has nothing unsaved.
+  const refreshOutlineFromEngine = useCallback(async () => {
+    if (!projectId || !loadRef.current) return;
+    const [p, flat] = await Promise.all([projects.get(projectId), nodes.listTree(projectId)]);
+    setLoad((prev) => (prev ? { ...prev, project: p, tree: buildTree(flat) } : prev));
+  }, [projectId]);
+
+  // Pull an agent's prose into the editor. The Tiptap key includes
+  // content_version, so a new version remounts the editor on the new doc, and
+  // the save-queue seed effect re-seeds against it.
+  const reloadSceneFromEngine = useCallback(async (nodeId: string) => {
+    const n = await nodes.get(nodeId);
+    const initialDoc = JSON.parse(n.content_doc ?? `{"type":"doc","content":[{"type":"paragraph"}]}`);
+    setLoad((prev) => (prev && prev.node.id === n.id ? { ...prev, node: n, initialDoc } : prev));
+    setCharCount(n.word_count);
+  }, []);
+
+  const { conflictNodeId, dismissConflict } = useMcpChanges({
+    projectId: projectId ?? null,
+    openNodeId: load?.node.id ?? null,
+    editorDirty,
+    onOutlineChanged: () => { void refreshOutlineFromEngine(); },
+    onSceneChanged: (nodeId) => { void reloadSceneFromEngine(nodeId); },
+  });
+
   const refreshTreeKeepNode = useCallback(
     async (currentNodeId: string) => {
       if (!projectId) return;
@@ -819,7 +850,10 @@ export function Workspace() {
       if (isActive()) setSaveStatus({ kind: "saving" });
       try {
         await sceneSaveQueue.save(nodeId, JSON.stringify(doc));
-        if (isActive()) setSaveStatus({ kind: "saved", at: Date.now() });
+        if (isActive()) {
+          setSaveStatus({ kind: "saved", at: Date.now() });
+          setEditorDirty(false);
+        }
         refreshMentioned(nodeId);
       } catch (e) {
         if (isActive()) {
@@ -852,6 +886,7 @@ export function Workspace() {
   );
   useEffect(() => {
     idleDirtyRef.current = false;
+    setEditorDirty(false);
     cancelIdleCheckpoint();
   }, [load?.node.id, cancelIdleCheckpoint]);
   const flushEditorBeforeCompanionSend = useCallback(async () => {
@@ -868,6 +903,7 @@ export function Workspace() {
       });
       setCharCount(updated.word_count);
       setSaveStatus({ kind: "saved", at: Date.now() });
+      setEditorDirty(false);
       refreshMentioned(currentLoad.node.id);
     } catch (e) {
       setSaveStatus({ kind: "error", message: String(e) });
@@ -1741,6 +1777,25 @@ export function Workspace() {
         />
         <section className={`ws-editor${focus ? " focus-mode" : ""}`} data-tour="workspace-editor">
           <div className="editor-col">
+            {conflictNodeId && (
+              /* An agent rewrote the scene the writer is editing. Their
+                 unsaved sentence outranks the agent's version, so nothing is
+                 replaced until they say so. */
+              <div className="mcp-conflict" role="status" data-testid="mcp-conflict">
+                <span>{t("workspace.mcp.conflict.body")}</span>
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() => { void reloadSceneFromEngine(conflictNodeId); dismissConflict(); }}
+                  data-testid="mcp-conflict-load"
+                >
+                  {t("workspace.mcp.conflict.load")}
+                </button>
+                <button type="button" className="btn ghost sm" onClick={dismissConflict}>
+                  {t("workspace.mcp.conflict.keep")}
+                </button>
+              </div>
+            )}
             <div className="scene-marker">
               <span>{sceneMarker}</span>
               <span className="rule" />
@@ -1761,6 +1816,7 @@ export function Workspace() {
               onChange={(doc) => {
                 debouncedSave(load.node.id, doc);
                 idleDirtyRef.current = true;
+                setEditorDirty(true);
                 markActivity();
                 throttledLastOpened();
               }}
