@@ -56,7 +56,7 @@ func TestExportCompanion_archivesTranscriptAndFacts(t *testing.T) {
 	}}
 	mem := &stubMemory{facts: map[string][]string{p.ID: {"주인공은 커피를 마시지 않는다"}}}
 
-	out, err := ExportCompanion(ctx, pr, history, mem, exportedAt())
+	out, err := ExportCompanion(ctx, pr, history, mem, exportedAt(), "")
 	if err != nil {
 		t.Fatalf("ExportCompanion: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestExportCompanion_skipsProjectsWithNothingToKeep(t *testing.T) {
 		t.Fatalf("create project: %v", err)
 	}
 
-	out, err := ExportCompanion(ctx, pr, &stubHistory{}, &stubMemory{}, exportedAt())
+	out, err := ExportCompanion(ctx, pr, &stubHistory{}, &stubMemory{}, exportedAt(), "")
 	if err != nil {
 		t.Fatalf("ExportCompanion: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestExportCompanion_pointsAtTheRawLogWhenFactsAreTruncated(t *testing.T) {
 	}
 	mem := &stubMemory{facts: map[string][]string{p.ID: many}, root: "/home/w/companion/p1"}
 
-	out, err := ExportCompanion(ctx, pr, &stubHistory{}, mem, exportedAt())
+	out, err := ExportCompanion(ctx, pr, &stubHistory{}, mem, exportedAt(), "")
 	if err != nil {
 		t.Fatalf("ExportCompanion: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestExportCompanion_readsWholeProjectScope(t *testing.T) {
 	}
 
 	history := &stubHistory{}
-	if _, err := ExportCompanion(ctx, pr, history, nil, exportedAt()); err != nil {
+	if _, err := ExportCompanion(ctx, pr, history, nil, exportedAt(), ""); err != nil {
 		t.Fatalf("ExportCompanion: %v", err)
 	}
 	if len(history.queries) != 1 {
@@ -158,5 +158,52 @@ func TestExportCompanion_readsWholeProjectScope(t *testing.T) {
 	}
 	if history.queries[0].NodeID != "" {
 		t.Fatalf("node_id = %q, want empty", history.queries[0].NodeID)
+	}
+}
+
+func TestExportCompanion_speaksTheReadersLanguage(t *testing.T) {
+	ctx := context.Background()
+	_, pr, _, _, _ := newExportFixture(t)
+	p, err := pr.Create(ctx, 1, project.NewInput{
+		Title: "Quiet City", LengthTarget: "novella", DefaultPOV: "first",
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	history := &stubHistory{byProject: map[string][]companion.HistoryMessage{p.ID: {
+		{Role: "user", Content: "Who is the narrator afraid of?", CreatedAt: 1, Status: companion.HistoryStatusDone},
+		{Role: "assistant", Content: "Her sister.", CreatedAt: 2, Status: companion.HistoryStatusDone},
+	}}}
+
+	// The archive wrapper was Korean for everyone, so an English writer got a
+	// Korean frame around their own English conversation (#45).
+	out, err := ExportCompanion(ctx, pr, history, nil, exportedAt(), "en")
+	if err != nil {
+		t.Fatalf("ExportCompanion: %v", err)
+	}
+	for _, want := range []string{"Linetta companion archive", "### Conversation", "Me", "Companion"} {
+		if !strings.Contains(out.Markdown, want) {
+			t.Errorf("English archive missing %q; doc=\n%s", want, out.Markdown)
+		}
+	}
+	// The transcript is the writer's. Only the frame is ours.
+	if !strings.Contains(out.Markdown, "Her sister.") {
+		t.Error("English archive dropped the transcript")
+	}
+
+	ja, err := ExportCompanion(ctx, pr, history, nil, exportedAt(), "ja")
+	if err != nil {
+		t.Fatalf("ExportCompanion(ja): %v", err)
+	}
+	if !strings.Contains(ja.Markdown, "### 会話") {
+		t.Errorf("Japanese archive missing its heading; doc=\n%s", ja.Markdown)
+	}
+
+	ko, err := ExportCompanion(ctx, pr, history, nil, exportedAt(), "")
+	if err != nil {
+		t.Fatalf("ExportCompanion(default): %v", err)
+	}
+	if !strings.Contains(ko.Markdown, "### 대화") {
+		t.Error("an unset language stopped defaulting to Korean")
 	}
 }

@@ -324,7 +324,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities, relationships, settingsLanguage))
 	s.Handle("export.node", handlers.ExportNode(nodes))
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
-	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc))
+	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc, settingsLanguage))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	return nil

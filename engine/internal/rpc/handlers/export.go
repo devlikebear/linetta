@@ -49,9 +49,14 @@ func ExportCompanionHistory(
 	pr *project.Repo,
 	history export.CompanionHistorySource,
 	mem export.CompanionMemorySource,
+	language func(context.Context) string,
 ) rpc.Handler {
 	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
-		out, err := export.ExportCompanion(ctx, pr, history, mem, time.Now())
+		lang := ""
+		if language != nil {
+			lang = language(ctx)
+		}
+		out, err := export.ExportCompanion(ctx, pr, history, mem, time.Now(), lang)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

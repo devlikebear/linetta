@@ -46,17 +46,19 @@ func ExportCompanion(
 	history CompanionHistorySource,
 	mem CompanionMemorySource,
 	now time.Time,
+	language string,
 ) (Payload, error) {
 	projects, err := pr.List(ctx, project.ListFilter{IncludeArchived: true})
 	if err != nil {
 		return Payload{}, err
 	}
 
+	w := companionStringsFor(language)
 	var sb strings.Builder
-	sb.WriteString("# 리네타 컴패니언 기록\n\n")
-	sb.WriteString(fmt.Sprintf("> 내보낸 시각: %s\n", now.Format("2006-01-02 15:04")))
-	sb.WriteString("> 리네타는 순수 창작 도구로 전환했고, 내장 AI 컴패니언은 다음 주요 버전에서 제거됩니다.\n")
-	sb.WriteString("> 이 파일은 그 전에 대화 기록을 남겨 두기 위한 것입니다.\n\n")
+	sb.WriteString("# " + w.title + "\n\n")
+	sb.WriteString(fmt.Sprintf("> %s: %s\n", w.exportedAt, now.Format("2006-01-02 15:04")))
+	sb.WriteString("> " + w.noticeLine1 + "\n")
+	sb.WriteString("> " + w.noticeLine2 + "\n\n")
 
 	wrote := false
 	for _, p := range projects {
@@ -79,13 +81,13 @@ func ExportCompanion(
 		}
 		wrote = true
 
-		sb.WriteString("## " + titleOrUntitled(p.Title) + "\n\n")
-		writeCompanionMessages(&sb, msgs)
-		writeCompanionFacts(&sb, facts, memRoot)
+		sb.WriteString("## " + titleOrUntitled(p.Title, w) + "\n\n")
+		writeCompanionMessages(&sb, msgs, w)
+		writeCompanionFacts(&sb, facts, memRoot, w)
 	}
 
 	if !wrote {
-		sb.WriteString("남아 있는 컴패니언 대화나 기억이 없습니다.\n")
+		sb.WriteString(w.nothingLeft + "\n")
 	}
 
 	return Payload{
@@ -94,21 +96,21 @@ func ExportCompanion(
 	}, nil
 }
 
-func titleOrUntitled(title string) string {
+func titleOrUntitled(title string, w companionStrings) string {
 	if strings.TrimSpace(title) == "" {
-		return "제목 없음"
+		return w.untitled
 	}
 	return title
 }
 
-func writeCompanionMessages(sb *strings.Builder, msgs []companion.HistoryMessage) {
+func writeCompanionMessages(sb *strings.Builder, msgs []companion.HistoryMessage, w companionStrings) {
 	if len(msgs) == 0 {
 		return
 	}
-	sb.WriteString("### 대화\n\n")
+	sb.WriteString("### " + w.conversation + "\n\n")
 	for _, m := range msgs {
 		stamp := time.UnixMilli(m.CreatedAt).Format("2006-01-02 15:04")
-		who := companionSpeaker(m.Role)
+		who := companionSpeaker(m.Role, w)
 		sb.WriteString(fmt.Sprintf("**%s · %s**", stamp, who))
 		if m.NodeLabel != "" {
 			sb.WriteString(fmt.Sprintf(" — %s", m.NodeLabel))
@@ -121,35 +123,33 @@ func writeCompanionMessages(sb *strings.Builder, msgs []companion.HistoryMessage
 		sb.WriteString("\n\n")
 		body := strings.TrimSpace(m.Content)
 		if body == "" {
-			body = "(내용 없음)"
+			body = w.emptyMessage
 		}
 		sb.WriteString(body)
 		sb.WriteString("\n\n")
 	}
 }
 
-func writeCompanionFacts(sb *strings.Builder, facts []string, memRoot string) {
+func writeCompanionFacts(sb *strings.Builder, facts []string, memRoot string, w companionStrings) {
 	if len(facts) == 0 {
 		return
 	}
-	sb.WriteString("### 기억한 것\n\n")
+	sb.WriteString("### " + w.remembered + "\n\n")
 	for _, f := range facts {
 		sb.WriteString("- " + f + "\n")
 	}
 	sb.WriteString("\n")
 	if len(facts) >= CompanionExportMemoryLimit && memRoot != "" {
-		sb.WriteString(fmt.Sprintf(
-			"> 기억은 최대 %d개까지만 담깁니다. 전체 기록은 `%s` 아래 `memory/experiences.jsonl`에 그대로 남아 있으며, 이 파일은 컴패니언이 제거돼도 지워지지 않습니다.\n\n",
-			CompanionExportMemoryLimit, memRoot))
+		sb.WriteString(fmt.Sprintf(w.memoryTruncate, CompanionExportMemoryLimit, memRoot))
 	}
 }
 
-func companionSpeaker(role string) string {
+func companionSpeaker(role string, w companionStrings) string {
 	switch role {
 	case "user":
-		return "나"
+		return w.speakerUser
 	case "assistant":
-		return "컴패니언"
+		return w.speakerAgent
 	default:
 		return role
 	}
