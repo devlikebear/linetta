@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { readAppFile } from "../test/readSource";
 import { entityRolePresets } from "./i18n";
-import type { AppLanguage } from "./i18n";
+import type { AppLanguage } from "./types";
 
 /**
  * The engine decides which entities are "core" — the story skeleton a connected
