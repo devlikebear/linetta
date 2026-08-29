@@ -28,7 +28,7 @@ interface Props {
   refreshKey?: number;
 }
 
-export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0 }: Props) {
+export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0 }: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
   const [rels, setRels] = useState<Relationship[]>([]);

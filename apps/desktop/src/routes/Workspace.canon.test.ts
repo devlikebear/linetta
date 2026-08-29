@@ -1,14 +1,8 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const srcRoot = resolve(here, "..");
+import { readSource } from "../test/readSource";
 
-async function workspace() {
-  return readFile(resolve(srcRoot, "routes/Workspace.tsx"), "utf8");
-}
+const workspace = () => readSource("routes/Workspace.tsx");
 
 /**
  * A panel with no mount site is this codebase's recurring failure — it compiles,

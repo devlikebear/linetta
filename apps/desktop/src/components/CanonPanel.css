@@ -126,7 +126,6 @@
   font-size: 14px;
   line-height: 1.35;
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .canon-kind {
@@ -163,5 +162,4 @@
 
 .canon-meta span {
   overflow-wrap: anywhere;
-  word-break: break-word;
 }

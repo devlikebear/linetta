@@ -1,10 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const repoApp = resolve(here, "../..");
+import { readAppFile, readSource } from "../test/readSource";
 
 /**
  * The webview can only reach engine methods named in RENDERER_ENGINE_METHODS.
@@ -15,7 +11,7 @@ const repoApp = resolve(here, "../..");
  * Two files, one list, no compiler between them — so the check lives here.
  */
 async function callers(): Promise<string[]> {
-  const src = await readFile(resolve(repoApp, "src/lib/rpc.ts"), "utf8");
+  const src = await readSource("lib/rpc.ts");
   const found = new Set<string>();
   // Every call site is a literal: `rpcCall<T>("some.method", …)`.
   for (const m of src.matchAll(/rpcCall<[^>]*>\(\s*"([a-z0-9_.]+)"/g)) {
@@ -25,7 +21,7 @@ async function callers(): Promise<string[]> {
 }
 
 async function allowed(): Promise<string[]> {
-  const src = await readFile(resolve(repoApp, "src-tauri/src/lib.rs"), "utf8");
+  const src = await readAppFile("src-tauri/src/lib.rs");
   const block = src.slice(
     src.indexOf("const RENDERER_ENGINE_METHODS"),
     src.indexOf("];", src.indexOf("const RENDERER_ENGINE_METHODS")),

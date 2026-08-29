@@ -51,8 +51,8 @@ const cast = [
   entity("e4", "은장도", "item"),
 ];
 
-function renderPanel(props: Partial<ComponentProps<typeof CanonPanel>> = {}) {
-  return render(
+function panel(props: Partial<ComponentProps<typeof CanonPanel>> = {}) {
+  return (
     <I18nProvider>
       <CanonPanel
         projectId="project-1"
@@ -60,8 +60,19 @@ function renderPanel(props: Partial<ComponentProps<typeof CanonPanel>> = {}) {
         onClose={vi.fn()}
         {...props}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
+}
+
+function renderPanel(props: Partial<ComponentProps<typeof CanonPanel>> = {}) {
+  return render(panel(props));
+}
+
+/** Render, wait for the first load, then type into the search box. */
+async function search(term: string) {
+  renderPanel();
+  await screen.findByText("해윤");
+  await userEvent.type(screen.getByRole("searchbox"), term);
 }
 
 describe("CanonPanel", () => {
@@ -92,25 +103,19 @@ describe("CanonPanel", () => {
   it("finds a record by the alias used in the prose, not only its name", async () => {
     // The writer looks for what they typed, which is usually not the canonical
     // name — that is the whole reason aliases exist.
-    renderPanel();
-    await screen.findByText("해윤");
-    await userEvent.type(screen.getByRole("searchbox"), "윤 선생");
+    await search("윤 선생");
     expect(screen.getByText("해윤")).toBeTruthy();
     expect(screen.queryByText("서린")).toBeNull();
   });
 
   it("searches the summary too", async () => {
-    renderPanel();
-    await screen.findByText("해윤");
-    await userEvent.type(screen.getByRole("searchbox"), "옛 동료");
+    await search("옛 동료");
     expect(screen.getByText("서린")).toBeTruthy();
     expect(screen.queryByText("청운관")).toBeNull();
   });
 
   it("says so when the search matches nothing, instead of showing an empty box", async () => {
-    renderPanel();
-    await screen.findByText("해윤");
-    await userEvent.type(screen.getByRole("searchbox"), "없는이름");
+    await search("없는이름");
     expect(screen.getByText(/찾는 이름이 없습니다/)).toBeTruthy();
   });
 
@@ -118,7 +123,7 @@ describe("CanonPanel", () => {
     renderPanel();
     await screen.findByText("해윤");
     // r1 and r2 are the two halves of one pair, so each name is in two rows.
-    expect(screen.getAllByText("관계 2").length).toBe(2);
+    expect(screen.getAllByText("관계 2")).toHaveLength(2);
   });
 
   it("opens the record the writer clicked", async () => {
@@ -150,16 +155,7 @@ describe("CanonPanel", () => {
     expect(mocks.entitiesList).toHaveBeenCalledTimes(1);
 
     mocks.entitiesList.mockResolvedValue([...cast, entity("e5", "도경")]);
-    rerender(
-      <I18nProvider>
-        <CanonPanel
-          projectId="project-1"
-          refreshKey={1}
-          onOpenEntity={vi.fn()}
-          onClose={vi.fn()}
-        />
-      </I18nProvider>,
-    );
+    rerender(panel({ refreshKey: 1 }));
     await waitFor(() => expect(screen.getByText("도경")).toBeTruthy());
   });
 });
