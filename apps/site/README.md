@@ -53,6 +53,18 @@ are drawings built from those tokens, not screenshots. That is deliberate: a
 screenshot goes stale the moment a panel is added or removed, and the repository's
 existing captures still show a companion the app no longer has.
 
+## Crawlers
+
+`static/robots.txt` points at `/sitemap.xml`, which is prerendered by
+`src/routes/sitemap.xml/+server.ts` from the same `translations` catalogue the
+pages use. Adding a locale therefore updates the sitemap, the `hreflang` links
+and the pages together.
+
+The deployed origin lives in one place — `SITE` in `src/lib/content.ts`. Canonical
+tags, `hreflang` links and the sitemap all derive from it, so moving the site to
+another domain means changing that constant, the `Sitemap:` line in `robots.txt`,
+and the absolute `og:image` URLs in `src/app.html`.
+
 ## Deploy
 
 Cloudflare Pages builds from `main`:

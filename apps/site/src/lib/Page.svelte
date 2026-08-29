@@ -8,12 +8,12 @@
   import Download from '$lib/sections/Download.svelte';
   import Faq from '$lib/sections/Faq.svelte';
   import Footer from '$lib/sections/Footer.svelte';
-  import type { Translation } from '$lib/content';
+  import { SITE, canonicalUrl, translations, type Translation } from '$lib/content';
 
   let { t }: { t: Translation } = $props();
 
-  const SITE = 'https://linetta.marvin-42.com';
-  const canonical = $derived(t.path === '/' ? `${SITE}/` : `${SITE}${t.path}`);
+  const canonical = $derived(canonicalUrl(t.path));
+  const alternates = Object.values(translations);
 
   const jsonLd = $derived(
     JSON.stringify({
@@ -44,9 +44,9 @@
   <meta name="twitter:title" content={t.pageTitle} />
   <meta name="twitter:description" content={t.metaDescription} />
 
-  <link rel="alternate" hreflang="en" href="{SITE}/" />
-  <link rel="alternate" hreflang="ko" href="{SITE}/ko" />
-  <link rel="alternate" hreflang="ja" href="{SITE}/ja" />
+  {#each alternates as alt}
+    <link rel="alternate" hreflang={alt.htmlLang} href={canonicalUrl(alt.path)} />
+  {/each}
   <link rel="alternate" hreflang="x-default" href="{SITE}/" />
 
   {@html `<script type="application/ld+json">${jsonLd}</script>`}

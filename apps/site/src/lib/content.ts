@@ -129,6 +129,14 @@ export type Translation = {
   };
 };
 
+/** The deployed origin. Canonical tags, hreflang links and the sitemap all
+ *  derive from this, so a domain change is a one-line change. */
+export const SITE = 'https://linetta.marvin-42.com';
+
+/** Absolute URL for a locale's path. The root keeps its trailing slash so the
+ *  canonical tag and the sitemap agree with what the host serves. */
+export const canonicalUrl = (path: string) => (path === '/' ? `${SITE}/` : `${SITE}${path}`);
+
 const REPO = 'https://github.com/devlikebear/linetta';
 const MAS = 'https://apps.apple.com/app/id6781664781';
 const RELEASES = `${REPO}/releases/latest`;
