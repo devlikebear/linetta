@@ -38,7 +38,6 @@ const JOB_BACKUP = "backup.daily";
 const JOB_GIT_SYNC = "git_sync";
 const JOB_FOLDER_SYNC = "folder_sync";
 const JOB_SUMMARIZER = "summarizer";
-const JOB_COMPANION = "companion.persistence";
 
 export function Settings() {
   const { language, setLanguage, t } = useI18n();
@@ -614,21 +613,6 @@ export function Settings() {
               </section>
             )}
 
-            {isDegraded(opsByJob.get(JOB_COMPANION)) && (
-              <section className="settings-section">
-                <h3>{t("settings.ops.companionStatus")}</h3>
-                <OpsStatusCard
-                  title={t("settings.ops.companionRecentFailure")}
-                  status={opsByJob.get(JOB_COMPANION)}
-                  okText={t("settings.ops.companionOk")}
-                  idleText={t("settings.ops.noRuns")}
-                  onClearError={() => clearOpsError(JOB_COMPANION)}
-                  disabled={saving}
-                  t={t}
-                  language={language}
-                />
-              </section>
-            )}
 
             {savedAt && <p className="settings-saved">{t("settings.saved")}</p>}
           </>

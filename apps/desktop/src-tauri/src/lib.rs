@@ -14,9 +14,6 @@ const ENGINE_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 // Keep renderer access explicit. New engine methods must be reviewed before the
 // Tauri webview can call them.
 const RENDERER_ENGINE_METHODS: &[&str] = &[
-    "ai.cancel",
-    "ai.preview_context",
-    "ai.run",
     "backup.create_recovery",
     "beats.create",
     "beats.delete",
@@ -24,18 +21,6 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "beats.list_by_thread",
     "beats.reorder",
     "beats.update",
-    "companion.apply_ops",
-    "companion.cancel",
-    "companion.clear",
-    "companion.compact",
-    "companion.history",
-    "companion.preview_context",
-    "companion.references.create",
-    "companion.references.delete",
-    "companion.references.list",
-    "companion.references.update",
-    "companion.remember",
-    "companion.send",
     "contextual.apply_change",
     "contextual.check_consistency",
     "contextual.plan_change",
@@ -90,9 +75,6 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "notes.get",
     "notes.list_for_node",
     "notes.update",
-    "openrouter.key_info",
-    "openrouter.oauth_finish",
-    "openrouter.oauth_start",
     "ops_status.clear_error",
     "ops_status.get",
     "plot.spine_panel",
@@ -103,11 +85,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "projects.get",
     "projects.list",
     "projects.restore",
-    "projects.rewrite_synopsis",
     "projects.update",
-    "providers.detect_cli",
-    "providers.list_models",
-    "providers.test",
     "relationships.create_one",
     "relationships.create_pair",
     "relationships.delete",
@@ -130,7 +108,6 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "threads.list",
     "threads.reopen",
     "threads.update",
-    "web_search.test",
 ];
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -734,7 +711,11 @@ mod security_boundary_tests {
     #[test]
     fn renderer_rpc_allowlist_rejects_internal_and_unknown_methods() {
         assert!(is_renderer_engine_method("projects.list"));
-        assert!(is_renderer_engine_method("companion.references.list"));
+        assert!(is_renderer_engine_method("export.companion_history"));
+        // The companion's own methods are gone; the allowlist must not still
+        // be handing them to the renderer.
+        assert!(!is_renderer_engine_method("companion.send"));
+        assert!(!is_renderer_engine_method("providers.test"));
         assert!(!is_renderer_engine_method("diagnostics.version"));
         assert!(!is_renderer_engine_method("debug.execute"));
     }

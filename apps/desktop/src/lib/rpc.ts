@@ -1,24 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  AIOptions,
-  AIContextPreview,
-  CompanionImageAttachment,
-  CompanionHistoryScope,
-  CompanionIntent,
-  CompanionReference,
-  CompanionReferenceInput,
-  CompanionReferencePatch,
-  CompanionApplyOpsResult,
   ApplyContextResult,
   ApplyContextSelection,
   Beat,
-  CompanionMessage,
   ConsistencyInput,
   ConsistencyReport,
   ContextChangeInput,
   ContextChangePlan,
-  ContextCounts,
-  ContextPreviewResponse,
   ContextTarget,
   DiagnosticsSnapshot,
   EngineStatus,
@@ -51,18 +39,12 @@ import type {
   OpsStatus,
   PlotSpine,
   Project,
-  ProposalOp,
   Relationship,
   ResolveTargetInput,
   ReplacePlan,
   ApplyReplaceResult,
   SceneMention,
   SearchResult,
-  ProviderID,
-  ProviderTestResult,
-  OpenRouterKeyInfo,
-  OpenRouterOAuthFinish,
-  OpenRouterOAuthStart,
   Settings,
   SettingsPatch,
   Snapshot,
@@ -76,7 +58,6 @@ import type {
   UpdateProjectInput,
   UpdateRelationshipInput,
   UpdateThreadInput,
-  WebSearchTestResult,
   WritingStatsDay,
   WritingStatsSummary,
   WritingStatsToday,
@@ -168,44 +149,12 @@ export async function rpcCall<T>(method: string, params?: unknown): Promise<T> {
   }
 }
 
-function mapContextPreviewResponse(r: ContextPreviewResponse): AIContextPreview {
-  const counts: ContextCounts = {
-    nearbyScenes: r.nearby_scenes,
-    hasOutline: r.has_outline,
-    hasSynopsis: r.has_synopsis,
-    relatedScenes: r.related_scenes,
-    entities: r.entities,
-    relationships: r.relationships,
-    plotBeats: r.plot_beats,
-    notes: r.notes,
-    projectMetaFields: r.project_meta_fields,
-    hasStyleNotes: r.has_style_notes,
-  };
-  return {
-    counts,
-    sections: (r.sections ?? []).map((s) => ({
-      id: s.id,
-      label: s.label,
-      present: s.present,
-      selected: s.selected,
-      count: s.count,
-      preview: s.preview,
-      charCount: s.char_count ?? 0,
-      tokenEstimate: s.token_estimate ?? 0,
-    })),
-    selectedItemCount: r.selected_item_count ?? 0,
-    selectedCharCount: r.selected_char_count ?? 0,
-    selectedTokenEstimate: r.selected_token_estimate ?? 0,
-    budgetTokenEstimate: r.budget_token_estimate ?? 0,
-  };
-}
 
 export const projects = {
   create: (input: NewProjectInput) => rpcCall<Project>("projects.create", input),
   list: (params: ListProjectsParams = {}) => rpcCall<Project[]>("projects.list", params),
   get: (id: string) => rpcCall<Project>("projects.get", { id }),
   update: (input: UpdateProjectInput) => rpcCall<Project>("projects.update", input),
-  rewriteSynopsis: (id: string) => rpcCall<Project>("projects.rewrite_synopsis", { id }),
   clearSynopsis: (id: string) => rpcCall<Project>("projects.clear_synopsis", { id }),
   archive: (id: string) => rpcCall<{ ok: true }>("projects.archive", { id }),
   restore: (id: string) => rpcCall<{ ok: true }>("projects.restore", { id }),
@@ -279,24 +228,8 @@ export const backupApi = {
   createRecovery: () => rpcCall<{ path: string; format_version: number }>("backup.create_recovery"),
 };
 
-export const providers = {
-  listModels: (provider: ProviderID) =>
-    rpcCall<{ models: string[] }>("providers.list_models", { provider }),
-  detectCli: () => rpcCall<{ path: string }>("providers.detect_cli"),
-  test: (provider: ProviderID) =>
-    rpcCall<ProviderTestResult>("providers.test", { provider }),
-};
 
-export const openRouter = {
-  keyInfo: () => rpcCall<OpenRouterKeyInfo>("openrouter.key_info"),
-  oauthStart: () => rpcCall<OpenRouterOAuthStart>("openrouter.oauth_start"),
-  oauthFinish: (requestId: string) =>
-    rpcCall<OpenRouterOAuthFinish>("openrouter.oauth_finish", { request_id: requestId }),
-};
 
-export const webSearch = {
-  test: () => rpcCall<WebSearchTestResult>("web_search.test"),
-};
 
 export const exportApi = {
   project: (projectId: string) =>
@@ -392,17 +325,6 @@ export const mentions = {
     rpcCall<Entity[]>("mentions.list_for_node", { node_id: nodeId }),
 };
 
-export const ai = {
-  run: (nodeId: string, prompt: string, options: AIOptions, selectionText: string = "") =>
-    rpcCall<{ run_id: string }>("ai.run", { node_id: nodeId, prompt, selection_text: selectionText, options }),
-  cancel: (runId: string) => rpcCall<{ ok: true }>("ai.cancel", { run_id: runId }),
-  previewContext: (nodeId: string, options?: AIOptions): Promise<AIContextPreview> =>
-    rpcCall<ContextPreviewResponse>(
-      "ai.preview_context",
-      options ? { node_id: nodeId, options } : { node_id: nodeId },
-    )
-      .then(mapContextPreviewResponse),
-};
 
 export const threads = {
   create: (input: NewThreadInput) => rpcCall<Thread>("threads.create", input),
@@ -461,67 +383,3 @@ export const plot = {
     rpcCall<PlotSpine>("plot.spine_panel", { node_id: nodeId }),
 };
 
-export const companion = {
-  send: (projectId: string, nodeId: string, text: string, options?: Pick<AIOptions, "context" | "outline_structure"> & { images?: CompanionImageAttachment[]; intent?: CompanionIntent; scope?: CompanionHistoryScope; language?: string }) =>
-    rpcCall<{ run_id: string }>("companion.send", {
-      project_id: projectId,
-      node_id: nodeId,
-      text,
-      options: options ? { context: options.context, outline_structure: options.outline_structure, intent: options.intent, scope: options.scope, language: options.language } : {},
-      images: options?.images ?? [],
-    }),
-  previewContext: (projectId: string, nodeId: string, options?: Pick<AIOptions, "context">): Promise<AIContextPreview> =>
-    rpcCall<ContextPreviewResponse>(
-      "companion.preview_context",
-      { project_id: projectId, node_id: nodeId, options: options ?? {} },
-    ).then(mapContextPreviewResponse),
-  history: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope, limit?: number) =>
-    rpcCall<{ messages: CompanionMessage[] }>("companion.history", {
-      project_id: projectId,
-      ...(nodeId ? { node_id: nodeId } : {}),
-      ...(scope ? { scope } : {}),
-      ...(limit ? { limit } : {}),
-    })
-      .then((r) => r.messages ?? []),
-  compact: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope, language?: string) =>
-    rpcCall<{ messages: CompanionMessage[] }>("companion.compact", {
-      project_id: projectId,
-      ...(nodeId ? { node_id: nodeId } : {}),
-      ...(scope ? { scope } : {}),
-      ...(language ? { language } : {}),
-    })
-      .then((r) => r.messages ?? []),
-  clear: (projectId: string, nodeId?: string | null, scope?: CompanionHistoryScope) =>
-    rpcCall<{ ok: true }>("companion.clear", {
-      project_id: projectId,
-      ...(nodeId ? { node_id: nodeId } : {}),
-      ...(scope ? { scope } : {}),
-    }),
-  cancel: (runId: string) =>
-    rpcCall<{ ok: true }>("companion.cancel", { run_id: runId }),
-  remember: (projectId: string, text: string, category?: string) =>
-    rpcCall<{ ok: true }>("companion.remember", { project_id: projectId, text, category }),
-  undoApply: (batchId: string) =>
-    rpcCall<{ ok: true }>("companion.undo_apply", { batch_id: batchId }),
-  applyOps: (projectId: string, nodeId: string | null, summary: string, ops: ProposalOp[]) =>
-    rpcCall<CompanionApplyOpsResult>("companion.apply_ops", {
-      project_id: projectId,
-      node_id: nodeId ?? "",
-      summary,
-      ops,
-    }),
-  references: {
-    list: (projectId: string, nodeId?: string | null, includeDisabled = true) =>
-      rpcCall<{ references: CompanionReference[] }>("companion.references.list", {
-        project_id: projectId,
-        ...(nodeId ? { node_id: nodeId } : {}),
-        include_disabled: includeDisabled,
-      }).then((r) => r.references ?? []),
-    create: (input: CompanionReferenceInput) =>
-      rpcCall<CompanionReference>("companion.references.create", input),
-    update: (input: CompanionReferencePatch) =>
-      rpcCall<CompanionReference>("companion.references.update", input),
-    delete: (projectId: string, id: string) =>
-      rpcCall<{ ok: true }>("companion.references.delete", { project_id: projectId, id }),
-  },
-};

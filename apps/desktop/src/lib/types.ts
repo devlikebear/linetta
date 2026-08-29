@@ -292,15 +292,6 @@ export type ToneID =
   | "lyrical"
   | "humor";
 
-export interface AIOptions {
-  tone: ToneID;
-  short_form: boolean;
-  context?: AIContextSelection;
-  outline_structure?: string;
-  /** App UI language; the engine switches AI prompts to English for "en". */
-  language?: string;
-}
-
 export type CompanionIntentKind =
   | "scene_write"
   | "scene_rewrite"
@@ -309,14 +300,6 @@ export type CompanionIntentKind =
   | "generic_mutation"
   | "read_only"
   | "chat";
-
-export interface CompanionIntent {
-  kind: CompanionIntentKind;
-  target_node_id?: string;
-  apply_policy?: "direct" | "proposal";
-}
-
-export type CompanionHistoryScope = "scene" | "project";
 
 export type AIContextKey =
   | "current_scene"
@@ -335,32 +318,6 @@ export type AIContextKey =
   | "references";
 
 export type AIContextSelection = Record<AIContextKey, boolean>;
-
-export interface AIDelta {
-  run_id: string;
-  text: string;
-}
-
-// Sent when the running text must be REPLACED (not appended) — emitted by the
-// engine's dedup when an upstream retry diverges from the first attempt.
-export interface AIReset {
-  run_id: string;
-  text: string;
-}
-
-export interface AIDone {
-  run_id: string;
-  full_text: string;
-}
-
-export interface AIError {
-  run_id: string;
-  message: string;
-}
-
-export interface AICancelled {
-  run_id: string;
-}
 
 export interface EngineStatus {
   ok: boolean;
@@ -454,15 +411,6 @@ export interface AIContextSection {
   tokenEstimate: number;
 }
 
-export interface AIContextPreview {
-  counts: ContextCounts;
-  sections: AIContextSection[];
-  selectedItemCount: number;
-  selectedCharCount: number;
-  selectedTokenEstimate: number;
-  budgetTokenEstimate: number;
-}
-
 /** Live state of the local MCP server that external agents connect to. */
 export interface McpStatus {
   running: boolean;
@@ -524,13 +472,6 @@ export type ProviderID =
   | "gemini-native";
 export type WebSearchProvider = "brave" | "perplexity";
 
-export type AISetupIssue =
-  | "missing_key"
-  | "auth_required"
-  | "model_unavailable"
-  | "rate_or_spend_limit"
-  | "unknown_provider_error";
-
 export type AppLanguage = "ko" | "en" | "ja";
 
 export interface ProviderConfig {
@@ -540,52 +481,6 @@ export interface ProviderConfig {
   clear_api_key?: boolean;
   base_url?: string;
   cli_path?: string;
-}
-
-export interface ProviderTestResult {
-  ok: boolean;
-  provider: ProviderID;
-  model?: string;
-  message: string;
-}
-
-export interface OpenRouterKeyInfo {
-  ok: boolean;
-  provider: "openrouter";
-  label?: string;
-  limit?: number | null;
-  limit_reset?: string | null;
-  limit_remaining?: number | null;
-  include_byok_in_limit?: boolean;
-  usage?: number;
-  usage_daily?: number;
-  usage_weekly?: number;
-  usage_monthly?: number;
-  byok_usage?: number;
-  byok_usage_daily?: number;
-  byok_usage_weekly?: number;
-  byok_usage_monthly?: number;
-  is_free_tier?: boolean;
-}
-
-export interface OpenRouterOAuthStart {
-  request_id: string;
-  auth_url: string;
-  callback_url: string;
-  expires_at: number;
-}
-
-export interface OpenRouterOAuthFinish {
-  ok: boolean;
-  provider: "openrouter";
-  model: string;
-  message: string;
-}
-
-export interface WebSearchTestResult {
-  ok: boolean;
-  provider: WebSearchProvider;
-  message: string;
 }
 
 export type ThemePreference = "system" | "light" | "dark";
@@ -887,70 +782,9 @@ export interface NoteBrief {
   body: string;
 }
 
-// Companion (Phase 2) — mirrors engine companion.* payloads.
-export interface CompanionMessage {
-  id?: string;
-  project_id?: string;
-  node_id?: string | null;
-  node_label?: string;
-  run_id?: string;
-  role: string;
-  content: string;
-  timestamp: number;
-  scope?: "scene" | "project" | "global";
-  intent?: string;
-  status?: string;
-}
-
-export interface CompanionImageAttachment {
-  name: string;
-  media_type: string;
-  data: string;
-  size?: number;
-}
-
 export type CompanionReferenceSource = "text" | "clipboard" | "markdown" | "file";
 export type CompanionReferencePurpose = "style" | "content" | "canon" | "constraint";
 export type CompanionReferenceStatus = "active" | "summarized" | "disabled";
-
-export interface CompanionReference {
-  id: string;
-  project_id: string;
-  node_id?: string;
-  source_type: CompanionReferenceSource;
-  purpose: CompanionReferencePurpose;
-  title: string;
-  content: string;
-  summary: string;
-  char_count: number;
-  token_estimate: number;
-  status: CompanionReferenceStatus;
-  created_at: number;
-  updated_at: number;
-}
-
-export interface CompanionReferenceInput {
-  project_id: string;
-  node_id?: string;
-  source_type: CompanionReferenceSource;
-  purpose: CompanionReferencePurpose;
-  title?: string;
-  content: string;
-  summary?: string;
-  status?: CompanionReferenceStatus;
-}
-
-export interface CompanionReferencePatch {
-  project_id: string;
-  id: string;
-  node_id?: string;
-  source_type?: CompanionReferenceSource;
-  purpose?: CompanionReferencePurpose;
-  title?: string;
-  content?: string;
-  summary?: string;
-  status?: CompanionReferenceStatus;
-}
 
 export type ProposalOpType =
   | "create_thread" | "update_thread"
@@ -1000,15 +834,6 @@ export interface ProposalOp {
   sources?: FactSourceInput[];
 }
 
-export interface CompanionProposal {
-  run_id: string;
-  project_id?: string;
-  valid: boolean;
-  summary?: string;
-  ops?: ProposalOp[];
-  error?: string;
-}
-
 export interface CompanionApplyOpsFailure {
   index: number;
   op?: string;
@@ -1021,18 +846,6 @@ export interface AppliedNodeChange {
   content_version: number;
   char_count: number;
   text_preview?: string;
-}
-
-export interface CompanionApplyOpsResult {
-  summary?: string;
-  applied: number;
-  created?: Record<string, string>;
-  changed_nodes?: AppliedNodeChange[];
-  failures?: CompanionApplyOpsFailure[];
-  /** Set when a structural batch failed partway and the outline was put back. */
-  rolled_back?: boolean;
-  /** Identifies the pre-change outline kept for a one-step undo. */
-  undo_batch_id?: string;
 }
 
 /** What a pending outline change would do to the tree. */
@@ -1063,26 +876,6 @@ export interface OutlineChangePreview {
   ops: ProposalOp[];
 }
 
-interface CompanionRunMeta {
-  run_id: string;
-  project_id?: string;
-  node_id?: string;
-  scope?: "scene" | "project" | "global";
-  intent?: string;
-}
-
-export interface CompanionDelta extends CompanionRunMeta { text: string; }
-export interface CompanionReset extends CompanionRunMeta { text: string; }
-export interface CompanionDone extends CompanionRunMeta { full_text: string; }
-export interface CompanionError extends CompanionRunMeta { message: string; }
-export interface CompanionCancelled extends CompanionRunMeta { applied?: boolean; }
-export interface CompanionApplied extends CompanionRunMeta {
-  summary?: string;
-  applied: number;
-  changed_nodes?: AppliedNodeChange[];
-  undo_batch_id?: string;
-}
-export interface CompanionPreview extends CompanionRunMeta { preview: OutlineChangePreview; }
 /** Steps a long companion run walks through, shown as progress in the panel. */
 export type CompanionPhase =
   | "requesting"
@@ -1094,21 +887,3 @@ export type CompanionPhase =
   | "applying"
   | "applied";
 
-export interface CompanionThinking extends CompanionRunMeta {
-  text: string;
-  phase?: CompanionPhase;
-  /** Ops written so far, and how many the run set out to write. */
-  applied?: number;
-  total?: number;
-}
-export interface CompanionReasoning extends CompanionRunMeta { text: string; }
-export interface CompanionChoices {
-  run_id: string;
-  project_id?: string;
-  node_id?: string;
-  scope?: "scene" | "project" | "global";
-  intent?: string;
-  prompt?: string;
-  options: string[];
-  allow_custom: boolean;
-}

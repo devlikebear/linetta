@@ -14,20 +14,18 @@ import (
 
 // Capabilities describes build-variant feature availability surfaced to the UI.
 type Capabilities struct {
-	UnavailableProviders []string
-	GitSyncAvailable     bool
-	MCPAvailable         bool
+	GitSyncAvailable bool
+	MCPAvailable     bool
 }
 
 type diagnosticsPayload struct {
-	Version              string   `json:"version"`
-	Home                 string   `json:"home"`
-	DBPath               string   `json:"db_path"`
-	MigrationVersion     int      `json:"migration_version"`
-	MigrationCount       int      `json:"migration_count"`
-	UnavailableProviders []string `json:"unavailable_providers,omitempty"`
-	GitSyncAvailable     bool     `json:"git_sync_available"`
-	MCPAvailable         bool     `json:"mcp_available"`
+	Version          string `json:"version"`
+	Home             string `json:"home"`
+	DBPath           string `json:"db_path"`
+	MigrationVersion int    `json:"migration_version"`
+	MigrationCount   int    `json:"migration_count"`
+	GitSyncAvailable bool   `json:"git_sync_available"`
+	MCPAvailable     bool   `json:"mcp_available"`
 
 	// CompanionHistoryExists says whether this library has ever held a
 	// companion message. It is the durable half of "is this an existing
@@ -67,14 +65,13 @@ func DiagnosticsVersion(st *store.Store, home string, version string, caps Capab
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		payload := diagnosticsPayload{
-			Version:              version,
-			Home:                 resolvedHome,
-			DBPath:               dbPath,
-			MigrationVersion:     int(latest.Int64),
-			MigrationCount:       int(count.Int64),
-			UnavailableProviders: caps.UnavailableProviders,
-			GitSyncAvailable:     caps.GitSyncAvailable,
-			MCPAvailable:         caps.MCPAvailable,
+			Version:          version,
+			Home:             resolvedHome,
+			DBPath:           dbPath,
+			MigrationVersion: int(latest.Int64),
+			MigrationCount:   int(count.Int64),
+			GitSyncAvailable: caps.GitSyncAvailable,
+			MCPAvailable:     caps.MCPAvailable,
 
 			CompanionHistoryExists: companionHistory,
 		}

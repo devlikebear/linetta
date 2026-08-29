@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -59,19 +58,6 @@ const OpenRouterAutoModel = "openrouter/auto"
 // model-scale output budget and reject even tiny prompts with 402.
 const OpenRouterDefaultMaxTokens = 2048
 
-func validProviders() []string {
-	return []string{
-		ProviderClaudeCodeCLI,
-		ProviderOpenAICodex,
-		ProviderAnthropic,
-		ProviderOpenAI,
-		ProviderOpenRouter,
-		ProviderGeminiNative,
-	}
-}
-
-func validWebSearchProviders() []string { return []string{"brave", "perplexity"} }
-
 func validLanguages() []string { return []string{"ko", "en", "ja"} }
 
 func validThemes() []string { return []string{"system", "light", "dark"} }
@@ -85,31 +71,28 @@ const defaultPalette = "hanji"
 
 func validCopyProfiles() []string { return []string{"plain", "munpia", "series", "joara"} }
 
-// ProviderConfig holds per-provider settings keyed by provider id in Config.Providers.
+// ProviderConfig is the shape of a stored per-provider entry.
+//
+// Deprecated: nothing writes these any more (#47). The type survives so the
+// Config field that carries them keeps its shape and a save round-trips what
+// a writer configured before the companion was removed.
 type ProviderConfig struct {
-	Model       string `json:"model,omitempty"`         // selected model id; empty => provider default
-	APIKey      string `json:"api_key,omitempty"`       // write-only in settings.set; redacted from settings.get and disk
-	APIKeySet   bool   `json:"api_key_set,omitempty"`   // read-only presence flag for settings.get
-	ClearAPIKey bool   `json:"clear_api_key,omitempty"` // write-only deletion flag for settings.set
-	BaseURL     string `json:"base_url,omitempty"`      // custom endpoint for OpenAI/Anthropic-compatible providers (MiniMax, Kimi, ...)
-	CliPath     string `json:"cli_path,omitempty"`      // claude-code-cli binary path override
-}
-
-// ProviderSettings is the resolved active-provider view consumed by the ai
-// package (kept here so settings has no dependency on ai).
-type ProviderSettings struct {
-	Provider string
-	Model    string
-	APIKey   string
-	BaseURL  string
-	CliPath  string
+	Model       string `json:"model,omitempty"`
+	APIKey      string `json:"api_key,omitempty"`
+	APIKeySet   bool   `json:"api_key_set,omitempty"`
+	ClearAPIKey bool   `json:"clear_api_key,omitempty"`
+	BaseURL     string `json:"base_url,omitempty"`
+	CliPath     string `json:"cli_path,omitempty"`
 }
 
 // Config is the on-disk JSON. backup_dir is computed at Load time and not
 // persisted (the field is omitted from JSON marshalling on write).
 type Config struct {
-	Language                    string                    `json:"language"`
-	Provider                    string                    `json:"provider"`
+	Language string `json:"language"`
+	Provider string `json:"provider"`
+	// Deprecated: the built-in AI companion is gone (#47). These fields are no
+	// longer settable and nothing reads them, but they stay in Config and in
+	// persist's field list so a save does not delete what is already on disk.
 	Providers                   map[string]ProviderConfig `json:"providers,omitempty"`
 	TypewriterDefault           bool                      `json:"typewriter_default"`
 	FocusDefault                bool                      `json:"focus_default"`
@@ -141,32 +124,26 @@ type Config struct {
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
 type Patch struct {
-	Language                    *string                   `json:"language,omitempty"`
-	Provider                    *string                   `json:"provider,omitempty"`
-	Providers                   map[string]ProviderConfig `json:"providers,omitempty"`
-	TypewriterDefault           *bool                     `json:"typewriter_default,omitempty"`
-	FocusDefault                *bool                     `json:"focus_default,omitempty"`
-	Theme                       *string                   `json:"theme,omitempty"`
-	Palette                     *string                   `json:"palette,omitempty"`
-	EditorFontSize              *int                      `json:"editor_font_size,omitempty"`
-	EditorLineHeight            *float64                  `json:"editor_line_height,omitempty"`
-	CopyProfile                 *string                   `json:"copy_profile,omitempty"`
-	GitSyncDir                  *string                   `json:"git_sync_dir,omitempty"`
-	GitSyncCommitTemplate       *string                   `json:"git_sync_commit_template,omitempty"`
-	FolderSyncDir               *string                   `json:"folder_sync_dir,omitempty"`
-	FolderSyncEnabled           *bool                     `json:"folder_sync_enabled,omitempty"`
-	SafetyChecklistDismissed    *bool                     `json:"safety_checklist_dismissed,omitempty"`
-	OnboardingTourEnabled       *bool                     `json:"onboarding_tour_enabled,omitempty"`
-	OnboardingTourSeenVersion   *string                   `json:"onboarding_tour_seen_version,omitempty"`
-	AIDataSharingConsentVersion *int                      `json:"ai_data_sharing_consent_version,omitempty"`
-	AIDataSharingConsentedAt    *int64                    `json:"ai_data_sharing_consented_at,omitempty"`
-	WebSearchProvider           *string                   `json:"web_search_provider,omitempty"`
-	WebSearchAPIKey             *string                   `json:"web_search_api_key,omitempty"`
-	MCPMode                     *string                   `json:"mcp_mode,omitempty"`
-	MCPPort                     *int                      `json:"mcp_port,omitempty"`
-	MCPProjectID                *string                   `json:"mcp_project_id,omitempty"`
-	MCPConsentVersion           *int                      `json:"mcp_consent_version,omitempty"`
-	MCPConsentedAt              *int64                    `json:"mcp_consented_at,omitempty"`
+	Language                  *string  `json:"language,omitempty"`
+	TypewriterDefault         *bool    `json:"typewriter_default,omitempty"`
+	FocusDefault              *bool    `json:"focus_default,omitempty"`
+	Theme                     *string  `json:"theme,omitempty"`
+	Palette                   *string  `json:"palette,omitempty"`
+	EditorFontSize            *int     `json:"editor_font_size,omitempty"`
+	EditorLineHeight          *float64 `json:"editor_line_height,omitempty"`
+	CopyProfile               *string  `json:"copy_profile,omitempty"`
+	GitSyncDir                *string  `json:"git_sync_dir,omitempty"`
+	GitSyncCommitTemplate     *string  `json:"git_sync_commit_template,omitempty"`
+	FolderSyncDir             *string  `json:"folder_sync_dir,omitempty"`
+	FolderSyncEnabled         *bool    `json:"folder_sync_enabled,omitempty"`
+	SafetyChecklistDismissed  *bool    `json:"safety_checklist_dismissed,omitempty"`
+	OnboardingTourEnabled     *bool    `json:"onboarding_tour_enabled,omitempty"`
+	OnboardingTourSeenVersion *string  `json:"onboarding_tour_seen_version,omitempty"`
+	MCPMode                   *string  `json:"mcp_mode,omitempty"`
+	MCPPort                   *int     `json:"mcp_port,omitempty"`
+	MCPProjectID              *string  `json:"mcp_project_id,omitempty"`
+	MCPConsentVersion         *int     `json:"mcp_consent_version,omitempty"`
+	MCPConsentedAt            *int64   `json:"mcp_consented_at,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -357,65 +334,12 @@ func (s *Store) Get(ctx context.Context) (Config, error) {
 	return s.redactedSettingsView(c), nil
 }
 
-// Provider returns the active provider id (cheap, lock-protected).
-// ai.Runner calls this on every Start so provider changes take effect at once.
-func (s *Store) Provider() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.cfg.Provider
-}
-
-func (s *Store) HasAIDataSharingConsent() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.cfg.AIDataSharingConsentVersion == AIDataSharingConsentVersion &&
-		s.cfg.AIDataSharingConsentedAt > 0
-}
-
-// Resolve returns the active provider plus its per-provider config. Consulted on
-// every AI call so settings changes take effect without an engine restart.
-func (s *Store) Resolve() ProviderSettings {
-	s.mu.RLock()
-	pc := s.cfg.Providers[s.cfg.Provider]
-	provider := s.cfg.Provider
-	s.mu.RUnlock()
-	pc = s.runtimeProviderConfig(provider, pc)
-	return ProviderSettings{
-		Provider: provider,
-		Model:    pc.Model,
-		APIKey:   pc.APIKey,
-		BaseURL:  pc.BaseURL,
-		CliPath:  pc.CliPath,
-	}
-}
-
 // ProviderConfigFor returns the stored config for a provider id (zero value if unset).
 func (s *Store) ProviderConfigFor(id string) ProviderConfig {
 	s.mu.RLock()
 	cfg := s.cfg.Providers[id]
 	s.mu.RUnlock()
 	return s.runtimeProviderConfig(id, cfg)
-}
-
-func (s *Store) WebSearchProvider() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.cfg.WebSearchProvider == "" {
-		return "brave"
-	}
-	return s.cfg.WebSearchProvider
-}
-
-func (s *Store) WebSearchAPIKey() string {
-	secret, ok, err := s.secrets.Get(webSearchAPIKeySecretName)
-	if err != nil || !ok {
-		return ""
-	}
-	return secret
-}
-
-func (s *Store) WebSearchAPIKeyStatus() (string, bool, error) {
-	return s.secrets.Get(webSearchAPIKeySecretName)
 }
 
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
@@ -426,34 +350,11 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	s.mu.RLock()
 	next := s.cfg
 	s.mu.RUnlock()
-	previousRecipient := aiDataRecipient(next)
-
 	if p.Language != nil {
 		if !slices.Contains(validLanguages(), *p.Language) {
 			return Config{}, fmt.Errorf("settings: unknown language %q", *p.Language)
 		}
 		next.Language = *p.Language
-	}
-	if p.Provider != nil {
-		if !slices.Contains(validProviders(), *p.Provider) {
-			return Config{}, fmt.Errorf("settings: unknown provider %q", *p.Provider)
-		}
-		next.Provider = *p.Provider
-	}
-	if p.Providers != nil {
-		merged := map[string]ProviderConfig{}
-		maps.Copy(merged, next.Providers)
-		for k, v := range p.Providers {
-			if !slices.Contains(validProviders(), k) {
-				return Config{}, fmt.Errorf("settings: unknown provider %q", k)
-			}
-			if err := s.applyProviderSecretPatch(k, &v); err != nil {
-				return Config{}, err
-			}
-			v = normalizeProviderConfig(k, v)
-			merged[k] = v
-		}
-		next.Providers = merged
 	}
 	if p.TypewriterDefault != nil {
 		next.TypewriterDefault = *p.TypewriterDefault
@@ -512,35 +413,6 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.OnboardingTourSeenVersion != nil {
 		next.OnboardingTourSeenVersion = *p.OnboardingTourSeenVersion
 	}
-	if p.AIDataSharingConsentVersion != nil {
-		if *p.AIDataSharingConsentVersion != 0 && *p.AIDataSharingConsentVersion != AIDataSharingConsentVersion {
-			return Config{}, fmt.Errorf("settings: unsupported ai data sharing consent version %d", *p.AIDataSharingConsentVersion)
-		}
-		next.AIDataSharingConsentVersion = *p.AIDataSharingConsentVersion
-	}
-	if p.AIDataSharingConsentedAt != nil {
-		if *p.AIDataSharingConsentedAt < 0 {
-			return Config{}, fmt.Errorf("settings: ai_data_sharing_consented_at must be non-negative")
-		}
-		next.AIDataSharingConsentedAt = *p.AIDataSharingConsentedAt
-	}
-	if next.AIDataSharingConsentVersion == 0 {
-		next.AIDataSharingConsentedAt = 0
-	} else if next.AIDataSharingConsentedAt == 0 {
-		return Config{}, fmt.Errorf("settings: consent timestamp required")
-	}
-	if p.WebSearchProvider != nil {
-		if !slices.Contains(validWebSearchProviders(), *p.WebSearchProvider) {
-			return Config{}, fmt.Errorf("settings: unknown web_search_provider %q", *p.WebSearchProvider)
-		}
-		next.WebSearchProvider = *p.WebSearchProvider
-	}
-	if p.WebSearchAPIKey != nil {
-		if err := s.applyWebSearchSecretPatch(*p.WebSearchAPIKey); err != nil {
-			return Config{}, err
-		}
-		next.WebSearchAPIKey = ""
-	}
 	if p.MCPMode != nil {
 		if !slices.Contains(ValidMCPModes(), *p.MCPMode) {
 			return Config{}, fmt.Errorf("settings: unknown mcp_mode %q", *p.MCPMode)
@@ -568,10 +440,6 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if next.Language == "" {
 		next.Language = "ko"
 	}
-	if aiDataRecipient(next) != previousRecipient && p.AIDataSharingConsentVersion == nil {
-		next.AIDataSharingConsentVersion = 0
-		next.AIDataSharingConsentedAt = 0
-	}
 	next = normalizeEditorPreferences(next)
 
 	if err := s.persist(next); err != nil {
@@ -583,12 +451,6 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	s.mu.Unlock()
 
 	return s.Get(ctx)
-}
-
-func aiDataRecipient(c Config) string {
-	provider := c.Provider
-	cfg := normalizeProviderConfig(provider, c.Providers[provider])
-	return provider + "\x00" + cfg.BaseURL
 }
 
 func (s *Store) persist(next Config) error {
@@ -652,39 +514,6 @@ func (s *Store) migrateProviderSecrets(providers map[string]ProviderConfig) (map
 		out[id] = cfg
 	}
 	return out, migrated, nil
-}
-
-func (s *Store) applyProviderSecretPatch(provider string, cfg *ProviderConfig) error {
-	switch {
-	case cfg.ClearAPIKey:
-		if err := s.secrets.Delete(providerAPIKeySecretName(provider)); err != nil {
-			return err
-		}
-		cfg.APIKey = ""
-		cfg.APIKeySet = false
-	case cfg.APIKey != "":
-		if err := s.setSecret(providerAPIKeySecretName(provider), cfg.APIKey); err != nil {
-			return err
-		}
-		cfg.APIKey = ""
-		cfg.APIKeySet = true
-	default:
-		cfg.APIKey = ""
-		ok, err := s.secrets.Exists(providerAPIKeySecretName(provider))
-		if err != nil {
-			return err
-		}
-		cfg.APIKeySet = ok
-	}
-	cfg.ClearAPIKey = false
-	return nil
-}
-
-func (s *Store) applyWebSearchSecretPatch(value string) error {
-	if value == "" {
-		return s.secrets.Delete(webSearchAPIKeySecretName)
-	}
-	return s.setSecret(webSearchAPIKeySecretName, value)
 }
 
 func (s *Store) setSecret(name, value string) error {

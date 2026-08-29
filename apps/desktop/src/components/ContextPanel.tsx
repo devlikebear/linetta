@@ -110,20 +110,6 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
     onProjectChanged?.(updated);
   };
 
-  const rewriteSynopsis = async () => {
-    if (synopsisSaveTimer.current) window.clearTimeout(synopsisSaveTimer.current);
-    setSynopsisBusy("rewrite");
-    try {
-      const updated = await projectsApi.rewriteSynopsis(project.id);
-      setSynopsis(updated.synopsis ?? "");
-      onProjectChanged?.(updated);
-    } catch {
-      /* benign; leave current synopsis visible */
-    } finally {
-      setSynopsisBusy(null);
-    }
-  };
-
   const clearSynopsis = async () => {
     if (synopsisSaveTimer.current) window.clearTimeout(synopsisSaveTimer.current);
     setSynopsisBusy("clear");
@@ -221,14 +207,13 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
           />
         </div>
 
-        {/* 시놉시스 — editable story summary used as its own AI context item. */}
+        {/* 시놉시스 — the writer's own story summary; it also feeds the MCP brief.
+            Deriving one from scene summaries needed a model, so that button is
+            gone and this is edited by hand or written by an agent. */}
         <div className="sec">
           <h4>
             <span>{t("workspace.synopsis")}</span>
             <span className="sec-actions">
-              <button type="button" onClick={rewriteSynopsis} disabled={synopsisBusy !== null}>
-                {synopsisBusy === "rewrite" ? t("workspace.rewriting") : t("workspace.rewrite")}
-              </button>
               <button type="button" onClick={clearSynopsis} disabled={synopsisBusy !== null || synopsis.trim() === ""}>
                 {t("workspace.clear")}
               </button>

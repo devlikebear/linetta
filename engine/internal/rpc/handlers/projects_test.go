@@ -303,26 +303,6 @@ func TestDeleteProjectHandler(t *testing.T) {
 	}
 }
 
-func TestRewriteProjectSynopsisHandler(t *testing.T) {
-	f := newProjectSynopsisFixture(t)
-	h := RewriteProjectSynopsis(f.projects, f.builder, func() int64 { return 2000 })
-
-	res, err := h(context.Background(), json.RawMessage(`{"id":"`+f.project.ID+`"}`))
-	if err != nil {
-		t.Fatalf("handler: %v", err)
-	}
-	var got project.Project
-	if err := json.Unmarshal(res, &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if got.Synopsis != "재작성된 시놉시스" {
-		t.Fatalf("synopsis = %q", got.Synopsis)
-	}
-	if got.Outline != "" {
-		t.Fatalf("rewrite synopsis should not touch outline, got %q", got.Outline)
-	}
-}
-
 func TestClearProjectSynopsisHandler(t *testing.T) {
 	f := newProjectSynopsisFixture(t)
 	body := "잘못된 시놉시스"

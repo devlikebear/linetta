@@ -3,7 +3,6 @@
 package settings
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -134,70 +133,36 @@ func TestCredentialSecretStore_implementsSecretStore(t *testing.T) {
 	}
 }
 
-// End to end through the same Store calls the UI drives: saving a web_search
-// key used to fail outright on Windows because there was no secret backend.
-func TestStore_keysPersistThroughCredentialManager(t *testing.T) {
+// The settings patch can no longer write provider or web-search keys — the
+// companion that used them is gone (#47). What still matters is that a key a
+// writer saved before the removal is moved out of settings.json and into the
+// OS credential store on load, so it is not left sitting in a plaintext file
+// that nothing reads any more.
+func TestStore_migratesADiskKeyIntoTheCredentialManager(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LINETTA_HOME", dir)
 	secrets := newTestCredentialStore(t)
-	t.Cleanup(func() {
-		_ = secrets.Delete(webSearchAPIKeySecretName)
-		_ = secrets.Delete(providerAPIKeySecretName(ProviderOpenRouter))
-	})
+	t.Cleanup(func() { _ = secrets.Delete(webSearchAPIKeySecretName) })
 
-	s, err := NewWithSecretStore(secrets)
-	if err != nil {
+	const key = "BSA-left-over-from-before"
+	seed := `{"web_search_api_key":"` + key + `"}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(seed), 0o600); err != nil {
+		t.Fatalf("seed settings.json: %v", err)
+	}
+
+	if _, err := NewWithSecretStore(secrets); err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	ctx := context.Background()
 
-	key := "BSA-windows-round-trip"
-	if _, err := s.Set(ctx, Patch{WebSearchAPIKey: &key}); err != nil {
-		t.Fatalf("Set web_search key: %v", err)
-	}
-	if got := s.WebSearchAPIKey(); got != key {
-		t.Fatalf("WebSearchAPIKey() = %q, want %q", got, key)
-	}
-
-	// settings.get must report presence without leaking the value, and the
-	// value must never reach settings.json on disk.
-	view, err := s.Get(ctx)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if !view.WebSearchAPIKeySet {
-		t.Error("web_search_api_key_set should be true after saving a key")
-	}
-	if view.WebSearchAPIKey != "" {
-		t.Errorf("settings.get leaked the key: %q", view.WebSearchAPIKey)
+	stored, ok, err := secrets.Get(webSearchAPIKeySecretName)
+	if err != nil || !ok || stored != key {
+		t.Fatalf("migrated key = (%q, %v, %v), want (%q, true, nil)", stored, ok, err, key)
 	}
 	onDisk, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if err != nil {
 		t.Fatalf("read settings.json: %v", err)
 	}
 	if strings.Contains(string(onDisk), key) {
-		t.Error("the key was written to settings.json")
-	}
-
-	// Provider keys take the same path.
-	provider := ProviderOpenRouter
-	if _, err := s.Set(ctx, Patch{
-		Provider:  &provider,
-		Providers: map[string]ProviderConfig{provider: {APIKey: "sk-or-windows"}},
-	}); err != nil {
-		t.Fatalf("Set provider key: %v", err)
-	}
-	stored, ok, err := secrets.Get(providerAPIKeySecretName(provider))
-	if err != nil || !ok || stored != "sk-or-windows" {
-		t.Fatalf("provider key = (%q, %v, %v), want (\"sk-or-windows\", true, nil)", stored, ok, err)
-	}
-
-	// Clearing removes the credential rather than leaving a stale entry.
-	empty := ""
-	if _, err := s.Set(ctx, Patch{WebSearchAPIKey: &empty}); err != nil {
-		t.Fatalf("clear web_search key: %v", err)
-	}
-	if ok, err := secrets.Exists(webSearchAPIKeySecretName); err != nil || ok {
-		t.Fatalf("web_search credential after clear = (%v, %v), want (false, nil)", ok, err)
+		t.Error("the key was left in settings.json")
 	}
 }

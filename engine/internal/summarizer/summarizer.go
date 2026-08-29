@@ -1,5 +1,10 @@
-// Package summarizer keeps node.summary in sync with node.content_doc by
-// running a background LLM summarization job after every content change.
+// Package summarizer keeps node.summary in sync with node.content_doc.
+//
+// There is no language model behind it any more. A short scene is its own
+// summary; a longer one gets its opening cut at a sentence; a container gets
+// its children rolled up. An agent connected over MCP replaces any of these
+// with a real summary through linetta_write_summary, and the freshness check
+// in summarizeOneDepth is what stops this from overwriting that.
 package summarizer
 
 import (
@@ -11,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 )
@@ -25,21 +29,19 @@ const maxSummarizeDepth = 6
 // asks the model to follow the manuscript's own language instead.
 
 type Summarizer struct {
-	nodes   *node.Repo
-	src     ai.ProviderSource
-	factory ai.ClientFactory
-	ch      chan string
-	ops     *opsstatus.Repo
-	now     func() int64
+	nodes *node.Repo
+	ch    chan string
+	ops   *opsstatus.Repo
+	now   func() int64
 
 	statusMu     sync.Mutex
 	failureCount int
 }
 
-func New(nodes *node.Repo, src ai.ProviderSource, factory ai.ClientFactory) *Summarizer {
+func New(nodes *node.Repo) *Summarizer {
 	return &Summarizer{
-		nodes: nodes, src: src, factory: factory,
-		ch: make(chan string, queueSize),
+		nodes: nodes,
+		ch:    make(chan string, queueSize),
 	}
 }
 
@@ -143,21 +145,16 @@ func (s *Summarizer) summarizeLeaf(ctx context.Context, n node.Node) {
 		return
 	}
 
-	summary, ok := s.summarizeViaLLM(ctx, n.ID, "", systemPrompt, plain)
-	if !ok {
-		// No model, or the request failed. A scene with no summary at all
-		// leaves the story brief blank, which costs an agent the context it
-		// needs to write the next scene — so Linetta writes the opening
-		// instead and says so. This is the only path once the MCP pivot
-		// removes the provider plumbing (#47).
-		summary = leadSummary(plain)
-	}
+	// The scene's own opening, cut at a sentence. Not a summary, and it does
+	// not claim to be — but a blank one would cost an agent the context it
+	// needs to write the next scene.
+	summary := leadSummary(plain)
 	if err := s.nodes.SetSummary(ctx, n.ID, summary, capturedVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: SetSummary %s: %v\n", n.ID, err)
 		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
-	s.recordOK(ctx, n.ID, !ok)
+	s.recordOK(ctx, n.ID, true)
 }
 
 // summarizeContainer rolls a container up from its children's Label+summary.
@@ -205,19 +202,15 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 		input = string(r[:containerSummaryMaxRunes])
 	}
 
-	summary, ok := s.summarizeViaLLM(ctx, n.ID, " (container)", containerSystemPrompt, input)
-	if !ok {
-		// The rolled-up children are already the honest answer for a
-		// container: a chapter is what its scenes are. Without a model the
-		// unit keeps that list rather than going blank.
-		summary = input
-	}
+	// The rolled-up children are the honest answer for a container: a chapter
+	// is what its scenes are.
+	summary := input
 	if err := s.nodes.SetSummary(ctx, n.ID, summary, capturedVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "summarizer: SetSummary (container) %s: %v\n", n.ID, err)
 		s.recordError(ctx, n.ID, err.Error())
 		return
 	}
-	s.recordOK(ctx, n.ID, !ok)
+	s.recordOK(ctx, n.ID, true)
 }
 
 func (s *Summarizer) recordError(ctx context.Context, nodeID string, msg string) {

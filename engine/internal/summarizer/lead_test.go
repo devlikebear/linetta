@@ -2,18 +2,11 @@ package summarizer
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
-	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
-	"github.com/devlikebear/tars/pkg/llm"
 )
-
-func noProvider(ai.ResolvedProvider) (llm.Client, error) {
-	return nil, errors.New("no provider configured")
-}
 
 func TestLeadSummary_keepsShortTextWhole(t *testing.T) {
 	got := leadSummary("비가 내렸다. 그는 우산을 펴지 않았다.")
@@ -62,7 +55,7 @@ func TestSummarizer_withoutAProvider_writesTheSceneLead(t *testing.T) {
 	body := "그는 문을 열었다. " + strings.Repeat("복도는 비어 있었다. ", 40)
 	_ = nodes.UpdateContent(ctx, *p.LastOpenedNodeID, longDoc(body), 1100)
 
-	sum := New(nodes, fixedProvider("none"), noProvider)
+	sum := New(nodes)
 	stop := sum.Start(ctx)
 	defer stop()
 
@@ -96,7 +89,7 @@ func TestSummarizer_leavesAnAuthoredSummaryAlone(t *testing.T) {
 		t.Fatalf("SetSummary: %v", err)
 	}
 
-	sum := New(nodes, fixedProvider("none"), noProvider)
+	sum := New(nodes)
 	stop := sum.Start(ctx)
 	defer stop()
 
@@ -120,8 +113,7 @@ func TestSummarizer_withoutAProvider_reportsHealthy(t *testing.T) {
 	_ = nodes.UpdateContent(ctx, *p.LastOpenedNodeID, longDoc(strings.Repeat("가나다라마", 200)), 1100)
 
 	ops := opsstatus.NewRepo(st)
-	sum := New(nodes, fixedProvider("none"), noProvider).
-		WithOpsStatus(ops, func() int64 { return 2000 })
+	sum := New(nodes).WithOpsStatus(ops, func() int64 { return 2000 })
 	stop := sum.Start(ctx)
 	defer stop()
 

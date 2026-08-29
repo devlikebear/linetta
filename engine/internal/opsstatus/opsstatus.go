@@ -12,11 +12,10 @@ import (
 )
 
 const (
-	JobBackup               = "backup.daily"
-	JobGitSync              = "git_sync"
-	JobFolderSync           = "folder_sync"
-	JobSummarizer           = "summarizer"
-	JobCompanionPersistence = "companion.persistence"
+	JobBackup     = "backup.daily"
+	JobGitSync    = "git_sync"
+	JobFolderSync = "folder_sync"
+	JobSummarizer = "summarizer"
 )
 
 // Status mirrors one ops_status row.

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/google/uuid"
 )
 
@@ -310,21 +311,38 @@ func defaultReferenceTitle(source string) string {
 	}
 }
 
+// purposeLabel names what a reference is for. It moved here from the prompt
+// builder, which is gone; the language switch went with it, because the one
+// remaining caller writes a stored summary rather than UI text and always
+// asked for the default.
+func purposeLabel(purpose string) string {
+	switch normalizeReferencePurpose(purpose) {
+	case ReferencePurposeStyle:
+		return "문체 참고"
+	case ReferencePurposeCanon:
+		return "설정/세계관"
+	case ReferencePurposeConstraint:
+		return "금지/주의"
+	default:
+		return "내용 참고"
+	}
+}
+
 func deterministicReferenceSummary(ref Reference) string {
-	body := trimRunesLocal(strings.Join(strings.Fields(ref.Content), " "), referenceSummaryRunes)
+	body := storyops.TrimRunes(strings.Join(strings.Fields(ref.Content), " "), referenceSummaryRunes)
 	if body == "" {
 		return ""
 	}
 	return fmt.Sprintf("%s · %s · 원문 %d자 중 발췌 요약\n%s",
-		purposeLabel(ref.Purpose, ""), ref.Title, ref.CharCount, body)
+		purposeLabel(ref.Purpose), ref.Title, ref.CharCount, body)
 }
 
 func referencePromptText(ref Reference) string {
 	if ref.Status == ReferenceStatusSummarized && strings.TrimSpace(ref.Summary) != "" {
-		return trimRunesLocal(ref.Summary, referencePromptRunes)
+		return storyops.TrimRunes(ref.Summary, referencePromptRunes)
 	}
 	if strings.TrimSpace(ref.Summary) != "" && ref.CharCount > referenceAutoSummaryRunes {
-		return trimRunesLocal(ref.Summary, referencePromptRunes)
+		return storyops.TrimRunes(ref.Summary, referencePromptRunes)
 	}
-	return trimRunesLocal(ref.Content, referencePromptRunes)
+	return storyops.TrimRunes(ref.Content, referencePromptRunes)
 }

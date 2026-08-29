@@ -38,21 +38,40 @@ func TestGetSettingsHandler_returnsDefaults(t *testing.T) {
 
 func TestSetSettingsHandler_partial(t *testing.T) {
 	store := newSettingsFixture(t)
-	res, err := SetSettings(store)(context.Background(), json.RawMessage(`{"provider":"openai-codex"}`))
+	res, err := SetSettings(store)(context.Background(), json.RawMessage(`{"theme":"dark"}`))
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}
 	var got settings.Config
 	_ = json.Unmarshal(res, &got)
-	if got.Provider != "openai-codex" {
-		t.Errorf("provider not applied: %+v", got)
+	if got.Theme != "dark" {
+		t.Errorf("theme not applied: %+v", got)
 	}
 }
 
-func TestSetSettingsHandler_invalidProvider(t *testing.T) {
+func TestSetSettingsHandler_invalidValueIsRejected(t *testing.T) {
 	store := newSettingsFixture(t)
-	_, err := SetSettings(store)(context.Background(), json.RawMessage(`{"provider":"nope"}`))
+	_, err := SetSettings(store)(context.Background(), json.RawMessage(`{"theme":"nope"}`))
 	if err == nil {
 		t.Error("expected validation error")
+	}
+}
+
+// The provider fields are no longer part of the patch surface (#47). A stale
+// client sending one must not be able to write it back.
+func TestSetSettingsHandler_ignoresRetiredProviderFields(t *testing.T) {
+	store := newSettingsFixture(t)
+	res, err := SetSettings(store)(context.Background(),
+		json.RawMessage(`{"provider":"nope","theme":"dark"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var got settings.Config
+	_ = json.Unmarshal(res, &got)
+	if got.Provider == "nope" {
+		t.Error("a retired field was written through the patch surface")
+	}
+	if got.Theme != "dark" {
+		t.Errorf("the rest of the patch was not applied: %+v", got)
 	}
 }
