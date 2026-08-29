@@ -32,7 +32,12 @@ Linetta is a writing tool. It no longer talks to a language model.
   homonym would be linked to the wrong record, so applying stays your call.
 - Engine failure and import messages now speak the reader's language. They were
   Korean sentences written in the engine, which an English or Japanese writer
-  saw verbatim.
+  saw verbatim. So do the section headings in an exported manuscript, and the
+  companion archive. Import reads all three, so a file exported in one language
+  still opens after you switch.
+- Fixed a character marked Protagonist counting for nothing unless you write in
+  Korean. The engine matched core story roles against Korean labels only, so a
+  connected agent asking for story context got a work with no cast.
 - Markdown export says where the file landed, and names the sync folder when it
   landed in one.
 
