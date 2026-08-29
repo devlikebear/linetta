@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.0.0 - 2026-08-29
+
+Linetta is a writing tool. It no longer talks to a language model.
+
+- Removed the built-in AI companion, the provider settings, and every path that
+  sent a manuscript to a third party. Linetta stores no API keys and calls no
+  models.
+- Added an MCP server hosted inside the app, so the agent you already run —
+  Claude Code, Claude Desktop — can read and write the work directly. It is off
+  until you consent, binds `127.0.0.1` only, and needs a token generated on your
+  machine. `read_only` mode omits the writing tools entirely.
+- Every change an agent makes is snapshotted before it lands, recorded in an
+  activity log, and undoable. A scene you are part way through editing is never
+  replaced behind your back.
+- Scene summaries no longer need a model: a short scene is its own summary, a
+  longer one keeps its opening, and an agent can replace either with a real one.
+- The Fact Book is now a place to record what you checked and where, rather than
+  to ask. Cards are readable by a connected agent.
+- Existing companion conversations are preserved. Settings → Backup can export
+  every project's transcript and remembered facts as one markdown file.
+- Provider API keys already in your OS keychain are left untouched; remove them
+  there if you want them gone.
+- `Cmd/Ctrl+J` and `Cmd/Ctrl+I` are unbound.
+
 ## v0.9.6 - 2026-08-22
 
 - Fixed folder sync and backup restore on Windows, which failed on every write because the atomic-write flush ran on a read-only file handle.

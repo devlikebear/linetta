@@ -8,7 +8,7 @@ This guide collects contributor-facing architecture, build, release, and trouble
 - Embedded Go engine linked through a C ABI
 - JSON-RPC envelopes as the internal request contract
 - SQLite under the local Linetta data directory
-- [`github.com/devlikebear/tars`](https://github.com/devlikebear/tars) for LLM provider integration
+- [`github.com/devlikebear/tars`](https://github.com/devlikebear/tars) for URL fetching and the keyword memory store
 
 Cargo links the embedded Go engine through `apps/desktop/src-tauri/build.rs`.
 
@@ -98,15 +98,41 @@ The iOS simulator target creates a no-sign `.app`, links the embedded Go engine,
 
 Signed iOS export is handled by the manual mobile release workflow because it depends on Apple team and signing credentials.
 
-## AI companion tools
+## MCP tools
 
-The `Cmd/Ctrl+J` companion runs through the TARS agent loop. When the active provider supports tool calls, Linetta exposes these built-in tools:
+Linetta hosts an MCP server inside the running app, so an external client —
+Claude Code, Claude Desktop — can work on the manuscript. It is off until the
+writer consents and enables it under **Settings → Connect an external agent**,
+binds `127.0.0.1` only, and requires a locally generated bearer token.
 
-- `web_search`: searches the web through Brave Search or Perplexity Sonar;
-- `web_fetch`: fetches a URL and returns extracted text with SSRF protection;
-- `linetta_apply_ops`: updates story state, including outlines, storylines, beats, characters, relationships, places, scenes, summaries, and memories.
+The tool budget is 15. Read tools are always registered; write tools appear
+only in `full` mode, so `read_only` omits them from `tools/list` entirely
+rather than refusing them at call time.
 
-Configure `web_search` in Settings under **LLM tools**. Provider credentials are stored locally; `web_fetch` does not require a key.
+Read:
+
+- `linetta_list_works`, `linetta_get_outline`, `linetta_get_story_context`
+- `linetta_read_scene`, `linetta_list_characters`, `linetta_get_fact_cards`
+- plus mention, search, and relationship lookups
+
+Write (`full` mode only):
+
+- `linetta_write_scene`: requires the `content_version` from a prior read, so a
+  scene the writer edited meanwhile is never silently overwritten;
+- `linetta_revise_scene`: exact-string replacement with a `dry_run` preview;
+- `linetta_write_summary`, `linetta_apply_story_ops`;
+- `linetta_create_checkpoint`, `linetta_undo_last_change`.
+
+Every mutation is snapshotted first, recorded in the activity log, and rate
+limited inside the registration decorator — so a new tool cannot be added
+without inheriting the limit.
+
+`web_fetch` (from TARS `pkg/tools`) is still used by the Fact Book to capture a
+source URL. It needs no key, and it is not exposed as an MCP tool.
+
+The engine links no language model. `scripts/validate-story-core-deps.sh`
+enforces that across the whole engine: `tars/pkg/llm`, `pkg/agentloop`, and
+`pkg/session` must not appear in `go list -deps ./...`.
 
 ## Versioning and builds
 
@@ -129,5 +155,5 @@ GitHub Actions workflows:
 
 - **Engine startup failure:** use the desktop diagnostic screen to retry and copy diagnostics.
 - **Embedded engine link failure:** run `cd apps/desktop/src-tauri && cargo build` and inspect the Go archive output from `build.rs`.
-- **AI provider error:** confirm the provider configuration in Settings and verify that its credentials work in the same shell environment.
+- **MCP client cannot connect:** confirm the server is on in Settings, that the port is not taken by something else, and that the token in your client config matches the current one.
 - **Backup or Git sync failure:** open Settings and inspect the operation status card for the latest error and timestamp.

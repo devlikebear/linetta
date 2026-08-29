@@ -329,7 +329,7 @@
 ### Task 5.3 — 데이터 보존 경로
 
 - [x] 컴패니언 대화 히스토리와 메모리를 마크다운 한 파일로 내보낸다. `export.companion_history` RPC가 전 작품을 하나의 아카이브로 만들고, 레거시 섹션의 버튼이 저장 대화상자로 넘긴다.
-- [ ] **테이블을 조용히 드롭하지 않는다.** 제거 후에도 데이터는 남고, 필요하면 읽을 수 있어야 한다. — 이 항목은 Phase 6의 제약이다. 여기서는 내보내기 경로만 만들었고, `companion_messages`를 실제로 남길지 지울지는 6.1에서 결정한다.
+- [x] **테이블을 조용히 드롭하지 않는다.** 6.1의 결정: `companion_messages`, `companion_references`, 그리고 디스크의 기억 파일 모두 **남긴다.** 마이그레이션도 없다. 내보내기 버튼은 레거시 설정 블록과 함께 사라지지 않고 백업 섹션으로 옮겨, 기록이 있는 라이브러리에만 보인다.
 
 **5단계 종료 조건 (수정됨):** ~~MCP만으로 한 작품 분량의 실제 집필이 가능하다는 것이 확인됐고~~ → **구조적으로 대체됨.**
 
@@ -346,6 +346,8 @@
 ---
 
 ## Phase 6 — 제거와 1.0.0
+
+**상태: 완료.** 실제 PR 순서는 #54(요약 폴백) → #56(MCP 알림 배선) → #57(워크스페이스) → #59(자료집+설정) → #60(엔진) → 문서·1.0.0. 계획서의 6.1↔6.2 순서를 뒤집은 이유는 아래 계획 정정 1을 보라.
 
 ~~5단계 검증이 끝난 뒤에만 진행한다.~~ 5.2의 실질 위험이 요약 폴백으로 구조적으로 닫혔으므로 바로 진행한다(위 계획 정정 참조).
 
@@ -380,15 +382,15 @@
 
 ### Task 6.3 — 문서와 스토어 문구
 
-- [ ] README를 다시 쓴다: "AI is optional" 섹션을 "당신의 에이전트와 함께 쓰기(MCP)"로 교체.
-- [ ] `docs/privacy-policy.md`에서 AI 프로바이더로 원고를 전송한다는 문구를 제거하고, MCP를 켠 경우 외부 클라이언트가 가져간다는 설명으로 바꾼다.
-- [ ] `docs/DEVELOPMENT.md`의 "AI companion tools" 절을 MCP 툴 카탈로그로 교체.
-- [ ] Mac App Store 설명, 스크린샷, CHANGELOG 갱신.
+- [x] README를 다시 쓴다: "AI is optional" 섹션을 "Writing with your own agent (MCP)"로 교체. 히어로 문구, 기능 목록, FAQ, 데이터 저장 설명도 함께 고쳤다.
+- [x] `docs/privacy-policy.md`의 3항을 3개 국어 모두 다시 썼다. "앱이 제3자 LLM에 보낸다"에서 "앱은 아무 데도 보내지 않는다; MCP를 켜면 사용자가 실행하는 클라이언트가 읽어 간다"로 바뀌었고, 수신자·토큰·로컬 전용·되돌리기를 명시했다. 시크릿 저장소 설명도 API 키에서 MCP 토큰으로 바꿨다.
+- [x] `docs/DEVELOPMENT.md`의 "AI companion tools"를 MCP 툴 카탈로그로 교체. 툴 예산 15개, `read_only`가 쓰기 툴을 목록에서 아예 빼는 것, 등록 데코레이터 안의 호출 한도, 그리고 엔진 전역 의존성 게이트를 적었다.
+- [x] CHANGELOG에 1.0.0 항목 추가. 스토어 문구에는 컴패니언 언급이 없어 고칠 것이 없었다(winget 설명은 "Local-first desktop writing app for long-form fiction"). **스크린샷은 남았다** — `docs/assets/screenshots/companion.png`가 이제 없는 화면을 보여준다. 실기에서 다시 찍어야 한다.
 
 ### Task 6.4 — 1.0.0
 
-- [ ] `make bump-version VERSION=1.0.0`
-- [ ] 마이그레이션 안내 문서: 기존 컴패니언 사용자가 MCP로 넘어오는 방법, 히스토리 데이터가 어떻게 되는지.
+- [x] `make bump-version VERSION=1.0.0`
+- [x] 마이그레이션 안내 문서: [`docs/migrating-to-1.0.md`](../../migrating-to-1.0.md). 대화 기록 내보내기, OS별 API 키 삭제 방법, MCP 연결 절차, 그리고 실제로 달라지는 것들(요약·시놉시스·자료집·레퍼런스)을 담았다.
 
 **6단계 종료 조건:** 앱이 어떤 LLM도 직접 호출하지 않고, 프로바이더 설정 화면이 존재하지 않으며, `make test` / `make test-mobile-engine` / `go build -tags mas ./...`가 전부 통과하고, `go list -deps`에 `tars/pkg/llm`·`pkg/agentloop`·`pkg/session`이 나타나지 않는다.
 
