@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Replace, Menu, Keyboard } from "lucide-react";
+import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
 import { McpIndicator } from "../components/McpIndicator";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
@@ -17,6 +17,7 @@ import { TiptapEditor, type TiptapHandle, type TiptapSelectionMenuPayload } from
 import { autoMentionDoc, countAutoMentionCandidates } from "../lib/editor/autoMention";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
+import { CanonPanel } from "../components/CanonPanel";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { ContextualEditPanel } from "../components/contextual/ContextualEditPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
@@ -131,20 +132,27 @@ export function Workspace() {
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
+  const [canonOpen, setCanonOpen] = useState(false);
+  // Bumped when an external agent changes the work, so the story world list
+  // reflects the three characters it just said it created (#28).
+  const [canonRefreshKey, setCanonRefreshKey] = useState(0);
   const prevInspectorRef = useRef<InspectorState>({
     factBook: false,
     contextual: false,
+    canon: false,
   });
   useEffect(() => {
     const next: InspectorState = {
       factBook: factBookOpen,
       contextual: contextualEditOpen,
+      canon: canonOpen,
     };
     const corrected = reconcileInspector(prevInspectorRef.current, next, sizeClass);
     if (corrected.factBook !== next.factBook) setFactBookOpen(corrected.factBook);
     if (corrected.contextual !== next.contextual) setContextualEditOpen(corrected.contextual);
+    if (corrected.canon !== next.canon) setCanonOpen(corrected.canon);
     prevInspectorRef.current = corrected;
-  }, [sizeClass, factBookOpen, contextualEditOpen]);
+  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen]);
   const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
@@ -448,7 +456,12 @@ export function Workspace() {
     projectId: projectId ?? null,
     openNodeId: load?.node.id ?? null,
     editorDirty,
-    onOutlineChanged: () => { void refreshOutlineFromEngine(); },
+    onOutlineChanged: () => {
+      void refreshOutlineFromEngine();
+      // linetta_apply_story_ops carries create_entity and create_relationship,
+      // so the same signal that refreshes the outline refreshes the cast.
+      setCanonRefreshKey((k) => k + 1);
+    },
     onSceneChanged: (nodeId) => { void reloadSceneFromEngine(nodeId); },
   });
 
@@ -954,6 +967,7 @@ export function Workspace() {
       const next = !v;
       if (next) {
             setContextualEditOpen(false);
+        setCanonOpen(false);
         setEntitySheetId(null);
         setThreadSheetId(null);
           }
@@ -968,9 +982,24 @@ export function Workspace() {
         setContextualSeed(null);
         setFactBookSelectedClaimRequest(null);
         setFactBookOpen(false);
+        setCanonOpen(false);
             setEntitySheetId(null);
         setThreadSheetId(null);
           }
+      return next;
+    });
+  }, []);
+
+  const toggleCanon = useCallback(() => {
+    setCanonOpen((v) => {
+      const next = !v;
+      if (next) {
+        setFactBookSelectedClaimRequest(null);
+        setFactBookOpen(false);
+        setContextualEditOpen(false);
+        setEntitySheetId(null);
+        setThreadSheetId(null);
+      }
       return next;
     });
   }, []);
@@ -1282,6 +1311,12 @@ export function Workspace() {
       run: toggleContextualEdit,
     });
     cmds.push({
+      id: "toggle-canon",
+      section: sectionProject,
+      label: t("canon.title"),
+      run: toggleCanon,
+    });
+    cmds.push({
       id: "toggle-fact-book",
       section: sectionProject,
       label: t("factBook.title"),
@@ -1294,7 +1329,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, gitSyncAvailable]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1496,6 +1531,14 @@ export function Workspace() {
           </button>
           <button
             type="button"
+            className={`ws-tool${canonOpen ? " is-active" : ""}`}
+            onClick={toggleCanon}
+            title={t("canon.title")}
+          >
+            <Library size={15} /> {t("canon.title")}
+          </button>
+          <button
+            type="button"
             className={`ws-tool${factBookOpen ? " is-active" : ""}`}
             onClick={toggleFactBook}
             title={t("factBook.title")}
@@ -1510,7 +1553,7 @@ export function Workspace() {
       </header>
 
       <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
-        (factBookOpen || contextualEditOpen) ? " right-wide" : ""
+        (factBookOpen || contextualEditOpen || canonOpen) ? " right-wide" : ""
       }${versionSheetNodeId ? " right-history" : ""}`}>
         {!railCollapsed && (
           <button
@@ -1730,6 +1773,19 @@ export function Workspace() {
             }}
             onSaved={() => {
               /* PlotPanel self-reloads */
+            }}
+          />
+        ) : canonOpen && load ? (
+          // Below the sheets on purpose: opening a record from the list hands
+          // the slot to EntitySheet, and closing the sheet lands back here
+          // instead of dumping the writer in the editor.
+          <CanonPanel
+            projectId={load.project.id}
+            refreshKey={canonRefreshKey}
+            onOpenEntity={(entityId) => setEntitySheetId(entityId)}
+            onClose={() => {
+              setCanonOpen(false);
+              focusEditor();
             }}
           />
         ) : sizeClass === "desktop" ? (

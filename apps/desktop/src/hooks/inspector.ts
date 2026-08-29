@@ -3,10 +3,11 @@ import type { SizeClass } from "./useSizeClass";
 export interface InspectorState {
   factBook: boolean;
   contextual: boolean;
+  canon: boolean;
 }
 
 type Key = keyof InspectorState;
-const PRIORITY: Key[] = ["factBook", "contextual"];
+const PRIORITY: Key[] = ["factBook", "contextual", "canon"];
 
 export function reconcileInspector(
   prev: InspectorState,
@@ -18,8 +19,9 @@ export function reconcileInspector(
   if (openCount <= 1) return next;
   const justOpened = PRIORITY.find((k) => !prev[k] && next[k]);
   const winner = justOpened ?? PRIORITY.find((k) => next[k])!;
-  return {
-    factBook: winner === "factBook",
-    contextual: winner === "contextual",
-  };
+  // Built from PRIORITY rather than named field-by-field, so a fourth panel is
+  // one entry in the list above instead of an edit here that is easy to skip.
+  const only = {} as InspectorState;
+  for (const k of PRIORITY) only[k] = k === winner;
+  return only;
 }

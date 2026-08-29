@@ -93,6 +93,47 @@ func TestListRelationshipsByEntityHandler(t *testing.T) {
 	}
 }
 
+func TestListRelationshipsHandler(t *testing.T) {
+	f := newRelFixture(t)
+	_, _ = f.rr.CreatePair(context.Background(), relationship.NewPairInput{
+		ProjectID: f.pID, FromID: f.a, ToID: f.b,
+		Label: "친구", InverseLabel: "친구",
+	})
+	res, err := ListRelationships(f.rr)(context.Background(),
+		json.RawMessage(`{"project_id":"`+f.pID+`"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	var list []relationship.Relationship
+	_ = json.Unmarshal(res, &list)
+	// Both halves of the pair, not just the one hanging off a single entity.
+	if len(list) != 2 {
+		t.Errorf("list = %+v", list)
+	}
+}
+
+func TestListRelationshipsHandlerRequiresProject(t *testing.T) {
+	f := newRelFixture(t)
+	if _, err := ListRelationships(f.rr)(context.Background(),
+		json.RawMessage(`{}`)); err == nil {
+		t.Error("missing project_id accepted")
+	}
+}
+
+func TestListRelationshipsHandlerEmptyIsArray(t *testing.T) {
+	f := newRelFixture(t)
+	res, err := ListRelationships(f.rr)(context.Background(),
+		json.RawMessage(`{"project_id":"`+f.pID+`"}`))
+	if err != nil {
+		t.Fatalf("handler: %v", err)
+	}
+	// A work with no relationships must answer [], not null: the panel maps
+	// over the result.
+	if string(res) != "[]" {
+		t.Errorf("empty list = %s", res)
+	}
+}
+
 func TestUpdateRelationshipHandler(t *testing.T) {
 	f := newRelFixture(t)
 	rel, _ := f.rr.CreateOne(context.Background(), relationship.NewInput{
