@@ -2,6 +2,7 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,11 @@ func newStoreOnTemp(t *testing.T) *Store {
 	}
 	return s
 }
+
+func boolPtr(v bool) *bool        { return &v }
+func intPtr(v int) *int           { return &v }
+func floatPtr(v float64) *float64 { return &v }
+func strPtr(v string) *string     { return &v }
 
 func TestLoad_missingFileReturnsDefaults(t *testing.T) {
 	s := newStoreOnTemp(t)
@@ -77,7 +83,7 @@ func TestSet_partialPatchPreservesUntouchedFields(t *testing.T) {
 
 func TestSet_persistsToDisk(t *testing.T) {
 	s := newStoreOnTemp(t)
-	if _, err := s.Set(context.Background(), Patch{Provider: strPtr("openai-codex")}); err != nil {
+	if _, err := s.Set(context.Background(), Patch{Theme: strPtr("dark")}); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
 	s2, err := New()
@@ -87,14 +93,6 @@ func TestSet_persistsToDisk(t *testing.T) {
 	got, _ := s2.Get(context.Background())
 	if got.Provider != "openai-codex" {
 		t.Errorf("provider not persisted across reload: %q", got.Provider)
-	}
-}
-
-func TestSet_rejectsUnknownProvider(t *testing.T) {
-	s := newStoreOnTemp(t)
-	_, err := s.Set(context.Background(), Patch{Provider: strPtr("bad-provider")})
-	if err == nil {
-		t.Error("expected validation error")
 	}
 }
 
@@ -301,54 +299,6 @@ func TestSet_safetyChecklistDismissed_persists(t *testing.T) {
 	}
 }
 
-func TestSet_aiDataSharingConsent_persistsAndCanBeWithdrawn(t *testing.T) {
-	s := newStoreOnTemp(t)
-	ctx := context.Background()
-	version := AIDataSharingConsentVersion
-	consentedAt := int64(1_720_000_000_000)
-	if _, err := s.Set(ctx, Patch{
-		AIDataSharingConsentVersion: &version,
-		AIDataSharingConsentedAt:    &consentedAt,
-	}); err != nil {
-		t.Fatalf("grant consent: %v", err)
-	}
-	if !s.HasAIDataSharingConsent() {
-		t.Fatal("consent should be active")
-	}
-	nextProvider := ProviderOpenRouter
-	if _, err := s.Set(ctx, Patch{Provider: &nextProvider}); err != nil {
-		t.Fatalf("change provider: %v", err)
-	}
-	if s.HasAIDataSharingConsent() {
-		t.Fatal("changing the data recipient should require renewed consent")
-	}
-	if _, err := s.Set(ctx, Patch{
-		AIDataSharingConsentVersion: &version,
-		AIDataSharingConsentedAt:    &consentedAt,
-	}); err != nil {
-		t.Fatalf("renew consent: %v", err)
-	}
-	reloaded, err := NewWithSecretStore(s.secrets)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	got, _ := reloaded.Get(ctx)
-	if got.AIDataSharingConsentVersion != version || got.AIDataSharingConsentedAt != consentedAt {
-		t.Fatalf("consent not persisted: %+v", got)
-	}
-	withdrawn := 0
-	zeroTime := int64(0)
-	if _, err := reloaded.Set(ctx, Patch{
-		AIDataSharingConsentVersion: &withdrawn,
-		AIDataSharingConsentedAt:    &zeroTime,
-	}); err != nil {
-		t.Fatalf("withdraw consent: %v", err)
-	}
-	if reloaded.HasAIDataSharingConsent() {
-		t.Fatal("consent should be withdrawn")
-	}
-}
-
 func TestLoad_legacyFileDefaultsOnboardingTourEnabled(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LINETTA_HOME", dir)
@@ -398,255 +348,6 @@ func TestSet_onboardingTour_persistsAndMerges(t *testing.T) {
 	}
 }
 
-func TestSet_webSearchConfig_persists(t *testing.T) {
-	s := newStoreOnTemp(t)
-	if _, err := s.Set(context.Background(), Patch{
-		WebSearchProvider: strPtr("perplexity"),
-		WebSearchAPIKey:   strPtr("secret-key"),
-	}); err != nil {
-		t.Fatalf("Set: %v", err)
-	}
-	got, _ := s.Get(context.Background())
-	if got.WebSearchProvider != "perplexity" {
-		t.Errorf("web_search_provider in-memory = %q", got.WebSearchProvider)
-	}
-	if got.WebSearchAPIKey != "" {
-		t.Errorf("web_search_api_key should be redacted in settings view, got %q", got.WebSearchAPIKey)
-	}
-	if !got.WebSearchAPIKeySet {
-		t.Errorf("web_search_api_key_set = false")
-	}
-	if s.WebSearchAPIKey() != "secret-key" {
-		t.Errorf("web search secret not resolved")
-	}
-
-	s2, err := NewWithSecretStore(s.secrets)
-	if err != nil {
-		t.Fatalf("re-New: %v", err)
-	}
-	reloaded, _ := s2.Get(context.Background())
-	if reloaded.WebSearchProvider != "perplexity" || !reloaded.WebSearchAPIKeySet || s2.WebSearchAPIKey() != "secret-key" {
-		t.Errorf("web search config not persisted: %+v", reloaded)
-	}
-}
-
-func TestGetUsesSecretPresenceWithoutReadingSecretValues(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("LINETTA_HOME", dir)
-	secrets := &countingSecretStore{data: map[string]string{
-		providerAPIKeySecretName(ProviderAnthropic): "provider-secret",
-		webSearchAPIKeySecretName:                   "web-secret",
-	}}
-	s, err := NewWithSecretStore(secrets)
-	if err != nil {
-		t.Fatalf("NewWithSecretStore: %v", err)
-	}
-	s.mu.Lock()
-	s.cfg.Providers[ProviderAnthropic] = ProviderConfig{Model: "claude-3"}
-	s.mu.Unlock()
-
-	got, err := s.Get(context.Background())
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if got.Providers[ProviderAnthropic].APIKey != "" || got.WebSearchAPIKey != "" {
-		t.Fatalf("settings view leaked secrets: %+v", got)
-	}
-	if !got.Providers[ProviderAnthropic].APIKeySet || !got.WebSearchAPIKeySet {
-		t.Fatalf("secret presence flags missing: %+v", got)
-	}
-	if secrets.getCount != 0 {
-		t.Fatalf("Get read secret values %d times; settings view should only check presence", secrets.getCount)
-	}
-}
-
-func TestSet_rejectsUnknownWebSearchProvider(t *testing.T) {
-	s := newStoreOnTemp(t)
-	if _, err := s.Set(context.Background(), Patch{WebSearchProvider: strPtr("unknown")}); err == nil {
-		t.Fatal("expected validation error")
-	}
-}
-
-func boolPtr(v bool) *bool        { return &v }
-func intPtr(v int) *int           { return &v }
-func floatPtr(v float64) *float64 { return &v }
-func strPtr(v string) *string     { return &v }
-
-func TestProvidersBackwardCompatLoadAndResolve(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("LINETTA_HOME", dir)
-	// Legacy file with no `providers` key must still load and resolve.
-	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"provider":"anthropic"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	s, err := New()
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	rp := s.Resolve()
-	if rp.Provider != "anthropic" {
-		t.Fatalf("provider=%q, want anthropic", rp.Provider)
-	}
-	if rp.Model != "" || rp.APIKey != "" || rp.CliPath != "" {
-		t.Fatalf("expected empty per-provider fields, got %+v", rp)
-	}
-}
-
-func TestResolveOpenAICodexDefaultsToChatGPTAccountModel(t *testing.T) {
-	s := newStoreOnTemp(t)
-
-	rp := s.Resolve()
-	if rp.Provider != ProviderOpenAICodex {
-		t.Fatalf("provider=%q, want %s", rp.Provider, ProviderOpenAICodex)
-	}
-	if rp.Model != DefaultOpenAICodexModel {
-		t.Fatalf("model=%q, want %q", rp.Model, DefaultOpenAICodexModel)
-	}
-}
-
-func TestResolveOpenAICodexKeepsExplicitModel(t *testing.T) {
-	s := newStoreOnTemp(t)
-	ctx := context.Background()
-	custom := "gpt-5.5"
-	if _, err := s.Set(ctx, Patch{
-		Providers: map[string]ProviderConfig{
-			ProviderOpenAICodex: {Model: custom},
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := s.Resolve().Model; got != custom {
-		t.Fatalf("model=%q, want explicit %q", got, custom)
-	}
-}
-
-func TestSetOpenAICodexReplacesUnsupportedLegacyModel(t *testing.T) {
-	s := newStoreOnTemp(t)
-	ctx := context.Background()
-	if _, err := s.Set(ctx, Patch{
-		Providers: map[string]ProviderConfig{
-			ProviderOpenAICodex: {Model: "gpt-5.3-codex"},
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := s.Get(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := cfg.Providers[ProviderOpenAICodex].Model; got != DefaultOpenAICodexModel {
-		t.Fatalf("stored model=%q, want %q", got, DefaultOpenAICodexModel)
-	}
-	if got := s.Resolve().Model; got != DefaultOpenAICodexModel {
-		t.Fatalf("resolved model=%q, want %q", got, DefaultOpenAICodexModel)
-	}
-}
-
-func TestSetProviderConfigMergePerKey(t *testing.T) {
-	s := newStoreOnTemp(t)
-	ctx := context.Background()
-	if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderConfig{"anthropic": {Model: "claude-3", APIKey: "k1"}}}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderConfig{"openai": {Model: "gpt-4o", APIKey: "k2"}}}); err != nil {
-		t.Fatal(err)
-	}
-	cfg, _ := s.Get(ctx)
-	if cfg.Providers["anthropic"].Model != "claude-3" {
-		t.Fatalf("anthropic clobbered: %+v", cfg.Providers)
-	}
-	if cfg.Providers["openai"].Model != "gpt-4o" {
-		t.Fatalf("openai missing: %+v", cfg.Providers)
-	}
-	if !cfg.Providers["anthropic"].APIKeySet || !cfg.Providers["openai"].APIKeySet {
-		t.Fatalf("api key set flags missing: %+v", cfg.Providers)
-	}
-}
-
-func TestSetRejectsUnknownProvider(t *testing.T) {
-	s := newStoreOnTemp(t)
-	bad := "bedrock"
-	if _, err := s.Set(context.Background(), Patch{Provider: &bad}); err == nil {
-		t.Fatal("expected error for unknown provider")
-	}
-}
-
-func TestResolveReturnsActiveProviderConfig(t *testing.T) {
-	s := newStoreOnTemp(t)
-	ctx := context.Background()
-	active := "gemini-native"
-	if _, err := s.Set(ctx, Patch{Provider: &active, Providers: map[string]ProviderConfig{"gemini-native": {Model: "gemini-2.5-pro", APIKey: "gk"}}}); err != nil {
-		t.Fatal(err)
-	}
-	rp := s.Resolve()
-	if rp.Provider != "gemini-native" || rp.Model != "gemini-2.5-pro" || rp.APIKey != "gk" {
-		t.Fatalf("resolve mismatch: %+v", rp)
-	}
-}
-
-func TestResolveReturnsOpenRouterDefaults(t *testing.T) {
-	s := newStoreOnTemp(t)
-	ctx := context.Background()
-	active := ProviderOpenRouter
-	if _, err := s.Set(ctx, Patch{
-		Provider: &active,
-		Providers: map[string]ProviderConfig{
-			ProviderOpenRouter: {APIKey: "or-test"},
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	rp := s.Resolve()
-	if rp.Provider != ProviderOpenRouter {
-		t.Fatalf("provider=%q, want %q", rp.Provider, ProviderOpenRouter)
-	}
-	if rp.BaseURL != OpenRouterBaseURL {
-		t.Fatalf("base_url=%q, want %q", rp.BaseURL, OpenRouterBaseURL)
-	}
-	if rp.Model != DefaultOpenRouterModel {
-		t.Fatalf("model=%q, want %q", rp.Model, DefaultOpenRouterModel)
-	}
-	if rp.APIKey != "or-test" {
-		t.Fatalf("api_key=%q, want stored key", rp.APIKey)
-	}
-}
-
-func TestSecretsAreNotWrittenToSettingsJSON(t *testing.T) {
-	s := newStoreOnTemp(t)
-	ctx := context.Background()
-	if _, err := s.Set(ctx, Patch{
-		Providers: map[string]ProviderConfig{
-			"anthropic": {Model: "claude-3", APIKey: "provider-secret"},
-		},
-		WebSearchAPIKey: strPtr("web-secret"),
-	}); err != nil {
-		t.Fatalf("Set: %v", err)
-	}
-
-	body, err := os.ReadFile(filepath.Join(s.dir, "settings.json"))
-	if err != nil {
-		t.Fatalf("read settings.json: %v", err)
-	}
-	for _, secret := range []string{"provider-secret", "web-secret", "api_key", "web_search_api_key"} {
-		if strings.Contains(string(body), secret) {
-			t.Fatalf("settings.json contains secret marker %q: %s", secret, body)
-		}
-	}
-
-	cfg, _ := s.Get(ctx)
-	if cfg.Providers["anthropic"].APIKey != "" || cfg.WebSearchAPIKey != "" {
-		t.Fatalf("secrets leaked through settings view: %+v", cfg)
-	}
-	if !cfg.Providers["anthropic"].APIKeySet || !cfg.WebSearchAPIKeySet {
-		t.Fatalf("secret presence flags missing: %+v", cfg)
-	}
-	if s.ProviderConfigFor("anthropic").APIKey != "provider-secret" || s.WebSearchAPIKey() != "web-secret" {
-		t.Fatalf("secrets not resolved through runtime accessors")
-	}
-}
-
 func TestPlaintextSecretsMigrateOutOfSettingsJSON(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LINETTA_HOME", dir)
@@ -664,9 +365,9 @@ func TestPlaintextSecretsMigrateOutOfSettingsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	rp := s.Resolve()
-	if rp.APIKey != "legacy-provider-secret" || s.WebSearchAPIKey() != "legacy-web-secret" {
-		t.Fatalf("legacy secrets not migrated: rp=%+v web=%q", rp, s.WebSearchAPIKey())
+	_ = s
+	if got, ok, err := secrets.Get(webSearchAPIKeySecretName); err != nil || !ok || got != "legacy-web-secret" {
+		t.Fatalf("web search secret not migrated: (%q, %v, %v)", got, ok, err)
 	}
 	body, err := os.ReadFile(filepath.Join(dir, "settings.json"))
 	if err != nil {
@@ -677,71 +378,55 @@ func TestPlaintextSecretsMigrateOutOfSettingsJSON(t *testing.T) {
 	}
 }
 
-func TestSetClearsStoredSecrets(t *testing.T) {
-	s := newStoreOnTemp(t)
-	ctx := context.Background()
-	if _, err := s.Set(ctx, Patch{
-		Providers: map[string]ProviderConfig{
-			"anthropic": {APIKey: "provider-secret"},
-		},
-		WebSearchAPIKey: strPtr("web-secret"),
-	}); err != nil {
-		t.Fatalf("set secrets: %v", err)
-	}
-	if _, err := s.Set(ctx, Patch{
-		Providers: map[string]ProviderConfig{
-			"anthropic": {ClearAPIKey: true},
-		},
-		WebSearchAPIKey: strPtr(""),
-	}); err != nil {
-		t.Fatalf("clear secrets: %v", err)
+// The companion's settings are no longer settable, but persist() writes an
+// enumerated struct — dropping them from that list would delete a writer's
+// stored provider config on the next unrelated save. This is the Phase 2
+// mcp_* bug in reverse, and the reason those fields stay in Config.
+func TestSet_leavesRetiredCompanionSettingsOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	path := filepath.Join(dir, "settings.json")
+	seed := `{"language":"ko","provider":"openrouter",` +
+		`"providers":{"openrouter":{"model":"openai/gpt-5.4","base_url":"https://example.test"}},` +
+		`"ai_data_sharing_consent_version":1,"ai_data_sharing_consented_at":1700000000000,` +
+		`"web_search_provider":"perplexity"}`
+	if err := os.WriteFile(path, []byte(seed), 0o600); err != nil {
+		t.Fatalf("seed settings.json: %v", err)
 	}
 
-	cfg, _ := s.Get(ctx)
-	if cfg.Providers["anthropic"].APIKeySet || cfg.WebSearchAPIKeySet {
-		t.Fatalf("secret flags not cleared: %+v", cfg)
+	s, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
-	if s.ProviderConfigFor("anthropic").APIKey != "" || s.WebSearchAPIKey() != "" {
-		t.Fatalf("runtime secrets not cleared")
+	if _, err := s.Set(context.Background(), Patch{Theme: strPtr("dark")}); err != nil {
+		t.Fatalf("Set: %v", err)
 	}
-}
 
-type countingSecretStore struct {
-	mu          sync.Mutex
-	data        map[string]string
-	getCount    int
-	existsCount int
-}
-
-func (s *countingSecretStore) Get(name string) (string, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.getCount++
-	v, ok := s.data[name]
-	return v, ok, nil
-}
-
-func (s *countingSecretStore) Set(name, value string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.data == nil {
-		s.data = map[string]string{}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read settings.json: %v", err)
 	}
-	s.data[name] = value
-	return nil
-}
-
-func (s *countingSecretStore) Delete(name string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.data, name)
-	return nil
-}
-
-func (s *countingSecretStore) Exists(name string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.existsCount++
-	_, ok := s.data[name]
-	return ok, nil
+	var onDisk Config
+	if err := json.Unmarshal(raw, &onDisk); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if onDisk.Provider != "openrouter" {
+		t.Errorf("provider = %q, want it untouched", onDisk.Provider)
+	}
+	if got := onDisk.Providers["openrouter"].Model; got != "openai/gpt-5.4" {
+		t.Errorf("provider model = %q, want it untouched", got)
+	}
+	if got := onDisk.Providers["openrouter"].BaseURL; got != "https://example.test" {
+		t.Errorf("provider base_url = %q, want it untouched", got)
+	}
+	if onDisk.AIDataSharingConsentVersion != 1 || onDisk.AIDataSharingConsentedAt != 1700000000000 {
+		t.Errorf("consent fields were rewritten: version=%d at=%d",
+			onDisk.AIDataSharingConsentVersion, onDisk.AIDataSharingConsentedAt)
+	}
+	if onDisk.WebSearchProvider != "perplexity" {
+		t.Errorf("web_search_provider = %q, want it untouched", onDisk.WebSearchProvider)
+	}
+	if onDisk.Theme != "dark" {
+		t.Errorf("theme = %q, want the patch applied", onDisk.Theme)
+	}
 }

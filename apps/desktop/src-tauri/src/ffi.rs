@@ -214,22 +214,6 @@ extern "C" fn notify_trampoline(method: *const c_char, params: *const c_char) {
 
 fn notification_event(method: &str) -> Option<&'static str> {
     match method {
-        "ai.delta" => Some("ai-delta"),
-        "ai.reset" => Some("ai-reset"),
-        "ai.done" => Some("ai-done"),
-        "ai.error" => Some("ai-error"),
-        "ai.cancelled" => Some("ai-cancelled"),
-        "companion.delta" => Some("companion-delta"),
-        "companion.reset" => Some("companion-reset"),
-        "companion.done" => Some("companion-done"),
-        "companion.error" => Some("companion-error"),
-        "companion.cancelled" => Some("companion-cancelled"),
-        "companion.proposal" => Some("companion-proposal"),
-        "companion.choices" => Some("companion-choices"),
-        "companion.applied" => Some("companion-applied"),
-        "companion.preview" => Some("companion-preview"),
-        "companion.thinking" => Some("companion-thinking"),
-        "companion.reasoning" => Some("companion-reasoning"),
         // An external MCP client changed the manuscript. Without this the
         // writer would keep looking at text the agent already replaced.
         "mcp.changed" => Some("mcp-changed"),

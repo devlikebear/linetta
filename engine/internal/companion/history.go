@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devlikebear/tars/pkg/session"
 	"github.com/google/uuid"
 )
 
@@ -178,74 +177,6 @@ UPDATE companion_messages
 	return err
 }
 
-func (r *HistoryRepo) ImportLegacy(ctx context.Context, projectID string, msgs []session.Message, importedAt int64) error {
-	if r == nil {
-		return nil
-	}
-	legacy := nonEmptySessionMessages(msgs)
-	if len(legacy) == 0 {
-		return nil
-	}
-	var done int
-	if err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(1) FROM companion_history_imports WHERE project_id = ?`, projectID).Scan(&done); err != nil {
-		return err
-	}
-	if done > 0 {
-		count, err := r.ProjectMessageCount(ctx, projectID)
-		if err != nil {
-			return err
-		}
-		if count > 0 {
-			return nil
-		}
-	}
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if done > 0 {
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM companion_history_imports WHERE project_id = ?`, projectID); err != nil {
-			return err
-		}
-	}
-	for _, m := range legacy {
-		createdAt := m.Timestamp.UnixMilli()
-		if createdAt <= 0 {
-			createdAt = importedAt
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO companion_messages
-  (id, project_id, node_id, run_id, role, scope, intent, status, content, created_at)
-VALUES (?, ?, NULL, NULL, ?, ?, '', ?, ?, ?)`,
-			uuid.NewString(), projectID, m.Role, HistoryScopeProject, HistoryStatusDone, m.Content, createdAt); err != nil {
-			return fmt.Errorf("import legacy companion history: %w", err)
-		}
-	}
-	if importedAt <= 0 {
-		importedAt = time.Now().UnixMilli()
-	}
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO companion_history_imports(project_id, imported_at)
-VALUES(?, ?)`, projectID, importedAt); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func nonEmptySessionMessages(msgs []session.Message) []session.Message {
-	out := make([]session.Message, 0, len(msgs))
-	for _, m := range msgs {
-		if strings.TrimSpace(m.Content) == "" {
-			continue
-		}
-		out = append(out, m)
-	}
-	return out
-}
-
 func (r *HistoryRepo) ProjectMessageCount(ctx context.Context, projectID string) (int, error) {
 	if r == nil {
 		return 0, nil
@@ -302,38 +233,6 @@ func normalizeHistoryStatus(status string) string {
 	default:
 		return HistoryStatusDone
 	}
-}
-
-func historyMessagesToSessionMessages(msgs []HistoryMessage) []session.Message {
-	out := make([]session.Message, 0, len(msgs))
-	for _, msg := range msgs {
-		out = append(out, session.Message{
-			Role:      msg.Role,
-			Content:   msg.Content,
-			Timestamp: time.UnixMilli(msg.CreatedAt).UTC(),
-		})
-	}
-	return out
-}
-
-func sessionMessagesToHistoryMessages(projectID string, msgs []session.Message) []HistoryMessage {
-	out := make([]HistoryMessage, 0, len(msgs))
-	for _, msg := range msgs {
-		createdAt := msg.Timestamp.UnixMilli()
-		if createdAt <= 0 {
-			createdAt = time.Now().UnixMilli()
-		}
-		out = append(out, HistoryMessage{
-			ID:        uuid.NewString(),
-			ProjectID: projectID,
-			Role:      msg.Role,
-			Scope:     HistoryScopeProject,
-			Status:    HistoryStatusDone,
-			Content:   msg.Content,
-			CreatedAt: createdAt,
-		})
-	}
-	return out
 }
 
 func historyErr(err error) error {

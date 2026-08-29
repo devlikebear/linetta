@@ -9,9 +9,6 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/devlikebear/tars/pkg/llm" // pin
-
-	"github.com/devlikebear/linetta/engine/internal/ai"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/companion"
@@ -21,10 +18,8 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
-	"github.com/devlikebear/linetta/engine/internal/modelcatalog"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
-	"github.com/devlikebear/linetta/engine/internal/openrouter"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -56,30 +51,6 @@ type App struct {
 	cancel  context.CancelFunc
 	closers []func() error
 	once    sync.Once
-}
-
-// providerSource adapts *settings.Store to ai.ProviderSource. The adapter lives
-// here so the settings package has no dependency on ai.
-type providerSource struct{ store *settings.Store }
-
-func (p providerSource) Resolve() ai.ResolvedProvider {
-	r := p.store.Resolve()
-	return ai.ResolvedProvider{
-		Provider:           r.Provider,
-		Model:              r.Model,
-		APIKey:             r.APIKey,
-		BaseURL:            r.BaseURL,
-		CliPath:            r.CliPath,
-		DataSharingConsent: p.store.HasAIDataSharingConsent(),
-	}
-}
-
-func (p providerSource) WebSearchProvider() string {
-	return p.store.WebSearchProvider()
-}
-
-func (p providerSource) WebSearchAPIKey() string {
-	return p.store.WebSearchAPIKey()
 }
 
 // Open constructs the full Linetta engine and registers every JSONRPC handler.
@@ -153,21 +124,13 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	if err != nil {
 		return fmt.Errorf("settings: %w", err)
 	}
-	providerSrc := providerSource{store: settingsStore}
 
-	aiRuns := store.NewAIRunsRepo(st)
-	runner := ai.NewRunner(s.Notifier(), aiRuns, ai.DefaultClientFactory, providerSrc)
-
-	summ := summarizer.New(nodes, providerSrc, ai.DefaultClientFactory).
-		WithOpsStatus(ops, clock)
+	summ := summarizer.New(nodes).WithOpsStatus(ops, clock)
 	stopSummarizer := summ.Start(ctx)
 	a.closers = append(a.closers, func() error {
 		stopSummarizer()
 		return nil
 	})
-
-	contextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
-		WithSummaryRefresher(summ)
 
 	syncDeps := syncDeps{
 		server:        s,
@@ -210,24 +173,14 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	// Named rather than inlined: the archive export reads the same transcript,
 	// and two repos over one table would be a needless second source.
 	companionHistory := companion.NewHistoryRepo(st.DB())
-	companionSvc := companion.NewService(
-		filepath.Join(home, "companion"),
-		projects, threads, entities, relationships, plotBuilder,
-		s.Notifier(), companion.ClientFactory(ai.DefaultClientFactory), providerSrc, home,
-		nodes, beats,
-	).WithFacts(facts).
-		WithOpsStatus(ops).
+	companionSvc := companion.NewService(home).
+		WithFacts(facts).
 		WithHistory(companionHistory).
-		WithReferences(companion.NewReferenceRepo(st.DB())).
-		WithManuscript(manuscriptSearcher).
-		WithSnapshots(snaps)
+		WithReferences(companion.NewReferenceRepo(st.DB()))
 
 	// The MCP host serves story tools to external agents. It binds only when
 	// the writer has turned MCP on and accepted its consent.
 	//
-	// The tool layer gets its OWN context builder, wired with the fact,
-	// memory, and reference sources. The builder above stays untouched so
-	// ai.run and ai.preview_context keep producing byte-identical prompts.
 	// A storyops instance of its own: undo batches live in memory on the
 	// service, so an agent can undo only what it applied — never the writer's
 	// own companion batch.
@@ -266,9 +219,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	a.closers = append(a.closers, stopMCP)
 
 	caps := handlers.Capabilities{
-		UnavailableProviders: ai.UnavailableProviders(),
-		GitSyncAvailable:     gitSyncAvailable,
-		MCPAvailable:         mcpAvailable,
+		GitSyncAvailable: gitSyncAvailable,
+		MCPAvailable:     mcpAvailable,
 	}
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, home, DefaultVersion, caps))
@@ -291,7 +243,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("projects.restore", handlers.RestoreProject(projects, clock))
 	s.Handle("projects.delete", handlers.DeleteProject(projects, companionSvc.DeleteProjectData))
 	s.Handle("projects.update", handlers.UpdateProject(projects, clock))
-	s.Handle("projects.rewrite_synopsis", handlers.RewriteProjectSynopsis(projects, contextBuilder, clock))
 	s.Handle("projects.clear_synopsis", handlers.ClearProjectSynopsis(projects, clock))
 	s.Handle("nodes.get", handlers.GetNode(nodes))
 	s.Handle("nodes.update_content", handlers.UpdateNodeContent(nodes, clock, summ.Enqueue))
@@ -349,22 +300,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("facts.update", handlers.UpdateFact(facts, clock))
 	s.Handle("facts.delete", handlers.DeleteFact(facts))
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
-	s.Handle("ai.run", handlers.RunAI(contextBuilder, runner, clock))
-	s.Handle("ai.preview_context", handlers.PreviewContext(contextBuilder))
-	s.Handle("ai.cancel", handlers.CancelAI(runner))
-	s.Handle("companion.preview_context", handlers.CompanionPreviewContext(companionSvc))
-	s.Handle("companion.send", handlers.CompanionSend(companionSvc, clock))
-	s.Handle("companion.history", handlers.CompanionHistory(companionSvc))
-	s.Handle("companion.compact", handlers.CompanionCompact(companionSvc, clock))
-	s.Handle("companion.clear", handlers.CompanionClear(companionSvc))
-	s.Handle("companion.cancel", handlers.CompanionCancel(companionSvc))
-	s.Handle("companion.remember", handlers.CompanionRemember(companionSvc))
-	s.Handle("companion.apply_ops", handlers.CompanionApplyOps(companionSvc, clock))
-	s.Handle("companion.undo_apply", handlers.CompanionUndoApply(companionSvc, clock))
-	s.Handle("companion.references.list", handlers.CompanionReferencesList(companionSvc))
-	s.Handle("companion.references.create", handlers.CompanionReferencesCreate(companionSvc, clock))
-	s.Handle("companion.references.update", handlers.CompanionReferencesUpdate(companionSvc, clock))
-	s.Handle("companion.references.delete", handlers.CompanionReferencesDelete(companionSvc))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
 	s.Handle("mcp.status", handlers.MCPStatus(mcpCtrl))
@@ -372,14 +307,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("mcp.disable", handlers.MCPDisable(mcpCtrl))
 	s.Handle("mcp.regenerate_token", handlers.MCPRegenerateToken(mcpCtrl))
 	s.Handle("mcp.activity", handlers.MCPActivity(mcpCtrl))
-	openRouterOAuth := openrouter.NewOAuthManager(openrouter.OAuthConfig{})
-	s.Handle("providers.list_models", handlers.ListModels(settingsStore, modelcatalog.Default()))
-	s.Handle("providers.detect_cli", handlers.DetectCLI())
-	s.Handle("providers.test", handlers.TestProvider(settingsStore, ai.DefaultClientFactory))
-	s.Handle("openrouter.oauth_start", handlers.OpenRouterOAuthStart(openRouterOAuth))
-	s.Handle("openrouter.oauth_finish", handlers.OpenRouterOAuthFinish(settingsStore, openRouterOAuth))
-	s.Handle("openrouter.key_info", handlers.OpenRouterKeyInfo(settingsStore, nil))
-	s.Handle("web_search.test", handlers.TestWebSearch(settingsStore, handlers.DefaultWebSearchTester))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))

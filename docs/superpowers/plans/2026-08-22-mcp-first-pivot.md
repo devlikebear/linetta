@@ -351,20 +351,32 @@
 
 ### Task 6.1 — 엔진 제거
 
-- [ ] `internal/ai`의 LLM 클라이언트/실행기와 `BuildMessages` 어댑터, `internal/companion` 잔여(에이전트 루프·세션·스트리밍), `internal/modelcatalog`, `internal/openrouter`, `internal/clidetect` 삭제.
-- [ ] `internal/summarizer`의 LLM 경로(`llm_path.go`) 삭제. 짧은 씬 평문 경로와 **긴 씬 리드 폴백**(`lead.go`)이 남아 유일한 경로가 된다. `nodes.update_content`의 훅은 유지 — 훅이 부르는 대상만 바뀐다.
-- [ ] RPC `ai.*`, `companion.*`, `providers.*`, `openrouter.*` 제거. `handlers.Capabilities`의 `UnavailableProviders` 정리.
-- [ ] **RPC `projects.rewrite_synopsis` 제거.** 프로바이더 없는 상태에서 이 메서드는 컨테이너 요약을 지우고 빈 문자열을 돌려주는 파괴적 동작이 된다(설계 문서 3.3절). `projects.clear_synopsis`는 무해하므로 유지 여부만 판단.
-- [ ] 설정에서 `provider`, `providers`, `ai_data_sharing_consent_*` 제거. 마이그레이션은 기존 값을 무시하되 파괴하지 않는다.
-- [ ] `tars` 의존성은 **유지한다** — `pkg/tools`의 `web_fetch`가 팩트북 URL 캡처에 쓰이고(`handlers/facts.go:108`), `storyops`의 `remember`가 `pkg/memory`를 쓴다. `pkg/llm`, `pkg/agentloop`, `pkg/session` 사용만 사라진다.
-- [ ] `handlers/websearch.go`, `web_search.test` RPC, `web_search_*` 설정을 제거한다(Phase 0 확정). `web_fetch`(`handlers/facts.go:108`, 키 불필요)는 남긴다.
+- [x] `internal/ai`, `internal/modelcatalog`, `internal/openrouter`, `internal/clidetect` 통째 삭제. `internal/companion`은 에이전트 루프·프롬프트·툴·세션 전사를 지우고 **데이터 계층만 남겼다** — `context_sources.go`(MCP 브리프의 팩트·기억·레퍼런스 소스), `memory.go`, `history.go`, `references.go`.
+- [x] `internal/summarizer`의 LLM 경로(`llm_path.go`) 삭제. 짧은 씬 평문 경로와 **긴 씬 리드 폴백**(`lead.go`)이 남아 유일한 경로가 된다. `nodes.update_content`의 훅은 유지 — 훅이 부르는 대상만 바뀐다.
+- [x] RPC `ai.*`, `companion.*`, `providers.*`, `openrouter.*` 제거(24개). `handlers.Capabilities`의 `UnavailableProviders`와 진단 응답 필드도 정리.
+- [x] **RPC `projects.rewrite_synopsis` 제거.** ContextPanel의 "재작성" 버튼도 함께 지웠다 — 계획서는 RPC만 적었지만 살아 있는 소비자가 있었다. `projects.clear_synopsis`는 모델과 무관하므로 유지하고, 시놉시스는 계속 손으로 편집하거나 에이전트가 `linetta_write_summary`로 쓴다.
+- [x] 설정의 `provider`, `providers`, `ai_data_sharing_consent_*`, `web_search_*`를 **Patch(쓰기 표면)에서만** 제거했다. `Config`와 `persist`의 필드 목록에는 남는다 — 빼면 다음 저장 때 디스크에서 사라진다(Phase 2의 `mcp_*` 버그와 같은 메커니즘, 방향만 반대). 왕복 테스트로 고정했다.
+- [x] `tars` 의존성은 **유지한다** — `pkg/tools`의 `web_fetch`가 팩트북 URL 캡처에 쓰이고(`handlers/facts.go:108`), `storyops`의 `remember`가 `pkg/memory`를 쓴다. `pkg/llm`, `pkg/agentloop`, `pkg/session` 사용만 사라진다.
+- [x] `handlers/websearch.go`, `web_search.test` RPC 제거. 설정 필드는 위와 같은 이유로 디스크에만 남는다. `web_fetch`는 유지.
+
+> **계획 정정 1 — 프론트엔드를 먼저 지웠다(6.2 → 6.1).** 엔진이 먼저 `companion.*`를 지우면, 아직 그걸 호출하는 프론트엔드와 만나 두 머지 사이에 main이 **런타임에** 깨진다. 게다가 프론트엔드 테스트는 rpc 모듈을 통째로 목킹하기 때문에 그걸 잡지 못한다. 소비자를 먼저 지우면 어느 시점에도 깨지지 않고, 잠시 남는 죽은 엔진 메서드는 무해하다. 실제 순서: B0(MCP 알림 배선 수정) → B1(워크스페이스) → B2(자료집) → B3(설정) → C(엔진).
+
+> **계획 정정 2 — 웹 검색 설정 UI는 6.1이 아니라 프론트엔드 PR에서 지웠다.** 위와 같은 이유다. 엔진이 `web_search.test`를 지우기 전에 호출자가 사라져 있어야 한다.
+
+> **계획 정정 3 — 계획에 없던 소비자가 둘 있었다.** `FactBookPanel`이 컴패니언으로 씬 검토·팩트체크를 돌리고 있었고(6.2 목록에 없음), `ContextPanel`에 `projects.rewrite_synopsis` 버튼이 살아 있었다(6.1은 RPC만 적었다). 자료집은 AI 흐름만 떼어내고 직접 기록하는 패널로 남겼다 — 카드 CRUD는 원래 직접 RPC였고, 계획서가 `web_fetch`를 유지하기로 한 것도 그 경로 때문이다.
+
+> **계획 정정 4 — 레퍼런스는 읽기 전용이 된다(사용자 결정).** `companion_references`를 읽는 쪽(MCP 브리프의 `WithReferenceSource`)은 살지만, 쓰는 쪽은 컴패니언 패널과 `companion.references.*` RPC뿐이었다. 기존 레퍼런스는 계속 브리프에 실리고 새로 만들 수는 없다 — `companion_messages`와 같은 모양이다. 쓰기 UI는 Phase 7에서 순수 창작 도구 기능으로 만든다.
+
+> **계획 정정 5 — 의존성 게이트를 엔진 전역으로 넓혔다.** `scripts/validate-story-core-deps.sh`가 `storycontext`/`storyops`만 보던 것을 `./...` 전체로 바꿨다. 제거가 끝난 지금은 엔진 어디에도 `tars/pkg/llm|agentloop|session`이 들어오면 안 된다. `pkg/tools`(팩트북 URL 캡처)와 `pkg/memory`(기억)는 모델을 담지 않으므로 그대로 링크된다.
+
+> **컴패니언 상태 진단 작업(`companion.persistence`)도 제거했다.** 그 작업을 기록하던 코드가 사라졌으므로 ops 상수와 설정 화면 카드를 함께 지웠다. 요약기 상태는 남는다.
 
 ### Task 6.2 — 프론트엔드 제거
 
-- [ ] `components/ai/*`, `components/companion/*`, `hooks/useCompanion*` 삭제.
-- [ ] Settings의 LLM 섹션, AI 온보딩 마법사, 관련 단축키·명령 팔레트 항목 삭제.
-- [ ] `ffi.rs`의 `notification_event`에서 `ai.*` / `companion.*` 매핑 제거, `lib.rs`의 `RENDERER_ENGINE_METHODS`에서 해당 메서드 제거.
-- [ ] `Cmd/Ctrl+J`를 비우거나 다른 집필 기능에 재할당한다.
+- [x] `components/ai/*`, `components/companion/*`, `hooks/useCompanion*`, `lib/companionDisplay`, `lib/companionScope`, `lib/applyProposal`, `lib/editor/useAIGeneration`, `lib/editor/commitGenerated`, `lib/openRouterDefaults`, `lib/secretStore` 삭제.
+- [x] Settings의 LLM 섹션, AI 연결 마법사, 웹 검색 설정, 명령 팔레트의 "AI" 섹션 삭제. 죽은 i18n 키 439개 × 3개 국어 정리(탐지 스크립트로 확인).
+- [x] `ffi.rs`의 `ai.*` / `companion.*` 매핑 16개, `lib.rs` 허용 목록 23개 제거. 허용 목록 보안 테스트가 이제 지워진 메서드가 **거부되는지**를 확인한다.
+- [x] `Cmd/Ctrl+J`(컴패니언)와 `Cmd/Ctrl+I`(AI 초안)를 재할당하지 않고 비웠다.
 
 ### Task 6.3 — 문서와 스토어 문구
 

@@ -125,10 +125,9 @@ describe("ContextPanel", () => {
     expect(onProjectChanged).toHaveBeenLastCalledWith({ ...project, outline: "새 개요", synopsis: "새 시놉시스" });
   });
 
-  it("rewrites and clears the project synopsis from the sidebar", async () => {
+  it("clears the project synopsis from the sidebar", async () => {
     const user = userEvent.setup();
     const onProjectChanged = vi.fn();
-    vi.mocked(projects.rewriteSynopsis).mockResolvedValue({ ...project, synopsis: "재작성된 시놉시스" });
     vi.mocked(projects.clearSynopsis).mockResolvedValue({ ...project, synopsis: "" });
 
     renderContextPanel({
@@ -136,11 +135,9 @@ describe("ContextPanel", () => {
       onProjectChanged,
     });
 
-    await user.click(screen.getByRole("button", { name: "재작성" }));
-    await waitFor(() => {
-      expect(projects.rewriteSynopsis).toHaveBeenCalledWith("project-1");
-    });
-    expect(screen.getByLabelText("작품 시놉시스")).toHaveValue("재작성된 시놉시스");
+    // Deriving a synopsis from scene summaries needed a model, so that button
+    // is gone. Clearing never did, and the field is still typed into by hand.
+    expect(screen.queryByRole("button", { name: "재작성" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "클리어" }));
     await waitFor(() => {

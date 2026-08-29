@@ -55,7 +55,7 @@ func PresetSeed(p PresetID) string {
 
 // Render applies the context selection and returns the final system and
 // user prompt texts. Callers that need chat-message envelopes wrap these
-// strings themselves (see internal/ai.BuildMessages).
+// strings themselves; the adapter that wrapped them for a model is gone.
 func Render(c Context) (system, user string) {
 	c = ApplyContextSelection(c)
 	return buildSystem(c), buildUser(c)
