@@ -813,28 +813,6 @@ export function Workspace() {
     setEditorDirty(false);
     cancelIdleCheckpoint();
   }, [load?.node.id, cancelIdleCheckpoint]);
-  const flushEditorBeforeCompanionSend = useCallback(async () => {
-    const currentLoad = loadRef.current;
-    const doc = editorRef.current?.getDoc();
-    if (!currentLoad || !doc) return;
-    debouncedSave.cancel(currentLoad.node.id);
-    setSaveStatus({ kind: "saving" });
-    try {
-      const updated = await sceneSaveQueue.save(currentLoad.node.id, JSON.stringify(doc));
-      setLoad((prev) => {
-        if (!prev || prev.node.id !== updated.id) return prev;
-        return { ...prev, node: updated, initialDoc: doc };
-      });
-      setCharCount(updated.word_count);
-      setSaveStatus({ kind: "saved", at: Date.now() });
-      setEditorDirty(false);
-      refreshMentioned(currentLoad.node.id);
-    } catch (e) {
-      setSaveStatus({ kind: "error", message: String(e) });
-      setError(String(e));
-      throw e;
-    }
-  }, [debouncedSave, refreshMentioned, sceneSaveQueue]);
   const throttledLastOpened = useThrottledCallback(
     useCallback(() => {
       if (!load) return;
@@ -1647,9 +1625,7 @@ export function Workspace() {
           <FactBookPanel
             projectId={load.project.id}
             nodeId={load.node.id}
-            sceneLabel={currentSceneTitle}
             selectedClaimRequest={factBookSelectedClaimRequest}
-            beforeReview={flushEditorBeforeCompanionSend}
             onImpactCheck={(text) => {
               setContextualSeed({ text, autoCheck: true });
               setFactBookOpen(false);

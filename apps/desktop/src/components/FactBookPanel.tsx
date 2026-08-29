@@ -1,96 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, CornerDownLeft, ExternalLink, Search, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BookOpen, ExternalLink, Search, Trash2, X } from "lucide-react";
 import { facts as factsApi } from "../lib/rpc";
-import type { CompanionProposal, FactCard, FactStatus } from "../lib/types";
+import type { FactCard, FactStatus } from "../lib/types";
 import { useI18n, type MessageKey } from "../lib/i18n";
-import { extractApplyOpsProposal, stripProposalBlock } from "../lib/companionDisplay";
-import { useCompanion } from "../hooks/useCompanion";
-import { ChoiceCard } from "./companion/ChoiceCard";
-import { Markdown } from "./companion/Markdown";
-import { ProposalCard } from "./companion/ProposalCard";
 import "./FactBookPanel.css";
+
+/** The writer's dossier: claims they have checked, and where they checked them.
+ *
+ *  This used to drive the companion — "review this scene", "find me a source"
+ *  — and the MCP pivot took that half away. What is left is the half that was
+ *  never about a model: the writer names a claim, gives a URL, and Linetta
+ *  fetches the page and files it. An agent connected over MCP can read these
+ *  cards with linetta_get_fact_cards.
+ */
 
 interface Props {
   projectId: string;
   nodeId: string;
-  sceneLabel: string;
   selectedClaimRequest?: { id: string; claim: string } | null;
-  beforeReview?: () => Promise<void> | void;
   onClose: () => void;
   onChanged?: () => void;
   onImpactCheck?: (text: string) => void;
-}
-
-// The fact-check flows send user-turn prompts to the companion, so they are
-// localized like every other frontend string; the choice-prefix strip accepts
-// all supported languages because a transcript can mix them.
-type Translate = ReturnType<typeof useI18n>["t"];
-
-function buildReviewPrompt(t: Translate, sceneLabel: string): string {
-  return t("factBook.ai.review", { sceneLabel, savePrefix: t("factBook.ai.savePrefix") });
-}
-
-const CHOICE_SAVE_PREFIXES = /^(?:검색 후 자료집에 저장|Save to dossier after search|検索して資料集に保存):\s*/i;
-
-function claimFromChoice(text: string): string {
-  return text.replace(CHOICE_SAVE_PREFIXES, "").trim();
-}
-
-function normalizeClaim(text: string): string {
-  return text.replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-function buildFactCheckPrompt(t: Translate, claim: string): string {
-  return t("factBook.ai.factCheck", { claim });
-}
-
-function buildAlternativeSourcePrompt(t: Translate, claim: string, failedURL: string, error: string): string {
-  return t("factBook.ai.altSource", { claim, failedURL, error });
-}
-
-function firstURL(text: string): string {
-  const match = text.match(/https?:\/\/[^\s<>"']+/i);
-  return match ? match[0].replace(/[),.;\]]+$/, "") : "";
-}
-
-function sourceURLFromAssistant(text: string): string {
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i += 1) {
-    const urls = lines[i].match(/https?:\/\/[^\s<>"']+/gi) ?? [];
-    for (const raw of urls) {
-      const context = [lines[i - 1] ?? "", lines[i], lines[i + 1] ?? ""].join(" ").toLowerCase();
-      if (isRejectedSourceContext(context)) continue;
-      return raw.replace(/[),.;\]]+$/, "");
-    }
-  }
-  return "";
-}
-
-function isRejectedSourceContext(context: string): boolean {
-  return [
-    /404/,
-    /403/,
-    /실패/,
-    /오류/,
-    /불충분/,
-    /부족/,
-    /차단/,
-    /저장하지 못/,
-    /저장 못/,
-    /본문[^.]*충분하지/,
-    /본문[^.]*추출[^.]*안/,
-    /접근[^.]*안/,
-    /접근[^.]*불/,
-    /접근[^.]*실패/,
-    /not accessible/,
-    /inaccessible/,
-    /blocked/,
-    /failed/,
-    /failure/,
-    /insufficient/,
-    /could not/,
-    /unable/,
-  ].some((pattern) => pattern.test(context));
 }
 
 function statusKey(status: FactStatus): MessageKey {
@@ -102,32 +32,30 @@ function statusKey(status: FactStatus): MessageKey {
   }
 }
 
-function extractFactCardProposal(text: string, runId = "fact-book-inline-apply-ops"): CompanionProposal | null {
-  const proposal = extractApplyOpsProposal(text, runId);
-  if (!proposal?.ops?.length) return null;
-  if (!proposal.ops.every((op) => op.op === "create_fact_card")) return null;
-  return proposal;
+function firstURL(text: string): string {
+  const match = text.match(/https?:\/\/[^\s<>"']+/i);
+  return match ? match[0].replace(/[),.;\]]+$/, "") : "";
 }
 
-export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequest, beforeReview, onClose, onChanged, onImpactCheck }: Props) {
+export function FactBookPanel({
+  projectId,
+  nodeId,
+  selectedClaimRequest,
+  onClose,
+  onChanged,
+  onImpactCheck,
+}: Props) {
   const { t } = useI18n();
   const [cards, setCards] = useState<FactCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [reviewing, setReviewing] = useState(false);
-  const [directSaving, setDirectSaving] = useState(false);
-  const [replyDraft, setReplyDraft] = useState("");
-  const [feedbackAnchor, setFeedbackAnchor] = useState<number | null>(null);
-  const [feedbackNote, setFeedbackNote] = useState("");
-  const [feedbackKind, setFeedbackKind] = useState<"ok" | "error">("ok");
-  const [directFactClaim, setDirectFactClaim] = useState("");
-  const [sourceRetry, setSourceRetry] = useState<{ claim: string; url: string; error: string } | null>(null);
-  const [awaitingFactSave, setAwaitingFactSave] = useState(false);
-  const nodeIdRef = useRef<string | null>(nodeId);
-  const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const handledSelectedClaimRequestRef = useRef<string | null>(null);
-
-  useEffect(() => { nodeIdRef.current = nodeId; }, [nodeId]);
+  const [claimDraft, setClaimDraft] = useState("");
+  const [urlDraft, setUrlDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState("");
+  const [noteKind, setNoteKind] = useState<"ok" | "error">("ok");
+  const claimInputRef = useRef<HTMLInputElement | null>(null);
+  const handledClaimRequestRef = useRef<string | null>(null);
 
   const loadFacts = useCallback(async () => {
     setLoading(true);
@@ -141,173 +69,51 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
     }
   }, [projectId, nodeId]);
 
-  const handleApplied = useCallback(() => {
-    setAwaitingFactSave(false);
-    setFeedbackKind("ok");
-    setFeedbackNote(t("factBook.applied"));
-    void loadFacts();
-    onChanged?.();
-  }, [loadFacts, onChanged, t]);
-
-  const { messages, streaming, thinking, status, send } = useCompanion(projectId, nodeIdRef, handleApplied);
-  const busy = status === "streaming";
-
   useEffect(() => { void loadFacts(); }, [loadFacts]);
 
-  const saveDirectURL = useCallback(async (claim: string, url: string, startMessage?: string) => {
-    setDirectSaving(true);
-    setSourceRetry(null);
-    if (startMessage) {
-      setFeedbackKind("ok");
-      setFeedbackNote(startMessage);
+  // Selecting prose and choosing "fact check" fills the claim in rather than
+  // asking a model about it. The writer still has to supply the source, which
+  // is the part that makes the card worth anything.
+  useEffect(() => {
+    if (!selectedClaimRequest || handledClaimRequestRef.current === selectedClaimRequest.id) return;
+    const claim = selectedClaimRequest.claim.trim();
+    if (!claim) return;
+    handledClaimRequestRef.current = selectedClaimRequest.id;
+    setClaimDraft(claim);
+    setNote("");
+    claimInputRef.current?.focus();
+  }, [selectedClaimRequest]);
+
+  const saveCard = async () => {
+    const claim = claimDraft.trim();
+    const url = firstURL(urlDraft);
+    if (saving) return;
+    if (!claim) {
+      setNoteKind("error");
+      setNote(t("factBook.directNeedsClaim"));
+      return;
     }
+    if (!url) {
+      setNoteKind("error");
+      setNote(t("factBook.needsUrl"));
+      return;
+    }
+    setSaving(true);
+    setNote("");
     try {
       await factsApi.createFromUrl({ project_id: projectId, node_id: nodeId, claim, url });
-      setReplyDraft("");
-      setDirectFactClaim("");
-      setAwaitingFactSave(false);
-      setSourceRetry(null);
-      setFeedbackKind("ok");
-      setFeedbackNote(t("factBook.directSaved"));
+      setClaimDraft("");
+      setUrlDraft("");
+      setNoteKind("ok");
+      setNote(t("factBook.directSaved"));
       await loadFacts();
       onChanged?.();
     } catch (err) {
-      const error = String(err);
-      setFeedbackKind("error");
-      setFeedbackNote(t("factBook.directSaveFailed", { error }));
-      setSourceRetry({ claim, url, error });
+      setNoteKind("error");
+      setNote(t("factBook.directSaveFailed", { error: String(err) }));
     } finally {
-      setDirectSaving(false);
+      setSaving(false);
     }
-  }, [loadFacts, nodeId, onChanged, projectId, t]);
-
-  const latestAssistantInfo = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") return { index: i, message: messages[i] };
-    }
-    return null;
-  }, [messages]);
-  const latestAssistant = latestAssistantInfo?.message ?? null;
-  const displayStreaming = stripProposalBlock(streaming);
-  const latestAssistantDisplayContent = stripProposalBlock(latestAssistant?.content ?? "");
-  const inlineFactProposal = useMemo(() => {
-    if (!latestAssistant || latestAssistant.proposal) return null;
-    return extractFactCardProposal(latestAssistant.content ?? "", latestAssistant.choices?.run_id);
-  }, [latestAssistant]);
-  const latestProposal = latestAssistant?.proposal ?? inlineFactProposal ?? undefined;
-  const savedClaims = useMemo(() => new Set(cards.map((card) => normalizeClaim(card.claim))), [cards]);
-  const latestChoices = useMemo(() => {
-    if (!latestAssistant?.choices) return null;
-    return {
-      ...latestAssistant.choices,
-      options: latestAssistant.choices.options.filter((option) => !savedClaims.has(normalizeClaim(claimFromChoice(option)))),
-    };
-  }, [latestAssistant, savedClaims]);
-  const hasLatestChoices = Boolean(latestChoices && (latestChoices.options.length > 0 || latestChoices.allow_custom));
-  const isNewFeedback = feedbackAnchor !== null && latestAssistantInfo !== null && latestAssistantInfo.index > feedbackAnchor;
-  const showAssistantContent = Boolean(
-    latestAssistantDisplayContent &&
-    (isNewFeedback || latestAssistant?.errored || latestAssistant?.choices || latestProposal),
-  );
-  const showCompanionFeedback = Boolean(
-    busy || streaming || feedbackNote || showAssistantContent || hasLatestChoices || latestProposal,
-  );
-
-  useEffect(() => {
-    if (!awaitingFactSave || busy || directSaving || feedbackNote || !isNewFeedback || !latestAssistant) return;
-    if (latestProposal || latestAssistant.choices) return;
-    const url = sourceURLFromAssistant(latestAssistant.content ?? "");
-    const claim = directFactClaim.trim();
-    if (url && claim) {
-      setAwaitingFactSave(false);
-      void saveDirectURL(claim, url, t("factBook.autoSaving"));
-      return;
-    }
-    setFeedbackKind("error");
-    setFeedbackNote(t("factBook.saveNotApplied"));
-  }, [awaitingFactSave, busy, directFactClaim, directSaving, feedbackNote, isNewFeedback, latestAssistant, latestProposal, saveDirectURL, t]);
-
-  const markFeedbackStart = useCallback(() => {
-    setFeedbackAnchor(messages.length);
-    setFeedbackNote("");
-    setFeedbackKind("ok");
-  }, [messages.length]);
-
-  const startReview = async () => {
-    if (reviewing || status === "streaming") return;
-    setDirectFactClaim("");
-    setSourceRetry(null);
-    setAwaitingFactSave(false);
-    markFeedbackStart();
-    setReviewing(true);
-    try {
-      await beforeReview?.();
-      await send(buildReviewPrompt(t, sceneLabel));
-    } finally {
-      setReviewing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!selectedClaimRequest || handledSelectedClaimRequestRef.current === selectedClaimRequest.id) return;
-    if (busy || directSaving) return;
-    const claim = selectedClaimRequest.claim.trim();
-    if (!claim) return;
-    handledSelectedClaimRequestRef.current = selectedClaimRequest.id;
-    setDirectFactClaim(claim);
-    setSourceRetry(null);
-    setAwaitingFactSave(true);
-    markFeedbackStart();
-    void (async () => {
-      await beforeReview?.();
-      await send(buildFactCheckPrompt(t, claim));
-    })();
-  }, [beforeReview, busy, directSaving, markFeedbackStart, selectedClaimRequest, send, t]);
-
-  const submitReply = async () => {
-    const text = replyDraft.trim();
-    if (!text || busy || directSaving) return;
-    const url = firstURL(text);
-    markFeedbackStart();
-    if (url) {
-      const claim = directFactClaim.trim();
-      if (!claim) {
-        setFeedbackKind("error");
-        setFeedbackNote(t("factBook.directNeedsClaim"));
-        return;
-      }
-      await saveDirectURL(claim, url);
-      return;
-    }
-    setReplyDraft("");
-    setSourceRetry(null);
-    await send(text);
-  };
-
-  const pickChoice = (text: string) => {
-    const claim = claimFromChoice(text);
-    setDirectFactClaim(claim);
-    setSourceRetry(null);
-    setAwaitingFactSave(Boolean(claim));
-    markFeedbackStart();
-    void send(claim ? buildFactCheckPrompt(t, claim) : text);
-  };
-
-  const retryAlternativeSource = () => {
-    if (!sourceRetry || busy || directSaving) return;
-    const retry = sourceRetry;
-    setDirectFactClaim(retry.claim);
-    setAwaitingFactSave(true);
-    setReplyDraft("");
-    setSourceRetry(null);
-    markFeedbackStart();
-    setFeedbackKind("ok");
-    setFeedbackNote(t("factBook.retryingSource"));
-    void send(buildAlternativeSourcePrompt(t, retry.claim, retry.url, retry.error));
-  };
-
-  const focusReplyInput = () => {
-    replyInputRef.current?.focus();
   };
 
   const deleteCard = async (id: string) => {
@@ -323,70 +129,35 @@ export function FactBookPanel({ projectId, nodeId, sceneLabel, selectedClaimRequ
         <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}><X size={16} /></button>
       </div>
 
-      <div className="fact-review">
-        <button type="button" className="btn accent sm" onClick={startReview} disabled={reviewing || busy || directSaving}>
-          <Search size={14} /> {reviewing || busy || directSaving ? t("factBook.reviewing") : t("factBook.reviewScene")}
-        </button>
-        <p>{t("factBook.reviewHint")}</p>
-      </div>
-
-      {showCompanionFeedback && (
-        <section className="fact-companion-box">
-          {status === "streaming" && <div className="companion-thinking"><span className="ai-working-dot" aria-hidden="true" /> {thinking || t("companion.thinking")}</div>}
-          {displayStreaming && <div className="fact-companion-prose"><Markdown text={displayStreaming} /></div>}
-          {feedbackNote && <div className={`fact-feedback ${feedbackKind}`}>{feedbackNote}</div>}
-          {sourceRetry && feedbackKind === "error" && !busy && !directSaving && (
-            <div className="fact-feedback-actions">
-              <button type="button" className="fact-feedback-action" onClick={retryAlternativeSource}>
-                <Search size={13} /> {t("factBook.findAlternativeSource")}
-              </button>
-            </div>
-          )}
-          {showAssistantContent && (
-            <div className={`fact-companion-prose${latestAssistant?.errored ? " errored" : ""}`}>
-              {latestAssistant?.errored ? latestAssistantDisplayContent : <Markdown text={latestAssistantDisplayContent} />}
-            </div>
-          )}
-          {latestProposal && (
-            <ProposalCard proposal={latestProposal} projectId={projectId} nodeIdRef={nodeIdRef} onApplied={handleApplied} />
-          )}
-          {hasLatestChoices && latestChoices && (
-            <ChoiceCard
-              choices={latestChoices}
-              disabled={busy || directSaving}
-              lockAfterPick={false}
-              onPick={pickChoice}
-              onCustom={focusReplyInput}
-            />
-          )}
-        </section>
-      )}
-
       <form
-        className="fact-reply"
+        className="fact-new"
         onSubmit={(e) => {
           e.preventDefault();
-          void submitReply();
+          void saveCard();
         }}
       >
-        <textarea
-          ref={replyInputRef}
-          value={replyDraft}
-          aria-label={t("factBook.directInput")}
-          placeholder={t("factBook.directPlaceholder")}
-          rows={2}
-          disabled={busy || directSaving}
-          onChange={(e) => setReplyDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void submitReply();
-            }
-          }}
+        <input
+          ref={claimInputRef}
+          type="text"
+          value={claimDraft}
+          aria-label={t("factBook.claimLabel")}
+          placeholder={t("factBook.claimPlaceholder")}
+          disabled={saving}
+          onChange={(e) => setClaimDraft(e.target.value)}
         />
-        <button type="submit" className="fact-reply-send" disabled={!replyDraft.trim() || busy || directSaving} aria-label={t("companion.send")}>
-          <CornerDownLeft size={15} />
+        <input
+          type="text"
+          value={urlDraft}
+          aria-label={t("factBook.urlLabel")}
+          placeholder={t("factBook.urlPlaceholder")}
+          disabled={saving}
+          onChange={(e) => setUrlDraft(e.target.value)}
+        />
+        <button type="submit" className="btn accent sm" disabled={saving}>
+          {saving ? t("factBook.saving") : t("factBook.save")}
         </button>
+        <p className="fact-new-hint">{t("factBook.hint")}</p>
+        {note && <div className={`fact-feedback ${noteKind}`}>{note}</div>}
       </form>
 
       <div className="panel-scroll fact-list">
