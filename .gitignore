@@ -16,6 +16,8 @@ apps/desktop/.vite/
 apps/desktop/*.tsbuildinfo
 apps/desktop/vite.config.d.ts
 apps/desktop/vite.config.js
+apps/site/build/
+apps/site/.svelte-kit/
 
 # Rust / Tauri
 apps/desktop/src-tauri/target/

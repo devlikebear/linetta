@@ -1,0 +1,238 @@
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,300;1,6..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------
+   Linetta site — tokens mirror the desktop app's default "hanji"
+   palette (apps/desktop/src/App.css). Light is the app's default,
+   so it is the site's default too; the dark block below is the
+   same palette's dark set, not an invented one. Keep both in sync
+   when the app's palette moves.
+   ------------------------------------------------------------ */
+
+@theme {
+  --color-paper: #d1dccd;
+  --color-surface: #e9efe4;
+  --color-surface-2: #c4d1bf;
+  --color-surface-3: #b6c4b1;
+
+  --color-ink: #182018;
+  --color-ink-soft: #3e4a40;
+  --color-muted: #556053;
+  --color-muted-2: #737d6f;
+
+  --color-line: #b8c5b3;
+  --color-line-soft: #cbd6c6;
+
+  --color-accent: #2d6f64;
+  --color-accent-deep: #23574f;
+  --color-on-accent: #e9efe4;
+
+  --color-sienna: #7d5a2e;
+  --color-danger: #9d3a34;
+
+  --font-serif: 'Newsreader', 'Nanum Myeongjo', 'AppleMyungjo', 'Hiragino Mincho ProN',
+    'Yu Mincho', 'Apple SD Gothic Neo', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, 'Menlo', monospace;
+
+  --measure: 34rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --shade: 24 32 24;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --shade: 0 0 0;
+
+      --color-paper: #0a1c12;
+      --color-surface: #12271b;
+      --color-surface-2: #1c3325;
+      --color-surface-3: #274030;
+
+      --color-ink: #e8f1e7;
+      --color-ink-soft: #c4d2c3;
+      --color-muted: #90a091;
+      --color-muted-2: #667667;
+
+      --color-line: #2f4a37;
+      --color-line-soft: #1f3527;
+
+      --color-accent: #6fbaad;
+      --color-accent-deep: #8ccfc3;
+      --color-on-accent: #06170e;
+
+      --color-sienna: #c39a5f;
+      --color-danger: #e08a83;
+    }
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-serif);
+    font-size: 1.0625rem;
+    line-height: 1.7;
+    color: var(--color-ink);
+    background: var(--color-paper);
+    /* The page ground is paper, not a flat fill: a faint warm bloom at the
+       top mirrors the app's library gradient. */
+    background-image: radial-gradient(
+      120% 60% at 50% -10%,
+      color-mix(in srgb, var(--color-surface) 85%, transparent) 0%,
+      transparent 60%
+    );
+    background-attachment: fixed;
+  }
+
+  h1, h2, h3, h4 {
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    word-break: keep-all;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 26%, transparent);
+    color: var(--color-ink);
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border-radius: 6px;
+    border: 3px solid var(--color-paper);
+  }
+}
+
+@layer components {
+  .wrap {
+    max-width: 68rem;
+    margin-inline: auto;
+    padding-inline: 1.5rem;
+  }
+
+  /* Mono margin marks — the app labels its rails this way. */
+  .mark {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-muted-2);
+  }
+
+  .em-accent {
+    color: var(--color-accent);
+    font-style: italic;
+  }
+  html:lang(ko) .em-accent,
+  html:lang(ja) .em-accent {
+    font-style: normal;
+  }
+
+  .rule {
+    height: 1px;
+    background: var(--color-line);
+    border: 0;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.15rem;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  }
+  .btn-primary {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+  .btn-primary:hover { background: var(--color-accent-deep); }
+  .btn-ghost {
+    border-color: var(--color-line);
+    color: var(--color-ink-soft);
+    background: color-mix(in srgb, var(--color-surface) 55%, transparent);
+  }
+  .btn-ghost:hover {
+    border-color: var(--color-muted-2);
+    color: var(--color-ink);
+  }
+
+  .panel {
+    background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+    border: 1px solid var(--color-line-soft);
+    border-radius: 6px;
+  }
+
+  .term {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.8;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-line);
+    border-radius: 5px;
+    padding: 0.9rem 1rem;
+    color: var(--color-ink-soft);
+    /* A clipped install command reads as a broken page, so wrap instead of
+       hiding the tail behind a scrollbar nobody notices. */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* Scroll reveal — the `reveal` action toggles data-shown. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 700ms cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .reveal[data-shown='true'] {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; }
+  }
+}
