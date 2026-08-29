@@ -35,11 +35,11 @@ describe("Workspace MCP change wiring", () => {
     const workspace = await readSource("routes/Workspace.tsx");
 
     // Set while typing, cleared once the engine has the text, and cleared
-    // again when a different scene opens.
+    // again when a different scene opens. A third clear lived in the companion
+    // flush, which went with the companion.
     expect(workspace).toContain("setEditorDirty(true)");
-    expect(workspace).toContain("setEditorDirty(false)");
     const clears = workspace.match(/setEditorDirty\(false\)/g) ?? [];
-    expect(clears.length).toBeGreaterThanOrEqual(3);
+    expect(clears.length).toBeGreaterThanOrEqual(2);
   });
 
   it("refreshes the outline without touching the open buffer", async () => {
