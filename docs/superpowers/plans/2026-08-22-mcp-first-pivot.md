@@ -408,7 +408,7 @@
 
 남은 것:
 
-- [ ] **스크린샷 3장** — README의 히어로와 "See Linetta in action" 두 칸이 전부 `companion.png`를 가리키고, 그 그림에는 지워진 컴패니언 패널과 `⌘J`가 그대로 있다. `fact-book.png`도 툴바에 `Companion`이 보이고 자료집이 옛 웹검색 흐름이다. **1.0.0 릴리스 차단 요소** — 프로젝트 첫 화면이 없는 기능을 광고한다.
+- [x] **스크린샷 4장** — 1.0.0 설치본을 임시 `LINETTA_HOME`으로 띄워 다시 찍었다. `companion.png`는 지웠고, `workspace.png` / `story-world.png` / `fact-book.png` / `library.png`로 갈았다. 이전 것들은 macOS 크롬에 cream 팔레트였고 새 것은 Windows 크롬에 기본 hanji 팔레트라, 첫 실행 화면과는 맞지만 README의 결은 달라졌다.
 - [ ] `contextualedit`(설정 변경 → 관련 씬 일괄 수정) 같은 결정론적 파워 기능 확장 — LLM 없이 동작하며 이 제품 방향의 대표 기능이다.
 - [ ] 손으로 쓰는 요약 UI — Phase 0에서 미추가로 시작하기로 확정했으므로, MCP 없이 쓰는 사용자 비중을 보고 여기서 재검토한다
 - [ ] 집필 통계, 원고 진행 관리, 퇴고 워크플로
