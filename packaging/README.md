@@ -105,8 +105,11 @@ that must match what is behind it — the check winget rejects most often.
 5. Fork `microsoft/winget-pkgs`, copy the three files to
    `manifests/d/Devlikebear/Linetta/1.0.0/`, and open the upstream PR.
 
-The manifests rendered for 1.0.0 pass step 3 against winget 1.12 as of
-2026-08-29. Steps 4 and 5 need the release to exist.
+Step 3 was run for 1.0.0 against winget 1.12 on 2026-08-29 and passed, using a
+locally built installer's SHA. That proves the templates and the schema, not the
+submission: re-render from the release's `SHA256SUMS` before step 5, because the
+SHA of a local build is not the SHA of the released binary. Steps 4 and 5 need
+the release to exist.
 
 Expect the first review to take a while: the installer is unsigned, so
 SmartScreen warns. Signing is not required for a winget submission, but its
