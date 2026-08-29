@@ -16,7 +16,7 @@ Plan your story, keep your world consistent, and write scene by scene. When you 
 English · 한국어 · 日本語
 </div>
 
-![Linetta editor](docs/assets/screenshots/companion.png)
+![Linetta editor](docs/assets/screenshots/workspace.png)
 
 ## One workspace for the whole story
 
@@ -30,10 +30,10 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 
 ## See Linetta in action
 
-| Build with context | Research without leaving the scene |
+| The work's own record | Research without leaving the scene |
 | --- | --- |
-| Connect your own agent over MCP and it reads the outline, drafts scenes, and records every change it makes. | Fact Book keeps source-backed notes next to the writing that needs them. |
-| ![Linetta workspace](docs/assets/screenshots/companion.png) | ![Linetta Fact Book](docs/assets/screenshots/fact-book.png) |
+| Story World lists the characters, places, items and concepts your work has registered — including the ones an agent created over MCP. | Fact Book keeps source-backed notes next to the writing that needs them. |
+| ![Linetta Story World](docs/assets/screenshots/story-world.png) | ![Linetta Fact Book](docs/assets/screenshots/fact-book.png) |
 
 Your projects stay organized in a library built for multiple works:
 
