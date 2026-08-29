@@ -20,7 +20,7 @@ modules:
     sources:
       - type: git
         url: https://github.com/devlikebear/linetta.git
-        tag: v0.9.6
+        tag: v1.0.0
         commit: REPLACE_WITH_RELEASE_COMMIT
     build-commands:
       - cd apps/desktop && corepack enable

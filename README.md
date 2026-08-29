@@ -5,7 +5,7 @@
 
 ### A calm, local-first writing studio for long-form fiction
 
-Plan your story, keep your world consistent, write scene by scene, and work with an optional AI companion — without giving up control of your manuscript.
+Plan your story, keep your world consistent, and write scene by scene. When you want to write alongside AI, connect the agent you already use over MCP — the manuscript never leaves your machine on its own.
 
 [![Latest release](https://img.shields.io/github/v/release/devlikebear/linetta?style=flat-square)](https://github.com/devlikebear/linetta/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/devlikebear/linetta/ci.yml?branch=main&style=flat-square&label=build)](https://github.com/devlikebear/linetta/actions/workflows/ci.yml)
@@ -16,7 +16,7 @@ Plan your story, keep your world consistent, write scene by scene, and work with
 English · 한국어 · 日本語
 </div>
 
-![Linetta editor with the writing companion open](docs/assets/screenshots/companion.png)
+![Linetta editor](docs/assets/screenshots/companion.png)
 
 ## One workspace for the whole story
 
@@ -24,7 +24,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 
 - **Write with focus.** Work scene by scene in a quiet editor with your outline always within reach.
 - **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
-- **Stay in control of AI.** Ask the optional companion to read the current scene or the whole work. It can suggest drafts and structured changes, but you decide what gets applied.
+- **Stay in control of AI.** Linetta itself never calls a model. Connect your own agent over MCP when you want one, see everything it changed, and undo any of it.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
@@ -32,8 +32,8 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 
 | Build with context | Research without leaving the scene |
 | --- | --- |
-| The companion can use your manuscript and story structure to offer continuations, revisions, and proposals. | Fact Book keeps source-backed notes next to the writing that needs them. |
-| ![Linetta writing companion](docs/assets/screenshots/companion.png) | ![Linetta Fact Book](docs/assets/screenshots/fact-book.png) |
+| Connect your own agent over MCP and it reads the outline, drafts scenes, and records every change it makes. | Fact Book keeps source-backed notes next to the writing that needs them. |
+| ![Linetta workspace](docs/assets/screenshots/companion.png) | ![Linetta Fact Book](docs/assets/screenshots/fact-book.png) |
 
 Your projects stay organized in a library built for multiple works:
 
@@ -66,19 +66,32 @@ Every [GitHub release](https://github.com/devlikebear/linetta/releases/latest) i
 
 Intel Mac users can [build from source](#build-from-source).
 
-## AI is optional
+## Writing with your own agent (MCP)
 
-Linetta is a complete writing app without AI. If you choose to connect a supported provider, credentials are stored locally and manuscript text is sent only when you make an AI request.
+Linetta does not talk to a language model. It has no API keys, no provider
+settings, and it never sends your manuscript anywhere on its own.
 
-The `Cmd/Ctrl+J` companion can:
+When you want to write alongside AI, Linetta opens a local MCP endpoint and an
+agent you already run — Claude Code, Claude Desktop — connects to it. The
+subscription you already pay for does the work; Linetta stays a writing tool.
 
-- discuss the current scene or the whole work;
-- suggest continuations and rewrites;
-- inspect story context with built-in read tools;
-- propose structured updates to scenes, outlines, characters, relationships, places, summaries, and memories;
-- search or fetch web sources when you explicitly configure and use those tools.
+Turn it on in **Settings → Connect an external agent (MCP)**. It is off until
+you tick an explicit consent box, and the pane gives you a command to paste
+into your client.
 
-Changes follow a **propose → review → apply** flow so the writer remains the final editor.
+Once connected, an agent can:
+
+- read the outline, a scene, characters, fact cards, and a story brief;
+- draft and revise scenes, write summaries, and restructure the outline;
+- record what it changed, so you can see it and undo it.
+
+The writer keeps the last word. Every change is snapshotted before it lands,
+`read_only` mode omits the writing tools entirely, and a scene you are part way
+through editing is never replaced behind your back — Linetta tells you the
+agent touched it and leaves your text alone until you choose.
+
+The endpoint binds `127.0.0.1` only, requires a token Linetta generates
+locally, and stops the moment you turn it off.
 
 ## Data and safety
 
@@ -94,10 +107,10 @@ Important data includes:
 
 - `library.db`: projects, scenes, story data, and version snapshots;
 - `backups/YYYY-MM-DD/`: daily database backups, kept for 14 days;
-- `companion/`: local companion transcripts and memories;
-- `settings.json`: app preferences and provider configuration.
+- `companion/`: remembered facts, and transcripts from the retired built-in companion;
+- `settings.json`: app preferences.
 
-Manual and AI-replace snapshots are retained indefinitely. Autosave snapshots are thinned over time, from every save during the first day to daily snapshots after 30 days.
+Manual and agent-write snapshots are retained indefinitely. Autosave snapshots are thinned over time, from every save during the first day to daily snapshots after 30 days.
 
 ## Frequently asked questions
 
@@ -107,7 +120,8 @@ No. Writing, organization, import/export, snapshots, and backups work without a 
 
 ### Do I have to use AI?
 
-No. AI features are optional and remain inactive until you connect a provider.
+No. Linetta is a complete writing app on its own and never contacts a model. AI
+is something you bring: turn on MCP in Settings and point your own client at it.
 
 ### Can I bring an existing manuscript?
 
@@ -115,7 +129,7 @@ Yes. Linetta supports Markdown import and export so your writing is not locked i
 
 ### Is my work uploaded to a Linetta cloud?
 
-No. Linetta has no mandatory cloud. Optional AI and Git features communicate only with services you configure and invoke.
+No. Linetta has no cloud. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure.
 
 ## For contributors
 
