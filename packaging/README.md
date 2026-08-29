@@ -92,9 +92,9 @@ scripts/render-winget-manifest.sh \
 
 ### Submitting
 
-The first submission has to wait for a public v1.0.0 release, because the
-manifest names an `InstallerUrl` that must resolve and an `InstallerSha256`
-that must match what is behind it — the check winget rejects most often.
+The first submission needs a public release, because the manifest names an
+`InstallerUrl` that must resolve and an `InstallerSha256` that must match what
+is behind it — the check winget rejects most often. v1.0.0 is out, so it can go.
 
 1. Take the SHA from the release's `SHA256SUMS`, not from a local build. A
    local build and the released binary are not byte-identical.
@@ -105,11 +105,17 @@ that must match what is behind it — the check winget rejects most often.
 5. Fork `microsoft/winget-pkgs`, copy the three files to
    `manifests/d/Devlikebear/Linetta/1.0.0/`, and open the upstream PR.
 
-Step 3 was run for 1.0.0 against winget 1.12 on 2026-08-29 and passed, using a
-locally built installer's SHA. That proves the templates and the schema, not the
-submission: re-render from the release's `SHA256SUMS` before step 5, because the
-SHA of a local build is not the SHA of the released binary. Steps 4 and 5 need
-the release to exist.
+Steps 1-3 are done for 1.0.0, against the published release rather than a local
+build:
+
+- `InstallerUrl` resolves (HTTP 200, 20,704,058 bytes).
+- `InstallerSha256` is `84C88C01FF0D89F3ED2B6ED7F55DCB3E5E1FF2FC48484BFA06551406A12423E8`,
+  which matches both the release `SHA256SUMS` and a fresh download of the file
+  the URL actually serves.
+- `winget validate --manifest` passes against winget 1.12.
+
+Step 4 is belt-and-braces: the upstream PR runs the manifest on a clean VM as
+part of its own validation. Step 5 is the submission itself.
 
 Expect the first review to take a while: the installer is unsigned, so
 SmartScreen warns. Signing is not required for a winget submission, but its
