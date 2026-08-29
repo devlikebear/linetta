@@ -14,7 +14,6 @@ type Translate = ReturnType<typeof useI18n>["t"];
  * Keep in step with engine/internal/rpc/reason.go.
  */
 const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
-  ai_data_sharing_consent_required: "errors.aiDataSharingConsentRequired",
   mcp_port_in_use: "errors.mcpPortInUse",
   mcp_consent_required: "errors.mcpConsentRequired",
 };

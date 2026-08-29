@@ -90,12 +90,6 @@ const baseSettings = {
   ai_data_sharing_consented_at: 0,
 };
 
-async function clickAdvancedProvider(user: ReturnType<typeof userEvent.setup>, label: RegExp, desc: string) {
-  const buttons = await screen.findAllByRole("button", { name: label });
-  const match = buttons.find((button) => button.textContent?.includes(desc));
-  if (!match) throw new Error(`Provider button not found: ${label}`);
-  await user.click(match);
-}
 
 describe("Settings", () => {
   beforeEach(() => {
@@ -220,107 +214,6 @@ describe("Settings", () => {
     expect(screen.getByText(/git push: fatal: no upstream/)).toBeInTheDocument();
     expect(screen.getByText("요약기 상태")).toBeInTheDocument();
     expect(screen.getByText(/provider unavailable/)).toBeInTheDocument();
-    expect(screen.getByText("LLM 도구")).toBeInTheDocument();
-    expect(screen.getByLabelText("web_search API 키")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/저장된 검색 API 키 있음/)).toBeInTheDocument();
-  });
-
-  it("renders the beginner AI setup guide with subscription policy links", async () => {
-    renderSettings();
-
-    expect(await screen.findByText("AI 연결 마법사")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /가장 쉬운 시작/ })).toBeInTheDocument();
-    expect(screen.getByText(/Claude와 Gemini 구독 로그인은/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /OpenAI Codex CLI 안내/ })).toHaveAttribute(
-      "href",
-      "https://developers.openai.com/codex/cli",
-    );
-  });
-
-  it("records and withdraws explicit third-party AI data-sharing consent", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    expect(await screen.findByText("AI 데이터 전송 동의")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "동의하고 AI 사용" }));
-    expect(mocks.settingsSet).toHaveBeenCalledWith(expect.objectContaining({
-      ai_data_sharing_consent_version: 1,
-      ai_data_sharing_consented_at: expect.any(Number),
-    }));
-
-    await user.click(screen.getByRole("button", { name: "동의 철회" }));
-    expect(mocks.settingsSet).toHaveBeenLastCalledWith(expect.objectContaining({
-      ai_data_sharing_consent_version: 0,
-      ai_data_sharing_consented_at: 0,
-    }));
-  });
-
-  it("selecting the OpenRouter beginner guide persists the OpenRouter provider", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await user.click(await screen.findByRole("button", { name: /가장 쉬운 시작/ }));
-    await user.click(await screen.findByRole("button", { name: "OpenRouter 선택" }));
-
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({ provider: "openrouter" }),
-    );
-  });
-
-  it("starts and finishes the OpenRouter OAuth connect flow", async () => {
-    const user = userEvent.setup();
-
-    renderSettings();
-
-    await user.click(await screen.findByRole("button", { name: /가장 쉬운 시작/ }));
-    await user.click(await screen.findByRole("button", { name: "OpenRouter로 연결" }));
-
-    await waitFor(() => expect(mocks.openRouterOAuthStart).toHaveBeenCalled());
-    // window.open cannot reach the OS browser from the webview, so the flow
-    // has to go through the Rust opener command.
-    expect(mocks.openExternalUrl).toHaveBeenCalledWith(
-      "https://openrouter.ai/auth?callback_url=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback",
-    );
-    await waitFor(() => expect(mocks.openRouterOAuthFinish).toHaveBeenCalledWith("req-1"));
-    await waitFor(() => expect(screen.getByText(/OpenRouter 연결이 완료되었습니다/)).toBeInTheDocument());
-  });
-
-  it("saves an OpenRouter key and refreshes OpenRouter models inside the setup guide", async () => {
-    mocks.providersListModels.mockResolvedValue({
-      models: [
-        "openai/gpt-5.4",
-        "google/gemini-3-flash-preview",
-        "openrouter/auto",
-        "anthropic/claude-sonnet-4",
-        "google/gemini-3.1-flash-image",
-      ],
-    });
-    const user = userEvent.setup();
-    renderSettings();
-
-    await user.click(await screen.findByRole("button", { name: /가장 쉬운 시작/ }));
-    await user.type(await screen.findByLabelText("OpenRouter API 키"), "or-test");
-    await user.click(screen.getByRole("button", { name: "키 저장" }));
-    await user.click(screen.getByRole("button", { name: "모델 가져오기" }));
-
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({
-        provider: "openrouter",
-        providers: {
-          openrouter: expect.objectContaining({
-            api_key: "or-test",
-          }),
-        },
-      }),
-    );
-    await waitFor(() =>
-      expect(mocks.providersListModels).toHaveBeenCalledWith("openrouter"),
-    );
-    await waitFor(() =>
-      expect(document.querySelector('option[value="anthropic/claude-sonnet-4"]')).not.toBeNull(),
-    );
-    expect(document.querySelector('option[value="google/gemini-3.1-flash-image"]')).toBeNull();
   });
 
   it("defaults to Korean and switches the settings UI to English", async () => {
@@ -337,7 +230,6 @@ describe("Settings", () => {
     );
     expect(await screen.findByLabelText("App language")).toHaveValue("en");
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
-    expect(screen.getByText("AI Setup Wizard")).toBeInTheDocument();
   });
 
   it("persists onboarding tour toggle and queues a manual replay", async () => {
@@ -383,36 +275,6 @@ describe("Settings", () => {
     await waitFor(() =>
       expect(mocks.settingsSet).toHaveBeenCalledWith({ copy_profile: "munpia" }),
     );
-  });
-
-  it("names the platform's own key store rather than always saying Keychain", async () => {
-    const original = Object.getOwnPropertyDescriptor(navigator, "platform");
-    const withPlatform = async (platform: string, assert: () => Promise<void> | void) => {
-      Object.defineProperty(navigator, "platform", { value: platform, configurable: true });
-      const view = renderSettings();
-      try {
-        await assert();
-      } finally {
-        view.unmount();
-      }
-    };
-    try {
-      await withPlatform("Win32", async () => {
-        expect(await screen.findByText(/키는 Windows 자격 증명 관리자에 저장됩니다/)).toBeInTheDocument();
-        expect(screen.queryByText(/macOS Keychain/)).not.toBeInTheDocument();
-        expect(screen.queryByText(/키를 저장할 수 없습니다/)).not.toBeInTheDocument();
-      });
-      await withPlatform("MacIntel", async () => {
-        expect(await screen.findByText(/키는 macOS Keychain에 저장됩니다/)).toBeInTheDocument();
-      });
-      // Linux has no backend, so the copy must not name a place at all.
-      await withPlatform("Linux x86_64", async () => {
-        expect(await screen.findByText(/이 플랫폼에서는 키를 저장할 수 없습니다/)).toBeInTheDocument();
-        expect(screen.queryByText(/키는 .*에 저장됩니다/)).not.toBeInTheDocument();
-      });
-    } finally {
-      if (original) Object.defineProperty(navigator, "platform", original);
-    }
   });
 
   it("persists the colour palette separately from the light/dark theme", async () => {
@@ -461,280 +323,13 @@ describe("Settings", () => {
 
     renderSettings();
 
-    expect(await screen.findByRole("link", { name: /OpenAI Codex CLI guide/ })).toBeInTheDocument();
+    // The awaited element is the load barrier: everything below is a sync get.
+    await screen.findByText("Backup");
     expect(screen.getByText(/If the selected folder is not a git repository yet/)).toBeInTheDocument();
     expect(screen.getByText(/1 file/)).toBeInTheDocument();
     expect(screen.getByText(/Committed/)).toBeInTheDocument();
     expect(screen.getByText(/Pushed/)).toBeInTheDocument();
     expect(screen.getByText(/New backup created/)).toBeInTheDocument();
-  });
-
-  it("selecting the Claude API guide persists the API provider", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await user.click(await screen.findByRole("button", { name: /Claude API 키로 연결/ }));
-    await user.click(await screen.findByRole("button", { name: "Claude API 선택" }));
-
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({ provider: "anthropic" }),
-    );
-    expect(await screen.findByText(/Claude 구독 하네스는 Linetta에서 지원하지 않습니다/)).toBeInTheDocument();
-  });
-
-  it("shows CLI path field only for the legacy claude-code-cli provider", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    expect(await screen.findByText("AI 연결 마법사")).toBeInTheDocument();
-    expect(screen.queryByLabelText("CLI 경로 (선택)")).not.toBeInTheDocument();
-    await clickAdvancedProvider(user, /Claude Code CLI/, "기존 설정 유지용");
-
-    expect(await screen.findByLabelText("CLI 경로 (선택)")).toBeInTheDocument();
-    expect(screen.queryByLabelText("API 키")).not.toBeInTheDocument();
-  });
-
-  it("auto-detect fills the CLI path and persists it for claude-code-cli", async () => {
-    mocks.providersDetectCli.mockResolvedValue({ path: "/opt/homebrew/bin/claude" });
-    const user = userEvent.setup();
-    renderSettings();
-
-    await clickAdvancedProvider(user, /Claude Code CLI/, "기존 설정 유지용");
-    await user.click(await screen.findByRole("button", { name: "자동 찾기" }));
-
-    await waitFor(() => expect(mocks.providersDetectCli).toHaveBeenCalled());
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({
-        providers: { "claude-code-cli": { cli_path: "/opt/homebrew/bin/claude" } },
-      }),
-    );
-    expect(await screen.findByDisplayValue("/opt/homebrew/bin/claude")).toBeInTheDocument();
-  });
-
-  it("custom Base URL field persists for OpenAI-compatible providers", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await clickAdvancedProvider(user, /OpenAI API/, "호환 엔드포인트");
-    const baseUrl = await screen.findByLabelText("Base URL (선택)");
-    await user.type(baseUrl, "https://api.minimax.io/v1");
-    await user.tab();
-
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({
-        providers: { openai: { base_url: "https://api.minimax.io/v1" } },
-      }),
-    );
-  });
-
-  it("selecting Anthropic reveals API key + model fields and persists the provider", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await clickAdvancedProvider(user, /Claude API/, "Anthropic Console API 키로 연결");
-
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({ provider: "anthropic" }),
-    );
-    expect(await screen.findByLabelText("API 키")).toBeInTheDocument();
-    expect(screen.getByLabelText("모델")).toBeInTheDocument();
-  });
-
-  it("entering a model sends a per-provider patch", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await clickAdvancedProvider(user, /OpenAI API/, "호환 엔드포인트");
-    const modelInput = await screen.findByLabelText("모델");
-    await user.type(modelInput, "gpt-4o");
-    await user.tab(); // blur
-
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({
-        providers: { openai: { model: "gpt-4o" } },
-      }),
-    );
-  });
-
-  it("refresh models fetches the active provider's list and fills the datalist", async () => {
-    mocks.providersListModels.mockResolvedValue({
-      models: ["claude-haiku-4-5", "claude-sonnet-4-6"],
-    });
-    const user = userEvent.setup();
-    renderSettings();
-
-    await clickAdvancedProvider(user, /Claude API/, "Anthropic Console API 키로 연결");
-    await user.click(await screen.findByRole("button", { name: "모델 새로고침" }));
-
-    await waitFor(() =>
-      expect(mocks.providersListModels).toHaveBeenCalledWith("anthropic"),
-    );
-    await waitFor(() =>
-      expect(document.querySelector('option[value="claude-sonnet-4-6"]')).not.toBeNull(),
-    );
-  });
-
-  it("connection test persists unsaved provider drafts before pinging the provider", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await clickAdvancedProvider(user, /Claude API/, "Anthropic Console API 키로 연결");
-    await user.type(await screen.findByLabelText("API 키"), "sk-ant-test");
-    await user.type(screen.getByLabelText("모델"), "claude-sonnet-4-6");
-    await user.click(await screen.findByRole("button", { name: "연결 테스트" }));
-
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({
-        providers: {
-          anthropic: expect.objectContaining({
-            api_key: "sk-ant-test",
-          }),
-        },
-      }),
-    );
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({
-        providers: {
-          anthropic: expect.objectContaining({
-            model: "claude-sonnet-4-6",
-          }),
-        },
-      }),
-    );
-    await waitFor(() => expect(mocks.providersTest).toHaveBeenCalledWith("anthropic"));
-    expect(await screen.findByText("연결 성공: 연결되었습니다")).toBeInTheDocument();
-  });
-
-  it("shows saved provider API key state without echoing the secret", async () => {
-    mocks.settingsGet.mockResolvedValue({
-      ...baseSettings,
-      provider: "anthropic",
-      web_search_api_key_set: false,
-      providers: { anthropic: { model: "claude-sonnet-4-6", api_key_set: true } },
-    });
-    renderSettings();
-
-    expect(await screen.findByText("API 키 저장됨")).toBeInTheDocument();
-    expect(screen.getByLabelText("API 키")).toHaveValue("");
-    expect(screen.getByPlaceholderText(/저장된 API 키 있음/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "키 삭제" })).toBeInTheDocument();
-  });
-
-  it("web_search connection test persists an unsaved API key before testing", async () => {
-    const user = userEvent.setup();
-    renderSettings();
-
-    await user.type(await screen.findByLabelText("web_search API 키"), "BSA-test");
-    await user.click(await screen.findByRole("button", { name: "web_search 연결 테스트" }));
-
-    await waitFor(() =>
-      expect(mocks.settingsSet).toHaveBeenCalledWith({ web_search_api_key: "BSA-test" }),
-    );
-    await waitFor(() => expect(mocks.webSearchTest).toHaveBeenCalled());
-    expect(await screen.findByText("web_search 연결 성공: 검색 결과 1건 응답")).toBeInTheDocument();
-  });
-
-  it("web_search connection test shows the provider error message", async () => {
-    mocks.webSearchTest.mockRejectedValue(new Error("web_search brave api key is required"));
-    const user = userEvent.setup();
-    renderSettings();
-
-    await user.click(await screen.findByRole("button", { name: "web_search 연결 테스트" }));
-
-    expect(await screen.findByText(/web_search 연결 실패: Error: web_search brave api key is required/)).toBeInTheDocument();
-  });
-
-  it("web_search connection test handles a redacted missing API key field", async () => {
-    mocks.settingsGet.mockResolvedValue({
-      ...baseSettings,
-      web_search_api_key: undefined,
-      web_search_api_key_set: true,
-    });
-    const user = userEvent.setup();
-    renderSettings();
-
-    await user.click(await screen.findByRole("button", { name: "web_search 연결 테스트" }));
-
-    await waitFor(() => expect(mocks.webSearchTest).toHaveBeenCalled());
-    expect(mocks.settingsSet).not.toHaveBeenCalledWith({ web_search_api_key: undefined });
-    expect(await screen.findByText("web_search 연결 성공: 검색 결과 1건 응답")).toBeInTheDocument();
-  });
-
-  it("hides sandbox-unavailable providers and their setup guides when diagnostics reports them", async () => {
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: ["claude-code-cli", "openai-codex"],
-    });
-    renderSettings();
-
-    // Wait for the settings to load
-    await screen.findByText("AI 연결 마법사");
-
-    // claude-code-cli provider toggle must NOT be rendered
-    expect(screen.queryByText(/Claude Code CLI/)).not.toBeInTheDocument();
-    // openai-codex setup guide button must NOT be rendered
-    expect(screen.queryByRole("button", { name: /ChatGPT 구독으로 연결/ })).not.toBeInTheDocument();
-
-    // Other providers must still be visible (Claude API setup guide button)
-    expect(screen.getByRole("button", { name: /Claude API 키로 연결/ })).toBeInTheDocument();
-  });
-
-  it("resets setup guide to first available when stored provider is hidden in MAS build", async () => {
-    // Stored provider is openai-codex, which is in the unavailable list — its guide
-    // (chatgpt-subscription) gets filtered out. The component should fall back to
-    // the first available guide without crashing.
-    mocks.settingsGet.mockResolvedValue({
-      ...baseSettings,
-      provider: "openai-codex",
-    });
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: ["claude-code-cli", "openai-codex"],
-    });
-
-    renderSettings();
-
-    await screen.findByText("AI 연결 마법사");
-
-    // The chatgpt-subscription guide button must NOT be shown (filtered out)
-    expect(screen.queryByRole("button", { name: /ChatGPT 구독으로 연결/ })).not.toBeInTheDocument();
-    // The detail panel must show one of the available guides — confirm by checking
-    // the action button text rendered inside .setup-guide (not the choice list).
-    // openai-api is the first available guide after filtering, so its action button appears.
-    const actionBtn = document.querySelector(".setup-guide button");
-    expect(actionBtn).not.toBeNull();
-    expect(actionBtn!.textContent).toMatch(/선택|API 키로 연결|OpenRouter로 연결/u);
-  });
-
-  it("shows all providers when diagnostics returns an empty unavailable list", async () => {
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-    });
-    renderSettings();
-
-    await screen.findByText("AI 연결 마법사");
-
-    // Both sandbox-only providers must be visible in non-MAS build
-    // (claude-code-cli appears as a provider toggle button; openai-codex as a setup guide button)
-    expect(screen.getByRole("button", { name: /Claude Code CLI/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ChatGPT 구독으로 연결/ })).toBeInTheDocument();
   });
 
   it("shows Git Sync section as disabled (with note) when git_sync_available is false, and full section when true", async () => {
@@ -758,8 +353,8 @@ describe("Settings", () => {
       </MemoryRouter>,
     );
 
-    // Wait for settings to load (some other element that's always present)
-    await screen.findByText("AI 연결 마법사");
+    // Wait for settings to load (an element that is always present)
+    await screen.findByText("백업");
     // Title is shown in the disabled state section
     expect(screen.getByText("GitHub 동기화")).toBeInTheDocument();
     // The full form (folder input) must NOT appear
@@ -779,13 +374,12 @@ describe("Settings", () => {
     });
     renderSettings();
 
-    await screen.findByText("AI 연결 마법사");
+    await screen.findByText("백업");
     expect(screen.getByText("GitHub 동기화")).toBeInTheDocument();
     expect(screen.getByLabelText("git 폴더")).toBeInTheDocument();
   });
 
-  it("folds the built-in companion away for someone who never used it", async () => {
-    mocks.settingsGet.mockResolvedValue({ ...baseSettings, ai_data_sharing_consented_at: 0 });
+  it("keeps the transcript export out of a library that never used the companion", async () => {
     mocks.diagnosticsGet.mockResolvedValue({
       version: "",
       home: "",
@@ -799,36 +393,8 @@ describe("Settings", () => {
     });
     renderSettings();
 
-    const legacy = await screen.findByTestId("legacy-ai");
-    // Folded, not removed: the signal cannot separate a newcomer from someone
-    // who configured a provider and never spoke to it, and that person still
-    // needs a way back to their own settings.
-    await waitFor(() => expect(legacy).not.toHaveAttribute("open"));
-  });
-
-  it("opens the companion block for someone whose library holds a transcript", async () => {
-    renderSettings();
-    const legacy = await screen.findByTestId("legacy-ai");
-    await waitFor(() => expect(legacy).toHaveAttribute("open"));
-  });
-
-  it("opens it for a writer who consented but never sent a message", async () => {
-    mocks.settingsGet.mockResolvedValue({ ...baseSettings, ai_data_sharing_consented_at: 1_700_000_000_000 });
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-      companion_history_exists: false,
-    });
-    renderSettings();
-
-    const legacy = await screen.findByTestId("legacy-ai");
-    await waitFor(() => expect(legacy).toHaveAttribute("open"));
+    await screen.findByText("백업");
+    expect(screen.queryByTestId("legacy-ai-export")).toBeNull();
   });
 
   it("hands the companion record back before the companion goes away", async () => {
