@@ -56,7 +56,7 @@ func ParseDocument(text string) Document {
 	if err != nil {
 		meta = mdmeta.Metadata{}
 		body = text
-		warnings = append(warnings, "Linetta frontmatter를 읽지 못해 메타데이터 복원을 건너뛰었습니다.")
+		warnings = append(warnings, WarnFrontmatterUnreadable)
 	}
 	legacy, stripped := stripLinettaAppendices(body, meta.Empty())
 	if meta.Empty() {

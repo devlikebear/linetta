@@ -77,7 +77,7 @@ func GetEntity(repo *entity.Repo) rpc.Handler {
 		}
 		e, err := repo.Get(ctx, p.ID)
 		if errors.Is(err, entity.ErrNotFound) {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "entity not found"}
+			return nil, rpc.NotFound(rpc.ReasonEntityNotFound, "entity not found")
 		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
@@ -94,7 +94,7 @@ func UpdateEntity(repo *entity.Repo, now Clock) rpc.Handler {
 		}
 		if err := repo.Update(ctx, now(), in); err != nil {
 			if errors.Is(err, entity.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "entity not found"}
+				return nil, rpc.NotFound(rpc.ReasonEntityNotFound, "entity not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

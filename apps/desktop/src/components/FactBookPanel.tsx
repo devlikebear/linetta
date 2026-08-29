@@ -101,7 +101,15 @@ export function FactBookPanel({
     setSaving(true);
     setNote("");
     try {
-      await factsApi.createFromUrl({ project_id: projectId, node_id: nodeId, claim, url });
+      // The engine has no idea what language the writer reads, so the card's
+      // default sentence is supplied here (#45).
+      await factsApi.createFromUrl({
+        project_id: projectId,
+        node_id: nodeId,
+        claim,
+        url,
+        result: t("factBook.savedFromUrlResult"),
+      });
       setClaimDraft("");
       setUrlDraft("");
       setNoteKind("ok");

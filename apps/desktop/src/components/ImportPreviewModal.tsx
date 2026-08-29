@@ -1,6 +1,7 @@
 import { FileText, Folder } from "lucide-react";
 import type { ImportPreviewNode, ImportPreviewResult } from "../lib/types";
 import { displayNodeLabel, useI18n } from "../lib/i18n";
+import { importWarningMessage } from "../lib/importWarnings";
 import "./ImportPreviewModal.css";
 
 interface Props {
@@ -32,7 +33,7 @@ export function ImportPreviewModal({ preview, fileName, busy, onConfirm, onCance
             <strong>{t("importPreview.warning")}</strong>
             <ul>
               {preview.warnings.map((w, i) => (
-                <li key={i}>{w}</li>
+                <li key={i}>{importWarningMessage(t, w)}</li>
               ))}
             </ul>
           </div>

@@ -35,8 +35,7 @@ func Preview(outline Outline, fallbackFileName string) PreviewResult {
 
 	res := PreviewResult{Title: title}
 	if len(outline.Roots) == 0 {
-		res.Warnings = append(res.Warnings,
-			"헤딩(`#`, `##`, `###`, `####`)을 찾지 못해 비어있는 작품이 생성됩니다. 마크다운에 헤딩을 추가해 주세요.")
+		res.Warnings = append(res.Warnings, WarnNoHeadings)
 		return res
 	}
 	for _, r := range outline.Roots {

@@ -24,7 +24,7 @@ func GetNode(nodes *node.Repo) rpc.Handler {
 		}
 		n, err := nodes.Get(ctx, p.ID)
 		if errors.Is(err, node.ErrNotFound) {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+			return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
@@ -51,7 +51,7 @@ func UpdateNodeContent(nodes *node.Repo, now Clock, postUpdate func(nodeID strin
 		}
 		if err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			if errors.Is(err, node.ErrContentOnContainer) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -87,7 +87,7 @@ func SetLastOpened(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.SetLastOpened(ctx, p.ProjectID, p.NodeID, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+				return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 			}
 			if errors.Is(err, node.ErrNodeProjectMismatch) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -137,7 +137,7 @@ func CreateSibling(nodes *node.Repo, now Clock) rpc.Handler {
 		n, err := nodes.CreateSibling(ctx, p.ReferenceID, p.Kind, p.Label, p.Title, now())
 		if err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "reference not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "reference not found")
 			}
 			if errors.Is(err, node.ErrInvalidKind) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -164,7 +164,7 @@ func CreateChild(nodes *node.Repo, now Clock) rpc.Handler {
 		n, err := nodes.CreateChild(ctx, p.ParentID, p.Kind, p.Label, p.Title, now())
 		if err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "parent not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "parent not found")
 			}
 			if errors.Is(err, node.ErrInvalidKind) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -194,7 +194,7 @@ func MoveTo(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.MoveTo(ctx, p.ID, p.ParentID, p.Ordinal, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node or parent not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node or parent not found")
 			}
 			if errors.Is(err, node.ErrNodeProjectMismatch) ||
 				errors.Is(err, node.ErrContentOnContainer) ||
@@ -215,7 +215,7 @@ func MoveToParent(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.MoveToParent(ctx, p.ID, p.ParentID, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node or parent not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node or parent not found")
 			}
 			if errors.Is(err, node.ErrNodeProjectMismatch) ||
 				errors.Is(err, node.ErrContentOnContainer) ||
@@ -236,7 +236,7 @@ func MoveToRoot(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.MoveToRoot(ctx, p.ID, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -252,7 +252,7 @@ func ConvertToContainer(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.ConvertLeafToContainer(ctx, p.ID, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			if errors.Is(err, node.ErrInvalidMove) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -276,7 +276,7 @@ func RestoreOutline(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.RestoreOutline(ctx, p.ProjectID, p.Nodes, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+				return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 			}
 			if errors.Is(err, node.ErrInvalidMove) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -306,7 +306,7 @@ func RenameNode(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.Rename(ctx, p.ID, p.Label, p.Title, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -322,7 +322,7 @@ func SetNodeStatus(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.SetStatus(ctx, p.ID, p.Status, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			if errors.Is(err, node.ErrInvalidStatus) {
 				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -341,7 +341,7 @@ func DeleteNode(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.Delete(ctx, p.ID, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -357,7 +357,7 @@ func MoveUp(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.MoveUp(ctx, p.ID, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -373,7 +373,7 @@ func MoveDown(nodes *node.Repo, now Clock) rpc.Handler {
 		}
 		if err := nodes.MoveDown(ctx, p.ID, now()); err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

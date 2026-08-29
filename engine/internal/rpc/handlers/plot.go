@@ -25,7 +25,7 @@ func PlotSpinePanel(builder *plot.Builder) rpc.Handler {
 		spine, err := builder.Build(ctx, p.NodeID)
 		if err != nil {
 			if errors.Is(err, node.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node not found"}
+				return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

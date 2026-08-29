@@ -21,7 +21,7 @@ import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
 import { SearchModal } from "../components/SearchModal";
 import { pickAndReadMarkdown } from "../lib/importLoad";
-import { saveExportedMarkdown } from "../lib/exportSave";
+import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
 import { Archive, Download, FolderOpen, MoreHorizontal, Settings, Plus, Search, Trash2, Upload } from "../lib/icons";
 import { useToast } from "../components/ToastProvider";
 import { formatWordCount, lengthLabel, useI18n } from "../lib/i18n";
@@ -233,7 +233,7 @@ export function Library() {
     try {
       const payload = await exportApi.project(p.id);
       const path = await saveExportedMarkdown(payload);
-      if (path) showToast(t("library.toast.projectBackupComplete"));
+      if (path) showToast(exportDestinationMessage(t, path));
     } catch (err) {
       showToast(t("library.toast.projectBackupFailed", { error: String(err) }));
     }

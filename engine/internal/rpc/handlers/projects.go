@@ -78,7 +78,7 @@ func GetProject(repo *project.Repo) rpc.Handler {
 		}
 		got, err := repo.Get(ctx, p.ID)
 		if errors.Is(err, project.ErrNotFound) {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+			return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 		}
 		if errors.Is(err, project.ErrInvalidInput) {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -99,7 +99,7 @@ func UpdateProject(repo *project.Repo, now Clock) rpc.Handler {
 		}
 		p, err := repo.Update(ctx, now(), in)
 		if errors.Is(err, project.ErrNotFound) {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+			return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 		}
 		if errors.Is(err, project.ErrInvalidInput) ||
 			errors.Is(err, project.ErrInvalidOutlinePreset) ||
@@ -123,7 +123,7 @@ func ClearProjectSynopsis(repo *project.Repo, now Clock) rpc.Handler {
 		empty := ""
 		got, err := repo.Update(ctx, now(), project.UpdateInput{ID: p.ID, Synopsis: &empty})
 		if errors.Is(err, project.ErrNotFound) {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+			return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
@@ -141,7 +141,7 @@ func ArchiveProject(repo *project.Repo, now Clock) rpc.Handler {
 		}
 		if err := repo.Archive(ctx, p.ID, now()); err != nil {
 			if errors.Is(err, project.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+				return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -158,7 +158,7 @@ func RestoreProject(repo *project.Repo, now Clock) rpc.Handler {
 		}
 		if err := repo.Restore(ctx, p.ID, now()); err != nil {
 			if errors.Is(err, project.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+				return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -175,7 +175,7 @@ func DeleteProject(repo *project.Repo, cleaners ...ProjectDataCleaner) rpc.Handl
 		}
 		if _, err := repo.Get(ctx, p.ID); err != nil {
 			if errors.Is(err, project.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+				return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -189,7 +189,7 @@ func DeleteProject(repo *project.Repo, cleaners ...ProjectDataCleaner) rpc.Handl
 		}
 		if err := repo.Delete(ctx, p.ID); err != nil {
 			if errors.Is(err, project.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project not found"}
+				return nil, rpc.NotFound(rpc.ReasonProjectNotFound, "project not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

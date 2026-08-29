@@ -118,11 +118,14 @@ describe("FactBookPanel", () => {
     await user.type(screen.getByLabelText("출처 주소"), "https://www.met.police.uk/");
     await user.click(screen.getByRole("button", { name: "자료집에 저장" }));
 
+    // The card's default sentence comes from the UI, not the engine: only the
+    // UI knows what language the writer reads (#45).
     await waitFor(() => expect(mocks.factsCreateFromUrl).toHaveBeenCalledWith({
       project_id: "project-1",
       node_id: "node-1",
       claim: "런던 경찰 총기 휴대",
       url: "https://www.met.police.uk/",
+      result: "직접 입력한 출처 URL에서 확인했습니다.",
     }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });

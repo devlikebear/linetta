@@ -16,6 +16,16 @@ type Translate = ReturnType<typeof useI18n>["t"];
 const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   mcp_port_in_use: "errors.mcpPortInUse",
   mcp_consent_required: "errors.mcpConsentRequired",
+  // The "not found" family: a record the writer asked for is gone, usually
+  // because another window or a connected agent removed it.
+  node_not_found: "errors.nodeNotFound",
+  project_not_found: "errors.projectNotFound",
+  entity_not_found: "errors.entityNotFound",
+  thread_not_found: "errors.threadNotFound",
+  beat_not_found: "errors.beatNotFound",
+  relationship_not_found: "errors.relationshipNotFound",
+  note_not_found: "errors.noteNotFound",
+  fact_card_not_found: "errors.factCardNotFound",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

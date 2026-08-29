@@ -12,7 +12,7 @@ import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
 import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
-import { saveExportedMarkdown } from "../lib/exportSave";
+import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle, type TiptapSelectionMenuPayload } from "../components/editor/Tiptap";
 import { autoMentionDoc } from "../lib/editor/autoMention";
 import { ZenMode } from "../components/ZenMode";
@@ -1157,7 +1157,7 @@ export function Workspace() {
         try {
           const payload = await exportApi.project(load.project.id);
           const path = await saveExportedMarkdown(payload);
-          if (path) showToast(t("workspace.toast.exportComplete"));
+          if (path) showToast(exportDestinationMessage(t, path));
         } catch (e) {
           showToast(t("workspace.toast.exportFailed", { error: String(e) }));
         }
@@ -1171,7 +1171,7 @@ export function Workspace() {
         try {
           const payload = await exportApi.node(load.node.id);
           const path = await saveExportedMarkdown(payload);
-          if (path) showToast(t("workspace.toast.exportComplete"));
+          if (path) showToast(exportDestinationMessage(t, path));
         } catch (e) {
           showToast(t("workspace.toast.exportFailed", { error: String(e) }));
         }

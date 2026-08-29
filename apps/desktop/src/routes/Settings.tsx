@@ -87,6 +87,8 @@ export function Settings() {
         setMcpAvailable(diag.mcp_available ?? false);
         setCompanionHistoryExists(diag.companion_history_exists ?? true);
       })
+      // Inside an effect: keeping `t` out of the deps avoids re-running the
+      // fetch on every render. A mount failure is rare and stays raw.
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
   }, [setLanguage]);
