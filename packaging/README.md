@@ -26,6 +26,17 @@ Windows desktop builds package the embedded Go engine as
 directory. This avoids linking Go's `c-archive` output into the MSVC Tauri
 binary while preserving the embedded-engine runtime boundary.
 
+`bundle.targets` in `tauri.conf.json` is `["app", "dmg"]` — macOS only. The
+release workflow passes `--bundles` per platform instead, which is why releases
+carry NSIS, MSI, AppImage, deb and rpm. It also means a bare `pnpm tauri build`
+on Windows or Linux produces the executable and no installer, without saying so.
+To get one locally, name the target:
+
+```sh
+pnpm tauri build --config src-tauri/tauri.windows.conf.json
+pnpm tauri bundle --bundles nsis --config src-tauri/tauri.windows.conf.json
+```
+
 ## macOS Homebrew cask
 
 The Homebrew cask uses `Linetta-macos.app.tar.gz` from the GitHub Release.
@@ -64,20 +75,50 @@ openssl base64 -A -in DeveloperIDApplication.p12 -out certificate-base64.txt
 ## Windows winget
 
 The release workflow renders `Linetta-winget-manifests.tar.gz` from the
-templates in `packaging/winget`. After the first public Windows release, unpack
-that tarball into a fork of `microsoft/winget-pkgs` under the package path
-selected by `wingetcreate`, validate it, and open the upstream pull request.
+templates in `packaging/winget`. Linetta is not in `microsoft/winget-pkgs` yet,
+so `winget install Linetta` does not work; Windows users download from the
+GitHub release (#46).
 
-Manual render example:
+Manual render:
 
 ```sh
 scripts/render-winget-manifest.sh \
-  0.4.0 \
-  https://github.com/devlikebear/linetta/releases/download/v0.4.0 \
-  Linetta_0.4.0_x64-setup.exe \
+  1.0.0 \
+  https://github.com/devlikebear/linetta/releases/download/v1.0.0 \
+  Linetta_1.0.0_x64-setup.exe \
   SHA256_FROM_RELEASE \
   dist/winget
 ```
+
+### Submitting
+
+The first submission has to wait for a public v1.0.0 release, because the
+manifest names an `InstallerUrl` that must resolve and an `InstallerSha256`
+that must match what is behind it — the check winget rejects most often.
+
+1. Take the SHA from the release's `SHA256SUMS`, not from a local build. A
+   local build and the released binary are not byte-identical.
+2. Render the three manifests with the command above.
+3. `winget validate --manifest dist/winget` — schema only, no network.
+4. `winget install --manifest dist/winget` on a clean machine, to prove the
+   installer switches and `Scope: user` are right.
+5. Fork `microsoft/winget-pkgs`, copy the three files to
+   `manifests/d/Devlikebear/Linetta/1.0.0/`, and open the upstream PR.
+
+The manifests rendered for 1.0.0 pass step 3 against winget 1.12 as of
+2026-08-29. Steps 4 and 5 need the release to exist.
+
+Expect the first review to take a while: the installer is unsigned, so
+SmartScreen warns. Signing is not required for a winget submission, but its
+absence is the sort of thing a first-time reviewer asks about.
+
+### After the first submission
+
+Every later release needs a version-bump PR upstream. Keep this manual until
+the first submission is accepted — the automation is a `wingetcreate update`
+step in `release.yml`, but it needs a PAT with fork access to
+`microsoft/winget-pkgs` stored as a repository secret, and there is no point
+holding that secret for a package that has not been accepted yet.
 
 ## Linux Flathub
 
