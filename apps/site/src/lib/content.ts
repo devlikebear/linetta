@@ -314,7 +314,7 @@ export const en: Translation = {
     commandLabel: 'Claude Code — one line in your terminal',
     command: MCP_COMMAND,
     commandNote:
-      'Claude Desktop connects through the bundled <code>linetta-mcp</code> stdio bridge. The token is generated when you turn MCP on, stored in the operating system’s secret store, and revocable from Settings.',
+      'Claude Desktop connects through the <code>linetta-mcp</code> stdio bridge, which some builds ship and others do not — Settings says which, and where to get it otherwise. The token is generated when you turn MCP on and can be regenerated or revoked from Settings.',
     modesLabel: 'Access',
     modes: [
       { name: 'Off', body: 'The default. Nothing listens, and nothing is exposed.' },
@@ -354,11 +354,11 @@ export const en: Translation = {
     safetyLabel: 'What keeps it safe',
     safety: [
       'Bound to 127.0.0.1 only, with an Origin check against DNS rebinding. No LAN binding and no tunnel, at any setting.',
-      'A 32-byte bearer token held in the operating system’s secret store, regenerable and revocable from Settings.',
+      'A 32-byte bearer token, held in the operating system’s secret store where there is one and in a 0600 file otherwise, regenerable and revocable from Settings.',
       'Optimistic version checks: if you are typing in the scene an agent is rewriting, the write is refused rather than silently applied.',
       'A snapshot before every scene write, and an outline capture before every structural change.',
       'An activity log of every call — time, tool, work, target, result — shown in Settings.',
-      'Per-call size limits and a per-minute call limit, so a runaway loop hits a wall instead of forty scenes.'
+      'A cap of 120 tool calls a minute, so a runaway agent loop hits a wall instead of forty rewritten scenes.'
     ]
   },
 
@@ -654,7 +654,7 @@ export const ko: Translation = {
     commandLabel: 'Claude Code — 터미널에 한 줄',
     command: MCP_COMMAND,
     commandNote:
-      'Claude Desktop은 함께 배포되는 <code>linetta-mcp</code> stdio 브리지로 연결합니다. 토큰은 MCP를 켤 때 발급되어 운영체제 시크릿 저장소에 보관되고, 설정에서 폐기할 수 있습니다.',
+      'Claude Desktop은 <code>linetta-mcp</code> stdio 브리지로 연결합니다. 이 브리지를 함께 배포하는 빌드도, 그렇지 않은 빌드도 있으며 어느 쪽인지는 설정 화면이 알려줍니다. 토큰은 MCP를 켤 때 발급되고 설정에서 재발급·폐기할 수 있습니다.',
     modesLabel: '권한',
     modes: [
       { name: '꺼짐', body: '기본값입니다. 아무것도 열리지 않고, 아무것도 노출되지 않습니다.' },
@@ -694,11 +694,11 @@ export const ko: Translation = {
     safetyLabel: '무엇이 이것을 안전하게 하는가',
     safety: [
       '127.0.0.1에만 바인딩하고 DNS 리바인딩을 막는 Origin 검사를 합니다. 어떤 설정에서도 LAN 바인딩이나 터널은 없습니다.',
-      '32바이트 베어러 토큰을 운영체제 시크릿 저장소에 보관하며, 설정에서 재발급·폐기할 수 있습니다.',
+      '32바이트 베어러 토큰. 시크릿 저장소가 있는 운영체제에서는 거기에, 없으면 0600 파일에 보관하며, 설정에서 재발급·폐기할 수 있습니다.',
       '낙관적 버전 검사: 에이전트가 고쳐 쓰는 씬을 당신이 타이핑 중이면, 쓰기는 조용히 적용되지 않고 거부됩니다.',
       '씬을 쓰기 전마다 스냅샷, 구조를 바꾸기 전마다 아웃라인 캡처.',
       '모든 호출의 활동 로그 — 시각, 툴, 작품, 대상, 결과 — 를 설정에서 보여줍니다.',
-      '호출당 크기 상한과 분당 호출 상한. 폭주하는 루프는 씬 40개가 아니라 벽에 부딪힙니다.'
+      '분당 120회 호출 상한. 폭주하는 에이전트 루프는 씬 40개가 아니라 벽에 부딪힙니다.'
     ]
   },
 
@@ -992,7 +992,7 @@ export const ja: Translation = {
     commandLabel: 'Claude Code — 端末に一行',
     command: MCP_COMMAND,
     commandNote:
-      'Claude Desktop は同梱の <code>linetta-mcp</code> stdio ブリッジ経由でつながります。トークンは MCP をオンにしたときに発行され、OS のシークレットストアに保管され、設定から失効できます。',
+      'Claude Desktop は <code>linetta-mcp</code> stdio ブリッジ経由でつながります。同梱するビルドとしないビルドがあり、どちらかは設定画面が教えます。トークンは MCP をオンにしたときに発行され、設定から再発行・失効できます。',
     modesLabel: 'アクセス',
     modes: [
       { name: 'オフ', body: '既定値です。何も待ち受けず、何も公開されません。' },
@@ -1032,11 +1032,11 @@ export const ja: Translation = {
     safetyLabel: '安全を保つもの',
     safety: [
       '127.0.0.1 のみにバインドし、DNS リバインディングを防ぐ Origin 検査を行います。どの設定でも LAN バインドやトンネルはありません。',
-      '32バイトのベアラートークンを OS のシークレットストアに保管し、設定から再発行・失効できます。',
+      '32バイトのベアラートークン。シークレットストアのある OS ではそこに、ない場合は 0600 のファイルに保管し、設定から再発行・失効できます。',
       '楽観的バージョン検査。エージェントが書き直しているシーンをあなたが打っていれば、書き込みは黙って適用されず拒否されます。',
       'シーンを書くたびに事前スナップショット、構造を変えるたびにアウトラインの記録。',
       'すべての呼び出しの活動ログ — 時刻、ツール、作品、対象、結果 — を設定に表示します。',
-      '呼び出しごとのサイズ上限と毎分の呼び出し上限。暴走したループはシーン40本ではなく壁にぶつかります。'
+      '毎分120回の呼び出し上限。暴走したエージェントのループはシーン40本ではなく壁にぶつかります。'
     ]
   },
 
