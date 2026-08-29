@@ -69,7 +69,7 @@ func TestExportProject_buildsTreeWithHeadingsAndMetadataAppendix(t *testing.T) {
 		ProjectID: p.ID, FromID: character.ID, ToID: place.ID, Label: "거주지", Notes: "자주 머문다",
 	})
 
-	out, err := ExportProject(ctx, pr, nr, er, rr, p.ID)
+	out, err := ExportProject(ctx, pr, nr, er, rr, p.ID, "")
 	if err != nil {
 		t.Fatalf("ExportProject: %v", err)
 	}
@@ -150,4 +150,66 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func TestExportProject_appendixHeadingsFollowTheReader(t *testing.T) {
+	_, pr, nr, er, rr := newExportFixture(t)
+	ctx := context.Background()
+	p, err := pr.Create(ctx, 1, project.NewInput{Title: "Quiet City", LengthTarget: "novella", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	a, _ := er.Create(ctx, 1, entity.NewInput{ProjectID: p.ID, Name: "Hae-jin", Kind: "character"})
+	b, _ := er.Create(ctx, 2, entity.NewInput{ProjectID: p.ID, Name: "Harbour", Kind: "place"})
+	if _, err := rr.CreateOne(ctx, relationship.NewInput{
+		ProjectID: p.ID, FromID: a.ID, ToID: b.ID, Label: "lives in",
+	}); err != nil {
+		t.Fatalf("create relationship: %v", err)
+	}
+
+	// The bug: an English writer exporting their own novel found "## 등장인물"
+	// in the middle of it, because the engine wrote the heading and the engine
+	// has no idea who is reading.
+	for _, tc := range []struct{ language, characters, relationships string }{
+		{"en", "## Characters", "## Relationships"},
+		{"ja", "## 登場人物", "## 関係"},
+		{"ko", "## 등장인물", "## 관계"},
+		{"", "## 등장인물", "## 관계"},
+	} {
+		out, err := ExportProject(ctx, pr, nr, er, rr, p.ID, tc.language)
+		if err != nil {
+			t.Fatalf("ExportProject(%q): %v", tc.language, err)
+		}
+		if !strings.Contains(out.Markdown, tc.characters) {
+			t.Errorf("language %q: missing %q; doc=\n%s", tc.language, tc.characters, out.Markdown)
+		}
+		if !strings.Contains(out.Markdown, tc.relationships) {
+			t.Errorf("language %q: missing %q", tc.language, tc.relationships)
+		}
+	}
+}
+
+func TestExportProject_translatesOnlyTheHeadings(t *testing.T) {
+	_, pr, nr, er, rr := newExportFixture(t)
+	ctx := context.Background()
+	p, err := pr.Create(ctx, 1, project.NewInput{Title: "조용한 도시", LengthTarget: "novella", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := er.Create(ctx, 1, entity.NewInput{
+		ProjectID: p.ID, Name: "해진", Role: "주인공", Kind: "character",
+	}); err != nil {
+		t.Fatalf("create entity: %v", err)
+	}
+
+	out, err := ExportProject(ctx, pr, nr, er, rr, p.ID, "en")
+	if err != nil {
+		t.Fatalf("ExportProject: %v", err)
+	}
+	// What the writer typed is theirs. Only the section label is ours.
+	for _, theirs := range []string{"조용한 도시", "해진", "주인공"} {
+		if !strings.Contains(out.Markdown, theirs) {
+			t.Errorf("English export dropped the writer's own %q; doc=\n%s", theirs, out.Markdown)
+		}
+	}
 }

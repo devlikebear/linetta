@@ -65,7 +65,7 @@ func New(s *settings.Store, p *project.Repo, n *node.Repo, e *entity.Repo, r *re
 }
 
 // exportAll writes every non-archived project's markdown into destDir.
-func (s *Syncer) exportAll(ctx context.Context, destDir string) (int, error) {
+func (s *Syncer) exportAll(ctx context.Context, destDir, language string) (int, error) {
 	projs, err := s.Projects.List(ctx, project.ListFilter{IncludeArchived: false, Limit: 1000})
 	if err != nil {
 		return 0, err
@@ -76,7 +76,7 @@ func (s *Syncer) exportAll(ctx context.Context, destDir string) (int, error) {
 	written := 0
 	failures := make([]string, 0)
 	for _, p := range projs {
-		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID)
+		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID, language)
 		if err != nil {
 			msg := fmt.Sprintf("project %s export: %v", p.ID, err)
 			fmt.Fprintf(os.Stderr, "folder sync: %s\n", msg)
@@ -133,7 +133,7 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 		summary.Skipped = true
 		return summary, nil
 	}
-	n, werr := s.exportAll(ctx, cfg.FolderSyncDir)
+	n, werr := s.exportAll(ctx, cfg.FolderSyncDir, cfg.Language)
 	summary.FilesWritten = n
 	summary.FilesCopied = n
 	if werr != nil {
@@ -159,7 +159,7 @@ func (s *Syncer) Stage(ctx context.Context) (StageResult, error) {
 	if err := os.RemoveAll(staging); err != nil {
 		return StageResult{}, err
 	}
-	if _, err := s.exportAll(ctx, staging); err != nil {
+	if _, err := s.exportAll(ctx, staging, cfg.Language); err != nil {
 		return StageResult{}, err
 	}
 	entries, err := os.ReadDir(staging)

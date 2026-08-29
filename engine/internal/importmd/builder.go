@@ -56,8 +56,7 @@ func BuildProject(ctx context.Context, pr *project.Repo, nr *node.Repo, now int6
 	res := BuildResult{Project: p}
 
 	if len(outline.Roots) == 0 {
-		res.Warnings = append(res.Warnings,
-			"헤딩(`#`, `##`, `###`, `####`)을 찾지 못해 비어있는 작품이 생성되었습니다. 마크다운에 헤딩을 추가한 뒤 다시 가져와 주세요.")
+		res.Warnings = append(res.Warnings, WarnNoHeadings)
 		return res, nil
 	}
 	if p.LastOpenedNodeID == nil {
@@ -294,7 +293,7 @@ func restoreOne(ctx context.Context, rr *relationship.Repo, projectID string, re
 	fromID, toID := resolveRelationshipEnds(rel, idMap, nameMap)
 	label := stringsTrim(rel.Label)
 	if fromID == "" || toID == "" || label == "" {
-		res.Warnings = append(res.Warnings, "일부 관계는 대상 엔티티를 찾지 못해 건너뛰었습니다.")
+		res.Warnings = append(res.Warnings, WarnRelationshipsSkipped)
 		return nil
 	}
 	if _, err := rr.CreateOne(ctx, relationship.NewInput{

@@ -18,10 +18,32 @@ type Payload struct {
 	SuggestedFilename string `json:"suggested_filename"`
 }
 
+// appendixHeadings names the two human-readable appendices in the reader's
+// language.
+//
+// These used to be Korean for everyone, so an English writer exporting their
+// own novel found "## 등장인물" in the middle of it (#45). The frontmatter above
+// them is what import actually restores from; these headings are for a person
+// reading the file, which is exactly why they have to be readable.
+func appendixHeadings(language string) (characters, relationships string) {
+	switch {
+	case strings.HasPrefix(language, "en"):
+		return "Characters", "Relationships"
+	case strings.HasPrefix(language, "ja"):
+		return "登場人物", "関係"
+	default:
+		return "등장인물", "관계"
+	}
+}
+
 // ExportProject builds a single markdown document from the project tree plus
 // frontmatter metadata and readable appendices. Heading levels are derived from
 // depth (root containers = ##).
-func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo, projectID string) (Payload, error) {
+//
+// `language` names the appendix headings only; nothing the writer typed is
+// translated. Import accepts all three, so a file exported in one language
+// still round-trips after the writer switches.
+func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo, projectID, language string) (Payload, error) {
 	p, err := pr.Get(ctx, projectID)
 	if err != nil {
 		return Payload{}, err
@@ -94,8 +116,9 @@ func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *ent
 
 	// Human-readable appendices. Import strips these and uses the frontmatter
 	// above for exact restoration.
+	charactersHeading, relationshipsHeading := appendixHeadings(language)
 	if len(ents) > 0 {
-		sb.WriteString("## 등장인물\n\n")
+		sb.WriteString("## " + charactersHeading + "\n\n")
 		for _, e := range ents {
 			line := fmt.Sprintf("- **%s** (%s)", e.Name, e.Kind)
 			if e.Role != "" {
@@ -110,7 +133,7 @@ func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *ent
 		sb.WriteString("\n")
 	}
 	if len(rels) > 0 {
-		sb.WriteString("## 관계\n\n")
+		sb.WriteString("## " + relationshipsHeading + "\n\n")
 		for _, rel := range rels {
 			line := fmt.Sprintf("- **%s** → **%s**: %s",
 				entityNames[rel.FromID], entityNames[rel.ToID], rel.Label)

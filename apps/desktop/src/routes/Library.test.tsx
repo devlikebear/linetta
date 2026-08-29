@@ -54,7 +54,10 @@ vi.mock("../lib/rpc", () => ({
   },
 }));
 
-vi.mock("../lib/exportSave", () => ({
+vi.mock("../lib/exportSave", async (importOriginal) => ({
+  // Only the dialog is faked. exportDestinationMessage is real, because what
+  // this test checks is that the writer is told where the file went.
+  ...(await importOriginal<typeof import("../lib/exportSave")>()),
   saveExportedMarkdown: mocks.saveExportedMarkdown,
 }));
 
@@ -283,6 +286,9 @@ describe("Library", () => {
       suggested_filename: "quiet-city.md",
       markdown: "# Quiet City\n",
     });
+    // The writer has to be able to see where a manuscript landed; "done" left
+    // them guessing whether it had gone into a synced folder (#34).
+    expect(await screen.findByText("/tmp에 저장했습니다.")).toBeInTheDocument();
   });
 
   it("deletes a recent project after confirmation", async () => {

@@ -56,7 +56,7 @@ func ParseDocument(text string) Document {
 	if err != nil {
 		meta = mdmeta.Metadata{}
 		body = text
-		warnings = append(warnings, "Linetta frontmatter를 읽지 못해 메타데이터 복원을 건너뛰었습니다.")
+		warnings = append(warnings, WarnFrontmatterUnreadable)
 	}
 	legacy, stripped := stripLinettaAppendices(body, meta.Empty())
 	if meta.Empty() {
@@ -190,11 +190,16 @@ func stripLinettaAppendices(text string, captureLegacy bool) (mdmeta.Metadata, s
 func appendixKind(label string) string {
 	compact := strings.ReplaceAll(strings.TrimSpace(strings.ToLower(label)), " ", "")
 	switch {
+	// Every language the exporter can write, plus the synonyms a writer might
+	// type by hand. A file exported in one language has to round-trip after
+	// the writer switches to another (#45).
 	case strings.Contains(compact, "등장인물") || strings.Contains(compact, "캐릭터") ||
 		strings.Contains(compact, "인물") || strings.Contains(compact, "장소") ||
-		strings.Contains(compact, "characters") || strings.Contains(compact, "places"):
+		strings.Contains(compact, "characters") || strings.Contains(compact, "places") ||
+		strings.Contains(compact, "登場人物") || strings.Contains(compact, "場所"):
 		return "entities"
-	case strings.Contains(compact, "관계") || strings.Contains(compact, "relationships"):
+	case strings.Contains(compact, "관계") || strings.Contains(compact, "relationships") ||
+		strings.Contains(compact, "関係"):
 		return "relationships"
 	default:
 		return ""

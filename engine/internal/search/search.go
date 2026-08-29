@@ -118,7 +118,10 @@ func preview(result Result, contentDoc string, query string) string {
 			return candidate
 		}
 	}
-	return "검색 결과"
+	// An untitled, empty scene in an untitled work has nothing to preview. The
+	// engine does not know the reader's language, so it says nothing rather
+	// than a Korean placeholder (#45); the result still carries its own title.
+	return ""
 }
 
 func docToPlainText(raw string) string {

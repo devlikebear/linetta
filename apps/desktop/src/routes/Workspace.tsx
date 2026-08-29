@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Replace, Menu, Keyboard } from "lucide-react";
+import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
 import { McpIndicator } from "../components/McpIndicator";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
@@ -12,11 +12,12 @@ import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
 import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
-import { saveExportedMarkdown } from "../lib/exportSave";
+import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle, type TiptapSelectionMenuPayload } from "../components/editor/Tiptap";
-import { autoMentionDoc } from "../lib/editor/autoMention";
+import { autoMentionDoc, countAutoMentionCandidates } from "../lib/editor/autoMention";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
+import { CanonPanel } from "../components/CanonPanel";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { ContextualEditPanel } from "../components/contextual/ContextualEditPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
@@ -59,6 +60,9 @@ import {
 } from "../hooks/useFirstLeaf";
 
 const SAVE_DEBOUNCE_MS = 800;
+// Longer than the save debounce: a name is only worth counting once the
+// writer has stopped mid-sentence, and the scan walks the whole document.
+const AUTO_MENTION_SCAN_MS = 1500;
 const IDLE_CHECKPOINT_MS = 120_000;
 const LAST_OPENED_THROTTLE_MS = 5000;
 function seedRailCollapsed(): boolean {
@@ -128,20 +132,27 @@ export function Workspace() {
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
+  const [canonOpen, setCanonOpen] = useState(false);
+  // Bumped when an external agent changes the work, so the story world list
+  // reflects the three characters it just said it created (#28).
+  const [canonRefreshKey, setCanonRefreshKey] = useState(0);
   const prevInspectorRef = useRef<InspectorState>({
     factBook: false,
     contextual: false,
+    canon: false,
   });
   useEffect(() => {
     const next: InspectorState = {
       factBook: factBookOpen,
       contextual: contextualEditOpen,
+      canon: canonOpen,
     };
     const corrected = reconcileInspector(prevInspectorRef.current, next, sizeClass);
     if (corrected.factBook !== next.factBook) setFactBookOpen(corrected.factBook);
     if (corrected.contextual !== next.contextual) setContextualEditOpen(corrected.contextual);
+    if (corrected.canon !== next.canon) setCanonOpen(corrected.canon);
     prevInspectorRef.current = corrected;
-  }, [sizeClass, factBookOpen, contextualEditOpen]);
+  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen]);
   const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
@@ -154,6 +165,11 @@ export function Workspace() {
   const [tourOpen, setTourOpen] = useState(false);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [autoMentionBusy, setAutoMentionBusy] = useState(false);
+  // Registered names sitting in the prose without a mention link. Counted, not
+  // applied: linking rewrites the manuscript and can pick the wrong record for
+  // a homonym, so the writer decides (#32).
+  const [autoMentionFound, setAutoMentionFound] = useState(0);
+  const [autoMentionScanKey, setAutoMentionScanKey] = useState(0);
   const factBookSelectionSeqRef = useRef(0);
   const loadRef = useRef<LoadState | null>(null);
   const sceneSaveQueueRef = useRef<SceneSaveQueue<NodeRow> | null>(null);
@@ -440,7 +456,12 @@ export function Workspace() {
     projectId: projectId ?? null,
     openNodeId: load?.node.id ?? null,
     editorDirty,
-    onOutlineChanged: () => { void refreshOutlineFromEngine(); },
+    onOutlineChanged: () => {
+      void refreshOutlineFromEngine();
+      // linetta_apply_story_ops carries create_entity and create_relationship,
+      // so the same signal that refreshes the outline refreshes the cast.
+      setCanonRefreshKey((k) => k + 1);
+    },
     onSceneChanged: (nodeId) => { void reloadSceneFromEngine(nodeId); },
   });
 
@@ -855,6 +876,29 @@ export function Workspace() {
     [debouncedSave, load, sceneSaveQueue, showToast, t],
   );
 
+  // Re-count after the writer stops typing, and after an agent or a scene
+  // change replaces the buffer. Debounced because it walks the whole doc.
+  useEffect(() => {
+    if (!load) return undefined;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const doc = editorRef.current?.getDoc();
+          if (!doc) return;
+          const allEntities = await entitiesApi.list(load.project.id);
+          if (!cancelled) setAutoMentionFound(countAutoMentionCandidates(doc, allEntities));
+        } catch {
+          /* benign: the count is a hint, not a feature the writer waits on */
+        }
+      })();
+    }, AUTO_MENTION_SCAN_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [load, autoMentionScanKey]);
+
   const handleAutoMentionScene = useCallback(async () => {
     if (!load) return;
     const editor = editorRef.current?.editor;
@@ -865,6 +909,7 @@ export function Workspace() {
       const allEntities = await entitiesApi.list(load.project.id);
       const result = autoMentionDoc(doc, allEntities);
       if (result.applied === 0) {
+        setAutoMentionFound(0);
         showToast(t("workspace.toast.autoMentionNone"));
         return;
       }
@@ -876,6 +921,7 @@ export function Workspace() {
       setCharCount(updated.word_count);
       await refreshMentioned(load.node.id);
       setSaveStatus({ kind: "saved", at: Date.now() });
+      setAutoMentionFound(0);
       showToast(t("workspace.toast.autoMentionApplied", { count: result.applied }));
     } catch (e) {
       setSaveStatus({ kind: "error", message: String(e) });
@@ -921,6 +967,7 @@ export function Workspace() {
       const next = !v;
       if (next) {
             setContextualEditOpen(false);
+        setCanonOpen(false);
         setEntitySheetId(null);
         setThreadSheetId(null);
           }
@@ -935,9 +982,24 @@ export function Workspace() {
         setContextualSeed(null);
         setFactBookSelectedClaimRequest(null);
         setFactBookOpen(false);
+        setCanonOpen(false);
             setEntitySheetId(null);
         setThreadSheetId(null);
           }
+      return next;
+    });
+  }, []);
+
+  const toggleCanon = useCallback(() => {
+    setCanonOpen((v) => {
+      const next = !v;
+      if (next) {
+        setFactBookSelectedClaimRequest(null);
+        setFactBookOpen(false);
+        setContextualEditOpen(false);
+        setEntitySheetId(null);
+        setThreadSheetId(null);
+      }
       return next;
     });
   }, []);
@@ -1157,7 +1219,7 @@ export function Workspace() {
         try {
           const payload = await exportApi.project(load.project.id);
           const path = await saveExportedMarkdown(payload);
-          if (path) showToast(t("workspace.toast.exportComplete"));
+          if (path) showToast(exportDestinationMessage(t, path));
         } catch (e) {
           showToast(t("workspace.toast.exportFailed", { error: String(e) }));
         }
@@ -1171,7 +1233,7 @@ export function Workspace() {
         try {
           const payload = await exportApi.node(load.node.id);
           const path = await saveExportedMarkdown(payload);
-          if (path) showToast(t("workspace.toast.exportComplete"));
+          if (path) showToast(exportDestinationMessage(t, path));
         } catch (e) {
           showToast(t("workspace.toast.exportFailed", { error: String(e) }));
         }
@@ -1249,6 +1311,12 @@ export function Workspace() {
       run: toggleContextualEdit,
     });
     cmds.push({
+      id: "toggle-canon",
+      section: sectionProject,
+      label: t("canon.title"),
+      run: toggleCanon,
+    });
+    cmds.push({
       id: "toggle-fact-book",
       section: sectionProject,
       label: t("factBook.title"),
@@ -1261,7 +1329,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, gitSyncAvailable]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1463,6 +1531,14 @@ export function Workspace() {
           </button>
           <button
             type="button"
+            className={`ws-tool${canonOpen ? " is-active" : ""}`}
+            onClick={toggleCanon}
+            title={t("canon.title")}
+          >
+            <Library size={15} /> {t("canon.title")}
+          </button>
+          <button
+            type="button"
             className={`ws-tool${factBookOpen ? " is-active" : ""}`}
             onClick={toggleFactBook}
             title={t("factBook.title")}
@@ -1477,7 +1553,7 @@ export function Workspace() {
       </header>
 
       <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
-        (factBookOpen || contextualEditOpen) ? " right-wide" : ""
+        (factBookOpen || contextualEditOpen || canonOpen) ? " right-wide" : ""
       }${versionSheetNodeId ? " right-history" : ""}`}>
         {!railCollapsed && (
           <button
@@ -1554,6 +1630,7 @@ export function Workspace() {
                 debouncedSave(load.node.id, doc);
                 idleDirtyRef.current = true;
                 setEditorDirty(true);
+                setAutoMentionScanKey((k) => k + 1);
                 markActivity();
                 throttledLastOpened();
               }}
@@ -1698,6 +1775,19 @@ export function Workspace() {
               /* PlotPanel self-reloads */
             }}
           />
+        ) : canonOpen && load ? (
+          // Below the sheets on purpose: opening a record from the list hands
+          // the slot to EntitySheet, and closing the sheet lands back here
+          // instead of dumping the writer in the editor.
+          <CanonPanel
+            projectId={load.project.id}
+            refreshKey={canonRefreshKey}
+            onOpenEntity={(entityId) => setEntitySheetId(entityId)}
+            onClose={() => {
+              setCanonOpen(false);
+              focusEditor();
+            }}
+          />
         ) : sizeClass === "desktop" ? (
           <ContextPanel
             project={load.project}
@@ -1713,6 +1803,7 @@ export function Workspace() {
             onMentionClick={(id) => setEntitySheetId(id)}
             onAutoMention={handleAutoMentionScene}
             autoMentionBusy={autoMentionBusy}
+            autoMentionFound={autoMentionFound}
             onOpenThread={setThreadSheetId}
             onProjectTitleChange={handleProjectTitleCommit}
             onProjectChanged={(p) =>

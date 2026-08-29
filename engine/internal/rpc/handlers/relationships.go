@@ -70,6 +70,32 @@ func ListRelationshipsByEntity(repo *relationship.Repo) rpc.Handler {
 	}
 }
 
+type listRelationshipsParams struct {
+	ProjectID string `json:"project_id"`
+}
+
+// ListRelationships handles relationships.list — every relationship in a work.
+//
+// The per-entity list answers "who is this one tied to"; a browser showing the
+// whole cast at once needs the other question, "how connected is each of them",
+// and asking it one entity at a time is a round trip per row.
+func ListRelationships(repo *relationship.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p listRelationshipsParams
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		list, err := repo.ListByProject(ctx, p.ProjectID)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		if list == nil {
+			list = []relationship.Relationship{}
+		}
+		return json.Marshal(list)
+	}
+}
+
 // UpdateRelationship handles relationships.update (single row only).
 func UpdateRelationship(repo *relationship.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
@@ -79,7 +105,7 @@ func UpdateRelationship(repo *relationship.Repo) rpc.Handler {
 		}
 		if err := repo.Update(ctx, in); err != nil {
 			if errors.Is(err, relationship.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "relationship not found"}
+				return nil, rpc.NotFound(rpc.ReasonRelationshipNotFound, "relationship not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -100,7 +126,7 @@ func DeleteRelationship(repo *relationship.Repo) rpc.Handler {
 		}
 		if err := repo.Delete(ctx, p.ID); err != nil {
 			if errors.Is(err, relationship.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "relationship not found"}
+				return nil, rpc.NotFound(rpc.ReasonRelationshipNotFound, "relationship not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

@@ -44,4 +44,31 @@ describe("rpcErrorMessage", () => {
   it("handles errors that are not RpcError at all", () => {
     expect(rpcErrorMessage(new Error("plain failure"), ko)).toContain("plain failure");
   });
+
+  // The engine reports a missing record with a code because the message it
+  // writes is for logs; the reader gets it in their own language (#44).
+  it("explains a record that is gone in the reader's language", () => {
+    const gone = new RpcError("nodes.get", "node not found", -32602, {
+      reason: "node_not_found",
+    });
+    expect(rpcErrorMessage(gone, ko)).toContain("씬");
+    expect(rpcErrorMessage(gone, en)).toContain("scene");
+    expect(rpcErrorMessage(gone, en)).not.toContain("node not found");
+  });
+
+  it("covers every not-found code the engine can send", () => {
+    for (const reason of [
+      "node_not_found",
+      "project_not_found",
+      "entity_not_found",
+      "thread_not_found",
+      "beat_not_found",
+      "relationship_not_found",
+      "note_not_found",
+      "fact_card_not_found",
+    ]) {
+      const err = new RpcError("x", "raw engine message", -32602, { reason });
+      expect(rpcErrorMessage(err, en), reason).not.toContain("raw engine message");
+    }
+  });
 });

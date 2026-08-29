@@ -59,7 +59,7 @@ func GetThread(repo *thread.Repo) rpc.Handler {
 		}
 		th, err := repo.Get(ctx, p.ID)
 		if errors.Is(err, thread.ErrNotFound) {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "thread not found"}
+			return nil, rpc.NotFound(rpc.ReasonThreadNotFound, "thread not found")
 		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
@@ -77,7 +77,7 @@ func UpdateThread(repo *thread.Repo) rpc.Handler {
 		}
 		if err := repo.Update(ctx, in); err != nil {
 			if errors.Is(err, thread.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "thread not found"}
+				return nil, rpc.NotFound(rpc.ReasonThreadNotFound, "thread not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -98,7 +98,7 @@ func CloseThread(repo *thread.Repo, now Clock) rpc.Handler {
 		}
 		if err := repo.Close(ctx, p.ID, now()); err != nil {
 			if errors.Is(err, thread.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "thread not found"}
+				return nil, rpc.NotFound(rpc.ReasonThreadNotFound, "thread not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -119,7 +119,7 @@ func ReopenThread(repo *thread.Repo) rpc.Handler {
 		}
 		if err := repo.Reopen(ctx, p.ID); err != nil {
 			if errors.Is(err, thread.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "thread not found"}
+				return nil, rpc.NotFound(rpc.ReasonThreadNotFound, "thread not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

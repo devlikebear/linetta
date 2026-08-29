@@ -12,6 +12,7 @@ import type {
   ReviewCandidate,
 } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
+import { rpcErrorMessage } from "../../lib/rpcMessage";
 import "./ContextChangeWizard.css";
 
 interface Props {
@@ -76,6 +77,8 @@ export function ContextChangeWizard({ projectId, initialEntityId, initialText, a
     setReport(null);
     contextual.checkConsistency({ project_id: projectId, old_terms: [term], language })
       .then((nextReport) => setReport(nextReport))
+      // Inside an effect: `t` stays out of the deps so a re-render cannot
+      // re-run the consistency check.
       .catch((err) => setError(String(err)));
   }, [autoCheck, autoCheckKey, initialText, language, projectId]);
 
@@ -189,7 +192,7 @@ export function ContextChangeWizard({ projectId, initialEntityId, initialText, a
         });
         setReport(nextReport);
       })
-      .catch((err) => setError(String(err)))
+      .catch((err) => setError(rpcErrorMessage(err, t)))
       .finally(() => setApplying(false));
   };
 

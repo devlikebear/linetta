@@ -55,7 +55,7 @@ func GetNote(repo *note.Repo) rpc.Handler {
 		}
 		n, err := repo.Get(ctx, p.ID)
 		if errors.Is(err, note.ErrNotFound) {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "note not found"}
+			return nil, rpc.NotFound(rpc.ReasonNoteNotFound, "note not found")
 		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
@@ -72,7 +72,7 @@ func UpdateNote(repo *note.Repo) rpc.Handler {
 		}
 		if err := repo.Update(ctx, in); err != nil {
 			if errors.Is(err, note.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "note not found"}
+				return nil, rpc.NotFound(rpc.ReasonNoteNotFound, "note not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
 		}
@@ -92,7 +92,7 @@ func DeleteNote(repo *note.Repo) rpc.Handler {
 		}
 		if err := repo.Delete(ctx, p.ID); err != nil {
 			if errors.Is(err, note.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "note not found"}
+				return nil, rpc.NotFound(rpc.ReasonNoteNotFound, "note not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

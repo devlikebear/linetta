@@ -124,6 +124,16 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	if err != nil {
 		return fmt.Errorf("settings: %w", err)
 	}
+	// The reader's language, for the handful of places the engine writes text a
+	// person reads. An unreadable setting falls back to the default rather than
+	// failing whatever asked.
+	settingsLanguage := func(ctx context.Context) string {
+		cfg, err := settingsStore.Get(ctx)
+		if err != nil {
+			return ""
+		}
+		return cfg.Language
+	}
 
 	summ := summarizer.New(nodes).WithOpsStatus(ops, clock)
 	stopSummarizer := summ.Start(ctx)
@@ -286,6 +296,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("plot.spine_panel", handlers.PlotSpinePanel(plotBuilder))
 	s.Handle("relationships.create_one", handlers.CreateOneRelationship(relationships))
 	s.Handle("relationships.create_pair", handlers.CreatePairRelationship(relationships))
+	s.Handle("relationships.list", handlers.ListRelationships(relationships))
 	s.Handle("relationships.list_by_entity", handlers.ListRelationshipsByEntity(relationships))
 	s.Handle("relationships.update", handlers.UpdateRelationship(relationships))
 	s.Handle("relationships.delete", handlers.DeleteRelationship(relationships))
@@ -310,10 +321,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
-	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities, relationships))
+	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities, relationships, settingsLanguage))
 	s.Handle("export.node", handlers.ExportNode(nodes))
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
-	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc))
+	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc, settingsLanguage))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	return nil

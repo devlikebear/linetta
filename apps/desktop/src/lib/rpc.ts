@@ -371,6 +371,8 @@ export const relationships = {
     rpcCall<Relationship>("relationships.create_one", input),
   createPair: (input: NewRelationshipPairInput) =>
     rpcCall<Relationship[]>("relationships.create_pair", input),
+  list: (projectId: string) =>
+    rpcCall<Relationship[]>("relationships.list", { project_id: projectId }),
   listByEntity: (entityId: string) =>
     rpcCall<Relationship[]>("relationships.list_by_entity", { entity_id: entityId }),
   update: (input: UpdateRelationshipInput) =>

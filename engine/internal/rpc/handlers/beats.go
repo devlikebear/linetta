@@ -80,7 +80,7 @@ func UpdateBeat(repo *beat.Repo) rpc.Handler {
 		}
 		if err := repo.Update(ctx, in); err != nil {
 			if errors.Is(err, beat.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "beat not found"}
+				return nil, rpc.NotFound(rpc.ReasonBeatNotFound, "beat not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
@@ -120,7 +120,7 @@ func DeleteBeat(repo *beat.Repo) rpc.Handler {
 		}
 		if err := repo.Delete(ctx, p.ID); err != nil {
 			if errors.Is(err, beat.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "beat not found"}
+				return nil, rpc.NotFound(rpc.ReasonBeatNotFound, "beat not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

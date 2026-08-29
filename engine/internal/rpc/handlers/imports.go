@@ -83,7 +83,7 @@ func restoreProjectOutlinePreset(ctx context.Context, pr *project.Repo, now int6
 		return nil
 	}
 	if !project.ValidOutlinePreset(preset) {
-		built.Warnings = append(built.Warnings, "알 수 없는 아웃라인 구조 프리셋을 무시했습니다: "+preset)
+		built.Warnings = append(built.Warnings, importmd.WarnUnknownOutlinePreset+":"+preset)
 		return nil
 	}
 	updated, err := pr.Update(ctx, now, project.UpdateInput{ID: built.Project.ID, OutlinePreset: &preset})

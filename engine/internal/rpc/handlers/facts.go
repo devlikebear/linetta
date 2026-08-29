@@ -70,10 +70,10 @@ func CreateFactFromURL(repo *fact.Repo, now Clock, fetch factURLFetcher) rpc.Han
 		snippet := trimRunes(strings.Join(strings.Fields(fetched.Content), " "), directFactSnippetRunes)
 		result := strings.TrimSpace(in.Result)
 		if result == "" {
-			result = "직접 입력한 출처 URL에서 확인했습니다."
-			if snippet != "" {
-				result += " " + snippet
-			}
+			// The caller supplies the sentence, because only it knows the
+			// reader's language (#45). Falling back to the fetched excerpt
+			// keeps the card useful without inventing Korean prose.
+			result = snippet
 		}
 		status := strings.TrimSpace(in.Status)
 		if status == "" {
@@ -182,7 +182,7 @@ func UpdateFact(repo *fact.Repo, now Clock) rpc.Handler {
 		}
 		card, err := repo.Update(ctx, now(), in)
 		if errors.Is(err, fact.ErrNotFound) {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "fact card not found"}
+			return nil, rpc.NotFound(rpc.ReasonFactCardNotFound, "fact card not found")
 		}
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
@@ -199,7 +199,7 @@ func DeleteFact(repo *fact.Repo) rpc.Handler {
 		}
 		if err := repo.Delete(ctx, p.ID); err != nil {
 			if errors.Is(err, fact.ErrNotFound) {
-				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "fact card not found"}
+				return nil, rpc.NotFound(rpc.ReasonFactCardNotFound, "fact card not found")
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

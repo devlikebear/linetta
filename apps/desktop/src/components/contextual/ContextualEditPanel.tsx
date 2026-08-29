@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, FileText, Replace, Search, X } from "lucide-
 import { manuscript } from "../../lib/rpc";
 import type { ApplyReplaceResult, ManuscriptSearchHit, ReplacePlan } from "../../lib/types";
 import { localeForLanguage, useI18n } from "../../lib/i18n";
+import { rpcErrorMessage } from "../../lib/rpcMessage";
 import type { TiptapFindResult, TiptapHandle } from "../editor/Tiptap";
 import { BatchReplaceReview } from "./BatchReplaceReview";
 import { ContextChangeWizard } from "./ContextChangeWizard";
@@ -264,7 +265,7 @@ export function ContextualEditPanel({
         setReplaceResult(result);
         if (result.changed_node_ids.length > 0) onBatchApplied?.(result.changed_node_ids);
       })
-      .catch((err) => setProjectError(String(err)))
+      .catch((err) => setProjectError(rpcErrorMessage(err, t)))
       .finally(() => setReplaceApplying(false));
   };
 

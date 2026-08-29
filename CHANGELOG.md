@@ -23,6 +23,23 @@ Linetta is a writing tool. It no longer talks to a language model.
 - Provider API keys already in your OS keychain are left untouched; remove them
   there if you want them gone.
 - `Cmd/Ctrl+J` and `Cmd/Ctrl+I` are unbound.
+- Added a Story World panel: the characters, places, items and concepts your
+  work has registered, with per-kind lists, search across names and aliases, and
+  a click through to the record. When an agent creates three characters, there
+  is now somewhere to go and look.
+- Registered names appearing in your prose are noticed as you write, instead of
+  waiting for you to press a scan button. They are counted, not linked — a
+  homonym would be linked to the wrong record, so applying stays your call.
+- Engine failure and import messages now speak the reader's language. They were
+  Korean sentences written in the engine, which an English or Japanese writer
+  saw verbatim. So do the section headings in an exported manuscript, and the
+  companion archive. Import reads all three, so a file exported in one language
+  still opens after you switch.
+- Fixed a character marked Protagonist counting for nothing unless you write in
+  Korean. The engine matched core story roles against Korean labels only, so a
+  connected agent asking for story context got a work with no cast.
+- Markdown export says where the file landed, and names the sync folder when it
+  landed in one.
 
 ## v0.9.6 - 2026-08-22
 
