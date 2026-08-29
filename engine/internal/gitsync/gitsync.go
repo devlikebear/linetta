@@ -119,7 +119,7 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 	written := 0
 	failures := make([]string, 0)
 	for _, p := range projs {
-		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID)
+		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID, cfg.Language)
 		if err != nil {
 			msg := fmt.Sprintf("project %s export: %v", p.ID, err)
 			fmt.Fprintf(os.Stderr, "gitsync: %s\n", msg)

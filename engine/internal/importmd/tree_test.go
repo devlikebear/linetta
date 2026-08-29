@@ -185,3 +185,33 @@ func TestParseDocument_skipsLegacyEntityAppendixAndCapturesEntities(t *testing.T
 		t.Fatalf("place entity not captured: %+v", doc.Metadata.Entities[1])
 	}
 }
+
+func TestAppendixKind_recognisesEveryLanguageTheExporterWrites(t *testing.T) {
+	// The export headings follow the reader's language (#45). Import has to
+	// accept all of them, or a writer who switches language can no longer read
+	// back a file they exported earlier.
+	entities := []string{
+		"등장인물", "캐릭터", "인물", "장소",
+		"Characters", "Places",
+		"登場人物", "場所",
+	}
+	for _, label := range entities {
+		if got := appendixKind(label); got != "entities" {
+			t.Errorf("appendixKind(%q) = %q, want entities", label, got)
+		}
+	}
+
+	relationships := []string{"관계", "Relationships", "関係"}
+	for _, label := range relationships {
+		if got := appendixKind(label); got != "relationships" {
+			t.Errorf("appendixKind(%q) = %q, want relationships", label, got)
+		}
+	}
+
+	// An ordinary chapter title must not be swallowed as an appendix.
+	for _, label := range []string{"1장", "Chapter One", "第一章"} {
+		if got := appendixKind(label); got != "" {
+			t.Errorf("appendixKind(%q) = %q, want empty", label, got)
+		}
+	}
+}

@@ -18,13 +18,21 @@ type exportProjectParams struct {
 }
 
 // ExportProject returns a handler for export.project.
-func ExportProject(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo) rpc.Handler {
+//
+// `language` names the reader, so the appendix headings are readable to them
+// (#45). It is a function rather than the settings store because one string is
+// all this needs, and the export must not fail when that string cannot be read.
+func ExportProject(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo, language func(context.Context) string) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p exportProjectParams
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
 		}
-		out, err := export.ExportProject(ctx, pr, nr, er, rr, p.ProjectID)
+		lang := ""
+		if language != nil {
+			lang = language(ctx)
+		}
+		out, err := export.ExportProject(ctx, pr, nr, er, rr, p.ProjectID, lang)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
