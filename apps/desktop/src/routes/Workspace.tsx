@@ -14,7 +14,7 @@ import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
 import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle, type TiptapSelectionMenuPayload } from "../components/editor/Tiptap";
-import { autoMentionDoc } from "../lib/editor/autoMention";
+import { autoMentionDoc, countAutoMentionCandidates } from "../lib/editor/autoMention";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { FactBookPanel } from "../components/FactBookPanel";
@@ -59,6 +59,9 @@ import {
 } from "../hooks/useFirstLeaf";
 
 const SAVE_DEBOUNCE_MS = 800;
+// Longer than the save debounce: a name is only worth counting once the
+// writer has stopped mid-sentence, and the scan walks the whole document.
+const AUTO_MENTION_SCAN_MS = 1500;
 const IDLE_CHECKPOINT_MS = 120_000;
 const LAST_OPENED_THROTTLE_MS = 5000;
 function seedRailCollapsed(): boolean {
@@ -154,6 +157,11 @@ export function Workspace() {
   const [tourOpen, setTourOpen] = useState(false);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [autoMentionBusy, setAutoMentionBusy] = useState(false);
+  // Registered names sitting in the prose without a mention link. Counted, not
+  // applied: linking rewrites the manuscript and can pick the wrong record for
+  // a homonym, so the writer decides (#32).
+  const [autoMentionFound, setAutoMentionFound] = useState(0);
+  const [autoMentionScanKey, setAutoMentionScanKey] = useState(0);
   const factBookSelectionSeqRef = useRef(0);
   const loadRef = useRef<LoadState | null>(null);
   const sceneSaveQueueRef = useRef<SceneSaveQueue<NodeRow> | null>(null);
@@ -855,6 +863,29 @@ export function Workspace() {
     [debouncedSave, load, sceneSaveQueue, showToast, t],
   );
 
+  // Re-count after the writer stops typing, and after an agent or a scene
+  // change replaces the buffer. Debounced because it walks the whole doc.
+  useEffect(() => {
+    if (!load) return undefined;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const doc = editorRef.current?.getDoc();
+          if (!doc) return;
+          const allEntities = await entitiesApi.list(load.project.id);
+          if (!cancelled) setAutoMentionFound(countAutoMentionCandidates(doc, allEntities));
+        } catch {
+          /* benign: the count is a hint, not a feature the writer waits on */
+        }
+      })();
+    }, AUTO_MENTION_SCAN_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [load, autoMentionScanKey]);
+
   const handleAutoMentionScene = useCallback(async () => {
     if (!load) return;
     const editor = editorRef.current?.editor;
@@ -865,6 +896,7 @@ export function Workspace() {
       const allEntities = await entitiesApi.list(load.project.id);
       const result = autoMentionDoc(doc, allEntities);
       if (result.applied === 0) {
+        setAutoMentionFound(0);
         showToast(t("workspace.toast.autoMentionNone"));
         return;
       }
@@ -876,6 +908,7 @@ export function Workspace() {
       setCharCount(updated.word_count);
       await refreshMentioned(load.node.id);
       setSaveStatus({ kind: "saved", at: Date.now() });
+      setAutoMentionFound(0);
       showToast(t("workspace.toast.autoMentionApplied", { count: result.applied }));
     } catch (e) {
       setSaveStatus({ kind: "error", message: String(e) });
@@ -1554,6 +1587,7 @@ export function Workspace() {
                 debouncedSave(load.node.id, doc);
                 idleDirtyRef.current = true;
                 setEditorDirty(true);
+                setAutoMentionScanKey((k) => k + 1);
                 markActivity();
                 throttledLastOpened();
               }}
@@ -1713,6 +1747,7 @@ export function Workspace() {
             onMentionClick={(id) => setEntitySheetId(id)}
             onAutoMention={handleAutoMentionScene}
             autoMentionBusy={autoMentionBusy}
+            autoMentionFound={autoMentionFound}
             onOpenThread={setThreadSheetId}
             onProjectTitleChange={handleProjectTitleCommit}
             onProjectChanged={(p) =>

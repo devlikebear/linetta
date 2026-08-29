@@ -19,6 +19,19 @@ export function autoMentionDoc(doc: object, entities: Entity[]): AutoMentionResu
   return { doc: converted.node, applied: converted.applied };
 }
 
+/** How many registered names appear in the prose without being linked yet.
+ *
+ *  Counting is separate from applying on purpose. Turning a name into a
+ *  mention edits the manuscript, and a homonym — a place called 해윤 in a work
+ *  that also has a character 해윤 — would be linked to the wrong record. So
+ *  Linetta reports what it found and leaves the decision with the writer,
+ *  rather than rewriting their prose on a timer. */
+export function countAutoMentionCandidates(doc: object, entities: Entity[]): number {
+  const candidates = buildCandidates(entities);
+  if (candidates.length === 0) return 0;
+  return convertNode(doc, candidates).applied;
+}
+
 function buildCandidates(entities: Entity[]): Candidate[] {
   const seen = new Set<string>();
   const out: Candidate[] = [];

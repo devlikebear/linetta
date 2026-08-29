@@ -28,6 +28,8 @@ interface Props {
   onMentionClick: (entityId: string) => void;
   onAutoMention?: () => void;
   autoMentionBusy?: boolean;
+  /** Registered names found in the prose but not yet linked. */
+  autoMentionFound?: number;
   onOpenThread: (threadId: string) => void;
   onProjectChanged?: (project: Project) => void;
   onProjectTitleChange?: (title: string) => void | Promise<void>;
@@ -51,7 +53,7 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
   series: 200000,
 };
 
-export function ContextPanel({ project, node, charCount, todayChars = null, episodeStock = null, statsRefreshKey = null, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget }: Readonly<Props>) {
+export function ContextPanel({ project, node, charCount, todayChars = null, episodeStock = null, statsRefreshKey = null, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, autoMentionFound = 0, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget }: Readonly<Props>) {
   const { language, t } = useI18n();
   const locale = localeForLanguage(language);
   const target = TARGET_WORDS[project.length_target] ?? 90000;
@@ -236,7 +238,11 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
             {onAutoMention && (
               <span className="sec-actions">
                 <button type="button" onClick={onAutoMention} disabled={!!autoMentionBusy}>
-                  <Search size={11} /> {autoMentionBusy ? t("workspace.scanning") : t("workspace.scanScene")}
+                  <Search size={11} /> {autoMentionBusy
+                    ? t("workspace.scanning")
+                    : autoMentionFound > 0
+                      ? t("workspace.scanSceneFound", { count: autoMentionFound })
+                      : t("workspace.scanScene")}
                 </button>
               </span>
             )}
