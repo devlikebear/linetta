@@ -33,6 +33,18 @@ describe("ShortcutsModal", () => {
     expect(screen.getByText("⌘F")).toBeInTheDocument();
   });
 
+  it("labels ⌘⇧F with what it actually does", async () => {
+    // Cmd+Shift+F opens Contextual Edit (Workspace.tsx). Focus mode has no
+    // shortcut at all, so the modal must not offer one.
+    mocks.settingsGet.mockResolvedValue({ language: "ko" });
+
+    openModal();
+
+    await screen.findByText("단축키");
+    expect(screen.getByText("맥락 편집 열기")).toBeInTheDocument();
+    expect(screen.queryByText(/Focus 모드/)).not.toBeInTheDocument();
+  });
+
   it("does not advertise the companion keys, which are unbound", async () => {
     // Cmd+J and Cmd+I went away with the companion and Workspace leaves them
     // unbound. Listing them told the writer about shortcuts that do nothing.

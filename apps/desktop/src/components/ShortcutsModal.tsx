@@ -16,7 +16,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: "⌘F", labelKey: "shortcuts.globalSearch" },
   { keys: "⌘.", labelKey: "shortcuts.exitZenDialog" },
   { keys: "esc", labelKey: "shortcuts.escape" },
-  { keys: "⌘⇧F", labelKey: "shortcuts.focusToggle" },
+  { keys: "⌘⇧F", labelKey: "workspace.command.contextualEdit" },
   { keys: "⌘Z", labelKey: "shortcuts.undoBody" },
   { keys: "⌘⇧Z", labelKey: "shortcuts.redoBody" },
   { keys: "@", labelKey: "shortcuts.mentionSearch" },
