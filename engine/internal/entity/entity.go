@@ -11,19 +11,40 @@ const (
 	KindConcept   = "concept"
 )
 
-// Core narrative roles are always worth surfacing to AI context even when the
-// current scene has not mentioned them yet. These labels stay in Korean because
-// they are writer-facing values stored in Entity.Role.
+// Core narrative roles are always worth surfacing to a connected agent even
+// when the current scene has not mentioned them yet.
+//
+// Entity.Role stores whatever the writer picked, in their own language, so this
+// table has to hold all three. It held only Korean, which meant an English or
+// Japanese writer's protagonist was never core and their story context arrived
+// with no cast at all (#45) — a silent one, because nothing failed.
+//
+// Keep in step with entityRolePresets in apps/desktop/src/lib/i18n.tsx.
 var coreRolesByKind = map[string]map[string]bool{
 	KindCharacter: {
+		// ko — including 적수, an older label still in existing works.
 		"주인공": true, "공동 주인공": true, "조연": true, "빌런": true,
 		"라이벌": true, "멘토": true, "조력자": true, "적수": true,
+		// en
+		"Protagonist": true, "Co-protagonist": true, "Supporting": true,
+		"Villain": true, "Rival": true, "Mentor": true, "Helper": true,
+		// ja
+		"主人公": true, "共同主人公": true, "脇役": true, "ヴィラン": true,
+		"ライバル": true, "メンター": true, "協力者": true,
 	},
 	KindPlace: {
+		// ko — spacing variants included, since these were typed by hand
+		// before they were a preset.
 		"메인무대": true, "메인 무대": true, "메인무대장소": true,
 		"메인 무대 장소": true, "특별한 장소": true, "일상 거점": true,
 		"위험 구역": true, "금지된 장소": true, "기억의 장소": true,
 		"권력의 중심": true,
+		// en
+		"Main stage": true, "Special place": true, "Everyday base": true,
+		"Danger zone": true, "Forbidden place": true, "Place of memory": true,
+		// ja
+		"メイン舞台": true, "特別な場所": true, "日常の拠点": true,
+		"危険区域": true, "禁じられた場所": true, "記憶の場所": true,
 	},
 }
 
