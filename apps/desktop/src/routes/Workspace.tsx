@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, MessageCircle, Maximize2, ArrowLeft, BookOpen, Replace, Sparkles, Menu, Keyboard } from "lucide-react";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, ai as aiApi, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
+import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Replace, Menu, Keyboard } from "lucide-react";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
 import { McpIndicator } from "../components/McpIndicator";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
-import { AITargetExtension } from "../components/editor/AITargetExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, AIContextPreview, AIOptions, ContextCounts, SearchResult, Settings as SettingsRow, NodeStatus, CompanionApplied } from "../lib/types";
+import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -15,13 +14,9 @@ import { ThreadSheet } from "../components/ThreadSheet";
 import { VersionSheet } from "../components/VersionSheet";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { TiptapEditor, type TiptapHandle, type TiptapSelectionMenuPayload } from "../components/editor/Tiptap";
-import { useAIGeneration } from "../lib/editor/useAIGeneration";
-import { commitGenerated, type CommitMode } from "../lib/editor/commitGenerated";
 import { autoMentionDoc } from "../lib/editor/autoMention";
-import { DEFAULT_AI_CONTEXT_SELECTION, totalContextItems } from "../components/ai/AIContextChecklist";
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
-import { CompanionPanel, type SelectionRewriteKind } from "../components/companion/CompanionPanel";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { ContextualEditPanel } from "../components/contextual/ContextualEditPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
@@ -47,7 +42,7 @@ import { useThrottledCallback } from "../hooks/useThrottledCallback";
 import { subscribeAppEvent, type LinettaEventMap } from "../lib/appEvents";
 import { useToast } from "../components/ToastProvider";
 import { displayNodeLabel, localeForLanguage, useI18n } from "../lib/i18n";
-import { outlineNumberLabel, outlinePresetById, outlineRoleName, repairOutlineTree, type OutlinePresetId } from "../lib/outlineRepair";
+import { outlineNumberLabel, outlinePresetById, repairOutlineTree, type OutlinePresetId } from "../lib/outlineRepair";
 import { findEpisodeNode } from "../lib/outlineEpisode";
 import { planChapterCreation, type CreateNodeStep } from "../lib/outlineCreate";
 import { normalizePlatformProfile, transformPlatformText } from "../lib/platformProfiles";
@@ -76,27 +71,7 @@ function seedRailCollapsed(): boolean {
   return compactish || ipadTouch;
 }
 
-const FALLBACK_COUNTS: ContextCounts = {
-  nearbyScenes: 0,
-  hasOutline: false,
-  hasSynopsis: false,
-  relatedScenes: 0,
-  entities: 0,
-  relationships: 0,
-  plotBeats: 0,
-  notes: 0,
-  projectMetaFields: 0,
-  hasStyleNotes: false,
-};
 
-const FALLBACK_CONTEXT_PREVIEW: AIContextPreview = {
-  counts: FALLBACK_COUNTS,
-  sections: [],
-  selectedItemCount: 0,
-  selectedCharCount: 0,
-  selectedTokenEstimate: 0,
-  budgetTokenEstimate: 0,
-};
 
 interface LoadState {
   project: Project;
@@ -151,76 +126,35 @@ export function Workspace() {
   const [mentionState, setMentionState] = useState<MentionPickerState | null>(null);
   const [entitySheetId, setEntitySheetId] = useState<string | null>(null);
   const [threadSheetId, setThreadSheetId] = useState<string | null>(null);
-  const [companionOpen, setCompanionOpen] = useState(false);
-  const companionOpenRef = useRef(false);
-  const aiOpenedCompanionRef = useRef(false);
-  useEffect(() => { companionOpenRef.current = companionOpen; }, [companionOpen]);
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
   const prevInspectorRef = useRef<InspectorState>({
-    companion: false,
     factBook: false,
     contextual: false,
   });
   useEffect(() => {
     const next: InspectorState = {
-      companion: companionOpen,
       factBook: factBookOpen,
       contextual: contextualEditOpen,
     };
     const corrected = reconcileInspector(prevInspectorRef.current, next, sizeClass);
-    if (corrected.companion !== next.companion) setCompanionOpen(corrected.companion);
     if (corrected.factBook !== next.factBook) setFactBookOpen(corrected.factBook);
     if (corrected.contextual !== next.contextual) setContextualEditOpen(corrected.contextual);
     prevInspectorRef.current = corrected;
-  }, [sizeClass, companionOpen, factBookOpen, contextualEditOpen]);
+  }, [sizeClass, factBookOpen, contextualEditOpen]);
   const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
   const outlinePreset = useMemo(() => outlinePresetById(load?.project.outline_preset), [load?.project.outline_preset]);
   const outlinePresetId = outlinePreset.id;
-  const outlineStructure = useMemo(() => {
-    const part = outlineRoleName(outlinePreset, "part", t);
-    const chapter = outlineRoleName(outlinePreset, "chapter", t);
-    const scene = outlineRoleName(outlinePreset, "scene", t);
-    return t("workspace.outlineStructureFormat", {
-      preset: t(outlinePreset.nameKey),
-      part,
-      chapter,
-      scene,
-      partExample: outlineNumberLabel(outlinePreset, "part", 1, t),
-      chapterExample: outlineNumberLabel(outlinePreset, "chapter", 1, t),
-      sceneExample: outlineNumberLabel(outlinePreset, "scene", 1, t),
-    });
-  }, [outlinePreset, t]);
   const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
-  const [companionRewriteRequest, setCompanionRewriteRequest] = useState<{ id: string; text: string; kind?: SelectionRewriteKind } | null>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
-  const companionNodeRef = useRef<string | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
   const [tourOpen, setTourOpen] = useState(false);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [autoMentionBusy, setAutoMentionBusy] = useState(false);
-  const [aiOptions, setAiOptions] = useState<AIOptions>({
-    tone: "my",
-    short_form: true,
-    context: DEFAULT_AI_CONTEXT_SELECTION,
-  });
-  const [aiModal, setAiModal] = useState<{
-    mode: CommitMode;
-    canChooseMode: boolean;
-    sel: { from: number; to: number };
-  } | null>(null);
-  const aiModalOpenRef = useRef(false);
-  useEffect(() => { aiModalOpenRef.current = aiModal !== null; }, [aiModal]);
-  const closeAIModalRef = useRef<(() => void) | null>(null);
-  const openAIModalRef = useRef<(() => void) | null>(null);
-  const [aiCtxChecklistOpen, setAiCtxChecklistOpen] = useState(false);
-  const [contextPreview, setContextPreview] = useState<AIContextPreview | null>(null);
-  const previewReqIdRef = useRef(0);
   const factBookSelectionSeqRef = useRef(0);
-  const companionRewriteSeqRef = useRef(0);
   const loadRef = useRef<LoadState | null>(null);
   const sceneSaveQueueRef = useRef<SceneSaveQueue<NodeRow> | null>(null);
   if (!sceneSaveQueueRef.current) {
@@ -292,7 +226,6 @@ export function Workspace() {
     void refreshTodayChars(load.project.id);
   }, [saveCompletedAt, load?.project.id, refreshTodayChars]);
   useEffect(() => { setOutlineUndoSnapshot(null); }, [projectId]);
-  useEffect(() => { companionNodeRef.current = load?.node.id ?? null; }, [load]);
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);
@@ -394,6 +327,10 @@ export function Workspace() {
   }, [selectionMenu]);
 
   const openEditorSelectionMenu = useCallback((event: ReactMouseEvent, payload: TiptapSelectionMenuPayload) => {
+    // A bare cursor had only one action, "continue writing here", and that was
+    // the companion. Without it there is nothing to offer, so the menu now
+    // opens on a selection only.
+    if (payload.kind !== "selection") return;
     setSelectionMenu({
       ...payload,
       x: event.clientX,
@@ -797,47 +734,34 @@ export function Workspace() {
     return subscribeAppEvent("linetta:mention-pick-new", handler);
   }, [projectId, showToast, t]);
 
-  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+Shift+F contextual edit + Cmd+I companion draft mode.
+  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+Shift+F contextual edit.
+  //
+  // Cmd+I (AI draft) and Cmd+J (companion) are gone with the companion and are
+  // deliberately left unbound rather than reassigned. The guards that used to
+  // swallow these keys while the AI modal was open went with it: each one
+  // tested that modal specifically, not modals in general.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
       const mod = isMac ? e.metaKey : e.ctrlKey;
       if (!mod) return;
       if (e.key.toLowerCase() === "r") {
-        if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
         window.location.reload();
       } else if (e.key.toLowerCase() === "p") {
-        if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
         setPaletteOpen((v) => !v);
       } else if (e.key.toLowerCase() === "f") {
-        if (aiModalOpenRef.current) { e.preventDefault(); return; }
         e.preventDefault();
         if (e.shiftKey) {
           setSearchOpen(false);
           setFactBookOpen(false);
-          setCompanionOpen(false);
           setEntitySheetId(null);
           setThreadSheetId(null);
-          closeAIModalRef.current?.();
           setContextualEditOpen((v) => !v);
           return;
         }
         setSearchOpen(true);
-      } else if (e.key.toLowerCase() === "i") {
-        e.preventDefault();
-        if (aiModalOpenRef.current) {
-          closeAIModalRef.current?.();
-          return;
-        }
-        openAIModalRef.current?.();
-      } else if (e.key.toLowerCase() === "j") {
-        if (aiModalOpenRef.current) { e.preventDefault(); return; }
-        e.preventDefault();
-        setFactBookOpen(false);
-        setContextualEditOpen(false);
-        setCompanionOpen((v) => !v);
       }
     };
     window.addEventListener("keydown", handler);
@@ -1012,80 +936,16 @@ export function Workspace() {
     [load, showToast, t],
   );
 
-  // --- AI generation (Cmd+I inside companion) ---
-
-  const tiptapEditor = editorRef.current?.editor ?? null;
-  const gen = useAIGeneration();
-
-  const finishAIModalPanelState = useCallback(() => {
-    setAiModal(null);
-    setContextPreview(null);
-    setAiCtxChecklistOpen(false);
-    if (aiOpenedCompanionRef.current) {
-      setCompanionOpen(false);
-      aiOpenedCompanionRef.current = false;
-    }
-    previewReqIdRef.current++;
-  }, []);
-
-  const closeAIModal = useCallback(() => {
-    gen.cancel();
-    if (tiptapEditor) {
-      tiptapEditor.commands.clearAITarget();
-      tiptapEditor.setEditable(true);
-    }
-    finishAIModalPanelState();
-  }, [finishAIModalPanelState, gen, tiptapEditor]);
-  useEffect(() => { closeAIModalRef.current = closeAIModal; }, [closeAIModal]);
-
-  // Open the Cmd+I AI generation flow inside the companion panel.
-  const openAIModal = useCallback((selectionOverride?: { from: number; to: number }) => {
-    const ed = editorRef.current?.editor;
-    const currentLoad = loadRef.current;
-    if (!ed || !currentLoad) return;
-    aiOpenedCompanionRef.current = !companionOpenRef.current;
-    setCompanionOpen(true);
-    setFactBookOpen(false);
-    setContextualEditOpen(false);
-    setEntitySheetId(null);
-    setThreadSheetId(null);
-    if (selectionOverride) {
-      ed.commands.setTextSelection(selectionOverride);
-      ed.view.focus();
-    }
-    const { from, to, empty } = ed.state.selection;
-    ed.setEditable(false);
-    const mode = empty ? "insert" : "replace";
-    ed.commands.setAITarget(mode, from, to);
-    setAiModal({
-      mode,
-      canChooseMode: empty,
-      sel: { from, to },
-    });
-    const reqId = ++previewReqIdRef.current;
-    aiApi.previewContext(currentLoad.node.id, aiOptions)
-      .then((preview) => {
-        if (reqId !== previewReqIdRef.current) return;
-        setContextPreview(preview);
-      })
-      .catch((err) => {
-        if (reqId !== previewReqIdRef.current) return;
-        showToast(t("workspace.toast.contextLoadFailed", { error: String(err) }));
-      });
-  }, [aiOptions, showToast, t]);
-  useEffect(() => { openAIModalRef.current = openAIModal; }, [openAIModal]);
 
   const toggleFactBook = useCallback(() => {
     setFactBookSelectedClaimRequest(null);
     setFactBookOpen((v) => {
       const next = !v;
       if (next) {
-        setCompanionOpen(false);
-        setContextualEditOpen(false);
+            setContextualEditOpen(false);
         setEntitySheetId(null);
         setThreadSheetId(null);
-        closeAIModalRef.current?.();
-      }
+          }
       return next;
     });
   }, []);
@@ -1097,11 +957,9 @@ export function Workspace() {
         setContextualSeed(null);
         setFactBookSelectedClaimRequest(null);
         setFactBookOpen(false);
-        setCompanionOpen(false);
-        setEntitySheetId(null);
+            setEntitySheetId(null);
         setThreadSheetId(null);
-        closeAIModalRef.current?.();
-      }
+          }
       return next;
     });
   }, []);
@@ -1110,11 +968,9 @@ export function Workspace() {
     if (!selectionMenu || selectionMenu.kind !== "selection") return;
     editorRef.current?.setSelection({ from: selectionMenu.from, to: selectionMenu.to });
     setSelectionMenu(null);
-    setCompanionOpen(false);
     setContextualEditOpen(false);
     setEntitySheetId(null);
     setThreadSheetId(null);
-    closeAIModalRef.current?.();
     setFactBookOpen(true);
     setFactBookSelectedClaimRequest({
       id: `selection-${++factBookSelectionSeqRef.current}`,
@@ -1122,38 +978,6 @@ export function Workspace() {
     });
   }, [selectionMenu]);
 
-  const runSelectionCompanionRequest = useCallback((kind: SelectionRewriteKind) => {
-    if (!selectionMenu || selectionMenu.kind !== "selection") return;
-    const sel = { from: selectionMenu.from, to: selectionMenu.to };
-    editorRef.current?.setSelection(sel);
-    setSelectionMenu(null);
-    setFactBookOpen(false);
-    setContextualEditOpen(false);
-    setEntitySheetId(null);
-    setThreadSheetId(null);
-    closeAIModalRef.current?.();
-    setCompanionOpen(true);
-    setCompanionRewriteRequest({
-      id: `selection-${kind}-${++companionRewriteSeqRef.current}`,
-      text: selectionMenu.text,
-      kind,
-    });
-  }, [selectionMenu]);
-
-  const runSelectionCompanionRewrite = useCallback(() => {
-    runSelectionCompanionRequest("rewrite");
-  }, [runSelectionCompanionRequest]);
-
-  const runSelectionCompanionProofread = useCallback(() => {
-    runSelectionCompanionRequest("proofread");
-  }, [runSelectionCompanionRequest]);
-
-  const runCursorAIGeneration = useCallback(() => {
-    if (!selectionMenu || selectionMenu.kind !== "cursor") return;
-    const sel = { from: selectionMenu.from, to: selectionMenu.to };
-    setSelectionMenu(null);
-    openAIModal(sel);
-  }, [openAIModal, selectionMenu]);
 
   const copyNodeText = useCallback(async (node: Pick<TreeNode, "id">) => {
     try {
@@ -1173,39 +997,13 @@ export function Workspace() {
     }
   }, [locale, settingsRow?.copy_profile, showToast, t]);
 
-  // Defensive: if the active node changes while the modal is open, close it so
-  // stale selection offsets can't be committed into a freshly-mounted editor.
-  useEffect(() => {
-    if (aiModalOpenRef.current) {
-      closeAIModalRef.current?.();
-    }
-  }, [load?.node.id]);
-
-  const acceptAIModal = useCallback(() => {
-    if (!aiModal || !tiptapEditor) return;
-    const v = gen.variations[gen.currentIdx];
-    if (!v || v.error) return;
-    tiptapEditor.commands.clearAITarget();
-    commitGenerated(tiptapEditor, aiModal.mode, aiModal.sel, v.text);
-    gen.cancel();
-    tiptapEditor.setEditable(true);
-    finishAIModalPanelState();
-  }, [aiModal, finishAIModalPanelState, gen, tiptapEditor]);
-
-  // Safety: if the modal closes for any reason, re-enable editing.
-  useEffect(() => {
-    if (aiModal === null && tiptapEditor && !tiptapEditor.isEditable) {
-      tiptapEditor.commands.clearAITarget();
-      tiptapEditor.setEditable(true);
-    }
-  }, [aiModal, tiptapEditor]);
-
   // --- Commands ---
 
-  // Cmd+P palette uses a fixed 8-section vocabulary. Every `cmds.push({ section })`
-  // call below MUST use one of these exact strings — adding a 9th label fractures
+  // Cmd+P palette uses a fixed 7-section vocabulary. Every `cmds.push({ section })`
+  // call below MUST use one of these exact strings — adding an 8th label fractures
   // the palette's mental model and reverts the Phase-15 cleanup. The labels are:
-  //   이동 · 보기 · 노드 · 엔티티 · 프로젝트 · AI · 내보내기 · 도움말
+  //   이동 · 보기 · 노드 · 엔티티 · 프로젝트 · 내보내기 · 도움말
+  // "AI" was the eighth; its only command was the companion toggle.
   // Hints should be either a keyboard shortcut (e.g. "Cmd+S", "ESC") or a brief
   // status note (e.g. "복원", "ESC로 종료"). Omit `hint` rather than putting noise.
   const commands: Command[] = useMemo(() => {
@@ -1473,17 +1271,6 @@ export function Workspace() {
       run: toggleContextualEdit,
     });
     cmds.push({
-      id: "toggle-companion",
-      section: "AI",
-      label: companionOpen ? t("workspace.command.closeCompanion") : t("workspace.command.openWritingCompanion"),
-      hint: "Cmd+J",
-      run: () => {
-        setFactBookOpen(false);
-        setContextualEditOpen(false);
-        setCompanionOpen((v) => !v);
-      },
-    });
-    cmds.push({
       id: "toggle-fact-book",
       section: sectionProject,
       label: t("factBook.title"),
@@ -1496,7 +1283,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, companionOpen, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, gitSyncAvailable]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, gitSyncAvailable]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1516,9 +1303,6 @@ export function Workspace() {
     () => crumbChain.join(" · "),
     [crumbChain],
   );
-  const aiContextSelection = aiOptions.context ?? DEFAULT_AI_CONTEXT_SELECTION;
-  const aiContextPreview = contextPreview ?? FALLBACK_CONTEXT_PREVIEW;
-  const aiContextItemCount = totalContextItems(aiContextPreview, aiContextSelection);
   const isWebnovelProject = outlinePresetId === "webnovel";
   const episodeCharTarget = load?.project.episode_char_target ?? 5000;
   const currentEpisodeCharCount = useMemo(() => {
@@ -1550,11 +1334,6 @@ export function Workspace() {
       body: t("onboarding.workspace.context.body"),
     },
     {
-      target: "workspace-companion",
-      title: t("onboarding.workspace.companion.title"),
-      body: t("onboarding.workspace.companion.body"),
-    },
-    {
       target: "workspace-zen",
       title: t("onboarding.workspace.zen.title"),
       body: t("onboarding.workspace.zen.body"),
@@ -1584,8 +1363,6 @@ export function Workspace() {
   useEffect(() => {
     const blocked = !load ||
       tourOpen ||
-      aiModal !== null ||
-      companionOpen ||
       contextualEditOpen ||
       entitySheetId !== null ||
       threadSheetId !== null ||
@@ -1603,8 +1380,6 @@ export function Workspace() {
       setTourOpen(true);
     }
   }, [
-    aiModal,
-    companionOpen,
     contextualEditOpen,
     dialog,
     entitySheetId,
@@ -1702,22 +1477,6 @@ export function Workspace() {
           <div className="ws-sep" />
           <button
             type="button"
-            className={`ws-tool${companionOpen || aiModal ? " is-active" : ""}`}
-            onClick={() => {
-              if (aiModal) {
-                closeAIModal();
-                return;
-              }
-              setFactBookOpen(false);
-              setContextualEditOpen(false);
-              setCompanionOpen((v) => !v);
-            }}
-            data-tour="workspace-companion"
-          >
-            <MessageCircle size={15} /> {t("workspace.companion")} <span className="kbd">⌘J</span>
-          </button>
-          <button
-            type="button"
             className={`ws-tool${contextualEditOpen ? " is-active" : ""}`}
             onClick={toggleContextualEdit}
             title={t("workspace.command.contextualEdit")}
@@ -1740,8 +1499,8 @@ export function Workspace() {
       </header>
 
       <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
-        (aiModal || companionOpen || factBookOpen || contextualEditOpen) ? " right-wide" : ""
-      }${companionOpen ? " right-xwide" : ""}${versionSheetNodeId ? " right-history" : ""}`}>
+        (factBookOpen || contextualEditOpen) ? " right-wide" : ""
+      }${versionSheetNodeId ? " right-history" : ""}`}>
         {!railCollapsed && (
           <button
             type="button"
@@ -1827,7 +1586,6 @@ export function Workspace() {
               extensions={[
                 ...(mentionExtension ? [mentionExtension] : []),
                 NoteMarkerExtension,
-                AITargetExtension,
               ]}
               onMentionDoubleClick={(id) => {
                 setContextualEditOpen(false);
@@ -1844,23 +1602,9 @@ export function Workspace() {
                 onMouseDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
               >
-                {selectionMenu.kind === "cursor" ? (
-                  <button type="button" role="menuitem" onClick={runCursorAIGeneration}>
-                    <Sparkles size={13} /> {t("workspace.selectionMenu.continueHere")}
-                  </button>
-                ) : (
-                  <>
-                    <button type="button" role="menuitem" onClick={runSelectionFactCheck}>
-                      <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
-                    </button>
-                    <button type="button" role="menuitem" onClick={runSelectionCompanionRewrite}>
-                      <MessageCircle size={13} /> {t("workspace.selectionMenu.companionRewrite")}
-                    </button>
-                    <button type="button" role="menuitem" onClick={runSelectionCompanionProofread}>
-                      <Sparkles size={13} /> {t("workspace.selectionMenu.aiProofread")}
-                    </button>
-                  </>
-                )}
+                <button type="button" role="menuitem" onClick={runSelectionFactCheck}>
+                  <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
+                </button>
               </div>
             )}
           </div>
@@ -1899,77 +1643,6 @@ export function Workspace() {
               showToast(t("workspace.toast.versionRestored"));
             }}
           />
-        ) : (aiModal || companionOpen) && load ? (
-          <CompanionPanel
-            projectId={load.project.id}
-            nodeIdRef={companionNodeRef}
-            currentNodeId={load.node.id}
-            beforeSend={flushEditorBeforeCompanionSend}
-            outlineStructure={outlineStructure}
-            selectionRewriteRequest={companionRewriteRequest}
-            aiDraft={aiModal ? {
-              mode: aiModal.mode,
-              canChooseMode: aiModal.canChooseMode,
-              options: aiOptions,
-              contextItemCount: aiContextItemCount,
-              contextPreview: aiContextPreview,
-              contextSelection: aiContextSelection,
-              variations: gen.variations,
-              currentIdx: gen.currentIdx,
-              status: gen.status,
-              onModeChange: (m) => {
-                setAiModal((s) => (s ? { ...s, mode: m } : s));
-                if (!tiptapEditor || !aiModal) return;
-                if (m === "replaceAll") {
-                  tiptapEditor.commands.setAITarget("replaceAll", 1, tiptapEditor.state.doc.content.size);
-                } else if (m === "insert") {
-                  tiptapEditor.commands.setAITarget("insert", aiModal.sel.from, aiModal.sel.from);
-                } else {
-                  tiptapEditor.commands.setAITarget("replace", aiModal.sel.from, aiModal.sel.to);
-                }
-              },
-              onOptionsChange: setAiOptions,
-              onContextSelectionChange: (context) => setAiOptions((opts) => ({ ...opts, context })),
-              onRun: (promptText, variationsOn) => {
-                const selectionText =
-                  aiModal.mode === "replace"
-                    ? tiptapEditor!.state.doc.textBetween(aiModal.sel.from, aiModal.sel.to, "\n")
-                    : "";
-                const args = {
-                  nodeId: load.node.id,
-                  prompt: promptText,
-                  // Inject the current UI language at send time so the engine
-                  // builds prompts (and the AI responds) in that language.
-                  options: { ...aiOptions, language },
-                  selectionText,
-                };
-                if (variationsOn) gen.startVariations(args, 3);
-                else gen.start(args);
-              },
-              onSwitch: gen.switchVariation,
-              onAccept: acceptAIModal,
-              onCancel: closeAIModal,
-              onContextClick: () => setAiCtxChecklistOpen((v) => !v),
-              showChecklist: aiCtxChecklistOpen,
-            } : undefined}
-            onClose={() => {
-              if (aiModal) {
-                closeAIModal();
-              }
-              setCompanionOpen(false);
-              focusEditor();
-            }}
-            onApplied={(event?: CompanionApplied) => {
-              if (!load) return;
-              refreshTreeKeepNode(load.node.id);
-              const changedCurrentNode = event?.changed_nodes?.find((change) => change.node_id === load.node.id);
-              if (changedCurrentNode) {
-                debouncedSave.cancel(changedCurrentNode.node_id);
-                sceneSaveQueue.seed(changedCurrentNode.node_id, changedCurrentNode.content_version);
-              }
-              refreshMentioned(changedCurrentNode?.node_id ?? load.node.id);
-            }}
-          />
         ) : factBookOpen && load ? (
           <FactBookPanel
             projectId={load.project.id}
@@ -1980,11 +1653,9 @@ export function Workspace() {
             onImpactCheck={(text) => {
               setContextualSeed({ text, autoCheck: true });
               setFactBookOpen(false);
-              setCompanionOpen(false);
-              setEntitySheetId(null);
+                        setEntitySheetId(null);
               setThreadSheetId(null);
-              closeAIModalRef.current?.();
-              setContextualEditOpen(true);
+                        setContextualEditOpen(true);
             }}
             onClose={() => {
               setFactBookOpen(false);
@@ -2032,10 +1703,8 @@ export function Workspace() {
               setContextualSeed({ entityId });
               setEntitySheetId(null);
               setFactBookOpen(false);
-              setCompanionOpen(false);
-              setThreadSheetId(null);
-              closeAIModalRef.current?.();
-              setContextualEditOpen(true);
+                        setThreadSheetId(null);
+                        setContextualEditOpen(true);
             }}
             onNavigate={(nodeId) => {
               setEntitySheetId(null);

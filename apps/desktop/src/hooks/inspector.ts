@@ -1,13 +1,12 @@
 import type { SizeClass } from "./useSizeClass";
 
 export interface InspectorState {
-  companion: boolean;
   factBook: boolean;
   contextual: boolean;
 }
 
 type Key = keyof InspectorState;
-const PRIORITY: Key[] = ["companion", "factBook", "contextual"];
+const PRIORITY: Key[] = ["factBook", "contextual"];
 
 export function reconcileInspector(
   prev: InspectorState,
@@ -20,7 +19,6 @@ export function reconcileInspector(
   const justOpened = PRIORITY.find((k) => !prev[k] && next[k]);
   const winner = justOpened ?? PRIORITY.find((k) => next[k])!;
   return {
-    companion: winner === "companion",
     factBook: winner === "factBook",
     contextual: winner === "contextual",
   };
