@@ -1,4 +1,4 @@
-.PHONY: help dev test test-go test-desktop test-tauri test-mobile-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -8,7 +8,7 @@ dev: ## Start the desktop app in dev mode
 
 test: test-go test-desktop test-tauri ## Run all local verification
 
-ci: validate-actions-runtime validate-distribution test ## Run the CI verification contract
+ci: validate-actions-runtime validate-distribution validate-mcp-bridge-targets test ## Run the CI verification contract
 
 audit: audit-go audit-desktop audit-rust ## Check reachable and locked dependency vulnerabilities
 
@@ -44,6 +44,9 @@ validate-actions-runtime: ## Validate GitHub Actions use non-deprecated runtimes
 
 validate-distribution: ## Validate release packaging metadata
 	bash scripts/validate-distribution.sh
+
+validate-mcp-bridge-targets: ## Cross-compile the MCP bridge for every shipped platform
+	bash scripts/validate-mcp-bridge-targets.sh
 
 build-engine: ## Build the standalone JSONRPC debug engine
 	bash scripts/build-engine.sh
