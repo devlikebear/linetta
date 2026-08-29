@@ -34,8 +34,9 @@ type diagnosticsPayload struct {
 	// companion user" — the settings-side consent fields are not: switching
 	// provider zeroes both the consent version and its timestamp
 	// (settings.applyPatch), so a real user can look brand new. The UI ORs this
-	// with the consent timestamp it already holds. Transitional: Phase 6 of the
-	// MCP pivot removes the companion and this field with it.
+	// with the consent timestamp it already holds. It outlives the companion:
+	// once the settings block is gone this is what decides whether a library is
+	// offered the transcript export at all.
 	CompanionHistoryExists bool `json:"companion_history_exists"`
 }
 

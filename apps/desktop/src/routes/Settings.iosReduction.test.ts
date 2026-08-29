@@ -10,6 +10,8 @@ async function readSource(path: string) {
   return readFile(resolve(srcRoot, path), "utf8");
 }
 
+// The provider-restriction note went with the provider chooser: a build that
+// cannot reach some providers no longer has a list to filter.
 describe("Settings iOS feature-reduction UX", () => {
   it("shows a disabled git-sync note when gitSyncAvailable is false", async () => {
     const settings = await readSource("routes/Settings.tsx");
@@ -18,26 +20,15 @@ describe("Settings iOS feature-reduction UX", () => {
     expect(settings).toContain('t("settings.git.unavailableNote")');
   });
 
-  it("shows an API-key-only note when providers are filtered", async () => {
-    const settings = await readSource("routes/Settings.tsx");
-
-    expect(settings).toContain("unavailableProviders.length > 0");
-    expect(settings).toContain('t("settings.provider.restrictedNote")');
-  });
-
   it("has the new i18n keys in both ko and en maps", async () => {
     const i18n = await readSource("lib/i18n.tsx");
 
     // ko map
     const koGitIdx = i18n.indexOf('"settings.git.unavailableNote"');
-    const koProvIdx = i18n.indexOf('"settings.provider.restrictedNote"');
     expect(koGitIdx).toBeGreaterThan(-1);
-    expect(koProvIdx).toBeGreaterThan(-1);
 
     // en map must contain a second occurrence after the ko occurrence
     const enGitIdx = i18n.indexOf('"settings.git.unavailableNote"', koGitIdx + 1);
-    const enProvIdx = i18n.indexOf('"settings.provider.restrictedNote"', koProvIdx + 1);
     expect(enGitIdx).toBeGreaterThan(-1);
-    expect(enProvIdx).toBeGreaterThan(-1);
   });
 });

@@ -9,35 +9,35 @@ const ko = (key: MessageKey, values?: Record<string, string | number>) =>
 const en = (key: MessageKey, values?: Record<string, string | number>) =>
   translate("en", key, values);
 
-function consentError() {
+function portInUseError() {
   return new RpcError(
-    "providers.test",
-    "AI data sharing consent is required before sending manuscript content to a provider",
-    -32603,
-    { reason: "ai_data_sharing_consent_required" },
+    "mcp.enable",
+    "mcp port in use: 7391",
+    -32602,
+    { reason: "mcp_port_in_use" },
   );
 }
 
 describe("rpcErrorMessage", () => {
   it("translates a tagged failure into the reader's language", () => {
-    const shown = rpcErrorMessage(consentError(), ko);
-    expect(shown).toContain("동의");
-    expect(shown).not.toContain("consent is required");
+    const shown = rpcErrorMessage(portInUseError(), ko);
+    expect(shown).toContain("포트");
+    expect(shown).not.toContain("port in use");
   });
 
   it("uses the same reason code for every language", () => {
-    const shown = rpcErrorMessage(consentError(), en);
-    expect(shown).toContain("consent");
-    expect(shown).not.toContain("동의");
+    const shown = rpcErrorMessage(portInUseError(), en);
+    expect(shown).toContain("port");
+    expect(shown).not.toContain("포트");
   });
 
   it("falls back to the engine message when the failure carries no reason", () => {
-    const error = new RpcError("providers.test", "connection refused", -32603);
+    const error = new RpcError("mcp.enable", "connection refused", -32603);
     expect(rpcErrorMessage(error, ko)).toContain("connection refused");
   });
 
   it("falls back for an unknown reason code rather than hiding the failure", () => {
-    const error = new RpcError("providers.test", "boom", -32603, { reason: "not_mapped_yet" });
+    const error = new RpcError("mcp.enable", "boom", -32603, { reason: "not_mapped_yet" });
     expect(rpcErrorMessage(error, ko)).toContain("boom");
   });
 

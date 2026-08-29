@@ -391,8 +391,9 @@ export interface DiagnosticsSnapshot {
   unavailable_providers?: string[];
   git_sync_available?: boolean;
   mcp_available?: boolean;
-  /** Whether this library ever held a companion message. Drives the legacy
-   *  AI section; removed with the companion in Phase 6. */
+  /** Whether this library ever held a companion message. Decides whether the
+   *  backup section offers the transcript export — a library that never used
+   *  the companion has nothing to export. */
   companion_history_exists?: boolean;
 }
 
