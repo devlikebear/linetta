@@ -7,11 +7,12 @@ interface Shortcut {
   labelKey: MessageKey;
 }
 
+// Cmd+J (companion) and Cmd+I (AI draft) are deliberately absent: both
+// features were removed with the companion and Workspace leaves the keys
+// unbound, so listing them here advertised shortcuts that do nothing.
 const SHORTCUTS: Shortcut[] = [
   { keys: "⌘P", labelKey: "shortcuts.commandPalette" },
   { keys: "⌘S", labelKey: "shortcuts.manualSnapshot" },
-  { keys: "⌘J", labelKey: "shortcuts.openCompanion" },
-  { keys: "⌘I", labelKey: "shortcuts.openAIGeneration" },
   { keys: "⌘F", labelKey: "shortcuts.globalSearch" },
   { keys: "⌘.", labelKey: "shortcuts.exitZenDialog" },
   { keys: "esc", labelKey: "shortcuts.escape" },
