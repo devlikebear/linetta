@@ -132,6 +132,27 @@ fn file_mentions_linetta(path: &PathBuf, needle: &str) -> bool {
     std::fs::read_to_string(path).map(|s| s.contains(needle)).unwrap_or(false)
 }
 
+/// Whether a Claude Code user config (~/.claude.json) carries a linetta MCP
+/// server. Parsed, not substring-matched: that file also holds project
+/// history, and on a machine that develops Linetta the word appears in paths
+/// everywhere — a contains() would say "connected" forever.
+fn claude_json_has_linetta(content: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(content)
+        .ok()
+        .and_then(|v| v.get("mcpServers").and_then(|s| s.get("linetta")).cloned())
+        .map(|entry| entry.is_object())
+        .unwrap_or(false)
+}
+
+fn claude_code_connected() -> bool {
+    let Some(path) = home_dir().map(|h| h.join(".claude.json")) else {
+        return false;
+    };
+    std::fs::read_to_string(path)
+        .map(|s| claude_json_has_linetta(&s))
+        .unwrap_or(false)
+}
+
 /// Whether Claude Desktop is running. Best effort: a detection failure reads
 /// as "not running", which only softens a warning, never blocks a connect.
 fn claude_desktop_running() -> bool {
@@ -162,10 +183,10 @@ fn claude_desktop_running() -> bool {
 fn status_of(id: &str) -> ClientStatus {
     let (installed, connected, config_path, running) = match id {
         "claude-code" => {
-            // Whether linetta is already registered would need `claude mcp
-            // list` (seconds of node startup); the add command reports
-            // "already exists" cheaply, so connected stays unknown-false.
-            (claude_cli_path().is_some(), false, None, false)
+            // `claude mcp list` costs seconds of node startup, but the user
+            // scope registration lands in ~/.claude.json — reading that is
+            // instant and is what our own connect writes.
+            (claude_cli_path().is_some(), claude_code_connected(), None, false)
         }
         "claude-desktop" => match claude_desktop_config() {
             Some(p) => (
@@ -439,6 +460,20 @@ mod tests {
     fn codex_append_is_idempotent() {
         let once = append_codex_server("", "/opt/bridge").unwrap();
         assert!(append_codex_server(&once, "/opt/bridge").is_none());
+    }
+
+    #[test]
+    fn claude_json_detection_needs_the_server_key_not_the_word() {
+        // A registered server counts…
+        assert!(claude_json_has_linetta(
+            r#"{ "mcpServers": { "linetta": { "type": "stdio", "command": "/b" } } }"#
+        ));
+        // …but project history full of linetta paths must not: this machine
+        // develops Linetta, so the word is everywhere.
+        assert!(!claude_json_has_linetta(
+            r#"{ "projects": { "C:\\Users\\w\\workspaces\\linetta": { "history": [] } }, "mcpServers": {} }"#
+        ));
+        assert!(!claude_json_has_linetta("{ not json"));
     }
 
     #[test]
