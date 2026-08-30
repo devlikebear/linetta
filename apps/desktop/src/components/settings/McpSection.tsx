@@ -2,9 +2,22 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
 import { disableMcp, enableMcp } from "../../lib/mcpControl";
-import { mcp, mcpBridgePath, projects as projectsApi, settings as settingsApi } from "../../lib/rpc";
+import {
+  mcp,
+  mcpBridgePath,
+  mcpClientStatus,
+  mcpConnectClient,
+  projects as projectsApi,
+  settings as settingsApi,
+} from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
-import type { McpActivityEntry, McpStatus, Project } from "../../lib/types";
+import type {
+  McpActivityEntry,
+  McpClientStatus,
+  McpConnectOutcome,
+  McpStatus,
+  Project,
+} from "../../lib/types";
 
 /** Connect an external agent (MCP).
  *
@@ -39,6 +52,11 @@ export function McpSection({ bridgePath }: McpSectionProps) {
   const [works, setWorks] = useState<Project[]>([]);
   const [token, setToken] = useState<string | null>(null);
   const [activity, setActivity] = useState<McpActivityEntry[]>([]);
+  // One-click client connect (#69).
+  const [clients, setClients] = useState<McpClientStatus[]>([]);
+  const [confirmClient, setConfirmClient] = useState<string | null>(null);
+  const [busyClient, setBusyClient] = useState<string | null>(null);
+  const [clientResults, setClientResults] = useState<Record<string, McpConnectOutcome>>({});
   // The raw failure is kept and translated at render time: a reason code has
   // no language of its own, and switching language should redraw the message
   // rather than leave a stale sentence on screen.
@@ -131,6 +149,52 @@ export function McpSection({ bridgePath }: McpSectionProps) {
   const running = status?.running ?? false;
   const port = status?.port || saved.port;
   const endpoint = `http://127.0.0.1:${port}/mcp`;
+
+  // Detect clients once the server runs — that is when connecting them
+  // becomes the next step. A failure leaves the list empty and the manual
+  // snippets still cover every client.
+  useEffect(() => {
+    if (!running) return;
+    mcpClientStatus().then(setClients, () => setClients([]));
+  }, [running]);
+
+  const CLIENT_NAMES: Record<string, string> = {
+    "claude-code": "Claude Code",
+    "claude-desktop": "Claude Desktop",
+    codex: "Codex CLI",
+    gemini: "Gemini CLI",
+  };
+
+  // What the shell is about to do, verbatim, so applying is informed consent:
+  // the exact command for CLI registration, the exact file + entry for config
+  // merges.
+  const clientPreview = (c: McpClientStatus): string => {
+    const bridge = resolvedBridge ?? "linetta-mcp";
+    if (c.id === "claude-code") {
+      return `claude mcp add -s user linetta -- ${bridge}`;
+    }
+    if (c.id === "codex") {
+      return `${c.config_path ?? ""}\n\n[mcp_servers.linetta]\ncommand = '${bridge}'\nargs = []`;
+    }
+    return `${c.config_path ?? ""}\n\n"mcpServers": { "linetta": { "command": ${JSON.stringify(bridge)}, "args": [] } }`;
+  };
+
+  const connectClient = async (id: string) => {
+    setBusyClient(id);
+    try {
+      const res = await mcpConnectClient(id);
+      setClientResults((m) => ({ ...m, [id]: res }));
+      setClients(await mcpClientStatus());
+    } catch (e) {
+      setClientResults((m) => ({
+        ...m,
+        [id]: { ok: false, outcome: "failed", detail: String(e) },
+      }));
+    } finally {
+      setBusyClient(null);
+      setConfirmClient(null);
+    }
+  };
 
   // The literal token goes only in the command the writer runs on their own
   // machine. .mcp.json gets headersHelper instead — it is a file people commit.
@@ -250,8 +314,96 @@ export function McpSection({ bridgePath }: McpSectionProps) {
       )}
 
       {running && (
-        <div data-testid="mcp-snippets">
-          <h4>{t("settings.mcp.snippets.title")}</h4>
+        <div data-testid="mcp-clients">
+          <h4>{t("settings.mcp.clients.title")}</h4>
+          {resolvedBridge === null ? (
+            <p className="sd" data-testid="mcp-clients-no-bridge">
+              {t("settings.mcp.clients.needBridge")}
+            </p>
+          ) : (
+            clients.map((c) => {
+              const result = clientResults[c.id];
+              return (
+                <div className="modal-field" key={c.id} data-testid={`mcp-client-${c.id}`}>
+                  <div>
+                    <b>{CLIENT_NAMES[c.id] ?? c.id}</b>{" "}
+                    {!c.installed ? (
+                      <span className="sd">{t("settings.mcp.clients.notInstalled")}</span>
+                    ) : c.connected ? (
+                      <span className="sd" data-testid={`mcp-client-${c.id}-connected`}>
+                        ✓ {t("settings.mcp.clients.connected")}
+                      </span>
+                    ) : (
+                      confirmClient !== c.id && (
+                        <button
+                          type="button"
+                          disabled={busyClient != null}
+                          onClick={() => {
+                            setConfirmClient(c.id);
+                            // The running flag must be fresh at decision time.
+                            mcpClientStatus().then(setClients, () => {});
+                          }}
+                          data-testid={`mcp-client-${c.id}-connect`}
+                        >
+                          {t("settings.mcp.clients.connect")}
+                        </button>
+                      )
+                    )}
+                  </div>
+                  {confirmClient === c.id && (
+                    <div data-testid={`mcp-client-${c.id}-confirm`}>
+                      {/* Observed, not theoretical: Claude Desktop rewrites
+                          this file from memory while it runs, erasing an
+                          entry written from outside. */}
+                      {c.id === "claude-desktop" && c.running && (
+                        <p className="sd" role="alert" data-testid="mcp-client-quit-first">
+                          {t("settings.mcp.clients.quitFirst")}
+                        </p>
+                      )}
+                      <p className="sd">
+                        {c.id === "claude-code"
+                          ? t("settings.mcp.clients.willRun")
+                          : t("settings.mcp.clients.willWrite")}
+                      </p>
+                      <pre>{clientPreview(c)}</pre>
+                      <button
+                        type="button"
+                        disabled={busyClient != null}
+                        onClick={() => void connectClient(c.id)}
+                        data-testid={`mcp-client-${c.id}-apply`}
+                      >
+                        {t("settings.mcp.clients.apply")}
+                      </button>{" "}
+                      <button
+                        type="button"
+                        disabled={busyClient != null}
+                        onClick={() => setConfirmClient(null)}
+                      >
+                        {t("settings.mcp.clients.cancel")}
+                      </button>
+                    </div>
+                  )}
+                  {result && (
+                    <p className="sd" data-testid={`mcp-client-${c.id}-result`}>
+                      {result.outcome === "connected" && t("settings.mcp.clients.done")}
+                      {result.outcome === "already" && t("settings.mcp.clients.already")}
+                      {result.outcome === "failed" &&
+                        t("settings.mcp.clients.failed", { error: result.detail ?? "" })}
+                      {result.backup_path
+                        ? ` ${t("settings.mcp.clients.doneBackup", { path: result.backup_path })}`
+                        : ""}
+                    </p>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {running && (
+        <details data-testid="mcp-snippets">
+          <summary>{t("settings.mcp.manual")}</summary>
           {addCommand ? (
             <>
               <p className="sd">{t("settings.mcp.snippets.claudeCode")}</p>
@@ -271,7 +423,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
           <pre data-testid="mcp-snippet-project">{projectConfig}</pre>
           <p className="sd">{t("settings.mcp.snippets.desktop")}</p>
           <pre data-testid="mcp-snippet-desktop">{desktopConfig}</pre>
-        </div>
+        </details>
       )}
 
       {running && activity.length > 0 && (

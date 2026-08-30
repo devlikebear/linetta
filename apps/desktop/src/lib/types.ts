@@ -428,6 +428,28 @@ export interface McpTokenResult {
   status: McpStatus;
 }
 
+/** Detection result for one supported MCP client (#69). */
+export interface McpClientStatus {
+  id: string;
+  installed: boolean;
+  connected: boolean;
+  config_path?: string | null;
+  /** The client app is running now. Meaningful for clients that rewrite
+   *  their own config while open (Claude Desktop) — connecting then is
+   *  clobbered by the app's next internal save. */
+  running?: boolean;
+}
+
+/** What a one-click connect did. */
+export interface McpConnectOutcome {
+  ok: boolean;
+  /** "connected" | "already" */
+  outcome: string;
+  config_path?: string | null;
+  backup_path?: string | null;
+  detail?: string | null;
+}
+
 /** One recorded external tool call, shown in the activity list. */
 export interface McpActivityEntry {
   id: string;
