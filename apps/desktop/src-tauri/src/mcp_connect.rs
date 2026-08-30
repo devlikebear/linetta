@@ -46,11 +46,42 @@ fn home_dir() -> Option<PathBuf> {
     std::env::var(var).ok().filter(|v| !v.is_empty()).map(PathBuf::from)
 }
 
+/// The virtualized Claude config dir inside an MSIX package, when the
+/// Microsoft Store build is installed. `packages_root` is
+/// %LOCALAPPDATA%\Packages.
+fn msix_claude_dir(packages_root: &std::path::Path) -> Option<PathBuf> {
+    for entry in std::fs::read_dir(packages_root).ok()?.flatten() {
+        let name = entry.file_name();
+        if !name.to_string_lossy().starts_with("Claude_") {
+            continue;
+        }
+        let dir = entry.path().join("LocalCache").join("Roaming").join("Claude");
+        if dir.is_dir() {
+            return Some(dir);
+        }
+    }
+    None
+}
+
 /// Claude Desktop's config file, whether or not it exists yet. None when the
 /// app itself is not installed (no Claude directory).
 fn claude_desktop_config() -> Option<PathBuf> {
     let dir = if cfg!(target_os = "windows") {
-        PathBuf::from(std::env::var("APPDATA").ok()?).join("Claude")
+        // The Store build of Claude runs in an MSIX container whose AppData is
+        // virtualized: the app reads its config through
+        // Packages\Claude_*\LocalCache\Roaming\Claude, never %APPDATA%\Claude.
+        // Writing the plain path on such a machine would report success while
+        // the app never sees the entry — the silent-no-op class this feature
+        // exists to kill. Prefer the container's view when it exists.
+        let msix = std::env::var("LOCALAPPDATA")
+            .ok()
+            .filter(|v| !v.is_empty())
+            .map(|l| PathBuf::from(l).join("Packages"))
+            .and_then(|p| msix_claude_dir(&p));
+        match msix {
+            Some(dir) => dir,
+            None => PathBuf::from(std::env::var("APPDATA").ok()?).join("Claude"),
+        }
     } else if cfg!(target_os = "macos") {
         home_dir()?.join("Library/Application Support/Claude")
     } else {
@@ -370,6 +401,22 @@ mod tests {
     fn codex_append_is_idempotent() {
         let once = append_codex_server("", "/opt/bridge").unwrap();
         assert!(append_codex_server(&once, "/opt/bridge").is_none());
+    }
+
+    #[test]
+    fn msix_claude_dir_finds_the_containers_view_and_ignores_other_packages() {
+        let root = std::env::temp_dir().join(format!("linetta-msix-test-{}", std::process::id()));
+        let claude = root.join("Claude_abc123").join("LocalCache").join("Roaming").join("Claude");
+        let other = root.join("Other_pkg").join("LocalCache").join("Roaming").join("Claude");
+        std::fs::create_dir_all(&claude).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+
+        assert_eq!(msix_claude_dir(&root), Some(claude));
+        // A packages root with no Claude container yields nothing, so the
+        // caller falls back to the plain %APPDATA% path.
+        assert_eq!(msix_claude_dir(&root.join("Other_pkg")), None);
+
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]
