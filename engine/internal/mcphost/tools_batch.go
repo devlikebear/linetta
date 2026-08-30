@@ -43,10 +43,11 @@ type opFailure struct {
 // ---------- linetta_create_checkpoint ----------
 
 type createCheckpointInput struct {
-	NodeID string `json:"node_id" jsonschema:"scene to checkpoint"`
+	NodeID    string `json:"node_id" jsonschema:"scene to checkpoint"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional; checked against the scene's work when given"`
 }
 
-func (in createCheckpointInput) scope() (string, string) { return "", in.NodeID }
+func (in createCheckpointInput) scope() (string, string) { return in.ProjectID, in.NodeID }
 
 type createCheckpointOutput struct {
 	SnapshotID string `json:"snapshot_id"`
@@ -74,8 +75,10 @@ func (d ToolDeps) registerBatchTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_apply_story_ops",
 		Description: "Apply a batch of story changes: outline nodes, storylines and beats, characters, " +
-			"places, relationships, Fact Book cards, and memories. Structural batches are all-or-nothing — " +
-			"if one op fails the outline is put back — and a clean run returns undo_batch_id. " +
+			"places, relationships, Fact Book cards, and memories. Outline-structural batches are " +
+			"all-or-nothing — if one op fails the outline is put back — and return undo_batch_id. " +
+			"Entity, thread, beat, fact, and memory changes apply individually and are NOT batch-undoable; " +
+			"revert those with follow-up ops. " +
 			"Scene prose is NOT written here; use linetta_write_scene, which checks the version first.",
 	}, record(d, "linetta_apply_story_ops", d.applyStoryOps))
 
@@ -168,7 +171,7 @@ func applyFailureText(r storyops.ApplyOpsResult) string {
 }
 
 func (d ToolDeps) createCheckpoint(ctx context.Context, _ *mcp.CallToolRequest, in createCheckpointInput) (*mcp.CallToolResult, createCheckpointOutput, error) {
-	n, errResult := d.requireNode(ctx, in.NodeID)
+	n, errResult := d.requireNodeInProject(ctx, in.NodeID, in.ProjectID)
 	if errResult != nil {
 		return errResult, createCheckpointOutput{}, nil
 	}

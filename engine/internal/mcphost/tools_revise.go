@@ -42,7 +42,10 @@ type reviseSceneOutput struct {
 	DryRun       bool          `json:"dry_run"`
 	Matches      []reviseMatch `json:"matches"`
 	ChangedNodes []string      `json:"changed_nodes,omitempty"`
-	Failures     []string      `json:"failures,omitempty"`
+	// SnapshotIDs maps changed node ids to their pre-edit snapshots:
+	// linetta_undo_last_change restores one scene from one of these.
+	SnapshotIDs map[string]string `json:"snapshot_ids,omitempty"`
+	Failures    []string          `json:"failures,omitempty"`
 }
 
 func (d ToolDeps) registerReviseTool(s *mcp.Server) {
@@ -50,8 +53,9 @@ func (d ToolDeps) registerReviseTool(s *mcp.Server) {
 		Name: "linetta_revise_scene",
 		Description: "Replace exact text across one or more scenes — a renamed character, a corrected " +
 			"term, a reworded line — without resending whole scene bodies. Every touched scene is " +
-			"snapshotted first. Pass dry_run to see what would change before committing; omit node_ids " +
-			"only when you mean to sweep the entire work.",
+			"snapshotted first and the result maps each changed scene to its snapshot_id, which " +
+			"linetta_undo_last_change can restore. Pass dry_run to see what would change before " +
+			"committing; omit node_ids only when you mean to sweep the entire work.",
 	}, record(d, "linetta_revise_scene", d.reviseScene))
 }
 
@@ -117,6 +121,7 @@ func (d ToolDeps) reviseScene(ctx context.Context, _ *mcp.CallToolRequest, in re
 	}
 	out.Applied = result.Applied
 	out.ChangedNodes = result.ChangedNodeIDs
+	out.SnapshotIDs = result.SnapshotIDs
 	for _, f := range result.Failures {
 		out.Failures = append(out.Failures, f.Message)
 	}

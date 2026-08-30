@@ -198,6 +198,24 @@ func (d ToolDeps) requireNode(ctx context.Context, nodeID string) (node.Node, *m
 	return n, nil
 }
 
+// requireNodeInProject is requireNode plus the courtesy of accepting an
+// optional project_id (#73): agents habitually pass it because most tools
+// want one, and rejecting the extra key failed otherwise-correct calls. When
+// given, a mismatch is refused loudly — it means the agent is confused about
+// which work it is in, and silence there becomes a wrong-work edit later.
+func (d ToolDeps) requireNodeInProject(ctx context.Context, nodeID, projectID string) (node.Node, *mcp.CallToolResult) {
+	n, errResult := d.requireNode(ctx, nodeID)
+	if errResult != nil {
+		return node.Node{}, errResult
+	}
+	projectID = strings.TrimSpace(projectID)
+	if projectID != "" && projectID != n.ProjectID {
+		return node.Node{}, toolErr(
+			"node %q belongs to work %q, not %q; drop project_id or fix it", n.ID, n.ProjectID, projectID)
+	}
+	return n, nil
+}
+
 // allowedProjectID returns the restriction, or "" when every work is reachable.
 func (d ToolDeps) allowedProjectID() string {
 	if d.Settings == nil {

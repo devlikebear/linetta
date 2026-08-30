@@ -61,7 +61,7 @@ func readScene(t *testing.T, c *mcpClient, nodeID string) (body string, version 
 		t.Fatalf("read_scene: %v", result)
 	}
 	var out struct {
-		Body           string `json:"body"`
+		Body           string `json:"text"`
 		ContentVersion int    `json:"content_version"`
 	}
 	if err := json.Unmarshal([]byte(structuredJSON(t, result)), &out); err != nil {

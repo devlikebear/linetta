@@ -82,7 +82,8 @@ type getOutlineOutput struct {
 // ---------- linetta_get_story_context ----------
 
 type getStoryContextInput struct {
-	NodeID string `json:"node_id" jsonschema:"id of the scene to build the brief for"`
+	NodeID    string `json:"node_id" jsonschema:"id of the scene to build the brief for"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional; checked against the scene's work when given"`
 	// Section toggles map onto the writer's own context checklist. Omit them
 	// to get everything.
 	IncludeFacts      *bool `json:"include_facts,omitempty"`
@@ -91,7 +92,7 @@ type getStoryContextInput struct {
 	IncludePlot       *bool `json:"include_plot,omitempty"`
 }
 
-func (in getStoryContextInput) scope() (string, string) { return "", in.NodeID }
+func (in getStoryContextInput) scope() (string, string) { return in.ProjectID, in.NodeID }
 
 type getStoryContextOutput struct {
 	ProjectID        string   `json:"project_id"`
@@ -105,10 +106,11 @@ type getStoryContextOutput struct {
 // ---------- linetta_read_scene ----------
 
 type readSceneInput struct {
-	NodeID string `json:"node_id" jsonschema:"id of the scene to read"`
+	NodeID    string `json:"node_id" jsonschema:"id of the scene to read"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional; checked against the scene's work when given"`
 }
 
-func (in readSceneInput) scope() (string, string) { return "", in.NodeID }
+func (in readSceneInput) scope() (string, string) { return in.ProjectID, in.NodeID }
 
 type readSceneOutput struct {
 	NodeID         string `json:"node_id"`
@@ -118,7 +120,10 @@ type readSceneOutput struct {
 	Status         string `json:"status"`
 	WordCount      int    `json:"word_count"`
 	ContentVersion int    `json:"content_version"`
-	Body           string `json:"body"`
+	// Named text, matching linetta_write_scene's input and set_scene_text's
+	// field (#73): the natural read→edit→write round trip should never fail
+	// on a renamed key.
+	Text           string `json:"text" jsonschema:"the scene's full prose"`
 	Summary        string `json:"summary,omitempty"`
 	SummaryIsStale bool   `json:"summary_is_stale"`
 }
@@ -168,10 +173,11 @@ type listCharactersOutput struct {
 // ---------- linetta_where_does_appear ----------
 
 type whereAppearsInput struct {
-	EntityID string `json:"entity_id" jsonschema:"id of the character, place, item, or concept"`
+	EntityID  string `json:"entity_id" jsonschema:"id of the character, place, item, or concept"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional; checked against the element's work when given"`
 }
 
-func (in whereAppearsInput) scope() (string, string) { return "", in.EntityID }
+func (in whereAppearsInput) scope() (string, string) { return in.ProjectID, in.EntityID }
 
 type appearanceRow struct {
 	NodeID string `json:"node_id"`
@@ -187,10 +193,11 @@ type whereAppearsOutput struct {
 // ---------- linetta_get_plot ----------
 
 type getPlotInput struct {
-	NodeID string `json:"node_id" jsonschema:"a scene in the work; the plot spine is built around it"`
+	NodeID    string `json:"node_id" jsonschema:"a scene in the work; the plot spine is built around it"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional; checked against the scene's work when given"`
 }
 
-func (in getPlotInput) scope() (string, string) { return "", in.NodeID }
+func (in getPlotInput) scope() (string, string) { return in.ProjectID, in.NodeID }
 
 type getPlotOutput struct {
 	NodeID string     `json:"node_id"`
@@ -370,7 +377,7 @@ func outlineRows(all []node.Node) []outlineRow {
 }
 
 func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, in getStoryContextInput) (*mcp.CallToolResult, getStoryContextOutput, error) {
-	n, errResult := d.requireNode(ctx, in.NodeID)
+	n, errResult := d.requireNodeInProject(ctx, in.NodeID, in.ProjectID)
 	if errResult != nil {
 		return errResult, getStoryContextOutput{}, nil
 	}
@@ -437,7 +444,7 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 }
 
 func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in readSceneInput) (*mcp.CallToolResult, readSceneOutput, error) {
-	n, errResult := d.requireNode(ctx, in.NodeID)
+	n, errResult := d.requireNodeInProject(ctx, in.NodeID, in.ProjectID)
 	if errResult != nil {
 		return errResult, readSceneOutput{}, nil
 	}
@@ -456,7 +463,7 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 		// Trimmed at the tool boundary, not in PlainText: the brief's renderer
 		// depends on that function's exact output. An untouched empty scene
 		// otherwise arrives as "\n", which an agent can misread as content.
-		Body:           strings.TrimSpace(storycontext.PlainText(n.ContentDoc)),
+		Text:           strings.TrimSpace(storycontext.PlainText(n.ContentDoc)),
 		Summary:        n.Summary,
 		SummaryIsStale: n.Summary == "" || n.SummaryForVersion != n.ContentVersion,
 	}, nil
@@ -528,6 +535,10 @@ func (d ToolDeps) whereAppears(ctx context.Context, _ *mcp.CallToolRequest, in w
 	if _, errResult := d.requireProject(ctx, ent.ProjectID); errResult != nil {
 		return errResult, whereAppearsOutput{}, nil
 	}
+	if pid := strings.TrimSpace(in.ProjectID); pid != "" && pid != ent.ProjectID {
+		return toolErr("story element %q belongs to work %q, not %q; drop project_id or fix it",
+			ent.ID, ent.ProjectID, pid), whereAppearsOutput{}, nil
+	}
 	ids, _, err := d.Mentions.MentionedNodeIDs(ctx, entityID)
 	if err != nil {
 		return toolErr("could not read mentions: %v", err), whereAppearsOutput{}, nil
@@ -554,7 +565,7 @@ func (d ToolDeps) whereAppears(ctx context.Context, _ *mcp.CallToolRequest, in w
 }
 
 func (d ToolDeps) getPlot(ctx context.Context, _ *mcp.CallToolRequest, in getPlotInput) (*mcp.CallToolResult, getPlotOutput, error) {
-	n, errResult := d.requireNode(ctx, in.NodeID)
+	n, errResult := d.requireNodeInProject(ctx, in.NodeID, in.ProjectID)
 	if errResult != nil {
 		return errResult, getPlotOutput{}, nil
 	}

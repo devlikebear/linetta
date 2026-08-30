@@ -70,6 +70,10 @@ type ApplyReplaceResult struct {
 	Skipped        int            `json:"skipped"`
 	Failures       []ApplyFailure `json:"failures"`
 	ChangedNodeIDs []string       `json:"changed_node_ids"`
+	// SnapshotIDs maps each changed node to the snapshot taken just before
+	// its edit, so a caller (an MCP agent especially, #73) can restore any
+	// one scene without hunting through version history.
+	SnapshotIDs map[string]string `json:"snapshot_ids,omitempty"`
 }
 
 type nodeRepo interface {
@@ -224,7 +228,8 @@ func (s *Service) ApplyReplace(ctx context.Context, plan ReplacePlan, candidateI
 			})
 			continue
 		}
-		if _, err := s.snaps.Create(ctx, n.ID, *n.ContentDoc, snapshot.ReasonManual, now); err != nil {
+		snap, err := s.snaps.Create(ctx, n.ID, *n.ContentDoc, snapshot.ReasonManual, now)
+		if err != nil {
 			result.Failures = append(result.Failures, ApplyFailure{
 				CandidateID: c.ID,
 				NodeID:      c.NodeID,
@@ -246,6 +251,10 @@ func (s *Service) ApplyReplace(ctx context.Context, plan ReplacePlan, candidateI
 		}
 		result.Applied++
 		result.ChangedNodeIDs = append(result.ChangedNodeIDs, n.ID)
+		if result.SnapshotIDs == nil {
+			result.SnapshotIDs = map[string]string{}
+		}
+		result.SnapshotIDs[n.ID] = snap.ID
 	}
 	return result, nil
 }
