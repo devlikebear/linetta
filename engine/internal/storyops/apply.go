@@ -443,7 +443,7 @@ func (s *Service) applyOneOp(
 		}
 		return s.nodes.MoveDown(ctx, nodeID, now())
 	default:
-		return fmt.Errorf("unknown op %q", op.Type)
+		return fmt.Errorf("unknown op %q; valid ops: %s", op.Type, strings.Join(ValidOpTypes(), ", "))
 	}
 }
 

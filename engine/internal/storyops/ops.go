@@ -11,14 +11,19 @@ package storyops
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/fact"
 )
 
 // Op is one proposed plot-core mutation. Only fields relevant to Type are set.
+//
+// The jsonschema tag on Type is the op catalogue an MCP agent sees; keep it
+// and ValidOpTypes in step (a mcphost test enforces the pairing), or agents
+// are back to guessing names (#73).
 type Op struct {
-	Type string `json:"op"`
+	Type string `json:"op" jsonschema:"one of: add_beat, create_entity, create_fact_card, create_outline_node, create_relationship, create_scene, create_thread, delete_beat, delete_outline_node, move_outline_node, remember, rename_outline_node, set_outline, set_scene_text, update_beat, update_entity, update_thread"`
 
 	// create_thread
 	Ref     string `json:"ref,omitempty"`
@@ -81,6 +86,18 @@ type Proposal struct {
 	Ops     []Op   `json:"ops"`
 }
 
+// ValidOpTypes returns every accepted op type, sorted, for error messages
+// and schema descriptions: an agent that guessed wrong must be told the real
+// names, not just that it guessed wrong.
+func ValidOpTypes() []string {
+	out := make([]string, 0, len(knownOps))
+	for op := range knownOps {
+		out = append(out, op)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // knownOps lists the accepted op types.
 var knownOps = map[string]bool{
 	"create_thread": true, "update_thread": true,
@@ -138,7 +155,7 @@ func ValidateProposal(p Proposal) error {
 	}
 	for i, op := range p.Ops {
 		if !knownOps[op.Type] {
-			return fmt.Errorf("op[%d]: unknown op %q", i, op.Type)
+			return fmt.Errorf("op[%d]: unknown op %q; valid ops: %s", i, op.Type, strings.Join(ValidOpTypes(), ", "))
 		}
 		switch op.Type {
 		case "create_thread":

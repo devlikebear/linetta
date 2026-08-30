@@ -34,8 +34,9 @@ const maxSceneRunes = 60000
 // ---------- linetta_write_scene ----------
 
 type writeSceneInput struct {
-	NodeID string `json:"node_id" jsonschema:"id of the scene to write"`
-	Text   string `json:"text" jsonschema:"the full scene body as plain prose; blank lines separate paragraphs"`
+	NodeID    string `json:"node_id" jsonschema:"id of the scene to write"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional; checked against the scene's work when given"`
+	Text      string `json:"text" jsonschema:"the full scene body as plain prose; blank lines separate paragraphs"`
 	// ExpectedContentVersion is the content_version from linetta_read_scene.
 	// Required: it is what stops an agent from overwriting edits the writer
 	// made after the agent last read the scene.
@@ -45,7 +46,7 @@ type writeSceneInput struct {
 	ExpectedContentVersion *int `json:"expected_content_version" jsonschema:"the content_version returned by linetta_read_scene"`
 }
 
-func (in writeSceneInput) scope() (string, string) { return "", in.NodeID }
+func (in writeSceneInput) scope() (string, string) { return in.ProjectID, in.NodeID }
 
 type writeSceneOutput struct {
 	NodeID         string `json:"node_id"`
@@ -113,7 +114,7 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 }
 
 func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in writeSceneInput) (*mcp.CallToolResult, writeSceneOutput, error) {
-	n, errResult := d.requireNode(ctx, in.NodeID)
+	n, errResult := d.requireNodeInProject(ctx, in.NodeID, in.ProjectID)
 	if errResult != nil {
 		return errResult, writeSceneOutput{}, nil
 	}
