@@ -48,10 +48,24 @@ the type breaks every locale that has not been updated, which is the point. The
 and IBM Plex Mono — including that palette's dark set, which the site uses for
 `prefers-color-scheme: dark`. Keep the two in step when the app's palette moves.
 
-The product visuals in `src/lib/AppFrame.svelte` and `src/lib/PanelMock.svelte`
-are drawings built from those tokens, not screenshots. That is deliberate: a
-screenshot goes stale the moment a panel is added or removed, and the repository's
-existing captures still show a companion the app no longer has.
+## Screenshots
+
+`src/lib/screenshots.ts` imports the four captures from `docs/assets/screenshots`
+at the repository root — the same files the project README uses. They are not
+copied into `static/`, so retaking them updates the README and the site in one
+commit and the two can never advertise different builds. `vite.config.ts` widens
+`server.fs.allow` so `vite dev` may serve from up there; the production build
+resolves and fingerprints them itself.
+
+Adding a capture means adding a `PanelId` in `content.ts`, a panel entry in all
+three locales, and one line in `screenshots.ts` — the record type makes the
+compiler ask for the third.
+
+The showcase keeps all four images mounted and cross-fades between them, so
+switching tabs neither re-requests an image nor collapses the frame while one
+decodes. Both the hero and the showcase give the capture the full measure: a
+1442px window squeezed into a half-width column turns the app's own type into
+grey mush.
 
 ## Crawlers
 

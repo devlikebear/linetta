@@ -1,5 +1,6 @@
 <script lang="ts">
-  import AppFrame from '$lib/AppFrame.svelte';
+  import Shot from '$lib/Shot.svelte';
+  import { screenshots } from '$lib/screenshots';
   import type { Translation } from '$lib/content';
 
   let { t }: { t: Translation } = $props();
@@ -26,11 +27,7 @@
           >{/if}{/each}
     </h1>
 
-    <div
-      class="mt-12 grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.12fr)] lg:items-start lg:gap-16"
-      style="--i: 2"
-    >
-      <div>
+    <div class="mt-12" style="--i: 2">
         <p class="max-w-[34rem] text-[1.075rem] leading-[1.75] text-ink-soft">{t.hero.sub}</p>
 
         <div class="mt-9 flex flex-wrap gap-3">
@@ -57,11 +54,12 @@
             </li>
           {/each}
         </ul>
-      </div>
+    </div>
 
-      <div>
-        <AppFrame {t} />
-      </div>
+    <!-- The capture gets the full measure: a 1442px window squeezed into a half
+         column turns the app's own type into grey mush. -->
+    <div class="mt-14" style="--i: 3">
+      <Shot src={screenshots.workspace} alt={t.hero.imageAlt} priority />
     </div>
   </div>
 </section>

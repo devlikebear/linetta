@@ -6,14 +6,16 @@ export type AltLink = { locale: Locale; path: string; label: string };
  *  break where its own grammar wants them. */
 export type HeadlineRun = { text?: string; accent?: boolean; nl?: boolean };
 
-export type PanelMockId = 'outline' | 'editor' | 'factbook' | 'contextual' | 'plot';
+/** One per screenshot in docs/assets/screenshots. */
+export type PanelId = 'workspace' | 'story-world' | 'fact-book' | 'library';
 
 export type Panel = {
-  id: PanelMockId;
+  id: PanelId;
   tab: string;
   kicker: string;
   title: string;
   body: string;
+  alt: string;
   points: string[];
 };
 
@@ -56,17 +58,7 @@ export type Translation = {
     ctaPrimary: string;
     ctaSecondary: string;
     pills: string[];
-    mock: {
-      window: string;
-      breadcrumb: string[];
-      rail: string;
-      railItems: { label: string; meta: string; active?: boolean }[];
-      kicker: string;
-      title: string;
-      prose: string[];
-      status: string;
-      badge: string;
-    };
+    imageAlt: string;
   };
 
   intro: { mark: string; heading: string; paragraphs: string[] };
@@ -190,24 +182,8 @@ export const en: Translation = {
       'The manuscript stays on your disk',
       'Korean, English, Japanese'
     ],
-    mock: {
-      window: 'Linetta',
-      breadcrumb: ['War of Spaces', 'Arc 1', 'Episode 1'],
-      rail: 'Outline',
-      railItems: [
-        { label: 'Episode 1', meta: '3,180 / 5,000', active: true },
-        { label: 'Episode 2', meta: '1,024 / 5,000' },
-        { label: 'Episode 3', meta: '— / 5,000' }
-      ],
-      kicker: 'Arc 1 · Episode 1',
-      title: 'Episode 1',
-      prose: [
-        'The rain went up that night, and every clock in the building agreed to stop at the same minute.',
-        'She had not heard that particular knock in eleven years. It was the one her sister used when she wanted to be let in without being announced.'
-      ],
-      status: 'Episode 1 · 3,180 / 5,000 chars · saved 12s ago',
-      badge: 'An external agent can read this work (read only)'
-    }
+    imageAlt:
+      'The Linetta workspace: an outline rail, a serif editor holding the opening of a scene, and a right-hand panel with the scene’s character count, targets and synopsis.'
   },
 
   intro: {
@@ -226,87 +202,79 @@ export const en: Translation = {
     sub: 'Every panel is built around the same question: what does this scene need to be consistent with?',
     panels: [
       {
-        id: 'outline',
-        tab: 'Outline',
-        kicker: 'Structure',
-        title: 'Parts and chapters, or arcs and episodes.',
-        body: 'Choose the shape the work actually has. Linetta numbers and labels the tree for you, in the language of the interface — Arc 1 · Episode 1, 제1부 · 1화, 第1巻 · 第1話.',
-        points: [
-          'Drag to reorder; renumbering follows',
-          'Per-scene length targets with a live count',
-          'Inspect the outline for duplicates, orphans and depth, then auto-repair — and undo the repair'
-        ]
-      },
-      {
-        id: 'editor',
-        tab: 'Editor',
+        id: 'workspace',
+        tab: 'Workspace',
         kicker: 'The page',
-        title: 'A serif page, and nothing asking for attention.',
-        body: 'Scene by scene, with the outline within reach and the character count where you can ignore it. Mentions link a name in the prose to the character behind it.',
+        title: 'A serif page, the outline beside it, and the scene’s own record.',
+        body: 'Write scene by scene with the outline within reach and the count where you can ignore it. The right rail holds what you check without leaving the sentence — characters written today, the episode target, the synopsis, the entities this scene mentions.',
+        alt: 'The workspace: an outline rail on the left, a serif editor in the middle, and a right panel showing 442 characters, an episode target and a project overview.',
         points: [
-          'Margin notes attached to the text, not to a sidebar',
-          'Full-text search across the manuscript, and a command palette for everything else',
+          'Parts and chapters, or arcs and episodes — Linetta numbers the tree in the language of the interface',
+          'Per-scene length targets with a live count, beside the work total',
           'ZEN empties the room down to the text and a counter'
         ]
       },
       {
-        id: 'factbook',
+        id: 'story-world',
+        tab: 'Story World',
+        kicker: 'The invented world',
+        title: 'Characters, places, items and concepts, with the ties between them.',
+        body: 'Fact Book is for the real world; Story World is for the invented one. Each card carries a role, a summary and the relationships it stands in, and the filters narrow the shelf to one kind.',
+        alt: 'The Story World panel listing entity cards — a place, two characters, a concept and an item — each with a role, a one-line summary and a relationship count.',
+        points: [
+          'Roles like protagonist, main stage or villain, and the relationships that connect them',
+          'Search by name, alias, role or summary',
+          'An agent connected over MCP can add entities here, and you see what it added'
+        ]
+      },
+      {
+        id: 'fact-book',
         tab: 'Fact Book',
         kicker: 'Research',
         title: 'Source-backed notes beside the scene that needs them.',
-        body: 'Select a claim in the manuscript and check it. What comes back is saved as a card with its source, next to the writing it belongs to — not in a browser tab you will lose.',
+        body: 'Write down what you checked and where; Linetta fetches the page and files it alongside. A card is marked verified or uncertain, so a claim you have not settled stays visibly unsettled instead of hardening into fact.',
+        alt: 'The Fact Book panel with research cards, each tagged verified or uncertain and carrying the source it came from.',
         points: [
-          'Cards carry the URL they came from',
-          'Kept per work, searchable, reusable across scenes',
-          'Fed to an external agent as part of the story brief'
+          'Verified and uncertain badges, with the source kept on the card',
+          'Scoped to the current scene or to the whole work',
+          'An agent connected over MCP reads these cards too'
         ]
       },
       {
-        id: 'contextual',
-        tab: 'Contextual Edit',
-        kicker: 'Consistency',
-        title: 'Change a fact once, and fix every scene that contradicts it.',
-        body: 'A character’s age moves, a place gets renamed, a relationship inverts. Linetta finds the scenes that carry the old version and walks you through the revision, scene by scene.',
+        id: 'library',
+        tab: 'Library',
+        kicker: 'The shelf',
+        title: 'From one line to a full book.',
+        body: 'Works sit on a shelf built for more than one of them, with word counts and status. Start a project, or bring an existing manuscript in from Markdown.',
+        alt: 'The Linetta library screen with a project card, buttons for a new project, Markdown import and search, and a note that core data stays local.',
         points: [
-          'Finds affected scenes from entities, facts and relationships',
-          'Batch review before anything is written',
-          'No language model involved — this is a search-and-revise tool'
-        ]
-      },
-      {
-        id: 'plot',
-        tab: 'Plot',
-        kicker: 'Threads',
-        title: 'A thread you opened in episode 3 should not vanish by 40.',
-        body: 'Storylines and beats sit on a spine across the outline, so an unresolved promise is something you can see rather than something you remember at the wrong moment.',
-        points: [
-          'Storylines with beats placed on scenes',
-          'Open and resolved beats at a glance',
-          'Register any scene as the start of a new storyline'
+          'New project, Markdown import, and search across everything',
+          'Active and archived shelves',
+          'Core data stays local — the library is a file on your own disk'
         ]
       }
     ],
     alsoLabel: 'Also in the room',
     also: [
       {
+        tag: 'Contextual Edit',
+        title: 'Fix a fact everywhere',
+        body: 'Change a character, place or relationship once, and Linetta finds the scenes that still carry the old version and walks you through them. No language model involved.'
+      },
+      {
+        tag: 'Plot',
+        title: 'Threads on a spine',
+        body: 'Storylines and beats placed across the outline, so a promise you opened in episode 3 is something you can see rather than something you remember late.'
+      },
+      {
         tag: 'History',
         title: 'Snapshots per scene',
-        body: 'Manual and automatic snapshots, restorable. Manual ones are kept indefinitely.'
+        body: 'Manual and automatic snapshots, restorable. Manual ones, and the ones taken before an agent writes, are kept indefinitely.'
       },
       {
         tag: 'Record',
         title: 'Writing pace',
         body: 'A seven-day average and the number of episodes per week it implies. No streaks, no guilt.'
-      },
-      {
-        tag: 'Entities',
-        title: 'Characters, places, things',
-        body: 'Briefs and relationships, linked into the prose by mention, and listed by the scenes they appear in.'
-      },
-      {
-        tag: 'Sync',
-        title: 'Folder and Git',
-        body: 'Export the work as Markdown into a folder, and optionally let Git carry it somewhere else.'
       }
     ]
   },
@@ -530,24 +498,8 @@ export const ko: Translation = {
     ctaPrimary: 'Linetta 받기',
     ctaSecondary: 'GitHub에서 소스 보기',
     pills: ['계정도 구독도 없음', '원고는 내 디스크에', '한국어 · English · 日本語'],
-    mock: {
-      window: 'Linetta',
-      breadcrumb: ['공간의 전쟁', '1부', '1화'],
-      rail: '아웃라인',
-      railItems: [
-        { label: '1화', meta: '3,180 / 5,000', active: true },
-        { label: '2화', meta: '1,024 / 5,000' },
-        { label: '3화', meta: '— / 5,000' }
-      ],
-      kicker: '1부 · 1화',
-      title: '1화',
-      prose: [
-        '그날 밤 비는 위로 내렸고, 건물 안의 모든 시계가 같은 분에서 멈추기로 합의했다.',
-        '그 노크 소리를 들은 건 십일 년 만이었다. 알리지 않고 들어오고 싶을 때 동생이 쓰던 방식이었다.'
-      ],
-      status: '1화 · 3,180 / 5,000자 · 12초 전 저장됨',
-      badge: '외부 에이전트가 이 작품을 읽을 수 있습니다 (읽기 전용)'
-    }
+    imageAlt:
+      'Linetta 작업 공간. 왼쪽에 아웃라인 레일, 가운데에 씬 도입부가 놓인 본문 편집기, 오른쪽에 이 씬의 글자 수·목표·시놉시스 패널.'
   },
 
   intro: {
@@ -566,87 +518,79 @@ export const ko: Translation = {
     sub: '모든 패널이 같은 질문 위에 서 있습니다. 이 씬은 무엇과 어긋나면 안 되는가?',
     panels: [
       {
-        id: 'outline',
-        tab: '아웃라인',
-        kicker: '구조',
-        title: '부·장·씬, 또는 권·화.',
-        body: '작품이 실제로 가진 형태를 고르면 됩니다. 번호와 라벨은 Linetta가 인터페이스 언어에 맞춰 붙입니다 — 1부 · 1화, Arc 1 · Episode 1, 第1巻 · 第1話.',
-        points: [
-          '끌어서 순서를 바꾸면 번호가 따라옵니다',
-          '씬마다 분량 목표와 실시간 글자 수',
-          '중복·고아 노드·과도한 깊이를 점검하고 자동 교정, 그리고 그 교정을 되돌리기'
-        ]
-      },
-      {
-        id: 'editor',
-        tab: '편집기',
+        id: 'workspace',
+        tab: '작업 공간',
         kicker: '본문',
-        title: '본문 한 장, 그리고 주의를 요구하지 않는 나머지.',
-        body: '아웃라인은 손 닿는 곳에, 글자 수는 무시할 수 있는 자리에 둔 채 씬 단위로 씁니다. 멘션은 본문 속 이름을 그 인물에 연결합니다.',
+        title: '본문 한 장, 그 옆의 아웃라인, 그리고 이 씬의 기록.',
+        body: '아웃라인은 손 닿는 곳에, 글자 수는 무시할 수 있는 자리에 둔 채 씬 단위로 씁니다. 오른쪽 레일에는 문장을 떠나지 않고 확인하는 것들이 있습니다 — 오늘 쓴 글자 수, 화 분량 목표, 시놉시스, 이 씬이 언급한 엔티티.',
+        alt: '작업 공간. 왼쪽에 아웃라인 레일, 가운데에 본문 편집기, 오른쪽에 442자·화 분량 목표·작품 개요를 보여주는 패널.',
         points: [
-          '사이드바가 아니라 본문에 붙는 여백 노트',
-          '원고 전문 검색, 나머지는 커맨드 팔레트로',
+          '부·장·씬 또는 권·화 — 번호와 라벨은 인터페이스 언어에 맞춰 붙습니다',
+          '씬마다 분량 목표와 실시간 글자 수, 그 옆에 작품 총합',
           'ZEN은 방을 비워 본문과 카운터만 남깁니다'
         ]
       },
       {
-        id: 'factbook',
+        id: 'story-world',
+        tab: '스토리 월드',
+        kicker: '창작된 세계',
+        title: '인물·장소·사물·개념, 그리고 그 사이의 관계.',
+        body: '팩트북이 현실 세계를 위한 것이라면, 스토리 월드는 지어낸 세계를 위한 것입니다. 카드마다 역할과 요약, 맺고 있는 관계 수가 붙고, 필터로 한 종류만 추려 볼 수 있습니다.',
+        alt: '스토리 월드 패널. 장소 하나, 인물 둘, 개념 하나, 사물 하나의 카드가 각각 역할과 한 줄 요약, 관계 수를 달고 나열되어 있습니다.',
+        points: [
+          '주인공·주요 무대·빌런 같은 역할과, 그것들을 잇는 관계',
+          '이름·별칭·역할·요약으로 검색',
+          'MCP로 연결된 에이전트가 여기에 엔티티를 만들 수 있고, 무엇을 추가했는지 보입니다'
+        ]
+      },
+      {
+        id: 'fact-book',
         tab: '팩트북',
         kicker: '자료',
         title: '출처가 붙은 메모를, 그 자료가 필요한 씬 옆에.',
-        body: '원고에서 확인이 필요한 문장을 선택해 점검합니다. 돌아온 결과는 출처와 함께 카드로 저장되어, 잃어버릴 브라우저 탭이 아니라 해당 원고 옆에 남습니다.',
+        body: '무엇을 어디서 확인했는지 적으면 Linetta가 그 페이지를 가져와 옆에 정리해 둡니다. 카드에는 확인됨 또는 불확실 표시가 붙어서, 아직 결론 나지 않은 주장이 슬그머니 사실로 굳지 않습니다.',
+        alt: '팩트북 패널. 조사 카드마다 확인됨 또는 불확실 배지가 붙고 출처가 함께 표시되어 있습니다.',
         points: [
-          '카드는 출처 URL을 함께 보관합니다',
-          '작품 단위로 쌓이고, 검색되고, 여러 씬에서 재사용됩니다',
-          '외부 에이전트에게는 스토리 브리프의 일부로 전달됩니다'
+          '확인됨·불확실 배지와, 카드에 남는 출처',
+          '현재 씬 또는 작품 전체로 범위 지정',
+          'MCP로 연결된 에이전트도 이 카드들을 읽습니다'
         ]
       },
       {
-        id: 'contextual',
-        tab: '컨텍스트 편집',
-        kicker: '일관성',
-        title: '설정을 한 번 고치고, 어긋나는 씬을 전부 고칩니다.',
-        body: '인물의 나이가 바뀌고, 장소 이름이 바뀌고, 관계가 뒤집힙니다. Linetta는 옛 설정을 담고 있는 씬들을 찾아 하나씩 수정 과정을 안내합니다.',
+        id: 'library',
+        tab: '서재',
+        kicker: '서가',
+        title: '한 줄에서 한 권까지.',
+        body: '작품이 여러 권을 전제로 만든 서가에 놓입니다. 분량과 상태가 함께 보이고, 새 작품을 시작하거나 쓰던 원고를 마크다운으로 가져올 수 있습니다.',
+        alt: 'Linetta 서재 화면. 작품 카드 하나와 새 작품·마크다운 가져오기·검색 버튼, 그리고 핵심 데이터가 로컬에 남는다는 표시.',
         points: [
-          '엔티티·팩트·관계에서 영향받는 씬을 찾아냅니다',
-          '무엇도 쓰이기 전에 일괄 검토합니다',
-          '언어 모델을 전혀 쓰지 않는 검색·수정 도구입니다'
-        ]
-      },
-      {
-        id: 'plot',
-        tab: '플롯',
-        kicker: '스레드',
-        title: '3화에서 연 실은 40화까지 사라지면 안 됩니다.',
-        body: '스토리라인과 비트가 아웃라인을 가로지르는 스파인 위에 놓입니다. 해소되지 않은 약속이 기억해야 할 것이 아니라 보이는 것이 됩니다.',
-        points: [
-          '씬에 배치되는 비트를 가진 스토리라인',
-          '열린 비트와 해소된 비트를 한눈에',
-          '아무 씬이나 새 스토리라인의 시작으로 등록'
+          '새 작품, 마크다운 가져오기, 전체 검색',
+          '진행 중과 보관함',
+          '핵심 데이터는 로컬에 — 서재는 내 디스크의 파일입니다'
         ]
       }
     ],
     alsoLabel: '같은 방 안에',
     also: [
       {
+        tag: '컨텍스트 편집',
+        title: '설정을 한 번에 정리',
+        body: '인물·장소·관계를 한 번 고치면, 옛 설정을 아직 담고 있는 씬들을 찾아 하나씩 안내합니다. 언어 모델은 전혀 쓰지 않습니다.'
+      },
+      {
+        tag: '플롯',
+        title: '스파인 위의 실',
+        body: '스토리라인과 비트가 아웃라인을 가로질러 놓입니다. 3화에서 연 약속이 뒤늦게 떠올리는 것이 아니라 보이는 것이 됩니다.'
+      },
+      {
         tag: '이력',
         title: '씬 단위 스냅샷',
-        body: '수동·자동 스냅샷을 복원할 수 있습니다. 수동 스냅샷은 기한 없이 보관됩니다.'
+        body: '수동·자동 스냅샷을 복원할 수 있습니다. 수동 스냅샷과 에이전트가 쓰기 전에 찍힌 스냅샷은 기한 없이 보관됩니다.'
       },
       {
         tag: '기록',
         title: '집필 속도',
         body: '7일 평균과 그 속도로 환산한 주당 화수. 연속 기록도, 죄책감도 없습니다.'
-      },
-      {
-        tag: '엔티티',
-        title: '인물 · 장소 · 사물',
-        body: '설정과 관계를 멘션으로 본문에 연결하고, 등장하는 씬 목록으로 되짚습니다.'
-      },
-      {
-        tag: '동기화',
-        title: '폴더와 Git',
-        body: '작품을 마크다운으로 폴더에 내보내고, 원하면 Git이 그 폴더를 다른 곳으로 옮기게 합니다.'
       }
     ]
   },
@@ -868,24 +812,8 @@ export const ja: Translation = {
     ctaPrimary: 'Linetta を入手',
     ctaSecondary: 'GitHub でソースを見る',
     pills: ['アカウントも購読も不要', '原稿は自分のディスクに', '한국어 · English · 日本語'],
-    mock: {
-      window: 'Linetta',
-      breadcrumb: ['空間の戦争', '第1巻', '第1話'],
-      rail: 'アウトライン',
-      railItems: [
-        { label: '第1話', meta: '3,180 / 5,000', active: true },
-        { label: '第2話', meta: '1,024 / 5,000' },
-        { label: '第3話', meta: '— / 5,000' }
-      ],
-      kicker: '第1巻 · 第1話',
-      title: '第1話',
-      prose: [
-        'その夜、雨は上に降り、建物じゅうの時計が同じ分で止まることに同意した。',
-        'そのノックを聞いたのは十一年ぶりだった。知らせずに入りたいとき、妹が使っていた叩き方だ。'
-      ],
-      status: '第1話 · 3,180 / 5,000字 · 12秒前に保存',
-      badge: '外部エージェントがこの作品を読めます（読み取り専用）'
-    }
+    imageAlt:
+      'Linetta のワークスペース。左にアウトラインのレール、中央にシーン冒頭を表示した本文エディタ、右にこのシーンの文字数・目標・あらすじのパネル。'
   },
 
   intro: {
@@ -904,87 +832,79 @@ export const ja: Translation = {
     sub: 'どのパネルも同じ問いの上に立っています。このシーンは何と食い違ってはいけないのか。',
     panels: [
       {
-        id: 'outline',
-        tab: 'アウトライン',
-        kicker: '構造',
-        title: '部・章・シーン、あるいは巻・話。',
-        body: '作品が実際に持っている形を選ぶだけです。番号とラベルは Linetta がインターフェースの言語に合わせて付けます — 第1巻 · 第1話、Arc 1 · Episode 1、제1부 · 1화。',
-        points: [
-          'ドラッグで並べ替えると番号が追従します',
-          'シーンごとの分量目標とリアルタイムの文字数',
-          '重複・孤立ノード・深すぎる階層を点検して自動修復、その修復も取り消せます'
-        ]
-      },
-      {
-        id: 'editor',
-        tab: '編集画面',
+        id: 'workspace',
+        tab: 'ワークスペース',
         kicker: '本文',
-        title: '本文一枚と、注意を要求しない残りすべて。',
-        body: 'アウトラインは手の届くところに、文字数は無視できる位置に置いたまま、シーン単位で書きます。メンションは本文の名前をその人物に結びます。',
+        title: '本文一枚、そのとなりのアウトライン、そしてこのシーンの記録。',
+        body: 'アウトラインは手の届くところに、文字数は無視できる位置に置いたまま、シーン単位で書きます。右のレールには文を離れずに確かめるものが並びます — 今日書いた文字数、話の分量目標、あらすじ、このシーンが言及したエンティティ。',
+        alt: 'ワークスペース。左にアウトラインのレール、中央に本文エディタ、右に442字・話の分量目標・作品概要を示すパネル。',
         points: [
-          'サイドバーではなく本文に付く余白メモ',
-          '原稿の全文検索、残りはコマンドパレットで',
+          '部・章・シーン、あるいは巻・話 — 番号とラベルはインターフェースの言語で付きます',
+          'シーンごとの分量目標とリアルタイムの文字数、そのとなりに作品の総計',
           'ZEN は部屋を空にして本文とカウンターだけを残します'
         ]
       },
       {
-        id: 'factbook',
+        id: 'story-world',
+        tab: 'ストーリーワールド',
+        kicker: '創作の世界',
+        title: '人物・場所・もの・概念と、その間の関係。',
+        body: 'ファクトブックが現実の世界のためのものなら、ストーリーワールドは創作の世界のためのものです。カードごとに役割と要約、結んでいる関係の数が付き、フィルタで一種類だけに絞れます。',
+        alt: 'ストーリーワールドのパネル。場所一つ、人物二人、概念一つ、ものが一つ、それぞれ役割と一行の要約、関係の数を伴って並んでいます。',
+        points: [
+          '主人公・主要な舞台・敵役といった役割と、それらをつなぐ関係',
+          '名前・別名・役割・要約で検索',
+          'MCP でつないだエージェントがここにエンティティを作れ、何を足したか見えます'
+        ]
+      },
+      {
+        id: 'fact-book',
         tab: 'ファクトブック',
         kicker: '資料',
         title: '出典付きのメモを、それが要るシーンのとなりに。',
-        body: '原稿の中で確かめたい主張を選んで点検します。返ってきたものは出典とともにカードとして保存され、失くすブラウザのタブではなく、その原稿のとなりに残ります。',
+        body: '何をどこで確かめたかを書けば、Linetta がそのページを取ってきて横に綴じます。カードには確認済みか不確実かの印が付くので、決着していない主張がいつの間にか事実として固まりません。',
+        alt: 'ファクトブックのパネル。調査カードごとに確認済みまたは不確実のバッジが付き、出典が併記されています。',
         points: [
-          'カードは出典の URL を一緒に保持します',
-          '作品ごとに溜まり、検索でき、複数のシーンで再利用できます',
-          '外部エージェントにはストーリーブリーフの一部として渡ります'
+          '確認済み・不確実のバッジと、カードに残る出典',
+          '現在のシーン、または作品全体に範囲を指定',
+          'MCP でつないだエージェントもこれらのカードを読みます'
         ]
       },
       {
-        id: 'contextual',
-        tab: '文脈編集',
-        kicker: '一貫性',
-        title: '設定を一度直し、食い違うシーンを全部直します。',
-        body: '人物の年齢が動き、場所の名が変わり、関係が反転します。Linetta は古い設定を抱えたシーンを探し出し、一つずつ修正を案内します。',
+        id: 'library',
+        tab: 'ライブラリ',
+        kicker: '書架',
+        title: '一行から一冊まで。',
+        body: '作品が複数あることを前提にした書架に並びます。分量と状態が見え、新しい作品を始めることも、書きかけの原稿を Markdown から取り込むこともできます。',
+        alt: 'Linetta のライブラリ画面。作品カードが一つ、新規作成・Markdown 取り込み・検索のボタン、そして中核データがローカルに残る旨の表示。',
         points: [
-          'エンティティ・ファクト・関係から影響を受けるシーンを見つけます',
-          '何も書かれる前に一括で確認します',
-          '言語モデルを一切使わない、検索と修正の道具です'
-        ]
-      },
-      {
-        id: 'plot',
-        tab: 'プロット',
-        kicker: '糸',
-        title: '第3話で張った糸が、第40話までに消えてはいけません。',
-        body: 'ストーリーラインとビートがアウトラインを横切る背骨の上に並びます。解決していない約束が、思い出すものではなく見えるものになります。',
-        points: [
-          'シーンに置かれたビートを持つストーリーライン',
-          '未解決と解決済みのビートが一目で',
-          '任意のシーンを新しいストーリーラインの始まりとして登録'
+          '新規作成、Markdown 取り込み、全体検索',
+          '進行中と保管',
+          '中核データはローカルに — ライブラリは自分のディスクのファイルです'
         ]
       }
     ],
     alsoLabel: '同じ部屋の中に',
     also: [
       {
+        tag: '文脈編集',
+        title: '設定を一度で直す',
+        body: '人物・場所・関係を一度直せば、古い設定を抱えたままのシーンを探して一つずつ案内します。言語モデルは一切使いません。'
+      },
+      {
+        tag: 'プロット',
+        title: '背骨の上の糸',
+        body: 'ストーリーラインとビートがアウトラインを横切って並びます。第3話で張った約束が、後から思い出すものではなく見えるものになります。'
+      },
+      {
         tag: '履歴',
         title: 'シーンごとのスナップショット',
-        body: '手動と自動のスナップショットを復元できます。手動のものは期限なく保管されます。'
+        body: '手動と自動のスナップショットを復元できます。手動のものと、エージェントが書く前に取られたものは期限なく保管されます。'
       },
       {
         tag: '記録',
         title: '執筆のペース',
         body: '7日平均と、そのペースで換算した週あたりの話数。連続記録も罪悪感もありません。'
-      },
-      {
-        tag: 'エンティティ',
-        title: '人物・場所・もの',
-        body: '設定と関係をメンションで本文に結び、登場するシーンの一覧から辿れます。'
-      },
-      {
-        tag: '同期',
-        title: 'フォルダと Git',
-        body: '作品を Markdown でフォルダに書き出し、必要なら Git にそのフォルダを運ばせます。'
       }
     ]
   },
