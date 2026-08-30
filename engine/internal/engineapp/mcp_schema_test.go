@@ -64,16 +64,15 @@ func TestMCPNodeToolsAcceptOptionalProjectID(t *testing.T) {
 func TestMCPApplyStoryOpsTeachesTheOpCatalogue(t *testing.T) {
 	_, c, projectID, _ := startWritableMCP(t)
 
-	// The schema advertises the op names.
+	// The schema advertises the op names — on the op field itself, not
+	// merely somewhere in the listing. The SDK dropping a nested struct's
+	// jsonschema tag is exactly the failure this guards against: the field
+	// rendered with no description at all before #73.
 	envelope := c.rpc("tools/list", map[string]any{})
-	raw, err := json.Marshal(envelope)
-	if err != nil {
-		t.Fatalf("marshal tools/list: %v", err)
-	}
-	listing := string(raw)
+	opDesc := opFieldDescription(t, envelope)
 	for _, op := range []string{"create_entity", "add_beat", "create_fact_card"} {
-		if !strings.Contains(listing, op) {
-			t.Errorf("tools/list does not advertise op %q anywhere in the schema", op)
+		if !strings.Contains(opDesc, op) {
+			t.Errorf("apply_story_ops' op field does not advertise %q; description: %s", op, opDesc)
 		}
 	}
 
@@ -89,6 +88,30 @@ func TestMCPApplyStoryOpsTeachesTheOpCatalogue(t *testing.T) {
 	if msg := errorText(result); !strings.Contains(msg, "create_entity") {
 		t.Errorf("unknown-op error does not name the valid ops: %s", msg)
 	}
+}
+
+// opFieldDescription digs tools/list down to
+// linetta_apply_story_ops.inputSchema.properties.ops.items.properties.op.description.
+func opFieldDescription(t *testing.T, envelope map[string]any) string {
+	t.Helper()
+	result, _ := envelope["result"].(map[string]any)
+	tools, _ := result["tools"].([]any)
+	for _, raw := range tools {
+		tool, _ := raw.(map[string]any)
+		if tool["name"] != "linetta_apply_story_ops" {
+			continue
+		}
+		schema, _ := tool["inputSchema"].(map[string]any)
+		props, _ := schema["properties"].(map[string]any)
+		ops, _ := props["ops"].(map[string]any)
+		items, _ := ops["items"].(map[string]any)
+		itemProps, _ := items["properties"].(map[string]any)
+		op, _ := itemProps["op"].(map[string]any)
+		desc, _ := op["description"].(string)
+		return desc
+	}
+	t.Fatal("linetta_apply_story_ops missing from tools/list")
+	return ""
 }
 
 // errorText pulls the human-readable message from a tool error, which lives
