@@ -20,12 +20,31 @@ import (
 // registered only in settings.MCPModeFull, so read_only does not merely refuse
 // writes — the tools are absent from tools/list.
 var WriteToolNames = []string{
+	"linetta_create_work",
 	"linetta_write_scene",
 	"linetta_write_summary",
 	"linetta_revise_scene",
 	"linetta_apply_story_ops",
 	"linetta_create_checkpoint",
 	"linetta_undo_last_change",
+}
+
+// ---------- linetta_create_work ----------
+
+type createWorkInput struct {
+	Title         string   `json:"title" jsonschema:"the work's title"`
+	Genres        []string `json:"genres,omitempty" jsonschema:"free-form genre labels, e.g. 회귀/빙의/환생"`
+	LengthTarget  string   `json:"length_target,omitempty" jsonschema:"one of: flash, short, novella, novel, series; default series"`
+	DefaultPOV    string   `json:"default_pov,omitempty" jsonschema:"one of: first, third_limited, omniscient; default first"`
+	OutlinePreset string   `json:"outline_preset,omitempty" jsonschema:"one of: webnovel, novel; default webnovel"`
+}
+
+func (in createWorkInput) scope() (string, string) { return "", "" }
+
+type createWorkOutput struct {
+	ProjectID        string `json:"project_id"`
+	Title            string `json:"title"`
+	FirstSceneNodeID string `json:"first_scene_node_id" jsonschema:"the auto-created first scene; draft it with linetta_write_scene, passing expected_content_version 0"`
 }
 
 // maxSceneRunes caps one scene body. A runaway agent should hit a wall with a
@@ -93,6 +112,14 @@ type writeSummaryOutput struct {
 // settings.MCPModeFull.
 func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_create_work",
+		Description: "Create a new work (novel) with its first chapter and scene, ready to draft. Returns " +
+			"project_id and first_scene_node_id — write that scene with linetta_write_scene, passing " +
+			"expected_content_version 0. Refused on a server restricted to a single work; the writer " +
+			"lifts the restriction in Settings.",
+	}, record(d, "linetta_create_work", d.createWork))
+
+	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_write_scene",
 		Description: "Replace a scene's body with new prose. Call linetta_read_scene first and pass the " +
 			"content_version it returned: if the writer edited the scene since then the write is refused, " +
@@ -116,6 +143,62 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 
 	d.registerReviseTool(s)
 	d.registerBatchTools(s)
+}
+
+func (d ToolDeps) createWork(ctx context.Context, _ *mcp.CallToolRequest, in createWorkInput) (*mcp.CallToolResult, createWorkOutput, error) {
+	// A restricted server promised the writer "this work only". A work the
+	// agent creates but can never touch again would be a trap, so refuse
+	// loudly instead.
+	if restricted := d.allowedProjectID(); restricted != "" {
+		return toolErr("this Linetta server is restricted to a single work; creating a new one is disabled — " +
+			"the writer can lift the restriction in Settings"), createWorkOutput{}, nil
+	}
+	title := strings.TrimSpace(in.Title)
+	if title == "" {
+		return toolErr("title is required"), createWorkOutput{}, nil
+	}
+	// Defaults mirror the app's own new-work dialog: web-fiction series in
+	// first person, webnovel outline.
+	lengthTarget := in.LengthTarget
+	if lengthTarget == "" {
+		lengthTarget = project.LengthSeries
+	}
+	if !project.ValidLengthTarget(lengthTarget) {
+		return toolErr("length_target %q is not valid; one of: flash, short, novella, novel, series", lengthTarget),
+			createWorkOutput{}, nil
+	}
+	pov := in.DefaultPOV
+	if pov == "" {
+		pov = project.POVFirst
+	}
+	if !project.ValidDefaultPOV(pov) {
+		return toolErr("default_pov %q is not valid; one of: first, third_limited, omniscient", pov),
+			createWorkOutput{}, nil
+	}
+	preset := in.OutlinePreset
+	if preset == "" {
+		preset = project.OutlinePresetWebNovel
+	}
+	if !project.ValidOutlinePreset(preset) {
+		return toolErr("outline_preset %q is not valid; one of: webnovel, novel", preset), createWorkOutput{}, nil
+	}
+	genres := in.Genres
+	if genres == nil {
+		genres = []string{}
+	}
+	p, err := d.Projects.Create(ctx, d.now(), project.NewInput{
+		Title: title, Genres: genres, LengthTarget: lengthTarget, DefaultPOV: pov, OutlinePreset: preset,
+	})
+	if err != nil {
+		return toolErr("could not create the work: %v", err), createWorkOutput{}, nil
+	}
+	first := ""
+	if p.LastOpenedNodeID != nil {
+		first = *p.LastOpenedNodeID
+	}
+	// The library view must learn a work appeared without being reopened.
+	d.notifyChanged(p.ID, "linetta_create_work", nil, "")
+	return nil, createWorkOutput{ProjectID: p.ID, Title: p.Title, FirstSceneNodeID: first}, nil
 }
 
 func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in writeSceneInput) (*mcp.CallToolResult, writeSceneOutput, error) {
