@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
@@ -56,6 +57,9 @@ type writeSceneOutput struct {
 	// not through linetta_undo_last_change's batch id: undoing a structural
 	// batch restores the outline and leaves scene bodies alone.
 	SnapshotID string `json:"snapshot_id,omitempty"`
+	// LinkedElements reports the registered story elements this write linked
+	// automatically (#72), so the agent can spot a homonym gone wrong.
+	LinkedElements []mention.Linked `json:"linked_elements,omitempty" jsonschema:"story elements named in the text, linked automatically"`
 	// SummaryIsPlaceholder is always true after a write: Linetta fills the
 	// scene summary with the opening lines cut to length, which is a
 	// placeholder rather than a summary. Story briefs are built from these, so
@@ -93,8 +97,9 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 		Description: "Replace a scene's body with new prose. Call linetta_read_scene first and pass the " +
 			"content_version it returned: if the writer edited the scene since then the write is refused, " +
 			"so their work is never silently overwritten. The previous text is snapshotted first and the " +
-			"returned snapshot_id restores it. Linetta then files the scene's opening lines as a " +
-			"placeholder summary; call linetta_write_summary afterwards so the story brief carries a " +
+			"returned snapshot_id restores it. Registered story elements named in the text are linked " +
+			"automatically and reported in linked_elements. Linetta then files the scene's opening lines " +
+			"as a placeholder summary; call linetta_write_summary afterwards so the story brief carries a " +
 			"real one.",
 	}, record(d, "linetta_write_scene", d.writeScene))
 
@@ -156,6 +161,21 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 	if err != nil {
 		return toolErr("could not convert the text: %v", err), writeSceneOutput{}, nil
 	}
+	// Agent prose gets its registered names linked on the way in (#72):
+	// without this, a scene written over MCP never reaches
+	// linetta_where_does_appear or the story brief's mentioned-entities
+	// section — the editor's scene-scan, same algorithm, is click-gated
+	// because it rewrites what the writer typed; this body is machine-written
+	// and snapshotted, a different consent regime. Linking is best-effort: a
+	// failure here must not lose the prose.
+	var linked []mention.Linked
+	if d.Entities != nil {
+		if ents, entErr := d.Entities.ListByProject(ctx, n.ProjectID); entErr == nil {
+			if linkedDoc, l, linkErr := mention.AutoLinkDoc([]byte(doc), mention.BuildCandidates(ents)); linkErr == nil && len(l) > 0 {
+				doc, linked = string(linkedDoc), l
+			}
+		}
+	}
 	if err := d.Nodes.UpdateContentIfVersion(ctx, n.ID, doc, expected, d.now()); err != nil {
 		if errors.Is(err, node.ErrContentConflict) {
 			return toolErr(
@@ -183,6 +203,7 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 		WordCount:            after.WordCount,
 		SnapshotID:           snapshotID,
 		SummaryIsPlaceholder: true,
+		LinkedElements:       linked,
 	}, nil
 }
 

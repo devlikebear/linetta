@@ -101,7 +101,21 @@ type getStoryContextOutput struct {
 	Brief            string   `json:"brief"`
 	IncludedSections []string `json:"included_sections"`
 	EmptySections    []string `json:"empty_sections"`
+	// ElementsNotInBrief kills the silent omission (#72): the brief carries
+	// only elements mentioned in this scene or holding a core role, and an
+	// agent must know the rest EXIST rather than conclude the work has no
+	// such records.
+	ElementsNotInBrief []unlistedElement `json:"elements_not_in_brief,omitempty" jsonschema:"registered story elements this brief left out — not mentioned in the scene and no core role; they still exist, fetch them with linetta_list_characters"`
 }
+
+type unlistedElement struct {
+	EntityID string `json:"entity_id"`
+	Kind     string `json:"kind"`
+	Name     string `json:"name"`
+}
+
+// maxUnlistedElements keeps the omission report a signal, not a second brief.
+const maxUnlistedElements = 20
 
 // ---------- linetta_read_scene ----------
 
@@ -401,12 +415,13 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	_, brief := storycontext.Render(c)
 	included, empty := sectionReport(c)
 	return nil, getStoryContextOutput{
-		ProjectID:        n.ProjectID,
-		NodeID:           n.ID,
-		SceneLabel:       c.SceneLabel,
-		Brief:            brief,
-		IncludedSections: included,
-		EmptySections:    empty,
+		ProjectID:          n.ProjectID,
+		NodeID:             n.ID,
+		SceneLabel:         c.SceneLabel,
+		Brief:              brief,
+		IncludedSections:   included,
+		EmptySections:      empty,
+		ElementsNotInBrief: d.unlistedElements(ctx, n.ProjectID, c),
 	}, nil
 }
 
@@ -630,4 +645,36 @@ func spineHasBeats(s plot.Spine) bool {
 		return true
 	}
 	return s.Next != nil && len(s.Next.Beats) > 0
+}
+
+// unlistedElements names the registered elements the brief left out. Briefs
+// carry mentioned entities plus core-role ones; everything else used to
+// vanish without a trace (#45 was this same silence in another coat). Best
+// effort — an error here must not cost the agent the brief itself.
+func (d ToolDeps) unlistedElements(ctx context.Context, projectID string, c storycontext.Context) []unlistedElement {
+	if d.Entities == nil {
+		return nil
+	}
+	all, err := d.Entities.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil
+	}
+	shown := map[string]bool{}
+	for _, b := range storycontext.ApplyContextSelection(c).Entities {
+		shown[b.Name] = true
+	}
+	out := []unlistedElement{}
+	for _, e := range all {
+		if shown[e.Name] {
+			continue
+		}
+		out = append(out, unlistedElement{EntityID: e.ID, Kind: e.Kind, Name: e.Name})
+		if len(out) >= maxUnlistedElements {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
