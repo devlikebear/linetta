@@ -209,11 +209,25 @@ pub(crate) fn resolve_bridge_path(app: &tauri::AppHandle) -> Option<String> {
     } else {
         "linetta-mcp"
     };
+    // Dev builds hand out the source-tree bridge, not the one under
+    // target/debug: every rebuild overwrites target/debug, and a client
+    // keeping that bridge alive then blocks the build itself with a file
+    // lock (observed: os error 32 in build.rs). The source path survives
+    // rebuilds, so a registration made while developing keeps working.
+    if cfg!(debug_assertions) {
+        if let Some(dev) = std::env::current_dir()
+            .ok()
+            .map(|d| d.join("src-tauri/resources").join(name))
+            .filter(|p| p.is_file())
+        {
+            return Some(dev.to_string_lossy().into_owned());
+        }
+    }
     let candidate = app.path().resource_dir().ok()?.join("resources").join(name);
     if candidate.is_file() {
         return Some(candidate.to_string_lossy().into_owned());
     }
-    // Dev builds run from the crate directory rather than a bundle.
+    // Dev fallback when the current directory is not the crate's parent.
     let dev = std::env::current_dir().ok()?.join("src-tauri/resources").join(name);
     dev.is_file().then(|| dev.to_string_lossy().into_owned())
 }
