@@ -11,6 +11,7 @@ const rpc = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   bridgePath: vi.fn(),
+  projectsList: vi.fn(),
 }));
 
 vi.mock("../../lib/rpc", () => ({
@@ -22,6 +23,7 @@ vi.mock("../../lib/rpc", () => ({
     activity: rpc.activity,
   },
   settings: { get: rpc.settingsGet, set: rpc.settingsSet },
+  projects: { list: rpc.projectsList },
   // The pane asks the shell for the installed bridge path when none is given.
   mcpBridgePath: rpc.bridgePath,
 }));
@@ -51,6 +53,7 @@ describe("McpSection", () => {
     rpc.settingsSet.mockResolvedValue(settingsWith());
     rpc.activity.mockResolvedValue([]);
     rpc.bridgePath.mockResolvedValue(null);
+    rpc.projectsList.mockResolvedValue([{ id: "work-1", title: "첫 작품" }]);
   });
 
   it("refuses to enable until the writer has explicitly consented", async () => {
@@ -97,23 +100,45 @@ describe("McpSection", () => {
     expect(desktop).toContain("/opt/linetta/linetta-mcp");
   });
 
-  it("enables with the chosen mode, port, and work restriction", async () => {
-    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
+  it("enables full by default: one decision, no mode dropdown in the way", async () => {
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_mode: "off", mcp_consent_version: 1 }));
     rpc.enable.mockResolvedValue({ token: "t", status: RUNNING });
     render(<McpSection />);
 
-    await userEvent.selectOptions(await screen.findByLabelText("settings.mcp.mode"), "full");
-    await userEvent.clear(screen.getByLabelText("settings.mcp.projectLimit"));
-    await userEvent.type(screen.getByLabelText("settings.mcp.projectLimit"), "work-1");
+    await userEvent.click(await screen.findByTestId("mcp-enable"));
+
+    await waitFor(() => expect(rpc.enable).toHaveBeenCalled());
+    const calls = rpc.settingsSet.mock.calls;
+    expect(calls[calls.length - 1]?.[0]).toMatchObject({ mcp_mode: "full" });
+  });
+
+  it("enables read-only and a work restriction when chosen under Advanced", async () => {
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_mode: "off", mcp_consent_version: 1 }));
+    rpc.enable.mockResolvedValue({ token: "t", status: RUNNING });
+    render(<McpSection />);
+
+    // The work is picked by title from a list, never typed as a UUID.
+    await userEvent.selectOptions(await screen.findByLabelText("settings.mcp.projectLimit"), "work-1");
+    await userEvent.click(screen.getByTestId("mcp-readonly"));
     await userEvent.click(screen.getByTestId("mcp-enable"));
 
     await waitFor(() => expect(rpc.enable).toHaveBeenCalled());
     const calls = rpc.settingsSet.mock.calls;
     const patch = calls[calls.length - 1]?.[0];
-    expect(patch).toMatchObject({ mcp_mode: "full", mcp_project_id: "work-1" });
+    expect(patch).toMatchObject({ mcp_mode: "read_only", mcp_project_id: "work-1" });
   });
 
-  it("kills the listener and drops the token from the pane", async () => {
+  it("keeps an unknown restricted work visible instead of silently dropping it", async () => {
+    rpc.settingsGet.mockResolvedValue(
+      settingsWith({ mcp_consent_version: 1, mcp_project_id: "gone-work" }),
+    );
+    render(<McpSection />);
+
+    const select = (await screen.findByLabelText("settings.mcp.projectLimit")) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("gone-work"));
+  });
+
+  it("kills the listener, persists off, and drops the token from the pane", async () => {
     rpc.status.mockResolvedValue(RUNNING);
     rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
     rpc.disable.mockResolvedValue(OFF);
@@ -122,6 +147,13 @@ describe("McpSection", () => {
     await userEvent.click(await screen.findByTestId("mcp-disable"));
 
     await waitFor(() => expect(rpc.disable).toHaveBeenCalledTimes(1));
+    // Off must reach the disk BEFORE the stop, or the server resurrects on
+    // the next launch (#74).
+    const offIndex = rpc.settingsSet.mock.calls.findIndex((c) => c[0]?.mcp_mode === "off");
+    expect(offIndex).toBeGreaterThanOrEqual(0);
+    expect(rpc.settingsSet.mock.invocationCallOrder[offIndex]).toBeLessThan(
+      rpc.disable.mock.invocationCallOrder[0],
+    );
     await waitFor(() => expect(screen.queryByTestId("mcp-snippets")).toBeNull());
   });
 
