@@ -91,5 +91,12 @@ Regenerate it when the headline or the palette changes.
 
 The site describes the app at `main`, which since the MCP-first pivot has **no
 built-in AI**: no provider settings, no API key field, no in-app companion. AI
-collaboration happens through the optional local MCP server. The root `README.md`
-still describes the old companion and is the thing to fix if the two disagree.
+collaboration happens through the optional local MCP server.
+
+Claims in `content.ts` are taken from the engine rather than from the docs — the
+fifteen `linetta_*` tool names, the nine/six read-write split, the access modes,
+the 7391 default port, the per-minute call limit. When one of them changes, the
+engine is the thing to check.
+
+`VERSION` in `content.ts` is the one number nothing derives: bump it by hand when
+a release ships.

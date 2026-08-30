@@ -140,7 +140,7 @@ export const canonicalUrl = (path: string) => (path === '/' ? `${SITE}/` : `${SI
 const REPO = 'https://github.com/devlikebear/linetta';
 const MAS = 'https://apps.apple.com/app/id6781664781';
 const RELEASES = `${REPO}/releases/latest`;
-const VERSION = '0.9.6';
+const VERSION = '1.0.0';
 
 const MCP_COMMAND =
   'claude mcp add --transport http linetta http://127.0.0.1:7391/mcp \\\n  --header "Authorization: Bearer <token>"';
