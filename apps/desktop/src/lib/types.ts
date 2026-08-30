@@ -434,6 +434,10 @@ export interface McpClientStatus {
   installed: boolean;
   connected: boolean;
   config_path?: string | null;
+  /** The client app is running now. Meaningful for clients that rewrite
+   *  their own config while open (Claude Desktop) — connecting then is
+   *  clobbered by the app's next internal save. */
+  running?: boolean;
 }
 
 /** What a one-click connect did. */

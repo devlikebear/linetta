@@ -259,6 +259,27 @@ describe("McpSection", () => {
     expect(result.textContent).toContain(".bak-linetta");
   });
 
+  it("warns that a running Claude Desktop will clobber the entry", async () => {
+    rpc.status.mockResolvedValue(RUNNING);
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
+    rpc.clientStatus.mockResolvedValue([
+      {
+        id: "claude-desktop",
+        installed: true,
+        connected: false,
+        config_path: "C:\\...\\claude_desktop_config.json",
+        running: true,
+      },
+    ]);
+    render(<McpSection bridgePath="/opt/linetta/linetta-mcp" />);
+
+    await userEvent.click(await screen.findByTestId("mcp-client-claude-desktop-connect"));
+    // Observed on a real machine: the app rewrites its config from memory
+    // while running, erasing an entry written from outside. Say so before
+    // the writer applies.
+    await screen.findByTestId("mcp-client-quit-first");
+  });
+
   it("says one-click needs the bridge on a build without one", async () => {
     rpc.status.mockResolvedValue(RUNNING);
     rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));

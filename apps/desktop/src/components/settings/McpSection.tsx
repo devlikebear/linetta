@@ -338,7 +338,11 @@ export function McpSection({ bridgePath }: McpSectionProps) {
                         <button
                           type="button"
                           disabled={busyClient != null}
-                          onClick={() => setConfirmClient(c.id)}
+                          onClick={() => {
+                            setConfirmClient(c.id);
+                            // The running flag must be fresh at decision time.
+                            mcpClientStatus().then(setClients, () => {});
+                          }}
                           data-testid={`mcp-client-${c.id}-connect`}
                         >
                           {t("settings.mcp.clients.connect")}
@@ -348,6 +352,14 @@ export function McpSection({ bridgePath }: McpSectionProps) {
                   </div>
                   {confirmClient === c.id && (
                     <div data-testid={`mcp-client-${c.id}-confirm`}>
+                      {/* Observed, not theoretical: Claude Desktop rewrites
+                          this file from memory while it runs, erasing an
+                          entry written from outside. */}
+                      {c.id === "claude-desktop" && c.running && (
+                        <p className="sd" role="alert" data-testid="mcp-client-quit-first">
+                          {t("settings.mcp.clients.quitFirst")}
+                        </p>
+                      )}
                       <p className="sd">
                         {c.id === "claude-code"
                           ? t("settings.mcp.clients.willRun")

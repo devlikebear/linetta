@@ -27,6 +27,11 @@ pub struct ClientStatus {
     pub installed: bool,
     pub connected: bool,
     pub config_path: Option<String>,
+    /// The client app is running right now. Only meaningful for clients that
+    /// rewrite their own config file while open (Claude Desktop): a connect
+    /// applied then is clobbered by the app's next internal save — observed,
+    /// not theoretical — so the pane warns to quit first.
+    pub running: bool,
 }
 
 #[derive(Serialize)]
@@ -127,33 +132,66 @@ fn file_mentions_linetta(path: &PathBuf, needle: &str) -> bool {
     std::fs::read_to_string(path).map(|s| s.contains(needle)).unwrap_or(false)
 }
 
+/// Whether Claude Desktop is running. Best effort: a detection failure reads
+/// as "not running", which only softens a warning, never blocks a connect.
+fn claude_desktop_running() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new("tasklist");
+        cmd.args(["/NH", "/FO", "CSV", "/FI", "IMAGENAME eq claude.exe"]);
+        cmd.creation_flags(0x0800_0000); // no console flash
+        match cmd.output() {
+            Ok(out) => String::from_utf8_lossy(&out.stdout)
+                .to_lowercase()
+                .contains("claude.exe"),
+            Err(_) => false,
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let name = if cfg!(target_os = "macos") { "Claude" } else { "claude" };
+        std::process::Command::new("pgrep")
+            .args(["-x", name])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+}
+
 fn status_of(id: &str) -> ClientStatus {
-    let (installed, connected, config_path) = match id {
+    let (installed, connected, config_path, running) = match id {
         "claude-code" => {
             // Whether linetta is already registered would need `claude mcp
             // list` (seconds of node startup); the add command reports
             // "already exists" cheaply, so connected stays unknown-false.
-            (claude_cli_path().is_some(), false, None)
+            (claude_cli_path().is_some(), false, None, false)
         }
         "claude-desktop" => match claude_desktop_config() {
-            Some(p) => (true, file_mentions_linetta(&p, "\"linetta\""), Some(p)),
-            None => (false, false, None),
+            Some(p) => (
+                true,
+                file_mentions_linetta(&p, "\"linetta\""),
+                Some(p),
+                claude_desktop_running(),
+            ),
+            None => (false, false, None, false),
         },
         "codex" => match codex_config() {
-            Some(p) => (true, file_mentions_linetta(&p, "[mcp_servers.linetta]"), Some(p)),
-            None => (false, false, None),
+            Some(p) => (true, file_mentions_linetta(&p, "[mcp_servers.linetta]"), Some(p), false),
+            None => (false, false, None, false),
         },
         "gemini" => match gemini_config() {
-            Some(p) => (true, file_mentions_linetta(&p, "\"linetta\""), Some(p)),
-            None => (false, false, None),
+            Some(p) => (true, file_mentions_linetta(&p, "\"linetta\""), Some(p), false),
+            None => (false, false, None, false),
         },
-        _ => (false, false, None),
+        _ => (false, false, None, false),
     };
     ClientStatus {
         id: id.to_string(),
         installed,
         connected,
         config_path: config_path.map(|p| p.to_string_lossy().into_owned()),
+        running,
     }
 }
 
