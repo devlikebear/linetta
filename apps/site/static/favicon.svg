@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Linetta">
+  <rect x="6" y="6" width="52" height="52" rx="11" fill="#faf7f0" stroke="#d8d0bf" stroke-width="1.4"/>
+  <path d="M19.4 13.8h9.1v34.3h-9.1z" fill="#1c1a16"/>
+  <path d="M19.4 40.6h27.1v7.5H19.4z" fill="#1c1a16"/>
+  <rect x="38.8" y="14.5" width="9.5" height="9.5" rx="3" fill="#b4492b"/>
+</svg>

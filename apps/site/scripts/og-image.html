@@ -1,0 +1,104 @@
+<!doctype html>
+<!--
+  Source for static/og-image.png. Render at exactly 1200x630:
+
+    chromium --headless --window-size=1200,630 \
+      --screenshot=static/og-image.png scripts/og-image.html
+
+  Keep the palette in step with src/app.css.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap"
+    />
+    <style>
+      :root {
+        --paper: #d1dccd;
+        --surface: #e9efe4;
+        --ink: #182018;
+        --muted: #556053;
+        --muted-2: #737d6f;
+        --line: #b8c5b3;
+        --accent: #2d6f64;
+        --sienna: #7d5a2e;
+        --serif: 'Newsreader', Georgia, serif;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        position: relative;
+        background: var(--paper);
+        font-family: var(--serif);
+        color: var(--ink);
+      }
+      .rules {
+        position: absolute;
+        inset: 0;
+        background-image: repeating-linear-gradient(
+          to bottom,
+          color-mix(in srgb, var(--line) 75%, transparent) 0 1px,
+          transparent 1px 42px
+        );
+        -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 70%, transparent 96%);
+      }
+      .bloom {
+        position: absolute;
+        inset: -30% 20% 40% -10%;
+        background: radial-gradient(closest-side, color-mix(in srgb, var(--surface) 90%, transparent), transparent);
+      }
+      .frame {
+        position: relative;
+        height: 100%;
+        padding: 56px 72px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 56px;
+      }
+      .frame > * { flex: none; }
+      .brand {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .brand .name { display: flex; align-items: center; gap: 14px; font-size: 30px; letter-spacing: -0.01em; }
+      .brand .site { font-size: 21px; color: var(--muted); }
+      h1 {
+        margin: 0;
+        font-size: 58px;
+        font-weight: 400;
+        line-height: 1.16;
+        letter-spacing: -0.02em;
+        max-width: 1000px;
+      }
+      h1 em { font-style: italic; color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div class="bloom"></div>
+    <div class="rules"></div>
+    <div class="frame">
+      <div class="brand">
+        <span class="name">
+        <svg width="40" height="40" viewBox="0 0 64 64" aria-hidden="true">
+          <rect x="4" y="4" width="56" height="56" rx="12" fill="#e9efe4" stroke="#b8c5b3" stroke-width="1.5" />
+          <path d="M19.4 13.8h9.1v34.3h-9.1z" fill="#182018" />
+          <path d="M19.4 40.6h27.1v7.5H19.4z" fill="#182018" />
+          <rect x="38.8" y="14.5" width="9.5" height="9.5" rx="3" fill="#b4492b" />
+        </svg>
+        Linetta
+        </span>
+        <span class="site">linetta.marvin-42.com</span>
+      </div>
+
+      <h1>The whole story, <em>within reach</em><br />of the sentence you are writing.</h1>
+
+    </div>
+  </body>
+</html>

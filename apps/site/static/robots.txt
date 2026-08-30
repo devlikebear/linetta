@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://linetta.marvin-42.com/sitemap.xml

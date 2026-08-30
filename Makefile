@@ -1,10 +1,19 @@
-.PHONY: help dev test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
+.PHONY: help dev site-dev site-build site-check test validate-mcp-bridge-targets test-go test-desktop test-tauri test-mobile-engine audit audit-go audit-desktop audit-rust validate-actions-runtime validate-distribution build-engine build-mcp-bridge build-mobile-engine-ios build-mobile-engine-android mobile-ios-init mobile-android-init build-mobile-ios-sim smoke-mobile-ios-sim dev-mobile-ios build-mobile-android-debug build-mobile-android-release-smoke patch-mobile-android-signing build-desktop release-macos-local build-mas-local release-mas-local bump-version ci
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_-]+:.*##/ {printf "%-18s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 dev: ## Start the desktop app in dev mode
 	bash scripts/dev.sh
+
+site-dev: ## Start the marketing site in dev mode
+	cd apps/site && pnpm install && pnpm dev
+
+site-build: ## Build the marketing site into apps/site/build
+	cd apps/site && pnpm install --frozen-lockfile && pnpm build
+
+site-check: ## Type-check the marketing site and build it
+	cd apps/site && pnpm install --frozen-lockfile && pnpm check && pnpm build
 
 test: test-go test-desktop test-tauri ## Run all local verification
 
