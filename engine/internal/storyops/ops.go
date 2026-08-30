@@ -52,7 +52,7 @@ type Op struct {
 
 	// create_entity / update_entity
 	Kind       string            `json:"kind,omitempty"`
-	Role       string            `json:"role,omitempty"`
+	Role       string            `json:"role,omitempty" jsonschema:"for create_entity: a preset role makes the element part of every story brief — characters: 주인공, 공동 주인공, 조연, 빌런, 라이벌, 멘토, 조력자; places: 메인 무대, 특별한 장소, 일상 거점, 위험 구역, 금지된 장소, 기억의 장소, 권력의 중심 (English/Japanese preset names also count). Any other or empty role appears in briefs only where the element is mentioned"`
 	EntityID   string            `json:"entity_id,omitempty"`
 	Attributes map[string]string `json:"attributes,omitempty"`
 

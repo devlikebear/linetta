@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/devlikebear/linetta/engine/internal/entity"
 )
 
 // The jsonschema tag on Op.Type is the op catalogue an MCP agent reads. If an
@@ -39,5 +41,30 @@ func TestUnknownOpErrorNamesTheValidOps(t *testing.T) {
 	// The error is the agent's only teacher; it has to carry the real names.
 	if !strings.Contains(err.Error(), "create_entity") {
 		t.Errorf("error does not name valid ops: %v", err)
+	}
+}
+
+// The Role tag documents which preset roles put an element into every brief.
+// That list already lives in entity.coreRolesByKind (which itself must track
+// the UI presets — #45 was that drift); this guard stops a third copy from
+// silently diverging.
+func TestRoleSchemaTagNamesEveryCorePreset(t *testing.T) {
+	field, ok := reflect.TypeOf(Op{}).FieldByName("Role")
+	if !ok {
+		t.Fatal("Op has no Role field")
+	}
+	tag := field.Tag.Get("jsonschema")
+	if tag == "" {
+		t.Fatal("Op.Role has no jsonschema tag")
+	}
+	for kind, roles := range entity.CoreRolePresetsKo() {
+		for _, role := range roles {
+			if !strings.Contains(tag, role) {
+				t.Errorf("preset %q missing from Op.Role's jsonschema tag", role)
+			}
+			if !entity.IsCoreRole(kind, role) {
+				t.Errorf("preset %q (%s) is not accepted by IsCoreRole — the picker and the whitelist drifted", role, kind)
+			}
+		}
 	}
 }

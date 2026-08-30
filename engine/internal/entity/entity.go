@@ -48,6 +48,18 @@ var coreRolesByKind = map[string]map[string]bool{
 	},
 }
 
+// CoreRolePresetsKo returns the canonical Korean preset roles per kind — the
+// ones the app's role picker offers. Legacy spellings in coreRolesByKind stay
+// accepted but are not part of this list. The storyops schema guard ties the
+// MCP role documentation to it, so adding a preset here without updating the
+// Op.Role jsonschema tag fails a test instead of silently lying to agents.
+func CoreRolePresetsKo() map[string][]string {
+	return map[string][]string{
+		KindCharacter: {"주인공", "공동 주인공", "조연", "빌런", "라이벌", "멘토", "조력자"},
+		KindPlace:     {"메인 무대", "특별한 장소", "일상 거점", "위험 구역", "금지된 장소", "기억의 장소", "권력의 중심"},
+	}
+}
+
 // IsCoreRole reports whether a kind/role pair should be treated as part of the
 // story bible skeleton rather than ordinary local scene context.
 func IsCoreRole(kind, role string) bool {
