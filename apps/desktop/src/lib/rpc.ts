@@ -18,6 +18,8 @@ import type {
   GitSyncInitResult,
   GitSyncResult,
   McpActivityEntry,
+  McpClientStatus,
+  McpConnectOutcome,
   McpStatus,
   McpTokenResult,
   ImportMarkdownResult,
@@ -90,6 +92,18 @@ export async function restoreLatestBackup(): Promise<{
  *  would produce a snippet that silently fails. */
 export async function mcpBridgePath(): Promise<string | null> {
   return invoke<string | null>("mcp_bridge_path");
+}
+
+/** Which supported MCP clients are on this machine, and whether their config
+ *  already carries a linetta entry. */
+export async function mcpClientStatus(): Promise<McpClientStatus[]> {
+  return invoke<McpClientStatus[]>("mcp_client_status");
+}
+
+/** One-click connect: registers the stdio bridge with the given client. The
+ *  shell backs up any config file it touches. */
+export async function mcpConnectClient(client: string): Promise<McpConnectOutcome> {
+  return invoke<McpConnectOutcome>("mcp_connect_client", { client });
 }
 
 export async function openPath(path: string): Promise<void> {

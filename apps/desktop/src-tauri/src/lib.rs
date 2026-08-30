@@ -1,5 +1,6 @@
 mod ffi;
 mod folder_sync;
+mod mcp_connect;
 #[cfg(all(target_os = "macos", feature = "mas"))]
 mod macos_bookmarks;
 
@@ -166,7 +167,9 @@ pub fn run() {
             open_path,
             open_external_url,
             folder_sync::set_folder_sync_dir,
-            folder_sync::folder_sync_now
+            folder_sync::folder_sync_now,
+            mcp_connect::mcp_client_status,
+            mcp_connect::mcp_connect_client
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -195,6 +198,12 @@ struct EngineStatus {
 /// client config, so it must be the real installed path, not a guess.
 #[tauri::command]
 fn mcp_bridge_path(app: tauri::AppHandle) -> Option<String> {
+    resolve_bridge_path(&app)
+}
+
+/// Shared with mcp_connect: the one-click client buttons write this path into
+/// other apps' configs, so both callers must agree on what "the bridge" is.
+pub(crate) fn resolve_bridge_path(app: &tauri::AppHandle) -> Option<String> {
     let name = if cfg!(target_os = "windows") {
         "linetta-mcp.exe"
     } else {

@@ -428,6 +428,24 @@ export interface McpTokenResult {
   status: McpStatus;
 }
 
+/** Detection result for one supported MCP client (#69). */
+export interface McpClientStatus {
+  id: string;
+  installed: boolean;
+  connected: boolean;
+  config_path?: string | null;
+}
+
+/** What a one-click connect did. */
+export interface McpConnectOutcome {
+  ok: boolean;
+  /** "connected" | "already" */
+  outcome: string;
+  config_path?: string | null;
+  backup_path?: string | null;
+  detail?: string | null;
+}
+
 /** One recorded external tool call, shown in the activity list. */
 export interface McpActivityEntry {
   id: string;

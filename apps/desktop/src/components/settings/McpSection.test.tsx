@@ -12,6 +12,8 @@ const rpc = vi.hoisted(() => ({
   settingsSet: vi.fn(),
   bridgePath: vi.fn(),
   projectsList: vi.fn(),
+  clientStatus: vi.fn(),
+  connectClient: vi.fn(),
 }));
 
 vi.mock("../../lib/rpc", () => ({
@@ -26,6 +28,8 @@ vi.mock("../../lib/rpc", () => ({
   projects: { list: rpc.projectsList },
   // The pane asks the shell for the installed bridge path when none is given.
   mcpBridgePath: rpc.bridgePath,
+  mcpClientStatus: rpc.clientStatus,
+  mcpConnectClient: rpc.connectClient,
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -54,6 +58,7 @@ describe("McpSection", () => {
     rpc.activity.mockResolvedValue([]);
     rpc.bridgePath.mockResolvedValue(null);
     rpc.projectsList.mockResolvedValue([{ id: "work-1", title: "첫 작품" }]);
+    rpc.clientStatus.mockResolvedValue([]);
   });
 
   it("refuses to enable until the writer has explicitly consented", async () => {
@@ -200,6 +205,68 @@ describe("McpSection", () => {
       expect(desktop.textContent).toContain("/Applications/Linetta.app/resources/linetta-mcp"),
     );
     expect(screen.queryByTestId("mcp-bridge-missing")).toBeNull();
+  });
+
+  it("shows each detected client and its connection state", async () => {
+    rpc.status.mockResolvedValue(RUNNING);
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
+    rpc.clientStatus.mockResolvedValue([
+      { id: "claude-code", installed: true, connected: false, config_path: null },
+      { id: "claude-desktop", installed: false, connected: false, config_path: null },
+      { id: "codex", installed: true, connected: true, config_path: "/home/w/.codex/config.toml" },
+    ]);
+    render(<McpSection bridgePath="/opt/linetta/linetta-mcp" />);
+
+    // Installed and not connected: a connect button.
+    await screen.findByTestId("mcp-client-claude-code-connect");
+    // Not installed: no button, just the muted state.
+    expect(screen.queryByTestId("mcp-client-claude-desktop-connect")).toBeNull();
+    // Already carrying a linetta entry: says so.
+    await screen.findByTestId("mcp-client-codex-connected");
+  });
+
+  it("shows exactly what will be written, then connects and reports the backup", async () => {
+    rpc.status.mockResolvedValue(RUNNING);
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
+    rpc.clientStatus.mockResolvedValue([
+      {
+        id: "claude-desktop",
+        installed: true,
+        connected: false,
+        config_path: "C:\\Users\\w\\AppData\\Roaming\\Claude\\claude_desktop_config.json",
+      },
+    ]);
+    rpc.connectClient.mockResolvedValue({
+      ok: true,
+      outcome: "connected",
+      config_path: "C:\\Users\\w\\AppData\\Roaming\\Claude\\claude_desktop_config.json",
+      backup_path: "C:\\Users\\w\\AppData\\Roaming\\Claude\\claude_desktop_config.json.bak-linetta",
+    });
+    render(<McpSection bridgePath="/opt/linetta/linetta-mcp" />);
+
+    // Consent to touch another app's file is informed: the confirm step shows
+    // the target path and the exact entry before anything is written.
+    await userEvent.click(await screen.findByTestId("mcp-client-claude-desktop-connect"));
+    expect(rpc.connectClient).not.toHaveBeenCalled();
+    const confirm = await screen.findByTestId("mcp-client-claude-desktop-confirm");
+    expect(confirm.textContent).toContain("claude_desktop_config.json");
+    expect(confirm.textContent).toContain("/opt/linetta/linetta-mcp");
+
+    await userEvent.click(screen.getByTestId("mcp-client-claude-desktop-apply"));
+    await waitFor(() => expect(rpc.connectClient).toHaveBeenCalledWith("claude-desktop"));
+    const result = await screen.findByTestId("mcp-client-claude-desktop-result");
+    expect(result.textContent).toContain("settings.mcp.clients.done");
+    expect(result.textContent).toContain(".bak-linetta");
+  });
+
+  it("says one-click needs the bridge on a build without one", async () => {
+    rpc.status.mockResolvedValue(RUNNING);
+    rpc.settingsGet.mockResolvedValue(settingsWith({ mcp_consent_version: 1 }));
+    rpc.bridgePath.mockResolvedValue(null);
+    render(<McpSection />);
+
+    await screen.findByTestId("mcp-clients-no-bridge");
+    expect(screen.queryByTestId("mcp-client-claude-code-connect")).toBeNull();
   });
 
   it("names the taken port as something the writer can fix", async () => {
