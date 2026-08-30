@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
-import { mcp, mcpBridgePath, settings as settingsApi } from "../../lib/rpc";
+import { disableMcp, enableMcp } from "../../lib/mcpControl";
+import { mcp, mcpBridgePath, projects as projectsApi, settings as settingsApi } from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
-import type { McpActivityEntry, McpStatus } from "../../lib/types";
+import type { McpActivityEntry, McpStatus, Project } from "../../lib/types";
 
 /** Connect an external agent (MCP).
  *
@@ -27,8 +28,6 @@ type Saved = {
   consented: boolean;
 };
 
-const MODES = ["read_only", "full"] as const;
-
 export function McpSection({ bridgePath }: McpSectionProps) {
   const { t } = useI18n();
   // undefined until the shell answers, then a path or null. The difference
@@ -36,7 +35,8 @@ export function McpSection({ bridgePath }: McpSectionProps) {
   // writer has to be told, and "not asked yet" must not look like that.
   const [resolvedBridge, setResolvedBridge] = useState<string | null | undefined>(bridgePath);
   const [status, setStatus] = useState<McpStatus | null>(null);
-  const [saved, setSaved] = useState<Saved>({ mode: "read_only", port: 7391, projectId: "", consented: false });
+  const [saved, setSaved] = useState<Saved>({ mode: "full", port: 7391, projectId: "", consented: false });
+  const [works, setWorks] = useState<Project[]>([]);
   const [token, setToken] = useState<string | null>(null);
   const [activity, setActivity] = useState<McpActivityEntry[]>([]);
   // The raw failure is kept and translated at render time: a reason code has
@@ -49,7 +49,10 @@ export function McpSection({ bridgePath }: McpSectionProps) {
     const [st, cfg] = await Promise.all([mcp.status(), settingsApi.get()]);
     setStatus(st);
     setSaved({
-      mode: cfg.mcp_mode && cfg.mcp_mode !== "off" ? cfg.mcp_mode : "read_only",
+      // Off carries no mode preference, so the pane defaults to full: writing
+      // together is what connecting an agent is for. Read-only survives a
+      // round trip only while the writer keeps it chosen under Advanced.
+      mode: cfg.mcp_mode === "read_only" ? "read_only" : "full",
       port: cfg.mcp_port || 7391,
       projectId: cfg.mcp_project_id ?? "",
       consented: (cfg.mcp_consent_version ?? 0) >= 1,
@@ -57,6 +60,13 @@ export function McpSection({ bridgePath }: McpSectionProps) {
     if (st.running) {
       setActivity(await mcp.activity(20));
     }
+  }, []);
+
+  // The scope picker names works instead of asking for a UUID. A load failure
+  // leaves the list empty; the current scope still renders as a raw option
+  // below so an unknown id is never silently dropped.
+  useEffect(() => {
+    projectsApi.list({}).then(setWorks, () => setWorks([]));
   }, []);
 
   useEffect(() => {
@@ -93,12 +103,11 @@ export function McpSection({ bridgePath }: McpSectionProps) {
 
   const enable = () =>
     guard(async () => {
-      await settingsApi.set({
-        mcp_mode: saved.mode,
-        mcp_port: saved.port,
-        mcp_project_id: saved.projectId,
+      const res = await enableMcp({
+        mode: saved.mode,
+        port: saved.port,
+        projectId: saved.projectId,
       });
-      const res = await mcp.enable();
       setToken(res.token);
       setStatus(res.status);
       setActivity(await mcp.activity(20));
@@ -106,7 +115,9 @@ export function McpSection({ bridgePath }: McpSectionProps) {
 
   const disable = () =>
     guard(async () => {
-      setStatus(await mcp.disable());
+      // disableMcp persists "off" before stopping, so the kill switch
+      // survives an app restart (#74).
+      setStatus(await disableMcp());
       setToken(null);
     });
 
@@ -162,43 +173,51 @@ export function McpSection({ bridgePath }: McpSectionProps) {
       </label>
 
       <div className="modal-field">
-        <label htmlFor="mcp-mode">{t("settings.mcp.mode")}</label>
+        <label htmlFor="mcp-project">{t("settings.mcp.projectLimit")}</label>
         <select
-          id="mcp-mode"
-          value={saved.mode}
+          id="mcp-project"
+          value={saved.projectId}
           disabled={busy || running}
-          onChange={(e) => setSaved((s) => ({ ...s, mode: e.target.value }))}
+          onChange={(e) => setSaved((s) => ({ ...s, projectId: e.target.value }))}
         >
-          {MODES.map((m) => (
-            <option key={m} value={m}>
-              {t(`settings.mcp.mode.${m}`)}
+          <option value="">{t("settings.mcp.projectLimit.all")}</option>
+          {works.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.title}
             </option>
           ))}
+          {saved.projectId !== "" && !works.some((p) => p.id === saved.projectId) && (
+            <option value={saved.projectId}>{saved.projectId}</option>
+          )}
         </select>
       </div>
 
-      <div className="modal-field">
-        <label htmlFor="mcp-port">{t("settings.mcp.port")}</label>
-        <input
-          id="mcp-port"
-          type="number"
-          value={saved.port}
-          disabled={busy || running}
-          onChange={(e) => setSaved((s) => ({ ...s, port: Number(e.target.value) }))}
-        />
-      </div>
-
-      <div className="modal-field">
-        <label htmlFor="mcp-project">{t("settings.mcp.projectLimit")}</label>
-        <input
-          id="mcp-project"
-          type="text"
-          value={saved.projectId}
-          placeholder={t("settings.mcp.projectLimit.placeholder")}
-          disabled={busy || running}
-          onChange={(e) => setSaved((s) => ({ ...s, projectId: e.target.value }))}
-        />
-      </div>
+      {/* One decision turns MCP on; the trade-offs live behind Advanced.
+          Turning on uses full access — the collaboration this exists for —
+          unless read-only is deliberately chosen here. */}
+      <details className="modal-field" data-testid="mcp-advanced">
+        <summary>{t("settings.mcp.advanced")}</summary>
+        <label className="modal-field">
+          <input
+            type="checkbox"
+            checked={saved.mode === "read_only"}
+            disabled={busy || running}
+            onChange={(e) => setSaved((s) => ({ ...s, mode: e.target.checked ? "read_only" : "full" }))}
+            data-testid="mcp-readonly"
+          />
+          {t("settings.mcp.mode.read_only")}
+        </label>
+        <div className="modal-field">
+          <label htmlFor="mcp-port">{t("settings.mcp.port")}</label>
+          <input
+            id="mcp-port"
+            type="number"
+            value={saved.port}
+            disabled={busy || running}
+            onChange={(e) => setSaved((s) => ({ ...s, port: Number(e.target.value) }))}
+          />
+        </div>
+      </details>
 
       {!running && (
         <button
