@@ -429,3 +429,93 @@
 .settings .restore-work-title {
   font-size: 13px;
 }
+
+/* ---- Sidebar layout (#82, 시안 A) ------------------------------------
+   One category renders at a time; the nav is the scroll-free path to all
+   of them. Below 720px the sidebar becomes a horizontal pill strip. */
+.settings .settings-inner {
+  width: min(900px, 94%);
+}
+.settings .settings-layout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 36px;
+  align-items: start;
+}
+.settings .settings-nav {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings .settings-nav-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-case);
+  color: var(--muted);
+  margin: 14px 10px 4px;
+}
+.settings .settings-nav-group:first-child .settings-nav-label {
+  margin-top: 0;
+}
+.settings .settings-nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  cursor: pointer;
+}
+.settings .settings-nav-item:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+.settings .settings-nav-item.on {
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 600;
+}
+.settings .settings-nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.settings .settings-content {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .settings .settings-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .settings .settings-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 6px;
+  }
+  .settings .settings-nav-group {
+    display: flex;
+    gap: 4px;
+    flex: none;
+  }
+  .settings .settings-nav-label {
+    display: none;
+  }
+  .settings .settings-nav-item {
+    white-space: nowrap;
+    border: 1px solid var(--line-soft);
+    border-radius: 999px;
+    padding: 5px 12px;
+    margin-bottom: 0;
+  }
+}
