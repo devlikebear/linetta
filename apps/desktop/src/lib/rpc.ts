@@ -79,6 +79,25 @@ export async function openRecoveryFolder(): Promise<void> {
   return invoke<void>("open_recovery_folder");
 }
 
+/** Tray residence + login autostart (#81). Desktop shells only — the invoke
+ *  rejects on mobile, which the settings pane uses to hide the section. */
+export interface BackgroundPrefs {
+  close_to_tray: boolean;
+  autostart: boolean;
+}
+
+export async function backgroundPrefsGet(): Promise<BackgroundPrefs> {
+  return invoke<BackgroundPrefs>("background_prefs_get");
+}
+
+export async function backgroundPrefsSet(patch: {
+  closeToTray?: boolean;
+  autostart?: boolean;
+  language?: string;
+}): Promise<BackgroundPrefs> {
+  return invoke<BackgroundPrefs>("background_prefs_set", patch);
+}
+
 export async function restoreLatestBackup(): Promise<{
   backup_path: string;
   quarantined_path: string | null;

@@ -14,7 +14,7 @@ tauri-build = { version = "2", features = [] }
 cc = "1"
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -24,6 +24,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "io-util", "process", "s
 once_cell = "1"
 tauri-plugin-opener = "2.5.4"
 url = "2"
+
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+tauri-plugin-autostart = "2"
 
 [target.'cfg(windows)'.dependencies]
 libloading = "0.7"

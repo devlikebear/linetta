@@ -13,6 +13,7 @@ import {
 } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { saveExportedMarkdown } from "../lib/exportSave";
+import { BackgroundSection } from "../components/settings/BackgroundSection";
 import { McpSection } from "../components/settings/McpSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
@@ -374,6 +375,8 @@ export function Settings() {
 
 
             {mcpAvailable && <McpSection />}
+
+            <BackgroundSection />
 
             {!gitSyncAvailable && (
             <section className="settings-section">

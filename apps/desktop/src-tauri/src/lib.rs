@@ -1,6 +1,8 @@
 mod ffi;
 mod folder_sync;
 mod mcp_connect;
+#[cfg(desktop)]
+mod tray;
 #[cfg(all(target_os = "macos", feature = "mas"))]
 mod macos_bookmarks;
 
@@ -114,13 +116,44 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
+        // Close-to-tray: converting close into hide keeps the engine — and
+        // with it the MCP server — alive for external agents (#81).
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if tray::handle_close_requested(window.app_handle()) {
+                    api.prevent_close();
+                }
+            }
+        });
+    builder
         .setup(|app| {
             let handle = app.handle().clone();
+            #[cfg(desktop)]
+            {
+                handle.manage(tray::TrayState {
+                    prefs: std::sync::Mutex::new(tray::load_prefs(&handle)),
+                    tray: std::sync::Mutex::new(None),
+                });
+                if let Err(e) = tray::setup(&handle) {
+                    eprintln!("[linetta] tray setup failed: {e}");
+                }
+                // Autostart launches with --hidden: the app becomes a tray
+                // resident until the writer asks for the window.
+                if std::env::args().any(|a| a == "--hidden") {
+                    tray::hide_to_tray(&handle);
+                }
+            }
             let recovery_home = resolve_recovery_home(&handle).ok();
             let state = match mobile_engine_home(&handle)
                 .and_then(|home| ffi::Engine::start(&handle, home.as_deref()))
@@ -169,7 +202,11 @@ pub fn run() {
             folder_sync::set_folder_sync_dir,
             folder_sync::folder_sync_now,
             mcp_connect::mcp_client_status,
-            mcp_connect::mcp_connect_client
+            mcp_connect::mcp_connect_client,
+            #[cfg(desktop)]
+            tray::background_prefs_get,
+            #[cfg(desktop)]
+            tray::background_prefs_set
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
