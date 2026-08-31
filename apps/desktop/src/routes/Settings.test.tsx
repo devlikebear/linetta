@@ -100,6 +100,9 @@ describe("Settings", () => {
     vi.clearAllMocks();
     window.localStorage.removeItem("linetta:onboarding:manual-phase");
     window.localStorage.removeItem("linetta:onboarding:workspace-pending");
+    // The sidebar remembers the last category per tab; tests must each start
+    // from the default ("general") or they inherit the previous test's spot.
+    window.sessionStorage.removeItem("linetta.settings.category");
     // Stateful settings mock mirroring the engine: patches merge onto the live
     // config, and the `providers` map merges per-key.
     let state: Record<string, unknown> = { ...baseSettings };
@@ -211,13 +214,18 @@ describe("Settings", () => {
       },
     ]);
 
+    const user = userEvent.setup();
     renderSettings();
 
+    await user.click(await screen.findByTestId("settings-nav-backup"));
     expect(await screen.findByText("최근 백업 상태")).toBeInTheDocument();
     expect(screen.getByText(/백업 성공/)).toBeInTheDocument();
-    expect(screen.getByText(/git push: fatal: no upstream/)).toBeInTheDocument();
+    // The degraded summarizer banner is global: visible from any category.
     expect(screen.getByText("요약기 상태")).toBeInTheDocument();
     expect(screen.getByText(/provider unavailable/)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("settings-nav-sync"));
+    expect(await screen.findByText(/git push: fatal: no upstream/)).toBeInTheDocument();
   });
 
   it("defaults to Korean and switches the settings UI to English", async () => {
@@ -254,7 +262,8 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    expect(await screen.findByText("에디터")).toBeInTheDocument();
+    await user.click(await screen.findByTestId("settings-nav-editor"));
+    expect(await screen.findByRole("heading", { name: "에디터" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "다크" }));
     await waitFor(() =>
@@ -285,6 +294,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
+    await user.click(await screen.findByTestId("settings-nav-editor"));
     const group = await screen.findByRole("radiogroup", { name: "색 팔레트" });
     const hanji = within(group).getByRole("radio", { name: /한지/ });
     const press = within(group).getByRole("radio", { name: /프레스/ });
@@ -325,15 +335,17 @@ describe("Settings", () => {
       },
     ]);
 
+    const user = userEvent.setup();
     renderSettings();
 
-    // The awaited element is the load barrier: everything below is a sync get.
-    await screen.findByText("Backup");
-    expect(screen.getByText(/If the selected folder is not a git repository yet/)).toBeInTheDocument();
+    await user.click(await screen.findByTestId("settings-nav-sync"));
+    expect(await screen.findByText(/If the selected folder is not a git repository yet/)).toBeInTheDocument();
     expect(screen.getByText(/1 file/)).toBeInTheDocument();
     expect(screen.getByText(/Committed/)).toBeInTheDocument();
     expect(screen.getByText(/Pushed/)).toBeInTheDocument();
-    expect(screen.getByText(/New backup created/)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("settings-nav-backup"));
+    expect(await screen.findByText(/New backup created/)).toBeInTheDocument();
   });
 
   it("shows Git Sync section as disabled (with note) when git_sync_available is false, and full section when true", async () => {
@@ -349,6 +361,7 @@ describe("Settings", () => {
       unavailable_providers: [],
       git_sync_available: false,
     });
+    const user = userEvent.setup();
     const { unmount } = render(
       <MemoryRouter>
         <I18nProvider>
@@ -357,13 +370,13 @@ describe("Settings", () => {
       </MemoryRouter>,
     );
 
-    // Wait for settings to load (an element that is always present)
-    await screen.findByText("백업");
+    await user.click(await screen.findByTestId("settings-nav-sync"));
     // Title is shown in the disabled state section
-    expect(screen.getByText("GitHub 동기화")).toBeInTheDocument();
+    expect(await screen.findByText("GitHub 동기화")).toBeInTheDocument();
     // The full form (folder input) must NOT appear
     expect(screen.queryByLabelText("git 폴더")).not.toBeInTheDocument();
     unmount();
+    window.sessionStorage.removeItem("linetta.settings.category");
 
     // When git_sync_available is true, the full section (with folder input) IS rendered.
     mocks.diagnosticsGet.mockResolvedValue({
@@ -378,8 +391,8 @@ describe("Settings", () => {
     });
     renderSettings();
 
-    await screen.findByText("백업");
-    expect(screen.getByText("GitHub 동기화")).toBeInTheDocument();
+    await user.click(await screen.findByTestId("settings-nav-sync"));
+    expect(await screen.findByText("GitHub 동기화")).toBeInTheDocument();
     expect(screen.getByLabelText("git 폴더")).toBeInTheDocument();
   });
 
@@ -395,9 +408,11 @@ describe("Settings", () => {
       git_sync_available: true,
       companion_history_exists: false,
     });
+    const user = userEvent.setup();
     renderSettings();
 
-    await screen.findByText("백업");
+    await user.click(await screen.findByTestId("settings-nav-backup"));
+    await screen.findByText("최근 백업 상태");
     expect(screen.queryByTestId("legacy-ai-export")).toBeNull();
   });
 
@@ -405,6 +420,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
+    await user.click(await screen.findByTestId("settings-nav-backup"));
     await user.click(await screen.findByTestId("legacy-ai-export"));
     await waitFor(() => expect(mocks.exportCompanionHistory).toHaveBeenCalledTimes(1));
   });

@@ -10,6 +10,7 @@ import {
   opsStatus as opsStatusApi,
   diagnostics as diagnosticsApi,
   exportApi,
+  backgroundPrefsGet,
 } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { saveExportedMarkdown } from "../lib/exportSave";
@@ -41,6 +42,33 @@ const JOB_GIT_SYNC = "git_sync";
 const JOB_FOLDER_SYNC = "folder_sync";
 const JOB_SUMMARIZER = "summarizer";
 
+/** Sidebar categories (#82, 시안 A). One category renders at a time; the
+ *  sidebar is the only scroll-free path to every setting. */
+const SETTINGS_CATEGORIES = [
+  "general",
+  "background",
+  "editor",
+  "writing",
+  "mcp",
+  "sync",
+  "backup",
+] as const;
+type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
+
+const CATEGORY_STORAGE_KEY = "linetta.settings.category";
+
+function initialCategory(): SettingsCategory {
+  try {
+    const stored = sessionStorage.getItem(CATEGORY_STORAGE_KEY);
+    if (stored && (SETTINGS_CATEGORIES as readonly string[]).includes(stored)) {
+      return stored as SettingsCategory;
+    }
+  } catch {
+    /* storage unavailable — start at the first category */
+  }
+  return "general";
+}
+
 export function Settings() {
   const { language, setLanguage, t } = useI18n();
   const navigate = useNavigate();
@@ -55,6 +83,9 @@ export function Settings() {
   // Hidden entirely on builds without MCP (mobile), the same way git sync is.
   const [mcpAvailable, setMcpAvailable] = useState(false);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
+  const [category, setCategoryState] = useState<SettingsCategory>(initialCategory);
+  // Nav visibility only; BackgroundSection keeps its own probe and content.
+  const [backgroundAvailable, setBackgroundAvailable] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -166,6 +197,66 @@ export function Settings() {
 
 
 
+  const setCategory = (next: SettingsCategory) => {
+    setCategoryState(next);
+    try {
+      sessionStorage.setItem(CATEGORY_STORAGE_KEY, next);
+    } catch {
+      /* per-tab convenience only */
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    backgroundPrefsGet()
+      .then(() => {
+        if (!cancelled) setBackgroundAvailable(true);
+      })
+      .catch(() => {
+        /* not a desktop shell — nav item stays hidden */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const navGroups: Array<{
+    label: string;
+    items: Array<{ id: SettingsCategory; label: string }>;
+  }> = [
+    {
+      label: t("settings.nav.groupApp"),
+      items: [
+        { id: "general", label: t("settings.nav.general") },
+        ...(backgroundAvailable
+          ? [{ id: "background" as const, label: t("settings.background.title") }]
+          : []),
+      ],
+    },
+    {
+      label: t("settings.nav.groupWriting"),
+      items: [
+        { id: "editor", label: t("settings.editor.title") },
+        { id: "writing", label: t("settings.writing.title") },
+      ],
+    },
+    ...(mcpAvailable
+      ? [
+          {
+            label: t("settings.nav.groupConnect"),
+            items: [{ id: "mcp" as const, label: t("settings.nav.mcp") }],
+          },
+        ]
+      : []),
+    {
+      label: t("settings.nav.groupData"),
+      items: [
+        { id: "sync", label: t("settings.nav.sync") },
+        { id: "backup", label: t("settings.nav.backupRestore") },
+      ],
+    },
+  ];
+
   const replayOnboardingTour = () => {
     clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
     storePhase(MANUAL_PHASE_STORAGE_KEY, "library");
@@ -187,7 +278,28 @@ export function Settings() {
         {!current ? (
           <p className="hint">{t("common.loading")}</p>
         ) : (
-          <>
+          <div className="settings-layout">
+            <nav className="settings-nav" aria-label={t("settings.title")}>
+              {navGroups.map((group) => (
+                <div key={group.label} className="settings-nav-group">
+                  <p className="settings-nav-label">{group.label}</p>
+                  {group.items.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`settings-nav-item${category === item.id ? " on" : ""}`}
+                      aria-current={category === item.id ? "page" : undefined}
+                      onClick={() => setCategory(item.id)}
+                      data-testid={`settings-nav-${item.id}`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </nav>
+            <div className="settings-content">
+            {category === "general" && (
             <section className="settings-section">
               <h3>{t("settings.language.title")}</h3>
               <p className="sd">{t("settings.language.description")}</p>
@@ -207,8 +319,9 @@ export function Settings() {
                 </select>
               </div>
             </section>
+            )}
 
-
+            {category === "writing" && (
             <section className="settings-section">
               <h3>{t("settings.writing.title")}</h3>
               <button
@@ -236,7 +349,9 @@ export function Settings() {
                 <span className={`switch${current.focus_default ? " on" : ""}`} />
               </button>
             </section>
+            )}
 
+            {category === "editor" && (
             <section className="settings-section">
               <h3>{t("settings.editor.title")}</h3>
               <div className="modal-field">
@@ -348,7 +463,9 @@ export function Settings() {
                 </select>
               </div>
             </section>
+            )}
 
+            {category === "general" && (
             <section className="settings-section">
               <h3>{t("settings.onboarding.title")}</h3>
               <button
@@ -373,20 +490,20 @@ export function Settings() {
                 </button>
               </div>
             </section>
+            )}
 
+            {category === "mcp" && mcpAvailable && <McpSection />}
 
-            {mcpAvailable && <McpSection />}
+            {category === "background" && <BackgroundSection />}
 
-            <BackgroundSection />
-
-            {!gitSyncAvailable && (
+            {category === "sync" && !gitSyncAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
               <p className="sd">{t("settings.git.unavailableNote")}</p>
             </section>
             )}
 
-            {gitSyncAvailable && (
+            {category === "sync" && gitSyncAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
               <p className="sd">{t("settings.git.description")}</p>
@@ -484,6 +601,7 @@ export function Settings() {
             </section>
             )}
 
+            {category === "sync" && (
             <section className="settings-section">
               <h3>{t("settings.folder.title")}</h3>
               <p className="sd">{t("settings.folder.description")}</p>
@@ -560,7 +678,9 @@ export function Settings() {
                 language={language}
               />
             </section>
+            )}
 
+            {category === "backup" && (
             <section className="settings-section">
               <h3>{t("settings.backup.title")}</h3>
               <p className="sd">{t("settings.backup.description")}</p>
@@ -604,6 +724,7 @@ export function Settings() {
                 </>
               )}
             </section>
+            )}
 
             {isDegraded(opsByJob.get(JOB_SUMMARIZER)) && (
               <section className="settings-section">
@@ -623,7 +744,8 @@ export function Settings() {
 
 
             {savedAt && <p className="settings-saved">{t("settings.saved")}</p>}
-          </>
+            </div>
+          </div>
         )}
       </div>
     </div>
