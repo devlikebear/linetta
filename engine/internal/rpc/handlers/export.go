@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
-	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
 
@@ -22,7 +20,7 @@ type exportProjectParams struct {
 // `language` names the reader, so the appendix headings are readable to them
 // (#45). It is a function rather than the settings store because one string is
 // all this needs, and the export must not fail when that string cannot be read.
-func ExportProject(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo, language func(context.Context) string) rpc.Handler {
+func ExportProject(src export.Sources, language func(context.Context) string) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p exportProjectParams
 		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
@@ -32,7 +30,7 @@ func ExportProject(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relatio
 		if language != nil {
 			lang = language(ctx)
 		}
-		out, err := export.ExportProject(ctx, pr, nr, er, rr, p.ProjectID, lang)
+		out, err := export.ExportProject(ctx, src, p.ProjectID, lang)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}

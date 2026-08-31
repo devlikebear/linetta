@@ -5,17 +5,41 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/mdmeta"
 	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
 // Payload is the wire-shape returned by both ExportProject and ExportNode.
 type Payload struct {
 	Markdown          string `json:"markdown"`
 	SuggestedFilename string `json:"suggested_filename"`
+}
+
+// Sources is everything ExportProject reads. Relationships and Extras tolerate
+// nil repos: the corresponding frontmatter sections are simply absent, which
+// keeps older callers and tests working while they wire the new stores.
+type Sources struct {
+	Projects      *project.Repo
+	Nodes         *node.Repo
+	Entities      *entity.Repo
+	Relationships *relationship.Repo
+	Extras        Extras
+}
+
+// Extras are the metadata stores added by the completeness pass (#83):
+// plot threads with beats, margin notes, and fact-book cards.
+type Extras struct {
+	Threads *thread.Repo
+	Beats   *beat.Repo
+	Notes   *note.Repo
+	Facts   *fact.Repo
 }
 
 // appendixHeadings names the two human-readable appendices in the reader's
@@ -43,12 +67,12 @@ func appendixHeadings(language string) (characters, relationships string) {
 // `language` names the appendix headings only; nothing the writer typed is
 // translated. Import accepts all three, so a file exported in one language
 // still round-trips after the writer switches.
-func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo, projectID, language string) (Payload, error) {
-	p, err := pr.Get(ctx, projectID)
+func ExportProject(ctx context.Context, src Sources, projectID, language string) (Payload, error) {
+	p, err := src.Projects.Get(ctx, projectID)
 	if err != nil {
 		return Payload{}, err
 	}
-	flat, err := nr.ListByProject(ctx, projectID)
+	flat, err := src.Nodes.ListByProject(ctx, projectID)
 	if err != nil {
 		return Payload{}, err
 	}
@@ -61,18 +85,37 @@ func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *ent
 		children[key] = append(children[key], n)
 	}
 
-	ents, err := er.ListByProject(ctx, projectID)
+	ents, err := src.Entities.ListByProject(ctx, projectID)
 	if err != nil {
 		return Payload{}, err
 	}
 	rels := []relationship.Relationship{}
-	if rr != nil {
-		rels, err = rr.ListByProject(ctx, projectID)
+	if src.Relationships != nil {
+		rels, err = src.Relationships.ListByProject(ctx, projectID)
 		if err != nil {
 			return Payload{}, err
 		}
 	}
 	meta, entityNames := buildMetadata(p, ents, rels)
+
+	// Nodes in the exact pre-order the headings are written below. Import
+	// aligns positionally against this list to give beats/notes/fact cards
+	// their node back after ids are regenerated.
+	orderedNodes := collectNodes(children)
+	for _, n := range orderedNodes {
+		meta.Nodes = append(meta.Nodes, mdmeta.Node{
+			ID:      n.ID,
+			Label:   n.Label,
+			Title:   n.Title,
+			Status:  n.Status,
+			Summary: n.Summary,
+		})
+	}
+
+	if err := appendExtras(ctx, src.Extras, projectID, orderedNodes, &meta); err != nil {
+		return Payload{}, err
+	}
+
 	frontmatter, err := mdmeta.RenderFrontMatter(meta)
 	if err != nil {
 		return Payload{}, err
@@ -152,8 +195,101 @@ func ExportProject(ctx context.Context, pr *project.Repo, nr *node.Repo, er *ent
 	}, nil
 }
 
+// collectNodes flattens the tree in the same pre-order the markdown walk uses.
+func collectNodes(children map[string][]node.Node) []node.Node {
+	var out []node.Node
+	var walk func(parentKey string)
+	walk = func(parentKey string) {
+		for _, n := range children[parentKey] {
+			out = append(out, n)
+			walk(n.ID)
+		}
+	}
+	walk("")
+	return out
+}
+
+// appendExtras adds threads/beats, margin notes, and fact cards to the
+// frontmatter. A nil repo skips its section; node_snapshots, mentions, and
+// companion/stat history intentionally stay backup-only.
+func appendExtras(ctx context.Context, ex Extras, projectID string, orderedNodes []node.Node, meta *mdmeta.Metadata) error {
+	if ex.Threads != nil {
+		threads, err := ex.Threads.ListByProject(ctx, projectID, true)
+		if err != nil {
+			return err
+		}
+		for _, t := range threads {
+			mt := mdmeta.Thread{Name: t.Name, Color: t.Color, Summary: t.Summary}
+			if t.ClosedAt != nil {
+				mt.ClosedAt = *t.ClosedAt
+			}
+			if ex.Beats != nil {
+				beats, err := ex.Beats.ListByThread(ctx, t.ID)
+				if err != nil {
+					return err
+				}
+				for _, b := range beats {
+					mb := mdmeta.Beat{Label: b.Label, Description: b.Description, Intensity: b.Intensity}
+					if b.NodeID != nil {
+						mb.NodeID = *b.NodeID
+					}
+					mt.Beats = append(mt.Beats, mb)
+				}
+			}
+			meta.Threads = append(meta.Threads, mt)
+		}
+	}
+	if ex.Notes != nil {
+		for _, n := range orderedNodes {
+			notes, err := ex.Notes.ListForNode(ctx, n.ID)
+			if err != nil {
+				return err
+			}
+			for _, nt := range notes {
+				meta.Notes = append(meta.Notes, mdmeta.Note{
+					NodeID:    nt.NodeID,
+					Anchor:    nt.Anchor,
+					Body:      nt.Body,
+					CreatedAt: nt.CreatedAt,
+				})
+			}
+		}
+	}
+	if ex.Facts != nil {
+		cards, err := ex.Facts.List(ctx, fact.ListFilter{ProjectID: projectID})
+		if err != nil {
+			return err
+		}
+		for _, c := range cards {
+			mc := mdmeta.FactCard{Claim: c.Claim, Result: c.Result, Status: c.Status, Category: c.Category}
+			if c.NodeID != nil {
+				mc.NodeID = *c.NodeID
+			}
+			for _, s := range c.Sources {
+				mc.Sources = append(mc.Sources, mdmeta.FactSource{
+					URL:        s.URL,
+					Title:      s.Title,
+					Snippet:    s.Snippet,
+					AccessedAt: s.AccessedAt,
+				})
+			}
+			meta.FactCards = append(meta.FactCards, mc)
+		}
+	}
+	return nil
+}
+
 func buildMetadata(p project.Project, ents []entity.Entity, rels []relationship.Relationship) (mdmeta.Metadata, map[string]string) {
 	meta := mdmeta.Metadata{Version: mdmeta.Version, OutlinePreset: p.OutlinePreset}
+	meta.Project = &mdmeta.ProjectMeta{
+		Genres:            p.Genres,
+		LengthTarget:      p.LengthTarget,
+		DefaultPOV:        p.DefaultPOV,
+		StyleNotes:        p.StyleNotes,
+		Synopsis:          p.Synopsis,
+		Outline:           p.Outline,
+		EpisodeCharTarget: p.EpisodeCharTarget,
+	}
 	entityNames := map[string]string{}
 	for _, e := range ents {
 		entityNames[e.ID] = e.Name

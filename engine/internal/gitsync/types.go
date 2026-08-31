@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -35,6 +36,7 @@ type Syncer struct {
 	Nodes         *node.Repo
 	Entities      *entity.Repo
 	Relationships *relationship.Repo
+	Extras        export.Extras
 	Run           CmdRunner
 	Now           func() time.Time
 	Ops           *opsstatus.Repo

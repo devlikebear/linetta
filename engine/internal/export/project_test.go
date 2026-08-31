@@ -69,7 +69,7 @@ func TestExportProject_buildsTreeWithHeadingsAndMetadataAppendix(t *testing.T) {
 		ProjectID: p.ID, FromID: character.ID, ToID: place.ID, Label: "거주지", Notes: "자주 머문다",
 	})
 
-	out, err := ExportProject(ctx, pr, nr, er, rr, p.ID, "")
+	out, err := ExportProject(ctx, Sources{Projects: pr, Nodes: nr, Entities: er, Relationships: rr}, p.ID, "")
 	if err != nil {
 		t.Fatalf("ExportProject: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestExportProject_appendixHeadingsFollowTheReader(t *testing.T) {
 		{"ko", "## 등장인물", "## 관계"},
 		{"", "## 등장인물", "## 관계"},
 	} {
-		out, err := ExportProject(ctx, pr, nr, er, rr, p.ID, tc.language)
+		out, err := ExportProject(ctx, Sources{Projects: pr, Nodes: nr, Entities: er, Relationships: rr}, p.ID, tc.language)
 		if err != nil {
 			t.Fatalf("ExportProject(%q): %v", tc.language, err)
 		}
@@ -202,7 +202,7 @@ func TestExportProject_translatesOnlyTheHeadings(t *testing.T) {
 		t.Fatalf("create entity: %v", err)
 	}
 
-	out, err := ExportProject(ctx, pr, nr, er, rr, p.ID, "en")
+	out, err := ExportProject(ctx, Sources{Projects: pr, Nodes: nr, Entities: er, Relationships: rr}, p.ID, "en")
 	if err != nil {
 		t.Fatalf("ExportProject: %v", err)
 	}

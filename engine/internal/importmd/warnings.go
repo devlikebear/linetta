@@ -22,4 +22,20 @@ const (
 	// WarnUnknownOutlinePreset: the requested outline preset does not exist and
 	// was ignored. Carries the offending value after a colon.
 	WarnUnknownOutlinePreset = "import.unknown_outline_preset"
+	// WarnProjectFieldSkipped: an exported project field held a value this
+	// engine does not accept and was left at its default. Carries the field
+	// name after a colon.
+	WarnProjectFieldSkipped = "import.project_field_skipped"
+	// WarnNodesMetaPartial: some exported node metadata (status, summary,
+	// title) could not be matched back onto the rebuilt outline.
+	WarnNodesMetaPartial = "import.nodes_meta_partial"
+	// WarnNodeLinksDropped: a beat or fact card referenced a scene that could
+	// not be matched; the item was kept without its scene link.
+	WarnNodeLinksDropped = "import.node_links_dropped"
+	// WarnNotesSkipped: margin notes referenced a scene that could not be
+	// matched and were dropped (a note cannot exist without its anchor).
+	WarnNotesSkipped = "import.notes_skipped"
+	// WarnFactCardsSkipped: some fact cards failed validation on re-create and
+	// were dropped.
+	WarnFactCardsSkipped = "import.fact_cards_skipped"
 )
