@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.1.0 - 2026-08-31
+
+- Export now carries the whole work: synopsis, plot threads and beats, fact
+  cards, margin notes, style notes, and each scene's status and summary ride in
+  the markdown frontmatter, and import restores all of it. Git and folder sync
+  write the same complete files.
+- Restore no longer means replacing the library. Settings → Backup lists every
+  backup, shows the works inside one, and brings a chosen work back as a new
+  project — nothing you are writing now is touched, and a safety snapshot is
+  taken first.
+- Linetta can stay running in the system tray after the window closes, so a
+  connected agent never loses its MCP connection, and can start hidden at
+  login. Both are opt-in toggles under Settings → Run in background.
+- Settings got a sidebar: App / Writing / Connections / Data categories replace
+  the single long page.
+
 ## v1.0.0 - 2026-08-29
 
 Linetta is a writing tool. It no longer talks to a language model.
