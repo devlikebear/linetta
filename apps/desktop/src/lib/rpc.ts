@@ -238,8 +238,33 @@ export const settings = {
   set: (patch: SettingsPatch) => rpcCall<Settings>("settings.set", patch),
 };
 
+export interface BackupEntry {
+  path: string;
+  kind: "daily" | "pre_migration" | "recovery";
+  size_bytes: number;
+  created_at: number;
+}
+
+export interface BackupProject {
+  id: string;
+  title: string;
+  word_count: number;
+  updated_at: number;
+  archived_at?: number;
+}
+
 export const backupApi = {
   createRecovery: () => rpcCall<{ path: string; format_version: number }>("backup.create_recovery"),
+  list: () => rpcCall<{ backups: BackupEntry[] }>("backup.list"),
+  peek: (path: string) => rpcCall<{ projects: BackupProject[] }>("backup.peek", { path }),
+  /** Additive merge: the picked work comes back as a NEW project; the live
+   *  library is never overwritten. The engine snapshots the library first. */
+  restoreProject: (path: string, projectId: string, titleSuffix: string) =>
+    rpcCall<{ project_id: string; title: string }>("backup.restore_project", {
+      path,
+      project_id: projectId,
+      title_suffix: titleSuffix,
+    }),
 };
 
 

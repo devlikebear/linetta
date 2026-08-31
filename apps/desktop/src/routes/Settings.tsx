@@ -14,6 +14,7 @@ import {
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { McpSection } from "../components/settings/McpSection";
+import { RestoreSection } from "../components/settings/RestoreSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
 
@@ -574,6 +575,8 @@ export function Settings() {
                 t={t}
                 language={language}
               />
+              <h4>{t("settings.restore.title")}</h4>
+              <RestoreSection />
               {/* The companion is gone; its conversations are not. This is the
                   only way left to read them, so it outlives the settings block
                   it used to live in. Shown only to a library that holds a
