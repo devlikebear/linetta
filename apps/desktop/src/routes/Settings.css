@@ -388,3 +388,44 @@
     flex-direction: column;
   }
 }
+
+/* Restore-from-backup (#83): backup list with per-work restore. */
+.settings .restore-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.settings .restore-backups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.settings .restore-backups > li > .btn.active {
+  border-color: var(--ink);
+}
+.settings .restore-works {
+  margin: 6px 0 2px 12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-soft);
+}
+.settings .restore-works ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings .restore-work-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settings .restore-work-title {
+  font-size: 13px;
+}

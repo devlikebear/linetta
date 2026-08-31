@@ -16,6 +16,9 @@ const ENGINE_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 // Tauri webview can call them.
 const RENDERER_ENGINE_METHODS: &[&str] = &[
     "backup.create_recovery",
+    "backup.list",
+    "backup.peek",
+    "backup.restore_project",
     "beats.create",
     "beats.delete",
     "beats.list_by_node",
