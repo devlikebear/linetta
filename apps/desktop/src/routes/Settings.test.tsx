@@ -24,6 +24,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/rpc", () => ({
+  // Rejecting hides the background-residence section, matching a shell
+  // without those commands; BackgroundSection has its own tests.
+  backgroundPrefsGet: () => Promise.reject(new Error("not in this test")),
+  backgroundPrefsSet: () => Promise.reject(new Error("not in this test")),
   settings: {
     get: mocks.settingsGet,
     set: mocks.settingsSet,
