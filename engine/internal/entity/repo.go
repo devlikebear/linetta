@@ -82,6 +82,9 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) error {
 	if in.Name != nil {
 		cur.Name = *in.Name
 	}
+	if in.Aliases != nil {
+		cur.Aliases = *in.Aliases
+	}
 	if in.Role != nil {
 		cur.Role = *in.Role
 	}

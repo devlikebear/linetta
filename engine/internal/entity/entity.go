@@ -106,6 +106,7 @@ type UpdateInput struct {
 	ID         string             `json:"id"`
 	Kind       *string            `json:"kind,omitempty"`
 	Name       *string            `json:"name,omitempty"`
+	Aliases    *[]string          `json:"aliases,omitempty"`
 	Role       *string            `json:"role,omitempty"`
 	Summary    *string            `json:"summary,omitempty"`
 	Attributes *map[string]string `json:"attributes,omitempty"`

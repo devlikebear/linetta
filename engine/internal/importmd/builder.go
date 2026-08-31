@@ -194,11 +194,16 @@ func RestoreMetadata(ctx context.Context, er *entity.Repo, rr *relationship.Repo
 		if attrs == nil {
 			attrs = map[string]string{}
 		}
-		if in.Summary != "" || len(attrs) > 0 {
+		if in.Summary != "" || len(attrs) > 0 || len(in.Aliases) > 0 {
+			aliases := in.Aliases
+			if aliases == nil {
+				aliases = []string{}
+			}
 			if err := er.Update(ctx, now, entity.UpdateInput{
 				ID:         created.ID,
 				Kind:       ptrutil.To(kind),
 				Name:       ptrutil.To(name),
+				Aliases:    &aliases,
 				Role:       ptrutil.To(stringsTrim(in.Role)),
 				Summary:    ptrutil.To(stringsTrim(in.Summary)),
 				Attributes: &attrs,

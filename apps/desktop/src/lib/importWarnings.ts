@@ -15,6 +15,11 @@ const WARNING_KEYS: Record<string, MessageKey> = {
   "import.frontmatter_unreadable": "importWarning.frontmatterUnreadable",
   "import.relationships_skipped": "importWarning.relationshipsSkipped",
   "import.unknown_outline_preset": "importWarning.unknownOutlinePreset",
+  "import.project_field_skipped": "importWarning.projectFieldSkipped",
+  "import.nodes_meta_partial": "importWarning.nodesMetaPartial",
+  "import.node_links_dropped": "importWarning.nodeLinksDropped",
+  "import.notes_skipped": "importWarning.notesSkipped",
+  "import.fact_cards_skipped": "importWarning.factCardsSkipped",
 };
 
 /** Human-readable text for one engine warning.

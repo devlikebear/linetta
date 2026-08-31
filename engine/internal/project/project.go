@@ -83,10 +83,14 @@ type ListFilter struct {
 // UpdateInput patches editable project fields. Each pointer field is nil to
 // leave the value alone, or non-nil (including "") to set it.
 type UpdateInput struct {
-	ID                string  `json:"id"`
-	Title             *string `json:"title,omitempty"`
-	Outline           *string `json:"outline,omitempty"`
-	OutlinePreset     *string `json:"outline_preset,omitempty"`
-	EpisodeCharTarget *int    `json:"episode_char_target,omitempty"`
-	Synopsis          *string `json:"synopsis,omitempty"`
+	ID                string    `json:"id"`
+	Title             *string   `json:"title,omitempty"`
+	Genres            *[]string `json:"genres,omitempty"`
+	LengthTarget      *string   `json:"length_target,omitempty"`
+	DefaultPOV        *string   `json:"default_pov,omitempty"`
+	StyleNotes        *string   `json:"style_notes,omitempty"`
+	Outline           *string   `json:"outline,omitempty"`
+	OutlinePreset     *string   `json:"outline_preset,omitempty"`
+	EpisodeCharTarget *int      `json:"episode_char_target,omitempty"`
+	Synopsis          *string   `json:"synopsis,omitempty"`
 }

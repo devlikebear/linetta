@@ -231,9 +231,31 @@ func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) (Project, 
 		}
 		cur.Title = *in.Title
 	}
+	if in.Genres != nil {
+		cur.Genres = *in.Genres
+	}
+	if in.LengthTarget != nil {
+		if !ValidLengthTarget(*in.LengthTarget) {
+			return Project{}, ErrInvalidLengthTarget
+		}
+		cur.LengthTarget = *in.LengthTarget
+	}
+	if in.DefaultPOV != nil {
+		if !ValidDefaultPOV(*in.DefaultPOV) {
+			return Project{}, ErrInvalidDefaultPOV
+		}
+		cur.DefaultPOV = *in.DefaultPOV
+	}
+	if in.StyleNotes != nil {
+		cur.StyleNotes = *in.StyleNotes
+	}
+	genresJSON, err := json.Marshal(cur.Genres)
+	if err != nil {
+		return Project{}, err
+	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE projects SET title = ?, outline = ?, outline_preset = ?, episode_char_target = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
-		cur.Title, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.Synopsis, now, in.ID); err != nil {
+		`UPDATE projects SET title = ?, genres = ?, length_target = ?, default_pov = ?, style_notes = ?, outline = ?, outline_preset = ?, episode_char_target = ?, synopsis = ?, updated_at = ? WHERE id = ?`,
+		cur.Title, string(genresJSON), cur.LengthTarget, cur.DefaultPOV, cur.StyleNotes, cur.Outline, cur.OutlinePreset, cur.EpisodeCharTarget, cur.Synopsis, now, in.ID); err != nil {
 		return Project{}, err
 	}
 	if err := tx.Commit(); err != nil {

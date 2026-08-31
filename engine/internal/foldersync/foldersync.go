@@ -55,6 +55,7 @@ type Syncer struct {
 	Nodes         *node.Repo
 	Entities      *entity.Repo
 	Relationships *relationship.Repo
+	Extras        export.Extras
 	Now           func() time.Time
 	Ops           *opsstatus.Repo
 }
@@ -76,7 +77,13 @@ func (s *Syncer) exportAll(ctx context.Context, destDir, language string) (int, 
 	written := 0
 	failures := make([]string, 0)
 	for _, p := range projs {
-		payload, err := export.ExportProject(ctx, s.Projects, s.Nodes, s.Entities, s.Relationships, p.ID, language)
+		payload, err := export.ExportProject(ctx, export.Sources{
+			Projects:      s.Projects,
+			Nodes:         s.Nodes,
+			Entities:      s.Entities,
+			Relationships: s.Relationships,
+			Extras:        s.Extras,
+		}, p.ID, language)
 		if err != nil {
 			msg := fmt.Sprintf("project %s export: %v", p.ID, err)
 			fmt.Fprintf(os.Stderr, "folder sync: %s\n", msg)

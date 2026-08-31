@@ -59,7 +59,7 @@ func TestSmokeCreateSaveSnapshotExport(t *testing.T) {
 	}
 
 	exportParams, _ := json.Marshal(map[string]string{"project_id": created.ID})
-	exportedRaw, err := ExportProject(projects, nodes, entities, relationships, nil)(ctx, exportParams)
+	exportedRaw, err := ExportProject(export.Sources{Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships}, nil)(ctx, exportParams)
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}

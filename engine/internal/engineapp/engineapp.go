@@ -14,7 +14,9 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/contextualedit"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/importmd"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -149,6 +151,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		nodes:         nodes,
 		entities:      entities,
 		relationships: relationships,
+		extras:        export.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts},
 		ops:           ops,
 	}
 	gitSyncer := setupGitSync(syncDeps)
@@ -321,11 +324,18 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))
-	s.Handle("export.project", handlers.ExportProject(projects, nodes, entities, relationships, settingsLanguage))
+	s.Handle("export.project", handlers.ExportProject(export.Sources{
+		Projects:      projects,
+		Nodes:         nodes,
+		Entities:      entities,
+		Relationships: relationships,
+		Extras:        export.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts},
+	}, settingsLanguage))
 	s.Handle("export.node", handlers.ExportNode(nodes))
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
 	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc, settingsLanguage))
-	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships, clock))
+	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships,
+		importmd.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts}, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	return nil
 }

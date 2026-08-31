@@ -15,7 +15,7 @@ func TestExportProjectHandler(t *testing.T) {
 	f := newNodeFixture(t)
 	er := entity.NewRepo(f.store)
 	rr := relationship.NewRepo(f.store)
-	h := ExportProject(f.proj, f.nodes, er, rr, nil)
+	h := ExportProject(export.Sources{Projects: f.proj, Nodes: f.nodes, Entities: er, Relationships: rr}, nil)
 	res, err := h(context.Background(), json.RawMessage(`{"project_id":"`+f.pID+`"}`))
 	if err != nil {
 		t.Fatalf("handler: %v", err)

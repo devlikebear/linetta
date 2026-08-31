@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -27,6 +28,7 @@ type syncDeps struct {
 	nodes         *node.Repo
 	entities      *entity.Repo
 	relationships *relationship.Repo
+	extras        export.Extras
 	ops           *opsstatus.Repo
 }
 
