@@ -7,11 +7,15 @@ on:
   pull_request:
     paths:
       - 'apps/site/**'
+      - 'apps/desktop/package.json'
+      - 'docs/assets/screenshots/**'
       - '.github/workflows/site.yml'
   push:
     branches: [main]
     paths:
       - 'apps/site/**'
+      - 'apps/desktop/package.json'
+      - 'docs/assets/screenshots/**'
       - '.github/workflows/site.yml'
 
 jobs:
@@ -31,7 +35,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: 25
+          node-version: 22.16.0
           cache: pnpm
           cache-dependency-path: apps/site/pnpm-lock.yaml
 

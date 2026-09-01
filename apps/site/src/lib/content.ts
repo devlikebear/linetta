@@ -1,3 +1,5 @@
+import { version as VERSION } from '../../../desktop/package.json';
+
 export type Locale = 'en' | 'ko' | 'ja';
 
 export type AltLink = { locale: Locale; path: string; label: string };
@@ -132,7 +134,6 @@ export const canonicalUrl = (path: string) => (path === '/' ? `${SITE}/` : `${SI
 const REPO = 'https://github.com/devlikebear/linetta';
 const MAS = 'https://apps.apple.com/app/id6781664781';
 const RELEASES = `${REPO}/releases/latest`;
-const VERSION = '1.0.0';
 
 const MCP_COMMAND =
   'claude mcp add --transport http linetta http://127.0.0.1:7391/mcp \\\n  --header "Authorization: Bearer <token>"';
@@ -300,10 +301,10 @@ export const en: Translation = {
       },
       {
         name: 'Full',
-        body: 'All fifteen. Every write is snapshotted first and can be undone in one step.'
+        body: 'All sixteen. Every write is snapshotted first and can be undone in one step.'
       }
     ],
-    toolsLabel: 'Fifteen tools, not a hundred RPCs',
+    toolsLabel: 'Sixteen tools, not a hundred RPCs',
     toolsNote:
       'A client’s tool budget is finite and selection accuracy falls as the list grows, so the engine’s RPC surface is not exposed one-to-one. Access can also be pinned to a single work.',
     readLabel: 'Read',
@@ -320,6 +321,7 @@ export const en: Translation = {
       { name: 'linetta_get_fact_cards', note: 'Research notes with their sources' }
     ],
     writeTools: [
+      { name: 'linetta_create_work', note: 'Start a new work with its first scene ready to draft' },
       { name: 'linetta_write_scene', note: 'Requires the expected content version' },
       { name: 'linetta_revise_scene', note: 'Partial revision without resending the scene' },
       { name: 'linetta_apply_story_ops', note: 'Structured story changes as one batch' },
@@ -616,10 +618,10 @@ export const ko: Translation = {
       },
       {
         name: '전체',
-        body: '15개 전부. 모든 쓰기는 먼저 스냅샷되고 한 번에 되돌릴 수 있습니다.'
+        body: '16개 전부. 모든 쓰기는 먼저 스냅샷되고 한 번에 되돌릴 수 있습니다.'
       }
     ],
-    toolsLabel: 'RPC 100개가 아니라, 툴 15개',
+    toolsLabel: 'RPC 100개가 아니라, 툴 16개',
     toolsNote:
       '클라이언트의 툴 예산은 유한하고 목록이 길어질수록 선택 정확도가 떨어집니다. 그래서 엔진 RPC를 1:1로 노출하지 않습니다. 접근을 한 작품으로 제한할 수도 있습니다.',
     readLabel: '읽기',
@@ -636,6 +638,7 @@ export const ko: Translation = {
       { name: 'linetta_get_fact_cards', note: '출처가 붙은 조사 노트' }
     ],
     writeTools: [
+      { name: 'linetta_create_work', note: '첫 씬이 준비된 새 작품 만들기' },
       { name: 'linetta_write_scene', note: '읽은 시점의 content_version 필수' },
       { name: 'linetta_revise_scene', note: '씬 전체를 다시 보내지 않는 부분 수정' },
       { name: 'linetta_apply_story_ops', note: '구조화된 스토리 변경을 한 배치로' },
@@ -930,10 +933,10 @@ export const ja: Translation = {
       },
       {
         name: 'フル',
-        body: '15個すべて。すべての書き込みは先にスナップショットされ、一手で取り消せます。'
+        body: '16個すべて。すべての書き込みは先にスナップショットされ、一手で取り消せます。'
       }
     ],
-    toolsLabel: 'RPC 百個ではなく、ツール15個',
+    toolsLabel: 'RPC 百個ではなく、ツール16個',
     toolsNote:
       'クライアントのツール予算は有限で、一覧が伸びるほど選択の精度は落ちます。だからエンジンの RPC を1対1では公開しません。アクセスを一つの作品に限定することもできます。',
     readLabel: '読み取り',
@@ -950,6 +953,7 @@ export const ja: Translation = {
       { name: 'linetta_get_fact_cards', note: '出典付きの調査ノート' }
     ],
     writeTools: [
+      { name: 'linetta_create_work', note: '最初のシーンを備えた新しい作品を作成' },
       { name: 'linetta_write_scene', note: '読んだ時点の content_version が必須' },
       { name: 'linetta_revise_scene', note: 'シーン全体を送り直さない部分修正' },
       { name: 'linetta_apply_story_ops', note: '構造化された物語の変更を一括で' },

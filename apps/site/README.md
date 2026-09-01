@@ -86,7 +86,8 @@ Cloudflare Pages builds from `main`:
 - Root directory: `apps/site`
 - Build command: `pnpm build`
 - Output directory: `build`
-- Node version: 22 or later
+- Node version: `22.16.0` (`.node-version`)
+- pnpm version: `11.3.0` (`packageManager` and `PNPM_VERSION` in Pages)
 
 Everything is prerendered, so the deployment is static files only.
 
@@ -112,5 +113,5 @@ fifteen `linetta_*` tool names, the nine/six read-write split, the access modes,
 the 7391 default port, the per-minute call limit. When one of them changes, the
 engine is the thing to check.
 
-`VERSION` in `content.ts` is the one number nothing derives: bump it by hand when
-a release ships.
+The release number is imported from `apps/desktop/package.json`, so the site and
+desktop package move together when `scripts/bump-version.sh` prepares a release.
