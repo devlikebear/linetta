@@ -72,11 +72,13 @@ Linetta does not talk to a language model. It has no API keys, no provider
 settings, and it never sends your manuscript anywhere on its own.
 
 When you want to write alongside AI, Linetta opens a local MCP endpoint and an
-agent you already run — Claude Code, Claude Desktop — connects to it. The
-subscription you already pay for does the work; Linetta stays a writing tool.
+agent you already run — Claude Code, Claude Desktop, Codex CLI, or Gemini CLI —
+connects to it. The subscription you already pay for does the work; Linetta
+stays a writing tool.
 
 Turn it on in **Settings → Connect an external agent (MCP)**. It is off until
-you tick an explicit consent box, and the pane gives you a command to paste
+you tick an explicit consent box. When those clients are detected, Settings
+offers one-click connect; the pane still gives you a copyable command to paste
 into your client.
 
 Once connected, an agent can:
