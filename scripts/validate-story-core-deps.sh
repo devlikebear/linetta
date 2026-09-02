@@ -13,12 +13,12 @@
 #      handlers — they are what every agent, external or built-in, runs on.
 #
 # tars' pkg/tools (fact-book URL capture) and pkg/memory (remembered facts) are
-# deliberately still linked — neither carries a model.
+# deliberately still linked — neither carries a model. Test files are included.
 set -euo pipefail
 cd "$(dirname "$0")/../engine"
 
 banned='github.com/devlikebear/tars/pkg/(agentloop|session)'
-if go list -deps ./... | grep -E "$banned"; then
+if go list -test -deps ./... | grep -E "$banned"; then
   echo "error: the engine must not link tars agentloop/session code" >&2
   echo "       the built-in agent's loop lives in internal/agent" >&2
   exit 1
@@ -26,15 +26,15 @@ fi
 
 llm='github.com/devlikebear/tars/pkg/llm'
 for pkg in ./internal/storycontext ./internal/storyops ./internal/mcphost ./internal/rpc/handlers; do
-  if go list -deps "$pkg" | grep -qx "$llm"; then
+  if go list -test -deps "$pkg" | grep -qx "$llm"; then
     echo "error: $pkg must not link $llm — it is shared by every agent" >&2
     exit 1
   fi
 done
 
 allowed='internal/provider|internal/agent'
-importers=$(go list -f '{{.ImportPath}}: {{join .Imports " "}}' ./... \
-  | grep -F "$llm" | cut -d: -f1 | grep -Ev "/($allowed)$" || true)
+importers=$(go list -test -f '{{.ImportPath}}: {{join .Imports " "}}' ./... \
+  | grep -F "$llm" | cut -d: -f1 | grep -Ev "/($allowed)(\s+\[.*\])?$" || true)
 if [ -n "$importers" ]; then
   echo "error: only internal/provider and internal/agent may import $llm; found:" >&2
   echo "$importers" >&2
