@@ -81,6 +81,9 @@ func (e *ReasonError) Unwrap() error { return e.Err }
 // the chain becomes an InvalidParams error carrying its reason; anything else
 // is an internal error with the message alone.
 func MethodErrorFrom(err error) *MethodError {
+	if err == nil {
+		return &MethodError{Code: CodeInternalError}
+	}
 	var re *ReasonError
 	if errors.As(err, &re) {
 		return &MethodError{Code: CodeInvalidParams, Message: err.Error(), Data: ReasonData(re.Reason)}

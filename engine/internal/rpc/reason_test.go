@@ -49,3 +49,23 @@ func TestReasonError_unwrapsItsCause(t *testing.T) {
 		t.Errorf("Error() = %q", err.Error())
 	}
 }
+
+func TestMethodErrorFrom_nilErrorDoesNotPanic(t *testing.T) {
+	me := MethodErrorFrom(nil)
+	if me.Code != CodeInternalError {
+		t.Errorf("code = %d, want %d", me.Code, CodeInternalError)
+	}
+	if me.Data != nil {
+		t.Errorf("Data should be nil for plain nil error, got %s", me.Data)
+	}
+	if me.Message != "" {
+		t.Errorf("Message should be empty for nil error, got %q", me.Message)
+	}
+}
+
+func TestReasonError_bareReasonWithoutError(t *testing.T) {
+	err := &ReasonError{Reason: ReasonProviderNotConfigured, Err: nil}
+	if err.Error() != "provider_not_configured" {
+		t.Errorf("Error() = %q, want %q", err.Error(), "provider_not_configured")
+	}
+}
