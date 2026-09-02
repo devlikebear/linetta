@@ -1,8 +1,11 @@
 package settings
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -210,5 +213,116 @@ func TestSet_rejectsMixedPatch_writesNoSecretForTheValidID(t *testing.T) {
 		if _, ok, _ := secrets.Get("provider.anthropic.api_key"); ok {
 			t.Fatalf("iteration %d: api key was written to the secret store despite Set returning an error", i)
 		}
+	}
+}
+
+// A patch that carries a valid api_key alongside a field that fails a *later*
+// validation must leave the secret store exactly as it was. The keychain write
+// is the one side effect Set cannot roll back, so it has to happen after every
+// validation, not in the middle of the merge loop.
+func TestSet_rejectsLateValidation_leavesTheSecretStoreUntouched(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	secrets := NewMemorySecretStore()
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+
+	// Direction 1: a write that must not happen. theme is validated well
+	// after the providers block.
+	if _, err := s.Set(ctx, Patch{
+		Providers: map[string]ProviderPatch{"anthropic": {APIKey: strPtr("sk-ant-never")}},
+		Theme:     strPtr("chartreuse"),
+	}); err == nil {
+		t.Fatal("expected an error for the unknown theme")
+	}
+	if v, ok, _ := secrets.Get("provider.anthropic.api_key"); ok {
+		t.Fatalf("a rejected patch wrote %q into the secret store", v)
+	}
+
+	// Direction 2: a delete that must not happen. Store a key first, then send
+	// an empty api_key (the delete) with an out-of-range mcp_port.
+	if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderPatch{
+		"anthropic": {APIKey: strPtr("sk-ant-keep")},
+	}}); err != nil {
+		t.Fatalf("Set seed: %v", err)
+	}
+	if _, err := s.Set(ctx, Patch{
+		Providers: map[string]ProviderPatch{"anthropic": {APIKey: strPtr("")}},
+		MCPPort:   intPtr(80),
+	}); err == nil {
+		t.Fatal("expected an error for the out-of-range mcp_port")
+	}
+	if v, ok, _ := secrets.Get("provider.anthropic.api_key"); !ok || v != "sk-ant-keep" {
+		t.Fatalf("a rejected patch deleted the stored key: got (%q, %v)", v, ok)
+	}
+}
+
+// base_url points the request somewhere other than the provider's own
+// endpoint. Consent is per provider and names that provider, so only the
+// OpenAI-compatible family may carry one; an empty string still clears.
+func TestSet_baseURL_isOpenAIOnly(t *testing.T) {
+	s := newStoreOnTemp(t)
+	ctx := context.Background()
+	for _, id := range []string{"anthropic", "gemini-native", "openai-codex"} {
+		if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderPatch{
+			id: {BaseURL: strPtr("https://evil.example/v1")},
+		}}); err == nil {
+			t.Errorf("base_url was accepted for %q", id)
+		}
+		// Clearing must stay allowed for every id.
+		if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderPatch{
+			id: {BaseURL: strPtr("  ")},
+		}}); err != nil {
+			t.Errorf("clearing base_url for %q was rejected: %v", id, err)
+		}
+	}
+	if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderPatch{
+		"openai": {BaseURL: strPtr("https://openrouter.ai/api/v1")},
+	}}); err != nil {
+		t.Fatalf("base_url on openai was rejected: %v", err)
+	}
+	got, _ := s.Get(ctx)
+	if got.Providers["openai"].BaseURL != "https://openrouter.ai/api/v1" {
+		t.Errorf("openai base_url = %q", got.Providers["openai"].BaseURL)
+	}
+	if got.Providers["anthropic"].BaseURL != "" {
+		t.Errorf("anthropic kept a base_url: %q", got.Providers["anthropic"].BaseURL)
+	}
+}
+
+// failingGetSecretStore answers Get with an error the way a locked or
+// access-denied keychain does, while still reporting the entry as present.
+type failingGetSecretStore struct {
+	SecretStore
+	err error
+}
+
+func (f failingGetSecretStore) Get(string) (string, bool, error) { return "", false, f.err }
+
+// A keychain that refuses to hand the key back currently reads downstream as
+// "no key". Until #94 can tell the writer the difference, the failure must at
+// least be logged rather than silently swallowed.
+func TestProviderConfigFor_logsASecretStoreReadFailure(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	s, err := NewWithSecretStore(failingGetSecretStore{
+		SecretStore: NewMemorySecretStore(),
+		err:         errors.New("keychain is locked"),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	var logs bytes.Buffer
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	if cfg := s.ProviderConfigFor("anthropic"); cfg.APIKey != "" || cfg.APIKeySet {
+		t.Fatalf("a failed read must not fabricate a key: %+v", cfg)
+	}
+	if !strings.Contains(logs.String(), "keychain is locked") {
+		t.Fatalf("secret-store read failure was swallowed without a log line: %q", logs.String())
 	}
 }

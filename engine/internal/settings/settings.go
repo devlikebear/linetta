@@ -350,11 +350,18 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		}
 		next.Provider = *p.Provider
 	}
+	// Provider key writes are collected here and applied only after every
+	// validation below has passed. The SecretStore is the one side effect Set
+	// cannot roll back: writing a key (or deleting one, which an empty api_key
+	// means) before an invalid theme or an out-of-range mcp_port aborts the
+	// call would leave the keychain changed while the caller is told nothing
+	// happened. See applyPendingSecrets below the validations.
+	var pendingSecrets []pendingSecret
 	if len(p.Providers) > 0 {
 		// Validate every id before mutating anything. Map iteration order is
-		// randomized, and a partial pass would let s.setSecret persist a key
-		// for a valid id before an invalid id later in the same patch aborts
-		// the call — breaking the "reject means nothing changed" guarantee.
+		// randomized, and a partial pass would let a later invalid id abort
+		// the call after an earlier valid one had already been merged —
+		// breaking the "reject means nothing changed" guarantee.
 		for id := range p.Providers {
 			if !slices.Contains(ValidProviders(), id) {
 				return Config{}, fmt.Errorf("settings: unknown provider %q", id)
@@ -370,16 +377,29 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 				cfg.Model = strings.TrimSpace(*pp.Model)
 			}
 			if pp.BaseURL != nil {
-				cfg.BaseURL = strings.TrimSpace(*pp.BaseURL)
+				base := strings.TrimSpace(*pp.BaseURL)
+				// base_url decides where the request actually goes. Consent is
+				// recorded per provider and the consent sentence names that
+				// provider, so a base_url on "anthropic" would let the real
+				// destination diverge from the name the writer agreed to. Only
+				// "openai" — the OpenAI-compatible family, whose whole purpose
+				// is pointing at OpenRouter/Ollama/LM Studio — may carry one.
+				// An empty string stays allowed so a writer can clear it.
+				if base != "" && id != ProviderOpenAI {
+					return Config{}, fmt.Errorf("settings: base_url is only supported for provider %q, not %q", ProviderOpenAI, id)
+				}
+				cfg.BaseURL = base
 			}
 			if pp.ConsentedAt != nil {
 				cfg.ConsentedAt = *pp.ConsentedAt
 			}
 			if pp.APIKey != nil {
-				// setSecret deletes on "", so one field both sets and clears.
-				if err := s.setSecret(providerAPIKeySecretName(id), strings.TrimSpace(*pp.APIKey)); err != nil {
-					return Config{}, err
-				}
+				// Deferred, not written here: setSecret deletes on "", so one
+				// field both sets and clears, and either is irreversible.
+				pendingSecrets = append(pendingSecrets, pendingSecret{
+					name:  providerAPIKeySecretName(id),
+					value: strings.TrimSpace(*pp.APIKey),
+				})
 			}
 			merged[id] = normalizeProviderConfig(id, cfg)
 		}
@@ -479,7 +499,28 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	s.cfg = sanitizeConfigForMemory(next)
 	s.mu.Unlock()
 
+	// Last, past every path that can still fail with nothing written. A
+	// SecretStore failure here (a locked keychain) is reported to the caller
+	// with the rest of the patch already applied — the ordering that keeps
+	// memory and disk in step; only the key did not take.
+	if err := s.applyPendingSecrets(pendingSecrets); err != nil {
+		return Config{}, err
+	}
+
 	return s.Get(ctx)
+}
+
+// pendingSecret is one deferred SecretStore write from a Set patch.
+type pendingSecret struct{ name, value string }
+
+func (s *Store) applyPendingSecrets(pending []pendingSecret) error {
+	for _, ps := range pending {
+		// setSecret deletes on "", so one field both sets and clears.
+		if err := s.setSecret(ps.name, ps.value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) persist(next Config) error {
@@ -556,7 +597,18 @@ func (s *Store) runtimeProviderConfig(provider string, cfg ProviderConfig) Provi
 	cfg.APIKey = ""
 	cfg.APIKeySet = false
 	secret, ok, err := s.secrets.Get(providerAPIKeySecretName(provider))
-	if err != nil || !ok {
+	if err != nil {
+		// A locked or access-denied keychain currently reads downstream as
+		// "no key": providers.list reports the provider unconfigured and
+		// providers.test fails with provider_not_configured, so the writer's
+		// rational move is to retype a key the store is still refusing. Log it
+		// so the failure is at least diagnosable. Telling the two apart in the
+		// UI needs a reason code and a pane to show it in — that belongs to
+		// #94, which builds the provider settings UI.
+		log.Printf("settings: reading the stored key for provider %q failed; treating it as unset: %v", provider, err)
+		return cfg
+	}
+	if !ok {
 		return cfg
 	}
 	cfg.APIKey = secret
@@ -568,6 +620,11 @@ func normalizeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig
 	if provider == ProviderOpenAICodex && (cfg.Model == "" || cfg.Model == "gpt-5.3-codex") {
 		cfg.Model = DefaultOpenAICodexModel
 	}
+	// base_url is not scrubbed here on purpose. Set rejects it for every id but
+	// "openai" (see the merge loop), which is the path the app writes through.
+	// Doing it here too would also strip the base_url off a retired 1.0 entry
+	// like "openrouter", which TestSet_leavesRetiredCompanionSettingsOnDisk
+	// requires be left exactly as found.
 	return cfg
 }
 
