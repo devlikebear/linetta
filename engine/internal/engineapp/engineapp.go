@@ -26,6 +26,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
@@ -231,6 +232,13 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	})
 	a.closers = append(a.closers, stopMCP)
 
+	// The built-in agent's provider layer (#90). Resolves the writer's
+	// provider settings into a client on demand; nothing here dials until an
+	// agent run or a connection test asks it to. Codex's auth.json lives under
+	// the data directory so the App Store build can reach it.
+	providerSrc := provider.NewSource(settingsStore, filepath.Join(home, "codex"))
+	providers := providerService{src: providerSrc}
+
 	caps := handlers.Capabilities{
 		GitSyncAvailable: gitSyncAvailable,
 		MCPAvailable:     mcpAvailable,
@@ -324,6 +332,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 	s.Handle("mcp.disable", handlers.MCPDisable(mcpCtrl))
 	s.Handle("mcp.regenerate_token", handlers.MCPRegenerateToken(mcpCtrl))
 	s.Handle("mcp.activity", handlers.MCPActivity(mcpCtrl))
+	s.Handle("providers.list", handlers.ProvidersList(providers))
+	s.Handle("providers.list_models", handlers.ProvidersListModels(providers))
+	s.Handle("providers.test", handlers.ProvidersTest(providers))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))

@@ -103,7 +103,7 @@ describe("Library", () => {
     mocks.createRecoveryBackup.mockResolvedValue({ path: "/tmp/library.linetta", format_version: 1 });
     mocks.settingsGet.mockResolvedValue({
       language: "ko",
-      provider: "claude-code-cli",
+      provider: "openai-codex",
       typewriter_default: false,
       focus_default: false,
       git_sync_dir: "",
@@ -115,7 +115,7 @@ describe("Library", () => {
     });
     mocks.settingsSet.mockResolvedValue({
       language: "ko",
-      provider: "claude-code-cli",
+      provider: "openai-codex",
       typewriter_default: false,
       focus_default: false,
       git_sync_dir: "",
@@ -164,7 +164,7 @@ describe("Library", () => {
     let resolveSettings: (value: unknown) => void = () => {};
     mocks.settingsGet.mockResolvedValue({
       language: "ko",
-      provider: "claude-code-cli",
+      provider: "openai-codex",
       typewriter_default: false,
       focus_default: false,
       git_sync_dir: "",
@@ -194,7 +194,7 @@ describe("Library", () => {
     await act(async () => {
       resolveSettings({
         language: "ko",
-        provider: "claude-code-cli",
+        provider: "openai-codex",
         typewriter_default: false,
         focus_default: false,
         git_sync_dir: "",
@@ -211,7 +211,7 @@ describe("Library", () => {
     const user = userEvent.setup();
     mocks.settingsGet.mockResolvedValue({
       language: "ko",
-      provider: "claude-code-cli",
+      provider: "openai-codex",
       typewriter_default: false,
       focus_default: false,
       git_sync_dir: "",
@@ -233,7 +233,7 @@ describe("Library", () => {
     const user = userEvent.setup();
     mocks.settingsGet.mockResolvedValue({
       language: "ko",
-      provider: "claude-code-cli",
+      provider: "openai-codex",
       typewriter_default: false,
       focus_default: false,
       git_sync_dir: "",
@@ -256,7 +256,7 @@ describe("Library", () => {
     mocks.projectsList.mockResolvedValue([]);
     mocks.settingsGet.mockResolvedValue({
       language: "ko",
-      provider: "claude-code-cli",
+      provider: "openai-codex",
       typewriter_default: false,
       focus_default: false,
       git_sync_dir: "",

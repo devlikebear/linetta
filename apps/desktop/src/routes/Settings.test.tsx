@@ -113,13 +113,11 @@ describe("Settings", () => {
       const redactedProviderPatch = providerPatch
         ? Object.fromEntries(Object.entries(providerPatch).map(([key, value]) => {
           const next = { ...value };
-          if (typeof next.api_key === "string" && next.api_key !== "") {
+          // The engine deletes a stored key when a patch carries an empty
+          // api_key, and redacts (never echoes) a non-empty one.
+          if (typeof next.api_key === "string") {
+            next.api_key_set = next.api_key !== "";
             delete next.api_key;
-            next.api_key_set = true;
-          }
-          if (next.clear_api_key) {
-            delete next.clear_api_key;
-            next.api_key_set = false;
           }
           return [key, next];
         }))
@@ -161,7 +159,7 @@ describe("Settings", () => {
     });
     mocks.openRouterKeyInfo.mockResolvedValue({
       ok: true,
-      provider: "openrouter",
+      provider: "openai-codex",
       label: "Linetta",
       limit: 10,
       limit_remaining: 8,
@@ -175,7 +173,7 @@ describe("Settings", () => {
     });
     mocks.openRouterOAuthFinish.mockResolvedValue({
       ok: true,
-      provider: "openrouter",
+      provider: "openai-codex",
       model: "openai/gpt-5.4",
       message: "OpenRouter 연결이 완료되었습니다.",
     });

@@ -41,6 +41,7 @@ import type {
   OpsStatus,
   PlotSpine,
   Project,
+  ProviderStatus,
   Relationship,
   ResolveTargetInput,
   ReplacePlan,
@@ -321,6 +322,13 @@ export const mcp = {
   disable: () => rpcCall<McpStatus>("mcp.disable"),
   regenerateToken: () => rpcCall<McpTokenResult>("mcp.regenerate_token"),
   activity: (limit?: number) => rpcCall<McpActivityEntry[]>("mcp.activity", { limit }),
+};
+
+export const providers = {
+  list: () => rpcCall<ProviderStatus[]>("providers.list"),
+  listModels: (provider: string) =>
+    rpcCall<{ models: string[] }>("providers.list_models", { provider }),
+  test: (provider: string) => rpcCall<{ ok: true }>("providers.test", { provider }),
 };
 
 export const gitSync = {
