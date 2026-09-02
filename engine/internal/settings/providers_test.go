@@ -183,3 +183,32 @@ func TestHasProviderConsent_isPerProvider(t *testing.T) {
 		t.Error("consented_at=0 did not revoke")
 	}
 }
+
+// A single patch that mixes a valid id carrying an API key with an
+// off-whitelist id must reject the whole call *and* leave the secret store
+// untouched for the valid id. Go map iteration order over p.Providers is
+// randomized, so this only holds if every id is validated before any
+// s.setSecret call runs — looping exercises both iteration orders, and after
+// the validate-then-apply fix the invariant holds by construction regardless
+// of order, so every iteration should pass.
+func TestSet_rejectsMixedPatch_writesNoSecretForTheValidID(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	secrets := NewMemorySecretStore()
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	for i := 0; i < 20; i++ {
+		if _, err := s.Set(ctx, Patch{Providers: map[string]ProviderPatch{
+			"anthropic": {APIKey: strPtr("sk-leak")},
+			"typo-id":   {Model: strPtr("x")},
+		}}); err == nil {
+			t.Fatal("expected an error for the off-whitelist id")
+		}
+		if _, ok, _ := secrets.Get("provider.anthropic.api_key"); ok {
+			t.Fatalf("iteration %d: api key was written to the secret store despite Set returning an error", i)
+		}
+	}
+}

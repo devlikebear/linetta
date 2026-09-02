@@ -351,14 +351,20 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		next.Provider = *p.Provider
 	}
 	if len(p.Providers) > 0 {
+		// Validate every id before mutating anything. Map iteration order is
+		// randomized, and a partial pass would let s.setSecret persist a key
+		// for a valid id before an invalid id later in the same patch aborts
+		// the call — breaking the "reject means nothing changed" guarantee.
+		for id := range p.Providers {
+			if !slices.Contains(ValidProviders(), id) {
+				return Config{}, fmt.Errorf("settings: unknown provider %q", id)
+			}
+		}
 		merged := map[string]ProviderConfig{}
 		for id, cfg := range next.Providers {
 			merged[id] = cfg
 		}
 		for id, pp := range p.Providers {
-			if !slices.Contains(ValidProviders(), id) {
-				return Config{}, fmt.Errorf("settings: unknown provider %q", id)
-			}
 			cfg := merged[id]
 			if pp.Model != nil {
 				cfg.Model = strings.TrimSpace(*pp.Model)
