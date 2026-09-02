@@ -17,8 +17,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/../engine"
 
+# Every check below captures `go list` into a variable first and only then
+# matches. Piping straight into `if ... | grep` fails open: `if` suspends
+# errexit for its condition, and with pipefail a `go list` that errors (a
+# renamed package, a build break) yields the same "no match" the clean case
+# does, so the gate would pass green while checking nothing. A capture is a
+# plain assignment, so errexit still aborts on a failed `go list`.
+
 banned='github.com/devlikebear/tars/pkg/(agentloop|session)'
-if go list -test -deps ./... | grep -E "$banned"; then
+all_deps=$(go list -test -deps ./...)
+if grep -E "$banned" <<<"$all_deps"; then
   echo "error: the engine must not link tars agentloop/session code" >&2
   echo "       the built-in agent's loop lives in internal/agent" >&2
   exit 1
@@ -26,15 +34,19 @@ fi
 
 llm='github.com/devlikebear/tars/pkg/llm'
 for pkg in ./internal/storycontext ./internal/storyops ./internal/mcphost ./internal/rpc/handlers; do
-  if go list -test -deps "$pkg" | grep -qx "$llm"; then
+  deps=$(go list -test -deps "$pkg")
+  if grep -qx "$llm" <<<"$deps"; then
     echo "error: $pkg must not link $llm — it is shared by every agent" >&2
     exit 1
   fi
 done
 
 allowed='internal/provider|internal/agent'
-importers=$(go list -test -f '{{.ImportPath}}: {{join .Imports " "}}' ./... \
-  | grep -F "$llm" | cut -d: -f1 | grep -Ev "/($allowed)(\s+\[.*\])?$" || true)
+# `go list` separated from the filtering on purpose: a `go list` failure must
+# still abort, while an empty filter result (nobody imports it) is the pass
+# case and keeps its `|| true`.
+imports=$(go list -test -f '{{.ImportPath}}: {{join .Imports " "}}' ./...)
+importers=$(grep -F "$llm" <<<"$imports" | cut -d: -f1 | grep -Ev "/($allowed)(\s+\[.*\])?$" || true)
 if [ -n "$importers" ]; then
   echo "error: only internal/provider and internal/agent may import $llm; found:" >&2
   echo "$importers" >&2
