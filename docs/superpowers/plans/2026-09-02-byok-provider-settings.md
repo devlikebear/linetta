@@ -1800,12 +1800,12 @@ Expected: 둘 다 출력 없이 성공. Windows가 `pkg/llm` 안에서 실패하
 - [ ] **Step 4: 실물 확인 (선택, 키가 있을 때)** — 앱을 띄우지 않고 엔진 CLI로 확인한다.
 
 ```bash
-cd engine && LINETTA_HOME=/tmp/linetta-91 go run ./cmd/linetta-engine <<'EOF'
+cd engine && LINETTA_HOME=/tmp/linetta-91 go run ./cmd/linetta-engine --stdio <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"providers.list"}
 EOF
 ```
 
-Expected: 프로바이더 4개, 전부 `configured:false`, `openai-codex`만 `active:true`. (`linetta-engine`의 입력 형식이 다르면 `engine/cmd/linetta-engine/main.go`의 사용법을 따른다.)
+Expected: 프로바이더 4개, 전부 `configured:false`, `openai-codex`만 `active:true`. (`--stdio`가 JSON-RPC를 stdin/stdout으로 서비스한다 — `engine/cmd/linetta-engine/main.go:20`.)
 
 - [ ] **Step 5: 이슈 갱신** — #91의 체크리스트를 채우고, 스펙 14절의 결정과 다르게 한 것이 있으면 적는다. 이 계획에서 스펙과 달라진 점 하나: patch의 키 삭제가 `clear_api_key` 플래그가 아니라 **빈 `api_key`** 로 표현된다(필드 하나가 설정과 삭제를 모두 맡는다). `ProviderConfig.ClearAPIKey`/`CliPath`는 제거됐고, 디스크의 `cli_path` 값은 다음 저장에서 사라진다(쓰는 프로바이더가 없다).
 
