@@ -15,6 +15,7 @@
 ## Global Constraints
 
 - 엔진 모듈은 `github.com/devlikebear/linetta/engine`. 빌드 태그 `mas`와 `mobile`은 독립이며 둘 다 계속 빌드되어야 한다: `make test`, `make test-mobile-engine`, `cd engine && go build -tags mas ./...`, `cd engine && GOOS=windows GOARCH=amd64 go build ./...`.
+- **윈도우는 빌드만이 아니라 테스트도 돈다.** CI 매트릭스(`.github/workflows/ci.yml`)의 `Test (Windows)` 잡이 `windows-latest`에서 Go 스위트 전체를 실행한다. 로컬에서 크로스컴파일만 확인하면 플랫폼 의존 테스트 실패를 놓친다 — 실제로 놓쳤다: `os.UserHomeDir`이 유닉스에서 `$HOME`, 윈도우에서 `%USERPROFILE%`을 읽는데 테스트가 `HOME`만 격리해 `TestResolveCodexHome_fallsBackToTheCodexCLI`가 CI에서만 깨졌다. 홈 디렉터리를 격리하는 테스트는 **두 변수를 모두** 설정한다.
 - **프로토콜 상수는 아래 표의 값을 그대로 쓰고, 환경 변수 오버라이드를 두지 않는다.** Codex CLI 소스(`openai/codex`, `codex-rs/login/src/{server.rs, auth/manager.rs, token_data.rs}`, 2026-09-02 확인)에서 가져온 값이다.
 
   | 항목 | 값 |
