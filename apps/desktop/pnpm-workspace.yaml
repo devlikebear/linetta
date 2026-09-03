@@ -5,3 +5,10 @@ allowBuilds:
 auditConfig:
   ignoreGhsas:
     - GHSA-qwww-vcr4-c8h2
+
+# @tiptap/react lists these optional deps as ^3.30.6, which floats to 3.31.x
+# while its own peers pin @tiptap/core and @tiptap/pm exactly. Hold them on the
+# 3.30.x line so the whole editor tree stays on one version.
+overrides:
+  '@tiptap/extension-bubble-menu': 3.30.6
+  '@tiptap/extension-floating-menu': 3.30.6

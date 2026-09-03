@@ -11,7 +11,7 @@ Plan your story, keep your world consistent, and write scene by scene. When you 
 [![Build](https://img.shields.io/github/actions/workflow/status/devlikebear/linetta/ci.yml?branch=main&style=flat-square&label=build)](https://github.com/devlikebear/linetta/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/devlikebear/linetta?style=flat-square)](LICENSE)
 
-[Mac App Store](https://apps.apple.com/app/id6781664781) · [Download for Windows or Linux](https://github.com/devlikebear/linetta/releases/latest) · [Report an issue](https://github.com/devlikebear/linetta/issues)
+[Website](https://linetta.marvin-42.com) · [Mac App Store](https://apps.apple.com/app/id6781664781) · [Download for Windows or Linux](https://github.com/devlikebear/linetta/releases/latest) · [Report an issue](https://github.com/devlikebear/linetta/issues)
 
 English · 한국어 · 日本語
 </div>
@@ -40,6 +40,10 @@ Your projects stay organized in a library built for multiple works:
 ![Linetta project library](docs/assets/screenshots/library.png)
 
 ## Get Linetta
+
+### Website
+
+Product overview and downloads: [linetta.marvin-42.com](https://linetta.marvin-42.com).
 
 ### Mac App Store
 
