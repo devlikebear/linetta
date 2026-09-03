@@ -40,12 +40,15 @@ func (c codexService) Logout(context.Context) error {
 // codexReason maps the login package's sentinels onto reason codes. Anything
 // unrecognised stays an internal error rather than being dressed up as a
 // failure the writer can act on.
+//
+// ErrLoginFailed is deliberately not mapped here: a failed exchange is not an
+// error any RPC call returns — it happens on the loopback callback, after
+// LoginStart has already answered — so the pane learns about it from
+// codexauth.Status.LoginFailed via codex.login_status instead.
 func codexReason(err error) error {
 	switch {
 	case errors.Is(err, codexauth.ErrPortInUse):
 		return &rpc.ReasonError{Reason: rpc.ReasonCodexPortInUse, Err: err}
-	case errors.Is(err, codexauth.ErrLoginFailed):
-		return &rpc.ReasonError{Reason: rpc.ReasonCodexLoginFailed, Err: err}
 	default:
 		return err
 	}

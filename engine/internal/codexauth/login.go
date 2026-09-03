@@ -39,6 +39,13 @@ type Status struct {
 	Email     string `json:"email,omitempty"`
 	AccountID string `json:"account_id,omitempty"`
 	ExpiresAt int64  `json:"expires_at,omitempty"`
+
+	// LoginFailed reports that the most recent attempt ended in a terminal
+	// failure — the issuer refused the exchange, or the credential could not
+	// be written — rather than the writer still being out in the browser.
+	// Never true alongside LoggedIn. The next Start clears it, so retrying
+	// starts clean. omitempty keeps a fresh install's payload unchanged.
+	LoginFailed bool `json:"login_failed,omitempty"`
 }
 
 // attempt is one in-flight login: the listener, the secrets that tie the
@@ -61,6 +68,11 @@ type Service struct {
 
 	mu      sync.Mutex
 	current *attempt
+	// lastFailure is the terminal failure the most recent attempt's callback
+	// ended with, if any. Guarded by mu, like current, since both describe
+	// the same in-flight-or-just-finished attempt. Read by Status via
+	// hasLastFailure; cleared at the top of Start.
+	lastFailure error
 
 	// afterExchangeForTest, if set, runs synchronously right after a
 	// successful exchange and before the pre-write recheck. Production code
@@ -113,6 +125,10 @@ func (s *Service) Start(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+
+	// A new attempt starts clean: whatever the previous one ended with is not
+	// this attempt's business to report.
+	s.setLastFailure(nil)
 
 	verifier, challenge, err := newPKCE()
 	if err != nil {
@@ -185,6 +201,7 @@ func (s *Service) callbackHandler(att *attempt, port int) http.HandlerFunc {
 		tok, err := s.exchange(r.Context(), code, att.verifier, port)
 		if err != nil {
 			log.Printf("codexauth: %v", err)
+			s.recordAttemptFailure(att, err)
 			writePage(w, http.StatusBadGateway, failurePage)
 			return
 		}
@@ -207,6 +224,7 @@ func (s *Service) callbackHandler(att *attempt, port int) http.HandlerFunc {
 		tok.AccountID = accountID
 		if err := writeAuthFile(s.codexHome, tok, s.now()); err != nil {
 			log.Printf("codexauth: %v", err)
+			s.recordAttemptFailure(att, err)
 			writePage(w, http.StatusInternalServerError, failurePage)
 			return
 		}
@@ -226,6 +244,35 @@ func (s *Service) isCurrent(att *attempt) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.current == att
+}
+
+// setLastFailure unconditionally replaces the recorded failure. Used only by
+// Start, to give a new attempt a clean slate regardless of how the previous
+// one ended.
+func (s *Service) setLastFailure(err error) {
+	s.mu.Lock()
+	s.lastFailure = err
+	s.mu.Unlock()
+}
+
+// recordAttemptFailure stores err as the last failure, but only if att is
+// still the attempt in flight: a superseded attempt's failure landing late
+// (the callback ran for up to exchangeTimeout) must not overwrite the clean
+// slate a newer Start already set for its own attempt.
+func (s *Service) recordAttemptFailure(att *attempt, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.current == att {
+		s.lastFailure = err
+	}
+}
+
+// hasLastFailure reports whether the most recent attempt ended in a
+// recorded failure.
+func (s *Service) hasLastFailure() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastFailure != nil
 }
 
 func writePage(w http.ResponseWriter, status int, page string) {
@@ -276,14 +323,16 @@ func (s *Service) exchange(ctx context.Context, code, verifier string, port int)
 }
 
 // Status reports the stored login without reading any token value out to the
-// caller.
+// caller. Absent a login, it reports whether the most recent attempt ended
+// in a failure — the only way the pane can tell that apart from a writer
+// still out in the browser.
 func (s *Service) Status() Status {
 	f, err := readAuthFile(s.codexHome)
 	if err != nil {
-		return Status{}
+		return Status{LoginFailed: s.hasLastFailure()}
 	}
 	if strings.TrimSpace(f.Tokens.AccessToken) == "" {
-		return Status{}
+		return Status{LoginFailed: s.hasLastFailure()}
 	}
 	email, accountID, exp := claimsFromIDToken(f.Tokens.IDToken)
 	if accountID == "" {

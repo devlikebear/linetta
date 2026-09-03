@@ -210,6 +210,53 @@ func TestStart_reportsAnIssuerRejection(t *testing.T) {
 	}
 }
 
+// Status is the pane's only window onto a login attempt. Without a way to
+// report "the last attempt failed," a refused exchange is indistinguishable
+// from a writer who is still sitting in the browser (#92 review, finding 1).
+func TestStatus_reportsAFailedExchangeUntilTheNextStart(t *testing.T) {
+	svc, ts, _ := newService(t, "")
+	ts.status = http.StatusBadRequest
+	ts.body = `{"error":"invalid_grant"}`
+
+	authURL, err := svc.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	res := follow(t, authURL, "stale-code", "")
+	if res.StatusCode != http.StatusBadGateway {
+		t.Fatalf("callback status = %d, want 502", res.StatusCode)
+	}
+
+	// The failure is recorded inside the callback handler before it writes
+	// the response, but poll rather than assume: the assertion should not be
+	// coupled to exactly when that happens.
+	deadline := time.Now().Add(5 * time.Second)
+	var st Status
+	for time.Now().Before(deadline) {
+		if st = svc.Status(); st.LoginFailed {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !st.LoginFailed {
+		t.Fatal("Status never reported the failed exchange")
+	}
+	if st.LoggedIn {
+		t.Error("a failed exchange must not also report a login")
+	}
+
+	// A fresh Start means the writer is trying again; the old failure must
+	// not haunt the new attempt.
+	ts.status = http.StatusOK
+	ts.body = `{"access_token":"acc","refresh_token":"ref","id_token":""}`
+	if _, err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("second Start: %v", err)
+	}
+	if st := svc.Status(); st.LoginFailed {
+		t.Error("Start did not clear the previous failure")
+	}
+}
+
 func TestStart_bothPortsBusyIsAnError(t *testing.T) {
 	// Occupy both registered ports so no listener can bind.
 	for _, port := range []int{PrimaryPort, FallbackPort} {

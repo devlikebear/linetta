@@ -74,11 +74,11 @@ describe("rpcErrorMessage", () => {
     }
   });
 
-  // The Codex login (#92) is the newest reason-code family: same rule as the
-  // provider codes above — an unmapped code would fall back to the raw
-  // engine message, which for port_in_use names two ports in English.
-  it("covers both Codex login codes", () => {
-    for (const reason of ["codex_port_in_use", "codex_login_failed"]) {
+  // The Codex login (#92) has a single reason code: port_in_use. A failed
+  // login attempt is not an RPC error at all — codex.login_status reports it
+  // via CodexStatus.login_failed instead — so there is no second code here.
+  it("covers the Codex port-in-use code", () => {
+    for (const reason of ["codex_port_in_use"]) {
       const err = new RpcError("codex.login_start", "raw engine message", -32602, { reason });
       for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
         const shown = rpcErrorMessage(err, t);

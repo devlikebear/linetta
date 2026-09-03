@@ -51,6 +51,11 @@ func openApp(t *testing.T) *App {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("LINETTA_HOME", home)
+	// internal/provider's Codex CLI fallback (#92) reads $HOME/.codex/auth.json
+	// when Linetta's own login is absent, and HOME is not scoped by
+	// LINETTA_HOME. Without this, a developer's real Codex CLI login leaks
+	// into every "fresh install" assertion in this package.
+	t.Setenv("HOME", t.TempDir())
 	// An in-memory secret store, not the OS keychain: the keychain is
 	// process-global and not scoped by Home, so without this a provider key a
 	// developer stored through ordinary app use would leak into every

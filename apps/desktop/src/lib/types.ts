@@ -536,6 +536,11 @@ export interface CodexStatus {
   account_id?: string;
   /** id_token expiry, epoch seconds. */
   expires_at?: number;
+  /** True when the most recent attempt ended in a failure — the issuer
+   *  refused the exchange, or the credential could not be written — rather
+   *  than the writer still being out in the browser. Never true alongside
+   *  logged_in. The next login_start clears it. */
+  login_failed?: boolean;
 }
 
 export type ThemePreference = "system" | "light" | "dark";
