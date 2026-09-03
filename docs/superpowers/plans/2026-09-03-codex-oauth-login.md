@@ -1897,4 +1897,16 @@ Expected: 전부 성공. `internal/codexauth`는 빌드 태그가 없으므로 �
 - **스펙 커버리지 (5.3절):** 흐름 1~5는 Task 1(인가 URL)·Task 3(콜백·교환·파일 쓰기)·Task 2(status/logout 재료)·Task 5(RPC 표면)가 덮는다. 프로토콜 상수 표는 Task 1이 상수로 고정하고 테스트가 값을 하나씩 검증한다. `auth.json` 형식은 Task 2. `account_id`를 id_token 클레임에서 뽑는 것은 Task 2(`claimsFromIDToken`)와 Task 3(콜백에서 대입). 포트 정책·state 검증·로컬 성공 페이지·5분 타임아웃은 Task 3. `TARS_OPENAI_CODEX_REFRESH_TOKEN_STORAGE=file`은 #91의 `provider.NewSource`가 이미 설정하므로 새 작업이 없다. `~/.codex` 폴백과 MAS 예외는 Task 4. 개인정보 문서는 Task 6.
 - **이름 일관성:** `codexauth.Tokens`/`Status`/`NewService`/`Start`/`Logout`/`Close`/`AuthPath`(Task 2·3) → `engineapp.codexService`(Task 5) → `handlers.CodexService`(Task 5). `resolveCodexHome`(Task 4)은 `provider.go`의 `Resolve`가 부른다. 이유 코드 `ReasonCodexPortInUse`(Task 5)는 `codexReason`과 프론트 카탈로그가 같은 문자열을 쓴다. 실패한 로그인은 이유 코드가 아니라 `Status.LoginFailed`로 전달된다 — 어떤 RPC 호출의 에러도 아니기 때문이다.
 - **플레이스홀더:** 없음. 유일하게 코드 블록 없이 지시만 있는 곳은 Task 5 Step 13의 번역 문구인데, 세 언어의 실제 문장을 명시했고 "기존 provider 이유 코드의 형식을 따르라"는 구체적 참조를 달았다 — 카탈로그 파일의 구조를 계획서에 복사하는 것보다 그쪽이 정확하다.
-- **미해결 위험 하나:** Task 3의 `TestStart_bothPortsBusyIsAnError`는 개발 머신에서 1455/1457이 이미 쓰이고 있으면 skip된다. CI에서는 비어 있으므로 실제로 돈다. skip이 나오면 보고서에 남긴다.
+- **미해결 위험 하나:** Task 3의 `TestStart_bothPortsBusyIsAnError`는 개발 머신에서 1455/1457이 이미 쓰이고 있으면 skip된다. CI에서는 비어 있으므로 실제로 돈다. skip이 나오면 보고서에 남긴다. (최종 리뷰 반영: 나머지 로그인 테스트는 임시 포트를 쓰는 테스트 전용 리스너로 옮겨서, 등록 포트를 실제로 잡는 것은 이 테스트 하나뿐이다.)
+
+---
+
+## #94(설정 창)로 넘기는 미해결 질문
+
+`~/.codex` 폴백(Task 4)은 읽기 전용 편의로 설계했지만, 시스템 전체로 보면 그렇지 않다. tars는 만료된 토큰을 갱신할 때 `PersistSource: true`로 **자기가 해석한 `SourcePath`를 다시 쓴다**(`tars/internal/llm/openai_codex_client.go`, `model_lister.go`). 그 경로는 `resolveCodexHome`이 돌려준 디렉터리다. 즉 폴백이 활성인 동안에는 토큰이 갱신될 때마다 Linetta가 Codex CLI 소유의 `~/.codex/auth.json`을 다시 쓴다. 개인정보 문서는 이 사실을 세 언어 모두에 반영했다(#92 최종 리뷰).
+
+남은 것은 제품 결정 두 가지다. 둘 다 설정 창을 만드는 #94이 답해야 한다. **여기서는 답하지 않고 기록만 한다.**
+
+1. **로그아웃은 CLI 소유 파일까지 지워야 하는가?** 지금 `codexauth.Service.Logout`은 Linetta 자신의 `<앱 데이터>/codex/auth.json`만 지운다. 폴백이 활성이면 로그아웃 버튼은 **아무것도 지우지 않고** 성공을 돌려주며, 사용자는 여전히 로그인된 상태로 남는다. 선택지: (a) 지금 동작을 두고 설정 창이 "이 로그인은 Codex CLI 것이라 여기서는 해제할 수 없다"고 설명한다, (b) 폴백이 활성일 때는 로그아웃 버튼을 비활성화한다, (c) 해석된 경로를 지운다 — Linetta가 만들지 않은 파일을 지우는 일이므로 별도의 확인이 필요하다. 개인정보 문서는 현재 동작을 기술하고 있으므로, 동작을 바꾸면 세 언어를 함께 고쳐야 한다.
+
+2. **"로그인되어 있는가"는 누가 답하는가?** `codexauth.Service.Status()`는 Linetta의 `codexHome`만 읽고, `provider.Resolved.Configured()`는 **해석된** 홈을 stat한다. CLI 로그인만 가진 사용자는 `codex.login_status → logged_in: false`와 `providers.list → configured: true`를 동시에 받는다. 설정 창은 두 값을 한 화면에 함께 보여주게 되므로 어느 쪽을 진실로 삼을지 정해야 한다. 선택지: (a) `Status`도 해석된 홈을 읽게 해서 두 값을 맞춘다 — 그러면 1번의 로그아웃 문제가 곧바로 눈에 보이는 모순이 된다, (b) 두 상태를 서로 다른 것으로 인정하고 UI에 "Codex CLI 로그인 사용 중"을 별도 상태로 그린다.
