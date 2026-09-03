@@ -32,7 +32,7 @@
 - **`account_id`는 `id_token`의 `https://api.openai.com/auth` 클레임 안 `chatgpt_account_id`에서 꺼낸다.** JWT는 검증하지 않고 페이로드만 디코드한다. 서명 검증은 토큰 엔드포인트를 TLS로 직접 호출해 받은 값이므로 불필요하고, 검증하려면 JWKS 의존성이 생긴다.
 - 쓰기 대상은 **항상** `$LINETTA_HOME/codex/auth.json`, 파일 권한 0600, 디렉터리 0700.
 - 포트 1455와 1457이 모두 막히면 **조용히 다른 포트로 가지 않는다.** redirect_uri가 등록된 값이라 다른 포트는 어차피 실패한다. `codex_port_in_use`로 보고한다.
-- 로그인 대기는 5분에 끊는다(`codex_login_timeout`). 새 로그인을 시작하면 이전 대기는 취소된다.
+- 로그인 대기는 5분에 끊는다. 새 로그인을 시작하면 이전 대기는 취소된다. **타임아웃은 조용하다** — `Start`는 즉시 반환하고 타임아웃은 리스너를 닫을 뿐이므로 엔진이 보고할 대상이 없다. 로그인이 비동기이고 설정 화면이 `login_status`를 폴링하므로, 시간 초과 판단은 `login_start`를 부른 시각을 아는 클라이언트(#94)가 한다.
 - 콜백은 `state`가 일치할 때만 받는다. 성공 뒤 브라우저에는 **로컬 성공 페이지**를 보여준다 — Codex의 호스트된 페이지로 리다이렉트하지 않는다.
 - 새 이유 코드는 `engine/internal/rpc/reason.go`의 기존 블록에 추가하고, `apps/desktop/src/lib/rpcMessage.ts`의 `REASON_MESSAGE_KEYS`와 `apps/desktop/src/lib/i18n.tsx`의 ko/en/ja 카탈로그에 **같은 커밋에서** 추가한다. 빠뜨리면 `String(error)`로 새어나간다(#91에서 고친 그 문제다).
 - UI가 부르는 새 엔진 메서드는 `apps/desktop/src-tauri/src/lib.rs`의 `RENDERER_ENGINE_METHODS`에 **정렬 순서를 지켜** 추가하고(이진 탐색), 같은 커밋에서 `apps/desktop/src/lib/rpc.ts` 래퍼를 붙인다. `rpcAllowlist.test.ts`가 양방향 일치를 요구한다.
@@ -56,7 +56,7 @@
 | `engine/internal/provider/codexhome_mas.go` (신규) | MAS 빌드는 폴백 없음 |
 | `engine/internal/provider/codexhome_test.go` (신규) | 폴백 우선순위 |
 | `engine/internal/provider/provider.go` (수정) | `Resolve`가 폴백을 거쳐 `CodexHome`을 채운다 |
-| `engine/internal/rpc/reason.go` (수정) | `codex_port_in_use`, `codex_login_timeout`, `codex_login_failed` |
+| `engine/internal/rpc/reason.go` (수정) | `codex_port_in_use`, `codex_login_failed` |
 | `engine/internal/rpc/handlers/codex.go` (신규) | `CodexService` 인터페이스와 세 핸들러 |
 | `engine/internal/rpc/handlers/codex_test.go` (신규) | 가짜 서비스로 핸들러 검증 |
 | `engine/internal/engineapp/codex.go` (신규) | `codexauth.Service` → `handlers.CodexService` 어댑터 |
@@ -637,7 +637,7 @@ git commit -m "feat(codexauth): read, write and clear the Codex credential file 
 **Interfaces:**
 - Consumes: Task 1의 `newPKCE`/`newState`/`authorizeURL`/`redirectURI`/상수, Task 2의 `Tokens`/`writeAuthFile`/`readAuthFile`/`Logout`/`claimsFromIDToken`/`AuthPath`.
 - Produces:
-  - `var ErrPortInUse`, `var ErrLoginTimeout`, `var ErrLoginFailed`
+  - `var ErrPortInUse`, `var ErrLoginFailed`
   - `type Status struct { LoggedIn bool; Email string; AccountID string; ExpiresAt int64 }` (JSON: `logged_in`, `email`, `account_id`, `expires_at`)
   - `type Service struct{ ... }`, `func NewService(codexHome string) *Service`
   - `(*Service).WithTokenURL(string) *Service`, `(*Service).WithHTTPClient(*http.Client) *Service`, `(*Service).WithClock(func() time.Time) *Service`
@@ -987,9 +987,6 @@ import (
 // redirect URI is registered per port, so there is no third port to try — a
 // running Codex CLI login is the usual cause.
 var ErrPortInUse = errors.New("codexauth: both callback ports are in use")
-
-// ErrLoginTimeout means the writer never finished in the browser.
-var ErrLoginTimeout = errors.New("codexauth: login timed out")
 
 // ErrLoginFailed means the issuer refused the exchange.
 var ErrLoginFailed = errors.New("codexauth: login failed")
@@ -1466,9 +1463,9 @@ git commit -m "feat(provider): read an existing Codex CLI login when Linetta has
 - Modify: `apps/desktop/src/lib/rpcMessage.test.ts`
 
 **Interfaces:**
-- Consumes: Task 3의 `codexauth.NewService`, `(*Service).Start/Status/Logout/Close`, `codexauth.Status`, `ErrPortInUse`/`ErrLoginTimeout`/`ErrLoginFailed`; 기존 `rpc.ReasonError`, `rpc.MethodErrorFrom`.
+- Consumes: Task 3의 `codexauth.NewService`, `(*Service).Start/Status/Logout/Close`, `codexauth.Status`, `ErrPortInUse`/`ErrLoginFailed`; 기존 `rpc.ReasonError`, `rpc.MethodErrorFrom`.
 - Produces:
-  - 이유 코드 `rpc.ReasonCodexPortInUse` = `"codex_port_in_use"`, `rpc.ReasonCodexLoginTimeout` = `"codex_login_timeout"`, `rpc.ReasonCodexLoginFailed` = `"codex_login_failed"`
+  - 이유 코드 `rpc.ReasonCodexPortInUse` = `"codex_port_in_use"`, `rpc.ReasonCodexLoginFailed` = `"codex_login_failed"`
   - `type CodexService interface { LoginStart(ctx) (json.RawMessage, error); LoginStatus(ctx) (json.RawMessage, error); Logout(ctx) error }`
   - 핸들러 `CodexLoginStart`, `CodexLoginStatus`, `CodexLogout`
   - RPC `codex.login_start` → `{auth_url}`; `codex.login_status` → `Status`; `codex.logout` → `{ok:true}`
@@ -1576,7 +1573,6 @@ Expected: 컴파일 실패 — `undefined: CodexLoginStart`, `undefined: ReasonC
 	// themselves, and the message has to name the two ports, because the fix
 	// is closing whatever holds them — usually a Codex CLI login.
 	ReasonCodexPortInUse     = "codex_port_in_use"
-	ReasonCodexLoginTimeout  = "codex_login_timeout"
 	ReasonCodexLoginFailed   = "codex_login_failed"
 ```
 
@@ -1691,8 +1687,6 @@ func codexReason(err error) error {
 	switch {
 	case errors.Is(err, codexauth.ErrPortInUse):
 		return &rpc.ReasonError{Reason: rpc.ReasonCodexPortInUse, Err: err}
-	case errors.Is(err, codexauth.ErrLoginTimeout):
-		return &rpc.ReasonError{Reason: rpc.ReasonCodexLoginTimeout, Err: err}
 	case errors.Is(err, codexauth.ErrLoginFailed):
 		return &rpc.ReasonError{Reason: rpc.ReasonCodexLoginFailed, Err: err}
 	default:
@@ -1823,16 +1817,14 @@ export const codex = {
   // The Codex login (#92). port_in_use is the only one the writer can fix
   // themselves, so its message names the two ports.
   codex_port_in_use: "errors.codexPortInUse",
-  codex_login_timeout: "errors.codexLoginTimeout",
   codex_login_failed: "errors.codexLoginFailed",
 ```
 
-그리고 `apps/desktop/src/lib/i18n.tsx`의 ko/en/ja 카탈로그 **세 곳 모두**에 `errors.codexPortInUse`, `errors.codexLoginTimeout`, `errors.codexLoginFailed` 항목을 추가한다. 기존 `errors.provider*` 항목이 각 카탈로그의 어디에 있는지 찾아 그 옆에 둔다. `i18n.catalog.test.ts`가 세 언어의 키 집합이 같기를 요구하므로 하나라도 빠지면 실패한다.
+그리고 `apps/desktop/src/lib/i18n.tsx`의 ko/en/ja 카탈로그 **세 곳 모두**에 `errors.codexPortInUse`, `errors.codexLoginFailed` 항목을 추가한다. 기존 `errors.provider*` 항목이 각 카탈로그의 어디에 있는지 찾아 그 옆에 둔다. `i18n.catalog.test.ts`가 세 언어의 키 집합이 같기를 요구하므로 하나라도 빠지면 실패한다.
 
 문구는 소설가가 읽고 무엇을 할지 알 수 있게 쓴다. 에러 용어를 쓰지 않는다.
 
 - `codex_port_in_use` — ko: "로그인 포트(1455, 1457)를 다른 프로그램이 쓰고 있습니다. Codex CLI 로그인 창을 닫고 다시 시도하세요." en/ja도 같은 내용.
-- `codex_login_timeout` — ko: "로그인이 완료되지 않았습니다. 다시 시도하세요."
 - `codex_login_failed` — ko: "ChatGPT 로그인에 실패했습니다. 다시 시도하세요."
 
 `apps/desktop/src/lib/rpcMessage.test.ts`에 세 코드가 번역되는지(그리고 `String(error)`로 새지 않는지) 검증을 추가한다. 기존 provider 코드 다섯 개를 검증하는 케이스가 이미 있으니 그 배열에 세 개를 더한다.
@@ -1907,6 +1899,6 @@ Expected: 전부 성공. `internal/codexauth`는 빌드 태그가 없으므로 �
 ## 자기 검토 기록
 
 - **스펙 커버리지 (5.3절):** 흐름 1~5는 Task 1(인가 URL)·Task 3(콜백·교환·파일 쓰기)·Task 2(status/logout 재료)·Task 5(RPC 표면)가 덮는다. 프로토콜 상수 표는 Task 1이 상수로 고정하고 테스트가 값을 하나씩 검증한다. `auth.json` 형식은 Task 2. `account_id`를 id_token 클레임에서 뽑는 것은 Task 2(`claimsFromIDToken`)와 Task 3(콜백에서 대입). 포트 정책·state 검증·로컬 성공 페이지·5분 타임아웃은 Task 3. `TARS_OPENAI_CODEX_REFRESH_TOKEN_STORAGE=file`은 #91의 `provider.NewSource`가 이미 설정하므로 새 작업이 없다. `~/.codex` 폴백과 MAS 예외는 Task 4. 개인정보 문서는 Task 6.
-- **이름 일관성:** `codexauth.Tokens`/`Status`/`NewService`/`Start`/`Logout`/`Close`/`AuthPath`(Task 2·3) → `engineapp.codexService`(Task 5) → `handlers.CodexService`(Task 5). `resolveCodexHome`(Task 4)은 `provider.go`의 `Resolve`가 부른다. 이유 코드 `ReasonCodexPortInUse`/`ReasonCodexLoginTimeout`/`ReasonCodexLoginFailed`(Task 5)는 `codexReason`과 프론트 카탈로그가 같은 문자열을 쓴다.
+- **이름 일관성:** `codexauth.Tokens`/`Status`/`NewService`/`Start`/`Logout`/`Close`/`AuthPath`(Task 2·3) → `engineapp.codexService`(Task 5) → `handlers.CodexService`(Task 5). `resolveCodexHome`(Task 4)은 `provider.go`의 `Resolve`가 부른다. 이유 코드 `ReasonCodexPortInUse`/`ReasonCodexLoginFailed`(Task 5)는 `codexReason`과 프론트 카탈로그가 같은 문자열을 쓴다.
 - **플레이스홀더:** 없음. 유일하게 코드 블록 없이 지시만 있는 곳은 Task 5 Step 13의 번역 문구인데, 세 언어의 실제 문장을 명시했고 "기존 provider 이유 코드의 형식을 따르라"는 구체적 참조를 달았다 — 카탈로그 파일의 구조를 계획서에 복사하는 것보다 그쪽이 정확하다.
 - **미해결 위험 하나:** Task 3의 `TestStart_bothPortsBusyIsAnError`는 개발 머신에서 1455/1457이 이미 쓰이고 있으면 skip된다. CI에서는 비어 있으므로 실제로 돈다. skip이 나오면 보고서에 남긴다.
