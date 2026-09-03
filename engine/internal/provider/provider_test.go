@@ -27,10 +27,36 @@ func (f fakeClient) Chat(_ context.Context, _ []llm.ChatMessage, _ llm.ChatOptio
 	return llm.ChatResponse{}, nil
 }
 
+// isolateHomeDir points os.UserHomeDir at dir for the rest of the test.
+//
+// Both variables are needed because os.UserHomeDir reads a different one per
+// platform: $HOME on Unix, %USERPROFILE% on Windows. Setting only HOME leaves
+// a Windows run consulting the real user's home, where a developer's — or a CI
+// runner's — actual Codex CLI login lives. The one that does not apply is inert.
+func isolateHomeDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+}
+
+// The isolation is only worth anything if os.UserHomeDir actually follows it,
+// which is exactly what a HOME-only version got wrong on Windows.
+func TestIsolateHomeDir_redirectsWhateverThisPlatformReads(t *testing.T) {
+	dir := t.TempDir()
+	isolateHomeDir(t, dir)
+	got, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir: %v", err)
+	}
+	if got != dir {
+		t.Fatalf("UserHomeDir = %q, want the isolated %q", got, dir)
+	}
+}
+
 func newSource(t *testing.T) (*Source, *settings.Store, string) {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	isolateHomeDir(t, home)
 	t.Setenv("LINETTA_HOME", home)
 	st, err := settings.NewWithSecretStore(settings.NewMemorySecretStore())
 	if err != nil {

@@ -107,7 +107,7 @@ func TestOpenAppIsolatesHOMEFromAnyRealCodexCLILogin(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{}`), 0o600); err != nil {
 		t.Fatalf("seed a fake Codex CLI login: %v", err)
 	}
-	t.Setenv("HOME", poisonedHome)
+	isolateHomeDir(t, poisonedHome)
 
 	app := openApp(t)
 

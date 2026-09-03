@@ -20,7 +20,7 @@ func writeAuth(t *testing.T, dir string) {
 
 func TestResolveCodexHome_prefersLinettasOwnLogin(t *testing.T) {
 	fakeHome := t.TempDir()
-	t.Setenv("HOME", fakeHome)
+	isolateHomeDir(t, fakeHome)
 	linetta := filepath.Join(t.TempDir(), "codex")
 	writeAuth(t, linetta)
 	writeAuth(t, filepath.Join(fakeHome, ".codex"))
@@ -32,7 +32,7 @@ func TestResolveCodexHome_prefersLinettasOwnLogin(t *testing.T) {
 
 func TestResolveCodexHome_fallsBackToTheCodexCLI(t *testing.T) {
 	fakeHome := t.TempDir()
-	t.Setenv("HOME", fakeHome)
+	isolateHomeDir(t, fakeHome)
 	linetta := filepath.Join(t.TempDir(), "codex") // no auth.json written
 	cli := filepath.Join(fakeHome, ".codex")
 	writeAuth(t, cli)
@@ -43,7 +43,7 @@ func TestResolveCodexHome_fallsBackToTheCodexCLI(t *testing.T) {
 }
 
 func TestResolveCodexHome_withNoLoginAnywhereReturnsLinettas(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateHomeDir(t, t.TempDir())
 	linetta := filepath.Join(t.TempDir(), "codex")
 
 	// A future login has to land in Linetta's own directory, so that is the
@@ -54,7 +54,7 @@ func TestResolveCodexHome_withNoLoginAnywhereReturnsLinettas(t *testing.T) {
 }
 
 func TestResolveCodexHome_emptyInputStaysEmpty(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	isolateHomeDir(t, t.TempDir())
 	if got := resolveCodexHome(""); got != "" {
 		t.Errorf("resolveCodexHome(\"\") = %q, want empty so Configured() stays false", got)
 	}
