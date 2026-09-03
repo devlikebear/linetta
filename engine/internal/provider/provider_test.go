@@ -85,6 +85,21 @@ func TestResolve_emptyMeansTheActiveProvider(t *testing.T) {
 	}
 }
 
+// Resolving the Codex home stats up to two paths, and only Codex ever reads
+// the answer, so a non-Codex Resolve must not pay for it — which shows up as
+// an empty CodexHome on everything else.
+func TestResolve_onlyResolvesTheCodexHomeForCodex(t *testing.T) {
+	src, st, _ := newSource(t)
+	configure(t, st, "anthropic", "sk-ant-test", false)
+	r, err := src.Resolve("anthropic")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if r.CodexHome != "" {
+		t.Errorf("CodexHome = %q for anthropic, want empty", r.CodexHome)
+	}
+}
+
 func TestResolve_readsTheKeyFromTheSecretStore(t *testing.T) {
 	src, st, _ := newSource(t)
 	configure(t, st, "anthropic", "sk-ant-test", false)
