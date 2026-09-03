@@ -30,6 +30,7 @@ func (f fakeClient) Chat(_ context.Context, _ []llm.ChatMessage, _ llm.ChatOptio
 func newSource(t *testing.T) (*Source, *settings.Store, string) {
 	t.Helper()
 	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("LINETTA_HOME", home)
 	st, err := settings.NewWithSecretStore(settings.NewMemorySecretStore())
 	if err != nil {
@@ -72,7 +73,6 @@ func TestNewSource_forcesTheFileRefreshStoreForCodex(t *testing.T) {
 
 func TestResolve_emptyMeansTheActiveProvider(t *testing.T) {
 	src, _, codexHome := newSource(t)
-	t.Setenv("HOME", t.TempDir())
 	r, err := src.Resolve("")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
