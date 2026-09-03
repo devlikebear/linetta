@@ -540,7 +540,12 @@ func TestStart_timesOutAndStopsListening(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 	u, _ := url.Parse(authURL)
 	redirect, _ := url.Parse(u.Query().Get("redirect_uri"))
-	if _, err := http.Get(redirect.String()); err == nil {
+	// A reply at all means the listener outlived its window, which is the
+	// failure. Close the body on that path anyway: a test that leaks a
+	// connection while reporting a leaked listener is a poor witness.
+	res, err := http.Get(redirect.String())
+	if err == nil {
+		_ = res.Body.Close()
 		t.Error("the callback listener is still accepting connections after the window closed")
 	}
 }
