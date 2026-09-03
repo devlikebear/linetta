@@ -81,6 +81,15 @@ type Service struct {
 	// returning and the credential write, instead of hoping a goroutine
 	// schedules there.
 	afterExchangeForTest func()
+
+	// startRaceSeamForTest, if set, runs synchronously inside Start, between
+	// invalidating the previous attempt and clearing its recorded failure.
+	// Production code never sets it; it exists only so a test can land a
+	// simulated stale write from the superseded attempt's callback
+	// deterministically inside that window, instead of hoping a goroutine
+	// schedules there — mirroring afterExchangeForTest above. See
+	// TestStart_aStaleFailureFromTheSupersededAttemptDoesNotSurviveASecondStart.
+	startRaceSeamForTest func()
 }
 
 // NewService returns a Service writing to codexHome. Nothing binds or dials
@@ -126,10 +135,6 @@ func (s *Service) Start(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	// A new attempt starts clean: whatever the previous one ended with is not
-	// this attempt's business to report.
-	s.setLastFailure(nil)
-
 	verifier, challenge, err := newPKCE()
 	if err != nil {
 		return "", err
@@ -143,7 +148,25 @@ func (s *Service) Start(ctx context.Context) (string, error) {
 	// must reclaim the primary port so that a stray callback for the
 	// superseded attempt lands on the new server (and gets refused for state
 	// mismatch) instead of finding nothing listening at all.
+	//
+	// This must run before clearing the previous attempt's recorded failure,
+	// not after (a round-2 review caught the two swapped): stopCurrent is
+	// what nils s.current, and recordAttemptFailure — called from the
+	// superseded attempt's callback goroutine — only refuses to record a
+	// stale failure once s.current no longer points at that attempt.
+	// Clearing first would leave a window, between the clear and the
+	// invalidation, where a failure from the very attempt being superseded
+	// could land immediately after this call promised a clean slate, with
+	// nothing left to clear it again until the attempt after this one.
 	s.stopCurrent()
+
+	if s.startRaceSeamForTest != nil {
+		s.startRaceSeamForTest()
+	}
+
+	// A new attempt starts clean: whatever the previous one ended with is not
+	// this attempt's business to report.
+	s.setLastFailure(nil)
 
 	ln, port, err := listenOnRegisteredPort()
 	if err != nil {

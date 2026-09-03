@@ -257,6 +257,51 @@ func TestStatus_reportsAFailedExchangeUntilTheNextStart(t *testing.T) {
 	}
 }
 
+// TestStart_aStaleFailureFromTheSupersededAttemptDoesNotSurviveASecondStart
+// guards the exact window a round-2 review found: Start clears the previous
+// attempt's recorded failure and invalidates that attempt in two separate
+// mutex sections, and if a stale write from the superseded attempt's
+// callback lands between them, recordAttemptFailure's guard cannot tell it
+// apart from a legitimate one — s.current still points at the superseded
+// attempt until it is invalidated.
+//
+// Driving this through the real HTTP path is not practical: the two steps
+// are back-to-back, sub-microsecond mutex sections with only pure,
+// non-blocking work between them — nothing to hang a blocking token server
+// on. Instead this uses a dedicated seam, startRaceSeamForTest (mirroring
+// the existing afterExchangeForTest), to land a simulated stale write from
+// the first attempt's callback deterministically inside that window, then
+// checks the invariant that must hold once the second Start returns: no
+// stale failure from a superseded attempt survives it.
+func TestStart_aStaleFailureFromTheSupersededAttemptDoesNotSurviveASecondStart(t *testing.T) {
+	svc, _, _ := newService(t, "")
+
+	if _, err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+	svc.mu.Lock()
+	att1 := svc.current
+	svc.mu.Unlock()
+	if att1 == nil {
+		t.Fatal("first Start left no current attempt to supersede")
+	}
+
+	svc.startRaceSeamForTest = func() {
+		// The first attempt's callback goroutine, concurrently, has decided
+		// its exchange failed and is recording that — landing exactly in the
+		// window this test exists to close.
+		svc.recordAttemptFailure(att1, errors.New("a stale failure from the superseded attempt"))
+	}
+
+	if _, err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("second Start: %v", err)
+	}
+
+	if svc.hasLastFailure() {
+		t.Error("a stale failure from the superseded first attempt survived the second Start")
+	}
+}
+
 func TestStart_bothPortsBusyIsAnError(t *testing.T) {
 	// Occupy both registered ports so no listener can bind.
 	for _, port := range []int{PrimaryPort, FallbackPort} {
