@@ -43,6 +43,14 @@ func (s *Source) List() []Status {
 	for _, id := range settings.ValidProviders() {
 		r, err := s.Resolve(id)
 		if err != nil {
+			// Unreachable today: Resolve only rejects an id outside
+			// ValidProviders, and that is exactly what this loop walks. Kept
+			// as an append rather than a `continue` so the invariant "one row
+			// per whitelisted provider" holds even if Resolve grows a second
+			// failure mode — a dropped row would leave the settings pane
+			// silently missing a provider, which is harder to notice than a
+			// row that reads as unconfigured.
+			out = append(out, Status{ID: id, Auth: authKind(id), Active: id == active})
 			continue
 		}
 		out = append(out, Status{

@@ -41,10 +41,28 @@ type Resolved struct {
 // has to exist).
 func (r Resolved) Configured() bool {
 	if r.ID == settings.ProviderOpenAICodex {
+		// Without a CodexHome the Join collapses to a bare "auth.json" and
+		// stats it against the process's working directory, so a stray file
+		// there would read as a completed login. No home means no login.
+		if r.CodexHome == "" {
+			return false
+		}
 		_, err := os.Stat(filepath.Join(r.CodexHome, codexAuthFile))
 		return err == nil
 	}
 	return strings.TrimSpace(r.APIKey) != ""
+}
+
+// String redacts APIKey. Resolved is passed between packages and logged with
+// %+v; the built-in agent (#93) will carry it further still. Making the plain
+// key unprintable is cheaper than auditing every future format verb.
+func (r Resolved) String() string {
+	key := "unset"
+	if strings.TrimSpace(r.APIKey) != "" {
+		key = "set"
+	}
+	return fmt.Sprintf("provider.Resolved{ID:%s Model:%s APIKey:%s BaseURL:%s CodexHome:%s ConsentedAt:%d}",
+		r.ID, r.Model, key, r.BaseURL, r.CodexHome, r.ConsentedAt)
 }
 
 // Consented reports whether the writer agreed to send text to this provider.

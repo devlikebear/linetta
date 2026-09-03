@@ -3,8 +3,10 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -208,5 +210,38 @@ func TestClient_classifiesFactoryFailures(t *testing.T) {
 	_, _, err := src.Client("anthropic")
 	if reasonOf(t, err) != rpc.ReasonProviderAuthFailed {
 		t.Errorf("reason = %v", err)
+	}
+}
+
+// An empty CodexHome makes filepath.Join collapse to a bare "auth.json",
+// which os.Stat resolves against the process's working directory. A stray
+// file there would then read as a completed Codex login.
+func TestConfigured_codexWithNoHomeDoesNotStatTheWorkingDirectory(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "auth.json"), []byte(`{"tokens":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	r := Resolved{ID: "openai-codex", CodexHome: ""}
+	if r.Configured() {
+		t.Fatal("an empty CodexHome picked up ./auth.json as a login")
+	}
+}
+
+// Resolved is passed across packages and will go further with the agent loop
+// (#93). Printing it with any of the usual verbs must not spill the key.
+func TestResolved_stringRedactsTheAPIKey(t *testing.T) {
+	r := Resolved{ID: "anthropic", Model: "claude-sonnet-4-5", APIKey: "sk-ant-supersecret"}
+	for _, format := range []string{"%v", "%s", "%+v", "%q"} {
+		got := fmt.Sprintf(format, r)
+		if strings.Contains(got, "sk-ant-supersecret") {
+			t.Errorf("%s printed the api key: %s", format, got)
+		}
+		if !strings.Contains(got, "anthropic") {
+			t.Errorf("%s dropped the provider id: %s", format, got)
+		}
+	}
+	if got := fmt.Sprintf("%v", Resolved{ID: "openai"}); strings.Contains(got, "APIKey:set") {
+		t.Errorf("an unset key reported as set: %s", got)
 	}
 }
