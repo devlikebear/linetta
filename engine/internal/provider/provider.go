@@ -139,7 +139,7 @@ func (s *Source) Resolve(id string) (Resolved, error) {
 		Model:       cfg.Model,
 		APIKey:      cfg.APIKey,
 		BaseURL:     cfg.BaseURL,
-		CodexHome:   s.codexHome,
+		CodexHome:   resolveCodexHome(s.codexHome),
 		ConsentedAt: cfg.ConsentedAt,
 	}, nil
 }

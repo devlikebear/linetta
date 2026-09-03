@@ -72,6 +72,7 @@ func TestNewSource_forcesTheFileRefreshStoreForCodex(t *testing.T) {
 
 func TestResolve_emptyMeansTheActiveProvider(t *testing.T) {
 	src, _, codexHome := newSource(t)
+	t.Setenv("HOME", t.TempDir())
 	r, err := src.Resolve("")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
