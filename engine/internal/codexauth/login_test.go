@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -67,6 +68,36 @@ func follow(t *testing.T, authURL, code string, overrideState string) *http.Resp
 	}
 	t.Cleanup(func() { _ = res.Body.Close() })
 	return res
+}
+
+// followAsync performs the same callback GET as follow, but — unlike follow —
+// never fails the test on a transport error. It exists for a caller that
+// launches the GET in its own goroutine while the exchange is deliberately
+// blocked: a connection reset or refusal is one of the valid outcomes being
+// tested for there, and t.Fatalf from a background goroutine only aborts
+// that goroutine (via runtime.Goexit) — it never sends anything to a channel
+// a caller might be blocked reading, which hangs the test instead of failing
+// it cleanly.
+func followAsync(authURL, code, overrideState string) (*http.Response, error) {
+	u, err := url.Parse(authURL)
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	state := q.Get("state")
+	if overrideState != "" {
+		state = overrideState
+	}
+	redirect, err := url.Parse(q.Get("redirect_uri"))
+	if err != nil {
+		return nil, err
+	}
+	cb := *redirect
+	cbq := url.Values{}
+	cbq.Set("code", code)
+	cbq.Set("state", state)
+	cb.RawQuery = cbq.Encode()
+	return http.Get(cb.String())
 }
 
 func newService(t *testing.T, idToken string) (*Service, *tokenServer, string) {
@@ -250,5 +281,238 @@ func TestStart_timesOutAndStopsListening(t *testing.T) {
 	redirect, _ := url.Parse(u.Query().Get("redirect_uri"))
 	if _, err := http.Get(redirect.String()); err == nil {
 		t.Error("the callback listener is still accepting connections after the window closed")
+	}
+}
+
+// blockingTokenServer stands in for the token endpoint but holds every
+// request open until the test releases it. It lets a test pin down exactly
+// when, relative to an in-flight exchange, a supersession or logout happens —
+// turning a scheduling race into a deterministic ordering.
+type blockingTokenServer struct {
+	*httptest.Server
+	reached chan struct{}
+	release chan struct{}
+}
+
+func newBlockingTokenServer(t *testing.T, idToken string) *blockingTokenServer {
+	t.Helper()
+	bs := &blockingTokenServer{
+		reached: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	var once sync.Once
+	bs.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { close(bs.reached) })
+		<-bs.release
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"acc","refresh_token":"ref","id_token":"`+idToken+`"}`)
+	}))
+	t.Cleanup(bs.Close)
+	return bs
+}
+
+// awaitReached blocks until a request has reached the handler (and is
+// parked on <-bs.release), or fails the test if none arrives in time.
+func (bs *blockingTokenServer) awaitReached(t *testing.T) {
+	t.Helper()
+	select {
+	case <-bs.reached:
+	case <-time.After(2 * time.Second):
+		t.Fatal("exchange never reached the token endpoint")
+	}
+}
+
+// TestStart_secondStartDuringExchangeDoesNotWriteCredential guards findings
+// 1(b) and 2 from the Task 3 review: a second Start landing while the first
+// attempt's callback is mid-exchange must leave that first attempt unable to
+// write a credential, no matter how the exchange's own goroutine eventually
+// resolves.
+func TestStart_secondStartDuringExchangeDoesNotWriteCredential(t *testing.T) {
+	idToken := fakeIDToken(t, "a@b.c", "acct", 1)
+	home := t.TempDir()
+	bs := newBlockingTokenServer(t, idToken)
+
+	svc := NewService(home).WithTokenURL(bs.URL).WithHTTPClient(bs.Client())
+	t.Cleanup(func() { _ = svc.Close() })
+
+	first, err := svc.Start(context.Background())
+	if err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+
+	type result struct {
+		res *http.Response
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		res, err := followAsync(first, "the-code", "")
+		done <- result{res, err}
+	}()
+	bs.awaitReached(t)
+
+	// Supersede the first attempt while its exchange is still in flight.
+	if _, err := svc.Start(context.Background()); err != nil {
+		t.Fatalf("second Start: %v", err)
+	}
+
+	close(bs.release)
+	r := <-done
+	// A transport error (the connection got reset or refused once the first
+	// attempt was superseded) is an acceptable way for this callback to
+	// fail — the only thing that must never happen is a 200 with a
+	// credential behind it.
+	if r.err == nil {
+		defer r.res.Body.Close()
+		if r.res.StatusCode == http.StatusOK {
+			t.Errorf("a superseded attempt's callback still reports success (status %d)", r.res.StatusCode)
+		}
+	}
+	if _, err := readAuthFile(home); err == nil {
+		t.Fatal("a superseded attempt wrote a credential after its exchange returned")
+	}
+}
+
+// TestLogoutMethod_duringAnInFlightExchangeIsNotUndone guards finding 2: a
+// writer who signs out while a stray exchange is still running must not have
+// that exchange resurrect the credential they just deleted.
+func TestLogoutMethod_duringAnInFlightExchangeIsNotUndone(t *testing.T) {
+	idToken := fakeIDToken(t, "a@b.c", "acct", 1)
+	home := t.TempDir()
+	bs := newBlockingTokenServer(t, idToken)
+
+	svc := NewService(home).WithTokenURL(bs.URL).WithHTTPClient(bs.Client())
+	t.Cleanup(func() { _ = svc.Close() })
+
+	authURL, err := svc.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	type result struct {
+		res *http.Response
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		res, err := followAsync(authURL, "the-code", "")
+		done <- result{res, err}
+	}()
+	bs.awaitReached(t)
+
+	if err := svc.Logout(); err != nil {
+		t.Fatalf("Logout: %v", err)
+	}
+
+	close(bs.release)
+	r := <-done
+	if r.err == nil {
+		_ = r.res.Body.Close()
+	}
+
+	if _, err := readAuthFile(home); err == nil {
+		t.Fatal("a stray exchange resurrected a credential after Logout deleted it")
+	}
+	if svc.Status().LoggedIn {
+		t.Error("Status reports a login after Logout raced a stray exchange")
+	}
+}
+
+// TestCallback_recheckAfterExchangeRefusesAStaleWrite guards finding 2
+// directly, at the exact window the review named: not "during the HTTP
+// round trip" (already covered above, and already closed by the exchange
+// running on r.Context()), but the narrow gap strictly between the exchange
+// returning and writeAuthFile being called. Blocking the token server can't
+// land a test there — closing an attempt's listener cancels the request
+// context and the exchange never returns at all — so this uses the
+// package-private afterExchangeForTest seam to run a Logout at exactly that
+// point, deterministically, instead of hoping a goroutine schedules there.
+func TestCallback_recheckAfterExchangeRefusesAStaleWrite(t *testing.T) {
+	svc, _, home := newService(t, fakeIDToken(t, "a@b.c", "acct", 1))
+
+	authURL, err := svc.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	// hookDone carries the hook's Logout error back to the test goroutine.
+	// Using a channel (rather than a plain variable the hook assigns) gives
+	// the race detector a real happens-before edge: the hook runs on the
+	// server's per-connection goroutine, and a bare variable read after the
+	// client's HTTP round trip completes is not actually synchronized with
+	// it — the socket carries bytes, not a Go memory barrier.
+	hookDone := make(chan error, 1)
+	svc.afterExchangeForTest = func() {
+		// The exchange has already returned successfully; simulate a Logout
+		// landing in the gap before the credential is written.
+		hookDone <- svc.Logout()
+	}
+
+	// Logout closes this attempt's own listener from inside the hook, so
+	// whether the client sees a clean refusal or a reset connection is
+	// timing-dependent and is not what is under test — use the
+	// non-fataling GET, run in the background, and ignore its outcome. What
+	// matters is whether a credential lands on disk afterward.
+	go func() {
+		if res, err := followAsync(authURL, "the-code", ""); err == nil {
+			_ = res.Body.Close()
+		}
+	}()
+
+	if err := <-hookDone; err != nil {
+		t.Fatalf("Logout (from the hook): %v", err)
+	}
+
+	// The channel receive above happened-after everything the handler did up
+	// to and including the hook, but the handler keeps running afterward.
+	// Give a stray writeAuthFile call a moment to land before asserting it
+	// didn't: the fix refuses before ever calling it, but unfixed code races
+	// the write against the connection Logout already closed, and this
+	// makes that race resolve before the check runs instead of the check
+	// beating a write that is still in flight.
+	time.Sleep(300 * time.Millisecond)
+	if _, err := readAuthFile(home); err == nil {
+		t.Fatal("a credential was written after Logout ran between the exchange returning and the write")
+	}
+}
+
+// TestStopAttempt_leavesAReplacementAttemptUntouched guards finding 1(b)
+// directly: the deferred cleanup after a successful callback must be scoped
+// to the attempt it belongs to. If it runs late — after a second Start has
+// already replaced it — it must not tear down the replacement or null out
+// s.current out from under it.
+func TestStopAttempt_leavesAReplacementAttemptUntouched(t *testing.T) {
+	svc, _, _ := newService(t, fakeIDToken(t, "a@b.c", "acct", 1))
+	first, err := svc.Start(context.Background())
+	if err != nil {
+		t.Fatalf("first Start: %v", err)
+	}
+	svc.mu.Lock()
+	firstAttempt := svc.current
+	svc.mu.Unlock()
+
+	second, err := svc.Start(context.Background())
+	if err != nil {
+		t.Fatalf("second Start: %v", err)
+	}
+	if first == second {
+		t.Fatal("the second login reused the first state")
+	}
+
+	// Simulate the first attempt's deferred success cleanup finally running
+	// after it has already been superseded.
+	svc.stopAttempt(firstAttempt)
+
+	svc.mu.Lock()
+	current := svc.current
+	svc.mu.Unlock()
+	if current == nil {
+		t.Fatal("a stale cleanup for a superseded attempt nulled out the live attempt")
+	}
+
+	// The still-current second attempt must still answer its own callback.
+	res := follow(t, second, "the-code", "")
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("the live attempt's callback status = %d, want 200 after a stale cleanup for a different attempt", res.StatusCode)
 	}
 }

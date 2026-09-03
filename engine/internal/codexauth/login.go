@@ -21,9 +21,6 @@ import (
 // running Codex CLI login is the usual cause.
 var ErrPortInUse = errors.New("codexauth: both callback ports are in use")
 
-// ErrLoginTimeout means the writer never finished in the browser.
-var ErrLoginTimeout = errors.New("codexauth: login timed out")
-
 // ErrLoginFailed means the issuer refused the exchange.
 var ErrLoginFailed = errors.New("codexauth: login failed")
 
@@ -64,6 +61,14 @@ type Service struct {
 
 	mu      sync.Mutex
 	current *attempt
+
+	// afterExchangeForTest, if set, runs synchronously right after a
+	// successful exchange and before the pre-write recheck. Production code
+	// never sets it; it exists only so a test can land a Logout or a second
+	// Start deterministically inside the window between the exchange
+	// returning and the credential write, instead of hoping a goroutine
+	// schedules there.
+	afterExchangeForTest func()
 }
 
 // NewService returns a Service writing to codexHome. Nothing binds or dials
@@ -148,10 +153,7 @@ func (s *Service) callbackHandler(att *attempt, port int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 
-		s.mu.Lock()
-		superseded := s.current != att
-		s.mu.Unlock()
-		if superseded || q.Get("state") != att.state {
+		if !s.isCurrent(att) || q.Get("state") != att.state {
 			writePage(w, http.StatusBadRequest, failurePage)
 			return
 		}
@@ -172,6 +174,21 @@ func (s *Service) callbackHandler(att *attempt, port int) http.HandlerFunc {
 			writePage(w, http.StatusBadGateway, failurePage)
 			return
 		}
+
+		if s.afterExchangeForTest != nil {
+			s.afterExchangeForTest()
+		}
+
+		// The exchange can run for up to exchangeTimeout. Re-validate that
+		// this attempt is still the one in flight immediately before writing
+		// anything: a Logout or a second Start that landed while we were
+		// waiting on the issuer must not have its outcome overwritten by a
+		// credential this attempt no longer has any business writing.
+		if !s.isCurrent(att) {
+			writePage(w, http.StatusBadRequest, failurePage)
+			return
+		}
+
 		_, accountID, _ := claimsFromIDToken(tok.IDToken)
 		tok.AccountID = accountID
 		if err := writeAuthFile(s.codexHome, tok, s.now()); err != nil {
@@ -181,9 +198,20 @@ func (s *Service) callbackHandler(att *attempt, port int) http.HandlerFunc {
 		}
 		writePage(w, http.StatusOK, successPage)
 
-		// The writer has their answer; the listener's job is done.
-		go s.stopCurrent()
+		// The writer has their answer; this attempt's job is done. stopAttempt
+		// shuts down gracefully — draining the response already in flight
+		// rather than resetting it, as Close would — and only touches
+		// s.current if it is still this attempt: a second Start that already
+		// replaced it is not this attempt's cleanup to perform.
+		go s.stopAttempt(att)
 	}
+}
+
+// isCurrent reports whether att is still the attempt in flight.
+func (s *Service) isCurrent(att *attempt) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.current == att
 }
 
 func writePage(w http.ResponseWriter, status int, page string) {
@@ -262,6 +290,10 @@ func (s *Service) Close() error {
 	return nil
 }
 
+// stopCurrent abruptly tears down whatever attempt is current, if any. It is
+// deliberately unconditional and unscoped: the timeout, Logout and Close
+// paths all mean "whatever is running now, stop it," and an abrupt Close is
+// correct there — there is no response in flight worth draining.
 func (s *Service) stopCurrent() {
 	s.mu.Lock()
 	att := s.current
@@ -272,6 +304,33 @@ func (s *Service) stopCurrent() {
 	}
 	att.cancel()
 	_ = att.srv.Close()
+}
+
+// stopAttempt gracefully tears down att, but only if att is still the
+// current attempt. It is used solely by the success path in
+// callbackHandler, and both properties matter: Shutdown (rather than Close)
+// lets the success response already in flight finish writing instead of
+// being reset mid-flush, and the identity check means a copy of this call
+// that runs late — after a second Start has already replaced att — does
+// nothing, rather than closing the replacement's listener and nulling out
+// s.current out from under it.
+//
+// Shutdown runs before cancel is called: att.cancel() releases the timeout
+// goroutine (see Start), which reacts by calling att.srv.Close(). Canceling
+// first would let that abrupt Close race the graceful Shutdown and reset the
+// very response Shutdown exists to drain. Once Shutdown has returned, the
+// server is already fully stopped, so the later Close from that goroutine is
+// a harmless no-op.
+func (s *Service) stopAttempt(att *attempt) {
+	s.mu.Lock()
+	if s.current != att {
+		s.mu.Unlock()
+		return
+	}
+	s.current = nil
+	s.mu.Unlock()
+	_ = att.srv.Shutdown(context.Background())
+	att.cancel()
 }
 
 // listenOnRegisteredPort binds the primary callback port, falling back to the
