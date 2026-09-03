@@ -533,7 +533,13 @@ export type PlatformProfileId = "plain" | "munpia" | "series" | "joara";
 
 export interface Settings {
   language: AppLanguage;
-  provider: ProviderID;
+  /** Widened past ProviderID on purpose: settings.get returns whatever the
+   *  file on disk says, and a library written by 1.0 still carries a retired
+   *  id such as "claude-code-cli" or "openrouter". The engine deliberately
+   *  leaves those untouched rather than rewriting someone's settings.json, so
+   *  the type must not promise more than the engine guarantees. Use
+   *  `providers.list` for the ids this build can actually drive. */
+  provider: ProviderID | (string & {});
   providers?: Record<string, ProviderConfig>;
   typewriter_default: boolean;
   focus_default: boolean;

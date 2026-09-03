@@ -33,6 +33,7 @@ import type {
   OpsStatus,
   PlatformProfileId,
   Settings as SettingsRow,
+  SettingsPatch,
   PalettePreference,
   ThemePreference,
 } from "../lib/types";
@@ -100,9 +101,6 @@ export function Settings() {
   const [editorFontSizeDraft, setEditorFontSizeDraft] = useState("20");
   const [editorLineHeightDraft, setEditorLineHeightDraft] = useState("1.92");
 
-  // Per-provider config drafts (re-synced when the active provider changes).
-
-
   useEffect(() => {
     let cancelled = false;
     Promise.all([settingsApi.get(), opsStatusApi.get(), diagnosticsApi.get()])
@@ -162,7 +160,11 @@ export function Settings() {
     }
   };
 
-  const apply = async (patch: Partial<SettingsRow>) => {
+  // SettingsPatch, not Partial<SettingsRow>: what may be *written* is
+  // narrower than what settings.get may *return*. `provider` is the case —
+  // a patch must name a live provider id, while a read can hand back a
+  // retired one still sitting in someone's settings.json.
+  const apply = async (patch: SettingsPatch) => {
     if (!current) return;
     setSaving(true);
     setError(null);

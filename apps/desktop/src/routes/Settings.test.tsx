@@ -12,12 +12,7 @@ const mocks = vi.hoisted(() => ({
   opsStatusGet: vi.fn(),
   opsStatusClearError: vi.fn(),
   providersListModels: vi.fn(),
-  providersDetectCli: vi.fn(),
   providersTest: vi.fn(),
-  openRouterKeyInfo: vi.fn(),
-  openRouterOAuthStart: vi.fn(),
-  openRouterOAuthFinish: vi.fn(),
-  webSearchTest: vi.fn(),
   diagnosticsGet: vi.fn(),
   exportCompanionHistory: vi.fn(),
   openExternalUrl: vi.fn(),
@@ -39,18 +34,14 @@ vi.mock("../lib/rpc", () => ({
     get: mocks.opsStatusGet,
     clearError: mocks.opsStatusClearError,
   },
+  // Mirrors ../lib/rpc exactly. `openRouter`, `webSearch` and
+  // `providers.detectCli` used to be mocked here and no longer exist on the
+  // real module — a mock for a method nothing can call tests nothing, and the
+  // 1.0 leftovers had already drifted (an OpenRouter success message returning
+  // provider "openai-codex" after a mechanical id rename).
   providers: {
     listModels: mocks.providersListModels,
-    detectCli: mocks.providersDetectCli,
     test: mocks.providersTest,
-  },
-  openRouter: {
-    keyInfo: mocks.openRouterKeyInfo,
-    oauthStart: mocks.openRouterOAuthStart,
-    oauthFinish: mocks.openRouterOAuthFinish,
-  },
-  webSearch: {
-    test: mocks.webSearchTest,
   },
   diagnostics: {
     get: mocks.diagnosticsGet,
@@ -109,23 +100,28 @@ describe("Settings", () => {
     mocks.settingsGet.mockImplementation(() => Promise.resolve({ ...state }));
     mocks.opsStatusGet.mockResolvedValue([]);
     mocks.settingsSet.mockImplementation((patch: Record<string, unknown>) => {
-      const providerPatch = patch.providers as Record<string, Record<string, unknown>> | undefined;
-      const redactedProviderPatch = providerPatch
-        ? Object.fromEntries(Object.entries(providerPatch).map(([key, value]) => {
-          const next = { ...value };
-          // The engine deletes a stored key when a patch carries an empty
-          // api_key, and redacts (never echoes) a non-empty one.
-          if (typeof next.api_key === "string") {
-            next.api_key_set = next.api_key !== "";
-            delete next.api_key;
-          }
-          return [key, next];
-        }))
-        : undefined;
-      const providers = {
-        ...(state.providers as Record<string, unknown> | undefined),
-        ...redactedProviderPatch,
-      };
+      // settings.go merges a provider patch onto the *existing* entry field by
+      // field — a patch carrying only `model` must not wipe a stored
+      // `consented_at`. Replacing the entry wholesale (what this mock used to
+      // do) hides exactly the bug the engine's merge loop exists to avoid.
+      const providerPatch = patch.providers as
+        | Record<string, Record<string, unknown>>
+        | undefined;
+      const existing = (state.providers ?? {}) as Record<string, Record<string, unknown>>;
+      const providers = { ...existing };
+      for (const [id, entry] of Object.entries(providerPatch ?? {})) {
+        const next = { ...(existing[id] ?? {}), ...entry };
+        // The engine trims every string field it stores, deletes a stored key
+        // when a patch carries an empty api_key, and redacts (never echoes) a
+        // non-empty one.
+        if (typeof next.model === "string") next.model = next.model.trim();
+        if (typeof next.base_url === "string") next.base_url = next.base_url.trim();
+        if (typeof next.api_key === "string") {
+          next.api_key_set = next.api_key.trim() !== "";
+          delete next.api_key;
+        }
+        providers[id] = next;
+      }
       const nextPatch = { ...patch };
       if (typeof nextPatch.web_search_api_key === "string") {
         nextPatch.web_search_api_key_set = nextPatch.web_search_api_key !== "";
@@ -150,38 +146,10 @@ describe("Settings", () => {
       suggested_filename: "linetta-companion-20260825.md",
     });
     mocks.providersListModels.mockResolvedValue({ models: [] });
-    mocks.providersDetectCli.mockResolvedValue({ path: "" });
-    mocks.providersTest.mockResolvedValue({
-      ok: true,
-      provider: "anthropic",
-      model: "claude-sonnet-4-6",
-      message: "연결되었습니다",
-    });
-    mocks.openRouterKeyInfo.mockResolvedValue({
-      ok: true,
-      provider: "openai-codex",
-      label: "Linetta",
-      limit: 10,
-      limit_remaining: 8,
-      usage_monthly: 2,
-    });
-    mocks.openRouterOAuthStart.mockResolvedValue({
-      request_id: "req-1",
-      auth_url: "https://openrouter.ai/auth?callback_url=http%3A%2F%2F127.0.0.1%3A1234%2Fcallback",
-      callback_url: "http://127.0.0.1:1234/callback",
-      expires_at: 1,
-    });
-    mocks.openRouterOAuthFinish.mockResolvedValue({
-      ok: true,
-      provider: "openai-codex",
-      model: "openai/gpt-5.4",
-      message: "OpenRouter 연결이 완료되었습니다.",
-    });
-    mocks.webSearchTest.mockResolvedValue({
-      ok: true,
-      provider: "brave",
-      message: "검색 결과 1건 응답",
-    });
+    // The engine answers providers.test with `{ok: true}` and nothing else —
+    // a failure is an RPC error carrying a reason code, not a payload field.
+    // #94 builds the provider pane against this shape.
+    mocks.providersTest.mockResolvedValue({ ok: true });
   });
 
   it("renders backup, git sync, and degraded summarizer status", async () => {
