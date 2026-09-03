@@ -40,6 +40,12 @@ const (
 	ReasonProviderAuthFailed      = "provider_auth_failed"
 	ReasonProviderRateLimited     = "provider_rate_limited"
 	ReasonProviderUnreachable     = "provider_unreachable"
+
+	// The Codex login (#92). port_in_use is the only one the writer can fix
+	// themselves, and the message has to name the two ports, because the fix
+	// is closing whatever holds them — usually a Codex CLI login.
+	ReasonCodexPortInUse   = "codex_port_in_use"
+	ReasonCodexLoginFailed = "codex_login_failed"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine

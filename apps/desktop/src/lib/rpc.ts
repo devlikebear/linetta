@@ -3,6 +3,8 @@ import type {
   ApplyContextResult,
   ApplyContextSelection,
   Beat,
+  CodexLoginStart,
+  CodexStatus,
   ConsistencyInput,
   ConsistencyReport,
   ContextChangeInput,
@@ -329,6 +331,12 @@ export const providers = {
   listModels: (provider: string) =>
     rpcCall<{ models: string[] }>("providers.list_models", { provider }),
   test: (provider: string) => rpcCall<{ ok: true }>("providers.test", { provider }),
+};
+
+export const codex = {
+  loginStart: () => rpcCall<CodexLoginStart>("codex.login_start"),
+  loginStatus: () => rpcCall<CodexStatus>("codex.login_status"),
+  logout: () => rpcCall<{ ok: true }>("codex.logout"),
 };
 
 export const gitSync = {

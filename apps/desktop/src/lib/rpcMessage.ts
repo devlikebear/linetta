@@ -34,6 +34,10 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   provider_auth_failed: "errors.providerAuthFailed",
   provider_rate_limited: "errors.providerRateLimited",
   provider_unreachable: "errors.providerUnreachable",
+  // The Codex login (#92). port_in_use is the only one the writer can fix
+  // themselves, so its message names the two ports.
+  codex_port_in_use: "errors.codexPortInUse",
+  codex_login_failed: "errors.codexLoginFailed",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

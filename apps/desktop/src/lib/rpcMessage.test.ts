@@ -74,6 +74,20 @@ describe("rpcErrorMessage", () => {
     }
   });
 
+  // The Codex login (#92) is the newest reason-code family: same rule as the
+  // provider codes above — an unmapped code would fall back to the raw
+  // engine message, which for port_in_use names two ports in English.
+  it("covers both Codex login codes", () => {
+    for (const reason of ["codex_port_in_use", "codex_login_failed"]) {
+      const err = new RpcError("codex.login_start", "raw engine message", -32602, { reason });
+      for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
+        const shown = rpcErrorMessage(err, t);
+        expect(shown, `${reason} in ${name}`).not.toContain("raw engine message");
+        expect(shown.length, `${reason} in ${name}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   // The engine's English message for a provider failure carries up to 200
   // bytes of the provider's own response body. If a code is unmapped the
   // fallback prints that body verbatim as UI text, which is exactly what the
