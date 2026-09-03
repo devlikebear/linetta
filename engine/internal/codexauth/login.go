@@ -99,7 +99,21 @@ func (s *Service) WithClock(fn func() time.Time) *Service { s.now = fn; return s
 // A second Start cancels the first. A writer who abandoned one attempt and
 // clicked again should not have a stale listener holding the port, nor two
 // listeners racing for one callback.
+//
+// ctx is checked once, up front, for a caller that has already given up —
+// see below — but does not bound the login window itself. Today's RPC server
+// hands handlers a connection-lifetime context, so that would be harmless,
+// but it is a trap for a future transport that hands handlers a per-request
+// context: the 5-minute window a writer needs to find their password would
+// silently collapse to however long that single request is allowed to run.
+// The window is instead derived from context.Background(), and torn down
+// deliberately by stopCurrent (via a second Start, Logout, or Close) or by
+// its own timeout — never by the caller's request finishing.
 func (s *Service) Start(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	verifier, challenge, err := newPKCE()
 	if err != nil {
 		return "", err
@@ -120,7 +134,7 @@ func (s *Service) Start(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, s.loginWindow)
+	runCtx, cancel := context.WithTimeout(context.Background(), s.loginWindow)
 	att := &attempt{state: state, verifier: verifier, cancel: cancel}
 
 	mux := http.NewServeMux()
