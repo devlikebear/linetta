@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,13 +40,13 @@ func newTokenServer(t *testing.T, idToken string) *tokenServer {
 	return ts
 }
 
-// follow performs the browser's half: GET the callback with the code and state
-// the issuer would have sent back.
-func follow(t *testing.T, authURL, code string, overrideState string) *http.Response {
-	t.Helper()
+// callbackURL builds the address the issuer would send the browser back to:
+// the authorize URL's own redirect_uri, carrying params plus this attempt's
+// state (or overrideState, to forge one).
+func callbackURL(authURL string, params url.Values, overrideState string) (string, error) {
 	u, err := url.Parse(authURL)
 	if err != nil {
-		t.Fatalf("parse auth url: %v", err)
+		return "", err
 	}
 	q := u.Query()
 	state := q.Get("state")
@@ -54,15 +55,34 @@ func follow(t *testing.T, authURL, code string, overrideState string) *http.Resp
 	}
 	redirect, err := url.Parse(q.Get("redirect_uri"))
 	if err != nil {
-		t.Fatalf("parse redirect uri: %v", err)
+		return "", err
 	}
 	cb := *redirect
 	cbq := url.Values{}
-	cbq.Set("code", code)
+	for k, vs := range params {
+		cbq[k] = vs
+	}
 	cbq.Set("state", state)
 	cb.RawQuery = cbq.Encode()
+	return cb.String(), nil
+}
 
-	res, err := http.Get(cb.String())
+// follow performs the browser's half: GET the callback with the code and state
+// the issuer would have sent back.
+func follow(t *testing.T, authURL, code string, overrideState string) *http.Response {
+	t.Helper()
+	return followCallback(t, authURL, url.Values{"code": {code}}, overrideState)
+}
+
+// followCallback is follow for a callback that is not a plain success — a
+// declined consent screen (?error=...), or one with no code at all.
+func followCallback(t *testing.T, authURL string, params url.Values, overrideState string) *http.Response {
+	t.Helper()
+	cb, err := callbackURL(authURL, params, overrideState)
+	if err != nil {
+		t.Fatalf("build callback url: %v", err)
+	}
+	res, err := http.Get(cb)
 	if err != nil {
 		t.Fatalf("callback GET: %v", err)
 	}
@@ -79,25 +99,28 @@ func follow(t *testing.T, authURL, code string, overrideState string) *http.Resp
 // a caller might be blocked reading, which hangs the test instead of failing
 // it cleanly.
 func followAsync(authURL, code, overrideState string) (*http.Response, error) {
-	u, err := url.Parse(authURL)
+	cb, err := callbackURL(authURL, url.Values{"code": {code}}, overrideState)
 	if err != nil {
 		return nil, err
 	}
-	q := u.Query()
-	state := q.Get("state")
-	if overrideState != "" {
-		state = overrideState
-	}
-	redirect, err := url.Parse(q.Get("redirect_uri"))
+	return http.Get(cb)
+}
+
+// listenEphemeral is the test suite's stand-in for listenOnRegisteredPort. The
+// production listener binds 1455 or 1457, which are shared machine state: a
+// `codex login` sitting in someone's other terminal, or a second `go test`
+// run, would make most of this file fail rather than skip. Nothing in these
+// tests depends on the port number — the callback address travels in the
+// authorize URL's redirect_uri, which is what follow() reads — so an
+// ephemeral port makes the suite hermetic. Only
+// TestStart_bothPortsBusyIsAnError, which is about the registered ports
+// themselves, keeps the production listener.
+func listenEphemeral() (net.Listener, int, error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	cb := *redirect
-	cbq := url.Values{}
-	cbq.Set("code", code)
-	cbq.Set("state", state)
-	cb.RawQuery = cbq.Encode()
-	return http.Get(cb.String())
+	return ln, ln.Addr().(*net.TCPAddr).Port, nil
 }
 
 func newService(t *testing.T, idToken string) (*Service, *tokenServer, string) {
@@ -105,8 +128,28 @@ func newService(t *testing.T, idToken string) (*Service, *tokenServer, string) {
 	home := t.TempDir()
 	ts := newTokenServer(t, idToken)
 	svc := NewService(home).WithTokenURL(ts.URL).WithHTTPClient(ts.Client())
+	svc.listen = listenEphemeral
 	t.Cleanup(func() { _ = svc.Close() })
 	return svc, ts, home
+}
+
+// TestNewService_wiresNoTestSeams guards the seams themselves. They are
+// package-private fields a test assigns, which means a future constructor
+// change could quietly wire one up in production and nothing would complain.
+func TestNewService_wiresNoTestSeams(t *testing.T) {
+	svc := NewService("x")
+	if svc.startRaceSeamForTest != nil {
+		t.Error("NewService wired a test seam into a production Service")
+	}
+	// The listener is not a test seam — it is a real dependency with a real
+	// default — but the default has to be the registered-port listener, or
+	// production would sign in on a port the issuer never redirects to.
+	if svc.listen == nil {
+		t.Fatal("NewService left the callback listener unset")
+	}
+	if reflect.ValueOf(svc.listen).Pointer() != reflect.ValueOf(listenOnRegisteredPort).Pointer() {
+		t.Error("NewService does not default to the registered-port listener")
+	}
 }
 
 func TestStart_completesTheLoginAndWritesTheCredential(t *testing.T) {
@@ -117,13 +160,22 @@ func TestStart_completesTheLoginAndWritesTheCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+	// Capture the attempt's own PKCE verifier before the callback retires it,
+	// so the exchange assertion below can compare against the real value
+	// rather than settling for "looks long enough".
+	svc.mu.Lock()
+	wantVerifier := svc.current.verifier
+	svc.mu.Unlock()
+
 	res := follow(t, authURL, "the-code", "")
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("callback status = %d, want 200", res.StatusCode)
 	}
 	body, _ := io.ReadAll(res.Body)
-	if !strings.Contains(string(body), "Linetta") {
-		t.Errorf("success page does not mention Linetta: %s", body)
+	// Assert on wording unique to the success page: both pages say "Linetta",
+	// so matching that would pass on the failure page too.
+	if !strings.Contains(string(body), "Signed in to ChatGPT") {
+		t.Errorf("the callback did not serve the success page: %s", body)
 	}
 
 	// The credential must land before Status reports a login.
@@ -152,9 +204,8 @@ func TestStart_completesTheLoginAndWritesTheCredential(t *testing.T) {
 	if got := ts.gotForm.Get("client_id"); got != ClientID {
 		t.Errorf("client_id = %q", got)
 	}
-	verifier := ts.gotForm.Get("code_verifier")
-	if len(verifier) < 43 {
-		t.Errorf("code_verifier = %q, want the PKCE verifier", verifier)
+	if got := ts.gotForm.Get("code_verifier"); got != wantVerifier {
+		t.Errorf("code_verifier = %q, want this attempt's own verifier %q", got, wantVerifier)
 	}
 	authQuery, _ := url.Parse(authURL)
 	if got, want := ts.gotForm.Get("redirect_uri"), authQuery.Query().Get("redirect_uri"); got != want {
@@ -173,7 +224,7 @@ func TestStart_completesTheLoginAndWritesTheCredential(t *testing.T) {
 }
 
 func TestStart_rejectsACallbackWithTheWrongState(t *testing.T) {
-	svc, _, home := newService(t, fakeIDToken(t, "a@b.c", "acct", 1))
+	svc, ts, home := newService(t, fakeIDToken(t, "a@b.c", "acct", 1))
 	authURL, err := svc.Start(context.Background())
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -183,6 +234,12 @@ func TestStart_rejectsACallbackWithTheWrongState(t *testing.T) {
 		t.Errorf("status = %d, want 400 for a mismatched state", res.StatusCode)
 	}
 	time.Sleep(100 * time.Millisecond)
+	// The state gate's real property is stronger than "no credential landed":
+	// a forged callback must not reach the exchange at all, so the forged
+	// code is never presented to the issuer.
+	if len(ts.gotForm) != 0 {
+		t.Errorf("a forged callback reached the token endpoint: %v", ts.gotForm)
+	}
 	if _, err := readAuthFile(home); err == nil {
 		t.Fatal("a forged callback wrote a credential")
 	}
@@ -257,6 +314,106 @@ func TestStatus_reportsAFailedExchangeUntilTheNextStart(t *testing.T) {
 	}
 }
 
+// awaitLoginFailed polls until Status reports a terminal failure. The failure
+// is recorded inside the callback handler before it writes the response, but
+// polling keeps the assertion from being coupled to exactly when that happens.
+func awaitLoginFailed(t *testing.T, svc *Service) Status {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	var st Status
+	for time.Now().Before(deadline) {
+		if st = svc.Status(); st.LoginFailed {
+			return st
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return st
+}
+
+// TestCallback_aDeclinedConsentScreenIsAReportedFailure guards the gap
+// LoginFailed exists to close, at its most common cause. A writer who clicks
+// Cancel on OpenAI's consent screen comes back as ?error=access_denied with a
+// perfectly valid state: past the state gate, terminal, and — before this —
+// silent, so the pane went on saying "waiting for your browser" for the rest
+// of the five-minute window while the writer looked at a failure page saying
+// the opposite.
+func TestCallback_aDeclinedConsentScreenIsAReportedFailure(t *testing.T) {
+	svc, ts, _ := newService(t, "")
+
+	authURL, err := svc.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	res := followCallback(t, authURL, url.Values{
+		"error":             {"access_denied"},
+		"error_description": {"The user denied the request"},
+	}, "")
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("callback status = %d, want 400 for a declined consent", res.StatusCode)
+	}
+	if len(ts.gotForm) != 0 {
+		t.Errorf("a declined consent still reached the token endpoint: %v", ts.gotForm)
+	}
+
+	st := awaitLoginFailed(t, svc)
+	if !st.LoginFailed {
+		t.Fatal("Status never reported the declined consent; the pane would spin until the window closed")
+	}
+	if st.LoggedIn {
+		t.Error("a declined consent must not also report a login")
+	}
+
+	// And the attempt must be over, not merely marked failed: an answer the
+	// writer has already given must not hold a callback port for the rest of
+	// the window.
+	assertCallbackListenerStopped(t, authURL)
+}
+
+// TestCallback_aCallbackWithNoCodeIsAReportedFailure covers the other branch
+// past the state gate that used to end in silence: the issuer sent the browser
+// back with neither an error nor a code, which is terminal for this attempt
+// just the same.
+func TestCallback_aCallbackWithNoCodeIsAReportedFailure(t *testing.T) {
+	svc, _, _ := newService(t, "")
+
+	authURL, err := svc.Start(context.Background())
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	res := followCallback(t, authURL, url.Values{}, "")
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("callback status = %d, want 400 for a callback with no code", res.StatusCode)
+	}
+	if st := awaitLoginFailed(t, svc); !st.LoginFailed {
+		t.Fatal("Status never reported a callback that carried no code")
+	}
+	assertCallbackListenerStopped(t, authURL)
+}
+
+// assertCallbackListenerStopped checks that nothing is still listening on the
+// attempt's callback address. The teardown is asynchronous (Shutdown waits for
+// the handler that scheduled it to return), so poll rather than assume.
+func assertCallbackListenerStopped(t *testing.T, authURL string) {
+	t.Helper()
+	// The probe carries a forged state on purpose: it must bounce off the
+	// state gate rather than reach the exchange, or the probe itself would
+	// complete a login and stop the very listener it is checking on.
+	cb, err := callbackURL(authURL, url.Values{"code": {"late"}}, "a-forged-probe-state")
+	if err != nil {
+		t.Fatalf("build callback url: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		res, err := http.Get(cb)
+		if err != nil {
+			return
+		}
+		_ = res.Body.Close()
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Error("the callback listener is still holding its port after a terminal failure")
+}
+
 // TestStart_aStaleFailureFromTheSupersededAttemptDoesNotSurviveASecondStart
 // guards the exact window a round-2 review found: Start clears the previous
 // attempt's recorded failure and invalidates that attempt in two separate
@@ -312,6 +469,9 @@ func TestStart_bothPortsBusyIsAnError(t *testing.T) {
 		defer ln.Close() //nolint:revive // held for the length of the test on purpose
 	}
 	svc, _, _ := newService(t, "")
+	// This is the one case that is about the registered ports themselves, so
+	// it is the one case that uses the production listener.
+	svc.listen = listenOnRegisteredPort
 	_, err := svc.Start(context.Background())
 	if !errors.Is(err, ErrPortInUse) {
 		t.Fatalf("err = %v, want ErrPortInUse", err)
@@ -331,10 +491,19 @@ func TestStart_secondCallCancelsTheFirst(t *testing.T) {
 	if first == second {
 		t.Fatal("the second login reused the first state; each attempt needs its own")
 	}
-	// The first attempt's callback must no longer be honoured.
-	res := follow(t, first, "code", "")
-	if res.StatusCode == http.StatusOK {
-		t.Error("a superseded login attempt still accepted its callback")
+	// The first attempt's callback must no longer be honoured. Either outcome
+	// counts: on the registered ports the second Start rebinds the same port
+	// and the new server refuses the stale state, and on the ephemeral ports
+	// this suite uses the first listener is simply gone and the connection is
+	// refused. Accepting both is also what retires the rebind flake this test
+	// used to have — it no longer depends on the second bind winning a race
+	// with the first close.
+	res, err := followAsync(first, "code", "")
+	if err == nil {
+		defer res.Body.Close()
+		if res.StatusCode == http.StatusOK {
+			t.Error("a superseded login attempt still accepted its callback")
+		}
 	}
 }
 
@@ -425,6 +594,7 @@ func TestStart_secondStartDuringExchangeDoesNotWriteCredential(t *testing.T) {
 	bs := newBlockingTokenServer(t, idToken)
 
 	svc := NewService(home).WithTokenURL(bs.URL).WithHTTPClient(bs.Client())
+	svc.listen = listenEphemeral
 	t.Cleanup(func() { _ = svc.Close() })
 
 	first, err := svc.Start(context.Background())
@@ -474,6 +644,7 @@ func TestLogoutMethod_duringAnInFlightExchangeIsNotUndone(t *testing.T) {
 	bs := newBlockingTokenServer(t, idToken)
 
 	svc := NewService(home).WithTokenURL(bs.URL).WithHTTPClient(bs.Client())
+	svc.listen = listenEphemeral
 	t.Cleanup(func() { _ = svc.Close() })
 
 	authURL, err := svc.Start(context.Background())
@@ -510,61 +681,89 @@ func TestLogoutMethod_duringAnInFlightExchangeIsNotUndone(t *testing.T) {
 	}
 }
 
-// TestCallback_recheckAfterExchangeRefusesAStaleWrite guards finding 2
-// directly, at the exact window the review named: not "during the HTTP
-// round trip" (already covered above, and already closed by the exchange
-// running on r.Context()), but the narrow gap strictly between the exchange
-// returning and writeAuthFile being called. Blocking the token server can't
-// land a test there — closing an attempt's listener cancels the request
-// context and the exchange never returns at all — so this uses the
-// package-private afterExchangeForTest seam to run a Logout at exactly that
-// point, deterministically, instead of hoping a goroutine schedules there.
-func TestCallback_recheckAfterExchangeRefusesAStaleWrite(t *testing.T) {
+// TestFinishLogin_refusesToWriteForASupersededAttempt guards finding 2
+// directly, at the exact window the review named: not "during the HTTP round
+// trip" (already covered above, and already closed by the exchange running on
+// r.Context()), but the narrow gap strictly between the exchange returning and
+// the credential being written. Blocking the token server cannot land a test
+// there — closing an attempt's listener cancels the request context and the
+// exchange never returns at all — and this used to need a production seam
+// planted mid-handler. It does not any more: finishLogin *is* that half of the
+// callback, so the test signs out first and then runs the whole post-code path
+// against a recorder, with the attempt already stale before the exchange even
+// starts. Deterministic, and no seam.
+func TestFinishLogin_refusesToWriteForASupersededAttempt(t *testing.T) {
 	svc, _, home := newService(t, fakeIDToken(t, "a@b.c", "acct", 1))
 
 	authURL, err := svc.Start(context.Background())
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-
-	// hookDone carries the hook's Logout error back to the test goroutine.
-	// Using a channel (rather than a plain variable the hook assigns) gives
-	// the race detector a real happens-before edge: the hook runs on the
-	// server's per-connection goroutine, and a bare variable read after the
-	// client's HTTP round trip completes is not actually synchronized with
-	// it — the socket carries bytes, not a Go memory barrier.
-	hookDone := make(chan error, 1)
-	svc.afterExchangeForTest = func() {
-		// The exchange has already returned successfully; simulate a Logout
-		// landing in the gap before the credential is written.
-		hookDone <- svc.Logout()
+	svc.mu.Lock()
+	att := svc.current
+	svc.mu.Unlock()
+	if att == nil {
+		t.Fatal("Start left no current attempt")
 	}
 
-	// Logout closes this attempt's own listener from inside the hook, so
-	// whether the client sees a clean refusal or a reset connection is
-	// timing-dependent and is not what is under test — use the
-	// non-fataling GET, run in the background, and ignore its outcome. What
-	// matters is whether a credential lands on disk afterward.
-	go func() {
-		if res, err := followAsync(authURL, "the-code", ""); err == nil {
-			_ = res.Body.Close()
-		}
-	}()
-
-	if err := <-hookDone; err != nil {
-		t.Fatalf("Logout (from the hook): %v", err)
+	// The writer signs out while this attempt's exchange is still in flight.
+	if err := svc.Logout(); err != nil {
+		t.Fatalf("Logout: %v", err)
 	}
 
-	// The channel receive above happened-after everything the handler did up
-	// to and including the hook, but the handler keeps running afterward.
-	// Give a stray writeAuthFile call a moment to land before asserting it
-	// didn't: the fix refuses before ever calling it, but unfixed code races
-	// the write against the connection Logout already closed, and this
-	// makes that race resolve before the check runs instead of the check
-	// beating a write that is still in flight.
-	time.Sleep(300 * time.Millisecond)
+	cb, err := callbackURL(authURL, url.Values{"code": {"the-code"}}, "")
+	if err != nil {
+		t.Fatalf("build callback url: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	svc.finishLogin(rec, httptest.NewRequest(http.MethodGet, cb, nil), att, "the-code", PrimaryPort)
+
+	if rec.Code == http.StatusOK {
+		t.Errorf("a superseded attempt's callback reported success (status %d)", rec.Code)
+	}
 	if _, err := readAuthFile(home); err == nil {
-		t.Fatal("a credential was written after Logout ran between the exchange returning and the write")
+		t.Fatal("a credential was written for an attempt that was superseded before the write")
+	}
+	if svc.Status().LoggedIn {
+		t.Error("Status reports a login after a superseded attempt finished its exchange")
+	}
+}
+
+// TestLogout_waitsForAnInFlightCredentialWrite guards the check-to-write
+// window the recheck above cannot close on its own. The recheck and the write
+// are two steps; so are Logout's stop and delete. Interleave them —
+// storeCredential's recheck passes, Logout stops the attempt and deletes the
+// file, storeCredential writes — and a credential survives a successful
+// sign-out, with Status reporting signed in.
+//
+// The interleaving is a handful of instructions wide and cannot be scheduled
+// deliberately, so this test asserts the property that closes it instead: the
+// two pairs are mutually exclusive under fileMu. Holding fileMu stands in for
+// a callback that is inside storeCredential; Logout must not proceed until it
+// is released.
+func TestLogout_waitsForAnInFlightCredentialWrite(t *testing.T) {
+	svc, _, home := newService(t, "")
+	if err := writeAuthFile(home, Tokens{AccessToken: "a"}, time.Now()); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	svc.fileMu.Lock()
+	done := make(chan error, 1)
+	go func() { done <- svc.Logout() }()
+
+	select {
+	case err := <-done:
+		svc.fileMu.Unlock()
+		t.Fatalf("Logout ran while a credential write held the file lock (err = %v)", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	svc.fileMu.Unlock()
+	if err := <-done; err != nil {
+		t.Fatalf("Logout: %v", err)
+	}
+	if _, err := readAuthFile(home); err == nil {
+		t.Error("Logout left the credential behind")
 	}
 }
 

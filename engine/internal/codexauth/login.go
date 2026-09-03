@@ -24,6 +24,17 @@ var ErrPortInUse = errors.New("codexauth: both callback ports are in use")
 // ErrLoginFailed means the issuer refused the exchange.
 var ErrLoginFailed = errors.New("codexauth: login failed")
 
+// ErrLoginDeclined means the writer said no on the consent screen, or the
+// issuer sent the browser back without an authorization code. It is a terminal
+// outcome for that attempt, not a transport problem.
+var ErrLoginDeclined = errors.New("codexauth: the authorization was declined")
+
+// errSuperseded means the attempt whose callback is running is no longer the
+// one in flight — a Logout or a second Start landed while it was waiting on
+// the issuer — so its credential must not be written. Never surfaced to a
+// caller; it only picks the response the callback writes.
+var errSuperseded = errors.New("codexauth: the attempt was superseded")
+
 // defaultLoginWindow bounds how long a callback listener stays open. Long
 // enough to find a password, short enough that a forgotten attempt does not
 // hold a port all day.
@@ -66,6 +77,25 @@ type Service struct {
 
 	loginWindow time.Duration
 
+	// listen binds the callback listener. NewService points it at the real
+	// listenOnRegisteredPort; the test suite swaps in an ephemeral-port
+	// listener so running the tests does not fight a `codex login` (or a
+	// second `go test` run) over the two registered ports. Only the test that
+	// is actually about those ports uses the production listener.
+	listen func() (net.Listener, int, error)
+
+	// fileMu guards the stored credential: it is held across the
+	// still-current recheck plus the write in storeCredential, and across the
+	// stop plus the delete in Logout. Without it those two pairs interleave
+	// and a credential survives a successful sign-out (`isCurrent` says yes →
+	// Logout stops the attempt and deletes → the callback writes anyway).
+	//
+	// It is deliberately separate from mu rather than an extension of it: mu
+	// is taken inside this section (via isCurrent and stopCurrent) and must
+	// stay a short, leaf-level lock that no file I/O runs under. Lock order is
+	// always fileMu then mu; nothing takes them the other way round.
+	fileMu sync.Mutex
+
 	mu      sync.Mutex
 	current *attempt
 	// lastFailure is the terminal failure the most recent attempt's callback
@@ -74,20 +104,17 @@ type Service struct {
 	// hasLastFailure; cleared at the top of Start.
 	lastFailure error
 
-	// afterExchangeForTest, if set, runs synchronously right after a
-	// successful exchange and before the pre-write recheck. Production code
-	// never sets it; it exists only so a test can land a Logout or a second
-	// Start deterministically inside the window between the exchange
-	// returning and the credential write, instead of hoping a goroutine
-	// schedules there.
-	afterExchangeForTest func()
-
 	// startRaceSeamForTest, if set, runs synchronously inside Start, between
 	// invalidating the previous attempt and clearing its recorded failure.
 	// Production code never sets it; it exists only so a test can land a
 	// simulated stale write from the superseded attempt's callback
 	// deterministically inside that window, instead of hoping a goroutine
-	// schedules there — mirroring afterExchangeForTest above. See
+	// schedules there. It is the only such seam left — the post-exchange one
+	// it used to mirror was dissolved by splitting finishLogin out, which a
+	// test can call directly. The window this one drives is pure, non-blocking
+	// work between two mutex sections, with no I/O to hang a fake server on
+	// and no function boundary to call across, so there is no equivalent way
+	// to reach it. See
 	// TestStart_aStaleFailureFromTheSupersededAttemptDoesNotSurviveASecondStart.
 	startRaceSeamForTest func()
 }
@@ -101,6 +128,7 @@ func NewService(codexHome string) *Service {
 		client:      &http.Client{Timeout: exchangeTimeout},
 		now:         time.Now,
 		loginWindow: defaultLoginWindow,
+		listen:      listenOnRegisteredPort,
 	}
 }
 
@@ -130,6 +158,14 @@ func (s *Service) WithClock(fn func() time.Time) *Service { s.now = fn; return s
 // The window is instead derived from context.Background(), and torn down
 // deliberately by stopCurrent (via a second Start, Logout, or Close) or by
 // its own timeout — never by the caller's request finishing.
+//
+// One consequence is worth stating plainly, because it reads as a mystery in
+// a bug report otherwise: the token exchange runs on the *callback request's*
+// context, so a writer who closes the browser tab while the exchange is in
+// flight cancels it, and the login fails. That is deliberate. The exchange
+// exists to answer the browser that is waiting for it; once nobody is waiting,
+// finishing it would only write a credential nobody can be told about. The
+// window stays open, so clicking sign-in again works.
 func (s *Service) Start(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -168,7 +204,7 @@ func (s *Service) Start(ctx context.Context) (string, error) {
 	// this attempt's business to report.
 	s.setLastFailure(nil)
 
-	ln, port, err := listenOnRegisteredPort()
+	ln, port, err := s.listen()
 	if err != nil {
 		return "", err
 	}
@@ -210,56 +246,93 @@ func (s *Service) callbackHandler(att *attempt, port int) http.HandlerFunc {
 			writePage(w, http.StatusBadRequest, failurePage)
 			return
 		}
+		// A declined consent screen is the most common terminal failure there
+		// is — far more common than a refused exchange — and it arrives here,
+		// past the state gate, as ?error=access_denied. Record it, or the pane
+		// spins on "waiting for your browser" for the rest of the window while
+		// the writer looks at a failure page saying otherwise.
 		if e := q.Get("error"); e != "" {
-			log.Printf("codexauth: issuer refused the authorization: %s", e)
-			writePage(w, http.StatusBadRequest, failurePage)
+			// URL-decoded issuer text: bound it and quote it, so a newline in
+			// the query string cannot forge a log record.
+			log.Printf("codexauth: issuer refused the authorization: %.64q", e)
+			s.failAttempt(w, att, fmt.Errorf("%w: the issuer refused the authorization", ErrLoginDeclined))
 			return
 		}
 		code := q.Get("code")
 		if code == "" {
-			writePage(w, http.StatusBadRequest, failurePage)
+			s.failAttempt(w, att, fmt.Errorf("%w: the callback carried no authorization code", ErrLoginDeclined))
 			return
 		}
 
-		tok, err := s.exchange(r.Context(), code, att.verifier, port)
-		if err != nil {
-			log.Printf("codexauth: %v", err)
-			s.recordAttemptFailure(att, err)
-			writePage(w, http.StatusBadGateway, failurePage)
-			return
-		}
-
-		if s.afterExchangeForTest != nil {
-			s.afterExchangeForTest()
-		}
-
-		// The exchange can run for up to exchangeTimeout. Re-validate that
-		// this attempt is still the one in flight immediately before writing
-		// anything: a Logout or a second Start that landed while we were
-		// waiting on the issuer must not have its outcome overwritten by a
-		// credential this attempt no longer has any business writing.
-		if !s.isCurrent(att) {
-			writePage(w, http.StatusBadRequest, failurePage)
-			return
-		}
-
-		_, accountID, _ := claimsFromIDToken(tok.IDToken)
-		tok.AccountID = accountID
-		if err := writeAuthFile(s.codexHome, tok, s.now()); err != nil {
-			log.Printf("codexauth: %v", err)
-			s.recordAttemptFailure(att, err)
-			writePage(w, http.StatusInternalServerError, failurePage)
-			return
-		}
-		writePage(w, http.StatusOK, successPage)
-
-		// The writer has their answer; this attempt's job is done. stopAttempt
-		// shuts down gracefully — draining the response already in flight
-		// rather than resetting it, as Close would — and only touches
-		// s.current if it is still this attempt: a second Start that already
-		// replaced it is not this attempt's cleanup to perform.
-		go s.stopAttempt(att)
+		s.finishLogin(w, r, att, code, port)
 	}
+}
+
+// failAttempt ends att on a terminal pre-exchange failure: it records the
+// failure so Status can report it, answers the browser, and stops the attempt
+// so an answer the writer has already given does not hold a registered port
+// for the rest of the login window.
+func (s *Service) failAttempt(w http.ResponseWriter, att *attempt, err error) {
+	s.recordAttemptFailure(att, err)
+	writePage(w, http.StatusBadRequest, failurePage)
+	// Asynchronously, for the same reason the success path is: stopAttempt
+	// calls Shutdown, which waits for this very handler to return.
+	go s.stopAttempt(att)
+}
+
+// finishLogin is the half of the callback that runs once an authorization
+// code is in hand: exchange it, then store the credential. It is split out of
+// callbackHandler so a test can drive the post-exchange window — the gap
+// between the exchange returning and the write — by calling it directly on an
+// attempt that has already been superseded, rather than through a production
+// seam planted mid-handler.
+func (s *Service) finishLogin(w http.ResponseWriter, r *http.Request, att *attempt, code string, port int) {
+	tok, err := s.exchange(r.Context(), code, att.verifier, port)
+	if err != nil {
+		log.Printf("codexauth: %v", err)
+		s.recordAttemptFailure(att, err)
+		writePage(w, http.StatusBadGateway, failurePage)
+		return
+	}
+
+	_, accountID, _ := claimsFromIDToken(tok.IDToken)
+	tok.AccountID = accountID
+	switch err := s.storeCredential(att, tok); {
+	case errors.Is(err, errSuperseded):
+		writePage(w, http.StatusBadRequest, failurePage)
+		return
+	case err != nil:
+		log.Printf("codexauth: %v", err)
+		s.recordAttemptFailure(att, err)
+		writePage(w, http.StatusInternalServerError, failurePage)
+		return
+	}
+	writePage(w, http.StatusOK, successPage)
+
+	// The writer has their answer; this attempt's job is done. stopAttempt
+	// shuts down gracefully — draining the response already in flight
+	// rather than resetting it, as Close would — and only touches
+	// s.current if it is still this attempt: a second Start that already
+	// replaced it is not this attempt's cleanup to perform.
+	go s.stopAttempt(att)
+}
+
+// storeCredential writes tok, but only if att is still the attempt in flight.
+//
+// The exchange can run for up to exchangeTimeout, so a Logout or a second
+// Start may well have landed while we were waiting on the issuer, and its
+// outcome must not be overwritten by a credential this attempt no longer has
+// any business writing. The recheck and the write are one critical section
+// under fileMu, and Logout takes the same lock across its own stop-and-delete:
+// otherwise the check passes, Logout stops the attempt and deletes the file,
+// and this write puts a credential back after a successful sign-out.
+func (s *Service) storeCredential(att *attempt, tok Tokens) error {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
+	if !s.isCurrent(att) {
+		return errSuperseded
+	}
+	return writeAuthFile(s.codexHome, tok, s.now())
 }
 
 // isCurrent reports whether att is still the attempt in flight.
@@ -365,7 +438,14 @@ func (s *Service) Status() Status {
 }
 
 // Logout deletes the stored login and drops any attempt in flight.
+//
+// Both steps run under fileMu, in that order. Dropping the attempt first is
+// what makes a callback that is mid-exchange fail its own recheck; holding
+// fileMu across both is what stops a callback that already passed that recheck
+// from writing its credential after the delete. See storeCredential.
 func (s *Service) Logout() error {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
 	s.stopCurrent()
 	return Logout(s.codexHome)
 }
