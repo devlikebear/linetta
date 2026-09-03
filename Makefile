@@ -26,7 +26,9 @@ audit-go: ## Check reachable Go vulnerabilities (requires govulncheck)
 
 audit-desktop: ## Check production frontend dependencies
 	@# GHSA-qwww-vcr4-c8h2 only affects React Router's unstable RSC APIs.
-	@if rg -n 'react-router/unstable_rsc|unstable_RSC|RSCRouter|RSCStaticRouter|getRSCStream|createCallServer' apps/desktop/src apps/desktop/package.json; then \
+	@# grep, not rg: the Linux CI runner ships no ripgrep, and a missing binary
+	@# makes `if` take the false branch — so this guard silently passed there.
+	@if grep -rnE 'react-router/unstable_rsc|unstable_RSC|RSCRouter|RSCStaticRouter|getRSCStream|createCallServer' apps/desktop/src apps/desktop/package.json; then \
 		echo "React Router RSC usage detected; remove the GHSA-qwww-vcr4-c8h2 audit exception"; \
 		exit 1; \
 	fi

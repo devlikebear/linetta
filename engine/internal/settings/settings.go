@@ -11,19 +11,21 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/devlikebear/linetta/engine/internal/paths"
 )
 
-// Allowed provider IDs (must match tars/pkg/llm provider names + UI labels).
+// Provider ids the built-in agent can use (#90). Each maps 1:1 to a tars
+// pkg/llm provider name. Codex authenticates with an OAuth login the app
+// performs itself (#92); the other three take an API key. "openai" is the
+// OpenAI-compatible family: base_url points it at OpenRouter, Ollama, LM Studio.
 const (
-	ProviderClaudeCodeCLI = "claude-code-cli"
-	ProviderOpenAICodex   = "openai-codex"
-	ProviderAnthropic     = "anthropic"
-	ProviderOpenAI        = "openai"
-	ProviderOpenRouter    = "openrouter"
-	ProviderGeminiNative  = "gemini-native"
+	ProviderOpenAICodex  = "openai-codex"
+	ProviderAnthropic    = "anthropic"
+	ProviderGeminiNative = "gemini-native"
+	ProviderOpenAI       = "openai"
 )
 
 // AIDataSharingConsentVersion increments whenever the disclosed third-party
@@ -34,29 +36,6 @@ const AIDataSharingConsentVersion = 1
 // Leaving the model empty lets tars fall back to gpt-5.3-codex, which is only
 // supported for API-backed Codex and returns 400 for ChatGPT account auth.
 const DefaultOpenAICodexModel = "gpt-5.3-codex-spark"
-
-// OpenRouterBaseURL is the OpenAI-compatible API endpoint documented by
-// OpenRouter. The app keeps "openrouter" as a user-facing provider and maps it
-// to OpenAI-compatible calls only at the tars boundary.
-const OpenRouterBaseURL = "https://openrouter.ai/api/v1"
-
-// DefaultOpenRouterModel favors trustable first answers over the cheapest route.
-// Webnovel planning, outlining, and scene rewrites are quality-sensitive, so the
-// beginner default should be an explicit frontier model instead of OpenRouter's
-// cost/quality auto router.
-const DefaultOpenRouterModel = "openai/gpt-5.4"
-
-// OpenRouterFastModel is a curated cheaper writing fallback shown near the top
-// of OpenRouter model lists.
-const OpenRouterFastModel = "google/gemini-3-flash-preview"
-
-// OpenRouterAutoModel remains available as an advanced, cost-sensitive option.
-const OpenRouterAutoModel = "openrouter/auto"
-
-// OpenRouterDefaultMaxTokens keeps first-run GPT-5.4 requests under a small
-// OpenRouter key limit. Without an explicit max_tokens, OpenRouter can reserve a
-// model-scale output budget and reject even tiny prompts with 402.
-const OpenRouterDefaultMaxTokens = 2048
 
 func validLanguages() []string { return []string{"ko", "en", "ja"} }
 
@@ -71,28 +50,35 @@ const defaultPalette = "hanji"
 
 func validCopyProfiles() []string { return []string{"plain", "munpia", "series", "joara"} }
 
-// ProviderConfig is the shape of a stored per-provider entry.
+// ProviderConfig is one provider's stored entry (#90/#91).
 //
-// Deprecated: nothing writes these any more (#47). The type survives so the
-// Config field that carries them keeps its shape and a save round-trips what
-// a writer configured before the companion was removed.
+// APIKey is legacy on-disk input only: a pre-1.0 settings.json may still carry
+// one, load() moves it into the SecretStore and it is never written back.
+// Patches carry keys through ProviderPatch instead.
 type ProviderConfig struct {
 	Model       string `json:"model,omitempty"`
 	APIKey      string `json:"api_key,omitempty"`
-	APIKeySet   bool   `json:"api_key_set,omitempty"`
-	ClearAPIKey bool   `json:"clear_api_key,omitempty"`
-	BaseURL     string `json:"base_url,omitempty"`
-	CliPath     string `json:"cli_path,omitempty"`
+	APIKeySet   bool   `json:"api_key_set,omitempty"`  // settings.get presence flag, never persisted
+	BaseURL     string `json:"base_url,omitempty"`     // openai only
+	ConsentedAt int64  `json:"consented_at,omitempty"` // per-provider data-sharing consent; 0 = none
+}
+
+// ProviderPatch is one provider's entry in Patch.Providers. Nil leaves the
+// field alone. An empty APIKey deletes the stored key; ConsentedAt 0 revokes.
+type ProviderPatch struct {
+	Model       *string `json:"model,omitempty"`
+	BaseURL     *string `json:"base_url,omitempty"`
+	APIKey      *string `json:"api_key,omitempty"`
+	ConsentedAt *int64  `json:"consented_at,omitempty"`
 }
 
 // Config is the on-disk JSON. backup_dir is computed at Load time and not
 // persisted (the field is omitted from JSON marshalling on write).
 type Config struct {
 	Language string `json:"language"`
-	Provider string `json:"provider"`
-	// Deprecated: the built-in AI companion is gone (#47). These fields are no
-	// longer settable and nothing reads them, but they stay in Config and in
-	// persist's field list so a save does not delete what is already on disk.
+	// The built-in agent's provider (#90). Provider is the active id; Providers
+	// holds each id's model, base URL and consent. Keys live in the SecretStore.
+	Provider                    string                    `json:"provider"`
 	Providers                   map[string]ProviderConfig `json:"providers,omitempty"`
 	TypewriterDefault           bool                      `json:"typewriter_default"`
 	FocusDefault                bool                      `json:"focus_default"`
@@ -124,26 +110,28 @@ type Config struct {
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
 type Patch struct {
-	Language                  *string  `json:"language,omitempty"`
-	TypewriterDefault         *bool    `json:"typewriter_default,omitempty"`
-	FocusDefault              *bool    `json:"focus_default,omitempty"`
-	Theme                     *string  `json:"theme,omitempty"`
-	Palette                   *string  `json:"palette,omitempty"`
-	EditorFontSize            *int     `json:"editor_font_size,omitempty"`
-	EditorLineHeight          *float64 `json:"editor_line_height,omitempty"`
-	CopyProfile               *string  `json:"copy_profile,omitempty"`
-	GitSyncDir                *string  `json:"git_sync_dir,omitempty"`
-	GitSyncCommitTemplate     *string  `json:"git_sync_commit_template,omitempty"`
-	FolderSyncDir             *string  `json:"folder_sync_dir,omitempty"`
-	FolderSyncEnabled         *bool    `json:"folder_sync_enabled,omitempty"`
-	SafetyChecklistDismissed  *bool    `json:"safety_checklist_dismissed,omitempty"`
-	OnboardingTourEnabled     *bool    `json:"onboarding_tour_enabled,omitempty"`
-	OnboardingTourSeenVersion *string  `json:"onboarding_tour_seen_version,omitempty"`
-	MCPMode                   *string  `json:"mcp_mode,omitempty"`
-	MCPPort                   *int     `json:"mcp_port,omitempty"`
-	MCPProjectID              *string  `json:"mcp_project_id,omitempty"`
-	MCPConsentVersion         *int     `json:"mcp_consent_version,omitempty"`
-	MCPConsentedAt            *int64   `json:"mcp_consented_at,omitempty"`
+	Language                  *string                  `json:"language,omitempty"`
+	Provider                  *string                  `json:"provider,omitempty"`
+	Providers                 map[string]ProviderPatch `json:"providers,omitempty"`
+	TypewriterDefault         *bool                    `json:"typewriter_default,omitempty"`
+	FocusDefault              *bool                    `json:"focus_default,omitempty"`
+	Theme                     *string                  `json:"theme,omitempty"`
+	Palette                   *string                  `json:"palette,omitempty"`
+	EditorFontSize            *int                     `json:"editor_font_size,omitempty"`
+	EditorLineHeight          *float64                 `json:"editor_line_height,omitempty"`
+	CopyProfile               *string                  `json:"copy_profile,omitempty"`
+	GitSyncDir                *string                  `json:"git_sync_dir,omitempty"`
+	GitSyncCommitTemplate     *string                  `json:"git_sync_commit_template,omitempty"`
+	FolderSyncDir             *string                  `json:"folder_sync_dir,omitempty"`
+	FolderSyncEnabled         *bool                    `json:"folder_sync_enabled,omitempty"`
+	SafetyChecklistDismissed  *bool                    `json:"safety_checklist_dismissed,omitempty"`
+	OnboardingTourEnabled     *bool                    `json:"onboarding_tour_enabled,omitempty"`
+	OnboardingTourSeenVersion *string                  `json:"onboarding_tour_seen_version,omitempty"`
+	MCPMode                   *string                  `json:"mcp_mode,omitempty"`
+	MCPPort                   *int                     `json:"mcp_port,omitempty"`
+	MCPProjectID              *string                  `json:"mcp_project_id,omitempty"`
+	MCPConsentVersion         *int                     `json:"mcp_consent_version,omitempty"`
+	MCPConsentedAt            *int64                   `json:"mcp_consented_at,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -356,6 +344,67 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		}
 		next.Language = *p.Language
 	}
+	if p.Provider != nil {
+		if !slices.Contains(ValidProviders(), *p.Provider) {
+			return Config{}, fmt.Errorf("settings: unknown provider %q", *p.Provider)
+		}
+		next.Provider = *p.Provider
+	}
+	// Provider key writes are collected here and applied only after every
+	// validation below has passed. The SecretStore is the one side effect Set
+	// cannot roll back: writing a key (or deleting one, which an empty api_key
+	// means) before an invalid theme or an out-of-range mcp_port aborts the
+	// call would leave the keychain changed while the caller is told nothing
+	// happened. See applyPendingSecrets below the validations.
+	var pendingSecrets []pendingSecret
+	if len(p.Providers) > 0 {
+		// Validate every id before mutating anything. Map iteration order is
+		// randomized, and a partial pass would let a later invalid id abort
+		// the call after an earlier valid one had already been merged —
+		// breaking the "reject means nothing changed" guarantee.
+		for id := range p.Providers {
+			if !slices.Contains(ValidProviders(), id) {
+				return Config{}, fmt.Errorf("settings: unknown provider %q", id)
+			}
+		}
+		merged := map[string]ProviderConfig{}
+		for id, cfg := range next.Providers {
+			merged[id] = cfg
+		}
+		for id, pp := range p.Providers {
+			cfg := merged[id]
+			if pp.Model != nil {
+				cfg.Model = strings.TrimSpace(*pp.Model)
+			}
+			if pp.BaseURL != nil {
+				base := strings.TrimSpace(*pp.BaseURL)
+				// base_url decides where the request actually goes. Consent is
+				// recorded per provider and the consent sentence names that
+				// provider, so a base_url on "anthropic" would let the real
+				// destination diverge from the name the writer agreed to. Only
+				// "openai" — the OpenAI-compatible family, whose whole purpose
+				// is pointing at OpenRouter/Ollama/LM Studio — may carry one.
+				// An empty string stays allowed so a writer can clear it.
+				if base != "" && id != ProviderOpenAI {
+					return Config{}, fmt.Errorf("settings: base_url is only supported for provider %q, not %q", ProviderOpenAI, id)
+				}
+				cfg.BaseURL = base
+			}
+			if pp.ConsentedAt != nil {
+				cfg.ConsentedAt = *pp.ConsentedAt
+			}
+			if pp.APIKey != nil {
+				// Deferred, not written here: setSecret deletes on "", so one
+				// field both sets and clears, and either is irreversible.
+				pendingSecrets = append(pendingSecrets, pendingSecret{
+					name:  providerAPIKeySecretName(id),
+					value: strings.TrimSpace(*pp.APIKey),
+				})
+			}
+			merged[id] = normalizeProviderConfig(id, cfg)
+		}
+		next.Providers = merged
+	}
 	if p.TypewriterDefault != nil {
 		next.TypewriterDefault = *p.TypewriterDefault
 	}
@@ -450,7 +499,28 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	s.cfg = sanitizeConfigForMemory(next)
 	s.mu.Unlock()
 
+	// Last, past every path that can still fail with nothing written. A
+	// SecretStore failure here (a locked keychain) is reported to the caller
+	// with the rest of the patch already applied — the ordering that keeps
+	// memory and disk in step; only the key did not take.
+	if err := s.applyPendingSecrets(pendingSecrets); err != nil {
+		return Config{}, err
+	}
+
 	return s.Get(ctx)
+}
+
+// pendingSecret is one deferred SecretStore write from a Set patch.
+type pendingSecret struct{ name, value string }
+
+func (s *Store) applyPendingSecrets(pending []pendingSecret) error {
+	for _, ps := range pending {
+		// setSecret deletes on "", so one field both sets and clears.
+		if err := s.setSecret(ps.name, ps.value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) persist(next Config) error {
@@ -509,7 +579,6 @@ func (s *Store) migrateProviderSecrets(providers map[string]ProviderConfig) (map
 			migrated = true
 		}
 		cfg.APIKeySet = false
-		cfg.ClearAPIKey = false
 		cfg = normalizeProviderConfig(id, cfg)
 		out[id] = cfg
 	}
@@ -527,9 +596,19 @@ func (s *Store) runtimeProviderConfig(provider string, cfg ProviderConfig) Provi
 	cfg = normalizeProviderConfig(provider, cfg)
 	cfg.APIKey = ""
 	cfg.APIKeySet = false
-	cfg.ClearAPIKey = false
 	secret, ok, err := s.secrets.Get(providerAPIKeySecretName(provider))
-	if err != nil || !ok {
+	if err != nil {
+		// A locked or access-denied keychain currently reads downstream as
+		// "no key": providers.list reports the provider unconfigured and
+		// providers.test fails with provider_not_configured, so the writer's
+		// rational move is to retype a key the store is still refusing. Log it
+		// so the failure is at least diagnosable. Telling the two apart in the
+		// UI needs a reason code and a pane to show it in — that belongs to
+		// #94, which builds the provider settings UI.
+		log.Printf("settings: reading the stored key for provider %q failed; treating it as unset: %v", provider, err)
+		return cfg
+	}
+	if !ok {
 		return cfg
 	}
 	cfg.APIKey = secret
@@ -541,14 +620,11 @@ func normalizeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig
 	if provider == ProviderOpenAICodex && (cfg.Model == "" || cfg.Model == "gpt-5.3-codex") {
 		cfg.Model = DefaultOpenAICodexModel
 	}
-	if provider == ProviderOpenRouter {
-		if cfg.Model == "" {
-			cfg.Model = DefaultOpenRouterModel
-		}
-		if cfg.BaseURL == "" {
-			cfg.BaseURL = OpenRouterBaseURL
-		}
-	}
+	// base_url is not scrubbed here on purpose. Set rejects it for every id but
+	// "openai" (see the merge loop), which is the path the app writes through.
+	// Doing it here too would also strip the base_url off a retired 1.0 entry
+	// like "openrouter", which TestSet_leavesRetiredCompanionSettingsOnDisk
+	// requires be left exactly as found.
 	return cfg
 }
 
@@ -613,7 +689,6 @@ func sanitizeConfigForMemory(c Config) Config {
 	providers := map[string]ProviderConfig{}
 	for id, cfg := range c.Providers {
 		cfg.APIKey = ""
-		cfg.ClearAPIKey = false
 		providers[id] = cfg
 	}
 	c.Providers = providers

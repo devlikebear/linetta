@@ -26,6 +26,14 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   relationship_not_found: "errors.relationshipNotFound",
   note_not_found: "errors.noteNotFound",
   fact_card_not_found: "errors.factCardNotFound",
+  // The built-in agent's provider layer (#90/#91). These must stay mapped:
+  // the engine's English message for the last three carries the provider's
+  // own response body, and the fallback below would print it verbatim.
+  provider_not_configured: "errors.providerNotConfigured",
+  provider_consent_required: "errors.providerConsentRequired",
+  provider_auth_failed: "errors.providerAuthFailed",
+  provider_rate_limited: "errors.providerRateLimited",
+  provider_unreachable: "errors.providerUnreachable",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

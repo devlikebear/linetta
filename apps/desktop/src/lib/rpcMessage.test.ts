@@ -8,6 +8,8 @@ const ko = (key: MessageKey, values?: Record<string, string | number>) =>
   translate("ko", key, values);
 const en = (key: MessageKey, values?: Record<string, string | number>) =>
   translate("en", key, values);
+const ja = (key: MessageKey, values?: Record<string, string | number>) =>
+  translate("ja", key, values);
 
 function portInUseError() {
   return new RpcError(
@@ -69,6 +71,29 @@ describe("rpcErrorMessage", () => {
     ]) {
       const err = new RpcError("x", "raw engine message", -32602, { reason });
       expect(rpcErrorMessage(err, en), reason).not.toContain("raw engine message");
+    }
+  });
+
+  // The engine's English message for a provider failure carries up to 200
+  // bytes of the provider's own response body. If a code is unmapped the
+  // fallback prints that body verbatim as UI text, which is exactly what the
+  // reason codes exist to prevent — so every one of them must translate.
+  it("never shows the provider's own response body to the reader", () => {
+    const body = '{"error":{"message":"Incorrect API key provided: sk-abc123"}}';
+    for (const reason of [
+      "provider_not_configured",
+      "provider_consent_required",
+      "provider_auth_failed",
+      "provider_rate_limited",
+      "provider_unreachable",
+    ]) {
+      const err = new RpcError("providers.test", `anthropic: ${body}`, -32602, { reason });
+      for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
+        const shown = rpcErrorMessage(err, t);
+        expect(shown, `${reason} in ${name}`).not.toContain("sk-abc123");
+        expect(shown, `${reason} in ${name}`).not.toContain("RpcError");
+        expect(shown.length, `${reason} in ${name}`).toBeGreaterThan(0);
+      }
     }
   });
 });

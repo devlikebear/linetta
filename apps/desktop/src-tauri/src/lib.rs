@@ -92,6 +92,9 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "projects.list",
     "projects.restore",
     "projects.update",
+    "providers.list",
+    "providers.list_models",
+    "providers.test",
     "relationships.create_one",
     "relationships.create_pair",
     "relationships.delete",
@@ -779,7 +782,9 @@ mod security_boundary_tests {
         // The companion's own methods are gone; the allowlist must not still
         // be handing them to the renderer.
         assert!(!is_renderer_engine_method("companion.send"));
-        assert!(!is_renderer_engine_method("providers.test"));
+        // providers.list/list_models/test are real (#91); providers.reset
+        // isn't a method at all, so it stands in for "unknown".
+        assert!(!is_renderer_engine_method("providers.reset"));
         assert!(!is_renderer_engine_method("diagnostics.version"));
         assert!(!is_renderer_engine_method("debug.execute"));
     }

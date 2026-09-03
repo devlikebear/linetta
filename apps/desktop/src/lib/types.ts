@@ -485,24 +485,43 @@ export interface GitSyncInitResult {
   error: string;
 }
 
-export type ProviderID =
-  | "claude-code-cli"
-  | "openai-codex"
-  | "anthropic"
-  | "openai"
-  | "openrouter"
-  | "gemini-native";
+/** The four providers the built-in agent can use (#90). Codex logs in with
+ *  OAuth inside the app; the other three take an API key. "openai" is the
+ *  OpenAI-compatible family — base_url points it at OpenRouter, Ollama, LM
+ *  Studio. */
+export type ProviderID = "openai-codex" | "anthropic" | "gemini-native" | "openai";
 export type WebSearchProvider = "brave" | "perplexity";
 
 export type AppLanguage = "ko" | "en" | "ja";
 
+/** One provider's stored entry as settings.get shows it. The key itself never
+ *  arrives — api_key_set says whether one is stored. */
 export interface ProviderConfig {
   model?: string;
-  api_key?: string;
   api_key_set?: boolean;
-  clear_api_key?: boolean;
   base_url?: string;
-  cli_path?: string;
+  /** Per-provider data-sharing consent, epoch ms; absent or 0 means none. */
+  consented_at?: number;
+}
+
+/** One provider's entry in a settings.set patch. An empty api_key deletes
+ *  the stored key; consented_at 0 revokes. */
+export interface ProviderPatch {
+  model?: string;
+  base_url?: string;
+  api_key?: string;
+  consented_at?: number;
+}
+
+/** providers.list — where each provider stands. Never carries a secret. */
+export interface ProviderStatus {
+  id: ProviderID;
+  auth: "oauth" | "api_key";
+  active: boolean;
+  configured: boolean;
+  consented: boolean;
+  model?: string;
+  base_url?: string;
 }
 
 export type ThemePreference = "system" | "light" | "dark";
@@ -514,7 +533,13 @@ export type PlatformProfileId = "plain" | "munpia" | "series" | "joara";
 
 export interface Settings {
   language: AppLanguage;
-  provider: ProviderID;
+  /** Widened past ProviderID on purpose: settings.get returns whatever the
+   *  file on disk says, and a library written by 1.0 still carries a retired
+   *  id such as "claude-code-cli" or "openrouter". The engine deliberately
+   *  leaves those untouched rather than rewriting someone's settings.json, so
+   *  the type must not promise more than the engine guarantees. Use
+   *  `providers.list` for the ids this build can actually drive. */
+  provider: ProviderID | (string & {});
   providers?: Record<string, ProviderConfig>;
   typewriter_default: boolean;
   focus_default: boolean;
@@ -548,7 +573,7 @@ export interface Settings {
 export interface SettingsPatch {
   language?: AppLanguage;
   provider?: ProviderID;
-  providers?: Record<string, ProviderConfig>;
+  providers?: Record<string, ProviderPatch>;
   typewriter_default?: boolean;
   focus_default?: boolean;
   theme?: ThemePreference;

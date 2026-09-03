@@ -1,6 +1,9 @@
 package rpc
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+)
 
 // Reason codes name a failure the UI is expected to explain in the reader's
 // own language. The Message on a MethodError stays English for logs and for
@@ -27,6 +30,16 @@ const (
 	ReasonRelationshipNotFound = "relationship_not_found"
 	ReasonNoteNotFound         = "note_not_found"
 	ReasonFactCardNotFound     = "fact_card_not_found"
+
+	// The built-in agent's provider layer (#90). The first two are states the
+	// settings pane fixes; the last three are what the provider said, reduced
+	// to something the reader can act on. The provider's raw body stays in
+	// the English Message for logs and never becomes UI text.
+	ReasonProviderNotConfigured   = "provider_not_configured"
+	ReasonProviderConsentRequired = "provider_consent_required"
+	ReasonProviderAuthFailed      = "provider_auth_failed"
+	ReasonProviderRateLimited     = "provider_rate_limited"
+	ReasonProviderUnreachable     = "provider_unreachable"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine
@@ -45,4 +58,35 @@ func ReasonData(reason string) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+// ReasonError carries a reason code out of a package that does not build
+// MethodErrors itself (internal/provider must not know about JSON-RPC).
+// Handlers turn it into one with MethodErrorFrom.
+type ReasonError struct {
+	Reason string
+	Err    error
+}
+
+func (e *ReasonError) Error() string {
+	if e.Err == nil {
+		return e.Reason
+	}
+	return e.Reason + ": " + e.Err.Error()
+}
+
+func (e *ReasonError) Unwrap() error { return e.Err }
+
+// MethodErrorFrom maps any error to a MethodError: a ReasonError anywhere in
+// the chain becomes an InvalidParams error carrying its reason; anything else
+// is an internal error with the message alone.
+func MethodErrorFrom(err error) *MethodError {
+	if err == nil {
+		return &MethodError{Code: CodeInternalError}
+	}
+	var re *ReasonError
+	if errors.As(err, &re) {
+		return &MethodError{Code: CodeInvalidParams, Message: err.Error(), Data: ReasonData(re.Reason)}
+	}
+	return &MethodError{Code: CodeInternalError, Message: err.Error()}
 }
