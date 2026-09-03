@@ -42,6 +42,10 @@ func writeAuthFile(codexHome string, tok Tokens, now time.Time) error {
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {
 		return fmt.Errorf("codexauth: create %s: %w", codexHome, err)
 	}
+	// Ensure the directory is 0700 even if it already existed with looser perms.
+	if err := os.Chmod(codexHome, 0o700); err != nil {
+		return fmt.Errorf("codexauth: chmod %s: %w", codexHome, err)
+	}
 	body, err := json.MarshalIndent(authFile{
 		AuthMode:    "chatgpt",
 		Tokens:      tok,

@@ -163,3 +163,54 @@ func TestClaimsFromIDToken_malformedInputYieldsEmptyValues(t *testing.T) {
 		})
 	}
 }
+
+func TestWriteAuthFile_enforcesDirectoryPermissionsEvenWhenPreexisting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits do not apply on Windows")
+	}
+	// Pre-create the directory with loose permissions (e.g., default 0755).
+	home := filepath.Join(t.TempDir(), "codex")
+	if err := os.Mkdir(home, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Verify it starts with 0755.
+	di, err := os.Stat(home)
+	if err != nil {
+		t.Fatalf("stat before: %v", err)
+	}
+	if perm := di.Mode().Perm(); perm != 0o755 {
+		t.Fatalf("pre-created directory has unexpected perm %o", perm)
+	}
+	// Write auth file; this should chmod the directory to 0700.
+	if err := writeAuthFile(home, Tokens{AccessToken: "a"}, time.Now()); err != nil {
+		t.Fatalf("writeAuthFile: %v", err)
+	}
+	// Verify directory is now 0700.
+	di, err = os.Stat(home)
+	if err != nil {
+		t.Fatalf("stat after: %v", err)
+	}
+	if perm := di.Mode().Perm(); perm != 0o700 {
+		t.Errorf("codex dir mode = %o, want 700", perm)
+	}
+}
+
+func TestReadAuthFile_corruptFileIsDistinguishableFromMissing(t *testing.T) {
+	home := t.TempDir()
+	authPath := AuthPath(home)
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// Write garbage to the file instead of valid JSON.
+	if err := os.WriteFile(authPath, []byte("not json at all"), 0o600); err != nil {
+		t.Fatalf("write garbage: %v", err)
+	}
+	// readAuthFile should return an error that is NOT os.IsNotExist.
+	_, err := readAuthFile(home)
+	if err == nil {
+		t.Fatal("err = nil, want an error for corrupted JSON")
+	}
+	if os.IsNotExist(err) {
+		t.Errorf("err satisfies os.IsNotExist, want a different error (e.g., JSON parse error)")
+	}
+}
