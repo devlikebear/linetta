@@ -1,6 +1,6 @@
 # Linetta 개인정보 처리방침 / Privacy Policy
 
-_최종 업데이트 / Last updated / 最終更新: 2026-08-29_
+_최종 업데이트 / Last updated / 最終更新: 2026-09-03_
 
 ---
 
@@ -20,6 +20,16 @@ Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local
 - MCP 접속 토큰 등 민감 정보: 운영체제의 보안 저장소(예: macOS Keychain)
 
 개발자는 이 데이터에 접근할 수 없습니다.
+
+ChatGPT(Codex)로 로그인하면 접근 토큰과 갱신 토큰이 `<앱 데이터>/codex/auth.json`에 저장됩니다. 이 파일은 소유자만 읽을 수 있는 권한(0600)으로 저장되며, 이는 Codex CLI가 자기 토큰을 보관하는 방식과 같습니다. Linetta는 이 파일을 어디로도 보내지 않으며, OpenAI에 요청을 보낼 때만 사용합니다.
+
+macOS App Store 빌드가 아닌 빌드에서는, 이미 Codex CLI로 로그인해 둔 것을 그대로 인정합니다. `<앱 데이터>/codex/auth.json`이 없고 `~/.codex/auth.json`이 있으면 Linetta가 그 파일을 대신 사용하므로 두 번 로그인하지 않아도 됩니다. macOS App Store 빌드는 샌드박스 컨테이너 밖을 읽을 수 없어 이 파일을 사용하지 않습니다.
+
+접근 토큰이 만료되면 Linetta가 토큰을 갱신하면서 그때 사용 중인 파일을 다시 씁니다. Codex CLI 로그인을 사용하고 있다면 `~/.codex/auth.json`도 여기에 포함됩니다.
+
+설정에서 로그아웃하면 Linetta 자신의 파일인 `<앱 데이터>/codex/auth.json`이 삭제됩니다. `~/.codex/auth.json`에 있는 Codex CLI 로그인은 삭제하지 않으므로, 그쪽은 Codex CLI에서 직접 로그아웃해야 합니다.
+
+macOS App Store 빌드를 포함한 모든 빌드가 이 파일 저장 방식을 사용하며, 이 토큰을 시스템 키체인에 저장하지 않습니다.
 
 ### 3. 외부 에이전트 연결 (MCP)
 **앱은 어떤 AI 공급자에게도 데이터를 보내지 않습니다.** API 키를 저장하지도, 모델을 호출하지도 않습니다.
@@ -64,6 +74,16 @@ Core data you create — manuscripts, projects, and settings — is stored **loc
 
 The developer has no access to this data.
 
+Signing in to ChatGPT (Codex) stores an access token and a refresh token at `<app data>/codex/auth.json`. This file is saved with owner-only read permissions (0600) — the same way the official Codex CLI keeps its own token. Linetta sends this file nowhere; it is used only for requests to OpenAI.
+
+Outside the macOS App Store build, Linetta also honours a sign-in you already completed with the Codex CLI: when there is no `<app data>/codex/auth.json` but `~/.codex/auth.json` exists, Linetta uses that file instead, so you do not have to sign in twice. The macOS App Store build cannot read outside its sandbox container and never uses it.
+
+When an access token expires, Linetta refreshes it and rewrites whichever of those two files is in use — including `~/.codex/auth.json`, when the Codex CLI's sign-in is the one being used.
+
+Signing out from Settings deletes Linetta's own file, `<app data>/codex/auth.json`. It does not delete a Codex CLI sign-in at `~/.codex/auth.json`; sign that one out with the Codex CLI itself.
+
+Every build, including the macOS App Store build, uses this file store — Linetta does not put this token in the system keychain.
+
 ### 3. Connecting an External Agent (MCP)
 **The App sends nothing to any AI provider.** It stores no API keys and calls no models.
 
@@ -107,6 +127,16 @@ Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆の�
 - MCP 接続トークンなどの機密情報: OS のセキュアストア（例: macOS Keychain）
 
 開発者はこのデータにアクセスできません。
+
+ChatGPT（Codex）にサインインすると、アクセストークンとリフレッシュトークンが `<アプリデータ>/codex/auth.json` に保存されます。このファイルは所有者のみが読み取れる権限（0600）で保存され、これは Codex CLI が自身のトークンを保管する方式と同じです。Linetta はこのファイルをどこにも送信せず、OpenAI へのリクエストにのみ使用します。
+
+macOS App Store ビルド以外では、すでに Codex CLI で済ませたサインインをそのまま利用します。`<アプリデータ>/codex/auth.json` がなく `~/.codex/auth.json` がある場合、Linetta はそのファイルを代わりに使用するため、二度サインインする必要はありません。macOS App Store ビルドはサンドボックスコンテナの外を読み取れないため、このファイルを使用しません。
+
+アクセストークンの有効期限が切れると、Linetta はトークンを更新し、そのとき使用しているファイルを書き換えます。Codex CLI のサインインを使用している場合は `~/.codex/auth.json` もその対象です。
+
+設定からログアウトすると、Linetta 自身のファイルである `<アプリデータ>/codex/auth.json` が削除されます。`~/.codex/auth.json` にある Codex CLI のサインインは削除しないため、そちらは Codex CLI 自身でログアウトしてください。
+
+macOS App Store ビルドを含むすべてのビルドがこのファイル保存方式を使用し、このトークンをシステムキーチェーンには保存しません。
 
 ### 3. 外部エージェントの接続 (MCP)
 **本アプリはいかなる AI プロバイダーにもデータを送信しません。** API キーを保存せず、モデルを呼び出しません。

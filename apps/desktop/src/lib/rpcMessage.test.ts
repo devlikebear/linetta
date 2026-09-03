@@ -74,6 +74,20 @@ describe("rpcErrorMessage", () => {
     }
   });
 
+  // The Codex login (#92) has a single reason code: port_in_use. A failed
+  // login attempt is not an RPC error at all — codex.login_status reports it
+  // via CodexStatus.login_failed instead — so there is no second code here.
+  it("covers the Codex port-in-use code", () => {
+    for (const reason of ["codex_port_in_use"]) {
+      const err = new RpcError("codex.login_start", "raw engine message", -32602, { reason });
+      for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
+        const shown = rpcErrorMessage(err, t);
+        expect(shown, `${reason} in ${name}`).not.toContain("raw engine message");
+        expect(shown.length, `${reason} in ${name}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   // The engine's English message for a provider failure carries up to 200
   // bytes of the provider's own response body. If a code is unmapped the
   // fallback prints that body verbatim as UI text, which is exactly what the

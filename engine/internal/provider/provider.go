@@ -134,14 +134,20 @@ func (s *Source) Resolve(id string) (Resolved, error) {
 		}
 	}
 	cfg := s.settings.ProviderConfigFor(id)
-	return Resolved{
+	r := Resolved{
 		ID:          id,
 		Model:       cfg.Model,
 		APIKey:      cfg.APIKey,
 		BaseURL:     cfg.BaseURL,
-		CodexHome:   s.codexHome,
 		ConsentedAt: cfg.ConsentedAt,
-	}, nil
+	}
+	// Only Codex reads CodexHome, and resolving it stats up to two paths on
+	// every call. Resolve runs on every agent turn for every provider, so the
+	// lookup belongs behind the one branch that uses its answer.
+	if id == settings.ProviderOpenAICodex {
+		r.CodexHome = resolveCodexHome(s.codexHome)
+	}
+	return r, nil
 }
 
 // Client builds a client for id ("" = active). It refuses before any network

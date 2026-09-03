@@ -524,6 +524,25 @@ export interface ProviderStatus {
   base_url?: string;
 }
 
+/** codex.login_start — the address the shell opens in the OS browser. */
+export interface CodexLoginStart {
+  auth_url: string;
+}
+
+/** codex.login_status — never carries a token, only who is signed in. */
+export interface CodexStatus {
+  logged_in: boolean;
+  email?: string;
+  account_id?: string;
+  /** id_token expiry, epoch seconds. */
+  expires_at?: number;
+  /** True when the most recent attempt ended in a failure — the issuer
+   *  refused the exchange, or the credential could not be written — rather
+   *  than the writer still being out in the browser. Never true alongside
+   *  logged_in. The next login_start clears it. */
+  login_failed?: boolean;
+}
+
 export type ThemePreference = "system" | "light" | "dark";
 /** Which set of colours the UI uses. Orthogonal to ThemePreference,
  *  which picks the light or dark end of whichever set is active.

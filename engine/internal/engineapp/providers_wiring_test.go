@@ -4,6 +4,8 @@ package engineapp
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -83,6 +85,43 @@ func TestProvidersListModelsAndTestAreRegistered(t *testing.T) {
 		if got := string(rpcErr.Data); got != `{"reason":"provider_not_configured"}` {
 			t.Errorf("%s: error data = %s (code %d, %q), want a provider_not_configured reason",
 				method, got, rpcErr.Code, rpcErr.Message)
+		}
+	}
+}
+
+// openApp only isolates LINETTA_HOME. internal/provider's Codex CLI fallback
+// (#92) reads $HOME/.codex/auth.json when Linetta's own login is absent, so a
+// real machine's Codex CLI login would otherwise leak into every "fresh
+// install" assertion in this package. This test poisons a controlled HOME
+// with a fake CLI login *before* calling openApp, so it fails deterministically
+// without the isolation — proving the isolation works rather than merely
+// passing because this particular machine has no real ~/.codex.
+func TestOpenAppIsolatesHOMEFromAnyRealCodexCLILogin(t *testing.T) {
+	poisonedHome := t.TempDir()
+	codexDir := filepath.Join(poisonedHome, ".codex")
+	if err := os.MkdirAll(codexDir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// provider.Resolved treats presence alone as "configured" (see
+	// internal/provider/provider.go); the content of this file never matters.
+	if err := os.WriteFile(filepath.Join(codexDir, "auth.json"), []byte(`{}`), 0o600); err != nil {
+		t.Fatalf("seed a fake Codex CLI login: %v", err)
+	}
+	isolateHomeDir(t, poisonedHome)
+
+	app := openApp(t)
+
+	result, rpcErr := call(t, app, "providers.list", "")
+	if rpcErr != nil {
+		t.Fatalf("providers.list: %+v", rpcErr)
+	}
+	var got []providerStatus
+	if err := json.Unmarshal(result, &got); err != nil {
+		t.Fatalf("decode providers.list: %v (%s)", err, result)
+	}
+	for _, p := range got {
+		if p.ID == "openai-codex" && p.Configured {
+			t.Fatal("openai-codex reports configured — a poisoned HOME leaked through openApp's isolation")
 		}
 	}
 }

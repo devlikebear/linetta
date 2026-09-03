@@ -47,10 +47,28 @@ type mcpStatus struct {
 	TokenSet bool   `json:"token_set"`
 }
 
+// isolateHomeDir points os.UserHomeDir at dir for the rest of the test.
+//
+// Both variables are needed because os.UserHomeDir reads a different one per
+// platform: $HOME on Unix, %USERPROFILE% on Windows. Setting only HOME leaves
+// a Windows run consulting the real user's home, where a developer's — or a CI
+// runner's — actual Codex CLI login lives. The one that does not apply is inert.
+func isolateHomeDir(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+}
+
 func openApp(t *testing.T) *App {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("LINETTA_HOME", home)
+	// internal/provider's Codex CLI fallback (#92) reads the user's own
+	// ~/.codex/auth.json when Linetta's login is absent, and the home
+	// directory is not scoped by LINETTA_HOME. Without this, a developer's or
+	// a CI runner's real Codex CLI login leaks into every "fresh install"
+	// assertion in this package.
+	isolateHomeDir(t, t.TempDir())
 	// An in-memory secret store, not the OS keychain: the keychain is
 	// process-global and not scoped by Home, so without this a provider key a
 	// developer stored through ordinary app use would leak into every

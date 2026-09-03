@@ -11,6 +11,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/codexauth"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/contextualedit"
 	"github.com/devlikebear/linetta/engine/internal/entity"
@@ -242,7 +243,14 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// provider settings into a client on demand; nothing here dials until an
 	// agent run or a connection test asks it to. Codex's auth.json lives under
 	// the data directory so the App Store build can reach it.
-	providerSrc := provider.NewSource(settingsStore, filepath.Join(home, "codex"))
+	// The Codex login (#92) writes into Linetta's own directory; the provider
+	// decides which directory to read from, and may prefer an existing Codex
+	// CLI login when Linetta has none.
+	codexHome := filepath.Join(home, "codex")
+	codexSvc := codexauth.NewService(codexHome)
+	a.closers = append(a.closers, codexSvc.Close)
+
+	providerSrc := provider.NewSource(settingsStore, codexHome)
 	providers := providerService{src: providerSrc}
 
 	caps := handlers.Capabilities{
@@ -341,6 +349,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("providers.list", handlers.ProvidersList(providers))
 	s.Handle("providers.list_models", handlers.ProvidersListModels(providers))
 	s.Handle("providers.test", handlers.ProvidersTest(providers))
+	codex := codexService{svc: codexSvc}
+	s.Handle("codex.login_start", handlers.CodexLoginStart(codex))
+	s.Handle("codex.login_status", handlers.CodexLoginStatus(codex))
+	s.Handle("codex.logout", handlers.CodexLogout(codex))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))

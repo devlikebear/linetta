@@ -34,6 +34,11 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   provider_auth_failed: "errors.providerAuthFailed",
   provider_rate_limited: "errors.providerRateLimited",
   provider_unreachable: "errors.providerUnreachable",
+  // The Codex login (#92). Its message names the two ports, since the fix is
+  // closing whatever holds them. A failed login is not an RPC error at all —
+  // codex.login_status reports it via CodexStatus.login_failed instead — so
+  // this is the only Codex reason code.
+  codex_port_in_use: "errors.codexPortInUse",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

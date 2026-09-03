@@ -40,6 +40,13 @@ const (
 	ReasonProviderAuthFailed      = "provider_auth_failed"
 	ReasonProviderRateLimited     = "provider_rate_limited"
 	ReasonProviderUnreachable     = "provider_unreachable"
+
+	// The Codex login (#92). The message has to name the two ports, because
+	// the fix is closing whatever holds them — usually a Codex CLI login. A
+	// failed login attempt is not an RPC error at all — codex.login_status
+	// reports it as a Status field instead (see codexauth.Status.LoginFailed)
+	// — so this is the only Codex reason code.
+	ReasonCodexPortInUse = "codex_port_in_use"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine

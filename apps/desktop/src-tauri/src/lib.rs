@@ -27,6 +27,9 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "beats.list_by_thread",
     "beats.reorder",
     "beats.update",
+    "codex.login_start",
+    "codex.login_status",
+    "codex.logout",
     "contextual.apply_change",
     "contextual.check_consistency",
     "contextual.plan_change",
@@ -441,12 +444,21 @@ async fn open_path(
         .map_err(|e| e.to_string())
 }
 
-/// Hosts the renderer may ask the OS browser to open.
+/// Hosts the renderer may ask the OS browser to open, each with whether its
+/// subdomains count too.
 ///
 /// The renderer hands back a URL the engine produced, so this is a narrow
 /// allowlist rather than a general "open anything" primitive, matching the way
-/// `open_path` is confined to the app data directory.
-const EXTERNAL_URL_HOSTS: [&str; 1] = ["openrouter.ai"];
+/// `open_path` is confined to the app data directory. auth.openai.com is the
+/// Codex login's authorize endpoint (#92); the settings pane that will call
+/// `open_external_url` with it is #94, so nothing in the app calls this
+/// command yet — the allowlist is here to be right before there is a caller,
+/// not to describe one.
+///
+/// It is an exact match: the authorize endpoint is that host and nothing
+/// under it, and every subdomain admitted is another name a mistake could
+/// hide behind.
+const EXTERNAL_URL_HOSTS: [(&str, bool); 1] = [("auth.openai.com", false)];
 
 fn validate_external_url(raw: &str) -> Result<String, String> {
     let parsed = url::Url::parse(raw.trim()).map_err(|e| format!("invalid url: {e}"))?;
@@ -454,14 +466,14 @@ fn validate_external_url(raw: &str) -> Result<String, String> {
         return Err("only https urls can be opened".to_string());
     }
     // Reject credentials, which can make a hostile host look like an allowed
-    // one in the address bar (https://openrouter.ai@example.com/).
+    // one in the address bar (https://auth.openai.com@example.com/).
     if !parsed.username().is_empty() || parsed.password().is_some() {
         return Err("urls with credentials cannot be opened".to_string());
     }
     let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
-    let allowed = EXTERNAL_URL_HOSTS
-        .iter()
-        .any(|candidate| host == *candidate || host.ends_with(&format!(".{candidate}")));
+    let allowed = EXTERNAL_URL_HOSTS.iter().any(|(candidate, with_subdomains)| {
+        host == *candidate || (*with_subdomains && host.ends_with(&format!(".{candidate}")))
+    });
     if !allowed {
         return Err(format!("host is not allowed: {host}"));
     }
@@ -749,12 +761,16 @@ mod security_boundary_tests {
     use super::{is_renderer_engine_method, validate_external_url, validate_open_path};
 
     #[test]
-    fn external_url_allows_only_https_openrouter() {
-        assert!(validate_external_url("https://openrouter.ai/auth?callback=x").is_ok());
-        assert!(validate_external_url("https://api.openrouter.ai/v1").is_ok());
-        assert!(validate_external_url("  https://openrouter.ai/auth  ").is_ok());
+    fn external_url_allows_only_https_openai_auth() {
+        assert!(validate_external_url("https://auth.openai.com/oauth/authorize?callback=x").is_ok());
+        assert!(validate_external_url("  https://auth.openai.com/oauth/authorize  ").is_ok());
 
-        assert!(validate_external_url("http://openrouter.ai/auth").is_err());
+        // The allowlist is exact. This case used to assert an invented
+        // subdomain was allowed; the authorize endpoint has none, so admitting
+        // them only widens what a mistake could hide behind.
+        assert!(validate_external_url("https://api.auth.openai.com/v1").is_err());
+
+        assert!(validate_external_url("http://auth.openai.com/oauth/authorize").is_err());
         assert!(validate_external_url("https://example.com/").is_err());
         assert!(validate_external_url("file:///C:/Windows/System32").is_err());
         assert!(validate_external_url("javascript:alert(1)").is_err());
@@ -764,15 +780,15 @@ mod security_boundary_tests {
 
     #[test]
     fn external_url_rejects_a_host_disguised_by_credentials() {
-        // https://openrouter.ai@example.com/ resolves to example.com.
-        assert!(validate_external_url("https://openrouter.ai@example.com/").is_err());
-        assert!(validate_external_url("https://user:pass@openrouter.ai/").is_err());
+        // https://auth.openai.com@example.com/ resolves to example.com.
+        assert!(validate_external_url("https://auth.openai.com@example.com/").is_err());
+        assert!(validate_external_url("https://user:pass@auth.openai.com/").is_err());
     }
 
     #[test]
     fn external_url_rejects_a_lookalike_suffix() {
-        assert!(validate_external_url("https://notopenrouter.ai/").is_err());
-        assert!(validate_external_url("https://openrouter.ai.evil.test/").is_err());
+        assert!(validate_external_url("https://notauth.openai.com/").is_err());
+        assert!(validate_external_url("https://auth.openai.com.evil.test/").is_err());
     }
 
     #[test]
