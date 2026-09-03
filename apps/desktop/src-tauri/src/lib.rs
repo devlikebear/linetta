@@ -444,14 +444,21 @@ async fn open_path(
         .map_err(|e| e.to_string())
 }
 
-/// Hosts the renderer may ask the OS browser to open.
+/// Hosts the renderer may ask the OS browser to open, each with whether its
+/// subdomains count too.
 ///
 /// The renderer hands back a URL the engine produced, so this is a narrow
 /// allowlist rather than a general "open anything" primitive, matching the way
 /// `open_path` is confined to the app data directory. auth.openai.com is the
-/// Codex login's authorize endpoint (#92) — the only production caller of
-/// `open_external_url` today.
-const EXTERNAL_URL_HOSTS: [&str; 1] = ["auth.openai.com"];
+/// Codex login's authorize endpoint (#92); the settings pane that will call
+/// `open_external_url` with it is #94, so nothing in the app calls this
+/// command yet — the allowlist is here to be right before there is a caller,
+/// not to describe one.
+///
+/// It is an exact match: the authorize endpoint is that host and nothing
+/// under it, and every subdomain admitted is another name a mistake could
+/// hide behind.
+const EXTERNAL_URL_HOSTS: [(&str, bool); 1] = [("auth.openai.com", false)];
 
 fn validate_external_url(raw: &str) -> Result<String, String> {
     let parsed = url::Url::parse(raw.trim()).map_err(|e| format!("invalid url: {e}"))?;
@@ -464,9 +471,9 @@ fn validate_external_url(raw: &str) -> Result<String, String> {
         return Err("urls with credentials cannot be opened".to_string());
     }
     let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
-    let allowed = EXTERNAL_URL_HOSTS
-        .iter()
-        .any(|candidate| host == *candidate || host.ends_with(&format!(".{candidate}")));
+    let allowed = EXTERNAL_URL_HOSTS.iter().any(|(candidate, with_subdomains)| {
+        host == *candidate || (*with_subdomains && host.ends_with(&format!(".{candidate}")))
+    });
     if !allowed {
         return Err(format!("host is not allowed: {host}"));
     }
@@ -756,8 +763,12 @@ mod security_boundary_tests {
     #[test]
     fn external_url_allows_only_https_openai_auth() {
         assert!(validate_external_url("https://auth.openai.com/oauth/authorize?callback=x").is_ok());
-        assert!(validate_external_url("https://api.auth.openai.com/v1").is_ok());
         assert!(validate_external_url("  https://auth.openai.com/oauth/authorize  ").is_ok());
+
+        // The allowlist is exact. This case used to assert an invented
+        // subdomain was allowed; the authorize endpoint has none, so admitting
+        // them only widens what a mistake could hide behind.
+        assert!(validate_external_url("https://api.auth.openai.com/v1").is_err());
 
         assert!(validate_external_url("http://auth.openai.com/oauth/authorize").is_err());
         assert!(validate_external_url("https://example.com/").is_err());
