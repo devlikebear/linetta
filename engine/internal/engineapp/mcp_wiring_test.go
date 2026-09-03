@@ -9,6 +9,8 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
 // call sends one JSONRPC request through the app and returns the raw result.
@@ -49,7 +51,12 @@ func openApp(t *testing.T) *App {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("LINETTA_HOME", home)
-	app, err := Open(context.Background(), Options{Home: home})
+	// An in-memory secret store, not the OS keychain: the keychain is
+	// process-global and not scoped by Home, so without this a provider key a
+	// developer stored through ordinary app use would leak into every
+	// assertion here — and a test writing one would land in their real login
+	// keychain.
+	app, err := Open(context.Background(), Options{Home: home, Secrets: settings.NewMemorySecretStore()})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -125,7 +132,12 @@ func TestMCPEnableWithoutConsentIsRefused(t *testing.T) {
 func TestMCPEnableBindsAndCloseReleasesPort(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("LINETTA_HOME", home)
-	app, err := Open(context.Background(), Options{Home: home})
+	// An in-memory secret store, not the OS keychain: the keychain is
+	// process-global and not scoped by Home, so without this a provider key a
+	// developer stored through ordinary app use would leak into every
+	// assertion here — and a test writing one would land in their real login
+	// keychain.
+	app, err := Open(context.Background(), Options{Home: home, Secrets: settings.NewMemorySecretStore()})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

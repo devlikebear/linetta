@@ -46,6 +46,12 @@ const DefaultVersion = "1.1.0"
 // Options configures an embedded engine instance.
 type Options struct {
 	Home string
+	// Secrets overrides the credential backend. Production leaves it nil and
+	// gets the OS keychain. Tests set it because the keychain is process-global
+	// and NOT scoped by Home: a test running against a t.TempDir() home still
+	// reads — and would write — the developer's real login keychain, so a
+	// provider key left there by ordinary app use leaks into assertions.
+	Secrets settings.SecretStore
 }
 
 // App owns the store, RPC server, and background jobs for one engine instance.
@@ -82,14 +88,14 @@ func Open(ctx context.Context, opts Options) (*App, error) {
 		cancel:  cancel,
 		closers: []func() error{st.Close},
 	}
-	if err := app.register(appCtx, home, st); err != nil {
+	if err := app.register(appCtx, home, st, opts.Secrets); err != nil {
 		_ = app.Close()
 		return nil, err
 	}
 	return app, nil
 }
 
-func (a *App) register(ctx context.Context, home string, st *store.Store) error {
+func (a *App) register(ctx context.Context, home string, st *store.Store, secrets settings.SecretStore) error {
 	s := a.server
 	projects := project.NewRepo(st)
 	nodes := node.NewRepo(st)
@@ -123,7 +129,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store) error 
 		fmt.Fprintf(os.Stderr, "mention rebuild: %v\n", err)
 	}
 
-	settingsStore, err := settings.NewForHome(home)
+	settingsStore, err := settings.NewForHomeWithSecretStore(home, secrets)
 	if err != nil {
 		return fmt.Errorf("settings: %w", err)
 	}
