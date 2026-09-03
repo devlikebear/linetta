@@ -38,6 +38,15 @@ func AuthPath(codexHome string) string {
 // writeAuthFile stores a completed login. The write goes to a temporary file
 // first and is then renamed, so a crash mid-write cannot leave a half-written
 // credential that reads as a broken login.
+//
+// The temporary file is created with os.CreateTemp — a fresh, exclusively
+// created, randomly named 0600 file — rather than written at a fixed
+// auth.json.tmp path. A fixed name opens with O_CREATE|O_TRUNC, which follows
+// a symlink and inherits an existing file's mode: a symlink planted while the
+// directory was still world-writable would survive the Chmod above (the
+// directory is tightened, the link is not) and then receive the token, and a
+// pre-existing 0644 temp file would rename into a 0644 credential. It also
+// gives two concurrent writers separate files instead of one shared one.
 func writeAuthFile(codexHome string, tok Tokens, now time.Time) error {
 	if err := os.MkdirAll(codexHome, 0o700); err != nil {
 		return fmt.Errorf("codexauth: create %s: %w", codexHome, err)
@@ -54,12 +63,29 @@ func writeAuthFile(codexHome string, tok Tokens, now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("codexauth: encode auth file: %w", err)
 	}
-	tmp := AuthPath(codexHome) + ".tmp"
-	if err := os.WriteFile(tmp, body, 0o600); err != nil {
+	f, err := os.CreateTemp(codexHome, "auth-*.json")
+	if err != nil {
+		return fmt.Errorf("codexauth: create temp auth file: %w", err)
+	}
+	tmp := f.Name()
+	// Removing the temp file is a no-op once the rename below has moved it,
+	// and the cleanup that matters on every path that did not get that far.
+	defer func() { _ = os.Remove(tmp) }()
+	// CreateTemp already opens at 0600, but a umask can only take bits away,
+	// never add them — say the intended mode outright so the permission the
+	// credential ends up with does not depend on reading that guarantee.
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("codexauth: chmod temp auth file: %w", err)
+	}
+	if _, err := f.Write(body); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("codexauth: write auth file: %w", err)
+	}
+	if err := f.Close(); err != nil {
 		return fmt.Errorf("codexauth: write auth file: %w", err)
 	}
 	if err := os.Rename(tmp, AuthPath(codexHome)); err != nil {
-		_ = os.Remove(tmp)
 		return fmt.Errorf("codexauth: install auth file: %w", err)
 	}
 	return nil

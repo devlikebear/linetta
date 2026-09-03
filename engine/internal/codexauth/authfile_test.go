@@ -93,6 +93,71 @@ func TestWriteAuthFile_permissionsKeepTheTokenPrivate(t *testing.T) {
 	}
 }
 
+// TestWriteAuthFile_doesNotWriteThroughAPlantedTempFile guards the staging
+// file. Writing to a fixed auth.json.tmp opens with O_CREATE|O_TRUNC, which
+// follows a symlink and leaves an existing file's mode alone: a link planted
+// while the directory was still world-writable survives the Chmod that
+// tightens the *directory* and then receives the token, and a pre-existing
+// 0644 temp file renames into a 0644 credential. os.CreateTemp cannot be
+// aimed: the name is random and the create is exclusive.
+func TestWriteAuthFile_doesNotWriteThroughAPlantedTempFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need elevation on Windows")
+	}
+	root := t.TempDir()
+	home := filepath.Join(root, "codex")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// The attacker's file, and a link to it at the old fixed temp path.
+	target := filepath.Join(root, "stolen.json")
+	if err := os.WriteFile(target, []byte("empty"), 0o644); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+	if err := os.Symlink(target, AuthPath(home)+".tmp"); err != nil {
+		t.Fatalf("plant symlink: %v", err)
+	}
+
+	if err := writeAuthFile(home, Tokens{AccessToken: "super-secret"}, time.Now()); err != nil {
+		t.Fatalf("writeAuthFile: %v", err)
+	}
+
+	stolen, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target: %v", err)
+	}
+	if string(stolen) != "empty" {
+		t.Errorf("the token was written through a planted symlink: %s", stolen)
+	}
+	fi, err := os.Stat(AuthPath(home))
+	if err != nil {
+		t.Fatalf("stat credential: %v", err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Errorf("auth.json mode = %o, want 600", perm)
+	}
+}
+
+// TestWriteAuthFile_leavesNoTemporaryFileBehind keeps the randomly named
+// staging files from accumulating in the writer's data directory.
+func TestWriteAuthFile_leavesNoTemporaryFileBehind(t *testing.T) {
+	home := t.TempDir()
+	if err := writeAuthFile(home, Tokens{AccessToken: "a"}, time.Now()); err != nil {
+		t.Fatalf("writeAuthFile: %v", err)
+	}
+	entries, err := os.ReadDir(home)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != authFileName {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("codex dir holds %v, want just %s", names, authFileName)
+	}
+}
+
 func TestWriteAuthFile_replacesAnExistingLogin(t *testing.T) {
 	home := t.TempDir()
 	if err := writeAuthFile(home, Tokens{AccessToken: "first"}, time.Now()); err != nil {
