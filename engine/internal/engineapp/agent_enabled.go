@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -166,48 +165,4 @@ func (c *agentController) Undo(ctx context.Context, batchID string) error {
 		return err
 	}
 	return nil
-}
-
-// SetProviderFactoryForTest replaces the client factory so a test can drive
-// the loop without a network. Test-only: production wires llm.NewProvider in
-// provider.NewSource.
-func (a *App) SetProviderFactoryForTest(f provider.ClientFactory) {
-	a.providerSrc.WithFactory(f)
-}
-
-// notificationLog records what the engine emitted. The agent's contract is
-// largely a notification contract — a run id comes back immediately and
-// everything after it arrives as agent.* — so a test that cannot see the
-// notifications can only assert on side effects, and would pass on an engine
-// that did the work but told the panel nothing.
-type notificationLog struct {
-	mu     sync.Mutex
-	events []string
-}
-
-func (n *notificationLog) add(method string) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.events = append(n.events, method)
-}
-
-func (n *notificationLog) saw(method string) bool {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	for _, e := range n.events {
-		if e == method {
-			return true
-		}
-	}
-	return false
-}
-
-// CaptureNotificationsForTest routes notifications into a log. It REPLACES
-// the current notifier rather than chaining: in a test the notifier is the
-// stdio default, which nothing is reading, and a getter on rpc.Server exists
-// only to serve a chain nobody needs.
-func (a *App) CaptureNotificationsForTest() *notificationLog {
-	log := &notificationLog{}
-	a.SetNotifier(func(method string, _ json.RawMessage) { log.add(method) })
-	return log
 }
