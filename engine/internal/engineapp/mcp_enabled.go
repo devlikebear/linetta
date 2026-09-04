@@ -67,7 +67,15 @@ type mcpController struct {
 	activity *mcphost.ActivityRepo
 }
 
-func setupMCP(deps mcpDeps) (*mcpController, func() error) {
+// agentToolDeps is what setupMCP hands the built-in agent to clone for its
+// own in-memory server (#93). An alias rather than the type itself because
+// register() is compiled on every build tag and mobile has no mcphost.
+type agentToolDeps = mcphost.ToolDeps
+
+// setupMCP builds the external HTTP host and returns the tool deps it was
+// built from, so the agent's server is wired from the same place rather than
+// from a second copy of this list.
+func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 	activity := mcphost.NewActivityRepo(deps.repos.db)
 	tools := mcphost.ToolDeps{
 		Projects:   deps.repos.projects,
@@ -100,7 +108,7 @@ func setupMCP(deps mcpDeps) (*mcpController, func() error) {
 	if err := host.Start(context.Background()); err != nil {
 		fmt.Printf("mcp: start skipped: %v\n", err)
 	}
-	return ctrl, host.Stop
+	return ctrl, tools, host.Stop
 }
 
 func (c *mcpController) Status() (json.RawMessage, error) {
