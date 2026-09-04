@@ -39,6 +39,16 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // codex.login_status reports it via CodexStatus.login_failed instead — so
   // this is the only Codex reason code.
   codex_port_in_use: "errors.codexPortInUse",
+  // The built-in agent's loop (#93). Busy is a state the writer resolves by
+  // waiting or pressing stop; the iteration limit means the turn used up its
+  // budget of tool calls (or the same tool kept failing) and was cut off
+  // partway, with the reply saying how far it got.
+  agent_busy: "errors.agentBusy",
+  agent_iteration_limit: "errors.agentIterationLimit",
+  // A panic inside the turn goroutine (#93 fix round 1). The engine's English
+  // Message carries the raw Go panic value for logs — this mapping is what
+  // keeps that value off the screen.
+  agent_internal_error: "errors.agentInternalError",
   // The built-in agent's undo (#93 fix round 1). storyops keeps only the last
   // few batches in memory, so this is the ordinary result of a restart or a
   // few more turns — not a mistake the writer made.

@@ -543,6 +543,26 @@ export interface CodexStatus {
   login_failed?: boolean;
 }
 
+/** agent.run — the turn id; progress arrives as agent.* notifications (#93). */
+export interface AgentRunResult {
+  run_id: string;
+}
+
+/** agent.history — one row of the built-in agent's transcript (#93). Shape
+ *  is the panel's projection of companion.HistoryMessage, not the engine's
+ *  internal row (see agentHistoryRow in engine/internal/engineapp). */
+export interface AgentHistoryRow {
+  id: string;
+  project_id: string;
+  node_id?: string;
+  node_label?: string;
+  run_id?: string;
+  role: string;
+  status: string;
+  content: string;
+  created_at: number;
+}
+
 export type ThemePreference = "system" | "light" | "dark";
 /** Which set of colours the UI uses. Orthogonal to ThemePreference,
  *  which picks the light or dark end of whichever set is active.
