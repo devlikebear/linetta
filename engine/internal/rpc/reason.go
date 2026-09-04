@@ -58,6 +58,14 @@ const (
 	// instead of taking the engine process down with it; the raw panic
 	// value stays in the English Message for logs.
 	ReasonAgentInternalError = "agent_internal_error"
+
+	// agent.undo asking to revert a batch that has fallen out of the
+	// in-memory undo window (#93 fix round 1). This is not "not found" in the
+	// writer-did-something-wrong sense — storyops keeps only the last few
+	// batches, so a restart or a handful of later turns is enough to age one
+	// out on its own. The writer can still reach the same change through
+	// snapshot history.
+	ReasonAgentUndoUnavailable = "agent_undo_unavailable"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine

@@ -64,6 +64,11 @@ type App struct {
 	// providerSrc is kept for the test seam in agent_enabled.go: the agent's
 	// loop is only testable if its client can be replaced without a network.
 	providerSrc *provider.Source
+	// agentCtrl and mcpTools exist for agent_wiring_test.go (#93 fix round
+	// 1): white-box, same-package access to the composed ToolDeps, rather
+	// than an exported accessor. Neither is read outside tests.
+	agentCtrl *agentController
+	mcpTools  agentToolDeps
 }
 
 // Open constructs the full Linetta engine and registers every JSONRPC handler.
@@ -277,6 +282,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		clock:    clock,
 	})
 	a.closers = append(a.closers, stopAgent)
+	a.agentCtrl = agentCtrl
+	a.mcpTools = mcpTools
 
 	caps := handlers.Capabilities{
 		GitSyncAvailable: gitSyncAvailable,

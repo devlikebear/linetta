@@ -5,6 +5,7 @@ package engineapp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/provider"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
@@ -65,6 +67,15 @@ func (s scopeLookup) NodeLabel(ctx context.Context, id string) string {
 // agentController adapts *agent.Service to handlers.AgentController.
 type agentController struct {
 	svc *agent.Service
+	// tools is the composed ToolDeps the agent registers on its own server —
+	// kept here (unexported, same package) purely so agent_wiring_test.go can
+	// confirm the three deliberate differences from the external host's deps
+	// (Source, Limiter, Story) actually landed. None of the five agent.*
+	// methods surfaces them on the wire when no provider is configured, so
+	// without this a regression that dropped one of the three would compile,
+	// pass every other test, and only show up as a writer's agent starving
+	// against — or reverting — an external client's work.
+	tools mcphost.ToolDeps
 }
 
 func setupAgent(deps agentDeps) (*agentController, func() error) {
@@ -98,7 +109,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		},
 		Clock: deps.clock,
 	})
-	return &agentController{svc: svc}, svc.Close
+	return &agentController{svc: svc, tools: tools}, svc.Close
 }
 
 func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt string) (string, error) {
@@ -142,6 +153,16 @@ func (c *agentController) Clear(ctx context.Context, projectID string) error {
 	return c.svc.Clear(ctx, projectID)
 }
 
+// Undo reverts a structural batch the agent applied. A batch that has aged
+// out of storyops' in-memory undo window is not the writer's mistake — it is
+// the ordinary result of a restart or a few more turns — so it gets its own
+// reason code rather than surfacing storyops' English sentence verbatim.
 func (c *agentController) Undo(ctx context.Context, batchID string) error {
-	return c.svc.Undo(ctx, batchID)
+	if err := c.svc.Undo(ctx, batchID); err != nil {
+		if errors.Is(err, storyops.ErrUndoBatchNotFound) {
+			return &rpc.ReasonError{Reason: rpc.ReasonAgentUndoUnavailable, Err: err}
+		}
+		return err
+	}
+	return nil
 }

@@ -39,6 +39,10 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // codex.login_status reports it via CodexStatus.login_failed instead — so
   // this is the only Codex reason code.
   codex_port_in_use: "errors.codexPortInUse",
+  // The built-in agent's undo (#93 fix round 1). storyops keeps only the last
+  // few batches in memory, so this is the ordinary result of a restart or a
+  // few more turns — not a mistake the writer made.
+  agent_undo_unavailable: "errors.agentUndoUnavailable",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc
