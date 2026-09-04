@@ -134,9 +134,23 @@ func TestAgentRun_writesThroughTheRealMCPToolsAndIsAudited(t *testing.T) {
 	}
 
 	// 3. The UI refresh path fired — the agent's writes reuse mcp.changed
-	//    rather than adding a second refresh channel.
+	//    rather than adding a second refresh channel — and it says WHO wrote,
+	//    so the workspace does not tell the writer that "an external agent
+	//    changed this scene" about a revision they asked their own panel for.
+	//    Like the activity log's source, it comes from the composed ToolDeps
+	//    and cannot be claimed off the wire by an external client.
 	if !changed.saw("mcp.changed") {
-		t.Error("no mcp.changed; the workspace would show stale text")
+		t.Fatal("no mcp.changed; the workspace would show stale text")
+	}
+	var mcpChanged struct {
+		Source  string   `json:"source"`
+		NodeIDs []string `json:"node_ids"`
+	}
+	if err := json.Unmarshal(changed.paramsFor("mcp.changed"), &mcpChanged); err != nil {
+		t.Fatalf("decode mcp.changed: %v", err)
+	}
+	if mcpChanged.Source != "agent" {
+		t.Errorf("mcp.changed source = %q, want agent", mcpChanged.Source)
 	}
 
 	// 4. The panel can restore the turn, and every row of it belongs to this
@@ -146,8 +160,9 @@ func TestAgentRun_writesThroughTheRealMCPToolsAndIsAudited(t *testing.T) {
 		t.Fatalf("agent.history: %+v", rpcErr)
 	}
 	var hist []struct {
-		Role  string `json:"role"`
-		RunID string `json:"run_id"`
+		Role   string `json:"role"`
+		RunID  string `json:"run_id"`
+		Status string `json:"status"`
 	}
 	if err := json.Unmarshal(histRaw, &hist); err != nil {
 		t.Fatalf("decode history: %v", err)
@@ -157,6 +172,12 @@ func TestAgentRun_writesThroughTheRealMCPToolsAndIsAudited(t *testing.T) {
 		roles[m.Role]++
 		if m.RunID != run.RunID {
 			t.Errorf("history row role=%s run_id = %q, want %q", m.Role, m.RunID, run.RunID)
+		}
+		// status reaches the panel over the wire, and it is what decides
+		// whether a turn gets a retry button. A turn that ran to completion
+		// carries "done" on every row.
+		if m.Status != "done" {
+			t.Errorf("history row role=%s status = %q, want done", m.Role, m.Status)
 		}
 	}
 	if roles["user"] != 1 || roles["tool"] != 3 || roles["assistant"] < 1 {

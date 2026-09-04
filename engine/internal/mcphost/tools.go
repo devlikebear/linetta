@@ -70,13 +70,24 @@ func (d ToolDeps) now() int64 {
 	return time.Now().UnixMilli()
 }
 
-// ChangedPayload is the body of an "mcp.changed" notification: what an external
-// agent just altered, so the UI can refetch instead of showing stale text.
+// ChangedPayload is the body of an "mcp.changed" notification: what an agent
+// just altered, so the UI can refetch instead of showing stale text.
 type ChangedPayload struct {
 	ProjectID string   `json:"project_id"`
 	Tool      string   `json:"tool"`
 	NodeIDs   []string `json:"node_ids,omitempty"`
 	BatchID   string   `json:"batch_id,omitempty"`
+
+	// Source is who wrote it: SourceExternal (Claude Desktop and friends over
+	// HTTP) or SourceAgent (the writer's own built-in panel). Without it the
+	// UI cannot tell the two apart, and tells a writer whose unsaved scene the
+	// panel just revised — at their own request — that "an external agent
+	// changed this scene", possibly while the HTTP host is not even running.
+	//
+	// It comes from ToolDeps.Source, the same field that stamps the activity
+	// log, so an external client cannot claim to be the agent: it is set when
+	// the server is composed, never read off the wire.
+	Source string `json:"source"`
 }
 
 func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchID string) {
@@ -85,6 +96,7 @@ func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchI
 	}
 	d.Notify("mcp.changed", ChangedPayload{
 		ProjectID: projectID, Tool: tool, NodeIDs: nodeIDs, BatchID: batchID,
+		Source: d.sourceOrExternal(),
 	})
 }
 
