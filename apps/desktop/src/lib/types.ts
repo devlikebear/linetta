@@ -348,6 +348,10 @@ export interface DiagnosticsSnapshot {
   unavailable_providers?: string[];
   git_sync_available?: boolean;
   mcp_available?: boolean;
+  /** Whether this build has the built-in writing agent. False on mobile
+   *  builds, where internal/agent is compiled out entirely — the panel must
+   *  not offer a feature the engine cannot run. */
+  agent_available?: boolean;
   /** Whether this library ever held a companion message. Decides whether the
    *  backup section offers the transcript export — a library that never used
    *  the companion has nothing to export. */

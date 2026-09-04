@@ -61,8 +61,9 @@ type App struct {
 	cancel  context.CancelFunc
 	closers []func() error
 	once    sync.Once
-	// providerSrc is kept for the test seam in agent_enabled.go: the agent's
-	// loop is only testable if its client can be replaced without a network.
+	// providerSrc is kept for the test seam in agent_seams_test.go
+	// (SetProviderFactoryForTest): the agent's loop is only testable if its
+	// client can be replaced without a network.
 	providerSrc *provider.Source
 	// agentCtrl and mcpTools exist for agent_wiring_test.go (#93 fix round
 	// 1): white-box, same-package access to the composed ToolDeps, rather

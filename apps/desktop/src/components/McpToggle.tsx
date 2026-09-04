@@ -55,8 +55,10 @@ export function McpToggle({ projectId, projectTitle }: McpToggleProps) {
     void refresh();
   }, [refresh]);
 
-  // An agent change is proof the server is live; refresh without waiting for
-  // a poll so the dot and the popover keep telling the truth.
+  // A change means SOME agent wrote to the manuscript — not necessarily the
+  // HTTP host: the built-in panel fires mcp.changed with the external server
+  // stopped. So this is a prompt to re-ask, not proof of anything; refresh
+  // re-queries mcp.status, which is what actually decides the dot.
   useEngineEvent("mcp-changed", () => {
     void refresh();
   });
