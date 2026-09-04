@@ -3729,10 +3729,37 @@ git commit -m "feat(desktop): reach the agent methods and forward its notificati
 - **History compaction.** The budget cuts; it does not summarise. Revisited with session search in sub-project 4.
 - **A model catalogue.** `Resolved.Model` empty means tars' own default, exactly as in #91.
 
+## What execution changed — read this before #95
+
+Written after the branch shipped. These are decisions and deviations the plan as drafted did not anticipate.
+
+**One deviation from the design spec, deliberate and unfixed.** Spec §4.3 says the assistant transcript row is written `status=streaming` during the stream and `done` after, and §10 builds on it ("engine dies mid-stream → `status=failed`, the panel offers retry"). This branch writes the assistant row only after `Chat` returns. Consequences: a turn killed by an engine crash leaves a user row at `done` and nothing else — indistinguishable from a completed turn — and a cancelled turn's partial text is lost rather than kept at `status=cancelled`. Adding it means writing the row before the stream and updating it, which is a real change to the loop; it was judged out of scope for #93. **#95 either lives with it or asks for it.**
+
+**Corrections to the plan's own text, found by implementing it:**
+
+- A Go `context.Context` **value** does not cross `mcp.NewInMemoryTransports()`. Cancellation does. The run id therefore rides in `_meta` (recorded up front, but worth repeating: the design spec still says "context value" and is wrong).
+- Client-side params are `mcp.CallToolParams`; the server's `CallToolRequest` is `ServerRequest[*CallToolParamsRaw]`.
+- `companion_messages` has foreign keys to `projects` and `nodes`, and `store.Open` sets `PRAGMA foreign_keys=ON`, so any test writing transcript rows must seed both parents.
+- The plan claimed `notificationLog` could not live in a `_test.go` because a non-test file returned it. False — move the type and its constructor together. The seams live in `engineapp/agent_seams_test.go`.
+- `rpcAllowlist.test.ts` requires every method in `RENDERER_ENGINE_METHODS` to have a typed wrapper in `apps/desktop/src/lib/rpc.ts`. There is now an `agent` export there with five methods and two types, unused until #95.
+- The gate's `allowed` list gained `internal/agenttest`, a test-only package holding the scripted `llm.Client` that `engineapp`'s full-stack test needs. `go list -deps ./cmd/...` must never show it.
+- Four `agent_*` reason codes exist, not two: `agent_busy`, `agent_iteration_limit`, `agent_internal_error`, `agent_undo_unavailable`. All are mapped and translated.
+
+**Engine-side prerequisites for #95** — the panel cannot solve these on its own:
+
+- **Same-millisecond row ordering.** `companion/history.go` tie-breaks equal `created_at` by uuid `id`, so a turn's assistant and tool rows come back in random order. Real on Windows' coarse timer. The panel would render the reply before the tool chips that produced it. The fix is in `companion/history.go`.
+- **The conflict banner's copy.** `mcp.changed` now carries `source` (`"agent"` or `"external"`), and `McpChangedPayload` has the optional field, but `workspace.mcp.conflict.body` still says "an external agent changed this scene" for every source. #95 must branch on it, which needs new i18n keys.
+
+**Behaviour worth knowing:**
+
+- `agent.history` and `agent.clear` are both scoped to the agent's own `intent`, so the removed 1.0 companion's rows are invisible to the panel and survive a clear. They remain reachable through `export.companion_history`, which is deliberately unfiltered.
+- A turn that hits a wall (iteration limit, repeated tool failure) ends with its rows at `done`, not `failed` — the work landed. `failed` is reserved for provider errors and panics, `cancelled` for a stop.
+- `historyBudget` counts runes. For CJK writers this is ~3× the context the byte version sent, which is what the spec asked for — but there is no token-aware guard, so a long Korean history may overflow a small-context model and surface as `provider_unreachable`.
+
 ## Open questions for #95
 
 Record answers in the panel's plan rather than deciding them here:
 
-- `agent.history` returns the whole project transcript. Should the panel filter by scene the way the companion's `HistoryViewScene` did, or is the work the only useful scope now that the scope line carries the scene?
-- A turn that hits `agent_iteration_limit` ends with `agent.error`, but its partial reply is already in the transcript. Does the panel render both, or fold the error into the reply bubble?
+- `agent.history` returns the whole project transcript. Should the panel filter by scene the way the companion's `HistoryViewScene` did, or is the work the only useful scope now that the scope line carries the scene? (Transcript rows never set `Scope`, so they all default to `project` today.)
+- A turn that hits `agent_iteration_limit` ends with `agent.error`, but its partial reply is already in the transcript at `status=done`. Does the panel render both, or fold the error into the reply bubble?
 - `agent.undo` takes one `batch_id`. A turn with three writes has three batches. Does the panel offer three undo buttons, or should the engine grow an "undo this run" that walks them in reverse?
