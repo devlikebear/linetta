@@ -24,6 +24,12 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
+// MetaRunID is the MCP _meta key the built-in agent stamps each tool call
+// with. A Go context value does not cross the in-memory transport — the
+// server handler sees a fresh context — so this is how one turn's calls are
+// tied together in the activity log.
+const MetaRunID = "linetta/run_id"
+
 // ToolDeps carries everything the tool layer reads from. Every field is a repo
 // the UI already uses, so an agent sees exactly what the writer sees.
 type ToolDeps struct {
@@ -37,6 +43,12 @@ type ToolDeps struct {
 	Context    *storycontext.ContextBuilder
 	Settings   *settings.Store
 	Activity   *ActivityRepo
+
+	// Source names who is calling: SourceExternal (the HTTP host) or
+	// SourceAgent (the built-in panel's in-memory server). It is a field on
+	// the deps rather than something read off the wire, so an external client
+	// cannot claim to be the agent. Empty means external.
+	Source string
 
 	// Write-side collaborators. Snapshots make every body change revertible;
 	// EnqueueSummary keeps agent prose in the summarizer's queue; Notify tells
@@ -116,12 +128,23 @@ func record[In, Out any](d ToolDeps, tool string, h mcp.ToolHandlerFor[In, Out])
 		} else if res != nil && res.IsError {
 			detail = firstText(res)
 		}
-		d.recordActivity(ctx, tool, projectID, targetID, ok, detail)
+		d.recordActivity(ctx, tool, projectID, targetID, ok, detail, d.runIDOf(req))
 		return res, out, err
 	}
 }
 
-func (d ToolDeps) recordActivity(ctx context.Context, tool, projectID, targetID string, ok bool, detail string) {
+// runIDOf reads the built-in agent's run id off the request. Only an agent
+// server reads it: external callers control their own _meta, and a forged
+// run id would put their edits under the panel's undo button.
+func (d ToolDeps) runIDOf(req *mcp.CallToolRequest) string {
+	if d.Source != SourceAgent || req == nil || req.Params == nil {
+		return ""
+	}
+	id, _ := req.Params.GetMeta()[MetaRunID].(string)
+	return id
+}
+
+func (d ToolDeps) recordActivity(ctx context.Context, tool, projectID, targetID string, ok bool, detail, runID string) {
 	if d.Activity == nil {
 		return
 	}
@@ -131,9 +154,18 @@ func (d ToolDeps) recordActivity(ctx context.Context, tool, projectID, targetID 
 		TargetID:  targetID,
 		OK:        ok,
 		Detail:    detail,
+		Source:    d.sourceOrExternal(),
+		RunID:     runID,
 	}); err != nil {
 		logf("activity log: %v", err)
 	}
+}
+
+func (d ToolDeps) sourceOrExternal() string {
+	if d.Source == "" {
+		return SourceExternal
+	}
+	return d.Source
 }
 
 func firstText(res *mcp.CallToolResult) string {
@@ -159,10 +191,7 @@ func toolErr(format string, args ...any) *mcp.CallToolResult {
 // cannot be bypassed by a tool that forgot to check.
 func (d ToolDeps) requireProject(ctx context.Context, projectID string) (project.Project, *mcp.CallToolResult) {
 	projectID = strings.TrimSpace(projectID)
-	restricted := ""
-	if d.Settings != nil {
-		restricted = strings.TrimSpace(d.Settings.MCPProjectID())
-	}
+	restricted := d.allowedProjectID()
 	if restricted != "" {
 		if projectID == "" {
 			projectID = restricted
@@ -217,8 +246,13 @@ func (d ToolDeps) requireNodeInProject(ctx context.Context, nodeID, projectID st
 }
 
 // allowedProjectID returns the restriction, or "" when every work is reachable.
+//
+// The built-in agent is never restricted: mcp_project_id exists so a writer
+// can hand an external client one work only, and the panel's scope is
+// whichever work it is open on. Tying the exemption to Source keeps it in the
+// same place as the log stamp, so the two cannot drift apart.
 func (d ToolDeps) allowedProjectID() string {
-	if d.Settings == nil {
+	if d.Settings == nil || d.Source == SourceAgent {
 		return ""
 	}
 	return strings.TrimSpace(d.Settings.MCPProjectID())
