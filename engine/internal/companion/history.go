@@ -49,6 +49,19 @@ type HistoryQuery struct {
 	NodeID    string
 	Scope     string
 	Limit     int
+
+	// Intent, when set, restricts the query to rows written with exactly that
+	// intent. Empty means every row, which is what the archive export and the
+	// story brief want.
+	//
+	// It exists because two different agents share this table. The 1.0
+	// companion stamped its rows with its own intents ("chat", "read_only",
+	// "generic_mutation", "scene_write", "scene_rewrite") or, for a compacted
+	// summary, none at all; the built-in agent (#93) stamps its own. Without
+	// this, the new panel's "clear conversation" would delete a writer's
+	// pre-1.0 companion history — the very rows export.companion_history
+	// exists to let them rescue.
+	Intent string
 }
 
 type HistoryRepo struct {
@@ -83,30 +96,37 @@ func (r *HistoryRepo) List(ctx context.Context, q HistoryQuery) ([]HistoryMessag
 	if q.Limit <= 0 {
 		q.Limit = 100
 	}
-	if q.Scope == HistoryViewScene && strings.TrimSpace(q.NodeID) != "" {
-		return r.list(ctx, `
+	where, args := historyWhere(q)
+	args = append(args, q.Limit)
+	return r.list(ctx, fmt.Sprintf(`
 SELECT m.id, m.project_id, COALESCE(m.node_id, ''), COALESCE(NULLIF(n.title, ''), n.label, ''),
        COALESCE(m.run_id, ''), m.role, m.scope, m.intent, m.status, m.content, m.created_at
   FROM (
     SELECT * FROM companion_messages
-     WHERE project_id = ? AND node_id = ? AND scope = ?
+     WHERE %s
      ORDER BY created_at DESC, CASE role WHEN 'assistant' THEN 0 ELSE 1 END, id DESC
      LIMIT ?
   ) m
   LEFT JOIN nodes n ON n.id = m.node_id
- ORDER BY m.created_at ASC, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.id ASC`, q.ProjectID, q.NodeID, HistoryScopeScene, q.Limit)
+ ORDER BY m.created_at ASC, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.id ASC`, where), args...)
+}
+
+// historyWhere builds the row filter List and Clear share, so the two can
+// never disagree about which rows a query owns — a Clear that deleted more
+// than the matching List showed is exactly the bug this guards against. The
+// fragments are string constants; only the values are parameters.
+func historyWhere(q HistoryQuery) (string, []any) {
+	where := "project_id = ?"
+	args := []any{q.ProjectID}
+	if normalizeHistoryView(q.Scope) == HistoryViewScene && strings.TrimSpace(q.NodeID) != "" {
+		where += " AND node_id = ? AND scope = ?"
+		args = append(args, strings.TrimSpace(q.NodeID), HistoryScopeScene)
 	}
-	return r.list(ctx, `
-SELECT m.id, m.project_id, COALESCE(m.node_id, ''), COALESCE(NULLIF(n.title, ''), n.label, ''),
-       COALESCE(m.run_id, ''), m.role, m.scope, m.intent, m.status, m.content, m.created_at
-  FROM (
-    SELECT * FROM companion_messages
-     WHERE project_id = ?
-     ORDER BY created_at DESC, CASE role WHEN 'assistant' THEN 0 ELSE 1 END, id DESC
-     LIMIT ?
-  ) m
-  LEFT JOIN nodes n ON n.id = m.node_id
- ORDER BY m.created_at ASC, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.id ASC`, q.ProjectID, q.Limit)
+	if intent := strings.TrimSpace(q.Intent); intent != "" {
+		where += " AND intent = ?"
+		args = append(args, intent)
+	}
+	return where, args
 }
 
 func (r *HistoryRepo) LoadForPrompt(ctx context.Context, q HistoryQuery) ([]HistoryMessage, error) {
@@ -121,12 +141,14 @@ func (r *HistoryRepo) LoadForPrompt(ctx context.Context, q HistoryQuery) ([]Hist
 			ProjectID: q.ProjectID,
 			NodeID:    q.NodeID,
 			Scope:     HistoryViewScene,
+			Intent:    q.Intent,
 			Limit:     q.Limit,
 		})
 	}
 	return r.List(ctx, HistoryQuery{
 		ProjectID: q.ProjectID,
 		Scope:     HistoryViewProject,
+		Intent:    q.Intent,
 		Limit:     q.Limit,
 	})
 }
@@ -156,13 +178,9 @@ func (r *HistoryRepo) Clear(ctx context.Context, q HistoryQuery) error {
 	if r == nil {
 		return nil
 	}
-	if normalizeHistoryView(q.Scope) == HistoryViewScene && strings.TrimSpace(q.NodeID) != "" {
-		_, err := r.db.ExecContext(ctx, `
-DELETE FROM companion_messages
- WHERE project_id = ? AND node_id = ? AND scope = ?`, q.ProjectID, q.NodeID, HistoryScopeScene)
-		return err
-	}
-	_, err := r.db.ExecContext(ctx, `DELETE FROM companion_messages WHERE project_id = ?`, q.ProjectID)
+	where, args := historyWhere(q)
+	_, err := r.db.ExecContext(ctx,
+		fmt.Sprintf(`DELETE FROM companion_messages WHERE %s`, where), args...)
 	return err
 }
 

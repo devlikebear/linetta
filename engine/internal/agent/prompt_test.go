@@ -6,6 +6,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
 )
@@ -96,6 +97,31 @@ func TestPriorMessages_keepsTheNewestWithinBudget(t *testing.T) {
 	}
 	if strings.Contains(joined, "oldest") {
 		t.Error("the budget did not bite")
+	}
+}
+
+// The budget is in CHARACTERS, not bytes. Linetta's writers work mostly in
+// Korean and Japanese, and a byte budget silently gives them a third of the
+// conversation an English writer gets — 40,000 bytes is about 13,300 Hangul
+// syllables. An ASCII case cannot tell the two implementations apart, so this
+// one is deliberately Korean: a turn just under the character budget is three
+// times over the byte budget, and a byte-counting priorMessages drops it.
+func TestPriorMessages_budgetsInCharactersNotBytes(t *testing.T) {
+	// 가 is 3 bytes in UTF-8: this is historyBudget-10 characters and
+	// roughly 3×historyBudget bytes.
+	big := strings.Repeat("가", historyBudget-10)
+	got := priorMessages([]companion.HistoryMessage{
+		{Role: "user", Content: big},
+		{Role: "assistant", Content: "네"},
+	})
+	joined := ""
+	for _, m := range got {
+		joined += m.Content
+	}
+	if !strings.Contains(joined, big) {
+		t.Errorf("a Korean turn of %d characters (%d bytes) was dropped from a %d character "+
+			"budget — the budget is counting bytes",
+			utf8.RuneCountInString(big), len(big), historyBudget)
 	}
 }
 

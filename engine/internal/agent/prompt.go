@@ -6,15 +6,22 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
 // historyBudget caps how much of the earlier conversation is replayed, in
-// characters, filled newest-first. No summarisation: a compaction pass that
-// quietly rewrites what the writer said is worse than an honest cut, and
-// session search (sub-project 4) is where this gets revisited.
+// CHARACTERS (runes), filled newest-first. No summarisation: a compaction
+// pass that quietly rewrites what the writer said is worse than an honest
+// cut, and session search (sub-project 4) is where this gets revisited.
+//
+// Runes, not bytes: Linetta's writers work mostly in Korean and Japanese, and
+// 40,000 bytes of Hangul is about 13,300 characters — a third of the budget
+// the spec asks for, so a Korean conversation would lose its earlier turns
+// three times sooner than an English one. tools.go's capText and loop.go's
+// summarize already count runes for the same reason.
 const historyBudget = 40000
 
 // ScopeLookup resolves the names in the scope line. An interface rather than
@@ -84,10 +91,11 @@ func priorMessages(msgs []companion.HistoryMessage) []llm.ChatMessage {
 		if strings.TrimSpace(m.Content) == "" {
 			continue
 		}
-		if used+len(m.Content) > historyBudget {
+		cost := utf8.RuneCountInString(m.Content)
+		if used+cost > historyBudget {
 			break
 		}
-		used += len(m.Content)
+		used += cost
 		kept = append(kept, llm.ChatMessage{Role: m.Role, Content: m.Content})
 	}
 	for i, j := 0, len(kept)-1; i < j; i, j = i+1, j-1 {
