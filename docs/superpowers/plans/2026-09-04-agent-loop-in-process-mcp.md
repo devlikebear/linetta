@@ -22,6 +22,8 @@ Three facts were established by spike before this plan was written (`engine/inte
 
 A fourth, smaller fact: `ListTools` hands the client `Tool.InputSchema` as a `map[string]any`, not raw JSON. Converting to `llm.ToolSchema` therefore means `json.Marshal` on that map (Task 2).
 
+A fifth, found while implementing Task 1: the client and server sides of a tool call use **different params types**. The client builds `mcp.CallToolParams`; the server's `CallToolRequest` is `ServerRequest[*CallToolParamsRaw]`, so a request literal in a server-side test needs `mcp.CallToolParamsRaw`. Both embed the same `Meta`, so `SetMeta`/`GetMeta` behave identically either way.
+
 ## Two deviations from issue #93
 
 **Error codes.** The issue names `-32011 agent_busy` and `-32012 provider_consent_required`. Linetta does not use per-failure JSON-RPC codes: #91 established that a failure the reader must understand is `CodeInvalidParams` (-32602) carrying a `{"reason": "..."}` data payload, and the renderer translates the reason. `provider_consent_required` already shipped that way. This plan follows the shipped convention; the numbers in the issue predate it.
@@ -247,7 +249,7 @@ func TestRecord_readsTheRunIDFromMeta(t *testing.T) {
 		return nil, nil, nil
 	})
 
-	req := &mcp.CallToolRequest{Params: &mcp.CallToolParams{Name: "probe"}}
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "probe"}}
 	req.Params.SetMeta(map[string]any{MetaRunID: "run-42"})
 	if _, _, err := h(context.Background(), req, probeIn{ProjectID: "p1"}); err != nil {
 		t.Fatalf("handler: %v", err)
@@ -270,7 +272,7 @@ func TestRecord_externalCallWithNoMetaIsLoggedAsExternal(t *testing.T) {
 		return nil, nil, nil
 	})
 
-	req := &mcp.CallToolRequest{Params: &mcp.CallToolParams{Name: "probe"}}
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "probe"}}
 	if _, _, err := h(context.Background(), req, probeIn{ProjectID: "p1"}); err != nil {
 		t.Fatalf("handler: %v", err)
 	}
@@ -293,7 +295,7 @@ func TestRecord_externalCallerCannotClaimARunID(t *testing.T) {
 		return nil, nil, nil
 	})
 
-	req := &mcp.CallToolRequest{Params: &mcp.CallToolParams{Name: "probe"}}
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "probe"}}
 	req.Params.SetMeta(map[string]any{MetaRunID: "forged"})
 	if _, _, err := h(context.Background(), req, probeIn{ProjectID: "p1"}); err != nil {
 		t.Fatalf("handler: %v", err)
