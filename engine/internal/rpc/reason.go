@@ -47,6 +47,12 @@ const (
 	// reports it as a Status field instead (see codexauth.Status.LoginFailed)
 	// — so this is the only Codex reason code.
 	ReasonCodexPortInUse = "codex_port_in_use"
+
+	// The built-in agent's loop (#93). Busy is a state the writer resolves by
+	// waiting or pressing stop; the iteration limit means the agent was cut
+	// off mid-task and the reply says how far it got.
+	ReasonAgentBusy           = "agent_busy"
+	ReasonAgentIterationLimit = "agent_iteration_limit"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine
