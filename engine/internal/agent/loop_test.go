@@ -6,10 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/provider"
@@ -114,6 +117,50 @@ func (r *recorder) has(method string) bool {
 		}
 	}
 	return false
+}
+
+// hasTerminalFor reports whether the given run reached one of the three ways
+// a turn ends: done, error, or cancelled. Tests that trigger a run use this
+// to wait for that run's own goroutine to actually finish — not just for
+// *some* run to reach a terminal state — before returning and letting
+// t.Cleanup tear the store down underneath it.
+func (r *recorder) hasTerminalFor(runID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.seen {
+		switch p := e.Params.(type) {
+		case donePayload:
+			if e.Method == "agent.done" && p.RunID == runID {
+				return true
+			}
+		case errorPayload:
+			if e.Method == "agent.error" && p.RunID == runID {
+				return true
+			}
+		case cancelledPayload:
+			if e.Method == "agent.cancelled" && p.RunID == runID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// toolStarts counts how many tool calls were actually attempted, across
+// every run this recorder has seen.
+func (r *recorder) toolStarts() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, e := range r.seen {
+		if e.Method != "agent.tool" {
+			continue
+		}
+		if p, ok := e.Params.(toolPayload); ok && p.State == "started" {
+			n++
+		}
+	}
+	return n
 }
 
 func textReply(text string) llm.ChatResponse {
@@ -322,12 +369,13 @@ func TestRun_secondRunOnTheSameWorkIsBusy(t *testing.T) {
 	blocking := &blockingClient{release: release}
 	svc := newService(t, blocking, rec)
 
-	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "first"}); err != nil {
+	firstRunID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "first"})
+	if err != nil {
 		t.Fatalf("first Run: %v", err)
 	}
 	waitFor(t, "the first run to reach the model", func() bool { return blocking.entered() })
 
-	_, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "second"})
+	_, err = svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "second"})
 	if err == nil {
 		t.Fatal("a second run on the same work must be refused")
 	}
@@ -336,6 +384,11 @@ func TestRun_secondRunOnTheSameWorkIsBusy(t *testing.T) {
 		t.Fatalf("err = %v, want a %s reason", err, rpc.ReasonAgentBusy)
 	}
 	close(release)
+
+	// The first run's own goroutine has to actually finish (and stop writing
+	// to the store) before this test returns and t.Cleanup starts tearing
+	// the store down — otherwise the two race (I4).
+	waitFor(t, "the first run to finish", func() bool { return rec.hasTerminalFor(firstRunID) })
 }
 
 func TestRun_cancelEndsTheTurnAndReportsIt(t *testing.T) {
@@ -357,10 +410,18 @@ func TestRun_cancelEndsTheTurnAndReportsIt(t *testing.T) {
 	close(release)
 
 	// The work is free again once the cancelled run tears down.
+	var nextRunID string
 	waitFor(t, "the work to be released", func() bool {
-		_, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "next"})
-		return err == nil
+		id, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "next"})
+		if err != nil {
+			return false
+		}
+		nextRunID = id
+		return true
 	})
+	// And that follow-up run's own goroutine must finish before this test
+	// returns and t.Cleanup starts tearing the store down (I4).
+	waitFor(t, "the follow-up run to finish", func() bool { return rec.hasTerminalFor(nextRunID) })
 }
 
 // blockingClient parks inside Chat until released or cancelled.
@@ -404,8 +465,16 @@ func TestRun_providerFailureBecomesAReasonCode(t *testing.T) {
 	})
 	t.Cleanup(func() { _ = svc.Close() })
 
-	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "hi"}); err == nil {
+	_, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "hi"})
+	if err == nil {
 		t.Fatal("a run without consent must be refused")
+	}
+	// The reason code is what the panel renders; the provider's own body
+	// must never become that text (asserting err != nil alone would not
+	// catch a regression that leaked the raw body instead).
+	var re *rpc.ReasonError
+	if !errors.As(err, &re) || re.Reason != rpc.ReasonProviderConsentRequired {
+		t.Fatalf("err = %v, want a %s reason", err, rpc.ReasonProviderConsentRequired)
 	}
 }
 
@@ -440,5 +509,245 @@ func TestRun_writesTheTurnToTheTranscript(t *testing.T) {
 		if err := json.Unmarshal([]byte(m.Content), &ev); err != nil {
 			t.Errorf("tool row is not JSON: %s", m.Content)
 		}
+	}
+}
+
+// C1 (fix round 1): maxIterations must bound the total number of tool calls
+// EXECUTED in a turn, not the number of Chat round-trips. A single response
+// that asks for more tool calls than the cap allows must not be allowed to
+// run all of them, and must not cost the writer another round-trip to the
+// model just to be told no.
+func TestRun_iterationCapCountsExecutedToolCallsNotChatRoundTrips(t *testing.T) {
+	rec := &recorder{}
+	calls := make([]llm.ToolCall, maxIterations+1)
+	for i := range calls {
+		calls[i] = llm.ToolCall{ID: fmt.Sprintf("call-%d", i), Name: "echo", Arguments: `{"text":"hi"}`}
+	}
+	burst := llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", ToolCalls: calls}}
+	c := &scriptedClient{responses: []llm.ChatResponse{burst}}
+	svc := newService(t, c, rec)
+
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "burst"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "agent.error", func() bool { return rec.has("agent.error") })
+
+	if got := rec.toolStarts(); got != maxIterations {
+		t.Errorf("executed %d tool calls for one response of %d, want exactly %d",
+			got, len(calls), maxIterations)
+	}
+	if c.count() != 1 {
+		t.Errorf("model was called %d times, want exactly 1 — the cap must trip within the "+
+			"response that exceeded it, not after another round-trip", c.count())
+	}
+	for _, e := range rec.seen {
+		if e.Method != "agent.error" {
+			continue
+		}
+		p, ok := e.Params.(errorPayload)
+		if !ok {
+			continue
+		}
+		if !strings.Contains(p.Message, fmt.Sprintf("%d", maxIterations)) {
+			t.Errorf("error message %q does not state the actual cap that was hit", p.Message)
+		}
+	}
+}
+
+// I2 (fix round 1): a real tool error normally carries changing detail — a
+// version conflict counts up ("expected 7, got 8", then "8, got 9", then "9,
+// got 10"). Keying the repeated-failure wall on the literal error text let a
+// genuinely stuck loop run forever, since every attempt looked like a "new"
+// failure. The wall must trip on the tool's name alone.
+func flakyToolWithVaryingErrors() RegisterTools {
+	return func(s *mcp.Server) {
+		var n int
+		mcp.AddTool(s, &mcp.Tool{Name: "flaky", Description: "fails every time, with a new message"},
+			func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct{}, error) {
+				n++
+				return &mcp.CallToolResult{
+					IsError: true,
+					Content: []mcp.Content{&mcp.TextContent{
+						Text: fmt.Sprintf("expected version %d, got %d", n, n+1),
+					}},
+				}, struct{}{}, nil
+			})
+	}
+}
+
+func TestRun_stopsAfterTheSameToolFailsThreeTimesEvenWithDifferentErrorText(t *testing.T) {
+	rec := &recorder{}
+	responses := make([]llm.ChatResponse, maxIterations)
+	for i := range responses {
+		responses[i] = toolReply("flaky", `{}`)
+	}
+	c := &scriptedClient{responses: responses}
+
+	st := openStoreForAgentTests(t)
+	svc := New(Deps{
+		Providers: fakeProviders{client: c},
+		History:   companion.NewHistoryRepo(st.DB()),
+		Scope:     fakeScope{titles: map[string]string{"p1": "제목"}},
+		Register:  flakyToolWithVaryingErrors(),
+		Notify:    rec.notify,
+		Language:  func() string { return "ko" },
+		Clock:     func() int64 { return 1700000000000 },
+	})
+	t.Cleanup(func() { _ = svc.Close() })
+
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "fail differently"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "the run to end", func() bool { return rec.has("agent.done") || rec.has("agent.error") })
+
+	if c.count() > maxRepeatedToolErrors+1 {
+		t.Errorf("model called %d times, want the loop cut at %d even though each failure's "+
+			"error text differs from the last", c.count(), maxRepeatedToolErrors+1)
+	}
+	if !rec.has("agent.error") {
+		t.Error("three failures of the same tool, with different error text each time, must still trip the wall")
+	}
+}
+
+// I5 (fix round 1): HistoryRepo.List sorts user rows before assistant rows
+// at equal timestamps, so under a frozen clock (or Windows' coarser one)
+// this turn's own user row is not guaranteed to be the LAST row a history
+// load returns. Dropping it by position, rather than by run id, can leave
+// it in the replayed history — which both repeats the current prompt and
+// reorders the prior reply after it.
+func TestRun_secondTurnSeesThePriorReplyAndDoesNotRepeatItsOwnPrompt(t *testing.T) {
+	rec := &recorder{}
+	c := &scriptedClient{responses: []llm.ChatResponse{
+		textReply("ok"),
+		textReply("done"),
+	}}
+	svc := newService(t, c, rec)
+
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "FIRST"}); err != nil {
+		t.Fatalf("first Run: %v", err)
+	}
+	waitFor(t, "first agent.done", func() bool { return rec.has("agent.done") })
+
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "SECOND"}); err != nil {
+		t.Fatalf("second Run: %v", err)
+	}
+	waitFor(t, "second agent.done", func() bool {
+		n := 0
+		for _, m := range rec.methods() {
+			if m == "agent.done" {
+				n++
+			}
+		}
+		return n == 2
+	})
+
+	msgs := c.messages()
+	if len(msgs) == 0 || msgs[0].Role != "system" {
+		t.Fatalf("messages = %+v, want the system prompt first", msgs)
+	}
+	occurrences := 0
+	for i, m := range msgs {
+		if strings.Contains(m.Content, "SECOND") {
+			occurrences++
+			if i != len(msgs)-1 {
+				t.Errorf("SECOND prompt appeared at index %d of %d, not only as the final message: %+v",
+					i, len(msgs), msgs)
+			}
+		}
+	}
+	if occurrences != 1 {
+		t.Errorf("SECOND prompt appears %d times in the second turn's messages, want exactly 1: %+v",
+			occurrences, msgs)
+	}
+	var sawPriorReply bool
+	for _, m := range msgs {
+		if m.Role == "assistant" && strings.Contains(m.Content, "ok") {
+			sawPriorReply = true
+		}
+	}
+	if !sawPriorReply {
+		t.Errorf("the first turn's reply is missing from the second turn's context: %+v", msgs)
+	}
+}
+
+// M6 (fix round 1): a cancelled turn must not lose the transcript row that
+// carries an undo batch id for a write that already succeeded.
+// toolSession.call deliberately does not special-case "the result came back
+// successful right as the context was cancelled" (see the Task 2 review
+// finding carried forward into this task) — that race is the loop's to
+// handle, by recording the result with a context that survives the turn's
+// own cancellation, the same way markRun already does.
+//
+// Real timing can't be forced through the public API deterministically —
+// probing it directly showed the MCP client itself turning a cancelled ctx
+// into an error result, discarding whatever the handler actually returned,
+// which is a different (already-handled) path. So this test injects the
+// cancellation at the exact point the race matters: the Notify callback
+// fires synchronously, on the loop's own goroutine, right after runTool has
+// the tool's SUCCESSFUL result (with its batch id) in hand and right before
+// that result is written to the transcript — which is exactly the gap the
+// fix (using an uncancellable context for that write) has to cover.
+func TestRun_cancelledTurnStillRecordsAToolResultThatAlreadySucceeded(t *testing.T) {
+	rec := &recorder{}
+	st := openStoreForAgentTests(t)
+
+	var svc *Service
+	notify := func(method string, params any) {
+		rec.notify(method, params)
+		if method != "agent.tool" {
+			return
+		}
+		p, ok := params.(toolPayload)
+		if !ok || p.State != "done" {
+			return
+		}
+		// The tool call already succeeded — echo's "batch-1" is in hand —
+		// and the writer's stop lands right now, before runTool has written
+		// that result to the transcript.
+		svc.Cancel(p.RunID)
+	}
+
+	c := &scriptedClient{responses: []llm.ChatResponse{toolReply("echo", `{"text":"committed"}`)}}
+	svc = New(Deps{
+		Providers: fakeProviders{client: c},
+		History:   companion.NewHistoryRepo(st.DB()),
+		Scope:     fakeScope{titles: map[string]string{"p1": "제목"}},
+		Register:  stubTools(nil),
+		Notify:    notify,
+		Language:  func() string { return "ko" },
+		Clock:     func() int64 { return 1700000000000 },
+	})
+	t.Cleanup(func() { _ = svc.Close() })
+
+	runID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "commit it"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "the run to end", func() bool { return rec.hasTerminalFor(runID) })
+
+	msgs, err := svc.History(context.Background(), "p1", 50)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	var found *toolEvent
+	for _, m := range msgs {
+		if m.Role != "tool" {
+			continue
+		}
+		var ev toolEvent
+		if err := json.Unmarshal([]byte(m.Content), &ev); err != nil {
+			continue
+		}
+		if ev.BatchID == "batch-1" {
+			e := ev
+			found = &e
+		}
+	}
+	if found == nil {
+		t.Fatalf("the tool result that already succeeded before cancellation was never "+
+			"recorded in the transcript: %+v", msgs)
+	}
+	if !found.OK {
+		t.Errorf("recorded tool event OK = false, want true — the write actually succeeded")
 	}
 }

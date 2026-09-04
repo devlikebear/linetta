@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
@@ -13,15 +14,22 @@ import (
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
-// maxIterations caps tool calls per turn. A runaway agent should hit a wall
-// the writer can see in the activity log, not rewrite forty scenes.
+// maxIterations caps the number of tool calls EXECUTED in a turn — not the
+// number of Chat round-trips. A single model response can legally ask for
+// many tool calls at once, and letting each one through uncounted is how a
+// runaway agent rewrites forty scenes instead of hitting the wall the writer
+// is supposed to see in the activity log.
 const maxIterations = 24
 
-// maxRepeatedToolErrors ends a turn when the same tool returns the same error
-// this many times running. A tool error is normally the model's to recover
-// from — it re-reads and retries — but a model that has failed identically
-// three times is not learning, and a fourth attempt spends the writer's money
-// to prove it.
+// maxRepeatedToolErrors ends a turn when the same TOOL — by name alone,
+// regardless of the exact error text — fails this many times in a row. Real
+// tool errors normally carry changing detail (a version conflict counts up:
+// "expected 7, got 8", then "8, got 9"), so keying the wall on the literal
+// error text let a genuinely stuck loop run forever, since every attempt
+// looked like a "new" failure. A tool error is normally the model's to
+// recover from — it re-reads and retries — but a model that has failed the
+// same tool three times running is not learning, and a fourth attempt spends
+// the writer's money to prove it.
 const maxRepeatedToolErrors = 3
 
 // RunRequest is one message from the panel.
@@ -57,12 +65,20 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		return "", err
 	}
 
+	// Registered under the same lock session() uses for its closed check: a
+	// Close racing this Run either finishes first (Run then already failed
+	// at session, above) or is guaranteed to wait for the turn enter admits.
+	if err := s.enter(); err != nil {
+		return "", err
+	}
+
 	runID := newRunID()
 	// Deliberately NOT derived from the caller's ctx: that context belongs to
 	// one JSON-RPC call and is cancelled the moment Run returns, which would
 	// kill the turn before its first token.
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	if err := s.runs.start(projectID, runID, cancel); err != nil {
+		s.leave()
 		cancel()
 		if errors.Is(err, ErrBusy) {
 			return "", &rpc.ReasonError{Reason: rpc.ReasonAgentBusy, Err: err}
@@ -72,22 +88,36 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 
 	if err := s.tr.appendUser(runCtx, projectID, req.NodeID, runID, req.Prompt); err != nil {
 		s.runs.finish(projectID, runID)
+		s.leave()
 		cancel()
 		return "", err
+	}
+
+	st := loopState{
+		runID:    runID,
+		req:      req,
+		client:   client,
+		model:    resolved.Model,
+		session:  tools,
+		schemas:  schemas,
+		language: s.language(),
 	}
 
 	go func() {
 		defer cancel()
 		defer s.runs.finish(projectID, runID)
-		s.loop(runCtx, loopState{
-			runID:    runID,
-			req:      req,
-			client:   client,
-			model:    resolved.Model,
-			session:  tools,
-			schemas:  schemas,
-			language: s.language(),
-		})
+		defer s.leave()
+		// The highest-risk goroutine in the feature: nothing here may take
+		// the whole engine process down with it. A panic ends this one turn
+		// with an agent.error instead.
+		defer func() {
+			if r := recover(); r != nil {
+				logf("panic in turn %s: %v\n%s", runID, r, debug.Stack())
+				s.endWithReason(runCtx, st, rpc.ReasonAgentInternalError,
+					fmt.Sprintf("internal error: %v", r))
+			}
+		}()
+		s.loop(runCtx, st)
 	}()
 	return runID, nil
 }
@@ -144,10 +174,11 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 	msgs := s.openingMessages(ctx, st)
 
 	var usage usagePayload
-	lastToolError := ""
+	toolCalls := 0
+	lastFailedTool := ""
 	repeats := 0
 
-	for iter := 0; iter < maxIterations; iter++ {
+	for {
 		resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
 			Tools:   st.schemas,
 			OnDelta: func(text string) { s.notify("agent.delta", deltaPayload{st.runID, text}) },
@@ -160,7 +191,10 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 		usage.Output += resp.Usage.OutputTokens
 
 		if text := strings.TrimSpace(resp.Message.Content); text != "" {
-			if err := s.tr.appendAssistant(ctx, st.req.ProjectID, st.req.NodeID, st.runID,
+			// Written with a context that survives the turn's own
+			// cancellation, the same as the tool-event write below: the
+			// reply already left the model by the time this runs.
+			if err := s.tr.appendAssistant(context.WithoutCancel(ctx), st.req.ProjectID, st.req.NodeID, st.runID,
 				resp.Message.Content, companion.HistoryStatusDone); err != nil {
 				logf("transcript: %v", err)
 			}
@@ -177,7 +211,18 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 				s.endCancelled(ctx, st)
 				return
 			}
+			// maxIterations bounds the TOTAL tool calls executed this turn,
+			// not the number of responses that asked for them — a single
+			// response can legally pack many calls into one, and this check
+			// runs before every one of them, not just once per round-trip.
+			if toolCalls >= maxIterations {
+				s.endWithReason(ctx, st, rpc.ReasonAgentIterationLimit,
+					fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
+				return
+			}
+
 			result := s.runTool(ctx, st, call)
+			toolCalls++
 			msgs = append(msgs, llm.ChatMessage{
 				Role:       "tool",
 				ToolCallID: call.ID,
@@ -185,25 +230,29 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			})
 
 			if !result.IsError {
-				lastToolError, repeats = "", 0
+				lastFailedTool, repeats = "", 0
 				continue
 			}
-			signature := call.Name + "\x00" + result.Text
-			if signature == lastToolError {
+			if call.Name == lastFailedTool {
 				repeats++
 			} else {
-				lastToolError, repeats = signature, 1
+				lastFailedTool, repeats = call.Name, 1
 			}
 			if repeats >= maxRepeatedToolErrors {
 				s.endWithReason(ctx, st, rpc.ReasonAgentIterationLimit,
-					fmt.Sprintf("%s failed the same way %d times running", call.Name, repeats))
+					fmt.Sprintf("%s failed %d times in a row", call.Name, repeats))
 				return
 			}
 		}
-	}
 
-	s.endWithReason(ctx, st, rpc.ReasonAgentIterationLimit,
-		fmt.Sprintf("stopped after %d tool calls in one turn", maxIterations))
+		// A response that used its entire allotment does not earn another
+		// round-trip just to be told no on its first tool call.
+		if toolCalls >= maxIterations {
+			s.endWithReason(ctx, st, rpc.ReasonAgentIterationLimit,
+				fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
+			return
+		}
+	}
 }
 
 // openingMessages is system prompt + budgeted history + the scope-prefixed
@@ -216,11 +265,20 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	if err != nil {
 		logf("history: %v", err)
 	}
-	// Drop the row Run just appended: it is delivered below, with its scope line.
-	if n := len(prior); n > 0 && prior[n-1].RunID == st.runID && prior[n-1].Role == "user" {
-		prior = prior[:n-1]
+	// Drop this turn's own user row: it is delivered below, with its scope
+	// line. Filtered by run id rather than assumed position — HistoryRepo.List
+	// sorts user rows before assistant rows at equal timestamps, so under a
+	// frozen or coarse-grained clock (tests; Windows) this turn's row is not
+	// guaranteed to be the last item load returns, and dropping the wrong
+	// (or no) row either repeats the prompt or reorders the prior reply.
+	filtered := make([]companion.HistoryMessage, 0, len(prior))
+	for _, m := range prior {
+		if m.Role == "user" && m.RunID == st.runID {
+			continue
+		}
+		filtered = append(filtered, m)
 	}
-	msgs = append(msgs, priorMessages(prior)...)
+	msgs = append(msgs, priorMessages(filtered)...)
 
 	scope := scopeLine(ctx, s.deps.Scope, st.req.ProjectID, st.req.NodeID)
 	return append(msgs, llm.ChatMessage{
@@ -248,7 +306,13 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 		RunID: st.runID, Name: call.Name, State: state,
 		Summary: summarize(result.Text), BatchID: result.BatchID, NodeIDs: result.NodeIDs,
 	})
-	if err := s.tr.appendToolEvent(ctx, st.req.ProjectID, st.req.NodeID, st.runID, toolEvent{
+	// Recorded with a context that survives the turn's own cancellation,
+	// unlike the tool call above: the call already ran — and may already
+	// have written the manuscript — by the time this executes, so a
+	// cancelled ctx must not cost the writer the transcript row carrying the
+	// undo batch id for a write that actually landed. Same reasoning as
+	// markRun (transcript.go).
+	if err := s.tr.appendToolEvent(context.WithoutCancel(ctx), st.req.ProjectID, st.req.NodeID, st.runID, toolEvent{
 		Name: call.Name, Summary: summarize(result.Text), OK: !result.IsError,
 		BatchID: result.BatchID, NodeIDs: result.NodeIDs,
 	}); err != nil {

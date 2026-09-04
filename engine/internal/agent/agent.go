@@ -50,6 +50,14 @@ type Service struct {
 	// server, and Open must not fail because of one.
 	toolsMu sync.Mutex
 	tools   *toolSession
+	closed  bool
+
+	// wg tracks turns in flight so Close can wait for them to actually stop.
+	// Cancelling a turn's context is not enough on its own: a turn that is
+	// mid Chat-call or mid transcript-write needs to observe the
+	// cancellation and unwind before it is safe to close the tool session
+	// or let the caller close the store underneath a turn that outlived it.
+	wg sync.WaitGroup
 }
 
 // New wires the service. Nothing connects until the first run.
@@ -61,24 +69,41 @@ func New(d Deps) *Service {
 	}
 }
 
-// Close tears down the tool session.
+// Close tears down the tool session. It cancels every turn still running,
+// waits for them to actually unwind, and refuses any further Run or session
+// rebuild from then on — a turn that outlived Close would otherwise keep
+// calling the provider and writing transcript rows against a store the
+// caller is free to close the moment Close returns.
 func (s *Service) Close() error {
 	s.toolsMu.Lock()
-	defer s.toolsMu.Unlock()
-	if s.tools == nil {
+	if s.closed {
+		s.toolsMu.Unlock()
 		return nil
 	}
-	err := s.tools.Close()
+	s.closed = true
+	tools := s.tools
 	s.tools = nil
-	return err
+	s.toolsMu.Unlock()
+
+	s.runs.cancelAll()
+	s.wg.Wait()
+
+	if tools == nil {
+		return nil
+	}
+	return tools.Close()
 }
 
 // session returns the connected tool session, building it once. A failed
 // attempt leaves nothing cached, so the next run retries instead of
-// inheriting a broken session forever.
+// inheriting a broken session forever. Once the service is closed it always
+// refuses, rather than silently rebuilding a session Close just tore down.
 func (s *Service) session(ctx context.Context) (*toolSession, error) {
 	s.toolsMu.Lock()
 	defer s.toolsMu.Unlock()
+	if s.closed {
+		return nil, errors.New("agent: service is closed")
+	}
 	if s.tools != nil {
 		return s.tools, nil
 	}
@@ -89,6 +114,23 @@ func (s *Service) session(ctx context.Context) (*toolSession, error) {
 	s.tools = ts
 	return ts, nil
 }
+
+// enter registers one turn with Close's wait group, under the same lock
+// session uses for its closed check. A Close racing a Run either finishes
+// first — in which case Run fails at session, above, and never calls enter —
+// or is guaranteed to wait for the turn enter just admitted.
+func (s *Service) enter() error {
+	s.toolsMu.Lock()
+	defer s.toolsMu.Unlock()
+	if s.closed {
+		return errors.New("agent: service is closed")
+	}
+	s.wg.Add(1)
+	return nil
+}
+
+// leave releases one turn registered with enter.
+func (s *Service) leave() { s.wg.Done() }
 
 func (s *Service) notify(method string, params any) {
 	if s.deps.Notify != nil {

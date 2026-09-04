@@ -53,6 +53,11 @@ const (
 	// off mid-task and the reply says how far it got.
 	ReasonAgentBusy           = "agent_busy"
 	ReasonAgentIterationLimit = "agent_iteration_limit"
+
+	// A panic inside the turn goroutine (#93 fix round 1). The turn ends
+	// instead of taking the engine process down with it; the raw panic
+	// value stays in the English Message for logs.
+	ReasonAgentInternalError = "agent_internal_error"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine

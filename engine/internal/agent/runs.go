@@ -64,3 +64,19 @@ func (r *runRegistry) finish(projectID, runID string) {
 	}
 	delete(r.cancels, runID)
 }
+
+// cancelAll stops every run currently in flight. Used when the service is
+// closing: a turn that outlives Close would keep calling the provider and
+// writing transcript rows against a store the caller is free to close the
+// moment Close returns.
+func (r *runRegistry) cancelAll() {
+	r.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(r.cancels))
+	for _, c := range r.cancels {
+		cancels = append(cancels, c)
+	}
+	r.mu.Unlock()
+	for _, c := range cancels {
+		c()
+	}
+}
