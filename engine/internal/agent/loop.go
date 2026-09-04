@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/tars/pkg/llm"
 )
@@ -65,24 +66,36 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		return "", err
 	}
 
-	// Registered under the same lock session() uses for its closed check: a
-	// Close racing this Run either finishes first (Run then already failed
-	// at session, above) or is guaranteed to wait for the turn enter admits.
-	if err := s.enter(); err != nil {
-		return "", err
-	}
-
 	runID := newRunID()
 	// Deliberately NOT derived from the caller's ctx: that context belongs to
 	// one JSON-RPC call and is cancelled the moment Run returns, which would
 	// kill the turn before its first token.
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+
+	// The cancel func is registered BEFORE enter, and that order is the whole
+	// point. Close sets closed, then takes a SNAPSHOT of the cancel map, then
+	// waits on the wait group — so a run that entered the group before
+	// registering its cancel would be invisible to that snapshot, never
+	// cancelled at all, and Close would block for the run's entire turn (up
+	// to 24 tool calls and every round-trip between them), not one
+	// round-trip. Registering first leaves only the harmless ordering: a
+	// Close landing in the gap misses this run's cancel in its snapshot, but
+	// enter below then sees closed and refuses, so no turn ever starts.
 	if err := s.runs.start(projectID, runID, cancel); err != nil {
-		s.leave()
 		cancel()
 		if errors.Is(err, ErrBusy) {
 			return "", &rpc.ReasonError{Reason: rpc.ReasonAgentBusy, Err: err}
 		}
+		return "", err
+	}
+
+	// Registered under the same lock session() uses for its closed check: a
+	// Close racing this Run either finishes first (Run then already failed
+	// at session, above, or fails here) or is guaranteed to wait for the turn
+	// enter admits.
+	if err := s.enter(); err != nil {
+		s.runs.finish(projectID, runID)
+		cancel()
 		return "", err
 	}
 
@@ -97,6 +110,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		runID:    runID,
 		req:      req,
 		client:   client,
+		provider: resolved.ID,
 		model:    resolved.Model,
 		session:  tools,
 		schemas:  schemas,
@@ -114,7 +128,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 			if r := recover(); r != nil {
 				logf("panic in turn %s: %v\n%s", runID, r, debug.Stack())
 				s.endWithReason(runCtx, st, rpc.ReasonAgentInternalError,
-					fmt.Sprintf("internal error: %v", r))
+					fmt.Sprintf("internal error: %v", r), companion.HistoryStatusFailed)
 			}
 		}()
 		s.loop(runCtx, st)
@@ -123,8 +137,12 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 }
 
 type loopState struct {
-	runID    string
-	req      RunRequest
+	runID string
+	req   RunRequest
+	// provider is the resolved provider id ("anthropic", "openai-codex", …).
+	// It names the failure in an agent.error message, the same way
+	// provider.Classify names it for the settings connection test.
+	provider string
 	client   llm.Client
 	model    string
 	session  *toolSession
@@ -216,8 +234,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			// response can legally pack many calls into one, and this check
 			// runs before every one of them, not just once per round-trip.
 			if toolCalls >= maxIterations {
-				s.endWithReason(ctx, st, rpc.ReasonAgentIterationLimit,
-					fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
+				s.endAtWall(ctx, st, fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
 				return
 			}
 
@@ -239,8 +256,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 				lastFailedTool, repeats = call.Name, 1
 			}
 			if repeats >= maxRepeatedToolErrors {
-				s.endWithReason(ctx, st, rpc.ReasonAgentIterationLimit,
-					fmt.Sprintf("%s failed %d times in a row", call.Name, repeats))
+				s.endAtWall(ctx, st, fmt.Sprintf("%s failed %d times in a row", call.Name, repeats))
 				return
 			}
 		}
@@ -248,8 +264,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 		// A response that used its entire allotment does not earn another
 		// round-trip just to be told no on its first tool call.
 		if toolCalls >= maxIterations {
-			s.endWithReason(ctx, st, rpc.ReasonAgentIterationLimit,
-				fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
+			s.endAtWall(ctx, st, fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
 			return
 		}
 	}
@@ -293,7 +308,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) toolResult {
 	s.notify("agent.tool", toolPayload{
 		RunID: st.runID, Name: call.Name, State: "started",
-		Summary: summarizeArgs(call.Arguments),
+		Summary: summarize(call.Arguments),
 	})
 
 	result := st.session.call(ctx, st.runID, call.Name, call.Arguments)
@@ -321,6 +336,21 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	return result
 }
 
+// endAtWall ends a turn that ran into one of the loop's own limits — the
+// per-turn tool-call cap, or the same tool failing three times running.
+//
+// The rows stay "done", unlike a provider error's. The turn stopped short,
+// and agent.error says so with agent_iteration_limit, but everything it did
+// before the wall actually happened: the scenes are written, the tool rows
+// carry live undo batch ids, and the reply the model already produced is a
+// real partial answer. Stamping those rows "failed" makes a turn that landed
+// twenty-four successful tool calls look identical to one that crashed before
+// its first token, and hangs a retry button under work the writer can see in
+// their manuscript.
+func (s *Service) endAtWall(ctx context.Context, st loopState, message string) {
+	s.endWithReason(ctx, st, rpc.ReasonAgentIterationLimit, message, companion.HistoryStatusDone)
+}
+
 func (s *Service) endCancelled(ctx context.Context, st loopState) {
 	if err := s.tr.markRun(ctx, st.runID, companion.HistoryStatusCancelled); err != nil {
 		logf("transcript: %v", err)
@@ -335,16 +365,49 @@ func (s *Service) endWithError(ctx context.Context, st loopState, err error) {
 		s.endCancelled(ctx, st)
 		return
 	}
-	reason := rpc.ReasonProviderUnreachable
-	var re *rpc.ReasonError
-	if errors.As(err, &re) {
-		reason = re.Reason
-	}
-	s.endWithReason(ctx, st, reason, err.Error())
+	reason, message := classifyProviderError(st.provider, err)
+	s.endWithReason(ctx, st, reason, message, companion.HistoryStatusFailed)
 }
 
-func (s *Service) endWithReason(ctx context.Context, st loopState, reason, message string) {
-	if err := s.tr.markRun(ctx, st.runID, companion.HistoryStatusFailed); err != nil {
+// classifyProviderError reduces a failure raised inside a turn to the reason
+// code the panel translates and a message safe to sit beside it.
+//
+// The reason comes from provider.Classify — the same mapper the settings
+// connection test uses, so an expired key reads "check your key" in both
+// places. Going through it is what makes an HTTP 401 provider_auth_failed
+// rather than provider_unreachable: st.client.Chat returns tars'
+// *llm.ProviderError, whose Unwrap() is a nil Cause, so a bare
+// errors.As(err, **rpc.ReasonError) never matches it. An error the pre-flight
+// already classified passes through Classify untouched and keeps its reason.
+//
+// The message is rebuilt here rather than taken from Classify. Classify keeps
+// the failure's first line capped at 200 characters, which stops a multi-line
+// JSON error page but not a compact single-line one — and *llm.ProviderError's
+// Message field IS the raw response body. So an HTTP failure is described by
+// the two parts that can carry neither the writer's manuscript nor their key:
+// the provider and the status.
+func classifyProviderError(id string, err error) (reason, message string) {
+	classified := provider.Classify(id, err)
+	reason = rpc.ReasonProviderUnreachable
+	var re *rpc.ReasonError
+	if errors.As(classified, &re) {
+		reason = re.Reason
+	}
+	var pe *llm.ProviderError
+	if errors.As(err, &pe) && pe.StatusCode > 0 {
+		return reason, fmt.Sprintf("%s: HTTP %d", id, pe.StatusCode)
+	}
+	return reason, classified.Error()
+}
+
+// endWithReason ends a turn with a reason code the panel renders. status is
+// what every row of the run is stamped with, and it is NOT always "failed":
+// a turn that hit the iteration wall after twenty-four successful tool calls
+// produced real work, and marking it failed puts a retry button under a reply
+// that already landed (spec §10 gives the retry button to failed turns).
+// Provider errors and panics keep "failed"; walls end "done".
+func (s *Service) endWithReason(ctx context.Context, st loopState, reason, message, status string) {
+	if err := s.tr.markRun(ctx, st.runID, status); err != nil {
 		logf("transcript: %v", err)
 	}
 	s.notify("agent.error", errorPayload{RunID: st.runID, Reason: reason, Message: message})
@@ -359,5 +422,3 @@ func summarize(s string) string {
 	}
 	return string(r[:max]) + "…"
 }
-
-func summarizeArgs(args string) string { return summarize(args) }
