@@ -178,11 +178,17 @@ type Context struct {
 	Notes         []NoteBrief         `json:"notes"`
 	Facts         []FactBrief         `json:"facts,omitempty"`
 	Memories      []string            `json:"memories,omitempty"`
-	References    []ReferenceBrief    `json:"references,omitempty"`
-	StyleNotes    string              `json:"style_notes"`
-	SelectionText string              `json:"selection_text"`
-	UserPrompt    string              `json:"user_prompt"`
-	Options       Options             `json:"options"`
+	// WriterProfile and WorkNotes are the curated, budgeted memories. Separate
+	// from Memories (the experiences.jsonl recall) because they are a different
+	// thing: a short document the writer and the agent both maintain, rather
+	// than a substring search over an unbounded log.
+	WriterProfile string           `json:"writer_profile,omitempty"`
+	WorkNotes     string           `json:"work_notes,omitempty"`
+	References    []ReferenceBrief `json:"references,omitempty"`
+	StyleNotes    string           `json:"style_notes"`
+	SelectionText string           `json:"selection_text"`
+	UserPrompt    string           `json:"user_prompt"`
+	Options       Options          `json:"options"`
 }
 
 // RelationBrief is one relationship between two entities present in the current

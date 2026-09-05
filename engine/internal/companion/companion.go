@@ -17,6 +17,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 )
 
@@ -29,6 +30,7 @@ type Service struct {
 	memBase    string
 	history    *HistoryRepo
 	references *ReferenceRepo
+	memories   *agentmemory.Repo
 }
 
 // NewService constructs the surviving store owner. memBase is the root the
@@ -49,6 +51,11 @@ func (s *Service) WithReferences(repo *ReferenceRepo) *Service {
 
 func (s *Service) WithFacts(repo *fact.Repo) *Service {
 	s.facts = repo
+	return s
+}
+
+func (s *Service) WithCuratedMemory(repo *agentmemory.Repo) *Service {
+	s.memories = repo
 	return s
 }
 
