@@ -791,6 +791,8 @@ const messages = {
     "settings.mcp.snippets.desktop": "Claude Desktop — claude_desktop_config.json 에 넣으세요.",
     "settings.mcp.snippets.tokenHidden": "토큰은 켤 때 한 번만 보여집니다. 접속 명령이 필요하면 토큰을 재발급하세요.",
     "settings.mcp.activity.title": "최근 활동",
+    "settings.mcp.activity.sourceAgent": "내장 에이전트",
+    "settings.mcp.activity.sourceExternal": "외부 클라이언트",
     "settings.git.alreadyRepo": "이미 git 저장소입니다",
   },
   en: {
@@ -1572,6 +1574,8 @@ const messages = {
     "settings.mcp.snippets.desktop": "Claude Desktop — add this to claude_desktop_config.json.",
     "settings.mcp.snippets.tokenHidden": "The token is shown once, when you turn MCP on. Regenerate it if you need the connection command again.",
     "settings.mcp.activity.title": "Recent activity",
+    "settings.mcp.activity.sourceAgent": "Built-in agent",
+    "settings.mcp.activity.sourceExternal": "External client",
     "settings.git.alreadyRepo": "Already a git repository",
   },
   ja: {
@@ -2353,6 +2357,8 @@ const messages = {
     "settings.mcp.snippets.desktop": "Claude Desktop — claude_desktop_config.json に追加してください。",
     "settings.mcp.snippets.tokenHidden": "トークンはオンにしたときに一度だけ表示されます。接続コマンドが必要なら再発行してください。",
     "settings.mcp.activity.title": "最近の操作",
+    "settings.mcp.activity.sourceAgent": "内蔵エージェント",
+    "settings.mcp.activity.sourceExternal": "外部クライアント",
     "settings.git.alreadyRepo": "すでに git リポジトリです",
   },
 } as const;

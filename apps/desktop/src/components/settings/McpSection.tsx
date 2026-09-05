@@ -431,7 +431,12 @@ export function McpSection({ bridgePath }: McpSectionProps) {
           <h4>{t("settings.mcp.activity.title")}</h4>
           <ul>
             {activity.map((entry) => (
-              <li key={entry.id}>
+              <li key={entry.id} data-testid={`mcp-activity-${entry.id}`}>
+                <span data-testid={`mcp-activity-source-${entry.id}`}>
+                  {entry.source === "agent"
+                    ? t("settings.mcp.activity.sourceAgent")
+                    : t("settings.mcp.activity.sourceExternal")}
+                </span>{" "}
                 {entry.ok ? "✓" : "✕"} {entry.tool}
                 {entry.detail ? ` — ${entry.detail}` : ""}
               </li>

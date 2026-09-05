@@ -463,6 +463,13 @@ export interface McpActivityEntry {
   target_id?: string;
   ok: boolean;
   detail?: string;
+  /** Who called the tool: "agent" for Linetta's built-in writing agent,
+   *  "external" for a client connected over the MCP port. The engine stamps
+   *  this from a static field on the tool deps, never from the wire, so an
+   *  external client cannot claim to be the agent. */
+  source?: string;
+  /** Which agent turn the call belonged to. Only the built-in agent sets it. */
+  run_id?: string;
 }
 
 export interface GitSyncResult {
