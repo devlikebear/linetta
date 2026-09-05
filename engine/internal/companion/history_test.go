@@ -11,7 +11,12 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestHistoryRepoListScopesMessagesByScene(t *testing.T) {
+// seedWork opens a throwaway library and creates one work in it. Every test
+// below needs a project row before it can append a message — companion_messages
+// has a foreign key to projects — and none of them is about how that row got
+// there.
+func seedWork(t *testing.T) (context.Context, *store.Store, *node.Repo, project.Project) {
+	t.Helper()
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -19,12 +24,17 @@ func TestHistoryRepoListScopesMessagesByScene(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 
-	projects := project.NewRepo(st)
-	nodes := node.NewRepo(st)
-	p, err := projects.Create(ctx, 1, project.NewInput{Title: "작품", Genres: []string{"fantasy"}, LengthTarget: "novel", DefaultPOV: "first"})
+	p, err := project.NewRepo(st).Create(ctx, 1, project.NewInput{
+		Title: "작품", Genres: []string{"fantasy"}, LengthTarget: "novel", DefaultPOV: "first",
+	})
 	if err != nil {
 		t.Fatalf("create project: %v", err)
 	}
+	return ctx, st, node.NewRepo(st), p
+}
+
+func TestHistoryRepoListScopesMessagesByScene(t *testing.T) {
+	ctx, st, nodes, p := seedWork(t)
 	sceneA, err := nodes.CreateRoot(ctx, p.ID, node.KindLeaf, "씬 1", "식탁 위 고지서", 10)
 	if err != nil {
 		t.Fatalf("create scene A: %v", err)
@@ -91,19 +101,7 @@ func TestList_ordersRowsWrittenInTheSameMillisecondByInsertion(t *testing.T) {
 	// millisecond. Ordering by the uuid id then decides at random, so the
 	// panel can draw a reply before the tool chips that produced it.
 	// Insertion order is the only thing that is actually true here.
-	ctx := context.Background()
-	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-
-	projects := project.NewRepo(st)
-	nodes := node.NewRepo(st)
-	p, err := projects.Create(ctx, 1, project.NewInput{Title: "작품", Genres: []string{"fantasy"}, LengthTarget: "novel", DefaultPOV: "first"})
-	if err != nil {
-		t.Fatalf("create project: %v", err)
-	}
+	ctx, st, nodes, p := seedWork(t)
 	scene, err := nodes.CreateRoot(ctx, p.ID, node.KindLeaf, "씬 1", "식탁 위 고지서", 10)
 	if err != nil {
 		t.Fatalf("create scene: %v", err)
