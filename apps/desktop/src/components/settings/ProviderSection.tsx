@@ -804,7 +804,7 @@ export function ProviderSection() {
         ) : null}
       </div>
 
-      <label className="modal-field">
+      <label className="modal-field modal-check">
         <input
           type="checkbox"
           checked={consented}

@@ -225,7 +225,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
       <h3>{t("settings.mcp.title")}</h3>
       <p className="sd">{t("settings.mcp.description")}</p>
 
-      <label className="modal-field">
+      <label className="modal-field modal-check">
         <input
           type="checkbox"
           checked={saved.consented}
@@ -261,7 +261,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
           unless read-only is deliberately chosen here. */}
       <details className="modal-field" data-testid="mcp-advanced">
         <summary>{t("settings.mcp.advanced")}</summary>
-        <label className="modal-field">
+        <label className="modal-field modal-check">
           <input
             type="checkbox"
             checked={saved.mode === "read_only"}
