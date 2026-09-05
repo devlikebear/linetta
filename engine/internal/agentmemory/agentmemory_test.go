@@ -3,6 +3,7 @@ package agentmemory
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -427,5 +428,79 @@ func TestEditRefusesAMismatchedScopeAndWork(t *testing.T) {
 	}
 	if _, err := repo.Edit(ctx, ScopeWriterProfile, projectID, ActionAdd, "", "x", 1); err == nil {
 		t.Error("the writer profile is global; a work id must be refused rather than silently ignored")
+	}
+}
+
+// An unknown work id is a mistake a caller can act on — pick a real work —
+// so it must arrive as a typed error carrying a sentence, not as the SQLite
+// driver's own "constraint failed: FOREIGN KEY constraint failed". Every
+// other refusal on this path (over budget, an invisible character, a
+// markdown heading) already reads that way, and this one reaches both the
+// Settings pane (memory.set) and an agent (linetta_edit_memory).
+//
+// These two also stand in for the driver check itself: isForeignKeyViolation
+// matches SQLite's numeric result code rather than the driver's wording, and
+// nothing else in the package exercises that. If modernc.org/sqlite stopped
+// reporting SQLITE_CONSTRAINT_FOREIGNKEY through a `Code() int` — a driver
+// upgrade, a swapped driver — these go red instead of the raw string
+// quietly reaching a writer again.
+func TestSaveOnAnUnknownWorkSaysSo(t *testing.T) {
+	ctx, repo, _ := seedRepo(t)
+	_, err := repo.Save(ctx, ScopeWorkNotes, "no-such-work", "민준은 3화부터 존댓말", 1000)
+	if !errors.Is(err, ErrUnknownProject) {
+		t.Fatalf("Save error = %v, want ErrUnknownProject", err)
+	}
+	if !strings.Contains(err.Error(), "no-such-work") {
+		t.Errorf("the message must name the id the caller passed; got %v", err)
+	}
+	if strings.Contains(err.Error(), "FOREIGN KEY") || strings.Contains(err.Error(), "constraint failed") {
+		t.Errorf("the driver's own text must not reach the caller; got %v", err)
+	}
+}
+
+func TestEditOnAnUnknownWorkSaysSo(t *testing.T) {
+	ctx, repo, _ := seedRepo(t)
+	_, err := repo.Edit(ctx, ScopeWorkNotes, "no-such-work", ActionAdd, "", "민준은 3화부터 존댓말", 1000)
+	if !errors.Is(err, ErrUnknownProject) {
+		t.Fatalf("Edit error = %v, want ErrUnknownProject", err)
+	}
+	if strings.Contains(err.Error(), "FOREIGN KEY") || strings.Contains(err.Error(), "constraint failed") {
+		t.Errorf("the driver's own text must not reach the caller; got %v", err)
+	}
+}
+
+// codedError stands in for a driver error carrying a sqlite result code. A
+// fake is the right tool here and the real database is not: only the
+// foreign-key code is reachable through Save and Edit, so a genuine
+// non-foreign-key write failure (a NOT NULL violation, a disk error) cannot
+// be provoked from outside the package — and it is precisely those that must
+// NOT be dressed up as a bad work id.
+type codedError struct{ code int }
+
+func (e codedError) Error() string { return "constraint failed (driver text)" }
+func (e codedError) Code() int     { return e.code }
+
+func TestOnlyTheForeignKeyCodeBecomesAnUnknownWork(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"foreign key", codedError{787}, true},
+		{"a plain constraint violation", codedError{19}, false},
+		{"NOT NULL", codedError{1299}, false},
+		{"disk I/O", codedError{10}, false},
+		{"an error with no sqlite code at all", errors.New("boom"), false},
+		{"a wrapped foreign key", fmt.Errorf("insert: %w", codedError{787}), true},
+	} {
+		got := asWriteError(tc.err, "p1")
+		if errors.Is(got, ErrUnknownProject) != tc.want {
+			t.Errorf("%s: ErrUnknownProject = %v, want %v (got %v)",
+				tc.name, !tc.want, tc.want, got)
+		}
+		if !tc.want && got != tc.err {
+			t.Errorf("%s: a failure that is not the foreign key must pass through untouched; got %v",
+				tc.name, got)
+		}
 	}
 }

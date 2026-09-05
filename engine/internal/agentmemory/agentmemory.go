@@ -55,6 +55,51 @@ func ParseScope(v string) (Scope, error) {
 // writer just said to remember.
 var ErrOverBudget = errors.New("agentmemory: over budget")
 
+// ErrUnknownProject is returned when work notes name a work that is not in
+// this library. projectArg cannot catch it — only the database knows which
+// ids exist — so it surfaces as SQLite refusing the INSERT on
+// agent_memory.project_id's foreign key, and Save and Edit translate that
+// here. Without the translation the caller gets the driver's own
+// "constraint failed: FOREIGN KEY constraint failed", which tells a writer
+// (and an agent reading a tool error) nothing they can act on, unlike every
+// other refusal on this path.
+var ErrUnknownProject = errors.New("agentmemory: no such work")
+
+// sqliteConstraintForeignKey is SQLITE_CONSTRAINT_FOREIGNKEY, SQLite's
+// extended result code for a write that would leave a foreign key dangling.
+// It is part of SQLite's published C API, so it is stable in a way the
+// driver's message text is not.
+const sqliteConstraintForeignKey = 787
+
+// isForeignKeyViolation reports whether err is that refusal.
+//
+// It matches on the numeric result code, never on the driver's wording: the
+// number is SQLite's own contract, the string is modernc.org/sqlite's
+// phrasing and could change in any release. The `Code() int` interface is
+// declared here rather than importing modernc.org/sqlite and asserting on
+// *sqlite.Error, so agentmemory stays free of a dependency on one particular
+// driver — any driver whose error carries the sqlite result code satisfies
+// it. TestSaveOnAnUnknownWorkSaysSo drives this against the real driver, so
+// a driver that stopped reporting the code would turn that test red.
+func isForeignKeyViolation(err error) bool {
+	var coded interface{ Code() int }
+	if !errors.As(err, &coded) {
+		return false
+	}
+	return coded.Code() == sqliteConstraintForeignKey
+}
+
+// asWriteError translates a failed write. Only the foreign-key refusal is
+// reinterpreted; everything else (a disk error, a closed database) is a
+// genuine fault and is passed through untouched.
+func asWriteError(err error, projectID string) error {
+	if isForeignKeyViolation(err) {
+		return fmt.Errorf("%w: %q is not a work in this library; open the work first",
+			ErrUnknownProject, strings.TrimSpace(projectID))
+	}
+	return err
+}
+
 // Document is one memory, carrying enough of its budget that a caller can
 // render a capacity line without asking twice.
 type Document struct {
@@ -234,7 +279,7 @@ func (r *Repo) Save(ctx context.Context, scope Scope, projectID, body string, no
 		}
 	}
 	if err := replaceBody(ctx, tx, scope, arg, body, now); err != nil {
-		return Document{}, err
+		return Document{}, asWriteError(err, projectID)
 	}
 	if err := tx.Commit(); err != nil {
 		return Document{}, err
@@ -310,7 +355,7 @@ func (r *Repo) Edit(ctx context.Context, scope Scope, projectID, action, find, t
 		return Document{}, err
 	}
 	if err := replaceBody(ctx, tx, scope, arg, next, now); err != nil {
-		return Document{}, err
+		return Document{}, asWriteError(err, projectID)
 	}
 	if err := tx.Commit(); err != nil {
 		return Document{}, err
