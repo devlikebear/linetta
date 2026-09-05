@@ -127,7 +127,11 @@ async function renderReady(onClose = vi.fn()) {
  *  the render belong together: what a restore test is about is the shape of
  *  the transcript, not the two lines it takes to serve one. */
 async function restoreWith(...rows: ReturnType<typeof historyRow>[]) {
-  rpc.agentHistory.mockImplementation(() => Promise.resolve(rows));
+  // Ids only have to be unique within one fixture, and typing them out was
+  // ceremony in every test below — position says the same thing. A row that
+  // names its own id keeps it, for the two tests that assert on one.
+  const keyed = rows.map((r, i) => (r.id === "h1" && i > 0 ? { ...r, id: `h${i + 1}` } : r));
+  rpc.agentHistory.mockImplementation(() => Promise.resolve(keyed));
   return renderReady();
 }
 
@@ -1183,6 +1187,7 @@ function historyRow(overrides: Partial<AgentHistoryRow> = {}): AgentHistoryRow {
   };
 }
 
+
 describe("AgentPanel history restore (#95 Task 7)", () => {
 
   function toolLines(): HTMLElement[] {
@@ -1192,9 +1197,8 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
 
   it("restores a saved conversation from agent.history when the panel opens", async () => {
     await restoreWith(
-      historyRow({ id: "h1", role: "user", content: "이어서 써줘" }),
+      historyRow({ role: "user", content: "이어서 써줘" }),
       historyRow({
-        id: "h2",
         role: "tool",
         content: JSON.stringify({
           name: "linetta_search_manuscript",
@@ -1202,7 +1206,7 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
           ok: true,
         }),
       }),
-      historyRow({ id: "h3", role: "assistant", content: "여기까지 썼습니다." }),
+      historyRow({ role: "assistant", content: "여기까지 썼습니다." }),
     );
 
     expect(await screen.findByText("이어서 써줘")).toBeTruthy();
@@ -1221,9 +1225,8 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
 
   it("shows a restored tool call as failed when its ok flag is false", async () => {
     await restoreWith(
-      historyRow({ id: "h1", role: "user", content: "확인용" }),
+      historyRow({ role: "user", content: "확인용" }),
       historyRow({
-        id: "h2",
         role: "tool",
         content: JSON.stringify({ name: "linetta_write_scene", ok: false }),
       }),
@@ -1239,7 +1242,6 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
     rpc.agentUndo.mockImplementation(() => Promise.resolve({ ok: true }));
     await restoreWith(
       historyRow({
-        id: "h1",
         role: "tool",
         content: JSON.stringify({ name: "linetta_apply_story_ops", ok: true, batch_id: "batch-restored" }),
       }),
@@ -1255,9 +1257,9 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
 
   it("skips a tool row that fails to parse, without blanking the rest of the restored conversation", async () => {
     await restoreWith(
-      historyRow({ id: "h1", role: "user", content: "첫 요청" }),
-      historyRow({ id: "h2", role: "tool", content: "{not valid json" }),
-      historyRow({ id: "h3", role: "assistant", content: "그래도 답은 옵니다" }),
+      historyRow({ role: "user", content: "첫 요청" }),
+      historyRow({ role: "tool", content: "{not valid json" }),
+      historyRow({ role: "assistant", content: "그래도 답은 옵니다" }),
     );
 
     expect(await screen.findByText("첫 요청")).toBeTruthy();
@@ -1268,8 +1270,8 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
 
   it("skips a tool row whose JSON is well-formed but missing the fields a toolEvent needs", async () => {
     await restoreWith(
-      historyRow({ id: "h1", role: "user", content: "확인용" }),
-      historyRow({ id: "h2", role: "tool", content: JSON.stringify({ summary: "no name or ok field" }) }),
+      historyRow({ role: "user", content: "확인용" }),
+      historyRow({ role: "tool", content: JSON.stringify({ summary: "no name or ok field" }) }),
     );
 
     expect(await screen.findByText("확인용")).toBeTruthy();
@@ -1288,8 +1290,8 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
 
   it("does not show the still-running notice once the conversation already has a reply", async () => {
     await restoreWith(
-      historyRow({ id: "h1", role: "user", content: "요청" }),
-      historyRow({ id: "h2", role: "assistant", content: "완료된 답" }),
+      historyRow({ role: "user", content: "요청" }),
+      historyRow({ role: "assistant", content: "완료된 답" }),
     );
 
     expect(await screen.findByText("완료된 답")).toBeTruthy();
@@ -1606,8 +1608,8 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     // writer saw agent.error under this partial text; restored, `status` is
     // the only trace of it left.
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "이어서 써줘", status: "failed" }),
-      historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "여기까지 쓰다가", status: "failed" }),
+      historyRow({ run_id: "r1", role: "user", content: "이어서 써줘", status: "failed" }),
+      historyRow({ run_id: "r1", role: "assistant", content: "여기까지 쓰다가", status: "failed" }),
     );
 
     expect(await screen.findByText("여기까지 쓰다가")).toBeTruthy();
@@ -1651,10 +1653,9 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     // it needs the engine to say which one it was: a run-status RPC, or a
     // distinct status for the wall. The plan adds neither.
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "많이 해줘", status: "done" }),
-      historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "24개까지 했습니다", status: "done" }),
+      historyRow({ run_id: "r1", role: "user", content: "많이 해줘", status: "done" }),
+      historyRow({ run_id: "r1", role: "assistant", content: "24개까지 했습니다", status: "done" }),
       historyRow({
-        id: "h3",
         run_id: "r1",
         role: "tool",
         content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
@@ -1673,8 +1674,8 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
 
   it("says a restored turn was cancelled", async () => {
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "써줘", status: "cancelled" }),
-      historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "쓰다 말았습니다", status: "cancelled" }),
+      historyRow({ run_id: "r1", role: "user", content: "써줘", status: "cancelled" }),
+      historyRow({ run_id: "r1", role: "assistant", content: "쓰다 말았습니다", status: "cancelled" }),
     );
 
     expect(await screen.findByText("쓰다 말았습니다")).toBeTruthy();
@@ -1683,9 +1684,9 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
 
   it("marks only the run that failed when an earlier turn succeeded before it", async () => {
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "첫 요청", status: "done" }),
-      historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "첫 답변", status: "done" }),
-      historyRow({ id: "h3", run_id: "r2", role: "user", content: "두 번째 요청", status: "failed" }),
+      historyRow({ run_id: "r1", role: "user", content: "첫 요청", status: "done" }),
+      historyRow({ run_id: "r1", role: "assistant", content: "첫 답변", status: "done" }),
+      historyRow({ run_id: "r2", role: "user", content: "두 번째 요청", status: "failed" }),
     );
 
     expect(await screen.findByText("두 번째 요청")).toBeTruthy();
@@ -1699,9 +1700,8 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     // died after a tool call resolved but before the model produced final
     // text, so no markRun ever ran and the last row is a tool row.
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "고쳐줘", status: "done" }),
+      historyRow({ run_id: "r1", role: "user", content: "고쳐줘", status: "done" }),
       historyRow({
-        id: "h2",
         run_id: "r1",
         role: "tool",
         content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
@@ -1715,7 +1715,7 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
 
   it("does not hedge that a cancelled turn may still be running", async () => {
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "그만", status: "cancelled" }),
+      historyRow({ run_id: "r1", role: "user", content: "그만", status: "cancelled" }),
     );
 
     expect(await screen.findByText("그만")).toBeTruthy();
@@ -1726,9 +1726,9 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     // JSON.parse("null") succeeds and yields null — the one malformed shape
     // that gets past the try/catch, and the one the brief named.
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "확인용" }),
-      historyRow({ id: "h2", run_id: "r1", role: "tool", content: "null" }),
-      historyRow({ id: "h3", run_id: "r1", role: "assistant", content: "그래도 답은 옵니다" }),
+      historyRow({ run_id: "r1", role: "user", content: "확인용" }),
+      historyRow({ run_id: "r1", role: "tool", content: "null" }),
+      historyRow({ run_id: "r1", role: "assistant", content: "그래도 답은 옵니다" }),
     );
 
     expect(await screen.findByText("확인용")).toBeTruthy();
@@ -1873,8 +1873,8 @@ describe("AgentPanel restore notice boundaries (#95 Task 7 review round 2)", () 
     // Skipping the unparseable LINE must not also skip the notice saying the
     // run failed — the row is unreadable, its status is not.
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "실패한 요청", status: "failed" }),
-      historyRow({ id: "h2", run_id: "r1", role: "tool", content: "{잘린 JSON", status: "failed" }),
+      historyRow({ run_id: "r1", role: "user", content: "실패한 요청", status: "failed" }),
+      historyRow({ run_id: "r1", role: "tool", content: "{잘린 JSON", status: "failed" }),
     );
 
     expect(await screen.findByText("실패한 요청")).toBeTruthy();
@@ -1886,8 +1886,8 @@ describe("AgentPanel restore notice boundaries (#95 Task 7 review round 2)", () 
   it("gives each run's end notice its own key, so two of them cannot collide", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     await restoreWith(
-      historyRow({ id: "h1", run_id: "r1", role: "user", content: "첫 요청", status: "failed" }),
-      historyRow({ id: "h2", run_id: "r2", role: "user", content: "둘째 요청", status: "cancelled" }),
+      historyRow({ run_id: "r1", role: "user", content: "첫 요청", status: "failed" }),
+      historyRow({ run_id: "r2", role: "user", content: "둘째 요청", status: "cancelled" }),
     );
 
     expect(await screen.findByText("첫 요청")).toBeTruthy();
