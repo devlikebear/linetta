@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
@@ -53,10 +54,15 @@ type mcpToolRepos struct {
 	snapshots  *snapshot.Repo
 	story      *storyops.Service
 	msEdit     *manuscriptedit.Service
-	enqueue    func(nodeID string)
-	notify     func(method string, params any)
-	clock      func() int64
-	db         *sql.DB
+	// memory is the two curated documents linetta_edit_memory writes. The
+	// same *agentmemory.Repo the companion reads them back through and the
+	// settings pane edits: one row per document, one writer per row at a
+	// time, so an agent's edit and a writer's textarea cannot fork.
+	memory  *agentmemory.Repo
+	enqueue func(nodeID string)
+	notify  func(method string, params any)
+	clock   func() int64
+	db      *sql.DB
 }
 
 // mcpController adapts *mcphost.Host to handlers.MCPController, translating
@@ -88,6 +94,7 @@ func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 		Context:    deps.repos.context,
 		Settings:   deps.settingsStore,
 		Activity:   activity,
+		Memory:     deps.repos.memory,
 
 		Snapshots:      deps.repos.snapshots,
 		Story:          deps.repos.story,

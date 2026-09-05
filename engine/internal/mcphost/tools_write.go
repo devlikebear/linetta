@@ -377,13 +377,21 @@ type editMemoryInput struct {
 	ProjectID string `json:"project_id,omitempty" jsonschema:"the work whose notes to edit; required when scope is work_notes, and not accepted for writer_profile"`
 }
 
-// scope names the work (work notes only; the profile is global and belongs to
-// no work) and, as the target, which of the two documents was edited. Without
-// the target the activity row for a profile edit would carry an empty work and
-// an empty target, and the only thing distinguishing it from a work-notes edit
-// would be the incidental fact that work notes always carry a work id. The
-// scope string is the document's only identity — these two rows have no id of
-// their own the way a node or a snapshot does.
+// scope names the work the caller asked for (work notes only; the profile is
+// global and belongs to no work) and, as the target, which of the two
+// documents was edited.
+//
+// The target is what actually tells the two apart. It is tempting to say a
+// work-notes row is the one carrying a work id, but that is not reliable:
+// scope() sees the raw input, and only editMemory itself — through
+// requireProject — resolves an omitted project_id to the work a restricted
+// server is pinned to. A pinned client that omits the field therefore edits
+// its one work and logs a row with no work id, exactly as it does for every
+// other tool in this package (scope() is the same shape everywhere: raw
+// input, no deps, no context). Without the target, that row would be
+// indistinguishable from a writer-profile edit — and the scope string is
+// these documents' only identity, since neither has an id of its own the way
+// a node or a snapshot does.
 func (in editMemoryInput) scope() (string, string) {
 	return strings.TrimSpace(in.ProjectID), strings.TrimSpace(in.Scope)
 }

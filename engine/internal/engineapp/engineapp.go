@@ -244,6 +244,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			snapshots:  snaps,
 			story:      mcpStory,
 			msEdit:     manuscriptEditor,
+			memory:     memRepo,
 			enqueue:    summ.Enqueue,
 			notify:     func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 			clock:      clock,

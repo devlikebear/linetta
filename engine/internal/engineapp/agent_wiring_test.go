@@ -4,6 +4,7 @@ package engineapp
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
@@ -129,5 +130,73 @@ func TestAgentToolDepsDifferFromTheExternalHosts(t *testing.T) {
 	}
 	if agentTools.Story == externalTools.Story {
 		t.Error("agent and external tool deps share one storyops.Service instance — the panel's undo button could revert an external agent's batch")
+	}
+}
+
+// The three differences above are the deliberate ones. Everything else in
+// ToolDeps must simply BE there — and until this test existed, one of them
+// was not: ToolDeps.Memory was never assigned in mcp_enabled.go, so
+// linetta_edit_memory answered "memory is unavailable in this build" for the
+// external host and for the built-in agent alike, while the system prompt
+// told the agent to record what it learns with that tool every single turn.
+// Nothing caught it, because every other test builds its own ToolDeps
+// literal carrying exactly the fields that test needs.
+//
+// So this asserts the shape rather than the one field: a large struct
+// literal where a forgotten field is silently a nil, and the nil surfaces
+// only as a runtime tool error, needs a guard that catches the NEXT
+// forgotten field too. Reflection walks every nilable field, so a
+// collaborator added to ToolDeps and not wired here fails this test instead
+// of shipping dead.
+//
+// Fields whose zero value is correct in production are named in
+// skipToolDep, with the reason — a short list that has to be argued for,
+// which is the point of keeping it explicit.
+func TestProductionToolDepsCarryEveryCollaborator(t *testing.T) {
+	app := openApp(t)
+
+	if app.agentCtrl == nil {
+		t.Fatal("app.agentCtrl is nil — setupAgent did not run")
+	}
+	assertToolDepsWired(t, "external host", app.mcpTools)
+	assertToolDepsWired(t, "built-in agent", app.agentCtrl.tools)
+
+	// Memory in particular must be the SAME repo on both, not two instances.
+	// The two documents are one row each and the settings pane edits those
+	// same rows, so a second repo here would still work — the repo is
+	// stateless — but it would mean someone built one, which is the drift
+	// this whole test exists to catch.
+	if app.mcpTools.Memory != app.agentCtrl.tools.Memory {
+		t.Error("agent and external tool deps hold different memory repos — the curated documents have exactly one home")
+	}
+}
+
+// skipToolDep explains why a ToolDeps field may be left at its zero value in
+// production, or returns "" when the field must be wired.
+func skipToolDep(name string) string {
+	if name == "Source" {
+		// Empty means external — that is how sourceOrExternal reads it, and
+		// TestAgentToolDepsDifferFromTheExternalHosts asserts both sides of
+		// it directly. It is a string besides, so it is never nil.
+		return "empty means the external host"
+	}
+	return ""
+}
+
+func assertToolDepsWired(t *testing.T, label string, deps mcphost.ToolDeps) {
+	t.Helper()
+	v := reflect.ValueOf(deps)
+	for i := 0; i < v.NumField(); i++ {
+		name := v.Type().Field(i).Name
+		if skipToolDep(name) != "" {
+			continue
+		}
+		switch f := v.Field(i); f.Kind() {
+		case reflect.Ptr, reflect.Func, reflect.Interface, reflect.Map, reflect.Slice:
+			if f.IsNil() {
+				t.Errorf("%s tool deps: ToolDeps.%s is nil — the tools that read it refuse at runtime, and nothing else notices",
+					label, name)
+			}
+		}
 	}
 }

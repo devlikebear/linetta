@@ -24,9 +24,13 @@ var (
 	ErrBadAction = errors.New("agentmemory: unknown action")
 )
 
-// Apply performs one edit and returns the new body. It does not write: the
-// caller saves, so Repo.Save stays the one place a budget is enforced against
-// what actually lands.
+// Apply performs one edit and returns the new body. It does not write, and in
+// production it has exactly one caller: Repo.Edit, which runs it inside the
+// transaction that then writes the result with replaceBody — not through
+// Repo.Save. So this is not a helper whose budget Save re-checks afterwards;
+// budgeted() below is the enforcement for everything that reaches the row this
+// way, and Save enforces the identical rule for the whole-document path the
+// settings pane uses. See budgeted's own note on why the two must agree.
 func Apply(scope Scope, body, action, find, text string) (string, error) {
 	switch action {
 	case ActionAdd:
@@ -151,9 +155,14 @@ func matchLine(body, find string) (int, error) {
 // there, which is how an agent digs out of a body that is already too big.
 //
 // Repo.Save has to agree with this escape hatch exactly (see its own budget
-// check), because Apply never writes: the tool that calls Apply always saves
-// what comes back through Save, and a body this function accepts must not be
-// refused a moment later at the one place that actually persists it.
+// check) — not because a body passes through both on its way to the row, but
+// because these are the two independent doors into the same row. An agent's
+// edit goes through Repo.Edit, which enforces the rule here and writes the
+// result itself; the settings textarea goes through Repo.Save, which enforces
+// it there. If the two rules drifted, one document would have two different
+// capacities depending on which door last touched it: a body a writer could
+// save by hand would be one the agent could not reach by editing, or the
+// reverse.
 func budgeted(scope Scope, before, after string) (string, error) {
 	used := utf8.RuneCountInString(after)
 	if used <= scope.Budget() || used < utf8.RuneCountInString(before) {
