@@ -1177,13 +1177,26 @@ describe("ProviderSection", () => {
       expect(await screen.findByTestId("provider-test-ok")).toBeInstanceOf(HTMLOutputElement);
     });
 
-    it("clears a passing test result when the provider changes", async () => {
-      activeId = "anthropic";
-      rowExtras = { anthropic: { configured: true, consented: true } };
-      render(<ProviderSection />);
+    /** Anthropic configured and consented, plus the click that earns a passing
+   *  badge — the starting point every test in this block shares before doing
+   *  the one thing that should invalidate it. `persist` makes settings.set
+   *  land on the row the way the engine would, which matters whenever the
+   *  invalidating action is itself a write.
+   *
+   *  Returns nothing: the badge is asserted present here, so a caller that
+   *  never sees it fails on the setup rather than on its own assertion. */
+  async function earnPassingBadge({ persist = false } = {}) {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true, consented: true } };
+    if (persist) persistWrites();
+    render(<ProviderSection />);
 
-      await userEvent.click(await screen.findByTestId("provider-test"));
-      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+    await userEvent.click(await screen.findByTestId("provider-test"));
+    expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+  }
+
+  it("clears a passing test result when the provider changes", async () => {
+      await earnPassingBadge();
 
       await userEvent.click(screen.getByTestId("provider-choice-gemini-native"));
       await screen.findByTestId("provider-key-input");
@@ -1196,13 +1209,7 @@ describe("ProviderSection", () => {
       // the button correctly disables itself, but a "Connected" left sitting
       // next to an unticked box tells the writer the connection is still
       // live when the engine will now refuse it outright.
-      activeId = "anthropic";
-      rowExtras = { anthropic: { configured: true, consented: true } };
-      persistWrites();
-      render(<ProviderSection />);
-
-      await userEvent.click(await screen.findByTestId("provider-test"));
-      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+      await earnPassingBadge({ persist: true });
 
       await userEvent.click(screen.getByTestId("provider-consent"));
 
@@ -1217,12 +1224,7 @@ describe("ProviderSection", () => {
       // a merely-hidden badge reappears — a "Connected" with no test run
       // behind it, on the one screen in the app that claims to know whether
       // the agent will work. Stale means gone, not gone-for-now.
-      activeId = "anthropic";
-      rowExtras = { anthropic: { configured: true, consented: true } };
-      render(<ProviderSection />);
-
-      await userEvent.click(await screen.findByTestId("provider-test"));
-      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+      await earnPassingBadge();
 
       await userEvent.click(screen.getByTestId("provider-choice-gemini-native"));
       await screen.findByTestId("provider-key-input");
@@ -1240,13 +1242,7 @@ describe("ProviderSection", () => {
       // The same resurrection through the consent box rather than the
       // provider buttons: untick, retick, and the signature is byte-for-byte
       // what it was when the badge was earned.
-      activeId = "anthropic";
-      rowExtras = { anthropic: { configured: true, consented: true } };
-      persistWrites();
-      render(<ProviderSection />);
-
-      await userEvent.click(await screen.findByTestId("provider-test"));
-      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+      await earnPassingBadge({ persist: true });
 
       await userEvent.click(screen.getByTestId("provider-consent"));
       await waitFor(() => expect(screen.queryByTestId("provider-test-ok")).toBeNull());
@@ -1262,13 +1258,7 @@ describe("ProviderSection", () => {
     it("clears a passing test result when the key is cleared", async () => {
       // The other half of what a passing test result depends on. A result
       // that outlives the credential it was obtained with is the same lie.
-      activeId = "anthropic";
-      rowExtras = { anthropic: { configured: true, consented: true } };
-      persistWrites();
-      render(<ProviderSection />);
-
-      await userEvent.click(await screen.findByTestId("provider-test"));
-      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+      await earnPassingBadge({ persist: true });
 
       await userEvent.click(screen.getByTestId("provider-key-clear"));
 
@@ -1286,12 +1276,7 @@ describe("ProviderSection", () => {
       // reload: a settings.set and a fresh providers.list, and not one value
       // the result was earned under changes. This test used to save a model
       // instead, which pinned the exact bug below as correct behaviour.
-      activeId = "anthropic";
-      rowExtras = { anthropic: { configured: true, consented: true } };
-      render(<ProviderSection />);
-
-      await userEvent.click(await screen.findByTestId("provider-test"));
-      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+      await earnPassingBadge();
 
       await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
 
@@ -1400,13 +1385,7 @@ describe("ProviderSection", () => {
       // both sides of a key rotation (a key was, and still is, stored), so a
       // dependency array built only from booleans cannot tell the old
       // credential from the new one. A passing result must not survive it.
-      activeId = "anthropic";
-      rowExtras = { anthropic: { configured: true, consented: true } };
-      persistWrites();
-      render(<ProviderSection />);
-
-      await userEvent.click(await screen.findByTestId("provider-test"));
-      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+      await earnPassingBadge({ persist: true });
 
       const keyInput = screen.getByTestId("provider-key-input");
       await userEvent.type(keyInput, "sk-new-rotated-key");
