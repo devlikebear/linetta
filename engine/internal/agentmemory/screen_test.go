@@ -76,6 +76,45 @@ func TestScreenAllowsZWJOnlyBetweenEmoji(t *testing.T) {
 	if err := Screen("안녕‍하세요"); !errors.Is(err, ErrInvisible) {
 		t.Errorf("Screen(hangul + ZWJ + hangul) = %v, want ErrInvisible (ZWJ between ordinary letters is the smuggling shape)", err)
 	}
+
+	// A skin-toned emoji is the most common emoji-customization gesture there
+	// is: WOMAN + a Fitzpatrick skin-tone modifier (category Sk, not So) +
+	// ZWJ + a medical symbol + VS16. The modifier sits directly between the
+	// base and the ZWJ, so isEmojiJoin must look past it to find the real
+	// (So) base rather than testing the modifier itself.
+	skinToneWomanHealthWorker := "\U0001F469\U0001F3FD‍⚕️"
+	if err := Screen("profile note: " + skinToneWomanHealthWorker); err != nil {
+		t.Errorf("Screen(skin-toned emoji) = %v, want nil (a skin-tone modifier before the ZWJ must not defeat the emoji-join check)", err)
+	}
+
+	// The two runes isEmojiJoin is documented to skip: a bare Fitzpatrick
+	// modifier with no trailing presentation selector, and a bare VS16 with
+	// no modifier. Both must independently let the join through.
+	waveModifierOnly := "\U0001F44B\U0001F3FD‍\U0001F44B" // waving hand, medium skin tone, ZWJ, waving hand
+	if err := Screen(waveModifierOnly); err != nil {
+		t.Errorf("Screen(modifier-only skip) = %v, want nil", err)
+	}
+	womanSelectorOnly := "\U0001F469️‍⚕" // woman, VS16, ZWJ, medical symbol
+	if err := Screen(womanSelectorOnly); err != nil {
+		t.Errorf("Screen(selector-only skip) = %v, want nil", err)
+	}
+
+	// The skip must not become its own hole: a run of otherwise-skippable
+	// runes that bottoms out on another ZWJ (not a real emoji base) is still
+	// not a join, on either side of either ZWJ, and must not run off either
+	// end of the rune slice while looking.
+	onlySkippableBetweenZWJs := "😀‍️‍😀"
+	if err := Screen(onlySkippableBetweenZWJs); !errors.Is(err, ErrInvisible) {
+		t.Errorf("Screen(skippable run between two ZWJs) = %v, want ErrInvisible (a skippable rune bottoming out on a ZWJ is not an emoji base)", err)
+	}
+	skippableThenStartOfText := "️‍b"
+	if err := Screen(skippableThenStartOfText); !errors.Is(err, ErrInvisible) {
+		t.Errorf("Screen(skippable run off the start) = %v, want ErrInvisible", err)
+	}
+	skippableThenEndOfText := "a‍️"
+	if err := Screen(skippableThenEndOfText); !errors.Is(err, ErrInvisible) {
+		t.Errorf("Screen(skippable run off the end) = %v, want ErrInvisible", err)
+	}
 }
 
 // TestScreenVariationSelectors covers the trade-off named in the critical
