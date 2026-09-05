@@ -56,26 +56,28 @@ describe("Workspace MCP change wiring", () => {
     expect(workspace).toContain("workspace.mcp.conflict.keep");
   });
 
-  it("names the built-in agent when the change came from it", async () => {
+  it("wires conflictSource to the right banner copy, in order", async () => {
     const workspace = await readSource("routes/Workspace.tsx");
 
     expect(workspace).toContain("conflictSource");
-    expect(workspace).toContain('conflictSource === "agent"');
-    expect(workspace).toContain("workspace.mcp.conflict.agentBody");
-  });
 
-  it("keeps the external wording for an unknown or missing source", async () => {
-    const workspace = await readSource("routes/Workspace.tsx");
+    // Three independent toContain checks (the condition, the agentBody key,
+    // the body key) all pass even if the ternary's branches are swapped,
+    // because they only prove the strings co-occur in the file, not that
+    // they are wired together in the right order. A swap would report an
+    // agent's write as external and an external write as the agent's — the
+    // exact mistake this feature exists to prevent — and still pass. Extract
+    // the ternary itself and assert it as one whitespace-normalised,
+    // contiguous, ordered string so a swap fails here.
+    const start = workspace.indexOf('conflictSource === "agent"');
+    const end = workspace.indexOf("</span>", start);
+    const ternary = workspace.slice(start, end).replace(/\s+/g, " ").trim();
 
-    // The banner must fall through to the existing generic copy for anything
-    // other than exactly "agent" — an unrecognised or absent source stays
-    // attributed to an external client, never the built-in agent.
-    const banner = workspace.slice(
-      workspace.indexOf('data-testid="mcp-conflict"'),
-      workspace.indexOf("mcp-conflict-load"),
+    // The affirmative "agent" match must select the agent's copy (true
+    // branch); every other value — missing, empty, or unrecognised — must
+    // fall through to the generic external copy (false branch).
+    expect(ternary).toBe(
+      'conflictSource === "agent" ? t("workspace.mcp.conflict.agentBody") : t("workspace.mcp.conflict.body")}',
     );
-    expect(banner).toContain('conflictSource === "agent"');
-    expect(banner).toContain("workspace.mcp.conflict.agentBody");
-    expect(banner).toContain("workspace.mcp.conflict.body");
   });
 });
