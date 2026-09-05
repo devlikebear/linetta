@@ -284,3 +284,148 @@ func TestParseScope(t *testing.T) {
 		t.Error("an unknown scope must be an error, not a zero Scope")
 	}
 }
+
+// ---------- Edit ----------
+
+func TestEditAppliesToWhatIsStoredAndPersists(t *testing.T) {
+	ctx, repo, projectID := seedRepo(t)
+	if _, err := repo.Edit(ctx, ScopeWorkNotes, projectID, ActionAdd, "", "민준은 3화부터 존댓말", 1); err != nil {
+		t.Fatalf("first Edit: %v", err)
+	}
+	got, err := repo.Edit(ctx, ScopeWorkNotes, projectID, ActionAdd, "", "서연은 존댓말을 쓰지 않는다", 2)
+	if err != nil {
+		t.Fatalf("second Edit: %v", err)
+	}
+	want := "민준은 3화부터 존댓말\n서연은 존댓말을 쓰지 않는다"
+	if got.Body != want {
+		t.Fatalf("Body = %q, want %q — the second Edit must build on what the first wrote", got.Body, want)
+	}
+	if got.CharsUsed != len([]rune(want)) || got.CharsBudget != workNotesBudget || got.UpdatedAt != 2 {
+		t.Errorf("Document = %+v", got)
+	}
+	stored, err := repo.Load(ctx, ScopeWorkNotes, projectID)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if stored.Body != want {
+		t.Errorf("stored Body = %q, want %q", stored.Body, want)
+	}
+}
+
+// Edit's refusals are Apply's refusals, taken against the body Edit itself
+// read, and a refused Edit must leave the document exactly as it was.
+func TestARefusedEditWritesNothing(t *testing.T) {
+	ctx, repo, projectID := seedRepo(t)
+	if _, err := repo.Edit(ctx, ScopeWorkNotes, projectID, ActionAdd, "", "지켜야 할 내용", 1); err != nil {
+		t.Fatalf("Edit: %v", err)
+	}
+	cases := map[string]struct{ action, find, text string }{
+		"no match":    {ActionRemove, "없음", ""},
+		"bad action":  {"rewrite", "", "x"},
+		"empty text":  {ActionAdd, "", "   "},
+		"over budget": {ActionAdd, "", strings.Repeat("가", 2201)},
+		"invisible":   {ActionAdd, "", "안녕​하세요"},
+	}
+	for name, c := range cases {
+		if _, err := repo.Edit(ctx, ScopeWorkNotes, projectID, c.action, c.find, c.text, 2); err == nil {
+			t.Errorf("%s: want a refusal", name)
+		}
+		got, err := repo.Load(ctx, ScopeWorkNotes, projectID)
+		if err != nil {
+			t.Fatalf("%s: Load: %v", name, err)
+		}
+		if got.Body != "지켜야 할 내용" {
+			t.Fatalf("%s: Body = %q, want the earlier memory untouched", name, got.Body)
+		}
+	}
+}
+
+// The shrink-only escape hatch has to survive the move into one transaction:
+// an agent must still be able to dig out of a document that is already over
+// budget, or every remove it tries would itself be refused as over budget.
+func TestEditKeepsTheShrinkOnlyEscapeHatch(t *testing.T) {
+	ctx, repo, _ := seedRepo(t)
+	// Seed directly, bypassing the budget check, the same way
+	// TestSaveAllowsAShrinkingSaveEvenWhileStillOverBudget does.
+	seed := strings.Repeat("가", 1500) + "\n" + strings.Repeat("나", 200)
+	if _, err := repo.db.ExecContext(ctx,
+		`INSERT INTO agent_memory (scope, project_id, body, updated_at) VALUES (?, ?, ?, ?)`,
+		string(ScopeWriterProfile), nil, seed, 1); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	got, err := repo.Edit(ctx, ScopeWriterProfile, "", ActionRemove, "나", "", 2)
+	if err != nil {
+		t.Fatalf("Edit: %v — a shrinking edit must be allowed even while still over budget", err)
+	}
+	if got.Body != strings.Repeat("가", 1500) {
+		t.Fatalf("Body has %d runes, want the 1500-rune line left behind", len([]rune(got.Body)))
+	}
+	// Growing an already-over-budget document is still refused.
+	if _, err := repo.Edit(ctx, ScopeWriterProfile, "", ActionAdd, "", "한 줄 더", 3); !errors.Is(err, ErrOverBudget) {
+		t.Fatalf("Edit = %v, want ErrOverBudget", err)
+	}
+}
+
+// Two writers edit the same document at once — the built-in agent and a
+// connected external client, which is this feature's normal shape, not a
+// contrived one. Both edits must survive. This is the test that fails against
+// a Load-then-Apply-then-Save caller: that caller reads outside any
+// transaction, so B's whole read-modify-write lands in the gap between A's
+// read and A's write, and A's save then discards B's line while having told
+// B it succeeded.
+func TestEditDoesNotLoseAConcurrentEdit(t *testing.T) {
+	ctx, repo, projectID := seedRepo(t)
+	if _, err := repo.Edit(ctx, ScopeWorkNotes, projectID, ActionAdd, "", "처음", 1); err != nil {
+		t.Fatalf("seed Edit: %v", err)
+	}
+
+	bDone := make(chan struct{})
+	bErr := make(chan error, 1)
+	hook := func() {
+		go func() {
+			// Plain ctx, not hookCtx: B must not trip this same hook.
+			_, err := repo.Edit(ctx, ScopeWorkNotes, projectID, ActionAdd, "", "B의 줄", 2)
+			bErr <- err
+			close(bDone)
+		}()
+		select {
+		case <-bDone:
+			// Pre-fix path: B's whole read-modify-write fit in the gap.
+		case <-time.After(500 * time.Millisecond):
+			// Post-fix path: B is genuinely blocked on A's open transaction.
+		}
+	}
+	hookCtx := context.WithValue(ctx, editRaceHookKey{}, hook)
+
+	if _, err := repo.Edit(hookCtx, ScopeWorkNotes, projectID, ActionAdd, "", "A의 줄", 3); err != nil {
+		t.Fatalf("A Edit: %v", err)
+	}
+	select {
+	case err := <-bErr:
+		if err != nil {
+			t.Fatalf("B Edit: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("B Edit never completed after A released the connection")
+	}
+
+	got, err := repo.Load(ctx, ScopeWorkNotes, projectID)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := "처음\nA의 줄\nB의 줄"
+	if got.Body != want {
+		t.Fatalf("Body = %q, want %q — B must apply its edit to the body A committed, "+
+			"and neither line may be lost", got.Body, want)
+	}
+}
+
+func TestEditRefusesAMismatchedScopeAndWork(t *testing.T) {
+	ctx, repo, projectID := seedRepo(t)
+	if _, err := repo.Edit(ctx, ScopeWorkNotes, "", ActionAdd, "", "x", 1); err == nil {
+		t.Error("work notes with no work must be refused")
+	}
+	if _, err := repo.Edit(ctx, ScopeWriterProfile, projectID, ActionAdd, "", "x", 1); err == nil {
+		t.Error("the writer profile is global; a work id must be refused rather than silently ignored")
+	}
+}
