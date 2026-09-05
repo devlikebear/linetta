@@ -283,6 +283,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		nodes:    nodes,
 		settings: settingsStore,
 		src:      providerSrc,
+		memory:   memRepo,
 		notify:   func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 		clock:    clock,
 	})

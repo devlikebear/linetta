@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -300,7 +301,12 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 // message. History is loaded BEFORE the user row is counted, because Run has
 // already written it — replaying it here would double it.
 func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatMessage {
-	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language)}}
+	profile := agentmemory.Document{Scope: agentmemory.ScopeWriterProfile, CharsBudget: agentmemory.ScopeWriterProfile.Budget()}
+	notes := agentmemory.Document{Scope: agentmemory.ScopeWorkNotes, CharsBudget: agentmemory.ScopeWorkNotes.Budget()}
+	if s.deps.Memory != nil {
+		profile, notes = s.deps.Memory.Memories(ctx, st.req.ProjectID)
+	}
+	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes)}}
 
 	prior, err := s.tr.load(ctx, st.req.ProjectID, 200)
 	if err != nil {

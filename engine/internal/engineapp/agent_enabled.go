@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/agent"
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -31,8 +32,33 @@ type agentDeps struct {
 	nodes    *node.Repo
 	settings *settings.Store
 	src      *provider.Source
+	memory   *agentmemory.Repo
 	notify   func(method string, params any)
 	clock    func() int64
+}
+
+// agentMemorySource adapts *agentmemory.Repo to agent.MemorySource. The two
+// reads are independent and best-effort, matching
+// companion.Service.CuratedMemory: a read failure leaves that document empty
+// (at its correct budget) rather than failing the whole turn over one of two
+// unrelated rows.
+type agentMemorySource struct {
+	repo *agentmemory.Repo
+}
+
+func (m agentMemorySource) Memories(ctx context.Context, projectID string) (writerProfile, workNotes agentmemory.Document) {
+	writerProfile = agentmemory.Document{Scope: agentmemory.ScopeWriterProfile, CharsBudget: agentmemory.ScopeWriterProfile.Budget()}
+	workNotes = agentmemory.Document{Scope: agentmemory.ScopeWorkNotes, CharsBudget: agentmemory.ScopeWorkNotes.Budget()}
+	if m.repo == nil {
+		return writerProfile, workNotes
+	}
+	if doc, err := m.repo.Load(ctx, agentmemory.ScopeWriterProfile, ""); err == nil {
+		writerProfile = doc
+	}
+	if doc, err := m.repo.Load(ctx, agentmemory.ScopeWorkNotes, projectID); err == nil {
+		workNotes = doc
+	}
+	return writerProfile, workNotes
 }
 
 // scopeLookup answers the two names the scope line carries. Failures are
@@ -108,6 +134,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		},
 		Notify:   deps.notify,
 		Language: deps.settings.Language,
+		Memory:   agentMemorySource{repo: deps.memory},
 		Undo: func(ctx context.Context, batchID string) error {
 			return deps.story.UndoApply(ctx, batchID, deps.clock)
 		},
