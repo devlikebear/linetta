@@ -120,7 +120,13 @@ working on one book is in the system prompt of every other book, and in the
 story brief a connected MCP client receives on any work. Work notes stay with
 their work.
 
-Both live in `library.db`, so the daily backup and a restore carry them.
+Both live in `library.db`, so the daily backup carries them. Restoring is
+narrower than the backup: **Settings → Backup**, which brings a single work
+back from a backup as a new project, does not yet copy that work's notes — the
+work comes back without them
+([#116](https://github.com/devlikebear/linetta/issues/116)). The startup
+recovery screen, which appears only when the app cannot open the library and
+replaces the whole database file, does bring both documents back.
 
 ## Writing with your own agent (MCP)
 
