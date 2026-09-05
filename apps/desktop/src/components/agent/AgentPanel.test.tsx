@@ -121,6 +121,47 @@ async function renderReady(onClose = vi.fn()) {
   return view;
 }
 
+/** Open the panel on a conversation the engine already holds.
+ *
+ *  Fifteen tests below differ only in the rows they hand back, so the mock and
+ *  the render belong together: what a restore test is about is the shape of
+ *  the transcript, not the two lines it takes to serve one. */
+async function restoreWith(...rows: ReturnType<typeof historyRow>[]) {
+  rpc.agentHistory.mockImplementation(() => Promise.resolve(rows));
+  return renderReady();
+}
+
+/** The panel at a given work, optionally under StrictMode.
+ *
+ *  Neither the `/workspace/:id` route nor `<AgentPanel>` is keyed on the
+ *  project id, so global search's cross-project jump changes this prop under a
+ *  panel that stays mounted — which is the shape of the bug three fix rounds
+ *  went into. Rendering it this way is what lets a test reproduce that without
+ *  an unmount. StrictMode is on in main.tsx, and one test only fails under it. */
+function panelFor(projectId: string, strict = false) {
+  const panel = (
+    <MemoryRouter>
+      <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
+    </MemoryRouter>
+  );
+  return strict ? <StrictMode>{panel}</StrictMode> : panel;
+}
+
+async function renderReadyAt(projectId: string, strict = false) {
+  rpc.providersList.mockImplementation(() =>
+    Promise.resolve([row({ configured: true, consented: true })]),
+  );
+  const view = render(panelFor(projectId, strict));
+  await screen.findByTestId("agent-log");
+  return view;
+}
+
+async function jumpTo(view: ReturnType<typeof render>, projectId: string, strict = false) {
+  await act(async () => {
+    view.rerender(panelFor(projectId, strict));
+  });
+}
+
 /** Emits one wire event.
  *
  *  Every agent.* payload carries `project_id` (#95 Task 7 review round 3) and
@@ -1104,22 +1145,19 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
   }
 
   it("restores a saved conversation from agent.history when the panel opens", async () => {
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", role: "user", content: "이어서 써줘" }),
-        historyRow({
-          id: "h2",
-          role: "tool",
-          content: JSON.stringify({
-            name: "linetta_search_manuscript",
-            summary: '{"raw":"engine json the writer must never see"}',
-            ok: true,
-          }),
+    await restoreWith(
+      historyRow({ id: "h1", role: "user", content: "이어서 써줘" }),
+      historyRow({
+        id: "h2",
+        role: "tool",
+        content: JSON.stringify({
+          name: "linetta_search_manuscript",
+          summary: '{"raw":"engine json the writer must never see"}',
+          ok: true,
         }),
-        historyRow({ id: "h3", role: "assistant", content: "여기까지 썼습니다." }),
-      ]),
+      }),
+      historyRow({ id: "h3", role: "assistant", content: "여기까지 썼습니다." }),
     );
-    await renderReady();
 
     expect(await screen.findByText("이어서 써줘")).toBeTruthy();
     const log = screen.getByTestId("agent-log");
@@ -1136,17 +1174,14 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
   });
 
   it("shows a restored tool call as failed when its ok flag is false", async () => {
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", role: "user", content: "확인용" }),
-        historyRow({
-          id: "h2",
-          role: "tool",
-          content: JSON.stringify({ name: "linetta_write_scene", ok: false }),
-        }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", role: "user", content: "확인용" }),
+      historyRow({
+        id: "h2",
+        role: "tool",
+        content: JSON.stringify({ name: "linetta_write_scene", ok: false }),
+      }),
     );
-    await renderReady();
 
     expect(await screen.findByText("확인용")).toBeTruthy();
     const lines = toolLines();
@@ -1156,16 +1191,13 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
 
   it("carries a restored tool call's batch id, so undo still works after a restart", async () => {
     rpc.agentUndo.mockImplementation(() => Promise.resolve({ ok: true }));
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({
-          id: "h1",
-          role: "tool",
-          content: JSON.stringify({ name: "linetta_apply_story_ops", ok: true, batch_id: "batch-restored" }),
-        }),
-      ]),
+    await restoreWith(
+      historyRow({
+        id: "h1",
+        role: "tool",
+        content: JSON.stringify({ name: "linetta_apply_story_ops", ok: true, batch_id: "batch-restored" }),
+      }),
     );
-    await renderReady();
 
     const button = await screen.findByRole("button", { name: "agentPanel.tool.undo" });
     await act(async () => {
@@ -1176,14 +1208,11 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
   });
 
   it("skips a tool row that fails to parse, without blanking the rest of the restored conversation", async () => {
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", role: "user", content: "첫 요청" }),
-        historyRow({ id: "h2", role: "tool", content: "{not valid json" }),
-        historyRow({ id: "h3", role: "assistant", content: "그래도 답은 옵니다" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", role: "user", content: "첫 요청" }),
+      historyRow({ id: "h2", role: "tool", content: "{not valid json" }),
+      historyRow({ id: "h3", role: "assistant", content: "그래도 답은 옵니다" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("첫 요청")).toBeTruthy();
     const log = screen.getByTestId("agent-log");
@@ -1192,13 +1221,10 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
   });
 
   it("skips a tool row whose JSON is well-formed but missing the fields a toolEvent needs", async () => {
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", role: "user", content: "확인용" }),
-        historyRow({ id: "h2", role: "tool", content: JSON.stringify({ summary: "no name or ok field" }) }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", role: "user", content: "확인용" }),
+      historyRow({ id: "h2", role: "tool", content: JSON.stringify({ summary: "no name or ok field" }) }),
     );
-    await renderReady();
 
     expect(await screen.findByText("확인용")).toBeTruthy();
     expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
@@ -1217,13 +1243,10 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
   });
 
   it("does not show the still-running notice once the conversation already has a reply", async () => {
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", role: "user", content: "요청" }),
-        historyRow({ id: "h2", role: "assistant", content: "완료된 답" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", role: "user", content: "요청" }),
+      historyRow({ id: "h2", role: "assistant", content: "완료된 답" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("완료된 답")).toBeTruthy();
     expect(notices()).toHaveLength(0);
@@ -1463,33 +1486,10 @@ describe("AgentPanel project switch (#95 Task 7 review)", () => {
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
   });
 
-  function panelFor(projectId: string) {
-    return (
-      <MemoryRouter>
-        <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
-      </MemoryRouter>
-    );
-  }
-
   /** Renders a ready panel that can be re-rendered at another project without
    *  unmounting — the actual shape of the bug. Neither the `/workspace/:id`
    *  route nor `<AgentPanel>` is keyed on the project id, so global search's
    *  cross-project jump changes this prop under a panel that stays mounted. */
-  async function renderReadyAt(projectId: string) {
-    rpc.providersList.mockImplementation(() =>
-      Promise.resolve([row({ configured: true, consented: true })]),
-    );
-    const view = render(panelFor(projectId));
-    await screen.findByTestId("agent-log");
-    return view;
-  }
-
-  async function jumpTo(view: ReturnType<typeof render>, projectId: string) {
-    await act(async () => {
-      view.rerender(panelFor(projectId));
-    });
-  }
-
   function notices(): HTMLElement[] {
     return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
   }
@@ -1574,13 +1574,10 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     // (transcript.go's markRun, from loop.go's endWithError). Live, the
     // writer saw agent.error under this partial text; restored, `status` is
     // the only trace of it left.
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "이어서 써줘", status: "failed" }),
-        historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "여기까지 쓰다가", status: "failed" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "이어서 써줘", status: "failed" }),
+      historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "여기까지 쓰다가", status: "failed" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("여기까지 쓰다가")).toBeTruthy();
     const found = notices();
@@ -1624,20 +1621,17 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     // hedge exists for — so the panel genuinely cannot tell them apart. Closing
     // it needs the engine to say which one it was: a run-status RPC, or a
     // distinct status for the wall. The plan adds neither.
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "많이 해줘", status: "done" }),
-        historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "24개까지 했습니다", status: "done" }),
-        historyRow({
-          id: "h3",
-          run_id: "r1",
-          role: "tool",
-          content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
-          status: "done",
-        }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "많이 해줘", status: "done" }),
+      historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "24개까지 했습니다", status: "done" }),
+      historyRow({
+        id: "h3",
+        run_id: "r1",
+        role: "tool",
+        content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
+        status: "done",
+      }),
     );
-    await renderReady();
 
     expect(await screen.findByText("24개까지 했습니다")).toBeTruthy();
     const found = notices();
@@ -1649,27 +1643,21 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
   });
 
   it("says a restored turn was cancelled", async () => {
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "써줘", status: "cancelled" }),
-        historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "쓰다 말았습니다", status: "cancelled" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "써줘", status: "cancelled" }),
+      historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "쓰다 말았습니다", status: "cancelled" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("쓰다 말았습니다")).toBeTruthy();
     expect(notices()[0].textContent).toBe("agentPanel.cancelled");
   });
 
   it("marks only the run that failed when an earlier turn succeeded before it", async () => {
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "첫 요청", status: "done" }),
-        historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "첫 답변", status: "done" }),
-        historyRow({ id: "h3", run_id: "r2", role: "user", content: "두 번째 요청", status: "failed" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "첫 요청", status: "done" }),
+      historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "첫 답변", status: "done" }),
+      historyRow({ id: "h3", run_id: "r2", role: "user", content: "두 번째 요청", status: "failed" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("두 번째 요청")).toBeTruthy();
     const found = notices();
@@ -1683,19 +1671,16 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     // The abandoned turn the "last row is a user row" test missed: the engine
     // died after a tool call resolved but before the model produced final
     // text, so no markRun ever ran and the last row is a tool row.
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "고쳐줘", status: "done" }),
-        historyRow({
-          id: "h2",
-          run_id: "r1",
-          role: "tool",
-          content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
-          status: "done",
-        }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "고쳐줘", status: "done" }),
+      historyRow({
+        id: "h2",
+        run_id: "r1",
+        role: "tool",
+        content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
+        status: "done",
+      }),
     );
-    await renderReady();
 
     expect(await screen.findByText("고쳐줘")).toBeTruthy();
     const found = notices();
@@ -1704,12 +1689,9 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
   });
 
   it("does not hedge that a cancelled turn may still be running", async () => {
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "그만", status: "cancelled" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "그만", status: "cancelled" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("그만")).toBeTruthy();
     const found = notices();
@@ -1720,14 +1702,11 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
   it("skips a tool row whose content is the JSON literal null", async () => {
     // JSON.parse("null") succeeds and yields null — the one malformed shape
     // that gets past the try/catch, and the one the brief named.
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "확인용" }),
-        historyRow({ id: "h2", run_id: "r1", role: "tool", content: "null" }),
-        historyRow({ id: "h3", run_id: "r1", role: "assistant", content: "그래도 답은 옵니다" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "확인용" }),
+      historyRow({ id: "h2", run_id: "r1", role: "tool", content: "null" }),
+      historyRow({ id: "h3", run_id: "r1", role: "assistant", content: "그래도 답은 옵니다" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("확인용")).toBeTruthy();
     expect(screen.getByTestId("agent-log").querySelector(".msg.bot .msg-bubble")?.textContent).toBe(
@@ -1769,29 +1748,6 @@ describe("AgentPanel abandoned send fence (#95 Task 7 review round 2)", () => {
         for (const cb of queued) cb(i);
       });
     }
-  }
-
-  function panelFor(projectId: string) {
-    return (
-      <MemoryRouter>
-        <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
-      </MemoryRouter>
-    );
-  }
-
-  async function renderReadyAt(projectId: string) {
-    rpc.providersList.mockImplementation(() =>
-      Promise.resolve([row({ configured: true, consented: true })]),
-    );
-    const view = render(panelFor(projectId));
-    await screen.findByTestId("agent-log");
-    return view;
-  }
-
-  async function jumpTo(view: ReturnType<typeof render>, projectId: string) {
-    await act(async () => {
-      view.rerender(panelFor(projectId));
-    });
   }
 
   it("refuses a delta for a send it left behind, instead of streaming that work's prose into another's log", async () => {
@@ -1914,13 +1870,10 @@ describe("AgentPanel restore notice boundaries (#95 Task 7 review round 2)", () 
   it("still says how a run ended when its last row is a tool row the panel cannot parse", async () => {
     // Skipping the unparseable LINE must not also skip the notice saying the
     // run failed — the row is unreadable, its status is not.
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "실패한 요청", status: "failed" }),
-        historyRow({ id: "h2", run_id: "r1", role: "tool", content: "{잘린 JSON", status: "failed" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "실패한 요청", status: "failed" }),
+      historyRow({ id: "h2", run_id: "r1", role: "tool", content: "{잘린 JSON", status: "failed" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("실패한 요청")).toBeTruthy();
     expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
@@ -1930,13 +1883,10 @@ describe("AgentPanel restore notice boundaries (#95 Task 7 review round 2)", () 
 
   it("gives each run's end notice its own key, so two of them cannot collide", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    rpc.agentHistory.mockImplementation(() =>
-      Promise.resolve([
-        historyRow({ id: "h1", run_id: "r1", role: "user", content: "첫 요청", status: "failed" }),
-        historyRow({ id: "h2", run_id: "r2", role: "user", content: "둘째 요청", status: "cancelled" }),
-      ]),
+    await restoreWith(
+      historyRow({ id: "h1", run_id: "r1", role: "user", content: "첫 요청", status: "failed" }),
+      historyRow({ id: "h2", run_id: "r2", role: "user", content: "둘째 요청", status: "cancelled" }),
     );
-    await renderReady();
 
     expect(await screen.findByText("첫 요청")).toBeTruthy();
     expect(notices().map((n) => n.textContent)).toEqual([
@@ -1981,29 +1931,6 @@ describe("AgentPanel project ownership on the wire (#95 Task 7 review round 3)",
         for (const cb of queued) cb(i);
       });
     }
-  }
-
-  function panelFor(projectId: string, strict = false) {
-    const panel = (
-      <MemoryRouter>
-        <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
-      </MemoryRouter>
-    );
-    // StrictMode is on in main.tsx, and one of the tests below only fails
-    // under it — see "keeps the send button's disabled mirror".
-    return strict ? <StrictMode>{panel}</StrictMode> : panel;
-  }
-
-  async function renderReadyAt(projectId: string, strict = false) {
-    const view = render(panelFor(projectId, strict));
-    await screen.findByTestId("agent-log");
-    return view;
-  }
-
-  async function jumpTo(view: ReturnType<typeof render>, projectId: string, strict = false) {
-    await act(async () => {
-      view.rerender(panelFor(projectId, strict));
-    });
   }
 
   function log() {
@@ -2183,26 +2110,6 @@ describe("AgentPanel ownership ordering (#95 Task 7 final review)", () => {
       Promise.resolve([row({ configured: true, consented: true })]),
     );
   });
-
-  function panelFor(projectId: string) {
-    return (
-      <MemoryRouter>
-        <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
-      </MemoryRouter>
-    );
-  }
-
-  async function renderReadyAt(projectId: string) {
-    const view = render(panelFor(projectId));
-    await screen.findByTestId("agent-log");
-    return view;
-  }
-
-  async function jumpTo(view: ReturnType<typeof render>, projectId: string) {
-    await act(async () => {
-      view.rerender(panelFor(projectId));
-    });
-  }
 
   it("refuses another work's event during a send instead of holding it for the flush", async () => {
     // The project check must run AHEAD of the send window, not behind it.
