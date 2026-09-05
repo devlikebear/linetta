@@ -96,37 +96,48 @@ func (r *HistoryRepo) List(ctx context.Context, q HistoryQuery) ([]HistoryMessag
 	if q.Limit <= 0 {
 		q.Limit = 100
 	}
-	where, args := historyWhere(q)
-	args = append(args, q.Limit)
-	return r.list(ctx, fmt.Sprintf(`
+	return r.list(ctx, listHistorySQL, append(historyArgs(q), q.Limit)...)
+}
+
+// historyRowFilter is the row predicate List and Clear share, so the two can
+// never disagree about which rows a query owns — a Clear that deleted more
+// than the matching List showed is exactly the bug this guards against.
+//
+// Every optional clause is switched by its own parameter rather than by
+// appending SQL, so the statement below is one fixed string. That costs a
+// little index selectivity on a table that only ever holds one project's
+// conversation, and buys a DELETE that cannot be built wrong: the argument
+// list is the only thing that varies, and a mistake there is a wrong row
+// count, never a wrong statement.
+const historyRowFilter = `project_id = ?
+       AND (? = '' OR (node_id = ? AND scope = ?))
+       AND (? = '' OR intent = ?)`
+
+const listHistorySQL = `
 SELECT m.id, m.project_id, COALESCE(m.node_id, ''), COALESCE(NULLIF(n.title, ''), n.label, ''),
        COALESCE(m.run_id, ''), m.role, m.scope, m.intent, m.status, m.content, m.created_at
   FROM (
     SELECT * FROM companion_messages
-     WHERE %s
+     WHERE ` + historyRowFilter + `
      ORDER BY created_at DESC, CASE role WHEN 'assistant' THEN 0 ELSE 1 END, id DESC
      LIMIT ?
   ) m
   LEFT JOIN nodes n ON n.id = m.node_id
- ORDER BY m.created_at ASC, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.id ASC`, where), args...)
-}
+ ORDER BY m.created_at ASC, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.id ASC`
 
-// historyWhere builds the row filter List and Clear share, so the two can
-// never disagree about which rows a query owns — a Clear that deleted more
-// than the matching List showed is exactly the bug this guards against. The
-// fragments are string constants; only the values are parameters.
-func historyWhere(q HistoryQuery) (string, []any) {
-	where := "project_id = ?"
-	args := []any{q.ProjectID}
+const clearHistorySQL = `DELETE FROM companion_messages WHERE ` + historyRowFilter
+
+// historyArgs supplies historyRowFilter's parameters in order. An empty
+// selector switches its clause off, which is why the scene branch has to
+// produce both the node id and the scope together: filtering by node without
+// the scope would sweep in a project-scoped row that happens to name a node.
+func historyArgs(q HistoryQuery) []any {
+	node, scope := "", ""
 	if normalizeHistoryView(q.Scope) == HistoryViewScene && strings.TrimSpace(q.NodeID) != "" {
-		where += " AND node_id = ? AND scope = ?"
-		args = append(args, strings.TrimSpace(q.NodeID), HistoryScopeScene)
+		node, scope = strings.TrimSpace(q.NodeID), HistoryScopeScene
 	}
-	if intent := strings.TrimSpace(q.Intent); intent != "" {
-		where += " AND intent = ?"
-		args = append(args, intent)
-	}
-	return where, args
+	intent := strings.TrimSpace(q.Intent)
+	return []any{q.ProjectID, node, node, scope, intent, intent}
 }
 
 func (r *HistoryRepo) LoadForPrompt(ctx context.Context, q HistoryQuery) ([]HistoryMessage, error) {
@@ -178,9 +189,7 @@ func (r *HistoryRepo) Clear(ctx context.Context, q HistoryQuery) error {
 	if r == nil {
 		return nil
 	}
-	where, args := historyWhere(q)
-	_, err := r.db.ExecContext(ctx,
-		fmt.Sprintf(`DELETE FROM companion_messages WHERE %s`, where), args...)
+	_, err := r.db.ExecContext(ctx, clearHistorySQL, historyArgs(q)...)
 	return err
 }
 
