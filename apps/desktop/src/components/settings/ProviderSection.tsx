@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
-import { providers as providersApi, settings as settingsApi } from "../../lib/rpc";
+import {
+  codex as codexApi,
+  openExternalUrl,
+  providers as providersApi,
+  settings as settingsApi,
+} from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
-import type { ProviderID, ProviderStatus } from "../../lib/types";
+import type { CodexStatus, ProviderID, ProviderStatus } from "../../lib/types";
 
 /** Connect an AI provider (BYOK).
  *
@@ -38,6 +43,25 @@ export function ProviderSection() {
   // rather than leave a stale sentence on screen.
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
+  // The stored key never comes back from settings.get — only whether one is
+  // set. So these drafts start empty and are the only source of what gets
+  // saved; nothing pre-fills them with a secret.
+  const [keyDraft, setKeyDraft] = useState("");
+  const [baseUrlDraft, setBaseUrlDraft] = useState("");
+  // The poll handle, so a second click cannot start a second loop and so the
+  // interval dies with the component. A login the writer abandons must not
+  // leave a timer calling the engine forever.
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current !== null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => stopPolling, [stopPolling]);
 
   const refresh = useCallback(async () => {
     const rows = await providersApi.list();
@@ -69,6 +93,73 @@ export function ProviderSection() {
     guard(async () => {
       await settingsApi.set({ provider: id });
       setActive(id);
+      await refresh();
+    });
+
+  // Every draft is scoped to the provider it belongs to. Carrying an openai
+  // base URL into an anthropic patch is not a cosmetic bug: the engine
+  // rejects base_url on any id but openai, and settings.set is all-or-
+  // nothing, so the whole patch — including the key the writer just typed —
+  // would be refused.
+  useEffect(() => {
+    setKeyDraft("");
+    setBaseUrlDraft(list.find((r) => r.id === active)?.base_url ?? "");
+  }, [active, list]);
+
+  const startCodexLogin = () =>
+    guard(async () => {
+      const { auth_url } = await codexApi.loginStart();
+      await openExternalUrl(auth_url);
+      // A retry after login_failed must not leave the old failure banner up
+      // for the ~1.5s until the first fresh poll tick reports back.
+      setCodexStatus(null);
+      stopPolling();
+      pollRef.current = window.setInterval(() => {
+        void codexApi
+          .loginStatus()
+          .then((s) => {
+            setCodexStatus(s);
+            // Both outcomes end the poll. login_failed is how the engine
+            // reports a failed exchange — it is a status field, not an RPC
+            // error, because the failure happens after login_start already
+            // returned.
+            if (s.logged_in || s.login_failed) {
+              stopPolling();
+              void refresh();
+            }
+          })
+          .catch(() => stopPolling());
+      }, 1500);
+    });
+
+  const logoutCodex = () =>
+    guard(async () => {
+      stopPolling();
+      await codexApi.logout();
+      setCodexStatus(null);
+      await refresh();
+    });
+
+  const saveKey = () =>
+    guard(async () => {
+      await settingsApi.set({ providers: { [active]: { api_key: keyDraft.trim() } } });
+      setKeyDraft("");
+      await refresh();
+    });
+
+  // An empty string is not a no-op: the engine deletes the stored secret.
+  // That is the only way to clear a key, and it is why this is a separate
+  // button rather than "save an empty field".
+  const clearKey = () =>
+    guard(async () => {
+      await settingsApi.set({ providers: { [active]: { api_key: "" } } });
+      setKeyDraft("");
+      await refresh();
+    });
+
+  const saveBaseUrl = () =>
+    guard(async () => {
+      await settingsApi.set({ providers: { [active]: { base_url: baseUrlDraft.trim() } } });
       await refresh();
     });
 
@@ -104,6 +195,94 @@ export function ProviderSection() {
             ? t("settings.providers.state.consented")
             : t("settings.providers.state.notConsented")}
         </p>
+      ) : null}
+
+      {active === "openai-codex" ? (
+        <div className="modal-field" data-testid="provider-codex">
+          {codexStatus?.logged_in ? (
+            <>
+              <span data-testid="provider-codex-email">
+                {codexStatus.email ?? t("settings.providers.codex.signedIn")}
+              </span>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void logoutCodex()}
+                data-testid="provider-codex-logout"
+              >
+                {t("settings.providers.codex.logout")}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void startCodexLogin()}
+              data-testid="provider-codex-login"
+            >
+              {t("settings.providers.codex.login")}
+            </button>
+          )}
+          {codexStatus?.login_failed ? (
+            <p className="sd" role="alert" data-testid="provider-codex-failed">
+              {t("settings.providers.codex.failed")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {active !== "openai-codex" ? (
+        <div className="modal-field" data-testid="provider-key">
+          <label htmlFor="provider-api-key">{t("settings.providers.apiKey")}</label>
+          <input
+            id="provider-api-key"
+            type="password"
+            value={keyDraft}
+            placeholder={
+              current?.configured
+                ? t("settings.providers.apiKey.stored")
+                : t("settings.providers.apiKey.placeholder")
+            }
+            disabled={busy}
+            onChange={(e) => setKeyDraft(e.target.value)}
+            data-testid="provider-key-input"
+          />
+          <button
+            type="button"
+            disabled={busy || !keyDraft.trim()}
+            onClick={() => void saveKey()}
+            data-testid="provider-key-save"
+          >
+            {t("settings.providers.apiKey.save")}
+          </button>
+          {current?.configured ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void clearKey()}
+              data-testid="provider-key-clear"
+            >
+              {t("settings.providers.apiKey.clear")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {active === "openai" ? (
+        <div className="modal-field" data-testid="provider-base-url">
+          <label htmlFor="provider-base-url-input">{t("settings.providers.baseUrl")}</label>
+          <input
+            id="provider-base-url-input"
+            type="url"
+            value={baseUrlDraft}
+            placeholder="https://openrouter.ai/api/v1"
+            disabled={busy}
+            onChange={(e) => setBaseUrlDraft(e.target.value)}
+            onBlur={() => void saveBaseUrl()}
+            data-testid="provider-base-url-input"
+          />
+          <p className="sd">{t("settings.providers.baseUrl.hint")}</p>
+        </div>
       ) : null}
 
       {error ? (
