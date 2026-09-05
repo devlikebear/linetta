@@ -1458,6 +1458,13 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   line-height: 1.55;
   color: var(--ink);
   cursor: pointer;
+  /* .modal-field > label is a field caption: mono, tracked, upper. These
+     labels are sentences the writer reads and agrees to, and the read-only
+     toggle is a direct child of a .modal-field <details>, so it inherited
+     that caption styling while the other two did not. Say it here. */
+  font-family: inherit;
+  letter-spacing: normal;
+  text-transform: none;
 }
 .modal-field.modal-check > input[type="checkbox"] {
   width: auto;

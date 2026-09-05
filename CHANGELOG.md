@@ -51,9 +51,10 @@ Linetta is a writing tool. It no longer talks to a language model.
   Claude Code, Claude Desktop — can read and write the work directly. It is off
   until you consent, binds `127.0.0.1` only, and needs a token generated on your
   machine. `read_only` mode omits the writing tools entirely.
-- Every change an agent makes is snapshotted before it lands, recorded in an
-  activity log, and undoable. A scene you are part way through editing is never
-  replaced behind your back.
+- Every change an agent makes is snapshotted before it lands and recorded in an
+  activity log. A restructuring of the outline can be undone as one batch while
+  the app stays open; a rewritten scene is restored from its version history.
+  A scene you are part way through editing is never replaced behind your back.
 - Scene summaries no longer need a model: a short scene is its own summary, a
   longer one keeps its opening, and an agent can replace either with a real one.
 - The Fact Book is now a place to record what you checked and where, rather than
