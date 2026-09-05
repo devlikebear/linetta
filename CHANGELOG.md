@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.2.0 - 2026-09-06
+
+- Added a built-in AI writing agent: connect a provider — sign in with a
+  ChatGPT account, or add an API key for Anthropic, Google Gemini, or an
+  OpenAI-compatible endpoint — and open the panel with `Cmd/Ctrl+J`. Consent to
+  send your writing to a provider is given separately for each one.
+- Added ChatGPT (Codex) sign-in inside the app, so connecting it no longer
+  needs the Codex CLI installed. Tokens are kept at
+  `<app data>/codex/auth.json` with owner-only permissions (0600), in the same
+  file format the Codex CLI uses for its own login, so the two can share one
+  sign-in.
+- The MCP activity log now records whether the built-in agent or an external
+  client made each tool call.
+- MCP itself is unchanged: the built-in agent is a client of Linetta's own MCP
+  server, reaching the same tools external clients use, rather than a second
+  set built for it.
+
 ## v1.1.0 - 2026-08-31
 
 - Export now carries the whole work: synopsis, plot threads and beats, fact
