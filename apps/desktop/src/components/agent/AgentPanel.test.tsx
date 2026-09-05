@@ -1070,6 +1070,21 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
     await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
   }
 
+  /** A finished first turn, then a second send whose response is still out.
+   *
+   *  That is the send window: the panel holds an authoritative run id for r1
+   *  and none yet for r2, which is the state every hazard in this block needs.
+   *  Resolve or reject the returned promise to close it. */
+  async function secondSendPending() {
+    await firstTurn();
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+
+    await type("두 번째 요청");
+    await pressEnter();
+    return pending;
+  }
+
   // Both halves of the guard, one case each. A Japanese writer's Enter
   // confirms a kanji conversion candidate; a Korean writer's commits the
   // trailing syllable. Browsers disagree about which signal they send, and
@@ -1090,12 +1105,7 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
   });
 
   it("keeps the chunk that arrived before agent.run's response", async () => {
-    await firstTurn();
-    const pending = deferred<{ run_id: string }>();
-    rpc.agentRun.mockImplementation(() => pending.promise);
-
-    await type("두 번째 요청");
-    await pressEnter();
+    const pending = await secondSendPending();
     await emit("agent-delta", { run_id: "r2", text: "두 번째 " });
     await act(async () => {
       pending.resolve({ run_id: "r2" });
@@ -1107,12 +1117,7 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
   });
 
   it("does not append a straggler from the finished turn to its bubble", async () => {
-    await firstTurn();
-    const pending = deferred<{ run_id: string }>();
-    rpc.agentRun.mockImplementation(() => pending.promise);
-
-    await type("두 번째 요청");
-    await pressEnter();
+    const pending = await secondSendPending();
     await emit("agent-delta", { run_id: "r1", text: "  <<유령>>" });
     await act(async () => {
       pending.resolve({ run_id: "r2" });
@@ -1124,12 +1129,7 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
   });
 
   it("returns the composer to send when the turn fails before agent.run's response", async () => {
-    await firstTurn();
-    const pending = deferred<{ run_id: string }>();
-    rpc.agentRun.mockImplementation(() => pending.promise);
-
-    await type("두 번째 요청");
-    await pressEnter();
+    const pending = await secondSendPending();
     await emit("agent-error", { run_id: "r2", reason: "provider_unreachable", message: "dial tcp" });
     await act(async () => {
       pending.resolve({ run_id: "r2" });
