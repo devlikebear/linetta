@@ -5,6 +5,7 @@ import type { ProviderStatus } from "../../lib/types";
 
 const rpc = vi.hoisted(() => ({
   providersList: vi.fn(),
+  agentUndo: vi.fn(),
 }));
 
 // Same approach as useMcpChanges.test.tsx: a hoisted listener map standing in
@@ -24,6 +25,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../../lib/rpc", () => ({
   providers: { list: rpc.providersList },
+  agent: { undo: rpc.agentUndo },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -303,21 +305,193 @@ describe("AgentPanel messages and streaming (#95 Task 4)", () => {
     expect(link?.getAttribute("rel")).toBe("noreferrer");
   });
 
-  it("keeps agent.tool events out of the rendered log (the collapsed line is Task 5)", async () => {
+});
+
+describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+  });
+
+  function toolLines(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="tool-line"]'));
+  }
+
+  it("merges the started and done events into one line", async () => {
     await renderReady();
 
-    await emit("agent-tool", { run_id: "r1", name: "linetta_search_scenes", state: "started" });
+    await emit("agent-tool", { run_id: "r1", name: "linetta_search_manuscript", state: "started" });
+    expect(toolLines()).toHaveLength(1);
+
     await emit("agent-tool", {
       run_id: "r1",
-      name: "linetta_search_scenes",
+      name: "linetta_search_manuscript",
+      state: "done",
+      summary: "4-2 씬 / 스토리 컨텍스트",
+    });
+
+    // Still one line — the second event resolved the first, it did not add
+    // a second row.
+    const lines = toolLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0].textContent).toBe("agentPanel.tool.read · 4-2 씬 / 스토리 컨텍스트");
+  });
+
+  it("shows a running tool call as still in progress, distinct from a resolved one", async () => {
+    await renderReady();
+
+    await emit("agent-tool", { run_id: "r1", name: "linetta_write_scene", state: "started" });
+
+    const running = toolLines();
+    expect(running).toHaveLength(1);
+    // No summary while running: the "started" event's summary is the raw
+    // call arguments, not a human phrase — never render the full arguments.
+    expect(running[0].textContent).toBe("agentPanel.tool.writing");
+    expect(running[0].className).toContain("tool-running");
+
+    await emit("agent-tool", { run_id: "r1", name: "linetta_write_scene", state: "done", summary: "4-2 씬" });
+
+    const resolved = toolLines();
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0].textContent).toBe("agentPanel.tool.wrote · 4-2 씬");
+    expect(resolved[0].className).toContain("tool-ok");
+  });
+
+  it("never falls back to the started event's raw-arguments text, even if the resolving event carries no summary of its own", async () => {
+    await renderReady();
+
+    // The engine's "started" summary is the tool's raw call arguments (see
+    // runTool in engine/internal/agent/loop.go) — for linetta_write_scene
+    // that argument set includes the scene's full body text. A wire payload
+    // carrying it is exactly the shape this line must never surface.
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_write_scene",
+      state: "started",
+      summary: '{"project_id":"p1","node_id":"4-2","content":"the whole scene body..."}',
+    });
+    // The resolving event, unusually, carries no summary of its own.
+    await emit("agent-tool", { run_id: "r1", name: "linetta_write_scene", state: "done" });
+
+    const lines = toolLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0].textContent).toBe("agentPanel.tool.wrote");
+    expect(lines[0].textContent).not.toContain("content");
+    expect(lines[0].textContent).not.toContain("scene body");
+  });
+
+  it("shows an error tool call distinctly from a done one", async () => {
+    await renderReady();
+
+    await emit("agent-tool", { run_id: "r1", name: "linetta_write_scene", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_write_scene",
+      state: "error",
+      summary: "version conflict",
+    });
+
+    const lines = toolLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0].textContent).toBe("agentPanel.tool.writeFailed · version conflict");
+    expect(lines[0].className).toContain("tool-error");
+    expect(lines[0].className).not.toContain("tool-ok");
+  });
+
+  it("offers undo only on a line that carries a batch id", async () => {
+    await renderReady();
+
+    // A read tool never produces a batch id.
+    await emit("agent-tool", { run_id: "r1", name: "linetta_search_manuscript", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_search_manuscript",
       state: "done",
       summary: "3 scenes",
     });
-    await emit("agent-delta", { run_id: "r1", text: "Found them." });
-    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
 
-    const log = screen.getByTestId("agent-log");
-    expect(log.querySelectorAll(".msg")).toHaveLength(1);
-    expect(log.textContent).not.toContain("3 scenes");
+    // A write whose result carried a batch id.
+    await emit("agent-tool", { run_id: "r1", name: "linetta_apply_story_ops", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_apply_story_ops",
+      state: "done",
+      summary: "4-2 씬",
+      batch_id: "batch-1",
+    });
+
+    // The writer stopped this turn mid-commit: the write happened (this is
+    // still a write-tool line), but no batch id came back — nothing to
+    // undo it with, so no button.
+    await emit("agent-tool", { run_id: "r1", name: "linetta_write_scene", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_write_scene",
+      state: "error",
+      summary: "the writer stopped this turn",
+    });
+
+    const lines = toolLines();
+    expect(lines).toHaveLength(3);
+    expect(lines[0].querySelector("button")).toBeNull();
+    expect(lines[1].querySelector("button")?.textContent).toBe("agentPanel.tool.undo");
+    expect(lines[2].querySelector("button")).toBeNull();
+  });
+
+  it("marks the line undone after agent.undo succeeds", async () => {
+    rpc.agentUndo.mockImplementation(() => Promise.resolve({ ok: true }));
+    await renderReady();
+
+    await emit("agent-tool", { run_id: "r1", name: "linetta_apply_story_ops", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_apply_story_ops",
+      state: "done",
+      summary: "4-2 씬",
+      batch_id: "batch-1",
+    });
+
+    const button = screen.getByRole("button", { name: "agentPanel.tool.undo" });
+    await act(async () => {
+      button.click();
+    });
+
+    expect(rpc.agentUndo).toHaveBeenCalledWith("batch-1");
+    expect(screen.queryByRole("button", { name: "agentPanel.tool.undo" })).toBeNull();
+    expect(toolLines()[0].textContent).toBe("agentPanel.tool.wrote · 4-2 씬agentPanel.tool.undone");
+  });
+
+  it("explains an expired undo window instead of failing silently", async () => {
+    // agent_undo_unavailable: the service keeps only the last 8 undo
+    // batches, so this is the ordinary result of a restart or a few more
+    // turns, not a mistake the writer made (#94 already mapped and
+    // translated this reason code).
+    rpc.agentUndo.mockImplementation(() => Promise.reject({ data: { reason: "agent_undo_unavailable" } }));
+    await renderReady();
+
+    await emit("agent-tool", { run_id: "r1", name: "linetta_apply_story_ops", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_apply_story_ops",
+      state: "done",
+      summary: "4-2 씬",
+      batch_id: "batch-1",
+    });
+
+    const button = screen.getByRole("button", { name: "agentPanel.tool.undo" });
+    await act(async () => {
+      button.click();
+    });
+
+    // The button is gone — undo is not retryable here — and the translated
+    // reason renders beside the line, contiguous with the rest of it.
+    expect(screen.queryByRole("button", { name: "agentPanel.tool.undo" })).toBeNull();
+    expect(toolLines()[0].textContent).toBe(
+      "agentPanel.tool.wrote · 4-2 씬 errors.agentUndoUnavailable",
+    );
+    // This must not have escalated into a panel-level error: the log (and
+    // this line within it) is still the thing on screen.
+    expect(screen.getByTestId("agent-log")).toBeTruthy();
+    expect(screen.queryByTestId("agent-unconfigured")).toBeNull();
   });
 });
