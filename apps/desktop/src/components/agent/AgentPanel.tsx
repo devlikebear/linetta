@@ -365,6 +365,13 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
 
   function acceptRun(runId: string): boolean {
     if (abandonedRunsRef.current.has(runId)) return false;
+    // A send from a work the writer left is still out (see orphanedSendRef):
+    // its run id is unknown here, so an event arriving now cannot be told
+    // apart from one belonging to a turn started in the work on screen — and
+    // the first-wins null check below would adopt it as exactly that. No such
+    // turn can exist, because the same fence holds the next send, so refusing
+    // costs nothing and adopting is the leak.
+    if (orphanedSendRef.current && currentRunIdRef.current === null) return false;
     if (currentRunIdRef.current === null) currentRunIdRef.current = runId;
     return currentRunIdRef.current === runId;
   }
@@ -413,11 +420,38 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     bufferedEventsRef.current = [];
   }
 
-  // The work this panel is currently showing, readable from an async callback
-  // that closed over an older render — handleSend's round trip has to know
-  // whether the writer has jumped elsewhere since it left. Written only in
-  // the reset below, so it and `projectId` can never disagree after a render.
-  const projectIdRef = useRef(projectId);
+  // The send this panel is currently waiting on, as an identity token minted
+  // per send. This — not the project id — is what handleSend's round trip
+  // checks when it lands (#95 Task 7 review round 2, N1): a writer who jumps
+  // away and back (A → B → A) is looking at the same project id again by the
+  // time a send from before the first jump resolves, so an id comparison
+  // waves that stale response through and it appends A's old prompt line,
+  // overwrites the run id and the turn the newer send installed, and flushes
+  // a window that is not its own. The reset below clears the token instead,
+  // and nothing can put it back.
+  const sendTokenRef = useRef<object | null>(null);
+
+  // A send whose work the writer left while its round trip was still out.
+  // Closing that send's window is not enough on its own: until the response
+  // arrives the abandoned run has no id here, so an event carrying it is
+  // judged against a currentRunIdRef the reset just set to null and gets
+  // adopted as the NEW work's turn — the same leak abandonedRunsRef closes
+  // for runs that are already named, through the one door that stays open
+  // while the name is still in the post.
+  //
+  // So the send itself is fenced rather than just its window. While this is
+  // true acceptRun adopts nothing, and the composer holds the next send:
+  // letting a second one out would leave two round trips outstanding whose
+  // responses can land in either order, each overwriting the other's run id,
+  // turn and window. It comes down in handleSend's own callbacks — the first
+  // instant anything here can tell the two runs apart. Mirrored in state
+  // because the send button's disabled-ness reads it.
+  const orphanedSendRef = useRef(false);
+  const [orphanedSend, setOrphanedSend] = useState(false);
+  function clearOrphanedSend() {
+    orphanedSendRef.current = false;
+    if (mountedRef.current) setOrphanedSend(false);
+  }
 
   // A jump to another work (#95 Task 7 review, C1). Neither Workspace nor
   // AgentPanel is keyed on the project id and the route is not remounted on a
@@ -440,15 +474,26 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   const [shownProjectId, setShownProjectId] = useState(projectId);
   if (shownProjectId !== projectId) {
     setShownProjectId(projectId);
-    projectIdRef.current = projectId;
     // A turn may still be running for the work being left. Refuse its events
     // from here on rather than letting the cleared currentRunIdRef adopt them.
     if (currentRunIdRef.current) abandonedRunsRef.current.add(currentRunIdRef.current);
     currentRunIdRef.current = null;
     pendingToolRef.current.clear();
     toolOccurrenceRef.current.clear();
+    // A send for the work being left is still out. Its run id cannot be named
+    // yet, so the send is fenced instead — read before discardSendWindow,
+    // which is what clears the flag this asks. (Checked, not set, on a second
+    // switch with nothing in flight: a fence raised by an earlier jump must
+    // stay up until that send actually lands.)
+    if (pendingSendRef.current) {
+      orphanedSendRef.current = true;
+      setOrphanedSend(true);
+    }
+    // Nothing in flight belongs to this panel any more; handleSend's round
+    // trip disowns itself by finding its token gone.
+    sendTokenRef.current = null;
     // Held events belong to the run being abandoned, and the send that opened
-    // the window (if any) is disowned below in handleSend.
+    // the window (if any) is fenced above and disowned below in handleSend.
     discardSendWindow();
     setLines([]);
     setRunning(false);
@@ -626,12 +671,19 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // Enter can still reach here) or while the draft is empty.
   function handleSend() {
     const prompt = draft.trim();
-    if (!prompt || sending || turnRunId !== null) return;
-    // The work this turn is for. Compared against projectIdRef when the round
-    // trip lands: a jump to another project in between must not install this
-    // turn — its prompt line, its run id, its stop button — into a panel now
-    // showing different work.
-    const sentProjectId = projectId;
+    // The fence: a send for a work the writer has left is still out, and its
+    // response can still overwrite this one's run id, turn and window when it
+    // lands. Held, not dropped — the draft stays in the composer, the send
+    // button is disabled meanwhile, and agent.run resolves as soon as the
+    // engine has minted the run id, so this is the same wait the composer
+    // already does for a send of its own.
+    if (!prompt || sending || turnRunId !== null || orphanedSendRef.current) return;
+    // This send's identity, checked when the round trip lands. A project
+    // switch clears the ref, and no later send can put this token back — so a
+    // jump away and back cannot make a stale response look current again, the
+    // way comparing project ids could.
+    const token = {};
+    sendTokenRef.current = token;
     setDraft("");
     setSendError(null);
     setSending(true);
@@ -642,21 +694,26 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     agentApi
       .run(projectId, prompt, nodeId)
       .then((result) => {
-        if (!mountedRef.current) {
-          discardSendWindow();
-          return;
-        }
-        if (projectIdRef.current !== sentProjectId) {
-          // The writer jumped to another work while this send was in flight.
-          // The turn is real and still running in the engine, but it belongs
-          // to a conversation this panel is no longer showing, so nothing of
-          // it is installed here and its events are refused from now on.
+        if (sendTokenRef.current !== token) {
+          // The writer jumped to another work while this send was in flight
+          // — and may since have jumped back, which is why the token, not the
+          // project id, is what knows. The turn is real and still running in
+          // the engine, but it belongs to a conversation this panel is no
+          // longer showing, so nothing of it is installed here: no prompt
+          // line, no run id, no turn for the stop button. From here its
+          // events are refused by name, so the fence that stood in for that
+          // name while it was unknown comes down.
           //
           // The send window is deliberately NOT touched: the project-switch
           // reset already emptied and closed it, and if the writer has since
           // sent something in the new work, that window is theirs — closing
           // it here would drop their turn's opening events instead.
           abandonedRunsRef.current.add(result.run_id);
+          clearOrphanedSend();
+          return;
+        }
+        if (!mountedRef.current) {
+          discardSendWindow();
           return;
         }
         // Set the authoritative run id directly from agent.run's response,
@@ -678,16 +735,19 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
         // so currentRunIdRef is untouched and replaying what the window held
         // judges it exactly as it would have been judged without the window.
         // Hand the draft back rather than discarding what the writer typed.
-        if (!mountedRef.current) {
-          discardSendWindow();
-          return;
-        }
         // Same as the resolved case: a refusal of a turn for the work the
         // writer has left is not news in the work they are now looking at,
         // and handing them back a prompt they wrote for a different book
         // would be worse than dropping it. No run id was ever minted, so
-        // there is nothing to abandon.
-        if (projectIdRef.current !== sentProjectId) return;
+        // there is nothing to abandon — only the fence to take down.
+        if (sendTokenRef.current !== token) {
+          clearOrphanedSend();
+          return;
+        }
+        if (!mountedRef.current) {
+          discardSendWindow();
+          return;
+        }
         setSending(false);
         setSendError(rpcErrorMessage(err, t));
         setDraft(prompt);
@@ -1000,7 +1060,11 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
                 className="cmp-send"
                 data-testid="agent-send"
                 onClick={handleSend}
-                disabled={!draft.trim()}
+                // Also while a send for a work the writer left is still out
+                // (orphanedSendRef): handleSend refuses one anyway, and a
+                // control that silently does nothing is worse than one that
+                // says it cannot yet.
+                disabled={!draft.trim() || orphanedSend}
                 aria-label={t("agentPanel.composer.send")}
               >
                 <Send size={14} />

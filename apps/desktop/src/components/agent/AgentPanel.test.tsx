@@ -1686,3 +1686,217 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
   });
 });
+
+describe("AgentPanel abandoned send fence (#95 Task 7 review round 2)", () => {
+  // Stand-in animation frames. jsdom's own requestAnimationFrame never runs
+  // inside `act`, so a delta that IS wrongly adopted renders an empty bubble
+  // and hides the prose it leaked — which is exactly why round 1's tests used
+  // tool events and missed this. Driving the frames by hand makes
+  // useSmoothStream finish its reveal synchronously, so the assertion can
+  // read the sentence that should never have been on screen.
+  const frames: FrameRequestCallback[] = [];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    frames.length = 0;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Runs queued frames until the reveal stops asking for more (each tick
+   *  re-queues, so the count is the bound, not the queue). */
+  async function flushFrames(limit = 40) {
+    for (let i = 0; i < limit; i++) {
+      const queued = frames.splice(0, frames.length);
+      if (queued.length === 0) return;
+      await act(async () => {
+        for (const cb of queued) cb(i);
+      });
+    }
+  }
+
+  function panelFor(projectId: string) {
+    return (
+      <MemoryRouter>
+        <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
+      </MemoryRouter>
+    );
+  }
+
+  async function renderReadyAt(projectId: string) {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ configured: true, consented: true })]),
+    );
+    const view = render(panelFor(projectId));
+    await screen.findByTestId("agent-log");
+    return view;
+  }
+
+  async function jumpTo(view: ReturnType<typeof render>, projectId: string) {
+    await act(async () => {
+      view.rerender(panelFor(projectId));
+    });
+  }
+
+  it("refuses a delta for a send it left behind, instead of streaming that work's prose into another's log", async () => {
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+
+    // The writer jumps away while agent.run is still in flight. The run id is
+    // unknown here — that is the whole gap — and the switch has already closed
+    // the window that would otherwise have held this event until it was known.
+    await jumpTo(view, OTHER_PROJECT_ID);
+    await emit("agent-delta", { run_id: "run-a", text: "A작품에만 있던 은밀한 문장" });
+    await flushFrames();
+
+    const log = screen.getByTestId("agent-log");
+    expect(log.querySelectorAll(".msg.bot")).toHaveLength(0);
+    expect(log.textContent).not.toContain("A작품에만 있던 은밀한 문장");
+
+    // And still refused once the send finally lands and names the run.
+    await act(async () => {
+      pending.resolve({ run_id: "run-a" });
+    });
+    await emit("agent-delta", { run_id: "run-a", text: "이어지는 문장" });
+    await flushFrames();
+    expect(screen.getByTestId("agent-log").textContent).not.toContain("이어지는 문장");
+  });
+
+  it("holds a second send until the abandoned one settles, instead of racing it", async () => {
+    const first = deferred<{ run_id: string }>();
+    const second = deferred<{ run_id: string }>();
+    rpc.agentRun
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+    expect(rpc.agentRun).toHaveBeenCalledTimes(1);
+
+    await jumpTo(view, OTHER_PROJECT_ID);
+    await type("B작품 요청");
+    await pressEnter();
+
+    // Sending now would leave two round trips outstanding whose responses can
+    // land in either order, each overwriting the other's run id.
+    expect(rpc.agentRun).toHaveBeenCalledTimes(1);
+    expect(composer().value).toBe("B작품 요청");
+    expect((screen.getByTestId("agent-send") as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      first.resolve({ run_id: "run-a" });
+    });
+
+    // The fence lifts the moment the abandoned send settles.
+    expect((screen.getByTestId("agent-send") as HTMLButtonElement).disabled).toBe(false);
+    await pressEnter();
+    expect(rpc.agentRun).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      second.resolve({ run_id: "run-b" });
+    });
+    expect(screen.getByTestId("agent-log").textContent).toContain("B작품 요청");
+  });
+
+  it("does not install a send from a work the writer left and came back to", async () => {
+    const first = deferred<{ run_id: string }>();
+    const second = deferred<{ run_id: string }>();
+    rpc.agentRun
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("첫 번째 요청");
+    await pressEnter();
+
+    // Away and back: the project id matches again by the time the stale
+    // response lands, so comparing project ids alone cannot tell the two apart.
+    await jumpTo(view, OTHER_PROJECT_ID);
+    await jumpTo(view, PROJECT_ID);
+    await type("두 번째 요청");
+    await pressEnter();
+
+    await act(async () => {
+      first.resolve({ run_id: "run-stale" });
+    });
+    const log = () => screen.getByTestId("agent-log");
+    expect(log().textContent).not.toContain("첫 번째 요청");
+    expect(screen.queryByTestId("agent-stop")).toBeNull();
+
+    // The second send is the one this panel is actually waiting on. (Fenced,
+    // it was held above and this press is what sends it; unfenced it went out
+    // already and the composer is empty, making this a no-op — either way
+    // exactly one turn is outstanding from here.)
+    await pressEnter();
+    await act(async () => {
+      second.resolve({ run_id: "run-new" });
+    });
+
+    expect(log().textContent).toContain("두 번째 요청");
+    expect(log().textContent).not.toContain("첫 번째 요청");
+    // The new run's events render, and stop targets the new run.
+    await emit("agent-tool", { run_id: "run-new", name: "linetta_write_scene", state: "started" });
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(1);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-stop"));
+    });
+    expect(rpc.agentCancel).toHaveBeenCalledWith("run-new");
+  });
+});
+
+describe("AgentPanel restore notice boundaries (#95 Task 7 review round 2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+  });
+
+  function notices(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
+  }
+
+  it("still says how a run ended when its last row is a tool row the panel cannot parse", async () => {
+    // Skipping the unparseable LINE must not also skip the notice saying the
+    // run failed — the row is unreadable, its status is not.
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "실패한 요청", status: "failed" }),
+        historyRow({ id: "h2", run_id: "r1", role: "tool", content: "{잘린 JSON", status: "failed" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("실패한 요청")).toBeTruthy();
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
+    expect(notices()).toHaveLength(1);
+    expect(notices()[0].textContent).toBe("agentPanel.restore.failed");
+  });
+
+  it("gives each run's end notice its own key, so two of them cannot collide", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "첫 요청", status: "failed" }),
+        historyRow({ id: "h2", run_id: "r2", role: "user", content: "둘째 요청", status: "cancelled" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("첫 요청")).toBeTruthy();
+    expect(notices().map((n) => n.textContent)).toEqual([
+      "agentPanel.restore.failed",
+      "agentPanel.cancelled",
+    ]);
+    // A fixed id here is what turned the missing project reset into two
+    // interleaved conversations rather than a visibly stale one.
+    const logged = consoleError.mock.calls.map((args) => args.join(" ")).join("\n");
+    expect(logged).not.toContain("same key");
+    consoleError.mockRestore();
+  });
+});
