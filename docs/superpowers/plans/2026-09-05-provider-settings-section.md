@@ -133,7 +133,7 @@ export interface McpActivityEntry {
 ```
 
 `source`를 옵셔널로 두는 이유: 이 필드가 생기기 전에 기록된 행이 데이터베이스에
-남아 있다. 마이그레이션 `0017`이 `NOT NULL DEFAULT ''`로 채웠으므로 실제로는 빈
+남아 있다. 마이그레이션 `0017`은 `source`를 `DEFAULT 'external'`로 채웠으므로 실제로는 그
 문자열로 오지만, 타입이 그 사실에 기대지 않게 한다.
 
 ### 1-2. 렌더
