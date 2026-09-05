@@ -824,15 +824,14 @@ export function ProviderSection() {
         >
           {t("settings.providers.test")}
         </button>
-        {/* role="status", not a bare span: a screen reader announced the
-            failure and said nothing at all about the success, so the one
-            outcome that means "you can start writing" was the one nobody
-            heard. `status` is polite — it waits for a pause rather than
-            interrupting, which suits a result the writer just asked for. */}
+        {/* <output>, not a bare span with role="status": a screen reader
+            announced the failure and said nothing at all about the success,
+            so the one outcome that means "you can start writing" was the one
+            nobody heard. <output> carries that polite, non-interrupting
+            status semantics natively rather than borrowing it from an
+            explicit role, and is the better-supported way to say it. */}
         {shownTest?.ok ? (
-          <span role="status" data-testid="provider-test-ok">
-            {t("settings.providers.test.ok")}
-          </span>
+          <output data-testid="provider-test-ok">{t("settings.providers.test.ok")}</output>
         ) : null}
         {shownTest?.error ? (
           <span role="alert" data-testid="provider-test-error">

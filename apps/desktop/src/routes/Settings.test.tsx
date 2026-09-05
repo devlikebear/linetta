@@ -66,6 +66,25 @@ vi.mock("../components/settings/McpSection", () => ({
   McpSection: () => <div data-testid="mcp-section-stub">mcp-section</div>,
 }));
 
+/** A diagnostics snapshot with the fields no test cares about already filled.
+ *
+ *  Only the capability flags decide what this screen renders, so those are
+ *  what a test should have to state. Spelling out the other seven fields at
+ *  each of nine call sites buried the one line that mattered. */
+function diagnostics(caps: Record<string, unknown> = {}) {
+  return {
+    version: "",
+    home: "",
+    db_path: "",
+    migration_version: 0,
+    migration_count: 0,
+    ops_status: [],
+    unavailable_providers: [],
+    git_sync_available: true,
+    ...caps,
+  };
+}
+
 function renderSettings() {
   return render(
     <MemoryRouter>
@@ -144,17 +163,7 @@ describe("Settings", () => {
       state = { ...state, ...nextPatch, providers };
       return Promise.resolve({ ...state });
     });
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-      companion_history_exists: true,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ companion_history_exists: true }));
     mocks.exportCompanionHistory.mockResolvedValue({
       markdown: "# 리네타 컴패니언 기록",
       suggested_filename: "linetta-companion-20260825.md",
@@ -331,16 +340,7 @@ describe("Settings", () => {
   it("shows Git Sync section as disabled (with note) when git_sync_available is false, and full section when true", async () => {
     // When git_sync_available is false, the section heading IS rendered but only with the unavailable note,
     // not with the full git-sync form (e.g. no folder input).
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: false,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ git_sync_available: false }));
     const user = userEvent.setup();
     const { unmount } = render(
       <MemoryRouter>
@@ -359,16 +359,7 @@ describe("Settings", () => {
     window.sessionStorage.removeItem("linetta.settings.category");
 
     // When git_sync_available is true, the full section (with folder input) IS rendered.
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics());
     renderSettings();
 
     await user.click(await screen.findByTestId("settings-nav-sync"));
@@ -377,17 +368,7 @@ describe("Settings", () => {
   });
 
   it("keeps the transcript export out of a library that never used the companion", async () => {
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-      companion_history_exists: false,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ companion_history_exists: false }));
     const user = userEvent.setup();
     renderSettings();
 
@@ -406,18 +387,7 @@ describe("Settings", () => {
   });
 
   it("shows the provider item in the connect group when the agent is available", async () => {
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-      companion_history_exists: true,
-      agent_available: true,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ companion_history_exists: true, agent_available: true }));
     renderSettings();
 
     expect(await screen.findByTestId("settings-nav-providers")).toBeInTheDocument();
@@ -436,18 +406,7 @@ describe("Settings", () => {
   });
 
   it("renders ProviderSection (not McpSection) under the providers nav item", async () => {
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-      agent_available: true,
-      mcp_available: true,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: true }));
     const user = userEvent.setup();
     renderSettings();
 
@@ -458,18 +417,7 @@ describe("Settings", () => {
   });
 
   it("renders McpSection (not ProviderSection) under the mcp nav item", async () => {
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-      agent_available: true,
-      mcp_available: true,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: true }));
     const user = userEvent.setup();
     renderSettings();
 
@@ -488,18 +436,7 @@ describe("Settings", () => {
     // mcp_available, even though both flags are booleans on the same
     // response and a copy-paste could swap which one gates the branch.
     window.sessionStorage.setItem("linetta.settings.category", "providers");
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-      agent_available: false,
-      mcp_available: true,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: false, mcp_available: true }));
     renderSettings();
 
     await screen.findByTestId("settings-nav-general");
@@ -507,18 +444,7 @@ describe("Settings", () => {
   });
 
   it("lists the provider nav item above the mcp one when both are available", async () => {
-    mocks.diagnosticsGet.mockResolvedValue({
-      version: "",
-      home: "",
-      db_path: "",
-      migration_version: 0,
-      migration_count: 0,
-      ops_status: [],
-      unavailable_providers: [],
-      git_sync_available: true,
-      agent_available: true,
-      mcp_available: true,
-    });
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: true }));
     renderSettings();
 
     const providersItem = await screen.findByTestId("settings-nav-providers");

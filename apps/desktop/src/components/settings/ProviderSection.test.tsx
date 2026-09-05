@@ -76,6 +76,41 @@ async function flush(times = 4) {
   });
 }
 
+/** Advance faked timers by `ms` and let the resulting work settle.
+ *
+ *  The Codex poll's interval is 1500ms, so that is the default: one tick.
+ *  Both halves matter — advancing without flushing fires the interval but
+ *  leaves its promise unresolved, and flushing without advancing never fires
+ *  it at all. Wrapping the pair lets a timer test say "one more tick" instead
+ *  of restating the mechanism eighteen times. */
+async function tick(ms = 1500) {
+  await advance(ms);
+  await flush();
+}
+
+/** `tick` without the trailing flush, for tests that assert on exactly the
+ *  state the tick produced. Kept separate rather than folded in because a
+ *  flush here would let a later queued effect run before the assertion, and
+ *  several call-count assertions below are exact. */
+async function advance(ms = 1500) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+/** Click "Sign in with ChatGPT" with the poll's timers faked.
+ *
+ *  The order is the point: the timers must be faked *before* the click, or
+ *  the interval the click starts is a real one and no `advance` can reach it.
+ *  Faking them here rather than in `beforeEach` is deliberate too — a
+ *  `findBy*` hangs under faked timers, so each test does its first find on
+ *  real ones. */
+async function beginLogin() {
+  vi.useFakeTimers();
+  fireEvent.click(screen.getByTestId("provider-codex-login"));
+  await flush();
+}
+
 describe("ProviderSection", () => {
   // Which provider the engine currently considers active, and any extra
   // fields on a given row. Tests set these before render.
@@ -573,9 +608,7 @@ describe("ProviderSection", () => {
     rpc.codexLoginStatus.mockClear();
     rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
 
-    vi.useFakeTimers();
-    fireEvent.click(screen.getByTestId("provider-codex-login"));
-    await flush();
+    await beginLogin();
 
     // The writer abandons the browser and switches to Anthropic to paste a
     // key instead. Leaving the provider stops the poll outright (see "stops
@@ -589,10 +622,7 @@ describe("ProviderSection", () => {
 
     // Even waiting out what would have been the next tick, nothing calls the
     // engine again, and the draft survives untouched.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await tick();
 
     expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
     expect((screen.getByTestId("provider-key-input") as HTMLInputElement).value).toBe(
@@ -622,10 +652,7 @@ describe("ProviderSection", () => {
 
     // Three tick intervals' worth of time — the old interval, if still
     // alive, would have fired at least twice by now.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4500);
-    });
-    await flush();
+    await tick(4500);
 
     expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
   });
@@ -636,9 +663,7 @@ describe("ProviderSection", () => {
     await flush();
     rpc.codexLoginStatus.mockClear();
 
-    vi.useFakeTimers();
-    fireEvent.click(screen.getByTestId("provider-codex-login"));
-    await flush();
+    await beginLogin();
 
     // The writer abandons the browser, switches to Anthropic, then comes
     // straight back to Codex — all before the poll's first tick fires.
@@ -657,10 +682,7 @@ describe("ProviderSection", () => {
     // resolves — reporting the abandoned attempt failed. It must not
     // overwrite the fresh, correct status above with a stale failure.
     rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: false, login_failed: true });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await tick();
 
     expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
     expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
@@ -685,10 +707,7 @@ describe("ProviderSection", () => {
     );
     fireEvent.click(screen.getByTestId("provider-codex-login"));
     await flush();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await tick();
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
 
     // The writer abandons that browser tab, switches to Anthropic, and comes
@@ -715,10 +734,7 @@ describe("ProviderSection", () => {
 
     // ...and, because login_failed is terminal, it must not have stopped
     // attempt #2's own poll on the way past.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await tick();
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
   });
 
@@ -729,13 +745,8 @@ describe("ProviderSection", () => {
     rpc.codexLoginStatus.mockClear();
     rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
 
-    vi.useFakeTimers();
-    fireEvent.click(screen.getByTestId("provider-codex-login"));
-    await flush();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await beginLogin();
+    await tick();
     expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
 
     // Second click, no provider switch in between: the poll must run again
@@ -743,10 +754,7 @@ describe("ProviderSection", () => {
     rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
     fireEvent.click(screen.getByTestId("provider-codex-login"));
     await flush();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await tick();
 
     expect(screen.getByTestId("provider-codex-email")).toHaveTextContent("writer@example.com");
     expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
@@ -779,13 +787,8 @@ describe("ProviderSection", () => {
     rpc.codexLoginStatus.mockClear();
     rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
 
-    vi.useFakeTimers();
-    fireEvent.click(screen.getByTestId("provider-codex-login"));
-    await flush();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await beginLogin();
+    await tick();
     expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
 
     // The engine forgets the failure at the next login_start; the pane must
@@ -816,22 +819,16 @@ describe("ProviderSection", () => {
     expect(rpc.openExternalUrl).toHaveBeenCalledWith("https://chatgpt.com/auth/start");
     expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
+    await advance();
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
+    await advance();
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId("provider-codex-email")).toHaveTextContent("writer@example.com");
 
     // The poll must have stopped: advancing further does not call again.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3000);
-    });
+    await advance(3000);
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(2);
   });
 
@@ -845,9 +842,7 @@ describe("ProviderSection", () => {
     vi.useFakeTimers();
     fireEvent.click(loginButton);
     await flush(2);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
+    await advance();
 
     expect(screen.getByTestId("provider-codex-email")).toHaveTextContent(
       "settings.providers.codex.signedIn",
@@ -865,16 +860,12 @@ describe("ProviderSection", () => {
     fireEvent.click(loginButton);
     await flush(2);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
+    await advance();
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
 
     // A failed login must not leave the poll running forever.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4500);
-    });
+    await advance(4500);
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
   });
 
@@ -890,15 +881,10 @@ describe("ProviderSection", () => {
     vi.useFakeTimers();
     fireEvent.click(loginButton);
     await flush(2);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await tick();
 
     expect(screen.getByTestId("provider-error").textContent).toBe("errors.providerNotConfigured");
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4500);
-    });
+    await advance(4500);
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
   });
 
@@ -916,10 +902,7 @@ describe("ProviderSection", () => {
     vi.useFakeTimers();
     fireEvent.click(loginButton);
     await flush(2);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    await flush();
+    await tick();
 
     expect(screen.getByTestId("provider-error").textContent).toBe("errors.providerNotConfigured");
   });
@@ -937,9 +920,7 @@ describe("ProviderSection", () => {
         }),
     );
 
-    vi.useFakeTimers();
-    fireEvent.click(screen.getByTestId("provider-codex-login"));
-    await flush();
+    await beginLogin();
 
     // Gone before login_start has even returned: the banner must not hang
     // over the whole browser-opening round trip.
@@ -963,9 +944,7 @@ describe("ProviderSection", () => {
 
     unmount();
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(4500);
-    });
+    await advance(4500);
     expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
   });
 
@@ -1182,15 +1161,20 @@ describe("ProviderSection", () => {
       // The failure carries role="alert"; the success was a bare <span>, so
       // a screen-reader user was told when the test failed and nothing at
       // all when it passed — the one outcome that means "you can start
-      // writing". `status` rather than `alert`: it is polite, and the writer
-      // asked for this result.
+      // writing". A status role rather than an alert: it is polite, and the
+      // writer asked for this result.
+      //
+      // Asserted through the tag rather than a role attribute because the
+      // element is an <output>, which carries that role natively. Checking
+      // for an explicit role="status" would fail on the markup that does the
+      // announcing best.
       activeId = "anthropic";
       rowExtras = { anthropic: { configured: true, consented: true } };
       render(<ProviderSection />);
 
       await userEvent.click(await screen.findByTestId("provider-test"));
 
-      expect(await screen.findByTestId("provider-test-ok")).toHaveAttribute("role", "status");
+      expect(await screen.findByTestId("provider-test-ok")).toBeInstanceOf(HTMLOutputElement);
     });
 
     it("clears a passing test result when the provider changes", async () => {
