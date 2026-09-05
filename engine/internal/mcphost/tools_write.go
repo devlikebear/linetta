@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -27,6 +28,7 @@ var WriteToolNames = []string{
 	"linetta_apply_story_ops",
 	"linetta_create_checkpoint",
 	"linetta_undo_last_change",
+	"linetta_edit_memory",
 }
 
 // ---------- linetta_create_work ----------
@@ -140,6 +142,14 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"A scene summary needs the content_version from linetta_read_scene; chapters and the synopsis " +
 			"do not.",
 	}, record(d, "linetta_write_summary", d.writeSummary))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_edit_memory",
+		Description: "Record something durable about how this writer works (writer_profile, which applies to every work) " +
+			"or about this work (work_notes). Both are read back to you at the start of every session, so keep them " +
+			"short and current: replace a line that changed rather than adding a second one. The result says how much " +
+			"room is left.",
+	}, record(d, "linetta_edit_memory", d.editMemory))
 
 	d.registerReviseTool(s)
 	d.registerBatchTools(s)
@@ -346,4 +356,71 @@ func (d ToolDeps) writeSummary(ctx context.Context, _ *mcp.CallToolRequest, in w
 	}
 	d.notifyChanged(n.ProjectID, "linetta_write_summary", []string{n.ID}, "")
 	return nil, writeSummaryOutput{Target: target, NodeID: n.ID, Summary: summary}, nil
+}
+
+// ---------- linetta_edit_memory ----------
+
+// memoryChangedPayload tells the app a memory moved under it. Settings holds
+// an unsent textarea draft; without this, the writer's next blur would
+// silently overwrite what the agent just recorded.
+type memoryChangedPayload struct {
+	Scope     string `json:"scope"`
+	ProjectID string `json:"project_id,omitempty"`
+	Source    string `json:"source"`
+}
+
+type editMemoryInput struct {
+	Scope     string `json:"scope" jsonschema:"which memory: writer_profile (global - how this writer works, across every work) or work_notes (what you have learned about one work)"`
+	Action    string `json:"action" jsonschema:"add, replace or remove"`
+	Text      string `json:"text,omitempty" jsonschema:"the memory to record, one line; required for add and replace"`
+	Find      string `json:"find,omitempty" jsonschema:"a short piece of the existing line you mean, unique among the lines; required for replace and remove"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"the work whose notes to edit; required when scope is work_notes, and not accepted for writer_profile"`
+}
+
+func (in editMemoryInput) scope() (string, string) { return in.ProjectID, "" }
+
+type editMemoryOutput struct {
+	Scope       string `json:"scope"`
+	Body        string `json:"body"`
+	CharsUsed   int    `json:"chars_used"`
+	CharsBudget int    `json:"chars_budget"`
+}
+
+// editMemory is the whole memory surface: there is no read tool, because the
+// documents are already in the story brief and every edit returns the result.
+func (d ToolDeps) editMemory(ctx context.Context, _ *mcp.CallToolRequest, in editMemoryInput) (*mcp.CallToolResult, editMemoryOutput, error) {
+	if d.Memory == nil {
+		return toolErr("memory is unavailable in this build"), editMemoryOutput{}, nil
+	}
+	scope, err := agentmemory.ParseScope(in.Scope)
+	if err != nil {
+		return toolErr("%v", err), editMemoryOutput{}, nil
+	}
+	projectID := strings.TrimSpace(in.ProjectID)
+	if scope == agentmemory.ScopeWorkNotes {
+		if _, errResult := d.requireProject(ctx, projectID); errResult != nil {
+			return errResult, editMemoryOutput{}, nil
+		}
+	}
+	current, err := d.Memory.Load(ctx, scope, projectID)
+	if err != nil {
+		return toolErr("could not read the memory: %v", err), editMemoryOutput{}, nil
+	}
+	next, err := agentmemory.Apply(scope, current.Body, in.Action, in.Find, in.Text)
+	if err != nil {
+		return toolErr("%v", err), editMemoryOutput{}, nil
+	}
+	saved, err := d.Memory.Save(ctx, scope, projectID, next, d.now())
+	if err != nil {
+		return toolErr("%v", err), editMemoryOutput{}, nil
+	}
+	if d.Notify != nil {
+		d.Notify("memory.changed", memoryChangedPayload{
+			Scope: string(scope), ProjectID: projectID, Source: d.sourceOrExternal(),
+		})
+	}
+	return nil, editMemoryOutput{
+		Scope: string(saved.Scope), Body: saved.Body,
+		CharsUsed: saved.CharsUsed, CharsBudget: saved.CharsBudget,
+	}, nil
 }
