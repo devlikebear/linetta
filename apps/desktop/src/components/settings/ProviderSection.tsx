@@ -53,15 +53,20 @@ export function ProviderSection() {
   // interval dies with the component. A login the writer abandons must not
   // leave a timer calling the engine forever.
   const pollRef = useRef<number | null>(null);
-  // Whether the currently-running poll is still allowed to write codexStatus.
-  // Leaving "openai-codex" flips this to false for good — not just while the
-  // writer is away. A late tick from the abandoned poll can still be in
-  // flight when the writer returns, and by then `active` is back to
-  // "openai-codex" again, so checking `active` at resolve time would not
-  // catch it. Only a fresh startCodexLogin() (a new polling session) sets
-  // this back to true; the mount-effect fetch below is what a returning
-  // visit actually trusts for status.
-  const pollValidRef = useRef(false);
+  // Which login attempt a poll tick belongs to. Every startCodexLogin() bumps
+  // this and captures the new value for the interval it creates; leaving
+  // "openai-codex" bumps it too, so every poll alive at that moment is
+  // invalidated for good. A tick writes only if the generation it captured is
+  // still current.
+  //
+  // A single shared boolean cannot express this. clearInterval stops future
+  // ticks but cannot cancel a login_status() call already in flight, so an
+  // abandoned attempt's tick can still resolve after the writer has come back
+  // and started a retry — and by then a shared latch reads true again,
+  // because the retry set it. The stale payload would go through, and a
+  // terminal login_failed would then stop the retry's own poll. A captured
+  // generation can never match a later attempt's, so it is simply dropped.
+  const pollGenRef = useRef(0);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -136,11 +141,11 @@ export function ProviderSection() {
   useEffect(() => {
     if (active !== "openai-codex") {
       // Leaving the provider drops the status, so a stale login_failed does
-      // not greet the writer on the way back in. It also permanently
-      // invalidates whatever poll is still running: that poll belongs to a
-      // login attempt the writer just walked away from, and a fresh fetch
-      // below is what the next visit to Codex will trust instead.
-      pollValidRef.current = false;
+      // not greet the writer on the way back in. Bumping the generation also
+      // permanently invalidates whatever poll is still running: that poll
+      // belongs to a login attempt the writer just walked away from, and a
+      // fresh fetch below is what the next visit to Codex will trust instead.
+      pollGenRef.current += 1;
       setCodexStatus(null);
       return;
     }
@@ -172,19 +177,22 @@ export function ProviderSection() {
       const { auth_url } = await codexApi.loginStart();
       await openExternalUrl(auth_url);
       stopPolling();
-      // This poll's writes are valid from here until the writer leaves
-      // "openai-codex" — see pollValidRef's declaration.
-      pollValidRef.current = true;
+      // This poll's writes are valid only while it is still the newest
+      // attempt — see pollGenRef's declaration.
+      pollGenRef.current += 1;
+      const gen = pollGenRef.current;
       pollRef.current = window.setInterval(() => {
         void codexApi
           .loginStatus()
           .then((s) => {
-            // The writer may have left and come back before this tick
-            // resolves; `active` would already read "openai-codex" again by
-            // then, so this ref — not `active` — is what remembers the
-            // departure. Skipping here leaves the fresh mount-effect fetch's
-            // result on screen instead of clobbering it with a stale one.
-            if (!pollValidRef.current) return;
+            // The writer may have left, come back, and even started a fresh
+            // attempt before this tick resolves; `active` would read
+            // "openai-codex" again by then, and a shared flag would read
+            // valid again. Only the generation this interval captured tells
+            // this tick's attempt apart from the one now running. Skipping
+            // leaves the newer truth — a retry's poll, or the mount fetch's
+            // result — standing instead of clobbering it with a stale one.
+            if (gen !== pollGenRef.current) return;
             setCodexStatus(s);
             // Both outcomes end the poll. login_failed is how the engine
             // reports a failed exchange — it is a status field, not an RPC
@@ -198,6 +206,10 @@ export function ProviderSection() {
           // A poll that dies quietly leaves the writer watching a sign-in
           // button that will never change its mind. Stop, and say why.
           .catch((e: unknown) => {
+            // The same gate on the failure path: a rejection belonging to an
+            // abandoned attempt must not blame the attempt the writer is
+            // actually waiting on, nor kill its poll.
+            if (gen !== pollGenRef.current) return;
             stopPolling();
             setError(e);
           });

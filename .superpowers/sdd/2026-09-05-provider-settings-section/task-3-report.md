@@ -594,3 +594,141 @@ $ tsc -b && vite build
 
 `go test ./...` not run, per the instructions: no Go changed, and this Mac's
 locked keychain hangs the engine fixtures.
+
+## Fix round 3 — the leave latch was one shared boolean, not a per-poll token
+
+### The defect
+
+Round 2's `pollValidRef` was a single component-wide boolean. It closed the
+"writer returns before the orphaned tick resolves" race, but any fresh
+`startCodexLogin()` flipped it back to `true` — including an unrelated retry —
+and `clearInterval` only stops *future* ticks; a `codex.login_status()` call
+already dispatched cannot be called back. So: attempt #1's slow tick is in
+flight → writer leaves to Anthropic (`false`) and returns (mount fetch reports
+clean) → writer clicks Login again (attempt #2 sets the latch back to `true`)
+→ attempt #1's tick finally resolves with `{logged_in:false,
+login_failed:true}`, reads the latch as `true`, shows a failure banner blaming
+attempt #2, and — because `login_failed` is terminal — calls `stopPolling()`,
+killing attempt #2's own interval. Both halves reproduced against `bdf0c19`
+(output below).
+
+### The fix — a generation captured per poll instance
+
+`pollValidRef` is replaced by `pollGenRef`, a monotonically increasing counter
+(`ProviderSection.tsx:69`). `startCodexLogin` bumps it and captures the new
+value in a `const gen` closed over by the interval it creates (`:182`);
+leaving `"openai-codex"` bumps it too (`:148`). Every tick — both the `.then`
+write (`:195`) and the `.catch` handler (`:212`) — returns early unless
+`gen === pollGenRef.current`.
+
+**Why the interleaving above cannot defeat it.** The counter only ever
+increases, and a tick compares against the value its *own* interval captured
+at creation, not against a shared "is anything valid" flag. Walk the four
+steps: attempt #1 captures `gen = 1`; leaving bumps to `2`; attempt #2 bumps
+to `3` and captures `3`. When attempt #1's in-flight tick resolves it compares
+`1 !== 3` and drops the payload — no banner, no `stopPolling()`. There is no
+sequence of clicks that makes a stale tick's captured generation equal the
+current one again, because every event that could orphan a poll (a departure,
+a new attempt) advances the counter past every value already captured. The
+boolean failed precisely because it was *re-settable to the value a stale tick
+was looking for*; a captured generation has no such value to be restored to.
+The `.catch` is gated the same way — a stale rejection must not kill the poll
+the writer is actually waiting on, nor blame it.
+
+### New tests
+
+1. `does not let an abandoned login's late tick fail the retry that replaced
+   it` — the reviewer's four-step interleaving. Attempt #1's tick is made to
+   hang (a promise the test resolves by hand, exactly modelling an
+   uncancellable in-flight call); the writer leaves, returns, clicks Login
+   again; only then is attempt #1's tick settled with `login_failed: true`.
+   Asserts no failure banner **and** that attempt #2's poll still ticks
+   1500ms later.
+2. `polls a retry after a failed attempt exactly like the first one` — a
+   legitimate second login, with no provider switch in between, must poll and
+   report its own `logged_in` result. This is what stops the fix from being
+   "never poll after the first attempt".
+
+Against `git show bdf0c19:apps/desktop/src/components/settings/ProviderSection.tsx`
+swapped into a scratch copy outside the repo (`node_modules` symlinked in,
+`./node_modules/.bin/vitest run ProviderSection`):
+
+```
+ ❯ src/components/settings/ProviderSection.test.tsx (29 tests | 1 failed) 301ms
+   × ProviderSection > does not let an abandoned login's late tick fail the retry that replaced it 7ms
+     → expected <p class="sd" role="alert" …(1)></p> to be null
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 passed (29)
+```
+
+The banner assertion fires first, so it hides the second symptom. Removing
+just that one assertion in the scratch copy exposes the killed poll:
+
+```
+   × ProviderSection > does not let an abandoned login's late tick fail the retry that replaced it 7ms
+     → expected "spy" to be called 1 times, but got 0 times
+ ❯ src/components/settings/ProviderSection.test.tsx:415:34
+```
+
+Attempt #2's own interval never fires again — the stale tick's terminal
+branch killed it. The retry test (2) passes against `bdf0c19` as intended: it
+is a guard against over-correcting, not a repro.
+
+### Mutation re-check (fresh scratch copy of the fixed component, outside the repo)
+
+Baseline there: `Tests  29 passed (29)`.
+
+1. `if (s.logged_in || s.login_failed)` → `if (s.login_failed)`:
+   ```
+      × ProviderSection > opens the browser and polls until Codex reports signed in
+      × ProviderSection > reports a reload that fails after a successful login
+      Tests  2 failed | 27 passed (29)
+   ```
+   Two, as round 2 established and the reviewer confirmed — pre-existing
+   shared coverage, unchanged by this round.
+2. `if (s.logged_in || s.login_failed)` → `if (s.logged_in)`:
+   ```
+      × ProviderSection > stops polling when Codex reports a failed login
+      Tests  1 failed | 28 passed (29)
+   ```
+3. `stopPolling()` removed from the `login_status` rejection handler:
+   ```
+      × ProviderSection > stops the poll and says why when login_status itself fails
+      Tests  1 failed | 28 passed (29)
+   ```
+4. Unmount cleanup neutered (`useEffect(() => stopPolling, …)` →
+   `useEffect(() => () => {}, …)`):
+   ```
+      × ProviderSection > clears the interval on unmount so an abandoned login stops calling the engine
+      Tests  1 failed | 28 passed (29)
+   ```
+
+Restored to the fixed file after each and re-verified `Tests  29 passed (29)`.
+
+### Verification
+
+```
+cd apps/desktop && pnpm test ProviderSection
+```
+```
+ ✓ src/components/settings/ProviderSection.test.tsx (29 tests) 305ms
+
+ Test Files  1 passed (1)
+      Tests  29 passed (29)
+```
+
+```
+make test-desktop
+```
+```
+✖ 28 problems (0 errors, 28 warnings)      [same pre-existing `any` warnings]
+ Test Files  61 passed (61)
+      Tests  305 passed (305)
+$ tsc -b && vite build
+✓ 1928 modules transformed.
+✓ built in 1.32s
+```
+
+`go test ./...` not run, per the instructions: no Go changed, and this Mac's
+locked keychain hangs the engine fixtures.

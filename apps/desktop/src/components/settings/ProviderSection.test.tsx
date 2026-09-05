@@ -361,6 +361,92 @@ describe("ProviderSection", () => {
     expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
   });
 
+  it("does not let an abandoned login's late tick fail the retry that replaced it", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    vi.useFakeTimers();
+
+    // Attempt #1. Its first tick's login_status is slow — still in flight
+    // when everything below happens. clearInterval cannot call it back.
+    let settleAbandoned: (s: unknown) => void = () => {};
+    rpc.codexLoginStatus.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settleAbandoned = resolve;
+        }),
+    );
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flush();
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+
+    // The writer abandons that browser tab, switches to Anthropic, and comes
+    // back. The fresh fetch on the way back reports a clean slate.
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+    fireEvent.click(screen.getByTestId("provider-choice-openai-codex"));
+    await flush(8);
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+
+    // Attempt #2: a real retry, whose poll the writer is now waiting on.
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    // Only now does attempt #1's tick resolve, reporting that *it* failed.
+    await act(async () => {
+      settleAbandoned({ logged_in: false, login_failed: true });
+    });
+    await flush();
+
+    // It must not be read as attempt #2 failing...
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+
+    // ...and, because login_failed is terminal, it must not have stopped
+    // attempt #2's own poll on the way past.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flush();
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("polls a retry after a failed attempt exactly like the first one", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flush();
+    expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
+
+    // Second click, no provider switch in between: the poll must run again
+    // and report the retry's own result.
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flush();
+
+    expect(screen.getByTestId("provider-codex-email")).toHaveTextContent("writer@example.com");
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+  });
+
   it("shows an already signed-in Codex account without waiting for a fresh login", async () => {
     rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
     render(<ProviderSection />);
