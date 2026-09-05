@@ -24,7 +24,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 
 - **Write with focus.** Work scene by scene in a quiet editor with your outline always within reach.
 - **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
-- **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
+- **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a recent structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
@@ -99,7 +99,7 @@ external MCP client does, and every call it makes is recorded in the MCP
 activity log, which shows whether the built-in agent or an external client
 made it. A structural change — outline restructuring and the like — gets an
 Undo button on its own line in the agent panel, good for one click while the
-app stays open; those batches are held in memory and do not survive a
+app stays open; only the last eight are held, in memory, and none survive a
 restart. A scene-prose rewrite has no one-click undo yet, but it is not lost:
 Linetta snapshots the scene before every agent write and keeps that version
 indefinitely, so you can put the old text back from the scene's **Previous
@@ -128,9 +128,9 @@ Once connected, an agent can:
 - record what it changed, so you can see it in the activity log.
 
 The writer keeps the last word. Every scene write is snapshotted before it
-lands and every outline restructuring is captured so it can be reversed in one
-click; entity, storyline, beat, fact-card and memory edits are logged but have
-to be reversed with another edit. `read_only` mode omits the writing tools
+lands, and a recent outline restructuring can be reversed in one click — the
+last eight, until the app is restarted; entity, storyline, beat, fact-card and
+memory edits are logged but have to be reversed with another edit. `read_only` mode omits the writing tools
 entirely, and a scene you are part way through editing is never replaced behind
 your back — Linetta tells you the agent touched it and leaves your text alone
 until you choose.
@@ -150,9 +150,11 @@ Windows  %APPDATA%\com.devlikebear.linetta
 
 Important data includes:
 
-- `library.db`: projects, scenes, story data, and version snapshots;
+- `library.db`: projects, scenes, story data, version snapshots, and the retired built-in companion's transcripts;
 - `backups/YYYY-MM-DD/`: daily database backups, kept for 14 days;
-- `companion/`: remembered facts, and transcripts from the retired built-in companion;
+- `<project id>/memory/experiences.jsonl`: facts an agent has been told to remember;
+- `companion/`: the same file for facts remembered before 1.0, which nothing reads
+  any more (see [Moving to Linetta 1.0](docs/migrating-to-1.0.md));
 - `settings.json`: app preferences.
 
 Manual and agent-write snapshots are retained indefinitely. Autosave snapshots are thinned over time, from every save during the first day to daily snapshots after 30 days.
