@@ -8,6 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 )
 
@@ -21,7 +22,7 @@ func (f fakeScope) NodeLabel(_ context.Context, id string) string    { return f.
 
 func TestSystemPrompt_namesTheReplyLanguage(t *testing.T) {
 	for _, lang := range []string{"ko", "en", "ja"} {
-		got := systemPrompt(lang)
+		got := systemPrompt(lang, emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes))
 		if !strings.Contains(got, lang) {
 			t.Errorf("systemPrompt(%q) does not name the language: %s", lang, got)
 		}
@@ -31,7 +32,7 @@ func TestSystemPrompt_namesTheReplyLanguage(t *testing.T) {
 // The brief is fetched with a tool, never pasted in. If it ever appears here,
 // the tool descriptions stop being exercised and start rotting.
 func TestSystemPrompt_tellsTheAgentToReadContextFirst(t *testing.T) {
-	got := systemPrompt("en")
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes))
 	if !strings.Contains(got, "linetta_get_story_context") {
 		t.Error("the prompt must point at the context tool")
 	}
@@ -132,5 +133,68 @@ func TestPriorMessages_mapsRolesForTheModel(t *testing.T) {
 	})
 	if got[0].Role != "user" || got[1].Role != "assistant" {
 		t.Errorf("roles = %q,%q", got[0].Role, got[1].Role)
+	}
+}
+
+func doc(scope agentmemory.Scope, body string) agentmemory.Document {
+	return agentmemory.Document{
+		Scope: scope, Body: body,
+		CharsUsed: len([]rune(body)), CharsBudget: scope.Budget(),
+	}
+}
+
+func emptyDoc(scope agentmemory.Scope) agentmemory.Document {
+	return agentmemory.Document{Scope: scope, CharsBudget: scope.Budget()}
+}
+
+func TestSystemPromptCarriesBothMemories(t *testing.T) {
+	got := systemPrompt("ko",
+		doc(agentmemory.ScopeWriterProfile, "줄표 쓰지 않기"),
+		doc(agentmemory.ScopeWorkNotes, "민준은 3화부터 존댓말"))
+	for _, want := range []string{"줄표 쓰지 않기", "민준은 3화부터 존댓말"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt is missing %q", want)
+		}
+	}
+}
+
+// The capacity line is what lets the agent consolidate deliberately instead of
+// hitting the budget halfway through recording something.
+func TestSystemPromptShowsRemainingCapacity(t *testing.T) {
+	got := systemPrompt("en", doc(agentmemory.ScopeWriterProfile, "abc"), emptyDoc(agentmemory.ScopeWorkNotes))
+	if !strings.Contains(got, "3 / 1400") {
+		t.Errorf("want a used/budget line for the profile; got:\n%s", got)
+	}
+	if !strings.Contains(got, "0 / 2200") {
+		t.Errorf("want the work-notes budget even when empty; got:\n%s", got)
+	}
+}
+
+func TestSystemPromptFramesTheMemories(t *testing.T) {
+	got := systemPrompt("en", doc(agentmemory.ScopeWriterProfile, "anything"), emptyDoc(agentmemory.ScopeWorkNotes))
+	if !strings.Contains(got, "do not change what the tools do") {
+		t.Errorf("the block must be framed; got:\n%s", got)
+	}
+}
+
+func TestSystemPromptWithNoMemoriesKeepsTheExistingInstructions(t *testing.T) {
+	empty := systemPrompt("ko", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes))
+	if !strings.Contains(empty, "linetta_get_story_context") {
+		t.Fatal("the existing instructions must survive")
+	}
+	if !strings.Contains(empty, "linetta_create_checkpoint") {
+		t.Error("the checkpoint instruction must survive")
+	}
+	// A writer who has never recorded anything must still be told the tool
+	// exists — that is how the first memory ever gets written.
+	if !strings.Contains(empty, "linetta_edit_memory") {
+		t.Error("the prompt must name the tool even when both memories are empty")
+	}
+}
+
+func TestSystemPromptStillNamesTheAppLanguage(t *testing.T) {
+	got := systemPrompt("ja", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes))
+	if !strings.Contains(got, `"ja"`) {
+		t.Errorf("the reply-language rule was lost; got:\n%s", got)
 	}
 }
