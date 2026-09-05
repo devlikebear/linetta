@@ -10,12 +10,19 @@
   needs the Codex CLI installed. Tokens are kept at
   `<app data>/codex/auth.json` with owner-only permissions (0600), in the same
   file format the Codex CLI uses for its own login, so the two can share one
-  sign-in.
+  sign-in — except in the Mac App Store build, which is sandboxed and cannot
+  read `~/.codex`, and so needs its own sign-in.
 - The MCP activity log now records whether the built-in agent or an external
-  client made each tool call.
-- MCP itself is unchanged: the built-in agent is a client of Linetta's own MCP
-  server, reaching the same tools external clients use, rather than a second
-  set built for it.
+  client made each tool call. Activity entries and the `mcp.changed`
+  notification both carry a new `source` field for it.
+- The tool surface is unchanged: the built-in agent is a client of Linetta's
+  own MCP server, reaching the same tools external clients use, rather than a
+  second set built for it.
+- The consent text you tick before connecting a provider now spells out what
+  the agent's tools can actually read — any scene in any work, not only the one
+  you have open, plus summaries, the outline, manuscript-wide search, the
+  character, plot and fact cards, remembered facts, and the list of your works.
+  The behaviour did not change; the sentence you agree to now matches it.
 
 ## v1.1.0 - 2026-08-31
 

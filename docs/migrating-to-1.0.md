@@ -31,14 +31,17 @@ refuses to build a request to any provider until that box is ticked. A key
 sitting untouched in your OS credential store does not quietly start being
 used.
 
-If you would still rather have a credential gone than consent to it, the
-removal instructions below are unchanged and still work:
+If you would still rather have a credential gone than consent to it, here is
+where to go and delete it:
 
 | Platform | Where |
 | --- | --- |
 | macOS | Keychain Access → search `linetta` |
 | Windows | Credential Manager → Windows Credentials → `linetta` entries |
-| Linux | there is no secure secret store here, so no provider API key was ever saved to begin with; the only provider connection that works on Linux is signing in with ChatGPT (Codex), which stores its token in `<app data>/codex/auth.json` instead |
+| Linux | there is no secure secret store here, so a key you enter today cannot be saved and only the ChatGPT (Codex) sign-in works, storing its token in `<app data>/codex/auth.json`. **A key you entered before June 2026 is a different matter**: those builds wrote it in plain text into `<app data>/settings.json`, under `providers`, and on Linux nothing has moved or cleared it since. Open that file and delete the `api_key` value yourself if you want it gone |
+
+On Linux `<app data>` is `$XDG_DATA_HOME/com.devlikebear.linetta`, or
+`~/.local/share/com.devlikebear.linetta` when `XDG_DATA_HOME` is unset.
 
 Your provider selection and model choices stay in `settings.json`, and in 1.2
 they mean something again: it is what the built-in agent reads to decide which
