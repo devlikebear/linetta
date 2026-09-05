@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
@@ -39,43 +39,224 @@ const PROVIDER_ORDER: { id: ProviderID; labelKey: MessageKey }[] = [
 const nameKeyFor = (id: ProviderID): MessageKey =>
   PROVIDER_ORDER.find((p) => p.id === id)!.labelKey;
 
+/* ---------------------------------------------------------------------------
+ * The server-derived state, and the one reducer that owns it.
+ *
+ * Everything below this line answers a single question that used to be
+ * answered per-field, differently each time: *which snapshot of server state
+ * is this piece of local state valid against?* A ref guarded the drafts, a
+ * signature compared at render time guarded the test badge, and `list` itself
+ * was written from five call sites with no ordering discipline at all. Each
+ * round of fixes closed one of those and opened another, because the three
+ * were never the same mechanism.
+ *
+ * They are now. `list`, `active`, the drafts, the credential epoch and the
+ * test outcome move together, under one reducer, and every transition ends in
+ * settle() — which reseeds the drafts when the provider they belong to is no
+ * longer the active one, and *discards* a test result whose configuration no
+ * longer matches. Two whole classes of bug stop being representable:
+ *
+ *   - A providers.list response that is older than one already applied cannot
+ *     land, because responses carry the sequence number of the refresh that
+ *     asked for them and the reducer keeps the newest. Two overlapping
+ *     settings.set + refresh pairs can no longer un-tick a box.
+ *   - A test result cannot be orphaned by a refresh landing between the click
+ *     and the render, and cannot be resurrected by leaving a provider and
+ *     coming back, because staleness is decided once — at the moment state
+ *     changes — and a stale result is thrown away rather than hidden.
+ * ------------------------------------------------------------------------ */
+
+/** The three input drafts, tagged with the provider they were seeded from.
+ *
+ *  The tag is what retires them: the writer *moving to another provider*, not
+ *  a providers.list arriving. The two are easy to confuse and are not the
+ *  same — every background reload parses fresh JSON and hands back a new array
+ *  identity, so keying the reseed on the list threw away whatever the writer
+ *  had typed and not yet saved, silently and with no error.
+ *
+ *  `provider` starts null rather than at the active id. The first render
+ *  happens before providers.list has resolved, with `active` still its initial
+ *  "openai-codex" — the engine's default and ActiveProvider()'s fallback, so
+ *  also the value it most often reports back. Claiming the drafts for that
+ *  provider on the empty first pass meant the pass that finally had rows found
+ *  the tag already matching and skipped the seed: the pane told a writer with a
+ *  saved model that no model was configured, and the next blur wrote that
+ *  emptiness back. Rows are what open the gate — see settle(). */
+interface Drafts {
+  provider: ProviderID | null;
+  /** The stored key never comes back from settings.get — only whether one is
+   *  set. So this starts empty and is the only source of what gets saved;
+   *  nothing pre-fills it with a secret. */
+  key: string;
+  baseUrl: string;
+  model: string;
+}
+
+/** providers.test's own result, kept apart from the section-level `error` for
+ *  the same reason as the model list: a failed connection test is information
+ *  about the provider, not a broken pane. `signature` is the configuration the
+ *  writer saw when they clicked — see signatureOf. */
+interface TestOutcome {
+  signature: string;
+  ok: boolean;
+  error: unknown;
+}
+
+interface ServerState {
+  /** The sequence number of the providers.list response currently in `list`.
+   *  A response numbered no higher than this one is a straggler and is
+   *  dropped: `list` only ever moves forward. */
+  applied: number;
+  list: ProviderStatus[];
+  active: ProviderID;
+  /** Bumped only by this pane's own saveKey/clearKey. `configured` only flips
+   *  on a bare set/clear transition — rotating to a different key while a key
+   *  is already stored leaves it true on both sides, and no field on
+   *  ProviderStatus says otherwise, because settings.get returns only
+   *  `api_key_set` and never the key itself. This counter is the honest
+   *  substitute: it moves at the one place a key change is known to have
+   *  happened. It still cannot see a key changed some other way (hand-editing
+   *  the settings file, a second window) while this pane stays mounted; there
+   *  is no observable on ProviderStatus that would close that gap either. */
+  credentialEpoch: number;
+  drafts: Drafts;
+  test: TestOutcome | null;
+}
+
+type ServerAction =
+  | { type: "listed"; seq: number; rows: ProviderStatus[] }
+  | { type: "chose"; id: ProviderID }
+  | { type: "credentialChanged" }
+  | { type: "typed"; field: "key" | "baseUrl" | "model"; value: string }
+  | { type: "testStarted" }
+  | { type: "testSettled"; signature: string; ok: boolean; error: unknown };
+
+const INITIAL_STATE: ServerState = {
+  applied: 0,
+  list: [],
+  active: "openai-codex",
+  credentialEpoch: 0,
+  drafts: { provider: null, key: "", baseUrl: "", model: "" },
+  test: null,
+};
+
+const activeRow = (s: ServerState): ProviderStatus | undefined =>
+  s.list.find((r) => r.id === s.active);
+
+/** Everything a passing test result was earned under, as one string.
+ *
+ *  A green tick left over from Anthropic sitting on the Gemini screen is a
+ *  lie; so is one still reading "Connected" after the writer has unticked
+ *  consent, cleared or rotated the key, pointed the model at one the provider
+ *  does not serve, or — for `openai` — repointed base_url at a different
+ *  server, because the connection it describes can no longer be made (or was
+ *  never made against what the screen now names).
+ *
+ *  This used to be an effect that cleared the result, keyed on the same
+ *  values; the difference matters because that dependency array had to be
+ *  complete and nothing said when it was not. It was extended twice and missed
+ *  `model` both times. A field forgotten here instead shows up in one place,
+ *  next to the values it is supposed to stand beside.
+ *
+ *  base_url and model are read from the *drafts*, not from the row. The drafts
+ *  are what the writer can see, and they are also what the writer's most
+ *  recent blur-save is on its way to store — so a save still in flight when
+ *  the test is clicked does not change this signature when its reload lands,
+ *  and the result the writer asked for is still theirs when it arrives.
+ *  Reading the row instead made the pane's whole first-run gesture — type a
+ *  model, click Test — send a real request to the provider and render nothing,
+ *  swallowing a genuine auth failure along with it.
+ *
+ *  NUL-joined so no value can spell out another one's boundary: a base_url and
+ *  a model cannot collide into the same signature by containing the
+ *  separator. */
+function signatureOf(s: ServerState): string {
+  const row = activeRow(s);
+  return [
+    s.active,
+    String(Boolean(row?.consented)),
+    String(Boolean(row?.configured)),
+    s.drafts.baseUrl.trim(),
+    s.drafts.model.trim(),
+    String(s.credentialEpoch),
+  ].join("\u0000");
+}
+
+/** The end of every transition: reseed drafts that no longer belong to the
+ *  active provider, then throw away a test result the new state has invalidated.
+ *
+ *  Discarded, not hidden. A result merely hidden while the signature differs
+ *  comes back the moment the signature does — leaving a provider and returning,
+ *  or unticking consent and reticking it, resurrected a "Connected" badge that
+ *  no test run stands behind. */
+function settle(s: ServerState): ServerState {
+  let next = s;
+  const row = activeRow(next);
+  if (row && next.drafts.provider !== next.active) {
+    next = {
+      ...next,
+      drafts: {
+        provider: next.active,
+        key: "",
+        baseUrl: row.base_url ?? "",
+        model: row.model ?? "",
+      },
+    };
+  }
+  if (next.test && next.test.signature !== signatureOf(next)) next = { ...next, test: null };
+  return next;
+}
+
+function reduceServerState(s: ServerState, a: ServerAction): ServerState {
+  switch (a.type) {
+    case "listed": {
+      // The whole of NEW-2's fix. Two settings.set + refresh pairs overlap
+      // whenever a background blur-save is still travelling as the writer
+      // clicks something else; without this, whichever providers.list happened
+      // to resolve last won, and a pre-write snapshot could un-tick consent,
+      // flip `configured` false and disable the test button, or revert
+      // base_url and hide a badge that had just been earned.
+      if (a.seq <= s.applied) return s;
+      const chosen = a.rows.find((r) => r.active);
+      return settle({ ...s, applied: a.seq, list: a.rows, active: chosen ? chosen.id : s.active });
+    }
+    case "chose":
+      return settle({ ...s, active: a.id });
+    case "credentialChanged":
+      return settle({ ...s, credentialEpoch: s.credentialEpoch + 1 });
+    case "typed":
+      return settle({ ...s, drafts: { ...s.drafts, [a.field]: a.value } });
+    // A stale result must not sit next to the one replacing it, in either
+    // direction, so the run clears before it starts.
+    case "testStarted":
+      return { ...s, test: null };
+    case "testSettled":
+      return settle({ ...s, test: { signature: a.signature, ok: a.ok, error: a.error } });
+  }
+}
+
 export function ProviderSection() {
   const { t } = useI18n();
-  const [list, setList] = useState<ProviderStatus[]>([]);
-  const [active, setActive] = useState<ProviderID>("openai-codex");
+  const [state, dispatch] = useReducer(reduceServerState, INITIAL_STATE);
+  const { list, active, drafts, test: shownTest } = state;
   // The raw failure is kept and translated at render time: a reason code has
   // no language of its own, and switching language should redraw the message
   // rather than leave a stale sentence on screen.
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [codexStatus, setCodexStatus] = useState<CodexStatus | null>(null);
-  // The stored key never comes back from settings.get — only whether one is
-  // set. So these drafts start empty and are the only source of what gets
-  // saved; nothing pre-fills them with a secret.
-  const [keyDraft, setKeyDraft] = useState("");
-  const [baseUrlDraft, setBaseUrlDraft] = useState("");
-  const [modelDraft, setModelDraft] = useState("");
   // The list is a convenience layered on top of the input, never the input's
   // source of truth: it only exists once a key is stored, and a new model
   // announced today is usable before this list ever hears about it. Its own
-  // failure is kept separate from `error` — see loadModels below.
+  // failure is kept separate from `error` — see loadModels below. It is not
+  // server state in the sense above: nothing in providers.list describes it,
+  // and it is fetched only when the writer asks.
   const [models, setModels] = useState<string[]>([]);
   const [modelsError, setModelsError] = useState<unknown>(null);
-  // providers.test's own result, kept apart from `error` for the same reason
-  // as the model list: a failed connection test is information about the
-  // provider, not a broken pane. It is stored *with the configuration it was
-  // earned under* and shown only while that configuration still stands — see
-  // testSignature below for why that is a field of the result rather than a
-  // dependency array.
-  const [testOutcome, setTestOutcome] = useState<{
-    signature: string;
-    ok: boolean;
-    error: unknown;
-  } | null>(null);
-  // Bumped only by this pane's own saveKey/clearKey, below — see the big
-  // comment on testSignature for why a local counter stands in for a key
-  // value this component is never given.
-  const [credentialEpoch, setCredentialEpoch] = useState(0);
+  // The number of the newest providers.list issued. A ref rather than reducer
+  // state because it is not rendered and because refresh() has to read the
+  // number it just claimed, synchronously, before it awaits.
+  const listSeqRef = useRef(0);
   // The poll handle, so a second click cannot start a second loop and so the
   // interval dies with the component. A login the writer abandons must not
   // leave a timer calling the engine forever.
@@ -104,11 +285,14 @@ export function ProviderSection() {
 
   useEffect(() => stopPolling, [stopPolling]);
 
+  // The one way `list` ever moves. Every caller goes through here, and the
+  // number is claimed before the await, so responses are ordered by when they
+  // were *asked for* rather than by when the socket happened to answer.
   const refresh = useCallback(async () => {
+    listSeqRef.current += 1;
+    const seq = listSeqRef.current;
     const rows = await providersApi.list();
-    setList(rows);
-    const chosen = rows.find((r) => r.active);
-    if (chosen) setActive(chosen.id);
+    dispatch({ type: "listed", seq, rows });
   }, []);
 
   useEffect(() => {
@@ -154,106 +338,38 @@ export function ProviderSection() {
   const choose = (id: ProviderID) =>
     guard(async () => {
       await settingsApi.set({ provider: id });
-      setActive(id);
+      // The drafts follow inside the reducer: `chose` ends in settle(), which
+      // reseeds them from the new provider's row. Carrying an openai base URL
+      // into an anthropic patch is not a cosmetic bug — the engine rejects
+      // base_url on any id but openai, and settings.set is all-or-nothing, so
+      // the whole patch, including the key the writer just typed, is refused.
+      dispatch({ type: "chose", id });
       await refresh();
     });
 
-  // Every draft is scoped to the provider it belongs to. Carrying an openai
-  // base URL into an anthropic patch is not a cosmetic bug: the engine
-  // rejects base_url on any id but openai, and settings.set is all-or-
-  // nothing, so the whole patch — including the key the writer just typed —
-  // would be refused.
-  //
-  // What retires a draft is the writer *moving to another provider* — not a
-  // providers.list arriving. The two are easy to confuse and are not the
-  // same: refresh() parses fresh JSON, so every background reload (a save's
-  // own reload, an abandoned Codex login's poll tick) hands back a new array
-  // identity. Keying this effect on that identity threw away whatever the
-  // writer had typed and not yet saved, silently and with no error. So the
-  // provider the drafts belong to is tracked explicitly.
-  //
-  // The ref alone is not the whole gate. The first render happens before
-  // providers.list has resolved, with `list` still empty and `active` still
-  // its initial "openai-codex" — the engine's default and ActiveProvider()'s
-  // fallback, so also the value it most often reports back. Marking the
-  // drafts as belonging to that provider on the empty first pass meant the
-  // second pass, the one that finally has rows, found the ref already
-  // matching and returned: the drafts were never seeded at all. The pane told
-  // a writer with a saved model that no model was configured, and the next
-  // blur wrote that emptiness back. So the rows are what open this gate — no
-  // row for `active`, nothing to seed from, and the ref stays unclaimed.
-  const draftProvider = useRef<ProviderID | null>(null);
+  // A model list belongs to the provider it was fetched for. Carrying
+  // Anthropic's list into an OpenAI-compatible screen would offer models that
+  // provider does not serve, so a provider change drops it — the writer asks
+  // for it again with the refresh button. Keyed on `active` alone: a
+  // background providers.list must not empty a datalist the writer just
+  // fetched.
   useEffect(() => {
-    const row = list.find((r) => r.id === active);
-    if (!row) return;
-    if (draftProvider.current === active) return;
-    draftProvider.current = active;
-    setKeyDraft("");
-    setBaseUrlDraft(row.base_url ?? "");
-    setModelDraft(row.model ?? "");
-    // A model list belongs to the provider it was fetched for. Carrying
-    // Anthropic's list into an OpenAI-compatible screen would offer models
-    // that provider does not serve, so a provider change drops it — the
-    // writer asks for it again with the refresh button.
     setModels([]);
     setModelsError(null);
-  }, [active, list]);
+  }, [active]);
 
-  // A passing test result belongs to the provider it was run against *and*
-  // to the destination, credentials, model, and consent it was run under. A
-  // green tick left over from Anthropic sitting on the Gemini screen is a
-  // lie; so is one still reading "Connected" after the writer has unticked
-  // consent, cleared the key, pointed the model at one the provider does not
-  // serve, or — for `openai` — repointed base_url at a different server,
-  // because the connection it describes can no longer be made (or was never
-  // made against what the screen now names).
-  //
-  // So the result carries a signature of everything it was earned under and
-  // is rendered only while that signature still matches what is on screen.
-  // This used to be an effect that cleared the result, keyed on the same
-  // values; the difference matters because that dependency array had to be
-  // complete and nothing said when it was not. It was extended twice and
-  // missed `model` both times — a badge earned against gpt-5 sat there
-  // unmoved while the writer typed a model name that does not exist, which
-  // is the one screen in the app that claims to know whether the agent will
-  // work. A field forgotten here instead shows up in one place, next to the
-  // values it is supposed to stand beside.
-  //
-  // These are values, never `list` itself: refresh() hands back a fresh
-  // array on every background reload (a model save, an abandoned Codex
-  // login's poll tick), and comparing identities would make a passing tick
-  // vanish for no reason the writer can see. A value only changes when the
-  // fact it encodes changes.
-  //
-  // `base_url` and `model` are on ProviderStatus, so they can be read
-  // directly. The API key cannot be: settings.get returns only `api_key_set`
-  // (surfaced here as `configured`), never the key itself, so there is no key
-  // *value* to compare. `configured` only flips on a bare set/clear
-  // transition — rotating to a different key while a key is already stored
-  // leaves it true on both sides, and no field on ProviderStatus says
-  // otherwise. `credentialEpoch` is the honest substitute: a local counter
-  // bumped only by this pane's own saveKey/clearKey, i.e. the one place a key
-  // change is known to have happened, rather than a proxy read off server
-  // state that would silently miss the same case `configured` does. It still
-  // cannot see a key changed some other way (hand-editing the settings file,
-  // a second window) while this pane stays mounted — there is no observable
-  // on ProviderStatus that would close that gap either.
+  // What the rest of the pane reads off the active row. `baseUrl` and `model`
+  // are the *stored* values, used for the blur no-op guards below and for the
+  // consent sentence; what the writer sees is drafts.baseUrl / drafts.model.
   const consented = Boolean(current?.consented);
   const configured = Boolean(current?.configured);
   const baseUrl = current?.base_url ?? "";
   const model = current?.model ?? "";
-  // NUL-joined so no value can spell out another one's boundary: a base_url
-  // and a model cannot collide into the same signature by containing the
-  // separator.
-  const testSignature = [
-    active,
-    String(consented),
-    String(configured),
-    baseUrl,
-    model,
-    String(credentialEpoch),
-  ].join("\u0000");
-  const shownTest = testOutcome?.signature === testSignature ? testOutcome : null;
+  // The configuration on screen right now, which runTest stamps onto the
+  // result it stores. The same function the reducer settles against, so the
+  // badge is shown exactly while the two agree — there is no second definition
+  // to fall out of step with the first.
+  const testSignature = signatureOf(state);
 
   // codex.login_status is the only thing that knows whether an account is
   // signed in — providers.list says "configured", not who. Asking for it only
@@ -367,13 +483,13 @@ export function ProviderSection() {
 
   const saveKey = () =>
     guard(async () => {
-      await settingsApi.set({ providers: { [active]: { api_key: keyDraft.trim() } } });
-      setKeyDraft("");
+      await settingsApi.set({ providers: { [active]: { api_key: drafts.key.trim() } } });
+      dispatch({ type: "typed", field: "key", value: "" });
       forgetModels();
       // A rotated key can leave `configured` true on both sides of the
       // write, so it is this call itself — not a value read back off
       // providers.list — that tells the test signature a credential changed.
-      setCredentialEpoch((n) => n + 1);
+      dispatch({ type: "credentialChanged" });
       await refresh();
     });
 
@@ -383,14 +499,14 @@ export function ProviderSection() {
   const clearKey = () =>
     guard(async () => {
       await settingsApi.set({ providers: { [active]: { api_key: "" } } });
-      setKeyDraft("");
+      dispatch({ type: "typed", field: "key", value: "" });
       forgetModels();
-      setCredentialEpoch((n) => n + 1);
+      dispatch({ type: "credentialChanged" });
       await refresh();
     });
 
   const saveBaseUrl = async () => {
-    const next = baseUrlDraft.trim();
+    const next = drafts.baseUrl.trim();
     // A blur that changed nothing is not a save. Without this, tabbing
     // through the field costs a full settings.set + providers.list round
     // trip — and that reload is what used to eat a half-typed API key.
@@ -426,7 +542,7 @@ export function ProviderSection() {
   // therefore a real write, which is why the no-op check below compares
   // against what is *stored* rather than testing `next` for emptiness.
   const saveModel = async () => {
-    const next = modelDraft.trim();
+    const next = drafts.model.trim();
     // Same as the base URL: a blur that changed nothing is not a save. Tab
     // order runs through this field on the way to the consent box, so
     // without this every keyboard user reaching consent spent a settings.set
@@ -473,20 +589,25 @@ export function ProviderSection() {
   // is no way to "just check the key works" ahead of consent.
   const runTest = () =>
     guard(async () => {
-      // The signature as it stands when the writer clicks. If anything it
-      // covers changes while the call is in flight, the result that comes
-      // back describes a configuration that is no longer on screen — and the
-      // render below will not show it, which is exactly right.
+      // The configuration the writer saw when they clicked. It is stored with
+      // the result and re-checked by settle() on every later transition: if
+      // anything it covers has moved by the time the result lands, the result
+      // describes a configuration that is no longer on screen and is thrown
+      // away rather than rendered.
+      //
+      // What it covers is deliberately the *drafts*, not the row — so the
+      // blur-save the writer's own click interrupted, whose reload lands
+      // somewhere in here, does not orphan the result they asked for.
       const signature = testSignature;
-      setTestOutcome(null);
+      dispatch({ type: "testStarted" });
       try {
         await providersApi.test(active);
-        setTestOutcome({ signature, ok: true, error: null });
+        dispatch({ type: "testSettled", signature, ok: true, error: null });
       } catch (e) {
         // Same reasoning as the model list: a failed test is information
         // about the provider, not a broken pane, so it lands on its own line
         // rather than in `error`.
-        setTestOutcome({ signature, ok: false, error: e });
+        dispatch({ type: "testSettled", signature, ok: false, error: e });
       }
     });
 
@@ -572,19 +693,19 @@ export function ProviderSection() {
             // deliberately not "password": autofill heuristics read it.
             name="provider-api-key"
             autoComplete="off"
-            value={keyDraft}
+            value={drafts.key}
             placeholder={
               current?.configured
                 ? t("settings.providers.apiKey.stored")
                 : t("settings.providers.apiKey.placeholder")
             }
             disabled={busy}
-            onChange={(e) => setKeyDraft(e.target.value)}
+            onChange={(e) => dispatch({ type: "typed", field: "key", value: e.target.value })}
             data-testid="provider-key-input"
           />
           <button
             type="button"
-            disabled={busy || !keyDraft.trim()}
+            disabled={busy || !drafts.key.trim()}
             onClick={() => void saveKey()}
             data-testid="provider-key-save"
           >
@@ -609,10 +730,12 @@ export function ProviderSection() {
           <input
             id="provider-base-url-input"
             type="url"
-            value={baseUrlDraft}
+            value={drafts.baseUrl}
             placeholder="https://openrouter.ai/api/v1"
             disabled={busy}
-            onChange={(e) => setBaseUrlDraft(e.target.value)}
+            onChange={(e) =>
+              dispatch({ type: "typed", field: "baseUrl", value: e.target.value })
+            }
             onBlur={() => void saveBaseUrl()}
             data-testid="provider-base-url-input"
           />
@@ -625,10 +748,10 @@ export function ProviderSection() {
         <input
           id="provider-model-input"
           list="provider-model-list"
-          value={modelDraft}
+          value={drafts.model}
           placeholder={t("settings.providers.model.default")}
           disabled={busy}
-          onChange={(e) => setModelDraft(e.target.value)}
+          onChange={(e) => dispatch({ type: "typed", field: "model", value: e.target.value })}
           onBlur={() => void saveModel()}
           data-testid="provider-model-input"
         />

@@ -1225,6 +1225,56 @@ describe("ProviderSection", () => {
       await waitFor(() => expect(screen.queryByTestId("provider-test-ok")).toBeNull());
     });
 
+    it("does not bring the passing result back when the writer returns to the provider", async () => {
+      // The other half of the five "clears a passing result when X" tests
+      // above, and the half none of them checked. Hiding a result while its
+      // signature differs is not the same as discarding it: leave Anthropic
+      // and come back and every value in the signature is identical again, so
+      // a merely-hidden badge reappears — a "Connected" with no test run
+      // behind it, on the one screen in the app that claims to know whether
+      // the agent will work. Stale means gone, not gone-for-now.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("provider-choice-gemini-native"));
+      await screen.findByTestId("provider-key-input");
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+
+      await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+      await flush();
+
+      // Nothing ran a second test, so nothing may claim one passed.
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("does not bring the passing result back when consent is reticked", async () => {
+      // The same resurrection through the consent box rather than the
+      // provider buttons: untick, retick, and the signature is byte-for-byte
+      // what it was when the badge was earned.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      persistWrites();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("provider-consent"));
+      await waitFor(() => expect(screen.queryByTestId("provider-test-ok")).toBeNull());
+
+      await userEvent.click(screen.getByTestId("provider-consent"));
+      await waitFor(() => expect(screen.getByTestId("provider-consent")).toBeChecked());
+      await flush();
+
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
     it("clears a passing test result when the key is cleared", async () => {
       // The other half of what a passing test result depends on. A result
       // that outlives the credential it was obtained with is the same lie.
@@ -1427,6 +1477,114 @@ describe("ProviderSection", () => {
 
       expect(rpc.providersTest).toHaveBeenCalledTimes(1);
       expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("renders the result of the test click that caused a model blur-save", async () => {
+      // persistWrites() is the whole point of this fixture, and its absence is
+      // what let the bug through the test above: without it the blur-save's
+      // reload never moves `model` on the row, so the only thing that test can
+      // see is the click landing — not the outcome becoming visible.
+      //
+      // With it, the reload lands *between* the click and the render, and the
+      // row's model changes underneath the result. A badge validated against
+      // the row rather than against what the writer typed was then orphaned:
+      // providers.test fired, a real request reached the provider, and the
+      // screen showed nothing. The pane's primary first-run gesture — type a
+      // model, click Test — produced no visible result, and recovering took a
+      // second click.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      persistWrites();
+      render(<ProviderSection />);
+
+      const model = await screen.findByTestId("provider-model-input");
+      fireEvent.change(model, { target: { value: "claude-x" } });
+      fireEvent.focusOut(model);
+      fireEvent.click(screen.getByTestId("provider-test"));
+      await flush(8);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { model: "claude-x" } },
+        }),
+      );
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("does not swallow an auth failure from the test click that caused a blur-save", async () => {
+      // The same gate covered the error branch, so the sequence above also ate
+      // a genuine provider_auth_failed — the writer learns nothing at all from
+      // a request that did reach the provider and was refused.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      persistWrites();
+      rpc.providersTest.mockImplementation(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_auth_failed" } })),
+      );
+      render(<ProviderSection />);
+
+      const model = await screen.findByTestId("provider-model-input");
+      fireEvent.change(model, { target: { value: "claude-x" } });
+      fireEvent.focusOut(model);
+      fireEvent.click(screen.getByTestId("provider-test"));
+      await flush(8);
+
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("provider-test-error").textContent).toBe(
+        "errors.providerAuthFailed",
+      );
+    });
+
+    it("discards a blur-save's reload that resolves after a later write's", async () => {
+      // A blur-save deliberately does not raise `busy` — that is what lets the
+      // click which caused the blur land. The cost is that two settings.set +
+      // providers.list pairs are in flight at once, and without an ordering
+      // rule whichever list resolved last simply won. A reload carrying a
+      // pre-write snapshot could then un-tick consent the writer had just
+      // watched take, flip `configured` false and disable the test button, or
+      // revert base_url and hide a badge earned a moment earlier.
+      activeId = "openai";
+      rowExtras = { openai: { configured: true } };
+      persistWrites();
+
+      // The blur-save's own reload (the second providers.list of the test) is
+      // held open. Its rows are snapshotted at call time, the way a real
+      // response is — so it carries the world as it stood *before* consent.
+      let releaseStale: () => void = () => {};
+      let calls = 0;
+      rpc.providersList.mockImplementation(() => {
+        calls += 1;
+        const snapshot = rows(activeId, rowExtras);
+        if (calls === 2) {
+          return new Promise((resolve) => {
+            releaseStale = () => resolve(snapshot);
+          });
+        }
+        return Promise.resolve(snapshot);
+      });
+
+      render(<ProviderSection />);
+
+      const baseUrl = await screen.findByTestId("provider-base-url-input");
+      fireEvent.change(baseUrl, { target: { value: "https://ollama.local/v1" } });
+      fireEvent.focusOut(baseUrl);
+      await flush();
+      expect(rpc.providersList).toHaveBeenCalledTimes(2);
+
+      // The writer goes straight on to the consent box, as the tab order
+      // invites. Its write and its reload both complete while the blur-save's
+      // reload is still travelling.
+      fireEvent.click(screen.getByTestId("provider-consent"));
+      await waitFor(() => expect(screen.getByTestId("provider-consent")).toBeChecked());
+
+      await act(async () => {
+        releaseStale();
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(screen.getByTestId("provider-consent")).toBeChecked();
     });
 
     it("does not swallow the consent click that caused a base URL blur-save", async () => {
