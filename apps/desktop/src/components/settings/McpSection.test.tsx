@@ -307,4 +307,27 @@ describe("McpSection", () => {
     // The port field stays editable so the fix is one keystroke away.
     expect(screen.getByLabelText("settings.mcp.port")).not.toBeDisabled();
   });
+
+  it("labels each activity row with who called the tool", async () => {
+    rpc.status.mockResolvedValue({ running: true, mode: "full", port: 7391, token_set: true });
+    rpc.settingsGet.mockResolvedValue({ mcp_mode: "full", mcp_port: 7391, mcp_consent_version: 1 });
+    rpc.activity.mockResolvedValue([
+      { id: "a1", at: 1, tool: "linetta_write_scene", ok: true, source: "agent", run_id: "r1" },
+      { id: "e1", at: 2, tool: "linetta_read_scene", ok: true, source: "external" },
+      // A row written before the source column existed.
+      { id: "old", at: 3, tool: "linetta_read_scene", ok: true },
+    ]);
+    render(<McpSection bridgePath="/bridge" />);
+
+    expect(await screen.findByTestId("mcp-activity-source-a1")).toHaveTextContent(
+      "settings.mcp.activity.sourceAgent",
+    );
+    expect(screen.getByTestId("mcp-activity-source-e1")).toHaveTextContent(
+      "settings.mcp.activity.sourceExternal",
+    );
+    // An unstamped legacy row must not read as the built-in agent.
+    expect(screen.getByTestId("mcp-activity-source-old")).toHaveTextContent(
+      "settings.mcp.activity.sourceExternal",
+    );
+  });
 });

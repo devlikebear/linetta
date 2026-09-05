@@ -1,0 +1,1652 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const rpc = vi.hoisted(() => ({
+  providersList: vi.fn(),
+  providersListModels: vi.fn(),
+  providersTest: vi.fn(),
+  settingsSet: vi.fn(),
+  codexLoginStart: vi.fn(),
+  codexLoginStatus: vi.fn(),
+  codexLogout: vi.fn(),
+  openExternalUrl: vi.fn(),
+}));
+
+vi.mock("../../lib/rpc", () => ({
+  providers: {
+    list: rpc.providersList,
+    listModels: rpc.providersListModels,
+    test: rpc.providersTest,
+  },
+  settings: { set: rpc.settingsSet },
+  codex: {
+    loginStart: rpc.codexLoginStart,
+    loginStatus: rpc.codexLoginStatus,
+    logout: rpc.codexLogout,
+  },
+  openExternalUrl: rpc.openExternalUrl,
+}));
+
+vi.mock("../../lib/i18n", () => ({
+  // The keys are the contract under test, not the prose, so echo them back.
+  //
+  // Interpolation is echoed as `name=value`, not as the bare value: a mock
+  // that joined values alone cannot tell `{ provider: X }` from `{ name: X }`,
+  // so renaming the component's interpolation key out of step with the
+  // catalogue rendered a literal `{provider}` on screen with the whole suite
+  // still green. This pins the component's half of that contract; the
+  // catalogue's half is pinned against the real `translate` in
+  // "substitutes the destination into the real consent sentence" below.
+  useI18n: () => ({
+    t: (key: string, vars?: Record<string, string>) =>
+      vars
+        ? `${key}:${Object.entries(vars)
+            .map(([name, value]) => `${name}=${value}`)
+            .join(",")}`
+        : key,
+  }),
+}));
+
+import { ProviderSection } from "./ProviderSection";
+
+const PROVIDER_IDS = ["openai-codex", "anthropic", "gemini-native", "openai"] as const;
+
+/** The four rows providers.list returns, with `active` marked and per-id
+ *  overrides folded in. Called fresh on every RPC — see the note in
+ *  beforeEach on why that matters. */
+function rows(active: string, extras: Record<string, Record<string, unknown>> = {}) {
+  return PROVIDER_IDS.map((id) => ({
+    id,
+    auth: id === "openai-codex" ? "oauth" : "api_key",
+    active: id === active,
+    configured: false,
+    consented: false,
+    ...extras[id],
+  }));
+}
+
+/** Let React settle the promises a click just started. Deliberately not
+ *  `findBy*`: @testing-library/dom's fake-timer detection looks for a `jest`
+ *  global that vitest's `globals: true` never defines, so waitFor takes its
+ *  real-timer branch while the timers it needs are faked and unadvanced. */
+async function flush(times = 4) {
+  await act(async () => {
+    for (let i = 0; i < times; i += 1) await Promise.resolve();
+  });
+}
+
+/** Advance faked timers by `ms` and let the resulting work settle.
+ *
+ *  The Codex poll's interval is 1500ms, so that is the default: one tick.
+ *  Both halves matter — advancing without flushing fires the interval but
+ *  leaves its promise unresolved, and flushing without advancing never fires
+ *  it at all. Wrapping the pair lets a timer test say "one more tick" instead
+ *  of restating the mechanism eighteen times. */
+async function tick(ms = 1500) {
+  await advance(ms);
+  await flush();
+}
+
+/** `tick` without the trailing flush, for tests that assert on exactly the
+ *  state the tick produced. Kept separate rather than folded in because a
+ *  flush here would let a later queued effect run before the assertion, and
+ *  several call-count assertions below are exact. */
+async function advance(ms = 1500) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+/** Click "Sign in with ChatGPT" with the poll's timers faked.
+ *
+ *  The order is the point: the timers must be faked *before* the click, or
+ *  the interval the click starts is a real one and no `advance` can reach it.
+ *  Faking them here rather than in `beforeEach` is deliberate too — a
+ *  `findBy*` hangs under faked timers, so each test does its first find on
+ *  real ones. */
+async function beginLogin() {
+  vi.useFakeTimers();
+  fireEvent.click(screen.getByTestId("provider-codex-login"));
+  await flush();
+}
+
+describe("ProviderSection", () => {
+  // Which provider the engine currently considers active, and any extra
+  // fields on a given row. Tests set these before render.
+  let activeId: string;
+  let rowExtras: Record<string, Record<string, unknown>>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    activeId = "openai-codex";
+    rowExtras = {};
+    // The engine's bookkeeping in miniature. Two things matter here:
+    // settings.set({provider}) moves the active row, so a test can switch
+    // providers and back; and every providers.list resolves a *fresh* array,
+    // the way a real RPC that parses new JSON does. A mock that hands back
+    // one shared reference makes React bail out of setList, which silently
+    // hides every bug in an effect keyed on the list.
+    rpc.providersList.mockImplementation(() => Promise.resolve(rows(activeId, rowExtras)));
+    rpc.providersListModels.mockImplementation(() => Promise.resolve({ models: [] }));
+    rpc.providersTest.mockImplementation(() => Promise.resolve({ ok: true }));
+    rpc.settingsSet.mockImplementation((patch: { provider?: string }) => {
+      if (patch.provider) activeId = patch.provider;
+      return Promise.resolve({});
+    });
+    rpc.codexLoginStart.mockResolvedValue({ auth_url: "https://chatgpt.com/auth/start" });
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false });
+    rpc.codexLogout.mockResolvedValue({ ok: true });
+    rpc.openExternalUrl.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    // Restores the Date.now spy the consent test installs, so a mocked
+    // "now" cannot leak into an unrelated test elsewhere in this file.
+    vi.restoreAllMocks();
+  });
+
+  it("renders the four providers and marks the active one", async () => {
+    render(<ProviderSection />);
+
+    const codex = await screen.findByTestId("provider-choice-openai-codex");
+    expect(codex).toHaveAttribute("aria-pressed", "true");
+
+    for (const id of ["anthropic", "gemini-native", "openai"]) {
+      const button = screen.getByTestId(`provider-choice-${id}`);
+      expect(button).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
+  it("saves the chosen provider and does not keep it local", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-choice-anthropic");
+
+    await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+
+    await waitFor(() => expect(rpc.settingsSet).toHaveBeenCalledWith({ provider: "anthropic" }));
+  });
+
+  it("shows configured and consent state for the active provider", async () => {
+    rowExtras = { "openai-codex": { configured: true, consented: true } };
+    render(<ProviderSection />);
+
+    const state = await screen.findByTestId("provider-state");
+    expect(state.textContent).toContain("settings.providers.state.configured");
+    expect(state.textContent).toContain("settings.providers.state.consented");
+  });
+
+  it("shows not-configured and not-consented state for a fresh provider", async () => {
+    // Every existing test that reaches provider-state exercises the
+    // true/true row from rows()'s defaults being overridden. Nothing pinned
+    // the false/false branches, which is exactly the first-run state every
+    // new writer sees — a hardcoded happy-path string would pass everything
+    // else and be wrong here.
+    render(<ProviderSection />);
+
+    const state = await screen.findByTestId("provider-state");
+    expect(state.textContent).toContain("settings.providers.state.notConfigured");
+    expect(state.textContent).toContain("settings.providers.state.notConsented");
+  });
+
+  it("renders a reason code as a translated message", async () => {
+    rpc.providersList.mockRejectedValue(
+      Object.assign(new Error("x"), {
+        data: { reason: "provider_not_configured" },
+      }),
+    );
+    render(<ProviderSection />);
+
+    const error = await screen.findByTestId("provider-error");
+    expect(error.textContent).toBe("errors.providerNotConfigured");
+  });
+
+  it("never puts a stored key back into the input", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-key-input")) as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe("settings.providers.apiKey.stored");
+  });
+
+  it("shows the placeholder for an unconfigured provider", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-choice-openai-codex");
+
+    await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    const input = (await screen.findByTestId("provider-key-input")) as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(input.placeholder).toBe("settings.providers.apiKey.placeholder");
+  });
+
+  it("disables save until a key is typed, and saves the trimmed draft", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const input = await screen.findByTestId("provider-key-input");
+    const save = screen.getByTestId("provider-key-save");
+    expect(save).toBeDisabled();
+
+    await userEvent.type(input, "  sk-live-abc  ");
+    expect(save).toBeEnabled();
+
+    await userEvent.click(save);
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { anthropic: { api_key: "sk-live-abc" } },
+      }),
+    );
+    expect((input as HTMLInputElement).value).toBe("");
+  });
+
+  it("clears a key by sending an empty string", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    render(<ProviderSection />);
+
+    await userEvent.click(await screen.findByTestId("provider-key-clear"));
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { anthropic: { api_key: "" } },
+      }),
+    );
+  });
+
+  it("keeps a password manager out of the API key field", async () => {
+    // A password input inside a webview invites the OS or an embedded
+    // manager to offer to save it. Nothing leaks either way, but a provider
+    // key ending up in a password vault is a second copy of a secret the
+    // writer meant to keep in one place.
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const input = await screen.findByTestId("provider-key-input");
+    expect(input).toHaveAttribute("autocomplete", "off");
+    expect(input).toHaveAttribute("name", "provider-api-key");
+  });
+
+  it("offers no clear button for a provider with no stored key", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-key-input");
+    expect(screen.queryByTestId("provider-key-clear")).toBeNull();
+  });
+
+  it("offers base URL only for the openai-compatible provider", async () => {
+    render(<ProviderSection />);
+
+    await screen.findByTestId("provider-choice-openai");
+    expect(screen.queryByTestId("provider-base-url")).toBeNull();
+
+    await userEvent.click(screen.getByTestId("provider-choice-openai"));
+    expect(await screen.findByTestId("provider-base-url")).toBeInTheDocument();
+  });
+
+  it("never lets an openai base URL ride into another provider's key patch", async () => {
+    activeId = "openai";
+    rowExtras = { openai: { base_url: "https://openrouter.ai/api/v1" } };
+    render(<ProviderSection />);
+
+    const baseUrlInput = (await screen.findByTestId(
+      "provider-base-url-input",
+    )) as HTMLInputElement;
+    expect(baseUrlInput.value).toBe("https://openrouter.ai/api/v1");
+
+    await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    const keyInput = await screen.findByTestId("provider-key-input");
+    expect(screen.queryByTestId("provider-base-url")).toBeNull();
+
+    await userEvent.type(keyInput, "sk-live-xyz");
+    await userEvent.click(screen.getByTestId("provider-key-save"));
+
+    // toHaveBeenLastCalledWith is an exact shape match: no base_url key at
+    // all, not even an undefined one. settings.set is all-or-nothing and the
+    // engine rejects base_url on any id but openai.
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenLastCalledWith({
+        providers: { anthropic: { api_key: "sk-live-xyz" } },
+      }),
+    );
+  });
+
+  it("drops an unsaved base URL draft when the writer changes provider", async () => {
+    activeId = "openai";
+    render(<ProviderSection />);
+
+    const baseUrlInput = (await screen.findByTestId(
+      "provider-base-url-input",
+    )) as HTMLInputElement;
+    fireEvent.change(baseUrlInput, { target: { value: "https://typed.example/v1" } });
+    expect(baseUrlInput.value).toBe("https://typed.example/v1");
+
+    await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await screen.findByTestId("provider-key-input");
+
+    await userEvent.click(screen.getByTestId("provider-choice-openai"));
+    const back = (await screen.findByTestId("provider-base-url-input")) as HTMLInputElement;
+    expect(back.value).toBe("");
+  });
+
+  it("keeps an unsaved key draft through a background providers.list reload", async () => {
+    activeId = "openai";
+    rowExtras = { openai: { base_url: "https://openrouter.ai/api/v1" } };
+    render(<ProviderSection />);
+
+    const keyInput = (await screen.findByTestId("provider-key-input")) as HTMLInputElement;
+    fireEvent.change(keyInput, { target: { value: "sk-live-typed" } });
+
+    // Tab on to the base URL and edit it: the blur saves, and the save
+    // reloads providers.list. That reload must not touch the key draft.
+    const baseUrl = screen.getByTestId("provider-base-url-input");
+    fireEvent.change(baseUrl, { target: { value: "https://ollama.local/v1" } });
+    fireEvent.focusOut(baseUrl);
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { openai: { base_url: "https://ollama.local/v1" } },
+      }),
+    );
+
+    expect((screen.getByTestId("provider-key-input") as HTMLInputElement).value).toBe(
+      "sk-live-typed",
+    );
+    await waitFor(() => expect(screen.getByTestId("provider-key-save")).toBeEnabled());
+
+    await userEvent.click(screen.getByTestId("provider-key-save"));
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenLastCalledWith({
+        providers: { openai: { api_key: "sk-live-typed" } },
+      }),
+    );
+  });
+
+  it("does not save the base URL on a blur that changed nothing", async () => {
+    activeId = "openai";
+    rowExtras = { openai: { base_url: "https://openrouter.ai/api/v1" } };
+    render(<ProviderSection />);
+
+    const baseUrl = await screen.findByTestId("provider-base-url-input");
+    fireEvent.focus(baseUrl);
+    fireEvent.focusOut(baseUrl);
+
+    await flush();
+    expect(rpc.settingsSet).not.toHaveBeenCalled();
+    expect(rpc.providersList).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the model refresh button until a credential is stored", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const refreshButton = await screen.findByTestId("provider-model-refresh");
+    expect(refreshButton).toBeDisabled();
+  });
+
+  it("enables the model refresh button once a credential is stored", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    render(<ProviderSection />);
+
+    const refreshButton = await screen.findByTestId("provider-model-refresh");
+    expect(refreshButton).toBeEnabled();
+  });
+
+  it("populates the model datalist on refresh", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    // Fresh array every call — see the note in beforeEach on why a shared
+    // literal would hide bugs in an effect keyed on this list's identity.
+    rpc.providersListModels.mockImplementation(() =>
+      Promise.resolve({ models: ["claude-opus", "claude-haiku"] }),
+    );
+    render(<ProviderSection />);
+
+    await userEvent.click(await screen.findByTestId("provider-model-refresh"));
+
+    await waitFor(() => expect(rpc.providersListModels).toHaveBeenCalledWith("anthropic"));
+    const datalist = document.getElementById("provider-model-list");
+    expect(datalist?.querySelectorAll("option")).toHaveLength(2);
+  });
+
+  it("drops the model list when the credential behind it is cleared", async () => {
+    // The list was fetched with a key. Once that key is gone there is no
+    // credential behind the names still sitting in the datalist, and after a
+    // rotation they may belong to a different account entirely. One click of
+    // the refresh button gets them back — when there is a key to get them
+    // with.
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    rpc.providersListModels.mockImplementation(() =>
+      Promise.resolve({ models: ["claude-opus", "claude-haiku"] }),
+    );
+    render(<ProviderSection />);
+
+    await userEvent.click(await screen.findByTestId("provider-model-refresh"));
+    await waitFor(() =>
+      expect(document.getElementById("provider-model-list")?.querySelectorAll("option")).toHaveLength(2),
+    );
+
+    await userEvent.click(screen.getByTestId("provider-key-clear"));
+
+    await waitFor(() =>
+      expect(document.getElementById("provider-model-list")?.querySelectorAll("option")).toHaveLength(0),
+    );
+  });
+
+  it("keeps the model input usable when the list fails to load", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-model-refresh");
+
+    // A model list is a convenience, not the control — its failure must land
+    // on its own line and never in `error`, which drives the section-level
+    // alert. Otherwise a writer whose network hiccuped cannot type a model
+    // name they already know.
+    rpc.providersListModels.mockImplementation(() =>
+      Promise.reject(
+        Object.assign(new Error("x"), { data: { reason: "provider_unreachable" } }),
+      ),
+    );
+
+    await userEvent.click(screen.getByTestId("provider-model-refresh"));
+
+    const modelError = await screen.findByTestId("provider-model-error");
+    expect(modelError.textContent).toBe("errors.providerUnreachable");
+    expect(screen.queryByTestId("provider-error")).toBeNull();
+
+    const input = screen.getByTestId("provider-model-input") as HTMLInputElement;
+    expect(input).toBeEnabled();
+    await userEvent.type(input, "gpt-5-custom");
+    expect(input.value).toBe("gpt-5-custom");
+  });
+
+  /** Render `id` with `model` already stored and hand back the model input,
+   *  seeded. The wait matters: the drafts are filled from the row after the
+   *  first providers.list resolves, so a test that types before that lands is
+   *  racing its own fixture. */
+  async function modelInput(id: string, model: string) {
+    activeId = id;
+    rowExtras = { [id]: { model } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe(model));
+    return input;
+  }
+
+  it("saves an empty model as the provider default", async () => {
+    // The row has a model and the writer clears it: emptying the field is a
+    // real write, not a no-op, because "" means the provider's own default.
+    // The fixture used to give the row no model at all, so writing "" was
+    // genuinely a no-op and this test passed for the wrong reason — it was
+    // the only thing standing in the way of the blur guard below.
+    const input = await modelInput("anthropic", "claude-sonnet-5");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.focusOut(input);
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { anthropic: { model: "" } },
+      }),
+    );
+  });
+
+  it("shows the saved model of the provider that is already active at mount", async () => {
+    // No provider switch anywhere in this test, which is the whole point.
+    // `active` starts as the literal "openai-codex" — the engine's default
+    // and ActiveProvider()'s fallback, so the id providers.list most often
+    // reports back — and the draft-scoping ref was claimed on the first
+    // render, before any rows existed. The second pass then found the ref
+    // already matching and returned, so the drafts were never seeded: the
+    // pane told a writer with a model configured that they had none. Every
+    // other draft test switches provider first, which is exactly why none of
+    // them saw it.
+    rowExtras = { "openai-codex": { configured: true, model: "gpt-5-codex" } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe("gpt-5-codex"));
+  });
+
+  it("does not destroy the saved model when the writer tabs through the field", async () => {
+    // The other half of the same bug, and the damaging one. Tab order runs
+    // four provider buttons → model → refresh → consent → test, so every
+    // keyboard user on their way to the consent box passes through this
+    // field. With the draft left empty, that blur saved "" over a model the
+    // writer had configured — an ordinary tab-through destroying stored
+    // state, with nothing on screen to say so.
+    rowExtras = { "openai-codex": { configured: true, model: "gpt-5-codex" } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe("gpt-5-codex"));
+
+    fireEvent.focus(input);
+    fireEvent.focusOut(input);
+    await flush();
+
+    expect(rpc.settingsSet).not.toHaveBeenCalled();
+    expect(input.value).toBe("gpt-5-codex");
+  });
+
+  it("does not save the model on a blur that changed nothing", async () => {
+    // The symmetric counterpart of the base URL's no-op guard. Beyond the
+    // wasted settings.set + providers.list round trip, that reload is the
+    // one that used to eat half-typed drafts elsewhere in the pane.
+    const input = await modelInput("anthropic", "claude-sonnet-5");
+
+    // Whitespace either side is still the same model name.
+    fireEvent.change(input, { target: { value: "  claude-sonnet-5  " } });
+    fireEvent.focusOut(input);
+    await flush();
+
+    expect(rpc.settingsSet).not.toHaveBeenCalled();
+    expect(rpc.providersList).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves the trimmed model draft on blur", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const input = await screen.findByTestId("provider-model-input");
+    fireEvent.change(input, { target: { value: "  claude-sonnet-5  " } });
+    fireEvent.focusOut(input);
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { anthropic: { model: "claude-sonnet-5" } },
+      }),
+    );
+  });
+
+  it("drops an unsaved model draft when the writer changes provider", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "claude-typed" } });
+    expect(input.value).toBe("claude-typed");
+
+    await userEvent.click(screen.getByTestId("provider-choice-openai"));
+    await screen.findByTestId("provider-base-url-input");
+
+    await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    const back = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    expect(back.value).toBe("");
+  });
+
+  it("keeps an unsaved model draft through a background providers.list reload", async () => {
+    activeId = "openai";
+    rowExtras = { openai: { base_url: "https://openrouter.ai/api/v1" } };
+    render(<ProviderSection />);
+
+    const modelInput = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    fireEvent.change(modelInput, { target: { value: "gpt-5-typed" } });
+
+    // Tab on to the base URL and edit it: the blur saves, and the save
+    // reloads providers.list. That reload must not touch the model draft.
+    const baseUrl = screen.getByTestId("provider-base-url-input");
+    fireEvent.change(baseUrl, { target: { value: "https://ollama.local/v1" } });
+    fireEvent.focusOut(baseUrl);
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { openai: { base_url: "https://ollama.local/v1" } },
+      }),
+    );
+
+    expect((screen.getByTestId("provider-model-input") as HTMLInputElement).value).toBe(
+      "gpt-5-typed",
+    );
+  });
+
+  it("does not erase a key typed on another provider after leaving an abandoned Codex login", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+
+    await beginLogin();
+
+    // The writer abandons the browser and switches to Anthropic to paste a
+    // key instead. Leaving the provider stops the poll outright (see "stops
+    // polling as soon as the writer leaves the provider" below), so there is
+    // no tick left to race the key draft.
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+    fireEvent.change(screen.getByTestId("provider-key-input"), {
+      target: { value: "sk-ant-typed" },
+    });
+
+    // Even waiting out what would have been the next tick, nothing calls the
+    // engine again, and the draft survives untouched.
+    await tick();
+
+    expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
+    expect((screen.getByTestId("provider-key-input") as HTMLInputElement).value).toBe(
+      "sk-ant-typed",
+    );
+  });
+
+  it("stops polling as soon as the writer leaves the provider, not just on unmount", async () => {
+    // #93's deferred finding: leaving Codex used to bump pollGenRef without
+    // calling stopPolling(), so the interval kept dispatching
+    // codex.login_status every 1.5s for as long as the component stayed
+    // mounted — a live call to the engine forever, even while the writer
+    // works on an unrelated provider. The writes were gated so it was waste
+    // rather than incorrectness, but this is the last task touching this
+    // component, so it gets fixed here.
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush();
+
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+
+    // Three tick intervals' worth of time — the old interval, if still
+    // alive, would have fired at least twice by now.
+    await tick(4500);
+
+    expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
+  });
+
+  it("does not resurrect a stale Codex failure when the writer returns before the orphaned poll resolves", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    await beginLogin();
+
+    // The writer abandons the browser, switches to Anthropic, then comes
+    // straight back to Codex — all before the poll's first tick fires.
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+
+    // The fresh fetch this return triggers reports the truth: no attempt in
+    // flight from here.
+    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: false });
+    fireEvent.click(screen.getByTestId("provider-choice-openai-codex"));
+    await flush(8);
+
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+
+    // ~1.5s after the original login click, the orphaned poll's tick finally
+    // resolves — reporting the abandoned attempt failed. It must not
+    // overwrite the fresh, correct status above with a stale failure.
+    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: false, login_failed: true });
+    await tick();
+
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+    expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
+  });
+
+  it("does not let an abandoned login's late tick fail the retry that replaced it", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    vi.useFakeTimers();
+
+    // Attempt #1. Its first tick's login_status is slow — still in flight
+    // when everything below happens. clearInterval cannot call it back.
+    let settleAbandoned: (s: unknown) => void = () => {};
+    rpc.codexLoginStatus.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settleAbandoned = resolve;
+        }),
+    );
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+    await tick();
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+
+    // The writer abandons that browser tab, switches to Anthropic, and comes
+    // back. The fresh fetch on the way back reports a clean slate.
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+    fireEvent.click(screen.getByTestId("provider-choice-openai-codex"));
+    await flush(8);
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+
+    // Attempt #2: a real retry, whose poll the writer is now waiting on.
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    // Only now does attempt #1's tick resolve, reporting that *it* failed.
+    await act(async () => {
+      settleAbandoned({ logged_in: false, login_failed: true });
+    });
+    await flush();
+
+    // It must not be read as attempt #2 failing...
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+
+    // ...and, because login_failed is terminal, it must not have stopped
+    // attempt #2's own poll on the way past.
+    await tick();
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("polls a retry after a failed attempt exactly like the first one", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+
+    await beginLogin();
+    await tick();
+    expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
+
+    // Second click, no provider switch in between: the poll must run again
+    // and report the retry's own result.
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+    await tick();
+
+    expect(screen.getByTestId("provider-codex-email")).toHaveTextContent("writer@example.com");
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+  });
+
+  it("shows an already signed-in Codex account without waiting for a fresh login", async () => {
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
+    render(<ProviderSection />);
+
+    expect(await screen.findByTestId("provider-codex-email")).toHaveTextContent(
+      "writer@example.com",
+    );
+    expect(screen.getByTestId("provider-codex-logout")).toBeInTheDocument();
+    expect(screen.queryByTestId("provider-codex-login")).toBeNull();
+  });
+
+  it("falls back to a signed-in label when the email claim is an empty string", async () => {
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "" });
+    render(<ProviderSection />);
+
+    expect(await screen.findByTestId("provider-codex-email")).toHaveTextContent(
+      "settings.providers.codex.signedIn",
+    );
+  });
+
+  it("drops a stale Codex failure when the writer leaves the provider and comes back", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+
+    await beginLogin();
+    await tick();
+    expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
+
+    // The engine forgets the failure at the next login_start; the pane must
+    // not remember it either.
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false });
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+    fireEvent.click(screen.getByTestId("provider-choice-openai-codex"));
+    await flush(8);
+
+    expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+  });
+
+  it("opens the browser and polls until Codex reports signed in", async () => {
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus
+      .mockResolvedValueOnce({ logged_in: false })
+      .mockResolvedValueOnce({ logged_in: true, email: "writer@example.com" });
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush(2);
+    expect(rpc.codexLoginStart).toHaveBeenCalledTimes(1);
+    expect(rpc.openExternalUrl).toHaveBeenCalledWith("https://chatgpt.com/auth/start");
+    expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
+
+    await advance();
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
+
+    await advance();
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("provider-codex-email")).toHaveTextContent("writer@example.com");
+
+    // The poll must have stopped: advancing further does not call again.
+    await advance(3000);
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a signed-in fallback when Codex reports no email claim", async () => {
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: true });
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush(2);
+    await advance();
+
+    expect(screen.getByTestId("provider-codex-email")).toHaveTextContent(
+      "settings.providers.codex.signedIn",
+    );
+  });
+
+  it("stops polling when Codex reports a failed login", async () => {
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush(2);
+
+    await advance();
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
+
+    // A failed login must not leave the poll running forever.
+    await advance(4500);
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops the poll and says why when login_status itself fails", async () => {
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockRejectedValue(
+      Object.assign(new Error("x"), { data: { reason: "provider_not_configured" } }),
+    );
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush(2);
+    await tick();
+
+    expect(screen.getByTestId("provider-error").textContent).toBe("errors.providerNotConfigured");
+    await advance(4500);
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a reload that fails after a successful login", async () => {
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
+    // The engine socket drops between login_status and providers.list.
+    rpc.providersList.mockImplementation(() =>
+      Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_not_configured" } })),
+    );
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush(2);
+    await tick();
+
+    expect(screen.getByTestId("provider-error").textContent).toBe("errors.providerNotConfigured");
+  });
+
+  it("clears a stale failure banner before the retry's first round trip", async () => {
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+    render(<ProviderSection />);
+    expect(await screen.findByTestId("provider-codex-failed")).toBeInTheDocument();
+
+    let release: (v: { auth_url: string }) => void = () => {};
+    rpc.codexLoginStart.mockImplementationOnce(
+      () =>
+        new Promise<{ auth_url: string }>((resolve) => {
+          release = resolve;
+        }),
+    );
+
+    await beginLogin();
+
+    // Gone before login_start has even returned: the banner must not hang
+    // over the whole browser-opening round trip.
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+
+    await act(async () => {
+      release({ auth_url: "https://chatgpt.com/auth/start" });
+      await Promise.resolve();
+    });
+  });
+
+  it("clears the interval on unmount so an abandoned login stops calling the engine", async () => {
+    const { unmount } = render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush(2);
+
+    unmount();
+
+    await advance(4500);
+    expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
+  });
+
+  it("logs out of Codex and returns to the sign-in button", async () => {
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
+    render(<ProviderSection />);
+
+    await userEvent.click(await screen.findByTestId("provider-codex-logout"));
+
+    await waitFor(() => expect(rpc.codexLogout).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId("provider-codex-login")).toBeInTheDocument();
+  });
+
+  describe("consent and connection test", () => {
+    it("disables the connection test until consent is given", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: false } };
+      render(<ProviderSection />);
+
+      const button = await screen.findByTestId("provider-test");
+      expect(button).toBeDisabled();
+    });
+
+    it("disables the connection test until a credential is stored", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: false, consented: true } };
+      render(<ProviderSection />);
+
+      const button = await screen.findByTestId("provider-test");
+      expect(button).toBeDisabled();
+    });
+
+    it("enables the connection test once both consent and a credential are present", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      const button = await screen.findByTestId("provider-test");
+      expect(button).toBeEnabled();
+    });
+
+    it("writes consent as providers[id].consented_at", async () => {
+      // The exact patch shape is the point: a wrong field name (e.g. the
+      // dead ai_data_sharing_consent_* pair) would leave this screen looking
+      // like it works while the engine never sees consent.
+      activeId = "anthropic";
+      vi.spyOn(Date, "now").mockReturnValue(1700000000000);
+      render(<ProviderSection />);
+
+      const checkbox = await screen.findByTestId("provider-consent");
+      await userEvent.click(checkbox);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { consented_at: 1700000000000 } },
+        }),
+      );
+    });
+
+    it("revokes consent by writing zero", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { consented: true } };
+      render(<ProviderSection />);
+
+      const checkbox = await screen.findByTestId("provider-consent");
+      expect(checkbox).toBeChecked();
+
+      await userEvent.click(checkbox);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { consented_at: 0 } },
+        }),
+      );
+    });
+
+    /** Make settings.set do the engine's half of a consent or key write.
+     *  The checkbox's tick and the test button's enablement both read off
+     *  providers.list, so ticking the box (or clearing the key) only means
+     *  anything in a test if the *next* list reflects it — which is exactly
+     *  what the `await refresh()` in those handlers is for. */
+    function persistWrites() {
+      rpc.settingsSet.mockImplementation(
+        (patch: {
+          provider?: string;
+          providers?: Record<
+            string,
+            { consented_at?: number; api_key?: string; base_url?: string; model?: string }
+          >;
+        }) => {
+          if (patch.provider) activeId = patch.provider;
+          for (const [id, fields] of Object.entries(patch.providers ?? {})) {
+            if (fields.consented_at !== undefined) {
+              rowExtras[id] = { ...rowExtras[id], consented: fields.consented_at !== 0 };
+            }
+            if (fields.api_key !== undefined) {
+              rowExtras[id] = { ...rowExtras[id], configured: fields.api_key !== "" };
+            }
+            if (fields.base_url !== undefined) {
+              rowExtras[id] = { ...rowExtras[id], base_url: fields.base_url };
+            }
+            if (fields.model !== undefined) {
+              rowExtras[id] = { ...rowExtras[id], model: fields.model };
+            }
+          }
+          return Promise.resolve({});
+        },
+      );
+    }
+
+    // Design spec 5.4: the sentence has to name the company the scenes are
+    // about to reach. One provider hardcoded into that sentence used to pass
+    // every test in this file, which is the exact failure the spec exists to
+    // prevent — a writer on Gemini reading "sent to Anthropic", ticking the
+    // box, and having their scenes go somewhere the screen never named. So
+    // every id is exercised, and the expectation varies with it.
+    it.each([
+      ["openai-codex", "settings.providers.name.openai-codex", {}],
+      ["anthropic", "settings.providers.name.anthropic", {}],
+      ["gemini-native", "settings.providers.name.gemini-native", {}],
+      // `openai` names a protocol, not a destination — see below.
+      ["openai", "settings.providers.consent.customEndpoint", {}],
+      [
+        "openai",
+        "https://openrouter.ai/api/v1",
+        { openai: { base_url: "https://openrouter.ai/api/v1" } },
+      ],
+    ] as const)("names %s's destination in the consent label", async (id, expected, extras) => {
+      activeId = id;
+      rowExtras = extras as Record<string, Record<string, unknown>>;
+      render(<ProviderSection />);
+
+      const checkbox = await screen.findByTestId("provider-consent");
+      expect(checkbox.closest("label")?.textContent).toBe(
+        `settings.providers.consent:provider=${expected}`,
+      );
+    });
+
+    it("names the configured endpoint, not the protocol, for openai", async () => {
+      // The three fixed ids name a company; `openai` does not. Its label is
+      // "OpenAI-compatible", which is both broken prose in the sentence and
+      // silent about where the scenes actually go — the base URL may be
+      // OpenRouter, or a local Ollama that never leaves the machine.
+      activeId = "openai";
+      rowExtras = { openai: { base_url: "http://localhost:11434/v1" } };
+      render(<ProviderSection />);
+
+      const label = (await screen.findByTestId("provider-consent")).closest("label");
+      expect(label?.textContent).toContain("http://localhost:11434/v1");
+      expect(label?.textContent).not.toContain("settings.providers.name.openai");
+    });
+
+    it("substitutes the destination into the real consent sentence", async () => {
+      // The mocked `t` above cannot see the catalogue, so nothing else here
+      // notices if the placeholder is renamed in all three catalogues at
+      // once (the parity test only compares ko↔en↔ja, so a consistent rename
+      // is invisible to it). The result would be a consent gate reading
+      // "…{provider}으로 전송…" — naming nobody — in every language. This
+      // runs the real translate() against the real catalogue instead.
+      const { translate } = await vi.importActual<typeof import("../../lib/i18n")>("../../lib/i18n");
+
+      for (const language of ["ko", "en", "ja"] as const) {
+        const sentence = translate(language, "settings.providers.consent", {
+          provider: "Acme Models",
+        });
+        expect(sentence, language).toContain("Acme Models");
+        expect(sentence, language).not.toMatch(/[{}]/);
+      }
+    });
+
+    it("names everything that is sent, in every language", async () => {
+      // Design spec 5.4: the sentence has to say *what* leaves the machine —
+      // the current scene's text, summaries, and the character/plot/fact
+      // cards the agent reads through its tools — and that Linetta sends it
+      // nowhere else. The shipped sentence named scene text alone, which
+      // understates the consent it records: all of that context travels with
+      // every agent turn. The section description above the checkbox is
+      // broader, but a description is not a consent record.
+      const { translate } = await vi.importActual<typeof import("../../lib/i18n")>("../../lib/i18n");
+
+      const expected = {
+        ko: ["요약", "카드", "그 밖의 어떤 곳에도"],
+        en: ["summaries", "cards", "nowhere else"],
+        ja: ["要約", "カード", "それ以外のどこにも"],
+      } as const;
+
+      for (const [language, phrases] of Object.entries(expected)) {
+        const sentence = translate(
+          language as keyof typeof expected,
+          "settings.providers.consent",
+          { provider: "Acme Models" },
+        );
+        for (const phrase of phrases) expect(sentence, `${language}: ${phrase}`).toContain(phrase);
+      }
+    });
+
+    it("keeps the Korean sentence grammatical after a vowel-final name", async () => {
+      // `으로` agrees with a consonant-final syllable and is wrong after a
+      // vowel — "Google Gemini(제미나이)으로" is ungrammatical, and so is any
+      // base URL ending in a vowel sound. The fix is a postposition with no
+      // allomorph, not a particle rule, so this pins the sentence against
+      // ever reintroducing one.
+      const { translate } = await vi.importActual<typeof import("../../lib/i18n")>("../../lib/i18n");
+
+      for (const provider of ["Google Gemini", "Anthropic", "https://openrouter.ai/api/v1"]) {
+        const sentence = translate("ko", "settings.providers.consent", { provider });
+        expect(sentence, provider).toContain(provider);
+        expect(sentence, provider).not.toContain(`${provider}으로`);
+        expect(sentence, provider).not.toContain(`${provider}로`);
+      }
+    });
+
+    it("announces a passing test to a screen reader, not only a failing one", async () => {
+      // The failure carries role="alert"; the success was a bare <span>, so
+      // a screen-reader user was told when the test failed and nothing at
+      // all when it passed — the one outcome that means "you can start
+      // writing". A status role rather than an alert: it is polite, and the
+      // writer asked for this result.
+      //
+      // Asserted through the tag rather than a role attribute because the
+      // element is an <output>, which carries that role natively. Checking
+      // for an explicit role="status" would fail on the markup that does the
+      // announcing best.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+
+      expect(await screen.findByTestId("provider-test-ok")).toBeInstanceOf(HTMLOutputElement);
+    });
+
+    /** Anthropic configured and consented, plus the click that earns a passing
+   *  badge — the starting point every test in this block shares before doing
+   *  the one thing that should invalidate it. `persist` makes settings.set
+   *  land on the row the way the engine would, which matters whenever the
+   *  invalidating action is itself a write.
+   *
+   *  Returns nothing: the badge is asserted present here, so a caller that
+   *  never sees it fails on the setup rather than on its own assertion. */
+  async function earnPassingBadge({ persist = false } = {}) {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true, consented: true } };
+    if (persist) persistWrites();
+    render(<ProviderSection />);
+
+    await userEvent.click(await screen.findByTestId("provider-test"));
+    expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+  }
+
+  it("clears a passing test result when the provider changes", async () => {
+      await earnPassingBadge();
+
+      await userEvent.click(screen.getByTestId("provider-choice-gemini-native"));
+      await screen.findByTestId("provider-key-input");
+
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("clears a passing test result when consent is revoked", async () => {
+      // Same "a green tick that is a lie" argument as switching provider:
+      // the button correctly disables itself, but a "Connected" left sitting
+      // next to an unticked box tells the writer the connection is still
+      // live when the engine will now refuse it outright.
+      await earnPassingBadge({ persist: true });
+
+      await userEvent.click(screen.getByTestId("provider-consent"));
+
+      await waitFor(() => expect(screen.queryByTestId("provider-test-ok")).toBeNull());
+    });
+
+    it("does not bring the passing result back when the writer returns to the provider", async () => {
+      // The other half of the five "clears a passing result when X" tests
+      // above, and the half none of them checked. Hiding a result while its
+      // signature differs is not the same as discarding it: leave Anthropic
+      // and come back and every value in the signature is identical again, so
+      // a merely-hidden badge reappears — a "Connected" with no test run
+      // behind it, on the one screen in the app that claims to know whether
+      // the agent will work. Stale means gone, not gone-for-now.
+      await earnPassingBadge();
+
+      await userEvent.click(screen.getByTestId("provider-choice-gemini-native"));
+      await screen.findByTestId("provider-key-input");
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+
+      await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+      await flush();
+
+      // Nothing ran a second test, so nothing may claim one passed.
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("does not bring the passing result back when consent is reticked", async () => {
+      // The same resurrection through the consent box rather than the
+      // provider buttons: untick, retick, and the signature is byte-for-byte
+      // what it was when the badge was earned.
+      await earnPassingBadge({ persist: true });
+
+      await userEvent.click(screen.getByTestId("provider-consent"));
+      await waitFor(() => expect(screen.queryByTestId("provider-test-ok")).toBeNull());
+
+      await userEvent.click(screen.getByTestId("provider-consent"));
+      await waitFor(() => expect(screen.getByTestId("provider-consent")).toBeChecked());
+      await flush();
+
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("clears a passing test result when the key is cleared", async () => {
+      // The other half of what a passing test result depends on. A result
+      // that outlives the credential it was obtained with is the same lie.
+      await earnPassingBadge({ persist: true });
+
+      await userEvent.click(screen.getByTestId("provider-key-clear"));
+
+      await waitFor(() => expect(screen.queryByTestId("provider-test-ok")).toBeNull());
+    });
+
+    it("keeps a passing test result across an unrelated reload", async () => {
+      // The counterpart to the tests above: the result clears on the *facts*
+      // it depends on, never on a providers.list arriving. Comparing list
+      // identities instead would make a passing tick vanish whenever
+      // anything reloaded in the background — a Codex poll tick in the app —
+      // with nothing on screen explaining why.
+      //
+      // Clicking the provider that is already active is the cleanest such
+      // reload: a settings.set and a fresh providers.list, and not one value
+      // the result was earned under changes. This test used to save a model
+      // instead, which pinned the exact bug below as correct behaviour.
+      await earnPassingBadge();
+
+      await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+
+      await waitFor(() => expect(rpc.providersList).toHaveBeenCalledTimes(2));
+      await flush();
+      expect(screen.getByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("clears a passing test result when the model changes", async () => {
+      // provider.Options() puts Model on the request and providers.test goes
+      // through Source.Client → Ask, so the badge was earned against one
+      // specific model. Typing a model the provider does not serve leaves
+      // the only diagnostic surface in the app saying the connection works
+      // while every agent turn will fail.
+      activeId = "anthropic";
+      rowExtras = {
+        anthropic: { configured: true, consented: true, model: "claude-sonnet-4-5" },
+      };
+      persistWrites();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      const model = screen.getByTestId("provider-model-input");
+      await userEvent.clear(model);
+      await userEvent.type(model, "claude-does-not-exist");
+      fireEvent.blur(model);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { model: "claude-does-not-exist" } },
+        }),
+      );
+      await flush();
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("clears the badge as the writer types a new model, before any blur", async () => {
+      // The badge now disappears the moment the draft changes, not on blur —
+      // signatureOf reads drafts.model, and every dispatch settles (see the
+      // reducer wrapper above). Before that wrapper existed, "every
+      // transition ends in settle()" was a convention nothing enforced: a
+      // mutation dropping settle from the `typed` case survived the whole
+      // suite, because saveModel's own blur-triggered refresh() happened to
+      // settle things a moment later. This test fails on that mutation
+      // directly, with no blur anywhere in it.
+      activeId = "anthropic";
+      rowExtras = {
+        anthropic: { configured: true, consented: true, model: "claude-sonnet-4-5" },
+      };
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      const model = screen.getByTestId("provider-model-input") as HTMLInputElement;
+      fireEvent.change(model, { target: { value: "claude-sonnet-4-5-typo" } });
+
+      // Gone already — no blur, no settings.set, no providers.list round trip.
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+
+      // Undo: retype the exact original text. settle() discards rather than
+      // hides, so a byte-identical signature cannot resurrect a result that
+      // has already been thrown away.
+      fireEvent.change(model, { target: { value: "claude-sonnet-4-5" } });
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("clears a passing test result when the base URL changes", async () => {
+      // The consent sentence for `openai` names the destination — see
+      // "names the configured endpoint" above — so a "Connected" badge next
+      // to it implies *that* endpoint was verified. A result earned against
+      // the old base_url must not survive a change to a new one, even though
+      // `configured` and `consented` never flip.
+      activeId = "openai";
+      rowExtras = {
+        openai: {
+          configured: true,
+          consented: true,
+          base_url: "https://openrouter.ai/api/v1",
+        },
+      };
+      persistWrites();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      const baseUrlInput = screen.getByTestId("provider-base-url-input");
+      await userEvent.clear(baseUrlInput);
+      await userEvent.type(baseUrlInput, "https://api.together.xyz/v1");
+      fireEvent.blur(baseUrlInput);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { openai: { base_url: "https://api.together.xyz/v1" } },
+        }),
+      );
+      await flush();
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("clears a passing test result when the key is rotated to a different one", async () => {
+      // The other half of the same class of bug: `configured` stays true on
+      // both sides of a key rotation (a key was, and still is, stored), so a
+      // dependency array built only from booleans cannot tell the old
+      // credential from the new one. A passing result must not survive it.
+      await earnPassingBadge({ persist: true });
+
+      const keyInput = screen.getByTestId("provider-key-input");
+      await userEvent.type(keyInput, "sk-new-rotated-key");
+      await userEvent.click(screen.getByTestId("provider-key-save"));
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { api_key: "sk-new-rotated-key" } },
+        }),
+      );
+      await flush();
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("keeps the checkbox ticked after consent is saved", async () => {
+      // `checked` derives from providers.list, so the tick only survives the
+      // click because saveConsent awaits refresh(). Without it the box
+      // springs back unticked the instant React re-renders, and the writer
+      // is left believing consent did not take.
+      activeId = "anthropic";
+      persistWrites();
+      render(<ProviderSection />);
+
+      const checkbox = await screen.findByTestId("provider-consent");
+      expect(checkbox).not.toBeChecked();
+
+      await userEvent.click(checkbox);
+
+      await waitFor(() => expect(screen.getByTestId("provider-consent")).toBeChecked());
+    });
+
+    it("drops a stale result before showing the next one", async () => {
+      // A failure the writer has already fixed must not sit next to the
+      // "Connected" that replaced it — nor the reverse. runTest resets both
+      // before it starts, which is not observable from either direction
+      // alone, so both are run here in sequence.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      rpc.providersTest.mockImplementationOnce(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_auth_failed" } })),
+      );
+      render(<ProviderSection />);
+
+      const button = await screen.findByTestId("provider-test");
+      await userEvent.click(button);
+      expect(await screen.findByTestId("provider-test-error")).toBeInTheDocument();
+
+      await userEvent.click(button);
+
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+      expect(screen.queryByTestId("provider-test-error")).toBeNull();
+
+      // And back the other way: a passing result must not outlive the run
+      // that replaced it with a failure.
+      rpc.providersTest.mockImplementationOnce(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_auth_failed" } })),
+      );
+      await userEvent.click(button);
+
+      expect(await screen.findByTestId("provider-test-error")).toBeInTheDocument();
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("does not swallow the test click that caused a model blur-save", async () => {
+      // Blur and click are separate event batches: React re-renders between
+      // them. A blur handler that raised the shared `busy` flag disabled the
+      // test button before the click that caused the blur landed, so typing
+      // a model and clicking "Test connection" — the first-run gesture —
+      // called providers.test zero times. Nothing incorrect was recorded;
+      // the button just looked dead.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      const model = await screen.findByTestId("provider-model-input");
+      fireEvent.change(model, { target: { value: "claude-x" } });
+      // fireEvent, not userEvent: the two events have to land in the order a
+      // real blur-then-click does, with only React's own re-render between
+      // them and no promise flush to let the save finish first.
+      fireEvent.focusOut(model);
+      fireEvent.click(screen.getByTestId("provider-test"));
+      await flush();
+
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("renders the result of the test click that caused a model blur-save", async () => {
+      // persistWrites() is the whole point of this fixture, and its absence is
+      // what let the bug through the test above: without it the blur-save's
+      // reload never moves `model` on the row, so the only thing that test can
+      // see is the click landing — not the outcome becoming visible.
+      //
+      // With it, the reload lands *between* the click and the render, and the
+      // row's model changes underneath the result. A badge validated against
+      // the row rather than against what the writer typed was then orphaned:
+      // providers.test fired, a real request reached the provider, and the
+      // screen showed nothing. The pane's primary first-run gesture — type a
+      // model, click Test — produced no visible result, and recovering took a
+      // second click.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      persistWrites();
+      render(<ProviderSection />);
+
+      const model = await screen.findByTestId("provider-model-input");
+      fireEvent.change(model, { target: { value: "claude-x" } });
+      fireEvent.focusOut(model);
+      fireEvent.click(screen.getByTestId("provider-test"));
+      await flush(8);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { model: "claude-x" } },
+        }),
+      );
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("does not swallow an auth failure from the test click that caused a blur-save", async () => {
+      // The same gate covered the error branch, so the sequence above also ate
+      // a genuine provider_auth_failed — the writer learns nothing at all from
+      // a request that did reach the provider and was refused.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      persistWrites();
+      rpc.providersTest.mockImplementation(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_auth_failed" } })),
+      );
+      render(<ProviderSection />);
+
+      const model = await screen.findByTestId("provider-model-input");
+      fireEvent.change(model, { target: { value: "claude-x" } });
+      fireEvent.focusOut(model);
+      fireEvent.click(screen.getByTestId("provider-test"));
+      await flush(8);
+
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId("provider-test-error").textContent).toBe(
+        "errors.providerAuthFailed",
+      );
+    });
+
+    it("discards a blur-save's reload that resolves after a later write's", async () => {
+      // A blur-save deliberately does not raise `busy` — that is what lets the
+      // click which caused the blur land. The cost is that two settings.set +
+      // providers.list pairs are in flight at once, and without an ordering
+      // rule whichever list resolved last simply won. A reload carrying a
+      // pre-write snapshot could then un-tick consent the writer had just
+      // watched take, flip `configured` false and disable the test button, or
+      // revert base_url and hide a badge earned a moment earlier.
+      activeId = "openai";
+      rowExtras = { openai: { configured: true } };
+      persistWrites();
+
+      // The blur-save's own reload (the second providers.list of the test) is
+      // held open. Its rows are snapshotted at call time, the way a real
+      // response is — so it carries the world as it stood *before* consent.
+      let releaseStale: () => void = () => {};
+      let calls = 0;
+      rpc.providersList.mockImplementation(() => {
+        calls += 1;
+        const snapshot = rows(activeId, rowExtras);
+        if (calls === 2) {
+          return new Promise((resolve) => {
+            releaseStale = () => resolve(snapshot);
+          });
+        }
+        return Promise.resolve(snapshot);
+      });
+
+      render(<ProviderSection />);
+
+      const baseUrl = await screen.findByTestId("provider-base-url-input");
+      fireEvent.change(baseUrl, { target: { value: "https://ollama.local/v1" } });
+      fireEvent.focusOut(baseUrl);
+      await flush();
+      expect(rpc.providersList).toHaveBeenCalledTimes(2);
+
+      // The writer goes straight on to the consent box, as the tab order
+      // invites. Its write and its reload both complete while the blur-save's
+      // reload is still travelling.
+      fireEvent.click(screen.getByTestId("provider-consent"));
+      await waitFor(() => expect(screen.getByTestId("provider-consent")).toBeChecked());
+
+      await act(async () => {
+        releaseStale();
+        await Promise.resolve();
+      });
+      await flush();
+
+      expect(screen.getByTestId("provider-consent")).toBeChecked();
+    });
+
+    it("does not swallow the consent click that caused a base URL blur-save", async () => {
+      // The same drop on the other natural gesture: type an endpoint, tick
+      // the box. consented_at was never written, so the writer ticked a
+      // checkbox that sprang straight back.
+      activeId = "openai";
+      rowExtras = { openai: { configured: true } };
+      persistWrites();
+      render(<ProviderSection />);
+
+      const baseUrl = await screen.findByTestId("provider-base-url-input");
+      fireEvent.change(baseUrl, { target: { value: "https://ollama.local/v1" } });
+      fireEvent.focusOut(baseUrl);
+
+      // Asserted on the DOM rather than on the dropped click, because jsdom
+      // cannot reproduce the drop: React suppresses a synthetic click on a
+      // disabled *button* — which is what the test above catches — but its
+      // change plugin still delivers onChange to a disabled checkbox, so a
+      // fireEvent click here lands where a browser would deliver nothing at
+      // all. What the writer's pointer meets is this attribute.
+      expect(screen.getByTestId("provider-consent")).toBeEnabled();
+
+      fireEvent.click(screen.getByTestId("provider-consent"));
+      await flush();
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { openai: { consented_at: expect.any(Number) } },
+        }),
+      );
+    });
+
+    it("locks the consent box and the test button while a call is in flight", async () => {
+      // Both controls start engine calls that must not be issued twice, and
+      // the checkbox is worse than the rest: a second click while the first
+      // consent write is still travelling would write the opposite value.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      rpc.providersTest.mockImplementation(() => new Promise(() => {}));
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+
+      expect(screen.getByTestId("provider-consent")).toBeDisabled();
+      expect(screen.getByTestId("provider-test")).toBeDisabled();
+    });
+
+    it("renders a failed test as a translated reason, not a raw message", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      rpc.providersTest.mockImplementation(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_auth_failed" } })),
+      );
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+
+      const error = await screen.findByTestId("provider-test-error");
+      expect(error.textContent).toBe("errors.providerAuthFailed");
+      expect(error).toHaveAttribute("role", "alert");
+      // A failed connection test is information about the provider, not a
+      // broken pane — same reasoning as the model list in Task 4.
+      expect(screen.queryByTestId("provider-error")).toBeNull();
+    });
+  });
+});
