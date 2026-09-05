@@ -24,7 +24,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 
 - **Write with focus.** Work scene by scene in a quiet editor with your outline always within reach.
 - **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
-- **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, and structural changes can be undone in one step.
+- **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
@@ -79,11 +79,14 @@ or an OpenAI-compatible endpoint — OpenRouter, or a model running on your own
 machine — by API key.
 
 Turn it on in **Settings → AI provider**. Consent is per provider, and it
-gates everything: the connection test itself is refused until you have given
-that provider a credential and ticked its consent box. An API key goes into
-your OS's secure credential store, never into `settings.json`; signing in
-with Codex instead stores its tokens in Linetta's own data directory, in a
-file only your account can read.
+gates even the connection test: that button is refused until you have given
+that provider a credential and ticked its consent box. The one request that
+runs on a credential alone is asking the provider which models it offers, so
+the picker has something to list; that request carries no manuscript text.
+
+An API key goes into your OS's secure credential store, never into
+`settings.json`; signing in with Codex instead stores its tokens in Linetta's
+own data directory, in a file only your account can read.
 
 Linux has no secure credential store backend, so Anthropic, Google Gemini,
 and the OpenAI-compatible endpoint cannot be configured there; signing in
@@ -94,9 +97,13 @@ Open the agent with `Cmd/Ctrl+J`; connect a provider first, or the panel
 prompts you to set one up. It reaches Linetta's tools the same way an
 external MCP client does, and every call it makes is recorded in the MCP
 activity log, which shows whether the built-in agent or an external client
-made it. Structural changes — outline restructuring and the like — can be
-undone in one step from there; undoing a single scene-prose write isn't
-there yet.
+made it. A structural change — outline restructuring and the like — gets an
+Undo button on its own line in the agent panel, good for one click while the
+app stays open; those batches are held in memory and do not survive a
+restart. A scene-prose rewrite has no one-click undo yet, but it is not lost:
+Linetta snapshots the scene before every agent write and keeps that version
+indefinitely, so you can put the old text back from the scene's **Previous
+versions** sheet.
 
 ## Writing with your own agent (MCP)
 
@@ -118,12 +125,15 @@ Once connected, an agent can:
 
 - read the outline, a scene, characters, fact cards, and a story brief;
 - draft and revise scenes, write summaries, and restructure the outline;
-- record what it changed, so you can see it and undo it.
+- record what it changed, so you can see it in the activity log.
 
-The writer keeps the last word. Every change is snapshotted before it lands,
-`read_only` mode omits the writing tools entirely, and a scene you are part way
-through editing is never replaced behind your back — Linetta tells you the
-agent touched it and leaves your text alone until you choose.
+The writer keeps the last word. Every scene write is snapshotted before it
+lands and every outline restructuring is captured so it can be reversed in one
+click; entity, storyline, beat, fact-card and memory edits are logged but have
+to be reversed with another edit. `read_only` mode omits the writing tools
+entirely, and a scene you are part way through editing is never replaced behind
+your back — Linetta tells you the agent touched it and leaves your text alone
+until you choose.
 
 The endpoint binds `127.0.0.1` only, requires a token Linetta generates
 locally, and stops the moment you turn it off.
