@@ -21,22 +21,20 @@ var (
 	ErrDelimiter = errors.New("agentmemory: markdown heading")
 )
 
-// blockDelimiter documents the common case of how the injected block
-// separates its sections: an ATX heading opened with "## ". Memory content
-// that opens its own heading could claim the block ended and the rest is
-// something else. headingPattern below is the check actually used — it also
-// catches the ATX forms blockDelimiter's plain substring match would miss:
-// 0-3 leading spaces, "#" through "######", and a heading that is the last
-// line of a block ending in "\r\n" rather than "\n". storycontext/render.go
-// only ever emits an unindented "## ", so today none of that is reachable
-// from this app's own renderer — but the boundary should hold on its own
-// terms, not on what happens to call it.
-const blockDelimiter = "\n## "
-
-// headingPattern matches a CommonMark ATX heading opener at the start of a
-// line. "(?m)" makes "^" match at the start of the text and after every
-// "\n"; a "\r" immediately before that "\n" is left as a trailing character
-// on the previous line, so "\r\n" endings are handled without special-casing.
+// headingPattern is how the injected block's boundary is actually enforced.
+// The block separates its sections with an ATX heading opened with "## ", and
+// memory content that opens its own heading could claim the block ended and
+// the rest is something else. A bare substring match on "\n## " would miss
+// ATX forms CommonMark still renders as headings, so headingPattern instead
+// matches: 0-3 leading spaces, "#" through "######", and a heading that is
+// the last line of a block ending in "\r\n" rather than "\n".
+// storycontext/render.go only ever emits an unindented "## ", so today none
+// of that is reachable from this app's own renderer — but the boundary
+// should hold on its own terms, not on what happens to call it.
+//
+// "(?m)" makes "^" match at the start of the text and after every "\n"; a
+// "\r" immediately before that "\n" is left as a trailing character on the
+// previous line, so "\r\n" endings are handled without special-casing.
 var headingPattern = regexp.MustCompile(`(?m)^[ ]{0,3}#{1,6}(?:[ \t]|$)`)
 
 // Runes that render as nothing in ordinary fonts but do not fall under
@@ -125,27 +123,56 @@ func Screen(text string) error {
 // ASCII invisibly.
 func isTagChar(r rune) bool { return r >= 0xE0000 && r <= 0xE007F }
 
-// isEmojiJoin reports whether the zero-width joiner at runes[i] sits directly
-// between two runes that look like emoji, i.e. it is doing the job ZWJ is for
-// (gluing separate emoji into one glyph) rather than hiding between two
-// ordinary characters.
+// isEmojiJoin reports whether the zero-width joiner at runes[i] sits between
+// two runes that look like emoji, i.e. it is doing the job ZWJ is for (gluing
+// separate emoji into one glyph) rather than hiding between two ordinary
+// characters. It looks past emoji modifiers and presentation selectors that
+// legitimately sit between an emoji base and the ZWJ (see isJoinSkippable),
+// so a skin-toned emoji like "👩🏽‍⚕️" — WOMAN, a skin-tone modifier, ZWJ,
+// a medical symbol, then VS16 — is recognized as a join even though the
+// runes immediately adjacent to the ZWJ are the modifier and the base, not
+// two emoji themselves.
 //
 // "Looks like emoji" is approximated as General_Category = So (Symbol,
 // other): Go's unicode package has no Extended_Pictographic table (the
 // property Unicode itself defines for this), and nearly every standalone
 // emoji base character — a person, object, hand gesture, or symbol, which is
-// what appears on either side of a ZWJ in a real sequence — is So. This is
-// deliberately an under-approximation, not an exact match: it misses a
-// handful of Extended_Pictographic code points that fall outside So (for
-// example some digits and symbols used only in keycap sequences, which do not
-// use ZWJ anyway), and it does not special-case skin-tone modifiers or
-// presentation selectors that may sit between the joined emoji and the ZWJ
-// in a longer sequence. Every gap makes this check stricter than the real
-// property, so it can be widened later without becoming less safe; it must
-// not be loosened to "not a letter", which would reopen the smuggling case.
+// what a real sequence's ZWJ ultimately joins — is So. This is deliberately
+// an under-approximation, not an exact match: it misses a handful of
+// Extended_Pictographic code points that fall outside So (for example some
+// digits and symbols used only in keycap sequences, which do not use ZWJ
+// anyway). Every gap makes this check stricter than the real property, so it
+// can be widened later without becoming less safe; it must not be loosened to
+// "not a letter", which would reopen the smuggling case. Widening what counts
+// as skippable is safe in the same direction as widening So would not be: a
+// skippable run still has to bottom out on a real So rune on each side, so it
+// cannot by itself let a bare ZWJ between two ordinary letters through.
 func isEmojiJoin(runes []rune, i int) bool {
-	if i <= 0 || i >= len(runes)-1 {
+	left := i - 1
+	for left >= 0 && isJoinSkippable(runes[left]) {
+		left--
+	}
+	right := i + 1
+	for right < len(runes) && isJoinSkippable(runes[right]) {
+		right++
+	}
+	if left < 0 || right >= len(runes) {
+		// Nothing but skippable runes (or nothing at all) on one side of the
+		// ZWJ — nothing to skip past onto a real emoji base. Not a join.
 		return false
 	}
-	return unicode.Is(unicode.So, runes[i-1]) && unicode.Is(unicode.So, runes[i+1])
+	return unicode.Is(unicode.So, runes[left]) && unicode.Is(unicode.So, runes[right])
+}
+
+// isJoinSkippable reports whether r is a rune that legitimately sits between
+// an emoji base and the ZWJ that joins it to the next element of a ZWJ
+// sequence, rather than being part of the base test itself: an emoji
+// modifier (the Fitzpatrick skin-tone modifiers, U+1F3FB-U+1F3FF, category
+// Sk, not So) or a presentation selector (U+FE0E/U+FE0F, the same two VS16
+// codepoints Screen already allows through elsewhere). Skipping these does
+// not widen what counts as an emoji base — isEmojiJoin still requires a real
+// So rune once the skip stops — so it cannot turn an ordinary-letter ZWJ into
+// a false accept.
+func isJoinSkippable(r rune) bool {
+	return (r >= 0x1F3FB && r <= 0x1F3FF) || r == '\uFE0E' || r == '\uFE0F'
 }
