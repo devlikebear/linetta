@@ -1346,6 +1346,37 @@ describe("ProviderSection", () => {
       expect(screen.queryByTestId("provider-test-ok")).toBeNull();
     });
 
+    it("clears the badge as the writer types a new model, before any blur", async () => {
+      // The badge now disappears the moment the draft changes, not on blur —
+      // signatureOf reads drafts.model, and every dispatch settles (see the
+      // reducer wrapper above). Before that wrapper existed, "every
+      // transition ends in settle()" was a convention nothing enforced: a
+      // mutation dropping settle from the `typed` case survived the whole
+      // suite, because saveModel's own blur-triggered refresh() happened to
+      // settle things a moment later. This test fails on that mutation
+      // directly, with no blur anywhere in it.
+      activeId = "anthropic";
+      rowExtras = {
+        anthropic: { configured: true, consented: true, model: "claude-sonnet-4-5" },
+      };
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      const model = screen.getByTestId("provider-model-input") as HTMLInputElement;
+      fireEvent.change(model, { target: { value: "claude-sonnet-4-5-typo" } });
+
+      // Gone already — no blur, no settings.set, no providers.list round trip.
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+
+      // Undo: retype the exact original text. settle() discards rather than
+      // hides, so a byte-identical signature cannot resurrect a result that
+      // has already been thrown away.
+      fireEvent.change(model, { target: { value: "claude-sonnet-4-5" } });
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
     it("clears a passing test result when the base URL changes", async () => {
       // The consent sentence for `openai` names the destination — see
       // "names the configured endpoint" above — so a "Connected" badge next

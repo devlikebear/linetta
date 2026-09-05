@@ -52,9 +52,12 @@ const nameKeyFor = (id: ProviderID): MessageKey =>
  *
  * They are now. `list`, `active`, the drafts, the credential epoch and the
  * test outcome move together, under one reducer, and every transition ends in
- * settle() — which reseeds the drafts when the provider they belong to is no
- * longer the active one, and *discards* a test result whose configuration no
- * longer matches. Two whole classes of bug stop being representable:
+ * settle() — not by convention, but because reduceServerState *is*
+ * settle(rawReduce(s, a)): there is no per-case call to settle to forget, so
+ * a future case cannot land without it. settle() reseeds the drafts when the
+ * provider they belong to is no longer the active one, and *discards* a test
+ * result whose configuration no longer matches. Two whole classes of bug stop
+ * being representable:
  *
  *   - A providers.list response that is older than one already applied cannot
  *     land, because responses carry the sequence number of the refresh that
@@ -169,7 +172,21 @@ const activeRow = (s: ServerState): ProviderStatus | undefined =>
  *
  *  NUL-joined so no value can spell out another one's boundary: a base_url and
  *  a model cannot collide into the same signature by containing the
- *  separator. */
+ *  separator.
+ *
+ *  This pane still cannot see a change that happens entirely outside it, and
+ *  reading base_url/model from the drafts widens that gap rather than closing
+ *  it: `credentialEpoch` already conceded it can't see a key rotated from a
+ *  second window or a hand-edited settings file, and the same is now true of
+ *  base_url and model. A background refresh() that lands while the drafts
+ *  hold an untouched, unsaved value leaves the row updated but the signature
+ *  (and the badge) unmoved, because the signature never looked at the row for
+ *  these two fields. The result: the input still shows the old value, the
+ *  badge still claims a connection earned under it, and the consent sentence
+ *  — which does read the row for `openai`'s base_url — can already be naming
+ *  the new one. Known and accepted (Minor): the writer who edits config out of
+ *  band while this pane sits open and idle is rare, and the alternative —
+ *  reading the row here — is the exact bug NEW-1 exists to fix. */
 function signatureOf(s: ServerState): string {
   const row = activeRow(s);
   return [
@@ -207,7 +224,11 @@ function settle(s: ServerState): ServerState {
   return next;
 }
 
-function reduceServerState(s: ServerState, a: ServerAction): ServerState {
+/** Every case's own half of a transition, with none of them settling the
+ *  result — that is reduceServerState's job, once, below. Kept separate so
+ *  there is exactly one call to settle() in the whole file: a case added
+ *  here later gets it for free, and there is no per-case call left to drop. */
+function rawReduce(s: ServerState, a: ServerAction): ServerState {
   switch (a.type) {
     case "listed": {
       // The whole of NEW-2's fix. Two settings.set + refresh pairs overlap
@@ -218,21 +239,29 @@ function reduceServerState(s: ServerState, a: ServerAction): ServerState {
       // base_url and hide a badge that had just been earned.
       if (a.seq <= s.applied) return s;
       const chosen = a.rows.find((r) => r.active);
-      return settle({ ...s, applied: a.seq, list: a.rows, active: chosen ? chosen.id : s.active });
+      return { ...s, applied: a.seq, list: a.rows, active: chosen ? chosen.id : s.active };
     }
     case "chose":
-      return settle({ ...s, active: a.id });
+      return { ...s, active: a.id };
     case "credentialChanged":
-      return settle({ ...s, credentialEpoch: s.credentialEpoch + 1 });
+      return { ...s, credentialEpoch: s.credentialEpoch + 1 };
     case "typed":
-      return settle({ ...s, drafts: { ...s.drafts, [a.field]: a.value } });
+      return { ...s, drafts: { ...s.drafts, [a.field]: a.value } };
     // A stale result must not sit next to the one replacing it, in either
-    // direction, so the run clears before it starts.
+    // direction, so the run clears before it starts. Settling this one too is
+    // harmless — `test` is already null — and it costs nothing to let it go
+    // through the same single door as everything else.
     case "testStarted":
       return { ...s, test: null };
     case "testSettled":
-      return settle({ ...s, test: { signature: a.signature, ok: a.ok, error: a.error } });
+      return { ...s, test: { signature: a.signature, ok: a.ok, error: a.error } };
   }
+}
+
+/** The reducer React is handed. Every dispatch settles — there is no case
+ *  above that can return an unsettled state without going through here. */
+function reduceServerState(s: ServerState, a: ServerAction): ServerState {
+  return settle(rawReduce(s, a));
 }
 
 export function ProviderSection() {
