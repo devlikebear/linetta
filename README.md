@@ -85,6 +85,11 @@ your OS's secure credential store, never into `settings.json`; signing in
 with Codex instead stores its tokens in Linetta's own data directory, in a
 file only your account can read.
 
+Linux has no secure credential store backend, so Anthropic, Google Gemini,
+and the OpenAI-compatible endpoint cannot be configured there; signing in
+with a ChatGPT account still works, since that path stores tokens in
+Linetta's data directory instead.
+
 Once a provider is connected, open the agent with `Cmd/Ctrl+J`. It reaches
 Linetta's tools the same way an external MCP client does, and every call it
 makes is recorded in the MCP activity log, which shows whether the built-in
@@ -94,8 +99,9 @@ single scene-prose write isn't there yet.
 
 ## Writing with your own agent (MCP)
 
-Linetta does not talk to a language model. It has no API keys, no provider
-settings, and it never sends your manuscript anywhere on its own.
+Connecting an outside agent over MCP is a different thing from connecting a
+provider in Settings: a writer who only wants MCP never has to give Linetta a
+credential at all.
 
 When you want to write alongside AI, Linetta opens a local MCP endpoint and an
 agent you already run — Claude Code, Claude Desktop, Codex CLI, or Gemini CLI —
