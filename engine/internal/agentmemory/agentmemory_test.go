@@ -108,6 +108,45 @@ func TestSaveRefusesOverBudget(t *testing.T) {
 	}
 }
 
+// Apply's budgeted() helper lets a result through when it is over budget but
+// shorter than what it replaces, so an agent can dig its way out of a
+// document that is already too big. Save must accept the same shape of save
+// once it reaches here — otherwise Apply would say an edit succeeded and
+// Save would then refuse to persist it, leaving the agent stuck.
+func TestSaveAllowsAShrinkingSaveEvenWhileStillOverBudget(t *testing.T) {
+	ctx, repo, _ := seedRepo(t)
+	// Seed a row directly, bypassing Save's own budget check — this is what a
+	// hand-edited row, or a document from before a budget shrank, looks like.
+	over := strings.Repeat("가", 2300)
+	if _, err := repo.db.ExecContext(ctx,
+		`INSERT INTO agent_memory (scope, project_id, body, updated_at) VALUES (?, ?, ?, ?)`,
+		string(ScopeWriterProfile), nil, over, 1); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	shorter := strings.Repeat("가", 1500) // still over the 1400 budget, but shorter than 2300
+	if _, err := repo.Save(ctx, ScopeWriterProfile, "", shorter, 2); err != nil {
+		t.Fatalf("Save: %v — a shrinking save must be allowed even while still over budget", err)
+	}
+	got, err := repo.Load(ctx, ScopeWriterProfile, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Body != shorter {
+		t.Fatalf("Body was not saved: got %q", got.Body)
+	}
+
+	// But a save that GROWS from that same over-budget starting point must
+	// still be refused — the escape hatch is for shrinking only.
+	grown := strings.Repeat("가", 1600)
+	if _, err := repo.Save(ctx, ScopeWriterProfile, "", grown, 3); !errors.Is(err, ErrOverBudget) {
+		t.Fatalf("Save (growing, still over budget) = %v, want ErrOverBudget", err)
+	}
+	got, _ = repo.Load(ctx, ScopeWriterProfile, "")
+	if got.Body != shorter {
+		t.Fatalf("a refused save must leave the previous body intact; got %q", got.Body)
+	}
+}
+
 func TestSaveScreens(t *testing.T) {
 	ctx, repo, _ := seedRepo(t)
 	if _, err := repo.Save(ctx, ScopeWriterProfile, "", "안녕​하세요", 1); !errors.Is(err, ErrInvisible) {
