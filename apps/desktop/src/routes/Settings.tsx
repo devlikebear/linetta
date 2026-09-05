@@ -16,6 +16,7 @@ import { rpcErrorMessage } from "../lib/rpcMessage";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { BackgroundSection } from "../components/settings/BackgroundSection";
 import { McpSection } from "../components/settings/McpSection";
+import { ProviderSection } from "../components/settings/ProviderSection";
 import { RestoreSection } from "../components/settings/RestoreSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
@@ -50,6 +51,7 @@ const SETTINGS_CATEGORIES = [
   "background",
   "editor",
   "writing",
+  "providers",
   "mcp",
   "sync",
   "backup",
@@ -83,6 +85,11 @@ export function Settings() {
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
   // Hidden entirely on builds without MCP (mobile), the same way git sync is.
   const [mcpAvailable, setMcpAvailable] = useState(false);
+  // Hidden on a build that never links internal/agent (mobile) — offering a
+  // screen to configure providers nothing can use would be a false promise.
+  // #93 added this field to DiagnosticsSnapshot and set it from real
+  // capability detection; nothing read it until now.
+  const [agentAvailable, setAgentAvailable] = useState(false);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [category, setCategoryState] = useState<SettingsCategory>(initialCategory);
   // Nav visibility only; BackgroundSection keeps its own probe and content.
@@ -116,6 +123,7 @@ export function Settings() {
         setOpsRows(rows);
         setGitSyncAvailable(diag.git_sync_available ?? true);
         setMcpAvailable(diag.mcp_available ?? false);
+        setAgentAvailable(diag.agent_available ?? false);
         setCompanionHistoryExists(diag.companion_history_exists ?? true);
       })
       // Inside an effect: keeping `t` out of the deps avoids re-running the
@@ -242,11 +250,16 @@ export function Settings() {
         { id: "writing", label: t("settings.writing.title") },
       ],
     },
-    ...(mcpAvailable
+    ...(mcpAvailable || agentAvailable
       ? [
           {
+            // Providers above MCP: connecting a provider is what a writer
+            // does first, and MCP is only for people using outside tools.
             label: t("settings.nav.groupConnect"),
-            items: [{ id: "mcp" as const, label: t("settings.nav.mcp") }],
+            items: [
+              ...(agentAvailable ? [{ id: "providers" as const, label: t("settings.nav.providers") }] : []),
+              ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.nav.mcp") }] : []),
+            ],
           },
         ]
       : []),
@@ -493,6 +506,8 @@ export function Settings() {
               </div>
             </section>
             )}
+
+            {category === "providers" && agentAvailable && <ProviderSection />}
 
             {category === "mcp" && mcpAvailable && <McpSection />}
 

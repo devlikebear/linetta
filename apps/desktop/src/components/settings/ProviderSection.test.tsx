@@ -464,7 +464,7 @@ describe("ProviderSection", () => {
     );
   });
 
-  it("does not erase a key typed on another provider when an abandoned Codex poll returns", async () => {
+  it("does not erase a key typed on another provider after leaving an abandoned Codex login", async () => {
     render(<ProviderSection />);
     await screen.findByTestId("provider-codex-login");
     await flush();
@@ -476,23 +476,56 @@ describe("ProviderSection", () => {
     await flush();
 
     // The writer abandons the browser and switches to Anthropic to paste a
-    // key instead. The orphaned poll is still running.
+    // key instead. Leaving the provider stops the poll outright (see "stops
+    // polling as soon as the writer leaves the provider" below), so there is
+    // no tick left to race the key draft.
     fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
     await flush(8);
     fireEvent.change(screen.getByTestId("provider-key-input"), {
       target: { value: "sk-ant-typed" },
     });
 
-    // ~1.5s later the poll reports the abandoned login failed and reloads.
+    // Even waiting out what would have been the next tick, nothing calls the
+    // engine again, and the draft survives untouched.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
     await flush();
 
-    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+    expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
     expect((screen.getByTestId("provider-key-input") as HTMLInputElement).value).toBe(
       "sk-ant-typed",
     );
+  });
+
+  it("stops polling as soon as the writer leaves the provider, not just on unmount", async () => {
+    // #93's deferred finding: leaving Codex used to bump pollGenRef without
+    // calling stopPolling(), so the interval kept dispatching
+    // codex.login_status every 1.5s for as long as the component stayed
+    // mounted — a live call to the engine forever, even while the writer
+    // works on an unrelated provider. The writes were gated so it was waste
+    // rather than incorrectness, but this is the last task touching this
+    // component, so it gets fixed here.
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush();
+
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+
+    // Three tick intervals' worth of time — the old interval, if still
+    // alive, would have fired at least twice by now.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4500);
+    });
+    await flush();
+
+    expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
   });
 
   it("does not resurrect a stale Codex failure when the writer returns before the orphaned poll resolves", async () => {

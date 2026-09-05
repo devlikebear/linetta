@@ -390,4 +390,34 @@ describe("Settings", () => {
     await user.click(await screen.findByTestId("legacy-ai-export"));
     await waitFor(() => expect(mocks.exportCompanionHistory).toHaveBeenCalledTimes(1));
   });
+
+  it("shows the provider item in the connect group when the agent is available", async () => {
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: true,
+      companion_history_exists: true,
+      agent_available: true,
+    });
+    renderSettings();
+
+    expect(await screen.findByTestId("settings-nav-providers")).toBeInTheDocument();
+  });
+
+  it("hides it on a build without the agent", async () => {
+    // agent_available omitted entirely — a mobile build's diagnostics
+    // response, which does not link internal/agent at all.
+    renderSettings();
+
+    // Wait for the settings shell to finish loading before asserting an
+    // absence, or the assertion would trivially pass before diagnostics ever
+    // resolved.
+    await screen.findByTestId("settings-nav-general");
+    expect(screen.queryByTestId("settings-nav-providers")).not.toBeInTheDocument();
+  });
 });

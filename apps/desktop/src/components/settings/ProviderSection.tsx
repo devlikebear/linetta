@@ -210,6 +210,15 @@ export function ProviderSection() {
       // permanently invalidates whatever poll is still running: that poll
       // belongs to a login attempt the writer just walked away from, and a
       // fresh fetch below is what the next visit to Codex will trust instead.
+      //
+      // stopPolling() itself matters too, not just the generation bump:
+      // without it the interval keeps calling codex.login_status every 1.5s
+      // for as long as this component stays mounted, even while the writer
+      // works on an unrelated provider. The gen check already keeps that
+      // call from writing anything, so this was waste rather than
+      // incorrectness — but a live call to the engine forever is still worth
+      // retiring outright.
+      stopPolling();
       pollGenRef.current += 1;
       setCodexStatus(null);
       return;
@@ -229,7 +238,7 @@ export function ProviderSection() {
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, stopPolling]);
 
   const startCodexLogin = () =>
     guard(async () => {
