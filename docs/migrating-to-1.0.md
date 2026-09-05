@@ -19,21 +19,30 @@ Remembered facts were never in the database — they live in
 `<app data>/companion/<project>/memory/experiences.jsonl` and keep working:
 an agent connected over MCP can still record and recall them.
 
-## What happened to your API keys
+## What happened to your API keys, and what changes in 1.2
 
-They are untouched. Linetta no longer reads them, but it does not delete
+They were untouched in 1.0: Linetta stopped reading them, but did not delete
 credentials you own.
 
-To remove them yourself:
+**In 1.2, the built-in agent reads them again** — but only for a provider you
+explicitly consent to. Being left alone in 1.0 is not consent: each provider
+needs its own yes, given again in **Settings → AI provider**, and Linetta
+refuses to build a request to any provider until that box is ticked. A key
+sitting untouched in your OS credential store does not quietly start being
+used.
+
+If you would still rather have a credential gone than consent to it, the
+removal instructions below are unchanged and still work:
 
 | Platform | Where |
 | --- | --- |
 | macOS | Keychain Access → search `linetta` |
 | Windows | Credential Manager → Windows Credentials → `linetta` entries |
-| Linux | your Secret Service keyring (`seahorse`, `kwalletmanager`), or `~/.local/share/com.devlikebear.linetta/secrets` |
+| Linux | there is no secure secret store here, so no provider API key was ever saved to begin with; the only provider connection that works on Linux is signing in with ChatGPT (Codex), which stores its token in `<app data>/codex/auth.json` instead |
 
-Your provider selection and model choices stay in `settings.json`. Nothing reads
-them; a future release may clean them up.
+Your provider selection and model choices stay in `settings.json`, and in 1.2
+they mean something again: it is what the built-in agent reads to decide which
+provider to call.
 
 ## Setting up an agent instead
 
