@@ -63,12 +63,17 @@ export function ProviderSection() {
   const [modelsError, setModelsError] = useState<unknown>(null);
   // providers.test's own result, kept apart from `error` for the same reason
   // as the model list: a failed connection test is information about the
-  // provider, not a broken pane. Reset below whenever the provider changes,
-  // since a passing result belongs to the provider it was run against.
-  const [testResult, setTestResult] = useState<"ok" | null>(null);
-  const [testError, setTestError] = useState<unknown>(null);
+  // provider, not a broken pane. It is stored *with the configuration it was
+  // earned under* and shown only while that configuration still stands — see
+  // testSignature below for why that is a field of the result rather than a
+  // dependency array.
+  const [testOutcome, setTestOutcome] = useState<{
+    signature: string;
+    ok: boolean;
+    error: unknown;
+  } | null>(null);
   // Bumped only by this pane's own saveKey/clearKey, below — see the big
-  // comment on the clear-effect for why a local counter stands in for a key
+  // comment on testSignature for why a local counter stands in for a key
   // value this component is never given.
   const [credentialEpoch, setCredentialEpoch] = useState(0);
   // The poll handle, so a second click cannot start a second loop and so the
@@ -122,6 +127,25 @@ export function ProviderSection() {
     }
   };
 
+  // A blur-save is not a click on a button: nobody is waiting on it, and it
+  // must not disable the control the writer is on their way to. Blur and
+  // click are separate event batches, so React re-renders in between — a
+  // blur handler that raised the shared `busy` flag made every other control
+  // `disabled` before the click that caused the blur landed, and the click
+  // was simply dropped. Typing a model and clicking "Test connection", or an
+  // endpoint and then the consent box, are the two most natural gestures in
+  // this pane, and both went nowhere: nothing incorrect was recorded, the
+  // control just looked dead. So these saves report failure the same way but
+  // leave the pane usable while they travel.
+  const saveInBackground = async (fn: () => Promise<void>) => {
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(e);
+    }
+  };
+
   const current = list.find((r) => r.id === active);
 
   // Choosing a provider is itself a saved setting, not a local tab. The agent
@@ -147,13 +171,26 @@ export function ProviderSection() {
   // identity. Keying this effect on that identity threw away whatever the
   // writer had typed and not yet saved, silently and with no error. So the
   // provider the drafts belong to is tracked explicitly.
+  //
+  // The ref alone is not the whole gate. The first render happens before
+  // providers.list has resolved, with `list` still empty and `active` still
+  // its initial "openai-codex" — the engine's default and ActiveProvider()'s
+  // fallback, so also the value it most often reports back. Marking the
+  // drafts as belonging to that provider on the empty first pass meant the
+  // second pass, the one that finally has rows, found the ref already
+  // matching and returned: the drafts were never seeded at all. The pane told
+  // a writer with a saved model that no model was configured, and the next
+  // blur wrote that emptiness back. So the rows are what open this gate — no
+  // row for `active`, nothing to seed from, and the ref stays unclaimed.
   const draftProvider = useRef<ProviderID | null>(null);
   useEffect(() => {
+    const row = list.find((r) => r.id === active);
+    if (!row) return;
     if (draftProvider.current === active) return;
     draftProvider.current = active;
     setKeyDraft("");
-    setBaseUrlDraft(list.find((r) => r.id === active)?.base_url ?? "");
-    setModelDraft(list.find((r) => r.id === active)?.model ?? "");
+    setBaseUrlDraft(row.base_url ?? "");
+    setModelDraft(row.model ?? "");
     // A model list belongs to the provider it was fetched for. Carrying
     // Anthropic's list into an OpenAI-compatible screen would offer models
     // that provider does not serve, so a provider change drops it — the
@@ -163,40 +200,60 @@ export function ProviderSection() {
   }, [active, list]);
 
   // A passing test result belongs to the provider it was run against *and*
-  // to the destination, credentials, and consent it was run under. A green
-  // tick left over from Anthropic sitting on the Gemini screen is a lie; so
-  // is one still reading "Connected" after the writer has unticked consent,
-  // cleared the key, or — for `openai` — repointed base_url at a different
-  // server, because the connection it describes can no longer be made (or
-  // was never made against what the screen now names).
+  // to the destination, credentials, model, and consent it was run under. A
+  // green tick left over from Anthropic sitting on the Gemini screen is a
+  // lie; so is one still reading "Connected" after the writer has unticked
+  // consent, cleared the key, pointed the model at one the provider does not
+  // serve, or — for `openai` — repointed base_url at a different server,
+  // because the connection it describes can no longer be made (or was never
+  // made against what the screen now names).
   //
-  // The dependencies below are values, never `list` itself: refresh() hands
-  // back a fresh array on every background reload (a model save, an
-  // abandoned Codex login's poll tick), and keying on that identity would
-  // make a passing tick vanish for no reason the writer can see. A value
-  // only changes when the fact it encodes changes.
+  // So the result carries a signature of everything it was earned under and
+  // is rendered only while that signature still matches what is on screen.
+  // This used to be an effect that cleared the result, keyed on the same
+  // values; the difference matters because that dependency array had to be
+  // complete and nothing said when it was not. It was extended twice and
+  // missed `model` both times — a badge earned against gpt-5 sat there
+  // unmoved while the writer typed a model name that does not exist, which
+  // is the one screen in the app that claims to know whether the agent will
+  // work. A field forgotten here instead shows up in one place, next to the
+  // values it is supposed to stand beside.
   //
-  // `base_url` is on ProviderStatus, so it can be keyed on directly and
-  // covers the endpoint-swap case above. The API key cannot be: settings.get
-  // returns only `api_key_set` (surfaced here as `configured`), never the
-  // key itself, so there is no key *value* this effect could ever compare.
-  // `configured` only flips on a bare set/clear transition — rotating to a
-  // different key while a key is already stored leaves it true on both
-  // sides, and no field on ProviderStatus says otherwise. `credentialEpoch`
-  // below is the honest substitute: a local counter bumped only by this
-  // pane's own saveKey/clearKey, i.e. the one place a key change is known to
-  // have happened, rather than a proxy read off server state that would
-  // silently miss the same case `configured` does. It still cannot see a key
-  // changed some other way (hand-editing the settings file, a second window)
-  // while this pane stays mounted — there is no observable on ProviderStatus
-  // that would close that gap either.
+  // These are values, never `list` itself: refresh() hands back a fresh
+  // array on every background reload (a model save, an abandoned Codex
+  // login's poll tick), and comparing identities would make a passing tick
+  // vanish for no reason the writer can see. A value only changes when the
+  // fact it encodes changes.
+  //
+  // `base_url` and `model` are on ProviderStatus, so they can be read
+  // directly. The API key cannot be: settings.get returns only `api_key_set`
+  // (surfaced here as `configured`), never the key itself, so there is no key
+  // *value* to compare. `configured` only flips on a bare set/clear
+  // transition — rotating to a different key while a key is already stored
+  // leaves it true on both sides, and no field on ProviderStatus says
+  // otherwise. `credentialEpoch` is the honest substitute: a local counter
+  // bumped only by this pane's own saveKey/clearKey, i.e. the one place a key
+  // change is known to have happened, rather than a proxy read off server
+  // state that would silently miss the same case `configured` does. It still
+  // cannot see a key changed some other way (hand-editing the settings file,
+  // a second window) while this pane stays mounted — there is no observable
+  // on ProviderStatus that would close that gap either.
   const consented = Boolean(current?.consented);
   const configured = Boolean(current?.configured);
   const baseUrl = current?.base_url ?? "";
-  useEffect(() => {
-    setTestResult(null);
-    setTestError(null);
-  }, [active, consented, configured, baseUrl, credentialEpoch]);
+  const model = current?.model ?? "";
+  // NUL-joined so no value can spell out another one's boundary: a base_url
+  // and a model cannot collide into the same signature by containing the
+  // separator.
+  const testSignature = [
+    active,
+    String(consented),
+    String(configured),
+    baseUrl,
+    model,
+    String(credentialEpoch),
+  ].join("\u0000");
+  const shownTest = testOutcome?.signature === testSignature ? testOutcome : null;
 
   // codex.login_status is the only thing that knows whether an account is
   // signed in — providers.list says "configured", not who. Asking for it only
@@ -298,13 +355,24 @@ export function ProviderSection() {
       await refresh();
     });
 
+  // A model list was fetched with a credential. Once that credential is gone
+  // or replaced, the list on screen is a leftover from an account that may
+  // not be the one the writer is now talking to — and after a clear there is
+  // no credential behind it at all. Dropping it costs one click of the
+  // refresh button to get back, and only when there is a key to get it with.
+  const forgetModels = () => {
+    setModels([]);
+    setModelsError(null);
+  };
+
   const saveKey = () =>
     guard(async () => {
       await settingsApi.set({ providers: { [active]: { api_key: keyDraft.trim() } } });
       setKeyDraft("");
+      forgetModels();
       // A rotated key can leave `configured` true on both sides of the
       // write, so it is this call itself — not a value read back off
-      // providers.list — that tells the clear-effect a credential changed.
+      // providers.list — that tells the test signature a credential changed.
       setCredentialEpoch((n) => n + 1);
       await refresh();
     });
@@ -316,6 +384,7 @@ export function ProviderSection() {
     guard(async () => {
       await settingsApi.set({ providers: { [active]: { api_key: "" } } });
       setKeyDraft("");
+      forgetModels();
       setCredentialEpoch((n) => n + 1);
       await refresh();
     });
@@ -325,8 +394,8 @@ export function ProviderSection() {
     // A blur that changed nothing is not a save. Without this, tabbing
     // through the field costs a full settings.set + providers.list round
     // trip — and that reload is what used to eat a half-typed API key.
-    if (next === (current?.base_url ?? "")) return;
-    await guard(async () => {
+    if (next === baseUrl) return;
+    await saveInBackground(async () => {
       await settingsApi.set({ providers: { [active]: { base_url: next } } });
       await refresh();
     });
@@ -353,12 +422,21 @@ export function ProviderSection() {
 
   // An empty string is meaningful — "the provider's own default" — not a
   // skip. #91 chose that over shipping a model catalogue that ages the day
-  // a provider ships a new one.
-  const saveModel = () =>
-    guard(async () => {
-      await settingsApi.set({ providers: { [active]: { model: modelDraft.trim() } } });
+  // a provider ships a new one. Clearing a field that held a model is
+  // therefore a real write, which is why the no-op check below compares
+  // against what is *stored* rather than testing `next` for emptiness.
+  const saveModel = async () => {
+    const next = modelDraft.trim();
+    // Same as the base URL: a blur that changed nothing is not a save. Tab
+    // order runs through this field on the way to the consent box, so
+    // without this every keyboard user reaching consent spent a settings.set
+    // and a providers.list on saving the value that was already there.
+    if (next === model) return;
+    await saveInBackground(async () => {
+      await settingsApi.set({ providers: { [active]: { model: next } } });
       await refresh();
     });
+  };
 
   // The one decision this whole pane exists to make legible: from here on,
   // scenes the writer asks the built-in agent about leave this machine and
@@ -395,16 +473,20 @@ export function ProviderSection() {
   // is no way to "just check the key works" ahead of consent.
   const runTest = () =>
     guard(async () => {
-      setTestResult(null);
-      setTestError(null);
+      // The signature as it stands when the writer clicks. If anything it
+      // covers changes while the call is in flight, the result that comes
+      // back describes a configuration that is no longer on screen — and the
+      // render below will not show it, which is exactly right.
+      const signature = testSignature;
+      setTestOutcome(null);
       try {
         await providersApi.test(active);
-        setTestResult("ok");
+        setTestOutcome({ signature, ok: true, error: null });
       } catch (e) {
         // Same reasoning as the model list: a failed test is information
         // about the provider, not a broken pane, so it lands on its own line
         // rather than in `error`.
-        setTestError(e);
+        setTestOutcome({ signature, ok: false, error: e });
       }
     });
 
@@ -483,6 +565,13 @@ export function ProviderSection() {
           <input
             id="provider-api-key"
             type="password"
+            // A password field in a webview is an invitation for the OS or an
+            // embedded password manager to offer to save it — for a provider
+            // key that is at best noise and at worst a second copy of a
+            // secret the writer meant to keep in one place. The name is
+            // deliberately not "password": autofill heuristics read it.
+            name="provider-api-key"
+            autoComplete="off"
             value={keyDraft}
             placeholder={
               current?.configured
@@ -583,12 +672,19 @@ export function ProviderSection() {
         >
           {t("settings.providers.test")}
         </button>
-        {testResult === "ok" ? (
-          <span data-testid="provider-test-ok">{t("settings.providers.test.ok")}</span>
+        {/* role="status", not a bare span: a screen reader announced the
+            failure and said nothing at all about the success, so the one
+            outcome that means "you can start writing" was the one nobody
+            heard. `status` is polite — it waits for a pause rather than
+            interrupting, which suits a result the writer just asked for. */}
+        {shownTest?.ok ? (
+          <span role="status" data-testid="provider-test-ok">
+            {t("settings.providers.test.ok")}
+          </span>
         ) : null}
-        {testError ? (
+        {shownTest?.error ? (
           <span role="alert" data-testid="provider-test-error">
-            {rpcErrorMessage(testError, t)}
+            {rpcErrorMessage(shownTest.error, t)}
           </span>
         ) : null}
       </div>

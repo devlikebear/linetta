@@ -221,6 +221,19 @@ describe("ProviderSection", () => {
     );
   });
 
+  it("keeps a password manager out of the API key field", async () => {
+    // A password input inside a webview invites the OS or an embedded
+    // manager to offer to save it. Nothing leaks either way, but a provider
+    // key ending up in a password vault is a second copy of a secret the
+    // writer meant to keep in one place.
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const input = await screen.findByTestId("provider-key-input");
+    expect(input).toHaveAttribute("autocomplete", "off");
+    expect(input).toHaveAttribute("name", "provider-api-key");
+  });
+
   it("offers no clear button for a provider with no stored key", async () => {
     activeId = "anthropic";
     render(<ProviderSection />);
@@ -364,6 +377,31 @@ describe("ProviderSection", () => {
     expect(datalist?.querySelectorAll("option")).toHaveLength(2);
   });
 
+  it("drops the model list when the credential behind it is cleared", async () => {
+    // The list was fetched with a key. Once that key is gone there is no
+    // credential behind the names still sitting in the datalist, and after a
+    // rotation they may belong to a different account entirely. One click of
+    // the refresh button gets them back — when there is a key to get them
+    // with.
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    rpc.providersListModels.mockImplementation(() =>
+      Promise.resolve({ models: ["claude-opus", "claude-haiku"] }),
+    );
+    render(<ProviderSection />);
+
+    await userEvent.click(await screen.findByTestId("provider-model-refresh"));
+    await waitFor(() =>
+      expect(document.getElementById("provider-model-list")?.querySelectorAll("option")).toHaveLength(2),
+    );
+
+    await userEvent.click(screen.getByTestId("provider-key-clear"));
+
+    await waitFor(() =>
+      expect(document.getElementById("provider-model-list")?.querySelectorAll("option")).toHaveLength(0),
+    );
+  });
+
   it("keeps the model input usable when the list fails to load", async () => {
     activeId = "anthropic";
     rowExtras = { anthropic: { configured: true } };
@@ -393,11 +431,17 @@ describe("ProviderSection", () => {
   });
 
   it("saves an empty model as the provider default", async () => {
+    // The row has a model and the writer clears it: emptying the field is a
+    // real write, not a no-op, because "" means the provider's own default.
+    // The fixture used to give the row no model at all, so writing "" was
+    // genuinely a no-op and this test passed for the wrong reason — it was
+    // the only thing standing in the way of the blur guard below.
     activeId = "anthropic";
+    rowExtras = { anthropic: { model: "claude-sonnet-5" } };
     render(<ProviderSection />);
 
     const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "claude-x" } });
+    await waitFor(() => expect(input.value).toBe("claude-sonnet-5"));
     fireEvent.change(input, { target: { value: "" } });
     fireEvent.focusOut(input);
 
@@ -406,6 +450,64 @@ describe("ProviderSection", () => {
         providers: { anthropic: { model: "" } },
       }),
     );
+  });
+
+  it("shows the saved model of the provider that is already active at mount", async () => {
+    // No provider switch anywhere in this test, which is the whole point.
+    // `active` starts as the literal "openai-codex" — the engine's default
+    // and ActiveProvider()'s fallback, so the id providers.list most often
+    // reports back — and the draft-scoping ref was claimed on the first
+    // render, before any rows existed. The second pass then found the ref
+    // already matching and returned, so the drafts were never seeded: the
+    // pane told a writer with a model configured that they had none. Every
+    // other draft test switches provider first, which is exactly why none of
+    // them saw it.
+    rowExtras = { "openai-codex": { configured: true, model: "gpt-5-codex" } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe("gpt-5-codex"));
+  });
+
+  it("does not destroy the saved model when the writer tabs through the field", async () => {
+    // The other half of the same bug, and the damaging one. Tab order runs
+    // four provider buttons → model → refresh → consent → test, so every
+    // keyboard user on their way to the consent box passes through this
+    // field. With the draft left empty, that blur saved "" over a model the
+    // writer had configured — an ordinary tab-through destroying stored
+    // state, with nothing on screen to say so.
+    rowExtras = { "openai-codex": { configured: true, model: "gpt-5-codex" } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe("gpt-5-codex"));
+
+    fireEvent.focus(input);
+    fireEvent.focusOut(input);
+    await flush();
+
+    expect(rpc.settingsSet).not.toHaveBeenCalled();
+    expect(input.value).toBe("gpt-5-codex");
+  });
+
+  it("does not save the model on a blur that changed nothing", async () => {
+    // The symmetric counterpart of the base URL's no-op guard. Beyond the
+    // wasted settings.set + providers.list round trip, that reload is the
+    // one that used to eat half-typed drafts elsewhere in the pane.
+    activeId = "anthropic";
+    rowExtras = { anthropic: { model: "claude-sonnet-5" } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe("claude-sonnet-5"));
+
+    // Whitespace either side is still the same model name.
+    fireEvent.change(input, { target: { value: "  claude-sonnet-5  " } });
+    fireEvent.focusOut(input);
+    await flush();
+
+    expect(rpc.settingsSet).not.toHaveBeenCalled();
+    expect(rpc.providersList).toHaveBeenCalledTimes(1);
   });
 
   it("saves the trimmed model draft on blur", async () => {
@@ -951,7 +1053,7 @@ describe("ProviderSection", () => {
           provider?: string;
           providers?: Record<
             string,
-            { consented_at?: number; api_key?: string; base_url?: string }
+            { consented_at?: number; api_key?: string; base_url?: string; model?: string }
           >;
         }) => {
           if (patch.provider) activeId = patch.provider;
@@ -964,6 +1066,9 @@ describe("ProviderSection", () => {
             }
             if (fields.base_url !== undefined) {
               rowExtras[id] = { ...rowExtras[id], base_url: fields.base_url };
+            }
+            if (fields.model !== undefined) {
+              rowExtras[id] = { ...rowExtras[id], model: fields.model };
             }
           }
           return Promise.resolve({});
@@ -1031,6 +1136,32 @@ describe("ProviderSection", () => {
       }
     });
 
+    it("names everything that is sent, in every language", async () => {
+      // Design spec 5.4: the sentence has to say *what* leaves the machine —
+      // the current scene's text, summaries, and the character/plot/fact
+      // cards the agent reads through its tools — and that Linetta sends it
+      // nowhere else. The shipped sentence named scene text alone, which
+      // understates the consent it records: all of that context travels with
+      // every agent turn. The section description above the checkbox is
+      // broader, but a description is not a consent record.
+      const { translate } = await vi.importActual<typeof import("../../lib/i18n")>("../../lib/i18n");
+
+      const expected = {
+        ko: ["요약", "카드", "그 밖의 어떤 곳에도"],
+        en: ["summaries", "cards", "nowhere else"],
+        ja: ["要約", "カード", "それ以外のどこにも"],
+      } as const;
+
+      for (const [language, phrases] of Object.entries(expected)) {
+        const sentence = translate(
+          language as keyof typeof expected,
+          "settings.providers.consent",
+          { provider: "Acme Models" },
+        );
+        for (const phrase of phrases) expect(sentence, `${language}: ${phrase}`).toContain(phrase);
+      }
+    });
+
     it("keeps the Korean sentence grammatical after a vowel-final name", async () => {
       // `으로` agrees with a consonant-final syllable and is wrong after a
       // vowel — "Google Gemini(제미나이)으로" is ungrammatical, and so is any
@@ -1045,6 +1176,21 @@ describe("ProviderSection", () => {
         expect(sentence, provider).not.toContain(`${provider}으로`);
         expect(sentence, provider).not.toContain(`${provider}로`);
       }
+    });
+
+    it("announces a passing test to a screen reader, not only a failing one", async () => {
+      // The failure carries role="alert"; the success was a bare <span>, so
+      // a screen-reader user was told when the test failed and nothing at
+      // all when it passed — the one outcome that means "you can start
+      // writing". `status` rather than `alert`: it is polite, and the writer
+      // asked for this result.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+
+      expect(await screen.findByTestId("provider-test-ok")).toHaveAttribute("role", "status");
     });
 
     it("clears a passing test result when the provider changes", async () => {
@@ -1096,11 +1242,16 @@ describe("ProviderSection", () => {
     });
 
     it("keeps a passing test result across an unrelated reload", async () => {
-      // The counterpart to the three tests above: the result clears on the
-      // *facts* it depends on, never on a providers.list arriving. Keying
-      // that effect on the list identity would make a passing tick vanish
-      // whenever anything reloaded in the background — a model save here, a
-      // Codex poll tick in the app — with nothing on screen explaining why.
+      // The counterpart to the tests above: the result clears on the *facts*
+      // it depends on, never on a providers.list arriving. Comparing list
+      // identities instead would make a passing tick vanish whenever
+      // anything reloaded in the background — a Codex poll tick in the app —
+      // with nothing on screen explaining why.
+      //
+      // Clicking the provider that is already active is the cleanest such
+      // reload: a settings.set and a fresh providers.list, and not one value
+      // the result was earned under changes. This test used to save a model
+      // instead, which pinned the exact bug below as correct behaviour.
       activeId = "anthropic";
       rowExtras = { anthropic: { configured: true, consented: true } };
       render(<ProviderSection />);
@@ -1108,17 +1259,41 @@ describe("ProviderSection", () => {
       await userEvent.click(await screen.findByTestId("provider-test"));
       expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
 
+      await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+
+      await waitFor(() => expect(rpc.providersList).toHaveBeenCalledTimes(2));
+      await flush();
+      expect(screen.getByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("clears a passing test result when the model changes", async () => {
+      // provider.Options() puts Model on the request and providers.test goes
+      // through Source.Client → Ask, so the badge was earned against one
+      // specific model. Typing a model the provider does not serve leaves
+      // the only diagnostic surface in the app saying the connection works
+      // while every agent turn will fail.
+      activeId = "anthropic";
+      rowExtras = {
+        anthropic: { configured: true, consented: true, model: "claude-sonnet-4-5" },
+      };
+      persistWrites();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
       const model = screen.getByTestId("provider-model-input");
-      await userEvent.type(model, "claude-sonnet-4-5");
+      await userEvent.clear(model);
+      await userEvent.type(model, "claude-does-not-exist");
       fireEvent.blur(model);
 
       await waitFor(() =>
         expect(rpc.settingsSet).toHaveBeenCalledWith({
-          providers: { anthropic: { model: "claude-sonnet-4-5" } },
+          providers: { anthropic: { model: "claude-does-not-exist" } },
         }),
       );
       await flush();
-      expect(screen.getByTestId("provider-test-ok")).toBeInTheDocument();
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
     });
 
     it("clears a passing test result when the base URL changes", async () => {
@@ -1228,6 +1403,61 @@ describe("ProviderSection", () => {
 
       expect(await screen.findByTestId("provider-test-error")).toBeInTheDocument();
       expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("does not swallow the test click that caused a model blur-save", async () => {
+      // Blur and click are separate event batches: React re-renders between
+      // them. A blur handler that raised the shared `busy` flag disabled the
+      // test button before the click that caused the blur landed, so typing
+      // a model and clicking "Test connection" — the first-run gesture —
+      // called providers.test zero times. Nothing incorrect was recorded;
+      // the button just looked dead.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      const model = await screen.findByTestId("provider-model-input");
+      fireEvent.change(model, { target: { value: "claude-x" } });
+      // fireEvent, not userEvent: the two events have to land in the order a
+      // real blur-then-click does, with only React's own re-render between
+      // them and no promise flush to let the save finish first.
+      fireEvent.focusOut(model);
+      fireEvent.click(screen.getByTestId("provider-test"));
+      await flush();
+
+      expect(rpc.providersTest).toHaveBeenCalledTimes(1);
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("does not swallow the consent click that caused a base URL blur-save", async () => {
+      // The same drop on the other natural gesture: type an endpoint, tick
+      // the box. consented_at was never written, so the writer ticked a
+      // checkbox that sprang straight back.
+      activeId = "openai";
+      rowExtras = { openai: { configured: true } };
+      persistWrites();
+      render(<ProviderSection />);
+
+      const baseUrl = await screen.findByTestId("provider-base-url-input");
+      fireEvent.change(baseUrl, { target: { value: "https://ollama.local/v1" } });
+      fireEvent.focusOut(baseUrl);
+
+      // Asserted on the DOM rather than on the dropped click, because jsdom
+      // cannot reproduce the drop: React suppresses a synthetic click on a
+      // disabled *button* — which is what the test above catches — but its
+      // change plugin still delivers onChange to a disabled checkbox, so a
+      // fireEvent click here lands where a browser would deliver nothing at
+      // all. What the writer's pointer meets is this attribute.
+      expect(screen.getByTestId("provider-consent")).toBeEnabled();
+
+      fireEvent.click(screen.getByTestId("provider-consent"));
+      await flush();
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { openai: { consented_at: expect.any(Number) } },
+        }),
+      );
     });
 
     it("locks the consent box and the test button while a call is in flight", async () => {

@@ -818,11 +818,21 @@ const messages = {
     "settings.providers.model": "모델",
     "settings.providers.model.default": "프로바이더 기본값",
     "settings.providers.model.refresh": "새로고침",
+    // Design spec 5.4: the sentence the writer ticks has to say *what*
+    // leaves the machine, not only where it goes. The agent reads story
+    // context, summaries and the character/plot/fact cards through its MCP
+    // tools, and all of it travels with the request — a checkbox naming only
+    // "scene text" understates the consent it is recording. The section
+    // description above says as much, but a description is not a consent
+    // record. It stays one sentence, because a paragraph here is a paragraph
+    // nobody reads.
+    //
     // `에`, not `으로`: the placeholder holds a provider name or a base URL,
     // and Korean's 으로/로 has to agree with the last syllable of whatever
     // lands there ("Google Gemini으로" is ungrammatical). `에` has no such
     // allomorph, so the sentence stays correct for every destination.
-    "settings.providers.consent": "씬 원문이 {provider}에 전송되는 데 동의합니다",
+    "settings.providers.consent":
+      "현재 씬 원문과 요약, 그리고 에이전트가 툴로 읽는 등장인물·플롯·팩트 카드가 {provider}에 전송되며 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
     "settings.providers.consent.customEndpoint": "직접 설정한 OpenAI 호환 엔드포인트",
     "settings.providers.test": "연결 테스트",
     "settings.providers.test.ok": "연결됨",
@@ -1634,7 +1644,8 @@ const messages = {
     "settings.providers.model": "Model",
     "settings.providers.model.default": "Provider default",
     "settings.providers.model.refresh": "Refresh",
-    "settings.providers.consent": "I agree that my scenes' text will be sent to {provider}",
+    "settings.providers.consent":
+      "I agree that the current scene's text, its summaries, and the character, plot and fact cards the agent reads through its tools are sent to {provider}, and that Linetta sends them nowhere else",
     "settings.providers.consent.customEndpoint": "the OpenAI-compatible endpoint set above",
     "settings.providers.test": "Test connection",
     "settings.providers.test.ok": "Connected",
@@ -2446,7 +2457,8 @@ const messages = {
     "settings.providers.model": "モデル",
     "settings.providers.model.default": "プロバイダーの既定値",
     "settings.providers.model.refresh": "更新",
-    "settings.providers.consent": "シーンの原文が{provider}に送信されることに同意します",
+    "settings.providers.consent":
+      "現在のシーンの原文と要約、そしてエージェントがツールで読む登場人物・プロット・ファクトカードが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
     "settings.providers.consent.customEndpoint": "上で設定した OpenAI 互換エンドポイント",
     "settings.providers.test": "接続テスト",
     "settings.providers.test.ok": "接続済み",
