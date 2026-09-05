@@ -305,10 +305,10 @@ export const en: Translation = {
       },
       {
         name: 'Full',
-        body: 'All sixteen. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
+        body: 'All seventeen. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
       }
     ],
-    toolsLabel: 'Sixteen tools, not a hundred RPCs',
+    toolsLabel: 'Seventeen tools, not a hundred RPCs',
     toolsNote:
       'A client’s tool budget is finite and selection accuracy falls as the list grows, so the engine’s RPC surface is not exposed one-to-one. Access can also be pinned to a single work.',
     readLabel: 'Read',
@@ -331,7 +331,11 @@ export const en: Translation = {
       { name: 'linetta_apply_story_ops', note: 'Structured story changes as one batch' },
       { name: 'linetta_write_summary', note: 'Scene, container and synopsis summaries' },
       { name: 'linetta_create_checkpoint', note: 'A labelled restore point before a big rewrite' },
-      { name: 'linetta_undo_last_change', note: 'Undo a batch in one call' }
+      { name: 'linetta_undo_last_change', note: 'Undo a batch in one call' },
+      {
+        name: 'linetta_edit_memory',
+        note: 'Record what it has learned — the writer profile, which applies to every work, or this work’s notes'
+      }
     ],
     safetyLabel: 'What keeps it safe',
     safety: [
@@ -355,7 +359,8 @@ export const en: Translation = {
       'An API key goes into your OS’s secure store; Linux has none, so only the ChatGPT sign-in works there',
       'Open it with Cmd/Ctrl+J — it reaches Linetta’s tools through the same MCP layer an external client uses',
       'Every call lands in the same activity log, marked with which agent made it',
-      'A structural change gets an Undo button on its line — the last eight, and only while the app stays open; a scene-prose rewrite has no one-click undo yet, but the previous text is kept as a restorable version'
+      'A structural change gets an Undo button on its line — the last eight, and only while the app stays open; a scene-prose rewrite has no one-click undo yet, but the previous text is kept as a restorable version',
+      'It reads two short memories at the start of every turn — a writer profile and this work’s notes — and writes to them itself. The profile is global: it is not scoped to the work you have open. Both are yours to rewrite in Settings → Memory'
     ]
   },
 
@@ -367,7 +372,7 @@ export const en: Translation = {
       {
         tag: 'library.db',
         title: 'One SQLite library',
-        body: 'Projects, scenes, outline, entities, relationships, plot and version snapshots, in a single database file.'
+        body: 'Projects, scenes, outline, entities, relationships, plot, version snapshots, and the memories an agent reads, in a single database file.'
       },
       {
         tag: 'Snapshots',
@@ -637,10 +642,10 @@ export const ko: Translation = {
       },
       {
         name: '전체',
-        body: '16개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
+        body: '17개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
       }
     ],
-    toolsLabel: 'RPC 100개가 아니라, 툴 16개',
+    toolsLabel: 'RPC 100개가 아니라, 툴 17개',
     toolsNote:
       '클라이언트의 툴 예산은 유한하고 목록이 길어질수록 선택 정확도가 떨어집니다. 그래서 엔진 RPC를 1:1로 노출하지 않습니다. 접근을 한 작품으로 제한할 수도 있습니다.',
     readLabel: '읽기',
@@ -663,7 +668,11 @@ export const ko: Translation = {
       { name: 'linetta_apply_story_ops', note: '구조화된 스토리 변경을 한 배치로' },
       { name: 'linetta_write_summary', note: '씬·컨테이너 요약과 작품 시놉시스' },
       { name: 'linetta_create_checkpoint', note: '큰 개작 전 라벨 붙은 복원 지점' },
-      { name: 'linetta_undo_last_change', note: '배치 단위로 한 번에 되돌리기' }
+      { name: 'linetta_undo_last_change', note: '배치 단위로 한 번에 되돌리기' },
+      {
+        name: 'linetta_edit_memory',
+        note: '알아낸 것을 기록 — 모든 작품에 적용되는 작가 프로필, 또는 이 작품의 노트'
+      }
     ],
     safetyLabel: '무엇이 이것을 안전하게 하는가',
     safety: [
@@ -687,7 +696,8 @@ export const ko: Translation = {
       'API 키는 OS의 시크릿 저장소로 들어갑니다. Linux는 저장소가 없어서 ChatGPT 로그인만 됩니다',
       'Cmd/Ctrl+J로 엽니다 — 외부 클라이언트가 쓰는 것과 같은 MCP 계층으로 Linetta의 툴에 접속합니다',
       '모든 호출은 같은 활동 로그에 남고, 어느 에이전트가 호출했는지 표시됩니다',
-      '구조 변경은 해당 줄의 되돌리기 버튼으로 한 번에 되돌립니다(앱이 켜져 있는 동안, 최근 8건까지). 씬 본문 다시쓰기는 아직 한 번에 되돌릴 수 없지만, 이전 본문이 버전으로 남아 복원할 수 있습니다'
+      '구조 변경은 해당 줄의 되돌리기 버튼으로 한 번에 되돌립니다(앱이 켜져 있는 동안, 최근 8건까지). 씬 본문 다시쓰기는 아직 한 번에 되돌릴 수 없지만, 이전 본문이 버전으로 남아 복원할 수 있습니다',
+      '매 턴 시작에 짧은 기억 두 개 — 작가 프로필과 이 작품의 노트 — 를 읽고, 스스로 거기에 기록합니다. 작가 프로필은 전역이어서 열려 있는 작품에 한정되지 않습니다. 둘 다 설정 → 기억에서 직접 고쳐 쓸 수 있습니다'
     ]
   },
 
@@ -699,7 +709,7 @@ export const ko: Translation = {
       {
         tag: 'library.db',
         title: 'SQLite 라이브러리 하나',
-        body: '작품, 씬, 아웃라인, 엔티티, 관계, 플롯, 버전 스냅샷이 단일 데이터베이스 파일 안에 있습니다.'
+        body: '작품, 씬, 아웃라인, 엔티티, 관계, 플롯, 버전 스냅샷, 그리고 에이전트가 읽는 기억이 단일 데이터베이스 파일 안에 있습니다.'
       },
       {
         tag: '스냅샷',
@@ -967,10 +977,10 @@ export const ja: Translation = {
       },
       {
         name: 'フル',
-        body: '16個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
+        body: '17個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
       }
     ],
-    toolsLabel: 'RPC 百個ではなく、ツール16個',
+    toolsLabel: 'RPC 百個ではなく、ツール17個',
     toolsNote:
       'クライアントのツール予算は有限で、一覧が伸びるほど選択の精度は落ちます。だからエンジンの RPC を1対1では公開しません。アクセスを一つの作品に限定することもできます。',
     readLabel: '読み取り',
@@ -993,7 +1003,11 @@ export const ja: Translation = {
       { name: 'linetta_apply_story_ops', note: '構造化された物語の変更を一括で' },
       { name: 'linetta_write_summary', note: 'シーン・コンテナの要約と作品のあらすじ' },
       { name: 'linetta_create_checkpoint', note: '大きな改稿の前のラベル付き復元点' },
-      { name: 'linetta_undo_last_change', note: 'バッチ単位で一度に取り消し' }
+      { name: 'linetta_undo_last_change', note: 'バッチ単位で一度に取り消し' },
+      {
+        name: 'linetta_edit_memory',
+        note: '学んだことを記録 — すべての作品に適用される作家プロフィール、またはこの作品のノート'
+      }
     ],
     safetyLabel: '安全を保つもの',
     safety: [
@@ -1017,7 +1031,8 @@ export const ja: Translation = {
       'API キーは OS のシークレットストアに入ります。Linux にはストアがないので、ChatGPT サインインだけが使えます',
       'Cmd/Ctrl+J で開きます — 外部クライアントと同じ MCP レイヤーで Linetta のツールに接続します',
       'すべての呼び出しは同じ活動ログに残り、どのエージェントが呼んだか表示されます',
-      '構造的な変更はその行の取り消しボタンで一手で戻せます（アプリを起動している間、直近 8 件まで）。シーン本文の書き直しにワンクリックの取り消しはまだありませんが、直前の本文はバージョンとして残り復元できます'
+      '構造的な変更はその行の取り消しボタンで一手で戻せます（アプリを起動している間、直近 8 件まで）。シーン本文の書き直しにワンクリックの取り消しはまだありませんが、直前の本文はバージョンとして残り復元できます',
+      '毎ターンの初めに短い記憶を二つ — 作家プロフィールとこの作品のノート — を読み、自分でもそこに書き込みます。プロフィールはグローバルで、開いている作品に限定されません。どちらも設定 → 記憶で自分で書き直せます'
     ]
   },
 
@@ -1029,7 +1044,7 @@ export const ja: Translation = {
       {
         tag: 'library.db',
         title: '一つの SQLite ライブラリ',
-        body: '作品、シーン、アウトライン、エンティティ、関係、プロット、バージョンスナップショットが単一のデータベースファイルの中にあります。'
+        body: '作品、シーン、アウトライン、エンティティ、関係、プロット、バージョンスナップショット、そしてエージェントが読む記憶が単一のデータベースファイルの中にあります。'
       },
       {
         tag: 'スナップショット',
