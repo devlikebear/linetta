@@ -24,7 +24,7 @@ is looked for: it was `<app data>/companion/<project id>/memory/`, and it is
 now `<app data>/<project id>/memory/`. Nothing was deleted, but nothing moved
 either, so an agent no longer recalls what the companion remembered. To bring
 those facts back, copy each project's directory out of `<app data>/companion/`
-up one level, into `<app data>/` beside the others.
+up one level, into `<app data>/` beside the others. ([#114](https://github.com/devlikebear/linetta/issues/114) tracks doing it for you.)
 
 ## What happened to your API keys, and what changes in 1.2
 
