@@ -5,7 +5,7 @@ import { agent as agentApi, providers as providersApi } from "../../lib/rpc";
 import type { AgentHistoryRow } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
-import { rpcErrorMessage } from "../../lib/rpcMessage";
+import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
 import { useEngineEvent } from "../../hooks/useEngineEvent";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { Markdown } from "./Markdown";
@@ -60,22 +60,29 @@ type Line =
   | NoticeLine;
 
 /** A terminal wire event with nothing else to collapse into (Task 7):
- *  agent.error or agent.cancelled, or the panel's own guess — restoring a
- *  conversation whose last row is a user turn — that a prior turn may still
- *  be running. Its own Line variant rather than folding into `sendError`
- *  (the composer's synchronous-refusal banner, which sits outside the log
- *  and only ever holds one message): a mid-turn failure belongs beside the
- *  partial reply that produced it, in the transcript, not in a banner the
- *  NEXT turn's own error would silently overwrite.
+ *  agent.error or agent.cancelled, or the panel's own reading of a restored
+ *  conversation — that a prior turn may still be running, or that a restored
+ *  turn ended in a failure. Its own Line variant rather than folding into
+ *  `sendError` (the composer's synchronous-refusal banner, which sits outside
+ *  the log and only ever holds one message): a mid-turn failure belongs
+ *  beside the partial reply that produced it, in the transcript, not in a
+ *  banner the NEXT turn's own error would silently overwrite.
  *
  *  `reason` is required only on the "error" variant — it is the one thing
  *  rendered from it, and only "error" needs it (never `message`; see
- *  AgentErrorPayload and rpcErrorMessage). Text is resolved at render time
+ *  AgentErrorPayload and reasonMessage). Text is resolved at render time
  *  from `variant`/`reason`, the same as a tool line's verb+label, so this
- *  carries no pre-translated copy to go stale under a language switch. */
+ *  carries no pre-translated copy to go stale under a language switch.
+ *
+ *  "failed" is the restored counterpart of "error" and carries no reason:
+ *  the transcript stamps rows with a status ("failed"), not with the reason
+ *  code that produced it, so a restored failure can honestly say only THAT
+ *  the turn failed. Inventing a reason to reuse the "error" variant would
+ *  put a sentence on screen the row does not support. */
 type NoticeLine =
   | { kind: "notice"; id: string; variant: "restored" }
   | { kind: "notice"; id: string; variant: "cancelled" }
+  | { kind: "notice"; id: string; variant: "failed" }
   | { kind: "notice"; id: string; variant: "error"; reason: string };
 
 interface AgentDeltaPayload {
@@ -149,37 +156,107 @@ function parseToolEvent(content: string): RestoredToolEvent | null {
   return { name, ok, batch_id: typeof batchId === "string" ? batchId : undefined };
 }
 
+/** How a restored turn ended, read off the last row of its run.
+ *
+ *  The engine stamps every row of a run with one status when the turn ends
+ *  (transcript.go's markRun), so any row of the run answers this — the last
+ *  one is simply the one the boundary check below already has in hand.
+ *
+ *  Only two statuses mean the turn ended badly. A provider failure or a panic
+ *  stamps "failed" (loop.go's endWithError / the panic recovery); a cancel
+ *  stamps "cancelled". Everything else is "done", INCLUDING the iteration
+ *  wall, which the engine keeps "done" on purpose: that turn's tool calls
+ *  really ran and its partial reply is real work, so it must not be drawn
+ *  with a failure beneath it (see endAtWall's comment). A normally completed
+ *  turn is never marked at all and keeps the "done" its rows were written
+ *  with. */
+function endNoticeVariant(status: string): "failed" | "cancelled" | null {
+  if (status === "failed") return "failed";
+  if (status === "cancelled") return "cancelled";
+  return null;
+}
+
 /** agent.history's rows -> the Line shape the log already renders (Task 7).
  *  A row this function cannot turn into a Line — an unrecognised role, or a
  *  tool row whose content fails to parse — is skipped rather than thrown:
- *  one bad row must not blank the whole restored conversation. */
+ *  one bad row must not blank the whole restored conversation.
+ *
+ *  A run that ended badly gets a notice line closing it out, so a turn that
+ *  died mid-reply does not restore looking exactly like one that finished.
+ *  Live, that is what agent.error and agent.cancelled draw; restored, `status`
+ *  is the only trace either of them leaves. */
 function linesFromHistory(rows: AgentHistoryRow[]): Line[] {
   const lines: Line[] = [];
-  for (const row of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
     if (row.role === "user") {
       lines.push({ kind: "user", id: `history:${row.id}`, text: row.content });
     } else if (row.role === "assistant") {
       lines.push({ kind: "assistant", id: `history:${row.id}`, text: row.content });
     } else if (row.role === "tool") {
       const ev = parseToolEvent(row.content);
-      if (!ev) continue;
-      lines.push({
-        kind: "tool",
-        id: `history:${row.id}`,
-        name: ev.name,
-        // Same rule as the live handler below: never render what the engine
-        // put in `summary`, restored or not. Nothing reads it back off a
-        // Line — this is "" purely so the shape matches a live tool line.
-        summary: "",
-        state: ev.ok ? "ok" : "error",
-        batchId: ev.batch_id,
-      });
+      if (ev) {
+        lines.push({
+          kind: "tool",
+          id: `history:${row.id}`,
+          name: ev.name,
+          // Same rule as the live handler below: never render what the engine
+          // put in `summary`, restored or not. Nothing reads it back off a
+          // Line — this is "" purely so the shape matches a live tool line.
+          summary: "",
+          state: ev.ok ? "ok" : "error",
+          batchId: ev.batch_id,
+        });
+      }
+      // An unparseable tool row still counts as a row of its run for the
+      // boundary check below — skipping the LINE must not also skip the
+      // notice that says how that run ended.
     }
     // Any other role is a row this panel has no drawing for. There should
     // not be one — role is "user" | "assistant" | "tool" — but the wire is
     // not the type system, so it is skipped rather than guessed at.
+
+    // A run's rows are contiguous and ordered, so a run ends where the next
+    // row belongs to a different one. (Rows written before run ids existed
+    // all share `undefined` and read as a single run; they are the removed
+    // 1.0 companion's, which this intent-scoped query never returns.)
+    const endsRun = i === rows.length - 1 || rows[i + 1].run_id !== row.run_id;
+    if (!endsRun) continue;
+    const variant = endNoticeVariant(row.status);
+    if (variant) lines.push({ kind: "notice", id: `history:${row.id}:${variant}`, variant });
   }
   return lines;
+}
+
+/** Whether the restored conversation might still have a turn running in the
+ *  engine — the notice from the Task 7 brief's 7-3, widened past "the last row
+ *  is a user row" (which missed the abandoned turn that got a tool call in).
+ *
+ *  What the rows can actually say:
+ *   - A "failed" or "cancelled" status means markRun ran, which only happens
+ *     on the way out of a turn. That turn is over, and linesFromHistory has
+ *     already said so above.
+ *   - An assistant row is text the model produced. The loop writes one only
+ *     after a completed Chat call, and a turn that keeps going writes a tool
+ *     row after it — so an assistant row at the very end is a turn that got
+ *     its answer out.
+ *   - Anything else — a user row with no reply, a tool row with no reply
+ *     after it — is a conversation that stops mid-turn, which is exactly what
+ *     an abandoned run leaves behind.
+ *
+ *  What they cannot say: the loop writes the assistant row BEFORE running the
+ *  tool calls that came with it, so a turn killed in that window ends on an
+ *  assistant row and reads here as settled. Nothing in the transcript
+ *  distinguishes it (the row carries no "and it also asked for tools"), and
+ *  the panel has no run-status RPC to ask — the plan deliberately does not add
+ *  one. A missed notice is the safe direction of that error: the notice is a
+ *  hedge, and claiming a finished turn may still be running would be worse
+ *  than staying quiet. */
+function turnMayBeRunning(rows: AgentHistoryRow[]): boolean {
+  const last = rows[rows.length - 1];
+  if (!last) return false;
+  if (endNoticeVariant(last.status)) return false;
+  return last.role !== "assistant";
 }
 
 interface Props {
@@ -270,7 +347,24 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // second turn in the same mount silently drops every event from the second
   // run and renders no output — and the events that arrive before that
   // response are held rather than judged (see the send window below).
+
+  // Runs this panel started for a work it is no longer showing. #93 made a
+  // turn outlive the RPC call, so jumping to another project does not stop
+  // one — the engine keeps running it and keeps emitting its events, and
+  // those events carry a run id but no project id. Without naming them, the
+  // first straggler to arrive would be adopted by acceptRun's first-wins null
+  // check (the switch below clears currentRunIdRef) and one work's prose
+  // would stream into another's log.
+  //
+  // They stay refused even if the writer jumps back: by then that turn's
+  // rows have been restored from history, and re-adopting the run would
+  // append its remaining deltas to a bubble that no longer exists. The
+  // "may still be running" notice restore puts under it is what that writer
+  // gets instead — which is what it is for.
+  const abandonedRunsRef = useRef<Set<string>>(new Set());
+
   function acceptRun(runId: string): boolean {
+    if (abandonedRunsRef.current.has(runId)) return false;
     if (currentRunIdRef.current === null) currentRunIdRef.current = runId;
     return currentRunIdRef.current === runId;
   }
@@ -317,6 +411,51 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   function discardSendWindow() {
     pendingSendRef.current = false;
     bufferedEventsRef.current = [];
+  }
+
+  // The work this panel is currently showing, readable from an async callback
+  // that closed over an older render — handleSend's round trip has to know
+  // whether the writer has jumped elsewhere since it left. Written only in
+  // the reset below, so it and `projectId` can never disagree after a render.
+  const projectIdRef = useRef(projectId);
+
+  // A jump to another work (#95 Task 7 review, C1). Neither Workspace nor
+  // AgentPanel is keyed on the project id and the route is not remounted on a
+  // param change, so global search's cross-project jump changes `projectId`
+  // under a panel that stays mounted with everything from the previous work
+  // still in it. Without this, the previous work's conversation stays on
+  // screen and the next restore prepends the new work's rows to it: two
+  // writers' — or one writer's two books' — private conversations interleaved
+  // in one log, unlabelled.
+  //
+  // Reset during render rather than in an effect, the pattern React documents
+  // for "reset all state when a prop changes": an effect runs after paint, so
+  // the previous work's messages would be shown for a frame under the new
+  // work's title. For a leak whose whole harm is "this text was visible where
+  // it should not have been", not painting it at all is the fix.
+  //
+  // `draft` deliberately survives: it is the writer's own unsent typing, not
+  // the other work's conversation, and throwing away what someone typed is a
+  // worse trade than carrying a sentence across.
+  const [shownProjectId, setShownProjectId] = useState(projectId);
+  if (shownProjectId !== projectId) {
+    setShownProjectId(projectId);
+    projectIdRef.current = projectId;
+    // A turn may still be running for the work being left. Refuse its events
+    // from here on rather than letting the cleared currentRunIdRef adopt them.
+    if (currentRunIdRef.current) abandonedRunsRef.current.add(currentRunIdRef.current);
+    currentRunIdRef.current = null;
+    pendingToolRef.current.clear();
+    toolOccurrenceRef.current.clear();
+    // Held events belong to the run being abandoned, and the send that opened
+    // the window (if any) is disowned below in handleSend.
+    discardSendWindow();
+    setLines([]);
+    setRunning(false);
+    setTurn(null);
+    setCanceling(false);
+    setSending(false);
+    setSendError(null);
   }
 
   /** Wraps a wire handler so anything arriving inside the send window waits
@@ -488,6 +627,11 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   function handleSend() {
     const prompt = draft.trim();
     if (!prompt || sending || turnRunId !== null) return;
+    // The work this turn is for. Compared against projectIdRef when the round
+    // trip lands: a jump to another project in between must not install this
+    // turn — its prompt line, its run id, its stop button — into a panel now
+    // showing different work.
+    const sentProjectId = projectId;
     setDraft("");
     setSendError(null);
     setSending(true);
@@ -498,16 +642,29 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     agentApi
       .run(projectId, prompt, nodeId)
       .then((result) => {
+        if (!mountedRef.current) {
+          discardSendWindow();
+          return;
+        }
+        if (projectIdRef.current !== sentProjectId) {
+          // The writer jumped to another work while this send was in flight.
+          // The turn is real and still running in the engine, but it belongs
+          // to a conversation this panel is no longer showing, so nothing of
+          // it is installed here and its events are refused from now on.
+          //
+          // The send window is deliberately NOT touched: the project-switch
+          // reset already emptied and closed it, and if the writer has since
+          // sent something in the new work, that window is theirs — closing
+          // it here would drop their turn's opening events instead.
+          abandonedRunsRef.current.add(result.run_id);
+          return;
+        }
         // Set the authoritative run id directly from agent.run's response,
         // bypassing acceptRun's first-wins null check. See the comment
         // above acceptRun: an id assigned here, before any wire event has
         // been judged, closes the window a stale straggler from the previous
         // run could otherwise be adopted through simply by arriving first.
         currentRunIdRef.current = result.run_id;
-        if (!mountedRef.current) {
-          discardSendWindow();
-          return;
-        }
         setLines((prev) => [...prev, { kind: "user", id: `user:${result.run_id}`, text: prompt }]);
         setTurn(result.run_id);
         setSending(false);
@@ -525,6 +682,12 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
           discardSendWindow();
           return;
         }
+        // Same as the resolved case: a refusal of a turn for the work the
+        // writer has left is not news in the work they are now looking at,
+        // and handing them back a prompt they wrote for a different book
+        // would be worse than dropping it. No run id was ever minted, so
+        // there is nothing to abandon.
+        if (projectIdRef.current !== sentProjectId) return;
         setSending(false);
         setSendError(rpcErrorMessage(err, t));
         setDraft(prompt);
@@ -610,12 +773,18 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
       .then((rows) => {
         if (cancelled) return;
         const restored = linesFromHistory(rows);
-        // The only signal available for "is a turn still running": the
-        // conversation's own last row. A user row with no reply yet is
-        // exactly what a turn abandoned mid-flight (panel closed, app
-        // restarted) leaves behind — see the Task 7 brief's 7-3.
-        if (rows.length > 0 && rows[rows.length - 1].role === "user") {
-          restored.push({ kind: "notice", id: "history:maybe-running", variant: "restored" });
+        // The only signal available for "is a turn still running": whether
+        // the conversation ends in a settled turn. See turnMayBeRunning for
+        // what the rows can and cannot say about that.
+        if (turnMayBeRunning(rows)) {
+          // Keyed on the row it follows rather than a fixed string. With the
+          // project-switch reset above, no two restores can put a line in
+          // `lines` at once any more, so this is belt and braces and no test
+          // pins it — but a fixed key is what turned that missing reset into
+          // two interleaved conversations rather than a visibly stale one,
+          // and an id scheme every other Line already follows costs nothing.
+          const last = rows[rows.length - 1];
+          restored.push({ kind: "notice", id: `history:${last.id}:maybe-running`, variant: "restored" });
         }
         if (restored.length > 0) setLines((prev) => [...restored, ...prev]);
       })
@@ -698,13 +867,15 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
               // below) — so a language switch never leaves stale copy
               // sitting in state. `message` is never read here or anywhere
               // else on this Line: agent_internal_error's carries a raw Go
-              // panic value, and rpcErrorMessage only ever sees `reason`.
+              // panic value, and reasonMessage only ever sees `reason`.
               const text =
                 line.variant === "restored"
                   ? t("agentPanel.restore.mayBeRunning")
-                  : line.variant === "cancelled"
-                    ? t("agentPanel.cancelled")
-                    : rpcErrorMessage({ data: { reason: line.reason } }, t);
+                  : line.variant === "failed"
+                    ? t("agentPanel.restore.failed")
+                    : line.variant === "cancelled"
+                      ? t("agentPanel.cancelled")
+                      : reasonMessage(line.reason, t);
               return (
                 <div
                   key={line.id}

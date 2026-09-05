@@ -1266,12 +1266,36 @@ describe("AgentPanel wire errors and cancellation (#95 Task 7)", () => {
     expect(notice.textContent).not.toContain("401");
   });
 
-  it("tells the writer a turn is already running for agent_busy", async () => {
+  it("keeps a panic value out of the log for agent_internal_error", async () => {
+    // Retargeted from agent_busy in the Task 7 review: agent_busy is only ever
+    // a synchronous rejection of agent.run (loop.go's Run), never an
+    // agent.error notification, and the sendError banner already covers that
+    // path. agent_internal_error is a reason the loop really does notify —
+    // and the one whose `message` carries a raw Go panic value.
     await renderReady();
 
-    await emit("agent-error", { run_id: "r1", reason: "agent_busy", message: "run already active" });
+    await emit("agent-error", {
+      run_id: "r1",
+      reason: "agent_internal_error",
+      message: "internal error: runtime error: index out of range [3] with length 3",
+    });
 
-    expect(notices()[0].textContent).toBe("errors.agentBusy");
+    expect(notices()[0].textContent).toBe("errors.agentInternalError");
+    expect(notices()[0].textContent).not.toContain("index out of range");
+  });
+
+  it("degrades to an honest sentence for a reason code the panel does not know", async () => {
+    // Latent today — every reason agent.error can carry is mapped — but the
+    // fallback must not be `String({data:{reason}})`, which puts the literal
+    // text "[object Object]" in front of the writer.
+    await renderReady();
+
+    await emit("agent-error", { run_id: "r1", reason: "not_mapped_yet", message: "raw engine sentence" });
+
+    const notice = notices()[0];
+    expect(notice.textContent).toBe("errors.unexpectedReason:reason=not_mapped_yet");
+    expect(notice.textContent).not.toContain("[object Object]");
+    expect(notice.textContent).not.toContain("raw engine sentence");
   });
 
   it("keeps the partial reply on screen and says the work is kept for agent_iteration_limit", async () => {
@@ -1414,5 +1438,251 @@ describe("AgentPanel review carry-ins (#95 Task 7)", () => {
     if (!cssMatch) throw new Error(".cmp-input textarea's max-height not found in App.css");
 
     expect(cssMatch[1]).toBe(tsMatch[1]);
+  });
+});
+
+const OTHER_PROJECT_ID = "project-2";
+
+describe("AgentPanel project switch (#95 Task 7 review)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+  });
+
+  function panelFor(projectId: string) {
+    return (
+      <MemoryRouter>
+        <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
+      </MemoryRouter>
+    );
+  }
+
+  /** Renders a ready panel that can be re-rendered at another project without
+   *  unmounting — the actual shape of the bug. Neither the `/workspace/:id`
+   *  route nor `<AgentPanel>` is keyed on the project id, so global search's
+   *  cross-project jump changes this prop under a panel that stays mounted. */
+  async function renderReadyAt(projectId: string) {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ configured: true, consented: true })]),
+    );
+    const view = render(panelFor(projectId));
+    await screen.findByTestId("agent-log");
+    return view;
+  }
+
+  async function jumpTo(view: ReturnType<typeof render>, projectId: string) {
+    await act(async () => {
+      view.rerender(panelFor(projectId));
+    });
+  }
+
+  function notices(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
+  }
+
+  it("does not leave one work's conversation on screen after a jump to another", async () => {
+    rpc.agentHistory.mockImplementation((projectId: string) =>
+      Promise.resolve(
+        projectId === PROJECT_ID
+          ? [historyRow({ id: "a1", run_id: "run-a", role: "user", content: "A작품의 사적인 대화" })]
+          : [historyRow({ id: "b1", run_id: "run-b", role: "user", content: "B작품의 요청" })],
+      ),
+    );
+    const view = await renderReadyAt(PROJECT_ID);
+    expect(await screen.findByText("A작품의 사적인 대화")).toBeTruthy();
+
+    await jumpTo(view, OTHER_PROJECT_ID);
+
+    expect(await screen.findByText("B작품의 요청")).toBeTruthy();
+    // The whole point: A's words are not sitting in B's log, interleaved and
+    // unlabelled, for the writer or anyone reading over their shoulder.
+    expect(screen.queryByText("A작품의 사적인 대화")).toBeNull();
+    expect(screen.getByTestId("agent-log").textContent).not.toContain("A작품");
+    // Both histories end on an unanswered user row, so both restores add the
+    // "may still be running" notice. Two of them under one fixed id is the
+    // duplicate React key that let the two conversations interleave.
+    expect(notices()).toHaveLength(1);
+  });
+
+  it("does not install a turn sent for the previous work into the new work's panel", async () => {
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("A작품에만 보낸 요청");
+    await pressEnter();
+
+    // The writer jumps to another work before agent.run's response lands. The
+    // turn is real and still running in the engine — nothing here can stop it.
+    await jumpTo(view, OTHER_PROJECT_ID);
+    await act(async () => {
+      pending.resolve({ run_id: "run-a" });
+    });
+
+    const log = screen.getByTestId("agent-log");
+    expect(log.textContent).not.toContain("A작품에만 보낸 요청");
+    // And the composer belongs to the new work: it must not be left showing
+    // stop for a turn the writer can no longer see.
+    expect(screen.getByTestId("agent-send")).toBeTruthy();
+    expect(screen.queryByTestId("agent-stop")).toBeNull();
+  });
+
+  it("refuses events from a run the writer left behind, instead of adopting them", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "run-a" }));
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+
+    await jumpTo(view, OTHER_PROJECT_ID);
+    // A tool event, not a delta, so it renders straight from state with no
+    // useSmoothStream animation in between — same reasoning as the send-window
+    // carry-in test above.
+    await emit("agent-tool", { run_id: "run-a", name: "linetta_write_scene", state: "started" });
+
+    // currentRunIdRef was cleared by the switch, so without naming the
+    // abandoned run acceptRun's first-wins null check would adopt this event
+    // as the new work's own turn.
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
+  });
+});
+
+describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+  });
+
+  function notices(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
+  }
+
+  it("says a restored turn failed, instead of restoring it as a finished reply", async () => {
+    // The engine stamps every row of a provider-failed turn "failed"
+    // (transcript.go's markRun, from loop.go's endWithError). Live, the
+    // writer saw agent.error under this partial text; restored, `status` is
+    // the only trace of it left.
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "이어서 써줘", status: "failed" }),
+        historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "여기까지 쓰다가", status: "failed" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("여기까지 쓰다가")).toBeTruthy();
+    const found = notices();
+    expect(found).toHaveLength(1);
+    expect(found[0].textContent).toBe("agentPanel.restore.failed");
+  });
+
+  it("leaves an iteration-limit turn unlabelled, because the engine keeps its rows done on purpose", async () => {
+    // endAtWall stamps "done", not "failed": those tool calls really ran and
+    // that partial reply is real work. A failure notice under it would say
+    // something untrue about the writer's manuscript.
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "많이 해줘", status: "done" }),
+        historyRow({
+          id: "h2",
+          run_id: "r1",
+          role: "tool",
+          content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
+          status: "done",
+        }),
+        historyRow({ id: "h3", run_id: "r1", role: "assistant", content: "24개까지 했습니다", status: "done" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("24개까지 했습니다")).toBeTruthy();
+    expect(notices()).toHaveLength(0);
+  });
+
+  it("says a restored turn was cancelled", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "써줘", status: "cancelled" }),
+        historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "쓰다 말았습니다", status: "cancelled" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("쓰다 말았습니다")).toBeTruthy();
+    expect(notices()[0].textContent).toBe("agentPanel.cancelled");
+  });
+
+  it("marks only the run that failed when an earlier turn succeeded before it", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "첫 요청", status: "done" }),
+        historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "첫 답변", status: "done" }),
+        historyRow({ id: "h3", run_id: "r2", role: "user", content: "두 번째 요청", status: "failed" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("두 번째 요청")).toBeTruthy();
+    const found = notices();
+    // One notice, for r2 only — and no "may still be running" hedge, since
+    // the failed status already says how that turn ended.
+    expect(found).toHaveLength(1);
+    expect(found[0].textContent).toBe("agentPanel.restore.failed");
+  });
+
+  it("shows the still-running notice when the conversation ends on a resolved tool call", async () => {
+    // The abandoned turn the "last row is a user row" test missed: the engine
+    // died after a tool call resolved but before the model produced final
+    // text, so no markRun ever ran and the last row is a tool row.
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "고쳐줘", status: "done" }),
+        historyRow({
+          id: "h2",
+          run_id: "r1",
+          role: "tool",
+          content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
+          status: "done",
+        }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("고쳐줘")).toBeTruthy();
+    const found = notices();
+    expect(found).toHaveLength(1);
+    expect(found[0].textContent).toBe("agentPanel.restore.mayBeRunning");
+  });
+
+  it("does not hedge that a cancelled turn may still be running", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "그만", status: "cancelled" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("그만")).toBeTruthy();
+    const found = notices();
+    expect(found).toHaveLength(1);
+    expect(found[0].textContent).toBe("agentPanel.cancelled");
+  });
+
+  it("skips a tool row whose content is the JSON literal null", async () => {
+    // JSON.parse("null") succeeds and yields null — the one malformed shape
+    // that gets past the try/catch, and the one the brief named.
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", run_id: "r1", role: "user", content: "확인용" }),
+        historyRow({ id: "h2", run_id: "r1", role: "tool", content: "null" }),
+        historyRow({ id: "h3", run_id: "r1", role: "assistant", content: "그래도 답은 옵니다" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("확인용")).toBeTruthy();
+    expect(screen.getByTestId("agent-log").querySelector(".msg.bot .msg-bubble")?.textContent).toBe(
+      "그래도 답은 옵니다",
+    );
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
   });
 });

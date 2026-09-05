@@ -134,5 +134,6 @@
 }
 .agent-notice-error { color: var(--danger); }
 .agent-notice-cancelled,
+.agent-notice-failed,
 .agent-notice-restored { color: var(--muted); }
 .agent-notice a { color: var(--accent-deep); }
