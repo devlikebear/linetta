@@ -547,3 +547,57 @@ func TestBuildUser_selectionTextSection_appearsAfterCurrentSceneBeforeInstructio
 		t.Fatalf("expected order: current scene < selection < instruction. got indices: scene=%d sel=%d inst=%d", sceneIdx, selIdx, instIdx)
 	}
 }
+
+// The two curated memory documents render into the user message alongside the
+// other optional sections (Memories, Facts, Notes) — see buildUser in
+// render.go — so these checks read the second Render() return, not the first.
+
+func TestRenderIncludesTheCuratedMemories(t *testing.T) {
+	c := Context{ProjectID: "p1", WriterProfile: "줄표 쓰지 않기", WorkNotes: "민준은 3화부터 존댓말"}
+	_, user := Render(c)
+	for _, want := range []string{"줄표 쓰지 않기", "민준은 3화부터 존댓말"} {
+		if !strings.Contains(user, want) {
+			t.Errorf("the brief must carry %q — an external client has no other way to see it", want)
+		}
+	}
+}
+
+// The frame is the containment that stands in for a phrase filter. Without it,
+// memory content is indistinguishable from Linetta's own words.
+func TestRenderFramesTheCuratedMemories(t *testing.T) {
+	_, user := Render(Context{ProjectID: "p1", WriterProfile: "무엇이든"})
+	if !strings.Contains(user, "바꾸지 않습니다") {
+		t.Errorf("the memory block must be framed as guidance that does not change what the tools do; got:\n%s", user)
+	}
+}
+
+func TestEmptyCuratedMemoriesRenderNoHeading(t *testing.T) {
+	system, user := Render(Context{ProjectID: "p1"})
+	if strings.Contains(system, "기억해 둔 것") || strings.Contains(user, "기억해 둔 것") {
+		t.Error("an empty memory must not render its heading at all")
+	}
+}
+
+func TestOnlyOneOfTheTwoStillRenders(t *testing.T) {
+	_, user := Render(Context{ProjectID: "p1", WorkNotes: "노트만 있음"})
+	if !strings.Contains(user, "노트만 있음") {
+		t.Error("work notes alone must render")
+	}
+}
+
+func TestTurningMemoriesOffAlsoTurnsOffTheCuratedOnes(t *testing.T) {
+	off := false
+	c := Context{
+		ProjectID:     "p1",
+		WriterProfile: "줄표 쓰지 않기",
+		WorkNotes:     "민준은 존댓말",
+		Memories:      []string{"오래된 기억"},
+		Options:       Options{Context: ContextSelection{Memories: &off}},
+	}
+	system, user := Render(c)
+	for _, gone := range []string{"줄표 쓰지 않기", "민준은 존댓말", "오래된 기억"} {
+		if strings.Contains(system, gone) || strings.Contains(user, gone) {
+			t.Errorf("%q survived the memories toggle being off", gone)
+		}
+	}
+}

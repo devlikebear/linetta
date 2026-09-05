@@ -34,16 +34,17 @@ func (noopRefresher) RefreshNow(context.Context, string) {}
 
 // ContextBuilder gathers the Context payload from the repos.
 type ContextBuilder struct {
-	factSource      FactSource
-	memorySource    MemorySource
-	referenceSource ReferenceSource
-	projects        *project.Repo
-	nodes           *node.Repo
-	mentions        *mention.Repo
-	notes           *note.Repo
-	relationships   *relationship.Repo
-	plot            *plot.Builder
-	refresher       SummaryRefresher
+	factSource          FactSource
+	memorySource        MemorySource
+	curatedMemorySource CuratedMemorySource
+	referenceSource     ReferenceSource
+	projects            *project.Repo
+	nodes               *node.Repo
+	mentions            *mention.Repo
+	notes               *note.Repo
+	relationships       *relationship.Repo
+	plot                *plot.Builder
+	refresher           SummaryRefresher
 }
 
 // NewContextBuilder returns a builder that reads from the supplied repos.
@@ -89,6 +90,13 @@ type MemorySource interface {
 	ContextMemories(projectID string) []string
 }
 
+// CuratedMemorySource supplies the two budgeted memory documents. Unlike
+// MemorySource it takes a context: these come from the database, and a brief
+// built during shutdown has to be able to give up.
+type CuratedMemorySource interface {
+	CuratedMemory(ctx context.Context, projectID string) (writerProfile, workNotes string)
+}
+
 // ReferenceSource supplies writer-attached reference material. Optional.
 type ReferenceSource interface {
 	ContextReferences(ctx context.Context, projectID, nodeID string) ([]ReferenceBrief, error)
@@ -103,6 +111,13 @@ func (b *ContextBuilder) WithFactSource(s FactSource) *ContextBuilder {
 // WithMemorySource wires the optional memories section.
 func (b *ContextBuilder) WithMemorySource(s MemorySource) *ContextBuilder {
 	b.memorySource = s
+	return b
+}
+
+// WithCuratedMemorySource wires the optional curated writer-profile /
+// work-notes section.
+func (b *ContextBuilder) WithCuratedMemorySource(s CuratedMemorySource) *ContextBuilder {
+	b.curatedMemorySource = s
 	return b
 }
 
@@ -213,6 +228,10 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	if b.memorySource != nil {
 		memories = b.memorySource.ContextMemories(n.ProjectID)
 	}
+	var writerProfile, workNotes string
+	if b.curatedMemorySource != nil {
+		writerProfile, workNotes = b.curatedMemorySource.CuratedMemory(ctx, n.ProjectID)
+	}
 	var references []ReferenceBrief
 	if b.referenceSource != nil {
 		if got, err := b.referenceSource.ContextReferences(ctx, n.ProjectID, nodeID); err == nil {
@@ -241,6 +260,8 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		Notes:         noteBriefs,
 		Facts:         facts,
 		Memories:      memories,
+		WriterProfile: writerProfile,
+		WorkNotes:     workNotes,
 		References:    references,
 		StyleNotes:    proj.StyleNotes,
 		SelectionText: selectionText,
@@ -316,6 +337,8 @@ func ApplyContextSelection(c Context) Context {
 	}
 	if !s.Enabled(ContextKeyMemories) {
 		c.Memories = nil
+		c.WriterProfile = ""
+		c.WorkNotes = ""
 	}
 	if !s.Enabled(ContextKeyReferences) {
 		c.References = nil

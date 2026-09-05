@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
@@ -203,10 +204,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// Named rather than inlined: the archive export reads the same transcript,
 	// and two repos over one table would be a needless second source.
 	companionHistory := companion.NewHistoryRepo(st.DB())
+	memRepo := agentmemory.NewRepo(st.DB())
 	companionSvc := companion.NewService(home).
 		WithFacts(facts).
 		WithHistory(companionHistory).
-		WithReferences(companion.NewReferenceRepo(st.DB()))
+		WithReferences(companion.NewReferenceRepo(st.DB())).
+		WithCuratedMemory(memRepo)
 
 	// The MCP host serves story tools to external agents. It binds only when
 	// the writer has turned MCP on and accepted its consent.
@@ -223,6 +226,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
 		WithMemorySource(companionSvc).
+		WithCuratedMemorySource(companionSvc).
 		WithReferenceSource(companionSvc)
 
 	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
