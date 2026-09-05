@@ -810,7 +810,7 @@ const messages = {
     "workspace.mcp.openSettings": "설정에서 연결 관리",
     "settings.mcp.title": "외부 에이전트 연결 (MCP)",
     "settings.mcp.description": "Claude Code나 Claude Desktop 같은 외부 AI 에이전트가 이 컴퓨터 안에서만 Linetta에 접속해 작품을 읽고, 전체 권한을 주면 원고를 쓸 수 있습니다. 켜기 전까지는 아무것도 열리지 않습니다.",
-    "settings.mcp.consent": "외부 에이전트가 내 원고와 설정 자료를 읽는 것에 동의합니다. 전체 권한에서는 원고를 고칠 수도 있습니다. 모든 변경은 기록되고, 씬은 고쳐 쓰기 전에 스냅샷이 남아 이전 본문을 복원할 수 있습니다. 등장인물·플롯·비트·팩트 카드·기억의 변경은 기록되지만 되돌리기는 제공되지 않습니다.",
+    "settings.mcp.consent": "외부 에이전트가 내 원고와 설정 자료를 읽는 것에 동의합니다. 전체 권한에서는 원고를 고칠 수도 있습니다. 작가 프로필과 작품 노트도 브리프에서 읽고, 전체 권한에서는 고쳐 씁니다(한 작품으로 제한한 클라이언트는 그 작품의 노트만). 작가 프로필은 열려 있는 작품에 한정되지 않고 모든 작품에 적용됩니다. 모든 변경은 기록되고, 씬은 고쳐 쓰기 전에 스냅샷이 남아 이전 본문을 복원할 수 있습니다. 등장인물·플롯·비트·팩트 카드·기억의 변경은 기록되지만 되돌리기는 제공되지 않습니다.",
     "settings.mcp.mode.read_only": "읽기 전용 — 에이전트가 원고를 바꿀 수 없습니다",
     "settings.mcp.advanced": "고급",
     "settings.mcp.port": "포트",
@@ -896,7 +896,7 @@ const messages = {
     // lands there ("Google Gemini으로" is ungrammatical). `에` has no such
     // allomorph, so the sentence stays correct for every destination.
     "settings.providers.consent":
-      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록을 읽을 수 있고, 읽은 내용이 {provider}에 전송되며 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
+      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록을 읽을 수 있고, 여기에 더해 작가 프로필과 작품 노트가 — 작가 프로필은 열려 있는 작품에 한정되지 않고 모든 작품에 적용됩니다 — 매 요청과 함께 실리며, 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
     "settings.providers.consent.customEndpoint": "직접 설정한 OpenAI 호환 엔드포인트",
     "settings.providers.test": "연결 테스트",
     "settings.providers.test.ok": "연결됨",
@@ -1700,7 +1700,7 @@ const messages = {
     "workspace.mcp.openSettings": "Manage the connection in Settings",
     "settings.mcp.title": "Connect an external agent (MCP)",
     "settings.mcp.description": "An external AI agent such as Claude Code or Claude Desktop can reach Linetta from this computer only, read your work, and — with full access — write the manuscript. Nothing is open until you turn it on.",
-    "settings.mcp.consent": "I agree to let an external agent read my manuscript and story notes. With full access it can also change the manuscript. Every change is recorded, and a scene it rewrites is snapshotted first so the previous text can be restored. Changes to characters, plot, beats, fact cards and memories are recorded but cannot be undone.",
+    "settings.mcp.consent": "I agree to let an external agent read my manuscript and story notes. With full access it can also change the manuscript. It reads the writer profile and the work notes in the brief too, and with full access rewrites them — a client pinned to a single work, only that work's notes. The writer profile is not scoped to the work I have open; it applies to every work. Every change is recorded, and a scene it rewrites is snapshotted first so the previous text can be restored. Changes to characters, plot, beats, fact cards and memories are recorded but cannot be undone.",
     "settings.mcp.mode.read_only": "Read only — the agent cannot change the manuscript",
     "settings.mcp.advanced": "Advanced",
     "settings.mcp.port": "Port",
@@ -1772,7 +1772,7 @@ const messages = {
     "settings.providers.model.default": "Provider default",
     "settings.providers.model.refresh": "Refresh",
     "settings.providers.consent":
-      "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, and the list of my works, and that what it reads is sent to {provider} and nowhere else",
+      "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, and the list of my works; that the writer profile and the work notes ride along with every request, the writer profile being global rather than scoped to the work I have open; and that all of it is sent to {provider} and nowhere else",
     "settings.providers.consent.customEndpoint": "the OpenAI-compatible endpoint set above",
     "settings.providers.test": "Test connection",
     "settings.providers.test.ok": "Connected",
@@ -2576,7 +2576,7 @@ const messages = {
     "workspace.mcp.openSettings": "設定で接続を管理",
     "settings.mcp.title": "外部エージェント接続 (MCP)",
     "settings.mcp.description": "Claude Code や Claude Desktop などの外部 AI エージェントが、このコンピュータ内からのみ Linetta に接続して作品を読み、フル権限では原稿を書けます。オンにするまで何も開きません。",
-    "settings.mcp.consent": "外部エージェントが原稿と設定資料を読むことに同意します。フル権限では原稿を変更できます。すべての変更は記録され、シーンは書き換える前にスナップショットが残るため以前の本文を復元できます。登場人物・プロット・ビート・ファクトカード・記憶の変更は記録されますが、取り消しはできません。",
+    "settings.mcp.consent": "外部エージェントが原稿と設定資料を読むことに同意します。フル権限では原稿を変更できます。作家プロフィールと作品ノートもブリーフで読み取り、フル権限では書き換えます（一つの作品に限定したクライアントはその作品のノートのみ）。作家プロフィールは開いている作品に限定されず、すべての作品に適用されます。すべての変更は記録され、シーンは書き換える前にスナップショットが残るため以前の本文を復元できます。登場人物・プロット・ビート・ファクトカード・記憶の変更は記録されますが、取り消しはできません。",
     "settings.mcp.mode.read_only": "読み取り専用 — エージェントは原稿を変更できません",
     "settings.mcp.advanced": "詳細設定",
     "settings.mcp.port": "ポート",
@@ -2646,7 +2646,7 @@ const messages = {
     "settings.providers.model.default": "プロバイダーの既定値",
     "settings.providers.model.refresh": "更新",
     "settings.providers.consent":
-      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧を読み取ることができ、読み取った内容が{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
+      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧を読み取ることができ、さらに作家プロフィールと作品ノートが — 作家プロフィールは開いている作品に限定されず、すべての作品に適用されます — 毎回のリクエストとともに送られ、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
     "settings.providers.consent.customEndpoint": "上で設定した OpenAI 互換エンドポイント",
     "settings.providers.test": "接続テスト",
     "settings.providers.test.ok": "接続済み",

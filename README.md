@@ -105,6 +105,23 @@ Linetta snapshots the scene before every agent write and keeps that version
 indefinitely, so you can put the old text back from the scene's **Previous
 versions** sheet.
 
+### What the agent remembers
+
+Linetta keeps two short documents an agent reads: a **writer profile** — how
+you work, up to 1,400 characters — and **work notes** for each work, up to
+2,200. Both are pasted whole into the built-in agent's system prompt at the
+start of every turn, with a line saying how much of the budget is used, and
+the agent records into them with its `linetta_edit_memory` tool. You can read
+and rewrite both yourself in **Settings → Memory**, one work at a time.
+
+**The writer profile is not scoped to the work you have open.** It is global,
+and it is read for every work. Something an agent records about you while
+working on one book is in the system prompt of every other book, and in the
+story brief a connected MCP client receives on any work. Work notes stay with
+their work.
+
+Both live in `library.db`, so the daily backup and a restore carry them.
+
 ## Writing with your own agent (MCP)
 
 Connecting an outside agent over MCP is a different thing from connecting a
@@ -126,6 +143,13 @@ Once connected, an agent can:
 - read the outline, a scene, characters, fact cards, and a story brief;
 - draft and revise scenes, write summaries, and restructure the outline;
 - record what it changed, so you can see it in the activity log.
+
+The story brief also carries the writer profile and the work's notes described
+above, in `read_only` and `full` alike. In `full` mode a client can write them with
+`linetta_edit_memory`; in `read_only` that tool is not registered at all. A
+client you have pinned to a single work can write only that work's notes — the
+writer profile applies to every work, so it is outside the pin, and the tool
+refuses it.
 
 The writer keeps the last word. Every scene write is snapshotted before it
 lands, and a recent outline restructuring can be reversed in one click — the
@@ -150,7 +174,7 @@ Windows  %APPDATA%\com.devlikebear.linetta
 
 Important data includes:
 
-- `library.db`: projects, scenes, story data, version snapshots, and the retired built-in companion's transcripts;
+- `library.db`: projects, scenes, story data, version snapshots, the writer profile and work notes an agent reads, and the retired built-in companion's transcripts;
 - `backups/YYYY-MM-DD/`: daily database backups, kept for 14 days;
 - `<project id>/memory/experiences.jsonl`: facts an agent has been told to remember;
 - `companion/`: the same file for facts remembered before 1.0, which nothing reads
