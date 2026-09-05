@@ -398,7 +398,17 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	if d.Context == nil {
 		return toolErr("story context is unavailable in this build"), getStoryContextOutput{}, nil
 	}
+	// storycontext defaults to Korean when Options.Language is empty, so
+	// without this every brief an external client reads came back with Korean
+	// headings no matter what language the app was set to. Nil Settings is a
+	// build with no store open, the same tolerance the rest of this file has;
+	// the empty string it leaves behind is exactly the old Korean default.
+	lang := ""
+	if d.Settings != nil {
+		lang = d.Settings.Language()
+	}
 	opts := storycontext.Options{
+		Language: lang,
 		Context: storycontext.ContextSelection{
 			Facts:      in.IncludeFacts,
 			Memories:   in.IncludeMemories,
@@ -443,7 +453,19 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		{"plot", spineHasBeats(c.Plot)},
 		{"notes", len(c.Notes) > 0},
 		{"facts", len(c.Facts) > 0},
-		{"memories", len(c.Memories) > 0},
+		// One "memories" entry covers all three things the brief renders under
+		// that name: the experiences.jsonl recall and the two curated
+		// documents. They fold together rather than getting their own entries
+		// because they share the single ContextKeyMemories toggle — there is
+		// no switch a client could throw for the curated pair alone, so
+		// reporting them separately would advertise a control that does not
+		// exist. Counting only c.Memories was worse than either: a brief that
+		// visibly carried a writer profile still reported "memories" empty,
+		// and a client that trusts the report skipped a section right in
+		// front of it.
+		{"memories", len(c.Memories) > 0 ||
+			strings.TrimSpace(c.WriterProfile) != "" ||
+			strings.TrimSpace(c.WorkNotes) != ""},
 		{"references", len(c.References) > 0},
 		{"style_notes", strings.TrimSpace(c.StyleNotes) != ""},
 	}
