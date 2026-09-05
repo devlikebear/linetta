@@ -94,6 +94,11 @@ interface AgentCancelledPayload {
   run_id: string;
 }
 
+/** The composer's growth cap, in px. Must match `max-height` on
+ *  `.cmp-input textarea` in App.css — the CSS enforces it for a box that has
+ *  never been autosized, this constant for one that has. */
+const COMPOSER_MAX_HEIGHT = 120;
+
 interface Props {
   onClose: () => void;
   /** The active project — agent.run's first argument. */
@@ -137,6 +142,16 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   const [turnRunId, setTurnRunId] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  // The same value as `turnRunId`, readable from an async callback that
+  // closed over an older render — handleStop's rejection has to know whether
+  // the turn is *still* running, and its `turnRunId` closure was captured
+  // before the round trip started. Written only through setTurn below, so the
+  // two can never disagree.
+  const turnRunIdRef = useRef<string | null>(null);
+  function setTurn(runId: string | null) {
+    turnRunIdRef.current = runId;
+    setTurnRunId(runId);
+  }
 
   // The run this mount follows. Locked onto the first run id any agent.*
   // event names; every later event carrying a different run id is dropped.
@@ -165,18 +180,73 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // this mount. But the lock is not reset on a terminal event (done/error/
   // cancelled); resetting it would reopen the same hazard on a subtler axis:
   // an event arriving after terminal_state but before the next agent.run()
-  // call completes could still be adopted first. The composer, when it lands
-  // and implements the send button, must set currentRunIdRef.current directly
-  // from agent.run()'s returned run_id the moment it receives the response,
-  // rather than leaving it to be decided by the first arriving event. Without
-  // that step, a second turn in the same mount will silently drop all events
-  // from the second run and render no output.
+  // call completes could still be adopted first. handleSend below is what
+  // makes that safe: it sets currentRunIdRef.current directly from
+  // agent.run()'s returned run_id the moment the response lands, rather than
+  // leaving it to be decided by the first arriving event. Without that step, a
+  // second turn in the same mount silently drops every event from the second
+  // run and renders no output — and the events that arrive before that
+  // response are held rather than judged (see the send window below).
   function acceptRun(runId: string): boolean {
     if (currentRunIdRef.current === null) currentRunIdRef.current = runId;
     return currentRunIdRef.current === runId;
   }
 
-  useEngineEvent<AgentDeltaPayload>("agent-delta", (payload) => {
+  // The send window. Between agent.run being called and its response landing,
+  // this mount has no authoritative id for the turn it just started:
+  // currentRunIdRef still names the PREVIOUS turn, so acceptRun would judge
+  // the new run's events against the old id. Every one of the three ways that
+  // goes wrong is a consequence of judging too early, so nothing is judged
+  // inside the window at all — events that arrive in it are held, and
+  // replayed the moment agent.run's response assigns the real id (see
+  // handleSend), which is the first instant acceptRun can be right:
+  //   - the new turn's opening chunk would be dropped (prose lost from state,
+  //     not merely from the reveal),
+  //   - a straggler belonging to the FINISHED previous turn would be accepted
+  //     and appended to its already-complete bubble,
+  //   - the new turn's own terminal event would be dropped, leaving the
+  //     composer stuck on stop with no further event ever coming for that run
+  //     — and the agent-cancelled from clicking stop dropped along with it.
+  // Service.Run mints the run id in a synchronous call and only then starts
+  // the turn, so the window is normally empty; a provider that fails without
+  // a round trip (offline, 401) is what actually lands in it.
+  const pendingSendRef = useRef(false);
+  const bufferedEventsRef = useRef<Array<() => void>>([]);
+
+  /** Holds `apply` until the in-flight send resolves, if there is one.
+   *  Returns true when it did — the caller must not run now. */
+  function deferDuringSend(apply: () => void): boolean {
+    if (!pendingSendRef.current) return false;
+    bufferedEventsRef.current.push(apply);
+    return true;
+  }
+
+  /** Closes the send window and replays what it held, in arrival order.
+   *  Synchronous, so no later event can interleave ahead of the replay. */
+  function flushSendWindow() {
+    pendingSendRef.current = false;
+    const held = bufferedEventsRef.current;
+    bufferedEventsRef.current = [];
+    for (const apply of held) apply();
+  }
+
+  /** Closes the window and throws away what it held — the panel is gone. */
+  function discardSendWindow() {
+    pendingSendRef.current = false;
+    bufferedEventsRef.current = [];
+  }
+
+  /** Wraps a wire handler so anything arriving inside the send window waits
+   *  for a run id to judge it against, instead of being judged against the
+   *  previous turn's. */
+  function whileNotSending<T>(apply: (payload: T) => void) {
+    return (payload: T) => {
+      if (deferDuringSend(() => apply(payload))) return;
+      apply(payload);
+    };
+  }
+
+  useEngineEvent<AgentDeltaPayload>("agent-delta", whileNotSending<AgentDeltaPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(true);
     const id = `assistant:${payload.run_id}`;
@@ -188,9 +258,9 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
       next[idx] = { ...line, text: line.text + payload.text };
       return next;
     });
-  });
+  }));
 
-  useEngineEvent<AgentToolPayload>("agent-tool", (payload) => {
+  useEngineEvent<AgentToolPayload>("agent-tool", whileNotSending<AgentToolPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     const key = `${payload.run_id}:${payload.name}`;
     if (payload.state === "started") {
@@ -241,39 +311,39 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
           : l,
       ),
     );
-  });
+  }));
 
-  useEngineEvent<AgentDonePayload>("agent-done", (payload) => {
+  useEngineEvent<AgentDonePayload>("agent-done", whileNotSending<AgentDonePayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
     // The composer's send control returns from "stop" to "send" once this
     // run's own terminal event lands — not on a timer, not on any other
     // run's terminal event (acceptRun above already refused those).
-    setTurnRunId(null);
+    setTurn(null);
     setCanceling(false);
     const id = `assistant:${payload.run_id}`;
     setLines((prev) =>
       prev.map((l) => (l.kind === "assistant" && l.id === id ? { ...l, usage: payload.usage } : l)),
     );
-  });
+  }));
 
   // Translating `reason` into a message and showing it is Task 7's job.
   // This task only has to stop the streaming indicator honestly instead of
   // leaving the reply looking like it is still arriving, and hand the
   // composer back to the writer.
-  useEngineEvent<AgentErrorPayload>("agent-error", (payload) => {
+  useEngineEvent<AgentErrorPayload>("agent-error", whileNotSending<AgentErrorPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
-    setTurnRunId(null);
+    setTurn(null);
     setCanceling(false);
-  });
+  }));
 
-  useEngineEvent<AgentCancelledPayload>("agent-cancelled", (payload) => {
+  useEngineEvent<AgentCancelledPayload>("agent-cancelled", whileNotSending<AgentCancelledPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
-    setTurnRunId(null);
+    setTurn(null);
     setCanceling(false);
-  });
+  }));
 
   // Undo is a per-line action, not a turn-level one: mark only the clicked
   // line pending, then resolve it to undone or to a translated failure.
@@ -317,6 +387,98 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
       });
   }
 
+  // Sends the composer's text as a new turn. A no-op while a turn is already
+  // in flight (busy below already hides the send control in that state, but
+  // Enter can still reach here) or while the draft is empty.
+  function handleSend() {
+    const prompt = draft.trim();
+    if (!prompt || sending || turnRunId !== null) return;
+    setDraft("");
+    setSendError(null);
+    setSending(true);
+    // Open the send window before the call, not after: the engine has already
+    // minted this turn's run id by the time run() returns, and an event for
+    // it can reach the listener before the response reaches us.
+    pendingSendRef.current = true;
+    agentApi
+      .run(projectId, prompt, nodeId)
+      .then((result) => {
+        // Set the authoritative run id directly from agent.run's response,
+        // bypassing acceptRun's first-wins null check. See the comment
+        // above acceptRun: an id assigned here, before any wire event has
+        // been judged, closes the window a stale straggler from the previous
+        // run could otherwise be adopted through simply by arriving first.
+        currentRunIdRef.current = result.run_id;
+        if (!mountedRef.current) {
+          discardSendWindow();
+          return;
+        }
+        setLines((prev) => [...prev, { kind: "user", id: `user:${result.run_id}`, text: prompt }]);
+        setTurn(result.run_id);
+        setSending(false);
+        // Last, so a terminal event that raced the response gets to clear the
+        // turn state this line just set, rather than being overwritten by it.
+        flushSendWindow();
+      })
+      .catch((err: unknown) => {
+        // A synchronous refusal (provider_not_configured,
+        // provider_consent_required, agent_busy, ...) — no run ever started,
+        // so currentRunIdRef is untouched and replaying what the window held
+        // judges it exactly as it would have been judged without the window.
+        // Hand the draft back rather than discarding what the writer typed.
+        if (!mountedRef.current) {
+          discardSendWindow();
+          return;
+        }
+        setSending(false);
+        setSendError(rpcErrorMessage(err, t));
+        setDraft(prompt);
+        flushSendWindow();
+      });
+  }
+
+  // agent.cancel reaches the in-memory turn; the partial reply already in
+  // `lines` is left exactly as it is — the engine keeps it in the
+  // transcript, and the composer returns to "send" only once this run's own
+  // agent-cancelled (or agent-done, if the cancel lost the race) arrives.
+  function handleStop() {
+    const runId = turnRunId;
+    if (!runId || canceling) return;
+    setCanceling(true);
+    agentApi
+      .cancel(runId)
+      .catch((err: unknown) => {
+        if (!mountedRef.current) return;
+        // Silent only in the case that is genuinely not news: the turn ended
+        // on its own while the cancel was in flight, and its terminal event
+        // has already handed the composer back. If the turn is still running,
+        // nothing else will ever say the stop failed — the writer clicked it
+        // and the reply keeps arriving — so it gets the same translated,
+        // never-raw treatment as a refused send.
+        if (turnRunIdRef.current !== runId) return;
+        setSendError(rpcErrorMessage(err, t));
+      })
+      .finally(() => {
+        if (mountedRef.current) setCanceling(false);
+      });
+  }
+
+  function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    // Never steal the Enter that belongs to an IME. In Japanese it is the key
+    // that commits the kanji conversion candidate, and in Korean the one that
+    // commits the trailing syllable of anything not ending in punctuation —
+    // consume it as send and there is no keystroke left that finishes the
+    // composition without also sending, so the unconverted reading is what
+    // gets submitted. Both signals are checked because browsers disagree:
+    // `isComposing` is the modern one, keyCode 229 the one Safari and older
+    // WebKit report instead (and the only one a synthetic jsdom event carries
+    // unless the test sets isComposing by hand).
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+    e.preventDefault();
+    handleSend();
+  }
+
   useEffect(() => {
     let cancelled = false;
     providersApi
@@ -336,65 +498,19 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     };
   }, []);
 
-  // Sends the composer's text as a new turn. A no-op while a turn is already
-  // in flight (busy below already hides the send control in that state, but
-  // Enter can still reach here) or while the draft is empty.
-  function handleSend() {
-    const prompt = draft.trim();
-    if (!prompt || sending || turnRunId !== null) return;
-    setDraft("");
-    setSendError(null);
-    setSending(true);
-    agentApi
-      .run(projectId, prompt, nodeId)
-      .then((result) => {
-        // Set the authoritative run id directly from agent.run's response,
-        // bypassing acceptRun's first-wins null check. See the comment
-        // above acceptRun: an id assigned here, before any wire event has
-        // arrived, closes the window a stale straggler from the previous
-        // run could otherwise be adopted through simply by arriving first.
-        currentRunIdRef.current = result.run_id;
-        if (!mountedRef.current) return;
-        setLines((prev) => [...prev, { kind: "user", id: `user:${result.run_id}`, text: prompt }]);
-        setTurnRunId(result.run_id);
-        setSending(false);
-      })
-      .catch((err: unknown) => {
-        // A synchronous refusal (provider_not_configured,
-        // provider_consent_required, agent_busy, ...) — no run ever started,
-        // so there is nothing for acceptRun to have touched. Hand the draft
-        // back rather than discarding what the writer typed.
-        if (!mountedRef.current) return;
-        setSending(false);
-        setSendError(rpcErrorMessage(err, t));
-        setDraft(prompt);
-      });
-  }
-
-  // agent.cancel reaches the in-memory turn; the partial reply already in
-  // `lines` is left exactly as it is — the engine keeps it in the
-  // transcript, and the composer returns to "send" only once this run's own
-  // agent-cancelled (or agent-done, if the cancel lost the race) arrives.
-  function handleStop() {
-    if (!turnRunId || canceling) return;
-    setCanceling(true);
-    agentApi
-      .cancel(turnRunId)
-      .catch(() => {
-        // A cancel that fails almost always means the turn already finished
-        // — its own terminal event will have reset canceling by the time
-        // this rejection is even observed. Nothing else to show for it.
-      })
-      .finally(() => {
-        if (mountedRef.current) setCanceling(false);
-      });
-  }
-
-  function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key !== "Enter" || e.shiftKey) return;
-    e.preventDefault();
-    handleSend();
-  }
+  // Grow the composer with what is in it, up to the same cap App.css sets on
+  // .cmp-input textarea. The starter chips fill in a whole sentence, so a
+  // fixed one-line box would show the feature's own happy path through a
+  // peephole. Collapse-then-measure is the standard autosize; jsdom reports
+  // scrollHeight as 0, and the guard leaves the box at its CSS min-height
+  // there rather than collapsing it to nothing.
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
+  }, [draft, ready]);
 
   // A mount can now hold more than one assistant line — Task 6 lets the
   // writer send a second turn once the first is done. Only the run
@@ -524,11 +640,17 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
           <div className="cmp-input">
             <textarea
               data-testid="agent-composer"
+              ref={composerRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleComposerKeyDown}
+              // A placeholder is not an accessible name — it is announced as
+              // a hint at best and disappears the moment anything is typed.
+              // Both buttons beside this box carry one; the box the panel
+              // exists for should too.
+              aria-label={t("agentPanel.composer.label")}
               placeholder={t("agentPanel.composer.placeholder")}
-              rows={1}
+              rows={2}
             />
             {busy ? (
               <button

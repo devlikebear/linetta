@@ -56,6 +56,27 @@ function row(overrides: Partial<ProviderStatus> = {}): ProviderStatus {
   };
 }
 
+/** The text of one function's body, braces included, for the few assertions
+ *  that have to read source (see the mount-ref test below).
+ *
+ *  Brace counting, not a slice to the next declaration: the boundary is the
+ *  function's own, so nothing about what sits after it in the file is pinned.
+ *  It does not know about braces inside strings, template literals or
+ *  comments — fine for the balanced TSX bodies asserted on here, and it
+ *  throws rather than returning a wrong span if that ever stops holding. */
+function functionBody(src: string, signature: string): string {
+  const start = src.indexOf(signature);
+  if (start === -1) throw new Error(`${signature} not found in source`);
+  const open = src.indexOf("{", start);
+  if (open === -1) throw new Error(`${signature} has no body`);
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(open, i + 1);
+  }
+  throw new Error(`unbalanced braces after ${signature}`);
+}
+
 const PROJECT_ID = "project-1";
 const NODE_ID = "node-1";
 
@@ -672,9 +693,15 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
     // unmounted component is silently dropped — so this is asserted the way
     // this codebase asserts other unobservable source facts (see
     // rpcAllowlist.test.ts, coreRoleParity.test.ts).
+    //
+    // Bounded by handleUndo's own braces, not by whatever function happens to
+    // follow it: an earlier revision sliced to the next `useEffect`, which
+    // silently pinned handleUndo's position in the file, forbade any other
+    // mountedRef-guarding function from being written between the two, and
+    // depended on that unrelated effect's exact indentation. Handlers had to
+    // be moved away from where they read best to keep it green.
     const src = await readSource("components/agent/AgentPanel.tsx");
-    const body = src.slice(src.indexOf("function handleUndo("), src.indexOf("useEffect(() => {\n    let cancelled"));
-    expect(body).toContain("function handleUndo(");
+    const body = functionBody(src, "function handleUndo(");
     // Both resolution paths, not just the happy one.
     expect(body.match(/if \(!mountedRef\.current\) return;/g) ?? []).toHaveLength(2);
     // Set on mount, not only at declaration: a StrictMode remount runs the
@@ -831,9 +858,14 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     await emit("agent-delta", { run_id: "r1", text: "답변" });
     await emit("agent-done", { run_id: "r1", usage: { input: 120, output: 340 } });
 
-    const usage = screen.getByTestId("agent-usage");
-    expect(usage.textContent).toBe("agentPanel.usage:input=120,output=340");
-    expect(usage.textContent).not.toContain("$");
+    // getAll, not get: the usage line is per finished turn, the same way
+    // `tool-line` is per tool call, so a conversation with two turns has two
+    // of these. Asserting with getByTestId here would pass today and throw
+    // "Found multiple elements" in the next test that sends twice.
+    const usage = screen.getAllByTestId("agent-usage");
+    expect(usage).toHaveLength(1);
+    expect(usage[0].textContent).toBe("agentPanel.usage:input=120,output=340");
+    expect(usage[0].textContent).not.toContain("$");
   });
 
   it("renders the second turn's reply after the first is done, in the same mount", async () => {
@@ -860,5 +892,148 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     expect(bubbles).toHaveLength(2);
     expect(bubbles[0].textContent).toBe("첫 번째 답");
     expect(bubbles[1].textContent).toBe("두 번째 답");
+  });
+});
+
+/** A promise whose settlement this test controls, standing in for the
+ *  agent.run round trip. Everything between `agentRun` being called and this
+ *  resolving is the "send window": the engine has already minted the run id
+ *  and started emitting for it, but the renderer does not know it yet. */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (err: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("AgentPanel send window and IME composition (#95 Task 6 review)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+  });
+
+  function botBubbles(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>(".msg.bot .msg-bubble"));
+  }
+
+  /** Runs one complete turn as r1, so the panel's run ref is pointed at a
+   *  finished run — the state every send-window hazard needs. */
+  async function firstTurn(text = "완성된 첫 답") {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    await type("첫 번째 요청");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r1", text });
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+  }
+
+  it("does not send the Enter that confirms an IME conversion candidate", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    await type("つづきをかいて");
+    await act(async () => {
+      fireEvent.keyDown(composer(), { key: "Enter", isComposing: true });
+    });
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+    expect(composer().value).toBe("つづきをかいて");
+  });
+
+  it("does not send the Enter that commits a composition reported only as keyCode 229", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    await type("이어서 써줘");
+    await act(async () => {
+      fireEvent.keyDown(composer(), { key: "Enter", keyCode: 229 });
+    });
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+    expect(composer().value).toBe("이어서 써줘");
+  });
+
+  it("keeps the chunk that arrived before agent.run's response", async () => {
+    await firstTurn();
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+
+    await type("두 번째 요청");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r2", text: "두 번째 " });
+    await act(async () => {
+      pending.resolve({ run_id: "r2" });
+    });
+    await emit("agent-delta", { run_id: "r2", text: "조각." });
+    await emit("agent-done", { run_id: "r2", usage: { input: 2, output: 2 } });
+
+    expect(botBubbles().map((b) => b.textContent)).toEqual(["완성된 첫 답", "두 번째 조각."]);
+  });
+
+  it("does not append a straggler from the finished turn to its bubble", async () => {
+    await firstTurn();
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+
+    await type("두 번째 요청");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r1", text: "  <<유령>>" });
+    await act(async () => {
+      pending.resolve({ run_id: "r2" });
+    });
+    await emit("agent-delta", { run_id: "r2", text: "두 번째 답" });
+    await emit("agent-done", { run_id: "r2", usage: { input: 2, output: 2 } });
+
+    expect(botBubbles().map((b) => b.textContent)).toEqual(["완성된 첫 답", "두 번째 답"]);
+  });
+
+  it("returns the composer to send when the turn fails before agent.run's response", async () => {
+    await firstTurn();
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+
+    await type("두 번째 요청");
+    await pressEnter();
+    await emit("agent-error", { run_id: "r2", reason: "provider_unreachable", message: "dial tcp" });
+    await act(async () => {
+      pending.resolve({ run_id: "r2" });
+    });
+
+    expect(screen.queryByTestId("agent-stop")).toBeNull();
+    expect(screen.getByTestId("agent-send")).toBeTruthy();
+  });
+
+  it("shows a usage line per finished turn", async () => {
+    await firstTurn();
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r2" }));
+    await type("두 번째 요청");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r2", text: "두 번째 답" });
+    await emit("agent-done", { run_id: "r2", usage: { input: 20, output: 40 } });
+
+    expect(screen.getAllByTestId("agent-usage").map((n) => n.textContent)).toEqual([
+      "agentPanel.usage:input=1,output=1",
+      "agentPanel.usage:input=20,output=40",
+    ]);
+  });
+
+  it("gives the composer an accessible name, not just a placeholder", async () => {
+    await renderReady();
+    expect(screen.getByRole("textbox", { name: "agentPanel.composer.label" })).toBe(composer());
+  });
+
+  it("surfaces a cancel that actually failed while the turn is still running", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    rpc.agentCancel.mockImplementation(() => Promise.reject(new Error("engine did not respond")));
+    await renderReady();
+    await type("써줘");
+    await pressEnter();
+
+    await act(async () => {
+      screen.getByTestId("agent-stop").click();
+    });
+
+    expect(screen.getByTestId("agent-send-error").textContent).toContain("engine did not respond");
+    // The turn never ended, so the control is still stop.
+    expect(screen.getByTestId("agent-stop")).toBeTruthy();
   });
 });
