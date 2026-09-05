@@ -465,18 +465,27 @@ describe("ProviderSection", () => {
     expect(input.value).toBe("gpt-5-custom");
   });
 
+  /** Render `id` with `model` already stored and hand back the model input,
+   *  seeded. The wait matters: the drafts are filled from the row after the
+   *  first providers.list resolves, so a test that types before that lands is
+   *  racing its own fixture. */
+  async function modelInput(id: string, model: string) {
+    activeId = id;
+    rowExtras = { [id]: { model } };
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    await waitFor(() => expect(input.value).toBe(model));
+    return input;
+  }
+
   it("saves an empty model as the provider default", async () => {
     // The row has a model and the writer clears it: emptying the field is a
     // real write, not a no-op, because "" means the provider's own default.
     // The fixture used to give the row no model at all, so writing "" was
     // genuinely a no-op and this test passed for the wrong reason — it was
     // the only thing standing in the way of the blur guard below.
-    activeId = "anthropic";
-    rowExtras = { anthropic: { model: "claude-sonnet-5" } };
-    render(<ProviderSection />);
-
-    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
-    await waitFor(() => expect(input.value).toBe("claude-sonnet-5"));
+    const input = await modelInput("anthropic", "claude-sonnet-5");
     fireEvent.change(input, { target: { value: "" } });
     fireEvent.focusOut(input);
 
@@ -529,12 +538,7 @@ describe("ProviderSection", () => {
     // The symmetric counterpart of the base URL's no-op guard. Beyond the
     // wasted settings.set + providers.list round trip, that reload is the
     // one that used to eat half-typed drafts elsewhere in the pane.
-    activeId = "anthropic";
-    rowExtras = { anthropic: { model: "claude-sonnet-5" } };
-    render(<ProviderSection />);
-
-    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
-    await waitFor(() => expect(input.value).toBe("claude-sonnet-5"));
+    const input = await modelInput("anthropic", "claude-sonnet-5");
 
     // Whitespace either side is still the same model name.
     fireEvent.change(input, { target: { value: "  claude-sonnet-5  " } });
