@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { parseToolEvent } from "../components/agent/AgentPanel";
 import { readAppFile } from "../test/readSource";
 import { READ_TOOL_NAMES, WRITE_TOOL_NAMES, toolKind, toolLabelKey } from "./agentTools";
 import { messageCatalogs } from "./i18n";
@@ -77,5 +78,77 @@ describe("agent tool catalogue parity with the engine", () => {
       .map((key) => key.slice("agentPanel.toolName.".length))
       .filter((name) => !names.has(name));
     expect(stale, "these agentPanel.toolName.* keys name tools the engine no longer has").toEqual([]);
+  });
+});
+
+/**
+ * The same hazard one struct over, and the one the branch had left unguarded.
+ *
+ * A restored tool line is drawn from a `role: "tool"` history row whose
+ * `content` is the JSON of agent/transcript.go's `toolEvent`. AgentPanel's
+ * `RestoredToolEvent` / `parseToolEvent` hand-mirror that struct's JSON tags,
+ * and a mismatch is silent by construction: `parseToolEvent` returns null for
+ * a row it cannot read, `linesFromHistory` skips a null, and every restore
+ * test in AgentPanel.test.tsx builds its fixtures by hand with the field names
+ * the panel expects — so renaming `ok` to `success` in the Go struct makes
+ * every restored tool line in the app vanish with the whole desktop suite
+ * green.
+ *
+ * So the fixture here is built from the tags the Go file actually carries, not
+ * from the names the panel expects.
+ */
+
+/** The JSON tag names on a `type <name> struct { … }` block in a Go file,
+ *  in declaration order, with any `,omitempty` stripped. */
+async function goJSONTags(file: string, typeName: string): Promise<string[]> {
+  const src = await readAppFile(`../../engine/internal/agent/${file}`);
+  const start = src.indexOf(`type ${typeName} struct {`);
+  if (start === -1) throw new Error(`${typeName} not found in ${file}`);
+  const end = src.indexOf("\n}", start);
+  if (end === -1) throw new Error(`${typeName} has no closing brace in ${file}`);
+  return [...src.slice(start, end).matchAll(/`json:"([^",]+)[^"]*"`/g)].map((m) => m[1]);
+}
+
+const toolEventTags = () => goJSONTags("transcript.go", "toolEvent");
+
+describe("restored tool row parity with the engine's toolEvent", () => {
+  it("finds the Go struct's tags (guards against the extraction silently breaking)", async () => {
+    // Without this, a broken extraction makes every assertion below pass
+    // vacuously — the exact failure mode this file exists to prevent.
+    expect(await toolEventTags()).toHaveLength(5);
+  });
+
+  it("reads a row written with the engine's own field names", async () => {
+    const tags = await toolEventTags();
+    // Built from the Go tags, so the row is what the engine would marshal
+    // rather than what the panel hopes for. Values are per-tag: only `ok` is
+    // a bool, and only the two the line cannot be drawn without are asserted
+    // back out.
+    const row: Record<string, unknown> = {};
+    for (const tag of tags) row[tag] = tag === "ok" ? true : tag === "node_ids" ? ["n1"] : `${tag}-value`;
+
+    const parsed = parseToolEvent(JSON.stringify(row));
+    expect(parsed, "parseToolEvent could not read a row in the engine's own shape").not.toBeNull();
+    expect(parsed?.name).toBe("name-value");
+    expect(parsed?.ok).toBe(true);
+    expect(parsed?.batch_id).toBe("batch_id-value");
+  });
+
+  it("carries every required field the engine's struct declares", async () => {
+    const tags = await toolEventTags();
+    // The panel needs `name` and `ok` to draw the line and `batch_id` to offer
+    // undo. `summary` and `node_ids` are deliberately not mirrored — see the
+    // notes on `Line` and on AgentToolPayload — so this asserts the direction
+    // that matters: everything the panel DOES read must still exist in Go.
+    for (const needed of ["name", "ok", "batch_id"]) {
+      expect(tags, `the panel reads ${needed} off a restored tool row`).toContain(needed);
+    }
+  });
+
+  it("cannot read a row whose fields the engine renamed", async () => {
+    // The mutation this file is here for, written out: a row in a shape the Go
+    // struct no longer produces must fail to parse, so the failure above is a
+    // real signal rather than a permissive parser shrugging.
+    expect(parseToolEvent(JSON.stringify({ name: "linetta_write_scene", success: true }))).toBeNull();
   });
 });

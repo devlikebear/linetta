@@ -116,6 +116,14 @@ interface AgentDonePayload {
   run_id: string;
   /** The work this event belongs to. See `forThisProject`. */
   project_id: string;
+  /** Never read, and deliberately kept — the same argument `summary` and
+   *  `node_ids` above are kept on: the usage footer says what the turn cost,
+   *  and which model produced it belongs on that line beside the token counts.
+   *  Naming it needs copy in three catalogues and a decision about whether a
+   *  writer wants a raw provider model id on screen at all, which is design
+   *  this task does not have. Declaring the field is what makes the wire's
+   *  shape readable here; the alternative is deleting it and rediscovering
+   *  that agent.done carries it. */
   model?: string;
   usage: { input: number; output: number };
 }
@@ -143,7 +151,15 @@ const COMPOSER_MAX_HEIGHT = 120;
  *  wire shape agent.tool's own resolving event carries (see AgentToolPayload
  *  above), because the engine writes one straight from the other (see
  *  agent/transcript.go's toolEvent, appended by loop.go's runTool). Only the
- *  two fields the line cannot be drawn without are required here. */
+ *  two fields the line cannot be drawn without are required here.
+ *
+ *  This is a hand copy of a Go struct's JSON tags, which is the hazard
+ *  agentToolParity.test.ts already exists for one file over: rename `ok` to
+ *  `success` in transcript.go and parseToolEvent returns null for every row,
+ *  every restored tool line vanishes, and no panel test notices, because every
+ *  fixture in them is hand-written JSON with the old names. agentToolParity's
+ *  "restored tool row" block reads the Go source and feeds parseToolEvent a
+ *  row built from the tags it actually finds there. */
 interface RestoredToolEvent {
   name: string;
   ok: boolean;
@@ -152,8 +168,10 @@ interface RestoredToolEvent {
 
 /** Parses one tool row's `content`. Null for anything that is not a usable
  *  toolEvent — malformed JSON, or JSON missing `name`/`ok` — so the caller
- *  can skip the row instead of crashing the whole restore over it. */
-function parseToolEvent(content: string): RestoredToolEvent | null {
+ *  can skip the row instead of crashing the whole restore over it.
+ *
+ *  Exported for the parity test only — nothing outside this file calls it. */
+export function parseToolEvent(content: string): RestoredToolEvent | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
@@ -323,15 +341,14 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     setTurnRunId(runId);
   }
 
-  // The run this mount follows. Locked onto the first run id any agent.*
-  // event names; every later event carrying a different run id is dropped.
-  // There is no composer yet to hand this panel an authoritative run id up
-  // front (that lands in Task 6), so the first event this mount sees is the
-  // only signal available — and once picked, it must not be overridden by a
-  // stray late event from some other run. #94 spent three fix rounds on
-  // exactly this class of bug (a late response for an abandoned selection
-  // overwriting the screen); this guard is built in from the start rather
-  // than discovered later.
+  // The run this mount follows. handleSend below assigns it authoritatively
+  // from agent.run's own response (see the comment there), and this first-wins
+  // lock is the fallback for every event that arrives with the ref still null
+  // — before this mount has sent anything of its own. Once picked, it must not
+  // be overridden by a stray late event from some other run. #94 spent three
+  // fix rounds on exactly this class of bug (a late response for an abandoned
+  // selection overwriting the screen); this guard is built in from the start
+  // rather than discovered later.
   const currentRunIdRef = useRef<string | null>(null);
   // agent.tool fires "started" and then "done"/"error" with no call id to
   // tie them together — arrival order is the only correlator. This tracks,
@@ -358,29 +375,47 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // run and renders no output — and the events that arrive before that
   // response are held rather than judged (see the send window below).
 
-  // Runs this panel started for a work it is no longer showing. #93 made a
-  // turn outlive the RPC call, so jumping to another project does not stop
-  // one — the engine keeps running it and keeps emitting its events, and
-  // those events carry a run id but no project id. Without naming them, the
-  // first straggler to arrive would be adopted by acceptRun's first-wins null
-  // check (the switch below clears currentRunIdRef) and one work's prose
-  // would stream into another's log.
+  // WHAT IS LEFT FOR THIS REF AND THE FENCE BELOW, NOW THAT THE WIRE SAYS
+  // WHOSE AN EVENT IS.
   //
-  // They stay refused even if the writer jumps back: by then that turn's
-  // rows have been restored from history, and re-adopting the run would
-  // append its remaining deltas to a bubble that no longer exists. The
-  // "may still be running" notice restore puts under it is what that writer
-  // gets instead — which is what it is for.
+  // This ref and orphanedSendRef were both added (review rounds 1 and 2) to
+  // keep one work's conversation out of another work's panel, back when a
+  // payload carried a run id and nothing else. `forThisProject` closes that
+  // leak by construction — the emitter states the owner, so no inference from
+  // this mount's bookkeeping is needed for it, on a mount five minutes old or
+  // five milliseconds old.
+  //
+  // What these two still do is narrower, and it is not a privacy leak: the
+  // same-project A → B → A case. The writer starts a turn in A, jumps to B and
+  // back; the reset cleared `lines`, restore has redrawn that turn's rows from
+  // history, and the run — which #93 made outlive its RPC call — is still
+  // emitting. Its events name A truthfully and the panel is showing A, so the
+  // project check passes and must. What is wrong is only that its remaining
+  // output would append beside the copy of itself the restore just drew.
+  // Cosmetic, in one work, for one writer.
+  //
+  // Say so plainly here so a later simplification pass starts from the truth
+  // rather than re-deriving it: nothing is deleted (each still has a test that
+  // fails when it is removed, and trading a closed race for a deletion-induced
+  // one is how the last three rounds went), but the job is a duplicate row, not
+  // a leaked conversation.
+  //
+  // This ref holds the runs already named — the ids this panel knew when the
+  // writer left. They stay refused even after a jump back, for the reason
+  // above; the "may still be running" notice under the restored rows is what
+  // that writer gets instead, which is what it is for.
   const abandonedRunsRef = useRef<Set<string>>(new Set());
 
   function acceptRun(runId: string): boolean {
     if (abandonedRunsRef.current.has(runId)) return false;
-    // A send from a work the writer left is still out (see orphanedSendRef):
-    // its run id is unknown here, so an event arriving now cannot be told
-    // apart from one belonging to a turn started in the work on screen — and
-    // the first-wins null check below would adopt it as exactly that. No such
-    // turn can exist, because the same fence holds the next send, so refusing
-    // costs nothing and adopting is the leak.
+    // A send from a work the writer left is still out (see orphanedSendRef),
+    // and its run id has not come back yet, so abandonedRunsRef cannot name it.
+    // `forThisProject` has already refused anything belonging to another work,
+    // so what reaches here is the same-project A → B → A case described above:
+    // the event names the work on screen and the first-wins null check below
+    // would adopt it as a turn of this visit's, appending its remaining output
+    // beside the copy restore already drew. No turn of this visit's can exist
+    // anyway — the same fence holds the next send — so refusing costs nothing.
     if (orphanedSendRef.current && currentRunIdRef.current === null) return false;
     if (currentRunIdRef.current === null) currentRunIdRef.current = runId;
     return currentRunIdRef.current === runId;

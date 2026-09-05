@@ -1588,27 +1588,64 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     expect(found[0].textContent).toBe("agentPanel.restore.failed");
   });
 
-  it("leaves an iteration-limit turn unlabelled, because the engine keeps its rows done on purpose", async () => {
-    // endAtWall stamps "done", not "failed": those tool calls really ran and
-    // that partial reply is real work. A failure notice under it would say
-    // something untrue about the writer's manuscript.
+  it("leaves an iteration-limit turn unlabelled, and hedges it as maybe-running — which it always will", async () => {
+    // THE SHAPE HERE IS THE ONE THE ENGINE ACTUALLY WRITES, and the version of
+    // this test that shipped in review round 1 had it wrong: it ended the run
+    // on an assistant row and asserted no notice at all, which made the wall
+    // look covered. loop.go cannot produce that ordering.
+    //
+    //   - appendAssistant runs BEFORE the tool loop, so the partial reply's row
+    //     is written first (loop.go:241).
+    //   - endAtWall returns from inside that loop, right after a runTool
+    //     (loop.go:285), or immediately after it (loop.go:293).
+    //   - endWithReason, which endAtWall delegates to, appends no row at all —
+    //     it stamps the existing ones and notifies.
+    //   - the in-loop cap check (loop.go:263) can never be the one that fires:
+    //     toolCalls is unchanged since the post-loop check of the previous
+    //     iteration, which would already have returned.
+    //
+    // So a wall-ended run's LAST row is always a `tool` row stamped "done".
+    //
+    // Two things follow, and this test pins both:
+    //
+    //   1. endNoticeVariant leaves it unlabelled, which is right and
+    //      deliberate: those tool calls really ran and that partial reply is
+    //      real work. A failure notice under it would say something untrue
+    //      about the writer's manuscript.
+    //   2. turnMayBeRunning returns true, because the last row is not an
+    //      assistant row — so the panel hedges "이 요청이 아직 진행 중일 수
+    //      있습니다" under a turn the engine definitively stopped. Not
+    //      sometimes: 100% of wall-ended turns, every time. Round 2's report
+    //      recorded this as a possibility (N2); it is a certainty.
+    //
+    // The behaviour is NOT fixed here, and the notice is asserted rather than
+    // wished away. The transcript stamps a wall "done" — byte-identical to an
+    // abandoned turn that ended on a resolved tool call, which is the case the
+    // hedge exists for — so the panel genuinely cannot tell them apart. Closing
+    // it needs the engine to say which one it was: a run-status RPC, or a
+    // distinct status for the wall. The plan adds neither.
     rpc.agentHistory.mockImplementation(() =>
       Promise.resolve([
         historyRow({ id: "h1", run_id: "r1", role: "user", content: "많이 해줘", status: "done" }),
+        historyRow({ id: "h2", run_id: "r1", role: "assistant", content: "24개까지 했습니다", status: "done" }),
         historyRow({
-          id: "h2",
+          id: "h3",
           run_id: "r1",
           role: "tool",
           content: JSON.stringify({ name: "linetta_write_scene", ok: true }),
           status: "done",
         }),
-        historyRow({ id: "h3", run_id: "r1", role: "assistant", content: "24개까지 했습니다", status: "done" }),
       ]),
     );
     await renderReady();
 
     expect(await screen.findByText("24개까지 했습니다")).toBeTruthy();
-    expect(notices()).toHaveLength(0);
+    const found = notices();
+    // No failure notice: the wall's rows stay "done" on purpose.
+    expect(found.map((n) => n.textContent)).not.toContain("agentPanel.restore.failed");
+    // And the gap, stated: one hedge, about a turn that is over.
+    expect(found).toHaveLength(1);
+    expect(found[0].textContent).toBe("agentPanel.restore.mayBeRunning");
   });
 
   it("says a restored turn was cancelled", async () => {
@@ -2130,5 +2167,109 @@ describe("AgentPanel project ownership on the wire (#95 Task 7 review round 3)",
 
     expect(log().querySelectorAll(".msg.bot")).toHaveLength(0);
     expect(log().textContent).not.toContain("이름이 아직 붙지 않은 문장");
+  });
+});
+
+describe("AgentPanel ownership ordering (#95 Task 7 final review)", () => {
+  // Two orderings the 94 tests above did not pin. Both mutations leave the
+  // whole suite green, and both reopen a leak the branch spent six rounds
+  // closing — which is the point: the ordering IS the fix, and an invariant
+  // that only holds by accident holds until the next refactor.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ configured: true, consented: true })]),
+    );
+  });
+
+  function panelFor(projectId: string) {
+    return (
+      <MemoryRouter>
+        <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
+      </MemoryRouter>
+    );
+  }
+
+  async function renderReadyAt(projectId: string) {
+    const view = render(panelFor(projectId));
+    await screen.findByTestId("agent-log");
+    return view;
+  }
+
+  async function jumpTo(view: ReturnType<typeof render>, projectId: string) {
+    await act(async () => {
+      view.rerender(panelFor(projectId));
+    });
+  }
+
+  it("refuses another work's event during a send instead of holding it for the flush", async () => {
+    // The project check must run AHEAD of the send window, not behind it.
+    // Swapping those two lines in whileNotSending leaves every other test in
+    // this file green, because the window is normally empty — and it reopens
+    // the cross-work leak through a door no ref can reach:
+    //
+    // The panel is freshly mounted in A (the writer closed it during a turn in
+    // B, so nothing here remembers B). The writer sends in A, which opens the
+    // send window. B's turn — still running, still emitting — lands a tool
+    // event. Buffered, if the window is consulted first, and buffered as
+    // `() => apply(payload)`, which calls the handler directly and never
+    // re-asks whose event it is. A's send is then refused, flushSendWindow()
+    // replays it, and acceptRun adopts B's run because currentRunIdRef is null.
+    // B's tool line, in A's conversation.
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+    await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+
+    await emit("agent-tool", {
+      run_id: "run-b",
+      project_id: OTHER_PROJECT_ID,
+      name: "linetta_undo_last_change",
+      state: "started",
+    });
+    await act(async () => {
+      pending.reject({ data: { reason: "provider_not_configured" } });
+    });
+
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
+    expect(screen.getByTestId("agent-log").textContent).not.toContain(
+      "agentPanel.toolName.linetta_undo_last_change",
+    );
+  });
+
+  it("lowers the fence when the send it left behind is refused, not only when it succeeds", async () => {
+    // clearOrphanedSend() in handleSend's CATCH, specifically. Removing it
+    // from only that site leaves all 94 tests green — the resolve site catches
+    // the other half — and the send button is then disabled for the life of
+    // the mount, with no way back: a cross-project jump does not unmount the
+    // panel, so only closing and reopening the whole panel recovers.
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+
+    // The jump raises the fence and clears the token, so this send can no
+    // longer be this panel's — which is exactly the state the catch has to
+    // clean up after. Typing first, so `disabled` is answering the fence and
+    // not merely an empty composer.
+    await jumpTo(view, OTHER_PROJECT_ID);
+    await type("B작품 요청");
+    expect((screen.getByTestId("agent-send") as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      pending.reject({ data: { reason: "provider_unreachable" } });
+    });
+
+    expect((screen.getByTestId("agent-send") as HTMLButtonElement).disabled).toBe(false);
+    // And the affordance has to be telling the truth: the press goes out.
+    await pressEnter();
+    expect(rpc.agentRun).toHaveBeenCalledTimes(2);
+    expect(rpc.agentRun).toHaveBeenLastCalledWith(OTHER_PROJECT_ID, "B작품 요청", NODE_ID);
+    // The refused send for the work the writer left is still not news here.
+    expect(screen.getByTestId("agent-log").textContent).not.toContain("A작품 요청");
   });
 });
