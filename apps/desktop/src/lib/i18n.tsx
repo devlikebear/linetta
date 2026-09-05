@@ -896,7 +896,7 @@ const messages = {
     // lands there ("Google Gemini으로" is ungrammatical). `에` has no such
     // allomorph, so the sentence stays correct for every destination.
     "settings.providers.consent":
-      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록을 읽을 수 있고, 여기에 더해 작가 프로필과 작품 노트가 — 작가 프로필은 열려 있는 작품에 한정되지 않고 모든 작품에 적용됩니다 — 매 요청과 함께 실리며, 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
+      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록을 읽을 수 있고, 여기에 더해 작가 프로필과 작품 노트가 매 요청과 함께 실리고, 그중 작가 프로필은 열려 있는 작품에 한정되지 않고 모든 작품에 적용되며, 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
     "settings.providers.consent.customEndpoint": "직접 설정한 OpenAI 호환 엔드포인트",
     "settings.providers.test": "연결 테스트",
     "settings.providers.test.ok": "연결됨",
@@ -2646,7 +2646,7 @@ const messages = {
     "settings.providers.model.default": "プロバイダーの既定値",
     "settings.providers.model.refresh": "更新",
     "settings.providers.consent":
-      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧を読み取ることができ、さらに作家プロフィールと作品ノートが — 作家プロフィールは開いている作品に限定されず、すべての作品に適用されます — 毎回のリクエストとともに送られ、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
+      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧を読み取ることができ、さらに作家プロフィールと作品ノートが毎回のリクエストとともに送られ、そのうち作家プロフィールは開いている作品に限定されずすべての作品に適用され、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
     "settings.providers.consent.customEndpoint": "上で設定した OpenAI 互換エンドポイント",
     "settings.providers.test": "接続テスト",
     "settings.providers.test.ok": "接続済み",

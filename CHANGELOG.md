@@ -37,9 +37,15 @@
   prompt of every other book, and in the story brief a connected client
   receives on any work. Work notes stay with their work. The consent text for a
   provider and for MCP now says so.
-- Both memories live in `library.db`, so the daily backup and a restore carry
-  them. The unbounded `memory/experiences.jsonl` recall is unchanged and still
-  appears in the brief alongside them.
+- Both memories live in `library.db`, so the daily backup carries them. The
+  per-work restore below does not yet: bringing a single work back from a
+  backup returns it without its work notes, which is tracked as
+  [#116](https://github.com/devlikebear/linetta/issues/116). The startup
+  recovery screen, which replaces the whole library file, does bring both back.
+  The unbounded `memory/experiences.jsonl` recall is unchanged and still
+  appears in the story brief — alongside both curated documents for an external
+  client, and on its own for the built-in agent, which already carries them in
+  its system prompt.
 
 ## v1.1.0 - 2026-08-31
 
