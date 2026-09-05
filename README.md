@@ -5,7 +5,7 @@
 
 ### A calm, local-first writing studio for long-form fiction
 
-Plan your story, keep your world consistent, and write scene by scene. When you want to write alongside AI, connect the agent you already use over MCP — the manuscript never leaves your machine on its own.
+Plan your story, keep your world consistent, and write scene by scene. When you want to write alongside AI, use Linetta's built-in agent or connect one you already run over MCP — neither happens on its own.
 
 [![Latest release](https://img.shields.io/github/v/release/devlikebear/linetta?style=flat-square)](https://github.com/devlikebear/linetta/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/devlikebear/linetta/ci.yml?branch=main&style=flat-square&label=build)](https://github.com/devlikebear/linetta/actions/workflows/ci.yml)
@@ -24,7 +24,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 
 - **Write with focus.** Work scene by scene in a quiet editor with your outline always within reach.
 - **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
-- **Stay in control of AI.** Linetta itself never calls a model. Connect your own agent over MCP when you want one, see everything it changed, and undo any of it.
+- **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, and structural changes can be undone in one step.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
@@ -69,6 +69,28 @@ brew reinstall --cask linetta
 Every [GitHub release](https://github.com/devlikebear/linetta/releases/latest) includes Windows NSIS and MSI installers plus Linux AppImage, `.deb`, and `.rpm` packages.
 
 Intel Mac users can [build from source](#build-from-source).
+
+## Writing with the built-in agent (BYOK)
+
+Linetta has a built-in writing agent, but it has nothing to call until you
+bring your own connection to a model. Four providers are supported: ChatGPT
+(Codex) by signing in with your ChatGPT account, and Anthropic, Google Gemini,
+or an OpenAI-compatible endpoint — OpenRouter, or a model running on your own
+machine — by API key.
+
+Turn it on in **Settings → AI provider**. Consent is per provider, and it
+gates everything: the connection test itself is refused until you have given
+that provider a credential and ticked its consent box. An API key goes into
+your OS's secure credential store, never into `settings.json`; signing in
+with Codex instead stores its tokens in Linetta's own data directory, in a
+file only your account can read.
+
+Once a provider is connected, open the agent with `Cmd/Ctrl+J`. It reaches
+Linetta's tools the same way an external MCP client does, and every call it
+makes is recorded in the MCP activity log, which shows whether the built-in
+agent or an external client made it. Structural changes — outline
+restructuring and the like — can be undone in one step from there; undoing a
+single scene-prose write isn't there yet.
 
 ## Writing with your own agent (MCP)
 
@@ -126,8 +148,9 @@ No. Writing, organization, import/export, snapshots, and backups work without a 
 
 ### Do I have to use AI?
 
-No. Linetta is a complete writing app on its own and never contacts a model. AI
-is something you bring: turn on MCP in Settings and point your own client at it.
+No. Linetta is a complete writing app on its own. It does not contact a model
+until you connect a provider — for the built-in agent, or your own agent over
+MCP — and give that provider your consent.
 
 ### Can I bring an existing manuscript?
 
