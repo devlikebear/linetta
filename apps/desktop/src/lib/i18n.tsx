@@ -814,6 +814,9 @@ const messages = {
     "settings.providers.apiKey.clear": "삭제",
     "settings.providers.baseUrl": "Base URL",
     "settings.providers.baseUrl.hint": "OpenRouter, Ollama, LM Studio 등 OpenAI 호환 엔드포인트를 지정합니다.",
+    "settings.providers.model": "모델",
+    "settings.providers.model.default": "프로바이더 기본값",
+    "settings.providers.model.refresh": "새로고침",
     "settings.git.alreadyRepo": "이미 git 저장소입니다",
   },
   en: {
@@ -1618,6 +1621,9 @@ const messages = {
     "settings.providers.apiKey.clear": "Clear",
     "settings.providers.baseUrl": "Base URL",
     "settings.providers.baseUrl.hint": "Point this at an OpenAI-compatible endpoint — OpenRouter, Ollama, LM Studio.",
+    "settings.providers.model": "Model",
+    "settings.providers.model.default": "Provider default",
+    "settings.providers.model.refresh": "Refresh",
     "settings.git.alreadyRepo": "Already a git repository",
   },
   ja: {
@@ -2422,6 +2428,9 @@ const messages = {
     "settings.providers.apiKey.clear": "削除",
     "settings.providers.baseUrl": "Base URL",
     "settings.providers.baseUrl.hint": "OpenRouter、Ollama、LM Studio など OpenAI 互換エンドポイントを指定します。",
+    "settings.providers.model": "モデル",
+    "settings.providers.model.default": "プロバイダーの既定値",
+    "settings.providers.model.refresh": "更新",
     "settings.git.alreadyRepo": "すでに git リポジトリです",
   },
 } as const;

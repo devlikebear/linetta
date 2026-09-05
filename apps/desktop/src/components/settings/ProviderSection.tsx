@@ -49,6 +49,13 @@ export function ProviderSection() {
   // saved; nothing pre-fills them with a secret.
   const [keyDraft, setKeyDraft] = useState("");
   const [baseUrlDraft, setBaseUrlDraft] = useState("");
+  const [modelDraft, setModelDraft] = useState("");
+  // The list is a convenience layered on top of the input, never the input's
+  // source of truth: it only exists once a key is stored, and a new model
+  // announced today is usable before this list ever hears about it. Its own
+  // failure is kept separate from `error` — see loadModels below.
+  const [models, setModels] = useState<string[]>([]);
+  const [modelsError, setModelsError] = useState<unknown>(null);
   // The poll handle, so a second click cannot start a second loop and so the
   // interval dies with the component. A login the writer abandons must not
   // leave a timer calling the engine forever.
@@ -131,6 +138,13 @@ export function ProviderSection() {
     draftProvider.current = active;
     setKeyDraft("");
     setBaseUrlDraft(list.find((r) => r.id === active)?.base_url ?? "");
+    setModelDraft(list.find((r) => r.id === active)?.model ?? "");
+    // A model list belongs to the provider it was fetched for. Carrying
+    // Anthropic's list into an OpenAI-compatible screen would offer models
+    // that provider does not serve, so a provider change drops it — the
+    // writer asks for it again with the refresh button.
+    setModels([]);
+    setModelsError(null);
   }, [active, list]);
 
   // codex.login_status is the only thing that knows whether an account is
@@ -252,6 +266,34 @@ export function ProviderSection() {
       await refresh();
     });
   };
+
+  // list_models requires Configured() but not Consented() — a model name
+  // carries no manuscript text, so a writer can browse it before ticking the
+  // consent box. The refresh button gates on the same credential check.
+  const loadModels = () =>
+    guard(async () => {
+      setModelsError(null);
+      try {
+        const { models: rows } = await providersApi.listModels(active);
+        setModels(rows);
+      } catch (e) {
+        // A model list that will not load is an inconvenience, not a failure
+        // of the pane: the writer can still type a model name they already
+        // know. So this lands on its own line and never in `error`, which
+        // drives the section-level alert that would otherwise lock the pane.
+        setModelsError(e);
+        setModels([]);
+      }
+    });
+
+  // An empty string is meaningful — "the provider's own default" — not a
+  // skip. #91 chose that over shipping a model catalogue that ages the day
+  // a provider ships a new one.
+  const saveModel = () =>
+    guard(async () => {
+      await settingsApi.set({ providers: { [active]: { model: modelDraft.trim() } } });
+      await refresh();
+    });
 
   return (
     <section className="settings-section" id="provider-settings" data-testid="provider-section">
@@ -375,6 +417,38 @@ export function ProviderSection() {
           <p className="sd">{t("settings.providers.baseUrl.hint")}</p>
         </div>
       ) : null}
+
+      <div className="modal-field" data-testid="provider-model">
+        <label htmlFor="provider-model-input">{t("settings.providers.model")}</label>
+        <input
+          id="provider-model-input"
+          list="provider-model-list"
+          value={modelDraft}
+          placeholder={t("settings.providers.model.default")}
+          disabled={busy}
+          onChange={(e) => setModelDraft(e.target.value)}
+          onBlur={() => void saveModel()}
+          data-testid="provider-model-input"
+        />
+        <datalist id="provider-model-list">
+          {models.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+        <button
+          type="button"
+          disabled={busy || !current?.configured}
+          onClick={() => void loadModels()}
+          data-testid="provider-model-refresh"
+        >
+          {t("settings.providers.model.refresh")}
+        </button>
+        {modelsError ? (
+          <p className="sd" data-testid="provider-model-error">
+            {rpcErrorMessage(modelsError, t)}
+          </p>
+        ) : null}
+      </div>
 
       {error ? (
         <p className="sd" role="alert" data-testid="provider-error">

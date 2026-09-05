@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const rpc = vi.hoisted(() => ({
   providersList: vi.fn(),
+  providersListModels: vi.fn(),
   settingsSet: vi.fn(),
   codexLoginStart: vi.fn(),
   codexLoginStatus: vi.fn(),
@@ -12,7 +13,7 @@ const rpc = vi.hoisted(() => ({
 }));
 
 vi.mock("../../lib/rpc", () => ({
-  providers: { list: rpc.providersList },
+  providers: { list: rpc.providersList, listModels: rpc.providersListModels },
   settings: { set: rpc.settingsSet },
   codex: {
     loginStart: rpc.codexLoginStart,
@@ -75,6 +76,7 @@ describe("ProviderSection", () => {
     // one shared reference makes React bail out of setList, which silently
     // hides every bug in an effect keyed on the list.
     rpc.providersList.mockImplementation(() => Promise.resolve(rows(activeId, rowExtras)));
+    rpc.providersListModels.mockImplementation(() => Promise.resolve({ models: [] }));
     rpc.settingsSet.mockImplementation((patch: { provider?: string }) => {
       if (patch.provider) activeId = patch.provider;
       return Promise.resolve({});
@@ -292,6 +294,140 @@ describe("ProviderSection", () => {
     await flush();
     expect(rpc.settingsSet).not.toHaveBeenCalled();
     expect(rpc.providersList).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the model refresh button until a credential is stored", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const refreshButton = await screen.findByTestId("provider-model-refresh");
+    expect(refreshButton).toBeDisabled();
+  });
+
+  it("enables the model refresh button once a credential is stored", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    render(<ProviderSection />);
+
+    const refreshButton = await screen.findByTestId("provider-model-refresh");
+    expect(refreshButton).toBeEnabled();
+  });
+
+  it("populates the model datalist on refresh", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    // Fresh array every call — see the note in beforeEach on why a shared
+    // literal would hide bugs in an effect keyed on this list's identity.
+    rpc.providersListModels.mockImplementation(() =>
+      Promise.resolve({ models: ["claude-opus", "claude-haiku"] }),
+    );
+    render(<ProviderSection />);
+
+    await userEvent.click(await screen.findByTestId("provider-model-refresh"));
+
+    await waitFor(() => expect(rpc.providersListModels).toHaveBeenCalledWith("anthropic"));
+    const datalist = document.getElementById("provider-model-list");
+    expect(datalist?.querySelectorAll("option")).toHaveLength(2);
+  });
+
+  it("keeps the model input usable when the list fails to load", async () => {
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-model-refresh");
+
+    // A model list is a convenience, not the control — its failure must land
+    // on its own line and never in `error`, which drives the section-level
+    // alert. Otherwise a writer whose network hiccuped cannot type a model
+    // name they already know.
+    rpc.providersListModels.mockImplementation(() =>
+      Promise.reject(
+        Object.assign(new Error("x"), { data: { reason: "provider_unreachable" } }),
+      ),
+    );
+
+    await userEvent.click(screen.getByTestId("provider-model-refresh"));
+
+    const modelError = await screen.findByTestId("provider-model-error");
+    expect(modelError.textContent).toBe("errors.providerUnreachable");
+    expect(screen.queryByTestId("provider-error")).toBeNull();
+
+    const input = screen.getByTestId("provider-model-input") as HTMLInputElement;
+    expect(input).toBeEnabled();
+    await userEvent.type(input, "gpt-5-custom");
+    expect(input.value).toBe("gpt-5-custom");
+  });
+
+  it("saves an empty model as the provider default", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "claude-x" } });
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.focusOut(input);
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { anthropic: { model: "" } },
+      }),
+    );
+  });
+
+  it("saves the trimmed model draft on blur", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const input = await screen.findByTestId("provider-model-input");
+    fireEvent.change(input, { target: { value: "  claude-sonnet-5  " } });
+    fireEvent.focusOut(input);
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { anthropic: { model: "claude-sonnet-5" } },
+      }),
+    );
+  });
+
+  it("drops an unsaved model draft when the writer changes provider", async () => {
+    activeId = "anthropic";
+    render(<ProviderSection />);
+
+    const input = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "claude-typed" } });
+    expect(input.value).toBe("claude-typed");
+
+    await userEvent.click(screen.getByTestId("provider-choice-openai"));
+    await screen.findByTestId("provider-base-url-input");
+
+    await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    const back = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    expect(back.value).toBe("");
+  });
+
+  it("keeps an unsaved model draft through a background providers.list reload", async () => {
+    activeId = "openai";
+    rowExtras = { openai: { base_url: "https://openrouter.ai/api/v1" } };
+    render(<ProviderSection />);
+
+    const modelInput = (await screen.findByTestId("provider-model-input")) as HTMLInputElement;
+    fireEvent.change(modelInput, { target: { value: "gpt-5-typed" } });
+
+    // Tab on to the base URL and edit it: the blur saves, and the save
+    // reloads providers.list. That reload must not touch the model draft.
+    const baseUrl = screen.getByTestId("provider-base-url-input");
+    fireEvent.change(baseUrl, { target: { value: "https://ollama.local/v1" } });
+    fireEvent.focusOut(baseUrl);
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { openai: { base_url: "https://ollama.local/v1" } },
+      }),
+    );
+
+    expect((screen.getByTestId("provider-model-input") as HTMLInputElement).value).toBe(
+      "gpt-5-typed",
+    );
   });
 
   it("does not erase a key typed on another provider when an abandoned Codex poll returns", async () => {
