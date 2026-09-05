@@ -96,3 +96,28 @@
 .tool-undo:disabled { color: var(--muted); cursor: default; }
 .tool-undone { margin-left: auto; flex: none; color: var(--muted); }
 .tool-undo-error { color: var(--danger); }
+
+/* Usage line (#95 Task 6): one quiet line under a finished reply, token
+ * counts only — no cost figure (see AgentPanel.tsx for why). */
+.msg-usage {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+
+/* A synchronous refusal to start a turn (provider_not_configured,
+ * agent_busy, ...). Sits between the log and the composer, not inside it —
+ * it explains why the composer just handed the draft back, not a line in
+ * the conversation itself. */
+.agent-send-error {
+  margin: 0;
+  padding: 8px 16px 0;
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Starting chips sit right above the composer, only before the first turn.
+ * .ai-chiprow / .chip are the shared chip-row rules from App.css. */
+.agent-starters { padding: 0 16px 10px; }

@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readSource } from "../../test/readSource";
@@ -7,6 +7,8 @@ import type { ProviderStatus } from "../../lib/types";
 const rpc = vi.hoisted(() => ({
   providersList: vi.fn(),
   agentUndo: vi.fn(),
+  agentRun: vi.fn(),
+  agentCancel: vi.fn(),
 }));
 
 // Same approach as useMcpChanges.test.tsx: a hoisted listener map standing in
@@ -26,7 +28,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../../lib/rpc", () => ({
   providers: { list: rpc.providersList },
-  agent: { undo: rpc.agentUndo },
+  agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -54,12 +56,34 @@ function row(overrides: Partial<ProviderStatus> = {}): ProviderStatus {
   };
 }
 
+const PROJECT_ID = "project-1";
+const NODE_ID = "node-1";
+
 function renderPanel(onClose = vi.fn()) {
   return render(
     <MemoryRouter>
-      <AgentPanel onClose={onClose} />
+      <AgentPanel onClose={onClose} projectId={PROJECT_ID} nodeId={NODE_ID} />
     </MemoryRouter>,
   );
+}
+
+function composer() {
+  return screen.getByTestId("agent-composer") as HTMLTextAreaElement;
+}
+
+/** Types into the composer and presses the given key. Two `act`s — a change
+ *  then a keydown — not one, so a controlled-input update and its listener
+ *  registration both land before the assertion runs. */
+async function type(text: string) {
+  await act(async () => {
+    fireEvent.change(composer(), { target: { value: text } });
+  });
+}
+
+async function pressEnter(shiftKey = false) {
+  await act(async () => {
+    fireEvent.keyDown(composer(), { key: "Enter", shiftKey });
+  });
 }
 
 /** Renders with a ready (configured + consented) provider and waits for the
@@ -656,5 +680,185 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
     // Set on mount, not only at declaration: a StrictMode remount runs the
     // cleanup and would otherwise leave the panel permanently "unmounted".
     expect(src).toContain("mountedRef.current = true;");
+  });
+});
+
+describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+  });
+
+  function botBubbles(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>(".msg.bot .msg-bubble"));
+  }
+
+  it("sends on Enter with the project id, the prompt, and the open editor's node id", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+
+    await type("다음 문단을 이어서 써줘");
+    await pressEnter();
+
+    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "다음 문단을 이어서 써줘", NODE_ID);
+    // The composer clears and the writer's own line lands in the log.
+    expect(composer().value).toBe("");
+    expect(screen.getByTestId("agent-log").querySelector(".msg.user .msg-bubble")?.textContent).toBe(
+      "다음 문단을 이어서 써줘",
+    );
+  });
+
+  it("does not send on Shift+Enter", async () => {
+    // jsdom does not simulate a browser's native newline-on-Enter behaviour
+    // for a plain keydown dispatch, so this cannot assert a "\n" landed in
+    // the textarea — only that Shift+Enter is not treated as send (the
+    // draft survives untouched, and no run starts).
+    await renderReady();
+
+    await type("one");
+    await pressEnter(true);
+
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+    expect(composer().value).toBe("one");
+  });
+
+  it("does not send an empty or whitespace-only draft", async () => {
+    await renderReady();
+
+    await type("   ");
+    await pressEnter();
+
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+  });
+
+  it("swaps the send control for stop once a run starts, and back once it finishes", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+
+    expect(screen.getByTestId("agent-send")).toBeTruthy();
+    expect(screen.queryByTestId("agent-stop")).toBeNull();
+
+    await type("써줘");
+    await pressEnter();
+
+    expect(screen.queryByTestId("agent-send")).toBeNull();
+    expect(screen.getByTestId("agent-stop")).toBeTruthy();
+
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+
+    expect(screen.getByTestId("agent-send")).toBeTruthy();
+    expect(screen.queryByTestId("agent-stop")).toBeNull();
+  });
+
+  it("cancels the running turn through agent.cancel and keeps the partial reply on screen", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    rpc.agentCancel.mockImplementation(() => Promise.resolve({ ok: true }));
+    await renderReady();
+
+    await type("써줘");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r1", text: "여기까지 쓰다가" });
+
+    await act(async () => {
+      screen.getByTestId("agent-stop").click();
+    });
+    expect(rpc.agentCancel).toHaveBeenCalledWith("r1");
+
+    // #93's contract: cancel reaches the in-memory turn, but the partial
+    // reply already accumulated stays in the transcript — the composer
+    // clearing it would throw away work the writer may want.
+    await emit("agent-cancelled", { run_id: "r1" });
+
+    expect(botBubbles()[0]?.textContent).toBe("여기까지 쓰다가");
+    expect(screen.getByTestId("agent-send")).toBeTruthy();
+  });
+
+  it("renders the translated reason for a synchronous refusal and does not leave the composer stuck on stop", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.reject({ data: { reason: "provider_consent_required" } }));
+    await renderReady();
+
+    await type("이어서 써줘");
+    await pressEnter();
+
+    expect(screen.getByTestId("agent-send-error").textContent).toBe("errors.providerConsentRequired");
+    // Never the raw engine message, and never stuck showing stop for a turn
+    // that was refused before it ever started.
+    expect(screen.queryByTestId("agent-stop")).toBeNull();
+    expect(screen.getByTestId("agent-send")).toBeTruthy();
+    // The draft is handed back rather than thrown away.
+    expect(composer().value).toBe("이어서 써줘");
+    // And no phantom turn was added to the log.
+    expect(screen.queryByTestId("agent-log")?.querySelector(".msg.user")).toBeNull();
+  });
+
+  it("fills the composer from each starting chip without sending", async () => {
+    await renderReady();
+
+    const draftChip = screen.getByTestId("agent-starter-draftScene");
+    await act(async () => {
+      draftChip.click();
+    });
+
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+    expect(composer().value).toBe("agentPanel.starters.draftScene.prompt");
+
+    await act(async () => {
+      screen.getByTestId("agent-starter-continuity").click();
+    });
+    expect(composer().value).toBe("agentPanel.starters.continuity.prompt");
+
+    await act(async () => {
+      screen.getByTestId("agent-starter-nextScene").click();
+    });
+    expect(composer().value).toBe("agentPanel.starters.nextScene.prompt");
+  });
+
+  it("hides the starting chips once the conversation has a turn in it", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+
+    expect(screen.getByTestId("agent-starters")).toBeTruthy();
+
+    await type("써줘");
+    await pressEnter();
+
+    expect(screen.queryByTestId("agent-starters")).toBeNull();
+  });
+
+  it("shows the turn's token usage after agent.done, with no cost figure", async () => {
+    await renderReady();
+
+    await emit("agent-delta", { run_id: "r1", text: "답변" });
+    await emit("agent-done", { run_id: "r1", usage: { input: 120, output: 340 } });
+
+    const usage = screen.getByTestId("agent-usage");
+    expect(usage.textContent).toBe("agentPanel.usage:input=120,output=340");
+    expect(usage.textContent).not.toContain("$");
+  });
+
+  it("renders the second turn's reply after the first is done, in the same mount", async () => {
+    // The scenario the acceptRun comment calls out by name: without setting
+    // currentRunIdRef.current from agent.run's own response, the second
+    // turn's events arrive before anything else names r2 as current, get
+    // read as stragglers from an abandoned run, and are dropped — the
+    // second reply never appears.
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+
+    await type("첫 번째 요청");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r1", text: "첫 번째 답" });
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r2" }));
+    await type("두 번째 요청");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r2", text: "두 번째 답" });
+    await emit("agent-done", { run_id: "r2", usage: { input: 2, output: 2 } });
+
+    const bubbles = botBubbles();
+    expect(bubbles).toHaveLength(2);
+    expect(bubbles[0].textContent).toBe("첫 번째 답");
+    expect(bubbles[1].textContent).toBe("두 번째 답");
   });
 });

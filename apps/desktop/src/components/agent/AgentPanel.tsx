@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, X } from "lucide-react";
+import { Bot, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, providers as providersApi } from "../../lib/rpc";
 import { useI18n } from "../../lib/i18n";
@@ -14,10 +14,12 @@ import "./AgentPanel.css";
  *
  *  Task 3 built the shell: it opens, it closes, and it says whether a
  *  provider is ready to talk to. Task 4 filled the log with the writer's
- *  turn, the agent's reply, and the reply arriving as it streams. This task
- *  (5) renders the tool line Task 4 kept but never showed, and adds undo for
- *  the lines that carry a batch id. No composer, no send button, no stop, no
- *  usage line, no history restore — those are Tasks 6-7.
+ *  turn, the agent's reply, and the reply arriving as it streams. Task 5
+ *  rendered the tool line Task 4 kept but never showed, and added undo for
+ *  the lines that carry a batch id. This task (6) adds the composer, the
+ *  stop button, the three starting chips, and the usage line at the end of a
+ *  turn — the panel can now actually send something. No history restore and
+ *  no agent.error/agent.cancelled rendering — those are Task 7.
  */
 
 /** One line in the transcript. Mirrors the shape in the task-4 brief.
@@ -94,9 +96,14 @@ interface AgentCancelledPayload {
 
 interface Props {
   onClose: () => void;
+  /** The active project — agent.run's first argument. */
+  projectId: string;
+  /** The currently open editor's node id — agent.run's scope argument and
+   *  the only material the engine gets for "which scene do you mean". */
+  nodeId: string;
 }
 
-export function AgentPanel({ onClose }: Props) {
+export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   const { t } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
   // credential without consent is refused server-side — Source.Client()
@@ -114,6 +121,22 @@ export function AgentPanel({ onClose }: Props) {
   // while true the reply reveals gradually; once false it snaps to the full
   // text (also covers the mount-with-nothing-streaming-yet case).
   const [running, setRunning] = useState(false);
+
+  // The composer (Task 6). `draft` is the textarea's own value. `sending` is
+  // true only for the round trip of agent.run itself — before a run id
+  // exists there is nothing to show a stop button for yet. `turnRunId` is
+  // the run the composer considers "in progress": set the moment agent.run
+  // resolves, cleared by that same run's terminal event (done/error/
+  // cancelled). It drives the send-vs-stop toggle; it is state (not the
+  // acceptRun ref) because the button needs a re-render when it changes.
+  // `canceling` guards agent.cancel the same way handleUndo guards
+  // agent.undo — one click, one call, even if the writer clicks again before
+  // the round trip returns.
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [turnRunId, setTurnRunId] = useState<string | null>(null);
+  const [canceling, setCanceling] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // The run this mount follows. Locked onto the first run id any agent.*
   // event names; every later event carrying a different run id is dropped.
@@ -223,6 +246,11 @@ export function AgentPanel({ onClose }: Props) {
   useEngineEvent<AgentDonePayload>("agent-done", (payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
+    // The composer's send control returns from "stop" to "send" once this
+    // run's own terminal event lands — not on a timer, not on any other
+    // run's terminal event (acceptRun above already refused those).
+    setTurnRunId(null);
+    setCanceling(false);
     const id = `assistant:${payload.run_id}`;
     setLines((prev) =>
       prev.map((l) => (l.kind === "assistant" && l.id === id ? { ...l, usage: payload.usage } : l)),
@@ -231,15 +259,20 @@ export function AgentPanel({ onClose }: Props) {
 
   // Translating `reason` into a message and showing it is Task 7's job.
   // This task only has to stop the streaming indicator honestly instead of
-  // leaving the reply looking like it is still arriving.
+  // leaving the reply looking like it is still arriving, and hand the
+  // composer back to the writer.
   useEngineEvent<AgentErrorPayload>("agent-error", (payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
+    setTurnRunId(null);
+    setCanceling(false);
   });
 
   useEngineEvent<AgentCancelledPayload>("agent-cancelled", (payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
+    setTurnRunId(null);
+    setCanceling(false);
   });
 
   // Undo is a per-line action, not a turn-level one: mark only the clicked
@@ -303,12 +336,81 @@ export function AgentPanel({ onClose }: Props) {
     };
   }, []);
 
-  // At most one assistant line ever exists in a mount: acceptRun locks onto
-  // a single run, and that run produces exactly one assistant reply. Feed
-  // its raw accumulated text through useSmoothStream so the reveal is
-  // decoupled from delta's chunky arrival rate.
-  const assistantText = lines.find((l): l is Extract<Line, { kind: "assistant" }> => l.kind === "assistant")?.text ?? "";
-  const shownAssistantText = useSmoothStream(assistantText, running);
+  // Sends the composer's text as a new turn. A no-op while a turn is already
+  // in flight (busy below already hides the send control in that state, but
+  // Enter can still reach here) or while the draft is empty.
+  function handleSend() {
+    const prompt = draft.trim();
+    if (!prompt || sending || turnRunId !== null) return;
+    setDraft("");
+    setSendError(null);
+    setSending(true);
+    agentApi
+      .run(projectId, prompt, nodeId)
+      .then((result) => {
+        // Set the authoritative run id directly from agent.run's response,
+        // bypassing acceptRun's first-wins null check. See the comment
+        // above acceptRun: an id assigned here, before any wire event has
+        // arrived, closes the window a stale straggler from the previous
+        // run could otherwise be adopted through simply by arriving first.
+        currentRunIdRef.current = result.run_id;
+        if (!mountedRef.current) return;
+        setLines((prev) => [...prev, { kind: "user", id: `user:${result.run_id}`, text: prompt }]);
+        setTurnRunId(result.run_id);
+        setSending(false);
+      })
+      .catch((err: unknown) => {
+        // A synchronous refusal (provider_not_configured,
+        // provider_consent_required, agent_busy, ...) — no run ever started,
+        // so there is nothing for acceptRun to have touched. Hand the draft
+        // back rather than discarding what the writer typed.
+        if (!mountedRef.current) return;
+        setSending(false);
+        setSendError(rpcErrorMessage(err, t));
+        setDraft(prompt);
+      });
+  }
+
+  // agent.cancel reaches the in-memory turn; the partial reply already in
+  // `lines` is left exactly as it is — the engine keeps it in the
+  // transcript, and the composer returns to "send" only once this run's own
+  // agent-cancelled (or agent-done, if the cancel lost the race) arrives.
+  function handleStop() {
+    if (!turnRunId || canceling) return;
+    setCanceling(true);
+    agentApi
+      .cancel(turnRunId)
+      .catch(() => {
+        // A cancel that fails almost always means the turn already finished
+        // — its own terminal event will have reset canceling by the time
+        // this rejection is even observed. Nothing else to show for it.
+      })
+      .finally(() => {
+        if (mountedRef.current) setCanceling(false);
+      });
+  }
+
+  function handleComposerKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Enter" || e.shiftKey) return;
+    e.preventDefault();
+    handleSend();
+  }
+
+  // A mount can now hold more than one assistant line — Task 6 lets the
+  // writer send a second turn once the first is done. Only the run
+  // currentRunIdRef is currently pointed at (the newest one, whether still
+  // streaming or just finished) needs the smooth reveal; every earlier
+  // turn's line already has its full text sitting in `lines` and is
+  // rendered verbatim. Reading the ref here rather than `turnRunId` state
+  // means this stays correct even when a test drives raw agent-delta events
+  // straight past the composer, with no run id ever assigned by hand.
+  const activeAssistantId = currentRunIdRef.current ? `assistant:${currentRunIdRef.current}` : null;
+  const activeAssistantText = activeAssistantId
+    ? lines.find((l): l is Extract<Line, { kind: "assistant" }> => l.kind === "assistant" && l.id === activeAssistantId)
+        ?.text ?? ""
+    : "";
+  const shownActiveText = useSmoothStream(activeAssistantText, running);
+  const busy = sending || turnRunId !== null;
 
   return (
     <aside className="panel agent-panel" onMouseDown={(e) => e.stopPropagation()}>
@@ -317,6 +419,7 @@ export function AgentPanel({ onClose }: Props) {
         <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}><X size={16} /></button>
       </div>
       {ready === null ? null : ready ? (
+        <>
         <div className="panel-scroll agent-log cmp-stream" data-testid="agent-log">
           {lines.map((line) => {
             if (line.kind === "user") {
@@ -327,11 +430,19 @@ export function AgentPanel({ onClose }: Props) {
               );
             }
             if (line.kind === "assistant") {
+              const text = line.id === activeAssistantId ? shownActiveText : line.text;
               return (
                 <div key={line.id} className="msg bot">
                   <div className="msg-bubble">
-                    <Markdown text={shownAssistantText} />
+                    <Markdown text={text} />
                   </div>
+                  {line.usage ? (
+                    // No cost figure: prices differ per provider and change
+                    // often, and a wrong number is worse than none.
+                    <div className="msg-usage" data-testid="agent-usage">
+                      {t("agentPanel.usage", { input: line.usage.input, output: line.usage.output })}
+                    </div>
+                  ) : null}
                 </div>
               );
             }
@@ -371,6 +482,80 @@ export function AgentPanel({ onClose }: Props) {
             );
           })}
         </div>
+        {sendError ? (
+          <p className="agent-send-error" role="alert" data-testid="agent-send-error">
+            {sendError}
+          </p>
+        ) : null}
+        {lines.length === 0 && !busy ? (
+          // Starting chips: three fixed prompts that fill the composer and
+          // stop there — the writer gets to edit the sentence before it goes
+          // anywhere. They only make sense before the first turn; once the
+          // log has something in it (or a send is already in flight), the
+          // writer is already composing their own message.
+          <div className="ai-chiprow agent-starters" data-testid="agent-starters">
+            <button
+              type="button"
+              className="chip"
+              data-testid="agent-starter-draftScene"
+              onClick={() => setDraft(t("agentPanel.starters.draftScene.prompt"))}
+            >
+              {t("agentPanel.starters.draftScene.label")}
+            </button>
+            <button
+              type="button"
+              className="chip"
+              data-testid="agent-starter-continuity"
+              onClick={() => setDraft(t("agentPanel.starters.continuity.prompt"))}
+            >
+              {t("agentPanel.starters.continuity.label")}
+            </button>
+            <button
+              type="button"
+              className="chip"
+              data-testid="agent-starter-nextScene"
+              onClick={() => setDraft(t("agentPanel.starters.nextScene.prompt"))}
+            >
+              {t("agentPanel.starters.nextScene.label")}
+            </button>
+          </div>
+        ) : null}
+        <div className="cmp-input-wrap">
+          <div className="cmp-input">
+            <textarea
+              data-testid="agent-composer"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={handleComposerKeyDown}
+              placeholder={t("agentPanel.composer.placeholder")}
+              rows={1}
+            />
+            {busy ? (
+              <button
+                type="button"
+                className="cmp-send"
+                data-testid="agent-stop"
+                onClick={handleStop}
+                disabled={!turnRunId || canceling}
+                aria-label={t("agentPanel.composer.stop")}
+              >
+                <Square size={14} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="cmp-send"
+                data-testid="agent-send"
+                onClick={handleSend}
+                disabled={!draft.trim()}
+                aria-label={t("agentPanel.composer.send")}
+              >
+                <Send size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+        </>
       ) : (
         <p className="agent-empty" data-testid="agent-unconfigured">
           {t("agentPanel.unconfigured")}{" "}

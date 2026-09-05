@@ -1861,6 +1861,8 @@ export function Workspace() {
           />
         ) : agentOpen && agentAvailable && load ? (
           <AgentPanel
+            projectId={load.project.id}
+            nodeId={load.node.id}
             onClose={() => {
               setAgentOpen(false);
               focusEditor();
