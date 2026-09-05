@@ -44,6 +44,7 @@ Linetta의 내장 에이전트는 사용자가 프로바이더를 직접 연결�
 - **언제 가나.** 동의한 뒤에만 갑니다. 동의는 프로바이더별이며, 한 곳에 동의한 것이 다른 곳에 동의한 것이 되지 않습니다. 같은 체크박스를 해제하면 클릭 한 번으로 동의가 철회되고, 앱은 그 프로바이더로 보내는 것을 즉시 멈춥니다. 이 확인은 앱이 전송할 수 있는 것을 만들기 전에 이루어지므로, 동의가 없으면 "연결 테스트" 버튼도 거절됩니다. (자격 증명을 입력한 뒤에는 앱이 프로바이더에 사용 가능한 모델 목록을 물을 수 있습니다. 이 요청에는 원고 내용이 담기지 않습니다.)
 - **자격 증명.** 2항에 적은 대로 보관합니다. API 키는 운영체제의 보안 저장소에, ChatGPT(Codex) 로그인은 `<앱 데이터>/codex/auth.json`에 보관합니다. 자격 증명은 요청의 일부로 해당 프로바이더에만 전송됩니다.
 - **프로바이더가 그 데이터로 무엇을 하는지**는 그 회사의 개인정보 처리방침과 약관 소관이며, 텍스트를 보관하는지 학습에 사용하는지도 여기에 포함됩니다. Linetta가 그 회사를 대신해 약속할 수 없으니, 선택한 프로바이더의 방침을 직접 확인하시기 바랍니다.
+- **에이전트는 원고를 직접 바꿉니다.** 씬을 쓰는 것도, 아웃라인을 재구성하는 것도 포함됩니다. 이 권한은 "외부 에이전트 연결 (MCP)"을 읽기 전용으로 두거나 꺼도 바뀌지 않습니다 — 그 설정은 외부 클라이언트에만 적용됩니다. 에이전트가 호출한 모든 툴은 외부 클라이언트의 호출과 함께 활동 기록에 남고, 어느 쪽이 호출했는지도 기록되어 설정의 MCP 항목에서 확인할 수 있습니다.
 - 개발자는 이 데이터를 수신·중계·저장하지 않습니다. 데이터는 사용자의 기기에서 사용자의 프로바이더로 바로 갑니다.
 
 #### 3.2 외부 에이전트 연결 (MCP)
@@ -128,6 +129,7 @@ Linetta's built-in agent has nothing to call until you connect a provider yourse
 - **When it goes.** Only after you consent. Consent is per provider: agreeing to one is not agreeing to another. Unticking the same box withdraws it in one click, and the App stops sending to that provider at once. The check runs before the App builds anything that can send, so without it even the "Test connection" button is refused. (Once you have entered a credential, the App can ask a provider for its list of available models; that request carries no manuscript content.)
 - **Your credential.** Kept as described in Section 2: an API key in your operating system's secure store, a ChatGPT (Codex) sign-in in `<app data>/codex/auth.json`. It is sent only to that provider, as part of the request.
 - **What the provider does with that data** is governed by that company's privacy policy and terms, including whether it retains the text or trains on it. Linetta cannot promise anything on that company's behalf; read the policy of the provider you choose.
+- **It writes, too.** The agent can write scenes and restructure the outline directly, not only read. This is unaffected by setting "Connect an external agent (MCP)" to read-only or turning it off — that setting governs external clients only. Every tool call the agent makes is recorded in the same activity log as an external client's calls, tagged with which one made it, and viewable under the MCP section of Settings.
 - The developer does not receive, relay, or store this data. It goes from your device straight to your provider.
 
 #### 3.2 Connecting an External Agent (MCP)
@@ -212,6 +214,7 @@ Linetta の内蔵エージェントは、ユーザー自身がプロバイダー
 - **いつ送られるか。** 同意した後に限られます。同意はプロバイダーごとで、一方への同意が他方への同意にはなりません。同じチェックボックスを外せば 1 クリックで同意を撤回でき、本アプリはそのプロバイダーへの送信を直ちに停止します。この確認は、送信できるものを本アプリが組み立てる前に行われるため、同意がなければ「接続テスト」ボタンも拒否されます。（認証情報を入力した後は、本アプリがプロバイダーに利用可能なモデルの一覧を問い合わせることがあります。この要求に原稿の内容は含まれません。）
 - **認証情報。** 第2項に記載のとおり保管します。API キーは OS のセキュアストアに、ChatGPT（Codex）のサインインは `<アプリデータ>/codex/auth.json` に保管します。認証情報はリクエストの一部として当該プロバイダーにのみ送信されます。
 - **プロバイダーがそのデータをどう扱うか**は、その企業のプライバシーポリシーおよび利用規約に従い、テキストを保持するか学習に使用するかもここに含まれます。Linetta がその企業に代わって約束することはできませんので、選んだプロバイダーの方針をご自身でご確認ください。
+- **書き込みも行います。** エージェントは読み取るだけでなく、シーンを直接執筆し、アウトラインを再構成することもできます。この権限は「外部エージェント接続 (MCP)」を読み取り専用にしても、オフにしても変わりません — その設定は外部クライアントにのみ適用されます。エージェントが呼び出したすべてのツールは、外部クライアントの呼び出しと同じ活動ログに記録され、どちらが呼び出したかも記録されるため、設定の MCP 項目で確認できます。
 - 開発者はこのデータを受信・中継・保存しません。データはユーザーの端末からユーザーのプロバイダーへ直接送られます。
 
 #### 3.2 外部エージェントの接続 (MCP)
