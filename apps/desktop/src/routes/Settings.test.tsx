@@ -52,6 +52,20 @@ vi.mock("../lib/rpc", () => ({
   openExternalUrl: mocks.openExternalUrl,
 }));
 
+// ProviderSection and McpSection are stubbed to identifiable markers rather
+// than mounted for real. This file's job is to prove Settings.tsx wires the
+// right component to the right category/flag pair — ProviderSection already
+// has 62 tests of its own (ProviderSection.test.tsx) that mount it directly,
+// and duplicating its rpc/codex mock surface here would only make this file
+// fragile to changes that have nothing to do with the wiring. A stub that
+// renders its own name makes a category/component swap fail immediately.
+vi.mock("../components/settings/ProviderSection", () => ({
+  ProviderSection: () => <div data-testid="provider-section-stub">provider-section</div>,
+}));
+vi.mock("../components/settings/McpSection", () => ({
+  McpSection: () => <div data-testid="mcp-section-stub">mcp-section</div>,
+}));
+
 function renderSettings() {
   return render(
     <MemoryRouter>
@@ -419,5 +433,99 @@ describe("Settings", () => {
     // resolved.
     await screen.findByTestId("settings-nav-general");
     expect(screen.queryByTestId("settings-nav-providers")).not.toBeInTheDocument();
+  });
+
+  it("renders ProviderSection (not McpSection) under the providers nav item", async () => {
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: true,
+      agent_available: true,
+      mcp_available: true,
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-providers"));
+
+    expect(await screen.findByTestId("provider-section-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("mcp-section-stub")).not.toBeInTheDocument();
+  });
+
+  it("renders McpSection (not ProviderSection) under the mcp nav item", async () => {
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: true,
+      agent_available: true,
+      mcp_available: true,
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-mcp"));
+
+    expect(await screen.findByTestId("mcp-section-stub")).toBeInTheDocument();
+    expect(screen.queryByTestId("provider-section-stub")).not.toBeInTheDocument();
+  });
+
+  it("does not render ProviderSection when only mcp_available is true (gate is agent_available)", async () => {
+    // A category value survives in sessionStorage across a diagnostics
+    // change (a previous run had the agent, this one does not). The nav
+    // item itself would already be hidden in this state, but the render
+    // branch must independently refuse to mount ProviderSection off a
+    // stale "providers" category — it must check agent_available, not
+    // mcp_available, even though both flags are booleans on the same
+    // response and a copy-paste could swap which one gates the branch.
+    window.sessionStorage.setItem("linetta.settings.category", "providers");
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: true,
+      agent_available: false,
+      mcp_available: true,
+    });
+    renderSettings();
+
+    await screen.findByTestId("settings-nav-general");
+    expect(screen.queryByTestId("provider-section-stub")).not.toBeInTheDocument();
+  });
+
+  it("lists the provider nav item above the mcp one when both are available", async () => {
+    mocks.diagnosticsGet.mockResolvedValue({
+      version: "",
+      home: "",
+      db_path: "",
+      migration_version: 0,
+      migration_count: 0,
+      ops_status: [],
+      unavailable_providers: [],
+      git_sync_available: true,
+      agent_available: true,
+      mcp_available: true,
+    });
+    renderSettings();
+
+    const providersItem = await screen.findByTestId("settings-nav-providers");
+    const mcpItem = await screen.findByTestId("settings-nav-mcp");
+
+    expect(
+      providersItem.compareDocumentPosition(mcpItem) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
