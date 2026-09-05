@@ -180,6 +180,19 @@ function notices(): HTMLElement[] {
   );
 }
 
+/** Assert the log carries exactly one notice, saying `key`.
+ *
+ *  The count is half the assertion: a restore that says both "this failed"
+ *  and "it may still be running" is telling the writer two different stories
+ *  about the same turn, and every notice test below is really about which one
+ *  survives. */
+function expectOneNotice(key: string) {
+  const found = notices();
+  expect(found).toHaveLength(1);
+  expect(found[0].textContent).toBe(key);
+  return found[0];
+}
+
 /** Emits one wire event.
  *
  *  Every agent.* payload carries `project_id` (#95 Task 7 review round 3) and
@@ -1245,9 +1258,7 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
     await renderReady();
 
     expect(await screen.findByText("아직 안 끝났을 수도")).toBeTruthy();
-    const found = notices();
-    expect(found).toHaveLength(1);
-    expect(found[0].textContent).toBe("agentPanel.restore.mayBeRunning");
+    expectOneNotice("agentPanel.restore.mayBeRunning");
   });
 
   it("does not show the still-running notice once the conversation already has a reply", async () => {
@@ -1289,10 +1300,10 @@ describe("AgentPanel wire errors and cancellation (#95 Task 7)", () => {
       message: "dial tcp 1.2.3.4:443: connect: connection refused",
     });
 
-    const found = notices();
-    expect(found).toHaveLength(1);
-    expect(found[0].textContent).toBe("errors.providerUnreachable");
-    expect(found[0].textContent).not.toContain("dial tcp");
+    const notice = expectOneNotice("errors.providerUnreachable");
+    // The engine's own message for this reason carries the dial error; only
+    // the translated reason may reach the writer.
+    expect(notice.textContent).not.toContain("dial tcp");
   });
 
   it("gives provider_auth_failed a link to Settings, the same shape as the unconfigured notice", async () => {
@@ -1575,9 +1586,7 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     );
 
     expect(await screen.findByText("여기까지 쓰다가")).toBeTruthy();
-    const found = notices();
-    expect(found).toHaveLength(1);
-    expect(found[0].textContent).toBe("agentPanel.restore.failed");
+    expectOneNotice("agentPanel.restore.failed");
   });
 
   it("leaves an iteration-limit turn unlabelled, and hedges it as maybe-running — which it always will", async () => {
@@ -1655,11 +1664,9 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     );
 
     expect(await screen.findByText("두 번째 요청")).toBeTruthy();
-    const found = notices();
     // One notice, for r2 only — and no "may still be running" hedge, since
     // the failed status already says how that turn ended.
-    expect(found).toHaveLength(1);
-    expect(found[0].textContent).toBe("agentPanel.restore.failed");
+    expectOneNotice("agentPanel.restore.failed");
   });
 
   it("shows the still-running notice when the conversation ends on a resolved tool call", async () => {
@@ -1678,9 +1685,7 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     );
 
     expect(await screen.findByText("고쳐줘")).toBeTruthy();
-    const found = notices();
-    expect(found).toHaveLength(1);
-    expect(found[0].textContent).toBe("agentPanel.restore.mayBeRunning");
+    expectOneNotice("agentPanel.restore.mayBeRunning");
   });
 
   it("does not hedge that a cancelled turn may still be running", async () => {
@@ -1689,9 +1694,7 @@ describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
     );
 
     expect(await screen.findByText("그만")).toBeTruthy();
-    const found = notices();
-    expect(found).toHaveLength(1);
-    expect(found[0].textContent).toBe("agentPanel.cancelled");
+    expectOneNotice("agentPanel.cancelled");
   });
 
   it("skips a tool row whose content is the JSON literal null", async () => {
