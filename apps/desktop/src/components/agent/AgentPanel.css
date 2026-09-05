@@ -79,7 +79,7 @@
 .tool-label { font-weight: 600; color: var(--ink-soft); }
 .tool-running .tool-label { color: var(--muted); font-weight: 500; font-style: italic; }
 .tool-error .tool-label { color: var(--danger); }
-.tool-summary { color: var(--muted); overflow-wrap: anywhere; }
+.tool-name { color: var(--muted); overflow-wrap: anywhere; }
 .tool-undo {
   margin-left: auto;
   flex: none;

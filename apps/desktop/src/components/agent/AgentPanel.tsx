@@ -3,7 +3,7 @@ import { Bot, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, providers as providersApi } from "../../lib/rpc";
 import { useI18n } from "../../lib/i18n";
-import type { MessageKey } from "../../lib/i18n";
+import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
 import { useEngineEvent } from "../../hooks/useEngineEvent";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
@@ -29,7 +29,15 @@ import "./AgentPanel.css";
  *  has started in this turn.
  *
  *  `undoing`/`undone`/`undoError` are Task 5 additions, local to this
- *  component's undo flow — they never arrive over the wire. */
+ *  component's undo flow — they never arrive over the wire.
+ *
+ *  `summary` is kept but never rendered. Whatever the engine puts there is
+ *  machine text in both directions — raw call arguments on "started", the
+ *  JSON serialisation of the tool's output on "done", an English engine
+ *  sentence on "error" — so the line is built from `name` instead (see
+ *  lib/agentTools.ts). It stays on the type because the "started" event's
+ *  copy must be actively discarded rather than merely hidden; see the
+ *  handler below. */
 type Line =
   | { kind: "user"; id: string; text: string }
   | { kind: "assistant"; id: string; text: string; usage?: { input: number; output: number } }
@@ -45,38 +53,6 @@ type Line =
       undoError?: string;
     };
 
-/** Tools that mutate the manuscript, mirroring
- *  engine/internal/mcphost/tools_write.go's `WriteToolNames` — the only
- *  place that list is authoritative. This is what decides the line's verb
- *  (읽음/씀); it is a different question from whether the *button* shows,
- *  which is decided per-line by whether a `batch_id` actually came back (see
- *  the render loop below). A write tool can still render with no button —
- *  e.g. `linetta_write_scene`, which returns a snapshot id rather than a
- *  batch id, or any write cut off mid-flight by the writer pressing stop. */
-const WRITE_TOOL_NAMES = new Set([
-  "linetta_create_work",
-  "linetta_write_scene",
-  "linetta_write_summary",
-  "linetta_revise_scene",
-  "linetta_apply_story_ops",
-  "linetta_create_checkpoint",
-  "linetta_undo_last_change",
-]);
-
-function isWriteTool(name: string): boolean {
-  return WRITE_TOOL_NAMES.has(name);
-}
-
-/** The line's verb, keyed by whether it is a write tool and by its resolved
- *  state. `"running"` reads as still-in-progress rather than reusing the
- *  past-tense done copy; `"error"` gets its own copy so it is legible
- *  without relying on color alone. */
-function toolLabelKey(write: boolean, state: "running" | "ok" | "error"): MessageKey {
-  if (state === "running") return write ? "agentPanel.tool.writing" : "agentPanel.tool.reading";
-  if (state === "error") return write ? "agentPanel.tool.writeFailed" : "agentPanel.tool.readFailed";
-  return write ? "agentPanel.tool.wrote" : "agentPanel.tool.read";
-}
-
 interface AgentDeltaPayload {
   run_id: string;
   text: string;
@@ -86,8 +62,17 @@ interface AgentToolPayload {
   run_id: string;
   name: string;
   state: "started" | "done" | "error";
+  /** Never rendered. See the `summary` note on `Line` and lib/agentTools.ts:
+   *  on every event, in both directions, this field is engine JSON or an
+   *  English engine sentence. */
   summary?: string;
   batch_id?: string;
+  /** The scenes the call touched, as opaque node ids. The panel would like to
+   *  name the scene on the line ("씀 · 4-2 씬"), but ids are not labels and
+   *  this component has no tree to resolve them against — a lookup per tool
+   *  event is a bigger change than this task should make. Rendering the id
+   *  itself would be worse than rendering nothing, so the line carries the
+   *  tool's label alone until a later task hands the panel the outline. */
   node_ids?: string[];
 }
 
@@ -205,7 +190,8 @@ export function AgentPanel({ onClose }: Props) {
           // to it: `payload.summary ?? l.summary` only reaches `l.summary`
           // if a resolving event ever arrived with no summary of its own,
           // and starting from "" makes that fallback safe by construction
-          // instead of dependent on the render loop hiding it correctly.
+          // rather than dependent on any one render site. Nothing renders
+          // `summary` today, and this keeps that true even if something does.
           summary: "",
           state: "running",
           batchId: payload.batch_id,
@@ -261,18 +247,35 @@ export function AgentPanel({ onClose }: Props) {
   // Failure — most commonly `agent_undo_unavailable`, since the service
   // keeps only the last 8 batches — is rendered beside the line and the
   // button is dropped; it never becomes a panel-level error.
+  // Undo resolves outside any effect, so it cannot use an effect-scoped
+  // cancelled flag. Reassigned on mount, not just initialised, so a
+  // StrictMode remount does not leave the panel permanently thinking it is
+  // gone.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   function handleUndo(id: string, batchId: string) {
-    setLines((prev) =>
-      prev.map((l) => (l.kind === "tool" && l.id === id ? { ...l, undoing: true, undoError: undefined } : l)),
-    );
+    // No `undoError: undefined` reset here: `showUndo` in the render loop
+    // requires `!line.undoError`, so a line that already has one has no
+    // button to click and can never reach this function.
+    setLines((prev) => prev.map((l) => (l.kind === "tool" && l.id === id ? { ...l, undoing: true } : l)));
     agentApi
       .undo(batchId)
       .then(() => {
+        // Same guard as the providers effect below: this resolves after an
+        // await, and the writer may have closed the panel in between.
+        if (!mountedRef.current) return;
         setLines((prev) =>
           prev.map((l) => (l.kind === "tool" && l.id === id ? { ...l, undoing: false, undone: true } : l)),
         );
       })
       .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         setLines((prev) =>
           prev.map((l) =>
             l.kind === "tool" && l.id === id ? { ...l, undoing: false, undoError: rpcErrorMessage(err, t) } : l,
@@ -333,19 +336,20 @@ export function AgentPanel({ onClose }: Props) {
               );
             }
             // Tool line: one row for the started+done/error pair Task 4
-            // already collapsed. `summary` only renders once the call has
-            // resolved — the "started" event's summary is the tool's raw
-            // arguments (see runTool in engine/internal/agent/loop.go),
-            // which can carry a full scene body, not a short phrase. Never
-            // the full arguments, so a running line shows the verb alone.
-            const write = isWriteTool(line.name);
+            // already collapsed. Built entirely from the tool NAME — a verb
+            // plus a short translated label. The event's `summary` is never
+            // rendered in any state: on "started" it is the raw call
+            // arguments (a whole scene body, for a write), and on
+            // "done"/"error" it is the JSON the go-sdk serialised from the
+            // tool's output, or an English engine sentence. See
+            // lib/agentTools.ts for the full trace.
+            const kind = toolKind(line.name);
+            const labelKey = toolLabelKey(line.name);
             const showUndo = Boolean(line.batchId) && !line.undone && !line.undoError;
             return (
               <div key={line.id} className={`tool-line tool-${line.state}`} data-testid="tool-line">
-                <span className="tool-label">{t(toolLabelKey(write, line.state))}</span>
-                {line.state !== "running" && line.summary ? (
-                  <span className="tool-summary"> · {line.summary}</span>
-                ) : null}
+                <span className="tool-label">{t(toolVerbKey(kind, line.state))}</span>
+                {labelKey ? <span className="tool-name"> · {t(labelKey)}</span> : null}
                 {showUndo ? (
                   <button
                     type="button"
