@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, providers as providersApi } from "../../lib/rpc";
+import type { AgentHistoryRow } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
@@ -16,10 +17,12 @@ import "./AgentPanel.css";
  *  provider is ready to talk to. Task 4 filled the log with the writer's
  *  turn, the agent's reply, and the reply arriving as it streams. Task 5
  *  rendered the tool line Task 4 kept but never showed, and added undo for
- *  the lines that carry a batch id. This task (6) adds the composer, the
- *  stop button, the three starting chips, and the usage line at the end of a
- *  turn — the panel can now actually send something. No history restore and
- *  no agent.error/agent.cancelled rendering — those are Task 7.
+ *  the lines that carry a batch id. Task 6 added the composer, the stop
+ *  button, the three starting chips, and the usage line at the end of a
+ *  turn — the panel can now actually send something. This task (7) restores
+ *  the conversation from agent.history when the panel reopens, and renders
+ *  agent.error and agent.cancelled — the two terminal wire events nothing
+ *  before this task ever drew.
  */
 
 /** One line in the transcript. Mirrors the shape in the task-4 brief.
@@ -53,7 +56,27 @@ type Line =
       undoing?: boolean;
       undone?: boolean;
       undoError?: string;
-    };
+    }
+  | NoticeLine;
+
+/** A terminal wire event with nothing else to collapse into (Task 7):
+ *  agent.error or agent.cancelled, or the panel's own guess — restoring a
+ *  conversation whose last row is a user turn — that a prior turn may still
+ *  be running. Its own Line variant rather than folding into `sendError`
+ *  (the composer's synchronous-refusal banner, which sits outside the log
+ *  and only ever holds one message): a mid-turn failure belongs beside the
+ *  partial reply that produced it, in the transcript, not in a banner the
+ *  NEXT turn's own error would silently overwrite.
+ *
+ *  `reason` is required only on the "error" variant — it is the one thing
+ *  rendered from it, and only "error" needs it (never `message`; see
+ *  AgentErrorPayload and rpcErrorMessage). Text is resolved at render time
+ *  from `variant`/`reason`, the same as a tool line's verb+label, so this
+ *  carries no pre-translated copy to go stale under a language switch. */
+type NoticeLine =
+  | { kind: "notice"; id: string; variant: "restored" }
+  | { kind: "notice"; id: string; variant: "cancelled" }
+  | { kind: "notice"; id: string; variant: "error"; reason: string };
 
 interface AgentDeltaPayload {
   run_id: string;
@@ -98,6 +121,66 @@ interface AgentCancelledPayload {
  *  `.cmp-input textarea` in App.css — the CSS enforces it for a box that has
  *  never been autosized, this constant for one that has. */
 const COMPOSER_MAX_HEIGHT = 120;
+
+/** What a `role === "tool"` history row's `content` decodes to — the exact
+ *  wire shape agent.tool's own resolving event carries (see AgentToolPayload
+ *  above), because the engine writes one straight from the other (see
+ *  agent/transcript.go's toolEvent, appended by loop.go's runTool). Only the
+ *  two fields the line cannot be drawn without are required here. */
+interface RestoredToolEvent {
+  name: string;
+  ok: boolean;
+  batch_id?: string;
+}
+
+/** Parses one tool row's `content`. Null for anything that is not a usable
+ *  toolEvent — malformed JSON, or JSON missing `name`/`ok` — so the caller
+ *  can skip the row instead of crashing the whole restore over it. */
+function parseToolEvent(content: string): RestoredToolEvent | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const { name, ok, batch_id: batchId } = parsed as Record<string, unknown>;
+  if (typeof name !== "string" || typeof ok !== "boolean") return null;
+  return { name, ok, batch_id: typeof batchId === "string" ? batchId : undefined };
+}
+
+/** agent.history's rows -> the Line shape the log already renders (Task 7).
+ *  A row this function cannot turn into a Line — an unrecognised role, or a
+ *  tool row whose content fails to parse — is skipped rather than thrown:
+ *  one bad row must not blank the whole restored conversation. */
+function linesFromHistory(rows: AgentHistoryRow[]): Line[] {
+  const lines: Line[] = [];
+  for (const row of rows) {
+    if (row.role === "user") {
+      lines.push({ kind: "user", id: `history:${row.id}`, text: row.content });
+    } else if (row.role === "assistant") {
+      lines.push({ kind: "assistant", id: `history:${row.id}`, text: row.content });
+    } else if (row.role === "tool") {
+      const ev = parseToolEvent(row.content);
+      if (!ev) continue;
+      lines.push({
+        kind: "tool",
+        id: `history:${row.id}`,
+        name: ev.name,
+        // Same rule as the live handler below: never render what the engine
+        // put in `summary`, restored or not. Nothing reads it back off a
+        // Line — this is "" purely so the shape matches a live tool line.
+        summary: "",
+        state: ev.ok ? "ok" : "error",
+        batchId: ev.batch_id,
+      });
+    }
+    // Any other role is a row this panel has no drawing for. There should
+    // not be one — role is "user" | "assistant" | "tool" — but the wire is
+    // not the type system, so it is skipped rather than guessed at.
+  }
+  return lines;
+}
 
 interface Props {
   onClose: () => void;
@@ -327,15 +410,23 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     );
   }));
 
-  // Translating `reason` into a message and showing it is Task 7's job.
-  // This task only has to stop the streaming indicator honestly instead of
-  // leaving the reply looking like it is still arriving, and hand the
-  // composer back to the writer.
+  // A mid-turn failure (Task 7). Stops the streaming indicator honestly
+  // instead of leaving the reply looking like it is still arriving, hands
+  // the composer back to the writer, and appends a notice line — the
+  // partial reply already in `lines` from agent-delta is left exactly as
+  // it is, right above it. `reason` is kept on the Line, not translated
+  // here: render time is where every other piece of copy in this log
+  // resolves (see toolVerbKey/toolLabelKey), and `message` is never even
+  // read — agent_internal_error's carries a raw Go panic value.
   useEngineEvent<AgentErrorPayload>("agent-error", whileNotSending<AgentErrorPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(false);
     setTurn(null);
     setCanceling(false);
+    setLines((prev) => [
+      ...prev,
+      { kind: "notice", id: `notice:${payload.run_id}:error`, variant: "error", reason: payload.reason },
+    ]);
   }));
 
   useEngineEvent<AgentCancelledPayload>("agent-cancelled", whileNotSending<AgentCancelledPayload>((payload) => {
@@ -343,6 +434,10 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     setRunning(false);
     setTurn(null);
     setCanceling(false);
+    setLines((prev) => [
+      ...prev,
+      { kind: "notice", id: `notice:${payload.run_id}:cancelled`, variant: "cancelled" },
+    ]);
   }));
 
   // Undo is a per-line action, not a turn-level one: mark only the clicked
@@ -498,6 +593,41 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     };
   }, []);
 
+  // Restore (Task 7): the conversation that was here before the panel
+  // closed. #93 made the engine's turn outlive the RPC call, so a turn can
+  // still be running when the panel reopens with nothing on screen yet —
+  // and there is no run-status RPC to ask; the plan deliberately does not
+  // add one (see the "restored" notice line below). Fires once `ready` is
+  // known: fetching history for a panel about to show the "configure a
+  // provider" notice instead of a log is pointless. Prepended rather than
+  // replacing `lines`, on the small chance the writer already sent
+  // something before this resolves.
+  useEffect(() => {
+    if (ready !== true) return;
+    let cancelled = false;
+    agentApi
+      .history(projectId)
+      .then((rows) => {
+        if (cancelled) return;
+        const restored = linesFromHistory(rows);
+        // The only signal available for "is a turn still running": the
+        // conversation's own last row. A user row with no reply yet is
+        // exactly what a turn abandoned mid-flight (panel closed, app
+        // restarted) leaves behind — see the Task 7 brief's 7-3.
+        if (rows.length > 0 && rows[rows.length - 1].role === "user") {
+          restored.push({ kind: "notice", id: "history:maybe-running", variant: "restored" });
+        }
+        if (restored.length > 0) setLines((prev) => [...restored, ...prev]);
+      })
+      .catch(() => {
+        // A failed restore is not worse than an empty panel — start fresh
+        // rather than blocking the log on it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, projectId]);
+
   // Grow the composer with what is in it, up to the same cap App.css sets on
   // .cmp-input textarea. The starter chips fill in a whole sentence, so a
   // fixed one-line box would show the feature's own happy path through a
@@ -558,6 +688,36 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
                     <div className="msg-usage" data-testid="agent-usage">
                       {t("agentPanel.usage", { input: line.usage.input, output: line.usage.output })}
                     </div>
+                  ) : null}
+                </div>
+              );
+            }
+            if (line.kind === "notice") {
+              // Text resolves at render time, from `variant`/`reason` — the
+              // same rule tool lines follow (see toolVerbKey/toolLabelKey
+              // below) — so a language switch never leaves stale copy
+              // sitting in state. `message` is never read here or anywhere
+              // else on this Line: agent_internal_error's carries a raw Go
+              // panic value, and rpcErrorMessage only ever sees `reason`.
+              const text =
+                line.variant === "restored"
+                  ? t("agentPanel.restore.mayBeRunning")
+                  : line.variant === "cancelled"
+                    ? t("agentPanel.cancelled")
+                    : rpcErrorMessage({ data: { reason: line.reason } }, t);
+              return (
+                <div
+                  key={line.id}
+                  className={`agent-notice agent-notice-${line.variant}`}
+                  data-testid="agent-notice"
+                  role={line.variant === "error" ? "alert" : undefined}
+                >
+                  {text}
+                  {line.variant === "error" && line.reason === "provider_auth_failed" ? (
+                    <>
+                      {" "}
+                      <Link to="/settings">{t("agentPanel.openSettings")}</Link>
+                    </>
                   ) : null}
                 </div>
               );

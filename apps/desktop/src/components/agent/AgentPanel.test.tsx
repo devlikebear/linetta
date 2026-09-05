@@ -2,13 +2,14 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readSource } from "../../test/readSource";
-import type { ProviderStatus } from "../../lib/types";
+import type { AgentHistoryRow, ProviderStatus } from "../../lib/types";
 
 const rpc = vi.hoisted(() => ({
   providersList: vi.fn(),
   agentUndo: vi.fn(),
   agentRun: vi.fn(),
   agentCancel: vi.fn(),
+  agentHistory: vi.fn(),
 }));
 
 // Same approach as useMcpChanges.test.tsx: a hoisted listener map standing in
@@ -28,7 +29,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../../lib/rpc", () => ({
   providers: { list: rpc.providersList },
-  agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel },
+  agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -131,6 +132,11 @@ describe("AgentPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ev.listeners.clear();
+    // Task 7 adds an agent.history call on mount. Every existing test in this
+    // file renders a panel that neither sets up nor cares about restored
+    // history, so it gets an empty conversation by default; tests that do
+    // care override this before rendering.
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
   });
 
   it("renders the unconfigured notice when no provider is active at all", async () => {
@@ -267,6 +273,11 @@ describe("AgentPanel messages and streaming (#95 Task 4)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ev.listeners.clear();
+    // Task 7 adds an agent.history call on mount. Every existing test in this
+    // file renders a panel that neither sets up nor cares about restored
+    // history, so it gets an empty conversation by default; tests that do
+    // care override this before rendering.
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -358,6 +369,11 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ev.listeners.clear();
+    // Task 7 adds an agent.history call on mount. Every existing test in this
+    // file renders a panel that neither sets up nor cares about restored
+    // history, so it gets an empty conversation by default; tests that do
+    // care override this before rendering.
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
   });
 
   function toolLines(): HTMLElement[] {
@@ -714,6 +730,11 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ev.listeners.clear();
+    // Task 7 adds an agent.history call on mount. Every existing test in this
+    // file renders a panel that neither sets up nor cares about restored
+    // history, so it gets an empty conversation by default; tests that do
+    // care override this before rendering.
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
   });
 
   function botBubbles(): HTMLElement[] {
@@ -913,6 +934,11 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
   beforeEach(() => {
     vi.clearAllMocks();
     ev.listeners.clear();
+    // Task 7 adds an agent.history call on mount. Every existing test in this
+    // file renders a panel that neither sets up nor cares about restored
+    // history, so it gets an empty conversation by default; tests that do
+    // care override this before rendering.
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
   });
 
   function botBubbles(): HTMLElement[] {
@@ -1035,5 +1061,358 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
     expect(screen.getByTestId("agent-send-error").textContent).toContain("engine did not respond");
     // The turn never ended, so the control is still stop.
     expect(screen.getByTestId("agent-stop")).toBeTruthy();
+  });
+});
+
+function historyRow(overrides: Partial<AgentHistoryRow> = {}): AgentHistoryRow {
+  return {
+    id: "h1",
+    project_id: PROJECT_ID,
+    role: "user",
+    status: "done",
+    content: "",
+    created_at: 1,
+    ...overrides,
+  };
+}
+
+describe("AgentPanel history restore (#95 Task 7)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+  });
+
+  function toolLines(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="tool-line"]'));
+  }
+
+  function notices(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
+  }
+
+  it("restores a saved conversation from agent.history when the panel opens", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", role: "user", content: "이어서 써줘" }),
+        historyRow({
+          id: "h2",
+          role: "tool",
+          content: JSON.stringify({
+            name: "linetta_search_manuscript",
+            summary: '{"raw":"engine json the writer must never see"}',
+            ok: true,
+          }),
+        }),
+        historyRow({ id: "h3", role: "assistant", content: "여기까지 썼습니다." }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("이어서 써줘")).toBeTruthy();
+    const log = screen.getByTestId("agent-log");
+    expect(log.querySelector(".msg.user .msg-bubble")?.textContent).toBe("이어서 써줘");
+    expect(log.querySelector(".msg.bot .msg-bubble")?.textContent).toBe("여기까지 썼습니다.");
+
+    const lines = toolLines();
+    expect(lines).toHaveLength(1);
+    // Same rendering as a live tool line: verb + translated label, never the
+    // persisted `summary` field, whatever it was written as.
+    expect(lines[0].textContent).toBe("agentPanel.tool.read · agentPanel.toolName.linetta_search_manuscript");
+    expect(lines[0].textContent).not.toContain("raw");
+    expect(lines[0].textContent).not.toContain("engine json");
+  });
+
+  it("shows a restored tool call as failed when its ok flag is false", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", role: "user", content: "확인용" }),
+        historyRow({
+          id: "h2",
+          role: "tool",
+          content: JSON.stringify({ name: "linetta_write_scene", ok: false }),
+        }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("확인용")).toBeTruthy();
+    const lines = toolLines();
+    expect(lines).toHaveLength(1);
+    expect(lines[0].textContent).toBe("agentPanel.tool.writeFailed · agentPanel.toolName.linetta_write_scene");
+  });
+
+  it("carries a restored tool call's batch id, so undo still works after a restart", async () => {
+    rpc.agentUndo.mockImplementation(() => Promise.resolve({ ok: true }));
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({
+          id: "h1",
+          role: "tool",
+          content: JSON.stringify({ name: "linetta_apply_story_ops", ok: true, batch_id: "batch-restored" }),
+        }),
+      ]),
+    );
+    await renderReady();
+
+    const button = await screen.findByRole("button", { name: "agentPanel.tool.undo" });
+    await act(async () => {
+      button.click();
+    });
+
+    expect(rpc.agentUndo).toHaveBeenCalledWith("batch-restored");
+  });
+
+  it("skips a tool row that fails to parse, without blanking the rest of the restored conversation", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", role: "user", content: "첫 요청" }),
+        historyRow({ id: "h2", role: "tool", content: "{not valid json" }),
+        historyRow({ id: "h3", role: "assistant", content: "그래도 답은 옵니다" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("첫 요청")).toBeTruthy();
+    const log = screen.getByTestId("agent-log");
+    expect(log.querySelector(".msg.bot .msg-bubble")?.textContent).toBe("그래도 답은 옵니다");
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
+  });
+
+  it("skips a tool row whose JSON is well-formed but missing the fields a toolEvent needs", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", role: "user", content: "확인용" }),
+        historyRow({ id: "h2", role: "tool", content: JSON.stringify({ summary: "no name or ok field" }) }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("확인용")).toBeTruthy();
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
+  });
+
+  it("shows a notice that a turn may still be running when the restored conversation's last row is a user turn", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([historyRow({ id: "h1", role: "user", content: "아직 안 끝났을 수도" })]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("아직 안 끝났을 수도")).toBeTruthy();
+    const found = notices();
+    expect(found).toHaveLength(1);
+    expect(found[0].textContent).toBe("agentPanel.restore.mayBeRunning");
+  });
+
+  it("does not show the still-running notice once the conversation already has a reply", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([
+        historyRow({ id: "h1", role: "user", content: "요청" }),
+        historyRow({ id: "h2", role: "assistant", content: "완료된 답" }),
+      ]),
+    );
+    await renderReady();
+
+    expect(await screen.findByText("완료된 답")).toBeTruthy();
+    expect(notices()).toHaveLength(0);
+  });
+
+  it("does not show the still-running notice when there is no history at all", async () => {
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    await renderReady();
+    // Give the (empty) restore effect a turn to resolve.
+    await act(async () => {});
+
+    expect(notices()).toHaveLength(0);
+  });
+});
+
+describe("AgentPanel wire errors and cancellation (#95 Task 7)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+  });
+
+  function notices(): HTMLElement[] {
+    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
+  }
+
+  it("renders a translated notice for agent.error and never shows the raw engine message", async () => {
+    await renderReady();
+
+    await emit("agent-error", {
+      run_id: "r1",
+      reason: "provider_unreachable",
+      // agent_internal_error carries a raw Go panic here; nothing tied to
+      // `message` may ever reach the DOM regardless of the reason.
+      message: "dial tcp 1.2.3.4:443: connect: connection refused",
+    });
+
+    const found = notices();
+    expect(found).toHaveLength(1);
+    expect(found[0].textContent).toBe("errors.providerUnreachable");
+    expect(found[0].textContent).not.toContain("dial tcp");
+  });
+
+  it("gives provider_auth_failed a link to Settings, the same shape as the unconfigured notice", async () => {
+    await renderReady();
+
+    await emit("agent-error", { run_id: "r1", reason: "provider_auth_failed", message: "401 unauthorized" });
+
+    const notice = notices()[0];
+    expect(notice.textContent).toBe("errors.providerAuthFailed agentPanel.openSettings");
+    const link = notice.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("/settings");
+    expect(notice.textContent).not.toContain("401");
+  });
+
+  it("tells the writer a turn is already running for agent_busy", async () => {
+    await renderReady();
+
+    await emit("agent-error", { run_id: "r1", reason: "agent_busy", message: "run already active" });
+
+    expect(notices()[0].textContent).toBe("errors.agentBusy");
+  });
+
+  it("keeps the partial reply on screen and says the work is kept for agent_iteration_limit", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    await type("길게 써줘");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r1", text: "여기까지 진행했습니다" });
+
+    await emit("agent-error", {
+      run_id: "r1",
+      reason: "agent_iteration_limit",
+      message: "stopped after 24 tool calls in one turn",
+    });
+
+    const log = screen.getByTestId("agent-log");
+    expect(log.querySelector(".msg.bot .msg-bubble")?.textContent).toBe("여기까지 진행했습니다");
+    expect(notices()[0].textContent).toBe("errors.agentIterationLimit");
+    // The composer is handed back — the writer can send a follow-up.
+    expect(screen.getByTestId("agent-send")).toBeTruthy();
+  });
+
+  it("ignores an agent.error from a run that is not the current one", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    await type("써줘");
+    await pressEnter();
+
+    await emit("agent-error", { run_id: "stale", reason: "provider_unreachable", message: "x" });
+
+    expect(notices()).toHaveLength(0);
+    // The real turn is untouched.
+    expect(screen.getByTestId("agent-stop")).toBeTruthy();
+  });
+
+  it("renders a notice when the turn is cancelled, and keeps the partial reply on screen", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    rpc.agentCancel.mockImplementation(() => Promise.resolve({ ok: true }));
+    await renderReady();
+    await type("써줘");
+    await pressEnter();
+    await emit("agent-delta", { run_id: "r1", text: "여기까지 쓰다가" });
+
+    await act(async () => {
+      screen.getByTestId("agent-stop").click();
+    });
+    await emit("agent-cancelled", { run_id: "r1" });
+
+    const log = screen.getByTestId("agent-log");
+    expect(log.querySelector(".msg.bot .msg-bubble")?.textContent).toBe("여기까지 쓰다가");
+    expect(notices()[0].textContent).toBe("agentPanel.cancelled");
+  });
+});
+
+describe("AgentPanel review carry-ins (#95 Task 7)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+  });
+
+  it("does not surface a stale cancel failure once the turn already ended on its own", async () => {
+    // Task 6's review carried this in: handleStop's async rejection handler
+    // must compare against turnRunIdRef.current (read fresh, at settle time),
+    // not the `turnRunId` state closed over when handleStop was called — that
+    // closure equals the captured runId by construction, so a mistaken swap
+    // makes the guard a no-op and every stale cancel failure would surface,
+    // even a genuinely stale one racing a turn that already finished.
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    let releaseCancel: (() => void) | null = null;
+    rpc.agentCancel.mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          releaseCancel = () => reject(new Error("too late, the turn already finished"));
+        }),
+    );
+    await renderReady();
+    await type("써줘");
+    await pressEnter();
+
+    await act(async () => {
+      screen.getByTestId("agent-stop").click();
+    });
+    // The turn finishes on its own, racing the still-in-flight cancel call.
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+
+    await act(async () => {
+      releaseCancel?.();
+    });
+
+    expect(screen.queryByTestId("agent-send-error")).toBeNull();
+  });
+
+  it("keeps an event that arrived during a later-rejected send, instead of losing it forever", async () => {
+    // Task 6's review carried this in too: flushSendWindow() (not
+    // discardSendWindow(), and not omitted) must run in handleSend's catch
+    // branch. Both wrong alternatives leave the held event unapplied here —
+    // discarding throws it away, and omitting it leaves pendingSendRef stuck
+    // true, so nothing after it is ever processed either.
+    //
+    // A tool event, not a delta: a replayed delta flips `running` back to
+    // true and hands the bubble to useSmoothStream's animated reveal, which
+    // needs driven rAF frames to show anything in a test — irrelevant noise
+    // for what this test actually checks. A tool line renders straight from
+    // state with no animation in between.
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    await type("첫 번째 요청");
+    await pressEnter();
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+    await type("두 번째 요청");
+    await pressEnter();
+
+    // A tool event for the still-current run r1 arrives while the send
+    // window for the (about to be refused) second send is open.
+    await emit("agent-tool", { run_id: "r1", name: "linetta_search_manuscript", state: "started" });
+
+    await act(async () => {
+      pending.reject({ data: { reason: "provider_consent_required" } });
+    });
+
+    // currentRunIdRef was never reassigned (the send failed before a run id
+    // existed), so flushSendWindow replays the held event exactly as it
+    // would have been judged without the window — onto r1, the still-current
+    // run. Losing it (discardSendWindow, or no flush at all) is the bug this
+    // test exists to catch.
+    expect(screen.getByTestId("agent-log").querySelectorAll('[data-testid="tool-line"]')).toHaveLength(1);
+  });
+
+  it("keeps COMPOSER_MAX_HEIGHT in AgentPanel.tsx equal to .cmp-input textarea's max-height in App.css", async () => {
+    const tsx = await readSource("components/agent/AgentPanel.tsx");
+    const css = await readSource("App.css");
+
+    const tsMatch = tsx.match(/const COMPOSER_MAX_HEIGHT = (\d+);/);
+    const cssMatch = css.match(/\.cmp-input textarea \{[^}]*max-height:\s*(\d+)px/);
+    if (!tsMatch) throw new Error("COMPOSER_MAX_HEIGHT constant not found in AgentPanel.tsx");
+    if (!cssMatch) throw new Error(".cmp-input textarea's max-height not found in App.css");
+
+    expect(cssMatch[1]).toBe(tsMatch[1]);
   });
 });

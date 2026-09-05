@@ -121,3 +121,18 @@
 /* Starting chips sit right above the composer, only before the first turn.
  * .ai-chiprow / .chip are the shared chip-row rules from App.css. */
 .agent-starters { padding: 0 16px 10px; }
+
+/* Terminal-event notices (#95 Task 7): agent.error, agent.cancelled, and the
+ * restore effect's "a turn may still be running" guess. A line of its own in
+ * the transcript, not a single banner outside it — see the Line comment on
+ * NoticeLine for why: the next turn's own outcome would silently overwrite a
+ * banner, but never a row that already has its place in the log. */
+.agent-notice {
+  padding: 4px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.agent-notice-error { color: var(--danger); }
+.agent-notice-cancelled,
+.agent-notice-restored { color: var(--muted); }
+.agent-notice a { color: var(--accent-deep); }
