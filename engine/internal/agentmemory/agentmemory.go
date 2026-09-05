@@ -112,6 +112,14 @@ func (r *Repo) Load(ctx context.Context, scope Scope, projectID string) (Documen
 	return doc, nil
 }
 
+// rowQuerier is satisfied by both *sql.DB and *sql.Tx. bodyRuneLenBefore
+// takes one of these — never r.db directly — so Save can run it against the
+// very transaction that goes on to perform the write; see Save's doc comment
+// for why that has to be the same transaction rather than a plain query.
+type rowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
 // bodyRuneLenBefore returns the rune length of the document currently stored
 // for scope/arg, or 0 if there is none. It backs Save's shrink-only escape
 // hatch below: agentmemory.Apply's own budgeted() helper accepts a result
@@ -120,9 +128,9 @@ func (r *Repo) Load(ctx context.Context, scope Scope, projectID string) (Documen
 // with that exactly, because Apply never writes — the tool that calls it
 // always saves what comes back through Save, and a body Apply accepted must
 // not be refused a moment later here.
-func (r *Repo) bodyRuneLenBefore(ctx context.Context, scope Scope, arg any) (int, error) {
+func bodyRuneLenBefore(ctx context.Context, q rowQuerier, scope Scope, arg any) (int, error) {
 	var body string
-	row := r.db.QueryRowContext(ctx,
+	row := q.QueryRowContext(ctx,
 		`SELECT body FROM agent_memory WHERE scope = ? AND project_id IS ?`, string(scope), arg)
 	if err := row.Scan(&body); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -131,6 +139,21 @@ func (r *Repo) bodyRuneLenBefore(ctx context.Context, scope Scope, arg any) (int
 		return 0, err
 	}
 	return utf8.RuneCountInString(body), nil
+}
+
+// saveRaceHookKey lets a test attach a callback that runs immediately after
+// Save reads the rune length of the currently stored document — inside the
+// same transaction that goes on to perform the write — and before that value
+// is used to decide anything. It exists solely so a test can force a
+// deterministic interleaving of two concurrent Saves without relying on
+// sleep-based timing. Production code never sets this key: ctx.Value always
+// returns nil outside a test, so runSaveRaceHook is a no-op there.
+type saveRaceHookKey struct{}
+
+func runSaveRaceHook(ctx context.Context) {
+	if hook, ok := ctx.Value(saveRaceHookKey{}).(func()); ok && hook != nil {
+		hook()
+	}
 }
 
 // Save screens and budget-checks, then replaces the document. Both checks run
@@ -145,10 +168,21 @@ func (r *Repo) bodyRuneLenBefore(ctx context.Context, scope Scope, arg any) (int
 // A save that GROWS an already-over-budget document, or that is not
 // shrinking at all, is still refused.
 //
-// Delete-then-insert in one transaction rather than an upsert: the global row
-// and a work's row conflict on two DIFFERENT partial unique indexes, so a
-// single ON CONFLICT target cannot cover both. store.Store caps the pool at
-// one connection, so this cannot interleave with another writer.
+// Screening the body and comparing its length against the scope's fixed
+// budget don't depend on what's currently stored, so both run before any
+// transaction opens. But the escape hatch's "is this shorter than what's
+// there?" question does depend on the stored row, and reading that row with
+// a plain query before opening the transaction is not safe: the store's pool
+// is capped to one connection (store.Store, see its own comment), which
+// guarantees no two statements run AT THE SAME INSTANT, but it does not make
+// "read the current row, decide, then delete-then-insert" one atomic unit.
+// The plain read releases the connection the moment it returns; another
+// Save's entire delete-then-insert can land in the gap between that read and
+// this call's own BeginTx, so the decision here would be made against a row
+// that Save then goes on to silently clobber. Reading bodyRuneLenBefore
+// through the same tx that performs the write closes that gap: once BeginTx
+// succeeds, this call holds the pool's one connection until Commit or
+// Rollback, so no other Save's BeginTx can proceed until this one is done.
 func (r *Repo) Save(ctx context.Context, scope Scope, projectID, body string, now int64) (Document, error) {
 	arg, err := projectArg(scope, projectID)
 	if err != nil {
@@ -158,20 +192,23 @@ func (r *Repo) Save(ctx context.Context, scope Scope, projectID, body string, no
 		return Document{}, err
 	}
 	used := utf8.RuneCountInString(body)
-	if used > scope.Budget() {
-		before, err := r.bodyRuneLenBefore(ctx, scope, arg)
-		if err != nil {
-			return Document{}, err
-		}
-		if used >= before {
-			return Document{}, fmt.Errorf("%w: %d characters, and %s holds %d", ErrOverBudget, used, scope, scope.Budget())
-		}
-	}
+	overBudget := used > scope.Budget()
+
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Document{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if overBudget {
+		before, err := bodyRuneLenBefore(ctx, tx, scope, arg)
+		if err != nil {
+			return Document{}, err
+		}
+		runSaveRaceHook(ctx)
+		if used >= before {
+			return Document{}, fmt.Errorf("%w: %d characters, and %s holds %d", ErrOverBudget, used, scope, scope.Budget())
+		}
+	}
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM agent_memory WHERE scope = ? AND project_id IS ?`, string(scope), arg); err != nil {
 		return Document{}, err

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -144,6 +145,97 @@ func TestSaveAllowsAShrinkingSaveEvenWhileStillOverBudget(t *testing.T) {
 	got, _ = repo.Load(ctx, ScopeWriterProfile, "")
 	if got.Body != shorter {
 		t.Fatalf("a refused save must leave the previous body intact; got %q", got.Body)
+	}
+}
+
+// The one-connection pool guarantees no two statements run at the same
+// instant, but it does not make "read the current row, decide, then
+// delete-then-insert" one atomic unit — see Save's doc comment. A plain read
+// taken before the transaction opens releases the connection the instant it
+// returns, leaving a gap before BeginTx where a second, independent Save can
+// run to completion and change the very row the first Save is about to
+// decide against.
+//
+// This test forces that interleaving deterministically — no sleep-based
+// timing decides pass or fail — using a hook Save invokes (via a context
+// key it never sets itself outside tests) immediately after reading the
+// stored row and before deciding anything from it:
+//
+//  1. Seed an over-budget row (2300 runes; the budget is 1400).
+//  2. Call Save for A: writing 2000 runes (still over budget, but a shrink
+//     relative to the seeded 2300, so the escape hatch should allow it).
+//  3. A's hook starts Save for B on its own goroutine: writing 1500 runes
+//     (also over budget, a shrink relative to 2300). The hook then waits —
+//     with a bounded timeout used only as a deadlock guard, never as the
+//     pass/fail signal — to see whether B finishes inside the wait.
+//
+// Pre-fix: A's read of "before" (via a plain query) has already released
+// the connection by the time the hook runs, so B's entire read-decide-write
+// completes inside the wait. The hook returns, and A resumes holding its
+// stale before=2300 — 2000 still looks like a shrink against that stale
+// value, so A's write is wrongly allowed even though the row actually there
+// is now B's 1500 runes, and it silently overwrites B's shrink. The final
+// body ends up A's 2000 runes.
+//
+// Post-fix: A's read happens inside its own open transaction, which holds
+// the pool's one connection until A commits. B's BeginTx can only block on
+// that connection — it is structurally unable to complete during the wait —
+// so the hook's timeout branch fires (a blocked BeginTx never returns; this
+// is not a close race) and A commits using the row genuinely still there
+// (2300 vs 2000: correctly a shrink, allowed). B then runs, sees A's fresh
+// 2000-rune row, and its own shrink to 1500 is still correctly allowed. The
+// final body ends up B's 1500 runes: A's decision was made against the row
+// that was actually there, and nothing was silently clobbered.
+func TestSaveDecidesTheShrinkOnlyRuleInsideItsOwnTransaction(t *testing.T) {
+	ctx, repo, _ := seedRepo(t)
+	// Seed a row directly, bypassing Save's own budget check — same setup as
+	// TestSaveAllowsAShrinkingSaveEvenWhileStillOverBudget.
+	seed := strings.Repeat("가", 2300)
+	if _, err := repo.db.ExecContext(ctx,
+		`INSERT INTO agent_memory (scope, project_id, body, updated_at) VALUES (?, ?, ?, ?)`,
+		string(ScopeWriterProfile), nil, seed, 1); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	bDone := make(chan struct{})
+	bErr := make(chan error, 1)
+	hook := func() {
+		go func() {
+			// Plain ctx, not hookCtx: B must not trip this same hook.
+			_, err := repo.Save(ctx, ScopeWriterProfile, "", strings.Repeat("가", 1500), 2)
+			bErr <- err
+			close(bDone)
+		}()
+		select {
+		case <-bDone:
+			// Pre-fix path: B's whole Save fit in the gap.
+		case <-time.After(500 * time.Millisecond):
+			// Post-fix path: B is genuinely blocked on A's open transaction.
+		}
+	}
+	hookCtx := context.WithValue(ctx, saveRaceHookKey{}, hook)
+
+	if _, err := repo.Save(hookCtx, ScopeWriterProfile, "", strings.Repeat("가", 2000), 3); err != nil {
+		t.Fatalf("A Save: %v", err)
+	}
+	select {
+	case err := <-bErr:
+		if err != nil {
+			t.Fatalf("B Save: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("B Save never completed after A released the connection")
+	}
+
+	got, err := repo.Load(ctx, ScopeWriterProfile, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := strings.Repeat("가", 1500)
+	if got.Body != want {
+		t.Fatalf("Body has %d runes, want B's 1500 — A must decide the shrink-only rule "+
+			"against the row inside its own transaction, not a value read before it opened",
+			len([]rune(got.Body)))
 	}
 }
 

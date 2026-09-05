@@ -135,3 +135,47 @@ func TestAddedTextIsNormalisedToOneLine(t *testing.T) {
 		t.Errorf("got %q, want the newline collapsed to a space", got)
 	}
 }
+
+// oneLine must screen the line it is actually going to store, not only the
+// text as typed. strings.Fields strips leading whitespace as part of
+// collapsing: four spaces then "#" defeats the heading pattern's own 0-3
+// leading-space allowance (so the raw text alone passes Screen), but once
+// those four spaces are gone the "#" lands at the very start of the stored
+// line — which is exactly a markdown heading opener. Screening only the raw
+// text would let this land in the document; screening the collapsed result
+// too is what catches it.
+func TestOneLineScreensTheLineItActuallyStores(t *testing.T) {
+	_, err := Apply(ScopeWorkNotes, "", ActionAdd, "", "    # 제목")
+	if !errors.Is(err, ErrDelimiter) {
+		t.Fatalf("got %v, want ErrDelimiter — the collapsed line starts a heading even though the raw text didn't", err)
+	}
+}
+
+// A single screen of only the collapsed text — the "simplification" that
+// looks equivalent to screening both — would miss this: strings.Fields (used
+// to collapse) treats "\r" as whitespace and discards it as a field
+// separator, so a bare "\r" never survives into the collapsed text for
+// Screen to see. Screen's control-character check has no exemption for "\r"
+// (only "\n" and "\t" are let through), so the raw screen is what actually
+// catches it. If oneLine is ever "simplified" to screen only the collapsed
+// result, this test starts failing.
+func TestOneLineStillCatchesACarriageReturnBeforeCollapseHidesIt(t *testing.T) {
+	_, err := Apply(ScopeWorkNotes, "", ActionAdd, "", "가나다\r마바사")
+	if !errors.Is(err, ErrControl) {
+		t.Fatalf("got %v, want ErrControl — a bare \\r must be caught before collapsing eats it as whitespace", err)
+	}
+}
+
+// Screening the raw text can refuse a heading that only exists before
+// collapsing — the newline that opens it collapses away, and the "#" it
+// introduced never actually reaches the stored line. That is a deliberate,
+// accepted over-refusal (the safe direction), not a bug: oneLine screens the
+// text as typed AND the line it will store, rather than trying to predict
+// the post-collapse shape before deciding whether to screen the pre-collapse
+// one.
+func TestOneLineStillRefusesAHeadingThatOnlyExistsBeforeCollapsing(t *testing.T) {
+	_, err := Apply(ScopeWorkNotes, "", ActionAdd, "", "판타지 세계관\n# 3 장면에서 등장")
+	if !errors.Is(err, ErrDelimiter) {
+		t.Fatalf("got %v, want ErrDelimiter", err)
+	}
+}
