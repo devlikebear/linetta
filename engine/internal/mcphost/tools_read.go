@@ -420,6 +420,20 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return toolErr("could not build the story brief: %v", err), getStoryContextOutput{}, nil
 	}
+	// The built-in agent already carries both curated documents verbatim in
+	// its own system prompt (agent.systemPrompt / memoryBlock), budget
+	// line and all. Repeating them in the brief costs context and teaches
+	// the model nothing it doesn't already have, so suppress them for that
+	// caller only. c.Memories (the experiences.jsonl recall) is left alone:
+	// it is an unbounded searchable log, not a budgeted document, and it is
+	// not in the system prompt — an external client is unaffected either
+	// way, since ToolDeps.Source is a field the server sets, never
+	// something read off the wire. This runs before Render and
+	// sectionReport so both describe the brief the caller actually gets.
+	if d.Source == SourceAgent {
+		c.WriterProfile = ""
+		c.WorkNotes = ""
+	}
 	// Only the user half of the render is the brief; the system half carries
 	// tone and instruction scaffolding meant for Linetta's own runner.
 	_, brief := storycontext.Render(c)
