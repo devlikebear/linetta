@@ -226,6 +226,10 @@ fn notification_event(method: &str) -> Option<&'static str> {
         "agent.done" => Some("agent-done"),
         "agent.error" => Some("agent-error"),
         "agent.cancelled" => Some("agent-cancelled"),
+        // Memory changed under the app: an agent recorded something, or
+        // another window saved. Settings holds an unsent textarea draft, so
+        // without this the next blur silently overwrites it.
+        "memory.changed" => Some("memory-changed"),
         _ => None,
     }
 }
@@ -411,6 +415,15 @@ mod tests {
         assert_eq!(notification_event("agent.cancelled"), Some("agent-cancelled"));
         // The removed companion's names must never come back.
         assert_eq!(notification_event("ai.delta"), None);
+    }
+
+    #[test]
+    fn memory_changed_is_forwarded_to_the_renderer() {
+        // Settings holds an unsent textarea draft. Without this event the
+        // next blur would silently overwrite what an agent, or another
+        // window, just saved.
+        assert_eq!(notification_event("memory.changed"), Some("memory-changed"));
+        assert_eq!(notification_event("memory.unmapped"), None);
     }
 
     #[cfg(target_os = "windows")]

@@ -380,6 +380,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
+	s.Handle("memory.get", handlers.GetMemory(memRepo))
+	s.Handle("memory.set", handlers.SetMemory(memRepo, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
 	s.Handle("mcp.status", handlers.MCPStatus(mcpCtrl))
 	s.Handle("mcp.enable", handlers.MCPEnable(mcpCtrl))
 	s.Handle("mcp.disable", handlers.MCPDisable(mcpCtrl))

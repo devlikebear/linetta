@@ -26,6 +26,8 @@ import type {
   McpConnectOutcome,
   McpStatus,
   McpTokenResult,
+  MemoryDocument,
+  MemoryState,
   ImportMarkdownResult,
   ImportPreviewResult,
   ListProjectsParams,
@@ -260,6 +262,12 @@ export const snapshots = {
 export const settings = {
   get: () => rpcCall<Settings>("settings.get"),
   set: (patch: SettingsPatch) => rpcCall<Settings>("settings.set", patch),
+};
+
+export const memory = {
+  get: (projectId: string) => rpcCall<MemoryState>("memory.get", { project_id: projectId }),
+  set: (scope: MemoryDocument["scope"], projectId: string, body: string) =>
+    rpcCall<MemoryDocument>("memory.set", { scope, project_id: projectId, body }),
 };
 
 export interface BackupEntry {
