@@ -377,7 +377,16 @@ type editMemoryInput struct {
 	ProjectID string `json:"project_id,omitempty" jsonschema:"the work whose notes to edit; required when scope is work_notes, and not accepted for writer_profile"`
 }
 
-func (in editMemoryInput) scope() (string, string) { return in.ProjectID, "" }
+// scope names the work (work notes only; the profile is global and belongs to
+// no work) and, as the target, which of the two documents was edited. Without
+// the target the activity row for a profile edit would carry an empty work and
+// an empty target, and the only thing distinguishing it from a work-notes edit
+// would be the incidental fact that work notes always carry a work id. The
+// scope string is the document's only identity — these two rows have no id of
+// their own the way a node or a snapshot does.
+func (in editMemoryInput) scope() (string, string) {
+	return strings.TrimSpace(in.ProjectID), strings.TrimSpace(in.Scope)
+}
 
 type editMemoryOutput struct {
 	Scope       string `json:"scope"`
@@ -397,20 +406,33 @@ func (d ToolDeps) editMemory(ctx context.Context, _ *mcp.CallToolRequest, in edi
 		return toolErr("%v", err), editMemoryOutput{}, nil
 	}
 	projectID := strings.TrimSpace(in.ProjectID)
-	if scope == agentmemory.ScopeWorkNotes {
-		if _, errResult := d.requireProject(ctx, projectID); errResult != nil {
+	switch scope {
+	case agentmemory.ScopeWorkNotes:
+		p, errResult := d.requireProject(ctx, projectID)
+		if errResult != nil {
 			return errResult, editMemoryOutput{}, nil
 		}
+		// requireProject fills in the pinned work when the caller omitted one,
+		// so take the id it resolved rather than the raw input.
+		projectID = p.ID
+	case agentmemory.ScopeWriterProfile:
+		// The writer profile is global: it rides into the system prompt of
+		// every work. A client the writer pinned to one work must not be able
+		// to rewrite it — that is exactly what the pin exists to prevent, and
+		// requireProject cannot enforce it here because there is no work to
+		// check against. The built-in agent is unaffected: allowedProjectID
+		// returns "" for SourceAgent.
+		if restricted := d.allowedProjectID(); restricted != "" {
+			return toolErr("this Linetta server is restricted to work %q, and the writer profile is "+
+				"global — it applies to every work, so it is outside that restriction. Use scope "+
+				"work_notes to record something about this work.", restricted), editMemoryOutput{}, nil
+		}
 	}
-	current, err := d.Memory.Load(ctx, scope, projectID)
-	if err != nil {
-		return toolErr("could not read the memory: %v", err), editMemoryOutput{}, nil
-	}
-	next, err := agentmemory.Apply(scope, current.Body, in.Action, in.Find, in.Text)
-	if err != nil {
-		return toolErr("%v", err), editMemoryOutput{}, nil
-	}
-	saved, err := d.Memory.Save(ctx, scope, projectID, next, d.now())
+	// One transaction, not Load-then-Apply-then-Save: this document has two
+	// writers by design (the panel's agent and a connected external client),
+	// and a read-modify-write split across three calls loses whichever edit
+	// lands second-to-last while telling its caller it succeeded.
+	saved, err := d.Memory.Edit(ctx, scope, projectID, in.Action, in.Find, in.Text, d.now())
 	if err != nil {
 		return toolErr("%v", err), editMemoryOutput{}, nil
 	}

@@ -112,12 +112,28 @@ func (r *Repo) Load(ctx context.Context, scope Scope, projectID string) (Documen
 	return doc, nil
 }
 
-// rowQuerier is satisfied by both *sql.DB and *sql.Tx. bodyRuneLenBefore
-// takes one of these — never r.db directly — so Save can run it against the
+// rowQuerier is satisfied by both *sql.DB and *sql.Tx. bodyBefore takes one
+// of these — never r.db directly — so Save and Edit can run it against the
 // very transaction that goes on to perform the write; see Save's doc comment
 // for why that has to be the same transaction rather than a plain query.
 type rowQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// bodyBefore returns the body currently stored for scope/arg, or "" if there
+// is no row. A missing row is the normal case for a writer who has never
+// recorded anything, so it is not an error here either.
+func bodyBefore(ctx context.Context, q rowQuerier, scope Scope, arg any) (string, error) {
+	var body string
+	row := q.QueryRowContext(ctx,
+		`SELECT body FROM agent_memory WHERE scope = ? AND project_id IS ?`, string(scope), arg)
+	if err := row.Scan(&body); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return body, nil
 }
 
 // bodyRuneLenBefore returns the rune length of the document currently stored
@@ -129,16 +145,24 @@ type rowQuerier interface {
 // always saves what comes back through Save, and a body Apply accepted must
 // not be refused a moment later here.
 func bodyRuneLenBefore(ctx context.Context, q rowQuerier, scope Scope, arg any) (int, error) {
-	var body string
-	row := q.QueryRowContext(ctx,
-		`SELECT body FROM agent_memory WHERE scope = ? AND project_id IS ?`, string(scope), arg)
-	if err := row.Scan(&body); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, nil
-		}
+	body, err := bodyBefore(ctx, q, scope, arg)
+	if err != nil {
 		return 0, err
 	}
 	return utf8.RuneCountInString(body), nil
+}
+
+// replaceBody performs the write itself. Save and Edit share it so the two
+// paths cannot drift into writing the row differently.
+func replaceBody(ctx context.Context, tx *sql.Tx, scope Scope, arg any, body string, now int64) error {
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM agent_memory WHERE scope = ? AND project_id IS ?`, string(scope), arg); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx,
+		`INSERT INTO agent_memory (scope, project_id, body, updated_at) VALUES (?, ?, ?, ?)`,
+		string(scope), arg, body, now)
+	return err
 }
 
 // saveRaceHookKey lets a test attach a callback that runs immediately after
@@ -209,13 +233,7 @@ func (r *Repo) Save(ctx context.Context, scope Scope, projectID, body string, no
 			return Document{}, fmt.Errorf("%w: %d characters, and %s holds %d", ErrOverBudget, used, scope, scope.Budget())
 		}
 	}
-	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM agent_memory WHERE scope = ? AND project_id IS ?`, string(scope), arg); err != nil {
-		return Document{}, err
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO agent_memory (scope, project_id, body, updated_at) VALUES (?, ?, ?, ?)`,
-		string(scope), arg, body, now); err != nil {
+	if err := replaceBody(ctx, tx, scope, arg, body, now); err != nil {
 		return Document{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -224,5 +242,81 @@ func (r *Repo) Save(ctx context.Context, scope Scope, projectID, body string, no
 	return Document{
 		Scope: scope, ProjectID: strings.TrimSpace(projectID), Body: body,
 		CharsUsed: used, CharsBudget: scope.Budget(), UpdatedAt: now,
+	}, nil
+}
+
+// editRaceHookKey is the Edit counterpart of saveRaceHookKey: a test attaches
+// a callback that runs immediately after Edit has read the current body —
+// inside the very transaction that goes on to perform the write — and before
+// Apply computes the new one. It exists solely so a test can force a
+// deterministic interleaving of two concurrent Edits without sleep-based
+// timing. Production code never sets this key, so runEditRaceHook is a no-op
+// there.
+type editRaceHookKey struct{}
+
+func runEditRaceHook(ctx context.Context) {
+	if hook, ok := ctx.Value(editRaceHookKey{}).(func()); ok && hook != nil {
+		hook()
+	}
+}
+
+// Edit is read-modify-write as ONE unit: it reads the current body, applies
+// one edit to it, and writes the result, all inside a single transaction.
+//
+// Save is the right call when the caller means to replace a whole document
+// it already has in hand — the Settings textarea, where overwriting is what
+// the writer asked for. Edit is the right call when the new body is a
+// function of the stored one, which is every agent edit. Doing that as
+// Load-then-Apply-then-Save loses data: two callers both load the same body,
+// both append their line, and the second Save discards the first caller's
+// line while telling it that it succeeded. This memory has two writers by
+// design — the built-in agent and a connected external client — so that is a
+// real interleaving, not a theoretical one. Save's own transaction does not
+// help, because it only protects Save's shrink-only decision about a body the
+// caller had already computed from a stale read.
+//
+// The store's pool is capped to one connection (see store.Store), so once
+// BeginTx succeeds this call holds it until Commit or Rollback and no other
+// Save or Edit can read the row in between.
+//
+// The budget rule is Apply's, evaluated against the body read inside this
+// transaction, and that is exactly Save's rule rather than merely a similar
+// one: Apply's budgeted() accepts when used <= budget || used < before, whose
+// complement is Save's refusal when used > budget && used >= before, over the
+// same `before`. Screen runs on the result too, keeping Save's invariant that
+// what is stored has been screened — Apply screens the incoming line, but a
+// remove leaves the rest of the body unexamined.
+func (r *Repo) Edit(ctx context.Context, scope Scope, projectID, action, find, text string, now int64) (Document, error) {
+	arg, err := projectArg(scope, projectID)
+	if err != nil {
+		return Document{}, err
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Document{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	current, err := bodyBefore(ctx, tx, scope, arg)
+	if err != nil {
+		return Document{}, err
+	}
+	runEditRaceHook(ctx)
+	next, err := Apply(scope, current, action, find, text)
+	if err != nil {
+		return Document{}, err
+	}
+	if err := Screen(next); err != nil {
+		return Document{}, err
+	}
+	if err := replaceBody(ctx, tx, scope, arg, next, now); err != nil {
+		return Document{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Document{}, err
+	}
+	return Document{
+		Scope: scope, ProjectID: strings.TrimSpace(projectID), Body: next,
+		CharsUsed: utf8.RuneCountInString(next), CharsBudget: scope.Budget(), UpdatedAt: now,
 	}, nil
 }

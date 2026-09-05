@@ -188,3 +188,128 @@ func TestEditMemoryIsRegisteredAsAWriteTool(t *testing.T) {
 		}
 	}
 }
+
+// The writer profile is global — it is injected into the system prompt of
+// every work. A client the writer pinned to one work must not be able to
+// rewrite it, or the pin means nothing: one restricted client could still
+// steer every other work.
+func TestEditMemoryRefusesTheGlobalProfileOnAPinnedServer(t *testing.T) {
+	ctx, d, projectID := newMemoryDeps(t)
+	d.Source = "" // external, the only kind of client a pin applies to
+	d.Settings = newRestrictedSettings(t, projectID)
+
+	res, _, err := d.editMemory(ctx, nil, editMemoryInput{
+		Scope: "writer_profile", Action: "add", Text: "3인칭을 선호"})
+	if err != nil {
+		t.Fatalf("transport error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("a pinned client must not be able to edit the global writer profile")
+	}
+	if msg := firstText(res); !strings.Contains(msg, "restricted") || !strings.Contains(msg, "work_notes") {
+		t.Errorf("the message must say it is scoped and what to use instead; got %q", msg)
+	}
+	got, err := d.Memory.Load(ctx, agentmemory.ScopeWriterProfile, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Body != "" {
+		t.Errorf("the refused edit still wrote: Body = %q", got.Body)
+	}
+
+	// The pinned client keeps its own work's notes.
+	if res, _, err := d.editMemory(ctx, nil, editMemoryInput{
+		Scope: "work_notes", Action: "add", Text: "민준은 존댓말", ProjectID: projectID}); err != nil || (res != nil && res.IsError) {
+		t.Fatalf("pinned work notes: err=%v res=%+v", err, res)
+	}
+}
+
+// The built-in agent is never pinned: mcp_project_id restricts external
+// clients, and the panel's scope is whichever work it is open on. A pin set
+// for an external client must not lock the agent out of the profile.
+func TestEditMemoryLetsTheBuiltInAgentEditTheProfileWhileAPinIsSet(t *testing.T) {
+	ctx, d, projectID := newMemoryDeps(t)
+	d.Settings = newRestrictedSettings(t, projectID)
+	if d.Source != SourceAgent {
+		t.Fatalf("Source = %q, want the agent", d.Source)
+	}
+	res, out, err := d.editMemory(ctx, nil, editMemoryInput{
+		Scope: "writer_profile", Action: "add", Text: "3인칭을 선호"})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("agent profile edit: err=%v res=%+v", err, res)
+	}
+	if out.Body != "3인칭을 선호" {
+		t.Errorf("Body = %q", out.Body)
+	}
+}
+
+// The activity row must say which of the two documents changed. A profile
+// edit carries no work id, so without the scope in the target field the row
+// is a bare tool name with nothing identifying what it touched.
+func TestEditMemoryPutsTheDocumentInTheActivityTarget(t *testing.T) {
+	ctx, d, projectID := newMemoryDeps(t)
+	h := record(d, "linetta_edit_memory", d.editMemory)
+	req := &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "linetta_edit_memory"}}
+	if _, _, err := h(ctx, req, editMemoryInput{
+		Scope: "writer_profile", Action: "add", Text: "3인칭을 선호"}); err != nil {
+		t.Fatalf("profile edit: %v", err)
+	}
+	if _, _, err := h(ctx, req, editMemoryInput{
+		Scope: "work_notes", Action: "add", Text: "민준은 존댓말", ProjectID: projectID}); err != nil {
+		t.Fatalf("notes edit: %v", err)
+	}
+	rows, err := d.Activity.List(ctx, 10)
+	if err != nil {
+		t.Fatalf("list activity: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("want 2 activity rows, got %d", len(rows))
+	}
+	byTarget := map[string]ActivityEntry{}
+	for _, r := range rows {
+		byTarget[r.TargetID] = r
+	}
+	profile, ok := byTarget["writer_profile"]
+	if !ok {
+		t.Fatalf("no row targeting writer_profile; rows = %+v", rows)
+	}
+	if profile.ProjectID != "" {
+		t.Errorf("the global profile belongs to no work; ProjectID = %q", profile.ProjectID)
+	}
+	notes, ok := byTarget["work_notes"]
+	if !ok {
+		t.Fatalf("no row targeting work_notes; rows = %+v", rows)
+	}
+	if notes.ProjectID != projectID {
+		t.Errorf("work notes must stay attached to their work; ProjectID = %q", notes.ProjectID)
+	}
+}
+
+// Two clients edit the same document at once. Neither line may be lost: the
+// tool goes through agentmemory.Repo.Edit, which does the whole
+// read-modify-write in one transaction.
+func TestEditMemoryDoesNotLoseAConcurrentEdit(t *testing.T) {
+	ctx, d, projectID := newMemoryDeps(t)
+	const n = 6
+	done := make(chan error, n)
+	for i := range n {
+		go func(i int) {
+			_, _, err := d.editMemory(ctx, nil, editMemoryInput{
+				Scope: "work_notes", Action: "add", Text: string(rune('가' + i)), ProjectID: projectID})
+			done <- err
+		}(i)
+	}
+	for range n {
+		if err := <-done; err != nil {
+			t.Fatalf("concurrent editMemory: %v", err)
+		}
+	}
+	got, err := d.Memory.Load(ctx, agentmemory.ScopeWorkNotes, projectID)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if lines := strings.Split(got.Body, "\n"); len(lines) != n {
+		t.Fatalf("Body = %q — %d of %d lines survived; a read-modify-write split across "+
+			"Load/Apply/Save drops whichever edit lands second-to-last", got.Body, len(lines), n)
+	}
+}
