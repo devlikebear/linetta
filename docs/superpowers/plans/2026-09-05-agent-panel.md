@@ -78,3 +78,137 @@ uuid v4다. 윈도우의 거친 타이머에서 실제로 발생한다. **패널
 5. 툴 줄과 되돌리기
 6. 작성기, 정지, 시작 칩, 사용량
 7. 히스토리 복원과 오류 처리
+
+---
+
+## Task 1: 트랜스크립트 순서를 결정적으로
+
+한 턴의 assistant 행과 tool 행이 같은 밀리초에 쓰이면 uuid 순서로 돌아온다.
+패널이 답변을 그걸 만든 툴 칩보다 먼저 그릴 수 있다.
+
+**조사에서 밝혀진 것: 마이그레이션이 필요 없다.** `companion_messages`는
+`WITHOUT ROWID`가 아니므로 SQLite의 암묵적 `rowid`가 이미 있고, 그건 정확히
+삽입 순서다. 새 열도, 카운터도, 마이그레이션도 필요 없다 — `ORDER BY`의
+tie-break를 `id`에서 `rowid`로 바꾸면 된다.
+
+`id`는 uuid v4라 무작위다. `rowid`는 단조 증가한다. 트랜스크립트가 알고 싶은
+것은 "어느 쪽이 먼저 쓰였나"이고, 그건 `rowid`가 그대로 답한다.
+
+### 파일
+
+- `engine/internal/companion/history.go` — `ORDER BY` 두 곳
+- `engine/internal/companion/history_test.go` — 순서를 고정하는 테스트
+
+### 1-1. 정렬
+
+`listHistorySQL`(현재 122·126행)의 두 `ORDER BY`를 바꾼다.
+
+안쪽(최근 N개를 고르는 서브셀렉트):
+```sql
+ORDER BY created_at DESC, CASE role WHEN 'assistant' THEN 0 ELSE 1 END, rowid DESC
+```
+바깥쪽(시간순 복원):
+```sql
+ORDER BY m.created_at ASC, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.rowid ASC
+```
+
+**`role` tie-break는 남긴다.** 그건 무작위가 아니라 의도적이다 — 같은 밀리초의
+user 행은 assistant 행보다 먼저 온다. 무작위인 건 그 다음 단계뿐이다.
+
+**서브셀렉트가 `SELECT *`이므로 `m.rowid`가 바깥에서 보이지 않는다.** 안쪽
+셀렉트에 `rowid`를 명시적으로 꺼내야 한다: `SELECT *, rowid FROM ...`. 구현할 때
+확인할 것 — 안 되면 서브셀렉트를 `SELECT rowid AS _rowid, * FROM`로 바꾸고
+바깥에서 `m._rowid`를 쓴다.
+
+### 1-2. 테스트
+
+```go
+func TestList_ordersRowsWrittenInTheSameMillisecondByInsertion(t *testing.T) {
+    // A turn writes assistant then tool then tool, and on a coarse clock —
+    // Windows' timer granularity is ~15ms — all three land on one
+    // millisecond. Ordering by the uuid id then decides at random, so the
+    // panel can draw a reply before the tool chips that produced it.
+    // Insertion order is the only thing that is actually true here.
+}
+```
+
+세 행을 **고정된 같은 `created_at`**으로 쓰고, 여러 번 돌려도(`-count=20`) 항상
+쓴 순서로 나오는지 본다. uuid는 매번 다르므로, `id` tie-break로는 이 테스트가
+반드시 언젠가 실패한다 — 그게 이 테스트가 진짜라는 증거다.
+
+### 검증
+
+```
+cd engine && go test ./internal/companion/ -run TestList -count=20
+cd engine && go test ./internal/companion/ ./internal/agent/ ./internal/export/ -count=1
+cd engine && go build ./... && go vet ./...
+cd engine && go build -tags mas ./... && GOOS=windows go build ./...
+bash scripts/validate-story-core-deps.sh
+make test-mobile-engine
+```
+
+키체인이 잠겨 있으므로 `go test ./...`나 `internal/engineapp` 전체는 돌리지 말 것.
+
+### 커밋
+
+```
+fix(companion): order a turn's rows by when they were written, not by uuid (#95)
+```
+
+---
+
+## Task 2: 충돌 배너가 누가 썼는지 안다
+
+작가가 방금 패널에서 시킨 변경에 대해 "외부 에이전트가 이 씬을 고쳤습니다"를
+읽는 상황을 없앤다.
+
+### 파일
+
+- `apps/desktop/src/hooks/useMcpChanges.ts` — 충돌의 출처를 함께 반환
+- `apps/desktop/src/hooks/useMcpChanges.test.tsx` — 테스트
+- `apps/desktop/src/routes/Workspace.tsx` — 배너 분기
+- `apps/desktop/src/lib/i18n.tsx` — 키 하나 × 세 카탈로그
+
+### 2-1. 훅
+
+`McpChangedPayload.source`는 이미 타입에 있다(`"agent" | "external"`). 훅이
+`conflictNodeId`만 반환하고 출처를 버린다. 출처도 같이 담는다.
+
+```ts
+// The conflict and the source it came from move together: a banner that
+// names the wrong writer is worse than a generic one, and they can only
+// disagree if they are stored apart.
+const [conflict, setConflict] = useState<{ nodeId: string; source: string } | null>(null);
+```
+
+**하나의 상태로 묶는 이유.** 두 `useState`로 나누면 둘이 어긋난 렌더가 존재할 수
+있고, 그 순간 배너는 이전 충돌의 출처로 이번 충돌을 설명한다.
+
+### 2-2. 배너
+
+`source === "agent"`일 때만 에이전트 문구를 쓴다. 나머지는 전부 기존 문구다 —
+빈 값도, 모르는 값도. 내장 에이전트가 한 일을 외부가 한 것으로 보여주는 쪽이
+그 반대보다 안전하다. #94의 활동 로그 출처 열과 같은 판단이다.
+
+```
+workspace.mcp.conflict.agentBody
+  ko "에이전트가 이 씬을 고쳤습니다. 편집 중인 내용이 있어 아직 반영하지 않았습니다."
+  en "The agent changed this scene. Your unsaved edits are still here, so nothing was replaced."
+  ja "エージェントがこのシーンを変更しました。編集中の内容があるため、まだ反映していません。"
+```
+
+### 2-3. 테스트
+
+```tsx
+it("names the built-in agent when the change came from it", ...);
+it("keeps the external wording for an unknown or missing source", ...);
+```
+
+두 번째가 핵심이다. `source`가 없는 이벤트(옛 엔진, 또는 필드가 빠진 경로)가
+에이전트로 읽히면 안 된다.
+
+### 커밋
+
+```
+feat(desktop): the conflict banner says whether the agent or an outside client wrote (#95)
+```
