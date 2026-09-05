@@ -1,10 +1,25 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderStatus } from "../../lib/types";
 
 const rpc = vi.hoisted(() => ({
   providersList: vi.fn(),
+}));
+
+// Same approach as useMcpChanges.test.tsx: a hoisted listener map standing in
+// for Tauri's real event bus, and an `emit` helper that calls the registered
+// listener inside `act` so the resulting state update is flushed before the
+// assertion runs.
+const ev = vi.hoisted(() => ({
+  listeners: new Map<string, (e: { payload: unknown }) => void>(),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (event: string, cb: (e: { payload: unknown }) => void) => {
+    ev.listeners.set(event, cb);
+    return Promise.resolve(() => ev.listeners.delete(event));
+  },
 }));
 
 vi.mock("../../lib/rpc", () => ({
@@ -44,9 +59,30 @@ function renderPanel(onClose = vi.fn()) {
   );
 }
 
+/** Renders with a ready (configured + consented) provider and waits for the
+ *  log to mount, so message tests can start emitting engine events right
+ *  away. */
+async function renderReady(onClose = vi.fn()) {
+  rpc.providersList.mockImplementation(() =>
+    Promise.resolve([row({ configured: true, consented: true })]),
+  );
+  const view = renderPanel(onClose);
+  await screen.findByTestId("agent-log");
+  return view;
+}
+
+async function emit(event: string, payload: unknown) {
+  const cb = ev.listeners.get(event);
+  if (!cb) throw new Error(`${event} listener was never registered`);
+  await act(async () => {
+    cb({ payload });
+  });
+}
+
 describe("AgentPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    ev.listeners.clear();
   });
 
   it("renders the unconfigured notice when no provider is active at all", async () => {
@@ -176,5 +212,112 @@ describe("AgentPanel", () => {
     aside!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
     document.removeEventListener("mousedown", onMouseDown);
     expect(onMouseDown).not.toHaveBeenCalled();
+  });
+});
+
+describe("AgentPanel messages and streaming (#95 Task 4)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function assistantBubble() {
+    return screen.getByTestId("agent-log").querySelector(".msg.bot .msg-bubble");
+  }
+
+  it("accumulates agent.delta into one reply", async () => {
+    await renderReady();
+
+    await emit("agent-delta", { run_id: "r1", text: "Hello" });
+    await emit("agent-delta", { run_id: "r1", text: ", world" });
+    // useSmoothStream returns the target verbatim once the run is no longer
+    // active, so finishing the turn is the simplest way to assert on the
+    // fully-accumulated text without driving the reveal animation by hand.
+    await emit("agent-done", { run_id: "r1", usage: { input: 4, output: 6 } });
+
+    const log = screen.getByTestId("agent-log");
+    expect(log.querySelectorAll(".msg.bot")).toHaveLength(1);
+    expect(assistantBubble()?.textContent).toBe("Hello, world");
+  });
+
+  it("reveals the reply a few characters at a time while the run is still streaming", async () => {
+    // Same technique as useSmoothStream.test.ts: stub rAF so frames only
+    // advance when this test flushes them.
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return frames.length;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+
+    await renderReady();
+    await emit("agent-delta", { run_id: "r1", text: "x".repeat(100) });
+
+    // Still mid-run: the hook has not been given a chance to catch up yet.
+    expect(assistantBubble()?.textContent).not.toBe("x".repeat(100));
+
+    for (let i = 0; i < 40 && frames.length > 0; i++) {
+      const due = frames.splice(0, frames.length);
+      await act(async () => {
+        due.forEach((cb) => cb(0));
+      });
+    }
+
+    expect(assistantBubble()?.textContent).toBe("x".repeat(100));
+  });
+
+  it("ignores events from a run that is not the current one", async () => {
+    await renderReady();
+
+    await emit("agent-delta", { run_id: "r1", text: "Real reply" });
+    // A second, unrelated run's events arrive interleaved — e.g. a late
+    // delivery from a run the writer already abandoned. None of it may
+    // touch what is on screen for r1.
+    await emit("agent-tool", { run_id: "stale-run", name: "linetta_search_scenes", state: "started" });
+    await emit("agent-delta", { run_id: "stale-run", text: "Ghost reply" });
+    await emit("agent-done", { run_id: "stale-run", usage: { input: 9, output: 9 } });
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 2 } });
+
+    const log = screen.getByTestId("agent-log");
+    expect(log.querySelectorAll(".msg.bot")).toHaveLength(1);
+    expect(assistantBubble()?.textContent).toBe("Real reply");
+  });
+
+  it("renders markdown in a reply", async () => {
+    await renderReady();
+
+    await emit("agent-delta", {
+      run_id: "r1",
+      text: "**bold** and a [link](https://example.com/x)",
+    });
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+
+    const bubble = assistantBubble();
+    expect(bubble?.querySelector("strong")?.textContent).toBe("bold");
+    const link = bubble?.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("https://example.com/x");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toBe("noreferrer");
+  });
+
+  it("keeps agent.tool events out of the rendered log (the collapsed line is Task 5)", async () => {
+    await renderReady();
+
+    await emit("agent-tool", { run_id: "r1", name: "linetta_search_scenes", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_search_scenes",
+      state: "done",
+      summary: "3 scenes",
+    });
+    await emit("agent-delta", { run_id: "r1", text: "Found them." });
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+
+    const log = screen.getByTestId("agent-log");
+    expect(log.querySelectorAll(".msg")).toHaveLength(1);
+    expect(log.textContent).not.toContain("3 scenes");
   });
 });
