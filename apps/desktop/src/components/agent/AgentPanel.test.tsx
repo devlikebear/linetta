@@ -162,6 +162,24 @@ async function jumpTo(view: ReturnType<typeof render>, projectId: string, strict
   });
 }
 
+// Every describe below starts from the same clean slate: no mock call counts
+// carried over, and no listener still registered from a panel the previous
+// test unmounted. Three blocks each declared this identically before it was
+// hoisted; a block that needs more still adds its own beforeEach on top.
+beforeEach(() => {
+  vi.clearAllMocks();
+  ev.listeners.clear();
+});
+
+/** The notice lines in the log — the "this run failed", "may still be
+ *  running" and "stopped" rows, as distinct from message bubbles and tool
+ *  lines. Five describe blocks below each grew their own copy of this. */
+function notices(): HTMLElement[] {
+  return Array.from(
+    screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'),
+  );
+}
+
 /** Emits one wire event.
  *
  *  Every agent.* payload carries `project_id` (#95 Task 7 review round 3) and
@@ -1010,26 +1028,23 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
     await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
   }
 
-  it("does not send the Enter that confirms an IME conversion candidate", async () => {
+  // Both halves of the guard, one case each. A Japanese writer's Enter
+  // confirms a kanji conversion candidate; a Korean writer's commits the
+  // trailing syllable. Browsers disagree about which signal they send, and
+  // dropping either half leaves the other case sending a half-typed prompt
+  // with no keystroke that could have confirmed it instead.
+  it.each([
+    ["reported as isComposing", { key: "Enter", isComposing: true }, "つづきをかいて"],
+    ["reported only as keyCode 229", { key: "Enter", keyCode: 229 }, "이어서 써줘"],
+  ])("does not send the Enter that commits a composition %s", async (_label, key, typed) => {
     rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
     await renderReady();
-    await type("つづきをかいて");
+    await type(typed as string);
     await act(async () => {
-      fireEvent.keyDown(composer(), { key: "Enter", isComposing: true });
+      fireEvent.keyDown(composer(), key as Record<string, unknown>);
     });
     expect(rpc.agentRun).not.toHaveBeenCalled();
-    expect(composer().value).toBe("つづきをかいて");
-  });
-
-  it("does not send the Enter that commits a composition reported only as keyCode 229", async () => {
-    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
-    await renderReady();
-    await type("이어서 써줘");
-    await act(async () => {
-      fireEvent.keyDown(composer(), { key: "Enter", keyCode: 229 });
-    });
-    expect(rpc.agentRun).not.toHaveBeenCalled();
-    expect(composer().value).toBe("이어서 써줘");
+    expect(composer().value).toBe(typed);
   });
 
   it("keeps the chunk that arrived before agent.run's response", async () => {
@@ -1131,18 +1146,11 @@ function historyRow(overrides: Partial<AgentHistoryRow> = {}): AgentHistoryRow {
 }
 
 describe("AgentPanel history restore (#95 Task 7)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    ev.listeners.clear();
-  });
 
   function toolLines(): HTMLElement[] {
     return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="tool-line"]'));
   }
 
-  function notices(): HTMLElement[] {
-    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
-  }
 
   it("restores a saved conversation from agent.history when the panel opens", async () => {
     await restoreWith(
@@ -1269,9 +1277,6 @@ describe("AgentPanel wire errors and cancellation (#95 Task 7)", () => {
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
   });
 
-  function notices(): HTMLElement[] {
-    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
-  }
 
   it("renders a translated notice for agent.error and never shows the raw engine message", async () => {
     await renderReady();
@@ -1490,9 +1495,6 @@ describe("AgentPanel project switch (#95 Task 7 review)", () => {
    *  unmounting — the actual shape of the bug. Neither the `/workspace/:id`
    *  route nor `<AgentPanel>` is keyed on the project id, so global search's
    *  cross-project jump changes this prop under a panel that stays mounted. */
-  function notices(): HTMLElement[] {
-    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
-  }
 
   it("does not leave one work's conversation on screen after a jump to another", async () => {
     rpc.agentHistory.mockImplementation((projectId: string) =>
@@ -1560,14 +1562,7 @@ describe("AgentPanel project switch (#95 Task 7 review)", () => {
 });
 
 describe("AgentPanel restored turn status (#95 Task 7 review)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    ev.listeners.clear();
-  });
 
-  function notices(): HTMLElement[] {
-    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
-  }
 
   it("says a restored turn failed, instead of restoring it as a finished reply", async () => {
     // The engine stamps every row of a provider-failed turn "failed"
@@ -1858,14 +1853,7 @@ describe("AgentPanel abandoned send fence (#95 Task 7 review round 2)", () => {
 });
 
 describe("AgentPanel restore notice boundaries (#95 Task 7 review round 2)", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    ev.listeners.clear();
-  });
 
-  function notices(): HTMLElement[] {
-    return Array.from(screen.getByTestId("agent-log").querySelectorAll<HTMLElement>('[data-testid="agent-notice"]'));
-  }
 
   it("still says how a run ended when its last row is a tool row the panel cannot parse", async () => {
     // Skipping the unparseable LINE must not also skip the notice saying the
