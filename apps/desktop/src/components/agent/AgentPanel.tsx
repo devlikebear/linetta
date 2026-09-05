@@ -23,7 +23,12 @@ export function AgentPanel({ onClose }: Props) {
   // requires both — so a turn sent while only configured comes back as
   // provider_consent_required. Telling the writer up front beats sending it
   // and rendering an error.
-  const [ready, setReady] = useState(false);
+  //
+  // Tri-state, not boolean: `null` means "still checking". Defaulting to
+  // `false` would flash the unconfigured notice on every open, even for a
+  // writer who is fully set up — a false claim about their own setup, not
+  // just an ugly flash.
+  const [ready, setReady] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,12 +55,12 @@ export function AgentPanel({ onClose }: Props) {
         <span className="ttl"><span className="ic"><Bot size={16} /></span> {t("agentPanel.title")}</span>
         <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}><X size={16} /></button>
       </div>
-      {ready ? (
+      {ready === null ? null : ready ? (
         <div className="panel-scroll agent-log" data-testid="agent-log" />
       ) : (
         <p className="agent-empty" data-testid="agent-unconfigured">
           {t("agentPanel.unconfigured")}{" "}
-          <Link to="/settings">{t("workspace.command.openSettings")}</Link>
+          <Link to="/settings">{t("agentPanel.openSettings")}</Link>
         </p>
       )}
     </aside>

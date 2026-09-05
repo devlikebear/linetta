@@ -91,6 +91,48 @@ describe("AgentPanel", () => {
     expect(screen.queryByTestId("agent-unconfigured")).toBeNull();
   });
 
+  it("renders neither branch while the provider check is in flight", () => {
+    // ready starts out unknown (tri-state), not "false" — defaulting to
+    // false would flash the unconfigured notice on every open, even for a
+    // fully-configured writer.
+    rpc.providersList.mockImplementation(() => new Promise(() => {}));
+    renderPanel();
+
+    expect(screen.queryByTestId("agent-log")).toBeNull();
+    expect(screen.queryByTestId("agent-unconfigured")).toBeNull();
+  });
+
+  it("reads readiness off the active row, not row 0, when the active row is ready", async () => {
+    // Two rows; the ready one is not first. rows[0] would show the notice
+    // even though the active provider is fine.
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([
+        row({ id: "openai", active: false, configured: false, consented: false }),
+        row({ id: "anthropic", active: true, configured: true, consented: true }),
+      ]),
+    );
+    renderPanel();
+
+    expect(await screen.findByTestId("agent-log")).toBeTruthy();
+    expect(screen.queryByTestId("agent-unconfigured")).toBeNull();
+  });
+
+  it("does not show a false-ready panel when row 0 is ready but the active row is not", async () => {
+    // The direction that matters most: rows[0] is fully ready, but it is not
+    // the active provider. Using rows[0] here would render the log for a
+    // writer who cannot actually send a turn.
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([
+        row({ id: "openai", active: false, configured: true, consented: true }),
+        row({ id: "anthropic", active: true, configured: false, consented: false }),
+      ]),
+    );
+    renderPanel();
+
+    expect(await screen.findByTestId("agent-unconfigured")).toBeTruthy();
+    expect(screen.queryByTestId("agent-log")).toBeNull();
+  });
+
   it("does not offer provider setup of its own", async () => {
     // Provider choice, key entry, and consent are #94's screen; a second
     // copy here would drift from it.

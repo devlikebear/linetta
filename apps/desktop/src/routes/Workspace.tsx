@@ -167,6 +167,12 @@ export function Workspace() {
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
+  // agent_available gates the panel, the slot, Cmd+J and the ShortcutsModal
+  // entry: a mobile/iPad build can ship with no provider plumbed in at all,
+  // and Settings.tsx hides the Providers screen on the same flag, so a
+  // writer must never be told to go configure something Settings won't show
+  // them (#95).
+  const [agentAvailable, setAgentAvailable] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [autoMentionBusy, setAutoMentionBusy] = useState(false);
@@ -177,6 +183,12 @@ export function Workspace() {
   const [autoMentionScanKey, setAutoMentionScanKey] = useState(0);
   const factBookSelectionSeqRef = useRef(0);
   const loadRef = useRef<LoadState | null>(null);
+  // The keydown effect below registers once with an intentionally empty dep
+  // array (toggleAgent is a stable useCallback), so it cannot see later
+  // updates to `agentAvailable` through its own closure. Mirror it into a
+  // ref, same pattern as loadRef just above, so the handler always reads the
+  // current value instead of whatever agent_available was at mount.
+  const agentAvailableRef = useRef(false);
   const sceneSaveQueueRef = useRef<SceneSaveQueue<NodeRow> | null>(null);
   if (!sceneSaveQueueRef.current) {
     sceneSaveQueueRef.current = new SceneSaveQueue((nodeId, doc, expectedVersion) =>
@@ -186,6 +198,9 @@ export function Workspace() {
   useEffect(() => {
     loadRef.current = load;
   }, [load]);
+  useEffect(() => {
+    agentAvailableRef.current = agentAvailable;
+  }, [agentAvailable]);
   useEffect(() => {
     if (load) sceneSaveQueue.seed(load.node.id, load.node.content_version ?? 0);
   }, [load, sceneSaveQueue]);
@@ -371,7 +386,11 @@ export function Workspace() {
       })
       .catch(() => { /* benign */ });
     diagnosticsApi.get()
-      .then((d) => { if (!cancelled) setGitSyncAvailable(d.git_sync_available ?? true); })
+      .then((d) => {
+        if (cancelled) return;
+        setGitSyncAvailable(d.git_sync_available ?? true);
+        setAgentAvailable(d.agent_available ?? false);
+      })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
@@ -791,7 +810,7 @@ export function Workspace() {
           return;
         }
         setSearchOpen(true);
-      } else if (e.key.toLowerCase() === "j") {
+      } else if (e.key.toLowerCase() === "j" && agentAvailableRef.current) {
         e.preventDefault();
         toggleAgent();
       }
@@ -803,7 +822,10 @@ export function Workspace() {
     // stable and never changes — listing it would not change when this
     // effect re-runs, only invite a forward-reference ReferenceError, since
     // deps are evaluated eagerly at this line while toggleAgent's own const
-    // has not been reached yet.
+    // has not been reached yet. agentAvailableRef is read through a ref for
+    // the same reason `agentAvailable` itself can't be listed here: a plain
+    // dependency would be captured once, at mount, and the diagnostics fetch
+    // that sets it hasn't resolved yet at that point.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1358,6 +1380,15 @@ export function Workspace() {
       label: t("factBook.title"),
       run: toggleFactBook,
     });
+    if (agentAvailable) {
+      cmds.push({
+        id: "toggle-agent",
+        section: sectionView,
+        label: t("workspace.command.agentPanel"),
+        hint: "Cmd+J",
+        run: toggleAgent,
+      });
+    }
     cmds.push({
       id: "show-shortcuts",
       section: sectionHelp,
@@ -1365,7 +1396,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1828,7 +1859,7 @@ export function Workspace() {
               focusEditor();
             }}
           />
-        ) : agentOpen && load ? (
+        ) : agentOpen && agentAvailable && load ? (
           <AgentPanel
             onClose={() => {
               setAgentOpen(false);
@@ -1915,7 +1946,7 @@ export function Workspace() {
         />
       )}
 
-      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} agentAvailable={agentAvailable} />
       <OnboardingTour
         open={tourOpen}
         steps={tourSteps}

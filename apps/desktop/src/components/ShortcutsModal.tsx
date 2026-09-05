@@ -28,10 +28,15 @@ const SHORTCUTS: Shortcut[] = [
 interface Props {
   open: boolean;
   onClose: () => void;
+  // agent_available: an iPad build can ship with no provider plumbed in at
+  // all, and Cmd+J does nothing when it isn't. Advertising the key anyway
+  // would send the writer to open a panel that can't open (#95).
+  agentAvailable: boolean;
 }
 
-export function ShortcutsModal({ open, onClose }: Props) {
+export function ShortcutsModal({ open, onClose, agentAvailable }: Props) {
   const { t } = useI18n();
+  const shortcuts = agentAvailable ? SHORTCUTS : SHORTCUTS.filter((s) => s.keys !== "⌘J");
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -58,7 +63,7 @@ export function ShortcutsModal({ open, onClose }: Props) {
         <h2>{t("shortcuts.title")}</h2>
         <p className="modal-sub">{t("shortcuts.subtitle")}</p>
         <div className="sc-grid">
-          {SHORTCUTS.map((s) => (
+          {shortcuts.map((s) => (
             <div className="sc-item" key={s.keys}>
               <span>{t(s.labelKey)}</span>
               <span className="kbd">{s.keys}</span>

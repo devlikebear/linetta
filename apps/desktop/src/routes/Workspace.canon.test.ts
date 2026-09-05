@@ -22,7 +22,7 @@ describe("Workspace story world panel", () => {
     expect(src).toContain('id: "toggle-canon"');
     // The palette list is a useMemo; a callback missing from its deps freezes
     // the command on a stale closure.
-    expect(src).toContain("toggleCanon, gitSyncAvailable]");
+    expect(src).toContain("toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable]");
   });
 
   it("shares the inspector slot instead of stacking", async () => {

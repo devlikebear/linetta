@@ -11,13 +11,19 @@ const workspace = () => readSource("routes/Workspace.tsx");
  * Workspace.mcpChanges.test.ts — these assertions watch the source directly.
  */
 describe("Workspace agent panel wiring", () => {
-  it("mounts the panel above the ContextPanel fallback", async () => {
+  it("mounts the panel above the ContextPanel fallback, gated on agent_available", async () => {
     const src = await workspace();
     expect(src).toContain('import { AgentPanel } from "../components/agent/AgentPanel"');
     expect(src).toContain("<AgentPanel");
     // ContextPanel is the else-fallback; the agent panel must be checked
     // before it or it can never win the slot.
     expect(src.indexOf("<AgentPanel")).toBeLessThan(src.indexOf('sizeClass === "desktop"'));
+    // The three assertions above still pass under a wrong-flag swap (e.g.
+    // contextualEditOpen for agentOpen) — none of them names the guard
+    // itself. Pin the guard — including agent_available's gate — and the
+    // component it renders as one contiguous string, not co-occurring
+    // substrings (#95 review, I1/I2).
+    expect(src).toContain(') : agentOpen && agentAvailable && load ? (\n          <AgentPanel');
   });
 
   it("closes the other inspector panels when the agent panel opens", async () => {
@@ -60,6 +66,40 @@ describe("Workspace agent panel wiring", () => {
     expect(jIndex).toBeGreaterThan(-1);
     const jBranch = src.slice(jIndex, jIndex + 120);
     expect(jBranch).toContain("toggleAgent();");
+  });
+
+  it("tracks agent_available from diagnostics, alongside git_sync_available", async () => {
+    const src = await workspace();
+    expect(src).toContain(
+      'diagnosticsApi.get()\n      .then((d) => {\n        if (cancelled) return;\n        setGitSyncAvailable(d.git_sync_available ?? true);\n        setAgentAvailable(d.agent_available ?? false);\n      })',
+    );
+  });
+
+  it("gates Cmd/Ctrl+J on agent_available", async () => {
+    const src = await workspace();
+    // A plain `agentAvailable` read here would be stale forever: this
+    // handler is registered once with an empty dep array (toggleAgent's
+    // identity is stable, but a boolean captured at mount never sees the
+    // diagnostics fetch that resolves after it) — so the guard must read
+    // through the ref, not the state variable directly.
+    expect(src).toContain(
+      'e.key.toLowerCase() === "j" && agentAvailableRef.current) {\n        e.preventDefault();\n        toggleAgent();',
+    );
+  });
+
+  it("gates the agent panel's command-palette entry on agent_available", async () => {
+    const src = await workspace();
+    expect(src).toContain(
+      'if (agentAvailable) {\n      cmds.push({\n        id: "toggle-agent",',
+    );
+    // The memo must also re-run when either changes, or a writer who
+    // configures a provider mid-session keeps seeing (or not seeing) a
+    // stale command list.
+    const depsIndex = src.indexOf("}, [load, navigateToNode");
+    expect(depsIndex).toBeGreaterThan(-1);
+    const depsLine = src.slice(depsIndex, src.indexOf(");", depsIndex));
+    expect(depsLine).toContain("toggleAgent");
+    expect(depsLine).toContain("agentAvailable");
   });
 
   it("corrects the stale comment that used to say Cmd+J was deliberately unbound", async () => {

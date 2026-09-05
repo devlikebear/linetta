@@ -13,10 +13,10 @@ vi.mock("../lib/rpc", () => ({
   },
 }));
 
-const openModal = () =>
+const openModal = (agentAvailable = true) =>
   render(
     <I18nProvider>
-      <ShortcutsModal open onClose={vi.fn()} />
+      <ShortcutsModal open onClose={vi.fn()} agentAvailable={agentAvailable} />
     </I18nProvider>,
   );
 
@@ -67,5 +67,18 @@ describe("ShortcutsModal", () => {
     await screen.findByText("단축키");
     expect(screen.getByText("⌘J")).toBeInTheDocument();
     expect(screen.getByText("에이전트 패널 열기")).toBeInTheDocument();
+  });
+
+  it("hides the agent panel shortcut when agent_available is false", async () => {
+    // No provider plumbed in at all (e.g. an iPad build) means Cmd+J does
+    // nothing — advertising it would send the writer to open a panel that
+    // can't open (#95).
+    mocks.settingsGet.mockResolvedValue({ language: "ko" });
+
+    openModal(false);
+
+    await screen.findByText("단축키");
+    expect(screen.queryByText("⌘J")).not.toBeInTheDocument();
+    expect(screen.queryByText("에이전트 패널 열기")).not.toBeInTheDocument();
   });
 });
