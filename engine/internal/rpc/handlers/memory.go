@@ -52,9 +52,25 @@ func GetMemory(store MemoryStore) rpc.Handler {
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
-		notes, err := store.Load(ctx, agentmemory.ScopeWorkNotes, projectID)
-		if err != nil {
-			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		// No work picked yet is a legitimate UI state, not an error: the
+		// Settings pane opens before the writer has opened a work, and this
+		// is the first call it makes. The store is right to refuse
+		// ScopeWorkNotes with no work id — a row whose project_id is NULL is
+		// the *profile*, so asking it for work notes without a work is a
+		// programming error down there, and agentmemory's own tests pin that
+		// refusal. This layer is the one that knows the difference, so it
+		// answers with the empty document itself rather than asking. The
+		// budget still comes back, because the pane draws its capacity line
+		// from it before anything is typed.
+		notes := agentmemory.Document{
+			Scope:       agentmemory.ScopeWorkNotes,
+			CharsBudget: agentmemory.ScopeWorkNotes.Budget(),
+		}
+		if projectID != "" {
+			notes, err = store.Load(ctx, agentmemory.ScopeWorkNotes, projectID)
+			if err != nil {
+				return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+			}
 		}
 		return json.Marshal(getMemoryResult{WriterProfile: profile, WorkNotes: notes})
 	}
