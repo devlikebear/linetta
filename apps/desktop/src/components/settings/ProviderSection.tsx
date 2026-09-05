@@ -53,6 +53,15 @@ export function ProviderSection() {
   // interval dies with the component. A login the writer abandons must not
   // leave a timer calling the engine forever.
   const pollRef = useRef<number | null>(null);
+  // Whether the currently-running poll is still allowed to write codexStatus.
+  // Leaving "openai-codex" flips this to false for good — not just while the
+  // writer is away. A late tick from the abandoned poll can still be in
+  // flight when the writer returns, and by then `active` is back to
+  // "openai-codex" again, so checking `active` at resolve time would not
+  // catch it. Only a fresh startCodexLogin() (a new polling session) sets
+  // this back to true; the mount-effect fetch below is what a returning
+  // visit actually trusts for status.
+  const pollValidRef = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -127,7 +136,11 @@ export function ProviderSection() {
   useEffect(() => {
     if (active !== "openai-codex") {
       // Leaving the provider drops the status, so a stale login_failed does
-      // not greet the writer on the way back in.
+      // not greet the writer on the way back in. It also permanently
+      // invalidates whatever poll is still running: that poll belongs to a
+      // login attempt the writer just walked away from, and a fresh fetch
+      // below is what the next visit to Codex will trust instead.
+      pollValidRef.current = false;
       setCodexStatus(null);
       return;
     }
@@ -137,10 +150,12 @@ export function ProviderSection() {
       .then((s) => {
         if (!cancelled) setCodexStatus(s);
       })
-      // Nobody is waiting on this one, unlike the poll: the sign-in button is
-      // already the right thing to show, and an error banner on every
-      // settings open would say nothing the writer can act on.
-      .catch(() => {});
+      .catch((e: unknown) => {
+        // An unreachable engine is a signal, not silence: without this a
+        // writer opening Settings on Codex with the engine down sees a
+        // sign-in button and nothing else explaining why it never responds.
+        if (!cancelled) setError(e);
+      });
     return () => {
       cancelled = true;
     };
@@ -157,10 +172,19 @@ export function ProviderSection() {
       const { auth_url } = await codexApi.loginStart();
       await openExternalUrl(auth_url);
       stopPolling();
+      // This poll's writes are valid from here until the writer leaves
+      // "openai-codex" — see pollValidRef's declaration.
+      pollValidRef.current = true;
       pollRef.current = window.setInterval(() => {
         void codexApi
           .loginStatus()
           .then((s) => {
+            // The writer may have left and come back before this tick
+            // resolves; `active` would already read "openai-codex" again by
+            // then, so this ref — not `active` — is what remembers the
+            // departure. Skipping here leaves the fresh mount-effect fetch's
+            // result on screen instead of clobbering it with a stale one.
+            if (!pollValidRef.current) return;
             setCodexStatus(s);
             // Both outcomes end the poll. login_failed is how the engine
             // reports a failed exchange — it is a status field, not an RPC

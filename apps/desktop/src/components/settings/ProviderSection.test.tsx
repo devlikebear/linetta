@@ -325,6 +325,42 @@ describe("ProviderSection", () => {
     );
   });
 
+  it("does not resurrect a stale Codex failure when the writer returns before the orphaned poll resolves", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+
+    // The writer abandons the browser, switches to Anthropic, then comes
+    // straight back to Codex — all before the poll's first tick fires.
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+
+    // The fresh fetch this return triggers reports the truth: no attempt in
+    // flight from here.
+    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: false });
+    fireEvent.click(screen.getByTestId("provider-choice-openai-codex"));
+    await flush(8);
+
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+
+    // ~1.5s after the original login click, the orphaned poll's tick finally
+    // resolves — reporting the abandoned attempt failed. It must not
+    // overwrite the fresh, correct status above with a stale failure.
+    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: false, login_failed: true });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flush();
+
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+    expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
+  });
+
   it("shows an already signed-in Codex account without waiting for a fresh login", async () => {
     rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
     render(<ProviderSection />);
