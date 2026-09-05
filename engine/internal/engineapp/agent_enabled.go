@@ -76,6 +76,10 @@ type agentController struct {
 	// pass every other test, and only show up as a writer's agent starving
 	// against — or reverting — an external client's work.
 	tools mcphost.ToolDeps
+	// notify is the same channel the tools themselves publish mcp.changed on.
+	// Undo below is the one mutation in this file that does not go through a
+	// tool, so it is the one place that has to emit the notification itself.
+	notify func(method string, params any)
 }
 
 func setupAgent(deps agentDeps) (*agentController, func() error) {
@@ -109,7 +113,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		},
 		Clock: deps.clock,
 	})
-	return &agentController{svc: svc, tools: tools}, svc.Close
+	return &agentController{svc: svc, tools: tools, notify: deps.notify}, svc.Close
 }
 
 func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt string) (string, error) {
@@ -157,12 +161,31 @@ func (c *agentController) Clear(ctx context.Context, projectID string) error {
 // out of storyops' in-memory undo window is not the writer's mistake — it is
 // the ordinary result of a restart or a few more turns — so it gets its own
 // reason code rather than surfacing storyops' English sentence verbatim.
+//
+// A successful revert emits mcp.changed, exactly as the equivalent tool path
+// does (mcphost.ToolDeps.undoLastChange). It has to: RestoreOutline deletes
+// the nodes the batch created, and mcp.changed is the ONLY signal the
+// workspace refreshes its outline from. Without it the sidebar keeps listing
+// chapters and scenes that no longer exist in the database — a tree the
+// writer can click into and get errors.nodeNotFound from — immediately after
+// their own undo reported success.
+//
+// The empty project id matches undoLastChange's own call: the batch id does
+// not carry a work, and useMcpChanges treats an empty project_id as "refresh
+// regardless" rather than filtering the event away.
 func (c *agentController) Undo(ctx context.Context, batchID string) error {
 	if err := c.svc.Undo(ctx, batchID); err != nil {
 		if errors.Is(err, storyops.ErrUndoBatchNotFound) {
 			return &rpc.ReasonError{Reason: rpc.ReasonAgentUndoUnavailable, Err: err}
 		}
 		return err
+	}
+	if c.notify != nil {
+		c.notify("mcp.changed", mcphost.ChangedPayload{
+			Tool:    "linetta_undo_last_change",
+			BatchID: batchID,
+			Source:  mcphost.SourceAgent,
+		})
 	}
 	return nil
 }

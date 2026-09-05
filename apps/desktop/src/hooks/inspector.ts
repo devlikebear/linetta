@@ -4,10 +4,11 @@ export interface InspectorState {
   factBook: boolean;
   contextual: boolean;
   canon: boolean;
+  agent: boolean;
 }
 
 type Key = keyof InspectorState;
-const PRIORITY: Key[] = ["factBook", "contextual", "canon"];
+const PRIORITY: Key[] = ["factBook", "contextual", "canon", "agent"];
 
 export function reconcileInspector(
   prev: InspectorState,

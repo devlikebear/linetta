@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RpcError } from "./rpc";
-import { rpcErrorMessage } from "./rpcMessage";
+import { reasonMessage, rpcErrorMessage } from "./rpcMessage";
 import { translate } from "./i18n";
 import type { MessageKey } from "./i18n";
 
@@ -150,6 +150,30 @@ describe("rpcErrorMessage", () => {
         expect(shown, `${reason} in ${name}`).not.toContain(reason);
         expect(shown.length, `${reason} in ${name}`).toBeGreaterThan(0);
       }
+    }
+  });
+});
+
+// A failure that arrives as a notification (agent.error, #95) has a reason
+// code and nothing else — no error object, no engine message. There is no
+// engine sentence to fall back to, so the fallback has to be its own.
+describe("reasonMessage", () => {
+  it("translates a mapped code the same as a tagged error would", () => {
+    const err = new RpcError("agent.run", "raw engine sentence", -32603, {
+      reason: "provider_unreachable",
+    });
+    for (const t of [ko, en, ja]) {
+      expect(reasonMessage("provider_unreachable", t)).toBe(rpcErrorMessage(err, t));
+    }
+  });
+
+  it("names an unmapped code instead of stringifying the shape it arrived in", () => {
+    for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
+      const shown = reasonMessage("not_mapped_yet", t);
+      // "[object Object]" is what String({data:{reason}}) produces, and it is
+      // what the panel's notice used to render for an unmapped code.
+      expect(shown, name).not.toContain("[object Object]");
+      expect(shown, name).toContain("not_mapped_yet");
     }
   });
 });

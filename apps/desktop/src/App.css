@@ -1235,7 +1235,11 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   transition: border-color .15s, box-shadow .15s;
 }
 .cmp-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint2); }
-.cmp-input textarea { flex: 1; border: 0; background: transparent; resize: none; outline: none; font-size: 13.5px; line-height: 1.5; max-height: 120px; }
+/* min-height is the floor an autosized box shrinks back to (two lines); the
+   panel's autosize effect grows it from there and stops at max-height, which
+   is also what caps a box no script ever sized. Keep the 120px in step with
+   COMPOSER_MAX_HEIGHT in AgentPanel.tsx. */
+.cmp-input textarea { flex: 1; border: 0; background: transparent; resize: none; outline: none; font-size: 13.5px; line-height: 1.5; min-height: 40px; max-height: 120px; }
 .cmp-send { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); }
 .cmp-send:hover { background: var(--accent-deep); }
 .cmp-send:disabled { background: var(--surface-3); color: var(--muted-2); }

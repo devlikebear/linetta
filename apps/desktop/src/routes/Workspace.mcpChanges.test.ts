@@ -55,4 +55,29 @@ describe("Workspace MCP change wiring", () => {
     expect(workspace).toContain("void reloadSceneFromEngine(conflictNodeId); dismissConflict();");
     expect(workspace).toContain("workspace.mcp.conflict.keep");
   });
+
+  it("wires conflictSource to the right banner copy, in order", async () => {
+    const workspace = await readSource("routes/Workspace.tsx");
+
+    expect(workspace).toContain("conflictSource");
+
+    // Three independent toContain checks (the condition, the agentBody key,
+    // the body key) all pass even if the ternary's branches are swapped,
+    // because they only prove the strings co-occur in the file, not that
+    // they are wired together in the right order. A swap would report an
+    // agent's write as external and an external write as the agent's — the
+    // exact mistake this feature exists to prevent — and still pass. Extract
+    // the ternary itself and assert it as one whitespace-normalised,
+    // contiguous, ordered string so a swap fails here.
+    const start = workspace.indexOf('conflictSource === "agent"');
+    const end = workspace.indexOf("</span>", start);
+    const ternary = workspace.slice(start, end).replace(/\s+/g, " ").trim();
+
+    // The affirmative "agent" match must select the agent's copy (true
+    // branch); every other value — missing, empty, or unrecognised — must
+    // fall through to the generic external copy (false branch).
+    expect(ternary).toBe(
+      'conflictSource === "agent" ? t("workspace.mcp.conflict.agentBody") : t("workspace.mcp.conflict.body")}',
+    );
+  });
 });

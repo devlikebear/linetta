@@ -65,6 +65,25 @@ function reasonOf(error: unknown): string | null {
   return typeof reason === "string" ? reason : null;
 }
 
+/** Human-readable text for a bare reason code — a failure that arrived as a
+ *  notification rather than as a rejected call (agent.error, #95), so there is
+ *  no error object and no engine message standing behind it.
+ *
+ *  Separate from rpcErrorMessage because the fallbacks differ, and only one of
+ *  them can be right here. rpcErrorMessage falls back to the engine's own
+ *  message, which is the honest last resort when there IS one. There is none
+ *  here: the caller has a code and nothing else, so wrapping it in a fake
+ *  `{data:{reason}}` to reuse that path produced "[object Object]" on screen
+ *  for any code not in the map above. Everything agent.error can send today is
+ *  mapped, so this fallback is for the code some future engine change adds —
+ *  which is exactly when nobody is watching this line. The code is
+ *  engineering text, but it is true, and it is what a bug report needs. */
+export function reasonMessage(reason: string, t: Translate): string {
+  const key = REASON_MESSAGE_KEYS[reason];
+  if (key) return t(key);
+  return t("errors.unexpectedReason", { reason });
+}
+
 /** Human-readable text for an error raised by an engine call. */
 export function rpcErrorMessage(error: unknown, t: Translate): string {
   const reason = reasonOf(error);

@@ -7,9 +7,10 @@ interface Shortcut {
   labelKey: MessageKey;
 }
 
-// Cmd+J (companion) and Cmd+I (AI draft) are deliberately absent: both
-// features were removed with the companion and Workspace leaves the keys
-// unbound, so listing them here advertised shortcuts that do nothing.
+// Cmd+I (AI draft) is deliberately absent: that feature was removed with the
+// companion and Workspace leaves the key unbound, so listing it here would
+// advertise a shortcut that does nothing. Cmd+J used to be absent for the
+// same reason; it is not any more, now that it opens the agent panel (#95).
 const SHORTCUTS: Shortcut[] = [
   { keys: "⌘P", labelKey: "shortcuts.commandPalette" },
   { keys: "⌘S", labelKey: "shortcuts.manualSnapshot" },
@@ -17,6 +18,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: "⌘.", labelKey: "shortcuts.exitZenDialog" },
   { keys: "esc", labelKey: "shortcuts.escape" },
   { keys: "⌘⇧F", labelKey: "workspace.command.contextualEdit" },
+  { keys: "⌘J", labelKey: "workspace.command.agentPanel" },
   { keys: "⌘Z", labelKey: "shortcuts.undoBody" },
   { keys: "⌘⇧Z", labelKey: "shortcuts.redoBody" },
   { keys: "@", labelKey: "shortcuts.mentionSearch" },
@@ -26,10 +28,15 @@ const SHORTCUTS: Shortcut[] = [
 interface Props {
   open: boolean;
   onClose: () => void;
+  // agent_available: an iPad build can ship with no provider plumbed in at
+  // all, and Cmd+J does nothing when it isn't. Advertising the key anyway
+  // would send the writer to open a panel that can't open (#95).
+  agentAvailable: boolean;
 }
 
-export function ShortcutsModal({ open, onClose }: Props) {
+export function ShortcutsModal({ open, onClose, agentAvailable }: Props) {
   const { t } = useI18n();
+  const shortcuts = agentAvailable ? SHORTCUTS : SHORTCUTS.filter((s) => s.keys !== "⌘J");
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -56,7 +63,7 @@ export function ShortcutsModal({ open, onClose }: Props) {
         <h2>{t("shortcuts.title")}</h2>
         <p className="modal-sub">{t("shortcuts.subtitle")}</p>
         <div className="sc-grid">
-          {SHORTCUTS.map((s) => (
+          {shortcuts.map((s) => (
             <div className="sc-item" key={s.keys}>
               <span>{t(s.labelKey)}</span>
               <span className="kbd">{s.keys}</span>
