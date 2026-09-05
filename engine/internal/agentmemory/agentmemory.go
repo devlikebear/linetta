@@ -186,9 +186,11 @@ func bodyBefore(ctx context.Context, q rowQuerier, scope Scope, arg any) (string
 // hatch below: agentmemory.Apply's own budgeted() helper accepts a result
 // that is over budget as long as it is shorter than what it replaces, so an
 // agent can dig out of a document that is already too big. Save has to agree
-// with that exactly, because Apply never writes — the tool that calls it
-// always saves what comes back through Save, and a body Apply accepted must
-// not be refused a moment later here.
+// with that exactly. Apply never writes, and its only production caller is
+// Edit, which writes through replaceBody rather than through Save — but the
+// two rules still have to be exact complements, because Save is the path the
+// Settings textarea takes and a body one of them accepted must not be
+// refused a moment later by the other.
 func bodyRuneLenBefore(ctx context.Context, q rowQuerier, scope Scope, arg any) (int, error) {
 	body, err := bodyBefore(ctx, q, scope, arg)
 	if err != nil {
