@@ -34,6 +34,11 @@ const PROVIDER_ORDER: { id: ProviderID; labelKey: MessageKey }[] = [
   { id: "openai", labelKey: "settings.providers.name.openai" },
 ];
 
+/** The i18n key naming one provider, for interpolation into a sentence that
+ *  has to say which company it means — see the consent checkbox below. */
+const nameKeyFor = (id: ProviderID): MessageKey =>
+  PROVIDER_ORDER.find((p) => p.id === id)!.labelKey;
+
 export function ProviderSection() {
   const { t } = useI18n();
   const [list, setList] = useState<ProviderStatus[]>([]);
@@ -56,6 +61,12 @@ export function ProviderSection() {
   // failure is kept separate from `error` — see loadModels below.
   const [models, setModels] = useState<string[]>([]);
   const [modelsError, setModelsError] = useState<unknown>(null);
+  // providers.test's own result, kept apart from `error` for the same reason
+  // as the model list: a failed connection test is information about the
+  // provider, not a broken pane. Reset below whenever the provider changes,
+  // since a passing result belongs to the provider it was run against.
+  const [testResult, setTestResult] = useState<"ok" | null>(null);
+  const [testError, setTestError] = useState<unknown>(null);
   // The poll handle, so a second click cannot start a second loop and so the
   // interval dies with the component. A login the writer abandons must not
   // leave a timer calling the engine forever.
@@ -146,6 +157,15 @@ export function ProviderSection() {
     setModels([]);
     setModelsError(null);
   }, [active, list]);
+
+  // A passing test result belongs to the provider it was run against. A
+  // green tick left over from Anthropic sitting on the Gemini screen is a
+  // lie, so this clears on the provider itself — not on a `list` reload,
+  // for the same reason the drafts above key on `active` rather than data.
+  useEffect(() => {
+    setTestResult(null);
+    setTestError(null);
+  }, [active]);
 
   // codex.login_status is the only thing that knows whether an account is
   // signed in — providers.list says "configured", not who. Asking for it only
@@ -293,6 +313,41 @@ export function ProviderSection() {
     guard(async () => {
       await settingsApi.set({ providers: { [active]: { model: modelDraft.trim() } } });
       await refresh();
+    });
+
+  // The one decision this whole pane exists to make legible: from here on,
+  // scenes the writer asks the built-in agent about leave this machine and
+  // reach the company behind `active`. Consent lives in
+  // providers[id].consented_at — a plain epoch-ms int64 the engine overwrites
+  // wholesale, where 0 means none. It is NOT the ai_data_sharing_consent_*
+  // pair elsewhere in settings: that field is dead, read by nothing, and
+  // writing it would leave this checkbox looking like it works while the
+  // engine never sees consent.
+  const saveConsent = (consented: boolean) =>
+    guard(async () => {
+      await settingsApi.set({
+        providers: { [active]: { consented_at: consented ? Date.now() : 0 } },
+      });
+      await refresh();
+    });
+
+  // providers.test goes through Source.Client(), which requires Configured()
+  // AND Consented() on the engine side — this is a server contract, not a UX
+  // preference. So the button below is disabled until both are true; there
+  // is no way to "just check the key works" ahead of consent.
+  const runTest = () =>
+    guard(async () => {
+      setTestResult(null);
+      setTestError(null);
+      try {
+        await providersApi.test(active);
+        setTestResult("ok");
+      } catch (e) {
+        // Same reasoning as the model list: a failed test is information
+        // about the provider, not a broken pane, so it lands on its own line
+        // rather than in `error`.
+        setTestError(e);
+      }
     });
 
   return (
@@ -447,6 +502,36 @@ export function ProviderSection() {
           <p className="sd" data-testid="provider-model-error">
             {rpcErrorMessage(modelsError, t)}
           </p>
+        ) : null}
+      </div>
+
+      <label className="modal-field">
+        <input
+          type="checkbox"
+          checked={Boolean(current?.consented)}
+          disabled={busy}
+          onChange={(e) => void saveConsent(e.target.checked)}
+          data-testid="provider-consent"
+        />
+        {t("settings.providers.consent", { provider: t(nameKeyFor(active)) })}
+      </label>
+
+      <div className="modal-field">
+        <button
+          type="button"
+          disabled={busy || !current?.consented || !current?.configured}
+          onClick={() => void runTest()}
+          data-testid="provider-test"
+        >
+          {t("settings.providers.test")}
+        </button>
+        {testResult === "ok" ? (
+          <span data-testid="provider-test-ok">{t("settings.providers.test.ok")}</span>
+        ) : null}
+        {testError ? (
+          <span role="alert" data-testid="provider-test-error">
+            {rpcErrorMessage(testError, t)}
+          </span>
         ) : null}
       </div>
 

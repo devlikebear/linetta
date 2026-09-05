@@ -817,6 +817,9 @@ const messages = {
     "settings.providers.model": "모델",
     "settings.providers.model.default": "프로바이더 기본값",
     "settings.providers.model.refresh": "새로고침",
+    "settings.providers.consent": "씬 원문이 {provider}으로 전송되는 데 동의합니다",
+    "settings.providers.test": "연결 테스트",
+    "settings.providers.test.ok": "연결됨",
     "settings.git.alreadyRepo": "이미 git 저장소입니다",
   },
   en: {
@@ -1624,6 +1627,9 @@ const messages = {
     "settings.providers.model": "Model",
     "settings.providers.model.default": "Provider default",
     "settings.providers.model.refresh": "Refresh",
+    "settings.providers.consent": "I agree that my scenes' text will be sent to {provider}",
+    "settings.providers.test": "Test connection",
+    "settings.providers.test.ok": "Connected",
     "settings.git.alreadyRepo": "Already a git repository",
   },
   ja: {
@@ -2431,6 +2437,9 @@ const messages = {
     "settings.providers.model": "モデル",
     "settings.providers.model.default": "プロバイダーの既定値",
     "settings.providers.model.refresh": "更新",
+    "settings.providers.consent": "シーンの原文が{provider}に送信されることに同意します",
+    "settings.providers.test": "接続テスト",
+    "settings.providers.test.ok": "接続済み",
     "settings.git.alreadyRepo": "すでに git リポジトリです",
   },
 } as const;

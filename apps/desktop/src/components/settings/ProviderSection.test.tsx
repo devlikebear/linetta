@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const rpc = vi.hoisted(() => ({
   providersList: vi.fn(),
   providersListModels: vi.fn(),
+  providersTest: vi.fn(),
   settingsSet: vi.fn(),
   codexLoginStart: vi.fn(),
   codexLoginStatus: vi.fn(),
@@ -13,7 +14,11 @@ const rpc = vi.hoisted(() => ({
 }));
 
 vi.mock("../../lib/rpc", () => ({
-  providers: { list: rpc.providersList, listModels: rpc.providersListModels },
+  providers: {
+    list: rpc.providersList,
+    listModels: rpc.providersListModels,
+    test: rpc.providersTest,
+  },
   settings: { set: rpc.settingsSet },
   codex: {
     loginStart: rpc.codexLoginStart,
@@ -77,6 +82,7 @@ describe("ProviderSection", () => {
     // hides every bug in an effect keyed on the list.
     rpc.providersList.mockImplementation(() => Promise.resolve(rows(activeId, rowExtras)));
     rpc.providersListModels.mockImplementation(() => Promise.resolve({ models: [] }));
+    rpc.providersTest.mockImplementation(() => Promise.resolve({ ok: true }));
     rpc.settingsSet.mockImplementation((patch: { provider?: string }) => {
       if (patch.provider) activeId = patch.provider;
       return Promise.resolve({});
@@ -89,6 +95,9 @@ describe("ProviderSection", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    // Restores the Date.now spy the consent test installs, so a mocked
+    // "now" cannot leak into an unrelated test elsewhere in this file.
+    vi.restoreAllMocks();
   });
 
   it("renders the four providers and marks the active one", async () => {
@@ -119,6 +128,19 @@ describe("ProviderSection", () => {
     const state = await screen.findByTestId("provider-state");
     expect(state.textContent).toContain("settings.providers.state.configured");
     expect(state.textContent).toContain("settings.providers.state.consented");
+  });
+
+  it("shows not-configured and not-consented state for a fresh provider", async () => {
+    // Every existing test that reaches provider-state exercises the
+    // true/true row from rows()'s defaults being overridden. Nothing pinned
+    // the false/false branches, which is exactly the first-run state every
+    // new writer sees — a hardcoded happy-path string would pass everything
+    // else and be wrong here.
+    render(<ProviderSection />);
+
+    const state = await screen.findByTestId("provider-state");
+    expect(state.textContent).toContain("settings.providers.state.notConfigured");
+    expect(state.textContent).toContain("settings.providers.state.notConsented");
   });
 
   it("renders a reason code as a translated message", async () => {
@@ -808,5 +830,111 @@ describe("ProviderSection", () => {
 
     await waitFor(() => expect(rpc.codexLogout).toHaveBeenCalledTimes(1));
     expect(await screen.findByTestId("provider-codex-login")).toBeInTheDocument();
+  });
+
+  describe("consent and connection test", () => {
+    it("disables the connection test until consent is given", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: false } };
+      render(<ProviderSection />);
+
+      const button = await screen.findByTestId("provider-test");
+      expect(button).toBeDisabled();
+    });
+
+    it("disables the connection test until a credential is stored", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: false, consented: true } };
+      render(<ProviderSection />);
+
+      const button = await screen.findByTestId("provider-test");
+      expect(button).toBeDisabled();
+    });
+
+    it("enables the connection test once both consent and a credential are present", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      const button = await screen.findByTestId("provider-test");
+      expect(button).toBeEnabled();
+    });
+
+    it("writes consent as providers[id].consented_at", async () => {
+      // The exact patch shape is the point: a wrong field name (e.g. the
+      // dead ai_data_sharing_consent_* pair) would leave this screen looking
+      // like it works while the engine never sees consent.
+      activeId = "anthropic";
+      vi.spyOn(Date, "now").mockReturnValue(1700000000000);
+      render(<ProviderSection />);
+
+      const checkbox = await screen.findByTestId("provider-consent");
+      await userEvent.click(checkbox);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { consented_at: 1700000000000 } },
+        }),
+      );
+    });
+
+    it("revokes consent by writing zero", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { consented: true } };
+      render(<ProviderSection />);
+
+      const checkbox = await screen.findByTestId("provider-consent");
+      expect(checkbox).toBeChecked();
+
+      await userEvent.click(checkbox);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { consented_at: 0 } },
+        }),
+      );
+    });
+
+    it("names the provider in the consent label", async () => {
+      activeId = "anthropic";
+      render(<ProviderSection />);
+
+      const checkbox = await screen.findByTestId("provider-consent");
+      expect(checkbox.closest("label")?.textContent).toBe(
+        "settings.providers.consent:settings.providers.name.anthropic",
+      );
+    });
+
+    it("clears a passing test result when the provider changes", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("provider-choice-gemini-native"));
+      await screen.findByTestId("provider-key-input");
+
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("renders a failed test as a translated reason, not a raw message", async () => {
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      rpc.providersTest.mockImplementation(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_auth_failed" } })),
+      );
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+
+      const error = await screen.findByTestId("provider-test-error");
+      expect(error.textContent).toBe("errors.providerAuthFailed");
+      expect(error).toHaveAttribute("role", "alert");
+      // A failed connection test is information about the provider, not a
+      // broken pane — same reasoning as the model list in Task 4.
+      expect(screen.queryByTestId("provider-error")).toBeNull();
+    });
   });
 });
