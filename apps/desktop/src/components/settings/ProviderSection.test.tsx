@@ -916,7 +916,10 @@ describe("ProviderSection", () => {
       rpc.settingsSet.mockImplementation(
         (patch: {
           provider?: string;
-          providers?: Record<string, { consented_at?: number; api_key?: string }>;
+          providers?: Record<
+            string,
+            { consented_at?: number; api_key?: string; base_url?: string }
+          >;
         }) => {
           if (patch.provider) activeId = patch.provider;
           for (const [id, fields] of Object.entries(patch.providers ?? {})) {
@@ -925,6 +928,9 @@ describe("ProviderSection", () => {
             }
             if (fields.api_key !== undefined) {
               rowExtras[id] = { ...rowExtras[id], configured: fields.api_key !== "" };
+            }
+            if (fields.base_url !== undefined) {
+              rowExtras[id] = { ...rowExtras[id], base_url: fields.base_url };
             }
           }
           return Promise.resolve({});
@@ -1080,6 +1086,66 @@ describe("ProviderSection", () => {
       );
       await flush();
       expect(screen.getByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("clears a passing test result when the base URL changes", async () => {
+      // The consent sentence for `openai` names the destination — see
+      // "names the configured endpoint" above — so a "Connected" badge next
+      // to it implies *that* endpoint was verified. A result earned against
+      // the old base_url must not survive a change to a new one, even though
+      // `configured` and `consented` never flip.
+      activeId = "openai";
+      rowExtras = {
+        openai: {
+          configured: true,
+          consented: true,
+          base_url: "https://openrouter.ai/api/v1",
+        },
+      };
+      persistWrites();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      const baseUrlInput = screen.getByTestId("provider-base-url-input");
+      await userEvent.clear(baseUrlInput);
+      await userEvent.type(baseUrlInput, "https://api.together.xyz/v1");
+      fireEvent.blur(baseUrlInput);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { openai: { base_url: "https://api.together.xyz/v1" } },
+        }),
+      );
+      await flush();
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("clears a passing test result when the key is rotated to a different one", async () => {
+      // The other half of the same class of bug: `configured` stays true on
+      // both sides of a key rotation (a key was, and still is, stored), so a
+      // dependency array built only from booleans cannot tell the old
+      // credential from the new one. A passing result must not survive it.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      persistWrites();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      const keyInput = screen.getByTestId("provider-key-input");
+      await userEvent.type(keyInput, "sk-new-rotated-key");
+      await userEvent.click(screen.getByTestId("provider-key-save"));
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { api_key: "sk-new-rotated-key" } },
+        }),
+      );
+      await flush();
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
     });
 
     it("keeps the checkbox ticked after consent is saved", async () => {

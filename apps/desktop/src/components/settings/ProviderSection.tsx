@@ -67,6 +67,10 @@ export function ProviderSection() {
   // since a passing result belongs to the provider it was run against.
   const [testResult, setTestResult] = useState<"ok" | null>(null);
   const [testError, setTestError] = useState<unknown>(null);
+  // Bumped only by this pane's own saveKey/clearKey, below — see the big
+  // comment on the clear-effect for why a local counter stands in for a key
+  // value this component is never given.
+  const [credentialEpoch, setCredentialEpoch] = useState(0);
   // The poll handle, so a second click cannot start a second loop and so the
   // interval dies with the component. A login the writer abandons must not
   // leave a timer calling the engine forever.
@@ -159,22 +163,40 @@ export function ProviderSection() {
   }, [active, list]);
 
   // A passing test result belongs to the provider it was run against *and*
-  // to the credentials and consent it was run under. A green tick left over
-  // from Anthropic sitting on the Gemini screen is a lie; so is one still
-  // reading "Connected" after the writer has unticked consent or cleared the
-  // key, because the connection it describes can no longer be made.
+  // to the destination, credentials, and consent it was run under. A green
+  // tick left over from Anthropic sitting on the Gemini screen is a lie; so
+  // is one still reading "Connected" after the writer has unticked consent,
+  // cleared the key, or — for `openai` — repointed base_url at a different
+  // server, because the connection it describes can no longer be made (or
+  // was never made against what the screen now names).
   //
-  // The dependencies are the three booleans-and-an-id themselves, never
-  // `list`: refresh() hands back a fresh array on every background reload
-  // (a model save, an abandoned Codex login's poll tick), and keying on that
-  // identity would make a passing tick vanish for no reason the writer can
-  // see. Primitives only change when the fact they encode changes.
+  // The dependencies below are values, never `list` itself: refresh() hands
+  // back a fresh array on every background reload (a model save, an
+  // abandoned Codex login's poll tick), and keying on that identity would
+  // make a passing tick vanish for no reason the writer can see. A value
+  // only changes when the fact it encodes changes.
+  //
+  // `base_url` is on ProviderStatus, so it can be keyed on directly and
+  // covers the endpoint-swap case above. The API key cannot be: settings.get
+  // returns only `api_key_set` (surfaced here as `configured`), never the
+  // key itself, so there is no key *value* this effect could ever compare.
+  // `configured` only flips on a bare set/clear transition — rotating to a
+  // different key while a key is already stored leaves it true on both
+  // sides, and no field on ProviderStatus says otherwise. `credentialEpoch`
+  // below is the honest substitute: a local counter bumped only by this
+  // pane's own saveKey/clearKey, i.e. the one place a key change is known to
+  // have happened, rather than a proxy read off server state that would
+  // silently miss the same case `configured` does. It still cannot see a key
+  // changed some other way (hand-editing the settings file, a second window)
+  // while this pane stays mounted — there is no observable on ProviderStatus
+  // that would close that gap either.
   const consented = Boolean(current?.consented);
   const configured = Boolean(current?.configured);
+  const baseUrl = current?.base_url ?? "";
   useEffect(() => {
     setTestResult(null);
     setTestError(null);
-  }, [active, consented, configured]);
+  }, [active, consented, configured, baseUrl, credentialEpoch]);
 
   // codex.login_status is the only thing that knows whether an account is
   // signed in — providers.list says "configured", not who. Asking for it only
@@ -271,6 +293,10 @@ export function ProviderSection() {
     guard(async () => {
       await settingsApi.set({ providers: { [active]: { api_key: keyDraft.trim() } } });
       setKeyDraft("");
+      // A rotated key can leave `configured` true on both sides of the
+      // write, so it is this call itself — not a value read back off
+      // providers.list — that tells the clear-effect a credential changed.
+      setCredentialEpoch((n) => n + 1);
       await refresh();
     });
 
@@ -281,6 +307,7 @@ export function ProviderSection() {
     guard(async () => {
       await settingsApi.set({ providers: { [active]: { api_key: "" } } });
       setKeyDraft("");
+      setCredentialEpoch((n) => n + 1);
       await refresh();
     });
 
