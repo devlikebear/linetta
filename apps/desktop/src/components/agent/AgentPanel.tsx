@@ -87,11 +87,15 @@ type NoticeLine =
 
 interface AgentDeltaPayload {
   run_id: string;
+  /** The work this event belongs to. See `forThisProject`. */
+  project_id: string;
   text: string;
 }
 
 interface AgentToolPayload {
   run_id: string;
+  /** The work this event belongs to. See `forThisProject`. */
+  project_id: string;
   name: string;
   state: "started" | "done" | "error";
   /** Never rendered. See the `summary` note on `Line` and lib/agentTools.ts:
@@ -110,18 +114,24 @@ interface AgentToolPayload {
 
 interface AgentDonePayload {
   run_id: string;
+  /** The work this event belongs to. See `forThisProject`. */
+  project_id: string;
   model?: string;
   usage: { input: number; output: number };
 }
 
 interface AgentErrorPayload {
   run_id: string;
+  /** The work this event belongs to. See `forThisProject`. */
+  project_id: string;
   reason: string;
   message: string;
 }
 
 interface AgentCancelledPayload {
   run_id: string;
+  /** The work this event belongs to. See `forThisProject`. */
+  project_id: string;
 }
 
 /** The composer's growth cap, in px. Must match `max-height` on
@@ -482,10 +492,22 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     toolOccurrenceRef.current.clear();
     // A send for the work being left is still out. Its run id cannot be named
     // yet, so the send is fenced instead — read before discardSendWindow,
-    // which is what clears the flag this asks. (Checked, not set, on a second
-    // switch with nothing in flight: a fence raised by an earlier jump must
-    // stay up until that send actually lands.)
-    if (pendingSendRef.current) {
+    // which is what clears the flag this asks. (A fence raised by an earlier
+    // jump must also stay up until that send actually lands, which is what
+    // the second half of the condition is for.)
+    //
+    // Reading `orphanedSendRef` as well as `pendingSendRef` is what makes the
+    // raise idempotent, and that is load-bearing under StrictMode (on in
+    // main.tsx). React double-invokes the render body and discards the
+    // queued state updates of the first pass — but NOT its ref mutations, and
+    // discardSendWindow() below clears pendingSendRef in that same body. So a
+    // pendingSendRef-only condition is true on the first pass and false on the
+    // second: setOrphanedSend(true) is queued, then thrown away, while
+    // orphanedSendRef stays true. The fence still refuses (nothing leaks) but
+    // the send button no longer says so — the writer sees a live control,
+    // presses it, and nothing happens, which is the exact failure the mirror
+    // exists to prevent.
+    if (pendingSendRef.current || orphanedSendRef.current) {
       orphanedSendRef.current = true;
       setOrphanedSend(true);
     }
@@ -503,11 +525,36 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     setSendError(null);
   }
 
+  /** True when a wire event belongs to the work this panel is showing.
+   *
+   *  Every agent.* notification names its project (engine/internal/agent/
+   *  loop.go), because a run id alone does not say whose conversation an
+   *  event is. Everything else in this file that answers that question —
+   *  `abandonedRunsRef`, `orphanedSendRef`, `sendTokenRef`, the reset — is
+   *  reconstructing it from what this mount happens to remember doing, and
+   *  each of those covers a different interval: the ones whose run is already
+   *  named, the ones whose name is still in the post. A fresh mount remembers
+   *  none of it, which is why closing the panel during a turn, jumping to
+   *  another work and reopening streamed the first work's prose into the
+   *  second's log even with all three in place.
+   *
+   *  This is the fact itself rather than an inference from it, so it holds on
+   *  a mount that has just been created as readily as on one that has been
+   *  open all along. */
+  function forThisProject(payload: { project_id: string }): boolean {
+    return payload.project_id === projectId;
+  }
+
   /** Wraps a wire handler so anything arriving inside the send window waits
    *  for a run id to judge it against, instead of being judged against the
-   *  previous turn's. */
-  function whileNotSending<T>(apply: (payload: T) => void) {
+   *  previous turn's.
+   *
+   *  The project check comes first, ahead of the window: an event for another
+   *  work must not even be held, or the flush would replay it into this
+   *  work's log the moment this panel's own send lands. */
+  function whileNotSending<T extends { project_id: string }>(apply: (payload: T) => void) {
     return (payload: T) => {
+      if (!forThisProject(payload)) return;
       if (deferDuringSend(() => apply(payload))) return;
       apply(payload);
     };

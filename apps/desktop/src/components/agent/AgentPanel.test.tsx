@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -120,11 +121,23 @@ async function renderReady(onClose = vi.fn()) {
   return view;
 }
 
+/** Emits one wire event.
+ *
+ *  Every agent.* payload carries `project_id` (#95 Task 7 review round 3) and
+ *  the panel refuses anything that does not name the work it is showing, so a
+ *  payload written without one gets PROJECT_ID — the project every test here
+ *  renders at unless it says otherwise. The tests about one work's events
+ *  reaching another's panel pass it explicitly, which is the only way to write
+ *  the leak they are pinning. */
 async function emit(event: string, payload: unknown) {
   const cb = ev.listeners.get(event);
   if (!cb) throw new Error(`${event} listener was never registered`);
+  const named =
+    payload && typeof payload === "object" && !("project_id" in payload)
+      ? { project_id: PROJECT_ID, ...payload }
+      : payload;
   await act(async () => {
-    cb({ payload });
+    cb({ payload: named });
   });
 }
 
@@ -1898,5 +1911,224 @@ describe("AgentPanel restore notice boundaries (#95 Task 7 review round 2)", () 
     const logged = consoleError.mock.calls.map((args) => args.join(" ")).join("\n");
     expect(logged).not.toContain("same key");
     consoleError.mockRestore();
+  });
+});
+
+describe("AgentPanel project ownership on the wire (#95 Task 7 review round 3)", () => {
+  // Same hand-driven frames as the round-2 block: jsdom's requestAnimationFrame
+  // never runs inside `act`, so a delta that IS wrongly adopted renders an
+  // empty bubble and hides the prose it leaked.
+  const frames: FrameRequestCallback[] = [];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ configured: true, consented: true })]),
+    );
+    frames.length = 0;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function flushFrames(limit = 40) {
+    for (let i = 0; i < limit; i++) {
+      const queued = frames.splice(0, frames.length);
+      if (queued.length === 0) return;
+      await act(async () => {
+        for (const cb of queued) cb(i);
+      });
+    }
+  }
+
+  function panelFor(projectId: string, strict = false) {
+    const panel = (
+      <MemoryRouter>
+        <AgentPanel onClose={vi.fn()} projectId={projectId} nodeId={NODE_ID} />
+      </MemoryRouter>
+    );
+    // StrictMode is on in main.tsx, and one of the tests below only fails
+    // under it — see "keeps the send button's disabled mirror".
+    return strict ? <StrictMode>{panel}</StrictMode> : panel;
+  }
+
+  async function renderReadyAt(projectId: string, strict = false) {
+    const view = render(panelFor(projectId, strict));
+    await screen.findByTestId("agent-log");
+    return view;
+  }
+
+  async function jumpTo(view: ReturnType<typeof render>, projectId: string, strict = false) {
+    await act(async () => {
+      view.rerender(panelFor(projectId, strict));
+    });
+  }
+
+  function log() {
+    return screen.getByTestId("agent-log");
+  }
+
+  it("refuses another work's delta on a panel that was only just mounted", async () => {
+    // The mount boundary. A turn is running for A; the writer closes the agent
+    // panel (Workspace unmounts it), jumps to B, and opens it again. The fresh
+    // mount has an empty abandonedRunsRef, a null currentRunIdRef and no
+    // fence, so every client-side guard this panel has grown over three review
+    // rounds starts out knowing nothing — and A's next delta is the first
+    // event it sees.
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "run-a" }));
+    const first = await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+    await act(async () => {
+      first.unmount();
+    });
+
+    await renderReadyAt(OTHER_PROJECT_ID);
+    await emit("agent-delta", {
+      run_id: "run-a",
+      project_id: PROJECT_ID,
+      text: "A작품에만 있던 은밀한 문장",
+    });
+    await flushFrames();
+
+    expect(log().querySelectorAll(".msg.bot")).toHaveLength(0);
+    expect(log().textContent).not.toContain("A작품에만 있던 은밀한 문장");
+  });
+
+  it("refuses another work's tool and terminal events on a freshly mounted panel", async () => {
+    // The same boundary for the events that are not prose: a tool line in the
+    // wrong log names work the writer did not ask for, and a terminal event
+    // hands the composer a turn that is not theirs.
+    await renderReadyAt(OTHER_PROJECT_ID);
+    await emit("agent-tool", {
+      run_id: "run-a",
+      project_id: PROJECT_ID,
+      name: "linetta_write_scene",
+      state: "started",
+    });
+    await emit("agent-error", {
+      run_id: "run-a",
+      project_id: PROJECT_ID,
+      reason: "agent_internal_error",
+      message: "",
+    });
+    await emit("agent-cancelled", { run_id: "run-a", project_id: PROJECT_ID });
+
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
+    expect(screen.queryAllByTestId("agent-notice")).toHaveLength(0);
+  });
+
+  it("refuses another work's delta after its send was refused, not just after it was named", async () => {
+    // The catch branch lowers the fence with nothing named: on a rejection no
+    // run id was ever minted, so clearOrphanedSend() runs and abandonedRunsRef
+    // gains nothing. From that instant the null-adopt path is open again, and
+    // an event for the abandoned work's run has no client-side guard left to
+    // meet.
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+
+    await jumpTo(view, OTHER_PROJECT_ID);
+    await act(async () => {
+      pending.reject(new Error("provider went away"));
+    });
+
+    await emit("agent-delta", {
+      run_id: "run-a",
+      project_id: PROJECT_ID,
+      text: "A작품에만 있던 다른 문장",
+    });
+    await flushFrames();
+
+    expect(log().querySelectorAll(".msg.bot")).toHaveLength(0);
+    expect(log().textContent).not.toContain("A작품에만 있던 다른 문장");
+    // And the refusal itself is still not reported in the work the writer is
+    // now looking at (round 1's rule, unchanged).
+    expect(log().textContent).not.toContain("A작품 요청");
+  });
+
+  it("keeps the send button's disabled mirror in step with the fence under StrictMode", async () => {
+    // React double-invokes the render body and discards the first pass's
+    // queued state updates — but not its ref mutations, and the reset's own
+    // discardSendWindow() clears pendingSendRef in that same body. A raise
+    // conditioned on pendingSendRef alone therefore lands only in the pass
+    // that is thrown away: the ref fence still refuses (nothing leaks) but the
+    // button says the writer may send, and pressing it does nothing.
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+    const view = await renderReadyAt(PROJECT_ID, true);
+    await type("A작품 요청");
+    await pressEnter();
+    expect(rpc.agentRun).toHaveBeenCalledTimes(1);
+
+    await jumpTo(view, OTHER_PROJECT_ID, true);
+    await type("B작품 요청");
+
+    expect((screen.getByTestId("agent-send") as HTMLButtonElement).disabled).toBe(true);
+    // The affordance and the behaviour have to agree: a live-looking button
+    // that swallows the press is the failure this mirror exists to prevent.
+    await pressEnter();
+    expect(rpc.agentRun).toHaveBeenCalledTimes(1);
+    expect(composer().value).toBe("B작품 요청");
+
+    // And it comes back the moment the abandoned send settles.
+    await act(async () => {
+      pending.resolve({ run_id: "run-a" });
+    });
+    expect((screen.getByTestId("agent-send") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("still refuses a named abandoned run once the writer jumps back to its work", async () => {
+    // A → B → A. The project check cannot help here: the event names the work
+    // now on screen, and it is telling the truth. abandonedRunsRef is the only
+    // thing that knows this run's bubble is gone — restored from history
+    // instead — so this is what keeps it pinned now that the wire says whose
+    // an event is.
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "run-a" }));
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+
+    await jumpTo(view, OTHER_PROJECT_ID);
+    await jumpTo(view, PROJECT_ID);
+    await emit("agent-tool", {
+      run_id: "run-a",
+      project_id: PROJECT_ID,
+      name: "linetta_write_scene",
+      state: "started",
+    });
+
+    expect(screen.queryAllByTestId("tool-line")).toHaveLength(0);
+  });
+
+  it("still fences an unnamed abandoned send once the writer jumps back to its work", async () => {
+    // The same A → B → A shape while the run id is still in the post. The
+    // event names the work on screen, currentRunIdRef is null, and nothing is
+    // in abandonedRunsRef yet — orphanedSendRef is the only refusal left, and
+    // it has to survive the second switch to give it.
+    const pending = deferred<{ run_id: string }>();
+    rpc.agentRun.mockImplementation(() => pending.promise);
+    const view = await renderReadyAt(PROJECT_ID);
+    await type("A작품 요청");
+    await pressEnter();
+
+    await jumpTo(view, OTHER_PROJECT_ID);
+    await jumpTo(view, PROJECT_ID);
+    await emit("agent-delta", {
+      run_id: "run-a",
+      project_id: PROJECT_ID,
+      text: "이름이 아직 붙지 않은 문장",
+    });
+    await flushFrames();
+
+    expect(log().querySelectorAll(".msg.bot")).toHaveLength(0);
+    expect(log().textContent).not.toContain("이름이 아직 붙지 않은 문장");
   });
 });

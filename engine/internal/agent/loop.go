@@ -107,14 +107,19 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	}
 
 	st := loopState{
-		runID:    runID,
-		req:      req,
-		client:   client,
-		provider: resolved.ID,
-		model:    resolved.Model,
-		session:  tools,
-		schemas:  schemas,
-		language: s.language(),
+		runID: runID,
+		// The trimmed id — the same value runs.start and appendUser key on,
+		// not req.ProjectID's raw form. Every agent.* notification carries it
+		// (#95 Task 7 review round 3), so a padded id can never make the
+		// panel's own equality check disagree with the engine's.
+		projectID: projectID,
+		req:       req,
+		client:    client,
+		provider:  resolved.ID,
+		model:     resolved.Model,
+		session:   tools,
+		schemas:   schemas,
+		language:  s.language(),
 	}
 
 	go func() {
@@ -138,7 +143,14 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 
 type loopState struct {
 	runID string
-	req   RunRequest
+	// projectID is the work this turn belongs to, trimmed. It is on every
+	// notification this file emits rather than only in the transcript,
+	// because a run id alone does not say whose conversation an event is —
+	// and a panel that has to reconstruct that from its own bookkeeping
+	// (which run it started, which it abandoned, which send is still out)
+	// is reconstructing a fact the emitter already knows.
+	projectID string
+	req       RunRequest
 	// provider is the resolved provider id ("anthropic", "openai-codex", …).
 	// It names the failure in an agent.error message, the same way
 	// provider.Classify names it for the settings connection test.
@@ -150,18 +162,27 @@ type loopState struct {
 	language string
 }
 
+// Every payload below carries project_id beside run_id, spelled the same way
+// mcphost.ChangedPayload spells it. A turn outlives the RPC call that started
+// it (#93), so its events keep arriving after the writer has moved to another
+// work — and a panel told only the run id has to infer ownership from what it
+// remembers starting, which is exactly the inference three review rounds of
+// #95 kept finding a new gap in. The emitter knows the answer; it says it.
+
 type deltaPayload struct {
-	RunID string `json:"run_id"`
-	Text  string `json:"text"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Text      string `json:"text"`
 }
 
 type toolPayload struct {
-	RunID   string   `json:"run_id"`
-	Name    string   `json:"name"`
-	State   string   `json:"state"` // started | done | error
-	Summary string   `json:"summary,omitempty"`
-	BatchID string   `json:"batch_id,omitempty"`
-	NodeIDs []string `json:"node_ids,omitempty"`
+	RunID     string   `json:"run_id"`
+	ProjectID string   `json:"project_id"`
+	Name      string   `json:"name"`
+	State     string   `json:"state"` // started | done | error
+	Summary   string   `json:"summary,omitempty"`
+	BatchID   string   `json:"batch_id,omitempty"`
+	NodeIDs   []string `json:"node_ids,omitempty"`
 }
 
 type usagePayload struct {
@@ -170,19 +191,22 @@ type usagePayload struct {
 }
 
 type donePayload struct {
-	RunID string       `json:"run_id"`
-	Model string       `json:"model,omitempty"`
-	Usage usagePayload `json:"usage"`
+	RunID     string       `json:"run_id"`
+	ProjectID string       `json:"project_id"`
+	Model     string       `json:"model,omitempty"`
+	Usage     usagePayload `json:"usage"`
 }
 
 type errorPayload struct {
-	RunID   string `json:"run_id"`
-	Reason  string `json:"reason"`
-	Message string `json:"message"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Reason    string `json:"reason"`
+	Message   string `json:"message"`
 }
 
 type cancelledPayload struct {
-	RunID string `json:"run_id"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
 }
 
 // loop is the turn. It ends when the model stops asking for tools, when it
@@ -198,8 +222,10 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 
 	for {
 		resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
-			Tools:   st.schemas,
-			OnDelta: func(text string) { s.notify("agent.delta", deltaPayload{st.runID, text}) },
+			Tools: st.schemas,
+			OnDelta: func(text string) {
+				s.notify("agent.delta", deltaPayload{RunID: st.runID, ProjectID: st.projectID, Text: text})
+			},
 		})
 		if err != nil {
 			s.endWithError(ctx, st, err)
@@ -219,7 +245,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 		}
 
 		if len(resp.Message.ToolCalls) == 0 {
-			s.notify("agent.done", donePayload{RunID: st.runID, Model: st.model, Usage: usage})
+			s.notify("agent.done", donePayload{RunID: st.runID, ProjectID: st.projectID, Model: st.model, Usage: usage})
 			return
 		}
 
@@ -307,7 +333,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 // off the request's _meta.
 func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) toolResult {
 	s.notify("agent.tool", toolPayload{
-		RunID: st.runID, Name: call.Name, State: "started",
+		RunID: st.runID, ProjectID: st.projectID, Name: call.Name, State: "started",
 		Summary: summarize(call.Arguments),
 	})
 
@@ -318,7 +344,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 		state = "error"
 	}
 	s.notify("agent.tool", toolPayload{
-		RunID: st.runID, Name: call.Name, State: state,
+		RunID: st.runID, ProjectID: st.projectID, Name: call.Name, State: state,
 		Summary: summarize(result.Text), BatchID: result.BatchID, NodeIDs: result.NodeIDs,
 	})
 	// Recorded with a context that survives the turn's own cancellation,
@@ -355,7 +381,7 @@ func (s *Service) endCancelled(ctx context.Context, st loopState) {
 	if err := s.tr.markRun(ctx, st.runID, companion.HistoryStatusCancelled); err != nil {
 		logf("transcript: %v", err)
 	}
-	s.notify("agent.cancelled", cancelledPayload{st.runID})
+	s.notify("agent.cancelled", cancelledPayload{RunID: st.runID, ProjectID: st.projectID})
 }
 
 // endWithError maps a provider failure to a reason code. The provider's own
@@ -410,7 +436,7 @@ func (s *Service) endWithReason(ctx context.Context, st loopState, reason, messa
 	if err := s.tr.markRun(ctx, st.runID, status); err != nil {
 		logf("transcript: %v", err)
 	}
-	s.notify("agent.error", errorPayload{RunID: st.runID, Reason: reason, Message: message})
+	s.notify("agent.error", errorPayload{RunID: st.runID, ProjectID: st.projectID, Reason: reason, Message: message})
 }
 
 func summarize(s string) string {
