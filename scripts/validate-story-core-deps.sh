@@ -41,14 +41,20 @@ for pkg in ./internal/storycontext ./internal/storyops ./internal/mcphost ./inte
   fi
 done
 
-allowed='internal/provider|internal/agent'
+# internal/agenttest carries a scripted tars/pkg/llm.Client for engineapp's
+# full-stack agent test — test-only scaffolding, and imported only from test
+# files. It is allowed to import llm for the same reason internal/agent is,
+# but unlike internal/agent it must never appear in a shipped binary's
+# dependency graph: `go list -deps ./cmd/...` must never show it. (Verified in
+# CI and by hand — see Task 7's fix round for the check that confirms it.)
+allowed='internal/provider|internal/agent|internal/agenttest'
 # `go list` separated from the filtering on purpose: a `go list` failure must
 # still abort, while an empty filter result (nobody imports it) is the pass
 # case and keeps its `|| true`.
 imports=$(go list -test -f '{{.ImportPath}}: {{join .Imports " "}}' ./...)
 importers=$(grep -F "$llm" <<<"$imports" | cut -d: -f1 | grep -Ev "/($allowed)(\s+\[.*\])?$" || true)
 if [ -n "$importers" ]; then
-  echo "error: only internal/provider and internal/agent may import $llm; found:" >&2
+  echo "error: only internal/provider, internal/agent and internal/agenttest may import $llm; found:" >&2
   echo "$importers" >&2
   exit 1
 fi

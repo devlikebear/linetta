@@ -19,6 +19,14 @@ const activityRetention = 500
 // caller does not ask for a specific count.
 const DefaultActivityLimit = 100
 
+// Who called a tool. External is every MCP client that reaches the HTTP host;
+// agent is Linetta's own panel, which speaks to a second server instance over
+// an in-memory transport.
+const (
+	SourceExternal = "external"
+	SourceAgent    = "agent"
+)
+
 // ActivityEntry is one recorded tool call.
 type ActivityEntry struct {
 	ID        string `json:"id"`
@@ -28,6 +36,8 @@ type ActivityEntry struct {
 	TargetID  string `json:"target_id,omitempty"`
 	OK        bool   `json:"ok"`
 	Detail    string `json:"detail,omitempty"`
+	Source    string `json:"source"`
+	RunID     string `json:"run_id,omitempty"`
 }
 
 // ActivityRepo persists the MCP audit trail.
@@ -54,10 +64,14 @@ func (r *ActivityRepo) Record(ctx context.Context, e ActivityEntry) error {
 	if e.At == 0 {
 		e.At = r.now()
 	}
+	if e.Source == "" {
+		e.Source = SourceExternal
+	}
 	if _, err := r.db.ExecContext(ctx,
-		`INSERT INTO mcp_activity (id, at, tool, project_id, target_id, ok, detail)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO mcp_activity (id, at, tool, project_id, target_id, ok, detail, source, run_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.At, e.Tool, e.ProjectID, e.TargetID, boolToInt(e.OK), truncate(e.Detail, 500),
+		e.Source, e.RunID,
 	); err != nil {
 		return err
 	}
@@ -77,7 +91,7 @@ func (r *ActivityRepo) List(ctx context.Context, limit int) ([]ActivityEntry, er
 		limit = DefaultActivityLimit
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, at, tool, project_id, target_id, ok, detail
+		`SELECT id, at, tool, project_id, target_id, ok, detail, source, run_id
 		 FROM mcp_activity ORDER BY at DESC, id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -88,7 +102,8 @@ func (r *ActivityRepo) List(ctx context.Context, limit int) ([]ActivityEntry, er
 	for rows.Next() {
 		var e ActivityEntry
 		var ok int
-		if err := rows.Scan(&e.ID, &e.At, &e.Tool, &e.ProjectID, &e.TargetID, &ok, &e.Detail); err != nil {
+		if err := rows.Scan(&e.ID, &e.At, &e.Tool, &e.ProjectID, &e.TargetID, &ok, &e.Detail,
+			&e.Source, &e.RunID); err != nil {
 			return nil, err
 		}
 		e.OK = ok != 0

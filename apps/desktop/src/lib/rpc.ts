@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AgentHistoryRow,
+  AgentRunResult,
   ApplyContextResult,
   ApplyContextSelection,
   Beat,
@@ -337,6 +339,19 @@ export const codex = {
   loginStart: () => rpcCall<CodexLoginStart>("codex.login_start"),
   loginStatus: () => rpcCall<CodexStatus>("codex.login_status"),
   logout: () => rpcCall<{ ok: true }>("codex.logout"),
+};
+
+/** The built-in agent's loop (#93). Its panel is #95; these wrappers are the
+ *  only way the renderer can reach agent.* today — a manual JSON-RPC call is
+ *  the alternative until the panel calls them. */
+export const agent = {
+  run: (projectId: string, prompt: string, nodeId?: string) =>
+    rpcCall<AgentRunResult>("agent.run", { project_id: projectId, node_id: nodeId, prompt }),
+  cancel: (runId: string) => rpcCall<{ ok: true }>("agent.cancel", { run_id: runId }),
+  history: (projectId: string, limit?: number) =>
+    rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),
+  clear: (projectId: string) => rpcCall<{ ok: true }>("agent.clear", { project_id: projectId }),
+  undo: (batchId: string) => rpcCall<{ ok: true }>("agent.undo", { batch_id: batchId }),
 };
 
 export const gitSync = {

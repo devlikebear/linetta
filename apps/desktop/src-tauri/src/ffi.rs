@@ -217,6 +217,15 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // An external MCP client changed the manuscript. Without this the
         // writer would keep looking at text the agent already replaced.
         "mcp.changed" => Some("mcp-changed"),
+        // The built-in agent's turn (#93). The panel is driven entirely by
+        // these: text as it streams, tool activity, and the three ways a turn
+        // ends. The removed companion's ai.* names are deliberately not
+        // reused — a stale listener must never match a new event.
+        "agent.delta" => Some("agent-delta"),
+        "agent.tool" => Some("agent-tool"),
+        "agent.done" => Some("agent-done"),
+        "agent.error" => Some("agent-error"),
+        "agent.cancelled" => Some("agent-cancelled"),
         _ => None,
     }
 }
@@ -388,6 +397,20 @@ mod tests {
         // text an external agent already replaced.
         assert_eq!(notification_event("mcp.changed"), Some("mcp-changed"));
         assert_eq!(notification_event("mcp.unmapped"), None);
+    }
+
+    #[test]
+    fn agent_notifications_are_forwarded_to_the_renderer() {
+        // The panel is driven entirely by these. A method missing here fails
+        // silently: the engine emits, nothing listens, and the panel hangs on
+        // a reply that already arrived.
+        assert_eq!(notification_event("agent.delta"), Some("agent-delta"));
+        assert_eq!(notification_event("agent.tool"), Some("agent-tool"));
+        assert_eq!(notification_event("agent.done"), Some("agent-done"));
+        assert_eq!(notification_event("agent.error"), Some("agent-error"));
+        assert_eq!(notification_event("agent.cancelled"), Some("agent-cancelled"));
+        // The removed companion's names must never come back.
+        assert_eq!(notification_event("ai.delta"), None);
     }
 
     #[cfg(target_os = "windows")]

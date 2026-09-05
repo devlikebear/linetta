@@ -61,6 +61,15 @@ type App struct {
 	cancel  context.CancelFunc
 	closers []func() error
 	once    sync.Once
+	// providerSrc is kept for the test seam in agent_seams_test.go
+	// (SetProviderFactoryForTest): the agent's loop is only testable if its
+	// client can be replaced without a network.
+	providerSrc *provider.Source
+	// agentCtrl and mcpTools exist for agent_wiring_test.go (#93 fix round
+	// 1): white-box, same-package access to the composed ToolDeps, rather
+	// than an exported accessor. Neither is read outside tests.
+	agentCtrl *agentController
+	mcpTools  agentToolDeps
 }
 
 // Open constructs the full Linetta engine and registers every JSONRPC handler.
@@ -216,7 +225,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithMemorySource(companionSvc).
 		WithReferenceSource(companionSvc)
 
-	mcpCtrl, stopMCP := setupMCP(mcpDeps{
+	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
 		settingsStore: settingsStore,
 		home:          home,
 		repos: mcpToolRepos{
@@ -252,10 +261,35 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 
 	providerSrc := provider.NewSource(settingsStore, codexHome)
 	providers := providerService{src: providerSrc}
+	a.providerSrc = providerSrc
+
+	// The built-in agent (#93). A second storyops service of its own, for the
+	// same reason the MCP host has one: undo batches live in memory on the
+	// service, so the panel's undo button can only revert what the panel did.
+	agentStory := storyops.New(projects, nodes, threads, beats, entities, relationships).
+		WithFacts(facts).
+		WithSnapshots(snaps).
+		WithMemory(companionSvc)
+
+	agentCtrl, stopAgent := setupAgent(agentDeps{
+		tools:    mcpTools,
+		story:    agentStory,
+		history:  companionHistory,
+		projects: projects,
+		nodes:    nodes,
+		settings: settingsStore,
+		src:      providerSrc,
+		notify:   func(method string, params any) { _ = s.Notifier().Notify(method, params) },
+		clock:    clock,
+	})
+	a.closers = append(a.closers, stopAgent)
+	a.agentCtrl = agentCtrl
+	a.mcpTools = mcpTools
 
 	caps := handlers.Capabilities{
 		GitSyncAvailable: gitSyncAvailable,
 		MCPAvailable:     mcpAvailable,
+		AgentAvailable:   agentAvailable,
 	}
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, home, DefaultVersion, caps))
@@ -353,6 +387,11 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("codex.login_start", handlers.CodexLoginStart(codex))
 	s.Handle("codex.login_status", handlers.CodexLoginStatus(codex))
 	s.Handle("codex.logout", handlers.CodexLogout(codex))
+	s.Handle("agent.run", handlers.AgentRun(agentCtrl))
+	s.Handle("agent.cancel", handlers.AgentCancel(agentCtrl))
+	s.Handle("agent.history", handlers.AgentHistory(agentCtrl))
+	s.Handle("agent.clear", handlers.AgentClear(agentCtrl))
+	s.Handle("agent.undo", handlers.AgentUndo(agentCtrl))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))
 	s.Handle("snapshots.compare", handlers.CompareSnapshots(snaps))
 	s.Handle("snapshots.restore", handlers.RestoreSnapshot(nodes, snaps, clock))

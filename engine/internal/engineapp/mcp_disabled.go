@@ -59,8 +59,12 @@ type mcpController struct{}
 
 var errMCPUnavailable = errors.New("mcp is not available in this build")
 
-func setupMCP(mcpDeps) (*mcpController, func() error) {
-	return &mcpController{}, func() error { return nil }
+// agentToolDeps is empty on mobile: the MCP tool layer is not compiled, so
+// there is nothing to hand the agent — which is also not compiled.
+type agentToolDeps = struct{}
+
+func setupMCP(mcpDeps) (*mcpController, agentToolDeps, func() error) {
+	return &mcpController{}, agentToolDeps{}, func() error { return nil }
 }
 
 func (c *mcpController) Status() (json.RawMessage, error) {

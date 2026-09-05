@@ -348,6 +348,10 @@ export interface DiagnosticsSnapshot {
   unavailable_providers?: string[];
   git_sync_available?: boolean;
   mcp_available?: boolean;
+  /** Whether this build has the built-in writing agent. False on mobile
+   *  builds, where internal/agent is compiled out entirely — the panel must
+   *  not offer a feature the engine cannot run. */
+  agent_available?: boolean;
   /** Whether this library ever held a companion message. Decides whether the
    *  backup section offers the transcript export — a library that never used
    *  the companion has nothing to export. */
@@ -541,6 +545,26 @@ export interface CodexStatus {
    *  than the writer still being out in the browser. Never true alongside
    *  logged_in. The next login_start clears it. */
   login_failed?: boolean;
+}
+
+/** agent.run — the turn id; progress arrives as agent.* notifications (#93). */
+export interface AgentRunResult {
+  run_id: string;
+}
+
+/** agent.history — one row of the built-in agent's transcript (#93). Shape
+ *  is the panel's projection of companion.HistoryMessage, not the engine's
+ *  internal row (see agentHistoryRow in engine/internal/engineapp). */
+export interface AgentHistoryRow {
+  id: string;
+  project_id: string;
+  node_id?: string;
+  node_label?: string;
+  run_id?: string;
+  role: string;
+  status: string;
+  content: string;
+  created_at: number;
 }
 
 export type ThemePreference = "system" | "light" | "dark";

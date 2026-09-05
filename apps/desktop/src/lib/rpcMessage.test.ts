@@ -110,4 +110,46 @@ describe("rpcErrorMessage", () => {
       }
     }
   });
+
+  it("translates the built-in agent's reason codes in every language", () => {
+    // An unmapped code falls through to the engine's English sentence. For
+    // the agent that sentence names internal limits; for its provider
+    // neighbours it carries the provider's own response body.
+    for (const reason of ["agent_busy", "agent_iteration_limit"]) {
+      const error = new RpcError("agent.run", "raw engine sentence", -32602, {
+        reason,
+      });
+      for (const t of [ko, en, ja]) {
+        const shown = rpcErrorMessage(error, t);
+        expect(shown).not.toContain("raw engine sentence");
+        expect(shown).not.toContain(reason);
+        expect(shown.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  // agent_internal_error matters most: the panic-recovery path in the loop
+  // puts the raw Go panic value into the English Message (see
+  // engine/internal/agent/loop.go), so an unmapped code would show that
+  // panic text to the writer. agent_undo_unavailable was mapped by an
+  // earlier fix round but had no direct test; covered here alongside its
+  // siblings so all four of the loop's reason codes stay in step with
+  // engine/internal/rpc/reason.go.
+  it("never shows the raw panic value for an internal agent error, and covers undo too", () => {
+    const panicBody = "runtime error: index out of range [3] with length 3";
+    for (const reason of ["agent_internal_error", "agent_undo_unavailable"]) {
+      const error = new RpcError(
+        "agent.run",
+        `internal error: ${panicBody}`,
+        -32603,
+        { reason },
+      );
+      for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
+        const shown = rpcErrorMessage(error, t);
+        expect(shown, `${reason} in ${name}`).not.toContain(panicBody);
+        expect(shown, `${reason} in ${name}`).not.toContain(reason);
+        expect(shown.length, `${reason} in ${name}`).toBeGreaterThan(0);
+      }
+    }
+  });
 });

@@ -17,6 +17,11 @@ const ENGINE_STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 // Keep renderer access explicit. New engine methods must be reviewed before the
 // Tauri webview can call them.
 const RENDERER_ENGINE_METHODS: &[&str] = &[
+    "agent.cancel",
+    "agent.clear",
+    "agent.history",
+    "agent.run",
+    "agent.undo",
     "backup.create_recovery",
     "backup.list",
     "backup.peek",
@@ -758,7 +763,10 @@ mod recovery_tests {
 
 #[cfg(test)]
 mod security_boundary_tests {
-    use super::{is_renderer_engine_method, validate_external_url, validate_open_path};
+    use super::{
+        is_renderer_engine_method, validate_external_url, validate_open_path,
+        RENDERER_ENGINE_METHODS,
+    };
 
     #[test]
     fn external_url_allows_only_https_openai_auth() {
@@ -803,6 +811,35 @@ mod security_boundary_tests {
         assert!(!is_renderer_engine_method("providers.reset"));
         assert!(!is_renderer_engine_method("diagnostics.version"));
         assert!(!is_renderer_engine_method("debug.execute"));
+    }
+
+    #[test]
+    fn renderer_rpc_allowlist_is_sorted() {
+        // is_renderer_engine_method binary-searches this list. An entry out
+        // of order is unreachable, and binary_search on unsorted data does
+        // not fail loudly — it just sometimes returns Err for a method that
+        // is actually present, which is a silent refusal the panel cannot
+        // tell apart from a missing feature.
+        assert!(
+            RENDERER_ENGINE_METHODS.windows(2).all(|pair| pair[0] <= pair[1]),
+            "RENDERER_ENGINE_METHODS is not sorted"
+        );
+    }
+
+    #[test]
+    fn agent_methods_are_reachable_from_the_renderer() {
+        for method in [
+            "agent.run",
+            "agent.cancel",
+            "agent.history",
+            "agent.clear",
+            "agent.undo",
+        ] {
+            assert!(
+                is_renderer_engine_method(method),
+                "{method} is not in RENDERER_ENGINE_METHODS; the panel would get a silent refusal"
+            );
+        }
     }
 
     #[test]

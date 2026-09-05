@@ -16,6 +16,7 @@ import (
 type Capabilities struct {
 	GitSyncAvailable bool
 	MCPAvailable     bool
+	AgentAvailable   bool
 }
 
 type diagnosticsPayload struct {
@@ -26,6 +27,7 @@ type diagnosticsPayload struct {
 	MigrationCount   int    `json:"migration_count"`
 	GitSyncAvailable bool   `json:"git_sync_available"`
 	MCPAvailable     bool   `json:"mcp_available"`
+	AgentAvailable   bool   `json:"agent_available"`
 
 	// CompanionHistoryExists says whether this library has ever held a
 	// companion message. It is the durable half of "is this an existing
@@ -72,6 +74,7 @@ func DiagnosticsVersion(st *store.Store, home string, version string, caps Capab
 			MigrationCount:   int(count.Int64),
 			GitSyncAvailable: caps.GitSyncAvailable,
 			MCPAvailable:     caps.MCPAvailable,
+			AgentAvailable:   caps.AgentAvailable,
 
 			CompanionHistoryExists: companionHistory,
 		}

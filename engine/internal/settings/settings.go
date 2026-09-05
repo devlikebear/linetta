@@ -330,6 +330,14 @@ func (s *Store) ProviderConfigFor(id string) ProviderConfig {
 	return s.runtimeProviderConfig(id, cfg)
 }
 
+// Language is the app's UI language (ko/en/ja). The built-in agent replies in
+// it, so it is read per turn rather than captured at start-up.
+func (s *Store) Language() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.Language
+}
+
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
 func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	s.writeMu.Lock()

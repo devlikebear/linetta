@@ -2,14 +2,23 @@ import { useCallback, useState } from "react";
 
 import { useEngineEvent } from "./useEngineEvent";
 
-/** What an external MCP client just changed. Emitted by the engine after every
- *  applied mutation so the workspace can refetch instead of showing text the
- *  agent already replaced. */
+/** What an agent just changed. Emitted by the engine after every applied
+ *  mutation so the workspace can refetch instead of showing text the agent
+ *  already replaced. */
 export type McpChangedPayload = {
   project_id?: string;
   tool?: string;
   node_ids?: string[];
   batch_id?: string;
+  /** Who wrote it: "external" (an MCP client over HTTP) or "agent" (the
+   *  writer's own built-in panel). Set engine-side from the composed tool
+   *  deps, so an external client cannot claim to be the agent. Optional
+   *  because an engine older than #93 does not send it.
+   *
+   *  Nothing here branches on it yet — the conflict banner's copy is #95's
+   *  to change, and it currently says "an external agent changed this scene"
+   *  for both. */
+  source?: string;
 };
 
 export type McpChangeOptions = {
