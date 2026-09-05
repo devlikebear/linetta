@@ -113,17 +113,30 @@ const historyRowFilter = `project_id = ?
        AND (? = '' OR (node_id = ? AND scope = ?))
        AND (? = '' OR intent = ?)`
 
+// listHistorySQL's inner subselect picks the most recent N rows, then the
+// outer query restores chronological order. Both ORDER BYs tie-break on
+// rowid, not id: id is a uuid v4, so on a coarse clock (Windows' timer
+// granularity is ~15ms) rows from the same turn can share created_at and
+// come back in random order. SQLite's implicit rowid — present because
+// companion_messages is not WITHOUT ROWID — already increases with
+// insertion order, which is the fact ordering actually wants. The role
+// tie-break stays: at equal timestamps a user row genuinely precedes the
+// rest; only the tie-break after it was ever random.
+//
+// The subselect projects rowid explicitly as row_seq: it is a `SELECT *`,
+// and SELECT * does not include the implicit rowid column, so the outer
+// query's `m.row_seq` would not resolve without it.
 const listHistorySQL = `
 SELECT m.id, m.project_id, COALESCE(m.node_id, ''), COALESCE(NULLIF(n.title, ''), n.label, ''),
        COALESCE(m.run_id, ''), m.role, m.scope, m.intent, m.status, m.content, m.created_at
   FROM (
-    SELECT * FROM companion_messages
+    SELECT rowid AS row_seq, * FROM companion_messages
      WHERE ` + historyRowFilter + `
-     ORDER BY created_at DESC, CASE role WHEN 'assistant' THEN 0 ELSE 1 END, id DESC
+     ORDER BY created_at DESC, CASE role WHEN 'assistant' THEN 0 ELSE 1 END, row_seq DESC
      LIMIT ?
   ) m
   LEFT JOIN nodes n ON n.id = m.node_id
- ORDER BY m.created_at ASC, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.id ASC`
+ ORDER BY m.created_at ASC, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.row_seq ASC`
 
 const clearHistorySQL = `DELETE FROM companion_messages WHERE ` + historyRowFilter
 
