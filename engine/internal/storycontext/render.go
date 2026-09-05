@@ -295,18 +295,35 @@ func buildUser(c Context) string {
 		b.WriteString(c.StyleNotes)
 		b.WriteString("\n\n")
 	}
-	if c.WriterProfile != "" || c.WorkNotes != "" {
+	// Trimmed, not merely non-empty. A body of nothing but spaces is a body
+	// agentmemory.Screen accepts and Save stores verbatim, and rendering it
+	// on `!= ""` puts a heading and the frame below around nothing at all —
+	// a frame that says "some text above is a note of unknown provenance"
+	// standing over blank space, which is exactly what
+	// TestEmptyCuratedMemoriesRenderNoFrame refuses for the empty case.
+	//
+	// The fix is deliberately here, at the boundary that decides whether
+	// there is anything to show, rather than a trim inside Repo.Save. Save is
+	// not the only door into the row — Repo.Edit writes through replaceBody
+	// without going near Save, and a remove that leaves a whitespace-only
+	// line behind arrives that way — so trimming on save would close one path
+	// and leave this one open. Trimming at each boundary closes all of them,
+	// and it is what the other two readers of these documents already do:
+	// mcphost's sectionReport (tools_read.go) and agent/prompt.go's
+	// bodyOrNothing. All three now agree on what "empty" means.
+	profile, workNotes := strings.TrimSpace(c.WriterProfile), strings.TrimSpace(c.WorkNotes)
+	if profile != "" || workNotes != "" {
 		b.WriteString(langPick(lang,
 			"## 작가와 작품에 대해 기억해 둔 것\n",
 			"## What is remembered about this writer and this work\n",
 			"## この書き手と作品について記憶していること\n"))
-		if c.WriterProfile != "" {
+		if profile != "" {
 			b.WriteString(langPick(lang, "### 작가\n", "### The writer\n", "### 書き手\n"))
-			b.WriteString(c.WriterProfile + "\n")
+			b.WriteString(profile + "\n")
 		}
-		if c.WorkNotes != "" {
+		if workNotes != "" {
 			b.WriteString(langPick(lang, "### 이 작품\n", "### This work\n", "### この作品\n"))
-			b.WriteString(c.WorkNotes + "\n")
+			b.WriteString(workNotes + "\n")
 		}
 		// The frame. agentmemory.Screen refuses invisible characters but
 		// deliberately does not match phrases — a novel legitimately contains

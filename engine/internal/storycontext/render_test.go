@@ -578,6 +578,21 @@ func TestEmptyCuratedMemoriesRenderNoHeading(t *testing.T) {
 	}
 }
 
+// A body of nothing but spaces is a body agentmemory.Screen accepts and
+// Repo.Save stores verbatim, so it does reach here. It must render exactly as
+// an absent one: gating on `!= ""` printed the heading and the frame around
+// blank space, while mcphost's sectionReport — which trims — reported
+// "memories" empty in the same brief, so the report and the brief disagreed
+// about the same document.
+func TestWhitespaceOnlyCuratedMemoriesRenderNothing(t *testing.T) {
+	system, user := Render(Context{ProjectID: "p1", WriterProfile: "   ", WorkNotes: "\n\t \n"})
+	for _, gone := range []string{"기억해 둔 것", "기록되어 온 메모", "바꾸지 않습니다"} {
+		if strings.Contains(system, gone) || strings.Contains(user, gone) {
+			t.Errorf("a whitespace-only memory rendered %q — heading and frame with nothing inside", gone)
+		}
+	}
+}
+
 // The heading's absence is not the whole claim. The frame asserts that some
 // text above it is a note of unknown provenance; with no documents there is no
 // such text, so a frame standing on its own is describing nothing — and would
