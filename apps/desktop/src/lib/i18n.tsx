@@ -879,7 +879,7 @@ const messages = {
     // lands there ("Google Gemini으로" is ungrammatical). `에` has no such
     // allomorph, so the sentence stays correct for every destination.
     "settings.providers.consent":
-      "현재 씬 원문과 요약, 그리고 에이전트가 툴로 읽는 등장인물·플롯·팩트 카드가 {provider}에 전송되며 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
+      "에이전트가 툴로 그 작품의 모든 씬 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 작품 목록을 읽을 수 있고, 읽은 내용이 {provider}에 전송되며 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
     "settings.providers.consent.customEndpoint": "직접 설정한 OpenAI 호환 엔드포인트",
     "settings.providers.test": "연결 테스트",
     "settings.providers.test.ok": "연결됨",
@@ -1739,7 +1739,7 @@ const messages = {
     "settings.providers.model.default": "Provider default",
     "settings.providers.model.refresh": "Refresh",
     "settings.providers.consent":
-      "I agree that the current scene's text, its summaries, and the character, plot and fact cards the agent reads through its tools are sent to {provider}, and that Linetta sends them nowhere else",
+      "I agree that the agent's tools can read any scene in the work and its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, and the list of my works, and that what it reads is sent to {provider} and nowhere else",
     "settings.providers.consent.customEndpoint": "the OpenAI-compatible endpoint set above",
     "settings.providers.test": "Test connection",
     "settings.providers.test.ok": "Connected",
@@ -2599,7 +2599,7 @@ const messages = {
     "settings.providers.model.default": "プロバイダーの既定値",
     "settings.providers.model.refresh": "更新",
     "settings.providers.consent":
-      "現在のシーンの原文と要約、そしてエージェントがツールで読む登場人物・プロット・ファクトカードが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
+      "エージェントがツールでその作品のすべてのシーンの原文と要約、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、作品一覧を読み取ることができ、読み取った内容が{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
     "settings.providers.consent.customEndpoint": "上で設定した OpenAI 互換エンドポイント",
     "settings.providers.test": "接続テスト",
     "settings.providers.test.ok": "接続済み",
