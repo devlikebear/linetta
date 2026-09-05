@@ -65,6 +65,9 @@ vi.mock("../components/settings/ProviderSection", () => ({
 vi.mock("../components/settings/McpSection", () => ({
   McpSection: () => <div data-testid="mcp-section-stub">mcp-section</div>,
 }));
+vi.mock("../components/settings/MemorySection", () => ({
+  MemorySection: () => <div data-testid="memory-section-stub">memory-section</div>,
+}));
 
 /** A diagnostics snapshot with the fields no test cares about already filled.
  *
@@ -425,6 +428,31 @@ describe("Settings", () => {
 
     expect(await screen.findByTestId("mcp-section-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("provider-section-stub")).not.toBeInTheDocument();
+  });
+
+  it("renders MemorySection under the memory nav item", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    // The built-in agent alone is enough: a memory is worth editing as soon as
+    // anything reads it, and MCP is not what makes that true.
+    await user.click(await screen.findByTestId("settings-nav-memory"));
+
+    expect(await screen.findByTestId("memory-section-stub")).toBeInTheDocument();
+  });
+
+  it("hides memory entirely when nothing can read it", async () => {
+    // No agent and no MCP: there is no reader, so the pane is not a setting —
+    // it is a box whose contents nothing would ever load. The stale-category
+    // path has to refuse it too, not just the nav.
+    window.sessionStorage.setItem("linetta.settings.category", "memory");
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: false, mcp_available: false }));
+    renderSettings();
+
+    await screen.findByTestId("settings-nav-general");
+    expect(screen.queryByTestId("settings-nav-memory")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("memory-section-stub")).not.toBeInTheDocument();
   });
 
   it("does not render ProviderSection when only mcp_available is true (gate is agent_available)", async () => {

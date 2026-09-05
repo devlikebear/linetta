@@ -3,6 +3,14 @@
    .set-row(.sk/.sd/.mono), .switch(.on), .modal-field, .btn, .mono.
    Only the toggle-row button reset, field rows and ops-status cards are local. */
 
+/* The memory boxes are the one place in Settings a writer types prose rather
+   than a path or a number, so they get line spacing that reads and may be
+   grown. Everything else about them comes from .modal-field textarea. */
+.settings #memory-settings textarea {
+  line-height: 1.6;
+  resize: vertical;
+}
+
 /* Toggle rows are buttons that must look like plain .set-rows. */
 .settings .set-row-btn {
   width: 100%;
