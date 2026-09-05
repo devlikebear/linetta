@@ -212,3 +212,297 @@ it("keeps the external wording for an unknown or missing source", ...);
 ```
 feat(desktop): the conflict banner says whether the agent or an outside client wrote (#95)
 ```
+
+---
+
+## Task 3: 패널 껍데기
+
+패널이 열리고 닫히고, 프로바이더가 없으면 그렇게 말한다.
+
+**이 작업이 끝나면** Cmd/Ctrl+J로 패널이 토글되고, 다른 패널과 겹치지 않고,
+프로바이더가 설정되지 않았으면 설정으로 가는 안내 하나가 본문 대신 나온다.
+메시지도 스트리밍도 아직 없다.
+
+### 파일
+
+- `apps/desktop/src/components/agent/AgentPanel.tsx` — 신규
+- `apps/desktop/src/components/agent/AgentPanel.css` — 신규
+- `apps/desktop/src/components/agent/AgentPanel.test.tsx` — 신규
+- `apps/desktop/src/routes/Workspace.tsx` — 슬롯, 토글, 단축키
+- `apps/desktop/src/hooks/inspector.ts` — `InspectorState`, `PRIORITY`
+- `apps/desktop/src/components/ShortcutsModal.tsx` — 항목 하나
+- `apps/desktop/src/lib/i18n.tsx` — `agentPanel.*` 시작
+
+### 3-1. 컴포넌트
+
+`FactBookPanel`의 구조를 따른다. 공용 클래스는 `App.css`에 있다.
+
+```tsx
+<aside className="panel agent-panel" onMouseDown={(e) => e.stopPropagation()}>
+  <div className="panel-head">
+    <span className="ttl"><span className="ic"><Bot /></span> {t("agentPanel.title")}</span>
+    <button className="panel-close" onClick={onClose}><X /></button>
+  </div>
+  {ready ? (
+    <div className="panel-scroll agent-log" data-testid="agent-log">…</div>
+  ) : (
+    <p className="agent-empty" data-testid="agent-unconfigured">
+      {t("agentPanel.unconfigured")}
+    </p>
+  )}
+</aside>
+```
+
+`onMouseDown` 전파 차단은 다른 패널이 전부 하는 것이다 — 패널 안을 클릭했다고
+워크스페이스의 선택이 풀리면 안 된다.
+
+### 3-2. 미설정 상태
+
+**무엇이 "설정됨"인가.** `providers.list`에서 `active` 행이 `configured &&
+consented`일 때만이다. 자격증명만 있고 동의가 없으면 첫 턴이 서버에서
+`provider_consent_required`로 거절된다 — 그걸 보내놓고 오류를 보여주느니
+처음부터 안내하는 게 낫다.
+
+안내는 문장 하나다. 설정 화면으로 가는 링크를 포함한다. **여기에 프로바이더
+선택 UI를 만들지 않는다** — 그건 #94의 화면이고, 두 벌이 되면 반드시 어긋난다.
+
+### 3-3. 슬롯 배선
+
+`Workspace.tsx`에서:
+
+1. `agentOpen` 상태와 `toggleAgent` 콜백. 기존 `toggleFactBook`,
+   `toggleContextualEdit`, `toggleCanon`이 서로를 닫는 방식 그대로, **셋 전부에**
+   `setAgentOpen(false)`를 추가하고 `toggleAgent`는 나머지 셋을 닫는다.
+2. `hooks/inspector.ts`의 `InspectorState`에 `agent` 필드, `PRIORITY` 배열에도.
+   빠뜨리면 iPad에서만 조용히 겹친다.
+3. 오른쪽 슬롯 삼항 사슬에 분기를 넣는다. `ContextPanel`(else 대체) **위**,
+   나머지 토글 패널들과 같은 층.
+4. `ws-body` 클래스 계산식의 `right-wide` 조건에 `agentOpen`을 넣는다.
+
+### 3-4. 단축키
+
+`Workspace.tsx`의 전역 keydown 핸들러에 분기를 추가한다.
+
+```tsx
+} else if (e.key.toLowerCase() === "j") {
+  e.preventDefault();
+  toggleAgent();
+}
+```
+
+`ShortcutsModal.tsx`의 `SHORTCUTS`에 항목 하나. **그리고 두 파일에 있는
+"컴패니언과 함께 사라졌고 의도적으로 비워둔다"는 주석을 지운다** — 이제 거짓이다.
+`Cmd+I`(AI 초고)는 여전히 비어 있으므로 그 부분은 남긴다.
+
+### 3-5. 테스트
+
+```tsx
+it("renders the unconfigured notice when no provider is consented", ...);
+it("renders the log once the active provider is configured and consented", ...);
+it("does not offer provider setup of its own", ...);  // no key input, no choices
+```
+
+그리고 `Workspace.mcpChanges.test.ts`가 쓰는 소스 텍스트 단언 방식으로
+(그 파일은 라우트가 커서 마운트 대신 원문을 검사한다):
+
+```ts
+it("closes the other inspector panels when the agent panel opens", ...);
+it("binds Cmd/Ctrl+J", ...);
+```
+
+### 커밋
+
+```
+feat(desktop): the agent panel's shell, its slot, and Cmd/Ctrl+J (#95)
+```
+
+---
+
+## Task 4: 메시지 목록과 스트리밍
+
+작가의 말과 에이전트의 답이 보인다. 답은 흐르듯 나타난다.
+
+### 4-1. 메시지 모델
+
+패널이 들고 있는 것은 세 종류의 줄이다.
+
+```ts
+type Line =
+  | { kind: "user"; id: string; text: string }
+  | { kind: "assistant"; id: string; text: string; usage?: { input: number; output: number } }
+  | { kind: "tool"; id: string; name: string; summary: string; state: "running" | "ok" | "error";
+      batchId?: string; undone?: boolean };
+```
+
+**`id`가 필요한 이유.** 툴 줄은 두 이벤트(`started` → `done`/`error`)가 하나로
+합쳐지고, `agent.tool` 페이로드에는 호출별 id가 없다. `run_id + name + 그 이름이
+이 턴에서 몇 번째인가`로 만든다. 순서가 유일한 상관자다.
+
+### 4-2. 스트리밍
+
+`agent.delta`가 조각을 보낸다. 누적한 문자열을 `useSmoothStream(text, streaming)`에
+넘긴다. `streaming`은 이 실행이 아직 끝나지 않았을 때 참이다.
+
+```tsx
+const shown = useSmoothStream(assistantText, running);
+```
+
+**`useSmoothStream`은 이 저장소에서 처음 쓰인다** — 존재하지만 호출부가 없었다.
+시그니처는 `(target: string, active: boolean) => string`이고, `active`가 거짓이면
+`target`을 그대로 돌려준다. `target`이 `shown`으로 시작하지 않으면 즉시
+스냅한다(스트림 리셋).
+
+### 4-3. 다른 실행의 이벤트를 무시한다
+
+모든 페이로드에 `run_id`가 있다. **현재 실행의 것이 아니면 버린다.** 패널을 닫고
+다시 열거나, 한 작품에서 다른 작품으로 옮겨간 뒤 옛 실행의 늦은 이벤트가 도착할 수
+있다. #94에서 같은 부류의 결함을 세 라운드에 걸쳐 고쳤으므로 여기서는 처음부터
+건다.
+
+### 4-4. 마크다운
+
+`react-markdown`과 `remark-gfm`이 의존성에 있고 쓰는 곳이 없다. 삭제된 1.0
+컴패니언의 `Markdown.tsx`(15줄)가 이 이슈를 위해 남겨진 것으로 보인다. 같은
+모양으로 `components/agent/Markdown.tsx`를 만든다 — 링크는
+`target="_blank" rel="noreferrer"`.
+
+**컴패니언 패널의 나머지는 되살리지 않는다.** 제안 카드, 선택 카드, 이미지 첨부,
+액션 프리셋은 전부 1.0의 개념이고 MCP 전환이 없앤 것이다.
+
+### 4-5. 테스트
+
+`useMcpChanges.test.tsx`가 쓰는 방식으로 `@tauri-apps/api/event`를 직접 모킹하고
+리스너를 손으로 부른다.
+
+```tsx
+it("accumulates agent.delta into one reply", ...);
+it("ignores events from a run that is not the current one", ...);
+it("renders markdown in a reply", ...);
+```
+
+### 커밋
+
+```
+feat(desktop): the message list, and a reply that streams (#95)
+```
+
+---
+
+## Task 5: 툴 줄과 되돌리기
+
+에이전트가 무엇을 읽고 무엇을 썼는지 한 줄씩 보인다. 쓴 것은 되돌릴 수 있다.
+
+### 5-1. 두 이벤트를 한 줄로
+
+`agent.tool`이 `state: "started"`로 한 번, `"done"`이나 `"error"`로 다시 온다.
+같은 줄을 갱신한다.
+
+```
+읽음 · 4-2 씬 / 스토리 컨텍스트
+씀 · 4-2 씬                      [되돌리기]
+```
+
+**`batch_id`가 있는 줄에만 되돌리기가 붙는다.** 읽기 툴은 배치를 만들지 않는다.
+그리고 #93의 리뷰가 확인한 것 — 작가가 쓰기 도중에 정지를 누르면 결과에
+`batch_id`가 없다. 그 경우 줄은 남지만 버튼은 없다. 정직한 상태다.
+
+### 5-2. 되돌리기
+
+`agent.undo(batchId)`. 성공하면 그 줄을 되돌림 상태로 바꾼다.
+
+**실패는 정상 경로다.** 되돌리기 배치는 서비스 메모리에 최대 8개만 산다. 재시작
+후나 턴을 몇 번 더 돌린 뒤에는 `agent_undo_unavailable`이 온다 — #94가 이미
+세 언어로 번역해뒀다. 그 문구를 줄 옆에 보여주고 버튼을 없앤다.
+
+### 5-3. 테스트
+
+```tsx
+it("merges the started and done events into one line", ...);
+it("offers undo only on a line that carries a batch id", ...);
+it("marks the line undone after agent.undo succeeds", ...);
+it("explains an expired undo window instead of failing silently", ...);
+```
+
+### 커밋
+
+```
+feat(desktop): one line per tool call, and undo where there is a batch (#95)
+```
+
+---
+
+## Task 6: 작성기, 정지, 시작 칩, 사용량
+
+### 6-1. 작성기
+
+여러 줄 입력. `Enter` 전송, `Shift+Enter` 줄바꿈. 실행 중에는 전송이 **정지**로
+바뀐다(`agent.cancel`).
+
+`agent.run`에 `project_id`와 **현재 에디터의 `node_id`**를 넘긴다. 그게 #93의
+스코프 라인 재료다 — 에이전트가 "지금 어느 씬 얘기인지"를 아는 유일한 경로.
+
+### 6-2. 시작 칩
+
+"현재 씬 초고", "연속성 점검", "다음 씬 제안". **작성기를 채우기만 한다.**
+바로 보내지 않는다 — 작가가 문장을 고칠 기회를 남긴다.
+
+### 6-3. 사용량
+
+`agent.done`의 `usage.input`/`usage.output`을 턴 끝에 한 줄로. **비용 계산은
+하지 않는다.** 가격은 프로바이더마다 다르고 자주 바뀌며, 틀린 금액은 없는
+금액보다 나쁘다.
+
+### 6-4. 정지
+
+`agent.cancel(runId)`. #93이 확인한 것: 취소는 인메모리 전송을 넘어가고, 부분
+응답은 트랜스크립트에 남는다. 정지 후에도 그때까지의 답변이 화면에 남아야 한다.
+
+### 커밋
+
+```
+feat(desktop): the composer, the stop button, and what a turn cost (#95)
+```
+
+---
+
+## Task 7: 히스토리 복원과 오류
+
+### 7-1. 복원
+
+패널을 열 때 `agent.history(projectId)`. 행을 `Line`으로 바꾼다.
+
+**`role === "tool"`인 행의 `content`는 JSON 문자열이다.** `{name, summary, ok,
+batch_id, node_ids}`. 파싱에 실패하면 그 줄을 건너뛴다 — 한 줄 때문에 대화 전체가
+안 보이는 것보다 낫다.
+
+### 7-2. 오류
+
+`agent.error`의 `reason`을 `rpcErrorMessage`로 번역한다. **원문 `message`를
+화면에 쓰지 않는다** — `agent_internal_error`에는 Go 패닉 값이 실려 있다.
+
+- 인증 실패(`provider_auth_failed`) → 설정으로 가는 링크
+- `agent_busy` → 이미 도는 턴이 있다는 안내
+- `agent_iteration_limit` → 부분 결과는 남아 있고 이어서 시킬 수 있다는 안내
+
+### 7-3. 남겨진 턴
+
+패널을 닫아도 실행은 계속된다. 다시 열었을 때 도는 턴이 있는지 알 방법은
+`agent.run`을 시도해 `agent_busy`를 받는 것뿐이다 — #93은 상태 조회 메서드를
+만들지 않았다. **이 계획서는 그걸 추가하지 않는다.** 복원된 히스토리의 마지막
+줄이 user 행이면 "아직 도는 중일 수 있다"고만 표시하고, 작가가 보내면 그때
+`agent_busy`가 정직하게 답한다.
+
+### 커밋
+
+```
+feat(desktop): restore a conversation, and say what went wrong (#95)
+```
+
+---
+
+## 이 계획서가 일부러 남기는 것
+
+- **메모리(#97)와 스킬(#98).** 시작 칩은 고정 세 개다. 스킬 목록에서 오지 않는다.
+- **세션 검색.** 히스토리는 예산만큼만 돌아온다. #99의 후보다.
+- **에이전트 실행 상태 조회 RPC.** 위 7-3을 볼 것. 필요해지면 #99에서 만든다.
+- **모바일.** `agent_available`이 거짓이면 패널 자체가 없다.
