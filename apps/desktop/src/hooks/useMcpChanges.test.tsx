@@ -53,15 +53,38 @@ describe("useMcpChanges", () => {
 
   it("never replaces a dirty buffer; it surfaces the change instead", async () => {
     const { view, onOutlineChanged, onSceneChanged } = setup({ editorDirty: true });
-    await emit({ project_id: "p1", tool: "linetta_write_scene", node_ids: ["n1"] });
+    await emit({ project_id: "p1", tool: "linetta_write_scene", node_ids: ["n1"], source: "external" });
 
     // The outline is still safe to refresh — it is not what the writer is typing into.
     expect(onOutlineChanged).toHaveBeenCalledTimes(1);
     expect(onSceneChanged).not.toHaveBeenCalled();
     expect(view.result.current.conflictNodeId).toBe("n1");
+    expect(view.result.current.conflictSource).toBe("external");
 
     act(() => view.result.current.dismissConflict());
     expect(view.result.current.conflictNodeId).toBeNull();
+    expect(view.result.current.conflictSource).toBeNull();
+  });
+
+  it("carries the built-in agent's source alongside the conflicting node", async () => {
+    const { view } = setup({ editorDirty: true });
+    await emit({ project_id: "p1", tool: "linetta_write_scene", node_ids: ["n1"], source: "agent" });
+
+    expect(view.result.current.conflictNodeId).toBe("n1");
+    expect(view.result.current.conflictSource).toBe("agent");
+  });
+
+  it("never lets a stale source outlive its conflict — one state, not two", async () => {
+    const { view } = setup({ editorDirty: true });
+    await emit({ project_id: "p1", tool: "linetta_write_scene", node_ids: ["n1"], source: "agent" });
+    expect(view.result.current.conflictSource).toBe("agent");
+
+    act(() => view.result.current.dismissConflict());
+    await emit({ project_id: "p1", tool: "linetta_write_scene", node_ids: ["n1"] });
+
+    // A conflict with no source must not inherit the previous conflict's "agent" source.
+    expect(view.result.current.conflictNodeId).toBe("n1");
+    expect(view.result.current.conflictSource).toBeNull();
   });
 
   it("ignores a change to a scene the writer does not have open", async () => {

@@ -55,4 +55,27 @@ describe("Workspace MCP change wiring", () => {
     expect(workspace).toContain("void reloadSceneFromEngine(conflictNodeId); dismissConflict();");
     expect(workspace).toContain("workspace.mcp.conflict.keep");
   });
+
+  it("names the built-in agent when the change came from it", async () => {
+    const workspace = await readSource("routes/Workspace.tsx");
+
+    expect(workspace).toContain("conflictSource");
+    expect(workspace).toContain('conflictSource === "agent"');
+    expect(workspace).toContain("workspace.mcp.conflict.agentBody");
+  });
+
+  it("keeps the external wording for an unknown or missing source", async () => {
+    const workspace = await readSource("routes/Workspace.tsx");
+
+    // The banner must fall through to the existing generic copy for anything
+    // other than exactly "agent" — an unrecognised or absent source stays
+    // attributed to an external client, never the built-in agent.
+    const banner = workspace.slice(
+      workspace.indexOf('data-testid="mcp-conflict"'),
+      workspace.indexOf("mcp-conflict-load"),
+    );
+    expect(banner).toContain('conflictSource === "agent"');
+    expect(banner).toContain("workspace.mcp.conflict.agentBody");
+    expect(banner).toContain("workspace.mcp.conflict.body");
+  });
 });

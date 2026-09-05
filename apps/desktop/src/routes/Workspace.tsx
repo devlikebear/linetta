@@ -452,7 +452,7 @@ export function Workspace() {
     setCharCount(n.word_count);
   }, []);
 
-  const { conflictNodeId, dismissConflict } = useMcpChanges({
+  const { conflictNodeId, conflictSource, dismissConflict } = useMcpChanges({
     projectId: projectId ?? null,
     openNodeId: load?.node.id ?? null,
     editorDirty,
@@ -1595,7 +1595,11 @@ export function Workspace() {
                  unsaved sentence outranks the agent's version, so nothing is
                  replaced until they say so. */
               <div className="mcp-conflict" role="status" data-testid="mcp-conflict">
-                <span>{t("workspace.mcp.conflict.body")}</span>
+                <span>
+                  {conflictSource === "agent"
+                    ? t("workspace.mcp.conflict.agentBody")
+                    : t("workspace.mcp.conflict.body")}
+                </span>
                 <button
                   type="button"
                   className="btn ghost sm"
