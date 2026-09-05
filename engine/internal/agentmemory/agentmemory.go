@@ -112,8 +112,38 @@ func (r *Repo) Load(ctx context.Context, scope Scope, projectID string) (Documen
 	return doc, nil
 }
 
+// bodyRuneLenBefore returns the rune length of the document currently stored
+// for scope/arg, or 0 if there is none. It backs Save's shrink-only escape
+// hatch below: agentmemory.Apply's own budgeted() helper accepts a result
+// that is over budget as long as it is shorter than what it replaces, so an
+// agent can dig out of a document that is already too big. Save has to agree
+// with that exactly, because Apply never writes — the tool that calls it
+// always saves what comes back through Save, and a body Apply accepted must
+// not be refused a moment later here.
+func (r *Repo) bodyRuneLenBefore(ctx context.Context, scope Scope, arg any) (int, error) {
+	var body string
+	row := r.db.QueryRowContext(ctx,
+		`SELECT body FROM agent_memory WHERE scope = ? AND project_id IS ?`, string(scope), arg)
+	if err := row.Scan(&body); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return utf8.RuneCountInString(body), nil
+}
+
 // Save screens and budget-checks, then replaces the document. Both checks run
 // before the write, so a refused save leaves the previous memory intact.
+//
+// The budget check has the same shrink-only escape hatch as
+// agentmemory.Apply's budgeted(): a body over the scope's budget is still
+// allowed through if it is shorter (in runes) than the document it replaces.
+// Without that, an agent could never claw its way out of a document that
+// somehow got over budget already (a shrunk budget, or a hand-edited row) —
+// every remove or replace it tries would itself be refused as over budget.
+// A save that GROWS an already-over-budget document, or that is not
+// shrinking at all, is still refused.
 //
 // Delete-then-insert in one transaction rather than an upsert: the global row
 // and a work's row conflict on two DIFFERENT partial unique indexes, so a
@@ -129,7 +159,13 @@ func (r *Repo) Save(ctx context.Context, scope Scope, projectID, body string, no
 	}
 	used := utf8.RuneCountInString(body)
 	if used > scope.Budget() {
-		return Document{}, fmt.Errorf("%w: %d characters, and %s holds %d", ErrOverBudget, used, scope, scope.Budget())
+		before, err := r.bodyRuneLenBefore(ctx, scope, arg)
+		if err != nil {
+			return Document{}, err
+		}
+		if used >= before {
+			return Document{}, fmt.Errorf("%w: %d characters, and %s holds %d", ErrOverBudget, used, scope, scope.Budget())
+		}
 	}
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
