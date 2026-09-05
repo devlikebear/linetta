@@ -110,6 +110,20 @@ export function AgentPanel({ onClose }: Props) {
   // scheme described on `Line` above.
   const toolOccurrenceRef = useRef<Map<string, number>>(new Map());
 
+  // acceptRun locks onto the first run id this mount sees and refuses any
+  // event from a different run. This guard prevents a late straggler event
+  // from an abandoned run — one that started before the user abandoned it,
+  // then arrived after the run was abandoned — from being mistakenly adopted
+  // as the "current" run simply because it was the first event to land for
+  // this mount. But the lock is not reset on a terminal event (done/error/
+  // cancelled); resetting it would reopen the same hazard on a subtler axis:
+  // an event arriving after terminal_state but before the next agent.run()
+  // call completes could still be adopted first. The composer, when it lands
+  // and implements the send button, must set currentRunIdRef.current directly
+  // from agent.run()'s returned run_id the moment it receives the response,
+  // rather than leaving it to be decided by the first arriving event. Without
+  // that step, a second turn in the same mount will silently drop all events
+  // from the second run and render no output.
   function acceptRun(runId: string): boolean {
     if (currentRunIdRef.current === null) currentRunIdRef.current = runId;
     return currentRunIdRef.current === runId;
