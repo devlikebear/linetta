@@ -32,7 +32,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 
 | The work's own record | Research without leaving the scene |
 | --- | --- |
-| Story World lists the characters, places, items and concepts your work has registered — including the ones an agent created over MCP. | Fact Book keeps source-backed notes next to the writing that needs them. |
+| Story World lists the characters, places, items and concepts your work has registered — including the ones an agent created, whether the built-in agent or one connected over MCP. | Fact Book keeps source-backed notes next to the writing that needs them. |
 | ![Linetta Story World](docs/assets/screenshots/story-world.png) | ![Linetta Fact Book](docs/assets/screenshots/fact-book.png) |
 
 Your projects stay organized in a library built for multiple works:
@@ -90,12 +90,13 @@ and the OpenAI-compatible endpoint cannot be configured there; signing in
 with a ChatGPT account still works, since that path stores tokens in
 Linetta's data directory instead.
 
-Once a provider is connected, open the agent with `Cmd/Ctrl+J`. It reaches
-Linetta's tools the same way an external MCP client does, and every call it
-makes is recorded in the MCP activity log, which shows whether the built-in
-agent or an external client made it. Structural changes — outline
-restructuring and the like — can be undone in one step from there; undoing a
-single scene-prose write isn't there yet.
+Open the agent with `Cmd/Ctrl+J`; connect a provider first, or the panel
+prompts you to set one up. It reaches Linetta's tools the same way an
+external MCP client does, and every call it makes is recorded in the MCP
+activity log, which shows whether the built-in agent or an external client
+made it. Structural changes — outline restructuring and the like — can be
+undone in one step from there; undoing a single scene-prose write isn't
+there yet.
 
 ## Writing with your own agent (MCP)
 
@@ -155,8 +156,9 @@ No. Writing, organization, import/export, snapshots, and backups work without a 
 ### Do I have to use AI?
 
 No. Linetta is a complete writing app on its own. It does not contact a model
-until you connect a provider — for the built-in agent, or your own agent over
-MCP — and give that provider your consent.
+until you set one up: connect a provider and give it your consent, for the
+built-in agent, or connect your own agent over MCP, which needs no provider
+credential at all.
 
 ### Can I bring an existing manuscript?
 
