@@ -35,7 +35,7 @@ describe("Workspace story world panel", () => {
     );
     expect(toggles.match(/setCanonOpen\(false\)/g)?.length).toBe(2);
     expect(src).toContain("canon: canonOpen");
-    expect(src).toContain("(factBookOpen || contextualEditOpen || canonOpen) ? \" right-wide\" : \"\"");
+    expect(src).toContain("(factBookOpen || contextualEditOpen || canonOpen || agentOpen) ? \" right-wide\" : \"\"");
   });
 
   it("sits below the sheets, so opening a record does not blank the panel", async () => {

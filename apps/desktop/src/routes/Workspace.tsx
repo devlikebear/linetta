@@ -19,6 +19,7 @@ import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CanonPanel } from "../components/CanonPanel";
 import { FactBookPanel } from "../components/FactBookPanel";
+import { AgentPanel } from "../components/agent/AgentPanel";
 import { ContextualEditPanel } from "../components/contextual/ContextualEditPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { InlineEditableText } from "../components/InlineEditableText";
@@ -133,6 +134,7 @@ export function Workspace() {
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
   const [canonOpen, setCanonOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(false);
   // Bumped when an external agent changes the work, so the story world list
   // reflects the three characters it just said it created (#28).
   const [canonRefreshKey, setCanonRefreshKey] = useState(0);
@@ -140,19 +142,22 @@ export function Workspace() {
     factBook: false,
     contextual: false,
     canon: false,
+    agent: false,
   });
   useEffect(() => {
     const next: InspectorState = {
       factBook: factBookOpen,
       contextual: contextualEditOpen,
       canon: canonOpen,
+      agent: agentOpen,
     };
     const corrected = reconcileInspector(prevInspectorRef.current, next, sizeClass);
     if (corrected.factBook !== next.factBook) setFactBookOpen(corrected.factBook);
     if (corrected.contextual !== next.contextual) setContextualEditOpen(corrected.contextual);
     if (corrected.canon !== next.canon) setCanonOpen(corrected.canon);
+    if (corrected.agent !== next.agent) setAgentOpen(corrected.agent);
     prevInspectorRef.current = corrected;
-  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen]);
+  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen, agentOpen]);
   const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
@@ -755,12 +760,15 @@ export function Workspace() {
     return subscribeAppEvent("linetta:mention-pick-new", handler);
   }, [projectId, showToast, t]);
 
-  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+Shift+F contextual edit.
+  // Global Cmd+R reload + Cmd+P palette toggle + Cmd+F search + Cmd+Shift+F
+  // contextual edit + Cmd+J agent panel.
   //
-  // Cmd+I (AI draft) and Cmd+J (companion) are gone with the companion and are
-  // deliberately left unbound rather than reassigned. The guards that used to
-  // swallow these keys while the AI modal was open went with it: each one
-  // tested that modal specifically, not modals in general.
+  // Cmd+I (AI draft) is gone with the companion and is deliberately left
+  // unbound rather than reassigned. The guard that used to swallow it while
+  // the AI modal was open went with it too: that guard tested that modal
+  // specifically, not modals in general. Cmd+J used to be unbound for the
+  // same reason; it is not any more, now that it opens the agent panel (#95)
+  // instead of staying reserved for a companion that is not coming back.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -783,10 +791,20 @@ export function Workspace() {
           return;
         }
         setSearchOpen(true);
+      } else if (e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        toggleAgent();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
+    // Registered once on mount, same as the rest of this handler. toggleAgent
+    // is declared further down with useCallback(..., []), so its identity is
+    // stable and never changes — listing it would not change when this
+    // effect re-runs, only invite a forward-reference ReferenceError, since
+    // deps are evaluated eagerly at this line while toggleAgent's own const
+    // has not been reached yet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const saveNow = useCallback(
@@ -968,6 +986,7 @@ export function Workspace() {
       if (next) {
             setContextualEditOpen(false);
         setCanonOpen(false);
+        setAgentOpen(false);
         setEntitySheetId(null);
         setThreadSheetId(null);
           }
@@ -983,6 +1002,7 @@ export function Workspace() {
         setFactBookSelectedClaimRequest(null);
         setFactBookOpen(false);
         setCanonOpen(false);
+        setAgentOpen(false);
             setEntitySheetId(null);
         setThreadSheetId(null);
           }
@@ -997,6 +1017,22 @@ export function Workspace() {
         setFactBookSelectedClaimRequest(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
+        setAgentOpen(false);
+        setEntitySheetId(null);
+        setThreadSheetId(null);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleAgent = useCallback(() => {
+    setAgentOpen((v) => {
+      const next = !v;
+      if (next) {
+        setFactBookSelectedClaimRequest(null);
+        setFactBookOpen(false);
+        setContextualEditOpen(false);
+        setCanonOpen(false);
         setEntitySheetId(null);
         setThreadSheetId(null);
       }
@@ -1553,7 +1589,7 @@ export function Workspace() {
       </header>
 
       <div className={`ws-body${railCollapsed ? " rail-collapsed" : ""}${
-        (factBookOpen || contextualEditOpen || canonOpen) ? " right-wide" : ""
+        (factBookOpen || contextualEditOpen || canonOpen || agentOpen) ? " right-wide" : ""
       }${versionSheetNodeId ? " right-history" : ""}`}>
         {!railCollapsed && (
           <button
@@ -1789,6 +1825,13 @@ export function Workspace() {
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
             onClose={() => {
               setCanonOpen(false);
+              focusEditor();
+            }}
+          />
+        ) : agentOpen && load ? (
+          <AgentPanel
+            onClose={() => {
+              setAgentOpen(false);
               focusEditor();
             }}
           />

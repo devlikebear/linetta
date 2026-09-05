@@ -1,0 +1,23 @@
+.agent-panel {
+  min-width: 0;
+}
+
+.agent-panel * {
+  min-width: 0;
+}
+
+.agent-empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.agent-empty a {
+  color: var(--accent-deep);
+}
+
+.agent-log {
+  padding: 16px;
+}

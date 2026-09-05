@@ -7,9 +7,10 @@ interface Shortcut {
   labelKey: MessageKey;
 }
 
-// Cmd+J (companion) and Cmd+I (AI draft) are deliberately absent: both
-// features were removed with the companion and Workspace leaves the keys
-// unbound, so listing them here advertised shortcuts that do nothing.
+// Cmd+I (AI draft) is deliberately absent: that feature was removed with the
+// companion and Workspace leaves the key unbound, so listing it here would
+// advertise a shortcut that does nothing. Cmd+J used to be absent for the
+// same reason; it is not any more, now that it opens the agent panel (#95).
 const SHORTCUTS: Shortcut[] = [
   { keys: "⌘P", labelKey: "shortcuts.commandPalette" },
   { keys: "⌘S", labelKey: "shortcuts.manualSnapshot" },
@@ -17,6 +18,7 @@ const SHORTCUTS: Shortcut[] = [
   { keys: "⌘.", labelKey: "shortcuts.exitZenDialog" },
   { keys: "esc", labelKey: "shortcuts.escape" },
   { keys: "⌘⇧F", labelKey: "workspace.command.contextualEdit" },
+  { keys: "⌘J", labelKey: "workspace.command.agentPanel" },
   { keys: "⌘Z", labelKey: "shortcuts.undoBody" },
   { keys: "⌘⇧Z", labelKey: "shortcuts.redoBody" },
   { keys: "@", labelKey: "shortcuts.mentionSearch" },

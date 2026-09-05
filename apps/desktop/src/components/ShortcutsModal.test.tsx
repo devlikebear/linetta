@@ -45,17 +45,27 @@ describe("ShortcutsModal", () => {
     expect(screen.queryByText(/Focus 모드/)).not.toBeInTheDocument();
   });
 
-  it("does not advertise the companion keys, which are unbound", async () => {
-    // Cmd+J and Cmd+I went away with the companion and Workspace leaves them
-    // unbound. Listing them told the writer about shortcuts that do nothing.
+  it("does not advertise the AI draft key, which is still unbound", async () => {
+    // Cmd+I went away with the companion and Workspace still leaves it
+    // unbound. Listing it would tell the writer about a shortcut that does
+    // nothing.
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
 
     openModal();
 
     await screen.findByText("단축키");
-    expect(screen.queryByText("⌘J")).not.toBeInTheDocument();
     expect(screen.queryByText("⌘I")).not.toBeInTheDocument();
     expect(screen.queryByText(/글쓰기 동료/)).not.toBeInTheDocument();
     expect(screen.queryByText(/AI 생성/)).not.toBeInTheDocument();
+  });
+
+  it("advertises the agent panel now that Cmd+J opens it", async () => {
+    mocks.settingsGet.mockResolvedValue({ language: "ko" });
+
+    openModal();
+
+    await screen.findByText("단축키");
+    expect(screen.getByText("⌘J")).toBeInTheDocument();
+    expect(screen.getByText("에이전트 패널 열기")).toBeInTheDocument();
   });
 });
