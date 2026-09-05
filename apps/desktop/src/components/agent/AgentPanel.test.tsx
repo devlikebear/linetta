@@ -186,6 +186,31 @@ function notices(): HTMLElement[] {
  *  and "it may still be running" is telling the writer two different stories
  *  about the same turn, and every notice test below is really about which one
  *  survives. */
+/** Hand-drive requestAnimationFrame, so a streamed reply reveals under the
+ *  test's control instead of the browser's.
+ *
+ *  `useSmoothStream` reveals a few characters per frame and re-queues, so a
+ *  test that asserts on the full text has to run frames until the reveal stops
+ *  asking for more — the limit is the bound, not the queue length. Two blocks
+ *  below each grew their own copy of this before it was hoisted. */
+const frames: FrameRequestCallback[] = [];
+
+function stubFrames() {
+  frames.length = 0;
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+  vi.stubGlobal("cancelAnimationFrame", () => {});
+}
+
+async function flushFrames(limit = 40) {
+  for (let i = 0; i < limit; i++) {
+    const queued = frames.splice(0, frames.length);
+    if (queued.length === 0) return;
+    await act(async () => {
+      for (const cb of queued) cb(i);
+    });
+  }
+}
+
 function expectOneNotice(key: string) {
   const found = notices();
   expect(found).toHaveLength(1);
@@ -1721,32 +1746,18 @@ describe("AgentPanel abandoned send fence (#95 Task 7 review round 2)", () => {
   // tool events and missed this. Driving the frames by hand makes
   // useSmoothStream finish its reveal synchronously, so the assertion can
   // read the sentence that should never have been on screen.
-  const frames: FrameRequestCallback[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
     ev.listeners.clear();
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
-    frames.length = 0;
-    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
-    vi.stubGlobal("cancelAnimationFrame", () => {});
+    stubFrames();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  /** Runs queued frames until the reveal stops asking for more (each tick
-   *  re-queues, so the count is the bound, not the queue). */
-  async function flushFrames(limit = 40) {
-    for (let i = 0; i < limit; i++) {
-      const queued = frames.splice(0, frames.length);
-      if (queued.length === 0) return;
-      await act(async () => {
-        for (const cb of queued) cb(i);
-      });
-    }
-  }
 
   it("refuses a delta for a send it left behind, instead of streaming that work's prose into another's log", async () => {
     const pending = deferred<{ run_id: string }>();
@@ -1896,7 +1907,6 @@ describe("AgentPanel project ownership on the wire (#95 Task 7 review round 3)",
   // Same hand-driven frames as the round-2 block: jsdom's requestAnimationFrame
   // never runs inside `act`, so a delta that IS wrongly adopted renders an
   // empty bubble and hides the prose it leaked.
-  const frames: FrameRequestCallback[] = [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1905,24 +1915,13 @@ describe("AgentPanel project ownership on the wire (#95 Task 7 review round 3)",
     rpc.providersList.mockImplementation(() =>
       Promise.resolve([row({ configured: true, consented: true })]),
     );
-    frames.length = 0;
-    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
-    vi.stubGlobal("cancelAnimationFrame", () => {});
+    stubFrames();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  async function flushFrames(limit = 40) {
-    for (let i = 0; i < limit; i++) {
-      const queued = frames.splice(0, frames.length);
-      if (queued.length === 0) return;
-      await act(async () => {
-        for (const cb of queued) cb(i);
-      });
-    }
-  }
 
   function log() {
     return screen.getByTestId("agent-log");
