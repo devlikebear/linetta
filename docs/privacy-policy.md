@@ -1,12 +1,12 @@
 # Linetta 개인정보 처리방침 / Privacy Policy
 
-_최종 업데이트 / Last updated / 最終更新: 2026-09-03_
+_최종 업데이트 / Last updated / 最終更新: 2026-09-06_
 
 ---
 
 ## 한국어
 
-Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local-first)** 데스크톱 앱입니다. 개발자(Changheon Shin / devlikebear)는 분석·광고·계정 서버를 운영하지 않으며 사용자 데이터를 수집하지 않습니다. 앱 자체는 어떤 언어 모델과도 통신하지 않습니다. 다만 사용자가 MCP 기능을 켜면, 사용자가 직접 실행하는 외부 클라이언트가 아래와 같이 원고를 읽어 갈 수 있습니다.
+Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local-first)** 데스크톱 앱입니다. 개발자(Changheon Shin / devlikebear)는 분석·광고·계정 서버를 운영하지 않으며 사용자 데이터를 수집하지 않습니다. 앱은 사용자가 직접 연결한 AI 프로바이더에만, 그 프로바이더에 대해 동의한 뒤에만 원고를 보냅니다. 그 경로는 두 가지 — 내장 에이전트와, 사용자가 직접 실행하는 외부 MCP 클라이언트 — 이며 아래 3항에서 설명합니다.
 
 ### 1. 수집하는 정보
 **개발자가 수집하는 정보는 없습니다.** 앱은 다음을 하지 않습니다.
@@ -17,9 +17,11 @@ Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local
 ### 2. 데이터 저장 위치
 사용자가 작성한 원고·프로젝트·설정 등 기본 데이터는 **사용자 기기에 로컬로** 저장됩니다.
 - 집필 데이터: 기기의 로컬 데이터베이스
-- MCP 접속 토큰 등 민감 정보: 운영체제의 보안 저장소(예: macOS Keychain)
+- MCP 접속 토큰, AI 프로바이더 API 키 등 민감 정보: 운영체제의 보안 저장소(macOS 키체인, Windows 자격 증명 관리자). `settings.json`에는 저장하지 않습니다.
 
 개발자는 이 데이터에 접근할 수 없습니다.
+
+Linux에는 보안 저장소 백엔드가 없어 API 키를 저장할 수 없습니다. 따라서 Linux에서는 API 키로 연결하는 프로바이더를 설정할 수 없고, 토큰을 아래 파일에 저장하는 ChatGPT(Codex) 로그인만 사용할 수 있습니다.
 
 ChatGPT(Codex)로 로그인하면 접근 토큰과 갱신 토큰이 `<앱 데이터>/codex/auth.json`에 저장됩니다. 이 파일은 소유자만 읽을 수 있는 권한(0600)으로 저장되며, 이는 Codex CLI가 자기 토큰을 보관하는 방식과 같습니다. Linetta는 이 파일을 어디로도 보내지 않으며, OpenAI에 요청을 보낼 때만 사용합니다.
 
@@ -31,9 +33,20 @@ macOS App Store 빌드가 아닌 빌드에서는, 이미 Codex CLI로 로그인�
 
 macOS App Store 빌드를 포함한 모든 빌드가 이 파일 저장 방식을 사용하며, 이 토큰을 시스템 키체인에 저장하지 않습니다.
 
-### 3. 외부 에이전트 연결 (MCP)
-**앱은 어떤 AI 공급자에게도 데이터를 보내지 않습니다.** API 키를 저장하지도, 모델을 호출하지도 않습니다.
+### 3. 원고가 기기를 떠나는 경우
+원고가 기기를 떠날 수 있는 경로는 두 가지입니다. 둘 다 사용자가 직접 설정하기 전에는 아무것도 보내지 않으며, 어느 쪽도 스스로 동작하지 않습니다.
 
+#### 3.1 내장 에이전트 (사용자가 연결한 프로바이더)
+Linetta의 내장 에이전트는 사용자가 프로바이더를 직접 연결하기 전까지 호출할 대상이 없습니다. 지원하는 프로바이더는 넷입니다. ChatGPT(Codex)는 ChatGPT 계정으로 로그인해 연결하고, Anthropic·Google Gemini·OpenAI 호환 엔드포인트는 API 키로 연결합니다.
+
+- **어디로 가나.** 사용자가 선택한 프로바이더에만 가고, 그 밖의 어디로도 가지 않습니다. OpenAI 호환 항목은 사용자가 입력한 base URL로 갑니다. 그 주소는 OpenRouter 같은 서비스일 수도 있고 이 기기에서 실행 중인 모델일 수도 있으며, 후자라면 데이터는 기기를 떠나지 않습니다.
+- **무엇이 가나.** 에이전트에 입력한 내용, 그 대화의 이전 메시지, 현재 열려 있는 작품과 씬, 그리고 에이전트가 툴로 읽는 것 — 현재 씬 원문, 요약, 등장인물·플롯·팩트 카드입니다. 설정에서 체크하는 동의 문구가 말하는 목록과 같습니다.
+- **언제 가나.** 동의한 뒤에만 갑니다. 동의는 프로바이더별이며, 한 곳에 동의한 것이 다른 곳에 동의한 것이 되지 않습니다. 이 확인은 앱이 전송할 수 있는 것을 만들기 전에 이루어지므로, 동의가 없으면 "연결 테스트" 버튼도 거절됩니다. (자격증명을 입력한 뒤에는 앱이 프로바이더에 사용 가능한 모델 목록을 물을 수 있습니다. 이 요청에는 원고 내용이 담기지 않습니다.)
+- **자격증명.** 2항에 적은 대로 보관합니다. API 키는 운영체제의 보안 저장소에, ChatGPT(Codex) 로그인은 `<앱 데이터>/codex/auth.json`에 보관합니다. 자격증명은 요청의 일부로 해당 프로바이더에만 전송됩니다.
+- **프로바이더가 그 데이터로 무엇을 하는지**는 그 회사의 개인정보 처리방침과 약관 소관이며, 텍스트를 보관하는지 학습에 사용하는지도 여기에 포함됩니다. Linetta가 그 회사를 대신해 약속할 수 없으니, 선택한 프로바이더의 방침을 직접 확인하시기 바랍니다.
+- 개발자는 이 데이터를 수신·중계·저장하지 않습니다. 데이터는 사용자의 기기에서 사용자의 프로바이더로 바로 갑니다.
+
+#### 3.2 외부 에이전트 연결 (MCP)
 사용자가 `설정 → 외부 에이전트 연결(MCP)`에서 명시적으로 동의하고 켜면, 앱이 `127.0.0.1`에만 바인딩되는 로컬 엔드포인트를 엽니다. 사용자가 자기 기기에서 실행하는 MCP 클라이언트(예: Claude Code, Claude Desktop)가 여기에 접속해 원고·작품 구조·팩트 카드를 읽고, 전체 접근 모드에서는 수정할 수 있습니다.
 
 - 이 경로로 전송되는 데이터의 수신자는 **사용자가 선택한 그 클라이언트**이며, 그 클라이언트가 자기 공급자에게 무엇을 보내는지는 해당 제품의 개인정보 처리방침을 따릅니다.
@@ -41,13 +54,14 @@ macOS App Store 빌드를 포함한 모든 빌드가 이 파일 저장 방식을
 - 접속에는 앱이 로컬에서 생성한 토큰이 필요하며, 사용자는 언제든 재발급할 수 있습니다.
 - 원격 접속은 불가능합니다. 다른 기기에서 이 엔드포인트에 닿을 수 없습니다.
 - 에이전트가 수행한 모든 변경은 앱의 활동 기록에 남고, 변경 전 스냅샷이 저장되어 되돌릴 수 있습니다.
+- 목적은 사용자가 요청한 생성·수정·요약·조사 보조를 제공하는 것입니다.
 - 개발자는 이 데이터를 수신·중계·저장하지 않습니다.
 
 ### 4. 데이터 판매·공유
-개발자는 사용자 데이터를 판매하거나 자체 목적으로 공유하지 않습니다. 단, 사용자가 명시적으로 동의해 MCP를 켜면 위 3항과 같이 사용자가 실행하는 클라이언트가 원고를 읽어 갑니다.
+개발자는 사용자 데이터를 판매하거나 자체 목적으로 공유하지 않습니다. 원고가 다른 곳에 닿는 경로는 사용자가 직접 켜는 두 가지뿐입니다. 내장 에이전트는 사용자가 연결한 프로바이더에 원고를 보내고, 사용자가 실행하는 MCP 클라이언트는 원고를 읽어 갑니다. 둘 다 위 3항과 같습니다.
 
 ### 5. 아동의 개인정보
-개발자는 아동을 포함한 사용자의 개인정보를 수집하지 않습니다. 아동 사용자는 MCP로 연결하는 클라이언트의 연령 요건과 보호자 동의 요건도 확인해야 합니다.
+개발자는 아동을 포함한 사용자의 개인정보를 수집하지 않습니다. 아동 사용자는 연결하는 AI 프로바이더의 연령 요건과, MCP로 연결하는 클라이언트의 연령 요건 및 보호자 동의 요건도 확인해야 합니다.
 
 ### 6. 변경 사항
 본 방침이 변경되면 이 페이지를 갱신하고 상단의 "최종 업데이트" 날짜를 수정합니다.
@@ -59,7 +73,7 @@ macOS App Store 빌드를 포함한 모든 빌드가 이 파일 저장 방식을
 
 ## English
 
-Linetta (the "App") is a **local-first** desktop app for writing long-form fiction. The developer (Changheon Shin / devlikebear) operates no analytics, advertising, or account server and does not collect user data. The App itself never contacts a language model. If you turn on the optional MCP endpoint, a client you run yourself can read your manuscript as described below.
+Linetta (the "App") is a **local-first** desktop app for writing long-form fiction. The developer (Changheon Shin / devlikebear) operates no analytics, advertising, or account server and does not collect user data. The App sends your writing only to an AI provider you connect yourself, and only after you have consented for that provider. There are two such paths — the built-in agent and an MCP client you run yourself — and Section 3 describes both.
 
 ### 1. Information We Collect
 **The developer collects none.** The App:
@@ -70,9 +84,11 @@ Linetta (the "App") is a **local-first** desktop app for writing long-form ficti
 ### 2. Where Data Is Stored
 Core data you create — manuscripts, projects, and settings — is stored **locally on your device**.
 - Writing data: a local database on your device.
-- Sensitive values such as the MCP connection token: your operating system's secure store (e.g., macOS Keychain).
+- Sensitive values such as the MCP connection token and an AI provider API key: your operating system's secure store (macOS Keychain, Windows Credential Manager). They are never written to `settings.json`.
 
 The developer has no access to this data.
+
+Linux has no secure-store backend, so an API key cannot be stored there. On Linux the API-key providers cannot be configured at all, and only the ChatGPT (Codex) sign-in works, because it stores its tokens in the file described below.
 
 Signing in to ChatGPT (Codex) stores an access token and a refresh token at `<app data>/codex/auth.json`. This file is saved with owner-only read permissions (0600) — the same way the official Codex CLI keeps its own token. Linetta sends this file nowhere; it is used only for requests to OpenAI.
 
@@ -84,9 +100,20 @@ Signing out from Settings deletes Linetta's own file, `<app data>/codex/auth.jso
 
 Every build, including the macOS App Store build, uses this file store — Linetta does not put this token in the system keychain.
 
-### 3. Connecting an External Agent (MCP)
-**The App sends nothing to any AI provider.** It stores no API keys and calls no models.
+### 3. When Your Writing Leaves Your Device
+Two paths can take your writing off this device. Neither sends anything until you set it up yourself, and neither runs on its own.
 
+#### 3.1 The Built-in Agent (a Provider You Connect)
+Linetta's built-in agent has nothing to call until you connect a provider yourself. Four are supported: ChatGPT (Codex), which you connect by signing in with your ChatGPT account, and Anthropic, Google Gemini, and an OpenAI-compatible endpoint, which you connect with an API key.
+
+- **Where it goes.** To the provider you selected, and nowhere else. The OpenAI-compatible option goes to the base URL you enter — that address may be a service such as OpenRouter, or a model running on this machine, in which case the data never leaves it.
+- **What goes.** What you type to the agent, the earlier messages in that conversation, the work and scene you have open, and what the agent reads through its tools — the current scene's text, its summaries, and the character, plot, and fact cards. This is the same list as the consent sentence you tick in Settings.
+- **When it goes.** Only after you consent. Consent is per provider: agreeing to one is not agreeing to another. The check runs before the App builds anything that can send, so without it even the "Test connection" button is refused. (Once you have entered a credential, the App can ask a provider for its list of available models; that request carries no manuscript content.)
+- **Your credential.** Kept as described in Section 2: an API key in your operating system's secure store, a ChatGPT (Codex) sign-in in `<app data>/codex/auth.json`. It is sent only to that provider, as part of the request.
+- **What the provider does with that data** is governed by that company's privacy policy and terms, including whether it retains the text or trains on it. Linetta cannot promise anything on that company's behalf; read the policy of the provider you choose.
+- The developer does not receive, relay, or store this data. It goes from your device straight to your provider.
+
+#### 3.2 Connecting an External Agent (MCP)
 When you explicitly consent and enable it under `Settings → Connect an external agent (MCP)`, the App opens a local endpoint bound to `127.0.0.1`. An MCP client you run on the same machine (such as Claude Code or Claude Desktop) can then read your manuscript, story structure, and fact cards, and in full-access mode modify them.
 
 - The recipient of anything read this way is **the client you chose**. What that client sends onward to its own provider is governed by that product's privacy policy.
@@ -98,10 +125,10 @@ When you explicitly consent and enable it under `Settings → Connect an externa
 - The developer does not receive, relay, or store this data.
 
 ### 4. Selling or Sharing Data
-The developer does not sell user data or share it for the developer's own purposes. When you explicitly consent and enable MCP, a client you run reads your manuscript as described in Section 3.
+The developer does not sell user data or share it for the developer's own purposes. The only ways your writing reaches anyone else are the two you turn on yourself: the built-in agent sends it to the provider you connected, and an MCP client you run reads it. Both are described in Section 3.
 
 ### 5. Children's Privacy
-The developer collects no personal data from users, including children. Child users must also satisfy the age and parental-consent requirements of any client they connect over MCP.
+The developer collects no personal data from users, including children. Child users must also satisfy the age and parental-consent requirements of any AI provider they connect and of any client they connect over MCP.
 
 ### 6. Changes
 If this policy changes, we will update this page and revise the "Last updated" date above.
@@ -113,7 +140,7 @@ Contact: devlikebear@gmail.com
 
 ## 日本語
 
-Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆のための**ローカルファースト**なデスクトップアプリです。開発者（Changheon Shin / devlikebear）は、分析・広告・アカウント用サーバーを運営せず、ユーザーデータを収集しません。本アプリ自体はいかなる言語モデルとも通信しません。ただし、ユーザーが MCP 機能を有効にすると、ユーザー自身が実行する外部クライアントが以下のとおり原稿を読み取ることがあります。
+Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆のための**ローカルファースト**なデスクトップアプリです。開発者（Changheon Shin / devlikebear）は、分析・広告・アカウント用サーバーを運営せず、ユーザーデータを収集しません。本アプリが原稿を送信する先は、ユーザー自身が接続した AI プロバイダーのみで、そのプロバイダーについて同意した後に限られます。その経路は二つ — 内蔵エージェントと、ユーザー自身が実行する外部 MCP クライアント — で、第3項で説明します。
 
 ### 1. 収集する情報
 **開発者が収集する情報はありません。** 本アプリは以下を行いません。
@@ -124,9 +151,11 @@ Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆の�
 ### 2. データの保存場所
 ユーザーが作成した原稿・プロジェクト・設定などの基本データは、**ユーザーの端末内にローカルで**保存されます。
 - 執筆データ: 端末内のローカルデータベース
-- MCP 接続トークンなどの機密情報: OS のセキュアストア（例: macOS Keychain）
+- MCP 接続トークンや AI プロバイダーの API キーなどの機密情報: OS のセキュアストア（macOS キーチェーン、Windows 資格情報マネージャー）。`settings.json` には保存しません。
 
 開発者はこのデータにアクセスできません。
+
+Linux にはセキュアストアのバックエンドがないため、API キーを保存できません。したがって Linux では API キーで接続するプロバイダーを設定できず、トークンを下記のファイルに保存する ChatGPT（Codex）サインインのみ利用できます。
 
 ChatGPT（Codex）にサインインすると、アクセストークンとリフレッシュトークンが `<アプリデータ>/codex/auth.json` に保存されます。このファイルは所有者のみが読み取れる権限（0600）で保存され、これは Codex CLI が自身のトークンを保管する方式と同じです。Linetta はこのファイルをどこにも送信せず、OpenAI へのリクエストにのみ使用します。
 
@@ -138,9 +167,20 @@ macOS App Store ビルド以外では、すでに Codex CLI で済ませたサ�
 
 macOS App Store ビルドを含むすべてのビルドがこのファイル保存方式を使用し、このトークンをシステムキーチェーンには保存しません。
 
-### 3. 外部エージェントの接続 (MCP)
-**本アプリはいかなる AI プロバイダーにもデータを送信しません。** API キーを保存せず、モデルを呼び出しません。
+### 3. 原稿が端末を離れる場合
+原稿が端末を離れる可能性がある経路は二つです。どちらもユーザー自身が設定するまで何も送信せず、どちらも自動的には動作しません。
 
+#### 3.1 内蔵エージェント（ユーザーが接続したプロバイダー）
+Linetta の内蔵エージェントは、ユーザー自身がプロバイダーを接続するまで呼び出す先がありません。対応するプロバイダーは四つです。ChatGPT（Codex）は ChatGPT アカウントでサインインして接続し、Anthropic・Google Gemini・OpenAI 互換エンドポイントは API キーで接続します。
+
+- **どこへ送られるか。** ユーザーが選んだプロバイダーにのみ送られ、それ以外のどこにも送られません。OpenAI 互換の項目は、ユーザーが入力した base URL へ送られます。その宛先は OpenRouter のようなサービスのこともあれば、この端末で実行しているモデルのこともあり、後者ならデータは端末を離れません。
+- **何が送られるか。** エージェントに入力した内容、その会話の以前のメッセージ、現在開いている作品とシーン、そしてエージェントがツールで読み取るもの — 現在のシーンの原文、要約、登場人物・プロット・ファクトカードです。設定でチェックする同意文が述べる一覧と同じです。
+- **いつ送られるか。** 同意した後に限られます。同意はプロバイダーごとで、一方への同意が他方への同意にはなりません。この確認は、送信できるものを本アプリが組み立てる前に行われるため、同意がなければ「接続テスト」ボタンも拒否されます。（認証情報を入力した後は、本アプリがプロバイダーに利用可能なモデルの一覧を問い合わせることがあります。この要求に原稿の内容は含まれません。）
+- **認証情報。** 第2項に記載のとおり保管します。API キーは OS のセキュアストアに、ChatGPT（Codex）のサインインは `<アプリデータ>/codex/auth.json` に保管します。認証情報はリクエストの一部として当該プロバイダーにのみ送信されます。
+- **プロバイダーがそのデータをどう扱うか**は、その企業のプライバシーポリシーおよび利用規約に従い、テキストを保持するか学習に使用するかもここに含まれます。Linetta がその企業に代わって約束することはできませんので、選んだプロバイダーの方針をご自身でご確認ください。
+- 開発者はこのデータを受信・中継・保存しません。データはユーザーの端末からユーザーのプロバイダーへ直接送られます。
+
+#### 3.2 外部エージェントの接続 (MCP)
 `設定 → 外部エージェント接続 (MCP)` で明示的に同意して有効にすると、`127.0.0.1` のみにバインドされるローカルエンドポイントが開きます。同じ端末で実行している MCP クライアント（Claude Code、Claude Desktop など）が接続し、原稿・作品構造・ファクトカードを読み取り、フルアクセスモードでは変更できます。
 
 - この経路で読み取られたデータの受信者は**ユーザーが選んだそのクライアント**です。そのクライアントが自社プロバイダーへ何を送るかは、当該製品のプライバシーポリシーに従います。
@@ -148,13 +188,14 @@ macOS App Store ビルドを含むすべてのビルドがこのファイル保�
 - 接続には本アプリがローカルで生成したトークンが必要で、いつでも再発行できます。
 - リモートからの接続はできません。他の端末からこのエンドポイントには到達できません。
 - エージェントが行った変更はすべて活動ログに記録され、変更前のスナップショットが保存されるため元に戻せます。
+- 目的は、ユーザーが要求した生成・修正・要約・調査の補助を提供することです。
 - 開発者はこのデータを受信・中継・保存しません。
 
 ### 4. データの販売・共有
-開発者はユーザーデータを販売せず、開発者自身の目的で共有しません。ただし、ユーザーが明示的に同意して MCP を有効にすると、第3項のとおりユーザーが実行するクライアントが原稿を読み取ります。
+開発者はユーザーデータを販売せず、開発者自身の目的で共有しません。原稿が他者に届く経路は、ユーザー自身が有効にする二つだけです。内蔵エージェントはユーザーが接続したプロバイダーへ原稿を送信し、ユーザーが実行する MCP クライアントは原稿を読み取ります。いずれも第3項のとおりです。
 
 ### 5. 子どものプライバシー
-開発者は子どもを含むユーザーの個人情報を収集しません。子どもの利用者は、選択したAIプロバイダーの年齢要件および保護者同意要件も満たす必要があります。
+開発者は子どもを含むユーザーの個人情報を収集しません。子どもの利用者は、接続する AI プロバイダーの年齢要件と、MCP で接続するクライアントの年齢要件および保護者同意要件も満たす必要があります。
 
 ### 6. 変更
 本ポリシーが変更された場合、このページを更新し、上部の「最終更新」日を改訂します。
