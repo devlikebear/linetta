@@ -32,27 +32,53 @@ vi.mock("../../lib/i18n", () => ({
 
 import { ProviderSection } from "./ProviderSection";
 
-function statusRow(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    id: "openai-codex",
-    auth: "oauth",
-    active: false,
+const PROVIDER_IDS = ["openai-codex", "anthropic", "gemini-native", "openai"] as const;
+
+/** The four rows providers.list returns, with `active` marked and per-id
+ *  overrides folded in. Called fresh on every RPC — see the note in
+ *  beforeEach on why that matters. */
+function rows(active: string, extras: Record<string, Record<string, unknown>> = {}) {
+  return PROVIDER_IDS.map((id) => ({
+    id,
+    auth: id === "openai-codex" ? "oauth" : "api_key",
+    active: id === active,
     configured: false,
     consented: false,
-    ...overrides,
-  };
+    ...extras[id],
+  }));
+}
+
+/** Let React settle the promises a click just started. Deliberately not
+ *  `findBy*`: @testing-library/dom's fake-timer detection looks for a `jest`
+ *  global that vitest's `globals: true` never defines, so waitFor takes its
+ *  real-timer branch while the timers it needs are faked and unadvanced. */
+async function flush(times = 4) {
+  await act(async () => {
+    for (let i = 0; i < times; i += 1) await Promise.resolve();
+  });
 }
 
 describe("ProviderSection", () => {
+  // Which provider the engine currently considers active, and any extra
+  // fields on a given row. Tests set these before render.
+  let activeId: string;
+  let rowExtras: Record<string, Record<string, unknown>>;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    rpc.providersList.mockResolvedValue([
-      statusRow({ id: "openai-codex", auth: "oauth", active: true }),
-      statusRow({ id: "anthropic", auth: "api_key" }),
-      statusRow({ id: "gemini-native", auth: "api_key" }),
-      statusRow({ id: "openai", auth: "api_key" }),
-    ]);
-    rpc.settingsSet.mockResolvedValue({});
+    activeId = "openai-codex";
+    rowExtras = {};
+    // The engine's bookkeeping in miniature. Two things matter here:
+    // settings.set({provider}) moves the active row, so a test can switch
+    // providers and back; and every providers.list resolves a *fresh* array,
+    // the way a real RPC that parses new JSON does. A mock that hands back
+    // one shared reference makes React bail out of setList, which silently
+    // hides every bug in an effect keyed on the list.
+    rpc.providersList.mockImplementation(() => Promise.resolve(rows(activeId, rowExtras)));
+    rpc.settingsSet.mockImplementation((patch: { provider?: string }) => {
+      if (patch.provider) activeId = patch.provider;
+      return Promise.resolve({});
+    });
     rpc.codexLoginStart.mockResolvedValue({ auth_url: "https://chatgpt.com/auth/start" });
     rpc.codexLoginStatus.mockResolvedValue({ logged_in: false });
     rpc.codexLogout.mockResolvedValue({ ok: true });
@@ -85,12 +111,7 @@ describe("ProviderSection", () => {
   });
 
   it("shows configured and consent state for the active provider", async () => {
-    rpc.providersList.mockResolvedValue([
-      statusRow({ id: "openai-codex", auth: "oauth", active: true, configured: true, consented: true }),
-      statusRow({ id: "anthropic", auth: "api_key" }),
-      statusRow({ id: "gemini-native", auth: "api_key" }),
-      statusRow({ id: "openai", auth: "api_key" }),
-    ]);
+    rowExtras = { "openai-codex": { configured: true, consented: true } };
     render(<ProviderSection />);
 
     const state = await screen.findByTestId("provider-state");
@@ -111,12 +132,8 @@ describe("ProviderSection", () => {
   });
 
   it("never puts a stored key back into the input", async () => {
-    rpc.providersList.mockResolvedValue([
-      statusRow({ id: "openai-codex", auth: "oauth" }),
-      statusRow({ id: "anthropic", auth: "api_key", active: true, configured: true }),
-      statusRow({ id: "gemini-native", auth: "api_key" }),
-      statusRow({ id: "openai", auth: "api_key" }),
-    ]);
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
     render(<ProviderSection />);
 
     const input = (await screen.findByTestId("provider-key-input")) as HTMLInputElement;
@@ -125,19 +142,6 @@ describe("ProviderSection", () => {
   });
 
   it("shows the placeholder for an unconfigured provider", async () => {
-    rpc.providersList
-      .mockResolvedValueOnce([
-        statusRow({ id: "openai-codex", auth: "oauth", active: true }),
-        statusRow({ id: "anthropic", auth: "api_key" }),
-        statusRow({ id: "gemini-native", auth: "api_key" }),
-        statusRow({ id: "openai", auth: "api_key" }),
-      ])
-      .mockResolvedValueOnce([
-        statusRow({ id: "openai-codex", auth: "oauth" }),
-        statusRow({ id: "anthropic", auth: "api_key", active: true }),
-        statusRow({ id: "gemini-native", auth: "api_key" }),
-        statusRow({ id: "openai", auth: "api_key" }),
-      ]);
     render(<ProviderSection />);
     await screen.findByTestId("provider-choice-openai-codex");
 
@@ -148,12 +152,7 @@ describe("ProviderSection", () => {
   });
 
   it("disables save until a key is typed, and saves the trimmed draft", async () => {
-    rpc.providersList.mockResolvedValue([
-      statusRow({ id: "openai-codex", auth: "oauth" }),
-      statusRow({ id: "anthropic", auth: "api_key", active: true }),
-      statusRow({ id: "gemini-native", auth: "api_key" }),
-      statusRow({ id: "openai", auth: "api_key" }),
-    ]);
+    activeId = "anthropic";
     render(<ProviderSection />);
 
     const input = await screen.findByTestId("provider-key-input");
@@ -173,12 +172,8 @@ describe("ProviderSection", () => {
   });
 
   it("clears a key by sending an empty string", async () => {
-    rpc.providersList.mockResolvedValue([
-      statusRow({ id: "openai-codex", auth: "oauth" }),
-      statusRow({ id: "anthropic", auth: "api_key", active: true, configured: true }),
-      statusRow({ id: "gemini-native", auth: "api_key" }),
-      statusRow({ id: "openai", auth: "api_key" }),
-    ]);
+    activeId = "anthropic";
+    rowExtras = { anthropic: { configured: true } };
     render(<ProviderSection />);
 
     await userEvent.click(await screen.findByTestId("provider-key-clear"));
@@ -191,31 +186,13 @@ describe("ProviderSection", () => {
   });
 
   it("offers no clear button for a provider with no stored key", async () => {
-    rpc.providersList.mockResolvedValue([
-      statusRow({ id: "openai-codex", auth: "oauth" }),
-      statusRow({ id: "anthropic", auth: "api_key", active: true }),
-      statusRow({ id: "gemini-native", auth: "api_key" }),
-      statusRow({ id: "openai", auth: "api_key" }),
-    ]);
+    activeId = "anthropic";
     render(<ProviderSection />);
     await screen.findByTestId("provider-key-input");
     expect(screen.queryByTestId("provider-key-clear")).toBeNull();
   });
 
   it("offers base URL only for the openai-compatible provider", async () => {
-    rpc.providersList
-      .mockResolvedValueOnce([
-        statusRow({ id: "openai-codex", auth: "oauth", active: true }),
-        statusRow({ id: "anthropic", auth: "api_key" }),
-        statusRow({ id: "gemini-native", auth: "api_key" }),
-        statusRow({ id: "openai", auth: "api_key" }),
-      ])
-      .mockResolvedValueOnce([
-        statusRow({ id: "openai-codex", auth: "oauth" }),
-        statusRow({ id: "anthropic", auth: "api_key" }),
-        statusRow({ id: "gemini-native", auth: "api_key" }),
-        statusRow({ id: "openai", auth: "api_key", active: true }),
-      ]);
     render(<ProviderSection />);
 
     await screen.findByTestId("provider-choice-openai");
@@ -225,25 +202,9 @@ describe("ProviderSection", () => {
     expect(await screen.findByTestId("provider-base-url")).toBeInTheDocument();
   });
 
-  it("drops the base URL draft when the provider changes", async () => {
-    rpc.providersList
-      .mockResolvedValueOnce([
-        statusRow({ id: "openai-codex", auth: "oauth" }),
-        statusRow({ id: "anthropic", auth: "api_key" }),
-        statusRow({ id: "gemini-native", auth: "api_key" }),
-        statusRow({
-          id: "openai",
-          auth: "api_key",
-          active: true,
-          base_url: "https://openrouter.ai/api/v1",
-        }),
-      ])
-      .mockResolvedValueOnce([
-        statusRow({ id: "openai-codex", auth: "oauth" }),
-        statusRow({ id: "anthropic", auth: "api_key", active: true }),
-        statusRow({ id: "gemini-native", auth: "api_key" }),
-        statusRow({ id: "openai", auth: "api_key" }),
-      ]);
+  it("never lets an openai base URL ride into another provider's key patch", async () => {
+    activeId = "openai";
+    rowExtras = { openai: { base_url: "https://openrouter.ai/api/v1" } };
     render(<ProviderSection />);
 
     const baseUrlInput = (await screen.findByTestId(
@@ -258,6 +219,9 @@ describe("ProviderSection", () => {
     await userEvent.type(keyInput, "sk-live-xyz");
     await userEvent.click(screen.getByTestId("provider-key-save"));
 
+    // toHaveBeenLastCalledWith is an exact shape match: no base_url key at
+    // all, not even an undefined one. settings.set is all-or-nothing and the
+    // engine rejects base_url on any id but openai.
     await waitFor(() =>
       expect(rpc.settingsSet).toHaveBeenLastCalledWith({
         providers: { anthropic: { api_key: "sk-live-xyz" } },
@@ -265,20 +229,162 @@ describe("ProviderSection", () => {
     );
   });
 
+  it("drops an unsaved base URL draft when the writer changes provider", async () => {
+    activeId = "openai";
+    render(<ProviderSection />);
+
+    const baseUrlInput = (await screen.findByTestId(
+      "provider-base-url-input",
+    )) as HTMLInputElement;
+    fireEvent.change(baseUrlInput, { target: { value: "https://typed.example/v1" } });
+    expect(baseUrlInput.value).toBe("https://typed.example/v1");
+
+    await userEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await screen.findByTestId("provider-key-input");
+
+    await userEvent.click(screen.getByTestId("provider-choice-openai"));
+    const back = (await screen.findByTestId("provider-base-url-input")) as HTMLInputElement;
+    expect(back.value).toBe("");
+  });
+
+  it("keeps an unsaved key draft through a background providers.list reload", async () => {
+    activeId = "openai";
+    rowExtras = { openai: { base_url: "https://openrouter.ai/api/v1" } };
+    render(<ProviderSection />);
+
+    const keyInput = (await screen.findByTestId("provider-key-input")) as HTMLInputElement;
+    fireEvent.change(keyInput, { target: { value: "sk-live-typed" } });
+
+    // Tab on to the base URL and edit it: the blur saves, and the save
+    // reloads providers.list. That reload must not touch the key draft.
+    const baseUrl = screen.getByTestId("provider-base-url-input");
+    fireEvent.change(baseUrl, { target: { value: "https://ollama.local/v1" } });
+    fireEvent.focusOut(baseUrl);
+
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenCalledWith({
+        providers: { openai: { base_url: "https://ollama.local/v1" } },
+      }),
+    );
+
+    expect((screen.getByTestId("provider-key-input") as HTMLInputElement).value).toBe(
+      "sk-live-typed",
+    );
+    await waitFor(() => expect(screen.getByTestId("provider-key-save")).toBeEnabled());
+
+    await userEvent.click(screen.getByTestId("provider-key-save"));
+    await waitFor(() =>
+      expect(rpc.settingsSet).toHaveBeenLastCalledWith({
+        providers: { openai: { api_key: "sk-live-typed" } },
+      }),
+    );
+  });
+
+  it("does not save the base URL on a blur that changed nothing", async () => {
+    activeId = "openai";
+    rowExtras = { openai: { base_url: "https://openrouter.ai/api/v1" } };
+    render(<ProviderSection />);
+
+    const baseUrl = await screen.findByTestId("provider-base-url-input");
+    fireEvent.focus(baseUrl);
+    fireEvent.focusOut(baseUrl);
+
+    await flush();
+    expect(rpc.settingsSet).not.toHaveBeenCalled();
+    expect(rpc.providersList).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not erase a key typed on another provider when an abandoned Codex poll returns", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+
+    // The writer abandons the browser and switches to Anthropic to paste a
+    // key instead. The orphaned poll is still running.
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+    fireEvent.change(screen.getByTestId("provider-key-input"), {
+      target: { value: "sk-ant-typed" },
+    });
+
+    // ~1.5s later the poll reports the abandoned login failed and reloads.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flush();
+
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+    expect((screen.getByTestId("provider-key-input") as HTMLInputElement).value).toBe(
+      "sk-ant-typed",
+    );
+  });
+
+  it("shows an already signed-in Codex account without waiting for a fresh login", async () => {
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
+    render(<ProviderSection />);
+
+    expect(await screen.findByTestId("provider-codex-email")).toHaveTextContent(
+      "writer@example.com",
+    );
+    expect(screen.getByTestId("provider-codex-logout")).toBeInTheDocument();
+    expect(screen.queryByTestId("provider-codex-login")).toBeNull();
+  });
+
+  it("falls back to a signed-in label when the email claim is an empty string", async () => {
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "" });
+    render(<ProviderSection />);
+
+    expect(await screen.findByTestId("provider-codex-email")).toHaveTextContent(
+      "settings.providers.codex.signedIn",
+    );
+  });
+
+  it("drops a stale Codex failure when the writer leaves the provider and comes back", async () => {
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flush();
+    expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
+
+    // The engine forgets the failure at the next login_start; the pane must
+    // not remember it either.
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false });
+    fireEvent.click(screen.getByTestId("provider-choice-anthropic"));
+    await flush(8);
+    fireEvent.click(screen.getByTestId("provider-choice-openai-codex"));
+    await flush(8);
+
+    expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+  });
+
   it("opens the browser and polls until Codex reports signed in", async () => {
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
     rpc.codexLoginStatus
       .mockResolvedValueOnce({ logged_in: false })
       .mockResolvedValueOnce({ logged_in: true, email: "writer@example.com" });
 
-    render(<ProviderSection />);
-    const loginButton = await screen.findByTestId("provider-codex-login");
     vi.useFakeTimers();
-
     fireEvent.click(loginButton);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flush(2);
     expect(rpc.codexLoginStart).toHaveBeenCalledTimes(1);
     expect(rpc.openExternalUrl).toHaveBeenCalledWith("https://chatgpt.com/auth/start");
     expect(rpc.codexLoginStatus).not.toHaveBeenCalled();
@@ -303,16 +409,15 @@ describe("ProviderSection", () => {
   });
 
   it("shows a signed-in fallback when Codex reports no email claim", async () => {
-    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: true });
-
     render(<ProviderSection />);
     const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: true });
+
     vi.useFakeTimers();
     fireEvent.click(loginButton);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flush(2);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
@@ -323,16 +428,15 @@ describe("ProviderSection", () => {
   });
 
   it("stops polling when Codex reports a failed login", async () => {
-    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
-
     render(<ProviderSection />);
     const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+
     vi.useFakeTimers();
     fireEvent.click(loginButton);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flush(2);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
@@ -347,44 +451,88 @@ describe("ProviderSection", () => {
     expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
   });
 
-  it("clears a stale failure banner as soon as a retry starts", async () => {
-    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: false, login_failed: true });
-
+  it("stops the poll and says why when login_status itself fails", async () => {
     render(<ProviderSection />);
     const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockRejectedValue(
+      Object.assign(new Error("x"), { data: { reason: "provider_not_configured" } }),
+    );
+
     vi.useFakeTimers();
     fireEvent.click(loginButton);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flush(2);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
     });
-    expect(screen.getByTestId("provider-codex-failed")).toBeInTheDocument();
+    await flush();
 
-    // Retrying must not leave the old failure banner up while the fresh
-    // poll is still in flight.
-    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false });
-    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    expect(screen.getByTestId("provider-error").textContent).toBe("errors.providerNotConfigured");
     await act(async () => {
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(4500);
+    });
+    expect(rpc.codexLoginStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a reload that fails after a successful login", async () => {
+    render(<ProviderSection />);
+    const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
+    // The engine socket drops between login_status and providers.list.
+    rpc.providersList.mockImplementation(() =>
+      Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_not_configured" } })),
+    );
+
+    vi.useFakeTimers();
+    fireEvent.click(loginButton);
+    await flush(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flush();
+
+    expect(screen.getByTestId("provider-error").textContent).toBe("errors.providerNotConfigured");
+  });
+
+  it("clears a stale failure banner before the retry's first round trip", async () => {
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false, login_failed: true });
+    render(<ProviderSection />);
+    expect(await screen.findByTestId("provider-codex-failed")).toBeInTheDocument();
+
+    let release: (v: { auth_url: string }) => void = () => {};
+    rpc.codexLoginStart.mockImplementationOnce(
+      () =>
+        new Promise<{ auth_url: string }>((resolve) => {
+          release = resolve;
+        }),
+    );
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId("provider-codex-login"));
+    await flush();
+
+    // Gone before login_start has even returned: the banner must not hang
+    // over the whole browser-opening round trip.
+    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
+
+    await act(async () => {
+      release({ auth_url: "https://chatgpt.com/auth/start" });
       await Promise.resolve();
     });
-    expect(screen.queryByTestId("provider-codex-failed")).toBeNull();
   });
 
   it("clears the interval on unmount so an abandoned login stops calling the engine", async () => {
-    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false });
-
     const { unmount } = render(<ProviderSection />);
     const loginButton = await screen.findByTestId("provider-codex-login");
+    await flush();
+    rpc.codexLoginStatus.mockClear();
+
     vi.useFakeTimers();
     fireEvent.click(loginButton);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await flush(2);
 
     unmount();
 
@@ -395,34 +543,12 @@ describe("ProviderSection", () => {
   });
 
   it("logs out of Codex and returns to the sign-in button", async () => {
-    rpc.providersList.mockResolvedValue([
-      statusRow({ id: "openai-codex", auth: "oauth", active: true, configured: true }),
-      statusRow({ id: "anthropic", auth: "api_key" }),
-      statusRow({ id: "gemini-native", auth: "api_key" }),
-      statusRow({ id: "openai", auth: "api_key" }),
-    ]);
-    rpc.codexLoginStatus.mockResolvedValueOnce({ logged_in: true, email: "writer@example.com" });
-
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: true, email: "writer@example.com" });
     render(<ProviderSection />);
-    const loginButton = await screen.findByTestId("provider-codex-login");
-    vi.useFakeTimers();
-    fireEvent.click(loginButton);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    expect(screen.getByTestId("provider-codex-email")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("provider-codex-logout"));
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(rpc.codexLogout).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("provider-codex-login")).toBeInTheDocument();
+    await userEvent.click(await screen.findByTestId("provider-codex-logout"));
+
+    await waitFor(() => expect(rpc.codexLogout).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId("provider-codex-login")).toBeInTheDocument();
   });
 });

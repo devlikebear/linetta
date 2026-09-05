@@ -86,6 +86,8 @@ export function ProviderSection() {
     }
   };
 
+  const current = list.find((r) => r.id === active);
+
   // Choosing a provider is itself a saved setting, not a local tab. The agent
   // reads settings.provider at the start of every turn, so a writer who picks
   // Anthropic here and opens the panel gets Anthropic without a save button.
@@ -101,18 +103,59 @@ export function ProviderSection() {
   // rejects base_url on any id but openai, and settings.set is all-or-
   // nothing, so the whole patch — including the key the writer just typed —
   // would be refused.
+  //
+  // What retires a draft is the writer *moving to another provider* — not a
+  // providers.list arriving. The two are easy to confuse and are not the
+  // same: refresh() parses fresh JSON, so every background reload (a save's
+  // own reload, an abandoned Codex login's poll tick) hands back a new array
+  // identity. Keying this effect on that identity threw away whatever the
+  // writer had typed and not yet saved, silently and with no error. So the
+  // provider the drafts belong to is tracked explicitly.
+  const draftProvider = useRef<ProviderID | null>(null);
   useEffect(() => {
+    if (draftProvider.current === active) return;
+    draftProvider.current = active;
     setKeyDraft("");
     setBaseUrlDraft(list.find((r) => r.id === active)?.base_url ?? "");
   }, [active, list]);
 
+  // codex.login_status is the only thing that knows whether an account is
+  // signed in — providers.list says "configured", not who. Asking for it only
+  // from inside the poll meant opening settings with an account already
+  // signed in showed "Sign in with ChatGPT", and the logout button could not
+  // be reached without a whole fresh OAuth round trip.
+  useEffect(() => {
+    if (active !== "openai-codex") {
+      // Leaving the provider drops the status, so a stale login_failed does
+      // not greet the writer on the way back in.
+      setCodexStatus(null);
+      return;
+    }
+    let cancelled = false;
+    void codexApi
+      .loginStatus()
+      .then((s) => {
+        if (!cancelled) setCodexStatus(s);
+      })
+      // Nobody is waiting on this one, unlike the poll: the sign-in button is
+      // already the right thing to show, and an error banner on every
+      // settings open would say nothing the writer can act on.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [active]);
+
   const startCodexLogin = () =>
     guard(async () => {
+      // Cleared before the first await, not after: login_start plus opening
+      // the browser is most of the window the stale banner would otherwise
+      // stay up for, and a login_start that rejects would leave the old
+      // "sign-in failed" line sitting next to the fresh RPC error. Nothing is
+      // lost — the engine's next login_start clears login_failed its side.
+      setCodexStatus(null);
       const { auth_url } = await codexApi.loginStart();
       await openExternalUrl(auth_url);
-      // A retry after login_failed must not leave the old failure banner up
-      // for the ~1.5s until the first fresh poll tick reports back.
-      setCodexStatus(null);
       stopPolling();
       pollRef.current = window.setInterval(() => {
         void codexApi
@@ -125,10 +168,15 @@ export function ProviderSection() {
             // returned.
             if (s.logged_in || s.login_failed) {
               stopPolling();
-              void refresh();
+              void refresh().catch(setError);
             }
           })
-          .catch(() => stopPolling());
+          // A poll that dies quietly leaves the writer watching a sign-in
+          // button that will never change its mind. Stop, and say why.
+          .catch((e: unknown) => {
+            stopPolling();
+            setError(e);
+          });
       }, 1500);
     });
 
@@ -157,13 +205,17 @@ export function ProviderSection() {
       await refresh();
     });
 
-  const saveBaseUrl = () =>
-    guard(async () => {
-      await settingsApi.set({ providers: { [active]: { base_url: baseUrlDraft.trim() } } });
+  const saveBaseUrl = async () => {
+    const next = baseUrlDraft.trim();
+    // A blur that changed nothing is not a save. Without this, tabbing
+    // through the field costs a full settings.set + providers.list round
+    // trip — and that reload is what used to eat a half-typed API key.
+    if (next === (current?.base_url ?? "")) return;
+    await guard(async () => {
+      await settingsApi.set({ providers: { [active]: { base_url: next } } });
       await refresh();
     });
-
-  const current = list.find((r) => r.id === active);
+  };
 
   return (
     <section className="settings-section" id="provider-settings" data-testid="provider-section">
@@ -202,7 +254,10 @@ export function ProviderSection() {
           {codexStatus?.logged_in ? (
             <>
               <span data-testid="provider-codex-email">
-                {codexStatus.email ?? t("settings.providers.codex.signedIn")}
+                {/* `||`, not `??`: an id_token can carry an empty email
+                    claim, and an empty span next to a Logout button reads
+                    as "not signed in". */}
+                {codexStatus.email || t("settings.providers.codex.signedIn")}
               </span>
               <button
                 type="button"
