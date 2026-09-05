@@ -73,21 +73,25 @@ func (s *Service) ContextMemories(projectID string) []string {
 }
 
 // CuratedMemory reads the two budgeted documents. Best-effort like the other
-// context sources: a read failure leaves the section empty rather than failing
+// context sources: a read failure leaves that section empty rather than failing
 // the brief the writer asked for.
+//
+// The two reads are independent on purpose. They are separate rows with
+// separate failure modes — the work-notes read alone can fail on an empty
+// project id, for instance — and neither document is worth more than the
+// other, so one failing must never cost the brief the one that succeeded.
 func (s *Service) CuratedMemory(ctx context.Context, projectID string) (string, string) {
 	if s.memories == nil {
 		return "", ""
 	}
-	profile, err := s.memories.Load(ctx, agentmemory.ScopeWriterProfile, "")
-	if err != nil {
-		return "", ""
+	var profile, notes string
+	if doc, err := s.memories.Load(ctx, agentmemory.ScopeWriterProfile, ""); err == nil {
+		profile = doc.Body
 	}
-	notes, err := s.memories.Load(ctx, agentmemory.ScopeWorkNotes, projectID)
-	if err != nil {
-		return profile.Body, ""
+	if doc, err := s.memories.Load(ctx, agentmemory.ScopeWorkNotes, projectID); err == nil {
+		notes = doc.Body
 	}
-	return profile.Body, notes.Body
+	return profile, notes
 }
 
 // ContextReferences returns the writer-attached material for the brief,
