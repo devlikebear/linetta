@@ -30,9 +30,21 @@ vi.mock("../../lib/rpc", () => ({
 
 vi.mock("../../lib/i18n", () => ({
   // The keys are the contract under test, not the prose, so echo them back.
+  //
+  // Interpolation is echoed as `name=value`, not as the bare value: a mock
+  // that joined values alone cannot tell `{ provider: X }` from `{ name: X }`,
+  // so renaming the component's interpolation key out of step with the
+  // catalogue rendered a literal `{provider}` on screen with the whole suite
+  // still green. This pins the component's half of that contract; the
+  // catalogue's half is pinned against the real `translate` in
+  // "substitutes the destination into the real consent sentence" below.
   useI18n: () => ({
     t: (key: string, vars?: Record<string, string>) =>
-      vars ? `${key}:${Object.values(vars).join(",")}` : key,
+      vars
+        ? `${key}:${Object.entries(vars)
+            .map(([name, value]) => `${name}=${value}`)
+            .join(",")}`
+        : key,
   }),
 }));
 
@@ -895,14 +907,105 @@ describe("ProviderSection", () => {
       );
     });
 
-    it("names the provider in the consent label", async () => {
-      activeId = "anthropic";
+    /** Make settings.set do the engine's half of a consent or key write.
+     *  The checkbox's tick and the test button's enablement both read off
+     *  providers.list, so ticking the box (or clearing the key) only means
+     *  anything in a test if the *next* list reflects it — which is exactly
+     *  what the `await refresh()` in those handlers is for. */
+    function persistWrites() {
+      rpc.settingsSet.mockImplementation(
+        (patch: {
+          provider?: string;
+          providers?: Record<string, { consented_at?: number; api_key?: string }>;
+        }) => {
+          if (patch.provider) activeId = patch.provider;
+          for (const [id, fields] of Object.entries(patch.providers ?? {})) {
+            if (fields.consented_at !== undefined) {
+              rowExtras[id] = { ...rowExtras[id], consented: fields.consented_at !== 0 };
+            }
+            if (fields.api_key !== undefined) {
+              rowExtras[id] = { ...rowExtras[id], configured: fields.api_key !== "" };
+            }
+          }
+          return Promise.resolve({});
+        },
+      );
+    }
+
+    // Design spec 5.4: the sentence has to name the company the scenes are
+    // about to reach. One provider hardcoded into that sentence used to pass
+    // every test in this file, which is the exact failure the spec exists to
+    // prevent — a writer on Gemini reading "sent to Anthropic", ticking the
+    // box, and having their scenes go somewhere the screen never named. So
+    // every id is exercised, and the expectation varies with it.
+    it.each([
+      ["openai-codex", "settings.providers.name.openai-codex", {}],
+      ["anthropic", "settings.providers.name.anthropic", {}],
+      ["gemini-native", "settings.providers.name.gemini-native", {}],
+      // `openai` names a protocol, not a destination — see below.
+      ["openai", "settings.providers.consent.customEndpoint", {}],
+      [
+        "openai",
+        "https://openrouter.ai/api/v1",
+        { openai: { base_url: "https://openrouter.ai/api/v1" } },
+      ],
+    ] as const)("names %s's destination in the consent label", async (id, expected, extras) => {
+      activeId = id;
+      rowExtras = extras as Record<string, Record<string, unknown>>;
       render(<ProviderSection />);
 
       const checkbox = await screen.findByTestId("provider-consent");
       expect(checkbox.closest("label")?.textContent).toBe(
-        "settings.providers.consent:settings.providers.name.anthropic",
+        `settings.providers.consent:provider=${expected}`,
       );
+    });
+
+    it("names the configured endpoint, not the protocol, for openai", async () => {
+      // The three fixed ids name a company; `openai` does not. Its label is
+      // "OpenAI-compatible", which is both broken prose in the sentence and
+      // silent about where the scenes actually go — the base URL may be
+      // OpenRouter, or a local Ollama that never leaves the machine.
+      activeId = "openai";
+      rowExtras = { openai: { base_url: "http://localhost:11434/v1" } };
+      render(<ProviderSection />);
+
+      const label = (await screen.findByTestId("provider-consent")).closest("label");
+      expect(label?.textContent).toContain("http://localhost:11434/v1");
+      expect(label?.textContent).not.toContain("settings.providers.name.openai");
+    });
+
+    it("substitutes the destination into the real consent sentence", async () => {
+      // The mocked `t` above cannot see the catalogue, so nothing else here
+      // notices if the placeholder is renamed in all three catalogues at
+      // once (the parity test only compares ko↔en↔ja, so a consistent rename
+      // is invisible to it). The result would be a consent gate reading
+      // "…{provider}으로 전송…" — naming nobody — in every language. This
+      // runs the real translate() against the real catalogue instead.
+      const { translate } = await vi.importActual<typeof import("../../lib/i18n")>("../../lib/i18n");
+
+      for (const language of ["ko", "en", "ja"] as const) {
+        const sentence = translate(language, "settings.providers.consent", {
+          provider: "Acme Models",
+        });
+        expect(sentence, language).toContain("Acme Models");
+        expect(sentence, language).not.toMatch(/[{}]/);
+      }
+    });
+
+    it("keeps the Korean sentence grammatical after a vowel-final name", async () => {
+      // `으로` agrees with a consonant-final syllable and is wrong after a
+      // vowel — "Google Gemini(제미나이)으로" is ungrammatical, and so is any
+      // base URL ending in a vowel sound. The fix is a postposition with no
+      // allomorph, not a particle rule, so this pins the sentence against
+      // ever reintroducing one.
+      const { translate } = await vi.importActual<typeof import("../../lib/i18n")>("../../lib/i18n");
+
+      for (const provider of ["Google Gemini", "Anthropic", "https://openrouter.ai/api/v1"]) {
+        const sentence = translate("ko", "settings.providers.consent", { provider });
+        expect(sentence, provider).toContain(provider);
+        expect(sentence, provider).not.toContain(`${provider}으로`);
+        expect(sentence, provider).not.toContain(`${provider}로`);
+      }
     });
 
     it("clears a passing test result when the provider changes", async () => {
@@ -917,6 +1020,130 @@ describe("ProviderSection", () => {
       await screen.findByTestId("provider-key-input");
 
       expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("clears a passing test result when consent is revoked", async () => {
+      // Same "a green tick that is a lie" argument as switching provider:
+      // the button correctly disables itself, but a "Connected" left sitting
+      // next to an unticked box tells the writer the connection is still
+      // live when the engine will now refuse it outright.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      persistWrites();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("provider-consent"));
+
+      await waitFor(() => expect(screen.queryByTestId("provider-test-ok")).toBeNull());
+    });
+
+    it("clears a passing test result when the key is cleared", async () => {
+      // The other half of what a passing test result depends on. A result
+      // that outlives the credential it was obtained with is the same lie.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      persistWrites();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId("provider-key-clear"));
+
+      await waitFor(() => expect(screen.queryByTestId("provider-test-ok")).toBeNull());
+    });
+
+    it("keeps a passing test result across an unrelated reload", async () => {
+      // The counterpart to the three tests above: the result clears on the
+      // *facts* it depends on, never on a providers.list arriving. Keying
+      // that effect on the list identity would make a passing tick vanish
+      // whenever anything reloaded in the background — a model save here, a
+      // Codex poll tick in the app — with nothing on screen explaining why.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+
+      const model = screen.getByTestId("provider-model-input");
+      await userEvent.type(model, "claude-sonnet-4-5");
+      fireEvent.blur(model);
+
+      await waitFor(() =>
+        expect(rpc.settingsSet).toHaveBeenCalledWith({
+          providers: { anthropic: { model: "claude-sonnet-4-5" } },
+        }),
+      );
+      await flush();
+      expect(screen.getByTestId("provider-test-ok")).toBeInTheDocument();
+    });
+
+    it("keeps the checkbox ticked after consent is saved", async () => {
+      // `checked` derives from providers.list, so the tick only survives the
+      // click because saveConsent awaits refresh(). Without it the box
+      // springs back unticked the instant React re-renders, and the writer
+      // is left believing consent did not take.
+      activeId = "anthropic";
+      persistWrites();
+      render(<ProviderSection />);
+
+      const checkbox = await screen.findByTestId("provider-consent");
+      expect(checkbox).not.toBeChecked();
+
+      await userEvent.click(checkbox);
+
+      await waitFor(() => expect(screen.getByTestId("provider-consent")).toBeChecked());
+    });
+
+    it("drops a stale result before showing the next one", async () => {
+      // A failure the writer has already fixed must not sit next to the
+      // "Connected" that replaced it — nor the reverse. runTest resets both
+      // before it starts, which is not observable from either direction
+      // alone, so both are run here in sequence.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      rpc.providersTest.mockImplementationOnce(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_auth_failed" } })),
+      );
+      render(<ProviderSection />);
+
+      const button = await screen.findByTestId("provider-test");
+      await userEvent.click(button);
+      expect(await screen.findByTestId("provider-test-error")).toBeInTheDocument();
+
+      await userEvent.click(button);
+
+      expect(await screen.findByTestId("provider-test-ok")).toBeInTheDocument();
+      expect(screen.queryByTestId("provider-test-error")).toBeNull();
+
+      // And back the other way: a passing result must not outlive the run
+      // that replaced it with a failure.
+      rpc.providersTest.mockImplementationOnce(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason: "provider_auth_failed" } })),
+      );
+      await userEvent.click(button);
+
+      expect(await screen.findByTestId("provider-test-error")).toBeInTheDocument();
+      expect(screen.queryByTestId("provider-test-ok")).toBeNull();
+    });
+
+    it("locks the consent box and the test button while a call is in flight", async () => {
+      // Both controls start engine calls that must not be issued twice, and
+      // the checkbox is worse than the rest: a second click while the first
+      // consent write is still travelling would write the opposite value.
+      activeId = "anthropic";
+      rowExtras = { anthropic: { configured: true, consented: true } };
+      rpc.providersTest.mockImplementation(() => new Promise(() => {}));
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-test"));
+
+      expect(screen.getByTestId("provider-consent")).toBeDisabled();
+      expect(screen.getByTestId("provider-test")).toBeDisabled();
     });
 
     it("renders a failed test as a translated reason, not a raw message", async () => {

@@ -158,14 +158,23 @@ export function ProviderSection() {
     setModelsError(null);
   }, [active, list]);
 
-  // A passing test result belongs to the provider it was run against. A
-  // green tick left over from Anthropic sitting on the Gemini screen is a
-  // lie, so this clears on the provider itself — not on a `list` reload,
-  // for the same reason the drafts above key on `active` rather than data.
+  // A passing test result belongs to the provider it was run against *and*
+  // to the credentials and consent it was run under. A green tick left over
+  // from Anthropic sitting on the Gemini screen is a lie; so is one still
+  // reading "Connected" after the writer has unticked consent or cleared the
+  // key, because the connection it describes can no longer be made.
+  //
+  // The dependencies are the three booleans-and-an-id themselves, never
+  // `list`: refresh() hands back a fresh array on every background reload
+  // (a model save, an abandoned Codex login's poll tick), and keying on that
+  // identity would make a passing tick vanish for no reason the writer can
+  // see. Primitives only change when the fact they encode changes.
+  const consented = Boolean(current?.consented);
+  const configured = Boolean(current?.configured);
   useEffect(() => {
     setTestResult(null);
     setTestError(null);
-  }, [active]);
+  }, [active, consented, configured]);
 
   // codex.login_status is the only thing that knows whether an account is
   // signed in — providers.list says "configured", not who. Asking for it only
@@ -330,6 +339,19 @@ export function ProviderSection() {
       });
       await refresh();
     });
+
+  // Who the consent sentence names. For the three fixed providers that is the
+  // company behind the id. For `openai` the id names a *protocol*, not a
+  // destination: "sent to OpenAI-compatible" is both broken prose and silent
+  // about where the scenes actually go, which is wherever base_url points —
+  // OpenRouter, or a local Ollama that never leaves this machine. So name the
+  // endpoint the writer configured, and fall back to describing it in prose
+  // while none is set. The saved value is used, not the draft: a half-typed
+  // URL must not appear in the sentence the writer is consenting to.
+  const consentDestination =
+    active === "openai"
+      ? current?.base_url?.trim() || t("settings.providers.consent.customEndpoint")
+      : t(nameKeyFor(active));
 
   // providers.test goes through Source.Client(), which requires Configured()
   // AND Consented() on the engine side — this is a server contract, not a UX
@@ -508,18 +530,18 @@ export function ProviderSection() {
       <label className="modal-field">
         <input
           type="checkbox"
-          checked={Boolean(current?.consented)}
+          checked={consented}
           disabled={busy}
           onChange={(e) => void saveConsent(e.target.checked)}
           data-testid="provider-consent"
         />
-        {t("settings.providers.consent", { provider: t(nameKeyFor(active)) })}
+        {t("settings.providers.consent", { provider: consentDestination })}
       </label>
 
       <div className="modal-field">
         <button
           type="button"
-          disabled={busy || !current?.consented || !current?.configured}
+          disabled={busy || !consented || !configured}
           onClick={() => void runTest()}
           data-testid="provider-test"
         >
