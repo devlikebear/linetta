@@ -27,8 +27,11 @@ for each one, and can be withdrawn at any time.
 
 If you already run an AI agent of your own — Claude Code, Claude Desktop, or
 another MCP client — you can connect it to Linetta instead of, or alongside,
-the built-in one. Both reach your manuscript through the same set of tools, so
-what one can read or change, the other can too.
+the built-in one. Both work through the same set of tools, but you decide how
+far an outside client gets: it stays off until you turn it on, can be limited
+to reading only, and can be pinned to a single work. The built-in agent is not
+scoped that way — it reads and writes across your whole library, which is what
+the consent you give a provider covers.
 
 Linetta has no user accounts, no analytics, and no advertising. The developer
 runs no server for the app and does not collect what you write. Your writing
@@ -74,9 +77,10 @@ choose to sync into.
   scene prose are individually snapshotted and restorable
   (`engine/internal/mcphost/tools_write.go`,
   `apps/desktop/src/components/VersionSheet.tsx`); some other things it can
-  change through `linetta_apply_story_ops` — individual fact-card, character,
-  and relationship edits — are logged in the activity log but are not
-  automatically undoable. The text above says "your manuscript text," not
-  "every change," to avoid implying an undo path that doesn't exist for those.
+  change through `linetta_apply_story_ops` — entity, relationship, storyline,
+  beat, fact-card and memory edits — are logged in the activity log but are not
+  batch-undoable (`engine/internal/mcphost/tools_batch.go`). The text above says
+  "your manuscript text," not "every change," to avoid implying an undo path
+  that doesn't exist for those.
 
 - **No model names, prices, or screenshots**, per the brief for this task.

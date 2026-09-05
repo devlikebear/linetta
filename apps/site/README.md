@@ -104,14 +104,16 @@ Regenerate it when the headline or the palette changes.
 
 ## Content accuracy
 
-The site describes the app at `main`, which since the MCP-first pivot has **no
-built-in AI**: no provider settings, no API key field, no in-app companion. AI
-collaboration happens through the optional local MCP server.
+The site describes the app at `main`. Since 1.2 that includes a **built-in
+agent**: Settings has provider entries and an API key field, and the agent panel
+runs inside the app against a provider the writer connects. It is a client of
+the same local MCP server an outside agent connects to, which remains the other
+way to write alongside a model.
 
 Claims in `content.ts` are taken from the engine rather than from the docs — the
-fifteen `linetta_*` tool names, the nine/six read-write split, the access modes,
-the 7391 default port, the per-minute call limit. When one of them changes, the
-engine is the thing to check.
+sixteen `linetta_*` tool names, the nine/seven read-write split, the access
+modes, the 7391 default port, the per-minute call limit. When one of them
+changes, the engine is the thing to check.
 
 The release number is imported from `apps/desktop/package.json`, so the site and
 desktop package move together when `scripts/bump-version.sh` prepares a release.
