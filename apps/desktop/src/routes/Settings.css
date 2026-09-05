@@ -11,6 +11,15 @@
   resize: vertical;
 }
 
+/* The character count is an <output> so a screen reader hears it change (see
+   MemorySection.tsx). <output> is inline by default, which would let the
+   count sit on the help line's baseline instead of under it; it is one of
+   several stacked notes below the box, so it lays out like the <p>s it sits
+   with. */
+.settings #memory-settings output {
+  display: block;
+}
+
 /* Toggle rows are buttons that must look like plain .set-rows. */
 .settings .set-row-btn {
   width: 100%;
