@@ -15,9 +15,16 @@ It writes one markdown file containing every project's transcript and the facts
 the companion was told to remember, readable without Linetta installed. The row
 only appears if your library actually holds a transcript.
 
-Remembered facts were never in the database — they live in
-`<app data>/companion/<project>/memory/experiences.jsonl` and keep working:
-an agent connected over MCP can still record and recall them.
+Remembered facts were never in the database — they live in a per-project
+`memory/experiences.jsonl` file, and an agent connected over MCP records and
+recalls them the same way the companion did.
+
+**Facts remembered before 1.0 are the exception.** 1.0 moved where that file
+is looked for: it was `<app data>/companion/<project id>/memory/`, and it is
+now `<app data>/<project id>/memory/`. Nothing was deleted, but nothing moved
+either, so an agent no longer recalls what the companion remembered. To bring
+those facts back, copy each project's directory out of `<app data>/companion/`
+up one level, into `<app data>/` beside the others.
 
 ## What happened to your API keys, and what changes in 1.2
 
@@ -38,7 +45,7 @@ where to go and delete it:
 | --- | --- |
 | macOS | Keychain Access → search `linetta` |
 | Windows | Credential Manager → Windows Credentials → `linetta` entries |
-| Linux | there is no secure secret store here, so a key you enter today cannot be saved and only the ChatGPT (Codex) sign-in works, storing its token in `<app data>/codex/auth.json`. **A key you entered before June 2026 is a different matter**: those builds wrote it in plain text into `<app data>/settings.json`, under `providers`, and on Linux nothing has moved or cleared it since. Open that file and delete the `api_key` value yourself if you want it gone |
+| Linux | there is no secure secret store here, so a key you enter today cannot be saved and only the ChatGPT (Codex) sign-in works, storing its token in `<app data>/codex/auth.json`. **A key you entered before 3 June 2026 is a different matter**: those builds wrote it in plain text into `<app data>/settings.json`, under `providers`, and on Linux nothing has moved or cleared it since. Open that file and delete the `api_key` value yourself if you want it gone |
 
 On Linux `<app data>` is `$XDG_DATA_HOME/com.devlikebear.linetta`, or
 `~/.local/share/com.devlikebear.linetta` when `XDG_DATA_HOME` is unset.

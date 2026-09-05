@@ -130,9 +130,15 @@ without inheriting the limit.
 `web_fetch` (from TARS `pkg/tools`) is still used by the Fact Book to capture a
 source URL. It needs no key, and it is not exposed as an MCP tool.
 
-The engine links no language model. `scripts/validate-story-core-deps.sh`
-enforces that across the whole engine: `tars/pkg/llm`, `pkg/agentloop`, and
-`pkg/session` must not appear in `go list -deps ./...`.
+Since 1.2 the engine does link a language-model client, for the built-in
+agent. `scripts/validate-story-core-deps.sh` bounds where:
+`tars/pkg/agentloop` and `pkg/session` must not appear anywhere in the engine
+— the agent's loop is ours, in `internal/agent` — and `tars/pkg/llm` may be
+imported only by `internal/provider`, `internal/agent`, and the test-only
+`internal/agenttest`. The story core (`storycontext`, `storyops`, `mcphost`,
+`rpc/handlers`) must not reach it even transitively: those packages are shared
+by every agent, built-in or connected over MCP, and a model client in their
+dependency graph would mean one of them could call a model on its own.
 
 ## Versioning and builds
 
