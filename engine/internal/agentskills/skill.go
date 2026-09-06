@@ -82,16 +82,35 @@ var (
 	ErrNoDescription  = errors.New("agentskills: missing description")
 )
 
-// openFence and closeFence bound the YAML frontmatter block. closeFence is
-// searched for starting right after openFence, and the FIRST match wins —
-// not the last — so a body that itself contains a line reading "---" is
-// treated as body bytes rather than closing the frontmatter early. That is
-// the one thing most worth getting right here: Parse and Render must
-// round-trip such a body untouched.
+// openFence and closeFence are the LF-only fence forms Render always
+// produces (see Render's doc comment for why it never emits CRLF).
+// splitFrontmatter accepts CRLF on input too; see its own doc comment.
+//
+// closeFence is searched for starting right after openFence, and the FIRST
+// match wins — not the last — so a body that itself contains a line reading
+// "---" is treated as body bytes rather than closing the frontmatter early.
+// That is the one thing most worth getting right here: Parse and Render
+// must round-trip such a body untouched.
 const (
 	openFence  = "---\n"
 	closeFence = "\n---\n"
 )
+
+// bom is the UTF-8 encoding of U+FEFF, the byte-order mark some Windows
+// editors (Notepad, in particular) write at the start of a file by default.
+// Parse strips it before anything else so such a file's frontmatter is still
+// detected rather than reported as absent.
+const bom = "\uFEFF"
+
+// maxFrontmatterRunes bounds the size of the raw text between the fences,
+// checked before it is handed to yaml.Unmarshal. yaml.v3 has no built-in
+// alias-expansion limit, and Parse is reachable from an MCP tool argument
+// (a later task), so an unbounded block could be used to exhaust memory
+// during Parse itself, before any other guard runs. The block holds four
+// short fields (name, description, author, enabled); a few kilobytes is
+// enormously generous. This does NOT bound Body — that is Task 2's Guard,
+// with its own limit (MaxBodyRunes), enforced elsewhere.
+const maxFrontmatterRunes = 4096
 
 // frontmatter is the YAML shape of the block between the fences. Name and
 // Enabled are pointers so Parse can tell "the key is absent" from "the key
@@ -109,7 +128,37 @@ type frontmatter struct {
 // validNamePattern is the slug rule: lowercase ASCII letters, digits and
 // hyphens only. Nothing else — not a space, not "..", not a non-ASCII
 // script — is a name character.
-var validNamePattern = regexp.MustCompile(`^[a-z0-9-]+$`)
+//
+// The pattern also requires the first and last characters to be alphanumeric,
+// which forbids a leading or trailing hyphen and, as a consequence, an
+// all-hyphen name too. None of those are unsafe as a path segment — this is
+// a deliberate cosmetic decision, not a safety one: Name becomes a directory
+// name a writer sees in a file browser (Task 3), and "-foo", "foo-", and
+// "---" are confusing entries to find there. Interior hyphens are otherwise
+// unrestricted (e.g. "a--b" is fine) since only the ends were the reviewer's
+// concern.
+var validNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
+// reservedDeviceNames are Windows reserved device names: writing a file or
+// directory with one of these names fails, or behaves strangely, on every
+// Windows box this app ships to — regardless of case or of any extension
+// appended to it. Name becomes a directory name (Task 3), so these must be
+// refused here, once, rather than fixed later as a breaking change to skills
+// that already exist on disk by then.
+var reservedDeviceNames = map[string]bool{
+	"con": true, "prn": true, "aux": true, "nul": true,
+	"com1": true, "com2": true, "com3": true, "com4": true, "com5": true,
+	"com6": true, "com7": true, "com8": true, "com9": true,
+	"lpt1": true, "lpt2": true, "lpt3": true, "lpt4": true, "lpt5": true,
+	"lpt6": true, "lpt7": true, "lpt8": true, "lpt9": true,
+}
+
+// isReservedDeviceName reports whether name collides with a Windows reserved
+// device name, case-insensitively (the slug rule already forces lowercase in
+// practice, but this check does not rely on that).
+func isReservedDeviceName(name string) bool {
+	return reservedDeviceNames[strings.ToLower(name)]
+}
 
 // ValidName reports whether name is an acceptable Skill.Name.
 //
@@ -121,37 +170,68 @@ var validNamePattern = regexp.MustCompile(`^[a-z0-9-]+$`)
 // ships on. The writer's own language belongs in Description, which is free
 // text with no such constraint. Please don't "fix" this to accept Unicode
 // names — see TestNameMustBeASlug for the case this guards.
+//
+// It also refuses a Windows reserved device name (see reservedDeviceNames)
+// even though such a name is otherwise a well-formed slug.
 func ValidName(name string) bool {
 	if name == "" || len([]rune(name)) > MaxNameRunes {
 		return false
 	}
-	return validNamePattern.MatchString(name)
+	if !validNamePattern.MatchString(name) {
+		return false
+	}
+	return !isReservedDeviceName(name)
 }
 
 // splitFrontmatter separates raw into its YAML block and body bytes.
 //
+// It strips a leading UTF-8 byte-order mark first, then recognizes fence
+// lines terminated by either "\n" or "\r\n" — a file with CRLF line endings
+// or a BOM (both realistic on Windows, which Linetta ships to, written by
+// tools it does not control, such as Notepad) must not be reported as
+// having no frontmatter at all. Only one line-ending style is recognized per
+// file: whichever the opening fence uses is also required of the closing
+// fence. Render (see its doc comment) always emits LF, regardless of what
+// was parsed — so a CRLF file's frontmatter round-trips to LF. This is a
+// deliberate choice, not an oversight: the fences and YAML are structure
+// Linetta owns and rewrites anyway, so there is no reason to preserve their
+// original line ending once parsed.
+//
 // The body is everything after the closing fence, kept byte-for-byte: no
-// trimming, no reformatting. That is what lets a body containing its own
-// "---" line, or trailing/leading blank lines, survive a Parse/Render round
-// trip unchanged.
+// trimming, no reformatting, and — this is the part that must not regress —
+// no rewriting of ITS line endings either. A CRLF body survives Parse and
+// Render untouched, even though the frontmatter around it does not, because
+// the body is content Linetta does not own; only the split points (BOM,
+// fence prefix/suffix lengths) are computed from the normalized view above,
+// and the body slice itself is taken from the original bytes.
 func splitFrontmatter(raw string) (yamlBlock, body string, err error) {
-	if !strings.HasPrefix(raw, openFence) {
-		return "", "", ErrNoFrontmatter
+	raw = strings.TrimPrefix(raw, bom)
+
+	nl := "\n"
+	prefix := openFence // "---\n"
+	if !strings.HasPrefix(raw, prefix) {
+		crlfPrefix := "---\r\n"
+		if !strings.HasPrefix(raw, crlfPrefix) {
+			return "", "", ErrNoFrontmatter
+		}
+		nl = "\r\n"
+		prefix = crlfPrefix
 	}
-	rest := raw[len(openFence):]
+	rest := raw[len(prefix):]
+	closer := nl + "---" + nl
 
 	// An empty frontmatter block: the closing fence immediately follows the
-	// opening one, so there is no leading "\n" inside rest for closeFence's
-	// pattern to match against.
-	if strings.HasPrefix(rest, "---\n") {
-		return "", rest[len("---\n"):], nil
+	// opening one, so there is no leading line-ending inside rest for
+	// closer's pattern to match against.
+	if strings.HasPrefix(rest, "---"+nl) {
+		return "", rest[len("---"+nl):], nil
 	}
 
-	idx := strings.Index(rest, closeFence)
+	idx := strings.Index(rest, closer)
 	if idx < 0 {
 		return "", "", ErrBadFrontmatter
 	}
-	return rest[:idx], rest[idx+len(closeFence):], nil
+	return rest[:idx], rest[idx+len(closer):], nil
 }
 
 // Parse reads a SKILL.md document: agentskills.io-format YAML frontmatter
@@ -165,6 +245,13 @@ func Parse(raw string) (Skill, error) {
 		return Skill{}, err
 	}
 
+	// Bound the block BEFORE it reaches yaml.Unmarshal — see
+	// maxFrontmatterRunes' doc comment for why this has to happen here and
+	// not only in a later guard.
+	if n := len([]rune(yamlBlock)); n > maxFrontmatterRunes {
+		return Skill{}, fmt.Errorf("%w: frontmatter block is %d runes, over the %d-rune limit", ErrBadFrontmatter, n, maxFrontmatterRunes)
+	}
+
 	var fm frontmatter
 	if err := yaml.Unmarshal([]byte(yamlBlock), &fm); err != nil {
 		return Skill{}, fmt.Errorf("%w: %v", ErrBadFrontmatter, err)
@@ -175,6 +262,9 @@ func Parse(raw string) (Skill, error) {
 	}
 	name := *fm.Name
 	if !ValidName(name) {
+		if isReservedDeviceName(name) {
+			return Skill{}, fmt.Errorf("%w: %q is a Windows reserved device name; pick a different name", ErrBadName, name)
+		}
 		return Skill{}, fmt.Errorf("%w: %q", ErrBadName, name)
 	}
 	if strings.TrimSpace(fm.Description) == "" {
@@ -210,7 +300,12 @@ func Parse(raw string) (Skill, error) {
 //
 // It never emits UpdatedAt or BodyRunes — they are not part of the file —
 // and it writes Body back verbatim, so a body that survived Parse with an
-// embedded "---" line survives Render too.
+// embedded "---" line, or with its own CRLF line endings, survives Render
+// too. The fences and YAML Render generates around Body are always
+// LF-terminated, even if the source Skill was Parsed from a CRLF file with
+// a BOM: that structure is Linetta's own, rewritten every time regardless,
+// so there is nothing gained by preserving its original line ending, and
+// LF keeps the writer output uniform across platforms.
 func Render(s Skill) string {
 	enabled := s.Enabled
 	name := s.Name

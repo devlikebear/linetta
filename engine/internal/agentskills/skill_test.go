@@ -146,8 +146,12 @@ func TestAuthorDefaultsToWriterWhenAbsent(t *testing.T) {
 func TestAuthorUnknownValueIsRefused(t *testing.T) {
 	raw := "---\nname: dialogue-rhythm\ndescription: some description\nauthor: robot\n---\n\nBody.\n"
 	_, err := Parse(raw)
-	if err == nil {
-		t.Fatalf("Parse() with unknown author: got nil error, want a refusal")
+	// Assert the sentinel, not just "an error": Parse maps an unknown author
+	// to ErrBadFrontmatter (there is no dedicated sentinel for it), and a
+	// bare err != nil check would still pass if that mapping silently
+	// changed to some other error.
+	if !errors.Is(err, ErrBadFrontmatter) {
+		t.Fatalf("Parse() with unknown author: error = %v, want ErrBadFrontmatter", err)
 	}
 }
 
@@ -211,6 +215,145 @@ func TestBodyContainingFrontmatterLikeLineSurvivesRoundTrip(t *testing.T) {
 	}
 	if s.Body != s2.Body {
 		t.Fatalf("body round trip mismatch:\nfirst:  %q\nsecond: %q", s.Body, s2.Body)
+	}
+}
+
+// TestNameRejectsWindowsReservedDeviceNames covers the second Important
+// review finding: Name becomes a directory name (Task 3), and these names
+// are reserved on Windows regardless of case or extension. Fixing this
+// later, once real skills exist on disk, would be a breaking change — hence
+// covering it now.
+func TestNameRejectsWindowsReservedDeviceNames(t *testing.T) {
+	cases := []string{"con", "CON", "Con", "nul", "aux", "prn", "com1", "COM9", "lpt1", "lpt9"}
+	for _, name := range cases {
+		if ValidName(name) {
+			t.Errorf("ValidName(%q) = true, want false (Windows reserved device name)", name)
+		}
+	}
+
+	// And through Parse: the error must still be ErrBadName (there is no
+	// dedicated sentinel for this), with a message that says what is wrong
+	// rather than just "bad name".
+	raw := "---\nname: con\ndescription: some description\n---\n\nBody.\n"
+	_, err := Parse(raw)
+	if !errors.Is(err, ErrBadName) {
+		t.Fatalf("Parse() with reserved name %q: error = %v, want ErrBadName", "con", err)
+	}
+	if !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("Parse() error = %q, want it to explain the name is reserved", err.Error())
+	}
+
+	// A name that merely contains a reserved word is not itself reserved.
+	if !ValidName("console") {
+		t.Errorf("ValidName(%q) = false, want true (not itself a reserved name)", "console")
+	}
+}
+
+// TestNameRejectsLeadingTrailingOrAllHyphens pins down the cosmetic decision
+// documented on validNamePattern: a leading or trailing hyphen (and, as a
+// consequence, an all-hyphen name) is refused, even though none of them are
+// unsafe as a path segment. Interior hyphens remain unrestricted.
+func TestNameRejectsLeadingTrailingOrAllHyphens(t *testing.T) {
+	cases := []struct {
+		name string
+		ok   bool
+	}{
+		{"-foo", false},
+		{"foo-", false},
+		{"-foo-", false},
+		{"-", false},
+		{"---", false},
+		{"a--b", true}, // interior consecutive hyphens are fine
+		{"a-b-c", true},
+	}
+	for _, c := range cases {
+		if got := ValidName(c.name); got != c.ok {
+			t.Errorf("ValidName(%q) = %v, want %v", c.name, got, c.ok)
+		}
+	}
+}
+
+// TestParseStripsLeadingBOM covers the first Important review finding: a
+// UTF-8 byte-order mark (which Notepad writes by default) must not defeat
+// frontmatter detection.
+func TestParseStripsLeadingBOM(t *testing.T) {
+	raw := "\uFEFF" + wellFormed
+	s, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse() with leading BOM: %v", err)
+	}
+	if s.Name != "dialogue-rhythm" {
+		t.Errorf("Name = %q", s.Name)
+	}
+}
+
+// TestParseAcceptsCRLFFrontmatter covers the other half of the first
+// Important review finding: a CRLF file (realistic on Windows, which
+// Linetta ships to, written by tools it does not control) must be readable,
+// not reported as having no frontmatter at all.
+func TestParseAcceptsCRLFFrontmatter(t *testing.T) {
+	raw := "---\r\nname: dialogue-rhythm\r\ndescription: some description\r\nauthor: agent\r\nenabled: true\r\n---\r\n\r\nBody line one.\r\nBody line two.\r\n"
+	s, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse() with CRLF frontmatter: %v", err)
+	}
+	if s.Name != "dialogue-rhythm" || s.Author != AuthorAgent || !s.Enabled {
+		t.Fatalf("Parse() with CRLF frontmatter produced %+v", s)
+	}
+	// The body's own CRLF line endings are content Linetta does not own —
+	// they must survive untouched, not get silently normalized to LF.
+	if !strings.Contains(s.Body, "Body line one.\r\nBody line two.\r\n") {
+		t.Fatalf("Body CRLF line endings were not preserved: %q", s.Body)
+	}
+}
+
+// TestRenderAlwaysEmitsLFFrontmatterButPreservesBodyLineEndings pins down
+// the deliberate choice documented on splitFrontmatter/Render: Render always
+// writes LF-terminated fences and YAML, regardless of what Parse read, but
+// Body's own line endings (content Linetta does not own) survive Parse and
+// Render untouched.
+func TestRenderAlwaysEmitsLFFrontmatterButPreservesBodyLineEndings(t *testing.T) {
+	raw := "---\r\nname: dialogue-rhythm\r\ndescription: some description\r\n---\r\n\r\nCRLF body.\r\n"
+	s, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	rendered := Render(s)
+	if !strings.HasPrefix(rendered, "---\nname: dialogue-rhythm\n") {
+		t.Fatalf("Render() did not emit an LF frontmatter fence: %q", rendered)
+	}
+	if !strings.Contains(rendered, "CRLF body.\r\n") {
+		t.Fatalf("Render() lost the body's own CRLF line ending: %q", rendered)
+	}
+
+	// And it must still round-trip: the CRLF body Render just emitted is
+	// still followed by an LF closing fence, so Parse must find it again.
+	s2, err := Parse(rendered)
+	if err != nil {
+		t.Fatalf("Parse(Render(s)): %v", err)
+	}
+	if s2.Body != s.Body {
+		t.Fatalf("body mismatch after Render round trip:\nfirst:  %q\nsecond: %q", s.Body, s2.Body)
+	}
+}
+
+// TestParseOversizedFrontmatterReturnsErrBadFrontmatter covers the Minor
+// finding: the frontmatter block is bounded before it ever reaches
+// yaml.Unmarshal, since yaml.v3 has no alias-expansion limit of its own.
+func TestParseOversizedFrontmatterReturnsErrBadFrontmatter(t *testing.T) {
+	padding := strings.Repeat("a", maxFrontmatterRunes+1)
+	raw := "---\nname: dialogue-rhythm\ndescription: some description\n# " + padding + "\n---\n\nBody.\n"
+	_, err := Parse(raw)
+	if !errors.Is(err, ErrBadFrontmatter) {
+		t.Fatalf("Parse() with oversized frontmatter: error = %v, want ErrBadFrontmatter", err)
+	}
+
+	// A frontmatter block right at the limit must still parse.
+	padding = strings.Repeat("a", maxFrontmatterRunes-100)
+	raw = "---\nname: dialogue-rhythm\ndescription: some description\n# " + padding + "\n---\n\nBody.\n"
+	if _, err := Parse(raw); err != nil {
+		t.Fatalf("Parse() with frontmatter under the limit: %v", err)
 	}
 }
 
