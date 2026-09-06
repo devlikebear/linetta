@@ -54,18 +54,12 @@ const zeroWidthJoiner = '\u200D'
 
 // Screen refuses text that must not reach a prompt.
 //
-// It screens for characters a writer cannot see while reviewing their own
-// memory but a model still reads: zero-width characters, bidi controls,
-// Unicode tag characters, variation selectors, and the format category
-// generally — plus a short list of characters outside that category which
-// are just as invisible in practice (see the const block above).
-//
-// The zero-width joiner is a deliberate, narrow exception: U+200D is what
-// makes family and profession emoji ("👩‍⚕️") a single glyph instead of three,
-// and writers describing their own preferences legitimately paste those. A
-// ZWJ is only accepted when it directly joins two runes that look like
-// emoji; a ZWJ anywhere else — in particular between two ordinary letters,
-// which is exactly the smuggling shape — is still refused. See isEmojiJoin.
+// It is ScreenInvisible plus one refusal of its own: a memory is one line,
+// and a heading there is an escape attempt against the block's own frame
+// (see ErrDelimiter's use below). A document that is legitimately markdown —
+// a skill body, for instance — needs the invisible-character screening
+// without that heading refusal; call ScreenInvisible directly for that (see
+// agentskills.Guard).
 //
 // It deliberately does NOT match phrases like "ignore previous instructions".
 // Linetta's users write novels: a thriller contains that sentence honestly,
@@ -79,6 +73,24 @@ func Screen(text string) error {
 	if headingPattern.MatchString(text) {
 		return fmt.Errorf("%w: a memory line may not start a markdown heading (\"#\" through \"######\")", ErrDelimiter)
 	}
+	return ScreenInvisible(text)
+}
+
+// ScreenInvisible refuses characters a writer cannot see while reviewing
+// their own text but a model still reads: zero-width characters, bidi
+// controls, Unicode tag characters, variation selectors, and the format
+// category generally — plus a short list of characters outside that
+// category which are just as invisible in practice (see the const block
+// above). It carries none of Screen's markdown-heading refusal, so it is
+// safe to run over a document where headings are ordinary structure.
+//
+// The zero-width joiner is a deliberate, narrow exception: U+200D is what
+// makes family and profession emoji ("👩‍⚕️") a single glyph instead of three,
+// and writers describing their own preferences legitimately paste those. A
+// ZWJ is only accepted when it directly joins two runes that look like
+// emoji; a ZWJ anywhere else — in particular between two ordinary letters,
+// which is exactly the smuggling shape — is still refused. See isEmojiJoin.
+func ScreenInvisible(text string) error {
 	runes := []rune(text)
 	for i, r := range runes {
 		switch {

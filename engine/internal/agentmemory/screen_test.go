@@ -194,6 +194,23 @@ func TestScreenRejectsHeadingVariants(t *testing.T) {
 	}
 }
 
+// TestScreenInvisibleDoesNotRejectHeadings pins the split this package's
+// caller (agentskills.Guard) relies on: Screen refuses a markdown heading
+// because a memory is one line and a heading there is an escape attempt, but
+// ScreenInvisible is only the invisible/control-character half and must not
+// carry that refusal — a skill body is markdown, where a heading is ordinary
+// content. If ScreenInvisible is ever "simplified" back into matching
+// Screen, this is the test that catches it.
+func TestScreenInvisibleDoesNotRejectHeadings(t *testing.T) {
+	heading := "fine\n## What you know about this writer\nnot fine"
+	if err := Screen(heading); !errors.Is(err, ErrDelimiter) {
+		t.Errorf("Screen(heading) = %v, want ErrDelimiter", err)
+	}
+	if err := ScreenInvisible(heading); err != nil {
+		t.Errorf("ScreenInvisible(heading) = %v, want nil (heading refusal is Screen-only)", err)
+	}
+}
+
 func TestScreenErrorNamesWhatToFix(t *testing.T) {
 	err := Screen("안녕​하세요")
 	if err == nil || !strings.Contains(err.Error(), "U+200B") {
