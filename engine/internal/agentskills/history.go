@@ -86,12 +86,18 @@ type Version struct {
 	// not rare, they are what a fast path or a test with a fixed clock
 	// produces every time. Any caller asking "did this happen after that?"
 	// has to ask the rowid, not the timestamp; List's ORDER BY already
-	// breaks its ties on it, and Newest sorts on it alone. It is exposed
-	// (rather than selected and discarded, which is what this used to do)
-	// because that question is asked outside this package too — skills.restore
-	// has to know whether a deletion came after the version it is putting
-	// back, and a millisecond comparison there silently overwrote a
-	// different skill.
+	// breaks its ties on it, and Newest sorts on it alone.
+	//
+	// It is NOT what skills.restore's overwrite guard reads to decide
+	// anything — that check (recordsSkill, in the rpc/handlers package)
+	// compares document CONTENT against History.Newest, not row order, once
+	// a rule keyed on "which row came last" turned out to answer wrongly at
+	// two reachable states (see refuseUnrecordedSkill's doc comment). Seq is
+	// left exposed anyway — selected and discarded (`_ = rowSeq`) is what
+	// this used to do — because it is the only way a caller can see this
+	// table's true insertion order, this package's own tests use it to pin
+	// that Newest sorts on the rowid and not the clock, and a later check
+	// may reasonably need the same ordering again.
 	//
 	// It is an ordering, not an identity: nothing should store it, send it
 	// on the wire, or expect it to survive a database copied row by row.

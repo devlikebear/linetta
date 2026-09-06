@@ -1115,7 +1115,18 @@ func TestASkillTooBigToReadIsNeverWrittenOver(t *testing.T) {
 		}
 	})
 
-	t.Run("skills.restore refuses it", func(t *testing.T) {
+	// This subtest's name once claimed to prove skills.restore refuses via
+	// inspectBeforeOverwrite's ReadRaw check specifically — the door that
+	// stops "unreadable" from being silently written over. It didn't: a huge
+	// body also refuses through refuseUnrecordedSkill's presenceUnparseable
+	// branch, so the mutation that deletes the ReadRaw check entirely (making
+	// inspectBeforeOverwrite report presenceUnparseable, no error, for every
+	// file Read cannot open) still leaves restore refusing — just for the
+	// wrong reason — and this subtest could not tell the difference. It now
+	// asserts on inspectBeforeOverwrite directly, which is the only way to
+	// pin that the ReadRaw check is what fires here, not a second refusal
+	// downstream that happens to cover for it.
+	t.Run("skills.restore refuses it, via the ReadRaw check specifically", func(t *testing.T) {
 		ctx, st, hist, _ := realSkills(t)
 		dir := writerDir(t, st)
 		params, _ := json.Marshal(map[string]any{
@@ -1131,9 +1142,146 @@ func TestASkillTooBigToReadIsNeverWrittenOver(t *testing.T) {
 		// The writer grows the file past the ceiling in their own editor.
 		writeRawSkill(t, filepath.Join(dir, "huge"), huge)
 
+		// The door itself: inspectBeforeOverwrite must report this as
+		// unreadable — an error, not presenceUnparseable with none — because
+		// a file over the read ceiling fails ReadRaw too, and that failure is
+		// what a caller ignoring refuseUnrecordedSkill's own refusal would
+		// otherwise miss.
+		_, presence, ibErr := inspectBeforeOverwrite(st, agentskills.ScopeWriter, "", "huge")
+		if ibErr == nil {
+			t.Fatalf("inspectBeforeOverwrite must refuse a file over the read ceiling itself "+
+				"(via ReadRaw), not fall through to presenceUnparseable with no error; got presence=%v, err=nil",
+				presence)
+		}
+		if presence != presenceUnreadable {
+			t.Errorf("presence = %v, want presenceUnreadable", presence)
+		}
+
 		_, err = RestoreSkill(st, hist, clockAt(2000), nil)(ctx, json.RawMessage(`{"id":`+quote(row.ID)+`}`))
 		wantInvalidParams(t, err)
 		wantFileOnDisk(t, filepath.Join(dir, "huge", "SKILL.md"), huge)
+	})
+}
+
+// A CRLF-only or trailing-newline-only rewrite of a store-written SKILL.md
+// must not lock its own history out of every future restore.
+//
+// splitFrontmatter (skill.go) deliberately preserves a body's own line
+// endings through Parse and Render, because the body is content this
+// package does not own. Linetta ships Windows builds, and the skills folder
+// is one a writer points other tools at — a file re-saved by Notepad, or
+// any CRLF-by-default editor, turns every body "\n" into "\r\n" with no
+// writer intent behind the change at all. Before recordsSkill normalized
+// line endings, that rewrite made the live document compare unequal to the
+// newest recorded row byte-for-byte, so refuseUnrecordedSkill read it as
+// "an unrecorded document is standing here" and refused every restore at
+// that name — falsely, since the log holds the same text. A save that only
+// adds or drops the file's own trailing newline hit the same false refusal.
+//
+// The control case in the same test proves the fix did not go too far: a
+// genuine one-word change to the live document — matching line endings and
+// all — still refuses, because that IS a document the log has no copy of.
+func TestRestoreOverALineEndingOrTrailingNewlineRewriteIsAllowed(t *testing.T) {
+	rewriteFile := func(t *testing.T, path string, transform func(string) string) {
+		t.Helper()
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte(transform(string(raw))), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	setup := func(t *testing.T) (ctx context.Context, st *agentskills.Store, hist *agentskills.History, dir, oldID string) {
+		ctx, st, hist, _ = realSkills(t)
+		dir = writerDir(t, st)
+		old, err := json.Marshal(map[string]any{
+			"scope": "writer", "name": "rewritten", "description": "설명", "body": "원래 본문\n",
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if _, err := WriteSkill(st, hist, clockAt(1000), nil)(ctx, old); err != nil {
+			t.Fatalf("write v1: %v", err)
+		}
+		oldRow, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "rewritten")
+		if err != nil {
+			t.Fatalf("newest after v1: %v", err)
+		}
+		latest, err := json.Marshal(map[string]any{
+			"scope": "writer", "name": "rewritten", "description": "설명", "body": "고친 본문\n",
+		})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if _, err := WriteSkill(st, hist, clockAt(2000), nil)(ctx, latest); err != nil {
+			t.Fatalf("write v2: %v", err)
+		}
+		return ctx, st, hist, dir, oldRow.ID
+	}
+
+	t.Run("a CRLF rewrite of the current document still allows restoring an older version", func(t *testing.T) {
+		ctx, st, hist, dir, oldID := setup(t)
+		path := filepath.Join(dir, "rewritten", "SKILL.md")
+		// The writer's own editor re-saves the file with CRLF line endings —
+		// no content change at all.
+		rewriteFile(t, path, func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") })
+
+		_, err := RestoreSkill(st, hist, clockAt(3000), nil)(ctx, json.RawMessage(`{"id":`+quote(oldID)+`}`))
+		if err != nil {
+			t.Fatalf("a CRLF-only rewrite must not block this restore: %v", err)
+		}
+		live, err := st.Read(agentskills.ScopeWriter, "", "rewritten")
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if live.Body != "원래 본문\n" {
+			t.Errorf("body = %q, want the restored older version", live.Body)
+		}
+	})
+
+	t.Run("a trailing-newline-only rewrite of the current document still allows restoring an older version", func(t *testing.T) {
+		ctx, st, hist, dir, oldID := setup(t)
+		path := filepath.Join(dir, "rewritten", "SKILL.md")
+		// The writer's editor saves without a final newline — the body's
+		// last "\n" is dropped, nothing else changes.
+		rewriteFile(t, path, func(s string) string { return strings.TrimSuffix(s, "\n") })
+
+		_, err := RestoreSkill(st, hist, clockAt(3000), nil)(ctx, json.RawMessage(`{"id":`+quote(oldID)+`}`))
+		if err != nil {
+			t.Fatalf("a trailing-newline-only rewrite must not block this restore: %v", err)
+		}
+		live, err := st.Read(agentskills.ScopeWriter, "", "rewritten")
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if live.Body != "원래 본문\n" {
+			t.Errorf("body = %q, want the restored older version", live.Body)
+		}
+	})
+
+	t.Run("a genuine one-word change to the current document still refuses", func(t *testing.T) {
+		ctx, st, hist, dir, oldID := setup(t)
+		path := filepath.Join(dir, "rewritten", "SKILL.md")
+		// One word changed, line endings untouched: a document the log has
+		// no copy of, unlike the two cases above.
+		rewriteFile(t, path, func(s string) string {
+			return strings.Replace(s, "고친 본문", "다른 본문", 1)
+		})
+
+		_, err := RestoreSkill(st, hist, clockAt(3000), nil)(ctx, json.RawMessage(`{"id":`+quote(oldID)+`}`))
+		me := wantInvalidParams(t, err)
+		if !strings.Contains(me.Message, "rewritten") {
+			t.Errorf("the message must name the skill; got %q", me.Message)
+		}
+		live, err := st.Read(agentskills.ScopeWriter, "", "rewritten")
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if live.Body != "다른 본문\n" {
+			t.Errorf("body = %q, want the hand-edited document untouched by the refused restore", live.Body)
+		}
 	})
 }
 

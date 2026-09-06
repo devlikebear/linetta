@@ -332,8 +332,8 @@ func ReadSkill(store SkillStore) rpc.Handler {
 // ---- what is standing at a name -------------------------------------------
 
 // skillPresence is what the two writing methods found at a name before they
-// wrote over it. There are three states, not two, and collapsing the last
-// two is how a file this handler could not read got replaced by one it
+// wrote over it. There are four states, not two, and collapsing any of them
+// together is how a file this handler could not read got replaced by one it
 // could.
 type skillPresence int
 
@@ -349,6 +349,15 @@ const (
 	// Settings to repair, so a write over it is an edit too. Nothing can be
 	// said about its fields; the Skill returned alongside is the zero value.
 	presenceUnparseable
+	// presenceUnreadable: something is at that name and inspectBeforeOverwrite
+	// could not read it (over the size ceiling, a permissions problem — see
+	// its doc comment). It is ALWAYS returned together with a non-nil error,
+	// and every caller in this file returns that error before ever looking at
+	// presence. This value exists so a caller that skipped the error check
+	// anyway cannot read "unreadable" as presenceAbsent's zero value and treat
+	// a file it could not see as empty ground to create over — the exact
+	// overwrite this task exists to prevent, reached through a different door.
+	presenceUnreadable
 )
 
 // inspectBeforeOverwrite reports what is at a name, and refuses on behalf of
@@ -387,7 +396,7 @@ func inspectBeforeOverwrite(store SkillStore, scope agentskills.Scope, projectID
 		return agentskills.Skill{}, presenceAbsent, nil
 	}
 	if _, _, rawErr := store.ReadRaw(scope, projectID, name); rawErr != nil {
-		return agentskills.Skill{}, presenceAbsent, skillErr(fmt.Errorf(
+		return agentskills.Skill{}, presenceUnreadable, skillErr(fmt.Errorf(
 			"something is at %q that cannot be read, so it must not be written over: %w", name, rawErr))
 	}
 	return agentskills.Skill{}, presenceUnparseable, nil
@@ -819,10 +828,44 @@ func refuseUnrecordedSkill(ctx context.Context, history SkillHistory, version ag
 // recordsSkill reports whether row is a copy of the document standing on
 // disk. See refuseUnrecordedSkill for which fields participate and why the
 // enabled flag cannot.
+//
+// Body and Description are compared after normalizeLineEndings, not
+// byte-for-byte. splitFrontmatter (skill.go's doc comment) deliberately
+// preserves a body's own line endings through Parse and Render — the body is
+// content this package does not own — so a SKILL.md a writer opens and
+// re-saves in a CRLF-by-default editor (Notepad, and most editors on
+// Windows, which Linetta ships to, and this folder is one a writer points
+// other tools at) comes back with every "\n" turned into "\r\n" and not one
+// keystroke of actual writer intent behind the difference. Comparing raw
+// bytes read that as "an unrecorded document is standing here" and refused
+// every future restore at that name until the writer deleted it — for a
+// rewrite nobody made on purpose. The same editors routinely add or drop
+// exactly one trailing newline on save, which normalizeLineEndings also
+// absorbs.
+//
+// Author is compared as-is: it is one of two fixed values (AuthorWriter,
+// AuthorAgent — skill.go), never free text a line-ending change could touch.
+//
+// Nothing else is normalized. Any other difference — including a single
+// changed word, with matching line endings — still fails this comparison,
+// and the restore still refuses; that direction is what this check exists
+// to protect.
 func recordsSkill(row, live agentskills.Skill) bool {
-	return row.Body == live.Body &&
-		row.Description == live.Description &&
+	return normalizeLineEndings(row.Body) == normalizeLineEndings(live.Body) &&
+		normalizeLineEndings(row.Description) == normalizeLineEndings(live.Description) &&
 		row.Author == live.Author
+}
+
+// normalizeLineEndings collapses CRLF to LF and trims trailing whitespace
+// (including the run of newlines many editors add or remove on save), so
+// recordsSkill can tell "the same document, re-saved by a different tool"
+// from "a different document". See recordsSkill's doc comment for why this
+// exists and what it deliberately does not touch — everything other than
+// line endings and trailing whitespace still participates in the
+// comparison untouched.
+func normalizeLineEndings(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.TrimRight(s, " \t\n")
 }
 
 // ---- shared write tail ----------------------------------------------------
