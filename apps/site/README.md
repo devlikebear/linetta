@@ -108,12 +108,20 @@ The site describes the app at `main`. Since 1.2 that includes a **built-in
 agent**: Settings has provider entries and an API key field, and the agent panel
 runs inside the app against a provider the writer connects. It is a client of
 the same local MCP server an outside agent connects to, which remains the other
-way to write alongside a model.
+way to write alongside a model. 1.2 also gives an agent skills — `SKILL.md`
+files under `<app data>/skills/` that it writes without an approval step, and a
+self-review after a tool-heavy turn that spends one more provider call. The
+site says both, because a writer paying per token should not learn the second
+one from a bill.
 
 Claims in `content.ts` are taken from the engine rather than from the docs — the
-seventeen `linetta_*` tool names, the nine/eight read-write split, the access
+nineteen `linetta_*` tool names, the ten/nine read-write split, the access
 modes, the 7391 default port, the per-minute call limit. When one of them
-changes, the engine is the thing to check.
+changes, the engine is the thing to check. The two counts live in
+`engine/internal/mcphost/tools_read.go` (`ReadToolNames`) and
+`tools_write.go` (`WriteToolNames`), and they appear in this file as well as in
+all three locales of `content.ts` — a count updated in one place and not the
+other is exactly the drift #96's review caught.
 
 The release number is imported from `apps/desktop/package.json`, so the site and
 desktop package move together when `scripts/bump-version.sh` prepares a release.
