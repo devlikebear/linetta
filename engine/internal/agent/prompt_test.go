@@ -318,6 +318,18 @@ func TestTheSkillFrameSaysTheSameThingAsTheMemoryFrame(t *testing.T) {
 	if !strings.Contains(withSkills, shared) {
 		t.Errorf("the skill frame diverged from the shared sentence; got:\n%s", withSkills)
 	}
+
+	// The other half of the memory frame's claim: WHO the text was recorded
+	// for. "notes recorded for this writer and this work" is what the memory
+	// frame says; the skill frame says the same thing about procedures. The
+	// [writer] / [this work] tags on each entry carry it only implicitly,
+	// and an implication is not the sentence that survived the review round.
+	if !strings.Contains(memOnly, "notes recorded for this writer and this work") {
+		t.Errorf("the memory frame lost its 'recorded for' clause; got:\n%s", memOnly)
+	}
+	if !strings.Contains(withSkills, "procedures recorded for this writer and this work") {
+		t.Errorf("the skill frame lost its 'recorded for' clause — the reader is told what the list is, but not who it was recorded for; got:\n%s", withSkills)
+	}
 }
 
 // Rule 3, the un-truncated case: with everything shown, the header states
@@ -342,19 +354,45 @@ func TestSystemPrompt_skillsBlockListsEveryNameAndScopeWhenUnderTheCap(t *testin
 	}
 }
 
+// hangulDescription is a description at exactly agentskills.MaxDescriptionRunes
+// RUNES — 600 bytes, not 200. The cap tests below use it rather than ASCII
+// filler on purpose: with strings.Repeat("x", ...) a len(line) where the code
+// says utf8.RuneCountInString(line) would measure identically and every cap
+// assertion would pass unchanged, which is the one thing a budget test in
+// this file must not allow. See historyBudget's comment for why runes are
+// the unit at all — Linetta's writers work mostly in Korean and Japanese.
+func hangulDescription() string {
+	return strings.Repeat("가", agentskills.MaxDescriptionRunes)
+}
+
+// skillsBlockOf returns the rendered skills block: everything systemPrompt
+// appended from the "## Skills you can read" heading to the end, which is
+// the whole block because skillsBlock is the last thing systemPrompt writes.
+func skillsBlockOf(t *testing.T, prompt string) string {
+	t.Helper()
+	start := strings.Index(prompt, "\n## Skills you can read")
+	if start < 0 {
+		t.Fatalf("could not locate the skills block in the prompt:\n%s", prompt)
+	}
+	return prompt[start:]
+}
+
+func fortyHangulSkills() []agentskills.Skill {
+	skills := make([]agentskills.Skill, 0, 40)
+	for i := 0; i < 40; i++ {
+		skills = append(skills, writerSkill(fmt.Sprintf("skill-%02d", i), hangulDescription()))
+	}
+	return skills
+}
+
 // Rule 3, the capped case: 40 skills at the 200-rune description cap would
-// be roughly 8000 runes of entries alone, well over the 3000-rune budget.
+// be roughly 9000 runes of entries alone, well over the 3000-rune budget.
 // The block must stop cleanly, not truncate an entry mid-line, and its
 // header must say how many of the total were actually shown rather than
 // silently dropping the rest — this is the exact header format the task
 // brief specifies.
 func TestSystemPrompt_skillsBlockCapsAt3000RunesAndSaysHowManyWereOmitted(t *testing.T) {
-	skills := make([]agentskills.Skill, 0, 40)
-	for i := 0; i < 40; i++ {
-		skills = append(skills, writerSkill(fmt.Sprintf("skill-%02d", i), strings.Repeat("x", agentskills.MaxDescriptionRunes)))
-	}
-
-	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), skills)
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), fortyHangulSkills())
 
 	if strings.Contains(got, "skill-39") {
 		t.Error("the block was not capped; every one of the 40 skills is present")
@@ -365,19 +403,90 @@ func TestSystemPrompt_skillsBlockCapsAt3000RunesAndSaysHowManyWereOmitted(t *tes
 	if !strings.Contains(got, "(40, showing ") || !strings.Contains(got, " — read the rest with linetta_read_skill)") {
 		t.Errorf("want the capped header format naming the total, how many were shown, and the read tool; got:\n%s", got)
 	}
+}
 
-	// The entries block itself — between the header line and the trailing
-	// frame paragraph — must not exceed the 3000-rune budget. Measuring the
-	// whole prompt would also count the (fixed-size) instructions and frame
-	// text, which is not what is being capped here.
-	start := strings.Index(got, "## Skills you can read")
-	end := strings.Index(got, "\nThose are names and descriptions only.")
-	if start < 0 || end < 0 || end < start {
-		t.Fatalf("could not locate the skills block in the prompt:\n%s", got)
+// The cap bounds the WHOLE rendered block — header, entries and frame — not
+// just the entry lines. The earlier version budgeted only the entries and
+// rendered 3265 runes for exactly this input while its constant said 3000.
+//
+// Both bounds are asserted, and the lower one is the load-bearing half:
+// without it an implementation that counted BYTES would pass the upper bound
+// trivially by fitting a third as many Hangul entries as it should. The
+// floor is "cap minus one entry", the largest gap the break can legitimately
+// leave, so it fails on any systematic under-fill without pinning an exact
+// entry count that reworded frame text would break.
+func TestSystemPrompt_skillsBlockKeepsTheWholeRenderedBlockUnderTheCap(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), fortyHangulSkills())
+	block := skillsBlockOf(t, got)
+
+	n := utf8.RuneCountInString(block)
+	if n > skillsBlockCapRunes {
+		t.Errorf("the rendered skills block is %d runes, over the %d-rune cap", n, skillsBlockCapRunes)
 	}
-	headerLineEnd := strings.Index(got[start:], "\n") + start + 1
-	entries := got[headerLineEnd:end]
-	if n := utf8.RuneCountInString(entries); n > skillsCapRunes {
-		t.Errorf("skills entries are %d runes, over the %d-rune cap", n, skillsCapRunes)
+	// One entry line: "- skill-00 — <200 runes> [writer]\n".
+	entryRunes := utf8.RuneCountInString(fmt.Sprintf("- %s — %s [%s]\n", "skill-00", hangulDescription(), "writer"))
+	if n <= skillsBlockCapRunes-entryRunes {
+		t.Errorf("the rendered skills block is only %d of %d runes with 40 skills waiting — more than a whole entry of budget went unused, which is what counting bytes instead of runes looks like",
+			n, skillsBlockCapRunes)
+	}
+	if !strings.HasSuffix(block, "what you are allowed to do.\n") {
+		t.Errorf("the block does not end in the frame, so the measurement above did not cover it:\n%s", block)
+	}
+}
+
+// "showing %d" must be the number of entries actually on the page, not what
+// the fill hoped for. Counted from the rendered text, so an off-by-one
+// between the header arithmetic and the loop shows up here.
+func TestSystemPrompt_skillsBlockShowingCountMatchesTheLinesRendered(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), fortyHangulSkills())
+	block := skillsBlockOf(t, got)
+
+	var total, shown int
+	if _, err := fmt.Sscanf(block, "\n## Skills you can read (%d, showing %d", &total, &shown); err != nil {
+		t.Fatalf("could not read the header's counts: %v\n%s", err, block)
+	}
+	if total != 40 {
+		t.Errorf("header says %d skills in total, want 40", total)
+	}
+	if lines := strings.Count(block, "\n- "); lines != shown {
+		t.Errorf("header says %d skills shown, but %d entry lines were rendered", shown, lines)
+	}
+	if shown >= total {
+		t.Errorf("header claims %d of %d shown, which is not the capped case this test needs", shown, total)
+	}
+}
+
+// The fill STOPS at the cap rather than skipping an oversize entry to reach
+// smaller ones behind it — the documented choice, and the one that costs
+// something, so it is pinned rather than left to be "fixed" by a later
+// reader who sees only the unused budget. The reason is in skillsBlock's
+// comment: the order is a relevance ranking, and skipping re-ranks it by
+// description length instead.
+//
+// Fourteen skills with full-length Hangul descriptions overrun the entry
+// budget; the two one-rune skills behind them would each fit in what is
+// left, and must still not appear.
+func TestSystemPrompt_skillsBlockStopsAtTheCapRatherThanSkipping(t *testing.T) {
+	skills := make([]agentskills.Skill, 0, 16)
+	for i := 0; i < 14; i++ {
+		skills = append(skills, writerSkill(fmt.Sprintf("long-%02d", i), hangulDescription()))
+	}
+	skills = append(skills,
+		writerSkill("zz-tiny-a", "짧"),
+		writerSkill("zz-tiny-b", "짧"),
+	)
+
+	block := skillsBlockOf(t, systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), skills))
+
+	if !strings.Contains(block, "(16, showing ") {
+		t.Fatalf("this test needs the capped case; got:\n%s", block)
+	}
+	for _, name := range []string{"zz-tiny-a", "zz-tiny-b"} {
+		if strings.Contains(block, name) {
+			t.Errorf("%q was skipped past the cap into the list — the fill must stop at the first entry that does not fit, keeping what is shown a prefix of the relevance order", name)
+		}
+	}
+	if utf8.RuneCountInString(block) > skillsBlockCapRunes {
+		t.Errorf("the block is %d runes, over the %d-rune cap", utf8.RuneCountInString(block), skillsBlockCapRunes)
 	}
 }

@@ -31,12 +31,25 @@ type MemorySource interface {
 }
 
 // SkillSource reads the skills available for one turn — the writer's
-// (global) and this work's — already reduced to what may reach a prompt:
-// enabled only, and with Body left off. That reduction is the caller's job,
-// not systemPrompt's — see prompt.go's skillsBlock doc comment — the same
-// division MemorySource draws around the two curated documents. An interface
-// rather than *agentskills.Store directly, matching MemorySource and
-// ScopeLookup, so the prompt can be tested without a filesystem.
+// (global) and this work's — already reduced to what may reach a prompt.
+// The full contract an implementation owes, because prompt.go re-checks none
+// of it and only orders, caps and formats what it is handed:
+//
+//   - Enabled only. A skill the writer switched off must not be listed.
+//   - Guard-passed. Every returned Name and Description has been through
+//     agentskills.Guard, so an invisible character cannot ride into the
+//     system prompt inside a description. agentskills.Store.List already
+//     does this — it reports a guard failure as a Diagnostic instead of
+//     returning the skill — which is why engineapp's agentSkillSource
+//     satisfies this clause by construction rather than by re-guarding.
+//   - Body left off. The list is cheap precisely because bodies stay on
+//     disk until linetta_read_skill fetches one; a Body here would put the
+//     whole point of progressive disclosure back in the prompt.
+//
+// That reduction is the caller's job, not systemPrompt's — the same division
+// MemorySource draws around the two curated documents. An interface rather
+// than *agentskills.Store directly, matching MemorySource and ScopeLookup,
+// so the prompt can be tested without a filesystem.
 type SkillSource interface {
 	Skills(ctx context.Context, projectID string) []agentskills.Skill
 }

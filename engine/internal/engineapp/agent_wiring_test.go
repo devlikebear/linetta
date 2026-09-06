@@ -200,3 +200,52 @@ func assertToolDepsWired(t *testing.T, label string, deps mcphost.ToolDeps) {
 		}
 	}
 }
+
+// agent.Deps is the second large struct literal engineapp fills in
+// production, and it has the same failure mode ToolDeps had: none of its
+// collaborators is visible on the wire on a fresh install with no provider
+// configured, and every agent package test builds its own Deps carrying
+// exactly the fields that test needs. Deps.Skills is the field that proved
+// it — the wiring in engineapp.go could be deleted and go build, go vet,
+// TestProductionToolDepsCarryEveryCollaborator and all seven
+// TestAgentSkillSource tests still passed, because setupAgent wrapped the
+// nil store in a non-nil agentSkillSource and the agent then read an empty
+// skill list forever while its system prompt kept telling it to use
+// linetta_read_skill.
+//
+// So: the same reflective walk, plus the one assertion reflection cannot
+// make — that Skills is not merely non-nil but carries a real store, and the
+// SAME store the MCP tools read, since there is one skills directory.
+func TestProductionAgentDepsCarryEveryCollaborator(t *testing.T) {
+	app := openApp(t)
+
+	if app.agentCtrl == nil {
+		t.Fatal("app.agentCtrl is nil — setupAgent did not run")
+	}
+	deps := app.agentCtrl.deps
+
+	v := reflect.ValueOf(deps)
+	for i := 0; i < v.NumField(); i++ {
+		name := v.Type().Field(i).Name
+		switch f := v.Field(i); f.Kind() {
+		case reflect.Ptr, reflect.Func, reflect.Interface, reflect.Map, reflect.Slice:
+			if f.IsNil() {
+				t.Errorf("agent.Deps.%s is nil in production — the turn silently does without it, and nothing else notices", name)
+			}
+		}
+	}
+
+	// Skills specifically: a non-nil interface is not proof of wiring, since
+	// agentSkillSource{store: nil} is a perfectly valid non-nil
+	// agent.SkillSource that answers "no skills" to every turn.
+	src, ok := deps.Skills.(agentSkillSource)
+	if !ok {
+		t.Fatalf("agent.Deps.Skills is %T, want agentSkillSource", deps.Skills)
+	}
+	if src.store == nil {
+		t.Fatal("agent.Deps.Skills carries a nil *agentskills.Store — every turn's skill list is empty, while the system prompt tells the agent to read from it")
+	}
+	if src.store != app.mcpTools.Skills {
+		t.Error("the agent's skill source and the MCP tools hold different *agentskills.Store instances — there is one skills directory, so a skill written through linetta_edit_skill would not appear in the agent's own list")
+	}
+}

@@ -42,7 +42,7 @@ func TestAgentSkillSource_nilStoreReturnsNoSkills(t *testing.T) {
 }
 
 func TestAgentSkillSource_readsBothWriterAndWorkScopedSkills(t *testing.T) {
-	src, home := newSkillTestSource(t)
+	src, _ := newSkillTestSource(t)
 	mustWriteSkill(t, src.store, agentskills.Skill{
 		Name: "dialogue-rhythm", Scope: agentskills.ScopeWriter,
 		Description: "short beats, no dashes", Author: agentskills.AuthorWriter, Enabled: true,
@@ -51,11 +51,33 @@ func TestAgentSkillSource_readsBothWriterAndWorkScopedSkills(t *testing.T) {
 		Name: "flashback-voice", Scope: agentskills.ScopeWork, ProjectID: "p1",
 		Description: "how flashbacks are written in this work", Author: agentskills.AuthorAgent, Enabled: true,
 	})
-	_ = home
 
 	got := src.Skills(context.Background(), "p1")
 	if len(got) != 2 {
 		t.Fatalf("want 2 skills, got %d: %+v", len(got), got)
+	}
+	// Both SCOPES, not just two rows: an adapter that listed the writer
+	// scope twice, or that read work skills into a writer-scoped result,
+	// would satisfy a length check alone.
+	byName := map[string]agentskills.Skill{}
+	for _, s := range got {
+		byName[s.Name] = s
+	}
+	for name, wantScope := range map[string]agentskills.Scope{
+		"dialogue-rhythm": agentskills.ScopeWriter,
+		"flashback-voice": agentskills.ScopeWork,
+	} {
+		s, ok := byName[name]
+		if !ok {
+			t.Errorf("skill %q is missing from the result: %+v", name, got)
+			continue
+		}
+		if s.Scope != wantScope {
+			t.Errorf("skill %q has scope %q, want %q", name, s.Scope, wantScope)
+		}
+	}
+	if s := byName["flashback-voice"]; s.ProjectID != "p1" {
+		t.Errorf("the work-scoped skill carries project id %q, want %q", s.ProjectID, "p1")
 	}
 }
 
