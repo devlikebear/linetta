@@ -482,6 +482,55 @@ describe("SkillsSection", () => {
     expect(rpc.write).toHaveBeenCalledTimes(1);
   });
 
+  it("does not send the same document twice when a second blur lands mid-save", async () => {
+    rpc.read.mockResolvedValue(full({ body: "안녕" }));
+    const writes: ((v: unknown) => void)[] = [];
+    rpc.write.mockImplementation(() => new Promise((resolve) => writes.push(resolve)));
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
+    await screen.findByTestId("skill-body");
+
+    await userEvent.type(descBox(), "!");
+    // Clicking into the textarea blurs the description: save #1 leaves.
+    await userEvent.click(bodyBox());
+    await waitFor(() => expect(rpc.write).toHaveBeenCalledTimes(1));
+
+    // Tabbing out of the textarea without typing is a second blur while the
+    // first save is still travelling. `saved` holds the PRE-save document
+    // until the reply lands, so a commit that compares against it alone finds
+    // this draft "changed" and sends the identical document again — a
+    // duplicate version row, a restamped updated_at and a second
+    // skills-changed at every window, for an edit nobody made.
+    await userEvent.tab();
+    expect(rpc.write).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      writes[0]({ ...full({ body: "안녕" }), description: "대사 사이 호흡을 넣는 법!", versioned: true });
+    });
+    // And once it HAS landed, the same document is still not a save.
+    await userEvent.click(bodyBox());
+    await userEvent.tab();
+    expect(rpc.write).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends again after a refusal, because a refused write changed nothing", async () => {
+    rpc.read.mockResolvedValue(full({ body: "안녕" }));
+    rpc.write.mockRejectedValue(new Error("agentskills: description is required"));
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
+    await screen.findByTestId("skill-body");
+
+    await userEvent.type(bodyBox(), "하세요");
+    await userEvent.tab();
+    await screen.findByTestId("skill-save-error");
+
+    // The suppression above must not swallow a retry: the file on disk never
+    // moved, so this draft is still unsaved work.
+    await userEvent.click(bodyBox());
+    await userEvent.tab();
+    await waitFor(() => expect(rpc.write).toHaveBeenCalledTimes(2));
+  });
+
   it("keeps what the writer typed while the save was in flight", async () => {
     rpc.read.mockResolvedValue(full({ body: "안녕" }));
     let confirmSave!: (v: unknown) => void;
@@ -551,6 +600,11 @@ describe("SkillsSection", () => {
     expect(screen.getByTestId("skills-empty")).toBeInTheDocument();
 
     await userEvent.click(screen.getByTestId("skills-new"));
+    // The picker above the list chooses WHICH work's skills are listed; this
+    // one chooses what a new skill applies to. Labelling both "work" makes
+    // them read as the same control.
+    expect(screen.getByLabelText("settings.skills.scope")).toBe(screen.getByTestId("skill-new-scope"));
+    expect(screen.getByLabelText("settings.skills.work")).toBe(screen.getByTestId("skills-work"));
     await userEvent.type(screen.getByTestId("skill-new-name"), "cliffhangers");
     await userEvent.type(screen.getByTestId("skill-new-description"), "회차 끝맺기");
     await userEvent.click(screen.getByTestId("skill-new-submit"));
@@ -585,6 +639,108 @@ describe("SkillsSection", () => {
     await waitFor(() => expect(rpc.del).toHaveBeenCalledWith("writer", "work-1", "dialogue-beats"));
     // The detail closes: there is nothing left to edit.
     await waitFor(() => expect(screen.queryByTestId("skill-body")).toBeNull());
+  });
+
+  it("closes the editor on a delete that answers after a restore of the same skill", async () => {
+    rpc.history.mockResolvedValue({
+      versions: [
+        {
+          id: "v1",
+          name: "dialogue-beats",
+          scope: "writer",
+          description: "대사 사이 호흡",
+          author: "writer",
+          body: "처음 쓴 판",
+          body_runes: 6,
+          reason: "created",
+          created_at: 1780100000000,
+        },
+      ],
+    });
+    let answerDelete!: (v: unknown) => void;
+    let answerRestore!: (v: unknown) => void;
+    rpc.del.mockImplementation(() => new Promise((resolve) => (answerDelete = resolve)));
+    rpc.restore.mockImplementation(() => new Promise((resolve) => (answerRestore = resolve)));
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
+    await screen.findByTestId("skill-body");
+    await userEvent.click(screen.getByTestId("skill-history"));
+    await screen.findByTestId("skill-version-v1");
+
+    await userEvent.click(screen.getByTestId("skill-delete"));
+    await userEvent.click(screen.getByTestId("skill-delete-confirm"));
+    await waitFor(() => expect(rpc.del).toHaveBeenCalledTimes(1));
+
+    // Second thoughts, on the SAME skill and before the delete has answered.
+    // Delete and restore ride the same lane, so this claims a newer ticket
+    // without the selection having changed at all.
+    await userEvent.click(screen.getByTestId("skill-history-restore"));
+    await waitFor(() => expect(rpc.restore).toHaveBeenCalledTimes(1));
+    await settle(() => answerRestore({ ...full({ body: "처음 쓴 판" }), versioned: true }));
+    await settle(() => answerDelete({ versioned: true }));
+
+    // The file is gone whichever order the two replies came back in. An
+    // editor left open on it writes to a path with nothing at it on the very
+    // next blur, and the writer is typing into a skill that does not exist.
+    await waitFor(() => expect(screen.queryByTestId("skill-detail")).toBeNull());
+  });
+
+  it("says when a save landed on disk but not in the history", async () => {
+    rpc.read.mockResolvedValue(full({ body: "안녕" }));
+    rpc.write.mockImplementation((input: Over) =>
+      Promise.resolve({ ...full(), ...input, versioned: false }),
+    );
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
+    await screen.findByTestId("skill-body");
+
+    await userEvent.type(bodyBox(), "하세요");
+    await userEvent.tab();
+
+    // Not an error — the save DID land — but not silence either: this one
+    // edit is not on the restore list, and a backup carrying the database
+    // does not carry it.
+    const notice = await screen.findByTestId("skills-not-versioned");
+    expect(notice).toHaveAttribute("role", "alert");
+    expect(notice).toHaveTextContent("settings.skills.notVersioned");
+  });
+
+  it("says when a delete took the body with no version row behind it", async () => {
+    rpc.del.mockResolvedValue({ versioned: false });
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
+    await screen.findByTestId("skill-body");
+
+    await userEvent.click(screen.getByTestId("skill-delete"));
+    await userEvent.click(screen.getByTestId("skill-delete-confirm"));
+
+    // The sharpest version of the flag: the editor closes and the body is
+    // simply gone, with nothing in the history to bring it back. It has to
+    // outlive the editor, which is why the line is not inside it.
+    const notice = await screen.findByTestId("skills-not-versioned");
+    expect(notice).toHaveTextContent("settings.skills.notVersioned");
+    await waitFor(() => expect(screen.queryByTestId("skill-body")).toBeNull());
+  });
+
+  it("offers to write the SKILL.md a skill directory is missing", async () => {
+    // store.go reports an empty skill directory under the DIRECTORY's path,
+    // and Store.Read answers ErrNotFound for it — so "open and fix" would
+    // hand the writer "not found" for a folder they can see on disk.
+    rpc.list.mockResolvedValue(
+      listResult([], [{ path: "/home/skills/half-made", message: "no SKILL.md in this directory" }]),
+    );
+    await mounted();
+
+    const open = await screen.findByTestId("skill-diagnostic-open-0");
+    expect(open).toHaveTextContent("settings.skills.repair.create");
+    await userEvent.click(open);
+
+    // An empty skill directory is a half-made skill, so the repair is to
+    // finish it under the name the folder already carries.
+    const name = (await screen.findByTestId("skill-new-name")) as HTMLInputElement;
+    expect(name.value).toBe("half-made");
+    expect(rpc.read).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("skill-read-error")).toBeNull();
   });
 
   it("shows the version history and restores a version", async () => {
@@ -628,6 +784,15 @@ describe("SkillsSection", () => {
     expect(within(panel).getByTestId("skill-version-v2")).toHaveTextContent(
       "settings.skills.author.agent",
     );
+    // And WHAT each version was. On a deleted skill's history this is the
+    // only thing telling the writer which row holds the last body they had —
+    // without it the rows are a list of timestamps and an author.
+    expect(within(panel).getByTestId("skill-version-reason-v2")).toHaveTextContent(
+      "settings.skills.reason.edited",
+    );
+    expect(within(panel).getByTestId("skill-version-reason-v1")).toHaveTextContent(
+      "settings.skills.reason.created",
+    );
     // The body travels with the row precisely so the writer can see what they
     // are about to revert to.
     expect(screen.getByTestId("skill-version-preview")).toHaveTextContent("에이전트가 쓴 두 번째 판");
@@ -657,6 +822,29 @@ describe("SkillsSection", () => {
         expect.objectContaining({ name: "dialogue-beats", enabled: false, body: "짧게 끊는다 📖" }),
       ),
     );
+  });
+
+  it("moves the checkbox the moment it is clicked, and locks it until it settles", async () => {
+    holdReads();
+    await mounted();
+    const toggle = () =>
+      screen.getByTestId("skill-enabled-writer-dialogue-beats") as HTMLInputElement;
+    expect(toggle().checked).toBe(true);
+
+    await userEvent.click(toggle());
+
+    // Read, write, refetch: three round trips for one click. A checkbox bound
+    // to the last list reply sits at "on" for all three, so the writer clicks
+    // it again — and the second click sends enabled:false a second time.
+    expect(toggle().checked).toBe(false);
+    expect(toggle().disabled).toBe(true);
+
+    await userEvent.click(toggle());
+    await waitFor(() => expect(reads.length).toBe(1));
+    expect(rpc.write).not.toHaveBeenCalled();
+
+    await settle(() => reads[0].answer(full()));
+    await waitFor(() => expect(rpc.write).toHaveBeenCalledTimes(1));
   });
 
   it("says so when the list cannot be read at all", async () => {

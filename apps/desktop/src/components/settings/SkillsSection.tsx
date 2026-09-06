@@ -86,6 +86,19 @@ export function diagnosticTarget(path: string, workId: string): Target | null {
   return null;
 }
 
+/** Whether a diagnostic points at a SKILL.md or at the directory that should
+ *  have held one.
+ *
+ *  The two shapes need different repairs and `store.go` produces both: a file
+ *  it could not parse or guard is reported by its own path, while an empty
+ *  skill directory is reported as `no SKILL.md in this directory` under the
+ *  DIRECTORY's path. There is no file to open in the second case —
+ *  `Store.Read` answers ErrNotFound for it — so "Open and fix" would hand the
+ *  writer "not found" for a folder they can see. An empty skill directory is
+ *  a half-made skill, so the repair is to finish it. */
+const pointsAtFile = (path: string) =>
+  path.replace(/\\/g, "/").split("/").pop() === "SKILL.md";
+
 type Lane = "list" | "detail" | "history";
 
 export function SkillsSection() {
@@ -111,10 +124,21 @@ export function SkillsSection() {
   const [draft, setDraft] = useState({ description: "", body: "" });
   const [behind, setBehind] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
+  // The engine wrote the file but not the version row. Reported by write,
+  // delete and restore alike, and never silence: the writer finds out
+  // otherwise only when they go looking for the version and it is not there.
+  const [notVersioned, setNotVersioned] = useState(false);
   const [asking, setAsking] = useState(false);
   // A count, not a flag: two blurs can be in flight at once (leave the
   // description, type in the body, leave that).
   const [inflight, setInflight] = useState(0);
+
+  // Which rows have a toggle in flight, and which way it is going. A skill's
+  // enabled flag takes a read then a write then a refetch — three round trips
+  // for one click — and a checkbox bound to the last list reply does not move
+  // for any of them, so the writer clicks it again and the second click sends
+  // the same value a second time.
+  const [toggling, setToggling] = useState<Record<string, boolean>>({});
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -156,6 +180,29 @@ export function SkillsSection() {
    *  ours is not news. One token per write we send, consumed by the first
    *  writer-sourced event for that skill, tells the two apart; a refused
    *  write hands its token back, because the engine emits nothing for one. */
+  /** The newest document this pane has SENT for the open skill, whether or
+   *  not its reply has come back yet.
+   *
+   *  `saved` is what the engine has CONFIRMED, and it is the wrong thing to
+   *  compare a blur against on its own: while a save is travelling, `saved`
+   *  still holds the pre-save document, so a second blur — leaving the
+   *  description, clicking into the body, tabbing straight out — finds the
+   *  draft "changed" and sends the identical document again. That is a
+   *  duplicate version row, a restamped updated_at and a second
+   *  `skills-changed` at every window, for an edit nobody made.
+   *
+   *  Cleared whenever the document moves underneath us from somewhere that is
+   *  not one of our own writes (a fresh detail read, an agent's write, a
+   *  restore), because then a draft equal to something we once sent is a real
+   *  change again. */
+  const pending = useRef<{ key: string; description: string; body: string } | null>(null);
+
+  /** The open skill, readable from inside a promise callback. A delete's
+   *  reply asks "is the writer still looking at the skill I removed?", and
+   *  that is a question about the selection now, not about which detail-lane
+   *  ticket happens to be newest. */
+  const selectedRef = useRef<Target | null>(null);
+
   const ownSaves = useRef<Map<string, number>>(new Map());
   const takeToken = useCallback((key: string) => {
     ownSaves.current.set(key, (ownSaves.current.get(key) ?? 0) + 1);
@@ -168,7 +215,11 @@ export function SkillsSection() {
   const applyList = useCallback(
     (id: string) => {
       const ticket = claim("list");
-      skillsApi.list(id).then(
+      // Returns the promise so a caller that has just changed a row — the
+      // enabled toggle — can hold its pending state until the refreshed row
+      // is actually on screen, rather than letting the checkbox snap back to
+      // the old value in the gap.
+      return skillsApi.list(id).then(
         (res) => {
           if (!newest("list", ticket)) return;
           setRows(res.skills ?? []);
@@ -214,6 +265,10 @@ export function SkillsSection() {
   const selName = selected?.name ?? null;
 
   useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
+
+  useEffect(() => {
     if (workId === null || selScope === null || selName === null) {
       setDetail(null);
       return;
@@ -222,9 +277,11 @@ export function SkillsSection() {
     setDetail(null);
     setReadError(null);
     setSaveError(null);
+    setNotVersioned(false);
     setBehind(false);
     setAsking(false);
     setHistoryOpen(false);
+    pending.current = null;
     skillsApi.read(selScope, workId, selName).then(
       (s) => {
         if (!newest("detail", ticket)) return;
@@ -245,16 +302,26 @@ export function SkillsSection() {
 
   /** Save on blur. Unchanged is not a save: writing anyway restamps
    *  updated_at, records a version row for a change nobody made, and fires
-   *  `skills.changed` at every other window. */
+   *  `skills.changed` at every other window.
+   *
+   *  "Unchanged" is measured against the newest document SENT, not only
+   *  against the newest confirmed — see `pending`. Two blurs in the time one
+   *  save takes is ordinary (leave the description, click the textarea, tab
+   *  out), and comparing against `saved` alone makes the second one resend
+   *  the first one's document verbatim. */
   const commit = () => {
     if (!selected || !detail || workId === null) return;
     const sent = draft;
-    if (sent.description === saved.description && sent.body === saved.body) return;
     const target = selected;
     const key = keyOf(target);
+    const last = pending.current?.key === key ? pending.current : null;
+    const base = last ?? saved;
+    if (sent.description === base.description && sent.body === base.body) return;
     const ticket = claim("detail");
+    pending.current = { key, description: sent.description, body: sent.body };
     takeToken(key);
     setSaveError(null);
+    setNotVersioned(false);
     setInflight((n) => n + 1);
     void skillsApi
       .write({
@@ -279,10 +346,24 @@ export function SkillsSection() {
           }));
           setDetail(res);
           setBehind(false);
+          // The file changed, the version row did not. Not an error — the
+          // save DID land — but not silence either: this one edit is not on
+          // the restore list and a backup carrying only the database misses
+          // it.
+          if (res.versioned === false) setNotVersioned(true);
         },
         (e) => {
           setInflight((n) => n - 1);
           giveBackToken(key);
+          // A refused write is not a write: nothing on disk moved, so this
+          // document is no longer something the engine has. Forgetting it
+          // keeps a later identical blur from being mistaken for a duplicate
+          // of a save that never happened. Only this document is forgotten —
+          // a NEWER save may already be in flight behind it.
+          const p = pending.current;
+          if (p?.key === key && p.description === sent.description && p.body === sent.body) {
+            pending.current = null;
+          }
           if (!newest("detail", ticket)) return;
           // Over the cap, an invisible character, a missing description:
           // every refusal names something the writer can fix from these two
@@ -296,22 +377,45 @@ export function SkillsSection() {
    *
    *  It reads before it writes because skills.write takes the whole document
    *  and a list row carries no body — a toggle that sent an empty body would
-   *  silently blank the skill it was only meant to switch off. */
+   *  silently blank the skill it was only meant to switch off.
+   *
+   *  Which is three round trips (read, write, refetch) for one click, so the
+   *  checkbox is held at the value the writer asked for and disabled until
+   *  the refreshed row lands. Without that it sits at the old value for the
+   *  whole trip, the writer clicks it again, and the second click sends
+   *  `enabled: false` a second time.
+   *
+   *  It claims a `list` ticket, like every other writer of the list: a list
+   *  reply issued BEFORE this toggle carries the row this toggle is changing,
+   *  so it is stale by the time it arrives, and the refetch at the end is
+   *  what replaces it. That refetch is skipped if the writer changed works
+   *  meanwhile — a list for the work they left must not land on the one they
+   *  are looking at. */
   const toggleEnabled = (row: SkillSummary) => {
     if (workId === null) return;
+    const id = workId;
     const key = `${row.scope}:${row.name}`;
+    if (key in toggling) return;
     setRowErrors((m) => {
       const next = { ...m };
       delete next[key];
       return next;
     });
+    setToggling((m) => ({ ...m, [key]: !row.enabled }));
+    const done = () =>
+      setToggling((m) => {
+        const next = { ...m };
+        delete next[key];
+        return next;
+      });
+    const ticket = claim("list");
     takeToken(key);
     void skillsApi
-      .read(row.scope, workId, row.name)
+      .read(row.scope, id, row.name)
       .then((s) =>
         skillsApi.write({
           scope: row.scope,
-          projectId: workId,
+          projectId: id,
           name: row.name,
           description: s.description,
           body: s.body,
@@ -319,10 +423,18 @@ export function SkillsSection() {
         }),
       )
       .then(
-        () => applyList(workId),
-        (e) => {
+        async () => {
+          if (newest("list", ticket)) await applyList(id);
+          done();
+        },
+        async (e) => {
           giveBackToken(key);
           setRowErrors((m) => ({ ...m, [key]: e }));
+          // The pre-toggle list reply this ticket invalidated is gone, and
+          // nothing changed on disk, so the list has to be asked again or the
+          // rows stay at whatever was on screen before.
+          if (newest("list", ticket)) await applyList(id);
+          done();
         },
       );
   };
@@ -352,21 +464,46 @@ export function SkillsSection() {
     );
   };
 
+  /** Delete.
+   *
+   *  The detail-lane ticket is deliberately NOT what decides whether the
+   *  editor closes. Delete and restore both ride that lane, so a restore of
+   *  the same skill claims a newer ticket without changing the selection —
+   *  and then the delete's reply, arriving second, would skip `setSelected`
+   *  and leave the writer typing into an editor for a file that is gone. The
+   *  question a delete's reply actually asks is "is the writer still looking
+   *  at the skill I removed?", which is about the selection, not the ticket. */
   const doDelete = () => {
     if (!selected || workId === null) return;
+    const id = workId;
     const target = selected;
     const key = keyOf(target);
-    const ticket = claim("detail");
     takeToken(key);
     setAsking(false);
-    void skillsApi.delete(target.scope, workId, target.name).then(
-      () => {
-        if (newest("detail", ticket)) setSelected(null);
-        applyList(workId);
+    setNotVersioned(false);
+    const stillOpen = () => {
+      const cur = selectedRef.current;
+      return cur !== null && cur.scope === target.scope && cur.name === target.name;
+    };
+    void skillsApi.delete(target.scope, id, target.name).then(
+      (res) => {
+        if (stillOpen()) {
+          setSelected(null);
+          // The history is a panel INSIDE the detail and it is keyed on the
+          // skill; leaving it open would offer to restore versions of
+          // something no longer selected.
+          setHistoryOpen(false);
+          pending.current = null;
+        }
+        // A deletion whose version row did not land took the body with it —
+        // the sharpest version of this warning. It sits at the pane level so
+        // it survives the editor closing, which a delete always causes.
+        if (res.versioned === false) setNotVersioned(true);
+        applyList(id);
       },
       (e) => {
         giveBackToken(key);
-        if (newest("detail", ticket)) setSaveError(e);
+        if (stillOpen()) setSaveError(e);
       },
     );
   };
@@ -397,6 +534,7 @@ export function SkillsSection() {
     const ticket = claim("detail");
     takeToken(key);
     setHistoryError(null);
+    setNotVersioned(false);
     void skillsApi.restore(versionId).then(
       (res) => {
         if (!newest("detail", ticket)) return;
@@ -405,9 +543,16 @@ export function SkillsSection() {
         setDetail(res);
         setSaved({ description: res.description, body: res.body });
         setDraft({ description: res.description, body: res.body });
+        // The document moved from somewhere that is not one of our blurs, so
+        // what we last sent says nothing about what is on disk now.
+        pending.current = null;
         setSaveError(null);
         setBehind(false);
         setHistoryOpen(false);
+        // A restore records a version row of its own, and it can fail to.
+        // Then the reverted-to text is on disk with nothing in the history
+        // marking that this is where the writer went back to.
+        if (res.versioned === false) setNotVersioned(true);
         if (workId !== null) applyList(workId);
       },
       (e) => {
@@ -453,6 +598,11 @@ export function SkillsSection() {
         if (!newest("detail", ticket)) return;
         setDetail(s);
         setSaved({ description: s.description, body: s.body });
+        // Whatever we last sent is no longer what the file holds, so it is no
+        // longer a duplicate to send it again. (Our own save's echo lands
+        // here too, and re-reading the file it just wrote is the same
+        // statement — the draft comparison below is what protects the box.)
+        if (fromElsewhere) pending.current = null;
         if (!wasDirty) setDraft({ description: s.description, body: s.body });
         if (wasDirty && fromElsewhere) setBehind(true);
       },
@@ -469,6 +619,25 @@ export function SkillsSection() {
     author === "agent" ? "settings.skills.author.agent" : "settings.skills.author.writer";
   const scopeKey = (scope: SkillScope) =>
     scope === "work" ? "settings.skills.scope.work" : "settings.skills.scope.writer";
+  /** What a version row IS. On a deleted skill's history it is the only thing
+   *  telling the writer which row holds the last body they had. */
+  const reasonKey = (reason: SkillVersion["reason"]) =>
+    reason === "created"
+      ? "settings.skills.reason.created"
+      : reason === "deleted"
+        ? "settings.skills.reason.deleted"
+        : "settings.skills.reason.edited";
+
+  /** Fill the create form from a diagnostic that is an empty skill directory:
+   *  the folder is there, the SKILL.md is not, and writing one is the repair. */
+  const startFrom = (target: Target) => {
+    setSelected(null);
+    setNewName(target.name);
+    setNewDescription("");
+    setNewScope(target.scope);
+    setNewError(null);
+    setCreating(true);
+  };
 
   const bodyHelpId = "skill-body-help";
   const bodyCountId = "skill-body-count";
@@ -507,6 +676,17 @@ export function SkillsSection() {
         </p>
       )}
 
+      {/* The write landed on disk and the version row did not. It sits at the
+          pane level and not in the editor because a delete raises it too, and
+          a delete closes the editor — the one case where the missing version
+          row is the difference between "I can undo this" and a body that is
+          simply gone. */}
+      {notVersioned && (
+        <p className="sd" role="alert" data-testid="skills-not-versioned">
+          {t("settings.skills.notVersioned")}
+        </p>
+      )}
+
       {/* The broken ones first, and never folded away. A SKILL.md the writer
           broke by hand is not listed as a skill — it must not reach a prompt —
           so this row is the only thing that says why the skill they wrote is
@@ -515,6 +695,14 @@ export function SkillsSection() {
         <div className="skills-diagnostics" data-testid="skills-diagnostics">
           {diagnostics.map((d, i) => {
             const target = diagnosticTarget(d.path, workId ?? "");
+            // Two shapes, two repairs. A SKILL.md the writer broke opens on
+            // its raw text (skills.read hands it back verbatim for exactly
+            // this). A directory with no SKILL.md has no file to open —
+            // Store.Read answers ErrNotFound and the writer would get "not
+            // found" for a folder they can see — and is almost always a
+            // half-made skill, so the repair is to finish writing it under
+            // the name the folder already carries.
+            const hasFile = pointsAtFile(d.path);
             return (
               <div className="skills-diagnostic" key={d.path} role="alert" data-testid={`skill-diagnostic-${i}`}>
                 <span className="sd">{t("settings.skills.broken", { path: d.path })}</span>
@@ -524,9 +712,9 @@ export function SkillsSection() {
                     type="button"
                     className="btn ghost sm"
                     data-testid={`skill-diagnostic-open-${i}`}
-                    onClick={() => setSelected(target)}
+                    onClick={() => (hasFile ? setSelected(target) : startFrom(target))}
                   >
-                    {t("settings.skills.repair")}
+                    {t(hasFile ? "settings.skills.repair" : "settings.skills.repair.create")}
                   </button>
                 )}
               </div>
@@ -539,7 +727,10 @@ export function SkillsSection() {
         <ul className="skills-list" data-testid="skills-list">
           {rows.map((row) => {
             const id = rowId(row.scope, row.name);
-            const rowError = rowErrors[`${row.scope}:${row.name}`];
+            const key = `${row.scope}:${row.name}`;
+            const rowError = rowErrors[key];
+            const wanted = toggling[key];
+            const pendingToggle = key in toggling;
             return (
               <li className="skills-row" key={id} data-testid={`skill-row-${id}`}>
                 <button
@@ -562,10 +753,14 @@ export function SkillsSection() {
                   </span>
                 </span>
                 <label className="skills-toggle">
+                  {/* Held at what the writer asked for, and locked, for the
+                      read-write-refetch the toggle takes. A checkbox that
+                      does not move gets clicked again. */}
                   <input
                     type="checkbox"
                     data-testid={`skill-enabled-${id}`}
-                    checked={row.enabled}
+                    checked={pendingToggle ? wanted : row.enabled}
+                    disabled={pendingToggle}
                     onChange={() => toggleEnabled(row)}
                   />
                   <span className="sd">{t("settings.skills.enabled")}</span>
@@ -620,7 +815,10 @@ export function SkillsSection() {
             />
           </div>
           <div className="modal-field">
-            <label htmlFor="skill-new-scope">{t("settings.skills.work")}</label>
+            {/* Not `settings.skills.work`: the picker above chooses WHICH
+                work's skills are listed, this chooses what a new skill
+                applies to. The same word on both reads as the same control. */}
+            <label htmlFor="skill-new-scope">{t("settings.skills.scope")}</label>
             <select
               id="skill-new-scope"
               data-testid="skill-new-scope"
@@ -808,6 +1006,12 @@ export function SkillsSection() {
                         onClick={() => setVersionId(v.id)}
                       >
                         <span className="skills-version-time">{formatTime(v.created_at)}</span>
+                        {/* What happened, not just when. On a deleted skill's
+                            history this is the only thing that says which row
+                            holds the last body the writer had. */}
+                        <span className="skills-badge" data-testid={`skill-version-reason-${v.id}`}>
+                          {t(reasonKey(v.reason))}
+                        </span>
                         <span className="skills-badge">{t(authorKey(v.author))}</span>
                       </button>
                     ))}

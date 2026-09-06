@@ -879,6 +879,10 @@ const messages = {
     "settings.skills.remaining": "{used} / {budget}자",
     "settings.skills.scope.writer": "모든 작품",
     "settings.skills.scope.work": "이 작품",
+    // 목록 위의 작품 고르개는 "어느 작품의 스킬을 보는가"이고, 새로 만들기의
+    // 고르개는 "이 스킬이 어디에 적용되는가"다. 같은 낱말을 쓰면 둘이 같은
+    // 것으로 읽힌다.
+    "settings.skills.scope": "적용 범위",
     "settings.skills.work": "작품",
     "settings.skills.author.writer": "직접 작성",
     "settings.skills.author.agent": "에이전트가 작성",
@@ -888,8 +892,20 @@ const messages = {
     "settings.skills.history": "기록",
     "settings.skills.history.restore": "이 버전으로 되돌리기",
     "settings.skills.history.empty": "기록이 없습니다.",
+    // 기록 한 줄이 무엇을 담고 있는지. 삭제된 스킬을 되살릴 때 가장 크게
+    // 쓰인다 — 되돌릴 판을 고르는 유일한 단서다.
+    "settings.skills.reason.created": "처음 작성",
+    "settings.skills.reason.edited": "수정",
+    "settings.skills.reason.deleted": "삭제",
     "settings.skills.broken": "이 파일을 읽지 못했습니다: {path}",
     "settings.skills.repair": "열어서 고치기",
+    // 폴더는 있는데 SKILL.md가 없는 경우. 열 파일이 없으므로 "열어서 고치기"는
+    // 없는 파일을 찾다 실패한다. 이 이름으로 새로 쓰는 것이 유일한 고치기다.
+    "settings.skills.repair.create": "이 이름으로 새로 만들기",
+    // 파일은 바뀌었는데 기록이 남지 않은 경우. 엔진이 굳이 알려 주는 값이니
+    // 화면도 침묵하면 안 된다 — 작가는 되돌리려 할 때에야 알게 된다.
+    "settings.skills.notVersioned":
+      "저장은 되었습니다. 다만 이 변경은 기록에 남지 않아, 되돌리기 목록에 없고 되돌려도 돌아오지 않습니다.",
     "settings.skills.changedElsewhere":
       "에이전트가 이 스킬을 방금 수정했습니다. 작성 중인 내용을 저장하면 그 수정을 덮어씁니다.",
     "settings.providers.title": "AI 프로바이더",
@@ -1798,6 +1814,7 @@ const messages = {
     "settings.skills.remaining": "{used} / {budget} characters",
     "settings.skills.scope.writer": "Every work",
     "settings.skills.scope.work": "This work",
+    "settings.skills.scope": "Applies to",
     "settings.skills.work": "Work",
     "settings.skills.author.writer": "Written by you",
     "settings.skills.author.agent": "Written by the agent",
@@ -1807,8 +1824,14 @@ const messages = {
     "settings.skills.history": "History",
     "settings.skills.history.restore": "Restore this version",
     "settings.skills.history.empty": "No history yet.",
+    "settings.skills.reason.created": "First written",
+    "settings.skills.reason.edited": "Edited",
+    "settings.skills.reason.deleted": "Deleted",
     "settings.skills.broken": "This file could not be read: {path}",
     "settings.skills.repair": "Open and fix",
+    "settings.skills.repair.create": "Create it under this name",
+    "settings.skills.notVersioned":
+      "The change is saved. It is not in the version history, though, so it is not on the restore list and restoring will not bring it back.",
     "settings.skills.changedElsewhere":
       "The agent just changed this skill. Saving what you are writing will overwrite that change.",
     "settings.providers.title": "AI provider",
@@ -2701,6 +2724,7 @@ const messages = {
     "settings.skills.remaining": "{used} / {budget}文字",
     "settings.skills.scope.writer": "すべての作品",
     "settings.skills.scope.work": "この作品",
+    "settings.skills.scope": "適用範囲",
     "settings.skills.work": "作品",
     "settings.skills.author.writer": "自分で作成",
     "settings.skills.author.agent": "エージェントが作成",
@@ -2710,8 +2734,14 @@ const messages = {
     "settings.skills.history": "履歴",
     "settings.skills.history.restore": "このバージョンに戻す",
     "settings.skills.history.empty": "履歴がありません。",
+    "settings.skills.reason.created": "最初に作成",
+    "settings.skills.reason.edited": "編集",
+    "settings.skills.reason.deleted": "削除",
     "settings.skills.broken": "このファイルを読み取れませんでした: {path}",
     "settings.skills.repair": "開いて直す",
+    "settings.skills.repair.create": "この名前で新しく作る",
+    "settings.skills.notVersioned":
+      "変更は保存されました。ただしこの変更は履歴に残っていないため、復元の一覧になく、元に戻しても戻りません。",
     "settings.skills.changedElsewhere":
       "エージェントがこのスキルをたった今変更しました。編集中の内容を保存すると、その変更を上書きします。",
     "settings.providers.title": "AI プロバイダー",
