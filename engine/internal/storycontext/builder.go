@@ -37,6 +37,7 @@ type ContextBuilder struct {
 	factSource          FactSource
 	memorySource        MemorySource
 	curatedMemorySource CuratedMemorySource
+	skillSource         SkillSource
 	referenceSource     ReferenceSource
 	projects            *project.Repo
 	nodes               *node.Repo
@@ -97,6 +98,28 @@ type CuratedMemorySource interface {
 	CuratedMemory(ctx context.Context, projectID string) (writerProfile, workNotes string)
 }
 
+// SkillSource supplies the skills list for the brief: the writer's own and
+// this work's, already reduced to what may reach a model. Optional — without
+// it the Skills section stays empty.
+//
+// The contract, which this package re-checks none of, matching
+// agent.SkillSource's for the system-prompt list:
+//
+//   - Enabled only. A skill the writer switched off must not be listed.
+//   - Guard-passed. agentskills.Store.List runs agentskills.Guard on every
+//     entry and reports a failure as a Diagnostic instead of returning the
+//     skill, so a guard-failing skill is SKIPPED rather than costing the
+//     whole block — the decision the prompt's list already made, for the
+//     same reason: one skill an invisible character got into must not
+//     silence the other thirty-nine.
+//   - Names and descriptions only. SkillBrief has no body to give.
+//
+// It takes a context for the same reason CuratedMemorySource does: these come
+// off disk, and a brief built during shutdown has to be able to give up.
+type SkillSource interface {
+	ContextSkills(ctx context.Context, projectID string) []SkillBrief
+}
+
 // ReferenceSource supplies writer-attached reference material. Optional.
 type ReferenceSource interface {
 	ContextReferences(ctx context.Context, projectID, nodeID string) ([]ReferenceBrief, error)
@@ -118,6 +141,12 @@ func (b *ContextBuilder) WithMemorySource(s MemorySource) *ContextBuilder {
 // work-notes section.
 func (b *ContextBuilder) WithCuratedMemorySource(s CuratedMemorySource) *ContextBuilder {
 	b.curatedMemorySource = s
+	return b
+}
+
+// WithSkillSource wires the optional skills list.
+func (b *ContextBuilder) WithSkillSource(s SkillSource) *ContextBuilder {
+	b.skillSource = s
 	return b
 }
 
@@ -232,6 +261,10 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	if b.curatedMemorySource != nil {
 		writerProfile, workNotes = b.curatedMemorySource.CuratedMemory(ctx, n.ProjectID)
 	}
+	var skills []SkillBrief
+	if b.skillSource != nil {
+		skills = b.skillSource.ContextSkills(ctx, n.ProjectID)
+	}
 	var references []ReferenceBrief
 	if b.referenceSource != nil {
 		if got, err := b.referenceSource.ContextReferences(ctx, n.ProjectID, nodeID); err == nil {
@@ -262,6 +295,7 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		Memories:      memories,
 		WriterProfile: writerProfile,
 		WorkNotes:     workNotes,
+		Skills:        skills,
 		References:    references,
 		StyleNotes:    proj.StyleNotes,
 		SelectionText: selectionText,
@@ -342,6 +376,11 @@ func ApplyContextSelection(c Context) Context {
 	}
 	if !s.Enabled(ContextKeyReferences) {
 		c.References = nil
+	}
+	// Its own key on purpose, not folded into ContextKeyMemories above — see
+	// ContextKeySkills' comment in types.go.
+	if !s.Enabled(ContextKeySkills) {
+		c.Skills = nil
 	}
 	return c
 }

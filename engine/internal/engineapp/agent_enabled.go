@@ -109,23 +109,10 @@ func (a agentSkillSource) Skills(_ context.Context, projectID string) []agentski
 	return out
 }
 
-// appendEnabledSkills lists one scope and appends its enabled, body-stripped
-// skills to out. A list error is swallowed — see agentSkillSource's doc
-// comment for why.
-func appendEnabledSkills(out []agentskills.Skill, store *agentskills.Store, scope agentskills.Scope, projectID string) []agentskills.Skill {
-	skills, _, err := store.List(scope, projectID)
-	if err != nil {
-		return out
-	}
-	for _, s := range skills {
-		if !s.Enabled {
-			continue
-		}
-		s.Body = "" // never leaves this adapter — see SkillSource's doc comment
-		out = append(out, s)
-	}
-	return out
-}
+// appendEnabledSkills, which performs the reduction described above, lives in
+// skill_context.go: the story brief's own skill source needs exactly the same
+// one, and that file is untagged because the MCP brief is served on builds
+// this file is not compiled into.
 
 // scopeLookup answers the two names the scope line carries. Failures are
 // silent on purpose: a missing title must not cost the writer their turn.

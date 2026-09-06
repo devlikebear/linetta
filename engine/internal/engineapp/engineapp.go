@@ -223,18 +223,25 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithSnapshots(snaps).
 		WithMemory(companionSvc)
 
+	// One Store for the skills the agent writes for itself, shared between
+	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below),
+	// the story brief's own skills list (just below) and the built-in
+	// agent's system-prompt list (setupAgent, below) — all read and write
+	// the same SKILL.md files under home.
+	skillsStore := agentskills.NewStore(home)
+
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
 		WithMemorySource(companionSvc).
 		WithCuratedMemorySource(companionSvc).
-		WithReferenceSource(companionSvc)
-
-	// One Store for the skills the agent writes for itself, shared between
-	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below)
-	// and the built-in agent's own system-prompt list (setupAgent, below) —
-	// both read and write the same SKILL.md files under home.
-	skillsStore := agentskills.NewStore(home)
+		WithReferenceSource(companionSvc).
+		// The brief is the only channel an external MCP client has, so this
+		// is where a connected Claude Code learns that skills exist at all
+		// (#98 Task 7). Without it linetta_read_skill is undiscoverable and
+		// nothing anywhere goes red — which is what
+		// TestProductionStoryContextBuilderCarriesEverySource guards.
+		WithSkillSource(skillBriefSource{store: skillsStore})
 
 	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
 		settingsStore: settingsStore,

@@ -46,6 +46,20 @@ const (
 	ContextKeyFacts         ContextKey = "facts"
 	ContextKeyMemories      ContextKey = "memories"
 	ContextKeyReferences    ContextKey = "references"
+	// ContextKeySkills is its own key, unlike the two curated memory
+	// documents (#97), which ride ContextKeyMemories because there was no
+	// switch a client could throw for them alone. A skills list is a
+	// genuinely different thing to want or not want: it is procedural
+	// material an agent chooses to open, not ambient facts about the writer,
+	// and a client that has already read the skills it needs this turn has a
+	// real reason to ask for the brief without them.
+	//
+	// A key with nothing behind it would be worse than no key — see
+	// sectionReport's comment in mcphost/tools_read.go on advertising a
+	// control that does not exist. So this key comes with the whole chain:
+	// ContextSelection.Skills below, Enabled, ApplyContextSelection, and
+	// getStoryContextInput.IncludeSkills on the wire.
+	ContextKeySkills ContextKey = "skills"
 )
 
 // ContextSelection mirrors the AI panel checklist. Nil means "use the default",
@@ -65,6 +79,7 @@ type ContextSelection struct {
 	Facts         *bool `json:"facts,omitempty"`
 	Memories      *bool `json:"memories,omitempty"`
 	References    *bool `json:"references,omitempty"`
+	Skills        *bool `json:"skills,omitempty"`
 }
 
 // DefaultContextSelection returns the nil-pointer default: every section is on.
@@ -100,6 +115,8 @@ func (s ContextSelection) Enabled(key ContextKey) bool {
 		return enabledByDefault(s.Memories)
 	case ContextKeyReferences:
 		return enabledByDefault(s.References)
+	case ContextKeySkills:
+		return enabledByDefault(s.Skills)
 	default:
 		return true
 	}
@@ -182,8 +199,13 @@ type Context struct {
 	// from Memories (the experiences.jsonl recall) because they are a different
 	// thing: a short document the writer and the agent both maintain, rather
 	// than a substring search over an unbounded log.
-	WriterProfile string           `json:"writer_profile,omitempty"`
-	WorkNotes     string           `json:"work_notes,omitempty"`
+	WriterProfile string `json:"writer_profile,omitempty"`
+	WorkNotes     string `json:"work_notes,omitempty"`
+	// Skills is the name-and-description list of the SKILL.md documents this
+	// writer and this work have. Names and descriptions only, never bodies —
+	// the same rule the built-in agent's system prompt follows, and the
+	// reason SkillBrief has no Body field to fill in by accident.
+	Skills        []SkillBrief     `json:"skills,omitempty"`
 	References    []ReferenceBrief `json:"references,omitempty"`
 	StyleNotes    string           `json:"style_notes"`
 	SelectionText string           `json:"selection_text"`
@@ -249,6 +271,24 @@ type FactBrief struct {
 type FactSourceBrief struct {
 	Title string `json:"title,omitempty"`
 	URL   string `json:"url"`
+}
+
+// SkillBrief is one entry in the brief's skills list: what the skill is
+// called, what it says it is for, and which scope it lives in ("writer" or
+// "work", agentskills.Scope's two values as plain strings).
+//
+// There is deliberately no Body. The whole point of listing skills rather
+// than pasting them is progressive disclosure — a body stays on disk until
+// linetta_read_skill fetches one — and a field that could hold a body is a
+// field some later caller fills in. Scope is a string rather than
+// agentskills.Scope so this package keeps no dependency on agentskills at
+// all: scripts/validate-story-core-deps.sh forbids a model client in
+// storycontext's graph, and the fewer edges it has the less there is to
+// re-argue. The adapter that reads the store does the conversion.
+type SkillBrief struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Scope       string `json:"scope"`
 }
 
 // ReferenceBrief is one writer-supplied reference: purpose-labelled material

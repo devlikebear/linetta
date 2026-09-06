@@ -93,6 +93,11 @@ type getStoryContextInput struct {
 	IncludeMemories   *bool `json:"include_memories,omitempty"`
 	IncludeReferences *bool `json:"include_references,omitempty"`
 	IncludePlot       *bool `json:"include_plot,omitempty"`
+	// IncludeSkills is the switch behind storycontext.ContextKeySkills. It
+	// exists because the key does: sectionReport's comment below warns
+	// against reporting a section whose control does not exist, so a skills
+	// key with no way to set it would be the same defect one level up.
+	IncludeSkills *bool `json:"include_skills,omitempty" jsonschema:"set false to leave the skills list out; it is on by default and is the only place this brief says which skills exist"`
 }
 
 func (in getStoryContextInput) scope() (string, string) { return in.ProjectID, in.NodeID }
@@ -501,6 +506,7 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 			Memories:   in.IncludeMemories,
 			References: in.IncludeReferences,
 			Plot:       in.IncludePlot,
+			Skills:     in.IncludeSkills,
 		},
 	}
 	c, err := d.Context.BuildFull(ctx, n.ID, "", "", opts)
@@ -517,9 +523,18 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	// way, since ToolDeps.Source is a field the server sets, never
 	// something read off the wire. This runs before Render and
 	// sectionReport so both describe the brief the caller actually gets.
+	// The skills list is in exactly the same position, for exactly the same
+	// reason as the two curated documents above: agent.systemPrompt's
+	// skillsBlock already pastes the writer's and the work's skills, names
+	// and descriptions and all, into the built-in agent's own prompt every
+	// turn. Sending them again here would be the second copy the comment
+	// above refuses. An external client is again unaffected — this brief is
+	// the ONLY channel that tells it skills exist, which is why the
+	// suppression is keyed on Source and nothing else.
 	if d.Source == SourceAgent {
 		c.WriterProfile = ""
 		c.WorkNotes = ""
+		c.Skills = nil
 	}
 	// Only the user half of the render is the brief; the system half carries
 	// tone and instruction scaffolding meant for Linetta's own runner.
@@ -567,6 +582,17 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		{"memories", len(c.Memories) > 0 ||
 			strings.TrimSpace(c.WriterProfile) != "" ||
 			strings.TrimSpace(c.WorkNotes) != ""},
+		// "skills" gets its own entry rather than folding into "memories"
+		// the way the curated documents do, because unlike them it HAS its
+		// own switch (getStoryContextInput.IncludeSkills →
+		// storycontext.ContextKeySkills), so reporting it separately
+		// describes a control that exists. Counted from c.Skills, which is
+		// nil for the built-in agent because getStoryContext blanked it
+		// above — this function runs after that suppression on purpose, so
+		// the report describes the brief the caller actually holds rather
+		// than the one that was built. #97 shipped a fix round over exactly
+		// that ordering.
+		{"skills", len(c.Skills) > 0},
 		{"references", len(c.References) > 0},
 		{"style_notes", strings.TrimSpace(c.StyleNotes) != ""},
 	}
