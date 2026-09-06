@@ -3,6 +3,7 @@ package agentskills
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -38,7 +39,25 @@ const skillFile = "SKILL.md"
 // therefore not available as a writer-scope skill name: a skill called
 // "works" would put its SKILL.md inside the directory that holds every work's
 // skills, and deleting it would take all of them with it.
+//
+// It is the only name the store itself reserves, because it is the only path
+// under a scope directory that the store manages rather than the writer. The
+// other name the store owns — skillFile — sits one level deeper, inside a
+// skill's own directory, so no skill NAME can collide with it.
 const worksSegment = "works"
+
+// maxSkillFileBytes bounds what readSkillFile will pull into memory before
+// anything has decided the file is a skill at all. Without it one hand-placed
+// gigabyte at <home>/skills/x/SKILL.md makes List allocate the whole thing
+// just to have Guard reject it afterwards.
+//
+// A SKILL.md that can pass Guard holds at most MaxBodyRunes (8000) runes of
+// body plus maxFrontmatterRunes (4096) runes of frontmatter; at UTF-8's worst
+// case of four bytes per rune that is a little under 48 KiB, so 64 KiB is the
+// smallest round cap that cannot refuse a file the rest of the package would
+// have accepted. Over it, the file is ErrTooLong — a diagnostic in List, an
+// error in Read — which is what an over-long body is anyway.
+const maxSkillFileBytes = 64 << 10
 
 // Sentinel causes, alongside the ones in skill.go and guard.go.
 var (
@@ -52,12 +71,17 @@ var (
 	// always allowed, so a writer at the cap can still fix what they have.
 	ErrTooManySkills = errors.New("agentskills: too many skills in this scope")
 
-	// ErrExists is something other than the skill occupying the skill's
+	// ErrPathOccupied is something other than the skill occupying the skill's
 	// path: a plain file where the skill's directory belongs, or a SKILL.md
 	// that is itself a directory. It is deliberately distinct from a write
 	// failure — nothing here is corrupt, the writer just has something else
 	// sitting in the way, and the fix is to move it.
-	ErrExists = errors.New("agentskills: another file is already at that path")
+	//
+	// It is NOT "a skill by that name already exists" — Write is an upsert and
+	// overwriting is normal. The name says "path occupied" rather than
+	// "exists" so that the tool layer's create action can own the plain
+	// already-exists meaning without the two being confused for each other.
+	ErrPathOccupied = errors.New("agentskills: another file is already at that path")
 )
 
 // Diagnostic is one thing on disk that should have been a skill and is not.
@@ -101,6 +125,23 @@ func NewStore(home string) *Store { return &Store{home: home} }
 var projectIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 var errReservedName = fmt.Errorf("agentskills: %q is reserved; work-scoped skills live under it", worksSegment)
+
+// isReservedSegment reports whether name would resolve to a directory the
+// store manages rather than to a skill of the writer's.
+//
+// The comparison is case-INSENSITIVE, and that is the whole point. On the
+// case-insensitive filesystems this app ships to (macOS, Windows) "WORKS"
+// opens the very same directory as "works", so an exact compare would let
+// Delete(ScopeWriter, "", "WORKS") RemoveAll the root holding every
+// work-scoped skill in the home. An exact compare is safe ONLY as long as
+// ValidName forbids uppercase — that is trusting a check in another file to
+// hold a path boundary here, which is exactly what this file promises not to
+// do (see the block comment above). Reproduced before the fix: with the
+// ValidName call removed from checkName, "WORKS" deleted <home>/skills/works
+// and everything under it.
+func isReservedSegment(name string) bool {
+	return strings.EqualFold(name, worksSegment)
+}
 
 // safeSegment is the path-shape check, independent of any naming rule: the
 // value must be exactly one path component that cannot climb, cannot be
@@ -147,7 +188,7 @@ func checkName(scope Scope, name string) error {
 	if !ValidName(name) {
 		return fmt.Errorf("%w: %q", ErrBadName, name)
 	}
-	if scope == ScopeWriter && name == worksSegment {
+	if scope == ScopeWriter && isReservedSegment(name) {
 		return errReservedName
 	}
 	return nil
@@ -216,16 +257,33 @@ func (st *Store) skillPaths(scope Scope, projectID, name string) (dir, file stri
 // that is an error.
 //
 // Everything else that goes wrong with a single entry becomes a Diagnostic:
-// a SKILL.md that does not parse, one the guard refuses (it must never reach
-// a prompt, but the writer must still see that it is there), a directory
-// whose SKILL.md is missing or is itself a directory, and a name in the
-// frontmatter that disagrees with the folder it sits in — that last one
-// cannot be addressed by Read or Delete at all, so listing it would hand the
-// caller a skill it could not then act on.
+// a SKILL.md that does not parse, one that is too big to read, one the guard
+// refuses (it must never reach a prompt, but the writer must still see that
+// it is there), a directory whose SKILL.md is missing or is itself a
+// directory, and a name in the frontmatter that disagrees with the folder it
+// sits in.
+//
+// That last one is dropped because List addresses skills by folder name and
+// the caller would otherwise get back a skill under a name that does not
+// locate it. Being precise about the direction, since the earlier version of
+// this comment was not: on a case-SENSITIVE filesystem "MixedCase" holding
+// `name: mixedcase` is unreachable by either name, and dropping it is the
+// only honest answer. On a case-INSENSITIVE one (macOS, Windows)
+// Read/Delete("mixedcase") do happen to reach it — that is the filesystem
+// folding the name, not a promise this store makes, and the same call fails
+// on Linux. So: everything List RETURNS can be Read and Deleted by its Name;
+// the converse does not hold, and no caller should assume it does.
 //
 // Hidden entries (a leading dot: .git, .DS_Store) are skipped in silence.
 // They are not the writer's mistake, and reporting them would bury the
 // diagnostics that are.
+//
+// Entries are classified with os.Stat, which FOLLOWS symlinks, and that is
+// intended: a writer who symlinks a shared or version-controlled skills
+// folder in here should have it work. A dangling or looping link stats with
+// an error and is skipped rather than reported, since it is not a skill that
+// broke. The one place the store must never follow a link is Delete — see
+// there.
 func (st *Store) List(scope Scope, projectID string) ([]Skill, []Diagnostic, error) {
 	dir, err := st.Dir(scope, projectID)
 	if err != nil {
@@ -248,7 +306,7 @@ func (st *Store) List(scope Scope, projectID string) ([]Skill, []Diagnostic, err
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		if scope == ScopeWriter && name == worksSegment {
+		if scope == ScopeWriter && isReservedSegment(name) {
 			continue // the work scopes' own root, not a skill
 		}
 		path := filepath.Join(dir, name)
@@ -264,6 +322,16 @@ func (st *Store) List(scope Scope, projectID string) ([]Skill, []Diagnostic, err
 				diags = append(diags, Diagnostic{Path: path, Message: "no " + skillFile + " in this directory"})
 				continue
 			}
+			diags = append(diags, Diagnostic{Path: file, Message: err.Error()})
+			continue
+		}
+		// The guard runs HERE rather than inside readSkillFile, so that Read
+		// can still hand a guard-failing skill back for repair (see Read).
+		// A skill the guard refuses is never listed — it must not reach a
+		// prompt — but it is always reported, which is the whole point: the
+		// writer has to be told which skill is broken and why before they can
+		// fix it.
+		if err := Guard(s); err != nil {
 			diags = append(diags, Diagnostic{Path: file, Message: err.Error()})
 			continue
 		}
@@ -286,13 +354,16 @@ func (st *Store) List(scope Scope, projectID string) ([]Skill, []Diagnostic, err
 	return skills, diags, nil
 }
 
-// readSkillFile loads and screens one SKILL.md, filling the two fields that
+// readSkillFile loads and parses one SKILL.md, filling the two fields that
 // are metadata rather than document content: UpdatedAt comes from the file's
 // modification time (it is not, and should not be, written into the file —
 // a writer editing SKILL.md in their own editor updates it for free) and
 // BodyRunes is derived.
 //
-// It returns ErrNotFound for an absent file and ErrExists for a SKILL.md that
+// It does NOT run Guard. Storage reads what is on disk; screening is the
+// write path's job and the prompt's job (see Read and Guard's placement).
+//
+// It returns ErrNotFound for an absent file and ErrPathOccupied for a SKILL.md that
 // is a directory, so callers can tell those apart from a parse failure.
 func readSkillFile(file string) (Skill, error) {
 	info, err := os.Stat(file)
@@ -303,10 +374,10 @@ func readSkillFile(file string) (Skill, error) {
 		return Skill{}, err
 	}
 	if info.IsDir() {
-		return Skill{}, fmt.Errorf("%w: %s is a directory, not a file", ErrExists, file)
+		return Skill{}, fmt.Errorf("%w: %s is a directory, not a file", ErrPathOccupied, file)
 	}
 
-	raw, err := os.ReadFile(file)
+	raw, err := readCapped(file)
 	if err != nil {
 		return Skill{}, err
 	}
@@ -314,27 +385,62 @@ func readSkillFile(file string) (Skill, error) {
 	if err != nil {
 		return Skill{}, err
 	}
-	// The guard runs on read, not only on write: a skill body is bound for a
-	// model's prompt, and a file the writer (or another agent editing this
-	// folder) put there by hand never went through Write. In List this
-	// becomes a Diagnostic rather than an error, which is exactly the
-	// visibility a screened-out skill needs.
-	if err := Guard(s); err != nil {
-		return Skill{}, err
-	}
 	s.UpdatedAt = info.ModTime().UnixMilli()
 	s.BodyRunes = len([]rune(s.Body))
 	return s, nil
 }
 
+// readCapped reads a SKILL.md without letting one hand-placed huge file
+// decide how much memory this process allocates.
+//
+// The read itself is bounded rather than the stat that precedes it: a stat
+// followed by an unbounded ReadFile is a race, and the file here is one the
+// writer or another agent can be editing at the same moment. One byte over
+// the cap is enough to know the file is too big, so the reader asks for
+// maxSkillFileBytes+1 and refuses if it got them all.
+func readCapped(file string) ([]byte, error) {
+	f, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	raw, err := io.ReadAll(io.LimitReader(f, maxSkillFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxSkillFileBytes {
+		return nil, fmt.Errorf("%w: %s is over the %d-byte file limit", ErrTooLong, file, maxSkillFileBytes)
+	}
+	return raw, nil
+}
+
 // ---- Read -----------------------------------------------------------------
 
 // Read returns one skill by name. A skill that is not there is ErrNotFound; a
-// SKILL.md that is a directory is ErrExists; a file that does not parse, or
-// that the guard refuses, is that failure's own error. Unlike List, this
-// addresses exactly one skill, so there is nothing for a diagnostic to
-// protect — the caller asked about this file and wants to hear what is wrong
-// with it.
+// SKILL.md that is a directory is ErrPathOccupied; a file that does not parse
+// is that failure's own error. Unlike List, this addresses exactly one skill,
+// so there is nothing for a diagnostic to protect — the caller asked about
+// this file and wants to hear what is wrong with it.
+//
+// Read deliberately does NOT run Guard, and this is a reversal of the first
+// version of this file. Guarding here made a guard-failing skill visible in
+// Settings (as a List diagnostic) but impossible to fetch, so the writer was
+// told "this skill is broken" with no way to open it — and an 8050-rune body
+// cannot be trimmed by someone who cannot read it. A broken skill has to be
+// both visible AND fixable, and Read is the fixing half.
+//
+// The verdict is not swallowed either: the caller has the Skill, and Guard is
+// exported and pure, so `Guard(s)` on the returned value IS the accessor.
+// That is the choice made here rather than a new field on Skill, because
+// Skill is the SKILL.md document (skill.go) and a guard verdict is a fact
+// about a moment, not a line of the document — putting it in the struct would
+// have it rendered, parsed and stored right along with the rest.
+//
+// Nothing over-long or invisible-character-laden reaches a model as a result:
+// Write guards before it stores, List guards before it lists, and prompt
+// assembly (Task 6) guards every skill again on its way into the prompt.
+// Storage is not the screening layer.
 func (st *Store) Read(scope Scope, projectID, name string) (Skill, error) {
 	_, file, err := st.skillPaths(scope, projectID, name)
 	if err != nil {
@@ -399,7 +505,7 @@ func (st *Store) Write(s Skill, now int64) (Skill, error) {
 	// corrupt store — the writer just has something in the way, and the fix
 	// is to move it.
 	if info, err := os.Stat(dir); err == nil && !info.IsDir() {
-		return Skill{}, fmt.Errorf("%w: %s is not a directory", ErrExists, dir)
+		return Skill{}, fmt.Errorf("%w: %s is not a directory", ErrPathOccupied, dir)
 	}
 
 	if _, err := os.Stat(file); err != nil {
@@ -429,9 +535,17 @@ func (st *Store) Write(s Skill, now int64) (Skill, error) {
 	return s, nil
 }
 
-// count is how many skills a scope already holds. A skill that does not parse
-// still occupies a slot — it is a real directory with a real SKILL.md, and
-// pretending otherwise would let the cap drift upward every time a file broke.
+// count is how many slots a scope already holds.
+//
+// It counts exactly the entries List treats as a skill directory — every
+// non-hidden subdirectory that is not the works root — and does NOT require a
+// SKILL.md inside. That is deliberate, and it is the second version of this
+// function: requiring the SKILL.md let forty half-made folders sit alongside
+// forty real skills, doubling a cap whose whole job is to bound how much of
+// this the writer has to keep track of. A directory here is a slot whether or
+// not its document parses, whether or not the document is even there yet: it
+// is a real folder taking a real name, List already reports it, and excluding
+// it would let the cap drift upward every time something on disk broke.
 func (st *Store) count(scope Scope, projectID string) (int, error) {
 	dir, err := st.Dir(scope, projectID)
 	if err != nil {
@@ -450,16 +564,14 @@ func (st *Store) count(scope Scope, projectID string) (int, error) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		if scope == ScopeWriter && name == worksSegment {
+		if scope == ScopeWriter && isReservedSegment(name) {
 			continue
 		}
 		info, err := os.Stat(filepath.Join(dir, name))
 		if err != nil || !info.IsDir() {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(dir, name, skillFile)); err == nil {
-			n++
-		}
+		n++
 	}
 	return n, nil
 }
@@ -477,6 +589,13 @@ func (st *Store) count(scope Scope, projectID string) (int, error) {
 // can only ever recurse into a directory that really is a skill — an
 // os.RemoveAll driven by a model's argument needs both that check and the
 // path-boundary one above it.
+//
+// Symlinks: List and Read follow them on purpose (a writer may link a shared
+// skills folder in), but Delete must not, and os.RemoveAll does not — it
+// unlinks the symlink itself and never recurses through it, so deleting a
+// linked skill removes the link and leaves the writer's real folder intact.
+// This is the one symlink behaviour where being wrong destroys data that is
+// not ours, so TestDeleteDoesNotFollowASymlink pins it.
 func (st *Store) Delete(scope Scope, projectID, name string) error {
 	dir, file, err := st.skillPaths(scope, projectID, name)
 	if err != nil {
