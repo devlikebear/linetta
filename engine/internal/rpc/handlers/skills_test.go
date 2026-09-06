@@ -1075,6 +1075,268 @@ func TestRestoreOverAReusedNameIsAllowedAndUndoable(t *testing.T) {
 	}
 }
 
+// THE OVERWRITE. A SKILL.md over the 64 KiB read ceiling cannot be shown to
+// the writer at all: skills.read refuses it, because ReadRaw hits the same
+// ceiling Read does. The app therefore knows nothing about what that file
+// holds — and a save or a restore at that name must not replace it.
+//
+// It could. The fallback that lets a broken SKILL.md be repaired was written
+// as "any read failure that is not ErrNotFound means edit this", which is
+// every read failure, not only a parse failure. A 600 KB document was
+// replaced by an 81-byte one, with a version row carrying six runes as the
+// only trace of it. Both writing methods take that door and both are covered
+// here.
+func TestASkillTooBigToReadIsNeverWrittenOver(t *testing.T) {
+	// Well over the ceiling, and a real document rather than filler: this is
+	// a skill someone grew past what this app will read, not a stray blob.
+	huge := "---\nname: huge\ndescription: 아주 큰 문서\n---\n" + strings.Repeat("가", 200_000)
+
+	t.Run("skills.write refuses it", func(t *testing.T) {
+		ctx, st, hist, _ := realSkills(t)
+		dir := writerDir(t, st)
+		writeRawSkill(t, filepath.Join(dir, "huge"), huge)
+
+		params, _ := json.Marshal(map[string]any{
+			"scope": "writer", "name": "huge", "description": "짧게", "body": "짧은 본문\n",
+		})
+		_, err := WriteSkill(st, hist, clockAt(2000), nil)(ctx, params)
+		me := wantInvalidParams(t, err)
+		if !strings.Contains(me.Message, "huge") {
+			t.Errorf("the message must name the skill; got %q", me.Message)
+		}
+		wantFileOnDisk(t, filepath.Join(dir, "huge", "SKILL.md"), huge)
+
+		versions, err := hist.List(ctx, agentskills.ScopeWriter, "", "huge", 10)
+		if err != nil {
+			t.Fatalf("history list: %v", err)
+		}
+		if len(versions) != 0 {
+			t.Errorf("versions = %+v, want none — nothing was written", versions)
+		}
+	})
+
+	t.Run("skills.restore refuses it", func(t *testing.T) {
+		ctx, st, hist, _ := realSkills(t)
+		dir := writerDir(t, st)
+		params, _ := json.Marshal(map[string]any{
+			"scope": "writer", "name": "huge", "description": "설명", "body": "원래 본문\n",
+		})
+		if _, err := WriteSkill(st, hist, clockAt(1000), nil)(ctx, params); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		row, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "huge")
+		if err != nil {
+			t.Fatalf("newest: %v", err)
+		}
+		// The writer grows the file past the ceiling in their own editor.
+		writeRawSkill(t, filepath.Join(dir, "huge"), huge)
+
+		_, err = RestoreSkill(st, hist, clockAt(2000), nil)(ctx, json.RawMessage(`{"id":`+quote(row.ID)+`}`))
+		wantInvalidParams(t, err)
+		wantFileOnDisk(t, filepath.Join(dir, "huge", "SKILL.md"), huge)
+	})
+}
+
+// DOOR (a). "Is the last recorded row a deletion?" is disarmed by an
+// ordinary delete-and-restore cycle: the restore records a `created` row, so
+// the name's last row is no longer its deletion — and a folder the writer
+// replaces BY HAND after that was overwritten by the next restore, though it
+// existed in no row at all.
+//
+// Comparing what is on disk against the newest recorded document closes it,
+// because the answer does not depend on which row kind came last.
+func TestRestoreRefusesAHandReplacedSkillAfterADeleteAndRestoreCycle(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	for i, body := range []string{"원래 본문\n", "고친 본문\n"} {
+		params, _ := json.Marshal(map[string]any{
+			"scope": "writer", "name": "cycled", "description": "설명", "body": body,
+		})
+		if _, err := WriteSkill(st, hist, clockAt(1000+int64(i)*1000), nil)(ctx, params); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	if _, err := DeleteSkill(st, hist, clockAt(3000), nil)(
+		ctx, json.RawMessage(`{"scope":"writer","name":"cycled"}`)); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	deletion, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "cycled")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+	if _, err := RestoreSkill(st, hist, clockAt(4000), nil)(
+		ctx, json.RawMessage(`{"id":`+quote(deletion.ID)+`}`)); err != nil {
+		t.Fatalf("bringing the deleted skill back: %v", err)
+	}
+	// The cycle is what disarms the old rule: the newest row is now a
+	// creation, not the deletion.
+	newest, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "cycled")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+	if newest.Reason != agentskills.ReasonCreated {
+		t.Fatalf("this test is about a `created` last row; got %q", newest.Reason)
+	}
+
+	// And now the writer replaces the folder in their own file browser.
+	// Nothing recorded this document; the history holds no copy of it.
+	seedSkill(t, st, agentskills.Skill{
+		Name: "cycled", Scope: agentskills.ScopeWriter,
+		Description: "손으로 만든 스킬", Enabled: true, Body: "손으로 쓴 본문\n",
+	}, 5000)
+
+	versions, err := hist.List(ctx, agentskills.ScopeWriter, "", "cycled", 10)
+	if err != nil {
+		t.Fatalf("history list: %v", err)
+	}
+	oldest := versions[len(versions)-1]
+	_, err = RestoreSkill(st, hist, clockAt(6000), nil)(ctx, json.RawMessage(`{"id":`+quote(oldest.ID)+`}`))
+	me := wantInvalidParams(t, err)
+	if !strings.Contains(me.Message, "cycled") {
+		t.Errorf("the message must name the skill; got %q", me.Message)
+	}
+	live, err := st.Read(agentskills.ScopeWriter, "", "cycled")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if live.Body != "손으로 쓴 본문\n" {
+		t.Errorf("body = %q, want the hand-made document untouched", live.Body)
+	}
+}
+
+// DOOR (b). Deleting a skill whose SKILL.md does not parse records nothing —
+// there was no readable document to snapshot, and DeleteSkill says so with
+// versioned:false — which leaves an old `created` row as the last one for
+// that name. The rule that read only that row was therefore disarmed at
+// exactly the name the app had just emptied, and whatever the writer put
+// there next was overwritten with no copy of it anywhere.
+func TestRestoreRefusesAtANameWhoseBrokenSkillsDeleteRecordedNothing(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	dir := writerDir(t, st)
+	params, _ := json.Marshal(map[string]any{
+		"scope": "writer", "name": "busted", "description": "설명", "body": "원래 본문\n",
+	})
+	if _, err := WriteSkill(st, hist, clockAt(1000), nil)(ctx, params); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	created, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "busted")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+
+	// The writer breaks the frontmatter in their own editor, then removes
+	// the skill from Settings. The removal records nothing.
+	writeRawSkill(t, filepath.Join(dir, "busted"), "name: no-fences\ndescription: 깨졌다\n\n본문\n")
+	rawResult, err := DeleteSkill(st, hist, clockAt(2000), nil)(
+		ctx, json.RawMessage(`{"scope":"writer","name":"busted"}`))
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	var deleted deleteSkillResult
+	if err := json.Unmarshal(rawResult, &deleted); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if deleted.Versioned {
+		t.Fatal("this test is about a delete that recorded nothing")
+	}
+	newest, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "busted")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+	if newest.Reason != agentskills.ReasonCreated {
+		t.Fatalf("this test is about a stale `created` last row; got %q", newest.Reason)
+	}
+
+	// The writer starts something new at the freed name, by hand.
+	seedSkill(t, st, agentskills.Skill{
+		Name: "busted", Scope: agentskills.ScopeWriter,
+		Description: "완전히 다른 스킬", Enabled: true, Body: "새로 쓴 본문\n",
+	}, 3000)
+
+	_, err = RestoreSkill(st, hist, clockAt(4000), nil)(ctx, json.RawMessage(`{"id":`+quote(created.ID)+`}`))
+	me := wantInvalidParams(t, err)
+	if !strings.Contains(me.Message, "busted") {
+		t.Errorf("the message must name the skill; got %q", me.Message)
+	}
+	live, err := st.Read(agentskills.ScopeWriter, "", "busted")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if live.Body != "새로 쓴 본문\n" {
+		t.Errorf("body = %q, want the new document untouched", live.Body)
+	}
+}
+
+// A file that does not parse can be a copy of no version row: every row came
+// from Store.Write, which renders, and rendered output always parses. So the
+// text sitting there is recorded nowhere and a restore must not write over
+// it — the writer opens it (skills.read hands it back verbatim), keeps what
+// it says, and then saves or deletes.
+func TestRestoreRefusesOverAFileThatDoesNotParse(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	dir := writerDir(t, st)
+	params, _ := json.Marshal(map[string]any{
+		"scope": "writer", "name": "halfway", "description": "설명", "body": "원래 본문\n",
+	})
+	if _, err := WriteSkill(st, hist, clockAt(1000), nil)(ctx, params); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	row, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "halfway")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+	const broken = "name: no-fences\ndescription: 깨졌다\n\n손으로 쓴 본문\n"
+	writeRawSkill(t, filepath.Join(dir, "halfway"), broken)
+
+	_, err = RestoreSkill(st, hist, clockAt(2000), nil)(ctx, json.RawMessage(`{"id":`+quote(row.ID)+`}`))
+	me := wantInvalidParams(t, err)
+	if !strings.Contains(me.Message, "halfway") {
+		t.Errorf("the message must name the skill; got %q", me.Message)
+	}
+	wantFileOnDisk(t, filepath.Join(dir, "halfway", "SKILL.md"), broken)
+}
+
+// The check needs the log, and a log that cannot be read is the one failure
+// here that is nobody's request. It must not become "allow the write": that
+// is the destructive direction, taken for a reason that has nothing to do
+// with what was asked. It comes back as the internal error it is, which a
+// retry clears, and the document on disk is still there.
+func TestRestoreReportsAHistoryItCannotReadRatherThanOverwriting(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	params, _ := json.Marshal(map[string]any{
+		"scope": "writer", "name": "guarded", "description": "설명", "body": "원래 본문\n",
+	})
+	if _, err := WriteSkill(st, hist, clockAt(1000), nil)(ctx, params); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	row, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "guarded")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+	second, _ := json.Marshal(map[string]any{
+		"scope": "writer", "name": "guarded", "description": "설명", "body": "고친 본문\n",
+	})
+	if _, err := WriteSkill(st, hist, clockAt(2000), nil)(ctx, second); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	_, err = RestoreSkill(st, unreadableNewest{hist}, clockAt(3000), nil)(
+		ctx, json.RawMessage(`{"id":`+quote(row.ID)+`}`))
+	if err == nil {
+		t.Fatal("a restore that cannot be checked must not proceed")
+	}
+	if me := methodError(t, err); me.Code != rpc.CodeInternalError {
+		t.Errorf("code = %d, want %d — a database that cannot be read is not a bad request",
+			me.Code, rpc.CodeInternalError)
+	}
+	live, err := st.Read(agentskills.ScopeWriter, "", "guarded")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if live.Body != "고친 본문\n" {
+		t.Errorf("body = %q, want the live document untouched", live.Body)
+	}
+}
+
 func TestRestoreRefusesAnUnknownVersion(t *testing.T) {
 	ctx, st, hist, _ := realSkills(t)
 	_, err := RestoreSkill(st, hist, clockAt(1), nil)(ctx, json.RawMessage(`{"id":"no-such-version"}`))
@@ -1135,6 +1397,40 @@ func TestARefusedSkillMutationEmitsNothing(t *testing.T) {
 }
 
 // ---- helpers --------------------------------------------------------------
+
+// writerDir is <home>/skills, where a test puts a SKILL.md the store never
+// wrote.
+func writerDir(t *testing.T, st *agentskills.Store) string {
+	t.Helper()
+	dir, err := st.Dir(agentskills.ScopeWriter, "")
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	return dir
+}
+
+// wantFileOnDisk asserts a file was left exactly as it was. It is the half
+// of every "must not overwrite" case that the refusal alone does not prove.
+func wantFileOnDisk(t *testing.T, path, want string) {
+	t.Helper()
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if string(got) != want {
+		t.Errorf("%s is %d bytes, want the original %d — it was written over",
+			path, len(got), len(want))
+	}
+}
+
+// unreadableNewest is a real history whose "what is standing here now" query
+// fails: rows still come back by id, so a restore resolves its target and
+// then finds it cannot check what it is about to overwrite.
+type unreadableNewest struct{ *agentskills.History }
+
+func (unreadableNewest) Newest(context.Context, agentskills.Scope, string, string) (agentskills.Version, error) {
+	return agentskills.Version{}, errors.New("the database is not readable")
+}
 
 func clockAt(now int64) func() int64 { return func() int64 { return now } }
 

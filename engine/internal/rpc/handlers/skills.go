@@ -329,6 +329,70 @@ func ReadSkill(store SkillStore) rpc.Handler {
 	}
 }
 
+// ---- what is standing at a name -------------------------------------------
+
+// skillPresence is what the two writing methods found at a name before they
+// wrote over it. There are three states, not two, and collapsing the last
+// two is how a file this handler could not read got replaced by one it
+// could.
+type skillPresence int
+
+const (
+	// presenceAbsent: nothing is at that name. A write is a create.
+	presenceAbsent skillPresence = iota
+	// presenceSkill: a SKILL.md that reads back as a skill. A write is an
+	// edit, and the skill it returns is the live one.
+	presenceSkill
+	// presenceUnparseable: a file IS there and its bytes ARE readable — the
+	// only thing that failed is Parse. That is a SKILL.md whose frontmatter
+	// the writer broke by hand, which is exactly the file they opened
+	// Settings to repair, so a write over it is an edit too. Nothing can be
+	// said about its fields; the Skill returned alongside is the zero value.
+	presenceUnparseable
+)
+
+// inspectBeforeOverwrite reports what is at a name, and refuses on behalf of
+// its caller when the answer is "something, and I cannot tell you what".
+//
+// This is the narrow version of a fallback that used to be one line of
+// `default:` on the read's error — every failure that was not ErrNotFound
+// counted as "there is a broken skill here, overwrite it". Only ONE failure
+// means that. The rest mean the handler does not know what is on disk, and
+// the difference is not academic: a SKILL.md over the 64 KiB ceiling
+// (maxSkillFileBytes) fails BOTH Read and ReadRaw, so skills.read refuses to
+// open it — and the widened fallback let skills.write replace it anyway. A
+// 600 KB document became an 81-byte one, with a version row holding six
+// runes as its only trace. Before that widening the write was refused, and
+// it has to be again.
+//
+// ReadRaw is what tells the two apart, and it is the right question to ask:
+// it resolves the same path through the same checks and reads through the
+// same ceiling as Read, and does nothing else. If it comes back with bytes,
+// the file is genuinely there and genuinely readable and Parse is what
+// failed. If it comes back with an error, nobody here knows what is at that
+// path, and a writer's file that cannot be read must not be silently
+// replaced by one that can.
+//
+// The refusal carries ReadRaw's own error — the sentence about the byte
+// stream ("over the 65536-byte file limit", a permissions problem), which is
+// the one that says why the save cannot go through — and skillErr picks the
+// code from it, so a file the writer can fix is still a refusal they can act
+// on and a genuine IO failure is still a 500.
+func inspectBeforeOverwrite(store SkillStore, scope agentskills.Scope, projectID, name string) (agentskills.Skill, skillPresence, error) {
+	cur, err := store.Read(scope, projectID, name)
+	switch {
+	case err == nil:
+		return cur, presenceSkill, nil
+	case errors.Is(err, agentskills.ErrNotFound):
+		return agentskills.Skill{}, presenceAbsent, nil
+	}
+	if _, _, rawErr := store.ReadRaw(scope, projectID, name); rawErr != nil {
+		return agentskills.Skill{}, presenceAbsent, skillErr(fmt.Errorf(
+			"something is at %q that cannot be read, so it must not be written over: %w", name, rawErr))
+	}
+	return agentskills.Skill{}, presenceUnparseable, nil
+}
+
 // ---- skills.write ---------------------------------------------------------
 
 type writeSkillParams struct {
@@ -396,26 +460,26 @@ func WriteSkill(store SkillStore, history SkillHistory, clock func() int64, noti
 		// Whether this is a create or an edit decides the reason the version
 		// row carries, and what an absent enabled flag falls back to.
 		//
-		// A file that is there but does NOT read as a skill counts as an
-		// edit, and the save goes through. The first version of this
-		// refused it — "writing over something unreadable is how a
-		// half-broken file becomes a lost one" — and that was backwards: a
-		// SKILL.md with broken frontmatter is exactly the file a writer
-		// opens Settings to fix, refusing the save left them with a skill
-		// they could see, could not repair and could not remove, and what
-		// they are overwriting it with is the repaired version of the same
-		// document. Anything genuinely wrong with the path (a permissions
-		// problem, a directory where the SKILL.md belongs) fails in
-		// Store.Write a few lines below, with its own message, so nothing
-		// is silently lost by not pre-judging it here.
+		// A file that is there but does not PARSE counts as an edit, and the
+		// save goes through: a SKILL.md with broken frontmatter is exactly
+		// the file a writer opens Settings to fix, and what they are
+		// overwriting it with is the repaired version of the same document.
+		// A file that cannot be READ at all is a different answer and
+		// inspectBeforeOverwrite refuses it there — see its doc comment.
 		enabled := true
 		reason := agentskills.ReasonCreated
-		switch cur, err := store.Read(scope, projectID, name); {
-		case err == nil:
+		cur, presence, err := inspectBeforeOverwrite(store, scope, projectID, name)
+		if err != nil {
+			return nil, err
+		}
+		switch presence {
+		case presenceSkill:
 			enabled, reason = cur.Enabled, agentskills.ReasonEdited
-		case errors.Is(err, agentskills.ErrNotFound):
-			// A create. The defaults above are already right.
-		default:
+		case presenceUnparseable:
+			// The broken file's own enabled flag is unreadable, so the
+			// repaired skill comes back ON, the way a new one does — a
+			// repair that silently switched a skill off is the value nobody
+			// notices is wrong until the agent stops using it.
 			reason = agentskills.ReasonEdited
 		}
 		if p.Enabled != nil {
@@ -639,21 +703,16 @@ func RestoreSkill(store SkillStore, history SkillHistory, clock func() int64, no
 
 		enabled := true
 		reason := agentskills.ReasonCreated
-		switch cur, err := store.Read(scope, projectID, name); {
-		case err == nil:
-			enabled, reason = cur.Enabled, agentskills.ReasonEdited
-			if err := refuseUnrecordedSkill(ctx, history, version); err != nil {
-				return nil, err
-			}
-		case errors.Is(err, agentskills.ErrNotFound):
-			// Gone. This restore recreates it; see above.
-		default:
-			// Something is at that name and it is not a readable skill —
-			// broken frontmatter, or a path problem. Either way the
-			// restore is a repair of it, and it has to pass the same check
-			// as any other live document.
+		live, presence, err := inspectBeforeOverwrite(store, scope, projectID, name)
+		if err != nil {
+			return nil, err
+		}
+		if presence != presenceAbsent {
 			reason = agentskills.ReasonEdited
-			if err := refuseUnrecordedSkill(ctx, history, version); err != nil {
+			if presence == presenceSkill {
+				enabled = live.Enabled
+			}
+			if err := refuseUnrecordedSkill(ctx, history, version, live, presence); err != nil {
 				return nil, err
 			}
 		}
@@ -681,54 +740,89 @@ func RestoreSkill(store SkillStore, history SkillHistory, clock func() int64, no
 // The answerable question, and the one that actually matters, is: if this
 // restore overwrites what is there, can it be got back?
 //
-// Every change made through this surface or through mcphost records a row
-// carrying the whole body, and this restore records one too, so the answer
-// is normally yes: reverting is undoable by reverting again, and the writer
-// browsing the version list can see both documents' rows sitting in it. The
-// case where the answer is NO is precise and detectable: the last thing this
-// log recorded for the name is its DELETION, and yet a skill is standing
-// there. Nothing recorded it, so nothing holds it, and overwriting it
-// destroys it for good. That is a file the writer created by hand in the
-// skills folder (which the store is deliberately built to support), one
-// restored from a backup, or one whose version row did not land.
+// That question is answered by COMPARING, not by reading a row's reason.
+// Every change through this surface and through mcphost's editSkill records
+// a row carrying the whole document, and Store.Write renders exactly what
+// the row stores (Render and Parse round-trip Description, Author and Body
+// byte for byte), so a skill whose text still matches the newest row for its
+// name IS held by the log: overwriting it loses nothing, and the writer who
+// reverts too far reverts back. A skill whose text does NOT match that row
+// is standing there unrecorded — hand-edited in the skills folder (which the
+// store is deliberately built to support), restored from a backup, or left
+// by a write whose version row did not land — and nothing anywhere holds it.
 //
-// This replaces a check that asked "is there a deletion row newer than this
-// version, by created_at", which was wrong in both directions:
+// What is compared, and what is not:
 //
-//   - It refused far too much. After any delete-then-restore cycle, every
-//     version older than the deletion became permanently unrestorable, with
-//     a message asserting a different skill stood at the name when it was
-//     the same one, restored a moment earlier.
+//   - Body, Description and Author: the three document fields
+//     skill_snapshots stores and Store.Write round-trips.
+//   - NOT Enabled. The table has no column for it (History.Record's INSERT
+//     is the list), so scanVersion always reads it back as false and a
+//     comparison including it — or a comparison of Render(row) against the
+//     file, which amounts to the same thing — would call every enabled
+//     skill in the app unrecorded. Toggling the flag goes through
+//     skills.write, which records a row with the same body anyway.
+//   - NOT Name, Scope or ProjectID: they are the key the row was fetched by.
+//   - NOT UpdatedAt: an mtime, not part of the document.
 //
-//   - It let the destructive case through. created_at is milliseconds, the
-//     comparison was strictly greater, and a deletion recorded in the same
-//     millisecond as the version being restored therefore did not count —
-//     so a genuinely unrecorded skill at that name was silently overwritten.
-//     Past 200 rows the check could not see the deletion at all.
+// This replaces a rule that asked "is the last recorded row a deletion?",
+// which was a proxy for the real question and answered it wrongly at two
+// reachable states, both unrecoverable:
 //
-// Both directions came from the same root: a millisecond clock is not an
-// ordering, and a windowed List is not a history. This asks History.Newest
-// instead, which reads one row ordered by rowid — a total order, no ties,
-// no window, unchanged by however many versions the skill accumulates.
+//   - After a delete-then-restore cycle the last row is `created`, so the
+//     rule was disarmed, and a folder replaced BY HAND afterwards was
+//     overwritten though it existed in no row.
+//   - Deleting a skill whose SKILL.md does not parse records nothing
+//     (DeleteSkill's versioned:false), leaving a stale `created` as the last
+//     row — so the rule was disarmed at exactly the name the app had just
+//     emptied, and whatever the writer put there next was overwritten.
 //
-// A history read that FAILS is not a refusal: the version's own target is
-// still valid, and blocking a restore because the log could not be read
-// would make an unrelated database problem look like a rejected request.
-// The same goes for a name with no history at all, which cannot happen from
-// here (the version being restored is itself a row) but must not become a
-// refusal if it ever does.
-func refuseUnrecordedSkill(ctx context.Context, history SkillHistory, version agentskills.Version) error {
+// Comparing content closes both, because it does not care which row kind
+// came last. It also stops the rule from firing on a hand-recreated file
+// whose byte-identical copy IS sitting in the deletion row, which the old
+// message asserted was unrecorded when it was not.
+//
+// The unparseable case is a refusal on its own, and necessarily so: the log
+// only ever recorded documents that parsed (they came from Store.Write,
+// which renders), so text that does not parse cannot be a copy of any row.
+// Nothing is trapped by that — skills.read hands the file back verbatim
+// (ReadRaw), skills.write saves a repair over it, and skills.delete removes
+// it — and the message says so.
+//
+// A history read that fails is the one case that is NOT the caller's fault,
+// and it is not silently allowed either: without the log this check cannot
+// be made, and a restore that cannot be checked must not proceed over a live
+// document. It comes back as the internal error it is (historyErr), which a
+// retry clears; the alternative, allowing it, is the destructive direction
+// for a reason that has nothing to do with the request.
+func refuseUnrecordedSkill(ctx context.Context, history SkillHistory, version agentskills.Version, live agentskills.Skill, presence skillPresence) error {
 	s := version.Skill
+	if presence == presenceUnparseable {
+		return refuse("the file standing at %q is not a readable skill, so nothing in the history is a copy "+
+			"of it and restoring over it would lose its text for good; open it to keep what it says, then "+
+			"save over it or delete it", s.Name)
+	}
 	newest, err := history.Newest(ctx, s.Scope, s.ProjectID, s.Name)
-	if err != nil {
+	if err != nil && !errors.Is(err, agentskills.ErrVersionNotFound) {
+		return historyErr(err)
+	}
+	// A name with no history at all cannot be reached from here (the version
+	// being restored is itself one of its rows), but if it ever were, a skill
+	// standing at it is recorded by definition nowhere.
+	if err == nil && recordsSkill(newest.Skill, live) {
 		return nil
 	}
-	if newest.Reason != agentskills.ReasonDeleted {
-		return nil
-	}
-	return refuse("a skill is standing at %q that this history has no copy of: the last thing recorded "+
-		"for that name is its deletion, so restoring over it would lose it for good; delete it first "+
-		"if you mean to bring this version back", s.Name)
+	return refuse("the skill standing at %q is not the one this history last recorded there, so nothing "+
+		"holds a copy of it and restoring over it would lose it for good; open it to keep what it says, "+
+		"then delete it if you mean to bring this version back", s.Name)
+}
+
+// recordsSkill reports whether row is a copy of the document standing on
+// disk. See refuseUnrecordedSkill for which fields participate and why the
+// enabled flag cannot.
+func recordsSkill(row, live agentskills.Skill) bool {
+	return row.Body == live.Body &&
+		row.Description == live.Description &&
+		row.Author == live.Author
 }
 
 // ---- shared write tail ----------------------------------------------------

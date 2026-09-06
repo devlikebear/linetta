@@ -1022,11 +1022,32 @@ func TestReadRawOnAMissingSkillIsErrNotFound(t *testing.T) {
 
 // ReadRaw is a narrower door, not an open one: the name still goes through
 // skillPaths, so nothing a caller writes can walk out of the skills folder.
+//
+// The fixture is what makes this test bite, and the first version of it did
+// not. It put a file at <home>/secrets.md and asked for "../secrets", so the
+// unsafe implementation this is meant to catch — a bare
+// filepath.Join(dir, name, skillFile) with no containment check — resolved
+// to <home>/secrets/SKILL.md, which does not exist, and failed with
+// ErrNotFound. The test passed against the very code it was written to
+// forbid.
+//
+// So the fixture is now a readable file at exactly the path the escape
+// resolves to, and the assertion is on the CONTENT as well as the error: a
+// store that hands back "not yours" has read a file outside the skills
+// folder, whatever error it returns alongside.
 func TestReadRawRefusesAPathEscape(t *testing.T) {
 	st, home := newTestStore(t)
-	writeRaw(t, filepath.Join(home, "secrets.md"), "not yours\n")
-	if _, _, err := st.ReadRaw(ScopeWriter, "", "../secrets"); err == nil {
+	const secret = "not yours\n"
+	// <home>/skills/../secrets/SKILL.md — where filepath.Join lands a name
+	// of "../secrets" once it has cleaned the climb away.
+	writeRaw(t, filepath.Join(home, "secrets", skillFile), secret)
+
+	raw, _, err := st.ReadRaw(ScopeWriter, "", "../secrets")
+	if err == nil {
 		t.Fatal("a name that climbs out of the skills folder must be refused")
+	}
+	if raw == secret {
+		t.Errorf("ReadRaw returned a file from outside the skills folder: %q", raw)
 	}
 }
 

@@ -175,6 +175,28 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 // retention job (that's #99) to bound how large the table can grow, so
 // List itself has to refuse to hand back the whole table just because a
 // caller passed 0 or something enormous.
+//
+// It orders by created_at (tie-broken on rowid), and Newest orders by rowid
+// alone. That is a deliberate disagreement, not an oversight, and this is
+// the note that says so.
+//
+// They answer different questions. List is a DISPLAY order: every row it
+// returns is rendered next to its own timestamp, and a list sorted by
+// anything other than the value printed in it reads as unsorted — a row
+// stamped 10:00 sitting above one stamped 11:00 is a bug the writer can
+// see. Newest answers a CAUSAL one — which write happened last, so a caller
+// can tell what is standing at a name now — and a millisecond clock cannot
+// answer that: rows tie, and a clock that goes backwards (a manual change,
+// an NTP step, a DST-confused VM) inverts it outright. Only the rowid is a
+// total order over inserts.
+//
+// So the two can disagree, and only when the clock has gone backwards: the
+// pane's first row is then not the row Newest returns. That is a display
+// anomaly in a version list whose timestamps are themselves out of order,
+// and nothing keys a decision on List's first row — skills.restore's
+// overwrite check calls Newest precisely because List could not answer it
+// (see Newest's own comment). Anything else that ever needs "what happened
+// last" must call Newest too, rather than reading List[0].
 func (h *History) List(ctx context.Context, scope Scope, projectID, name string, limit int) ([]Version, error) {
 	arg, err := projectArg(scope, projectID)
 	if err != nil {
@@ -226,7 +248,8 @@ SELECT rowid, id, scope, project_id, name, body, descript, author, reason, creat
 // It orders by rowid, NOT by created_at: the caller comparing this against
 // some older version is asking which was written first, and two rows in the
 // same millisecond (a write and the deletion right after it) cannot answer
-// that. See Version.Seq.
+// that. See Version.Seq, and List's doc comment for why List orders the
+// other way and why the two are meant not to agree.
 func (h *History) Newest(ctx context.Context, scope Scope, projectID, name string) (Version, error) {
 	arg, err := projectArg(scope, projectID)
 	if err != nil {
