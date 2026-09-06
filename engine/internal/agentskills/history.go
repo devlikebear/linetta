@@ -55,6 +55,18 @@ func validReason(reason string) bool {
 // constants above.
 var ErrInvalidReason = errors.New("agentskills: invalid version reason")
 
+// defaultHistoryLimit is how many versions List returns when the caller
+// passes limit <= 0 ("I didn't say"), matching the house naming convention
+// for this kind of bound (mcphost.DefaultActivityLimit, companion.recallLimit).
+const defaultHistoryLimit = 20
+
+// maxHistoryLimit is the ceiling List clamps any caller-supplied limit to.
+// skill_snapshots carries no retention/thinning pass (that's #99, per the
+// migration's comment), so nothing else keeps the table small; the RPC
+// handler Task 8 adds will pass a client-supplied limit straight through,
+// and this is what stops that from ever meaning "give me the whole table."
+const maxHistoryLimit = 200
+
 // ErrVersionNotFound is Get's refusal of an id that names no row. It is
 // distinct from the package's ErrNotFound (store.go), which is a skill
 // missing from the filesystem — a different kind of "not found" that would
@@ -137,22 +149,29 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 // that two skills sharing a name in different scopes, or in different
 // works, are correctly treated as separate histories.
 //
-// limit bounds how many rows come back. limit <= 0 means "no limit": SQLite
-// treats a negative LIMIT as unbounded, which is used here rather than a
-// second query shape.
+// limit bounds how many rows come back. limit <= 0 (the caller said
+// nothing) falls back to defaultHistoryLimit; anything above
+// maxHistoryLimit is clamped to it. Task 8's RPC handler passes a
+// client-supplied value straight through, and skill_snapshots has no
+// retention job (that's #99) to bound how large the table can grow, so
+// List itself has to refuse to hand back the whole table just because a
+// caller passed 0 or something enormous.
 func (h *History) List(ctx context.Context, scope Scope, projectID, name string, limit int) ([]Version, error) {
 	arg, err := projectArg(scope, projectID)
 	if err != nil {
 		return nil, err
 	}
-	if limit <= 0 {
-		limit = -1
+	switch {
+	case limit <= 0:
+		limit = defaultHistoryLimit
+	case limit > maxHistoryLimit:
+		limit = maxHistoryLimit
 	}
 	rows, err := h.db.QueryContext(ctx, `
-SELECT id, scope, project_id, name, body, descript, author, reason, created_at
+SELECT rowid, id, scope, project_id, name, body, descript, author, reason, created_at
   FROM skill_snapshots
  WHERE scope = ? AND project_id IS ? AND name = ?
- ORDER BY created_at DESC, id DESC
+ ORDER BY created_at DESC, rowid DESC
  LIMIT ?`, string(scope), arg, name, limit)
 	if err != nil {
 		return nil, fmt.Errorf("agentskills: list versions: %w", err)
@@ -178,7 +197,7 @@ SELECT id, scope, project_id, name, body, descript, author, reason, created_at
 // target has to be told the id no longer names anything.
 func (h *History) Get(ctx context.Context, id string) (Version, error) {
 	row := h.db.QueryRowContext(ctx, `
-SELECT id, scope, project_id, name, body, descript, author, reason, created_at
+SELECT rowid, id, scope, project_id, name, body, descript, author, reason, created_at
   FROM skill_snapshots
  WHERE id = ?`, id)
 	v, err := scanVersion(row)
@@ -201,11 +220,12 @@ func scanVersion(row rowScanner) (Version, error) {
 	var (
 		id, scope, name, body, descript, author, reason string
 		projectID                                       sql.NullString
-		createdAt                                       int64
+		createdAt, rowSeq                               int64
 	)
-	if err := row.Scan(&id, &scope, &projectID, &name, &body, &descript, &author, &reason, &createdAt); err != nil {
+	if err := row.Scan(&rowSeq, &id, &scope, &projectID, &name, &body, &descript, &author, &reason, &createdAt); err != nil {
 		return Version{}, err
 	}
+	_ = rowSeq // selected only so List's ORDER BY tie-break names a real column
 	v := Version{
 		ID:        id,
 		Reason:    reason,

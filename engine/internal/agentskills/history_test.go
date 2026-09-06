@@ -3,6 +3,7 @@ package agentskills
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -134,6 +135,105 @@ func TestListIsNewestFirstAndHonoursTheLimit(t *testing.T) {
 	}
 }
 
+// TestListTieBreaksOnInsertionOrderNotID is the regression test for the
+// Critical review finding: List's ORDER BY used to tie-break on the uuid
+// `id`, which is random per row, so two versions sharing a created_at came
+// back in a random order instead of insertion order. The fix tie-breaks on
+// SQLite's implicit rowid, which only ever increases with insertion — the
+// same fix internal/companion/history.go shipped for issue #95.
+//
+// This records n=10 versions that all share one created_at. With a random
+// tie-break, the odds of them coming back in exact insertion order by luck
+// are about 1 in 10! (~3.6 million) — reverting the fix to `id DESC` makes
+// this fail essentially every run, not just flakily. (Verified by mutation:
+// reverting the ORDER BY to `id DESC` makes this test fail.)
+func TestListTieBreaksOnInsertionOrderNotID(t *testing.T) {
+	const n = 10
+	const sameCreatedAt = int64(5000)
+	ctx, h, _, _ := seedHistory(t)
+
+	wantBodies := make([]string, n)
+	for i := 0; i < n; i++ {
+		body := fmt.Sprintf("v%d", i)
+		wantBodies[i] = body
+		if err := h.Record(ctx, writerSkill("x", body), ReasonEdited, sameCreatedAt); err != nil {
+			t.Fatalf("Record %d: %v", i, err)
+		}
+	}
+
+	versions, err := h.List(ctx, ScopeWriter, "", "x", n)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(versions) != n {
+		t.Fatalf("len(versions) = %d, want %d", len(versions), n)
+	}
+
+	// All n rows share created_at, so ordering depends entirely on the
+	// tie-break. Newest-first on insertion order means the LAST body
+	// recorded (v9) must come back FIRST, v8 second, and so on.
+	gotBodies := make([]string, n)
+	for i, v := range versions {
+		gotBodies[i] = v.Skill.Body
+	}
+	for i := 0; i < n; i++ {
+		want := wantBodies[n-1-i]
+		if gotBodies[i] != want {
+			t.Fatalf("versions[%d].Body = %q, want %q (insertion order, newest first) — full order: %v",
+				i, gotBodies[i], want, gotBodies)
+		}
+	}
+}
+
+// TestListDefaultsLimitWhenCallerSaysNothing pins the Minor review finding:
+// limit <= 0 used to mean "unlimited" via SQLite's LIMIT -1. It now falls
+// back to defaultHistoryLimit instead, for any non-positive value.
+func TestListDefaultsLimitWhenCallerSaysNothing(t *testing.T) {
+	ctx, h, _, _ := seedHistory(t)
+	total := defaultHistoryLimit + 5
+	for i := 0; i < total; i++ {
+		body := fmt.Sprintf("v%d", i)
+		if err := h.Record(ctx, writerSkill("x", body), ReasonEdited, int64(i+1)); err != nil {
+			t.Fatalf("Record %d: %v", i, err)
+		}
+	}
+	for _, limit := range []int{0, -1, -100} {
+		versions, err := h.List(ctx, ScopeWriter, "", "x", limit)
+		if err != nil {
+			t.Fatalf("List(limit=%d): %v", limit, err)
+		}
+		if len(versions) != defaultHistoryLimit {
+			t.Errorf("List(limit=%d): len(versions) = %d, want defaultHistoryLimit (%d)", limit, len(versions), defaultHistoryLimit)
+		}
+	}
+}
+
+// TestListClampsLimitToTheMaximum pins the ceiling half of the same fix:
+// a caller-supplied limit above maxHistoryLimit is clamped to it, so a
+// client-controlled value (Task 8's RPC handler) can never pull the whole
+// table.
+func TestListClampsLimitToTheMaximum(t *testing.T) {
+	ctx, h, _, _ := seedHistory(t)
+	total := maxHistoryLimit + 5
+	for i := 0; i < total; i++ {
+		body := fmt.Sprintf("v%d", i)
+		if err := h.Record(ctx, writerSkill("x", body), ReasonEdited, int64(i+1)); err != nil {
+			t.Fatalf("Record %d: %v", i, err)
+		}
+	}
+	versions, err := h.List(ctx, ScopeWriter, "", "x", total*10)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(versions) != maxHistoryLimit {
+		t.Fatalf("len(versions) = %d, want maxHistoryLimit (%d)", len(versions), maxHistoryLimit)
+	}
+	wantNewest := fmt.Sprintf("v%d", total-1)
+	if versions[0].Skill.Body != wantNewest {
+		t.Errorf("newest version body = %q, want %q", versions[0].Skill.Body, wantNewest)
+	}
+}
+
 // TestListKeysOnScopeProjectAndName pins that two skills sharing a name in
 // different scopes, or in different works, are different histories — the
 // query must filter on all three, not just name.
@@ -255,5 +355,17 @@ func TestRecordRejectsAnUnknownReason(t *testing.T) {
 	err := h.Record(ctx, writerSkill("x", "body"), "sideways", 1000)
 	if err == nil {
 		t.Fatal("Record with an unknown reason: want an error, got nil")
+	}
+	if !errors.Is(err, ErrInvalidReason) {
+		t.Errorf("err = %v, want errors.Is(err, ErrInvalidReason)", err)
+	}
+	// And the row must never have landed: a rejected Record must not leave
+	// a partial write behind.
+	versions, listErr := h.List(ctx, ScopeWriter, "", "x", 10)
+	if listErr != nil {
+		t.Fatalf("List: %v", listErr)
+	}
+	if len(versions) != 0 {
+		t.Errorf("len(versions) = %d, want 0 — a rejected Record must not write a row", len(versions))
 	}
 }
