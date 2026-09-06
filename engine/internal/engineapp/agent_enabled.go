@@ -210,6 +210,9 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		Language: deps.settings.Language,
 		Memory:   agentMemorySource{repo: deps.memory},
 		Skills:   skills,
+		// Read per turn, like Language: switching the self-review off in
+		// Settings has to take effect on the writer's very next message.
+		SelfReviewEnabled: deps.settings.AgentSelfReviewEnabled,
 		Undo: func(ctx context.Context, batchID string) error {
 			return deps.story.UndoApply(ctx, batchID, deps.clock)
 		},

@@ -106,6 +106,13 @@ type Config struct {
 	MCPConsentVersion           int                       `json:"mcp_consent_version"`
 	MCPConsentedAt              int64                     `json:"mcp_consented_at"`
 	MCPTokenSet                 bool                      `json:"mcp_token_set,omitempty"` // read-only presence flag for settings.get
+	// AgentSelfReviewEnabled governs the built-in agent's self-improvement
+	// pass (#98 Task 10): after a turn that actually did work, the agent is
+	// asked separately whether anything is worth recording as a skill. It
+	// defaults to ON — the loop the feature is named for is the feature —
+	// and the writer can switch it off in Settings → Skills. Off means no
+	// second provider call and no skill written without the writer asking.
+	AgentSelfReviewEnabled bool `json:"agent_self_review_enabled"`
 }
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
@@ -132,6 +139,7 @@ type Patch struct {
 	MCPProjectID              *string                  `json:"mcp_project_id,omitempty"`
 	MCPConsentVersion         *int                     `json:"mcp_consent_version,omitempty"`
 	MCPConsentedAt            *int64                   `json:"mcp_consented_at,omitempty"`
+	AgentSelfReviewEnabled    *bool                    `json:"agent_self_review_enabled,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -200,6 +208,9 @@ func defaults(home string) Config {
 		WebSearchProvider:     "brave",
 		MCPMode:               MCPModeOff,
 		MCPPort:               DefaultMCPPort,
+		// On by default: an agent that never notices what it learned is the
+		// feature not shipping. See Config.AgentSelfReviewEnabled.
+		AgentSelfReviewEnabled: true,
 	}
 }
 
@@ -272,6 +283,14 @@ func (s *Store) load() error {
 	s.cfg.MCPProjectID = disk.MCPProjectID
 	s.cfg.MCPConsentVersion = disk.MCPConsentVersion
 	s.cfg.MCPConsentedAt = disk.MCPConsentedAt
+	// Presence-guarded, exactly like onboarding_tour_enabled above and for the
+	// same reason: the default is true, so a plain assignment would read a
+	// deliberate `false` and a settings.json written by a build that predates
+	// the key as the same thing — and silently turn the writer's switch back
+	// on at every restart.
+	if _, ok := raw["agent_self_review_enabled"]; ok {
+		s.cfg.AgentSelfReviewEnabled = disk.AgentSelfReviewEnabled
+	}
 	s.cfg = normalizeMCPPreferences(s.cfg)
 	migratedProviderKeys, migratedWebKey, err := s.migrateLegacySecrets(&disk)
 	if err != nil {
@@ -336,6 +355,16 @@ func (s *Store) Language() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.Language
+}
+
+// AgentSelfReviewEnabled reports whether the built-in agent may run its
+// self-improvement pass after a working turn. Read per turn like Language,
+// not captured at start-up: switching it off in Settings has to take effect
+// on the writer's very next message, not after a restart.
+func (s *Store) AgentSelfReviewEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.AgentSelfReviewEnabled
 }
 
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
@@ -491,6 +520,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.MCPConsentedAt != nil {
 		next.MCPConsentedAt = *p.MCPConsentedAt
 	}
+	if p.AgentSelfReviewEnabled != nil {
+		next.AgentSelfReviewEnabled = *p.AgentSelfReviewEnabled
+	}
 	if next.WebSearchProvider == "" {
 		next.WebSearchProvider = "brave"
 	}
@@ -559,6 +591,10 @@ func (s *Store) persist(next Config) error {
 		MCPProjectID:                next.MCPProjectID,
 		MCPConsentVersion:           next.MCPConsentVersion,
 		MCPConsentedAt:              next.MCPConsentedAt,
+		// The line everyone forgets: a field missing from this literal is
+		// never written to disk, so the writer's choice survives until the
+		// next restart and no further.
+		AgentSelfReviewEnabled: next.AgentSelfReviewEnabled,
 	}
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {

@@ -73,6 +73,15 @@ type Deps struct {
 	// so a build that never wires one (or a test that constructs Deps
 	// without it) still works.
 	Skills SkillSource
+	// SelfReviewEnabled reports whether the self-improvement pass may run
+	// after a working turn (settings.agent_self_review_enabled, default on).
+	// A func rather than a bool because it is read at the END of every turn,
+	// not captured when the service is built: a writer who switches it off
+	// mid-session must not get one more review out of the turn already in
+	// flight. A nil func means enabled — the same "unwired collaborator
+	// degrades to the documented default" rule Memory and Skills follow, and
+	// the default here is on.
+	SelfReviewEnabled func() bool
 	// Undo reverts a structural batch. It must be bound to the SAME storyops
 	// service the agent's tools use — undo batches live in memory on the
 	// service, so any other instance simply does not have the batch.

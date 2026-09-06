@@ -869,6 +869,13 @@ const messages = {
     "settings.skills.title": "스킬",
     "settings.skills.description":
       "에이전트가 익힌 기법을 적어 두는 문서입니다. 사실이 아니라 방법을 담습니다 — 사실은 팩트북과 기억에 있습니다.",
+    // 스스로 배우는 고리(#98). 작가가 시키지 않은 프로바이더 호출이므로
+    // 설명이 그 사실을 먼저 말한다: 언제 도는지, 무엇을 남기는지, 끄면 무엇이
+    // 멈추는지.
+    "settings.skills.selfReview.title": "스스로 익히기",
+    "settings.skills.selfReview.enabled": "작업이 끝나면 배운 것을 정리",
+    "settings.skills.selfReview.description":
+      "손이 많이 간 턴이 끝난 뒤, 답장을 보낸 다음에 따로 한 번 더 물어봅니다 — 적어 둘 기법이 있었는지, 따라 해 보니 틀린 스킬이 있었는지. 적을 것이 있을 때만 스킬을 쓰고, 없으면 아무것도 남기지 않습니다. 끄면 이 추가 호출도 하지 않습니다.",
     "settings.skills.empty": "아직 스킬이 없습니다.",
     "settings.skills.new": "새 스킬",
     "settings.skills.name": "이름",
@@ -1804,6 +1811,10 @@ const messages = {
     "settings.skills.title": "Skills",
     "settings.skills.description":
       "Notes on techniques the agent has worked out. They hold methods, not facts — facts live in the fact book and in memory.",
+    "settings.skills.selfReview.title": "Learning from its own work",
+    "settings.skills.selfReview.enabled": "Review what a turn taught it",
+    "settings.skills.selfReview.description":
+      "After a turn that did real work, and once your reply has already been sent, the agent is asked separately whether it learned a technique worth recording — or followed a skill that turned out wrong. It writes a skill only when there is something to write. Off means it does not make that extra call at all.",
     "settings.skills.empty": "No skills yet.",
     "settings.skills.new": "New skill",
     "settings.skills.name": "Name",
@@ -2716,6 +2727,10 @@ const messages = {
     "settings.skills.title": "スキル",
     "settings.skills.description":
       "エージェントが身につけた手法を書き留める文書です。事実ではなく方法を書きます — 事実はファクトブックと記憶にあります。",
+    "settings.skills.selfReview.title": "自分の仕事から学ぶ",
+    "settings.skills.selfReview.enabled": "作業のあとに学んだことを振り返る",
+    "settings.skills.selfReview.description":
+      "手のかかったターンが終わり、返信を送ったあとで、別途もう一度だけ尋ねます — 書き留める価値のある手法があったか、従ってみて間違っていたスキルがあったか。書くことがあるときだけスキルを書き、なければ何も残しません。オフにすると、この追加の呼び出しも行いません。",
     "settings.skills.empty": "まだスキルがありません。",
     "settings.skills.new": "新しいスキル",
     "settings.skills.name": "名前",

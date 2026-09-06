@@ -470,6 +470,41 @@ describe("Settings", () => {
     expect(await screen.findByTestId("skills-section-stub")).toBeInTheDocument();
   });
 
+  // The self-improvement loop's switch (#98 Task 10). It is ON unless the
+  // writer says otherwise, so the first click must send false — and a payload
+  // from an engine that predates the key must still read as on, or a writer
+  // upgrading would find the feature silently switched off.
+  it("turns the agent's self-review off from the skills pane", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+    const toggle = await screen.findByRole("button", { name: /작업이 끝나면 배운 것을 정리/ });
+    expect(toggle.querySelector(".switch")).toHaveClass("on");
+
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ agent_self_review_enabled: false }),
+    );
+  });
+
+  it("shows the self-review switch off when the writer has switched it off", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings, agent_self_review_enabled: false });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+    const toggle = await screen.findByRole("button", { name: /작업이 끝나면 배운 것을 정리/ });
+    expect(toggle.querySelector(".switch")).not.toHaveClass("on");
+
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ agent_self_review_enabled: true }),
+    );
+  });
+
   it("hides skills entirely when nothing can read them", async () => {
     // No agent and no MCP: nothing would ever load a skill, so the pane is a
     // folder editor for a folder with no reader. The stale-category path has

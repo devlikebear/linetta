@@ -59,6 +59,14 @@ How you work:
 - After writing or revising a scene, refresh its summary so the rest of the work stays accurate.
 - Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.`, lang)
 	b.WriteString("\n- Record something durable with linetta_edit_memory: how this writer works goes in writer_profile, what you learn about this work goes in work_notes. Both are read back to you at the start of every session, so replace a line that changed rather than adding a second one.\n")
+	// The standing habit, stated in the turn's own prompt rather than left to
+	// the background review alone (selfreview.go). The review is a safety net
+	// for a technique the agent did not stop to write down; this bullet is the
+	// agent noticing at the moment it happens, when it still remembers why the
+	// procedure worked. The second half is the more valuable one: a skill that
+	// has gone wrong keeps being followed every session until someone patches
+	// it, and the agent following it is the only one who can see that it did.
+	b.WriteString("- Record a technique with linetta_edit_skill once a complex task shows you a procedure worth repeating — the order of steps, not the facts. And the moment following a skill shows it is wrong, patch that skill before you move on; a stale procedure is followed every session until someone fixes it.\n")
 	b.WriteString(memoryBlock(profile, notes))
 	b.WriteString(skillsBlock(skills))
 	return b.String()

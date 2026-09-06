@@ -618,6 +618,10 @@ export interface Settings {
   mcp_consented_at?: number;
   /** Presence flag only — the token itself never reaches the renderer here. */
   mcp_token_set?: boolean;
+  /** The agent's self-improvement pass after a working turn (#98). Optional
+   *  because a settings payload from an older engine simply omits it; every
+   *  reader must treat "missing" as the default, which is ON. */
+  agent_self_review_enabled?: boolean;
 }
 
 export interface SettingsPatch {
@@ -647,6 +651,7 @@ export interface SettingsPatch {
   mcp_project_id?: string;
   mcp_consent_version?: number;
   mcp_consented_at?: number;
+  agent_self_review_enabled?: boolean;
 }
 
 export interface SnapshotEntry {

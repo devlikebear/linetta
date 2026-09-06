@@ -44,6 +44,22 @@ func TestSystemPrompt_tellsTheAgentToReadContextFirst(t *testing.T) {
 	}
 }
 
+// The standing habit (#98 Task 10). The background self-review is the safety
+// net; this bullet is the agent noticing at the moment it happens, while it
+// still remembers why the procedure worked. Both halves have to be there: a
+// prompt that only says "record a technique" grows a skill list nobody ever
+// corrects, and a stale procedure is followed every session until someone
+// fixes it.
+func TestSystemPrompt_statesTheRecordAndPatchHabit(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil)
+	if !strings.Contains(got, "linetta_edit_skill") {
+		t.Error("the prompt never names linetta_edit_skill, so the agent is told to have skills but never to write one")
+	}
+	if !strings.Contains(got, "patch that skill") {
+		t.Error("the prompt does not tell the agent to correct a skill that turned out wrong")
+	}
+}
+
 func TestScopeLine_namesTheWorkAndTheOpenScene(t *testing.T) {
 	s := fakeScope{
 		titles: map[string]string{"p1": "은하수를 여행하는"},
