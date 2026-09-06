@@ -780,6 +780,51 @@ describe("SkillsSection", () => {
     expect(notice).toHaveTextContent("settings.skills.notVersioned");
   });
 
+  it("keeps one skill's data-loss line up while another skill is written", async () => {
+    rpc.list.mockResolvedValue(
+      listResult([summary({ name: "aaa" }), summary({ name: "bbb" })]),
+    );
+    rpc.read.mockResolvedValue(full({ name: "aaa" }));
+    // Only aaa's save loses its version row. bbb's toggle is versioned
+    // normally, so the line that survives can only be aaa's — a mock that
+    // failed both would raise a fresh line for bbb and hide the bug.
+    rpc.write.mockImplementation((input: Over) =>
+      Promise.resolve(written(input, { versioned: (input as { name: string }).name !== "aaa" })),
+    );
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-aaa"));
+    await screen.findByTestId("skill-body");
+    await userEvent.type(bodyBox(), "하세요");
+    await userEvent.tab();
+    await screen.findByTestId("skills-not-versioned");
+
+    // aaa's body is on disk with nothing in the history holding it. Toggling
+    // an unrelated row is not the writer acting on that warning, and clearing
+    // it here is how the one line telling them to go copy the text out
+    // disappears before they have read it.
+    await userEvent.click(screen.getByTestId("skill-enabled-writer-bbb"));
+
+    expect(screen.getByTestId("skills-not-versioned")).toBeTruthy();
+  });
+
+  it("says why the repair button did nothing to a half-typed new skill", async () => {
+    rpc.list.mockResolvedValue(
+      listResult([], [{ path: "/home/skills/half-made", message: "no SKILL.md in this directory" }]),
+    );
+    await mounted();
+
+    await userEvent.click(screen.getByTestId("skills-new"));
+    await userEvent.type(screen.getByTestId("skill-new-description"), "쓰던 설명");
+    await userEvent.click(screen.getByTestId("skill-diagnostic-open-0"));
+
+    // Refusing to overwrite what they typed is right. Refusing in silence is
+    // a button that does nothing, which reads as broken.
+    expect(screen.getByTestId("skill-new-description")).toHaveValue("쓰던 설명");
+    expect(await screen.findByTestId("skill-new-error")).toHaveTextContent(
+      "settings.skills.repair.busy",
+    );
+  });
+
   it("says when a new skill was created with no version row behind it", async () => {
     rpc.list.mockResolvedValue(listResult([]));
     rpc.write.mockImplementation((input: Over) => Promise.resolve(written(input, { versioned: false })));

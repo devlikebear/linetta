@@ -899,6 +899,7 @@ const messages = {
     "settings.skills.reason.deleted": "삭제",
     "settings.skills.broken": "이 파일을 읽지 못했습니다: {path}",
     "settings.skills.repair": "열어서 고치기",
+    "settings.skills.repair.busy": "새 스킬을 작성하는 중입니다. 지금 채우면 쓰던 내용을 덮어쓰게 되어 그대로 두었습니다.",
     // 폴더는 있는데 SKILL.md가 없는 경우. 열 파일이 없으므로 "열어서 고치기"는
     // 없는 파일을 찾다 실패한다. 이 이름으로 새로 쓰는 것이 유일한 고치기다.
     "settings.skills.repair.create": "이 이름으로 새로 만들기",
@@ -1829,6 +1830,7 @@ const messages = {
     "settings.skills.reason.deleted": "Deleted",
     "settings.skills.broken": "This file could not be read: {path}",
     "settings.skills.repair": "Open and fix",
+    "settings.skills.repair.busy": "You are part way through a new skill. Filling this in would overwrite what you typed, so it was left alone.",
     "settings.skills.repair.create": "Create it under this name",
     "settings.skills.notVersioned":
       "The change is saved. It is not in the version history, though, so it is not on the restore list and restoring will not bring it back.",
@@ -2739,6 +2741,7 @@ const messages = {
     "settings.skills.reason.deleted": "削除",
     "settings.skills.broken": "このファイルを読み取れませんでした: {path}",
     "settings.skills.repair": "開いて直す",
+    "settings.skills.repair.busy": "新しいスキルを作成中です。ここを埋めると入力中の内容を上書きするため、そのままにしました。",
     "settings.skills.repair.create": "この名前で新しく作る",
     "settings.skills.notVersioned":
       "変更は保存されました。ただしこの変更は履歴に残っていないため、復元の一覧になく、元に戻しても戻りません。",

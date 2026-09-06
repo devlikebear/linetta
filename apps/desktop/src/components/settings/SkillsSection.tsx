@@ -150,6 +150,13 @@ export function SkillsSection() {
   // it, and opening the same one does not (which is also what lets `submitNew`
   // raise it and then open the skill it raised it for).
   const [notVersioned, setNotVersioned] = useState<string | null>(null);
+  // Clear the line only when it is about the skill this write is about. It is a
+  // data-loss warning — saved to disk, absent from the history a restore and
+  // the daily backup read — so a write to some OTHER skill must not swallow it
+  // before the writer has acted on it.
+  const clearNotVersionedFor = useCallback((key: string) => {
+    setNotVersioned((cur) => (cur === key ? null : cur));
+  }, []);
   const [asking, setAsking] = useState(false);
   // A count, not a flag: two blurs can be in flight at once (leave the
   // description, type in the body, leave that).
@@ -341,7 +348,7 @@ export function SkillsSection() {
     pending.current = { key, description: sent.description, body: sent.body };
     takeToken(key);
     setSaveError(null);
-    setNotVersioned(null);
+    clearNotVersionedFor(key);
     setInflight((n) => n + 1);
     void skillsApi
       .write({
@@ -440,10 +447,12 @@ export function SkillsSection() {
       delete next[key];
       return next;
     });
-    // A write is about to leave, so any standing "not in the history" line is
-    // about an older one. Leaving it up would put it over THIS write, which
-    // may be perfectly versioned.
-    setNotVersioned(null);
+    // A write is about to leave, so a standing "not in the history" line about
+    // THIS skill is about an older one and would sit over a write that may be
+    // perfectly versioned. One about a DIFFERENT skill is a data-loss warning
+    // the writer has not acted on yet; clearing it here made toggling any
+    // other row silently swallow it.
+    clearNotVersionedFor(key);
     setToggling((m) => ({ ...m, [key]: !row.enabled }));
     const done = () =>
       setToggling((m) => {
@@ -495,7 +504,7 @@ export function SkillsSection() {
     const scope = newScope;
     const key = `${scope}:${name}`;
     setNewError(null);
-    setNotVersioned(null);
+    clearNotVersionedFor(key);
     takeToken(key);
     void skillsApi.write({ scope, projectId: workId, name, description, body: "" }).then(
       (res) => {
@@ -535,7 +544,7 @@ export function SkillsSection() {
     const key = keyOf(target);
     takeToken(key);
     setAsking(false);
-    setNotVersioned(null);
+    clearNotVersionedFor(key);
     const stillOpen = () => {
       const cur = selectedRef.current;
       return cur !== null && cur.scope === target.scope && cur.name === target.name;
@@ -589,7 +598,7 @@ export function SkillsSection() {
     const ticket = claim("detail");
     takeToken(key);
     setHistoryError(null);
-    setNotVersioned(null);
+    clearNotVersionedFor(key);
     void skillsApi.restore(versionId).then(
       (res) => {
         if (!newest("detail", ticket)) return;
@@ -696,12 +705,17 @@ export function SkillsSection() {
    *  submitted or cancelled. */
   const startFrom = (target: Target) => {
     setSelected(null);
-    setNewError(null);
     const untouched = !creating || (newName.trim() === "" && newDescription.trim() === "");
     if (untouched) {
+      setNewError(null);
       setNewName(target.name);
       setNewDescription("");
       setNewScope(target.scope);
+    } else {
+      // Overwriting text the writer is part way through typing is the one
+      // thing this pane must never do. Say why nothing happened instead of
+      // being a button that silently does nothing.
+      setNewError(t("settings.skills.repair.busy"));
     }
     setCreating(true);
   };
