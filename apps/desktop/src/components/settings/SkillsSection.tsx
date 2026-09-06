@@ -116,7 +116,20 @@ export function SkillsSection() {
   const [listError, setListError] = useState<unknown>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, unknown>>({});
 
-  const [selected, setSelected] = useState<Target | null>(null);
+  const [selected, setSelectedState] = useState<Target | null>(null);
+  /** The open skill, readable from inside a promise callback. A delete's
+   *  reply asks "is the writer still looking at the skill I removed?", and
+   *  that is a question about the selection now, not about which detail-lane
+   *  ticket happens to be newest.
+   *
+   *  Assigned by the SETTER rather than mirrored in an effect: an effect lags
+   *  the state it mirrors by one commit, so a reply that settled in that gap
+   *  would read the previous selection. */
+  const selectedRef = useRef<Target | null>(null);
+  const setSelected = useCallback((next: Target | null) => {
+    selectedRef.current = next;
+    setSelectedState(next);
+  }, []);
   const [detail, setDetail] = useState<Skill | null>(null);
   const [readError, setReadError] = useState<unknown>(null);
   // What the engine last confirmed, against which a draft is dirty-or-not.
@@ -124,10 +137,19 @@ export function SkillsSection() {
   const [draft, setDraft] = useState({ description: "", body: "" });
   const [behind, setBehind] = useState(false);
   const [saveError, setSaveError] = useState<unknown>(null);
-  // The engine wrote the file but not the version row. Reported by write,
-  // delete and restore alike, and never silence: the writer finds out
-  // otherwise only when they go looking for the version and it is not there.
-  const [notVersioned, setNotVersioned] = useState(false);
+  // The engine wrote the file but not the version row. Reported by EVERY
+  // caller of a write — save, toggle, create, delete, restore — and never
+  // silence: the writer finds out otherwise only when they go looking for the
+  // version and it is not there.
+  //
+  // It holds the skill's key rather than a flag, because the line has to be
+  // able to tell "still about the skill in front of me" from "about one I
+  // have moved on from". A banner left standing over a later, successfully
+  // versioned write is its own lie, so every write clears it before it sends
+  // and switching works clears it outright; opening a DIFFERENT skill clears
+  // it, and opening the same one does not (which is also what lets `submitNew`
+  // raise it and then open the skill it raised it for).
+  const [notVersioned, setNotVersioned] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   // A count, not a flag: two blurs can be in flight at once (leave the
   // description, type in the body, leave that).
@@ -197,12 +219,6 @@ export function SkillsSection() {
    *  change again. */
   const pending = useRef<{ key: string; description: string; body: string } | null>(null);
 
-  /** The open skill, readable from inside a promise callback. A delete's
-   *  reply asks "is the writer still looking at the skill I removed?", and
-   *  that is a question about the selection now, not about which detail-lane
-   *  ticket happens to be newest. */
-  const selectedRef = useRef<Target | null>(null);
-
   const ownSaves = useRef<Map<string, number>>(new Map());
   const takeToken = useCallback((key: string) => {
     ownSaves.current.set(key, (ownSaves.current.get(key) ?? 0) + 1);
@@ -255,18 +271,17 @@ export function SkillsSection() {
     // switch would leave the editor pointed at a file the new work has no
     // path to, and the next blur would write it somewhere else.
     setSelected(null);
+    // A pane-level line about a write to the work being left is about a skill
+    // this list no longer contains.
+    setNotVersioned(null);
     applyList(workId);
     return () => {
       claim("list");
     };
-  }, [workId, applyList, claim]);
+  }, [workId, applyList, claim, setSelected]);
 
   const selScope = selected?.scope ?? null;
   const selName = selected?.name ?? null;
-
-  useEffect(() => {
-    selectedRef.current = selected;
-  }, [selected]);
 
   useEffect(() => {
     if (workId === null || selScope === null || selName === null) {
@@ -277,7 +292,12 @@ export function SkillsSection() {
     setDetail(null);
     setReadError(null);
     setSaveError(null);
-    setNotVersioned(false);
+    // Only when this is a DIFFERENT skill. `submitNew` raises the line and
+    // then opens the very skill it raised it for, so an unkeyed clear here
+    // would wipe it on the way in — and a delete raises it with nothing
+    // selected at all, which this branch never reaches.
+    const openKey = `${selScope}:${selName}`;
+    setNotVersioned((cur) => (cur === openKey ? cur : null));
     setBehind(false);
     setAsking(false);
     setHistoryOpen(false);
@@ -321,7 +341,7 @@ export function SkillsSection() {
     pending.current = { key, description: sent.description, body: sent.body };
     takeToken(key);
     setSaveError(null);
-    setNotVersioned(false);
+    setNotVersioned(null);
     setInflight((n) => n + 1);
     void skillsApi
       .write({
@@ -335,6 +355,25 @@ export function SkillsSection() {
         (res) => {
           setInflight((n) => n - 1);
           if (!newest("detail", ticket)) return;
+          // Reconcile what we SENT with what the engine kept.
+          //
+          // The engine normalises: handlers/skills.go trims the description
+          // before it writes. So for a description with a leading or trailing
+          // space, `res` is not the document that went out — and a `pending`
+          // still holding the untrimmed text is compared against a draft that
+          // has become the trimmed one, which reads as a change and resends
+          // an identical document on the very next blur. That is the
+          // duplicate this ref exists to prevent, arriving through the door
+          // the ref itself opened.
+          //
+          // Only when `pending` is still exactly this save's document:
+          // anything else is a NEWER save already in flight behind this one,
+          // and that one's document is what the next blur must be measured
+          // against.
+          const p = pending.current;
+          if (p?.key === key && p.description === sent.description && p.body === sent.body) {
+            pending.current = { key, description: res.description, body: res.body };
+          }
           setSaved({ description: res.description, body: res.body });
           // The box may have moved on: a writer who keeps typing after the
           // blur is still typing while this reply travels. Only the draft
@@ -350,7 +389,7 @@ export function SkillsSection() {
           // save DID land — but not silence either: this one edit is not on
           // the restore list and a backup carrying only the database misses
           // it.
-          if (res.versioned === false) setNotVersioned(true);
+          if (res.versioned === false) setNotVersioned(key);
         },
         (e) => {
           setInflight((n) => n - 1);
@@ -401,6 +440,10 @@ export function SkillsSection() {
       delete next[key];
       return next;
     });
+    // A write is about to leave, so any standing "not in the history" line is
+    // about an older one. Leaving it up would put it over THIS write, which
+    // may be perfectly versioned.
+    setNotVersioned(null);
     setToggling((m) => ({ ...m, [key]: !row.enabled }));
     const done = () =>
       setToggling((m) => {
@@ -423,7 +466,13 @@ export function SkillsSection() {
         }),
       )
       .then(
-        async () => {
+        async (res) => {
+          // The toggle is a whole-document write like any other, and it can
+          // land on disk with no version row behind it just as a blur save
+          // can. Switching a skill off is exactly the change a writer later
+          // wants to walk back from the history, so it is not silence here
+          // either.
+          if (res.versioned === false) setNotVersioned(key);
           if (newest("list", ticket)) await applyList(id);
           done();
         },
@@ -446,12 +495,18 @@ export function SkillsSection() {
     const scope = newScope;
     const key = `${scope}:${name}`;
     setNewError(null);
+    setNotVersioned(null);
     takeToken(key);
     void skillsApi.write({ scope, projectId: workId, name, description, body: "" }).then(
       (res) => {
         setCreating(false);
         setNewName("");
         setNewDescription("");
+        // A create with no version row behind it has no "created" row to
+        // restore from, so the skill's history starts one edit late. Raised
+        // BEFORE the skill opens, and keyed to it, so the detail effect
+        // recognises it as belonging to the skill being opened and keeps it.
+        if (res.versioned === false) setNotVersioned(`${scope}:${res.name}`);
         // Opening it is the point: a skill with no body does nothing, so the
         // writer is put straight in front of the box they have to fill.
         setSelected({ scope, name: res.name });
@@ -480,7 +535,7 @@ export function SkillsSection() {
     const key = keyOf(target);
     takeToken(key);
     setAsking(false);
-    setNotVersioned(false);
+    setNotVersioned(null);
     const stillOpen = () => {
       const cur = selectedRef.current;
       return cur !== null && cur.scope === target.scope && cur.name === target.name;
@@ -498,7 +553,7 @@ export function SkillsSection() {
         // A deletion whose version row did not land took the body with it —
         // the sharpest version of this warning. It sits at the pane level so
         // it survives the editor closing, which a delete always causes.
-        if (res.versioned === false) setNotVersioned(true);
+        if (res.versioned === false) setNotVersioned(key);
         applyList(id);
       },
       (e) => {
@@ -534,7 +589,7 @@ export function SkillsSection() {
     const ticket = claim("detail");
     takeToken(key);
     setHistoryError(null);
-    setNotVersioned(false);
+    setNotVersioned(null);
     void skillsApi.restore(versionId).then(
       (res) => {
         if (!newest("detail", ticket)) return;
@@ -552,7 +607,7 @@ export function SkillsSection() {
         // A restore records a version row of its own, and it can fail to.
         // Then the reverted-to text is on disk with nothing in the history
         // marking that this is where the writer went back to.
-        if (res.versioned === false) setNotVersioned(true);
+        if (res.versioned === false) setNotVersioned(key);
         if (workId !== null) applyList(workId);
       },
       (e) => {
@@ -629,13 +684,25 @@ export function SkillsSection() {
         : "settings.skills.reason.edited";
 
   /** Fill the create form from a diagnostic that is an empty skill directory:
-   *  the folder is there, the SKILL.md is not, and writing one is the repair. */
+   *  the folder is there, the SKILL.md is not, and writing one is the repair.
+   *
+   *  It prefills only into an UNTOUCHED form. The diagnostics band sits
+   *  directly above the create form, so a writer part-way through describing
+   *  a new skill can see both at once and hit this button by accident — and
+   *  the version of this that always prefilled overwrote the name they had
+   *  typed and blanked the description outright, with no undo anywhere and
+   *  nothing having asked. What someone typed is not this button's to throw
+   *  away; a repair they meant to start is two clicks away once the form is
+   *  submitted or cancelled. */
   const startFrom = (target: Target) => {
     setSelected(null);
-    setNewName(target.name);
-    setNewDescription("");
-    setNewScope(target.scope);
     setNewError(null);
+    const untouched = !creating || (newName.trim() === "" && newDescription.trim() === "");
+    if (untouched) {
+      setNewName(target.name);
+      setNewDescription("");
+      setNewScope(target.scope);
+    }
     setCreating(true);
   };
 
@@ -681,7 +748,7 @@ export function SkillsSection() {
           a delete closes the editor — the one case where the missing version
           row is the difference between "I can undo this" and a body that is
           simply gone. */}
-      {notVersioned && (
+      {notVersioned !== null && (
         <p className="sd" role="alert" data-testid="skills-not-versioned">
           {t("settings.skills.notVersioned")}
         </p>

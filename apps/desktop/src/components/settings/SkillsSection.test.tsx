@@ -78,6 +78,26 @@ function listResult(skills: Over[], diagnostics: Over[] = []) {
   return { skills, diagnostics };
 }
 
+/** What `skills.write` answers — and it is NOT the document it was sent.
+ *
+ *  `handlers/skills.go:501` writes `strings.TrimSpace(p.Description)`, so a
+ *  description with a leading or trailing space comes back changed. That gap
+ *  between the document sent and the document kept is where a whole class of
+ *  bug lives — a pane that measures the next blur against what it SENT sees
+ *  the normalised reply as a change and sends the identical document again —
+ *  and a mock that echoes its input cannot see any of it. So every write mock
+ *  here normalises, exactly as the engine does. */
+function written(input: Over, over: Over = {}) {
+  return {
+    ...full(),
+    ...input,
+    description: String(input.description ?? "").trim(),
+    project_id: undefined,
+    versioned: true,
+    ...over,
+  };
+}
+
 /** Mount and wait for the first skills.list to have landed. */
 async function mounted() {
   render(<SkillsSection />);
@@ -175,9 +195,7 @@ describe("SkillsSection", () => {
     rpc.projectsList.mockResolvedValue([{ id: "work-1", title: "첫 작품" }]);
     rpc.list.mockResolvedValue(listResult([summary()]));
     rpc.read.mockResolvedValue(full());
-    rpc.write.mockImplementation((input: Over) =>
-      Promise.resolve({ ...full(), ...input, project_id: undefined, versioned: true }),
-    );
+    rpc.write.mockImplementation((input: Over) => Promise.resolve(written(input)));
     rpc.del.mockResolvedValue({ versioned: true });
     rpc.history.mockResolvedValue({ versions: [] });
   });
@@ -513,6 +531,33 @@ describe("SkillsSection", () => {
     expect(rpc.write).toHaveBeenCalledTimes(1);
   });
 
+  it("does not send again a document the engine only normalised", async () => {
+    rpc.read.mockResolvedValue(full({ description: "호흡", body: "안녕" }));
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
+    await screen.findByTestId("skill-body");
+
+    // Leading and trailing space is what pasting produces, and the engine
+    // trims it (handlers/skills.go:501) before it writes.
+    await userEvent.clear(descBox());
+    await userEvent.type(descBox(), " 호흡 ");
+    // Clicking into the textarea blurs the description: the save leaves.
+    await userEvent.click(bodyBox());
+    await waitFor(() => expect(rpc.write).toHaveBeenCalledTimes(1));
+    expect(rpc.write).toHaveBeenCalledWith(expect.objectContaining({ description: " 호흡 " }));
+
+    // The reply carries "호흡", not " 호흡 ". If the guard against a duplicate
+    // save keeps measuring the next blur against what was SENT, this
+    // untouched textarea is "changed" against a document that no longer
+    // exists anywhere, and tabbing out sends the identical file a second
+    // time: a duplicate version row, a restamped updated_at and a second
+    // skills-changed at every window — worse than the resend the guard was
+    // added to stop, because it needs no second edit to trigger.
+    await waitFor(() => expect(descBox().value).toBe("호흡"));
+    await userEvent.tab();
+    expect(rpc.write).toHaveBeenCalledTimes(1);
+  });
+
   it("sends again after a refusal, because a refused write changed nothing", async () => {
     rpc.read.mockResolvedValue(full({ body: "안녕" }));
     rpc.write.mockRejectedValue(new Error("agentskills: description is required"));
@@ -687,9 +732,7 @@ describe("SkillsSection", () => {
 
   it("says when a save landed on disk but not in the history", async () => {
     rpc.read.mockResolvedValue(full({ body: "안녕" }));
-    rpc.write.mockImplementation((input: Over) =>
-      Promise.resolve({ ...full(), ...input, versioned: false }),
-    );
+    rpc.write.mockImplementation((input: Over) => Promise.resolve(written(input, { versioned: false })));
     await mounted();
     await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
     await screen.findByTestId("skill-body");
@@ -720,6 +763,105 @@ describe("SkillsSection", () => {
     const notice = await screen.findByTestId("skills-not-versioned");
     expect(notice).toHaveTextContent("settings.skills.notVersioned");
     await waitFor(() => expect(screen.queryByTestId("skill-body")).toBeNull());
+  });
+
+  it("says when turning a skill off landed on disk but not in the history", async () => {
+    rpc.write.mockImplementation((input: Over) => Promise.resolve(written(input, { versioned: false })));
+    await mounted();
+
+    await userEvent.click(screen.getByTestId("skill-enabled-writer-dialogue-beats"));
+
+    // The toggle is a whole-document write like any other, and switching a
+    // skill off is exactly the change a writer later goes to the history to
+    // walk back. A toggle that lost its version row is as silent as a save
+    // that did.
+    const notice = await screen.findByTestId("skills-not-versioned");
+    expect(notice).toHaveAttribute("role", "alert");
+    expect(notice).toHaveTextContent("settings.skills.notVersioned");
+  });
+
+  it("says when a new skill was created with no version row behind it", async () => {
+    rpc.list.mockResolvedValue(listResult([]));
+    rpc.write.mockImplementation((input: Over) => Promise.resolve(written(input, { versioned: false })));
+    await mounted();
+
+    await userEvent.click(screen.getByTestId("skills-new"));
+    await userEvent.type(screen.getByTestId("skill-new-name"), "cliffhangers");
+    await userEvent.type(screen.getByTestId("skill-new-description"), "회차 끝맺기");
+    await userEvent.click(screen.getByTestId("skill-new-submit"));
+
+    // A create with no version row starts the skill's history one edit late:
+    // there is no "created" row to go back to.
+    await screen.findByTestId("skills-not-versioned");
+    // And it has to survive the create OPENING the skill it is about — that
+    // open is what clears the line for a different skill.
+    await waitFor(() =>
+      expect(screen.getByTestId("skill-detail-name")).toHaveTextContent("cliffhangers"),
+    );
+    expect(screen.getByTestId("skills-not-versioned")).toBeInTheDocument();
+  });
+
+  it("takes the not-in-the-history line down before the next write goes out", async () => {
+    rpc.read.mockResolvedValue(full({ body: "안녕" }));
+    rpc.write.mockImplementationOnce((input: Over) =>
+      Promise.resolve(written(input, { versioned: false })),
+    );
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
+    await screen.findByTestId("skill-body");
+    await userEvent.type(bodyBox(), "하세요");
+    await userEvent.tab();
+    await screen.findByTestId("skills-not-versioned");
+
+    // The toggle's write IS versioned. A line standing over a later
+    // successful, versioned write is its own lie — it names a history gap
+    // that the writer's most recent change does not have.
+    await userEvent.click(screen.getByTestId("skill-enabled-writer-dialogue-beats"));
+
+    await waitFor(() => expect(screen.queryByTestId("skills-not-versioned")).toBeNull());
+  });
+
+  it("takes the not-in-the-history line down when the writer changes works", async () => {
+    rpc.projectsList.mockResolvedValue([
+      { id: "work-1", title: "첫 작품" },
+      { id: "work-2", title: "두 번째 작품" },
+    ]);
+    rpc.read.mockResolvedValue(full({ body: "안녕" }));
+    rpc.write.mockImplementation((input: Over) => Promise.resolve(written(input, { versioned: false })));
+    await mounted();
+    await userEvent.click(screen.getByTestId("skill-open-writer-dialogue-beats"));
+    await screen.findByTestId("skill-body");
+    await userEvent.type(bodyBox(), "하세요");
+    await userEvent.tab();
+    await screen.findByTestId("skills-not-versioned");
+
+    const picker = screen.getByTestId("skills-work") as HTMLSelectElement;
+    await waitFor(() => expect(picker.options.length).toBe(2));
+    await userEvent.selectOptions(picker, "work-2");
+
+    // The line is about a write to a skill in the work just left, and it is
+    // not on this list at all. Left up, it reads as a claim about whatever
+    // the writer is looking at now.
+    await waitFor(() => expect(screen.queryByTestId("skills-not-versioned")).toBeNull());
+  });
+
+  it("keeps a half-typed create form when a repair button is clicked", async () => {
+    rpc.list.mockResolvedValue(
+      listResult([], [{ path: "/home/skills/half-made", message: "no SKILL.md in this directory" }]),
+    );
+    await mounted();
+
+    await userEvent.click(screen.getByTestId("skills-new"));
+    await userEvent.type(screen.getByTestId("skill-new-name"), "cliffhangers");
+    await userEvent.type(screen.getByTestId("skill-new-description"), "회차 끝맺기");
+
+    // The diagnostics band sits directly above the create form, so both are
+    // on screen at once and this button is easy to hit by accident. A text
+    // input has no undo and nothing asked.
+    await userEvent.click(screen.getByTestId("skill-diagnostic-open-0"));
+
+    expect((screen.getByTestId("skill-new-name") as HTMLInputElement).value).toBe("cliffhangers");
+    expect((screen.getByTestId("skill-new-description") as HTMLInputElement).value).toBe("회차 끝맺기");
   });
 
   it("offers to write the SKILL.md a skill directory is missing", async () => {
@@ -825,8 +967,18 @@ describe("SkillsSection", () => {
   });
 
   it("moves the checkbox the moment it is clicked, and locks it until it settles", async () => {
+    // The REFETCH is held as well as the read, and that is the whole point of
+    // this fixture: the gap the toggle's `await applyList(...)` exists to
+    // cover opens after the write answers and before the refreshed row is on
+    // screen. A test that only holds the read never enters that gap, so it
+    // stays green while the checkbox visibly snaps back in it.
+    holdLists();
     holdReads();
-    await mounted();
+    render(<SkillsSection />);
+    await waitFor(() => expect(lists.length).toBe(1));
+    await settle(() => lists[0].answer(listResult([summary()])));
+    await screen.findByTestId("skills-list");
+
     const toggle = () =>
       screen.getByTestId("skill-enabled-writer-dialogue-beats") as HTMLInputElement;
     expect(toggle().checked).toBe(true);
@@ -845,6 +997,18 @@ describe("SkillsSection", () => {
 
     await settle(() => reads[0].answer(full()));
     await waitFor(() => expect(rpc.write).toHaveBeenCalledTimes(1));
+
+    // The write has answered; the refetch is still out. The list on screen is
+    // still the PRE-toggle one, so releasing the pending state here puts the
+    // checkbox back to "on" while the writer watches — and then to "off"
+    // again a round trip later. Held, it simply does not move.
+    await waitFor(() => expect(lists.length).toBe(2));
+    expect(toggle().checked).toBe(false);
+    expect(toggle().disabled).toBe(true);
+
+    await settle(() => lists[1].answer(listResult([summary({ enabled: false })])));
+    await waitFor(() => expect(toggle().disabled).toBe(false));
+    expect(toggle().checked).toBe(false);
   });
 
   it("says so when the list cannot be read at all", async () => {
