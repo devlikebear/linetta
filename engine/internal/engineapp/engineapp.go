@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
@@ -245,10 +246,15 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			story:      mcpStory,
 			msEdit:     manuscriptEditor,
 			memory:     memRepo,
-			enqueue:    summ.Enqueue,
-			notify:     func(method string, params any) { _ = s.Notifier().Notify(method, params) },
-			clock:      clock,
-			db:         st.DB(),
+			// The skills the agent writes for itself live as SKILL.md files
+			// under the same home the rest of Linetta's own material does,
+			// with their versions in the database beside the manuscript's.
+			skills:       agentskills.NewStore(home),
+			skillHistory: agentskills.NewHistory(st.DB()),
+			enqueue:      summ.Enqueue,
+			notify:       func(method string, params any) { _ = s.Notifier().Notify(method, params) },
+			clock:        clock,
+			db:           st.DB(),
 		},
 	})
 	a.closers = append(a.closers, stopMCP)

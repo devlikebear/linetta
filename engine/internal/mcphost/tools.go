@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
@@ -48,6 +49,14 @@ type ToolDeps struct {
 	// Memory is the two curated documents every agent reads. Nil in a build
 	// with no database open; the tool refuses rather than panicking.
 	Memory *agentmemory.Repo
+
+	// Skills are the SKILL.md documents an agent writes for itself and the
+	// writer can read, edit and revert. Skills is the filesystem store under
+	// the Linetta home; SkillHistory is the version row every write lands, so
+	// a bad edit is revertible. Both nil in a build with no home or database;
+	// the tools refuse rather than panicking.
+	Skills       *agentskills.Store
+	SkillHistory *agentskills.History
 
 	// Source names who is calling: SourceExternal (the HTTP host) or
 	// SourceAgent (the built-in panel's in-memory server). It is a field on
@@ -260,6 +269,50 @@ func (d ToolDeps) requireNodeInProject(ctx context.Context, nodeID, projectID st
 			"node %q belongs to work %q, not %q; drop project_id or fix it", n.ID, n.ProjectID, projectID)
 	}
 	return n, nil
+}
+
+// requireSkillTarget resolves the scope, work and name that one skill tool
+// call addresses, funnelling the work through requireProject so a skill in
+// another work cannot be reached through a restricted server.
+//
+// It deliberately does NOT apply the pin to a writer-scoped skill: reading a
+// global skill is harmless, and only the WRITE path has a reason to refuse
+// one — see editSkill, where that refusal lives.
+//
+// The name is validated here rather than left to the store so the refusal is
+// a sentence about slugs that an agent can act on, instead of a path error.
+func (d ToolDeps) requireSkillTarget(ctx context.Context, scopeArg, projectID, name string) (agentskills.Scope, string, string, *mcp.CallToolResult) {
+	scope, err := agentskills.ParseScope(scopeArg)
+	if err != nil {
+		return "", "", "", toolErr("%v", err)
+	}
+	projectID = strings.TrimSpace(projectID)
+	switch scope {
+	case agentskills.ScopeWork:
+		p, errResult := d.requireProject(ctx, projectID)
+		if errResult != nil {
+			return "", "", "", errResult
+		}
+		// requireProject fills in the pinned work when the caller omitted
+		// one, so take the id it resolved rather than the raw input.
+		projectID = p.ID
+	case agentskills.ScopeWriter:
+		if projectID != "" {
+			return "", "", "", toolErr(
+				"a %q skill is global and belongs to no work; drop project_id, or use scope %q for a skill about one work",
+				agentskills.ScopeWriter, agentskills.ScopeWork)
+		}
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", "", "", toolErr(`name is required: the skill's name, a lowercase slug such as "fight-scenes"`)
+	}
+	if !agentskills.ValidName(name) {
+		return "", "", "", toolErr(
+			`skill name %q is not usable: use lowercase letters, digits and hyphens only, `+
+				`starting and ending with a letter or digit (e.g. "fight-scenes")`, name)
+	}
+	return scope, projectID, name, nil
 }
 
 // allowedProjectID returns the restriction, or "" when every work is reachable.
