@@ -790,13 +790,16 @@ func TestAFileAtTheCapStillReads(t *testing.T) {
 
 // ---- symlinks -------------------------------------------------------------
 
-// The decision, written down: List and Read FOLLOW a symlink, deliberately —
-// a writer who links a shared or version-controlled skills folder into
-// <home>/skills should have it work, which is the reason entries are
-// classified with os.Stat rather than entry.Type(). Delete must NOT follow,
+// The decision, written down: List, Read and Write all FOLLOW a symlink,
+// deliberately — a writer who links a shared or version-controlled skills
+// folder into <home>/skills should have it work for reading AND editing,
+// which is why List/Read classify entries with os.Stat rather than
+// entry.Type(), and why Write's os.MkdirAll-then-atomicfile.Write is left to
+// land through the link rather than special-cased. Delete must NOT follow,
 // and os.RemoveAll does not: it unlinks the link and leaves the target alone.
 // That asymmetry is the one worth pinning, because being wrong about it
-// destroys a folder the store does not own.
+// destroys a folder the store does not own — Write being wrong about it
+// would merely write to an unexpected place the writer chose by linking it.
 func TestDeleteDoesNotFollowASymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlinks need privilege on Windows")
@@ -879,5 +882,106 @@ func TestHalfMadeDirectoriesOccupyCapSlots(t *testing.T) {
 	}
 	if _, err := st.Write(sample("one-more"), 1); !errors.Is(err, ErrTooManySkills) {
 		t.Fatalf("forty directories with no %s still fill the scope; Write = %v", skillFile, err)
+	}
+}
+
+// TestReviewerReproductionThirtyNineSkillsPlusOneEmptyDirectory is the exact
+// state the reviewer found unrecoverable: 39 real skills plus one empty
+// "half-made" directory with no SKILL.md. Before this fix, Delete("half-made")
+// returned ErrNotFound (it stats SKILL.md first and never looks at the
+// directory itself), and Write(a skill named "half-made") returned
+// ErrTooManySkills (count included the very directory the write was about to
+// fill, as an extra slot on top of the one it was about to create) — so the
+// error told the writer to delete a skill, and nothing in the API could
+// delete the thing actually occupying the slot. Both arms below must now
+// succeed.
+func TestReviewerReproductionThirtyNineSkillsPlusOneEmptyDirectory(t *testing.T) {
+	build := func(t *testing.T) (*Store, string) {
+		t.Helper()
+		st, home := newTestStore(t)
+		for i := 0; i < MaxSkillsPerScope-1; i++ {
+			name := fmt.Sprintf("real-%02d", i)
+			if _, err := st.Write(sample(name), 1); err != nil {
+				t.Fatalf("Write %s: %v", name, err)
+			}
+		}
+		if err := os.MkdirAll(filepath.Join(home, "skills", "half-made"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		return st, home
+	}
+
+	t.Run("delete_clears_the_slot", func(t *testing.T) {
+		st, home := build(t)
+		if err := st.Delete(ScopeWriter, "", "half-made"); err != nil {
+			t.Fatalf(`Delete("half-made") = %v, want success`, err)
+		}
+		if _, err := os.Stat(filepath.Join(home, "skills", "half-made")); !os.IsNotExist(err) {
+			t.Errorf("half-made directory should be gone, stat = %v", err)
+		}
+	})
+
+	t.Run("write_fills_its_own_slot", func(t *testing.T) {
+		st, _ := build(t)
+		if _, err := st.Write(sample("half-made"), 2); err != nil {
+			t.Fatalf(`Write(skill named "half-made") = %v, want success`, err)
+		}
+		got, err := st.Read(ScopeWriter, "", "half-made")
+		if err != nil {
+			t.Fatalf("Read after filling the half-made directory: %v", err)
+		}
+		if got.Body != sample("half-made").Body {
+			t.Errorf("body = %q, want the written draft", got.Body)
+		}
+	})
+}
+
+// TestDeleteOnTrulyNothingIsStillErrNotFound guards against overcorrecting
+// the fix above: a name with no directory at all — not even a half-made one
+// — must still be ErrNotFound, not a silent success.
+func TestDeleteOnTrulyNothingIsStillErrNotFound(t *testing.T) {
+	st, _ := newTestStore(t)
+	if err := st.Delete(ScopeWriter, "", "never-existed"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Delete(never-existed) = %v, want ErrNotFound", err)
+	}
+}
+
+// TestWriteFollowsASymlinkedSkillDirectory pins the decision recorded in
+// Write's doc comment and in the symlinks block above: Write follows a
+// symlinked skill directory just as List and Read do, landing the new
+// SKILL.md at the link's target rather than replacing the link with a real
+// directory.
+func TestWriteFollowsASymlinkedSkillDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks need privilege on Windows")
+	}
+	st, home := newTestStore(t)
+
+	target := filepath.Join(home, "shared", "shared-skill")
+	writeRaw(t, filepath.Join(target, skillFile), Render(sample("shared-skill")))
+
+	if err := os.MkdirAll(filepath.Join(home, "skills"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "skills", "shared-skill")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable here: %v", err)
+	}
+
+	updated := sample("shared-skill")
+	updated.Body = "# shared-skill\n\nEdited through the link.\n"
+	if _, err := st.Write(updated, 2); err != nil {
+		t.Fatalf("Write through a symlinked skill directory: %v", err)
+	}
+
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the link itself should still be a symlink, not replaced by a real directory: %v", err)
+	}
+	got, err := readSkillFile(filepath.Join(target, skillFile))
+	if err != nil {
+		t.Fatalf("reading the target's %s: %v", skillFile, err)
+	}
+	if got.Body != updated.Body {
+		t.Errorf("body at the link's target = %q, want the edit", got.Body)
 	}
 }

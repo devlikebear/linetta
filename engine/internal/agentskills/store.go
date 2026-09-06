@@ -282,8 +282,11 @@ func (st *Store) skillPaths(scope Scope, projectID, name string) (dir, file stri
 // intended: a writer who symlinks a shared or version-controlled skills
 // folder in here should have it work. A dangling or looping link stats with
 // an error and is skipped rather than reported, since it is not a skill that
-// broke. The one place the store must never follow a link is Delete — see
-// there.
+// broke. Write follows a symlinked skill directory too — MkdirAll on an
+// existing link is a no-op and atomicfile.Write then writes through it — so
+// editing a linked skill through this store lands the new SKILL.md at the
+// link's target, which is what a writer who made the link would want. The
+// one place the store must never follow a link is Delete — see there.
 func (st *Store) List(scope Scope, projectID string) ([]Skill, []Diagnostic, error) {
 	dir, err := st.Dir(scope, projectID)
 	if err != nil {
@@ -475,6 +478,15 @@ func (st *Store) Read(scope Scope, projectID, name string) (Skill, error) {
 // 0700 for the directories: this is the writer's own material under
 // LINETTA_HOME, following codexauth's credential handling rather than the
 // 0644 folder-sync path, which writes into a folder the writer chose to share.
+//
+// Symlinks: if the skill's directory is itself a symlink, Write follows it —
+// os.MkdirAll on an existing link is a no-op, and atomicfile.Write's rename
+// then lands the new SKILL.md at the link's target, outside home. This is
+// intentional and consistent with List and Read (see List's doc comment): a
+// writer who deliberately links a shared or version-controlled skills folder
+// into <home>/skills should be able to edit it through this store too, not
+// just read it. Delete is the sole exception, and for a reason specific to
+// it — see Delete's doc comment.
 func (st *Store) Write(s Skill, now int64) (Skill, error) {
 	// An author is optional in the struct but not in the file: Render would
 	// emit `author: ""` and Parse would then refuse to read back what we just
@@ -513,7 +525,13 @@ func (st *Store) Write(s Skill, now int64) (Skill, error) {
 			return Skill{}, err
 		}
 		// A skill that does not exist yet is the only kind the cap can refuse.
-		n, err := st.count(s.Scope, s.ProjectID)
+		// count excludes s.Name — the directory THIS write is about to fill —
+		// so a half-made directory sitting at that exact name (no SKILL.md
+		// yet, whether from a Write that died between MkdirAll and
+		// atomicfile.Write, or a folder made by hand) is judged as what it
+		// is: the slot this write would occupy, not one more slot on top of
+		// it. See count's doc comment.
+		n, err := st.count(s.Scope, s.ProjectID, s.Name)
 		if err != nil {
 			return Skill{}, err
 		}
@@ -535,7 +553,8 @@ func (st *Store) Write(s Skill, now int64) (Skill, error) {
 	return s, nil
 }
 
-// count is how many slots a scope already holds.
+// count is how many OTHER slots a scope already holds — "other" than
+// exclude, which is always the name the caller is about to write.
 //
 // It counts exactly the entries List treats as a skill directory — every
 // non-hidden subdirectory that is not the works root — and does NOT require a
@@ -546,7 +565,21 @@ func (st *Store) Write(s Skill, now int64) (Skill, error) {
 // not its document parses, whether or not the document is even there yet: it
 // is a real folder taking a real name, List already reports it, and excluding
 // it would let the cap drift upward every time something on disk broke.
-func (st *Store) count(scope Scope, projectID string) (int, error) {
+//
+// exclude is the third version's fix, and the reason it exists: a directory
+// with no SKILL.md counts as a slot by the rule above, but when that
+// directory is the very one Write is about to fill, counting it double-counts
+// the same slot — once as "already there", once as "about to be created" —
+// and refuses the write that would turn a half-made directory into a real
+// skill. There is then no way to clear that slot at all: Delete refuses it
+// too (a bare SKILL.md stat finds nothing), so the state is permanent until
+// this exclusion existed. What matters for the cap is room for every OTHER
+// skill plus this one, so this one is left out of the count and checked
+// against the cap by the caller instead (n >= MaxSkillsPerScope). A name that
+// does not already occupy a directory costs nothing to exclude — it simply
+// is not in entries — so forty half-made directories under forty OTHER names
+// still refuse a forty-first real skill, exactly as before.
+func (st *Store) count(scope Scope, projectID, exclude string) (int, error) {
 	dir, err := st.Dir(scope, projectID)
 	if err != nil {
 		return 0, err
@@ -567,6 +600,9 @@ func (st *Store) count(scope Scope, projectID string) (int, error) {
 		if scope == ScopeWriter && isReservedSegment(name) {
 			continue
 		}
+		if name == exclude {
+			continue
+		}
 		info, err := os.Stat(filepath.Join(dir, name))
 		if err != nil || !info.IsDir() {
 			continue
@@ -581,31 +617,54 @@ func (st *Store) count(scope Scope, projectID string) (int, error) {
 // Delete removes a skill and everything in its directory — the SKILL.md and
 // any sibling files it grew.
 //
-// It refuses a name it cannot find with ErrNotFound rather than reporting a
-// silent success, because the caller is often an agent: one that deletes the
-// wrong name and is told "done" will believe it tidied up when it did not.
+// It refuses a name it cannot find at all with ErrNotFound rather than
+// reporting a silent success, because the caller is often an agent: one that
+// deletes the wrong name and is told "done" will believe it tidied up when it
+// did not.
 //
-// The SKILL.md is confirmed to exist before the directory is removed, so this
-// can only ever recurse into a directory that really is a skill — an
-// os.RemoveAll driven by a model's argument needs both that check and the
-// path-boundary one above it.
+// A directory that exists but has no SKILL.md — a half-made skill, whether
+// from a Write that died between MkdirAll and atomicfile.Write, or a folder a
+// writer made by hand — is NOT "not found": something is there, it occupies
+// exactly one of the scope's forty slots (see count), and it must be
+// removable, because nothing else in this package can clear it (Write only
+// refuses that name a fresh cap slot now — see count's exclude parameter — it
+// does not remove the directory, and there is no separate "delete a folder"
+// call). So Delete removes it and reports success: the caller asked for the
+// name to be gone, and after this call it is. The alternative — a distinct
+// error naming the half-made state — would still leave the caller with no
+// path to clear it, which is the one outcome this fix rules out.
 //
-// Symlinks: List and Read follow them on purpose (a writer may link a shared
-// skills folder in), but Delete must not, and os.RemoveAll does not — it
-// unlinks the symlink itself and never recurses through it, so deleting a
-// linked skill removes the link and leaves the writer's real folder intact.
-// This is the one symlink behaviour where being wrong destroys data that is
-// not ours, so TestDeleteDoesNotFollowASymlink pins it.
+// The SKILL.md is confirmed to exist before deleting a real skill, so a
+// RemoveAll on a directory that already has a document can only ever recurse
+// into a directory that really is a skill — an os.RemoveAll driven by a
+// model's argument needs both that check and the path-boundary one above it.
+// For the half-made case, the check instead confirms dir itself is a
+// directory (not nothing, not a stray file) before RemoveAll runs.
+//
+// Symlinks: List, Read and Write follow them on purpose (a writer may link a
+// shared skills folder in and expect edits through this store to land there
+// too), but Delete must not, and os.RemoveAll does not — it unlinks the
+// symlink itself and never recurses through it, so deleting a linked skill
+// removes the link and leaves the writer's real folder intact. This is the
+// one symlink behaviour where being wrong destroys data that is not ours, so
+// TestDeleteDoesNotFollowASymlink pins it. The same os.Stat-then-RemoveAll
+// shape covers the half-made case too: Stat follows the link only to check
+// it is a directory, RemoveAll itself never does.
 func (st *Store) Delete(scope Scope, projectID, name string) error {
 	dir, file, err := st.skillPaths(scope, projectID, name)
 	if err != nil {
 		return err
 	}
 	if _, err := os.Stat(file); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		// No SKILL.md. Distinguish "nothing here at all" from "a half-made
+		// directory sits here" — see the doc comment above.
+		info, statErr := os.Stat(dir)
+		if statErr != nil || !info.IsDir() {
 			return fmt.Errorf("%w: %q", ErrNotFound, name)
 		}
-		return err
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		return fmt.Errorf("agentskills: delete %s: %w", dir, err)

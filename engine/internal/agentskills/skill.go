@@ -82,19 +82,12 @@ var (
 	ErrNoDescription  = errors.New("agentskills: missing description")
 )
 
-// openFence and closeFence are the LF-only fence forms Render always
-// produces (see Render's doc comment for why it never emits CRLF).
-// splitFrontmatter accepts CRLF on input too; see its own doc comment.
-//
-// closeFence is searched for starting right after openFence, and the FIRST
-// match wins — not the last — so a body that itself contains a line reading
-// "---" is treated as body bytes rather than closing the frontmatter early.
-// That is the one thing most worth getting right here: Parse and Render
-// must round-trip such a body untouched.
-const (
-	openFence  = "---\n"
-	closeFence = "\n---\n"
-)
+// openFence is the LF-only opening fence Render always produces (see
+// Render's doc comment for why it never emits CRLF). splitFrontmatter
+// accepts CRLF on input too; see its own doc comment, which is also where
+// the matching closing fence is computed (as "closer", since its line
+// ending depends on what the opening fence used) and searched for.
+const openFence = "---\n"
 
 // bom is the UTF-8 encoding of U+FEFF, the byte-order mark some Windows
 // editors (Notepad, in particular) write at the start of a file by default.
@@ -227,6 +220,11 @@ func splitFrontmatter(raw string) (yamlBlock, body string, err error) {
 		return "", rest[len("---"+nl):], nil
 	}
 
+	// closer is searched for starting right after the opening fence, and the
+	// FIRST match wins — not the last — so a body that itself contains a line
+	// reading "---" is treated as body bytes rather than closing the
+	// frontmatter early. That is the one thing most worth getting right here:
+	// Parse and Render must round-trip such a body untouched.
 	idx := strings.Index(rest, closer)
 	if idx < 0 {
 		return "", "", ErrBadFrontmatter

@@ -186,7 +186,7 @@ func (st *Store) Read(scope Scope, projectID, name string) (Skill, error)
 func (st *Store) Write(s Skill, now int64) (Skill, error)
 func (st *Store) Delete(scope Scope, projectID, name string) error
 type Diagnostic struct{ Path, Message string }
-var (ErrNotFound, ErrTooManySkills, ErrExists error)
+var (ErrNotFound, ErrTooManySkills, ErrPathOccupied error)
 ```
 
 Layout: `<home>/skills/<name>/SKILL.md` for `ScopeWriter`, `<home>/skills/works/<project id>/<name>/SKILL.md` for `ScopeWork`. A directory per skill, because agentskills.io skills carry sibling files and a writer pointing Claude Code here should find the shape it expects.
