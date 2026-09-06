@@ -230,6 +230,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// the same SKILL.md files under home.
 	skillsStore := agentskills.NewStore(home)
 
+	// The versions behind those files. One History, shared the same way: the
+	// MCP tools record a version for every agent write, and skills.restore
+	// (below) reverts through the same rows. Two instances would be two
+	// halves of one log.
+	skillHistory := agentskills.NewHistory(st.DB())
+
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
@@ -267,7 +273,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			// whether a skill is read through the MCP tools or listed into
 			// the agent's own system prompt.
 			skills:       skillsStore,
-			skillHistory: agentskills.NewHistory(st.DB()),
+			skillHistory: skillHistory,
 			enqueue:      summ.Enqueue,
 			notify:       func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 			clock:        clock,
@@ -408,6 +414,17 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("memory.get", handlers.GetMemory(memRepo))
 	s.Handle("memory.set", handlers.SetMemory(memRepo, clock,
 		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
+	// The skills surface (#98). skills.write, skills.delete and
+	// skills.restore all emit skills.changed with source "writer", so a
+	// second window — and the Settings pane's own open editor — hears about
+	// a save it did not make.
+	skillNotify := func(method string, params any) { _ = s.Notifier().Notify(method, params) }
+	s.Handle("skills.list", handlers.ListSkills(skillsStore))
+	s.Handle("skills.read", handlers.ReadSkill(skillsStore))
+	s.Handle("skills.write", handlers.WriteSkill(skillsStore, skillHistory, clock, skillNotify))
+	s.Handle("skills.delete", handlers.DeleteSkill(skillsStore, skillHistory, clock, skillNotify))
+	s.Handle("skills.history", handlers.SkillVersions(skillHistory))
+	s.Handle("skills.restore", handlers.RestoreSkill(skillsStore, skillHistory, clock, skillNotify))
 	s.Handle("mcp.status", handlers.MCPStatus(mcpCtrl))
 	s.Handle("mcp.enable", handlers.MCPEnable(mcpCtrl))
 	s.Handle("mcp.disable", handlers.MCPDisable(mcpCtrl))

@@ -230,6 +230,10 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // another window saved. Settings holds an unsent textarea draft, so
         // without this the next blur silently overwrites it.
         "memory.changed" => Some("memory-changed"),
+        // A skill moved under the app: an agent wrote one, or another window
+        // saved. Settings lists skills and holds an editor open on one, so
+        // without this the next save silently overwrites what just landed.
+        "skills.changed" => Some("skills-changed"),
         _ => None,
     }
 }
@@ -424,6 +428,16 @@ mod tests {
         // window, just saved.
         assert_eq!(notification_event("memory.changed"), Some("memory-changed"));
         assert_eq!(notification_event("memory.unmapped"), None);
+    }
+
+    #[test]
+    fn skills_changed_is_forwarded_to_the_renderer() {
+        // Settings lists the writer's skills and holds an editor open on one.
+        // Without this event a skill an agent wrote mid-session is invisible
+        // until the pane is reopened, and the open editor's next save
+        // overwrites it.
+        assert_eq!(notification_event("skills.changed"), Some("skills-changed"));
+        assert_eq!(notification_event("skills.unmapped"), None);
     }
 
     #[cfg(target_os = "windows")]
