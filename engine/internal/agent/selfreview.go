@@ -88,8 +88,15 @@ func (s *Service) maybeSelfReview(ctx context.Context, st loopState, toolCalls i
 	}
 	if !offers(st.schemas, "linetta_edit_skill") {
 		// A review that cannot write a skill has nothing to do but cost a
-		// provider call. Not hypothetical: linetta_edit_skill is only
-		// registered on a server built with a skills store.
+		// provider call.
+		//
+		// In production this never fires: the agent's own server always
+		// registers in full mode (engineapp/agent_enabled.go), and Register
+		// keys the write tools on the mode alone (mcphost/tools.go), so the
+		// tool is always offered — a nil skills store is refused later, at
+		// call time. The guard is for a caller that assembles a narrower tool
+		// set, and it is deliberately about what THIS turn was offered rather
+		// than about how the server was built.
 		return
 	}
 	s.startSelfReview(ctx, st, used)
