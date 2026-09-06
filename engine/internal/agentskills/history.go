@@ -76,8 +76,27 @@ var ErrVersionNotFound = errors.New("agentskills: version not found")
 // Version is one row of a skill's history: the skill as it looked right
 // after the write that produced this row, tagged with why it was written.
 type Version struct {
-	ID        string
-	Skill     Skill
+	ID    string
+	Skill Skill
+	// Seq is skill_snapshots.rowid: the order the rows were INSERTED in,
+	// which is the only total order this table has.
+	//
+	// CreatedAt is a millisecond clock reading, so two rows can share one —
+	// a write and the deletion that follows it in the same millisecond are
+	// not rare, they are what a fast path or a test with a fixed clock
+	// produces every time. Any caller asking "did this happen after that?"
+	// has to ask the rowid, not the timestamp; List's ORDER BY already
+	// breaks its ties on it, and Newest sorts on it alone. It is exposed
+	// (rather than selected and discarded, which is what this used to do)
+	// because that question is asked outside this package too — skills.restore
+	// has to know whether a deletion came after the version it is putting
+	// back, and a millisecond comparison there silently overwrote a
+	// different skill.
+	//
+	// It is an ordering, not an identity: nothing should store it, send it
+	// on the wire, or expect it to survive a database copied row by row.
+	// The id is the identity.
+	Seq       int64
 	Reason    string
 	CreatedAt int64
 }
@@ -192,6 +211,43 @@ SELECT rowid, id, scope, project_id, name, body, descript, author, reason, creat
 	return out, nil
 }
 
+// Newest returns the last row recorded for one skill — the state this log
+// says the name is in right now — or ErrVersionNotFound if the name has no
+// history at all.
+//
+// It exists because List cannot answer this question safely. List is
+// paged: it takes a limit, clamps it, and hands back a window, so a caller
+// asking it "what happened last, and was anything deleted since?" gets an
+// answer that is right until the table grows past the window and then
+// quietly stops being right. That is not hypothetical — skills.restore's
+// reuse check was written against List and could be walked past by adding
+// rows. Newest reads one row, and no amount of history moves it.
+//
+// It orders by rowid, NOT by created_at: the caller comparing this against
+// some older version is asking which was written first, and two rows in the
+// same millisecond (a write and the deletion right after it) cannot answer
+// that. See Version.Seq.
+func (h *History) Newest(ctx context.Context, scope Scope, projectID, name string) (Version, error) {
+	arg, err := projectArg(scope, projectID)
+	if err != nil {
+		return Version{}, err
+	}
+	row := h.db.QueryRowContext(ctx, `
+SELECT rowid, id, scope, project_id, name, body, descript, author, reason, created_at
+  FROM skill_snapshots
+ WHERE scope = ? AND project_id IS ? AND name = ?
+ ORDER BY rowid DESC
+ LIMIT 1`, string(scope), arg, name)
+	v, err := scanVersion(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Version{}, fmt.Errorf("%w: no history for %q", ErrVersionNotFound, name)
+		}
+		return Version{}, fmt.Errorf("agentskills: newest version: %w", err)
+	}
+	return v, nil
+}
+
 // Get returns one version by id. A missing id is ErrVersionNotFound, not a
 // zero Version silently returned, because a caller resolving a restore
 // target has to be told the id no longer names anything.
@@ -225,9 +281,9 @@ func scanVersion(row rowScanner) (Version, error) {
 	if err := row.Scan(&rowSeq, &id, &scope, &projectID, &name, &body, &descript, &author, &reason, &createdAt); err != nil {
 		return Version{}, err
 	}
-	_ = rowSeq // selected only so List's ORDER BY tie-break names a real column
 	v := Version{
 		ID:        id,
+		Seq:       rowSeq,
 		Reason:    reason,
 		CreatedAt: createdAt,
 		Skill: Skill{

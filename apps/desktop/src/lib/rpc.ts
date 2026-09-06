@@ -289,10 +289,19 @@ export const memory = {
  *  what its version history is keyed on, so renaming through a write would
  *  strand every version under a name nothing on disk answers to. A rename is
  *  a delete plus a create. */
+/** The work id a scoped call may carry. A writer-scope skill is global and
+ *  the engine hard-refuses a work id on it (`agentskills.projectArg`), which
+ *  means every caller would otherwise have to remember to blank the id it is
+ *  already holding — the selected work does not stop being selected because
+ *  the writer opened a writer-scope skill. #97 shipped that same
+ *  `scope === … ? id : ""` by hand at every call site in MemorySection; here
+ *  it lives once, in the wrapper, so no pane can forget it. */
+const workIdFor = (scope: SkillScope, projectId: string) => (scope === "work" ? projectId : "");
+
 export const skills = {
   list: (projectId: string) => rpcCall<SkillsListResult>("skills.list", { project_id: projectId }),
   read: (scope: SkillScope, projectId: string, name: string) =>
-    rpcCall<Skill>("skills.read", { scope, project_id: projectId, name }),
+    rpcCall<Skill>("skills.read", { scope, project_id: workIdFor(scope, projectId), name }),
   write: (input: {
     scope: SkillScope;
     projectId: string;
@@ -303,18 +312,18 @@ export const skills = {
   }) =>
     rpcCall<SkillWriteResult>("skills.write", {
       scope: input.scope,
-      project_id: input.projectId,
+      project_id: workIdFor(input.scope, input.projectId),
       name: input.name,
       description: input.description,
       body: input.body,
       enabled: input.enabled,
     }),
   delete: (scope: SkillScope, projectId: string, name: string) =>
-    rpcCall<SkillDeleteResult>("skills.delete", { scope, project_id: projectId, name }),
+    rpcCall<SkillDeleteResult>("skills.delete", { scope, project_id: workIdFor(scope, projectId), name }),
   history: (scope: SkillScope, projectId: string, name: string, limit?: number) =>
     rpcCall<{ versions: SkillVersion[] }>("skills.history", {
       scope,
-      project_id: projectId,
+      project_id: workIdFor(scope, projectId),
       name,
       limit,
     }),

@@ -20,6 +20,12 @@ import (
 type SkillStore interface {
 	List(scope agentskills.Scope, projectID string) ([]agentskills.Skill, []agentskills.Diagnostic, error)
 	Read(scope agentskills.Scope, projectID, name string) (agentskills.Skill, error)
+	// ReadRaw is Read's unparsed twin, and it is in this interface for one
+	// reason: a SKILL.md whose frontmatter the writer broke does not parse,
+	// so Read cannot return it, and a skill that is listed as broken and
+	// cannot be opened cannot be repaired from inside the app. See
+	// ReadSkill.
+	ReadRaw(scope agentskills.Scope, projectID, name string) (string, int64, error)
 	Write(s agentskills.Skill, now int64) (agentskills.Skill, error)
 	Delete(scope agentskills.Scope, projectID, name string) error
 }
@@ -28,6 +34,10 @@ type SkillStore interface {
 type SkillHistory interface {
 	Record(ctx context.Context, s agentskills.Skill, reason string, now int64) error
 	List(ctx context.Context, scope agentskills.Scope, projectID, name string, limit int) ([]agentskills.Version, error)
+	// Newest is the last row recorded for one skill. RestoreSkill needs it
+	// and List cannot stand in for it: List is a window, and a check written
+	// against a window stops being true once the table outgrows it.
+	Newest(ctx context.Context, scope agentskills.Scope, projectID, name string) (agentskills.Version, error)
 	Get(ctx context.Context, id string) (agentskills.Version, error)
 }
 
@@ -90,6 +100,34 @@ func badParams(err error) error {
 
 func refuse(format string, args ...any) error {
 	return &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: fmt.Sprintf(format, args...)}
+}
+
+// refuseScopeMismatch catches a scope paired with the wrong work id BEFORE
+// the call that would otherwise catch it.
+//
+// Both storage layers already enforce this rule — Store.Dir and
+// History.projectArg — but they return it as an ordinary error, mixed in
+// with everything else that can go wrong down there, and the history's
+// errors come from a database where the other failures are the server's
+// fault rather than the caller's. Sorting the two apart afterwards means
+// guessing. Asking here, where the difference is still obvious, means
+// skills.history can answer a genuine SQLite failure with the internal
+// error it is.
+//
+// The wording mirrors agentskills' own, so a writer does not read two
+// different sentences about the same mistake.
+func refuseScopeMismatch(scope agentskills.Scope, projectID string) error {
+	switch scope {
+	case agentskills.ScopeWriter:
+		if projectID != "" {
+			return refuse("writer skills are global; they take no work id (got %q)", projectID)
+		}
+	case agentskills.ScopeWork:
+		if projectID == "" {
+			return refuse("work skills need the work they belong to")
+		}
+	}
+	return nil
 }
 
 // ---- skills.list ----------------------------------------------------------
@@ -201,6 +239,20 @@ func (p skillTargetParams) target() (agentskills.Scope, string, string, error) {
 	return scope, strings.TrimSpace(p.ProjectID), strings.TrimSpace(p.Name), nil
 }
 
+// skillReadResult is the document plus, when it did not parse, the reason.
+//
+// ParseError is empty for every skill that is well-formed, which is nearly
+// all of them, so it is omitempty: a pane that does not know about it reads
+// exactly what it read before. When it IS set, the fields around it are the
+// best that can be said about a file that is not a skill — see ReadSkill —
+// and the pane has to show it, because a writer handed a body with no
+// explanation would save it straight back and wonder why the skill still
+// does not appear.
+type skillReadResult struct {
+	agentskills.Skill
+	ParseError string `json:"parse_error,omitempty"`
+}
+
 // ReadSkill returns a handler for skills.read: the full document, body and
 // all.
 //
@@ -211,6 +263,30 @@ func (p skillTargetParams) target() (agentskills.Scope, string, string, error) {
 // cannot be trimmed by someone who cannot read it. So this is the repair
 // path — it opens what the list refused, and skills.write, which does guard,
 // is what refuses to store it again unrepaired.
+//
+// Not guarding was not enough, and this is the second half of the fix.
+// Store.Read still PARSES, so a SKILL.md whose frontmatter the writer broke
+// by hand — the commonest way to break one, and the one Settings shows as a
+// diagnostic — came back as "agentskills: no frontmatter" and nothing else.
+// The skill was visible and unopenable: exactly the state Task 3's rule
+// exists to forbid, one level up. So a parse failure falls back to
+// Store.ReadRaw and the file is returned as what it is:
+//
+//   - body: the file's text, verbatim, every byte of it including whatever
+//     is left of the frontmatter. The writer is looking at the same thing
+//     their own editor would show them, which is what lets them fix it.
+//   - name: the one that was asked for (the folder's), since the file's own
+//     may be unreadable or absent.
+//   - description: empty. It is a required field, so skills.write will
+//     refuse the save until the writer supplies one — which is right: a
+//     skill with no description is invisible to the agent that has to pick
+//     it.
+//   - parse_error: what is wrong, in the same sentence the diagnostic gave.
+//
+// A file that is not there stays a refusal, and a genuine read failure
+// (permissions, an unreadable directory) stays a 500 — skillErr's split is
+// unchanged. Only "there is a file here and it is not a skill" is new, and
+// it is a repair, not an error.
 func ReadSkill(store SkillStore) rpc.Handler {
 	return func(_ context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p skillTargetParams
@@ -222,10 +298,34 @@ func ReadSkill(store SkillStore) rpc.Handler {
 			return nil, err
 		}
 		s, err := store.Read(scope, projectID, name)
-		if err != nil {
+		if err == nil {
+			return json.Marshal(skillReadResult{Skill: s})
+		}
+		if errors.Is(err, agentskills.ErrNotFound) {
 			return nil, skillErr(err)
 		}
-		return json.Marshal(s)
+		parseErr := err
+
+		raw, updatedAt, rawErr := store.ReadRaw(scope, projectID, name)
+		if rawErr != nil {
+			// Nothing readable is there at all — a SKILL.md that is a
+			// directory, a file over the size ceiling, a permissions
+			// problem. Report what the FIRST read said, which is the
+			// sentence about the document rather than about the byte
+			// stream, and let skillErr pick the code from it.
+			return nil, skillErr(parseErr)
+		}
+		return json.Marshal(skillReadResult{
+			Skill: agentskills.Skill{
+				Name: name, Scope: scope, ProjectID: projectID,
+				Author:    agentskills.AuthorWriter,
+				Enabled:   true,
+				Body:      raw,
+				UpdatedAt: updatedAt,
+				BodyRunes: len([]rune(raw)),
+			},
+			ParseError: parseErr.Error(),
+		})
 	}
 }
 
@@ -294,15 +394,29 @@ func WriteSkill(store SkillStore, history SkillHistory, clock func() int64, noti
 		name := strings.TrimSpace(p.Name)
 
 		// Whether this is a create or an edit decides the reason the version
-		// row carries, and what an absent enabled flag falls back to. A read
-		// failure that is not "no such skill" is a real problem — writing over
-		// something unreadable is how a half-broken file becomes a lost one.
+		// row carries, and what an absent enabled flag falls back to.
+		//
+		// A file that is there but does NOT read as a skill counts as an
+		// edit, and the save goes through. The first version of this
+		// refused it — "writing over something unreadable is how a
+		// half-broken file becomes a lost one" — and that was backwards: a
+		// SKILL.md with broken frontmatter is exactly the file a writer
+		// opens Settings to fix, refusing the save left them with a skill
+		// they could see, could not repair and could not remove, and what
+		// they are overwriting it with is the repaired version of the same
+		// document. Anything genuinely wrong with the path (a permissions
+		// problem, a directory where the SKILL.md belongs) fails in
+		// Store.Write a few lines below, with its own message, so nothing
+		// is silently lost by not pre-judging it here.
 		enabled := true
 		reason := agentskills.ReasonCreated
-		if cur, err := store.Read(scope, projectID, name); err == nil {
+		switch cur, err := store.Read(scope, projectID, name); {
+		case err == nil:
 			enabled, reason = cur.Enabled, agentskills.ReasonEdited
-		} else if !errors.Is(err, agentskills.ErrNotFound) {
-			return nil, skillErr(err)
+		case errors.Is(err, agentskills.ErrNotFound):
+			// A create. The defaults above are already right.
+		default:
+			reason = agentskills.ReasonEdited
 		}
 		if p.Enabled != nil {
 			enabled = *p.Enabled
@@ -340,15 +454,28 @@ type deleteSkillResult struct {
 
 // DeleteSkill returns a handler for skills.delete.
 //
-// The skill is read BEFORE it is removed, so the version row marked deleted
+// The skill is read before it is removed, so the version row marked deleted
 // carries the last body rather than an empty one — that is what makes a
 // deletion restorable straight from the row that records it, instead of the
 // writer having to know to reach for the row before it (History.Record's doc
 // comment is explicit about this, and skills.restore depends on it).
 //
-// A name that is not there is a refusal, not a silent success: a writer who
-// deleted the wrong thing has to be told, the same rule Store.Delete follows
-// for the same reason.
+// That read is BEST EFFORT, and this is the correction of the first
+// version, which treated it as a precondition. A SKILL.md whose frontmatter
+// the writer broke by hand does not parse, so the read failed, so the
+// deletion was refused — and the writer was left with a file that Settings
+// listed as broken and offered no way to remove. A delete has no business
+// parsing anything: the caller asked for the name to be gone. So the read
+// only decides what the version row can SAY; whether the skill goes is
+// Store.Delete's call, and it is the one that refuses a name that is not
+// there (a writer who deleted the wrong thing has to be told, not
+// silently succeeded at).
+//
+// When the file could not be read, no version row is recorded and the
+// result says versioned:false. That is the honest answer: there was no
+// readable document to snapshot, so this deletion cannot be undone from the
+// history — and a row carrying an empty body would be worse, since it would
+// appear in the version list as a restore point that restores nothing.
 func DeleteSkill(store SkillStore, history SkillHistory, clock func() int64, notify func(method string, params any)) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p skillTargetParams
@@ -359,15 +486,15 @@ func DeleteSkill(store SkillStore, history SkillHistory, clock func() int64, not
 		if err != nil {
 			return nil, err
 		}
-		cur, err := store.Read(scope, projectID, name)
-		if err != nil {
-			return nil, skillErr(err)
-		}
+		cur, readErr := store.Read(scope, projectID, name)
 		if err := store.Delete(scope, projectID, name); err != nil {
 			return nil, skillErr(err)
 		}
 		now := clock()
-		versioned := recordVersion(ctx, history, cur, agentskills.ReasonDeleted, now)
+		versioned := false
+		if readErr == nil {
+			versioned = recordVersion(ctx, history, cur, agentskills.ReasonDeleted, now)
+		}
 		notifySkillChanged(notify, scope, projectID, name)
 		return json.Marshal(deleteSkillResult{Versioned: versioned})
 	}
@@ -433,12 +560,18 @@ func SkillVersions(history SkillHistory) rpc.Handler {
 		if err != nil {
 			return nil, badParams(err)
 		}
-		versions, err := history.List(ctx, scope, strings.TrimSpace(p.ProjectID), strings.TrimSpace(p.Name), p.Limit)
+		projectID := strings.TrimSpace(p.ProjectID)
+		if err := refuseScopeMismatch(scope, projectID); err != nil {
+			return nil, err
+		}
+		versions, err := history.List(ctx, scope, projectID, strings.TrimSpace(p.Name), p.Limit)
 		if err != nil {
-			// A scope/work-id mismatch (a writer skill handed a work id)
-			// comes back from here as a refusal the caller can fix, not a
-			// database failure.
-			return nil, skillErr(err)
+			// Everything the caller could have got wrong was refused above,
+			// so anything left is the database failing — an internal error,
+			// not a bad request. Routing it through skillErr (which reads a
+			// non-filesystem error as "the writer can fix this") answered a
+			// broken SQLite file with -32602 and a message about skills.
+			return nil, historyErr(err)
 		}
 		out := skillVersionsResult{Versions: make([]skillVersion, 0, len(versions))}
 		for _, v := range versions {
@@ -453,11 +586,6 @@ func SkillVersions(history SkillHistory) rpc.Handler {
 type restoreSkillParams struct {
 	ID string `json:"id"`
 }
-
-// restoreLookback is how far back RestoreSkill reads a skill's history to
-// find an intervening deletion. It is History.List's own ceiling, so this
-// asks for as much as that call will ever give.
-const restoreLookback = 200
 
 // RestoreSkill returns a handler for skills.restore: it puts a version's
 // body back.
@@ -477,16 +605,11 @@ const restoreLookback = 200
 //     is marked created, because that is what just happened — the skill did
 //     not exist a moment ago.
 //
-//   - A DIFFERENT skill now stands at that name: the name was deleted and
-//     then reused for something else. The old version still addresses that
-//     name, but the document there is not the one it came from, and writing
-//     over it would destroy work the writer never offered up. This is
-//     refused, with a message saying what to do (delete the current skill
-//     first). It is detected by the one signal that exists — a deletion
-//     recorded AFTER the version being restored, with a skill standing at
-//     the name again now. Beyond restoreLookback versions the signal is out
-//     of reach and the restore proceeds; that is a limit of the log, not a
-//     judgement.
+//   - A skill stands at that name that THIS LOG HAS NEVER SEEN. Writing
+//     over it would destroy a document nothing else holds a copy of, so it
+//     is refused. See refuseUnrecordedSkill for how that is told apart from
+//     the ordinary case, and for what changed from the first version of
+//     this check.
 //
 // The enabled flag is NOT restored, because skill_snapshots has no column
 // for it: scanVersion leaves Skill.Enabled at its zero value, so writing a
@@ -516,13 +639,23 @@ func RestoreSkill(store SkillStore, history SkillHistory, clock func() int64, no
 
 		enabled := true
 		reason := agentskills.ReasonCreated
-		if cur, err := store.Read(scope, projectID, name); err == nil {
+		switch cur, err := store.Read(scope, projectID, name); {
+		case err == nil:
 			enabled, reason = cur.Enabled, agentskills.ReasonEdited
-			if err := refuseIfReused(ctx, history, version); err != nil {
+			if err := refuseUnrecordedSkill(ctx, history, version); err != nil {
 				return nil, err
 			}
-		} else if !errors.Is(err, agentskills.ErrNotFound) {
-			return nil, skillErr(err)
+		case errors.Is(err, agentskills.ErrNotFound):
+			// Gone. This restore recreates it; see above.
+		default:
+			// Something is at that name and it is not a readable skill —
+			// broken frontmatter, or a path problem. Either way the
+			// restore is a repair of it, and it has to pass the same check
+			// as any other live document.
+			reason = agentskills.ReasonEdited
+			if err := refuseUnrecordedSkill(ctx, history, version); err != nil {
+				return nil, err
+			}
 		}
 		want.Enabled = enabled
 
@@ -537,30 +670,65 @@ func RestoreSkill(store SkillStore, history SkillHistory, clock func() int64, no
 	}
 }
 
-// refuseIfReused reports whether the skill standing at the version's name is
-// a different document from the one the version came from — which is exactly
-// the case where the name was deleted and then reused.
+// refuseUnrecordedSkill refuses a restore that would write over a document
+// this history does not hold a copy of.
 //
-// A history read that fails is not a refusal: the version's own target is
-// still valid, and blocking a restore because the log could not be scanned
+// The question a restore has to answer before it overwrites anything is not
+// "is the skill standing here the same one this version came from" — that is
+// unanswerable, because skill_snapshots has no lineage column and a name
+// that was deleted and recreated looks identical in the log whether the
+// recreation was a restore of the same skill or somebody's brand new one.
+// The answerable question, and the one that actually matters, is: if this
+// restore overwrites what is there, can it be got back?
+//
+// Every change made through this surface or through mcphost records a row
+// carrying the whole body, and this restore records one too, so the answer
+// is normally yes: reverting is undoable by reverting again, and the writer
+// browsing the version list can see both documents' rows sitting in it. The
+// case where the answer is NO is precise and detectable: the last thing this
+// log recorded for the name is its DELETION, and yet a skill is standing
+// there. Nothing recorded it, so nothing holds it, and overwriting it
+// destroys it for good. That is a file the writer created by hand in the
+// skills folder (which the store is deliberately built to support), one
+// restored from a backup, or one whose version row did not land.
+//
+// This replaces a check that asked "is there a deletion row newer than this
+// version, by created_at", which was wrong in both directions:
+//
+//   - It refused far too much. After any delete-then-restore cycle, every
+//     version older than the deletion became permanently unrestorable, with
+//     a message asserting a different skill stood at the name when it was
+//     the same one, restored a moment earlier.
+//
+//   - It let the destructive case through. created_at is milliseconds, the
+//     comparison was strictly greater, and a deletion recorded in the same
+//     millisecond as the version being restored therefore did not count —
+//     so a genuinely unrecorded skill at that name was silently overwritten.
+//     Past 200 rows the check could not see the deletion at all.
+//
+// Both directions came from the same root: a millisecond clock is not an
+// ordering, and a windowed List is not a history. This asks History.Newest
+// instead, which reads one row ordered by rowid — a total order, no ties,
+// no window, unchanged by however many versions the skill accumulates.
+//
+// A history read that FAILS is not a refusal: the version's own target is
+// still valid, and blocking a restore because the log could not be read
 // would make an unrelated database problem look like a rejected request.
-func refuseIfReused(ctx context.Context, history SkillHistory, version agentskills.Version) error {
+// The same goes for a name with no history at all, which cannot happen from
+// here (the version being restored is itself a row) but must not become a
+// refusal if it ever does.
+func refuseUnrecordedSkill(ctx context.Context, history SkillHistory, version agentskills.Version) error {
 	s := version.Skill
-	rows, err := history.List(ctx, s.Scope, s.ProjectID, s.Name, restoreLookback)
+	newest, err := history.Newest(ctx, s.Scope, s.ProjectID, s.Name)
 	if err != nil {
 		return nil
 	}
-	for _, row := range rows {
-		if row.ID == version.ID || row.Reason != agentskills.ReasonDeleted {
-			continue
-		}
-		if row.CreatedAt > version.CreatedAt {
-			return refuse("the skill %q this version belongs to was deleted, and a different skill now "+
-				"stands at that name; delete that one first if you mean to bring this version back",
-				s.Name)
-		}
+	if newest.Reason != agentskills.ReasonDeleted {
+		return nil
 	}
-	return nil
+	return refuse("a skill is standing at %q that this history has no copy of: the last thing recorded "+
+		"for that name is its deletion, so restoring over it would lose it for good; delete it first "+
+		"if you mean to bring this version back", s.Name)
 }
 
 // ---- shared write tail ----------------------------------------------------

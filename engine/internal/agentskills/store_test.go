@@ -985,3 +985,58 @@ func TestWriteFollowsASymlinkedSkillDirectory(t *testing.T) {
 		t.Errorf("body at the link's target = %q, want the edit", got.Body)
 	}
 }
+
+// ---- ReadRaw --------------------------------------------------------------
+
+// Read not guarding was only half of "a broken skill must be visible AND
+// fixable": it still parses, so the commonest way to break a SKILL.md by
+// hand — its frontmatter — left the file unopenable, and a writer looking at
+// the diagnostic in Settings had nothing to edit. ReadRaw is the other half.
+func TestReadRawOpensAFileWhoseFrontmatterIsBroken(t *testing.T) {
+	st, home := newTestStore(t)
+	const broken = "name: no-fences\ndescription: 깨졌다\n\nbody text\n"
+	writeRaw(t, filepath.Join(home, "skills", "busted", skillFile), broken)
+
+	if _, err := st.Read(ScopeWriter, "", "busted"); !errors.Is(err, ErrNoFrontmatter) {
+		t.Fatalf("Read err = %v, want ErrNoFrontmatter — this test is about the file Read cannot return", err)
+	}
+
+	got, updatedAt, err := st.ReadRaw(ScopeWriter, "", "busted")
+	if err != nil {
+		t.Fatalf("ReadRaw: %v", err)
+	}
+	if got != broken {
+		t.Errorf("ReadRaw = %q, want the file byte for byte", got)
+	}
+	if updatedAt <= 0 {
+		t.Errorf("updatedAt = %d, want the file's modification time", updatedAt)
+	}
+}
+
+func TestReadRawOnAMissingSkillIsErrNotFound(t *testing.T) {
+	st, _ := newTestStore(t)
+	if _, _, err := st.ReadRaw(ScopeWriter, "", "nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// ReadRaw is a narrower door, not an open one: the name still goes through
+// skillPaths, so nothing a caller writes can walk out of the skills folder.
+func TestReadRawRefusesAPathEscape(t *testing.T) {
+	st, home := newTestStore(t)
+	writeRaw(t, filepath.Join(home, "secrets.md"), "not yours\n")
+	if _, _, err := st.ReadRaw(ScopeWriter, "", "../secrets"); err == nil {
+		t.Fatal("a name that climbs out of the skills folder must be refused")
+	}
+}
+
+// And the file-size ceiling still applies: readCapped is what stops one
+// hand-placed gigabyte from deciding how much memory this process allocates,
+// and reading raw must not become the way around it.
+func TestReadRawKeepsTheFileSizeCeiling(t *testing.T) {
+	st, home := newTestStore(t)
+	writeRaw(t, filepath.Join(home, "skills", "huge", skillFile), strings.Repeat("a", maxSkillFileBytes+1))
+	if _, _, err := st.ReadRaw(ScopeWriter, "", "huge"); !errors.Is(err, ErrTooLong) {
+		t.Errorf("err = %v, want ErrTooLong", err)
+	}
+}

@@ -1030,9 +1030,18 @@ export interface SkillSummary {
   body_budget: number;
 }
 
-/** One full SKILL.md, as skills.read returns it. */
+/** One full SKILL.md, as skills.read returns it.
+ *
+ *  parse_error is set only when the file on disk is not a readable skill —
+ *  frontmatter the writer broke by hand, which is the same file skills.list
+ *  reports as a diagnostic. Then `body` is the file VERBATIM (every byte,
+ *  broken frontmatter included), `description` is empty and `name` is the
+ *  folder's, because the file's own could not be read. The pane must show
+ *  the message: a writer handed that body with no explanation would save it
+ *  straight back and wonder why the skill still does not appear. */
 export interface Skill extends SkillSummary {
   body: string;
+  parse_error?: string;
 }
 
 /** skills.write and skills.restore return the stored skill plus one field the

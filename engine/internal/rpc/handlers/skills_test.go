@@ -286,6 +286,115 @@ func TestReadSkillOnAMissingNameIsARefusalNotA500(t *testing.T) {
 	}
 }
 
+// The rule Task 3 is built around, one level up: a skill broken by hand is
+// visible in Settings AND fixable there. Frontmatter is what a writer
+// actually breaks — a fence deleted, a stray tab in the YAML — and such a
+// file does not parse, so every one of these three methods used to answer
+// "agentskills: no frontmatter" and nothing else. The skill was listed as
+// broken and could not be opened, repaired or removed from inside the app.
+//
+// All three are checked here in one place, against one broken file each,
+// because the bug was one bug: a delete and a write that had no business
+// parsing, and a read that had to stop.
+func TestABrokenSkillCanBeReadRepairedAndRemoved(t *testing.T) {
+	broken := "name: no-fences\ndescription: 프론트매터가 깨졌다\n\n본문이라고 쓴 것\n"
+
+	t.Run("read returns what is on disk", func(t *testing.T) {
+		ctx, st, _, _ := realSkills(t)
+		dir, err := st.Dir(agentskills.ScopeWriter, "")
+		if err != nil {
+			t.Fatalf("Dir: %v", err)
+		}
+		writeRawSkill(t, filepath.Join(dir, "busted"), broken)
+
+		raw, err := ReadSkill(st)(ctx, json.RawMessage(`{"scope":"writer","name":"busted"}`))
+		if err != nil {
+			t.Fatalf("a skill listed as broken must open, or it cannot be fixed: %v", err)
+		}
+		var got skillReadResult
+		if err := json.Unmarshal(raw, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got.Body != broken {
+			t.Errorf("body = %q, want the file verbatim — that is what the writer edits", got.Body)
+		}
+		if got.Name != "busted" {
+			t.Errorf("name = %q, want the folder's name; the file's own is unreadable", got.Name)
+		}
+		if got.ParseError == "" {
+			t.Error("parse_error must say what is wrong, or the writer saves it straight back")
+		}
+		if got.BodyRunes != len([]rune(broken)) {
+			t.Errorf("body_runes = %d, want %d", got.BodyRunes, len([]rune(broken)))
+		}
+	})
+
+	t.Run("write replaces it with a good one", func(t *testing.T) {
+		ctx, st, hist, _ := realSkills(t)
+		dir, err := st.Dir(agentskills.ScopeWriter, "")
+		if err != nil {
+			t.Fatalf("Dir: %v", err)
+		}
+		writeRawSkill(t, filepath.Join(dir, "busted"), broken)
+
+		params, _ := json.Marshal(map[string]any{
+			"scope": "writer", "name": "busted", "description": "고쳤다", "body": "본문\n",
+		})
+		if _, err := WriteSkill(st, hist, clockAt(2000), nil)(ctx, params); err != nil {
+			t.Fatalf("the repaired file must save over the broken one: %v", err)
+		}
+		fixed, err := st.Read(agentskills.ScopeWriter, "", "busted")
+		if err != nil {
+			t.Fatalf("the repaired skill must now parse: %v", err)
+		}
+		if fixed.Body != "본문\n" || fixed.Description != "고쳤다" {
+			t.Errorf("stored skill = %+v", fixed)
+		}
+		// It is an edit of the file that was there, not a create.
+		versions, err := hist.List(ctx, agentskills.ScopeWriter, "", "busted", 10)
+		if err != nil {
+			t.Fatalf("history list: %v", err)
+		}
+		if len(versions) != 1 || versions[0].Reason != agentskills.ReasonEdited {
+			t.Errorf("versions = %+v, want one row marked %q", versions, agentskills.ReasonEdited)
+		}
+	})
+
+	t.Run("delete removes it", func(t *testing.T) {
+		ctx, st, hist, _ := realSkills(t)
+		dir, err := st.Dir(agentskills.ScopeWriter, "")
+		if err != nil {
+			t.Fatalf("Dir: %v", err)
+		}
+		writeRawSkill(t, filepath.Join(dir, "busted"), broken)
+
+		rawResult, err := DeleteSkill(st, hist, clockAt(2000), nil)(
+			ctx, json.RawMessage(`{"scope":"writer","name":"busted"}`))
+		if err != nil {
+			t.Fatalf("the caller asked for the name to be gone; parsing is not delete's business: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "busted")); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("the directory must be gone; stat gave %v", err)
+		}
+		// Nothing readable was there to snapshot, and the result says so
+		// rather than promising a restore point that restores nothing.
+		var got deleteSkillResult
+		if err := json.Unmarshal(rawResult, &got); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if got.Versioned {
+			t.Error("versioned = true, but no readable body was there to record")
+		}
+		versions, err := hist.List(ctx, agentskills.ScopeWriter, "", "busted", 10)
+		if err != nil {
+			t.Fatalf("history list: %v", err)
+		}
+		if len(versions) != 0 {
+			t.Errorf("versions = %+v, want no row rather than an empty one", versions)
+		}
+	})
+}
+
 func TestReadSkillRefusesAnUnknownScope(t *testing.T) {
 	ctx, st, _, _ := realSkills(t)
 	_, err := ReadSkill(st)(ctx, json.RawMessage(`{"scope":"nonsense","name":"x"}`))
@@ -608,6 +717,26 @@ func TestSkillVersionsRefusesAWriterScopeWithAWorkID(t *testing.T) {
 	wantInvalidParams(t, err)
 }
 
+// The brief's split, in the one method that was getting it wrong: a scope
+// paired with the wrong work id is the caller's mistake (-32602, above), and
+// a database that will not read is the server's (-32603). This used to send
+// both through the same mapping, so an unreadable SQLite file came back as
+// "your request was invalid" with a sentence about skills — and the pane
+// would have shown the writer a refusal to act on that they could not act
+// on.
+func TestSkillVersionsReportsADatabaseFailureAsInternal(t *testing.T) {
+	ctx, _, _, _ := realSkills(t)
+	_, err := SkillVersions(failingHistory{})(ctx, json.RawMessage(`{"scope":"writer","name":"x"}`))
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	me := methodError(t, err)
+	if me.Code != rpc.CodeInternalError {
+		t.Errorf("code = %d, want %d — a broken database is not a bad request",
+			me.Code, rpc.CodeInternalError)
+	}
+}
+
 // ---- skills.restore -------------------------------------------------------
 
 func TestRestoreSkillPutsAnOlderBodyBack(t *testing.T) {
@@ -631,7 +760,8 @@ func TestRestoreSkillPutsAnOlderBodyBack(t *testing.T) {
 	oldest := versions[len(versions)-1]
 
 	var gotMethod string
-	notify := func(m string, _ any) { gotMethod = m }
+	var gotPayload any
+	notify := func(m string, p any) { gotMethod, gotPayload = m, p }
 	raw, err := RestoreSkill(st, hist, clockAt(3000), notify)(
 		ctx, json.RawMessage(`{"id":`+quote(oldest.ID)+`}`))
 	if err != nil {
@@ -646,6 +776,20 @@ func TestRestoreSkillPutsAnOlderBodyBack(t *testing.T) {
 	}
 	if gotMethod != "skills.changed" {
 		t.Errorf("notify method = %q", gotMethod)
+	}
+	// The payload too, not just the method: mcphost's vocabulary is
+	// agent/external, and a revert made by the person at the keyboard is
+	// neither. A listener that colours the two differently reads this field.
+	p, ok := gotPayload.(skillChangedPayload)
+	if !ok {
+		t.Fatalf("payload = %+v (%T), want a skillChangedPayload", gotPayload, gotPayload)
+	}
+	// The literal, not the sourceWriter constant: asserting a constant
+	// against itself passes however the constant is changed, which is no
+	// assertion at all. "writer" is the value on the wire that the renderer
+	// and mcphost both already agree on.
+	if p.Source != "writer" || p.Name != "reverted" || p.Scope != "writer" {
+		t.Errorf("payload = %+v, want a writer-sourced change to the writer-scope skill %q", p, "reverted")
 	}
 	back, err := st.Read(agentskills.ScopeWriter, "", "reverted")
 	if err != nil {
@@ -751,12 +895,17 @@ func TestRestoreKeepsTheLiveEnabledFlag(t *testing.T) {
 	}
 }
 
-// A name can be deleted and reused. The old version row still addresses that
-// name, but the skill standing there now is a DIFFERENT document, and
-// restoring over it would destroy work the writer never asked to lose. So
-// the restore is refused, with the sentence that says how to go through with
-// it deliberately.
-func TestRestoreRefusesWhenADifferentSkillNowStandsAtThatName(t *testing.T) {
+// THE DESTRUCTIVE ONE. A deletion recorded in the same millisecond as the
+// version being restored, and a skill standing at that name that this
+// history never recorded — a file the writer made by hand in the skills
+// folder, which the store is deliberately built to allow.
+//
+// The first version of this check compared created_at with a strict >, so a
+// deletion sharing the version's millisecond did not count, and the restore
+// wrote straight over a document nothing holds a copy of. A millisecond
+// clock is not an ordering; the rowid is. Restoring must be refused here,
+// and the file on disk must still be there afterwards.
+func TestRestoreRefusesASkillTheHistoryNeverRecorded(t *testing.T) {
 	ctx, st, hist, _ := realSkills(t)
 	original, _ := json.Marshal(map[string]any{
 		"scope": "writer", "name": "recycled", "description": "설명", "body": "옛날 본문\n",
@@ -770,16 +919,29 @@ func TestRestoreRefusesWhenADifferentSkillNowStandsAtThatName(t *testing.T) {
 	}
 	old := versions[0]
 
-	if _, err := DeleteSkill(st, hist, clockAt(2000), nil)(
+	// The same clock reading as the write above: the deletion lands in the
+	// version's own millisecond, which is exactly what a fixed clock, a fast
+	// path or an unlucky moment produces.
+	if _, err := DeleteSkill(st, hist, clockAt(1000), nil)(
 		ctx, json.RawMessage(`{"scope":"writer","name":"recycled"}`)); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	reused, _ := json.Marshal(map[string]any{
-		"scope": "writer", "name": "recycled", "description": "완전히 다른 스킬", "body": "새 본문\n",
-	})
-	if _, err := WriteSkill(st, hist, clockAt(3000), nil)(ctx, reused); err != nil {
-		t.Fatalf("write: %v", err)
+	deletion, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "recycled")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
 	}
+	if deletion.CreatedAt != old.CreatedAt {
+		t.Fatalf("this test is about a same-millisecond deletion; got %d vs %d",
+			deletion.CreatedAt, old.CreatedAt)
+	}
+
+	// A different skill put at that name WITHOUT going through this surface,
+	// so nothing recorded it: the history holds no copy, and overwriting it
+	// would lose it for good.
+	seedSkill(t, st, agentskills.Skill{
+		Name: "recycled", Scope: agentskills.ScopeWriter,
+		Description: "완전히 다른 스킬", Enabled: true, Body: "손으로 쓴 본문\n",
+	}, 3000)
 
 	_, err = RestoreSkill(st, hist, clockAt(4000), nil)(ctx, json.RawMessage(`{"id":`+quote(old.ID)+`}`))
 	me := wantInvalidParams(t, err)
@@ -790,8 +952,126 @@ func TestRestoreRefusesWhenADifferentSkillNowStandsAtThatName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if live.Body != "새 본문\n" {
+	if live.Body != "손으로 쓴 본문\n" {
 		t.Errorf("the skill standing at that name must be untouched; got %q", live.Body)
+	}
+}
+
+// THE FALSE POSITIVE. Deleting a skill and restoring it back is an ordinary
+// thing to do, and every version older than that deletion must still be
+// restorable afterwards.
+//
+// The first version of this check refused them all, permanently, saying "a
+// different skill now stands at that name" when it was the same skill,
+// brought back a moment earlier by the writer sitting right there. A
+// deletion row older than nothing at all is not evidence of a reused name.
+func TestRestoreAllowsAnOlderVersionAfterADeleteAndRestoreCycle(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	for i, body := range []string{"원래 본문\n", "고친 본문\n"} {
+		params, _ := json.Marshal(map[string]any{
+			"scope": "writer", "name": "cycled", "description": "설명", "body": body,
+		})
+		if _, err := WriteSkill(st, hist, clockAt(1000+int64(i)*1000), nil)(ctx, params); err != nil {
+			t.Fatalf("write %d: %v", i, err)
+		}
+	}
+	if _, err := DeleteSkill(st, hist, clockAt(3000), nil)(
+		ctx, json.RawMessage(`{"scope":"writer","name":"cycled"}`)); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	deletion, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "cycled")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+	// Bring it back, the way a writer who deleted the wrong thing does.
+	if _, err := RestoreSkill(st, hist, clockAt(4000), nil)(
+		ctx, json.RawMessage(`{"id":`+quote(deletion.ID)+`}`)); err != nil {
+		t.Fatalf("restoring the deleted skill: %v", err)
+	}
+
+	versions, err := hist.List(ctx, agentskills.ScopeWriter, "", "cycled", 10)
+	if err != nil {
+		t.Fatalf("history list: %v", err)
+	}
+	oldest := versions[len(versions)-1]
+	if oldest.Skill.Body != "원래 본문\n" {
+		t.Fatalf("expected the first write as the oldest row; got %q", oldest.Skill.Body)
+	}
+	raw, err := RestoreSkill(st, hist, clockAt(5000), nil)(ctx, json.RawMessage(`{"id":`+quote(oldest.ID)+`}`))
+	if err != nil {
+		t.Fatalf("a version older than the deletion must still be restorable: %v", err)
+	}
+	var got skillWriteResult
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Body != "원래 본문\n" {
+		t.Errorf("body = %q, want the version that was asked for", got.Body)
+	}
+}
+
+// A name that was deleted and then reused THROUGH THIS SURFACE is a restore
+// that goes ahead, and this is a deliberate reversal of the first version's
+// ruling.
+//
+// The old rule refused it to protect the document standing there — but that
+// document is in the same log, one row down, carrying its whole body, and
+// this restore records a row of its own. Nothing is lost: the writer who
+// reverts too far reverts back. Refusing instead cost the far worse thing,
+// since the same signal could not tell this apart from a delete-and-restore
+// of the same skill, and every version older than any deletion became
+// unrestorable forever. What is still refused is the case where the log
+// genuinely cannot give the document back — see the test above.
+func TestRestoreOverAReusedNameIsAllowedAndUndoable(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	original, _ := json.Marshal(map[string]any{
+		"scope": "writer", "name": "recycled", "description": "설명", "body": "옛날 본문\n",
+	})
+	if _, err := WriteSkill(st, hist, clockAt(1000), nil)(ctx, original); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	first, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "recycled")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+	if _, err := DeleteSkill(st, hist, clockAt(2000), nil)(
+		ctx, json.RawMessage(`{"scope":"writer","name":"recycled"}`)); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	reused, _ := json.Marshal(map[string]any{
+		"scope": "writer", "name": "recycled", "description": "완전히 다른 스킬", "body": "새 본문\n",
+	})
+	if _, err := WriteSkill(st, hist, clockAt(3000), nil)(ctx, reused); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	reusedRow, err := hist.Newest(ctx, agentskills.ScopeWriter, "", "recycled")
+	if err != nil {
+		t.Fatalf("newest: %v", err)
+	}
+
+	if _, err := RestoreSkill(st, hist, clockAt(4000), nil)(
+		ctx, json.RawMessage(`{"id":`+quote(first.ID)+`}`)); err != nil {
+		t.Fatalf("the log holds both documents, so this must go through: %v", err)
+	}
+	live, err := st.Read(agentskills.ScopeWriter, "", "recycled")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if live.Body != "옛날 본문\n" {
+		t.Errorf("body = %q, want the restored one", live.Body)
+	}
+	// And the document that was overwritten comes straight back, which is
+	// the whole reason this is allowed rather than refused.
+	if _, err := RestoreSkill(st, hist, clockAt(5000), nil)(
+		ctx, json.RawMessage(`{"id":`+quote(reusedRow.ID)+`}`)); err != nil {
+		t.Fatalf("undoing the restore: %v", err)
+	}
+	live, err = st.Read(agentskills.ScopeWriter, "", "recycled")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if live.Body != "새 본문\n" {
+		t.Errorf("body = %q, want the overwritten document back", live.Body)
 	}
 }
 
@@ -801,6 +1081,56 @@ func TestRestoreRefusesAnUnknownVersion(t *testing.T) {
 	me := wantInvalidParams(t, err)
 	if !strings.Contains(me.Message, "no-such-version") {
 		t.Errorf("the message must name the id; got %q", me.Message)
+	}
+}
+
+// ---- the three mutations, when they refuse --------------------------------
+
+// A refused mutation must not tell the UI something changed. #97 shipped
+// this test for its own surface (TestEditSkillDoesNotNotifyOnFailure is the
+// mcphost twin) and it belongs here for the same reason: skills.changed is
+// what makes every other window reload, and a notification for a save that
+// did not happen sends them all to re-read a file nobody touched — or, on a
+// delete that was refused, to drop a skill from the list that is still
+// there.
+//
+// All three mutations are covered, each through a refusal it can actually
+// reach.
+func TestARefusedSkillMutationEmitsNothing(t *testing.T) {
+	for name, tc := range map[string]struct {
+		handler func(*agentskills.Store, *agentskills.History, func(string, any)) rpc.Handler
+		params  string
+	}{
+		"write refuses an invisible character": {
+			handler: func(st *agentskills.Store, h *agentskills.History, n func(string, any)) rpc.Handler {
+				return WriteSkill(st, h, clockAt(1000), n)
+			},
+			params: `{"scope":"writer","name":"pasted","description":"설명","body":"보이지 않는 문자​가 있다"}`,
+		},
+		"delete refuses a name that is not there": {
+			handler: func(st *agentskills.Store, h *agentskills.History, n func(string, any)) rpc.Handler {
+				return DeleteSkill(st, h, clockAt(1000), n)
+			},
+			params: `{"scope":"writer","name":"never-existed"}`,
+		},
+		"restore refuses an unknown version": {
+			handler: func(st *agentskills.Store, h *agentskills.History, n func(string, any)) rpc.Handler {
+				return RestoreSkill(st, h, clockAt(1000), n)
+			},
+			params: `{"id":"no-such-version"}`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, st, hist, _ := realSkills(t)
+			notified := ""
+			notify := func(m string, _ any) { notified = m }
+			if _, err := tc.handler(st, hist, notify)(ctx, json.RawMessage(tc.params)); err == nil {
+				t.Fatal("this case must refuse, or it is testing nothing")
+			}
+			if notified != "" {
+				t.Errorf("a refused mutation emitted %q; nothing changed", notified)
+			}
+		})
 	}
 }
 
@@ -836,6 +1166,10 @@ func (failingHistory) Record(context.Context, agentskills.Skill, string, int64) 
 
 func (failingHistory) List(context.Context, agentskills.Scope, string, string, int) ([]agentskills.Version, error) {
 	return nil, errors.New("the database is not readable")
+}
+
+func (failingHistory) Newest(context.Context, agentskills.Scope, string, string) (agentskills.Version, error) {
+	return agentskills.Version{}, errors.New("the database is not readable")
 }
 
 func (failingHistory) Get(context.Context, string) (agentskills.Version, error) {

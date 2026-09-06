@@ -369,3 +369,95 @@ func TestRecordRejectsAnUnknownReason(t *testing.T) {
 		t.Errorf("len(versions) = %d, want 0 — a rejected Record must not write a row", len(versions))
 	}
 }
+
+// Newest is the question List cannot be trusted with: what is the last
+// thing recorded for this name? List answers it only for as long as the
+// window it was called with covers the table, and skills.restore's reuse
+// check was written that way and could be walked past by adding rows.
+//
+// What "last" means is the point of both cases here. created_at is a
+// millisecond clock reading and cannot order these rows: in the first it
+// has run out of resolution, in the second it has gone backwards, which a
+// clock correction does and which nothing in Record prevents a caller from
+// producing. The rowid rises with every insert either way, so that is what
+// Newest sorts on — and only the second case can prove it, because with
+// equal timestamps SQLite may return the right row by accident.
+func TestNewestIsTheLastRowRecorded(t *testing.T) {
+	for name, tc := range map[string]struct{ created, deleted int64 }{
+		"the clock ran out of resolution": {created: 7000, deleted: 7000},
+		"the clock went backwards":        {created: 9000, deleted: 7000},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, h, _, _ := seedHistory(t)
+			if err := h.Record(ctx, writerSkill("x", "body"), ReasonCreated, tc.created); err != nil {
+				t.Fatalf("Record created: %v", err)
+			}
+			if err := h.Record(ctx, writerSkill("x", "body"), ReasonDeleted, tc.deleted); err != nil {
+				t.Fatalf("Record deleted: %v", err)
+			}
+
+			v, err := h.Newest(ctx, ScopeWriter, "", "x")
+			if err != nil {
+				t.Fatalf("Newest: %v", err)
+			}
+			if v.Reason != ReasonDeleted {
+				t.Errorf("reason = %q, want %q — the deletion was recorded last", v.Reason, ReasonDeleted)
+			}
+			// And the ordering it used is readable by the caller, which is
+			// the whole reason Version carries it: the deletion's rowid is
+			// above the creation's whatever the two clocks say.
+			rows, err := h.List(ctx, ScopeWriter, "", "x", 10)
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if len(rows) != 2 {
+				t.Fatalf("len(rows) = %d, want 2", len(rows))
+			}
+			seqs := map[string]int64{rows[0].Reason: rows[0].Seq, rows[1].Reason: rows[1].Seq}
+			if seqs[ReasonDeleted] <= seqs[ReasonCreated] {
+				t.Errorf("seqs = %+v; the row recorded later must carry the higher rowid", seqs)
+			}
+			if v.Seq != seqs[ReasonDeleted] {
+				t.Errorf("Newest seq = %d, want the deletion's rowid %d", v.Seq, seqs[ReasonDeleted])
+			}
+		})
+	}
+}
+
+// Newest reads one row no matter how much history there is. skills.restore
+// used to look back 200 versions for an intervening deletion, so 200 rows
+// of ordinary editing hid it and the restore overwrote a skill it should
+// have refused. That failure mode has to be gone by construction, not by a
+// bigger number.
+func TestNewestIsNotFooledByALongHistory(t *testing.T) {
+	ctx, h, _, _ := seedHistory(t)
+	if err := h.Record(ctx, writerSkill("x", "the deleted one"), ReasonDeleted, 1000); err != nil {
+		t.Fatalf("Record deleted: %v", err)
+	}
+	for i := 0; i < 205; i++ {
+		if err := h.Record(ctx, writerSkill("other", fmt.Sprintf("v%d", i)), ReasonEdited, int64(2000+i)); err != nil {
+			t.Fatalf("Record %d: %v", i, err)
+		}
+	}
+	v, err := h.Newest(ctx, ScopeWriter, "", "x")
+	if err != nil {
+		t.Fatalf("Newest: %v", err)
+	}
+	if v.Reason != ReasonDeleted || v.Skill.Body != "the deleted one" {
+		t.Errorf("got %+v, want the deletion — another skill's history must not hide it", v)
+	}
+}
+
+func TestNewestOnAnUnknownNameIsErrVersionNotFound(t *testing.T) {
+	ctx, h, _, _ := seedHistory(t)
+	if _, err := h.Newest(ctx, ScopeWriter, "", "never-recorded"); !errors.Is(err, ErrVersionNotFound) {
+		t.Errorf("err = %v, want ErrVersionNotFound", err)
+	}
+}
+
+func TestNewestRefusesAWriterScopeWithAWorkID(t *testing.T) {
+	ctx, h, _, projectID := seedHistory(t)
+	if _, err := h.Newest(ctx, ScopeWriter, projectID, "x"); err == nil {
+		t.Error("a writer skill with a work id must be refused, as List refuses it")
+	}
+}

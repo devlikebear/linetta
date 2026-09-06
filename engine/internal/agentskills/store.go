@@ -461,6 +461,48 @@ func (st *Store) Read(scope Scope, projectID, name string) (Skill, error) {
 	return s, nil
 }
 
+// ReadRaw returns a SKILL.md's text exactly as it is on disk, with the
+// modification time Read would have reported, and does not parse it.
+//
+// It is the last half of the rule Read's doc comment states: a broken skill
+// must be visible AND fixable. Read already refuses to GUARD, so an
+// over-long body can be opened and trimmed — but it still PARSES, and a
+// SKILL.md whose frontmatter the writer broke by hand (a missing fence, a
+// stray tab in the YAML) does not parse, so Read cannot hand back the one
+// thing that would let anyone repair it: the text. Settings listed such a
+// file as a diagnostic and then had no way to open it.
+//
+// Parsing stays where it is. Every caller that wants a Skill wants it
+// parsed, and a Read that returned half-filled structs for unparseable
+// files would push that check onto all of them. This is the narrower door
+// for the one caller that wants the bytes: it resolves the path through
+// skillPaths (so the same name and containment checks apply) and reads
+// through readCapped (so the same file-size ceiling applies), and that is
+// all it does.
+//
+// A file that is not there is ErrNotFound, matching Read.
+func (st *Store) ReadRaw(scope Scope, projectID, name string) (string, int64, error) {
+	_, file, err := st.skillPaths(scope, projectID, name)
+	if err != nil {
+		return "", 0, err
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", 0, fmt.Errorf("%w: %q", ErrNotFound, name)
+		}
+		return "", 0, err
+	}
+	if info.IsDir() {
+		return "", 0, fmt.Errorf("%w: %s is a directory, not a file", ErrPathOccupied, file)
+	}
+	raw, err := readCapped(file)
+	if err != nil {
+		return "", 0, err
+	}
+	return string(raw), info.ModTime().UnixMilli(), nil
+}
+
 // ---- Write ----------------------------------------------------------------
 
 // Write stores a skill, creating or replacing it, and returns what was
