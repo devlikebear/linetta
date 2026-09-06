@@ -120,3 +120,40 @@ func TestGuardAcceptsSkinTonedEmojiZWJSequence(t *testing.T) {
 		t.Errorf("Guard(body with skin-toned ZWJ emoji) = %v, want nil", err)
 	}
 }
+
+// Guard borrows agentmemory.ScreenInvisible, which now screens two document
+// types. Its refusals therefore name the code point and not a document type,
+// and Guard supplies the noun by wrapping — so what reaches an agent through
+// linetta_read_skill says "skill body", never "memory".
+func TestGuardRefusalNamesTheSkillAndTheCodePointNotAMemory(t *testing.T) {
+	err := Guard(Skill{
+		Name:        "tainted",
+		Description: "an ordinary description",
+		Body:        "보이지 않는 글자​가 있다",
+	})
+	if err == nil {
+		t.Fatal("Guard must refuse a zero-width space in a body")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "U+200B") {
+		t.Errorf("the message must name the offending code point so it can be deleted; got %q", msg)
+	}
+	if !strings.Contains(msg, "skill body") {
+		t.Errorf("the message must say which document it is about; got %q", msg)
+	}
+	if strings.Contains(msg, "in a memory") {
+		t.Errorf("a skill is not a memory; got %q", msg)
+	}
+
+	err = Guard(Skill{
+		Name:        "tainted",
+		Description: "설명​에도",
+		Body:        "ordinary body",
+	})
+	if err == nil {
+		t.Fatal("Guard must refuse a zero-width space in a description")
+	}
+	if msg := err.Error(); !strings.Contains(msg, "skill description") || strings.Contains(msg, "in a memory") {
+		t.Errorf("description refusal = %q", msg)
+	}
+}

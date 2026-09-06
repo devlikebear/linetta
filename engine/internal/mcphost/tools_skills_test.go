@@ -23,6 +23,14 @@ import (
 // directly, with no server, the way tools_memory_test.go drives editMemory.
 func newSkillDeps(t *testing.T) (context.Context, ToolDeps, string, string) {
 	t.Helper()
+	ctx, d, projectID, home, _ := newSkillDepsWithStore(t)
+	return ctx, d, projectID, home
+}
+
+// newSkillDepsWithStore is newSkillDeps plus the open database itself, for
+// the one test that has to break the history behind a live store.
+func newSkillDepsWithStore(t *testing.T) (context.Context, ToolDeps, string, string, *store.Store) {
+	t.Helper()
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -44,7 +52,7 @@ func newSkillDeps(t *testing.T) (context.Context, ToolDeps, string, string) {
 		Source:       SourceAgent,
 		Clock:        func() int64 { return 42 },
 	}
-	return ctx, d, p.ID, home
+	return ctx, d, p.ID, home, st
 }
 
 // mustCreateSkill is the happy path every other test starts from.
@@ -431,6 +439,19 @@ func TestReadSkillRefusesABodyTheGuardRejects(t *testing.T) {
 	if res == nil || !res.IsError {
 		t.Fatal("a body the guard rejects must not reach a model through this tool")
 	}
+	// agentmemory.ScreenInvisible is shared by two document types, and this
+	// is the first path that puts its message in front of a model. It must
+	// name the code point to fix and must not call a skill a memory.
+	msg := firstText(res)
+	if !strings.Contains(msg, "U+200B") {
+		t.Errorf("the refusal must name the offending code point; got %q", msg)
+	}
+	if strings.Contains(msg, "in a memory") {
+		t.Errorf("the refusal names the wrong document type — this is a skill, not a memory; got %q", msg)
+	}
+	if !strings.Contains(msg, "skill") {
+		t.Errorf("the refusal must say which document it is about; got %q", msg)
+	}
 }
 
 func TestReadSkillFailuresAreToolErrorsNotTransportErrors(t *testing.T) {
@@ -515,5 +536,158 @@ func TestSkillToolsRefuseWhenTheStoreIsMissing(t *testing.T) {
 	res, _, err = d.readSkill(ctx, nil, readSkillInput{Scope: "writer", Name: "x"})
 	if err != nil || res == nil || !res.IsError {
 		t.Errorf("readSkill: err=%v res=%+v", err, res)
+	}
+}
+
+// A patch carrying replace but no find is a half-formed edit: the agent named
+// the new text and forgot to say what it replaces. Before this it "succeeded"
+// — replace was dropped on the floor, any description alongside it was
+// applied, and the agent was told the edit landed.
+func TestEditSkillRefusesReplaceWithNoFind(t *testing.T) {
+	ctx, d, _, _ := newSkillDeps(t)
+	mustCreateSkill(t, ctx, d, editSkillInput{
+		Action: "create", Scope: "writer", Name: "pacing", Description: "속도", Body: "옛 본문"})
+
+	// With a description alongside it, which is what made this silent: the
+	// description gave the call something to change, so it reported success.
+	res, _, err := d.editSkill(ctx, nil, editSkillInput{
+		Action: "patch", Scope: "writer", Name: "pacing",
+		Replace: "새 본문", Description: "더 정확한 설명"})
+	if err != nil {
+		t.Fatalf("transport error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("replace with no find must be refused, not silently dropped")
+	}
+	if msg := firstText(res); !strings.Contains(msg, "find") {
+		t.Errorf("the message must name what is missing; got %q", msg)
+	}
+	// And nothing may have changed on the way to that refusal.
+	got, err := d.Skills.Read(agentskills.ScopeWriter, "", "pacing")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if got.Body != "옛 본문" || got.Description != "속도" {
+		t.Errorf("the refused patch still wrote: %+v", got)
+	}
+
+	// Without a description it is the same refusal, not the older "nothing to
+	// change" — which was actively misleading, because replace WAS given.
+	res, _, err = d.editSkill(ctx, nil, editSkillInput{
+		Action: "patch", Scope: "writer", Name: "pacing", Replace: "새 본문"})
+	if err != nil {
+		t.Fatalf("transport error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("replace with no find must be refused")
+	}
+	if msg := firstText(res); !strings.Contains(msg, "find") {
+		t.Errorf("the message must name what is missing; got %q", msg)
+	}
+}
+
+// Whether a patch changes anything is decided on the rendered document, so
+// every no-op is refused the same way — a find equal to its replace, a body
+// identical to the one on disk, and a re-asserted enabled flag alike. The
+// alternative is a version row in the writer's history that reverts to
+// itself.
+func TestEditSkillRefusesEveryNoOpPatchAlike(t *testing.T) {
+	ctx, d, _, _ := newSkillDeps(t)
+	mustCreateSkill(t, ctx, d, editSkillInput{
+		Action: "create", Scope: "writer", Name: "pacing", Description: "속도", Body: "짧은 문장."})
+	on := true
+
+	cases := map[string]editSkillInput{
+		"find equals replace":  {Action: "patch", Scope: "writer", Name: "pacing", Find: "짧은", Replace: "짧은"},
+		"same body wholesale":  {Action: "patch", Scope: "writer", Name: "pacing", Body: "짧은 문장."},
+		"same description":     {Action: "patch", Scope: "writer", Name: "pacing", Description: "속도"},
+		"enabled re-asserted":  {Action: "patch", Scope: "writer", Name: "pacing", Enabled: &on},
+		"nothing at all":       {Action: "patch", Scope: "writer", Name: "pacing"},
+		"all of them together": {Action: "patch", Scope: "writer", Name: "pacing", Body: "짧은 문장.", Description: "속도", Enabled: &on},
+	}
+	for name, in := range cases {
+		res, _, err := d.editSkill(ctx, nil, in)
+		if err != nil {
+			t.Errorf("%s: got a transport error %v; want a tool error result", name, err)
+			continue
+		}
+		if res == nil || !res.IsError {
+			t.Errorf("%s: a no-op patch must be refused, got %+v", name, res)
+		}
+	}
+
+	// One version row: the create. No refused no-op added one.
+	versions, err := d.SkillHistory.List(ctx, agentskills.ScopeWriter, "", "pacing", 0)
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if len(versions) != 1 {
+		t.Errorf("want only the created row, got %d versions — a no-op patch wrote history", len(versions))
+	}
+}
+
+// The disk write succeeded and is not rolled back — undoing it would lose the
+// agent's work. But the result has to say the version row is missing, or the
+// only trace of an unrevertible edit is a log line nobody reads.
+func TestEditSkillReportsAWriteItCouldNotVersion(t *testing.T) {
+	ctx, d, _, _, st := newSkillDepsWithStore(t)
+	out := mustCreateSkill(t, ctx, d, editSkillInput{
+		Action: "create", Scope: "writer", Name: "pacing", Description: "속도", Body: "본문"})
+	if !out.Versioned {
+		t.Fatal("a normal write is versioned")
+	}
+
+	// Close the database behind the live store: the filesystem write still
+	// lands, History.Record cannot.
+	if err := st.Close(); err != nil {
+		t.Fatalf("close store: %v", err)
+	}
+	res, out, err := d.editSkill(ctx, nil, editSkillInput{
+		Action: "create", Scope: "writer", Name: "unversioned", Description: "d", Body: "본문"})
+	if err != nil {
+		t.Fatalf("transport error: %v", err)
+	}
+	if res != nil && res.IsError {
+		t.Fatalf("the write landed on disk, so it must not be reported as a failure: %q", firstText(res))
+	}
+	if out.Versioned {
+		t.Error("versioned must be false when the version row could not be recorded")
+	}
+	// The skill really is on disk — that is why this is reported rather than
+	// rolled back.
+	if _, err := d.Skills.Read(agentskills.ScopeWriter, "", "unversioned"); err != nil {
+		t.Errorf("the skill must still be on disk: %v", err)
+	}
+}
+
+// #97's ruling for the global writer profile, applied to skills: a pinned
+// client may READ what is global — linetta_get_story_context already hands
+// it the writer profile — and only the write is refused (346fb7d). One rule,
+// not two.
+func TestReadSkillAllowsAWriterSkillOnAPinnedServer(t *testing.T) {
+	ctx, d, projectID, _ := newSkillDeps(t)
+	mustCreateSkill(t, ctx, d, editSkillInput{
+		Action: "create", Scope: "writer", Name: "global-steer", Description: "d", Body: "전역 본문"})
+
+	d.Source = "" // external, the only kind of client a pin applies to
+	d.Settings = newRestrictedSettings(t, projectID)
+
+	res, got, err := d.readSkill(ctx, nil, readSkillInput{Scope: "writer", Name: "global-steer"})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("a pinned client reads a global skill, as it reads the global writer profile in the "+
+			"brief: err=%v res=%q", err, firstText(res))
+	}
+	if got.Body != "전역 본문" {
+		t.Errorf("Body = %q", got.Body)
+	}
+	// The write half of the same rule still refuses; that pairing is what
+	// makes this one rule rather than an oversight.
+	res, _, err = d.editSkill(ctx, nil, editSkillInput{
+		Action: "patch", Scope: "writer", Name: "global-steer", Body: "고쳐 쓴 본문"})
+	if err != nil {
+		t.Fatalf("transport error: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Error("a pinned client must still not be able to WRITE a global skill")
 	}
 }

@@ -162,9 +162,11 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"project_id. action create needs description and body; action patch takes either find and " +
 			"replace for a targeted edit (find must appear exactly once in the body) or body to replace the " +
 			"document wholesale, and can also change description or enabled on their own; action delete " +
-			"removes it. Every change is versioned, so the writer can revert what you write. Keep a skill " +
-			"specific and short — the description is one line saying when to reach for it, and bodies are " +
-			"capped; the result says how much room is left.",
+			"removes it. Every change is versioned, so the writer can revert what you write — if the " +
+			"result comes back with versioned false, the change was saved but that version row was not, " +
+			"so say so in your reply: the writer cannot revert that one edit. Keep a skill specific and " +
+			"short — the description is one line saying when to reach for it, and bodies are capped; the " +
+			"result says how much room is left.",
 	}, record(d, "linetta_edit_skill", d.editSkill))
 
 	d.registerReviseTool(s)
@@ -531,6 +533,14 @@ type editSkillOutput struct {
 	BodyRunes   int    `json:"body_runes"`
 	BodyBudget  int    `json:"body_budget" jsonschema:"the cap a skill body is held to, so you can see how much room is left"`
 	UpdatedAt   int64  `json:"updated_at,omitempty"`
+
+	// Versioned says whether the version row behind this change was
+	// recorded. Almost always true; false means the skill on disk did
+	// change but the history did not, so this one edit cannot be reverted
+	// and a backup carrying only history would not contain it. No
+	// omitempty: false is the whole point of the field, and omitempty would
+	// delete exactly the case worth reporting.
+	Versioned bool `json:"versioned" jsonschema:"true normally; false means the change was saved but could not be recorded in the skill's version history - tell the writer, because that one edit cannot be reverted"`
 }
 
 // editSkill creates, patches and deletes skills.
@@ -551,8 +561,13 @@ func (d ToolDeps) editSkill(ctx context.Context, _ *mcp.CallToolRequest, in edit
 	// that is exactly what the pin exists to prevent, and requireSkillTarget
 	// cannot enforce it because there is no work to check against. The
 	// built-in agent is unaffected: allowedProjectID returns "" for
-	// SourceAgent. Reading such a skill stays allowed; only writing one
-	// reaches past the pin.
+	// SourceAgent.
+	//
+	// Reading such a skill stays allowed; only writing one reaches past the
+	// pin. That is #97's ruling for the global writer profile applied
+	// unchanged (346fb7d refuses the profile WRITE under a pin, while
+	// linetta_get_story_context still hands a pinned client the profile
+	// itself) — see requireSkillTarget, where the read half of it lives.
 	if scope == agentskills.ScopeWriter {
 		if restricted := d.allowedProjectID(); restricted != "" {
 			return toolErr("this Linetta server is restricted to work %q, and a %q skill is global — it "+
@@ -601,12 +616,20 @@ func (d ToolDeps) editSkill(ctx context.Context, _ *mcp.CallToolRequest, in edit
 	}
 
 	// The version lands before the tool returns, so nothing an agent is told
-	// succeeded is missing from the history the writer reverts through. A
-	// failure here is logged rather than returned: the skill on disk has
-	// already changed, and reporting an error for a change that DID happen
-	// would send the agent off repairing something that is not broken.
+	// succeeded is missing from the history the writer reverts through.
+	//
+	// A failure here is not an error result: the skill on disk HAS changed,
+	// and refusing after the fact would send the agent off repairing
+	// something that is not broken, or re-writing work that already landed.
+	// But it is not silence either — a log line reaches nobody who could act
+	// on it, and the state it leaves is the one this function's doc comment
+	// calls worse than a refusal: a file newer than its history, unrevertible,
+	// and absent from a backup that carries only history. So the result says
+	// so, in a field the tool's description tells the model to pass on.
+	versioned := true
 	if err := d.SkillHistory.Record(ctx, saved, reason, now); err != nil {
 		logf("skill history: %v", err)
+		versioned = false
 	}
 	if d.Notify != nil {
 		d.Notify("skills.changed", skillChangedPayload{
@@ -618,6 +641,7 @@ func (d ToolDeps) editSkill(ctx context.Context, _ *mcp.CallToolRequest, in edit
 		Action: reason, Name: saved.Name, Scope: string(scope), ProjectID: projectID,
 		Description: saved.Description, Enabled: saved.Enabled,
 		BodyRunes: saved.BodyRunes, BodyBudget: agentskills.MaxBodyRunes,
+		Versioned: versioned,
 	}
 	if reason != agentskills.ReasonDeleted {
 		out.Body = saved.Body
@@ -678,9 +702,18 @@ func (d ToolDeps) patchSkill(scope agentskills.Scope, projectID, name string, in
 		return toolErr("give either find and replace, or body — not both: find makes a targeted edit, " +
 			"body replaces the whole document"), agentskills.Skill{}
 	}
+	// replace with nothing to find is the same half-formed edit in the other
+	// direction, and the more dangerous one: without this the call succeeds,
+	// the replace is dropped on the floor, and the agent is told the edit
+	// landed. Name what is missing rather than guessing that "replace" meant
+	// "body" — the two produce completely different documents.
+	if in.Find == "" && in.Replace != "" {
+		return toolErr("replace needs find: give the piece of the existing body to replace — read the "+
+			"skill %q with linetta_read_skill first — or use body to replace the whole document",
+			name), agentskills.Skill{}
+	}
 
 	next := cur
-	changed := false
 	switch {
 	case in.Find != "":
 		// Exactly one match, the rule agentmemory's own find follows. Zero
@@ -696,22 +729,30 @@ func (d ToolDeps) patchSkill(scope agentskills.Scope, projectID, name string, in
 				"exactly once", n, name), agentskills.Skill{}
 		}
 		next.Body = strings.Replace(cur.Body, in.Find, in.Replace, 1)
-		changed = true
 	case in.Body != "":
 		next.Body = in.Body
-		changed = true
 	}
 	if description := strings.TrimSpace(in.Description); description != "" {
 		next.Description = description
-		changed = true
 	}
-	if in.Enabled != nil && *in.Enabled != cur.Enabled {
+	if in.Enabled != nil {
 		next.Enabled = *in.Enabled
-		changed = true
 	}
-	if !changed {
-		return toolErr("nothing to change: a %s needs find and replace, or body, or description, or enabled",
-			skillActionPatch), agentskills.Skill{}
+
+	// Whether this patch changes anything is decided on the rendered
+	// document, not on which fields the call happened to carry. A patch
+	// whose find equals its replace, or whose body is the body already on
+	// disk, is as much of a no-op as re-asserting the enabled flag it
+	// already has — and one rule for all of them means the writer's history
+	// never grows a version row that reverts to itself. Render is the
+	// comparison because it is exactly what Store.Write puts on disk;
+	// Author is deliberately still cur's here (it is set below), so a
+	// no-op body from the agent over a writer-authored skill does not count
+	// as a change on the strength of the byline alone.
+	if agentskills.Render(next) == agentskills.Render(cur) {
+		return toolErr("nothing to change: skill %q already reads exactly that. A %s needs find and "+
+			"replace, or body, or description, or enabled — with a value different from the current one.",
+			name, skillActionPatch), agentskills.Skill{}
 	}
 
 	// The author becomes the agent because the agent is what wrote THIS

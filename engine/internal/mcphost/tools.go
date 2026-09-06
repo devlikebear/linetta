@@ -275,9 +275,17 @@ func (d ToolDeps) requireNodeInProject(ctx context.Context, nodeID, projectID st
 // call addresses, funnelling the work through requireProject so a skill in
 // another work cannot be reached through a restricted server.
 //
-// It deliberately does NOT apply the pin to a writer-scoped skill: reading a
-// global skill is harmless, and only the WRITE path has a reason to refuse
-// one — see editSkill, where that refusal lives.
+// It deliberately does NOT apply the pin to a writer-scoped skill, and that
+// is #97's ruling rather than a fresh judgement here: a pin refuses a WRITE
+// to the global writer profile (346fb7d, "the pin covers the global
+// profile", the ScopeWriterProfile arm of editMemory) while a pinned
+// external client still receives that same global profile inside the brief
+// linetta_get_story_context hands it — getStoryContext strips WriterProfile
+// only for SourceAgent, which carries no pin at all. So the rule the pin
+// enforces is "a client held to one work may read what is global but must
+// not rewrite it", and skills follow it unchanged: reading a writer skill is
+// allowed here, and editSkill refuses writing one. A reader of either file
+// should find one rule, not two.
 //
 // The name is validated here rather than left to the store so the refusal is
 // a sentence about slugs that an agent can act on, instead of a path error.

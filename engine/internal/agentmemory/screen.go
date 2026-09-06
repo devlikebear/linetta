@@ -90,6 +90,15 @@ func Screen(text string) error {
 // ZWJ is only accepted when it directly joins two runes that look like
 // emoji; a ZWJ anywhere else — in particular between two ordinary letters,
 // which is exactly the smuggling shape — is still refused. See isEmojiJoin.
+//
+// Its refusals say "here", not "in a memory": this function now screens two
+// different document types (a memory line through Screen, a skill body
+// through agentskills.Guard), and the first path that put one of these
+// messages in front of a model was the skill one — where "not allowed in a
+// memory" names the wrong document. The caller supplies the noun by wrapping
+// (Guard prefixes "skill body:"); what belongs here is the code point, which
+// every message still names so the writing agent knows exactly what to
+// delete.
 func ScreenInvisible(text string) error {
 	runes := []rune(text)
 	for i, r := range runes {
@@ -97,18 +106,18 @@ func ScreenInvisible(text string) error {
 		case r == '\n' || r == '\t':
 			// The only two control characters memory is written with.
 		case unicode.IsControl(r):
-			return fmt.Errorf("%w: U+%04X is not allowed in a memory", ErrControl, r)
+			return fmt.Errorf("%w: U+%04X is not allowed here", ErrControl, r)
 		case r == zeroWidthJoiner:
 			if isEmojiJoin(runes, i) {
 				continue
 			}
-			return fmt.Errorf("%w: U+200D is invisible and is not allowed in a memory outside an emoji sequence", ErrInvisible)
+			return fmt.Errorf("%w: U+200D is invisible and is not allowed here outside an emoji sequence", ErrInvisible)
 		case isTagChar(r):
-			return fmt.Errorf("%w: U+%04X is invisible and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X is invisible and is not allowed here", ErrInvisible, r)
 		case r >= 0xE0100 && r <= 0xE01EF:
 			// Variation Selector Supplement: same invisible-payload shape as
 			// the tag block just above, immediately adjacent in the plane.
-			return fmt.Errorf("%w: U+%04X is invisible and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X is invisible and is not allowed here", ErrInvisible, r)
 		case r >= 0xFE00 && r <= 0xFE0F:
 			// Base Variation Selectors. VS15/VS16 (U+FE0E/U+FE0F) select
 			// text vs. emoji presentation for the preceding character — a
@@ -119,13 +128,13 @@ func ScreenInvisible(text string) error {
 			if r == '\uFE0E' || r == '\uFE0F' {
 				continue
 			}
-			return fmt.Errorf("%w: U+%04X is invisible and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X is invisible and is not allowed here", ErrInvisible, r)
 		case r == hangulChoseongFiller || r == hangulJungseongFiller || r == hangulFiller:
-			return fmt.Errorf("%w: U+%04X renders as nothing and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X renders as nothing and is not allowed here", ErrInvisible, r)
 		case r == khmerVowelInherentAq || r == khmerVowelInherentAa:
-			return fmt.Errorf("%w: U+%04X renders as nothing and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X renders as nothing and is not allowed here", ErrInvisible, r)
 		case unicode.Is(unicode.Cf, r) || r == '­':
-			return fmt.Errorf("%w: U+%04X is invisible and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X is invisible and is not allowed here", ErrInvisible, r)
 		}
 	}
 	return nil
