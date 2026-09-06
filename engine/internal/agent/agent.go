@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -29,6 +30,17 @@ type MemorySource interface {
 	Memories(ctx context.Context, projectID string) (writerProfile, workNotes agentmemory.Document)
 }
 
+// SkillSource reads the skills available for one turn — the writer's
+// (global) and this work's — already reduced to what may reach a prompt:
+// enabled only, and with Body left off. That reduction is the caller's job,
+// not systemPrompt's — see prompt.go's skillsBlock doc comment — the same
+// division MemorySource draws around the two curated documents. An interface
+// rather than *agentskills.Store directly, matching MemorySource and
+// ScopeLookup, so the prompt can be tested without a filesystem.
+type SkillSource interface {
+	Skills(ctx context.Context, projectID string) []agentskills.Skill
+}
+
 // Deps are the collaborators the agent needs.
 type Deps struct {
 	Providers ProviderSource
@@ -42,6 +54,12 @@ type Deps struct {
 	Language func() string
 	// Memory supplies the two curated documents pasted into the system prompt.
 	Memory MemorySource
+	// Skills supplies the name-and-description list pasted into the system
+	// prompt after the memory block. A nil Skills is valid — it renders as
+	// no skills, the same way a nil Memory renders as both documents empty —
+	// so a build that never wires one (or a test that constructs Deps
+	// without it) still works.
+	Skills SkillSource
 	// Undo reverts a structural batch. It must be bound to the SAME storyops
 	// service the agent's tools use — undo batches live in memory on the
 	// service, so any other instance simply does not have the batch.

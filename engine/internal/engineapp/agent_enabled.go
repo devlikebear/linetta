@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/agent"
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -33,6 +35,7 @@ type agentDeps struct {
 	settings *settings.Store
 	src      *provider.Source
 	memory   *agentmemory.Repo
+	skills   *agentskills.Store
 	notify   func(method string, params any)
 	clock    func() int64
 }
@@ -59,6 +62,67 @@ func (m agentMemorySource) Memories(ctx context.Context, projectID string) (writ
 		workNotes = doc
 	}
 	return writerProfile, workNotes
+}
+
+// agentSkillSource adapts *agentskills.Store to agent.SkillSource. It reads
+// both scopes a turn can see — the writer's global skills and this work's —
+// and returns only what agent.SkillSource promises: enabled skills with
+// Body left off. A nil store (the zero value, e.g. a build that never wires
+// deps.skills) yields no skills rather than panicking, matching
+// agentMemorySource's nil-repo case above.
+//
+// It does not call agentskills.Guard itself. Store.List already runs Guard
+// on every entry it reads and reports a failure as a Diagnostic instead of
+// returning the skill — see List's doc comment and agentskills'
+// TestGuardFailureIsADiagnostic — so a skill an invisible character got
+// hidden inside never leaves the store to begin with. Re-guarding here would
+// be the same check run twice, not a second line of defence. The
+// diagnostics themselves are dropped on the floor rather than surfaced to
+// the model: a broken SKILL.md is the writer's problem to fix (visible in
+// Settings' skills panel), not something worth spending the agent's turn
+// explaining. That also answers the "skip vs. refuse the whole block"
+// question the store's guard already decided: skip, so a single skill an
+// invisible character got into does not go on to silence the other
+// thirty-nine.
+//
+// A read failure for one scope (e.g. a permissions problem List would
+// otherwise surface as an error) is swallowed the same way: best-effort,
+// matching agentMemorySource's per-document reads — an agent turn should not
+// fail over the skill list any more than over a memory document.
+type agentSkillSource struct {
+	store *agentskills.Store
+}
+
+func (a agentSkillSource) Skills(_ context.Context, projectID string) []agentskills.Skill {
+	if a.store == nil {
+		return nil
+	}
+	out := make([]agentskills.Skill, 0)
+	out = appendEnabledSkills(out, a.store, agentskills.ScopeWriter, "")
+	// Work-scoped skills need a work open to belong to; a fresh session
+	// with no manuscript selected simply has none to offer.
+	if id := strings.TrimSpace(projectID); id != "" {
+		out = appendEnabledSkills(out, a.store, agentskills.ScopeWork, id)
+	}
+	return out
+}
+
+// appendEnabledSkills lists one scope and appends its enabled, body-stripped
+// skills to out. A list error is swallowed — see agentSkillSource's doc
+// comment for why.
+func appendEnabledSkills(out []agentskills.Skill, store *agentskills.Store, scope agentskills.Scope, projectID string) []agentskills.Skill {
+	skills, _, err := store.List(scope, projectID)
+	if err != nil {
+		return out
+	}
+	for _, s := range skills {
+		if !s.Enabled {
+			continue
+		}
+		s.Body = "" // never leaves this adapter — see SkillSource's doc comment
+		out = append(out, s)
+	}
+	return out
 }
 
 // scopeLookup answers the two names the scope line carries. Failures are
@@ -135,6 +199,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		Notify:   deps.notify,
 		Language: deps.settings.Language,
 		Memory:   agentMemorySource{repo: deps.memory},
+		Skills:   agentSkillSource{store: deps.skills},
 		Undo: func(ctx context.Context, batchID string) error {
 			return deps.story.UndoApply(ctx, batchID, deps.clock)
 		},

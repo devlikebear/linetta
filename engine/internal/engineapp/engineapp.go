@@ -230,6 +230,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithCuratedMemorySource(companionSvc).
 		WithReferenceSource(companionSvc)
 
+	// One Store for the skills the agent writes for itself, shared between
+	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below)
+	// and the built-in agent's own system-prompt list (setupAgent, below) —
+	// both read and write the same SKILL.md files under home.
+	skillsStore := agentskills.NewStore(home)
+
 	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
 		settingsStore: settingsStore,
 		home:          home,
@@ -249,7 +255,11 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			// The skills the agent writes for itself live as SKILL.md files
 			// under the same home the rest of Linetta's own material does,
 			// with their versions in the database beside the manuscript's.
-			skills:       agentskills.NewStore(home),
+			// skillsStore is the same *Store the built-in agent's own
+			// SkillSource reads below — one directory, one set of skills,
+			// whether a skill is read through the MCP tools or listed into
+			// the agent's own system prompt.
+			skills:       skillsStore,
 			skillHistory: agentskills.NewHistory(st.DB()),
 			enqueue:      summ.Enqueue,
 			notify:       func(method string, params any) { _ = s.Notifier().Notify(method, params) },
@@ -291,6 +301,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		settings: settingsStore,
 		src:      providerSrc,
 		memory:   memRepo,
+		skills:   skillsStore,
 		notify:   func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 		clock:    clock,
 	})

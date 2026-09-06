@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -306,7 +307,11 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	if s.deps.Memory != nil {
 		profile, notes = s.deps.Memory.Memories(ctx, st.req.ProjectID)
 	}
-	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes)}}
+	var skills []agentskills.Skill
+	if s.deps.Skills != nil {
+		skills = s.deps.Skills.Skills(ctx, st.req.ProjectID)
+	}
+	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes, skills)}}
 
 	prior, err := s.tr.load(ctx, st.req.ProjectID, 200)
 	if err != nil {
