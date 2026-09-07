@@ -110,7 +110,7 @@ func TestGetStoryContextRendersInTheAppLanguage(t *testing.T) {
 	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes"}, nil)
 	d.Settings = languageSettings(t, "en")
 
-	res, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	res, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil || (res != nil && res.IsError) {
 		t.Fatalf("getStoryContext: err=%v res=%+v", err, res)
 	}
@@ -135,7 +135,7 @@ func TestGetStoryContextStillDefaultsToKorean(t *testing.T) {
 	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "줄표 쓰지 않기"}, nil)
 	d.Settings = languageSettings(t, "ko")
 
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestGetStoryContextStillDefaultsToKorean(t *testing.T) {
 func TestGetStoryContextToleratesNilSettings(t *testing.T) {
 	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
 
-	res, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	res, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil || (res != nil && res.IsError) {
 		t.Fatalf("getStoryContext with nil Settings: err=%v res=%+v", err, res)
 	}
@@ -215,7 +215,7 @@ func TestGetStoryContextForTheAgentOmitsTheCuratedMemoryButKeepsRecall(t *testin
 	d.Source = SourceAgent
 	d.Settings = languageSettings(t, "en")
 
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestGetStoryContextForAnExternalClientCarriesEverything(t *testing.T) {
 	d.Settings = languageSettings(t, "en")
 	// d.Source is left at newStoryContextDeps' default, SourceExternal.
 
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestSectionReportMatchesTheBriefForBothSources(t *testing.T) {
 	d.Settings = languageSettings(t, "en")
 
 	d.Source = SourceAgent
-	_, agentOut, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, agentOut, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext (agent): %v", err)
 	}
@@ -280,7 +280,7 @@ func TestSectionReportMatchesTheBriefForBothSources(t *testing.T) {
 	}
 
 	d.Source = SourceExternal
-	_, extOut, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, extOut, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext (external): %v", err)
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/tars/pkg/llm"
 )
@@ -198,8 +199,8 @@ type skillIn struct {
 // provider call with nothing to do), so every test here registers them.
 func skillTools(rec *skillCounter) RegisterTools {
 	base := stubTools(nil)
-	return func(s *mcp.Server) {
-		base(s)
+	return func(s *mcp.Server, groups mcphost.ToolGroups) {
+		base(s, groups)
 		mcp.AddTool(s, &mcp.Tool{Name: "linetta_edit_skill", Description: "write a skill"},
 			func(_ context.Context, _ *mcp.CallToolRequest, in skillIn) (*mcp.CallToolResult, struct{}, error) {
 				rec.mu.Lock()

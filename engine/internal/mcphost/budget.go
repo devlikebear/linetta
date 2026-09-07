@@ -33,6 +33,24 @@ type ToolGroups struct {
 // writer who never opens the pane keeps.
 func AllToolGroups() ToolGroups { return ToolGroups{Memory: true, Skills: true} }
 
+// ToolGroupsFrom reads the writer's two tool-budget switches (#99) off a
+// settings store. It is the ONE reading a caller is expected to make: whoever
+// builds a server passes the result to Register, and anyone who also has to
+// describe that server — a prompt, a cache key — uses the same value rather
+// than reading again.
+//
+// A nil store — the zero ToolDeps a test registers, a build with no store
+// open — means the defaults, which is every group on.
+func ToolGroupsFrom(store *settings.Store) ToolGroups {
+	if store == nil {
+		return AllToolGroups()
+	}
+	return ToolGroups{
+		Memory: store.MemoryToolsEnabled(),
+		Skills: store.SkillToolsEnabled(),
+	}
+}
+
 // MemoryToolNames and SkillToolNames are each group's members. They are
 // subsets of ReadToolNames and WriteToolNames rather than a separate
 // inventory, and TestToolGroupNamesAreAllRealTools holds them to that: a
@@ -100,10 +118,9 @@ func measureToolSchemaBytes() map[string]int {
 	ctx := context.Background()
 	srv := mcp.NewServer(&mcp.Implementation{Name: ServerName, Version: ServerVersion}, nil)
 	// Every group on and full mode: this measures the whole inventory once,
-	// and any subset is a sum over ToolNames. ToolDeps carries only Settings,
-	// nil here so the groups fall back to AllToolGroups — registration reads
-	// no other collaborator and no handler runs.
-	ToolDeps{}.Register(srv, settings.MCPModeFull)
+	// and any subset is a sum over ToolNames. The zero ToolDeps is enough —
+	// registration reads no collaborator and no handler runs.
+	ToolDeps{}.Register(srv, settings.MCPModeFull, AllToolGroups())
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	ss, err := srv.Connect(ctx, serverTransport, nil)

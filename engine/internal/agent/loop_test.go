@@ -16,6 +16,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -561,7 +562,7 @@ func TestRun_iterationCapCountsExecutedToolCallsNotChatRoundTrips(t *testing.T) 
 // genuinely stuck loop run forever, since every attempt looked like a "new"
 // failure. The wall must trip on the tool's name alone.
 func flakyToolWithVaryingErrors() RegisterTools {
-	return func(s *mcp.Server) {
+	return func(s *mcp.Server, _ mcphost.ToolGroups) {
 		var n int
 		mcp.AddTool(s, &mcp.Tool{Name: "flaky", Description: "fails every time, with a new message"},
 			func(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct{}, error) {

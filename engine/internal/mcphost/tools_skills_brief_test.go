@@ -4,9 +4,12 @@ package mcphost
 
 import (
 	"context"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
@@ -39,7 +42,7 @@ func TestGetStoryContextTellsAnExternalClientItsSkillsExist(t *testing.T) {
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -68,7 +71,7 @@ func TestSectionReportListsSkillsEmptyWhenThereAreNone(t *testing.T) {
 	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
 	d.Settings = languageSettings(t, "en")
 
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -90,7 +93,7 @@ func TestIncludeSkillsFalseRemovesTheBlockAndTheReportSaysSo(t *testing.T) {
 	d.Settings = languageSettings(t, "en")
 
 	off := false
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &off})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &off}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -116,7 +119,7 @@ func TestTheTwoTogglesDoNotReachEachOther(t *testing.T) {
 
 	off := false
 
-	_, memOff, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeMemories: &off})
+	_, memOff, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeMemories: &off}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext (memories off): %v", err)
 	}
@@ -127,7 +130,7 @@ func TestTheTwoTogglesDoNotReachEachOther(t *testing.T) {
 		t.Errorf("turning memories off also took the skills; got:\n%s", memOff.Brief)
 	}
 
-	_, skillsOff, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &off})
+	_, skillsOff, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &off}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext (skills off): %v", err)
 	}
@@ -148,7 +151,7 @@ func TestGetStoryContextForTheAgentOmitsTheSkillsAndTheReportAgrees(t *testing.T
 	d.Settings = languageSettings(t, "en")
 	d.Source = SourceAgent
 
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -181,7 +184,7 @@ func TestGetStoryContextDropsTheSkillsBlockWhenTheSkillToolsAreOff(t *testing.T)
 	d.Settings = languageSettings(t, "en")
 	setToolGroups(t, d.Settings, ToolGroups{Memory: true, Skills: false})
 
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, ToolGroupsFrom(d.Settings))
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -217,7 +220,7 @@ func TestIncludeSkillsTrueCannotOverrideTheWritersSwitch(t *testing.T) {
 	setToolGroups(t, d.Settings, ToolGroups{Memory: true, Skills: false})
 
 	on := true
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &on})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &on}, ToolGroupsFrom(d.Settings))
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -234,7 +237,7 @@ func TestTheWritersSwitchLeavesIncludeSkillsAloneWhenTheGroupIsOn(t *testing.T) 
 	d.Settings = languageSettings(t, "en")
 	setToolGroups(t, d.Settings, AllToolGroups())
 
-	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, ToolGroupsFrom(d.Settings))
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
@@ -242,13 +245,93 @@ func TestTheWritersSwitchLeavesIncludeSkillsAloneWhenTheGroupIsOn(t *testing.T) 
 		t.Errorf("the default brief lost its skills block; got:\n%s", out.Brief)
 	}
 	off := false
-	_, out, err = d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &off})
+	_, out, err = d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &off}, ToolGroupsFrom(d.Settings))
 	if err != nil {
 		t.Fatalf("getStoryContext: %v", err)
 	}
 	if strings.Contains(out.Brief, "Skills you can read") {
 		t.Errorf("include_skills=false stopped working; got:\n%s", out.Brief)
 	}
+}
+
+// The brief is bound to the tool budget the SERVER was built with, not to
+// whatever the store says when the call arrives. Those two are the same value
+// almost always — which is why a live read looked harmless — but not while a
+// switch is thrown against a server already standing. The MCP host builds one
+// server per HTTP session, so a client that connected before the flip holds
+// that server for the length of its session.
+//
+// The dangerous direction is the group going ON: the server registered no
+// linetta_read_skill, and a brief that re-read the store would hand that
+// client a list of skills and tell it to open one with a tool its own
+// tools/list does not contain. This test puts the server and the store in
+// exactly that disagreement and asks the server itself, over the wire, for
+// both answers.
+func TestTheBriefNamesNoToolTheSameServerDidNotRegister(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
+	d.Settings = languageSettings(t, "en")
+
+	// The server is built while the skills group is off...
+	built := ToolGroups{Memory: true, Skills: false}
+	cs := connectedServer(t, d, settings.MCPModeFull, built)
+	// ...and the writer switches it back on a moment later. Nothing rebuilds
+	// this server: the client is mid-session.
+	setToolGroups(t, d.Settings, AllToolGroups())
+
+	served := map[string]bool{}
+	for tool, err := range cs.Tools(ctx, nil) {
+		if err != nil {
+			t.Fatalf("list tools: %v", err)
+		}
+		served[tool.Name] = true
+	}
+	if served["linetta_read_skill"] {
+		t.Fatal("test setup: the server was built with the skills group off and served it anyway")
+	}
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "linetta_get_story_context",
+		Arguments: map[string]any{"node_id": nodeID},
+	})
+	if err != nil {
+		t.Fatalf("call linetta_get_story_context: %v", err)
+	}
+	brief := firstText(res)
+	for _, name := range promptToolName.FindAllString(brief, -1) {
+		if !served[name] {
+			t.Errorf("the brief tells the client to call %s, which this same server never "+
+				"registered — the brief read the store instead of the budget its server was "+
+				"built with; brief:\n%s", name, brief)
+		}
+	}
+}
+
+// promptToolName matches every Linetta tool a brief names, by the naming
+// convention rather than by a list this test would have to be reminded to
+// update.
+var promptToolName = regexp.MustCompile(`linetta_[a-z_]+`)
+
+// connectedServer builds a server exactly the way the host does — resolve the
+// budget, hand it to Register — and dials it in memory.
+func connectedServer(t *testing.T, d ToolDeps, mode string, groups ToolGroups) *mcp.ClientSession {
+	t.Helper()
+	srv := mcp.NewServer(&mcp.Implementation{Name: ServerName, Version: ServerVersion}, nil)
+	d.Register(srv, mode, groups)
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	ss, err := srv.Connect(context.Background(), serverTransport, nil)
+	if err != nil {
+		t.Fatalf("connect server: %v", err)
+	}
+	t.Cleanup(func() { _ = ss.Close() })
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil).
+		Connect(context.Background(), clientTransport, nil)
+	if err != nil {
+		t.Fatalf("connect client: %v", err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+	return cs
 }
 
 func setToolGroups(t *testing.T, st *settings.Store, groups ToolGroups) {

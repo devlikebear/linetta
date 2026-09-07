@@ -95,10 +95,10 @@ func TestDefaultsServeTheWholeToolSet(t *testing.T) {
 		t.Errorf("a default full server serves %d tools, want %d",
 			len(got), len(ReadToolNames)+len(WriteToolNames))
 	}
-	// And a ToolDeps with no settings store at all falls back to the same
-	// thing, which is what keeps a build with no store open (and every test
-	// that registers a zero ToolDeps) on the documented tool set.
-	if g := (ToolDeps{}).toolGroups(); g != AllToolGroups() {
+	// And no settings store at all falls back to the same thing, which is
+	// what keeps a build with no store open (and every test that registers a
+	// zero ToolDeps) on the documented tool set.
+	if g := ToolGroupsFrom(nil); g != AllToolGroups() {
 		t.Errorf("a nil settings store yields %+v, want every group on", g)
 	}
 }

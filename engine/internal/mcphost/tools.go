@@ -122,33 +122,28 @@ func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchI
 // The mode is captured when the listener starts. Changing it goes through
 // Host.Restart (see mcpController.Enable), which builds a fresh server, so a
 // running server never serves a stale tool set.
-// The two optional groups are taken from d.Settings at the moment the server
-// is built, which means a server already built serves the tool set it was
-// registered with until something builds another one. The MCP host builds one
-// per HTTP session (host.go's StreamableHTTPHandler), so an external client
-// picks up a change on its next connection. The built-in agent CACHES its
-// server across turns, so it is the agent's own business to notice a change
-// and rebuild — see agent.Service.session, which keys that cache on these
-// same two groups. Neither needs an engine restart.
 //
-// A nil Settings — the zero ToolDeps a test registers, and a build with no
-// store open — means the defaults, which is every group on.
-func (d ToolDeps) Register(s *mcp.Server, mode string) {
-	groups := d.toolGroups()
+// The two optional tool-budget groups (#99) are an ARGUMENT, not something
+// read from d.Settings here, and that is the whole point. A caller that also
+// has to describe this tool set elsewhere — the built-in agent, whose system
+// prompt names the tools and whose session cache is keyed on the same value —
+// must get its tools and its description from ONE reading of the switches. As
+// long as Register did its own reading, a settings.Set landing between the
+// caller's reading and this one built a server whose tools came from one
+// answer and whose label came from the other; the label being the cache key,
+// every later turn inherited the mismatch. See agent.Service.session and
+// agent.Run, which resolve the groups once per turn.
+//
+// A server already built serves the tool set it was registered with until
+// something builds another one. The MCP host builds one per HTTP session
+// (host.go's StreamableHTTPHandler, which reads the switches there), so an
+// external client picks up a change on its next connection; the built-in
+// agent rebuilds when the resolved groups differ from the cached session's.
+// Neither needs an engine restart.
+func (d ToolDeps) Register(s *mcp.Server, mode string, groups ToolGroups) {
 	d.registerReadTools(s, groups)
 	if mode == settings.MCPModeFull {
 		d.registerWriteTools(s, groups)
-	}
-}
-
-// toolGroups reads the writer's two tool-budget switches (#99).
-func (d ToolDeps) toolGroups() ToolGroups {
-	if d.Settings == nil {
-		return AllToolGroups()
-	}
-	return ToolGroups{
-		Memory: d.Settings.MemoryToolsEnabled(),
-		Skills: d.Settings.SkillToolsEnabled(),
 	}
 }
 

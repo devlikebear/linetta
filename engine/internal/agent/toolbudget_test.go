@@ -46,10 +46,14 @@ func budgetService(t *testing.T, c llm.Client, rec *recorder) (*Service, *settin
 		Providers: fakeProviders{client: c},
 		History:   companion.NewHistoryRepo(db.DB()),
 		Scope:     fakeScope{titles: map[string]string{"p1": "제목"}},
-		Register: func(s *mcp.Server) {
+		Register: func(s *mcp.Server, groups mcphost.ToolGroups) {
 			registrations++
-			// Always full mode, exactly as setupAgent binds it.
-			tools.Register(s, settings.MCPModeFull)
+			// Always full mode, and the turn's own groups — exactly as
+			// setupAgent binds it. The registrar is handed the budget rather
+			// than reading the store for itself, which is the only way the
+			// server it builds can be guaranteed to match the label the
+			// session is cached under.
+			tools.Register(s, settings.MCPModeFull, groups)
 		},
 		Notify:   rec.notify,
 		Language: func() string { return "ko" },
@@ -238,5 +242,115 @@ func TestRun_theToolSessionIsRebuiltOnlyWhenTheBudgetChanges(t *testing.T) {
 	if *registrations != 2 {
 		t.Errorf("a turn after the rebuild built another server (%d total), want 2 — "+
 			"the new session is not being cached", *registrations)
+	}
+}
+
+// One reading per turn is not enough on its own if a SECOND consumer goes back
+// to the store. Until this round the registrar did exactly that: Run resolved
+// the switches, and mcphost.Register then read them again to decide which
+// tools to install. A settings.Set landing in that window built a session
+// whose TOOLS came from the second reading and whose LABEL — the value
+// Service.session caches on — came from the first.
+//
+// The label being the cache key is what turns a one-turn slip into a
+// permanent one. Once the writer's switches are back where they started, every
+// later turn resolves the same label, finds the cached session, and is handed
+// the tool set built during the window — for the life of the process.
+//
+// So this runs three turns with the switches steady at both-on, and flips them
+// off and back exactly ONCE, between the two readings of the first turn. No
+// goroutine, no sleep: the flip is performed by the switch accessor itself,
+// after it has answered, which is precisely the interleaving the race under
+// -race was only sampling.
+func TestRun_aFlipBetweenTheTwoReadingsIsNotCachedForever(t *testing.T) {
+	rec := &recorder{}
+	c := &scriptedClient{responses: []llm.ChatResponse{textReply("ok")}}
+	svc, cfg, _ := budgetService(t, c, rec)
+	setToolSwitches(t, cfg, true, true)
+
+	// The window. resolveToolGroups reads memory first and skills second, so
+	// hanging the flip off the skills accessor puts it after the whole
+	// snapshot has been taken and before anything else can read the store.
+	// It answers with the value the writer actually set; the store is what
+	// moves underneath.
+	flipped := false
+	svc.deps.SkillToolsEnabled = func() bool {
+		answer := cfg.SkillToolsEnabled()
+		if !flipped {
+			flipped = true
+			setToolSwitches(t, cfg, false, false)
+		}
+		return answer
+	}
+
+	for turn := 1; turn <= 3; turn++ {
+		oneTurn(t, svc, rec)
+		if turn == 1 {
+			if !flipped {
+				t.Fatal("test setup: the flip never happened, so nothing was interleaved")
+			}
+			// The writer's switches, back where the writer left them. From
+			// here on every turn resolves both-on — and a turn that is handed
+			// the cached session from the window gets 16 tools with a 19-tool
+			// prompt.
+			setToolSwitches(t, cfg, true, true)
+		}
+
+		system := c.messages()[0].Content
+		offered := offeredTools(c.options().Tools)
+
+		// Both switches were on for the whole of every one of these turns.
+		for _, name := range []string{"linetta_edit_memory", "linetta_read_skill", "linetta_edit_skill"} {
+			if !offered[name] {
+				t.Errorf("turn %d was not offered %s, though both switches were on for the "+
+					"whole turn: the tools came from a second reading of the store, taken "+
+					"inside the window the flip opened", turn, name)
+			}
+		}
+		// The invariant itself, on the turn's own two halves.
+		for _, name := range promptToolName.FindAllString(system, -1) {
+			if !offered[name] {
+				t.Errorf("turn %d: the system prompt tells the agent to call %s, but the same "+
+					"turn offered %d tools and not that one", turn, name, len(offered))
+			}
+		}
+	}
+}
+
+// A session released twice reports it. Nothing in the tree does that today —
+// every acquire has exactly one release, and `closed` would stop a second one
+// from closing anything — but a refcount that silently sits at -1 is a session
+// a later retire can close while another holder is still calling tools on it.
+func TestToolSession_aSecondReleaseIsReportedAndChangesNothing(t *testing.T) {
+	ts, err := connectTools(context.Background(), stubTools(nil), allToolGroups())
+	if err != nil {
+		t.Fatalf("connectTools: %v", err)
+	}
+	ts.acquire()
+	if err := ts.retire(); err != nil {
+		t.Fatalf("retire: %v", err)
+	}
+	ts.mu.Lock()
+	closedWhileHeld := ts.closed
+	ts.mu.Unlock()
+	if closedWhileHeld {
+		t.Fatal("retire closed a session someone was still holding")
+	}
+	if err := ts.release(); err != nil {
+		t.Fatalf("the last release: %v", err)
+	}
+
+	if err := ts.release(); err == nil {
+		t.Error("a second release for the same reference was accepted in silence")
+	}
+	ts.mu.Lock()
+	refs, closed := ts.refs, ts.closed
+	ts.mu.Unlock()
+	if refs < 0 {
+		t.Errorf("the refcount is %d: a later acquire/release pair would drop it to -1 "+
+			"again and let a retire close the session under its holder", refs)
+	}
+	if !closed {
+		t.Error("the extra release reopened the session's closed flag")
 	}
 }

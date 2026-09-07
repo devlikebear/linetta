@@ -274,7 +274,12 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 			"writer's style and POV targets. Call this before drafting or revising so the text stays " +
 			"consistent with the rest of the work. Empty summary sections mean nobody has summarized those " +
 			"scenes yet.",
-	}, record(d, "linetta_get_story_context", d.getStoryContext))
+	}, record(d, "linetta_get_story_context",
+		// Bound to the groups this server is being built with, so the brief
+		// and this server's tools/list can never name different sets.
+		func(ctx context.Context, req *mcp.CallToolRequest, in getStoryContextInput) (*mcp.CallToolResult, getStoryContextOutput, error) {
+			return d.getStoryContext(ctx, req, in, groups)
+		}))
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_read_scene",
@@ -495,7 +500,14 @@ func outlineRows(all []node.Node) []outlineRow {
 	return rows
 }
 
-func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, in getStoryContextInput) (*mcp.CallToolResult, getStoryContextOutput, error) {
+// getStoryContext takes the tool budget as an argument, and registerReadTools
+// binds it to the groups THIS SERVER was registered with — not to whatever the
+// store says at call time. The brief is the only thing that tells an external
+// client its skills exist, and it does that by naming linetta_read_skill; a
+// live read here would let a switch thrown after the server was built produce
+// a brief naming a tool this server never registered. Same invariant as the
+// agent's prompt, one level out.
+func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, in getStoryContextInput, groups ToolGroups) (*mcp.CallToolResult, getStoryContextOutput, error) {
 	n, errResult := d.requireNodeInProject(ctx, in.NodeID, in.ProjectID)
 	if errResult != nil {
 		return errResult, getStoryContextOutput{}, nil
@@ -530,7 +542,7 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	// read but not update is coherent and useful; a skill list with no way to
 	// read a body is not.
 	includeSkills := in.IncludeSkills
-	if !d.toolGroups().Skills {
+	if !groups.Skills {
 		off := false
 		includeSkills = &off
 	}

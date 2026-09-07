@@ -26,18 +26,20 @@ import (
 // and no handler is called here.
 func registeredToolNames(t *testing.T, mode string) []string {
 	t.Helper()
-	return registeredToolNamesOf(t, ToolDeps{}, mode)
+	return registeredToolNamesOf(t, ToolDeps{}, mode, AllToolGroups())
 }
 
 // registeredToolNamesWithGroups is the same question asked of a server built
 // with the writer's tool-budget switches in a given position (#99). The
-// switches are read off a real settings.Store rather than passed as an
-// argument because that is how Register learns them in production — a test
-// that handed the groups in directly would not notice a Register that stopped
-// consulting the store at all.
+// switches still go through a real settings.Store and come back out through
+// ToolGroupsFrom, which is the whole production path from a written setting to
+// a built server — the host's own call site does exactly this. Register itself
+// no longer reads the store: it takes the answer, so that whoever resolved it
+// can use that same answer to describe the server elsewhere.
 func registeredToolNamesWithGroups(t *testing.T, mode string, groups ToolGroups) []string {
 	t.Helper()
-	return registeredToolNamesOf(t, ToolDeps{Settings: storeWithGroups(t, groups)}, mode)
+	store := storeWithGroups(t, groups)
+	return registeredToolNamesOf(t, ToolDeps{Settings: store}, mode, ToolGroupsFrom(store))
 }
 
 func storeWithGroups(t *testing.T, groups ToolGroups) *settings.Store {
@@ -56,13 +58,13 @@ func storeWithGroups(t *testing.T, groups ToolGroups) *settings.Store {
 	return s
 }
 
-func registeredToolNamesOf(t *testing.T, deps ToolDeps, mode string) []string {
+func registeredToolNamesOf(t *testing.T, deps ToolDeps, mode string, groups ToolGroups) []string {
 	t.Helper()
 	ctx := context.Background()
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name: ServerName, Version: ServerVersion,
 	}, nil)
-	deps.Register(srv, mode)
+	deps.Register(srv, mode, groups)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	ss, err := srv.Connect(ctx, serverTransport, nil)

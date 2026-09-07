@@ -48,8 +48,10 @@ var ErrConsentRequired = errors.New("mcphost: MCP consent is required before sta
 // (see tools_read.go) so this file stays about lifecycle and auth.
 type Deps struct {
 	Settings *settings.Store
-	// Tools registers the tool set for the current mode on a fresh server.
-	Tools func(s *mcp.Server, mode string)
+	// Tools registers the tool set for the current mode and tool budget on a
+	// fresh server. The host resolves the budget itself, per server it
+	// builds — see the handler in Start.
+	Tools func(s *mcp.Server, mode string, groups ToolGroups)
 	// Home is $LINETTA_HOME, where the discovery file lives.
 	Home string
 }
@@ -131,7 +133,16 @@ func (h *Host) Start(ctx context.Context) error {
 			Version: ServerVersion,
 		}, nil)
 		if h.deps.Tools != nil {
-			h.deps.Tools(srv, mode)
+			// The tool budget (#99) is read HERE, once per server, because
+			// this is where the only reading of it is needed: the host does
+			// not describe this tool set anywhere else, does not cache the
+			// server, and hands no label to anyone. An external client asks
+			// tools/list on the session it just opened and is told the truth,
+			// and a switch thrown now reaches its next connection. The one
+			// caller that does describe the set twice — the built-in agent —
+			// resolves the groups at the top of its turn and passes the same
+			// value to its prompt and to Register.
+			h.deps.Tools(srv, mode, ToolGroupsFrom(h.deps.Settings))
 		}
 		return srv
 	}, nil)

@@ -60,12 +60,15 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		return "", err
 	}
 	// The two tool-budget switches (#99) are read ONCE, here, and the same
-	// value then decides both halves of the turn: which tools the session is
-	// built with, below, and which tools the prompt is allowed to name
-	// (openingMessages reads st.groups, it does not read the switches again).
-	// Reading them twice is how a flip mid-turn could still produce a prompt
-	// and a tool list that disagree — the one failure this feature exists to
-	// prevent.
+	// value then decides every part of the turn that has an opinion about
+	// which tools exist: the server the session is built with (connectTools
+	// hands this value to Deps.Register — the registrar does not read the
+	// store), the label that session is cached under, and which tools the
+	// prompt is allowed to name (openingMessages reads st.groups). Any second
+	// reading reopens the same hole: a settings.Set landing between two
+	// readings produces a turn whose prompt names a tool its own server never
+	// registered, and because the label is the cache key, that turn's mistake
+	// is cached for every turn after it.
 	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled)
 	tools, err := s.session(ctx, groups)
 	if err != nil {
