@@ -113,6 +113,36 @@ type Config struct {
 	// and the writer can switch it off in Settings → Skills. Off means no
 	// second provider call and no skill written without the writer asking.
 	AgentSelfReviewEnabled bool `json:"agent_self_review_enabled"`
+	// MemoryToolsEnabled and SkillToolsEnabled are the writer's tool budget
+	// (#99). Every tool's whole JSON schema travels in every request, so the
+	// nineteen tools Linetta serves are a standing cost on every turn — the
+	// memory and skills tools alone are about a fifth of it. These two
+	// switches remove a group from what any agent is offered: the built-in
+	// panel's server and the MCP server an external client connects to both
+	// read them, so there is one answer to "which tools exist", not two.
+	//
+	// Both default to ON: a writer who never opens this pane keeps exactly
+	// the tool set 1.2 shipped.
+	//
+	// Off removes the tools AND the instructions that name them. A prompt
+	// that tells an agent to record a skill with a tool it has not been given
+	// is worse than the tool's cost — see agent/prompt.go. What survives
+	// differs by group, and deliberately: the memory documents are still
+	// pasted (they are content, and the writer still edits them in Settings),
+	// while the skills LIST goes with its tools, because a list of names is
+	// only ever a pointer to bodies linetta_read_skill would fetch.
+	MemoryToolsEnabled bool `json:"memory_tools_enabled"`
+	SkillToolsEnabled  bool `json:"skill_tools_enabled"`
+	// ToolBudget is what those two switches actually cost, measured from the
+	// tool set the engine would register right now — never a table written
+	// down here. Derived at settings.get time and never persisted, for the
+	// same reason as the legacy-plaintext fields below: a number on disk
+	// outlives the tool set it described.
+	//
+	// Nil on a build that wired no measurement (mobile, and every test that
+	// does not ask for one), which is why the Settings pane treats it as
+	// optional rather than as a promise.
+	ToolBudget *ToolBudget `json:"tool_budget,omitempty"`
 	// The four fields below report one thing settings.get cannot get from
 	// anywhere else: a pre-1.0 plaintext api_key that is *still in
 	// settings.json* because load() had nowhere to move it to (#113).
@@ -245,6 +275,8 @@ type Patch struct {
 	MCPConsentVersion         *int                     `json:"mcp_consent_version,omitempty"`
 	MCPConsentedAt            *int64                   `json:"mcp_consented_at,omitempty"`
 	AgentSelfReviewEnabled    *bool                    `json:"agent_self_review_enabled,omitempty"`
+	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
+	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
 	// ClearLegacyPlaintextKeys, when true, deletes the plaintext keys load()
 	// could not migrate from settings.json (#113). One-way and destructive:
 	// on a platform with no secret store the file is the only place those
@@ -264,6 +296,9 @@ type Store struct {
 	// Guarded by mu. Empty on every healthy install; non-empty only on a
 	// platform with no secret backend, or after one refused. See #113.
 	legacyPlaintext legacyPlaintextKeys
+	// toolBudget measures what the tool set costs, for settings.get (#99).
+	// Guarded by mu; nil until WithToolBudget wires one. See toolbudget.go.
+	toolBudget ToolBudgetFunc
 }
 
 // New constructs a Store, ensuring $LINETTA_HOME exists and loading the file.
@@ -326,6 +361,10 @@ func defaults(home string) Config {
 		// On by default: an agent that never notices what it learned is the
 		// feature not shipping. See Config.AgentSelfReviewEnabled.
 		AgentSelfReviewEnabled: true,
+		// On by default: a writer who never opens the tool-budget pane keeps
+		// exactly the tool set 1.2 shipped. See Config.MemoryToolsEnabled.
+		MemoryToolsEnabled: true,
+		SkillToolsEnabled:  true,
 	}
 }
 
@@ -405,6 +444,17 @@ func (s *Store) load() error {
 	// on at every restart.
 	if _, ok := raw["agent_self_review_enabled"]; ok {
 		s.cfg.AgentSelfReviewEnabled = disk.AgentSelfReviewEnabled
+	}
+	// The two tool-budget switches (#99), presence-guarded for the same
+	// reason: both default to true, so a plain assignment would read the
+	// writer's deliberate `false` and a settings.json from a build that
+	// predates the key as the same thing, and hand the tools back at every
+	// restart.
+	if _, ok := raw["memory_tools_enabled"]; ok {
+		s.cfg.MemoryToolsEnabled = disk.MemoryToolsEnabled
+	}
+	if _, ok := raw["skill_tools_enabled"]; ok {
+		s.cfg.SkillToolsEnabled = disk.SkillToolsEnabled
 	}
 	s.cfg = normalizeMCPPreferences(s.cfg)
 	// Migration cannot fail the load any more (#113). A pre-1.0 plaintext key
@@ -492,6 +542,27 @@ func (s *Store) AgentSelfReviewEnabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.AgentSelfReviewEnabled
+}
+
+// MemoryToolsEnabled reports whether linetta_edit_memory is offered (#99).
+//
+// Read where the tool set is built, not captured at start-up, for a stronger
+// reason than Language's: the built-in agent builds a fresh in-memory server
+// for every run, and the MCP host builds one per HTTP session, so reading it
+// there is what makes the switch take effect on the writer's next message and
+// their client's next connection rather than at the next restart.
+func (s *Store) MemoryToolsEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.MemoryToolsEnabled
+}
+
+// SkillToolsEnabled reports whether linetta_read_skill and linetta_edit_skill
+// are offered (#99). Read per server build, like MemoryToolsEnabled.
+func (s *Store) SkillToolsEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.SkillToolsEnabled
 }
 
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
@@ -650,6 +721,12 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.AgentSelfReviewEnabled != nil {
 		next.AgentSelfReviewEnabled = *p.AgentSelfReviewEnabled
 	}
+	if p.MemoryToolsEnabled != nil {
+		next.MemoryToolsEnabled = *p.MemoryToolsEnabled
+	}
+	if p.SkillToolsEnabled != nil {
+		next.SkillToolsEnabled = *p.SkillToolsEnabled
+	}
 	if next.WebSearchProvider == "" {
 		next.WebSearchProvider = "brave"
 	}
@@ -757,6 +834,8 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		// never written to disk, so the writer's choice survives until the
 		// next restart and no further.
 		AgentSelfReviewEnabled: next.AgentSelfReviewEnabled,
+		MemoryToolsEnabled:     next.MemoryToolsEnabled,
+		SkillToolsEnabled:      next.SkillToolsEnabled,
 	}
 	// sanitizeConfigForDisk has just blanked every api_key, which is right for
 	// every key the SecretStore holds. It is wrong for the pre-1.0 ones it
@@ -955,6 +1034,10 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	// Presence only — never the value: settings.get must not read secrets, and
 	// the check has to see the 0600 file fallback too.
 	c.MCPTokenSet = s.MCPTokenExists()
+	// What the tool set the two switches govern actually costs (#99).
+	// Measured here rather than stored, so it can never describe a tool set
+	// the engine no longer serves.
+	c.ToolBudget = s.toolBudgetView(c.MemoryToolsEnabled, c.SkillToolsEnabled)
 	// Which keys are still in plain text in settings.json, and why (#113).
 	// Names and a reason only — the values stay where they are, and the point
 	// of the notice is that the writer already has them.
@@ -985,6 +1068,10 @@ func sanitizeConfigForDisk(c Config) Config {
 	c = sanitizeConfigForMemory(c)
 	c.WebSearchAPIKeySet = false
 	c.MCPTokenSet = false
+	// Derived, never written: a measurement on disk outlives the tool set it
+	// measured. persist()'s allowlist already leaves it out; this is the
+	// second lock on the same door, matching the two flags above.
+	c.ToolBudget = nil
 	providers := map[string]ProviderConfig{}
 	for id, cfg := range c.Providers {
 		cfg.APIKeySet = false

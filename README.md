@@ -176,6 +176,26 @@ metered by your provider like any other call. Turn it off under **Settings →
 Skills → Learning from its own work** (`agent_self_review_enabled` in
 `settings.json`) and Linetta does not make that call at all.
 
+**You can switch the memory and skills tools off entirely.** Every tool's full
+description travels in every request, so Linetta's nineteen tools are a
+standing cost on every turn — and the memory tool and the two skills tools are
+about a fifth of it. **Settings → Tool budget** says how many tools the agent
+currently gets and what each group costs, and turns either group off for both
+the built-in agent and any MCP client (`memory_tools_enabled` and
+`skill_tools_enabled` in `settings.json`; both on by default). Switching a
+group off also removes the instructions that name its tools — a prompt telling
+an agent to use a tool it has not been given is worse than the tool's cost.
+Either switch takes effect on your very next message; there is nothing to
+restart. With the skills tools off the self-improvement pass cannot run at
+all, and the Skills pane says so.
+
+The two groups lose different things, and that is deliberate. With the memory
+tool off, what is already recorded is still read back to the agent — it just
+cannot add to it, and you can still edit it yourself under Settings → Memory.
+With the skills tools off, the skill **list** goes too: a list with no
+`linetta_read_skill` to open a body is only names. Nothing is deleted either
+way, and switching a group back on restores it exactly.
+
 **The daily backup does not carry the skills folder.** It is `VACUUM INTO` on
 `library.db` and copies nothing else under your data directory. What it does
 carry is the version history: every write and every delete lands a row holding

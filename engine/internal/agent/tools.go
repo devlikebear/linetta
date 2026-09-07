@@ -12,8 +12,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -30,17 +32,133 @@ const maxToolResultChars = 24000
 // RegisterTools installs the tool set on a fresh server. The caller supplies
 // mcphost.ToolDeps.Register bound to full mode — the built-in agent is always
 // full: an agent that cannot write the manuscript has no reason to exist.
-type RegisterTools func(*mcp.Server)
+//
+// The tool budget (#99) is passed in rather than read by the registrar,
+// because the turn has already read it: Run resolves the switches once and
+// that same value builds the server, labels the session and bounds the
+// prompt. A registrar that read the store again would answer a settings.Set
+// landing in between, and the session — cached under the label from the FIRST
+// reading — would serve the disagreement to every later turn.
+type RegisterTools func(*mcp.Server, mcphost.ToolGroups)
 
-// toolSession is one connected client/server pair. One per engine: the tools
-// are stateless, and a session per run would re-handshake on every turn.
+// hostGroups is the turn's tool budget in the form the tool layer takes. The
+// conversion lives here rather than in prompt.go so the prompt stays free of
+// the tool layer, and it exists so the value that bounded the prompt is
+// literally the value that builds the server — rather than the two being read
+// separately and hoped to agree.
+func (g toolGroups) hostGroups() mcphost.ToolGroups {
+	return mcphost.ToolGroups{Memory: g.memory, Skills: g.skills}
+}
+
+// toolSession is one connected client/server pair. Normally one per engine:
+// the tools are stateless, and a session per run would re-handshake on every
+// turn. It is rebuilt only when the writer's tool budget changes, because the
+// tool set is fixed at registration time and a live server cannot be
+// re-registered — see Service.session.
 type toolSession struct {
 	client *mcp.ClientSession
 	server *mcp.ServerSession
+	// groups is the tool budget (#99) the server was BUILT for. The session
+	// is cached across turns, so this is the only thing that can tell a later
+	// turn whether the cached tools still match the switches its own prompt
+	// is about to describe.
+	groups toolGroups
+
+	// mu guards the retirement bookkeeping. A superseded session outlives the
+	// call that swapped it out: a turn already in flight holds it for its
+	// whole life, and its self-review for longer still. So a rebuild may not
+	// close it — it retires it, and the last holder to let go does the
+	// closing. Cancelling those turns instead would be a switch flip that
+	// kills the message the writer is waiting on.
+	mu      sync.Mutex
+	refs    int
+	retired bool
+	closed  bool
+}
+
+// acquire takes one reference. It has two callers, and only one of them holds
+// Service.toolsMu:
+//
+//   - Service.session, under toolsMu, taking the FIRST reference — which is
+//     what makes it safe to hand a turn a session that is not already closed:
+//     nothing can retire it between the check and the reference.
+//   - startSelfReview, holding no lock at all. Safe for a different reason:
+//     it acquires on the turn's own goroutine, against a session that turn is
+//     still holding, so the refcount cannot be at zero and a concurrent retire
+//     can only mark the session, not close it.
+//
+// Acquiring a session nobody else holds and nobody has retired from outside
+// the lock would be the unsafe case, and there is no such caller.
+func (s *toolSession) acquire() {
+	s.mu.Lock()
+	s.refs++
+	s.mu.Unlock()
+}
+
+// release drops one reference, closing the session if it has been retired and
+// this was the last holder. Every acquire owes exactly one release — and only
+// one.
+//
+// A second release for the same reference is a bookkeeping bug in this file
+// (a missing handedOff guard, a defer on the wrong goroutine), and it is
+// reported rather than absorbed. It cannot double-close: `closed` is what
+// actually stops that, and the extra release therefore does no visible harm
+// today. But it would leave refs at -1, and a NEGATIVE refcount is a loaded
+// gun — the next holder's release would then see refs drop to -1 again from
+// its own legitimate acquire/release pair, so a retire could close a session
+// another holder is still calling tools on. Clamping at zero keeps the count
+// meaning what it says; the returned error is how the caller's logf makes the
+// bug visible instead of leaving it to be found by a closed pipe months later.
+func (s *toolSession) release() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	s.refs--
+	if s.refs < 0 {
+		s.refs = 0
+		s.mu.Unlock()
+		return errors.New("agent: tool session released more times than it was acquired")
+	}
+	last := s.retired && s.refs <= 0 && !s.closed
+	if last {
+		s.closed = true
+	}
+	s.mu.Unlock()
+	if !last {
+		return nil
+	}
+	return s.Close()
+}
+
+// retire marks the session superseded so no further turn is handed it, and
+// closes it right away when nobody is holding it. A held session is closed by
+// its last release instead.
+func (s *toolSession) retire() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	s.retired = true
+	now := s.refs <= 0 && !s.closed
+	if now {
+		s.closed = true
+	}
+	s.mu.Unlock()
+	if !now {
+		return nil
+	}
+	return s.Close()
 }
 
 // connectTools builds the server, registers the tools and dials it in memory.
-func connectTools(ctx context.Context, register RegisterTools) (*toolSession, error) {
+// groups does two jobs here, and they are the same reading: it BUILDS the tool
+// set (passed to register) and it LABELS the session (stored on it, so a later
+// turn can tell whether the cached tools still match what its own prompt is
+// about to describe). One value doing both is what makes the label honest —
+// while register read the switches for itself, the two could come from
+// readings either side of a settings.Set, and the label is the cache key.
+func connectTools(ctx context.Context, register RegisterTools, groups toolGroups) (*toolSession, error) {
 	if register == nil {
 		return nil, fmt.Errorf("agent: no tool registration")
 	}
@@ -49,7 +167,7 @@ func connectTools(ctx context.Context, register RegisterTools) (*toolSession, er
 		Title:   "Linetta",
 		Version: mcphost.ServerVersion,
 	}, nil)
-	register(srv)
+	register(srv, groups.hostGroups())
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	ss, err := srv.Connect(ctx, serverTransport, nil)
@@ -63,7 +181,7 @@ func connectTools(ctx context.Context, register RegisterTools) (*toolSession, er
 		_ = ss.Close()
 		return nil, fmt.Errorf("agent: connect tool client: %w", err)
 	}
-	return &toolSession{client: cs, server: ss}, nil
+	return &toolSession{client: cs, server: ss, groups: groups}, nil
 }
 
 func (s *toolSession) Close() error {

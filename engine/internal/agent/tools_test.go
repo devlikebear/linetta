@@ -23,8 +23,12 @@ type echoOut struct {
 
 // stubTools installs one tool that echoes its input back, reports the run id
 // it saw, and can be told to fail or to return an oversized body.
+// It ignores the tool budget: the one tool it installs is in no group, so
+// there is nothing for the switches to remove. That is exactly why the
+// budget's own tests use the real mcphost registration instead — see
+// budgetService in toolbudget_test.go.
 func stubTools(seenRunID *string) RegisterTools {
-	return func(s *mcp.Server) {
+	return func(s *mcp.Server, _ mcphost.ToolGroups) {
 		mcp.AddTool(s, &mcp.Tool{Name: "echo", Description: "echo the text back"},
 			func(_ context.Context, req *mcp.CallToolRequest, in echoIn) (*mcp.CallToolResult, echoOut, error) {
 				if seenRunID != nil && req != nil && req.Params != nil {
@@ -51,7 +55,7 @@ func stubTools(seenRunID *string) RegisterTools {
 
 func newSession(t *testing.T, register RegisterTools) *toolSession {
 	t.Helper()
-	s, err := connectTools(context.Background(), register)
+	s, err := connectTools(context.Background(), register, allToolGroups())
 	if err != nil {
 		t.Fatalf("connectTools: %v", err)
 	}

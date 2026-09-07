@@ -683,10 +683,25 @@ const messages = {
     "settings.nav.general": "일반",
     "settings.nav.providers": "AI 프로바이더",
     "settings.nav.mcp": "외부 에이전트 (MCP)",
+    "settings.nav.tools": "툴 예산",
     "settings.nav.memory": "기억",
     "settings.nav.skills": "스킬",
     "settings.nav.sync": "동기화",
     "settings.nav.backupRestore": "백업·복원",
+    // 툴 예산(#99). 스위치만 있으면 예산이 아니다 — 무엇을 얼마에 파는지
+    // 말해야 작가가 고를 수 있다. 숫자는 엔진이 실제로 등록하는 툴에서 재서
+    // 넘겨주므로 여기에 적어 두지 않는다.
+    "settings.tools.title": "툴 예산",
+    "settings.tools.description":
+      "툴 설명은 요청마다 통째로 들어갑니다. 쓰지 않는 툴 묶음을 끄면 매 턴 그만큼을 아낍니다. 툴을 끄면 그 툴을 쓰라고 시키는 안내문도 함께 빠집니다.",
+    "settings.tools.current": "지금 에이전트가 받는 툴: {tools}개 · 요청마다 약 {size}",
+    "settings.tools.groupCost": "툴 {tools}개 · 약 {size}",
+    "settings.tools.memory.title": "기억 툴",
+    "settings.tools.memory.description":
+      "에이전트가 작가와 작품에 대해 알아낸 것을 스스로 적어 둡니다. 끄면 적어 둔 기억은 그대로 읽되 에이전트가 더 쓰지는 못합니다 — 기억 화면에서는 계속 직접 고칠 수 있습니다.",
+    "settings.tools.skills.title": "스킬 툴",
+    "settings.tools.skills.description":
+      "에이전트가 스킬 본문을 읽고 새로 적습니다. 끄면 스킬 목록도 함께 빠집니다 — 본문을 열 방법이 없는 목록은 이름만 늘어놓는 셈이기 때문입니다. 스킬 문서 자체는 지워지지 않고, 다시 켜면 그대로 돌아옵니다.",
     "settings.language.title": "언어",
     "settings.language.description": "Linetta의 앱 UI 언어를 선택합니다. 한국어가 기본값입니다.",
     "settings.language.label": "앱 언어",
@@ -872,6 +887,11 @@ const messages = {
     // 스스로 배우는 고리(#98). 작가가 시키지 않은 프로바이더 호출이므로
     // 설명이 그 사실을 먼저 말한다: 언제 도는지, 무엇을 남기는지, 끄면 무엇이
     // 멈추는지.
+    // 스킬 툴이 꺼져 있을 때(#99). 이 화면은 그대로 쓸 수 있지만, 여기서 쓴
+    // 스킬을 읽는 쪽이 없다는 사실 — 그리고 어디서 다시 켜는지 — 를 말해
+    // 주지 않으면 작가는 아무도 읽지 않는 문서를 계속 쓰게 된다.
+    "settings.skills.toolsOff":
+      "스킬 툴이 꺼져 있습니다. 아래 스킬은 에이전트에게 전달되지 않고, 에이전트가 스킬을 읽거나 쓸 수도 없습니다 — 바로 아래 '스스로 익히기'도 켜 두든 꺼 두든 동작하지 않습니다. 다시 켜려면 {pane}으로 가세요.",
     "settings.skills.selfReview.title": "스스로 익히기",
     "settings.skills.selfReview.enabled": "작업이 끝나면 배운 것을 정리",
     "settings.skills.selfReview.description":
@@ -1645,10 +1665,26 @@ const messages = {
     "settings.nav.general": "General",
     "settings.nav.providers": "AI provider",
     "settings.nav.mcp": "External agents (MCP)",
+    "settings.nav.tools": "Tool budget",
     "settings.nav.memory": "Memory",
     "settings.nav.skills": "Skills",
     "settings.nav.sync": "Sync",
     "settings.nav.backupRestore": "Backup & restore",
+    // The tool budget (#99). A bare switch is not a budget — it has to say
+    // what is being given up and for how much. The numbers are measured
+    // engine-side from the tools it would actually register, never written
+    // down here.
+    "settings.tools.title": "Tool budget",
+    "settings.tools.description":
+      "Every tool's full description travels in every request. Switching off a group you do not use gives that back on every turn. Turning a group off also removes the instructions that tell the agent to use it.",
+    "settings.tools.current": "The agent currently gets {tools} tools — about {size} in every request",
+    "settings.tools.groupCost": "{tools} tools · about {size}",
+    "settings.tools.memory.title": "Memory tools",
+    "settings.tools.memory.description":
+      "Lets the agent record what it learns about you and this work. Switched off, what is already recorded is still read back to it — the agent just cannot add to it, and you can still edit it yourself on the Memory page.",
+    "settings.tools.skills.title": "Skills tools",
+    "settings.tools.skills.description":
+      "Lets the agent read a skill in full and write new ones. Switched off, the skill list goes with them — a list with no way to open a body is just names. Your skill documents are not deleted, and switching it back on brings them back.",
     "settings.language.title": "Language",
     "settings.language.description": "Choose the Linetta app UI language. Korean is the default.",
     "settings.language.label": "App language",
@@ -1825,6 +1861,8 @@ const messages = {
     "settings.skills.title": "Skills",
     "settings.skills.description":
       "Notes on techniques the agent has worked out. They hold methods, not facts — facts live in the fact book and in memory.",
+    "settings.skills.toolsOff":
+      "The skills tools are switched off. The skills below are not given to the agent, and it can neither read nor write one — so the self-review switch under this notice never fires, whichever way it is set. Switch the tools back on under {pane}.",
     "settings.skills.selfReview.title": "Learning from its own work",
     "settings.skills.selfReview.enabled": "Review what a turn taught it",
     "settings.skills.selfReview.description":
@@ -2573,10 +2611,25 @@ const messages = {
     "settings.nav.general": "一般",
     "settings.nav.providers": "AI プロバイダー",
     "settings.nav.mcp": "外部エージェント (MCP)",
+    "settings.nav.tools": "ツール予算",
     "settings.nav.memory": "記憶",
     "settings.nav.skills": "スキル",
     "settings.nav.sync": "同期",
     "settings.nav.backupRestore": "バックアップと復元",
+    // ツール予算(#99)。スイッチだけでは予算にならない — 何をいくらで手放す
+    // のかを示して初めて選べる。数値はエンジンが実際に登録するツールから
+    // 計測して渡されるので、ここには書かない。
+    "settings.tools.title": "ツール予算",
+    "settings.tools.description":
+      "ツールの説明はリクエストごとに丸ごと送られます。使わないツール群を切れば、毎ターンその分が戻ります。切ったツールを使うよう促す案内文も一緒に外れます。",
+    "settings.tools.current": "いまエージェントが受け取るツール: {tools}個 · リクエストごとに約 {size}",
+    "settings.tools.groupCost": "ツール {tools}個 · 約 {size}",
+    "settings.tools.memory.title": "記憶ツール",
+    "settings.tools.memory.description":
+      "書き手とこの作品について分かったことをエージェント自身が書き留めます。切ると、すでに記録された内容はそのまま読み込まれますが、エージェントは書き足せません — 記憶画面ではこれまで通り自分で編集できます。",
+    "settings.tools.skills.title": "スキルツール",
+    "settings.tools.skills.description":
+      "エージェントがスキル本文を読み、新しく書きます。切るとスキル一覧も一緒に外れます — 本文を開く手段のない一覧は名前が並ぶだけだからです。スキル文書自体は消えず、また入れれば戻ります。",
     "settings.language.title": "言語",
     "settings.language.description": "Linetta のアプリ UI 言語を選択します。既定は韓国語です。",
     "settings.language.label": "アプリの言語",
@@ -2751,6 +2804,8 @@ const messages = {
     "settings.skills.title": "スキル",
     "settings.skills.description":
       "エージェントが身につけた手法を書き留める文書です。事実ではなく方法を書きます — 事実はファクトブックと記憶にあります。",
+    "settings.skills.toolsOff":
+      "スキルツールがオフになっています。下のスキルはエージェントに渡されず、エージェントがスキルを読むことも書くこともできません — すぐ下の「自分の仕事から学ぶ」も、オンオフにかかわらず動きません。もう一度オンにするには {pane} へ。",
     "settings.skills.selfReview.title": "自分の仕事から学ぶ",
     "settings.skills.selfReview.enabled": "作業のあとに学んだことを振り返る",
     "settings.skills.selfReview.description":

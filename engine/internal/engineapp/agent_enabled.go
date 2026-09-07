@@ -201,10 +201,13 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		Providers: deps.src,
 		History:   deps.history,
 		Scope:     scopeLookup{projects: deps.projects, nodes: deps.nodes},
-		Register: func(s *mcp.Server) {
+		Register: func(s *mcp.Server, groups mcphost.ToolGroups) {
 			// Always full: an agent that cannot write the manuscript has no
 			// reason to exist. settings.MCPMode governs external clients only.
-			tools.Register(s, settings.MCPModeFull)
+			//
+			// groups comes from the turn, not from the store: the two funcs
+			// below are the only reading of the switches on this path.
+			tools.Register(s, settings.MCPModeFull, groups)
 		},
 		Notify:   deps.notify,
 		Language: deps.settings.Language,
@@ -213,6 +216,17 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		// Read per turn, like Language: switching the self-review off in
 		// Settings has to take effect on the writer's very next message.
 		SelfReviewEnabled: deps.settings.AgentSelfReviewEnabled,
+		// The tool budget (#99), and the ONLY place it is read on the agent's
+		// path. Run calls these once per turn and passes the one answer to
+		// both halves: to the prompt, and to Register above as its groups
+		// argument. That is what makes "the prompt and the tool list cannot
+		// disagree" true rather than merely likely — while Register read the
+		// store for itself, a settings.Set landing between the two readings
+		// built a server whose tools and whose cache-key label came from
+		// different answers, and the label being the key, every later turn
+		// inherited it.
+		MemoryToolsEnabled: deps.settings.MemoryToolsEnabled,
+		SkillToolsEnabled:  deps.settings.SkillToolsEnabled,
 		Undo: func(ctx context.Context, batchID string) error {
 			return deps.story.UndoApply(ctx, batchID, deps.clock)
 		},

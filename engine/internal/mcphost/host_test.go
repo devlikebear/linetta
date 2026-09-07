@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
@@ -307,6 +309,47 @@ func TestStopKeepsAnotherHostsDiscoveryFile(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatal("the owning host must remove its discovery file on shutdown")
+	}
+}
+
+// Register no longer reads the tool-budget switches (#99) — it takes them —
+// so somebody has to read them for the HTTP host, and this is the assertion
+// that somebody still does. The host is the call site that is allowed to read
+// per server: it builds one per HTTP session and describes that tool set
+// nowhere else, so there is no second reading for a flip to land between. What
+// it owes in exchange is liveness, which is the second half of this test: the
+// writer's next flip must reach the client's next connection without an engine
+// restart.
+func TestTheHostResolvesTheToolBudgetForEverySessionItBuilds(t *testing.T) {
+	h, st, _ := newHost(t, settings.MCPModeFull, true)
+
+	var seen []ToolGroups
+	h.deps.Tools = func(s *mcp.Server, mode string, groups ToolGroups) {
+		seen = append(seen, groups)
+		ToolDeps{}.Register(s, mode, groups)
+	}
+	if err := h.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	token := st.MCPToken()
+	auth := map[string]string{"Authorization": "Bearer " + token}
+
+	post(t, endpoint(h), auth)
+	if len(seen) != 1 || seen[0] != AllToolGroups() {
+		t.Fatalf("the first session was built with %+v, want every group on", seen)
+	}
+
+	off := false
+	if _, err := st.Set(context.Background(), settings.Patch{SkillToolsEnabled: &off}); err != nil {
+		t.Fatalf("settings.Set: %v", err)
+	}
+	post(t, endpoint(h), auth)
+	if len(seen) != 2 {
+		t.Fatalf("the second connection built %d servers in total, want 2", len(seen))
+	}
+	if want := (ToolGroups{Memory: true, Skills: false}); seen[1] != want {
+		t.Errorf("the session opened after the flip was built with %+v, want %+v — an "+
+			"external client would need an engine restart to see the switch", seen[1], want)
 	}
 }
 

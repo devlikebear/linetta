@@ -581,6 +581,26 @@ export type ThemePreference = "system" | "light" | "dark";
 export type PalettePreference = "hanji" | "paper" | "bone" | "press";
 export type PlatformProfileId = "plain" | "munpia" | "series" | "joara";
 
+/** One switchable tool group's share of the budget: how many tools it adds
+ *  and how many bytes of tool schema they cost in every request. Reported
+ *  whether or not the group is currently on, because the writer deciding
+ *  about a switch needs the price of the thing they would be giving up. */
+export interface ToolBudgetGroup {
+  tools: number;
+  bytes: number;
+}
+
+/** What the built-in agent's tool set costs right now (#99). `tools` and
+ *  `bytes` are the totals with the writer's switches as they stand; `memory`
+ *  and `skills` are what each group costs when it is on. Every number is
+ *  measured engine-side from the tools it would actually register. */
+export interface ToolBudget {
+  tools: number;
+  bytes: number;
+  memory: ToolBudgetGroup;
+  skills: ToolBudgetGroup;
+}
+
 export interface Settings {
   language: AppLanguage;
   /** Widened past ProviderID on purpose: settings.get returns whatever the
@@ -622,6 +642,18 @@ export interface Settings {
    *  because a settings payload from an older engine simply omits it; every
    *  reader must treat "missing" as the default, which is ON. */
   agent_self_review_enabled?: boolean;
+  /** The writer's tool budget (#99): whether the memory tool and the two
+   *  skills tools are offered to any agent at all. Both optional and both
+   *  default ON, so — like agent_self_review_enabled above — every reader
+   *  must treat "missing" as on and test `!== false`, never truthiness. */
+  memory_tools_enabled?: boolean;
+  skill_tools_enabled?: boolean;
+  /** What that tool set costs, measured by the engine from the tools it would
+   *  actually register — never a table maintained here, which is how the site's
+   *  tool counts drifted. Absent on a build that cannot measure it (mobile),
+   *  so the pane draws the switches without the numbers rather than inventing
+   *  any. */
+  tool_budget?: ToolBudget;
   /** Provider ids whose pre-1.0 plaintext `api_key` is still sitting in
    *  settings.json because the engine had nowhere to move it (#113). Derived
    *  at load time and never persisted, so it is absent on every healthy
@@ -665,6 +697,8 @@ export interface SettingsPatch {
   mcp_consent_version?: number;
   mcp_consented_at?: number;
   agent_self_review_enabled?: boolean;
+  memory_tools_enabled?: boolean;
+  skill_tools_enabled?: boolean;
   /** Deletes the plaintext keys the engine could not migrate out of
    *  settings.json (#113). Destructive and one-way — where there is no secret
    *  store the file is the only place those keys exist — so it is only ever

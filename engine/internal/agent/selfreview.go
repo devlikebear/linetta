@@ -90,13 +90,21 @@ func (s *Service) maybeSelfReview(ctx context.Context, st loopState, toolCalls i
 		// A review that cannot write a skill has nothing to do but cost a
 		// provider call.
 		//
-		// In production this never fires: the agent's own server always
-		// registers in full mode (engineapp/agent_enabled.go), and Register
-		// keys the write tools on the mode alone (mcphost/tools.go), so the
-		// tool is always offered — a nil skills store is refused later, at
-		// call time. The guard is for a caller that assembles a narrower tool
-		// set, and it is deliberately about what THIS turn was offered rather
-		// than about how the server was built.
+		// This fires in production, and it is the only thing that stops that
+		// call: since #99 the writer can switch the skills tools off, and
+		// Register then leaves linetta_edit_skill out of the turn's server
+		// entirely (mcphost/tools.go). Every later turn would otherwise end
+		// with a provider round-trip whose whole purpose is a tool the model
+		// is not holding — spending the writer's money to demonstrate the
+		// switch worked.
+		//
+		// It is deliberately about what THIS turn was offered rather than
+		// about how the server was built, and st.schemas is the honest source
+		// for that: it is the list that came back from the very session this
+		// turn used, so a turn started before the flip is judged on the tools
+		// it actually had. Reading the switch here instead would be a second
+		// reading of a value the turn already fixed — the same mistake the
+		// prompt used to make.
 		return
 	}
 	s.startSelfReview(ctx, st, used)
@@ -122,6 +130,13 @@ func (s *Service) maybeSelfReview(ctx context.Context, st loopState, toolCalls i
 // and makes enter refuse. A review registered after the snapshot and admitted
 // to the wait group would be invisible to cancelAll and hold Close open for
 // its entire timeout.
+//
+// The tool session: the review calls tools on st.session after the turn that
+// built it has ended, so it takes a reference of its own (#99). Without it a
+// writer flipping a tool-budget switch while the review ran would retire that
+// session and — the turn having already released it — close the pipe out from
+// under a call in flight. The reference is taken here, on the turn's own
+// goroutine, so it is in hand before the turn releases its own.
 func (s *Service) startSelfReview(ctx context.Context, st loopState, used []string) {
 	reviewCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), selfReviewTimeout)
 	reviewID := newRunID()
@@ -132,10 +147,15 @@ func (s *Service) startSelfReview(ctx context.Context, st loopState, used []stri
 		cancel()
 		return
 	}
+	st.session.acquire()
 	go func() {
 		defer cancel()
 		defer s.runs.untrack(reviewID)
 		defer s.leave()
+		// Declared after leave so it runs before it, for the reason Run's
+		// copy of this line gives: Close retires the session only once
+		// wg.Wait has returned.
+		defer releaseSession(st.session)
 		// Same reasoning as the turn's own recover: a panic in a background
 		// goroutine takes the engine process down with it. Unlike the turn's,
 		// this one has nobody to tell — there is no agent.error for a pass the

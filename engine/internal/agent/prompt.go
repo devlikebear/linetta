@@ -48,7 +48,54 @@ type ScopeLookup interface {
 // SkillSource's doc comment) — or nil when Deps.Skills itself is nil. Either
 // way skillsBlock renders "no skills" rather than panicking; see
 // TestSystemPrompt_withNoSkillsOmitsTheBlockEntirely.
-func systemPrompt(lang string, profile, notes agentmemory.Document, skills []agentskills.Skill) string {
+// toolGroups is the writer's tool budget as this turn's prompt sees it (#99).
+// The zero value would be "both off", which is the wrong default for a struct
+// a caller might forget to fill, so every construction goes through
+// allToolGroups or resolveToolGroups and nothing builds one literally.
+type toolGroups struct {
+	memory bool
+	skills bool
+}
+
+func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true} }
+
+// resolveToolGroups reads the two Deps funcs, treating a nil func as enabled
+// — the same "unwired collaborator degrades to the documented default" rule
+// Deps.SelfReviewEnabled follows.
+func resolveToolGroups(memory, skills func() bool) toolGroups {
+	g := allToolGroups()
+	if memory != nil {
+		g.memory = memory()
+	}
+	if skills != nil {
+		g.skills = skills()
+	}
+	return g
+}
+
+// groups says which of the two switchable tool groups this turn actually has
+// (#99). It changes the prompt in two different ways, and the difference is a
+// product decision rather than an oversight:
+//
+//   - skills off: the instruction AND the list both go. The list is names and
+//     descriptions only — a pointer to bodies that only linetta_read_skill can
+//     fetch — so without the tool it is a menu with no kitchen. Worse than
+//     useless: it spends runes telling the agent about documents it has no way
+//     to open, which is the exact failure this feature was supposed to avoid.
+//   - memory off: the instruction goes, the two documents STAY. They are
+//     content, not a pointer: sentences already recorded about this writer and
+//     this work, which still shape the writing whether or not the agent can add
+//     to them. The writer also still edits them in Settings, so they are not
+//     even frozen — just no longer the agent's to write. A memory the agent can
+//     read but not update is a coherent product; a skill list it cannot open is
+//     not.
+//
+// What the memory block loses is its budget line. "(412 / 2000 characters
+// used)" is there because the agent is the one who has to make room — see
+// memoryBlock — and an agent with no linetta_edit_memory can never make room.
+// Quoting a budget at someone who cannot spend it invites exactly the reply
+// this change is trying to prevent: an offer to tidy the memory up.
+func systemPrompt(lang string, profile, notes agentmemory.Document, skills []agentskills.Skill, groups toolGroups) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `You are Linetta's writing agent. You work inside the writer's own app, on their manuscript, with the writer holding the final say on every word.
 
@@ -58,7 +105,16 @@ How you work:
 - Call linetta_get_story_context before drafting anything, so you write from the work's actual state rather than a guess.
 - After writing or revising a scene, refresh its summary so the rest of the work stays accurate.
 - Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.`, lang)
-	b.WriteString("\n- Record something durable with linetta_edit_memory: how this writer works goes in writer_profile, what you learn about this work goes in work_notes. Both are read back to you at the start of every session, so replace a line that changed rather than adding a second one.\n")
+	if groups.memory {
+		b.WriteString("\n- Record something durable with linetta_edit_memory: how this writer works goes in writer_profile, what you learn about this work goes in work_notes. Both are read back to you at the start of every session, so replace a line that changed rather than adding a second one.\n")
+	} else {
+		// The bullet list above is written with a leading newline on its
+		// first appended bullet rather than a trailing one on the format
+		// string, so dropping that bullet has to put the break back — or the
+		// skills bullet, or the memory heading, runs on from the checkpoint
+		// line.
+		b.WriteString("\n")
+	}
 	// The standing habit, stated in the turn's own prompt rather than left to
 	// the background review alone (selfreview.go). The review is a safety net
 	// for a technique the agent did not stop to write down; this bullet is the
@@ -66,9 +122,13 @@ How you work:
 	// procedure worked. The second half is the more valuable one: a skill that
 	// has gone wrong keeps being followed every session until someone patches
 	// it, and the agent following it is the only one who can see that it did.
-	b.WriteString("- Record a technique with linetta_edit_skill once a complex task shows you a procedure worth repeating — the order of steps, not the facts. And the moment following a skill shows it is wrong, patch that skill before you move on; a stale procedure is followed every session until someone fixes it.\n")
-	b.WriteString(memoryBlock(profile, notes))
-	b.WriteString(skillsBlock(skills))
+	if groups.skills {
+		b.WriteString("- Record a technique with linetta_edit_skill once a complex task shows you a procedure worth repeating — the order of steps, not the facts. And the moment following a skill shows it is wrong, patch that skill before you move on; a stale procedure is followed every session until someone fixes it.\n")
+	}
+	b.WriteString(memoryBlock(profile, notes, groups.memory))
+	if groups.skills {
+		b.WriteString(skillsBlock(skills))
+	}
 	return b.String()
 }
 
@@ -76,11 +136,25 @@ How you work:
 // budget is shown because the agent is the one who has to make room: it is the
 // difference between consolidating deliberately and discovering the limit
 // halfway through recording something the writer just said.
-func memoryBlock(profile, notes agentmemory.Document) string {
+//
+// writable is the writer's memory-tools switch (#99). When it is off the
+// documents still appear — see systemPrompt's comment for why content
+// survives where a pointer does not — but the budget line does not: a
+// capacity is a thing to manage, and an agent with no linetta_edit_memory has
+// nothing to manage it with.
+func memoryBlock(profile, notes agentmemory.Document, writable bool) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\n## What you know about this writer (%d / %d characters used)\n", profile.CharsUsed, profile.CharsBudget)
+	if writable {
+		fmt.Fprintf(&b, "\n## What you know about this writer (%d / %d characters used)\n", profile.CharsUsed, profile.CharsBudget)
+	} else {
+		b.WriteString("\n## What you know about this writer\n")
+	}
 	b.WriteString(bodyOrNothing(profile.Body))
-	fmt.Fprintf(&b, "\n## What you have learned about this work (%d / %d characters used)\n", notes.CharsUsed, notes.CharsBudget)
+	if writable {
+		fmt.Fprintf(&b, "\n## What you have learned about this work (%d / %d characters used)\n", notes.CharsUsed, notes.CharsBudget)
+	} else {
+		b.WriteString("\n## What you have learned about this work\n")
+	}
 	b.WriteString(bodyOrNothing(notes.Body))
 	// The frame. agentmemory.Screen refuses invisible characters but
 	// deliberately does not match phrases — a novel legitimately contains

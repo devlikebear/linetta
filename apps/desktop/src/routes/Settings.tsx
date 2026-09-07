@@ -55,6 +55,7 @@ const SETTINGS_CATEGORIES = [
   "writing",
   "providers",
   "mcp",
+  "tools",
   "memory",
   "skills",
   "sync",
@@ -63,6 +64,15 @@ const SETTINGS_CATEGORIES = [
 type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
 
 const CATEGORY_STORAGE_KEY = "linetta.settings.category";
+
+/** Tool-schema bytes as something a writer can weigh (#99). kB, one decimal,
+ *  and the same unit for every figure on the pane so the group costs visibly
+ *  add up to the total — a group shown in bytes beside a total in kilobytes
+ *  would make the arithmetic the writer is doing harder, not easier. The
+ *  engine measures the number; this only chooses how to say it. */
+function formatToolBytes(bytes: number): string {
+  return `${(bytes / 1024).toFixed(1)} kB`;
+}
 
 function initialCategory(): SettingsCategory {
   try {
@@ -263,6 +273,11 @@ export function Settings() {
             items: [
               ...(agentAvailable ? [{ id: "providers" as const, label: t("settings.nav.providers") }] : []),
               ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.nav.mcp") }] : []),
+              // The tool budget (#99) governs what the built-in agent AND an
+              // external client are offered, so it sits between the two panes
+              // it applies to rather than inside either — and above memory and
+              // skills, which are the two groups it can take away.
+              { id: "tools" as const, label: t("settings.nav.tools") },
               // A memory is only meaningful when some agent can read it, so it
               // rides the same condition as the group it lives in.
               { id: "memory" as const, label: t("settings.nav.memory") },
@@ -282,6 +297,20 @@ export function Settings() {
       ],
     },
   ];
+
+  /* The tool budget, but only when it is a real measurement (#99).
+     Truthiness is not the test: an engine whose measurement failed answers
+     with a well-formed `{tools: 0, bytes: 0, …}` — nothing in that payload
+     says "unknown" — and gating on the object alone rendered "the agent
+     currently gets 0 tools — about 0.0 kB" over a tool set of nineteen.
+     A budget of zero tools is not a state this pane can be in: the agent
+     always keeps the manuscript tools, which no switch can remove. So zero
+     means the number is not known, and an unknown number is drawn the same
+     way an absent one is — not at all. The engine omits the key in that case
+     too; this is the second lock on the same door, because the pane is what
+     the writer reads and inventing a number here is the drift the whole
+     feature exists to avoid. */
+  const toolBudget = current?.tool_budget && current.tool_budget.tools > 0 ? current.tool_budget : null;
 
   const replayOnboardingTour = () => {
     clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
@@ -522,10 +551,93 @@ export function Settings() {
 
             {category === "mcp" && mcpAvailable && <McpSection />}
 
+            {/* The tool budget (#99). Both switches are ON by default, so they
+                read `!== false`: a settings payload from an engine that
+                predates the keys has no opinion, and truthiness would read
+                that as off and draw a switch the writer never threw.
+
+                The numbers come from the engine — measured from the tools it
+                would actually register — and the block is simply skipped when
+                they are absent, which is what a build that cannot measure them
+                returns. A count invented here would be the drift this feature
+                exists to avoid. */}
+            {category === "tools" && (mcpAvailable || agentAvailable) && (
+            <section className="settings-section">
+              <h3>{t("settings.tools.title")}</h3>
+              <p className="sd">{t("settings.tools.description")}</p>
+              {toolBudget && (
+                <p className="sd" data-testid="tool-budget-current">
+                  {t("settings.tools.current", {
+                    tools: String(toolBudget.tools),
+                    size: formatToolBytes(toolBudget.bytes),
+                  })}
+                </p>
+              )}
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving && apply({ memory_tools_enabled: current.memory_tools_enabled === false })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.tools.memory.title")}</span>
+                  <span className="sd">{t("settings.tools.memory.description")}</span>
+                  {toolBudget && (
+                    <span className="sd" data-testid="tool-budget-memory">
+                      {t("settings.tools.groupCost", {
+                        tools: String(toolBudget.memory.tools),
+                        size: formatToolBytes(toolBudget.memory.bytes),
+                      })}
+                    </span>
+                  )}
+                </span>
+                <span className={`switch${current.memory_tools_enabled !== false ? " on" : ""}`} />
+              </button>
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving && apply({ skill_tools_enabled: current.skill_tools_enabled === false })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.tools.skills.title")}</span>
+                  <span className="sd">{t("settings.tools.skills.description")}</span>
+                  {toolBudget && (
+                    <span className="sd" data-testid="tool-budget-skills">
+                      {t("settings.tools.groupCost", {
+                        tools: String(toolBudget.skills.tools),
+                        size: formatToolBytes(toolBudget.skills.bytes),
+                      })}
+                    </span>
+                  )}
+                </span>
+                <span className={`switch${current.skill_tools_enabled !== false ? " on" : ""}`} />
+              </button>
+            </section>
+            )}
+
             {category === "memory" && (mcpAvailable || agentAvailable) && <MemorySection />}
 
             {category === "skills" && (mcpAvailable || agentAvailable) && (
             <>
+            {/* With the skills tools switched off (#99) this whole pane is
+                still fully usable and none of it reaches the agent: the list
+                below is not put in its prompt, linetta_read_skill is not
+                registered, and the self-improvement switch under it governs a
+                pass whose first act would be to call a tool the agent does
+                not have — so it can never fire. Hiding the pane would be
+                worse: the skills are the writer's documents and they are
+                still theirs to write. What was missing is the sentence saying
+                nobody is reading them, and where to change that. */}
+            {current.skill_tools_enabled === false && (
+              <p className="hint" data-testid="skills-tools-off">
+                {t("settings.skills.toolsOff", { pane: t("settings.tools.title") })}
+              </p>
+            )}
             {/* The self-improvement loop (#98). It sits above the skill list
                 rather than in the providers pane because what it produces is
                 skills: the writer who wants to know why a skill appeared they

@@ -26,11 +26,45 @@ import (
 // and no handler is called here.
 func registeredToolNames(t *testing.T, mode string) []string {
 	t.Helper()
+	return registeredToolNamesOf(t, ToolDeps{}, mode, AllToolGroups())
+}
+
+// registeredToolNamesWithGroups is the same question asked of a server built
+// with the writer's tool-budget switches in a given position (#99). The
+// switches still go through a real settings.Store and come back out through
+// ToolGroupsFrom, which is the whole production path from a written setting to
+// a built server — the host's own call site does exactly this. Register itself
+// no longer reads the store: it takes the answer, so that whoever resolved it
+// can use that same answer to describe the server elsewhere.
+func registeredToolNamesWithGroups(t *testing.T, mode string, groups ToolGroups) []string {
+	t.Helper()
+	store := storeWithGroups(t, groups)
+	return registeredToolNamesOf(t, ToolDeps{Settings: store}, mode, ToolGroupsFrom(store))
+}
+
+func storeWithGroups(t *testing.T, groups ToolGroups) *settings.Store {
+	t.Helper()
+	t.Setenv("LINETTA_HOME", t.TempDir())
+	s, err := settings.NewWithSecretStore(settings.NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("settings store: %v", err)
+	}
+	if _, err := s.Set(context.Background(), settings.Patch{
+		MemoryToolsEnabled: &groups.Memory,
+		SkillToolsEnabled:  &groups.Skills,
+	}); err != nil {
+		t.Fatalf("settings set: %v", err)
+	}
+	return s
+}
+
+func registeredToolNamesOf(t *testing.T, deps ToolDeps, mode string, groups ToolGroups) []string {
+	t.Helper()
 	ctx := context.Background()
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name: ServerName, Version: ServerVersion,
 	}, nil)
-	ToolDeps{}.Register(srv, mode)
+	deps.Register(srv, mode, groups)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	ss, err := srv.Connect(ctx, serverTransport, nil)

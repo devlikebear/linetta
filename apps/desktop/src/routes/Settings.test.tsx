@@ -545,4 +545,166 @@ describe("Settings", () => {
       providersItem.compareDocumentPosition(mcpItem) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
+
+  /* -------------------------------------------------------------------------
+   * #99: the tool budget pane.
+   * ---------------------------------------------------------------------- */
+
+  // A bare switch is not a budget. The pane has to say how many tools the
+  // agent gets right now and what each group costs, or the writer has no
+  // basis for the trade — and the count has to move when a switch does, or it
+  // is decoration.
+  it("shows the tool count and tracks it as the switches change", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({
+      ...baseSettings,
+      tool_budget: {
+        tools: 19,
+        bytes: 27687,
+        memory: { tools: 1, bytes: 1357 },
+        skills: { tools: 2, bytes: 4636 },
+      },
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    expect(await screen.findByTestId("tool-budget-current")).toHaveTextContent("19");
+    expect(screen.getByTestId("tool-budget-current")).toHaveTextContent("27.0 kB");
+    // Each group's own price, so the writer knows what they would be buying
+    // back by switching it on again.
+    expect(screen.getByTestId("tool-budget-memory")).toHaveTextContent("1.3 kB");
+    expect(screen.getByTestId("tool-budget-skills")).toHaveTextContent("4.5 kB");
+
+    // The engine re-measures on the way back out of settings.set — the pane
+    // renders whatever that call returns — so the number moves on the same
+    // click that throws the switch. This mock stands in for that measurement.
+    mocks.settingsSet.mockResolvedValue({
+      ...baseSettings,
+      skill_tools_enabled: false,
+      tool_budget: {
+        tools: 17,
+        bytes: 23051,
+        memory: { tools: 1, bytes: 1357 },
+        skills: { tools: 2, bytes: 4636 },
+      },
+    });
+    await user.click(screen.getByRole("button", { name: /스킬 툴/ }));
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ skill_tools_enabled: false }),
+    );
+    await waitFor(() => expect(screen.getByTestId("tool-budget-current")).toHaveTextContent("17"));
+  });
+
+  // Both switches are ON unless the writer says otherwise, so the first click
+  // sends false — and a payload from an engine that predates the keys must
+  // still read as on, or upgrading would silently take the tools away.
+  it("turns each tool group off and back on independently", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    const memory = await screen.findByRole("button", { name: /기억 툴/ });
+    const skills = screen.getByRole("button", { name: /스킬 툴/ });
+    expect(memory.querySelector(".switch")).toHaveClass("on");
+    expect(skills.querySelector(".switch")).toHaveClass("on");
+
+    await user.click(memory);
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ memory_tools_enabled: false }),
+    );
+    // One switch must not carry the other: two groups, two decisions.
+    expect(mocks.settingsSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ skill_tools_enabled: expect.anything() }),
+    );
+  });
+
+  it("shows a group off when the writer has switched it off", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings, memory_tools_enabled: false });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    const memory = await screen.findByRole("button", { name: /기억 툴/ });
+    expect(memory.querySelector(".switch")).not.toHaveClass("on");
+
+    await user.click(memory);
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ memory_tools_enabled: true }),
+    );
+  });
+
+  // An engine that cannot measure the budget (mobile, or one older than this
+  // change) sends no tool_budget at all. The switches still work; the pane
+  // simply says nothing about cost rather than inventing a number — which is
+  // the drift this feature exists to avoid.
+  it("draws the switches without numbers when the engine reports no budget", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    expect(await screen.findByRole("button", { name: /기억 툴/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-budget-current")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tool-budget-memory")).not.toBeInTheDocument();
+  });
+
+  // A budget of zero is not the same as no budget, and only one of them is
+  // true. When the engine's measurement fails it can answer with a
+  // well-formed {tools: 0, bytes: 0, …} — nothing in that payload says
+  // "unknown" — and a pane that gates on the object alone renders "the agent
+  // currently gets 0 tools — about 0.0 kB" over a tool set of nineteen. Zero
+  // is not a state this pane can honestly be in: the manuscript tools are
+  // unconditional and no switch removes them.
+  it("draws no numbers when the engine reports a budget of zero", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({
+      ...baseSettings,
+      tool_budget: {
+        tools: 0,
+        bytes: 0,
+        memory: { tools: 0, bytes: 0 },
+        skills: { tools: 0, bytes: 0 },
+      },
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    // The switches are still there — an unmeasurable budget does not take the
+    // writer's control away.
+    expect(await screen.findByRole("button", { name: /기억 툴/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-budget-current")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tool-budget-memory")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tool-budget-skills")).not.toBeInTheDocument();
+  });
+
+  // With the skills tools off, the Skills pane still lets the writer author
+  // skills — which is right, they are the writer's documents — but nothing
+  // reads them, and the self-review switch below governs a pass that can
+  // never fire. The pane has to say so.
+  it("says so in the Skills pane when the skills tools are switched off", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings, skill_tools_enabled: false });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+    const notice = await screen.findByTestId("skills-tools-off");
+    // It names where to switch them back on, or the writer is told about a
+    // control they now have to hunt for.
+    expect(notice).toHaveTextContent("툴 예산");
+  });
+
+  it("shows no such notice while the skills tools are on", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+    expect(await screen.findByText(/스스로 익히기/)).toBeInTheDocument();
+    expect(screen.queryByTestId("skills-tools-off")).not.toBeInTheDocument();
+  });
 });

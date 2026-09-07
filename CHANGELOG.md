@@ -77,6 +77,19 @@
   provider meters it like any other call — Settings → Skills → "Learning from
   its own work" (`agent_self_review_enabled`) turns it off, and off means the
   call is not made.
+- Added a **tool budget** you can spend: every tool's full description travels
+  in every request, and the memory tool plus the two skills tools are about a
+  fifth of Linetta's nineteen. Settings → Tool budget says how many tools the
+  agent currently gets and what each group costs, and switches either group
+  off — for the built-in agent and for any MCP client alike
+  (`memory_tools_enabled`, `skill_tools_enabled`; both on by default, so
+  nothing changes unless you open the pane). Switching a group off also
+  removes the instructions that name its tools. With the memory tool off the
+  recorded documents are still read back to the agent, which simply cannot add
+  to them; with the skills tools off the skill list goes too, because a list
+  with no way to open a body is only names. Nothing is deleted either way, and
+  either switch takes effect on your next message rather than at the next
+  restart.
 - Skills live in files, and **the daily backup does not carry them**: it is
   `VACUUM INTO` on `library.db` and copies nothing else under the data
   directory. It does carry their history — every write and delete lands a row

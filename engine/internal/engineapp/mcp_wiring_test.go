@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
@@ -267,4 +268,79 @@ func freeTestPort(t *testing.T) int {
 	port := ln.Addr().(*net.TCPAddr).Port
 	_ = ln.Close()
 	return port
+}
+
+// The tool budget reaches settings.get on a real app (#99), measured from the
+// tools the engine would actually register.
+//
+// This is the one assertion that catches a dropped WithToolBudget line in
+// setupMCP. Nothing else can: settings.get answers with the block simply
+// absent, which is also exactly what a mobile build legitimately returns, so
+// the Settings pane treats it as optional and draws the switches without the
+// numbers — a silent downgrade from "here is what this costs" to a bare
+// switch, which is the one thing this feature was not supposed to be.
+func TestSettingsGetCarriesTheMeasuredToolBudget(t *testing.T) {
+	app := openApp(t)
+
+	res, rpcErr := call(t, app, "settings.get", "")
+	if rpcErr != nil {
+		t.Fatalf("settings.get: %+v", rpcErr)
+	}
+	var got struct {
+		MemoryToolsEnabled bool `json:"memory_tools_enabled"`
+		SkillToolsEnabled  bool `json:"skill_tools_enabled"`
+		ToolBudget         *struct {
+			Tools  int `json:"tools"`
+			Bytes  int `json:"bytes"`
+			Memory struct {
+				Tools int `json:"tools"`
+				Bytes int `json:"bytes"`
+			} `json:"memory"`
+			Skills struct {
+				Tools int `json:"tools"`
+				Bytes int `json:"bytes"`
+			} `json:"skills"`
+		} `json:"tool_budget"`
+	}
+	if err := json.Unmarshal(res, &got); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if !got.MemoryToolsEnabled || !got.SkillToolsEnabled {
+		t.Errorf("a fresh install has a tool group switched off: memory=%v skills=%v",
+			got.MemoryToolsEnabled, got.SkillToolsEnabled)
+	}
+	if got.ToolBudget == nil {
+		t.Fatal("settings.get carries no tool_budget — setupMCP never wired the measurement, " +
+			"so the Settings pane draws two switches and cannot say what either costs")
+	}
+	// Against the tool layer's own lists rather than a number written here:
+	// a literal would be the drift this whole feature exists to avoid.
+	wantTools := len(mcphost.ReadToolNames) + len(mcphost.WriteToolNames)
+	if got.ToolBudget.Tools != wantTools {
+		t.Errorf("tool_budget reports %d tools, the tool layer registers %d",
+			got.ToolBudget.Tools, wantTools)
+	}
+	if got.ToolBudget.Bytes <= 0 {
+		t.Error("tool_budget reports no bytes; the measurement ran but found nothing")
+	}
+	if got.ToolBudget.Memory.Tools != len(mcphost.MemoryToolNames) ||
+		got.ToolBudget.Skills.Tools != len(mcphost.SkillToolNames) {
+		t.Errorf("group counts = memory %d skills %d, want %d and %d",
+			got.ToolBudget.Memory.Tools, got.ToolBudget.Skills.Tools,
+			len(mcphost.MemoryToolNames), len(mcphost.SkillToolNames))
+	}
+
+	// And it moves with the switch, because settings.set answers with the
+	// same freshly measured view the pane renders.
+	res, rpcErr = call(t, app, "settings.set", `{"skill_tools_enabled":false}`)
+	if rpcErr != nil {
+		t.Fatalf("settings.set: %+v", rpcErr)
+	}
+	if err := json.Unmarshal(res, &got); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if got.ToolBudget == nil || got.ToolBudget.Tools != wantTools-len(mcphost.SkillToolNames) {
+		t.Errorf("after switching the skills tools off the budget is %+v, want %d tools",
+			got.ToolBudget, wantTools-len(mcphost.SkillToolNames))
+	}
 }
