@@ -32,9 +32,9 @@ func TestScreenAcceptsOrdinaryWriting(t *testing.T) {
 
 func TestScreenRejectsInvisibleCharacters(t *testing.T) {
 	cases := map[string]string{
-		"zero width space":       "안녕​하세요",
-		"zero width joiner":      "a‍b",
-		"zero width no-break":    "a\uFEFFb",
+		"zero width space":    "안녕​하세요",
+		"zero width joiner":   "a‍b",
+		"zero width no-break": "a\uFEFFb",
 		// Escapes, not the literal characters. A bidi override in source
 		// reorders everything after it in a reviewer's editor and in a diff,
 		// which is the whole reason Screen refuses it -- writing it literally
