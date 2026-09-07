@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -49,6 +50,15 @@ func TestOpenMigratesLegacyCompanionMemory(t *testing.T) {
 
 // A migration that cannot do its job must not keep the app from starting.
 func TestOpenSurvivesFailedLegacyMemoryMigration(t *testing.T) {
+	// Both skips are about how the failure is INDUCED, not about what is under
+	// test: Open surviving a failed migration is platform-independent, and
+	// CI's Linux leg exercises it. Windows does not honour a directory's
+	// permission bits, so the rename below simply succeeds -- and the test
+	// then fails on its own premise, looking for a source it expected to still
+	// be there.
+	if runtime.GOOS == "windows" {
+		t.Skip("windows ignores directory permission bits, so a read-only old root does not block the rename")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores the permission bits this test relies on")
 	}

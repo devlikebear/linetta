@@ -3,6 +3,7 @@ package companion
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -263,6 +264,15 @@ func TestMigrateLegacyMemoryRemovesEmptiedRoot(t *testing.T) {
 
 // One entry failing to move must not stop the others, and must be reported.
 func TestMigrateLegacyMemoryReportsFailureAndContinues(t *testing.T) {
+	// Both skips are about how the failure is INDUCED, not about what is under
+	// test: reporting a failure and carrying on is platform-independent, and
+	// CI's Linux leg exercises it. Windows does not honour a directory's
+	// permission bits -- os.Chmod there only toggles a read-only attribute, on
+	// a file at that -- so the rename below simply succeeds and the test then
+	// asserts against a failure that never happened.
+	if runtime.GOOS == "windows" {
+		t.Skip("windows ignores directory permission bits, so a read-only old root does not block the rename")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores the permission bits this test relies on")
 	}
