@@ -43,6 +43,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_apply_story_ops",
   "linetta_create_checkpoint",
   "linetta_undo_last_change",
+  "linetta_edit_memory",
 ] as const;
 
 const READS: ReadonlySet<string> = new Set(READ_TOOL_NAMES);

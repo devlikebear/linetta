@@ -23,6 +23,29 @@
   you have open, plus summaries, the outline, manuscript-wide search, the
   character, plot and fact cards, remembered facts, and the list of your works.
   The behaviour did not change; the sentence you agree to now matches it.
+- An agent now keeps two short, curated memories: a **writer profile** (1,400
+  characters) for how you work, and **work notes** (2,200 characters) for each
+  work. Both are pasted whole into the built-in agent's system prompt at the
+  start of every turn with a line saying how much of the budget is used, and
+  both appear in the story brief an external MCP client reads. A new
+  `linetta_edit_memory` tool records into them with `add`, `replace` and
+  `remove`; like every other write tool it is registered only in full-access
+  mode, and a client pinned to a single work is refused on the writer profile.
+  Settings → Memory shows both as textareas you can rewrite yourself.
+- The writer profile is **global**: it is not scoped to the work you have open.
+  Something an agent records there while working on one book is in the system
+  prompt of every other book, and in the story brief a connected client
+  receives on any work. Work notes stay with their work. The consent text for a
+  provider and for MCP now says so.
+- Both memories live in `library.db`, so the daily backup carries them. The
+  per-work restore below does not yet: bringing a single work back from a
+  backup returns it without its work notes, which is tracked as
+  [#116](https://github.com/devlikebear/linetta/issues/116). The startup
+  recovery screen, which replaces the whole library file, does bring both back.
+  The unbounded `memory/experiences.jsonl` recall is unchanged and still
+  appears in the story brief — alongside both curated documents for an external
+  client, and on its own for the built-in agent, which already carries them in
+  its system prompt.
 
 ## v1.1.0 - 2026-08-31
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -27,6 +28,7 @@ var WriteToolNames = []string{
 	"linetta_apply_story_ops",
 	"linetta_create_checkpoint",
 	"linetta_undo_last_change",
+	"linetta_edit_memory",
 }
 
 // ---------- linetta_create_work ----------
@@ -140,6 +142,14 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"A scene summary needs the content_version from linetta_read_scene; chapters and the synopsis " +
 			"do not.",
 	}, record(d, "linetta_write_summary", d.writeSummary))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_edit_memory",
+		Description: "Record something durable about how this writer works (writer_profile, which applies to every work) " +
+			"or about this work (work_notes). Both are read back to you at the start of every session, so keep them " +
+			"short and current: replace a line that changed rather than adding a second one. The result says how much " +
+			"room is left.",
+	}, record(d, "linetta_edit_memory", d.editMemory))
 
 	d.registerReviseTool(s)
 	d.registerBatchTools(s)
@@ -346,4 +356,101 @@ func (d ToolDeps) writeSummary(ctx context.Context, _ *mcp.CallToolRequest, in w
 	}
 	d.notifyChanged(n.ProjectID, "linetta_write_summary", []string{n.ID}, "")
 	return nil, writeSummaryOutput{Target: target, NodeID: n.ID, Summary: summary}, nil
+}
+
+// ---------- linetta_edit_memory ----------
+
+// memoryChangedPayload tells the app a memory moved under it. Settings holds
+// an unsent textarea draft; without this, the writer's next blur would
+// silently overwrite what the agent just recorded.
+type memoryChangedPayload struct {
+	Scope     string `json:"scope"`
+	ProjectID string `json:"project_id,omitempty"`
+	Source    string `json:"source"`
+}
+
+type editMemoryInput struct {
+	Scope     string `json:"scope" jsonschema:"which memory: writer_profile (global - how this writer works, across every work) or work_notes (what you have learned about one work)"`
+	Action    string `json:"action" jsonschema:"add, replace or remove"`
+	Text      string `json:"text,omitempty" jsonschema:"the memory to record, one line; required for add and replace"`
+	Find      string `json:"find,omitempty" jsonschema:"a short piece of the existing line you mean, unique among the lines; required for replace and remove"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"the work whose notes to edit; required when scope is work_notes, and not accepted for writer_profile"`
+}
+
+// scope names the work the caller asked for (work notes only; the profile is
+// global and belongs to no work) and, as the target, which of the two
+// documents was edited.
+//
+// The target is what actually tells the two apart. It is tempting to say a
+// work-notes row is the one carrying a work id, but that is not reliable:
+// scope() sees the raw input, and only editMemory itself — through
+// requireProject — resolves an omitted project_id to the work a restricted
+// server is pinned to. A pinned client that omits the field therefore edits
+// its one work and logs a row with no work id, exactly as it does for every
+// other tool in this package (scope() is the same shape everywhere: raw
+// input, no deps, no context). Without the target, that row would be
+// indistinguishable from a writer-profile edit — and the scope string is
+// these documents' only identity, since neither has an id of its own the way
+// a node or a snapshot does.
+func (in editMemoryInput) scope() (string, string) {
+	return strings.TrimSpace(in.ProjectID), strings.TrimSpace(in.Scope)
+}
+
+type editMemoryOutput struct {
+	Scope       string `json:"scope"`
+	Body        string `json:"body"`
+	CharsUsed   int    `json:"chars_used"`
+	CharsBudget int    `json:"chars_budget"`
+}
+
+// editMemory is the whole memory surface: there is no read tool, because the
+// documents are already in the story brief and every edit returns the result.
+func (d ToolDeps) editMemory(ctx context.Context, _ *mcp.CallToolRequest, in editMemoryInput) (*mcp.CallToolResult, editMemoryOutput, error) {
+	if d.Memory == nil {
+		return toolErr("memory is unavailable in this build"), editMemoryOutput{}, nil
+	}
+	scope, err := agentmemory.ParseScope(in.Scope)
+	if err != nil {
+		return toolErr("%v", err), editMemoryOutput{}, nil
+	}
+	projectID := strings.TrimSpace(in.ProjectID)
+	switch scope {
+	case agentmemory.ScopeWorkNotes:
+		p, errResult := d.requireProject(ctx, projectID)
+		if errResult != nil {
+			return errResult, editMemoryOutput{}, nil
+		}
+		// requireProject fills in the pinned work when the caller omitted one,
+		// so take the id it resolved rather than the raw input.
+		projectID = p.ID
+	case agentmemory.ScopeWriterProfile:
+		// The writer profile is global: it rides into the system prompt of
+		// every work. A client the writer pinned to one work must not be able
+		// to rewrite it — that is exactly what the pin exists to prevent, and
+		// requireProject cannot enforce it here because there is no work to
+		// check against. The built-in agent is unaffected: allowedProjectID
+		// returns "" for SourceAgent.
+		if restricted := d.allowedProjectID(); restricted != "" {
+			return toolErr("this Linetta server is restricted to work %q, and the writer profile is "+
+				"global — it applies to every work, so it is outside that restriction. Use scope "+
+				"work_notes to record something about this work.", restricted), editMemoryOutput{}, nil
+		}
+	}
+	// One transaction, not Load-then-Apply-then-Save: this document has two
+	// writers by design (the panel's agent and a connected external client),
+	// and a read-modify-write split across three calls loses whichever edit
+	// lands second-to-last while telling its caller it succeeded.
+	saved, err := d.Memory.Edit(ctx, scope, projectID, in.Action, in.Find, in.Text, d.now())
+	if err != nil {
+		return toolErr("%v", err), editMemoryOutput{}, nil
+	}
+	if d.Notify != nil {
+		d.Notify("memory.changed", memoryChangedPayload{
+			Scope: string(scope), ProjectID: projectID, Source: d.sourceOrExternal(),
+		})
+	}
+	return nil, editMemoryOutput{
+		Scope: string(saved.Scope), Body: saved.Body,
+		CharsUsed: saved.CharsUsed, CharsBudget: saved.CharsBudget,
+	}, nil
 }

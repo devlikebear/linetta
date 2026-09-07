@@ -984,3 +984,28 @@ export type CompanionPhase =
   | "applying"
   | "applied";
 
+/** One curated-memory document: the global writer profile, or one work's notes. */
+export interface MemoryDocument {
+  scope: "writer_profile" | "work_notes";
+  project_id?: string;
+  body: string;
+  chars_used: number;
+  chars_budget: number;
+  updated_at: number;
+}
+
+/** memory.get's shape: both documents, since Settings needs both at once. */
+export interface MemoryState {
+  writer_profile: MemoryDocument;
+  work_notes: MemoryDocument;
+}
+
+/** memory-changed's payload. "agent" and "external" come from mcphost's
+ *  linetta_edit_memory tool (mcphost/tools_write.go); "writer" is a save made
+ *  by the person at the keyboard, from memory.set. */
+export interface MemoryChangedPayload {
+  scope: MemoryDocument["scope"];
+  project_id?: string;
+  source: "agent" | "external" | "writer";
+}
+

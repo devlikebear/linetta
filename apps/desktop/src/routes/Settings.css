@@ -3,6 +3,23 @@
    .set-row(.sk/.sd/.mono), .switch(.on), .modal-field, .btn, .mono.
    Only the toggle-row button reset, field rows and ops-status cards are local. */
 
+/* The memory boxes are the one place in Settings a writer types prose rather
+   than a path or a number, so they get line spacing that reads and may be
+   grown. Everything else about them comes from .modal-field textarea. */
+.settings #memory-settings textarea {
+  line-height: 1.6;
+  resize: vertical;
+}
+
+/* The character count is an <output> so a screen reader hears it change (see
+   MemorySection.tsx). <output> is inline by default, which would let the
+   count sit on the help line's baseline instead of under it; it is one of
+   several stacked notes below the box, so it lays out like the <p>s it sits
+   with. */
+.settings #memory-settings output {
+  display: block;
+}
+
 /* Toggle rows are buttons that must look like plain .set-rows. */
 .settings .set-row-btn {
   width: 100%;

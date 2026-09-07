@@ -111,7 +111,7 @@ the same local MCP server an outside agent connects to, which remains the other
 way to write alongside a model.
 
 Claims in `content.ts` are taken from the engine rather than from the docs — the
-sixteen `linetta_*` tool names, the nine/seven read-write split, the access
+seventeen `linetta_*` tool names, the nine/eight read-write split, the access
 modes, the 7391 default port, the per-minute call limit. When one of them
 changes, the engine is the thing to check.
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 )
@@ -23,9 +24,10 @@ const referenceContextLimit = 40
 // storyops.
 
 var (
-	_ storycontext.FactSource      = (*Service)(nil)
-	_ storycontext.MemorySource    = (*Service)(nil)
-	_ storycontext.ReferenceSource = (*Service)(nil)
+	_ storycontext.FactSource          = (*Service)(nil)
+	_ storycontext.MemorySource        = (*Service)(nil)
+	_ storycontext.CuratedMemorySource = (*Service)(nil)
+	_ storycontext.ReferenceSource     = (*Service)(nil)
 )
 
 // ContextFacts returns Fact Book cards for the brief, preferring cards
@@ -68,6 +70,28 @@ func (s *Service) ContextFacts(ctx context.Context, projectID, nodeID string) ([
 // ContextMemories returns recent remembered facts for the brief.
 func (s *Service) ContextMemories(projectID string) []string {
 	return s.Recall(projectID, "", recallLimit)
+}
+
+// CuratedMemory reads the two budgeted documents. Best-effort like the other
+// context sources: a read failure leaves that section empty rather than failing
+// the brief the writer asked for.
+//
+// The two reads are independent on purpose. They are separate rows with
+// separate failure modes — the work-notes read alone can fail on an empty
+// project id, for instance — and neither document is worth more than the
+// other, so one failing must never cost the brief the one that succeeded.
+func (s *Service) CuratedMemory(ctx context.Context, projectID string) (string, string) {
+	if s.memories == nil {
+		return "", ""
+	}
+	var profile, notes string
+	if doc, err := s.memories.Load(ctx, agentmemory.ScopeWriterProfile, ""); err == nil {
+		profile = doc.Body
+	}
+	if doc, err := s.memories.Load(ctx, agentmemory.ScopeWorkNotes, projectID); err == nil {
+		notes = doc.Body
+	}
+	return profile, notes
 }
 
 // ContextReferences returns the writer-attached material for the brief,

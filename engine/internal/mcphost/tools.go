@@ -10,6 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
@@ -43,6 +44,10 @@ type ToolDeps struct {
 	Context    *storycontext.ContextBuilder
 	Settings   *settings.Store
 	Activity   *ActivityRepo
+
+	// Memory is the two curated documents every agent reads. Nil in a build
+	// with no database open; the tool refuses rather than panicking.
+	Memory *agentmemory.Repo
 
 	// Source names who is calling: SourceExternal (the HTTP host) or
 	// SourceAgent (the built-in panel's in-memory server). It is a field on

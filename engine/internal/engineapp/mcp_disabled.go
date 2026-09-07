@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
@@ -46,6 +47,7 @@ type mcpToolRepos struct {
 	snapshots  *snapshot.Repo
 	story      *storyops.Service
 	msEdit     *manuscriptedit.Service
+	memory     *agentmemory.Repo
 	enqueue    func(nodeID string)
 	notify     func(method string, params any)
 	clock      func() int64

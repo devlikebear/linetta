@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -28,6 +29,7 @@ type agentDeps struct {
 	nodes    *node.Repo
 	settings *settings.Store
 	src      *provider.Source
+	memory   *agentmemory.Repo
 	notify   func(method string, params any)
 	clock    func() int64
 }

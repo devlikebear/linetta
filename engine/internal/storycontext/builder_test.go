@@ -897,3 +897,34 @@ func TestCountsFromContext_partialProjectMeta(t *testing.T) {
 		t.Fatalf("HasStyleNotes should be false (whitespace-only)")
 	}
 }
+
+type fakeCuratedMemory struct{ profile, notes string }
+
+func (f fakeCuratedMemory) CuratedMemory(_ context.Context, _ string) (string, string) {
+	return f.profile, f.notes
+}
+
+func TestBuildFullFetchesTheCuratedMemories(t *testing.T) {
+	f := newCtxFixture(t)
+	p := f.project(t, project.NewInput{LengthTarget: "novel", DefaultPOV: "first"})
+	b := f.builder().WithCuratedMemorySource(fakeCuratedMemory{profile: "P", notes: "N"})
+	c, err := b.BuildFull(context.Background(), *p.LastOpenedNodeID, "", "", Options{})
+	if err != nil {
+		t.Fatalf("BuildFull: %v", err)
+	}
+	if c.WriterProfile != "P" || c.WorkNotes != "N" {
+		t.Errorf("got profile=%q notes=%q", c.WriterProfile, c.WorkNotes)
+	}
+}
+
+func TestBuildFullSurvivesNoCuratedMemorySource(t *testing.T) {
+	f := newCtxFixture(t)
+	p := f.project(t, project.NewInput{LengthTarget: "novel", DefaultPOV: "first"})
+	c, err := f.builder().BuildFull(context.Background(), *p.LastOpenedNodeID, "", "", Options{})
+	if err != nil {
+		t.Fatalf("BuildFull with no memory source must still build: %v", err)
+	}
+	if c.WriterProfile != "" || c.WorkNotes != "" {
+		t.Errorf("got %q / %q", c.WriterProfile, c.WorkNotes)
+	}
+}

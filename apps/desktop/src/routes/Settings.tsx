@@ -16,6 +16,7 @@ import { rpcErrorMessage } from "../lib/rpcMessage";
 import { saveExportedMarkdown } from "../lib/exportSave";
 import { BackgroundSection } from "../components/settings/BackgroundSection";
 import { McpSection } from "../components/settings/McpSection";
+import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
 import { RestoreSection } from "../components/settings/RestoreSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
@@ -53,6 +54,7 @@ const SETTINGS_CATEGORIES = [
   "writing",
   "providers",
   "mcp",
+  "memory",
   "sync",
   "backup",
 ] as const;
@@ -259,6 +261,9 @@ export function Settings() {
             items: [
               ...(agentAvailable ? [{ id: "providers" as const, label: t("settings.nav.providers") }] : []),
               ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.nav.mcp") }] : []),
+              // A memory is only meaningful when some agent can read it, so it
+              // rides the same condition as the group it lives in.
+              { id: "memory" as const, label: t("settings.nav.memory") },
             ],
           },
         ]
@@ -510,6 +515,8 @@ export function Settings() {
             {category === "providers" && agentAvailable && <ProviderSection />}
 
             {category === "mcp" && mcpAvailable && <McpSection />}
+
+            {category === "memory" && (mcpAvailable || agentAvailable) && <MemorySection />}
 
             {category === "background" && <BackgroundSection />}
 

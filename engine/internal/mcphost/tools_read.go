@@ -398,7 +398,17 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	if d.Context == nil {
 		return toolErr("story context is unavailable in this build"), getStoryContextOutput{}, nil
 	}
+	// storycontext defaults to Korean when Options.Language is empty, so
+	// without this every brief an external client reads came back with Korean
+	// headings no matter what language the app was set to. Nil Settings is a
+	// build with no store open, the same tolerance the rest of this file has;
+	// the empty string it leaves behind is exactly the old Korean default.
+	lang := ""
+	if d.Settings != nil {
+		lang = d.Settings.Language()
+	}
 	opts := storycontext.Options{
+		Language: lang,
 		Context: storycontext.ContextSelection{
 			Facts:      in.IncludeFacts,
 			Memories:   in.IncludeMemories,
@@ -409,6 +419,20 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	c, err := d.Context.BuildFull(ctx, n.ID, "", "", opts)
 	if err != nil {
 		return toolErr("could not build the story brief: %v", err), getStoryContextOutput{}, nil
+	}
+	// The built-in agent already carries both curated documents verbatim in
+	// its own system prompt (agent.systemPrompt / memoryBlock), budget
+	// line and all. Repeating them in the brief costs context and teaches
+	// the model nothing it doesn't already have, so suppress them for that
+	// caller only. c.Memories (the experiences.jsonl recall) is left alone:
+	// it is an unbounded searchable log, not a budgeted document, and it is
+	// not in the system prompt — an external client is unaffected either
+	// way, since ToolDeps.Source is a field the server sets, never
+	// something read off the wire. This runs before Render and
+	// sectionReport so both describe the brief the caller actually gets.
+	if d.Source == SourceAgent {
+		c.WriterProfile = ""
+		c.WorkNotes = ""
 	}
 	// Only the user half of the render is the brief; the system half carries
 	// tone and instruction scaffolding meant for Linetta's own runner.
@@ -443,7 +467,19 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		{"plot", spineHasBeats(c.Plot)},
 		{"notes", len(c.Notes) > 0},
 		{"facts", len(c.Facts) > 0},
-		{"memories", len(c.Memories) > 0},
+		// One "memories" entry covers all three things the brief renders under
+		// that name: the experiences.jsonl recall and the two curated
+		// documents. They fold together rather than getting their own entries
+		// because they share the single ContextKeyMemories toggle — there is
+		// no switch a client could throw for the curated pair alone, so
+		// reporting them separately would advertise a control that does not
+		// exist. Counting only c.Memories was worse than either: a brief that
+		// visibly carried a writer profile still reported "memories" empty,
+		// and a client that trusts the report skipped a section right in
+		// front of it.
+		{"memories", len(c.Memories) > 0 ||
+			strings.TrimSpace(c.WriterProfile) != "" ||
+			strings.TrimSpace(c.WorkNotes) != ""},
 		{"references", len(c.References) > 0},
 		{"style_notes", strings.TrimSpace(c.StyleNotes) != ""},
 	}

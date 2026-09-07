@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
@@ -203,10 +204,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// Named rather than inlined: the archive export reads the same transcript,
 	// and two repos over one table would be a needless second source.
 	companionHistory := companion.NewHistoryRepo(st.DB())
+	memRepo := agentmemory.NewRepo(st.DB())
 	companionSvc := companion.NewService(home).
 		WithFacts(facts).
 		WithHistory(companionHistory).
-		WithReferences(companion.NewReferenceRepo(st.DB()))
+		WithReferences(companion.NewReferenceRepo(st.DB())).
+		WithCuratedMemory(memRepo)
 
 	// The MCP host serves story tools to external agents. It binds only when
 	// the writer has turned MCP on and accepted its consent.
@@ -223,6 +226,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
 		WithMemorySource(companionSvc).
+		WithCuratedMemorySource(companionSvc).
 		WithReferenceSource(companionSvc)
 
 	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
@@ -240,6 +244,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			snapshots:  snaps,
 			story:      mcpStory,
 			msEdit:     manuscriptEditor,
+			memory:     memRepo,
 			enqueue:    summ.Enqueue,
 			notify:     func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 			clock:      clock,
@@ -279,6 +284,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		nodes:    nodes,
 		settings: settingsStore,
 		src:      providerSrc,
+		memory:   memRepo,
 		notify:   func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 		clock:    clock,
 	})
@@ -375,6 +381,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("mentions.list_for_node", handlers.ListMentionsForNode(mentions))
 	s.Handle("settings.get", handlers.GetSettings(settingsStore))
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
+	s.Handle("memory.get", handlers.GetMemory(memRepo))
+	s.Handle("memory.set", handlers.SetMemory(memRepo, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
 	s.Handle("mcp.status", handlers.MCPStatus(mcpCtrl))
 	s.Handle("mcp.enable", handlers.MCPEnable(mcpCtrl))
 	s.Handle("mcp.disable", handlers.MCPDisable(mcpCtrl))

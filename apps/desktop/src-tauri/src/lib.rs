@@ -67,6 +67,8 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "mcp.enable",
     "mcp.regenerate_token",
     "mcp.status",
+    "memory.get",
+    "memory.set",
     "mentions.list_for_node",
     "nodes.convert_to_container",
     "nodes.create_child",

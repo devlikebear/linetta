@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -19,6 +20,13 @@ import (
 // without restarting the engine. *provider.Source satisfies this.
 type ProviderSource interface {
 	Client(id string) (llm.Client, provider.Resolved, error)
+}
+
+// MemorySource reads the curated memories for one turn. An interface rather
+// than the repo so the prompt can be tested without a database, matching
+// ScopeLookup.
+type MemorySource interface {
+	Memories(ctx context.Context, projectID string) (writerProfile, workNotes agentmemory.Document)
 }
 
 // Deps are the collaborators the agent needs.
@@ -32,6 +40,8 @@ type Deps struct {
 	Register RegisterTools
 	Notify   func(method string, params any)
 	Language func() string
+	// Memory supplies the two curated documents pasted into the system prompt.
+	Memory MemorySource
 	// Undo reverts a structural batch. It must be bound to the SAME storyops
 	// service the agent's tools use — undo batches live in memory on the
 	// service, so any other instance simply does not have the batch.
