@@ -3,6 +3,7 @@ package settings
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -503,5 +504,279 @@ func TestAgentSelfReviewEnabled_defaultsOnAndSurvivesADeliberateFalse(t *testing
 	}
 	if !s4.AgentSelfReviewEnabled() {
 		t.Error("a settings.json written before this key existed reads as a deliberate false")
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * #113: a pre-1.0 plaintext api_key on a platform with no secret store.
+ *
+ * Before f04ea82 the key was written into settings.json on every platform.
+ * load() moves it into the SecretStore now — and on Linux there is no store to
+ * move it into, so the migration's error came back out of load() and the app
+ * could not open the writer's settings at all. The key was neither moved nor
+ * cleared; it was simply unreachable, along with every other preference in the
+ * file.
+ *
+ * The tests below pin the three halves of the fix: the load succeeds, the key
+ * on disk is left exactly as found, and settings.get says so.
+ * ------------------------------------------------------------------------ */
+
+// The pre-1.0 file the reproduction in #113 describes, plus enough ordinary
+// preferences to prove the rest of the load still happened.
+const legacyPlaintextSettings = `{
+	"language":"ja",
+	"provider":"anthropic",
+	"providers":{"anthropic":{"model":"claude-3","api_key":"legacy-provider-secret"}},
+	"editor_font_size":18,
+	"web_search_provider":"brave",
+	"web_search_api_key":"legacy-web-secret"
+}`
+
+func seedLegacyPlaintextHome(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(legacyPlaintextSettings), 0o600); err != nil {
+		t.Fatalf("seed settings.json: %v", err)
+	}
+	return dir
+}
+
+func readSettingsFile(t *testing.T, dir string) string {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join(dir, "settings.json"))
+	if err != nil {
+		t.Fatalf("read settings.json: %v", err)
+	}
+	return string(body)
+}
+
+// failingSecretStore is a store that exists and refuses — a locked or
+// access-denied Keychain, not a platform with no backend at all. Its error is
+// deliberately not ErrSecretStoreUnsupported: telling the two apart is what
+// decides which sentence the writer is shown.
+type failingSecretStore struct{ err error }
+
+func (f failingSecretStore) Get(string) (string, bool, error) { return "", false, nil }
+func (f failingSecretStore) Exists(string) (bool, error)      { return false, nil }
+func (f failingSecretStore) Set(string, string) error         { return f.err }
+func (f failingSecretStore) Delete(string) error              { return nil }
+
+// The bug itself. Everything else in this block is a consequence of it.
+func TestLoad_succeedsWhenTheSecretStoreCannotTakeALegacyPlaintextKey(t *testing.T) {
+	seedLegacyPlaintextHome(t)
+
+	s, err := NewWithSecretStore(unsupportedSecretStore{})
+	if err != nil {
+		t.Fatalf("New failed on a settings.json with a plaintext key — this is #113: %v", err)
+	}
+
+	got, err := s.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	// The rest of the file has to have loaded. A load that "succeeds" by
+	// falling back to defaults would be a different bug wearing this fix.
+	if got.Language != "ja" {
+		t.Errorf("language = %q, want ja", got.Language)
+	}
+	if got.Provider != "anthropic" {
+		t.Errorf("provider = %q, want anthropic", got.Provider)
+	}
+	if got.EditorFontSize != 18 {
+		t.Errorf("editor_font_size = %d, want 18", got.EditorFontSize)
+	}
+	if got.Providers["anthropic"].Model != "claude-3" {
+		t.Errorf("provider model = %q, want claude-3", got.Providers["anthropic"].Model)
+	}
+	// settings.get still never carries a key value, migrated or not.
+	if got.Providers["anthropic"].APIKey != "" || got.WebSearchAPIKey != "" {
+		t.Errorf("settings.get leaked a plaintext key: %+v", got)
+	}
+}
+
+func TestLoad_leavesAnUnmigratableKeyOnDisk(t *testing.T) {
+	dir := seedLegacyPlaintextHome(t)
+
+	if _, err := NewWithSecretStore(unsupportedSecretStore{}); err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	body := readSettingsFile(t, dir)
+	if !strings.Contains(body, "legacy-provider-secret") {
+		t.Errorf("the provider key was removed from settings.json by a failed migration; "+
+			"nothing stored it anywhere else, so it is simply gone: %s", body)
+	}
+	if !strings.Contains(body, "legacy-web-secret") {
+		t.Errorf("the web-search key was removed from settings.json by a failed migration: %s", body)
+	}
+}
+
+// A save of an unrelated preference rewrites the whole file. It must not be
+// the thing that deletes a credential nobody asked it to touch.
+func TestSet_doesNotDeleteAnUnmigratableKeyOnAnUnrelatedSave(t *testing.T) {
+	dir := seedLegacyPlaintextHome(t)
+	s, err := NewWithSecretStore(unsupportedSecretStore{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if _, err := s.Set(context.Background(), Patch{Theme: strPtr("dark")}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	body := readSettingsFile(t, dir)
+	if !strings.Contains(body, "legacy-provider-secret") || !strings.Contains(body, "legacy-web-secret") {
+		t.Errorf("saving an unrelated preference destroyed the plaintext keys: %s", body)
+	}
+	if !strings.Contains(body, `"theme": "dark"`) {
+		t.Errorf("the unrelated preference was not saved: %s", body)
+	}
+}
+
+func TestGet_reportsTheKeysItCouldNotMove(t *testing.T) {
+	dir := seedLegacyPlaintextHome(t)
+	s, err := NewWithSecretStore(unsupportedSecretStore{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	got, err := s.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(got.LegacyPlaintextProviders) != 1 || got.LegacyPlaintextProviders[0] != "anthropic" {
+		t.Errorf("legacy_plaintext_providers = %v, want [anthropic]", got.LegacyPlaintextProviders)
+	}
+	if !got.LegacyPlaintextWebSearch {
+		t.Error("legacy_plaintext_web_search = false, want true")
+	}
+	if got.LegacyPlaintextReason != LegacyPlaintextReasonUnsupported {
+		t.Errorf("legacy_plaintext_reason = %q, want %q", got.LegacyPlaintextReason, LegacyPlaintextReasonUnsupported)
+	}
+	if got.LegacyPlaintextPath != filepath.Join(dir, "settings.json") {
+		t.Errorf("legacy_plaintext_path = %q, want the file the keys are in", got.LegacyPlaintextPath)
+	}
+}
+
+// A store that refuses is not a platform with no store. The notice says
+// something different for each, so the engine has to keep them apart.
+func TestGet_distinguishesARefusingStoreFromAMissingOne(t *testing.T) {
+	seedLegacyPlaintextHome(t)
+	s, err := NewWithSecretStore(failingSecretStore{err: errors.New("keychain is locked")})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	got, err := s.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.LegacyPlaintextReason != LegacyPlaintextReasonError {
+		t.Errorf("legacy_plaintext_reason = %q, want %q — a locked Keychain is not a missing backend",
+			got.LegacyPlaintextReason, LegacyPlaintextReasonError)
+	}
+	if len(got.LegacyPlaintextProviders) != 1 {
+		t.Errorf("a refusing store must still leave the key recorded: %v", got.LegacyPlaintextProviders)
+	}
+}
+
+// The other side of the fix: where the store works, nothing changed.
+func TestLoad_stillMigratesWhereTheSecretStoreWorks(t *testing.T) {
+	dir := seedLegacyPlaintextHome(t)
+	secrets := NewMemorySecretStore()
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if got, ok, err := secrets.Get(providerAPIKeySecretName("anthropic")); err != nil || !ok || got != "legacy-provider-secret" {
+		t.Fatalf("provider key not migrated: (%q, %v, %v)", got, ok, err)
+	}
+	body := readSettingsFile(t, dir)
+	if strings.Contains(body, "legacy-provider-secret") || strings.Contains(body, "legacy-web-secret") {
+		t.Fatalf("legacy secrets still on disk after a successful migration: %s", body)
+	}
+	got, err := s.Get(context.Background())
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.LegacyPlaintextProviders != nil || got.LegacyPlaintextWebSearch ||
+		got.LegacyPlaintextReason != "" || got.LegacyPlaintextPath != "" {
+		t.Errorf("a successful migration reported itself as a failure: %+v", got)
+	}
+}
+
+func TestSet_clearLegacyPlaintextKeys_deletesThemOnlyWhenAsked(t *testing.T) {
+	dir := seedLegacyPlaintextHome(t)
+	s, err := NewWithSecretStore(unsupportedSecretStore{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+
+	// Explicitly false is not a request. Neither is any other patch.
+	if _, err := s.Set(ctx, Patch{ClearLegacyPlaintextKeys: boolPtr(false)}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if body := readSettingsFile(t, dir); !strings.Contains(body, "legacy-provider-secret") {
+		t.Fatalf("clear_legacy_plaintext_keys:false deleted the keys anyway: %s", body)
+	}
+
+	got, err := s.Set(ctx, Patch{ClearLegacyPlaintextKeys: boolPtr(true)})
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	body := readSettingsFile(t, dir)
+	if strings.Contains(body, "legacy-provider-secret") || strings.Contains(body, "legacy-web-secret") {
+		t.Errorf("the writer asked for the plaintext keys to be deleted and they are still there: %s", body)
+	}
+	if got.LegacyPlaintextProviders != nil || got.LegacyPlaintextWebSearch || got.LegacyPlaintextReason != "" {
+		t.Errorf("the notice is still being reported after the keys were deleted: %+v", got)
+	}
+	// The rest of the file survives the surgery.
+	if got.Language != "ja" || got.Providers["anthropic"].Model != "claude-3" {
+		t.Errorf("clearing the keys took other settings with it: %+v", got)
+	}
+
+	// And it stays deleted across a reload.
+	s2, err := NewWithSecretStore(unsupportedSecretStore{})
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	reloaded, err := s2.Get(ctx)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if len(reloaded.LegacyPlaintextProviders) != 0 || reloaded.LegacyPlaintextWebSearch {
+		t.Errorf("the deleted keys came back on reload: %+v", reloaded)
+	}
+}
+
+// Storing a key for a provider is an explicit decision about that credential;
+// after it, the plaintext copy is not something to keep writing back.
+func TestSet_storingAKeySupersedesTheUnmigratedPlaintextOne(t *testing.T) {
+	dir := seedLegacyPlaintextHome(t)
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// Force the residue by hand: a memory store migrates cleanly, and what is
+	// under test is the bookkeeping, not the platform.
+	s.mu.Lock()
+	s.legacyPlaintext = legacyPlaintextKeys{
+		providers: map[string]string{"anthropic": "legacy-provider-secret"},
+		reason:    LegacyPlaintextReasonUnsupported,
+	}
+	s.mu.Unlock()
+
+	if _, err := s.Set(context.Background(), Patch{
+		Providers: map[string]ProviderPatch{"anthropic": {APIKey: strPtr("a-new-key")}},
+	}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	if body := readSettingsFile(t, dir); strings.Contains(body, "legacy-provider-secret") {
+		t.Errorf("the superseded plaintext key is still being written back: %s", body)
 	}
 }

@@ -935,6 +935,20 @@ const messages = {
     "settings.providers.apiKey.placeholder": "API 키를 입력하세요",
     "settings.providers.apiKey.save": "저장",
     "settings.providers.apiKey.clear": "삭제",
+    // #113: 6월 이전 빌드는 키를 설정 파일에 평문으로 적었고, 지금은 로드할 때
+    // OS 보안 저장소로 옮깁니다. 옮길 곳이 없는 플랫폼에서는 옮기지 못한 채
+    // 파일에 그대로 남습니다. 말없이 두지도, 말없이 지우지도 않고 알립니다.
+    // 어느 회사 이름도 넣지 않습니다 — 어느 프로바이더의 키든 같은 상황입니다.
+    "settings.providers.plaintextKey.title": "저장된 키가 평문으로 남아 있습니다",
+    "settings.providers.plaintextKey.unsupported":
+      "이 플랫폼에는 앱이 쓸 수 있는 안전한 저장소가 없어, 예전 버전이 저장해 둔 키를 옮기지 못했습니다. 키는 아직 설정 파일에 그대로, 읽을 수 있는 상태로 들어 있습니다.",
+    "settings.providers.plaintextKey.failed":
+      "예전 버전이 저장해 둔 키를 안전한 저장소로 옮기지 못했습니다. 키는 아직 설정 파일에 그대로, 읽을 수 있는 상태로 들어 있습니다. 앱을 다시 열면 옮겨질 수도 있습니다.",
+    "settings.providers.plaintextKey.path": "위치: {path}",
+    "settings.providers.plaintextKey.delete": "설정 파일에서 키 지우기",
+    "settings.providers.plaintextKey.confirm":
+      "지우면 되돌릴 수 없습니다. 이 키는 여기 말고 어디에도 저장되어 있지 않습니다. 한 번 더 누르면 지웁니다.",
+    "settings.providers.plaintextKey.deleted": "설정 파일에서 키를 지웠습니다.",
     "settings.providers.baseUrl": "Base URL",
     "settings.providers.baseUrl.hint": "OpenRouter, Ollama, LM Studio 등 OpenAI 호환 엔드포인트를 지정합니다.",
     "settings.providers.model": "모델",
@@ -1866,6 +1880,16 @@ const messages = {
     "settings.providers.apiKey.placeholder": "Enter an API key",
     "settings.providers.apiKey.save": "Save",
     "settings.providers.apiKey.clear": "Clear",
+    "settings.providers.plaintextKey.title": "A stored key is still in plain text",
+    "settings.providers.plaintextKey.unsupported":
+      "This platform has no secure storage the app can use, so a key an older version saved could not be moved. It is still in the settings file, readable as it is.",
+    "settings.providers.plaintextKey.failed":
+      "A key an older version saved could not be moved into secure storage. It is still in the settings file, readable as it is. Opening the app again may move it.",
+    "settings.providers.plaintextKey.path": "Location: {path}",
+    "settings.providers.plaintextKey.delete": "Delete the key from the settings file",
+    "settings.providers.plaintextKey.confirm":
+      "This cannot be undone — the key is stored nowhere else. Press again to delete it.",
+    "settings.providers.plaintextKey.deleted": "The key has been deleted from the settings file.",
     "settings.providers.baseUrl": "Base URL",
     "settings.providers.baseUrl.hint": "Point this at an OpenAI-compatible endpoint — OpenRouter, Ollama, LM Studio.",
     "settings.providers.model": "Model",
@@ -2781,6 +2805,16 @@ const messages = {
     "settings.providers.apiKey.placeholder": "APIキーを入力してください",
     "settings.providers.apiKey.save": "保存",
     "settings.providers.apiKey.clear": "削除",
+    "settings.providers.plaintextKey.title": "保存された鍵が平文のまま残っています",
+    "settings.providers.plaintextKey.unsupported":
+      "このプラットフォームにはアプリが使える安全な保存領域がないため、以前のバージョンが保存した鍵を移せませんでした。鍵はいまも設定ファイルの中に、読める状態で残っています。",
+    "settings.providers.plaintextKey.failed":
+      "以前のバージョンが保存した鍵を安全な保存領域へ移せませんでした。鍵はいまも設定ファイルの中に、読める状態で残っています。アプリを開き直すと移せる場合があります。",
+    "settings.providers.plaintextKey.path": "場所: {path}",
+    "settings.providers.plaintextKey.delete": "設定ファイルから鍵を削除",
+    "settings.providers.plaintextKey.confirm":
+      "削除すると元に戻せません。この鍵はほかのどこにも保存されていません。もう一度押すと削除します。",
+    "settings.providers.plaintextKey.deleted": "設定ファイルから鍵を削除しました。",
     "settings.providers.baseUrl": "Base URL",
     "settings.providers.baseUrl.hint": "OpenRouter、Ollama、LM Studio など OpenAI 互換エンドポイントを指定します。",
     "settings.providers.model": "モデル",

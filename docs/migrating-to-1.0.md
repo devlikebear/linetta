@@ -45,7 +45,7 @@ where to go and delete it:
 | --- | --- |
 | macOS | Keychain Access → search `linetta` |
 | Windows | Credential Manager → Windows Credentials → `linetta` entries |
-| Linux | there is no secure secret store here, so a key you enter today cannot be saved and only the ChatGPT (Codex) sign-in works, storing its token in `<app data>/codex/auth.json`. **A key you entered before 3 June 2026 is a different matter**: those builds wrote it in plain text into `<app data>/settings.json`, under `providers`, and on Linux nothing has moved or cleared it since. Open that file and delete the `api_key` value yourself if you want it gone |
+| Linux | there is no secure secret store here, so a key you enter today cannot be saved and only the ChatGPT (Codex) sign-in works, storing its token in `<app data>/codex/auth.json`. **A key you entered before 3 June 2026 is a different matter**: those builds wrote it in plain text into `<app data>/settings.json`, under `providers`, and on Linux nothing has moved or cleared it since. Settings → AI provider now says so and offers to delete it for you; you can also open the file and delete the `api_key` value yourself |
 
 On Linux `<app data>` is `$XDG_DATA_HOME/com.devlikebear.linetta`, or
 `~/.local/share/com.devlikebear.linetta` when `XDG_DATA_HOME` is unset.

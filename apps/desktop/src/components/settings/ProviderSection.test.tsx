@@ -6,6 +6,7 @@ const rpc = vi.hoisted(() => ({
   providersList: vi.fn(),
   providersListModels: vi.fn(),
   providersTest: vi.fn(),
+  settingsGet: vi.fn(),
   settingsSet: vi.fn(),
   codexLoginStart: vi.fn(),
   codexLoginStatus: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock("../../lib/rpc", () => ({
     listModels: rpc.providersListModels,
     test: rpc.providersTest,
   },
-  settings: { set: rpc.settingsSet },
+  settings: { get: rpc.settingsGet, set: rpc.settingsSet },
   codex: {
     loginStart: rpc.codexLoginStart,
     loginStatus: rpc.codexLoginStatus,
@@ -116,6 +117,9 @@ describe("ProviderSection", () => {
   // fields on a given row. Tests set these before render.
   let activeId: string;
   let rowExtras: Record<string, Record<string, unknown>>;
+  // What settings.get answers with. Only the #113 plaintext-key fields matter
+  // to this pane; everything else it reads comes from providers.list.
+  let settingsPayload: Record<string, unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -130,6 +134,11 @@ describe("ProviderSection", () => {
     rpc.providersList.mockImplementation(() => Promise.resolve(rows(activeId, rowExtras)));
     rpc.providersListModels.mockImplementation(() => Promise.resolve({ models: [] }));
     rpc.providersTest.mockImplementation(() => Promise.resolve({ ok: true }));
+    // The healthy answer: nothing of the writer's is in plain text. The
+    // plaintext-key tests below override it. Kept here rather than in each
+    // test because every render reads it now (#113).
+    settingsPayload = {};
+    rpc.settingsGet.mockImplementation(() => Promise.resolve(settingsPayload));
     rpc.settingsSet.mockImplementation((patch: { provider?: string }) => {
       if (patch.provider) activeId = patch.provider;
       return Promise.resolve({});
@@ -1647,6 +1656,109 @@ describe("ProviderSection", () => {
       // A failed connection test is information about the provider, not a
       // broken pane — same reasoning as the model list in Task 4.
       expect(screen.queryByTestId("provider-error")).toBeNull();
+    });
+  });
+
+  // #113: a pre-June build wrote api_key into settings.json in plain text, and
+  // on a platform with no secret store the engine cannot move it out. It says
+  // so instead of failing, and this pane is where the writer finds out.
+  describe("a key still in plain text", () => {
+    const plaintext = (extra: Record<string, unknown> = {}) => ({
+      legacy_plaintext_providers: ["anthropic"],
+      legacy_plaintext_reason: "unsupported",
+      legacy_plaintext_path: "/home/writer/.local/share/com.devlikebear.linetta/settings.json",
+      ...extra,
+    });
+
+    it("says nothing when the engine reports nothing", async () => {
+      render(<ProviderSection />);
+      await screen.findByTestId("provider-choices");
+      await flush();
+      expect(screen.queryByTestId("provider-plaintext-key")).toBeNull();
+    });
+
+    it("names the file and offers to delete the key when the platform has no store", async () => {
+      settingsPayload = plaintext();
+      render(<ProviderSection />);
+
+      const notice = await screen.findByTestId("provider-plaintext-key");
+      expect(notice).toHaveAttribute("role", "alert");
+      expect(notice.textContent).toContain("settings.providers.plaintextKey.unsupported");
+      expect(screen.getByTestId("provider-plaintext-key-path").textContent).toBe(
+        "settings.providers.plaintextKey.path:path=/home/writer/.local/share/com.devlikebear.linetta/settings.json",
+      );
+      expect(screen.getByTestId("provider-plaintext-key-delete")).toBeTruthy();
+    });
+
+    // A store that refused is not a platform without one: the first is
+    // permanent and deleting is the only way out, the second may right itself.
+    it("uses the other sentence when a store that exists refused", async () => {
+      settingsPayload = plaintext({ legacy_plaintext_reason: "error" });
+      render(<ProviderSection />);
+
+      const notice = await screen.findByTestId("provider-plaintext-key");
+      expect(notice.textContent).toContain("settings.providers.plaintextKey.failed");
+      expect(notice.textContent).not.toContain("settings.providers.plaintextKey.unsupported");
+    });
+
+    it("shows the notice for the web-search key alone", async () => {
+      settingsPayload = {
+        legacy_plaintext_web_search: true,
+        legacy_plaintext_reason: "unsupported",
+        legacy_plaintext_path: "/x/settings.json",
+      };
+      render(<ProviderSection />);
+
+      await screen.findByTestId("provider-plaintext-key");
+    });
+
+    it("does not delete anything on the first press", async () => {
+      settingsPayload = plaintext();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-plaintext-key-delete"));
+
+      expect(screen.getByTestId("provider-plaintext-key-confirm")).toBeTruthy();
+      expect(rpc.settingsSet).not.toHaveBeenCalled();
+      // Still there, still warning.
+      expect(screen.getByTestId("provider-plaintext-key")).toBeTruthy();
+    });
+
+    it("deletes on the second press and says it did", async () => {
+      settingsPayload = plaintext();
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-plaintext-key-delete"));
+      // The engine's side of it: after the clear, settings.get reports nothing.
+      rpc.settingsSet.mockImplementation(() => {
+        settingsPayload = {};
+        return Promise.resolve({});
+      });
+      await userEvent.click(screen.getByTestId("provider-plaintext-key-delete"));
+      await flush();
+
+      expect(rpc.settingsSet).toHaveBeenCalledWith({ clear_legacy_plaintext_keys: true });
+      await waitFor(() => expect(screen.queryByTestId("provider-plaintext-key")).toBeNull());
+      // The warning must not merely vanish — the writer pressed something
+      // irreversible and has to see that it happened.
+      expect(screen.getByTestId("provider-plaintext-key-deleted").textContent).toBe(
+        "settings.providers.plaintextKey.deleted",
+      );
+    });
+
+    // Every other control in this pane sends a provider patch. None of them
+    // may carry the one flag that destroys a credential.
+    it("never sends the clear flag from anything but that button", async () => {
+      settingsPayload = plaintext();
+      activeId = "anthropic";
+      render(<ProviderSection />);
+
+      await userEvent.click(await screen.findByTestId("provider-choice-openai"));
+      await flush();
+
+      for (const [patch] of rpc.settingsSet.mock.calls) {
+        expect(patch).not.toHaveProperty("clear_legacy_plaintext_keys");
+      }
     });
   });
 });

@@ -113,6 +113,87 @@ type Config struct {
 	// and the writer can switch it off in Settings → Skills. Off means no
 	// second provider call and no skill written without the writer asking.
 	AgentSelfReviewEnabled bool `json:"agent_self_review_enabled"`
+	// The four fields below report one thing settings.get cannot get from
+	// anywhere else: a pre-1.0 plaintext api_key that is *still in
+	// settings.json* because load() had nowhere to move it to (#113).
+	//
+	// They are derived at load time and never persisted — deliberately absent
+	// from persist()'s allowlist. A flag written to disk would outlive the
+	// condition it describes: it survives a reinstall onto a platform that
+	// does have a secret store, and it survives the writer deleting the key,
+	// leaving a warning about a file that no longer says what it claims.
+	// Recomputing it every load costs nothing and can never be stale.
+	//
+	// LegacyPlaintextProviders is the sorted list of provider ids whose key
+	// is still in the file.
+	LegacyPlaintextProviders []string `json:"legacy_plaintext_providers,omitempty"`
+	// LegacyPlaintextWebSearch says the same about the web-search key.
+	LegacyPlaintextWebSearch bool `json:"legacy_plaintext_web_search,omitempty"`
+	// LegacyPlaintextReason is "unsupported" when this platform has no secret
+	// backend at all, "error" when it has one and it refused. The two need
+	// different sentences: the first is permanent and the writer's only move
+	// is to delete the key, the second may work on the next launch.
+	LegacyPlaintextReason string `json:"legacy_plaintext_reason,omitempty"`
+	// LegacyPlaintextPath is the settings.json holding them, so the notice can
+	// name the file instead of asking the writer to guess where it lives.
+	LegacyPlaintextPath string `json:"legacy_plaintext_path,omitempty"`
+}
+
+// Why a legacy plaintext key could not be moved into the secret store.
+const (
+	// LegacyPlaintextReasonUnsupported: this build has no secret backend.
+	// Permanent until someone writes one; see secrets_other.go.
+	LegacyPlaintextReasonUnsupported = "unsupported"
+	// LegacyPlaintextReasonError: there is a backend and it refused — a
+	// locked or access-denied Keychain, say. Possibly transient.
+	LegacyPlaintextReasonError = "error"
+)
+
+// legacyPlaintextKeys is the pre-1.0 plaintext credentials load() found in
+// settings.json and could not move into the SecretStore.
+//
+// It lives on the Store rather than in Config on purpose. Config's copies get
+// blanked by sanitizeConfigForMemory the first time anything is saved, and a
+// blanked copy is exactly what persist() would then write back over the file —
+// silently destroying the credential. Keeping the values here, out of every
+// sanitize path, is what lets persist() put them back byte for byte.
+type legacyPlaintextKeys struct {
+	providers map[string]string // provider id → the key still in settings.json
+	webSearch string            // the web-search key still in settings.json
+	reason    string            // LegacyPlaintextReason*
+}
+
+func (l legacyPlaintextKeys) any() bool {
+	return len(l.providers) > 0 || l.webSearch != ""
+}
+
+func (l legacyPlaintextKeys) providerIDs() []string {
+	if len(l.providers) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(l.providers))
+	for id := range l.providers {
+		ids = append(ids, id)
+	}
+	// Sorted because map order is randomized and this list reaches the UI:
+	// an unordered one would reshuffle the notice on every settings.get.
+	slices.Sort(ids)
+	return ids
+}
+
+// note records one setSecret failure. A real error outranks "unsupported":
+// if any part of the migration failed for a reason a backend could recover
+// from, the writer should be told that rather than that their platform has
+// no storage — which would be a lie on macOS.
+func (l *legacyPlaintextKeys) note(err error) {
+	if errors.Is(err, ErrSecretStoreUnsupported) {
+		if l.reason == "" {
+			l.reason = LegacyPlaintextReasonUnsupported
+		}
+		return
+	}
+	log.Printf("settings: moving a legacy plaintext key into the secret store failed; leaving it in settings.json: %v", err)
+	l.reason = LegacyPlaintextReasonError
 }
 
 // Patch holds optional updates. Nil pointers mean "leave the field alone".
@@ -140,6 +221,12 @@ type Patch struct {
 	MCPConsentVersion         *int                     `json:"mcp_consent_version,omitempty"`
 	MCPConsentedAt            *int64                   `json:"mcp_consented_at,omitempty"`
 	AgentSelfReviewEnabled    *bool                    `json:"agent_self_review_enabled,omitempty"`
+	// ClearLegacyPlaintextKeys, when true, deletes the plaintext keys load()
+	// could not migrate from settings.json (#113). One-way and destructive:
+	// on a platform with no secret store the file is the only place those
+	// keys exist, so this must never fire on its own — the Settings notice
+	// puts it behind a button the writer has to press.
+	ClearLegacyPlaintextKeys *bool `json:"clear_legacy_plaintext_keys,omitempty"`
 }
 
 // Store reads and writes the settings file with internal locking.
@@ -149,6 +236,10 @@ type Store struct {
 	cfg     Config
 	dir     string
 	secrets SecretStore
+	// legacyPlaintext is what load() could not move out of settings.json.
+	// Guarded by mu. Empty on every healthy install; non-empty only on a
+	// platform with no secret backend, or after one refused. See #113.
+	legacyPlaintext legacyPlaintextKeys
 }
 
 // New constructs a Store, ensuring $LINETTA_HOME exists and loading the file.
@@ -292,28 +383,37 @@ func (s *Store) load() error {
 		s.cfg.AgentSelfReviewEnabled = disk.AgentSelfReviewEnabled
 	}
 	s.cfg = normalizeMCPPreferences(s.cfg)
-	migratedProviderKeys, migratedWebKey, err := s.migrateLegacySecrets(&disk)
-	if err != nil {
-		s.mu.Unlock()
-		return err
-	}
+	// Migration cannot fail the load any more (#113). A pre-1.0 plaintext key
+	// on a platform with no secret store used to return an error from here,
+	// which meant the writer could not open their settings at all — while the
+	// key stayed in the file regardless. What comes back instead is a record
+	// of what could not be moved, which Get() surfaces so Settings can say so
+	// and offer to delete it.
+	migratedProviderKeys, migratedWebKey := s.migrateLegacySecrets(&disk)
 	next := s.cfg
+	legacy := s.legacyPlaintext
 	s.mu.Unlock()
 	if migratedWebKey || migratedProviderKeys {
-		if err := s.persist(next); err != nil {
+		// persistWith, not persist: the rewrite that drops the keys that *did*
+		// move must put back the ones that did not, or a partly-failed
+		// migration would delete the keys it could not save.
+		if err := s.persistWith(next, legacy); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Store) migrateLegacySecrets(disk *Config) (bool, bool, error) {
+// migrateLegacySecrets moves pre-1.0 plaintext keys out of settings.json and
+// into the SecretStore. It reports what moved (so load() knows whether the
+// file needs rewriting) and records what could not in s.legacyPlaintext.
+//
+// Called with s.mu held.
+func (s *Store) migrateLegacySecrets(disk *Config) (bool, bool) {
+	legacy := legacyPlaintextKeys{}
 	migratedProviderKeys := false
 	if len(disk.Providers) > 0 {
-		providers, migrated, err := s.migrateProviderSecrets(disk.Providers)
-		if err != nil {
-			return false, false, err
-		}
+		providers, migrated := s.migrateProviderSecrets(disk.Providers, &legacy)
 		s.cfg.Providers = providers
 		if migrated {
 			disk.Providers = providers
@@ -323,13 +423,16 @@ func (s *Store) migrateLegacySecrets(disk *Config) (bool, bool, error) {
 	migratedWebKey := false
 	if disk.WebSearchAPIKey != "" {
 		if err := s.setSecret(webSearchAPIKeySecretName, disk.WebSearchAPIKey); err != nil {
-			return false, false, err
+			legacy.note(err)
+			legacy.webSearch = disk.WebSearchAPIKey
+		} else {
+			s.cfg.WebSearchAPIKey = ""
+			disk.WebSearchAPIKey = ""
+			migratedWebKey = true
 		}
-		s.cfg.WebSearchAPIKey = ""
-		disk.WebSearchAPIKey = ""
-		migratedWebKey = true
 	}
-	return migratedProviderKeys, migratedWebKey, nil
+	s.legacyPlaintext = legacy
+	return migratedProviderKeys, migratedWebKey
 }
 
 // Get returns a copy of the current Config (with backup_dir filled in).
@@ -531,12 +634,26 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	}
 	next = normalizeEditorPreferences(next)
 
-	if err := s.persist(next); err != nil {
+	// The one path that deletes a credential the writer owns (#113). The file
+	// is rewritten without the plaintext keys first and the in-memory record
+	// dropped only once that write has landed: the other order would take the
+	// notice off the screen while the keys were still on disk.
+	s.mu.RLock()
+	legacy := s.legacyPlaintext
+	s.mu.RUnlock()
+	clearLegacy := p.ClearLegacyPlaintextKeys != nil && *p.ClearLegacyPlaintextKeys
+	if clearLegacy {
+		legacy = legacyPlaintextKeys{}
+	}
+	if err := s.persistWith(next, legacy); err != nil {
 		return Config{}, err
 	}
 
 	s.mu.Lock()
 	s.cfg = sanitizeConfigForMemory(next)
+	if clearLegacy {
+		s.legacyPlaintext = legacyPlaintextKeys{}
+	}
 	s.mu.Unlock()
 
 	// Last, past every path that can still fail with nothing written. A
@@ -545,6 +662,15 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	// memory and disk in step; only the key did not take.
 	if err := s.applyPendingSecrets(pendingSecrets); err != nil {
 		return Config{}, err
+	}
+	// A key the writer has just stored or cleared supersedes the plaintext one
+	// still in the file for that provider, so the file stops carrying it. This
+	// is after applyPendingSecrets because only a write that actually landed
+	// counts, and it is why the rewrite is a second one.
+	if s.forgetLegacyPlaintextFor(pendingSecrets) {
+		if err := s.persist(next); err != nil {
+			return Config{}, err
+		}
 	}
 
 	return s.Get(ctx)
@@ -563,7 +689,19 @@ func (s *Store) applyPendingSecrets(pending []pendingSecret) error {
 	return nil
 }
 
+// persist writes next, carrying forward whatever pre-1.0 plaintext keys the
+// file still holds. Every caller but the one destructive path wants this.
 func (s *Store) persist(next Config) error {
+	s.mu.RLock()
+	legacy := s.legacyPlaintext
+	s.mu.RUnlock()
+	return s.persistWith(next, legacy)
+}
+
+// persistWith writes next plus exactly the legacy plaintext keys given.
+// Passing an empty legacy is how the keys get deleted from the file, and the
+// only caller that does is the explicit clear_legacy_plaintext_keys patch.
+func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 	next = sanitizeConfigForDisk(next)
 	persistable := Config{
 		Language:                    next.Language,
@@ -596,6 +734,11 @@ func (s *Store) persist(next Config) error {
 		// next restart and no further.
 		AgentSelfReviewEnabled: next.AgentSelfReviewEnabled,
 	}
+	// sanitizeConfigForDisk has just blanked every api_key, which is right for
+	// every key the SecretStore holds. It is wrong for the pre-1.0 ones it
+	// refused: for those the file is the only copy, and a save of an unrelated
+	// preference must not be what destroys one (#113). Put them back.
+	persistable = withLegacyPlaintextKeys(persistable, legacy)
 	body, err := json.MarshalIndent(persistable, "", "  ")
 	if err != nil {
 		return err
@@ -611,22 +754,85 @@ func (s *Store) persist(next Config) error {
 	return nil
 }
 
-func (s *Store) migrateProviderSecrets(providers map[string]ProviderConfig) (map[string]ProviderConfig, bool, error) {
+// withLegacyPlaintextKeys puts the un-migrated plaintext keys back into a
+// config on its way to disk, so the file keeps saying what it already said.
+func withLegacyPlaintextKeys(c Config, legacy legacyPlaintextKeys) Config {
+	if !legacy.any() {
+		return c
+	}
+	if legacy.webSearch != "" {
+		c.WebSearchAPIKey = legacy.webSearch
+	}
+	if len(legacy.providers) > 0 {
+		providers := map[string]ProviderConfig{}
+		for id, cfg := range c.Providers {
+			providers[id] = cfg
+		}
+		for id, key := range legacy.providers {
+			cfg := providers[id]
+			cfg.APIKey = key
+			providers[id] = cfg
+		}
+		c.Providers = providers
+	}
+	return c
+}
+
+// forgetLegacyPlaintextFor drops the record of any plaintext key the writer
+// has just deliberately replaced or cleared through settings.set. Storing a
+// new key for a provider — or clearing that provider's key, which is the same
+// button saying the opposite — is an explicit decision about that credential,
+// and after it the plaintext copy is not something to preserve. It returns
+// whether anything changed, so the caller knows to rewrite the file.
+func (s *Store) forgetLegacyPlaintextFor(pending []pendingSecret) bool {
+	if len(pending) == 0 {
+		return false
+	}
+	names := map[string]bool{}
+	for _, ps := range pending {
+		names[ps.name] = true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	changed := false
+	for id := range s.legacyPlaintext.providers {
+		if names[providerAPIKeySecretName(id)] {
+			delete(s.legacyPlaintext.providers, id)
+			changed = true
+		}
+	}
+	if !s.legacyPlaintext.any() {
+		s.legacyPlaintext = legacyPlaintextKeys{}
+	}
+	return changed
+}
+
+func (s *Store) migrateProviderSecrets(providers map[string]ProviderConfig, legacy *legacyPlaintextKeys) (map[string]ProviderConfig, bool) {
 	out := map[string]ProviderConfig{}
 	migrated := false
 	for id, cfg := range providers {
 		if cfg.APIKey != "" {
 			if err := s.setSecret(providerAPIKeySecretName(id), cfg.APIKey); err != nil {
-				return nil, false, err
+				// The key is recorded and left exactly where it is — in cfg
+				// and in the file. Blanking it in memory while it stayed on
+				// disk would make the two disagree about what the writer has;
+				// blanking it on disk would be the app destroying a
+				// credential nobody asked it to touch (#113).
+				legacy.note(err)
+				if legacy.providers == nil {
+					legacy.providers = map[string]string{}
+				}
+				legacy.providers[id] = cfg.APIKey
+			} else {
+				cfg.APIKey = ""
+				migrated = true
 			}
-			cfg.APIKey = ""
-			migrated = true
 		}
 		cfg.APIKeySet = false
 		cfg = normalizeProviderConfig(id, cfg)
 		out[id] = cfg
 	}
-	return out, migrated, nil
+	return out, migrated
 }
 
 func (s *Store) setSecret(name, value string) error {
@@ -725,6 +931,18 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	// Presence only — never the value: settings.get must not read secrets, and
 	// the check has to see the 0600 file fallback too.
 	c.MCPTokenSet = s.MCPTokenExists()
+	// Which keys are still in plain text in settings.json, and why (#113).
+	// Names and a reason only — the values stay where they are, and the point
+	// of the notice is that the writer already has them.
+	s.mu.RLock()
+	legacy := s.legacyPlaintext
+	s.mu.RUnlock()
+	if legacy.any() {
+		c.LegacyPlaintextProviders = legacy.providerIDs()
+		c.LegacyPlaintextWebSearch = legacy.webSearch != ""
+		c.LegacyPlaintextReason = legacy.reason
+		c.LegacyPlaintextPath = filepath.Join(s.dir, "settings.json")
+	}
 	return c
 }
 
