@@ -941,7 +941,7 @@ const messages = {
     // 어느 회사 이름도 넣지 않습니다 — 어느 프로바이더의 키든 같은 상황입니다.
     "settings.providers.plaintextKey.title": "저장된 키가 평문으로 남아 있습니다",
     "settings.providers.plaintextKey.unsupported":
-      "이 플랫폼에는 앱이 쓸 수 있는 안전한 저장소가 없어, 예전 버전이 저장해 둔 키를 옮기지 못했습니다. 키는 아직 설정 파일에 그대로, 읽을 수 있는 상태로 들어 있습니다.",
+      "이 플랫폼에는 앱이 쓸 수 있는 안전한 저장소가 없어, 예전 버전이 저장해 둔 키를 옮기지 못했습니다. 키는 아직 설정 파일에 그대로, 읽을 수 있는 상태로 들어 있습니다. 그리고 그 자리에서는 아무 일도 하지 않습니다 — Linetta는 프로바이더 키를 운영체제 자격 증명 저장소에서만 읽으므로, 설정 파일에 남은 키는 쓰이지 않습니다.",
     "settings.providers.plaintextKey.failed":
       "예전 버전이 저장해 둔 키를 안전한 저장소로 옮기지 못했습니다. 키는 아직 설정 파일에 그대로, 읽을 수 있는 상태로 들어 있습니다. 앱을 다시 열면 옮겨질 수도 있습니다.",
     "settings.providers.plaintextKey.path": "위치: {path}",
@@ -1882,7 +1882,7 @@ const messages = {
     "settings.providers.apiKey.clear": "Clear",
     "settings.providers.plaintextKey.title": "A stored key is still in plain text",
     "settings.providers.plaintextKey.unsupported":
-      "This platform has no secure storage the app can use, so a key an older version saved could not be moved. It is still in the settings file, readable as it is.",
+      "This platform has no secure storage the app can use, so a key an older version saved could not be moved. It is still in the settings file, readable as it is — and it does nothing where it is: Linetta reads provider keys only from the OS credential store, so a key left in the settings file is never used.",
     "settings.providers.plaintextKey.failed":
       "A key an older version saved could not be moved into secure storage. It is still in the settings file, readable as it is. Opening the app again may move it.",
     "settings.providers.plaintextKey.path": "Location: {path}",
@@ -2807,7 +2807,7 @@ const messages = {
     "settings.providers.apiKey.clear": "削除",
     "settings.providers.plaintextKey.title": "保存された鍵が平文のまま残っています",
     "settings.providers.plaintextKey.unsupported":
-      "このプラットフォームにはアプリが使える安全な保存領域がないため、以前のバージョンが保存した鍵を移せませんでした。鍵はいまも設定ファイルの中に、読める状態で残っています。",
+      "このプラットフォームにはアプリが使える安全な保存領域がないため、以前のバージョンが保存した鍵を移せませんでした。鍵はいまも設定ファイルの中に、読める状態で残っています。そしてその場所では何の働きもしません — Linetta はプロバイダーの鍵を OS の資格情報ストアからのみ読むため、設定ファイルに残った鍵が使われることはありません。",
     "settings.providers.plaintextKey.failed":
       "以前のバージョンが保存した鍵を安全な保存領域へ移せませんでした。鍵はいまも設定ファイルの中に、読める状態で残っています。アプリを開き直すと移せる場合があります。",
     "settings.providers.plaintextKey.path": "場所: {path}",

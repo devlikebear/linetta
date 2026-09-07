@@ -93,9 +93,12 @@ func (r LegacyMemoryReport) Lines() []string {
 //   - A destination that already exists means both directories are left alone.
 //     Merging two experiences.jsonl files is the alternative and it is the
 //     riskier one — it must not happen silently.
-//   - A symlinked entry is skipped. Renaming a link moves the link, not its
-//     target, so <home>/<name> would become a link whose contents live outside
-//     the home and every later memory write would follow it there.
+//   - A symlink anywhere on the path is skipped — the entry itself, and every
+//     component of memory/experiences.jsonl inside it. Renaming a link moves
+//     the link, not its target, so <home>/<name> would become a directory whose
+//     memory/ lives outside the home and every later memory write would follow
+//     it there. A single Lstat of the whole marker path is not that check: it
+//     leaves only the final component unresolved. See isMemoryWorkspace.
 //   - A directory without memory/experiences.jsonl is not a memory workspace
 //     and is not moved.
 //   - A name that is not a plain single path segment is refused. The names come
@@ -173,10 +176,34 @@ func MigrateLegacyMemory(home string) LegacyMemoryReport {
 }
 
 // isMemoryWorkspace reports whether dir holds the marker file as a regular
-// file. Lstat so a symlinked marker does not vouch for a directory.
+// file reached without crossing a single symlink.
+//
+// One Lstat of the whole marker path is not enough: it leaves only the *final*
+// component unresolved, so a directory whose memory/ is itself a link to
+// somewhere outside the app data directory passes it, gets moved, and every
+// later memory write follows the link out. So every component below dir is
+// stat'd in turn and must be a real directory — Lstat reports a symlink as a
+// symlink, never as the directory it points at, so IsDir() is the refusal.
+// dir itself is checked by the caller, off the os.ReadDir entry.
 func isMemoryWorkspace(dir string) bool {
-	info, err := os.Lstat(filepath.Join(dir, memoryWorkspaceMarker))
-	return err == nil && info.Mode().IsRegular()
+	parts := strings.Split(memoryWorkspaceMarker, string(filepath.Separator))
+	path := dir
+	for i, part := range parts {
+		path = filepath.Join(path, part)
+		info, err := os.Lstat(path)
+		if err != nil {
+			return false
+		}
+		if i == len(parts)-1 {
+			return info.Mode().IsRegular()
+		}
+		if !info.IsDir() {
+			return false
+		}
+	}
+	// Unreachable while memoryWorkspaceMarker has components; a marker
+	// constant emptied by a future edit must not vouch for anything.
+	return false
 }
 
 // plainSegment reports whether name is a single path segment that can only

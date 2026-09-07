@@ -31,24 +31,51 @@ removes the `companion` folder once it is empty. There is nothing to click:
 open the app and the facts are back where an agent reads them
 ([#114](https://github.com/devlikebear/linetta/issues/114)).
 
-Two cases it deliberately leaves alone, because guessing would risk your data:
+It moves a folder only when that folder really is memory: a directory holding
+`memory/experiences.jsonl` as an ordinary file, with no symlink anywhere on the
+way to it. Everything else it leaves exactly as it found it, and nothing in
+`companion/` is ever changed or deleted.
 
-- **A project that already has memories in the new place.** If both
+Here is every case where it declines, and what you should do about each:
+
+- **The project already has memories in the new place.** If both
   `<app data>/companion/<project id>/` and `<app data>/<project id>/` exist,
   Linetta touches neither — merging two `experiences.jsonl` files is not
-  something it will do behind your back. The file is one JSON object per line,
-  so you can append the old file's lines to the new one yourself.
-- **A `companion` folder holding anything other than project memory.** Only a
-  directory containing `memory/experiences.jsonl` is treated as memory and
-  moved; anything else stays, and so does the folder around it. A symlink is
-  not followed either.
+  something it will do behind your back. *What to do:* nothing, unless you want
+  the older facts back. The file is one JSON object per line, so you can append
+  the old file's lines to the new one yourself, then delete the old folder.
+- **The folder is not project memory.** Anything under `companion/` without
+  `memory/experiences.jsonl` inside it stays where it is — and so does a stray
+  file rather than a folder, which on macOS is usually the hidden `.DS_Store`
+  the Finder writes as soon as you look inside. *What to do:* nothing. Linetta
+  reads memory only from `<app data>/<project id>/memory/experiences.jsonl`, so
+  moving something that is not that up one level would not make it readable —
+  it would only put an unrecognised folder in a directory Linetta keeps its own
+  files in. Delete it or leave it, as you prefer.
+- **The folder is named for something else Linetta keeps.** `backups`, `codex`,
+  `skills`, `folder-sync-staging`, `library.db`, `settings.json`, `mcp.json`
+  and `companion` itself are refused by name, so a hand-made folder cannot be
+  moved on top of one of them. Project ids are uuids, so a real project is
+  never refused this way. *What to do:* nothing; rename it first if it really
+  does hold a project's memory.
+- **Something on the path is a symlink.** A linked folder, or a linked
+  `memory/` inside a real one, is refused rather than followed: moving it would
+  leave Linetta writing your memories to wherever the link points, outside its
+  own data folder. *What to do:* if the link was deliberate, move the folder it
+  points at to `<app data>/<project id>/` yourself and remove the link.
+- **The move itself failed.** The likeliest cause is a rename across
+  filesystems — `companion/` and `<app data>/` on different mounts — and Linetta
+  does not fall back to copying, because a half-finished copy is worse than no
+  copy. *What to do:* open the app again, which retries the whole pass; or move
+  `<app data>/companion/<project id>/` up to `<app data>/<project id>/`
+  yourself, which is the same move by hand.
 
-So a `<app data>/companion/` still there after an upgrade is holding something
-Linetta would not move without you — or, rarely, something it could not move,
-such as a folder it lacks permission to write to. Nothing in it was changed,
-and the manual fix is the same in every case: move the project directories up
-one level into `<app data>/` yourself, or merge the lines by hand where both
-files exist.
+The `companion` folder is removed once it is empty, so it is normally gone
+after the first launch. **A `companion/` folder still there does not mean your
+memories were left behind** — on macOS a single hidden `.DS_Store` is enough to
+keep it, with every project folder already moved out from under it. Open it and
+look: if it holds no `<project id>/` folders, everything moved and you can
+delete what is left.
 
 ## What happened to your API keys, and what changes in 1.2
 
@@ -69,7 +96,7 @@ where to go and delete it:
 | --- | --- |
 | macOS | Keychain Access → search `linetta` |
 | Windows | Credential Manager → Windows Credentials → `linetta` entries |
-| Linux | there is no secure secret store here, so a key you enter today cannot be saved and only the ChatGPT (Codex) sign-in works, storing its token in `<app data>/codex/auth.json`. **A key you entered before 3 June 2026 is a different matter**: those builds wrote it in plain text into `<app data>/settings.json`, under `providers`, and on Linux nothing has moved or cleared it since. Settings → AI provider now says so and offers to delete it for you; you can also open the file and delete the `api_key` value yourself |
+| Linux | there is no secure secret store here, so a key you enter today cannot be saved and only the ChatGPT (Codex) sign-in works, storing its token in `<app data>/codex/auth.json`. **A key you entered before 3 June 2026 is a different matter**: those builds wrote it in plain text into `<app data>/settings.json`, under `providers`, and on Linux nothing has moved or cleared it since. **That key does nothing where it is** — Linetta reads provider keys only from the OS credential store, so a key left in `settings.json` is not used by the built-in agent, by MCP, or by anything else, no matter which boxes you tick. It is readable text and no more. Settings → AI provider now says so and offers to delete it for you; you can also open the file and delete the `api_key` value yourself |
 
 On Linux `<app data>` is `$XDG_DATA_HOME/com.devlikebear.linetta`, or
 `~/.local/share/com.devlikebear.linetta` when `XDG_DATA_HOME` is unset.

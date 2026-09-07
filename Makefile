@@ -37,8 +37,13 @@ audit-desktop: ## Check production frontend dependencies
 audit-rust: ## Check RustSec advisories (requires cargo-audit)
 	cd apps/desktop/src-tauri && cargo audit
 
-test-go: ## Run Go engine tests
-	cd engine && go test ./...
+test-go: ## Run Go engine tests (race detector on: the engine is concurrent)
+	@# -race, because the engine's shared state is reached from one goroutine
+	@# per RPC message (internal/rpc/server.go) and a data race on a map is not
+	@# a wrong answer but a process abort — "fatal error: concurrent map
+	@# iteration and map write" kills the app under the writer. #113 shipped
+	@# exactly that past a green suite; the flag is what would have caught it.
+	cd engine && go test -race ./...
 	bash scripts/validate-story-core-deps.sh
 
 test-desktop: ## Run desktop frontend tests and production build

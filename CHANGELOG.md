@@ -94,6 +94,17 @@
   Nothing is merged: a project that already has memories in the new location is
   left untouched, along with its old directory
   ([#114](https://github.com/devlikebear/linetta/issues/114)).
+- Fixed Linetta refusing to open its settings on Linux for anyone who had
+  entered an API key before 3 June 2026. Those builds wrote the key in plain
+  text into `settings.json`; the move into secure storage has nowhere to go on
+  a platform with no credential store, and that failure came back out of the
+  load, so every other preference in the file was unreachable too. The load now
+  always completes and the key is left exactly as it was found — neither moved
+  nor quietly deleted. Settings → AI provider says the key is still there, says
+  where the file is, and offers to delete it; it also says plainly that a key
+  left in that file does nothing, because Linetta reads provider keys only from
+  the OS credential store
+  ([#113](https://github.com/devlikebear/linetta/issues/113)).
 
 ## v1.1.0 - 2026-08-31
 

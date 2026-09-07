@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -778,5 +781,136 @@ func TestSet_storingAKeySupersedesTheUnmigratedPlaintextOne(t *testing.T) {
 
 	if body := readSettingsFile(t, dir); strings.Contains(body, "legacy-provider-secret") {
 		t.Errorf("the superseded plaintext key is still being written back: %s", body)
+	}
+}
+
+// A settings.get and a key write are two RPCs, and rpc dispatch runs one
+// goroutine per message (internal/rpc/server.go:153), so they overlap. Both
+// touched the same legacyPlaintext.providers map: Get iterated it after
+// releasing mu (redactedSettingsView -> providerIDs, and persist ->
+// withLegacyPlaintextKeys), while forgetLegacyPlaintextFor deleted from it
+// under mu.Lock. Go turns that pair into "fatal error: concurrent map
+// iteration and map write" — a hard process abort, reached by pressing Clear
+// in the very pane #113 exists to show. Under -race this test reported the
+// race before legacyPlaintextKeys.clone() existed.
+//
+// The window is the gap between Get's RUnlock and its next RLock, because
+// every RUnlock publishes the reader's clock to the next writer. So the test
+// widens it deliberately: a residue big enough that sorting and copying it
+// outside the lock takes real time, several readers so one of them is always
+// inside that gap, and a writer that keeps deleting for as long as they run.
+func TestLegacyPlaintextKeys_getAndForgetAreConcurrencySafe(t *testing.T) {
+	seedLegacyPlaintextHome(t)
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// Padding: far more entries than the four real providers, because a
+	// four-entry iteration is over before a writer can get in. A file written
+	// by an older build can carry any provider id, so an oversized residue is
+	// not a shape the store forbids — but only the four real ids can be the
+	// subject of a settings.set, so those are what the writer clears.
+	const residueSize = 400
+	residue := make(map[string]string, residueSize)
+	for i := range residueSize {
+		residue[fmt.Sprintf("padding-%04d", i)] = "legacy-padding"
+	}
+	ids := []string{ProviderAnthropic, ProviderOpenAI, ProviderGeminiNative}
+	for _, id := range ids {
+		residue[id] = "legacy-" + id
+	}
+	s.mu.Lock()
+	s.legacyPlaintext = legacyPlaintextKeys{providers: residue, reason: LegacyPlaintextReasonUnsupported}
+	s.mu.Unlock()
+
+	ctx := context.Background()
+	var wg sync.WaitGroup
+	var writerDone atomic.Bool
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for !writerDone.Load() {
+				if _, err := s.Get(ctx); err != nil {
+					t.Errorf("Get: %v", err)
+					return
+				}
+			}
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer writerDone.Store(true)
+		// The pane's Clear button: an empty api_key deletes the stored key,
+		// which drops that provider's plaintext residue. The entry is put back
+		// between presses so every press really does delete one — one writer
+		// pressing Clear three times is too few chances for the window.
+		for range 12 {
+			for _, id := range ids {
+				s.mu.Lock()
+				if s.legacyPlaintext.providers == nil {
+					s.legacyPlaintext = legacyPlaintextKeys{
+						providers: map[string]string{},
+						reason:    LegacyPlaintextReasonUnsupported,
+					}
+				}
+				s.legacyPlaintext.providers[id] = "legacy-" + id
+				s.mu.Unlock()
+				if _, err := s.Set(ctx, Patch{
+					Providers: map[string]ProviderPatch{id: {APIKey: strPtr("")}},
+				}); err != nil {
+					t.Errorf("Set: %v", err)
+					return
+				}
+			}
+		}
+	}()
+	wg.Wait()
+}
+
+// Two providers, each with a key still in plain text. Storing a key for one is
+// a decision about that one credential; the other's residue must survive it.
+// Without this, mutating forgetLegacyPlaintextFor to forget *every* provider
+// on any key write passes the whole engine suite (#113 review).
+func TestSet_storingOneProvidersKeyKeepsTheOthersPlaintextResidue(t *testing.T) {
+	dir := seedLegacyPlaintextHome(t)
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	// Forced by hand: a memory store migrates cleanly, and what is under test
+	// is the bookkeeping, not the platform.
+	s.mu.Lock()
+	s.legacyPlaintext = legacyPlaintextKeys{
+		providers: map[string]string{
+			"anthropic": "legacy-anthropic-secret",
+			"openai":    "legacy-openai-secret",
+		},
+		reason: LegacyPlaintextReasonUnsupported,
+	}
+	s.mu.Unlock()
+
+	got, err := s.Set(context.Background(), Patch{
+		Providers: map[string]ProviderPatch{"anthropic": {APIKey: strPtr("a-new-key")}},
+	})
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	body := readSettingsFile(t, dir)
+	if strings.Contains(body, "legacy-anthropic-secret") {
+		t.Errorf("the superseded plaintext key is still being written back: %s", body)
+	}
+	if !strings.Contains(body, "legacy-openai-secret") {
+		t.Errorf("storing anthropic's key deleted openai's plaintext key, which nobody asked "+
+			"it to touch and nothing else holds a copy of: %s", body)
+	}
+	// And the notice still names the provider the writer has not dealt with.
+	if !slices.Contains(got.LegacyPlaintextProviders, "openai") {
+		t.Errorf("legacy_plaintext_providers = %v, want it to still carry openai", got.LegacyPlaintextProviders)
+	}
+	if slices.Contains(got.LegacyPlaintextProviders, "anthropic") {
+		t.Errorf("legacy_plaintext_providers = %v, want anthropic gone", got.LegacyPlaintextProviders)
 	}
 }

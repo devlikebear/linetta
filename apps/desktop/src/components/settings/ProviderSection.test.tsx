@@ -49,7 +49,7 @@ vi.mock("../../lib/i18n", () => ({
   }),
 }));
 
-import { ProviderSection } from "./ProviderSection";
+import { PLAINTEXT_DELETE_ARM_MS, ProviderSection } from "./ProviderSection";
 
 const PROVIDER_IDS = ["openai-codex", "anthropic", "gemini-native", "openai"] as const;
 
@@ -1744,6 +1744,52 @@ describe("ProviderSection", () => {
       expect(screen.getByTestId("provider-plaintext-key-deleted").textContent).toBe(
         "settings.providers.plaintextKey.deleted",
       );
+    });
+
+    // The armed state has to expire. A confirmation that lives as long as the
+    // pane means a writer who pressed once and went off to change a model is
+    // one press from destroying a credential nothing else holds a copy of.
+    it("disarms the confirmation after a while, so a later press asks again", async () => {
+      settingsPayload = plaintext();
+      render(<ProviderSection />);
+      await screen.findByTestId("provider-plaintext-key");
+
+      vi.useFakeTimers();
+      fireEvent.click(screen.getByTestId("provider-plaintext-key-delete"));
+      await flush();
+      expect(screen.getByTestId("provider-plaintext-key-confirm")).toBeTruthy();
+
+      await tick(PLAINTEXT_DELETE_ARM_MS + 1);
+
+      expect(screen.queryByTestId("provider-plaintext-key-confirm")).toBeNull();
+      // And the next press is the *first* press again: it asks, it does not
+      // delete.
+      fireEvent.click(screen.getByTestId("provider-plaintext-key-delete"));
+      await flush();
+      expect(rpc.settingsSet).not.toHaveBeenCalled();
+      expect(screen.getByTestId("provider-plaintext-key-confirm")).toBeTruthy();
+    });
+
+    // The other half: the arming does not expire so fast that a writer who
+    // read the sentence and meant it has to press three times.
+    it("is still armed a moment before it expires", async () => {
+      settingsPayload = plaintext();
+      render(<ProviderSection />);
+      await screen.findByTestId("provider-plaintext-key");
+
+      vi.useFakeTimers();
+      fireEvent.click(screen.getByTestId("provider-plaintext-key-delete"));
+      await flush();
+      await tick(PLAINTEXT_DELETE_ARM_MS - 1);
+
+      rpc.settingsSet.mockImplementation(() => {
+        settingsPayload = {};
+        return Promise.resolve({});
+      });
+      fireEvent.click(screen.getByTestId("provider-plaintext-key-delete"));
+      await flush();
+
+      expect(rpc.settingsSet).toHaveBeenCalledWith({ clear_legacy_plaintext_keys: true });
     });
 
     // Every other control in this pane sends a provider patch. None of them

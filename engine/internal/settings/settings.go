@@ -167,6 +167,30 @@ func (l legacyPlaintextKeys) any() bool {
 	return len(l.providers) > 0 || l.webSearch != ""
 }
 
+// clone returns a copy that is safe to hold after s.mu is released.
+//
+// Assigning the struct is not enough: the copy shares the same providers map,
+// and forgetLegacyPlaintextFor deletes from it under mu.Lock. A settings.get
+// arriving on another goroutine — RPC dispatch is one goroutine per message
+// (internal/rpc/server.go) — would then be iterating that map while it is
+// written, which Go does not merely race on but aborts the process for:
+// "fatal error: concurrent map iteration and map write". Every read of
+// s.legacyPlaintext that outlives the lock must go through here.
+func (l legacyPlaintextKeys) clone() legacyPlaintextKeys {
+	if len(l.providers) == 0 {
+		// Nil rather than an empty map, so a clone of nothing allocates
+		// nothing and compares the way the zero value does.
+		l.providers = nil
+		return l
+	}
+	providers := make(map[string]string, len(l.providers))
+	for id, key := range l.providers {
+		providers[id] = key
+	}
+	l.providers = providers
+	return l
+}
+
 func (l legacyPlaintextKeys) providerIDs() []string {
 	if len(l.providers) == 0 {
 		return nil
@@ -391,7 +415,7 @@ func (s *Store) load() error {
 	// and offer to delete it.
 	migratedProviderKeys, migratedWebKey := s.migrateLegacySecrets(&disk)
 	next := s.cfg
-	legacy := s.legacyPlaintext
+	legacy := s.legacyPlaintext.clone()
 	s.mu.Unlock()
 	if migratedWebKey || migratedProviderKeys {
 		// persistWith, not persist: the rewrite that drops the keys that *did*
@@ -639,7 +663,7 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	// dropped only once that write has landed: the other order would take the
 	// notice off the screen while the keys were still on disk.
 	s.mu.RLock()
-	legacy := s.legacyPlaintext
+	legacy := s.legacyPlaintext.clone()
 	s.mu.RUnlock()
 	clearLegacy := p.ClearLegacyPlaintextKeys != nil && *p.ClearLegacyPlaintextKeys
 	if clearLegacy {
@@ -693,7 +717,7 @@ func (s *Store) applyPendingSecrets(pending []pendingSecret) error {
 // file still holds. Every caller but the one destructive path wants this.
 func (s *Store) persist(next Config) error {
 	s.mu.RLock()
-	legacy := s.legacyPlaintext
+	legacy := s.legacyPlaintext.clone()
 	s.mu.RUnlock()
 	return s.persistWith(next, legacy)
 }
@@ -935,7 +959,7 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	// Names and a reason only — the values stay where they are, and the point
 	// of the notice is that the writer already has them.
 	s.mu.RLock()
-	legacy := s.legacyPlaintext
+	legacy := s.legacyPlaintext.clone()
 	s.mu.RUnlock()
 	if legacy.any() {
 		c.LegacyPlaintextProviders = legacy.providerIDs()

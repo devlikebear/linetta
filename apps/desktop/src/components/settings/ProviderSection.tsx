@@ -34,6 +34,12 @@ const PROVIDER_ORDER: { id: ProviderID; labelKey: MessageKey }[] = [
   { id: "openai", labelKey: "settings.providers.name.openai" },
 ];
 
+/** How long the "delete the plaintext key" button stays armed after the first
+ *  press (#113). Long enough to read the sentence it puts on screen and press
+ *  again on purpose; short enough that the arming cannot outlive the intent
+ *  and catch the writer on some unrelated visit back to this pane. */
+export const PLAINTEXT_DELETE_ARM_MS = 10_000;
+
 /** The i18n key naming one provider, for interpolation into a sentence that
  *  has to say which company it means — see the consent checkbox below. */
 const nameKeyFor = (id: ProviderID): MessageKey =>
@@ -302,7 +308,8 @@ export function ProviderSection() {
   const [plaintextKey, setPlaintextKey] = useState<PlaintextKeyNotice | null>(null);
   // Deleting is one-way and the key exists nowhere else, so the button asks
   // once. Not a modal: this pane has none, and a confirmation the writer can
-  // walk away from by doing anything else is the gentler shape here.
+  // walk away from by doing anything else is the gentler shape here. It is
+  // armed for PLAINTEXT_DELETE_ARM_MS and no longer — see the effect below.
   const [confirmingPlaintextDelete, setConfirmingPlaintextDelete] = useState(false);
   // Kept after the notice goes away, so the writer sees that the thing they
   // pressed actually happened rather than the warning merely vanishing.
@@ -370,6 +377,21 @@ export function ProviderSection() {
   useEffect(() => {
     void refreshPlaintextKey().catch(setError);
   }, [refreshPlaintextKey]);
+
+  // The confirmation disarms itself. Without this it stayed armed for the life
+  // of the pane: a writer who pressed once, went off to change a model or a
+  // base URL and came back was one press away from deleting a credential
+  // nothing else holds a copy of, with the sentence explaining that long since
+  // scrolled out of mind. Asking again costs one press; not asking costs the
+  // key.
+  useEffect(() => {
+    if (!confirmingPlaintextDelete) return;
+    const timer = window.setTimeout(
+      () => setConfirmingPlaintextDelete(false),
+      PLAINTEXT_DELETE_ARM_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [confirmingPlaintextDelete]);
 
   const guard = async (fn: () => Promise<void>) => {
     setBusy(true);

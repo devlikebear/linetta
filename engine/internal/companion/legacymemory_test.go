@@ -296,3 +296,38 @@ func TestMigrateLegacyMemoryReportsFailureAndContinues(t *testing.T) {
 		t.Fatalf("the source should be intact: %v", err)
 	}
 }
+
+// A real directory whose memory/ is a symlink pointing out of the app data
+// directory. One Lstat of "<dir>/memory/experiences.jsonl" resolves memory/
+// and only leaves the last component alone, so this entry used to pass the
+// marker check and get moved — after which <home>/<id>/memory was a link out
+// of the home that every later memory write followed (#114 review).
+func TestMigrateLegacyMemoryRefusesSymlinkedMemoryDirectory(t *testing.T) {
+	home := t.TempDir()
+	outside := t.TempDir()
+	const id = "6f1b0e2a-0000-4000-8000-000000000008"
+	if err := os.WriteFile(filepath.Join(outside, "experiences.jsonl"), []byte("{\"summary\":\"elsewhere\"}\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	entry := filepath.Join(home, "companion", id)
+	if err := os.MkdirAll(entry, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Symlink(outside, filepath.Join(entry, "memory")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	rep := MigrateLegacyMemory(home)
+
+	if len(rep.Moved) != 0 {
+		t.Fatalf("Moved = %v, want none — moving this makes <home>/%s/memory a link out of the app data directory", rep.Moved, id)
+	}
+	if len(rep.Skipped) != 1 || !strings.Contains(rep.Skipped[0], "no memory") {
+		t.Fatalf("Skipped = %v, want one no-marker line", rep.Skipped)
+	}
+	mustNotExist(t, filepath.Join(home, id))
+	// And the entry it refused is untouched, link and all.
+	if _, err := os.Lstat(filepath.Join(entry, "memory")); err != nil {
+		t.Fatalf("the refused entry was disturbed: %v", err)
+	}
+}
