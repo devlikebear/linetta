@@ -54,18 +54,12 @@ const zeroWidthJoiner = '\u200D'
 
 // Screen refuses text that must not reach a prompt.
 //
-// It screens for characters a writer cannot see while reviewing their own
-// memory but a model still reads: zero-width characters, bidi controls,
-// Unicode tag characters, variation selectors, and the format category
-// generally — plus a short list of characters outside that category which
-// are just as invisible in practice (see the const block above).
-//
-// The zero-width joiner is a deliberate, narrow exception: U+200D is what
-// makes family and profession emoji ("👩‍⚕️") a single glyph instead of three,
-// and writers describing their own preferences legitimately paste those. A
-// ZWJ is only accepted when it directly joins two runes that look like
-// emoji; a ZWJ anywhere else — in particular between two ordinary letters,
-// which is exactly the smuggling shape — is still refused. See isEmojiJoin.
+// It is ScreenInvisible plus one refusal of its own: a memory is one line,
+// and a heading there is an escape attempt against the block's own frame
+// (see ErrDelimiter's use below). A document that is legitimately markdown —
+// a skill body, for instance — needs the invisible-character screening
+// without that heading refusal; call ScreenInvisible directly for that (see
+// agentskills.Guard).
 //
 // It deliberately does NOT match phrases like "ignore previous instructions".
 // Linetta's users write novels: a thriller contains that sentence honestly,
@@ -79,24 +73,51 @@ func Screen(text string) error {
 	if headingPattern.MatchString(text) {
 		return fmt.Errorf("%w: a memory line may not start a markdown heading (\"#\" through \"######\")", ErrDelimiter)
 	}
+	return ScreenInvisible(text)
+}
+
+// ScreenInvisible refuses characters a writer cannot see while reviewing
+// their own text but a model still reads: zero-width characters, bidi
+// controls, Unicode tag characters, variation selectors, and the format
+// category generally — plus a short list of characters outside that
+// category which are just as invisible in practice (see the const block
+// above). It carries none of Screen's markdown-heading refusal, so it is
+// safe to run over a document where headings are ordinary structure.
+//
+// The zero-width joiner is a deliberate, narrow exception: U+200D is what
+// makes family and profession emoji ("👩‍⚕️") a single glyph instead of three,
+// and writers describing their own preferences legitimately paste those. A
+// ZWJ is only accepted when it directly joins two runes that look like
+// emoji; a ZWJ anywhere else — in particular between two ordinary letters,
+// which is exactly the smuggling shape — is still refused. See isEmojiJoin.
+//
+// Its refusals say "here", not "in a memory": this function now screens two
+// different document types (a memory line through Screen, a skill body
+// through agentskills.Guard), and the first path that put one of these
+// messages in front of a model was the skill one — where "not allowed in a
+// memory" names the wrong document. The caller supplies the noun by wrapping
+// (Guard prefixes "skill body:"); what belongs here is the code point, which
+// every message still names so the writing agent knows exactly what to
+// delete.
+func ScreenInvisible(text string) error {
 	runes := []rune(text)
 	for i, r := range runes {
 		switch {
 		case r == '\n' || r == '\t':
 			// The only two control characters memory is written with.
 		case unicode.IsControl(r):
-			return fmt.Errorf("%w: U+%04X is not allowed in a memory", ErrControl, r)
+			return fmt.Errorf("%w: U+%04X is not allowed here", ErrControl, r)
 		case r == zeroWidthJoiner:
 			if isEmojiJoin(runes, i) {
 				continue
 			}
-			return fmt.Errorf("%w: U+200D is invisible and is not allowed in a memory outside an emoji sequence", ErrInvisible)
+			return fmt.Errorf("%w: U+200D is invisible and is not allowed here outside an emoji sequence", ErrInvisible)
 		case isTagChar(r):
-			return fmt.Errorf("%w: U+%04X is invisible and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X is invisible and is not allowed here", ErrInvisible, r)
 		case r >= 0xE0100 && r <= 0xE01EF:
 			// Variation Selector Supplement: same invisible-payload shape as
 			// the tag block just above, immediately adjacent in the plane.
-			return fmt.Errorf("%w: U+%04X is invisible and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X is invisible and is not allowed here", ErrInvisible, r)
 		case r >= 0xFE00 && r <= 0xFE0F:
 			// Base Variation Selectors. VS15/VS16 (U+FE0E/U+FE0F) select
 			// text vs. emoji presentation for the preceding character — a
@@ -107,13 +128,13 @@ func Screen(text string) error {
 			if r == '\uFE0E' || r == '\uFE0F' {
 				continue
 			}
-			return fmt.Errorf("%w: U+%04X is invisible and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X is invisible and is not allowed here", ErrInvisible, r)
 		case r == hangulChoseongFiller || r == hangulJungseongFiller || r == hangulFiller:
-			return fmt.Errorf("%w: U+%04X renders as nothing and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X renders as nothing and is not allowed here", ErrInvisible, r)
 		case r == khmerVowelInherentAq || r == khmerVowelInherentAa:
-			return fmt.Errorf("%w: U+%04X renders as nothing and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X renders as nothing and is not allowed here", ErrInvisible, r)
 		case unicode.Is(unicode.Cf, r) || r == '­':
-			return fmt.Errorf("%w: U+%04X is invisible and is not allowed in a memory", ErrInvisible, r)
+			return fmt.Errorf("%w: U+%04X is invisible and is not allowed here", ErrInvisible, r)
 		}
 	}
 	return nil

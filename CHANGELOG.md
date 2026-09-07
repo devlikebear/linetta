@@ -15,9 +15,9 @@
 - The MCP activity log now records whether the built-in agent or an external
   client made each tool call. Activity entries and the `mcp.changed`
   notification both carry a new `source` field for it.
-- The tool surface is unchanged: the built-in agent is a client of Linetta's
-  own MCP server, reaching the same tools external clients use, rather than a
-  second set built for it.
+- The built-in agent has no tool surface of its own: it is a client of
+  Linetta's own MCP server, reaching the same tools external clients use,
+  rather than a second set built for it.
 - The consent text you tick before connecting a provider now spells out what
   the agent's tools can actually read — any scene in any work, not only the one
   you have open, plus summaries, the outline, manuscript-wide search, the
@@ -46,6 +46,45 @@
   appears in the story brief — alongside both curated documents for an external
   client, and on its own for the built-in agent, which already carries them in
   its system prompt.
+- An agent now also keeps **skills**: short how-to documents about method
+  rather than about the story. Each is a plain `SKILL.md` file with
+  agentskills.io YAML frontmatter in its own folder — `<app data>/skills/<name>/`
+  for a skill that applies to every work, `<app data>/skills/works/<project
+  id>/<name>/` for one work — so you can edit them in any editor, keep the
+  folder in git, or point your own Claude Code at it. At most 40 per scope,
+  200 characters of description and 8,000 of body.
+- Only the names and descriptions of enabled skills go into the built-in
+  agent's system prompt and into the story brief an MCP client reads; the body
+  is fetched on demand. Two new tools: `linetta_read_skill`, a read tool
+  registered in read-only mode as well, and `linetta_edit_skill`, a write tool
+  registered only in full-access mode. A client pinned to a single work can
+  write a skill for that work and is refused on a global one, exactly as it is
+  on the writer profile. That makes ten read tools and nine write tools.
+- **A skill under `skills/<name>/` is global**, like the writer profile: it is
+  offered on every work, not only the one you have open. The consent text for
+  a provider and for MCP now says so.
+- **An agent writes a skill without asking.** There is no approval gate. What
+  you get instead is a badge on every skill saying whether you or an agent
+  wrote it, a version of every write you can read and revert to, and one
+  switch that takes a skill out of the prompt without deleting it — all under
+  Settings → Skills, where you can also write and edit skills yourself.
+- Added a self-review that costs an extra model call. After a turn in which
+  the built-in agent executed eight or more tool calls, and after your reply
+  has already been sent, Linetta asks the same provider and the same model, in
+  a separate request, whether the turn taught it a technique worth recording
+  or showed a skill to be wrong. Most turns answer "nothing" in one round
+  trip; one that writes a skill costs up to five. It is on by default and your
+  provider meters it like any other call — Settings → Skills → "Learning from
+  its own work" (`agent_self_review_enabled`) turns it off, and off means the
+  call is not made.
+- Skills live in files, and **the daily backup does not carry them**: it is
+  `VACUUM INTO` on `library.db` and copies nothing else under the data
+  directory. It does carry their history — every write and delete lands a row
+  holding that skill's whole text in `library.db`. So a skill you only ever
+  hand-wrote into the folder has no row anywhere, and a skill whose file is
+  gone is not listed in Settings → Skills, which is also the only way to reach
+  its history. Copy the folder yourself or keep it in git; tracked as
+  [#119](https://github.com/devlikebear/linetta/issues/119).
 
 ## v1.1.0 - 2026-08-31
 

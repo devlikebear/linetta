@@ -68,6 +68,9 @@ vi.mock("../components/settings/McpSection", () => ({
 vi.mock("../components/settings/MemorySection", () => ({
   MemorySection: () => <div data-testid="memory-section-stub">memory-section</div>,
 }));
+vi.mock("../components/settings/SkillsSection", () => ({
+  SkillsSection: () => <div data-testid="skills-section-stub">skills-section</div>,
+}));
 
 /** A diagnostics snapshot with the fields no test cares about already filled.
  *
@@ -453,6 +456,66 @@ describe("Settings", () => {
     await screen.findByTestId("settings-nav-general");
     expect(screen.queryByTestId("settings-nav-memory")).not.toBeInTheDocument();
     expect(screen.queryByTestId("memory-section-stub")).not.toBeInTheDocument();
+  });
+
+  it("renders SkillsSection under the skills nav item", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    // Same gate as memory, and for the same reason: a skill is worth editing
+    // as soon as anything can load it into a prompt.
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+
+    expect(await screen.findByTestId("skills-section-stub")).toBeInTheDocument();
+  });
+
+  // The self-improvement loop's switch (#98 Task 10). It is ON unless the
+  // writer says otherwise, so the first click must send false — and a payload
+  // from an engine that predates the key must still read as on, or a writer
+  // upgrading would find the feature silently switched off.
+  it("turns the agent's self-review off from the skills pane", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+    const toggle = await screen.findByRole("button", { name: /작업이 끝나면 배운 것을 정리/ });
+    expect(toggle.querySelector(".switch")).toHaveClass("on");
+
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ agent_self_review_enabled: false }),
+    );
+  });
+
+  it("shows the self-review switch off when the writer has switched it off", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings, agent_self_review_enabled: false });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+    const toggle = await screen.findByRole("button", { name: /작업이 끝나면 배운 것을 정리/ });
+    expect(toggle.querySelector(".switch")).not.toHaveClass("on");
+
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ agent_self_review_enabled: true }),
+    );
+  });
+
+  it("hides skills entirely when nothing can read them", async () => {
+    // No agent and no MCP: nothing would ever load a skill, so the pane is a
+    // folder editor for a folder with no reader. The stale-category path has
+    // to refuse it too, not just the nav.
+    window.sessionStorage.setItem("linetta.settings.category", "skills");
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: false, mcp_available: false }));
+    renderSettings();
+
+    await screen.findByTestId("settings-nav-general");
+    expect(screen.queryByTestId("settings-nav-skills")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("skills-section-stub")).not.toBeInTheDocument();
   });
 
   it("does not render ProviderSection when only mcp_available is true (gate is agent_available)", async () => {

@@ -80,3 +80,35 @@ func (r *runRegistry) cancelAll() {
 		c()
 	}
 }
+
+// track registers a cancel func WITHOUT claiming a work, and untrack releases
+// it. This is the whole of what the background self-review needs from the
+// registry, and the "without" is the point.
+//
+// start refuses a second run per work (ErrBusy), which is right for turns: two
+// loops writing the same manuscript would interleave scene updates the writer
+// never asked for. A self-review keyed on the same project id would inherit
+// that rule and get it exactly backwards — the review is a janitor that runs
+// after the reply has already gone, so claiming the work would make the
+// writer's very next message wait on it (or, if the writer is quick, make the
+// review lose to that message and never happen at all). The writer's next
+// message must never wait on a review.
+//
+// cancelAll still reaches it, which is the half that must NOT be lost: Close
+// cancels everything in cancels, and a review that outlived Close would keep
+// calling the provider and writing skill files while the caller is free to
+// close the store underneath it.
+func (r *runRegistry) track(runID string, cancel context.CancelFunc) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cancels[runID] = cancel
+}
+
+// untrack releases a cancel func registered with track. It touches byProject
+// not at all, because track never wrote to it — so a review tearing down can
+// never evict the turn that is holding the work.
+func (r *runRegistry) untrack(runID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.cancels, runID)
+}

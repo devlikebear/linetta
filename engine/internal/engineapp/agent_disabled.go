@@ -8,6 +8,7 @@ import (
 	"errors"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -21,6 +22,10 @@ import (
 // frontend gets a clear refusal rather than a missing method.
 const agentAvailable = false
 
+// skills is carried here even though mobile never builds the agent (see
+// agentAvailable, below) purely so engineapp.go's single, untagged
+// agentDeps{...} literal compiles against either build's struct — the same
+// reason every other field name here matches internal/engineapp/agent_enabled.go's.
 type agentDeps struct {
 	tools    agentToolDeps
 	story    *storyops.Service
@@ -30,6 +35,7 @@ type agentDeps struct {
 	settings *settings.Store
 	src      *provider.Source
 	memory   *agentmemory.Repo
+	skills   *agentskills.Store
 	notify   func(method string, params any)
 	clock    func() int64
 }

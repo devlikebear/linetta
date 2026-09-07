@@ -430,3 +430,78 @@ func TestSet_leavesRetiredCompanionSettingsOnDisk(t *testing.T) {
 		t.Errorf("theme = %q, want the patch applied", onDisk.Theme)
 	}
 }
+
+// The self-improvement loop is on unless the writer says otherwise (#98 Task
+// 10), and a deliberate "otherwise" has to survive a restart. The three ways
+// this field can be silently lost are all covered here: missing from defaults
+// (a fresh install ships the feature off), missing from persist()'s allowlist
+// (the writer's choice lives until the next restart and no further), and a
+// plain assignment in load() instead of the presence guard (a settings.json
+// written before the key existed reads as a deliberate false).
+func TestAgentSelfReviewEnabled_defaultsOnAndSurvivesADeliberateFalse(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	ctx := context.Background()
+
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	got, _ := s.Get(ctx)
+	if !got.AgentSelfReviewEnabled {
+		t.Fatalf("agent_self_review_enabled defaults to false; the loop the feature is named "+
+			"for would never run on a fresh install: %+v", got)
+	}
+	if !s.AgentSelfReviewEnabled() {
+		t.Error("the accessor the agent reads disagrees with the config")
+	}
+
+	if _, err := s.Set(ctx, Patch{AgentSelfReviewEnabled: boolPtr(false)}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if s.AgentSelfReviewEnabled() {
+		t.Error("switching the self-review off did not take effect in memory")
+	}
+
+	s2, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	if s2.AgentSelfReviewEnabled() {
+		t.Error("a deliberate false did not survive a reload — either persist() never wrote it, " +
+			"or load() overwrote it with the default")
+	}
+
+	// And back on. This direction is the one that catches a field missing from
+	// persist()'s allowlist, and it is the ONLY direction that does: the JSON
+	// tag has no omitempty, so an unlisted field is still written — as its
+	// zero value, false. A test that only ever switched the setting off would
+	// read that accident as success and ship a switch that cannot be turned
+	// back on across a restart.
+	if _, err := s2.Set(ctx, Patch{AgentSelfReviewEnabled: boolPtr(true)}); err != nil {
+		t.Fatalf("Set back on: %v", err)
+	}
+	s3, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	if !s3.AgentSelfReviewEnabled() {
+		t.Error("switching the self-review back on did not survive a reload — " +
+			"agent_self_review_enabled is missing from persist()'s allowlist")
+	}
+
+	// A settings.json written by a build that predates the key must still get
+	// the default, not the zero value.
+	legacy := t.TempDir()
+	t.Setenv("LINETTA_HOME", legacy)
+	if err := os.WriteFile(filepath.Join(legacy, "settings.json"), []byte(`{"language":"en"}`), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	s4, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("legacy New: %v", err)
+	}
+	if !s4.AgentSelfReviewEnabled() {
+		t.Error("a settings.json written before this key existed reads as a deliberate false")
+	}
+}

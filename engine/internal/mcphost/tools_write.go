@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -29,6 +30,7 @@ var WriteToolNames = []string{
 	"linetta_create_checkpoint",
 	"linetta_undo_last_change",
 	"linetta_edit_memory",
+	"linetta_edit_skill",
 }
 
 // ---------- linetta_create_work ----------
@@ -150,6 +152,22 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"short and current: replace a line that changed rather than adding a second one. The result says how much " +
 			"room is left.",
 	}, record(d, "linetta_edit_memory", d.editMemory))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_edit_skill",
+		Description: "Write one of your own skills: a durable how-to document you keep for next time — how " +
+			"this writer wants fight scenes paced, how a recurring character speaks. Every skill's name and " +
+			"description is put in front of you at the start of a session; linetta_read_skill opens one. " +
+			"Scope writer makes it global, across every work; scope work ties it to the one work in " +
+			"project_id. action create needs description and body; action patch takes either find and " +
+			"replace for a targeted edit (find must appear exactly once in the body) or body to replace the " +
+			"document wholesale, and can also change description or enabled on their own; action delete " +
+			"removes it. Every change is versioned, so the writer can revert what you write — if the " +
+			"result comes back with versioned false, the change was saved but that version row was not, " +
+			"so say so in your reply: the writer cannot revert that one edit. Keep a skill specific and " +
+			"short — the description is one line saying when to reach for it, and bodies are capped; the " +
+			"result says how much room is left.",
+	}, record(d, "linetta_edit_skill", d.editSkill))
 
 	d.registerReviseTool(s)
 	d.registerBatchTools(s)
@@ -453,4 +471,307 @@ func (d ToolDeps) editMemory(ctx context.Context, _ *mcp.CallToolRequest, in edi
 		Scope: string(saved.Scope), Body: saved.Body,
 		CharsUsed: saved.CharsUsed, CharsBudget: saved.CharsBudget,
 	}, nil
+}
+
+// ---------- linetta_edit_skill ----------
+
+// Actions linetta_edit_skill accepts. Named rather than inlined so the
+// handler's switch and its refusal message cannot drift apart.
+const (
+	skillActionCreate = "create"
+	skillActionPatch  = "patch"
+	skillActionDelete = "delete"
+)
+
+// skillChangedPayload tells the app a skill moved under it — Settings lists
+// skills and holds an editor open on one, and the panel's next turn builds
+// its prompt from the same documents.
+//
+// It matches memoryChangedPayload field for field, plus the name a skill has
+// and a memory document does not, so a listener that already handles
+// memory.changed does not have to learn a second shape for this one.
+type skillChangedPayload struct {
+	Scope     string `json:"scope"`
+	ProjectID string `json:"project_id,omitempty"`
+	Name      string `json:"name"`
+	Source    string `json:"source"`
+}
+
+type editSkillInput struct {
+	Action      string `json:"action" jsonschema:"create, patch or delete"`
+	Name        string `json:"name" jsonschema:"the skill's name: a lowercase slug of letters, digits and hyphens, e.g. fight-scenes"`
+	Scope       string `json:"scope" jsonschema:"writer (global - applies to every work) or work (belongs to one work)"`
+	ProjectID   string `json:"project_id,omitempty" jsonschema:"the work the skill belongs to; required when scope is work, and not accepted for writer"`
+	Description string `json:"description,omitempty" jsonschema:"one line saying when to reach for this skill; required for create, optional for patch"`
+	Body        string `json:"body,omitempty" jsonschema:"the skill's markdown body; required for create, and for a patch that replaces the document wholesale"`
+	Find        string `json:"find,omitempty" jsonschema:"for patch: a piece of the existing body that appears exactly once, to be replaced"`
+	Replace     string `json:"replace,omitempty" jsonschema:"for patch: what to put in place of find; empty removes the found text"`
+	// Enabled is a pointer so "the agent said nothing" stays distinguishable
+	// from "the agent said false": a patch must leave the flag alone unless
+	// it was asked to change it, and false is the interesting value here.
+	Enabled *bool `json:"enabled,omitempty" jsonschema:"whether Linetta offers this skill to you; defaults to true on create, unchanged on patch"`
+}
+
+// scope names the work (work-scoped skills only; a writer skill is global and
+// belongs to none) and, as the target, the skill written — so the activity
+// row the writer reads says which document changed, not merely that some
+// skill did. Like every other scope() in this package it sees the raw input
+// and resolves nothing: a pinned client that omits project_id logs a row with
+// no work id, exactly as it does for the other tools.
+func (in editSkillInput) scope() (string, string) {
+	return strings.TrimSpace(in.ProjectID), strings.TrimSpace(in.Name)
+}
+
+type editSkillOutput struct {
+	Action      string `json:"action"`
+	Name        string `json:"name"`
+	Scope       string `json:"scope"`
+	ProjectID   string `json:"project_id,omitempty"`
+	Description string `json:"description,omitempty"`
+	Enabled     bool   `json:"enabled"`
+	Body        string `json:"body,omitempty"`
+	BodyRunes   int    `json:"body_runes"`
+	BodyBudget  int    `json:"body_budget" jsonschema:"the cap a skill body is held to, so you can see how much room is left"`
+	UpdatedAt   int64  `json:"updated_at,omitempty"`
+
+	// Versioned says whether the version row behind this change was
+	// recorded. Almost always true; false means the skill on disk did
+	// change but the history did not, so this one edit cannot be reverted
+	// and a backup carrying only history would not contain it. No
+	// omitempty: false is the whole point of the field, and omitempty would
+	// delete exactly the case worth reporting.
+	Versioned bool `json:"versioned" jsonschema:"true normally; false means the change was saved but could not be recorded in the skill's version history - tell the writer, because that one edit cannot be reverted"`
+}
+
+// editSkill creates, patches and deletes skills.
+//
+// Both collaborators are required up front, not just the store: a write that
+// landed on disk with no version row behind it is a change the writer cannot
+// revert, which is worse than a refusal they can read.
+func (d ToolDeps) editSkill(ctx context.Context, _ *mcp.CallToolRequest, in editSkillInput) (*mcp.CallToolResult, editSkillOutput, error) {
+	if d.Skills == nil || d.SkillHistory == nil {
+		return toolErr("skills are unavailable in this build"), editSkillOutput{}, nil
+	}
+	scope, projectID, name, errResult := d.requireSkillTarget(ctx, in.Scope, in.ProjectID, in.Name)
+	if errResult != nil {
+		return errResult, editSkillOutput{}, nil
+	}
+	// A writer skill is global: it is offered to the agent in every work. A
+	// client the writer pinned to one work must not be able to write one —
+	// that is exactly what the pin exists to prevent, and requireSkillTarget
+	// cannot enforce it because there is no work to check against. The
+	// built-in agent is unaffected: allowedProjectID returns "" for
+	// SourceAgent.
+	//
+	// Reading such a skill stays allowed; only writing one reaches past the
+	// pin. That is #97's ruling for the global writer profile applied
+	// unchanged (346fb7d refuses the profile WRITE under a pin, while
+	// linetta_get_story_context still hands a pinned client the profile
+	// itself) — see requireSkillTarget, where the read half of it lives.
+	if scope == agentskills.ScopeWriter {
+		if restricted := d.allowedProjectID(); restricted != "" {
+			return toolErr("this Linetta server is restricted to work %q, and a %q skill is global — it "+
+				"steers every work, so it is outside that restriction. Use scope %q to write a skill for "+
+				"this work.", restricted, agentskills.ScopeWriter, agentskills.ScopeWork), editSkillOutput{}, nil
+		}
+	}
+
+	now := d.now()
+	var saved agentskills.Skill
+	var reason string
+
+	switch strings.TrimSpace(in.Action) {
+	case skillActionCreate:
+		res, s := d.createSkill(scope, projectID, name, in, now)
+		if res != nil {
+			return res, editSkillOutput{}, nil
+		}
+		saved, reason = s, agentskills.ReasonCreated
+
+	case skillActionPatch:
+		res, s := d.patchSkill(scope, projectID, name, in, now)
+		if res != nil {
+			return res, editSkillOutput{}, nil
+		}
+		saved, reason = s, agentskills.ReasonEdited
+
+	case skillActionDelete:
+		// The version row for a deletion carries the last body, so the writer
+		// can restore straight from the row marked deleted rather than having
+		// to reach for the one before it. That means reading the skill before
+		// removing it, and refusing a name that is not there — an agent that
+		// deleted the wrong name has to be told.
+		cur, err := d.Skills.Read(scope, projectID, name)
+		if err != nil {
+			return skillReadErr(scope, name, err), editSkillOutput{}, nil
+		}
+		if err := d.Skills.Delete(scope, projectID, name); err != nil {
+			return toolErr("could not delete skill %q: %v", name, err), editSkillOutput{}, nil
+		}
+		saved, reason = cur, agentskills.ReasonDeleted
+
+	default:
+		return toolErr("unknown action %q; use %s, %s or %s",
+			in.Action, skillActionCreate, skillActionPatch, skillActionDelete), editSkillOutput{}, nil
+	}
+
+	// The version lands before the tool returns, so nothing an agent is told
+	// succeeded is missing from the history the writer reverts through.
+	//
+	// A failure here is not an error result: the skill on disk HAS changed,
+	// and refusing after the fact would send the agent off repairing
+	// something that is not broken, or re-writing work that already landed.
+	// But it is not silence either — a log line reaches nobody who could act
+	// on it, and the state it leaves is the one this function's doc comment
+	// calls worse than a refusal: a file newer than its history, unrevertible,
+	// and absent from a backup that carries only history. So the result says
+	// so, in a field the tool's description tells the model to pass on.
+	versioned := true
+	if err := d.SkillHistory.Record(ctx, saved, reason, now); err != nil {
+		logf("skill history: %v", err)
+		versioned = false
+	}
+	if d.Notify != nil {
+		d.Notify("skills.changed", skillChangedPayload{
+			Scope: string(scope), ProjectID: projectID, Name: name, Source: d.sourceOrExternal(),
+		})
+	}
+
+	out := editSkillOutput{
+		Action: reason, Name: saved.Name, Scope: string(scope), ProjectID: projectID,
+		Description: saved.Description, Enabled: saved.Enabled,
+		BodyRunes: saved.BodyRunes, BodyBudget: agentskills.MaxBodyRunes,
+		Versioned: versioned,
+	}
+	if reason != agentskills.ReasonDeleted {
+		out.Body = saved.Body
+		out.UpdatedAt = saved.UpdatedAt
+	}
+	return nil, out, nil
+}
+
+// createSkill writes a skill that must not already exist. A non-nil result is
+// the refusal to return; the Skill is only meaningful when it is nil.
+func (d ToolDeps) createSkill(scope agentskills.Scope, projectID, name string, in editSkillInput, now int64) (*mcp.CallToolResult, agentskills.Skill) {
+	// Store.Write is an upsert — overwriting is normal there — so the plain
+	// "already exists" meaning belongs to this action, and is checked here.
+	// Without it, create silently destroys a skill the agent meant to extend.
+	if _, err := d.Skills.Read(scope, projectID, name); err == nil {
+		return toolErr("a %s skill named %q already exists; read it with linetta_read_skill and use "+
+			"action %s to change it, or pick another name", scope, name, skillActionPatch), agentskills.Skill{}
+	} else if !errors.Is(err, agentskills.ErrNotFound) {
+		return toolErr("could not check whether skill %q exists: %v", name, err), agentskills.Skill{}
+	}
+
+	description := strings.TrimSpace(in.Description)
+	if description == "" {
+		return toolErr("description is required for %s: one line saying when to reach for this skill",
+			skillActionCreate), agentskills.Skill{}
+	}
+	if strings.TrimSpace(in.Body) == "" {
+		return toolErr("body is required for %s: the skill itself, as markdown", skillActionCreate),
+			agentskills.Skill{}
+	}
+	enabled := true
+	if in.Enabled != nil {
+		enabled = *in.Enabled
+	}
+	saved, err := d.Skills.Write(agentskills.Skill{
+		Name: name, Scope: scope, ProjectID: projectID,
+		Description: description, Author: agentskills.AuthorAgent,
+		Enabled: enabled, Body: in.Body,
+	}, now)
+	if err != nil {
+		return toolErr("could not write skill %q: %v", name, err), agentskills.Skill{}
+	}
+	return nil, saved
+}
+
+// patchSkill changes a skill that must already exist. A non-nil result is the
+// refusal to return; the Skill is only meaningful when it is nil.
+func (d ToolDeps) patchSkill(scope agentskills.Scope, projectID, name string, in editSkillInput, now int64) (*mcp.CallToolResult, agentskills.Skill) {
+	cur, err := d.Skills.Read(scope, projectID, name)
+	if err != nil {
+		return skillReadErr(scope, name, err), agentskills.Skill{}
+	}
+
+	// find/replace and a wholesale body are two different intentions, and
+	// guessing which one a call carrying both meant is how an agent's
+	// half-formed edit becomes a lost document.
+	if in.Find != "" && in.Body != "" {
+		return toolErr("give either find and replace, or body — not both: find makes a targeted edit, " +
+			"body replaces the whole document"), agentskills.Skill{}
+	}
+	// replace with nothing to find is the same half-formed edit in the other
+	// direction, and the more dangerous one: without this the call succeeds,
+	// the replace is dropped on the floor, and the agent is told the edit
+	// landed. Name what is missing rather than guessing that "replace" meant
+	// "body" — the two produce completely different documents.
+	if in.Find == "" && in.Replace != "" {
+		return toolErr("replace needs find: give the piece of the existing body to replace — read the "+
+			"skill %q with linetta_read_skill first — or use body to replace the whole document",
+			name), agentskills.Skill{}
+	}
+
+	next := cur
+	switch {
+	case in.Find != "":
+		// Exactly one match, the rule agentmemory's own find follows. Zero
+		// means the agent is working from a body it has not read; more than
+		// one means it has not said which, and editing the first would
+		// corrupt a document it cannot see.
+		switch n := strings.Count(cur.Body, in.Find); {
+		case n == 0:
+			return toolErr("find text does not appear in skill %q; read it with linetta_read_skill first",
+				name), agentskills.Skill{}
+		case n > 1:
+			return toolErr("find text appears %d times in skill %q; give a longer piece that appears "+
+				"exactly once", n, name), agentskills.Skill{}
+		}
+		next.Body = strings.Replace(cur.Body, in.Find, in.Replace, 1)
+	case in.Body != "":
+		next.Body = in.Body
+	}
+	if description := strings.TrimSpace(in.Description); description != "" {
+		next.Description = description
+	}
+	if in.Enabled != nil {
+		next.Enabled = *in.Enabled
+	}
+
+	// Whether this patch changes anything is decided on the rendered
+	// document, not on which fields the call happened to carry. A patch
+	// whose find equals its replace, or whose body is the body already on
+	// disk, is as much of a no-op as re-asserting the enabled flag it
+	// already has — and one rule for all of them means the writer's history
+	// never grows a version row that reverts to itself. Render is the
+	// comparison because it is exactly what Store.Write puts on disk;
+	// Author is deliberately still cur's here (it is set below), so a
+	// no-op body from the agent over a writer-authored skill does not count
+	// as a change on the strength of the byline alone.
+	if agentskills.Render(next) == agentskills.Render(cur) {
+		return toolErr("nothing to change: skill %q already reads exactly that. A %s needs find and "+
+			"replace, or body, or description, or enabled — with a value different from the current one.",
+			name, skillActionPatch), agentskills.Skill{}
+	}
+
+	// The author becomes the agent because the agent is what wrote THIS
+	// version, even when the writer authored the one before it.
+	next.Author = agentskills.AuthorAgent
+	saved, err := d.Skills.Write(next, now)
+	if err != nil {
+		return toolErr("could not write skill %q: %v", name, err), agentskills.Skill{}
+	}
+	return nil, saved
+}
+
+// skillReadErr turns a failed Store.Read into the refusal the agent reads. A
+// missing skill is the common case and gets a sentence about what to do next;
+// anything else says what actually went wrong.
+func skillReadErr(scope agentskills.Scope, name string, err error) *mcp.CallToolResult {
+	if errors.Is(err, agentskills.ErrNotFound) {
+		return toolErr("no %s skill named %q; use one of the skills already listed for you, or create "+
+			"this one with action %s", scope, name, skillActionCreate)
+	}
+	return toolErr("could not read skill %q: %v", name, err)
 }

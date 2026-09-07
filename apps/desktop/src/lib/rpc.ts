@@ -28,6 +28,12 @@ import type {
   McpTokenResult,
   MemoryDocument,
   MemoryState,
+  Skill,
+  SkillDeleteResult,
+  SkillScope,
+  SkillVersion,
+  SkillWriteResult,
+  SkillsListResult,
   ImportMarkdownResult,
   ImportPreviewResult,
   ListProjectsParams,
@@ -268,6 +274,60 @@ export const memory = {
   get: (projectId: string) => rpcCall<MemoryState>("memory.get", { project_id: projectId }),
   set: (scope: MemoryDocument["scope"], projectId: string, body: string) =>
     rpcCall<MemoryDocument>("memory.set", { scope, project_id: projectId, body }),
+};
+
+/** The skills surface (#98). `list` returns BOTH scopes plus the diagnostics:
+ *  a SKILL.md the writer broke by hand is never listed as a skill, because it
+ *  must not reach a prompt, and must still be visible so it can be fixed.
+ *
+ *  `read` deliberately does not screen what it opens — that is the repair
+ *  path, and a body over the cap cannot be trimmed by someone who cannot read
+ *  it — while `write` does. `enabled` is optional on the way in: omitting it
+ *  leaves a stored skill's flag alone and turns a new one on.
+ *
+ *  There is no rename. A skill's identity is (scope, work, name), which is
+ *  what its version history is keyed on, so renaming through a write would
+ *  strand every version under a name nothing on disk answers to. A rename is
+ *  a delete plus a create. */
+/** The work id a scoped call may carry. A writer-scope skill is global and
+ *  the engine hard-refuses a work id on it (`agentskills.projectArg`), which
+ *  means every caller would otherwise have to remember to blank the id it is
+ *  already holding — the selected work does not stop being selected because
+ *  the writer opened a writer-scope skill. #97 shipped that same
+ *  `scope === … ? id : ""` by hand at every call site in MemorySection; here
+ *  it lives once, in the wrapper, so no pane can forget it. */
+const workIdFor = (scope: SkillScope, projectId: string) => (scope === "work" ? projectId : "");
+
+export const skills = {
+  list: (projectId: string) => rpcCall<SkillsListResult>("skills.list", { project_id: projectId }),
+  read: (scope: SkillScope, projectId: string, name: string) =>
+    rpcCall<Skill>("skills.read", { scope, project_id: workIdFor(scope, projectId), name }),
+  write: (input: {
+    scope: SkillScope;
+    projectId: string;
+    name: string;
+    description: string;
+    body: string;
+    enabled?: boolean;
+  }) =>
+    rpcCall<SkillWriteResult>("skills.write", {
+      scope: input.scope,
+      project_id: workIdFor(input.scope, input.projectId),
+      name: input.name,
+      description: input.description,
+      body: input.body,
+      enabled: input.enabled,
+    }),
+  delete: (scope: SkillScope, projectId: string, name: string) =>
+    rpcCall<SkillDeleteResult>("skills.delete", { scope, project_id: workIdFor(scope, projectId), name }),
+  history: (scope: SkillScope, projectId: string, name: string, limit?: number) =>
+    rpcCall<{ versions: SkillVersion[] }>("skills.history", {
+      scope,
+      project_id: workIdFor(scope, projectId),
+      name,
+      limit,
+    }),
+  restore: (id: string) => rpcCall<SkillWriteResult>("skills.restore", { id }),
 };
 
 export interface BackupEntry {

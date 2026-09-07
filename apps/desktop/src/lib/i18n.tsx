@@ -376,6 +376,7 @@ const messages = {
     "agentPanel.toolName.linetta_where_does_appear": "등장 위치",
     "agentPanel.toolName.linetta_get_plot": "스토리라인",
     "agentPanel.toolName.linetta_get_fact_cards": "자료 카드",
+    "agentPanel.toolName.linetta_read_skill": "스킬 문서",
     "agentPanel.toolName.linetta_create_work": "새 작품",
     "agentPanel.toolName.linetta_write_scene": "씬 본문",
     "agentPanel.toolName.linetta_write_summary": "씬 요약",
@@ -384,6 +385,7 @@ const messages = {
     "agentPanel.toolName.linetta_create_checkpoint": "복원 지점",
     "agentPanel.toolName.linetta_undo_last_change": "변경 되돌리기",
     "agentPanel.toolName.linetta_edit_memory": "기억 수정",
+    "agentPanel.toolName.linetta_edit_skill": "스킬 수정",
     "agentPanel.composer.label": "에이전트에게 보낼 메시지",
     "agentPanel.composer.placeholder": "에이전트에게 요청할 내용을 적어주세요…",
     "agentPanel.composer.send": "보내기",
@@ -682,6 +684,7 @@ const messages = {
     "settings.nav.providers": "AI 프로바이더",
     "settings.nav.mcp": "외부 에이전트 (MCP)",
     "settings.nav.memory": "기억",
+    "settings.nav.skills": "스킬",
     "settings.nav.sync": "동기화",
     "settings.nav.backupRestore": "백업·복원",
     "settings.language.title": "언어",
@@ -810,7 +813,7 @@ const messages = {
     "workspace.mcp.openSettings": "설정에서 연결 관리",
     "settings.mcp.title": "외부 에이전트 연결 (MCP)",
     "settings.mcp.description": "Claude Code나 Claude Desktop 같은 외부 AI 에이전트가 이 컴퓨터 안에서만 Linetta에 접속해 작품을 읽고, 전체 권한을 주면 원고를 쓸 수 있습니다. 켜기 전까지는 아무것도 열리지 않습니다.",
-    "settings.mcp.consent": "외부 에이전트가 내 원고와 설정 자료를 읽는 것에 동의합니다. 전체 권한에서는 원고를 고칠 수도 있습니다. 작가 프로필과 작품 노트도 브리프에서 읽고, 전체 권한에서는 고쳐 씁니다(한 작품으로 제한한 클라이언트는 그 작품의 노트만). 작가 프로필은 열려 있는 작품에 한정되지 않고 모든 작품에 적용됩니다. 모든 변경은 기록되고, 씬은 고쳐 쓰기 전에 스냅샷이 남아 이전 본문을 복원할 수 있습니다. 등장인물·플롯·비트·팩트 카드·기억의 변경은 기록되지만 되돌리기는 제공되지 않습니다.",
+    "settings.mcp.consent": "외부 에이전트가 내 원고와 설정 자료를 읽는 것에 동의합니다. 전체 권한에서는 원고를 고칠 수도 있습니다. 작가 프로필과 작품 노트도 브리프에서 읽고, 전체 권한에서는 고쳐 씁니다(한 작품으로 제한한 클라이언트는 그 작품의 노트만). 작가 프로필은 열려 있는 작품에 한정되지 않고 모든 작품에 적용됩니다. 모든 변경은 기록되고, 씬은 고쳐 쓰기 전에 스냅샷이 남아 이전 본문을 복원할 수 있습니다. 등장인물·플롯·비트·팩트 카드·기억의 변경은 기록되지만 되돌리기는 제공되지 않습니다. 스킬의 이름과 설명도 브리프에서 읽고, 전체 권한에서는 스킬을 쓰고 지웁니다(한 작품으로 제한한 클라이언트는 그 작품의 스킬만). 적용 범위가 \"모든 작품\"인 스킬은 작가 프로필과 마찬가지로 열려 있는 작품에 한정되지 않습니다.",
     "settings.mcp.mode.read_only": "읽기 전용 — 에이전트가 원고를 바꿀 수 없습니다",
     "settings.mcp.advanced": "고급",
     "settings.mcp.port": "포트",
@@ -858,6 +861,61 @@ const messages = {
     "settings.memory.changedElsewhere":
       "에이전트가 이 기억을 방금 수정했습니다. 작성 중인 내용을 저장하면 그 수정을 덮어씁니다.",
     "settings.memory.empty": "아직 기록된 것이 없습니다.",
+    // 스킬(#98). 기억이 "무엇이 사실인가"라면 스킬은 "어떻게 하는가"다 —
+    // 둘을 헷갈리면 작가는 설정을 스킬에 적고 왜 반영되지 않는지 묻게 되므로,
+    // 설명은 그 경계를 먼저 긋는다. 작성자 배지는 장식이 아니라 승인 절차를
+    // 두지 않기로 한 결정의 대가다: 에이전트는 묻지 않고 쓰고, 작가는 대신
+    // 누가 썼는지와 되돌릴 기록과 끄는 스위치를 받는다.
+    "settings.skills.title": "스킬",
+    "settings.skills.description":
+      "에이전트가 익힌 기법을 적어 두는 문서입니다. 사실이 아니라 방법을 담습니다 — 사실은 팩트북과 기억에 있습니다.",
+    // 스스로 배우는 고리(#98). 작가가 시키지 않은 프로바이더 호출이므로
+    // 설명이 그 사실을 먼저 말한다: 언제 도는지, 무엇을 남기는지, 끄면 무엇이
+    // 멈추는지.
+    "settings.skills.selfReview.title": "스스로 익히기",
+    "settings.skills.selfReview.enabled": "작업이 끝나면 배운 것을 정리",
+    "settings.skills.selfReview.description":
+      "손이 많이 간 턴이 끝난 뒤, 답장을 보낸 다음에 따로 한 번 더 물어봅니다 — 적어 둘 기법이 있었는지, 따라 해 보니 틀린 스킬이 있었는지. 적을 것이 있을 때만 스킬을 쓰고, 없으면 아무것도 남기지 않습니다. 끄면 이 추가 호출도 하지 않습니다.",
+    "settings.skills.empty": "아직 스킬이 없습니다.",
+    "settings.skills.new": "새 스킬",
+    "settings.skills.name": "이름",
+    "settings.skills.name.help": "영문 소문자, 숫자, 하이픈만 쓸 수 있습니다. 폴더 이름이 되고, 나중에 바꿀 수 없습니다.",
+    "settings.skills.describe": "설명",
+    "settings.skills.body": "내용",
+    "settings.skills.body.help": "에이전트가 이 스킬을 골랐을 때 읽는 본문입니다. 마크다운으로 씁니다.",
+    "settings.skills.remaining": "{used} / {budget}자",
+    "settings.skills.scope.writer": "모든 작품",
+    "settings.skills.scope.work": "이 작품",
+    // 목록 위의 작품 고르개는 "어느 작품의 스킬을 보는가"이고, 새로 만들기의
+    // 고르개는 "이 스킬이 어디에 적용되는가"다. 같은 낱말을 쓰면 둘이 같은
+    // 것으로 읽힌다.
+    "settings.skills.scope": "적용 범위",
+    "settings.skills.work": "작품",
+    "settings.skills.author.writer": "직접 작성",
+    "settings.skills.author.agent": "에이전트가 작성",
+    "settings.skills.enabled": "사용",
+    "settings.skills.delete": "삭제",
+    "settings.skills.delete.confirm": "이 스킬을 삭제합니다. 기록에는 남아 되돌릴 수 있습니다.",
+    "settings.skills.history": "기록",
+    "settings.skills.history.restore": "이 버전으로 되돌리기",
+    "settings.skills.history.empty": "기록이 없습니다.",
+    // 기록 한 줄이 무엇을 담고 있는지. 삭제된 스킬을 되살릴 때 가장 크게
+    // 쓰인다 — 되돌릴 판을 고르는 유일한 단서다.
+    "settings.skills.reason.created": "처음 작성",
+    "settings.skills.reason.edited": "수정",
+    "settings.skills.reason.deleted": "삭제",
+    "settings.skills.broken": "이 파일을 읽지 못했습니다: {path}",
+    "settings.skills.repair": "열어서 고치기",
+    "settings.skills.repair.busy": "새 스킬을 작성하는 중입니다. 지금 채우면 쓰던 내용을 덮어쓰게 되어 그대로 두었습니다.",
+    // 폴더는 있는데 SKILL.md가 없는 경우. 열 파일이 없으므로 "열어서 고치기"는
+    // 없는 파일을 찾다 실패한다. 이 이름으로 새로 쓰는 것이 유일한 고치기다.
+    "settings.skills.repair.create": "이 이름으로 새로 만들기",
+    // 파일은 바뀌었는데 기록이 남지 않은 경우. 엔진이 굳이 알려 주는 값이니
+    // 화면도 침묵하면 안 된다 — 작가는 되돌리려 할 때에야 알게 된다.
+    "settings.skills.notVersioned":
+      "저장은 되었습니다. 다만 이 변경은 기록에 남지 않아, 되돌리기 목록에 없고 되돌려도 돌아오지 않습니다.",
+    "settings.skills.changedElsewhere":
+      "에이전트가 이 스킬을 방금 수정했습니다. 작성 중인 내용을 저장하면 그 수정을 덮어씁니다.",
     "settings.providers.title": "AI 프로바이더",
     "settings.providers.description": "여기서 고른 회사로 원고 내용이 전송됩니다.",
     "settings.providers.name.openai-codex": "ChatGPT (Codex)",
@@ -896,7 +954,7 @@ const messages = {
     // lands there ("Google Gemini으로" is ungrammatical). `에` has no such
     // allomorph, so the sentence stays correct for every destination.
     "settings.providers.consent":
-      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록을 읽을 수 있고, 여기에 더해 작가 프로필과 작품 노트가 매 요청과 함께 실리고, 그중 작가 프로필은 열려 있는 작품에 한정되지 않고 모든 작품에 적용되며, 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
+      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록을 읽을 수 있고, 여기에 더해 작가 프로필과 작품 노트와 스킬의 이름·설명이 매 요청과 함께 실리고, 그중 작가 프로필과 적용 범위가 \"모든 작품\"인 스킬은 열려 있는 작품에 한정되지 않으며, 손이 많이 간 턴 뒤에는 무엇을 배웠는지 묻는 호출이 한 번 더 갈 수 있고(설정 → 스킬에서 끌 수 있습니다), 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
     "settings.providers.consent.customEndpoint": "직접 설정한 OpenAI 호환 엔드포인트",
     "settings.providers.test": "연결 테스트",
     "settings.providers.test.ok": "연결됨",
@@ -1266,6 +1324,7 @@ const messages = {
     "agentPanel.toolName.linetta_where_does_appear": "Appearances",
     "agentPanel.toolName.linetta_get_plot": "Storyline",
     "agentPanel.toolName.linetta_get_fact_cards": "Fact cards",
+    "agentPanel.toolName.linetta_read_skill": "Skill document",
     "agentPanel.toolName.linetta_create_work": "New work",
     "agentPanel.toolName.linetta_write_scene": "Scene text",
     "agentPanel.toolName.linetta_write_summary": "Scene summary",
@@ -1274,6 +1333,7 @@ const messages = {
     "agentPanel.toolName.linetta_create_checkpoint": "Restore point",
     "agentPanel.toolName.linetta_undo_last_change": "Change undo",
     "agentPanel.toolName.linetta_edit_memory": "Edit memory",
+    "agentPanel.toolName.linetta_edit_skill": "Edit skill",
     "agentPanel.composer.label": "Message to the agent",
     "agentPanel.composer.placeholder": "Tell the agent what you'd like…",
     "agentPanel.composer.send": "Send",
@@ -1572,6 +1632,7 @@ const messages = {
     "settings.nav.providers": "AI provider",
     "settings.nav.mcp": "External agents (MCP)",
     "settings.nav.memory": "Memory",
+    "settings.nav.skills": "Skills",
     "settings.nav.sync": "Sync",
     "settings.nav.backupRestore": "Backup & restore",
     "settings.language.title": "Language",
@@ -1700,7 +1761,7 @@ const messages = {
     "workspace.mcp.openSettings": "Manage the connection in Settings",
     "settings.mcp.title": "Connect an external agent (MCP)",
     "settings.mcp.description": "An external AI agent such as Claude Code or Claude Desktop can reach Linetta from this computer only, read your work, and — with full access — write the manuscript. Nothing is open until you turn it on.",
-    "settings.mcp.consent": "I agree to let an external agent read my manuscript and story notes. With full access it can also change the manuscript. It reads the writer profile and the work notes in the brief too, and with full access rewrites them — a client pinned to a single work, only that work's notes. The writer profile is not scoped to the work I have open; it applies to every work. Every change is recorded, and a scene it rewrites is snapshotted first so the previous text can be restored. Changes to characters, plot, beats, fact cards and memories are recorded but cannot be undone.",
+    "settings.mcp.consent": "I agree to let an external agent read my manuscript and story notes. With full access it can also change the manuscript. It reads the writer profile and the work notes in the brief too, and with full access rewrites them — a client pinned to a single work, only that work's notes. The writer profile is not scoped to the work I have open; it applies to every work. Every change is recorded, and a scene it rewrites is snapshotted first so the previous text can be restored. Changes to characters, plot, beats, fact cards and memories are recorded but cannot be undone. It reads the names and descriptions of my skills in the brief too, and with full access writes and deletes skills — a client pinned to a single work, only that work's skills. A skill whose scope is every work is not scoped to the work I have open, the same way the writer profile is not.",
     "settings.mcp.mode.read_only": "Read only — the agent cannot change the manuscript",
     "settings.mcp.advanced": "Advanced",
     "settings.mcp.port": "Port",
@@ -1747,6 +1808,45 @@ const messages = {
     "settings.memory.changedElsewhere":
       "The agent just changed this memory. Saving what you are writing will overwrite that change.",
     "settings.memory.empty": "Nothing recorded yet.",
+    "settings.skills.title": "Skills",
+    "settings.skills.description":
+      "Notes on techniques the agent has worked out. They hold methods, not facts — facts live in the fact book and in memory.",
+    "settings.skills.selfReview.title": "Learning from its own work",
+    "settings.skills.selfReview.enabled": "Review what a turn taught it",
+    "settings.skills.selfReview.description":
+      "After a turn that did real work, and once your reply has already been sent, the agent is asked separately whether it learned a technique worth recording — or followed a skill that turned out wrong. It writes a skill only when there is something to write. Off means it does not make that extra call at all.",
+    "settings.skills.empty": "No skills yet.",
+    "settings.skills.new": "New skill",
+    "settings.skills.name": "Name",
+    "settings.skills.name.help":
+      "Lowercase letters, digits and hyphens only. It becomes the folder's name and cannot be changed later.",
+    "settings.skills.describe": "Description",
+    "settings.skills.body": "Body",
+    "settings.skills.body.help": "What the agent reads once it picks this skill. Write it in Markdown.",
+    "settings.skills.remaining": "{used} / {budget} characters",
+    "settings.skills.scope.writer": "Every work",
+    "settings.skills.scope.work": "This work",
+    "settings.skills.scope": "Applies to",
+    "settings.skills.work": "Work",
+    "settings.skills.author.writer": "Written by you",
+    "settings.skills.author.agent": "Written by the agent",
+    "settings.skills.enabled": "On",
+    "settings.skills.delete": "Delete",
+    "settings.skills.delete.confirm": "This deletes the skill. It stays in the history, so you can bring it back.",
+    "settings.skills.history": "History",
+    "settings.skills.history.restore": "Restore this version",
+    "settings.skills.history.empty": "No history yet.",
+    "settings.skills.reason.created": "First written",
+    "settings.skills.reason.edited": "Edited",
+    "settings.skills.reason.deleted": "Deleted",
+    "settings.skills.broken": "This file could not be read: {path}",
+    "settings.skills.repair": "Open and fix",
+    "settings.skills.repair.busy": "You are part way through a new skill. Filling this in would overwrite what you typed, so it was left alone.",
+    "settings.skills.repair.create": "Create it under this name",
+    "settings.skills.notVersioned":
+      "The change is saved. It is not in the version history, though, so it is not on the restore list and restoring will not bring it back.",
+    "settings.skills.changedElsewhere":
+      "The agent just changed this skill. Saving what you are writing will overwrite that change.",
     "settings.providers.title": "AI provider",
     "settings.providers.description": "Your manuscript's contents leave this machine and reach whichever company you pick here.",
     "settings.providers.name.openai-codex": "ChatGPT (Codex)",
@@ -1772,7 +1872,7 @@ const messages = {
     "settings.providers.model.default": "Provider default",
     "settings.providers.model.refresh": "Refresh",
     "settings.providers.consent":
-      "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, and the list of my works; that the writer profile and the work notes ride along with every request, the writer profile being global rather than scoped to the work I have open; and that all of it is sent to {provider} and nowhere else",
+      "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, and the list of my works; that the writer profile, the work notes and my skills' names and descriptions ride along with every request, the writer profile and any skill whose scope is every work being global rather than scoped to the work I have open; that after a tool-heavy turn one further call may go out asking what it learned, which I can switch off under Settings → Skills; and that all of it is sent to {provider} and nowhere else",
     "settings.providers.consent.customEndpoint": "the OpenAI-compatible endpoint set above",
     "settings.providers.test": "Test connection",
     "settings.providers.test.ok": "Connected",
@@ -2142,6 +2242,7 @@ const messages = {
     "agentPanel.toolName.linetta_where_does_appear": "登場箇所",
     "agentPanel.toolName.linetta_get_plot": "ストーリーライン",
     "agentPanel.toolName.linetta_get_fact_cards": "資料カード",
+    "agentPanel.toolName.linetta_read_skill": "スキル文書",
     "agentPanel.toolName.linetta_create_work": "新規作品",
     "agentPanel.toolName.linetta_write_scene": "シーン本文",
     "agentPanel.toolName.linetta_write_summary": "シーン要約",
@@ -2150,6 +2251,7 @@ const messages = {
     "agentPanel.toolName.linetta_create_checkpoint": "復元ポイント",
     "agentPanel.toolName.linetta_undo_last_change": "変更の取り消し",
     "agentPanel.toolName.linetta_edit_memory": "記憶の編集",
+    "agentPanel.toolName.linetta_edit_skill": "スキルの編集",
     "agentPanel.composer.label": "エージェントへのメッセージ",
     "agentPanel.composer.placeholder": "エージェントへの依頼を入力してください…",
     "agentPanel.composer.send": "送信",
@@ -2448,6 +2550,7 @@ const messages = {
     "settings.nav.providers": "AI プロバイダー",
     "settings.nav.mcp": "外部エージェント (MCP)",
     "settings.nav.memory": "記憶",
+    "settings.nav.skills": "スキル",
     "settings.nav.sync": "同期",
     "settings.nav.backupRestore": "バックアップと復元",
     "settings.language.title": "言語",
@@ -2576,7 +2679,7 @@ const messages = {
     "workspace.mcp.openSettings": "設定で接続を管理",
     "settings.mcp.title": "外部エージェント接続 (MCP)",
     "settings.mcp.description": "Claude Code や Claude Desktop などの外部 AI エージェントが、このコンピュータ内からのみ Linetta に接続して作品を読み、フル権限では原稿を書けます。オンにするまで何も開きません。",
-    "settings.mcp.consent": "外部エージェントが原稿と設定資料を読むことに同意します。フル権限では原稿を変更できます。作家プロフィールと作品ノートもブリーフで読み取り、フル権限では書き換えます（一つの作品に限定したクライアントはその作品のノートのみ）。作家プロフィールは開いている作品に限定されず、すべての作品に適用されます。すべての変更は記録され、シーンは書き換える前にスナップショットが残るため以前の本文を復元できます。登場人物・プロット・ビート・ファクトカード・記憶の変更は記録されますが、取り消しはできません。",
+    "settings.mcp.consent": "外部エージェントが原稿と設定資料を読むことに同意します。フル権限では原稿を変更できます。作家プロフィールと作品ノートもブリーフで読み取り、フル権限では書き換えます（一つの作品に限定したクライアントはその作品のノートのみ）。作家プロフィールは開いている作品に限定されず、すべての作品に適用されます。すべての変更は記録され、シーンは書き換える前にスナップショットが残るため以前の本文を復元できます。登場人物・プロット・ビート・ファクトカード・記憶の変更は記録されますが、取り消しはできません。スキルの名前と説明もブリーフで読み取り、フル権限ではスキルを書き、削除します（一つの作品に限定したクライアントはその作品のスキルのみ）。適用範囲が「すべての作品」のスキルは、作家プロフィールと同じく開いている作品に限定されません。",
     "settings.mcp.mode.read_only": "読み取り専用 — エージェントは原稿を変更できません",
     "settings.mcp.advanced": "詳細設定",
     "settings.mcp.port": "ポート",
@@ -2621,6 +2724,44 @@ const messages = {
     "settings.memory.changedElsewhere":
       "エージェントがこの記憶をたった今変更しました。編集中の内容を保存すると、その変更を上書きします。",
     "settings.memory.empty": "まだ何も記録されていません。",
+    "settings.skills.title": "スキル",
+    "settings.skills.description":
+      "エージェントが身につけた手法を書き留める文書です。事実ではなく方法を書きます — 事実はファクトブックと記憶にあります。",
+    "settings.skills.selfReview.title": "自分の仕事から学ぶ",
+    "settings.skills.selfReview.enabled": "作業のあとに学んだことを振り返る",
+    "settings.skills.selfReview.description":
+      "手のかかったターンが終わり、返信を送ったあとで、別途もう一度だけ尋ねます — 書き留める価値のある手法があったか、従ってみて間違っていたスキルがあったか。書くことがあるときだけスキルを書き、なければ何も残しません。オフにすると、この追加の呼び出しも行いません。",
+    "settings.skills.empty": "まだスキルがありません。",
+    "settings.skills.new": "新しいスキル",
+    "settings.skills.name": "名前",
+    "settings.skills.name.help": "英小文字、数字、ハイフンのみ使えます。フォルダ名になり、あとから変更できません。",
+    "settings.skills.describe": "説明",
+    "settings.skills.body": "本文",
+    "settings.skills.body.help": "エージェントがこのスキルを選んだときに読む本文です。マークダウンで書きます。",
+    "settings.skills.remaining": "{used} / {budget}文字",
+    "settings.skills.scope.writer": "すべての作品",
+    "settings.skills.scope.work": "この作品",
+    "settings.skills.scope": "適用範囲",
+    "settings.skills.work": "作品",
+    "settings.skills.author.writer": "自分で作成",
+    "settings.skills.author.agent": "エージェントが作成",
+    "settings.skills.enabled": "使用",
+    "settings.skills.delete": "削除",
+    "settings.skills.delete.confirm": "このスキルを削除します。履歴には残るので元に戻せます。",
+    "settings.skills.history": "履歴",
+    "settings.skills.history.restore": "このバージョンに戻す",
+    "settings.skills.history.empty": "履歴がありません。",
+    "settings.skills.reason.created": "最初に作成",
+    "settings.skills.reason.edited": "編集",
+    "settings.skills.reason.deleted": "削除",
+    "settings.skills.broken": "このファイルを読み取れませんでした: {path}",
+    "settings.skills.repair": "開いて直す",
+    "settings.skills.repair.busy": "新しいスキルを作成中です。ここを埋めると入力中の内容を上書きするため、そのままにしました。",
+    "settings.skills.repair.create": "この名前で新しく作る",
+    "settings.skills.notVersioned":
+      "変更は保存されました。ただしこの変更は履歴に残っていないため、復元の一覧になく、元に戻しても戻りません。",
+    "settings.skills.changedElsewhere":
+      "エージェントがこのスキルをたった今変更しました。編集中の内容を保存すると、その変更を上書きします。",
     "settings.providers.title": "AI プロバイダー",
     "settings.providers.description": "ここで選んだ会社に原稿の内容が送信されます。",
     "settings.providers.name.openai-codex": "ChatGPT (Codex)",
@@ -2646,7 +2787,7 @@ const messages = {
     "settings.providers.model.default": "プロバイダーの既定値",
     "settings.providers.model.refresh": "更新",
     "settings.providers.consent":
-      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧を読み取ることができ、さらに作家プロフィールと作品ノートが毎回のリクエストとともに送られ、そのうち作家プロフィールは開いている作品に限定されずすべての作品に適用され、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
+      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧を読み取ることができ、さらに作家プロフィールと作品ノートとスキルの名前・説明が毎回のリクエストとともに送られ、そのうち作家プロフィールと適用範囲が「すべての作品」のスキルは開いている作品に限定されず、手のかかったターンのあとには何を学んだかを尋ねる呼び出しがもう一度送られることがあり（設定 → スキルでオフにできます）、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
     "settings.providers.consent.customEndpoint": "上で設定した OpenAI 互換エンドポイント",
     "settings.providers.test": "接続テスト",
     "settings.providers.test.ok": "接続済み",

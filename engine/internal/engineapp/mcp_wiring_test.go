@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"reflect"
 	"testing"
 	"time"
 
@@ -221,6 +222,39 @@ func TestMCPDisableStopsListener(t *testing.T) {
 	}
 	if !waitPortFree(t, free) {
 		t.Fatal("mcp.disable must drop the listener")
+	}
+}
+
+// TestProductionToolDepsCarryEveryCollaborator can only see that
+// ToolDeps.Context is non-nil, and a *storycontext.ContextBuilder with every
+// optional source unwired is perfectly non-nil: it builds a brief that is
+// simply missing the facts, the memories, the references and — since #98 Task
+// 7 — the skills, with nothing anywhere going red. That is the same failure
+// mode agent.Deps.Skills had, one level further in, and it matters more here
+// because this brief is the ONLY channel an external MCP client has: a
+// forgotten WithSkillSource means a connected Claude Code never learns skills
+// exist and never calls linetta_read_skill, and no test fails.
+//
+// So: the same reflective walk the ToolDeps and agent.Deps guards use, over
+// the builder's own fields. They are unexported and in another package —
+// reflect.Value.IsNil needs no CanInterface, which is exactly the read this
+// guard wants and no more.
+func TestProductionStoryContextBuilderCarriesEverySource(t *testing.T) {
+	app := openApp(t)
+
+	builder := app.mcpTools.Context
+	if builder == nil {
+		t.Fatal("app.mcpTools.Context is nil — the story brief is unavailable to every client")
+	}
+	v := reflect.ValueOf(*builder)
+	for i := 0; i < v.NumField(); i++ {
+		name := v.Type().Field(i).Name
+		switch f := v.Field(i); f.Kind() {
+		case reflect.Ptr, reflect.Func, reflect.Interface, reflect.Map, reflect.Slice:
+			if f.IsNil() {
+				t.Errorf("storycontext.ContextBuilder.%s is nil in production — that section is silently missing from every brief, and nothing else notices", name)
+			}
+		}
 	}
 }
 

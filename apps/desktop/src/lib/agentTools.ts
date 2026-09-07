@@ -33,6 +33,7 @@ export const READ_TOOL_NAMES = [
   "linetta_where_does_appear",
   "linetta_get_plot",
   "linetta_get_fact_cards",
+  "linetta_read_skill",
 ] as const;
 
 export const WRITE_TOOL_NAMES = [
@@ -44,6 +45,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_create_checkpoint",
   "linetta_undo_last_change",
   "linetta_edit_memory",
+  "linetta_edit_skill",
 ] as const;
 
 const READS: ReadonlySet<string> = new Set(READ_TOOL_NAMES);

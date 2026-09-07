@@ -19,6 +19,7 @@ import { McpSection } from "../components/settings/McpSection";
 import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
 import { RestoreSection } from "../components/settings/RestoreSection";
+import { SkillsSection } from "../components/settings/SkillsSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
 import { dispatchAppEvent } from "../lib/appEvents";
 
@@ -55,6 +56,7 @@ const SETTINGS_CATEGORIES = [
   "providers",
   "mcp",
   "memory",
+  "skills",
   "sync",
   "backup",
 ] as const;
@@ -264,6 +266,10 @@ export function Settings() {
               // A memory is only meaningful when some agent can read it, so it
               // rides the same condition as the group it lives in.
               { id: "memory" as const, label: t("settings.nav.memory") },
+              // Skills ride the same condition for the same reason: a skill
+              // that nothing can load into a prompt is a document with no
+              // reader.
+              { id: "skills" as const, label: t("settings.nav.skills") },
             ],
           },
         ]
@@ -517,6 +523,38 @@ export function Settings() {
             {category === "mcp" && mcpAvailable && <McpSection />}
 
             {category === "memory" && (mcpAvailable || agentAvailable) && <MemorySection />}
+
+            {category === "skills" && (mcpAvailable || agentAvailable) && (
+            <>
+            {/* The self-improvement loop (#98). It sits above the skill list
+                rather than in the providers pane because what it produces is
+                skills: the writer who wants to know why a skill appeared they
+                did not write is already looking at this page. It is on by
+                default, so the switch reads `!== false` — a settings.json from
+                a build before the key simply has no opinion. */}
+            <section className="settings-section">
+              <h3>{t("settings.skills.selfReview.title")}</h3>
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving &&
+                  apply({ agent_self_review_enabled: current.agent_self_review_enabled === false })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.skills.selfReview.enabled")}</span>
+                  <span className="sd">{t("settings.skills.selfReview.description")}</span>
+                </span>
+                <span
+                  className={`switch${current.agent_self_review_enabled !== false ? " on" : ""}`}
+                />
+              </button>
+            </section>
+            <SkillsSection />
+            </>
+            )}
 
             {category === "background" && <BackgroundSection />}
 

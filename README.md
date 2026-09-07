@@ -128,6 +128,65 @@ work comes back without them
 recovery screen, which appears only when the app cannot open the library and
 replaces the whole database file, does bring both documents back.
 
+### What the agent learns
+
+Beside the memories, an agent keeps **skills**: short how-to documents about
+method, not about the story — how you want a fight scene paced, how a
+recurring character speaks. Facts about the world belong in the Fact Book and
+in memory; skills hold procedures.
+
+Each one is a plain `SKILL.md` file with agentskills.io YAML frontmatter, in
+its own folder under your data directory:
+
+```text
+<app data>/skills/<name>/SKILL.md                     every work
+<app data>/skills/works/<project id>/<name>/SKILL.md  one work
+```
+
+That is deliberate. You can open a skill in any editor, keep the folder in
+git, or point your own Claude Code at it and have it find the shape it
+expects. At most 40 skills per scope, a description of 200 characters and a
+body of 8,000.
+
+Only the **names and descriptions** of enabled skills go into the built-in
+agent's system prompt and into the story brief an MCP client reads; the body is
+fetched on demand with `linetta_read_skill`. The story brief lists every one.
+The system prompt holds that list to about 3,000 characters and, when they do
+not all fit, says how many it is showing.
+
+**A skill under `skills/<name>/` is global**, the same way the writer profile
+is. It is offered on every work, not only the one you have open. A skill under
+`skills/works/<project id>/` stays with its work.
+
+**An agent writes a skill without asking you first.** There is no approval
+gate: `linetta_edit_skill` creates, patches and deletes, and the change is
+saved. What you get instead is on the record and in your hands — every skill
+carries a badge saying whether you or an agent wrote it, every write is kept
+as a version you can read and revert to, and one switch turns a skill off so
+it leaves the prompt without being deleted. All of it is in **Settings →
+Skills**, where you can also write and edit skills yourself.
+
+**The self-review is an extra model call.** After a turn in which the built-in
+agent executed eight or more tool calls — and after your reply has already been
+sent — Linetta asks the same provider and the same model, in a separate
+request, whether that turn taught it a technique worth recording or showed a
+skill to be wrong. Most turns answer "nothing" in one round trip; a turn that
+does write a skill costs up to five. It is on by default and it is
+metered by your provider like any other call. Turn it off under **Settings →
+Skills → Learning from its own work** (`agent_self_review_enabled` in
+`settings.json`) and Linetta does not make that call at all.
+
+**The daily backup does not carry the skills folder.** It is `VACUUM INTO` on
+`library.db` and copies nothing else under your data directory. What it does
+carry is the version history: every write and every delete lands a row holding
+that skill's whole text in `library.db`, so the history survives even though
+the files do not. Two consequences worth knowing: a skill you have never
+edited through Linetta — one you hand-wrote into the folder and never saved
+from Settings — has no row anywhere, and a skill whose file is gone does not
+appear in Settings → Skills, so its history cannot be reached there either.
+If the skills folder matters to you, copy it yourself, or keep it in git
+([#119](https://github.com/devlikebear/linetta/issues/119)).
+
 ## Writing with your own agent (MCP)
 
 Connecting an outside agent over MCP is a different thing from connecting a
@@ -157,6 +216,13 @@ client you have pinned to a single work can write only that work's notes — the
 writer profile applies to every work, so it is outside the pin, and the tool
 refuses it.
 
+Skills work the same way. The brief lists every enabled skill's name and
+description, in both modes, and `linetta_read_skill` opens one — that tool is a
+read tool, registered in `read_only` as well. Writing is `linetta_edit_skill`,
+which like every other write tool exists only in `full` mode. A pinned client
+can write a skill for its own work and is refused on a global one, for the same
+reason it is refused on the writer profile.
+
 The writer keeps the last word. Every scene write is snapshotted before it
 lands, and a recent outline restructuring can be reversed in one click — the
 last eight, until the app is restarted; entity, storyline, beat, fact-card and
@@ -180,8 +246,9 @@ Windows  %APPDATA%\com.devlikebear.linetta
 
 Important data includes:
 
-- `library.db`: projects, scenes, story data, version snapshots, the writer profile and work notes an agent reads, and the retired built-in companion's transcripts;
-- `backups/YYYY-MM-DD/`: daily database backups, kept for 14 days;
+- `library.db`: projects, scenes, story data, version snapshots, the writer profile and work notes an agent reads, the version history of every skill, and the retired built-in companion's transcripts;
+- `backups/YYYY-MM-DD/`: daily backups of `library.db`, kept for 14 days — the database only, nothing else on this list;
+- `skills/`: the `SKILL.md` documents an agent writes and reads, one folder per skill;
 - `<project id>/memory/experiences.jsonl`: facts an agent has been told to remember;
 - `companion/`: the same file for facts remembered before 1.0, which nothing reads
   any more (see [Moving to Linetta 1.0](docs/migrating-to-1.0.md));

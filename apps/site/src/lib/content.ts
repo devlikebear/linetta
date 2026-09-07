@@ -301,14 +301,14 @@ export const en: Translation = {
       { name: 'Off', body: 'The default. Nothing listens, and nothing is exposed.' },
       {
         name: 'Read only',
-        body: 'Nine read tools. The write tools are never registered, so they do not appear in tools/list and cannot be called.'
+        body: 'Ten read tools. The write tools are never registered, so they do not appear in tools/list and cannot be called.'
       },
       {
         name: 'Full',
-        body: 'All seventeen. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
+        body: 'All nineteen. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
       }
     ],
-    toolsLabel: 'Seventeen tools, not a hundred RPCs',
+    toolsLabel: 'Nineteen tools, not a hundred RPCs',
     toolsNote:
       'A client’s tool budget is finite and selection accuracy falls as the list grows, so the engine’s RPC surface is not exposed one-to-one. Access can also be pinned to a single work.',
     readLabel: 'Read',
@@ -322,7 +322,11 @@ export const en: Translation = {
       { name: 'linetta_list_characters', note: 'Characters, places, objects, concepts' },
       { name: 'linetta_where_does_appear', note: 'Every scene an entity appears in' },
       { name: 'linetta_get_plot', note: 'Storylines and beats' },
-      { name: 'linetta_get_fact_cards', note: 'Research notes with their sources' }
+      { name: 'linetta_get_fact_cards', note: 'Research notes with their sources' },
+      {
+        name: 'linetta_read_skill',
+        note: 'Open one recorded how-to in full — the brief lists only names and descriptions'
+      }
     ],
     writeTools: [
       { name: 'linetta_create_work', note: 'Start a new work with its first scene ready to draft' },
@@ -335,6 +339,10 @@ export const en: Translation = {
       {
         name: 'linetta_edit_memory',
         note: 'Record what it has learned — the writer profile, which applies to every work, or this work’s notes'
+      },
+      {
+        name: 'linetta_edit_skill',
+        note: 'Write a how-to as a SKILL.md file — global, or tied to one work. No approval step; the writer gets attribution, history and an off switch'
       }
     ],
     safetyLabel: 'What keeps it safe',
@@ -360,7 +368,10 @@ export const en: Translation = {
       'Open it with Cmd/Ctrl+J — it reaches Linetta’s tools through the same MCP layer an external client uses',
       'Every call lands in the same activity log, marked with which agent made it',
       'A structural change gets an Undo button on its line — the last eight, and only while the app stays open; a scene-prose rewrite has no one-click undo yet, but the previous text is kept as a restorable version',
-      'It reads two short memories at the start of every turn — a writer profile and this work’s notes — and writes to them itself. The profile is global: it is not scoped to the work you have open. Both are yours to rewrite in Settings → Memory'
+      'It reads two short memories at the start of every turn — a writer profile and this work’s notes — and writes to them itself. The profile is global: it is not scoped to the work you have open. Both are yours to rewrite in Settings → Memory',
+      'It also keeps skills — how-to documents about method, as plain SKILL.md files under your data directory, which you can edit in any editor or point your own Claude Code at. A skill can apply to every work or to one. It writes them without asking; you get the author badge, the version history and an off switch, in Settings → Skills',
+      'After a turn that ran eight or more tool calls, and once your reply has gone, it asks the same provider and model one more time whether that turn taught it a skill — an extra call your provider meters, on by default, switched off under Settings → Skills',
+      'The daily backup is the database only. It carries every skill’s version history and not the skills folder itself'
     ]
   },
 
@@ -372,7 +383,7 @@ export const en: Translation = {
       {
         tag: 'library.db',
         title: 'One SQLite library',
-        body: 'Projects, scenes, outline, entities, relationships, plot, version snapshots, and the memories an agent reads, in a single database file.'
+        body: 'Projects, scenes, outline, entities, relationships, plot, version snapshots, the memories an agent reads, and every skill’s version history, in a single database file.'
       },
       {
         tag: 'Snapshots',
@@ -382,7 +393,7 @@ export const en: Translation = {
       {
         tag: 'backups/',
         title: 'Verified daily backups',
-        body: 'A daily backup and a pre-migration backup, kept fourteen days, with restore controls at startup.'
+        body: 'A daily backup and a pre-migration backup, kept fourteen days, with restore controls at startup. It copies the database and nothing beside it — the skills folder included.'
       },
       {
         tag: 'Markdown',
@@ -638,14 +649,14 @@ export const ko: Translation = {
       { name: '꺼짐', body: '기본값입니다. 아무것도 열리지 않고, 아무것도 노출되지 않습니다.' },
       {
         name: '읽기 전용',
-        body: '읽기 툴 9개. 쓰기 툴은 아예 등록되지 않아 tools/list에 나타나지도, 호출되지도 않습니다.'
+        body: '읽기 툴 10개. 쓰기 툴은 아예 등록되지 않아 tools/list에 나타나지도, 호출되지도 않습니다.'
       },
       {
         name: '전체',
-        body: '17개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
+        body: '19개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
       }
     ],
-    toolsLabel: 'RPC 100개가 아니라, 툴 17개',
+    toolsLabel: 'RPC 100개가 아니라, 툴 19개',
     toolsNote:
       '클라이언트의 툴 예산은 유한하고 목록이 길어질수록 선택 정확도가 떨어집니다. 그래서 엔진 RPC를 1:1로 노출하지 않습니다. 접근을 한 작품으로 제한할 수도 있습니다.',
     readLabel: '읽기',
@@ -659,7 +670,8 @@ export const ko: Translation = {
       { name: 'linetta_list_characters', note: '인물, 장소, 사물, 개념' },
       { name: 'linetta_where_does_appear', note: '특정 엔티티가 등장하는 모든 씬' },
       { name: 'linetta_get_plot', note: '스토리라인과 비트' },
-      { name: 'linetta_get_fact_cards', note: '출처가 붙은 조사 노트' }
+      { name: 'linetta_get_fact_cards', note: '출처가 붙은 조사 노트' },
+      { name: 'linetta_read_skill', note: '기록해 둔 기법 하나를 본문까지 열기 — 브리프에는 이름과 설명만 실립니다' }
     ],
     writeTools: [
       { name: 'linetta_create_work', note: '첫 씬이 준비된 새 작품 만들기' },
@@ -672,6 +684,10 @@ export const ko: Translation = {
       {
         name: 'linetta_edit_memory',
         note: '알아낸 것을 기록 — 모든 작품에 적용되는 작가 프로필, 또는 이 작품의 노트'
+      },
+      {
+        name: 'linetta_edit_skill',
+        note: '기법을 SKILL.md 파일로 기록 — 전역이거나 한 작품에 묶이거나. 승인 절차는 없고, 작가는 대신 작성자 표시와 버전 기록과 끄는 스위치를 받습니다'
       }
     ],
     safetyLabel: '무엇이 이것을 안전하게 하는가',
@@ -697,7 +713,10 @@ export const ko: Translation = {
       'Cmd/Ctrl+J로 엽니다 — 외부 클라이언트가 쓰는 것과 같은 MCP 계층으로 Linetta의 툴에 접속합니다',
       '모든 호출은 같은 활동 로그에 남고, 어느 에이전트가 호출했는지 표시됩니다',
       '구조 변경은 해당 줄의 되돌리기 버튼으로 한 번에 되돌립니다(앱이 켜져 있는 동안, 최근 8건까지). 씬 본문 다시쓰기는 아직 한 번에 되돌릴 수 없지만, 이전 본문이 버전으로 남아 복원할 수 있습니다',
-      '매 턴 시작에 짧은 기억 두 개 — 작가 프로필과 이 작품의 노트 — 를 읽고, 스스로 거기에 기록합니다. 작가 프로필은 전역이어서 열려 있는 작품에 한정되지 않습니다. 둘 다 설정 → 기억에서 직접 고쳐 쓸 수 있습니다'
+      '매 턴 시작에 짧은 기억 두 개 — 작가 프로필과 이 작품의 노트 — 를 읽고, 스스로 거기에 기록합니다. 작가 프로필은 전역이어서 열려 있는 작품에 한정되지 않습니다. 둘 다 설정 → 기억에서 직접 고쳐 쓸 수 있습니다',
+      '스킬도 함께 쌓습니다. 방법을 적어 두는 문서이고, 데이터 폴더 아래 평범한 SKILL.md 파일이라 아무 편집기로나 열 수 있고 자기 Claude Code를 그 폴더에 붙일 수도 있습니다. 모든 작품에 적용할 수도, 한 작품에만 묶을 수도 있습니다. 에이전트는 묻지 않고 씁니다. 작가는 대신 작성자 표시와 버전 기록과 끄는 스위치를 설정 → 스킬에서 받습니다',
+      '툴을 8번 이상 호출한 턴이 끝나고 답장이 나간 뒤, 같은 프로바이더와 같은 모델에 한 번 더 묻습니다 — 적어 둘 기법이 있었는지. 프로바이더에 그만큼 과금되는 추가 호출이며, 기본은 켜짐이고 설정 → 스킬에서 끕니다',
+      '매일 도는 백업은 데이터베이스만 담습니다. 스킬의 버전 기록은 담기고, 스킬 폴더 자체는 담기지 않습니다'
     ]
   },
 
@@ -709,7 +728,7 @@ export const ko: Translation = {
       {
         tag: 'library.db',
         title: 'SQLite 라이브러리 하나',
-        body: '작품, 씬, 아웃라인, 엔티티, 관계, 플롯, 버전 스냅샷, 그리고 에이전트가 읽는 기억이 단일 데이터베이스 파일 안에 있습니다.'
+        body: '작품, 씬, 아웃라인, 엔티티, 관계, 플롯, 버전 스냅샷, 에이전트가 읽는 기억, 그리고 모든 스킬의 버전 기록이 단일 데이터베이스 파일 안에 있습니다.'
       },
       {
         tag: '스냅샷',
@@ -719,7 +738,7 @@ export const ko: Translation = {
       {
         tag: 'backups/',
         title: '검증된 일일 백업',
-        body: '일일 백업과 마이그레이션 전 백업을 14일 보관하고, 시작 시 복원할 수 있습니다.'
+        body: '일일 백업과 마이그레이션 전 백업을 14일 보관하고, 시작 시 복원할 수 있습니다. 담는 것은 데이터베이스뿐이고, 그 옆의 스킬 폴더는 담기지 않습니다.'
       },
       {
         tag: '마크다운',
@@ -973,14 +992,14 @@ export const ja: Translation = {
       { name: 'オフ', body: '既定値です。何も待ち受けず、何も公開されません。' },
       {
         name: '読み取り専用',
-        body: '読み取りツール9個。書き込みツールは登録すらされないので、tools/list に現れず、呼び出せません。'
+        body: '読み取りツール10個。書き込みツールは登録すらされないので、tools/list に現れず、呼び出せません。'
       },
       {
         name: 'フル',
-        body: '17個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
+        body: '19個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
       }
     ],
-    toolsLabel: 'RPC 百個ではなく、ツール17個',
+    toolsLabel: 'RPC 百個ではなく、ツール19個',
     toolsNote:
       'クライアントのツール予算は有限で、一覧が伸びるほど選択の精度は落ちます。だからエンジンの RPC を1対1では公開しません。アクセスを一つの作品に限定することもできます。',
     readLabel: '読み取り',
@@ -994,7 +1013,8 @@ export const ja: Translation = {
       { name: 'linetta_list_characters', note: '人物、場所、もの、概念' },
       { name: 'linetta_where_does_appear', note: '特定のエンティティが登場する全シーン' },
       { name: 'linetta_get_plot', note: 'ストーリーラインとビート' },
-      { name: 'linetta_get_fact_cards', note: '出典付きの調査ノート' }
+      { name: 'linetta_get_fact_cards', note: '出典付きの調査ノート' },
+      { name: 'linetta_read_skill', note: '記録された手法を一つ、本文まで開く — ブリーフには名前と説明だけが載ります' }
     ],
     writeTools: [
       { name: 'linetta_create_work', note: '最初のシーンを備えた新しい作品を作成' },
@@ -1007,6 +1027,10 @@ export const ja: Translation = {
       {
         name: 'linetta_edit_memory',
         note: '学んだことを記録 — すべての作品に適用される作家プロフィール、またはこの作品のノート'
+      },
+      {
+        name: 'linetta_edit_skill',
+        note: '手法を SKILL.md ファイルとして書く — グローバルにも、一つの作品に紐づけることも。承認の手順はなく、作家は代わりに作成者の表示とバージョン履歴とオフのスイッチを得ます'
       }
     ],
     safetyLabel: '安全を保つもの',
@@ -1032,7 +1056,10 @@ export const ja: Translation = {
       'Cmd/Ctrl+J で開きます — 外部クライアントと同じ MCP レイヤーで Linetta のツールに接続します',
       'すべての呼び出しは同じ活動ログに残り、どのエージェントが呼んだか表示されます',
       '構造的な変更はその行の取り消しボタンで一手で戻せます（アプリを起動している間、直近 8 件まで）。シーン本文の書き直しにワンクリックの取り消しはまだありませんが、直前の本文はバージョンとして残り復元できます',
-      '毎ターンの初めに短い記憶を二つ — 作家プロフィールとこの作品のノート — を読み、自分でもそこに書き込みます。プロフィールはグローバルで、開いている作品に限定されません。どちらも設定 → 記憶で自分で書き直せます'
+      '毎ターンの初めに短い記憶を二つ — 作家プロフィールとこの作品のノート — を読み、自分でもそこに書き込みます。プロフィールはグローバルで、開いている作品に限定されません。どちらも設定 → 記憶で自分で書き直せます',
+      'スキルも貯めます。方法を書き留める文書で、データフォルダの下の普通の SKILL.md ファイルなので、どの編集ソフトでも開けますし、自分の Claude Code をそのフォルダに向けることもできます。すべての作品に適用することも、一つの作品に紐づけることもできます。エージェントは尋ねずに書きます。作家は代わりに、作成者の表示とバージョン履歴とオフのスイッチを設定 → スキルで受け取ります',
+      'ツールを8回以上呼んだターンが終わり、返信が送られたあとに、同じプロバイダーと同じモデルへもう一度だけ尋ねます — 書き留める価値のある手法があったか。プロバイダーに課金される追加の呼び出しで、既定はオン、設定 → スキルでオフにできます',
+      '毎日のバックアップはデータベースだけを含みます。スキルのバージョン履歴は含まれ、スキルのフォルダそのものは含まれません'
     ]
   },
 
@@ -1044,7 +1071,7 @@ export const ja: Translation = {
       {
         tag: 'library.db',
         title: '一つの SQLite ライブラリ',
-        body: '作品、シーン、アウトライン、エンティティ、関係、プロット、バージョンスナップショット、そしてエージェントが読む記憶が単一のデータベースファイルの中にあります。'
+        body: '作品、シーン、アウトライン、エンティティ、関係、プロット、バージョンスナップショット、エージェントが読む記憶、そしてすべてのスキルのバージョン履歴が単一のデータベースファイルの中にあります。'
       },
       {
         tag: 'スナップショット',
@@ -1054,7 +1081,7 @@ export const ja: Translation = {
       {
         tag: 'backups/',
         title: '検証済みの日次バックアップ',
-        body: '日次バックアップと移行前バックアップを14日保管し、起動時に復元できます。'
+        body: '日次バックアップと移行前バックアップを14日保管し、起動時に復元できます。含むのはデータベースだけで、その隣のスキルのフォルダは含みません。'
       },
       {
         tag: 'Markdown',

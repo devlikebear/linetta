@@ -9,6 +9,7 @@ import (
 	"errors"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
@@ -36,22 +37,24 @@ type mcpDeps struct {
 // mcpToolRepos mirrors the enabled build's shape so register() compiles
 // unchanged; mobile never reads these.
 type mcpToolRepos struct {
-	projects   *project.Repo
-	nodes      *node.Repo
-	entities   *entity.Repo
-	mentions   *mention.Repo
-	facts      *fact.Repo
-	plot       *plot.Builder
-	manuscript *manuscript.Searcher
-	context    *storycontext.ContextBuilder
-	snapshots  *snapshot.Repo
-	story      *storyops.Service
-	msEdit     *manuscriptedit.Service
-	memory     *agentmemory.Repo
-	enqueue    func(nodeID string)
-	notify     func(method string, params any)
-	clock      func() int64
-	db         *sql.DB
+	projects     *project.Repo
+	nodes        *node.Repo
+	entities     *entity.Repo
+	mentions     *mention.Repo
+	facts        *fact.Repo
+	plot         *plot.Builder
+	manuscript   *manuscript.Searcher
+	context      *storycontext.ContextBuilder
+	snapshots    *snapshot.Repo
+	story        *storyops.Service
+	msEdit       *manuscriptedit.Service
+	memory       *agentmemory.Repo
+	skills       *agentskills.Store
+	skillHistory *agentskills.History
+	enqueue      func(nodeID string)
+	notify       func(method string, params any)
+	clock        func() int64
+	db           *sql.DB
 }
 
 // mcpController answers status queries with a disabled state and refuses

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/tars/pkg/llm"
@@ -29,6 +30,30 @@ type MemorySource interface {
 	Memories(ctx context.Context, projectID string) (writerProfile, workNotes agentmemory.Document)
 }
 
+// SkillSource reads the skills available for one turn — the writer's
+// (global) and this work's — already reduced to what may reach a prompt.
+// The full contract an implementation owes, because prompt.go re-checks none
+// of it and only orders, caps and formats what it is handed:
+//
+//   - Enabled only. A skill the writer switched off must not be listed.
+//   - Guard-passed. Every returned Name and Description has been through
+//     agentskills.Guard, so an invisible character cannot ride into the
+//     system prompt inside a description. agentskills.Store.List already
+//     does this — it reports a guard failure as a Diagnostic instead of
+//     returning the skill — which is why engineapp's agentSkillSource
+//     satisfies this clause by construction rather than by re-guarding.
+//   - Body left off. The list is cheap precisely because bodies stay on
+//     disk until linetta_read_skill fetches one; a Body here would put the
+//     whole point of progressive disclosure back in the prompt.
+//
+// That reduction is the caller's job, not systemPrompt's — the same division
+// MemorySource draws around the two curated documents. An interface rather
+// than *agentskills.Store directly, matching MemorySource and ScopeLookup,
+// so the prompt can be tested without a filesystem.
+type SkillSource interface {
+	Skills(ctx context.Context, projectID string) []agentskills.Skill
+}
+
 // Deps are the collaborators the agent needs.
 type Deps struct {
 	Providers ProviderSource
@@ -42,6 +67,21 @@ type Deps struct {
 	Language func() string
 	// Memory supplies the two curated documents pasted into the system prompt.
 	Memory MemorySource
+	// Skills supplies the name-and-description list pasted into the system
+	// prompt after the memory block. A nil Skills is valid — it renders as
+	// no skills, the same way a nil Memory renders as both documents empty —
+	// so a build that never wires one (or a test that constructs Deps
+	// without it) still works.
+	Skills SkillSource
+	// SelfReviewEnabled reports whether the self-improvement pass may run
+	// after a working turn (settings.agent_self_review_enabled, default on).
+	// A func rather than a bool because it is read at the END of every turn,
+	// not captured when the service is built: a writer who switches it off
+	// mid-session must not get one more review out of the turn already in
+	// flight. A nil func means enabled — the same "unwired collaborator
+	// degrades to the documented default" rule Memory and Skills follow, and
+	// the default here is on.
+	SelfReviewEnabled func() bool
 	// Undo reverts a structural batch. It must be bound to the SAME storyops
 	// service the agent's tools use — undo batches live in memory on the
 	// service, so any other instance simply does not have the batch.

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
@@ -222,12 +223,31 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithSnapshots(snaps).
 		WithMemory(companionSvc)
 
+	// One Store for the skills the agent writes for itself, shared between
+	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below),
+	// the story brief's own skills list (just below) and the built-in
+	// agent's system-prompt list (setupAgent, below) — all read and write
+	// the same SKILL.md files under home.
+	skillsStore := agentskills.NewStore(home)
+
+	// The versions behind those files. One History, shared the same way: the
+	// MCP tools record a version for every agent write, and skills.restore
+	// (below) reverts through the same rows. Two instances would be two
+	// halves of one log.
+	skillHistory := agentskills.NewHistory(st.DB())
+
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
 		WithMemorySource(companionSvc).
 		WithCuratedMemorySource(companionSvc).
-		WithReferenceSource(companionSvc)
+		WithReferenceSource(companionSvc).
+		// The brief is the only channel an external MCP client has, so this
+		// is where a connected Claude Code learns that skills exist at all
+		// (#98 Task 7). Without it linetta_read_skill is undiscoverable and
+		// nothing anywhere goes red — which is what
+		// TestProductionStoryContextBuilderCarriesEverySource guards.
+		WithSkillSource(skillBriefSource{store: skillsStore})
 
 	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
 		settingsStore: settingsStore,
@@ -245,10 +265,19 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			story:      mcpStory,
 			msEdit:     manuscriptEditor,
 			memory:     memRepo,
-			enqueue:    summ.Enqueue,
-			notify:     func(method string, params any) { _ = s.Notifier().Notify(method, params) },
-			clock:      clock,
-			db:         st.DB(),
+			// The skills the agent writes for itself live as SKILL.md files
+			// under the same home the rest of Linetta's own material does,
+			// with their versions in the database beside the manuscript's.
+			// skillsStore is the same *Store the built-in agent's own
+			// SkillSource reads below — one directory, one set of skills,
+			// whether a skill is read through the MCP tools or listed into
+			// the agent's own system prompt.
+			skills:       skillsStore,
+			skillHistory: skillHistory,
+			enqueue:      summ.Enqueue,
+			notify:       func(method string, params any) { _ = s.Notifier().Notify(method, params) },
+			clock:        clock,
+			db:           st.DB(),
 		},
 	})
 	a.closers = append(a.closers, stopMCP)
@@ -285,6 +314,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		settings: settingsStore,
 		src:      providerSrc,
 		memory:   memRepo,
+		skills:   skillsStore,
 		notify:   func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 		clock:    clock,
 	})
@@ -384,6 +414,17 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("memory.get", handlers.GetMemory(memRepo))
 	s.Handle("memory.set", handlers.SetMemory(memRepo, clock,
 		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
+	// The skills surface (#98). skills.write, skills.delete and
+	// skills.restore all emit skills.changed with source "writer", so a
+	// second window — and the Settings pane's own open editor — hears about
+	// a save it did not make.
+	skillNotify := func(method string, params any) { _ = s.Notifier().Notify(method, params) }
+	s.Handle("skills.list", handlers.ListSkills(skillsStore))
+	s.Handle("skills.read", handlers.ReadSkill(skillsStore))
+	s.Handle("skills.write", handlers.WriteSkill(skillsStore, skillHistory, clock, skillNotify))
+	s.Handle("skills.delete", handlers.DeleteSkill(skillsStore, skillHistory, clock, skillNotify))
+	s.Handle("skills.history", handlers.SkillVersions(skillHistory))
+	s.Handle("skills.restore", handlers.RestoreSkill(skillsStore, skillHistory, clock, skillNotify))
 	s.Handle("mcp.status", handlers.MCPStatus(mcpCtrl))
 	s.Handle("mcp.enable", handlers.MCPEnable(mcpCtrl))
 	s.Handle("mcp.disable", handlers.MCPDisable(mcpCtrl))

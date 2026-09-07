@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -218,6 +219,11 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 
 	var usage usagePayload
 	toolCalls := 0
+	// The tool NAMES this turn executed, in order. This is the whole of what
+	// the self-review is told about the turn (see selfreview.go): names, never
+	// arguments or results, so a background call the writer did not ask for
+	// carries none of their manuscript.
+	usedTools := make([]string, 0, maxIterations)
 	lastFailedTool := ""
 	repeats := 0
 
@@ -247,6 +253,11 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 
 		if len(resp.Message.ToolCalls) == 0 {
 			s.notify("agent.done", donePayload{RunID: st.runID, ProjectID: st.projectID, Model: st.model, Usage: usage})
+			// After the reply has gone, and only for a turn that did real
+			// work: ask what was learned. It runs on its own goroutine with
+			// its own context, so this returns immediately and the writer's
+			// next message never waits on it.
+			s.maybeSelfReview(ctx, st, toolCalls, usedTools)
 			return
 		}
 
@@ -262,11 +273,16 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			// runs before every one of them, not just once per round-trip.
 			if toolCalls >= maxIterations {
 				s.endAtWall(ctx, st, fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
+				// The wall ends the turn "done" on purpose (see endAtWall):
+				// twenty-four successful tool calls is work, and work is
+				// exactly what the review is for.
+				s.maybeSelfReview(ctx, st, toolCalls, usedTools)
 				return
 			}
 
 			result := s.runTool(ctx, st, call)
 			toolCalls++
+			usedTools = append(usedTools, call.Name)
 			msgs = append(msgs, llm.ChatMessage{
 				Role:       "tool",
 				ToolCallID: call.ID,
@@ -284,6 +300,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			}
 			if repeats >= maxRepeatedToolErrors {
 				s.endAtWall(ctx, st, fmt.Sprintf("%s failed %d times in a row", call.Name, repeats))
+				s.maybeSelfReview(ctx, st, toolCalls, usedTools)
 				return
 			}
 		}
@@ -292,6 +309,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 		// round-trip just to be told no on its first tool call.
 		if toolCalls >= maxIterations {
 			s.endAtWall(ctx, st, fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
+			s.maybeSelfReview(ctx, st, toolCalls, usedTools)
 			return
 		}
 	}
@@ -306,7 +324,11 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	if s.deps.Memory != nil {
 		profile, notes = s.deps.Memory.Memories(ctx, st.req.ProjectID)
 	}
-	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes)}}
+	var skills []agentskills.Skill
+	if s.deps.Skills != nil {
+		skills = s.deps.Skills.Skills(ctx, st.req.ProjectID)
+	}
+	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes, skills)}}
 
 	prior, err := s.tr.load(ctx, st.req.ProjectID, 200)
 	if err != nil {

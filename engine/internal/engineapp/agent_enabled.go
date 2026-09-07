@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/agent"
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -33,6 +35,7 @@ type agentDeps struct {
 	settings *settings.Store
 	src      *provider.Source
 	memory   *agentmemory.Repo
+	skills   *agentskills.Store
 	notify   func(method string, params any)
 	clock    func() int64
 }
@@ -60,6 +63,56 @@ func (m agentMemorySource) Memories(ctx context.Context, projectID string) (writ
 	}
 	return writerProfile, workNotes
 }
+
+// agentSkillSource adapts *agentskills.Store to agent.SkillSource. It reads
+// both scopes a turn can see — the writer's global skills and this work's —
+// and returns only what agent.SkillSource promises: enabled skills with
+// Body left off. A nil store (the zero value) yields no skills rather than
+// panicking, matching agentMemorySource's nil-repo case above — but
+// setupAgent never builds one that way on purpose: it leaves agent.Deps.Skills
+// nil instead, so an unwired store is a nil field a guard can see rather than
+// a populated field that silently lists nothing. See setupAgent's comment.
+//
+// It does not call agentskills.Guard itself. Store.List already runs Guard
+// on every entry it reads and reports a failure as a Diagnostic instead of
+// returning the skill — see List's doc comment and agentskills'
+// TestGuardFailureIsADiagnostic — so a skill an invisible character got
+// hidden inside never leaves the store to begin with. Re-guarding here would
+// be the same check run twice, not a second line of defence. The
+// diagnostics themselves are dropped on the floor rather than surfaced to
+// the model: a broken SKILL.md is the writer's problem to fix (visible in
+// Settings' skills panel), not something worth spending the agent's turn
+// explaining. That also answers the "skip vs. refuse the whole block"
+// question the store's guard already decided: skip, so a single skill an
+// invisible character got into does not go on to silence the other
+// thirty-nine.
+//
+// A read failure for one scope (e.g. a permissions problem List would
+// otherwise surface as an error) is swallowed the same way: best-effort,
+// matching agentMemorySource's per-document reads — an agent turn should not
+// fail over the skill list any more than over a memory document.
+type agentSkillSource struct {
+	store *agentskills.Store
+}
+
+func (a agentSkillSource) Skills(_ context.Context, projectID string) []agentskills.Skill {
+	if a.store == nil {
+		return nil
+	}
+	out := make([]agentskills.Skill, 0)
+	out = appendEnabledSkills(out, a.store, agentskills.ScopeWriter, "")
+	// Work-scoped skills need a work open to belong to; a fresh session
+	// with no manuscript selected simply has none to offer.
+	if id := strings.TrimSpace(projectID); id != "" {
+		out = appendEnabledSkills(out, a.store, agentskills.ScopeWork, id)
+	}
+	return out
+}
+
+// appendEnabledSkills, which performs the reduction described above, lives in
+// skill_context.go: the story brief's own skill source needs exactly the same
+// one, and that file is untagged because the MCP brief is served on builds
+// this file is not compiled into.
 
 // scopeLookup answers the two names the scope line carries. Failures are
 // silent on purpose: a missing title must not cost the writer their turn.
@@ -102,6 +155,13 @@ type agentController struct {
 	// pass every other test, and only show up as a writer's agent starving
 	// against — or reverting — an external client's work.
 	tools mcphost.ToolDeps
+	// deps is the agent.Deps literal setupAgent built, kept for the same
+	// reason tools is: agent.Deps is a large struct of collaborators, none of
+	// which is visible on the wire on a fresh install with no provider
+	// configured, so a forgotten field there is exactly as silent as
+	// ToolDeps.Memory was. TestProductionAgentDepsCarryEveryCollaborator
+	// walks it reflectively.
+	deps agent.Deps
 	// notify is the same channel the tools themselves publish mcp.changed on.
 	// Undo below is the one mutation in this file that does not go through a
 	// tool, so it is the one place that has to emit the notification itself.
@@ -123,7 +183,21 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 	tools.Limiter = mcphost.NewLimiter()
 	tools.Story = deps.story
 
-	svc := agent.New(agent.Deps{
+	// A nil deps.skills must leave Deps.Skills NIL, not an agentSkillSource
+	// wrapping a nil store. Both answer "no skills" at runtime, but only one
+	// of them can be noticed: a non-nil interface over a nil pointer looks
+	// wired to every guard that checks the field, so dropping the
+	// `skills: skillsStore` line in engineapp.go would compile, pass, and
+	// ship an agent whose system prompt tells it every turn to read skills
+	// from a list that is permanently empty. Nil here is what
+	// TestProductionAgentDepsCarryEveryCollaborator can actually catch —
+	// the same lesson as ToolDeps.Memory in #97.
+	var skills agent.SkillSource
+	if deps.skills != nil {
+		skills = agentSkillSource{store: deps.skills}
+	}
+
+	built := agent.Deps{
 		Providers: deps.src,
 		History:   deps.history,
 		Scope:     scopeLookup{projects: deps.projects, nodes: deps.nodes},
@@ -135,12 +209,17 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		Notify:   deps.notify,
 		Language: deps.settings.Language,
 		Memory:   agentMemorySource{repo: deps.memory},
+		Skills:   skills,
+		// Read per turn, like Language: switching the self-review off in
+		// Settings has to take effect on the writer's very next message.
+		SelfReviewEnabled: deps.settings.AgentSelfReviewEnabled,
 		Undo: func(ctx context.Context, batchID string) error {
 			return deps.story.UndoApply(ctx, batchID, deps.clock)
 		},
 		Clock: deps.clock,
-	})
-	return &agentController{svc: svc, tools: tools, notify: deps.notify}, svc.Close
+	}
+	svc := agent.New(built)
+	return &agentController{svc: svc, tools: tools, deps: built, notify: deps.notify}, svc.Close
 }
 
 func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt string) (string, error) {

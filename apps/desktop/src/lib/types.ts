@@ -618,6 +618,10 @@ export interface Settings {
   mcp_consented_at?: number;
   /** Presence flag only — the token itself never reaches the renderer here. */
   mcp_token_set?: boolean;
+  /** The agent's self-improvement pass after a working turn (#98). Optional
+   *  because a settings payload from an older engine simply omits it; every
+   *  reader must treat "missing" as the default, which is ON. */
+  agent_self_review_enabled?: boolean;
 }
 
 export interface SettingsPatch {
@@ -647,6 +651,7 @@ export interface SettingsPatch {
   mcp_project_id?: string;
   mcp_consent_version?: number;
   mcp_consented_at?: number;
+  agent_self_review_enabled?: boolean;
 }
 
 export interface SnapshotEntry {
@@ -1009,3 +1014,93 @@ export interface MemoryChangedPayload {
   source: "agent" | "external" | "writer";
 }
 
+/** Where a skill lives: global to the writer, or scoped to one work. */
+export type SkillScope = "writer" | "work";
+
+/** Who wrote a skill last — the writer editing by hand, or the agent that
+ *  authored it during a session. */
+export type SkillAuthor = "writer" | "agent";
+
+/** One row of the Settings skill list: the whole SKILL.md except its body.
+ *  skills.read fetches the body of the one the writer opens. */
+export interface SkillSummary {
+  name: string;
+  scope: SkillScope;
+  project_id?: string;
+  description: string;
+  author: SkillAuthor;
+  enabled: boolean;
+  updated_at: number;
+  body_runes: number;
+  body_budget: number;
+}
+
+/** One full SKILL.md, as skills.read returns it.
+ *
+ *  parse_error is set only when the file on disk is not a readable skill —
+ *  frontmatter the writer broke by hand, which is the same file skills.list
+ *  reports as a diagnostic. Then `body` is the file VERBATIM (every byte,
+ *  broken frontmatter included), `description` is empty and `name` is the
+ *  folder's, because the file's own could not be read. The pane must show
+ *  the message: a writer handed that body with no explanation would save it
+ *  straight back and wonder why the skill still does not appear. */
+export interface Skill extends SkillSummary {
+  body: string;
+  parse_error?: string;
+}
+
+/** skills.write and skills.restore return the stored skill plus one field the
+ *  document itself does not carry. versioned=false means the file changed but
+ *  the version row did not land: that one edit cannot be reverted, and the
+ *  writer has to be told rather than finding out when they try. */
+export interface SkillWriteResult extends Skill {
+  versioned: boolean;
+}
+
+/** skills.delete's shape: the same flag, and for a sharper reason — a
+ *  deletion whose version row did not land took the body with it. */
+export interface SkillDeleteResult {
+  versioned: boolean;
+}
+
+/** Something on disk that should have been a skill and is not — a SKILL.md
+ *  the writer broke by hand. It is never listed as a skill (it must not reach
+ *  a prompt) and always reported here, because a broken skill has to be
+ *  visible before it can be fixed. */
+export interface SkillDiagnostic {
+  path: string;
+  message: string;
+}
+
+/** skills.list's shape: both scopes at once, plus what could not be read. */
+export interface SkillsListResult {
+  skills: SkillSummary[];
+  diagnostics: SkillDiagnostic[];
+}
+
+/** One version of a skill, newest first out of skills.history. The body
+ *  travels with each row because skills.restore takes only an id — this is
+ *  the only place the writer can see what they are about to revert to. */
+export interface SkillVersion {
+  id: string;
+  name: string;
+  scope: SkillScope;
+  project_id?: string;
+  description: string;
+  author: SkillAuthor;
+  body: string;
+  body_runes: number;
+  reason: "created" | "edited" | "deleted";
+  created_at: number;
+}
+
+/** skills-changed's payload. "agent" and "external" come from mcphost's
+ *  linetta_edit_skill tool (mcphost/tools_write.go); "writer" is a save made
+ *  by the person at the keyboard, from skills.write, skills.delete or
+ *  skills.restore. */
+export interface SkillChangedPayload {
+  scope: SkillScope;
+  project_id?: string;
+  name: string;
+  source: "agent" | "external" | "writer";
+}

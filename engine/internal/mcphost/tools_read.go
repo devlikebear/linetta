@@ -4,11 +4,13 @@ package mcphost
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -28,6 +30,7 @@ var ReadToolNames = []string{
 	"linetta_where_does_appear",
 	"linetta_get_plot",
 	"linetta_get_fact_cards",
+	"linetta_read_skill",
 }
 
 const defaultSearchLimit = 20
@@ -90,6 +93,11 @@ type getStoryContextInput struct {
 	IncludeMemories   *bool `json:"include_memories,omitempty"`
 	IncludeReferences *bool `json:"include_references,omitempty"`
 	IncludePlot       *bool `json:"include_plot,omitempty"`
+	// IncludeSkills is the switch behind storycontext.ContextKeySkills. It
+	// exists because the key does: sectionReport's comment below warns
+	// against reporting a section whose control does not exist, so a skills
+	// key with no way to set it would be the same defect one level up.
+	IncludeSkills *bool `json:"include_skills,omitempty" jsonschema:"set false to leave the skills list out; it is on by default and is the only place this brief says which skills exist"`
 }
 
 func (in getStoryContextInput) scope() (string, string) { return in.ProjectID, in.NodeID }
@@ -298,6 +306,90 @@ func (d ToolDeps) registerReadTools(s *mcp.Server) {
 		Description: "Return the work's Fact Book cards: source-backed research notes with their " +
 			"verification status. Use them for real-world details instead of inventing facts.",
 	}, record(d, "linetta_get_fact_cards", d.getFactCards))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_read_skill",
+		Description: "Read one skill in full — the whole how-to document, not the one-line description you " +
+			"already have. There is no way to list skills here and you do not need one: every available " +
+			"skill is already named and described for you, in your instructions and in the story brief " +
+			"from linetta_get_story_context. Pick a name from there when its description matches what you " +
+			"are about to do, then read it. Scope writer means the skill applies to every work; scope work " +
+			"means it belongs to the one work named by project_id.",
+	}, record(d, "linetta_read_skill", d.readSkill))
+}
+
+// ---------- linetta_read_skill ----------
+
+type readSkillInput struct {
+	Name      string `json:"name" jsonschema:"the skill's name, exactly as it appears in the skills already listed for you"`
+	Scope     string `json:"scope" jsonschema:"writer (global - applies to every work) or work (belongs to one work)"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"the work the skill belongs to; required when scope is work, and not accepted for writer"`
+}
+
+// scope names the work (work-scoped skills only; a writer skill is global and
+// belongs to none) and, as the target, the skill read — so the activity row
+// says which document was opened rather than only that some skill was.
+func (in readSkillInput) scope() (string, string) {
+	return strings.TrimSpace(in.ProjectID), strings.TrimSpace(in.Name)
+}
+
+type readSkillOutput struct {
+	Name        string `json:"name"`
+	Scope       string `json:"scope"`
+	ProjectID   string `json:"project_id,omitempty"`
+	Description string `json:"description"`
+	Author      string `json:"author"`
+	Enabled     bool   `json:"enabled"`
+	Body        string `json:"body"`
+	BodyRunes   int    `json:"body_runes"`
+	BodyBudget  int    `json:"body_budget" jsonschema:"the cap a skill body is held to, so you can see how much room a rewrite has"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
+// readSkill returns one skill's body.
+//
+// It guards before returning, which agentskills.Store.Read deliberately does
+// not: the store hands back a broken skill on purpose, so a writer can open
+// an oversized or invisible-character-laden document in Settings and repair
+// it. This tool is a path into a model's context, so the same document must
+// be refused here — with a message saying why, since a skill the agent can
+// see listed but never read would otherwise look like a bug.
+//
+// A disabled skill IS returned. Enabled decides whether Linetta offers the
+// skill unprompted, not whether it may be looked at; an agent asked to fix a
+// retired skill has to be able to read it first.
+func (d ToolDeps) readSkill(ctx context.Context, _ *mcp.CallToolRequest, in readSkillInput) (*mcp.CallToolResult, readSkillOutput, error) {
+	if d.Skills == nil {
+		return toolErr("skills are unavailable in this build"), readSkillOutput{}, nil
+	}
+	scope, projectID, name, errResult := d.requireSkillTarget(ctx, in.Scope, in.ProjectID, in.Name)
+	if errResult != nil {
+		return errResult, readSkillOutput{}, nil
+	}
+	s, err := d.Skills.Read(scope, projectID, name)
+	if err != nil {
+		if errors.Is(err, agentskills.ErrNotFound) {
+			return toolErr("no %s skill named %q; use one of the skills already listed for you", scope, name),
+				readSkillOutput{}, nil
+		}
+		return toolErr("could not read skill %q: %v", name, err), readSkillOutput{}, nil
+	}
+	if err := agentskills.Guard(s); err != nil {
+		return toolErr("skill %q cannot be shown as it stands: %v. The writer can repair it in Settings.",
+			name, err), readSkillOutput{}, nil
+	}
+	return nil, readSkillOutput{
+		Name:        s.Name,
+		Scope:       string(s.Scope),
+		ProjectID:   s.ProjectID,
+		Description: s.Description,
+		Author:      string(s.Author),
+		Enabled:     s.Enabled,
+		Body:        s.Body,
+		BodyRunes:   s.BodyRunes,
+		BodyBudget:  agentskills.MaxBodyRunes,
+		UpdatedAt:   s.UpdatedAt,
+	}, nil
 }
 
 func (d ToolDeps) listWorks(ctx context.Context, _ *mcp.CallToolRequest, in listWorksInput) (*mcp.CallToolResult, listWorksOutput, error) {
@@ -414,6 +506,7 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 			Memories:   in.IncludeMemories,
 			References: in.IncludeReferences,
 			Plot:       in.IncludePlot,
+			Skills:     in.IncludeSkills,
 		},
 	}
 	c, err := d.Context.BuildFull(ctx, n.ID, "", "", opts)
@@ -430,9 +523,18 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	// way, since ToolDeps.Source is a field the server sets, never
 	// something read off the wire. This runs before Render and
 	// sectionReport so both describe the brief the caller actually gets.
+	// The skills list is in exactly the same position, for exactly the same
+	// reason as the two curated documents above: agent.systemPrompt's
+	// skillsBlock already pastes the writer's and the work's skills, names
+	// and descriptions and all, into the built-in agent's own prompt every
+	// turn. Sending them again here would be the second copy the comment
+	// above refuses. An external client is again unaffected — this brief is
+	// the ONLY channel that tells it skills exist, which is why the
+	// suppression is keyed on Source and nothing else.
 	if d.Source == SourceAgent {
 		c.WriterProfile = ""
 		c.WorkNotes = ""
+		c.Skills = nil
 	}
 	// Only the user half of the render is the brief; the system half carries
 	// tone and instruction scaffolding meant for Linetta's own runner.
@@ -480,6 +582,17 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		{"memories", len(c.Memories) > 0 ||
 			strings.TrimSpace(c.WriterProfile) != "" ||
 			strings.TrimSpace(c.WorkNotes) != ""},
+		// "skills" gets its own entry rather than folding into "memories"
+		// the way the curated documents do, because unlike them it HAS its
+		// own switch (getStoryContextInput.IncludeSkills →
+		// storycontext.ContextKeySkills), so reporting it separately
+		// describes a control that exists. Counted from c.Skills, which is
+		// nil for the built-in agent because getStoryContext blanked it
+		// above — this function runs after that suppression on purpose, so
+		// the report describes the brief the caller actually holds rather
+		// than the one that was built. #97 shipped a fix round over exactly
+		// that ordering.
+		{"skills", len(c.Skills) > 0},
 		{"references", len(c.References) > 0},
 		{"style_notes", strings.TrimSpace(c.StyleNotes) != ""},
 	}

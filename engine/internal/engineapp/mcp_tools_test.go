@@ -140,7 +140,7 @@ func (c *mcpClient) callTool(name string, args map[string]any) map[string]any {
 }
 
 // The read surface is a contract external agents build against: it must be
-// exactly the nine documented tools, and read_only must expose no others.
+// exactly the ten documented tools, and read_only must expose no others.
 func TestMCPReadOnlyExposesExactlyTheReadTools(t *testing.T) {
 	_, c := startMCPServer(t)
 
