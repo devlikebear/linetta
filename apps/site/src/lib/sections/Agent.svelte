@@ -96,5 +96,35 @@
         {/each}
       </ul>
     </div>
+
+    <!-- Built-in agent (BYOK) -->
+    <div class="mt-16 border-t border-line pt-14" use:reveal>
+      <div class="max-w-2xl">
+        <p class="mark">{a.byokLabel}</p>
+        <p class="mt-3 text-[0.95rem] leading-[1.75] text-muted">{a.byokLead}</p>
+      </div>
+
+      <div class="mt-7 grid gap-x-12 gap-y-8 md:grid-cols-2">
+        <ul>
+          {#each a.byokProviders as provider}
+            <li class="grid gap-1 border-b border-line-soft py-3 sm:grid-cols-[13.5rem_1fr] sm:gap-4">
+              <code class="font-mono text-[0.76rem] text-accent">{provider.name}</code>
+              <span class="text-[0.85rem] leading-[1.6] text-muted">{provider.note}</span>
+            </li>
+          {/each}
+        </ul>
+
+        <ul class="grid gap-4">
+          {#each a.byokPoints as point, i}
+            <li class="flex gap-4 text-[0.92rem] leading-[1.7] text-muted">
+              <span class="font-mono text-[0.7rem] text-muted-2 pt-[0.28em]"
+                >{String(i + 1).padStart(2, '0')}</span
+              >
+              <span>{point}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
+    </div>
   </div>
 </section>

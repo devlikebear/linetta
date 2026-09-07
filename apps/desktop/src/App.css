@@ -1443,6 +1443,42 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   line-height: 1.25;
 }
 .modal-field input:focus, .modal-field textarea:focus, .modal-field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-tint2); }
+
+/* A checkbox is not a text field. The width:100% above rendered the consent
+   box as a full-width bordered rectangle with its sentence wrapped beneath it,
+   which reads as an empty input the writer is meant to type into. .modal-check
+   lays the box out beside its text and keeps the wrapped lines indented past
+   it, so the sentence stays one readable block next to the thing it consents
+   to. */
+.modal-field.modal-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  cursor: pointer;
+  /* .modal-field > label is a field caption: mono, tracked, upper. These
+     labels are sentences the writer reads and agrees to, and the read-only
+     toggle is a direct child of a .modal-field <details>, so it inherited
+     that caption styling while the other two did not. Say it here. */
+  font-family: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.modal-field.modal-check > input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+  padding: 0;
+  box-shadow: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.modal-field.modal-check > input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
 
 .tmpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

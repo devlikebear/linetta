@@ -92,6 +92,10 @@ export type Translation = {
     writeTools: Tool[];
     safetyLabel: string;
     safety: string[];
+    byokLabel: string;
+    byokLead: string;
+    byokProviders: Tool[];
+    byokPoints: string[];
   };
 
   data: {
@@ -282,8 +286,8 @@ export const en: Translation = {
 
   agent: {
     mark: '§ 03 — Agents',
-    heading: 'Linetta does not call a model.\nYour agent calls Linetta.',
-    lead: 'There is no provider setting, no API key field and no token budget inside the app. Linetta opens a local MCP server instead, and the agent you already use — Claude Code, Claude Desktop — connects to it.',
+    heading: 'Bring your own agent,\nor your own key.',
+    lead: 'Linetta ships no model and no subscription of its own. Connect an agent you already run — Claude Code, Claude Desktop — over MCP, using the subscription you already pay for and no credential to Linetta at all. Or turn on the built-in agent below and give it a provider of your own.',
     paragraphs: [
       'A generic filesystem MCP server can already read and write Markdown. What it cannot assemble is the brief for <em>one scene</em>: where that scene sits in the outline, the summaries above it, the previous scene’s summary, character and relationship briefs, the plot spine, fact cards, memories, and your style and length targets.',
       'That brief is what Linetta hands over, and it is the reason a draft written outside the app comes back without contradicting episode fourteen. The writer keeps the desk, the filing cabinet, and the veto.'
@@ -301,7 +305,7 @@ export const en: Translation = {
       },
       {
         name: 'Full',
-        body: 'All sixteen. Every write is snapshotted first and can be undone in one step.'
+        body: 'All sixteen. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
       }
     ],
     toolsLabel: 'Sixteen tools, not a hundred RPCs',
@@ -337,6 +341,21 @@ export const en: Translation = {
       'A snapshot before every scene write, and an outline capture before every structural change.',
       'An activity log of every call — time, tool, work, target, result — shown in Settings.',
       'A cap of 120 tool calls a minute, so a runaway agent loop hits a wall instead of forty rewritten scenes.'
+    ],
+    byokLabel: 'Or, the built-in agent',
+    byokLead: 'Rather write with a panel inside Linetta than switch to a separate app? Turn on the built-in agent and connect a provider of your own.',
+    byokProviders: [
+      { name: 'ChatGPT (Codex)', note: 'Sign in with your ChatGPT account — no key to hold' },
+      { name: 'Anthropic', note: 'By API key' },
+      { name: 'Google Gemini', note: 'By API key' },
+      { name: 'OpenAI-compatible', note: 'By API key, any compatible endpoint — including one on your own machine' }
+    ],
+    byokPoints: [
+      'Consent is per provider, and it gates even the connection test',
+      'An API key goes into your OS’s secure store; Linux has none, so only the ChatGPT sign-in works there',
+      'Open it with Cmd/Ctrl+J — it reaches Linetta’s tools through the same MCP layer an external client uses',
+      'Every call lands in the same activity log, marked with which agent made it',
+      'A structural change gets an Undo button on its line — the last eight, and only while the app stays open; a scene-prose rewrite has no one-click undo yet, but the previous text is kept as a restorable version'
     ]
   },
 
@@ -420,7 +439,7 @@ export const en: Translation = {
       },
       {
         q: 'Is there AI inside the app?',
-        a: 'Not any more. Linetta used to carry its own provider settings and an in-app companion; both were removed. AI collaboration now happens through the optional MCP server, using an agent and a subscription you already have.'
+        a: 'Optionally. A built-in agent can write for you once you connect a provider — Anthropic, Google Gemini, a ChatGPT sign-in or an OpenAI-compatible endpoint — and consent to it, provider by provider. Or skip that entirely and connect your own agent, such as Claude Code, over the MCP server instead.'
       },
       {
         q: 'Can I bring an existing manuscript?',
@@ -428,7 +447,7 @@ export const en: Translation = {
       },
       {
         q: 'Is my writing uploaded anywhere?',
-        a: 'No. There is no Linetta cloud. The MCP server is loopback-only and off by default; Git sync talks only to the remote you configure.'
+        a: 'Not by default, and never to a Linetta cloud — there is none. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch.'
       },
       {
         q: 'What about iPad and Android?',
@@ -599,8 +618,8 @@ export const ko: Translation = {
 
   agent: {
     mark: '§ 03 — 에이전트',
-    heading: 'Linetta는 모델을 부르지 않습니다.\n당신의 에이전트가 Linetta를 부릅니다.',
-    lead: '앱 안에는 프로바이더 설정도, API 키 입력란도, 토큰 예산도 없습니다. 대신 Linetta가 로컬 MCP 서버를 열고, 이미 쓰고 있는 에이전트 — Claude Code, Claude Desktop — 가 거기에 접속합니다.',
+    heading: '내 에이전트를 데려오거나,\n내 키를 연결하세요.',
+    lead: 'Linetta 자체에는 모델도 구독도 없습니다. 이미 쓰고 있는 에이전트 — Claude Code, Claude Desktop — 를 MCP로 연결하면 이미 있는 구독으로 동작하고, Linetta에는 어떤 자격 증명도 넘기지 않습니다. 아니면 아래의 내장 에이전트를 켜고 직접 연결한 프로바이더를 쓸 수도 있습니다.',
     paragraphs: [
       '일반적인 파일시스템 MCP 서버도 마크다운은 읽고 씁니다. 그것이 조립하지 못하는 것은 <em>씬 하나를 위한 브리프</em>입니다. 그 씬이 아웃라인의 어디에 있는지, 상위 계층의 요약, 직전 씬의 요약, 인물과 관계 브리프, 플롯 스파인, 팩트 카드, 메모리, 그리고 문체와 분량 목표.',
       '그 브리프가 Linetta가 건네는 것이고, 앱 바깥에서 쓴 초고가 14화와 모순되지 않고 돌아오는 이유입니다. 책상과 서류함과 거부권은 계속 작가가 쥐고 있습니다.'
@@ -618,7 +637,7 @@ export const ko: Translation = {
       },
       {
         name: '전체',
-        body: '16개 전부. 모든 쓰기는 먼저 스냅샷되고 한 번에 되돌릴 수 있습니다.'
+        body: '16개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
       }
     ],
     toolsLabel: 'RPC 100개가 아니라, 툴 16개',
@@ -654,6 +673,21 @@ export const ko: Translation = {
       '씬을 쓰기 전마다 스냅샷, 구조를 바꾸기 전마다 아웃라인 캡처.',
       '모든 호출의 활동 로그 — 시각, 툴, 작품, 대상, 결과 — 를 설정에서 보여줍니다.',
       '분당 120회 호출 상한. 폭주하는 에이전트 루프는 씬 40개가 아니라 벽에 부딪힙니다.'
+    ],
+    byokLabel: '또는, 내장 에이전트',
+    byokLead: '별도 앱 대신 Linetta 안의 패널에서 쓰고 싶다면, 내장 에이전트를 켜고 직접 프로바이더를 연결하세요.',
+    byokProviders: [
+      { name: 'ChatGPT (Codex)', note: 'ChatGPT 계정으로 로그인 — 키를 보관할 필요 없음' },
+      { name: 'Anthropic', note: 'API 키로' },
+      { name: 'Google Gemini', note: 'API 키로' },
+      { name: 'OpenAI 호환', note: 'API 키로, 호환되는 어떤 엔드포인트든 — 내 컴퓨터에서 도는 모델도 포함' }
+    ],
+    byokPoints: [
+      '동의는 프로바이더별이고, 연결 테스트 자체도 이 동의가 있어야 통과합니다',
+      'API 키는 OS의 시크릿 저장소로 들어갑니다. Linux는 저장소가 없어서 ChatGPT 로그인만 됩니다',
+      'Cmd/Ctrl+J로 엽니다 — 외부 클라이언트가 쓰는 것과 같은 MCP 계층으로 Linetta의 툴에 접속합니다',
+      '모든 호출은 같은 활동 로그에 남고, 어느 에이전트가 호출했는지 표시됩니다',
+      '구조 변경은 해당 줄의 되돌리기 버튼으로 한 번에 되돌립니다(앱이 켜져 있는 동안, 최근 8건까지). 씬 본문 다시쓰기는 아직 한 번에 되돌릴 수 없지만, 이전 본문이 버전으로 남아 복원할 수 있습니다'
     ]
   },
 
@@ -737,7 +771,7 @@ export const ko: Translation = {
       },
       {
         q: '앱 안에 AI가 들어 있나요?',
-        a: '더는 아닙니다. 예전에는 앱 안에 프로바이더 설정과 컴패니언이 있었지만 둘 다 제거했습니다. 지금 AI 협업은 선택적인 MCP 서버를 통해, 이미 쓰고 있는 에이전트와 구독으로 이루어집니다.'
+        a: '선택적으로요. 프로바이더 — Anthropic, Google Gemini, ChatGPT 로그인, 또는 OpenAI 호환 엔드포인트 — 를 연결하고 각각 동의하면 내장 에이전트가 대신 씁니다. 아니면 그것 없이 Claude Code 같은 에이전트를 MCP 서버로 직접 연결할 수도 있습니다.'
       },
       {
         q: '쓰던 원고를 가져올 수 있나요?',
@@ -745,7 +779,7 @@ export const ko: Translation = {
       },
       {
         q: '제 글이 어딘가로 업로드되나요?',
-        a: '아니요. Linetta 클라우드는 존재하지 않습니다. MCP 서버는 루프백 전용이고 기본값은 꺼짐이며, Git 동기화는 직접 설정한 원격에만 연결합니다.'
+        a: '기본값으로는 아니고, Linetta 클라우드는 애초에 없습니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보냅니다.'
       },
       {
         q: 'iPad나 Android는요?',
@@ -914,8 +948,8 @@ export const ja: Translation = {
 
   agent: {
     mark: '§ 03 — エージェント',
-    heading: 'Linetta はモデルを呼びません。\nあなたのエージェントが Linetta を呼びます。',
-    lead: 'アプリの中にプロバイダー設定も、API キー欄も、トークン予算もありません。代わりに Linetta がローカルの MCP サーバーを開き、すでに使っているエージェント — Claude Code、Claude Desktop — がそこに接続します。',
+    heading: '自分のエージェントを連れてくるか、\n自分の鍵をつなぐか。',
+    lead: 'Linetta 自体にはモデルも購読もありません。すでに使っているエージェント — Claude Code、Claude Desktop — を MCP でつなげば、すでにある購読で動き、Linetta には資格情報を一切渡しません。あるいは下の内蔵エージェントをオンにして、自分でつないだプロバイダーを使うこともできます。',
     paragraphs: [
       '一般的なファイルシステム MCP サーバーでも Markdown の読み書きはできます。できないのは<em>一つのシーンのためのブリーフ</em>を組み立てることです。そのシーンがアウトラインのどこにあるか、上位階層の要約、直前のシーンの要約、人物と関係のブリーフ、プロットの背骨、ファクトカード、メモリ、そして文体と分量の目標。',
       'そのブリーフこそ Linetta が渡すものであり、アプリの外で書かれた草稿が第14話と矛盾せずに戻ってくる理由です。机と書類棚と拒否権は、作家が持ったままです。'
@@ -933,7 +967,7 @@ export const ja: Translation = {
       },
       {
         name: 'フル',
-        body: '16個すべて。すべての書き込みは先にスナップショットされ、一手で取り消せます。'
+        body: '16個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
       }
     ],
     toolsLabel: 'RPC 百個ではなく、ツール16個',
@@ -969,6 +1003,21 @@ export const ja: Translation = {
       'シーンを書くたびに事前スナップショット、構造を変えるたびにアウトラインの記録。',
       'すべての呼び出しの活動ログ — 時刻、ツール、作品、対象、結果 — を設定に表示します。',
       '毎分120回の呼び出し上限。暴走したエージェントのループはシーン40本ではなく壁にぶつかります。'
+    ],
+    byokLabel: 'または、内蔵エージェント',
+    byokLead: '別のアプリに切り替えるより Linetta の中のパネルで書きたいなら、内蔵エージェントをオンにして自分でプロバイダーをつなぎましょう。',
+    byokProviders: [
+      { name: 'ChatGPT (Codex)', note: 'ChatGPT アカウントでサインイン — 鍵を持つ必要なし' },
+      { name: 'Anthropic', note: 'API キーで' },
+      { name: 'Google Gemini', note: 'API キーで' },
+      { name: 'OpenAI 互換', note: 'API キーで、互換エンドポイントなら何でも — 自分のマシン上のものも含む' }
+    ],
+    byokPoints: [
+      '同意はプロバイダーごとで、接続テスト自体もこの同意がないと通りません',
+      'API キーは OS のシークレットストアに入ります。Linux にはストアがないので、ChatGPT サインインだけが使えます',
+      'Cmd/Ctrl+J で開きます — 外部クライアントと同じ MCP レイヤーで Linetta のツールに接続します',
+      'すべての呼び出しは同じ活動ログに残り、どのエージェントが呼んだか表示されます',
+      '構造的な変更はその行の取り消しボタンで一手で戻せます（アプリを起動している間、直近 8 件まで）。シーン本文の書き直しにワンクリックの取り消しはまだありませんが、直前の本文はバージョンとして残り復元できます'
     ]
   },
 
@@ -1052,7 +1101,7 @@ export const ja: Translation = {
       },
       {
         q: 'アプリの中に AI は入っていますか。',
-        a: 'もう入っていません。以前はアプリ内にプロバイダー設定とコンパニオンがありましたが、どちらも取り除きました。いま AI との協働は任意の MCP サーバー経由で、すでに使っているエージェントと購読で行います。'
+        a: '任意で入っています。プロバイダー — Anthropic、Google Gemini、ChatGPT サインイン、または OpenAI 互換エンドポイント — をつないでそれぞれ同意すれば、内蔵エージェントが代わりに書きます。それをせずに、Claude Code のようなエージェントを MCP サーバーで直接つなぐこともできます。'
       },
       {
         q: '書きかけの原稿を持ち込めますか。',
@@ -1060,7 +1109,7 @@ export const ja: Translation = {
       },
       {
         q: '書いたものはどこかにアップロードされますか。',
-        a: 'いいえ。Linetta のクラウドは存在しません。MCP サーバーはループバック専用で既定はオフ、Git 同期は自分で設定したリモートにしかつながりません。'
+        a: '既定ではされず、Linetta のクラウドはそもそも存在しません。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出します。'
       },
       {
         q: 'iPad や Android はどうですか。',

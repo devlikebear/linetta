@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.2.0 - 2026-09-06
+
+- Added a built-in AI writing agent: connect a provider — sign in with a
+  ChatGPT account, or add an API key for Anthropic, Google Gemini, or an
+  OpenAI-compatible endpoint — and open the panel with `Cmd/Ctrl+J`. Consent to
+  send your writing to a provider is given separately for each one.
+- Added ChatGPT (Codex) sign-in inside the app, so connecting it no longer
+  needs the Codex CLI installed. Tokens are kept at
+  `<app data>/codex/auth.json` with owner-only permissions (0600), in the same
+  file format the Codex CLI uses for its own login, so the two can share one
+  sign-in — except in the Mac App Store build, which is sandboxed and cannot
+  read `~/.codex`, and so needs its own sign-in.
+- The MCP activity log now records whether the built-in agent or an external
+  client made each tool call. Activity entries and the `mcp.changed`
+  notification both carry a new `source` field for it.
+- The tool surface is unchanged: the built-in agent is a client of Linetta's
+  own MCP server, reaching the same tools external clients use, rather than a
+  second set built for it.
+- The consent text you tick before connecting a provider now spells out what
+  the agent's tools can actually read — any scene in any work, not only the one
+  you have open, plus summaries, the outline, manuscript-wide search, the
+  character, plot and fact cards, remembered facts, and the list of your works.
+  The behaviour did not change; the sentence you agree to now matches it.
+
 ## v1.1.0 - 2026-08-31
 
 - Export now carries the whole work: synopsis, plot threads and beats, fact
@@ -27,9 +51,10 @@ Linetta is a writing tool. It no longer talks to a language model.
   Claude Code, Claude Desktop — can read and write the work directly. It is off
   until you consent, binds `127.0.0.1` only, and needs a token generated on your
   machine. `read_only` mode omits the writing tools entirely.
-- Every change an agent makes is snapshotted before it lands, recorded in an
-  activity log, and undoable. A scene you are part way through editing is never
-  replaced behind your back.
+- Every change an agent makes is snapshotted before it lands and recorded in an
+  activity log. A restructuring of the outline can be undone as one batch while
+  the app stays open; a rewritten scene is restored from its version history.
+  A scene you are part way through editing is never replaced behind your back.
 - Scene summaries no longer need a model: a short scene is its own summary, a
   longer one keeps its opening, and an agent can replace either with a real one.
 - The Fact Book is now a place to record what you checked and where, rather than
