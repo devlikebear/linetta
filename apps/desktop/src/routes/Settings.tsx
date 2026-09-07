@@ -55,6 +55,7 @@ const SETTINGS_CATEGORIES = [
   "writing",
   "providers",
   "mcp",
+  "tools",
   "memory",
   "skills",
   "sync",
@@ -63,6 +64,15 @@ const SETTINGS_CATEGORIES = [
 type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
 
 const CATEGORY_STORAGE_KEY = "linetta.settings.category";
+
+/** Tool-schema bytes as something a writer can weigh (#99). kB, one decimal,
+ *  and the same unit for every figure on the pane so the group costs visibly
+ *  add up to the total — a group shown in bytes beside a total in kilobytes
+ *  would make the arithmetic the writer is doing harder, not easier. The
+ *  engine measures the number; this only chooses how to say it. */
+function formatToolBytes(bytes: number): string {
+  return `${(bytes / 1024).toFixed(1)} kB`;
+}
 
 function initialCategory(): SettingsCategory {
   try {
@@ -263,6 +273,11 @@ export function Settings() {
             items: [
               ...(agentAvailable ? [{ id: "providers" as const, label: t("settings.nav.providers") }] : []),
               ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.nav.mcp") }] : []),
+              // The tool budget (#99) governs what the built-in agent AND an
+              // external client are offered, so it sits between the two panes
+              // it applies to rather than inside either — and above memory and
+              // skills, which are the two groups it can take away.
+              { id: "tools" as const, label: t("settings.nav.tools") },
               // A memory is only meaningful when some agent can read it, so it
               // rides the same condition as the group it lives in.
               { id: "memory" as const, label: t("settings.nav.memory") },
@@ -521,6 +536,75 @@ export function Settings() {
             {category === "providers" && agentAvailable && <ProviderSection />}
 
             {category === "mcp" && mcpAvailable && <McpSection />}
+
+            {/* The tool budget (#99). Both switches are ON by default, so they
+                read `!== false`: a settings payload from an engine that
+                predates the keys has no opinion, and truthiness would read
+                that as off and draw a switch the writer never threw.
+
+                The numbers come from the engine — measured from the tools it
+                would actually register — and the block is simply skipped when
+                they are absent, which is what a build that cannot measure them
+                returns. A count invented here would be the drift this feature
+                exists to avoid. */}
+            {category === "tools" && (mcpAvailable || agentAvailable) && (
+            <section className="settings-section">
+              <h3>{t("settings.tools.title")}</h3>
+              <p className="sd">{t("settings.tools.description")}</p>
+              {current.tool_budget && (
+                <p className="sd" data-testid="tool-budget-current">
+                  {t("settings.tools.current", {
+                    tools: String(current.tool_budget.tools),
+                    size: formatToolBytes(current.tool_budget.bytes),
+                  })}
+                </p>
+              )}
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving && apply({ memory_tools_enabled: current.memory_tools_enabled === false })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.tools.memory.title")}</span>
+                  <span className="sd">{t("settings.tools.memory.description")}</span>
+                  {current.tool_budget && (
+                    <span className="sd" data-testid="tool-budget-memory">
+                      {t("settings.tools.groupCost", {
+                        tools: String(current.tool_budget.memory.tools),
+                        size: formatToolBytes(current.tool_budget.memory.bytes),
+                      })}
+                    </span>
+                  )}
+                </span>
+                <span className={`switch${current.memory_tools_enabled !== false ? " on" : ""}`} />
+              </button>
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving && apply({ skill_tools_enabled: current.skill_tools_enabled === false })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.tools.skills.title")}</span>
+                  <span className="sd">{t("settings.tools.skills.description")}</span>
+                  {current.tool_budget && (
+                    <span className="sd" data-testid="tool-budget-skills">
+                      {t("settings.tools.groupCost", {
+                        tools: String(current.tool_budget.skills.tools),
+                        size: formatToolBytes(current.tool_budget.skills.bytes),
+                      })}
+                    </span>
+                  )}
+                </span>
+                <span className={`switch${current.skill_tools_enabled !== false ? " on" : ""}`} />
+              </button>
+            </section>
+            )}
 
             {category === "memory" && (mcpAvailable || agentAvailable) && <MemorySection />}
 

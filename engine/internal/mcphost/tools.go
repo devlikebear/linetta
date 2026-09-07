@@ -122,10 +122,29 @@ func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchI
 // The mode is captured when the listener starts. Changing it goes through
 // Host.Restart (see mcpController.Enable), which builds a fresh server, so a
 // running server never serves a stale tool set.
+// The two optional groups are taken from d.Settings at the moment the server
+// is built, and that is what makes the switches live: the built-in agent
+// builds a fresh server for every run (agent/tools.go connectTools) and the
+// MCP host builds one per HTTP session (host.go's StreamableHTTPHandler), so
+// neither needs a restart to pick up a change. A nil Settings — the zero
+// ToolDeps a test registers, and a build with no store open — means the
+// defaults, which is every group on.
 func (d ToolDeps) Register(s *mcp.Server, mode string) {
-	d.registerReadTools(s)
+	groups := d.toolGroups()
+	d.registerReadTools(s, groups)
 	if mode == settings.MCPModeFull {
-		d.registerWriteTools(s)
+		d.registerWriteTools(s, groups)
+	}
+}
+
+// toolGroups reads the writer's two tool-budget switches (#99).
+func (d ToolDeps) toolGroups() ToolGroups {
+	if d.Settings == nil {
+		return AllToolGroups()
+	}
+	return ToolGroups{
+		Memory: d.Settings.MemoryToolsEnabled(),
+		Skills: d.Settings.SkillToolsEnabled(),
 	}
 }
 

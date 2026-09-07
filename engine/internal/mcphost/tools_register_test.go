@@ -26,11 +26,43 @@ import (
 // and no handler is called here.
 func registeredToolNames(t *testing.T, mode string) []string {
 	t.Helper()
+	return registeredToolNamesOf(t, ToolDeps{}, mode)
+}
+
+// registeredToolNamesWithGroups is the same question asked of a server built
+// with the writer's tool-budget switches in a given position (#99). The
+// switches are read off a real settings.Store rather than passed as an
+// argument because that is how Register learns them in production — a test
+// that handed the groups in directly would not notice a Register that stopped
+// consulting the store at all.
+func registeredToolNamesWithGroups(t *testing.T, mode string, groups ToolGroups) []string {
+	t.Helper()
+	return registeredToolNamesOf(t, ToolDeps{Settings: storeWithGroups(t, groups)}, mode)
+}
+
+func storeWithGroups(t *testing.T, groups ToolGroups) *settings.Store {
+	t.Helper()
+	t.Setenv("LINETTA_HOME", t.TempDir())
+	s, err := settings.NewWithSecretStore(settings.NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("settings store: %v", err)
+	}
+	if _, err := s.Set(context.Background(), settings.Patch{
+		MemoryToolsEnabled: &groups.Memory,
+		SkillToolsEnabled:  &groups.Skills,
+	}); err != nil {
+		t.Fatalf("settings set: %v", err)
+	}
+	return s
+}
+
+func registeredToolNamesOf(t *testing.T, deps ToolDeps, mode string) []string {
+	t.Helper()
 	ctx := context.Background()
 	srv := mcp.NewServer(&mcp.Implementation{
 		Name: ServerName, Version: ServerVersion,
 	}, nil)
-	ToolDeps{}.Register(srv, mode)
+	deps.Register(srv, mode)
 
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	ss, err := srv.Connect(ctx, serverTransport, nil)

@@ -213,6 +213,11 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		// Read per turn, like Language: switching the self-review off in
 		// Settings has to take effect on the writer's very next message.
 		SelfReviewEnabled: deps.settings.AgentSelfReviewEnabled,
+		// The tool budget (#99). Register above reads the same two switches
+		// off the same store when it builds this turn's server, so the
+		// prompt and the tool list cannot disagree about which tools exist.
+		MemoryToolsEnabled: deps.settings.MemoryToolsEnabled,
+		SkillToolsEnabled:  deps.settings.SkillToolsEnabled,
 		Undo: func(ctx context.Context, batchID string) error {
 			return deps.story.UndoApply(ctx, batchID, deps.clock)
 		},

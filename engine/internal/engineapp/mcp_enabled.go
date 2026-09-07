@@ -115,6 +115,12 @@ func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 		Notify:         deps.repos.notify,
 		Clock:          deps.repos.clock,
 	}
+	// What the tool set costs, for the Settings pane's tool-budget group
+	// (#99). Wired here rather than where the store is built because this is
+	// the only file that may import mcphost — internal/settings has no build
+	// tag and mcphost is //go:build !mobile, so a mobile store simply reports
+	// no budget and the pane leaves the numbers out.
+	deps.settingsStore.WithToolBudget(mcphost.MeasureToolBudget)
 	host := mcphost.New(mcphost.Deps{
 		Settings: deps.settingsStore,
 		Home:     deps.home,

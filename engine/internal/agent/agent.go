@@ -82,6 +82,22 @@ type Deps struct {
 	// degrades to the documented default" rule Memory and Skills follow, and
 	// the default here is on.
 	SelfReviewEnabled func() bool
+	// MemoryToolsEnabled and SkillToolsEnabled report the writer's two
+	// tool-budget switches (#99, settings.memory_tools_enabled /
+	// skill_tools_enabled, both default on). Deps.Register already leaves the
+	// tools themselves out when a group is off — it reads the same store when
+	// it builds the turn's server — so what these two are FOR is the prompt:
+	// a system prompt that tells the agent to record a skill with
+	// linetta_edit_skill when linetta_edit_skill is not in its tool list is a
+	// worse outcome than the bytes the switch was meant to save. They are the
+	// one thing the prompt cannot learn from anywhere else.
+	//
+	// Funcs, and read per turn like SelfReviewEnabled, because the server is
+	// rebuilt per run: prompt and tools have to change on the same turn or
+	// they contradict each other on exactly one message. A nil func means
+	// enabled, the same default-when-unwired rule the fields above follow.
+	MemoryToolsEnabled func() bool
+	SkillToolsEnabled  func() bool
 	// Undo reverts a structural batch. It must be bound to the SAME storyops
 	// service the agent's tools use — undo batches live in memory on the
 	// service, so any other instance simply does not have the batch.

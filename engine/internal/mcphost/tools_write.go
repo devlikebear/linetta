@@ -113,8 +113,11 @@ type writeSummaryOutput struct {
 }
 
 // registerWriteTools installs the mutating tools. Only called for
-// settings.MCPModeFull.
-func (d ToolDeps) registerWriteTools(s *mcp.Server) {
+// settings.MCPModeFull. groups decides whether the two optional write tools —
+// linetta_edit_memory and linetta_edit_skill — are among them (#99). They are
+// installed from here rather than by a separate pass off Register, so that
+// the decision and the tools sit in the same place a reader looks for either.
+func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_create_work",
 		Description: "Create a new work (novel) with its first chapter and scene, ready to draft. Returns " +
@@ -145,6 +148,18 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"do not.",
 	}, record(d, "linetta_write_summary", d.writeSummary))
 
+	if groups.Memory {
+		d.registerMemoryTool(s)
+	}
+	if groups.Skills {
+		d.registerEditSkillTool(s)
+	}
+
+	d.registerReviseTool(s)
+	d.registerBatchTools(s)
+}
+
+func (d ToolDeps) registerMemoryTool(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_edit_memory",
 		Description: "Record something durable about how this writer works (writer_profile, which applies to every work) " +
@@ -152,7 +167,9 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"short and current: replace a line that changed rather than adding a second one. The result says how much " +
 			"room is left.",
 	}, record(d, "linetta_edit_memory", d.editMemory))
+}
 
+func (d ToolDeps) registerEditSkillTool(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_edit_skill",
 		Description: "Write one of your own skills: a durable how-to document you keep for next time — how " +
@@ -168,9 +185,6 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server) {
 			"short — the description is one line saying when to reach for it, and bodies are capped; the " +
 			"result says how much room is left.",
 	}, record(d, "linetta_edit_skill", d.editSkill))
-
-	d.registerReviseTool(s)
-	d.registerBatchTools(s)
 }
 
 func (d ToolDeps) createWork(ctx context.Context, _ *mcp.CallToolRequest, in createWorkInput) (*mcp.CallToolResult, createWorkOutput, error) {

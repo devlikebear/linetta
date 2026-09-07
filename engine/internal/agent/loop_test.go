@@ -14,6 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -749,5 +750,66 @@ func TestRun_cancelledTurnStillRecordsAToolResultThatAlreadySucceeded(t *testing
 	}
 	if !found.OK {
 		t.Errorf("recorded tool event OK = false, want true — the write actually succeeded")
+	}
+}
+
+// countingSkills is a SkillSource that records whether it was asked at all.
+type countingSkills struct {
+	asked int
+	items []agentskills.Skill
+}
+
+func (c *countingSkills) Skills(context.Context, string) []agentskills.Skill {
+	c.asked++
+	return c.items
+}
+
+// The turn's prompt is built from the switches as they stand (#99). This is
+// the assertion that the loop actually reads Deps.SkillToolsEnabled — the
+// prompt tests below prove systemPrompt honours the flag, but nothing else
+// proves the flag reaches it, and a loop that passed allToolGroups()
+// unconditionally would pass every one of them while shipping a prompt that
+// names tools the same turn's server did not register.
+func TestRun_theTurnsPromptFollowsTheToolBudgetSwitches(t *testing.T) {
+	rec := &recorder{}
+	c := &scriptedClient{responses: []llm.ChatResponse{textReply("ok")}}
+	st := openStoreForAgentTests(t)
+	skills := &countingSkills{items: []agentskills.Skill{
+		{Name: "dialogue-rhythm", Scope: agentskills.ScopeWriter, Description: "rhythm", Enabled: true},
+	}}
+	svc := New(Deps{
+		Providers:          fakeProviders{client: c},
+		History:            companion.NewHistoryRepo(st.DB()),
+		Scope:              fakeScope{titles: map[string]string{"p1": "제목"}},
+		Register:           stubTools(nil),
+		Notify:             rec.notify,
+		Language:           func() string { return "ko" },
+		Skills:             skills,
+		MemoryToolsEnabled: func() bool { return false },
+		SkillToolsEnabled:  func() bool { return false },
+		Clock:              func() int64 { return 1700000000000 },
+	})
+	t.Cleanup(func() { _ = svc.Close() })
+
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "hi"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+
+	msgs := c.messages()
+	if len(msgs) == 0 {
+		t.Fatal("no messages reached the model")
+	}
+	system := msgs[0].Content
+	for _, tool := range []string{"linetta_edit_memory", "linetta_read_skill", "linetta_edit_skill"} {
+		if strings.Contains(system, tool) {
+			t.Errorf("the turn's system prompt names %s with its group switched off — "+
+				"the loop is not reading the switches; got:\n%s", tool, system)
+		}
+	}
+	// And the skills are not even fetched: with no reader for the list, a
+	// filesystem walk on the turn's critical path buys nothing.
+	if skills.asked != 0 {
+		t.Errorf("the skill source was asked %d times with the skills tools off", skills.asked)
 	}
 }

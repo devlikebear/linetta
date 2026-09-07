@@ -250,8 +250,11 @@ type getFactCardsOutput struct {
 }
 
 // registerReadTools installs every read tool, each wrapped so the call lands
-// in the activity log.
-func (d ToolDeps) registerReadTools(s *mcp.Server) {
+// in the activity log. groups decides whether the one optional read tool —
+// linetta_read_skill — is among them (#99). It is installed here at the end
+// rather than by a separate pass off Register, so that the decision and the
+// tool sit in the same place a reader looks for either.
+func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_list_works",
 		Description: "List the writer's works (novels) with their ids, titles, and scene counts. " +
@@ -307,6 +310,9 @@ func (d ToolDeps) registerReadTools(s *mcp.Server) {
 			"verification status. Use them for real-world details instead of inventing facts.",
 	}, record(d, "linetta_get_fact_cards", d.getFactCards))
 
+	if !groups.Skills {
+		return
+	}
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_read_skill",
 		Description: "Read one skill in full — the whole how-to document, not the one-line description you " +
@@ -499,6 +505,28 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	if d.Settings != nil {
 		lang = d.Settings.Language()
 	}
+	// Two controls now decide whether the brief carries the skills list, and
+	// they compose in one direction only (#99). in.IncludeSkills is the
+	// CLIENT's per-request choice, behind storycontext.ContextKeySkills. The
+	// writer's skill-tools switch is upstream of it: with the group off,
+	// linetta_read_skill is not registered, and a list of names whose bodies
+	// nothing can open is a menu with no kitchen — the list is only ever a
+	// pointer. So the switch forces the section off and the client's flag can
+	// then only subtract further, never add. The reverse would be the defect
+	// this whole change is about: a brief naming skills and telling the
+	// reader to open one with a tool that is not in its tools/list.
+	//
+	// The two curated memory documents are deliberately NOT treated this way
+	// and stay in the brief when the memory tools are off. They are content,
+	// not a pointer: sentences already written about this writer and this
+	// work, still edited by the writer in Settings. A memory an agent can
+	// read but not update is coherent and useful; a skill list with no way to
+	// read a body is not.
+	includeSkills := in.IncludeSkills
+	if !d.toolGroups().Skills {
+		off := false
+		includeSkills = &off
+	}
 	opts := storycontext.Options{
 		Language: lang,
 		Context: storycontext.ContextSelection{
@@ -506,7 +534,7 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 			Memories:   in.IncludeMemories,
 			References: in.IncludeReferences,
 			Plot:       in.IncludePlot,
-			Skills:     in.IncludeSkills,
+			Skills:     includeSkills,
 		},
 	}
 	c, err := d.Context.BuildFull(ctx, n.ID, "", "", opts)

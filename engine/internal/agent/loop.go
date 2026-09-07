@@ -324,11 +324,20 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	if s.deps.Memory != nil {
 		profile, notes = s.deps.Memory.Memories(ctx, st.req.ProjectID)
 	}
+	// Read the two tool-budget switches HERE, in the same function that
+	// builds the prompt, rather than once when the service was constructed:
+	// the turn's tool server is built from the same store moments earlier
+	// (connectTools → mcphost.Register), so this is what keeps the prompt and
+	// the tool list describing the same turn. See Deps.MemoryToolsEnabled.
+	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled)
 	var skills []agentskills.Skill
-	if s.deps.Skills != nil {
+	// Not even asked for when the group is off: the list has no reader then
+	// (systemPrompt drops the block), and a skills read is filesystem work on
+	// the turn's critical path.
+	if groups.skills && s.deps.Skills != nil {
 		skills = s.deps.Skills.Skills(ctx, st.req.ProjectID)
 	}
-	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes, skills)}}
+	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes, skills, groups)}}
 
 	prior, err := s.tr.load(ctx, st.req.ProjectID, 200)
 	if err != nil {

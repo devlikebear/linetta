@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 )
 
@@ -161,5 +162,101 @@ func TestGetStoryContextForTheAgentOmitsTheSkillsAndTheReportAgrees(t *testing.T
 	}
 	if !slices.Contains(out.EmptySections, "skills") {
 		t.Errorf("agent's report should list skills as empty: empty=%v", out.EmptySections)
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * #99: the writer's skill-tools switch, on the brief.
+ * ------------------------------------------------------------------------ */
+
+// The brief is the ONLY channel that tells an external client skills exist,
+// and the sentence it uses to do that names linetta_read_skill. With the
+// skills group switched off that tool is not in the client's tools/list at
+// all, so a brief still carrying the block would be pointing at a tool the
+// same server just refused to register — the exact failure this feature is
+// supposed to prevent, one level out from the system prompt.
+func TestGetStoryContextDropsTheSkillsBlockWhenTheSkillToolsAreOff(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "PROFILE-BODY: no em dashes"}, nil)
+	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
+	d.Settings = languageSettings(t, "en")
+	setToolGroups(t, d.Settings, ToolGroups{Memory: true, Skills: false})
+
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	if err != nil {
+		t.Fatalf("getStoryContext: %v", err)
+	}
+	for _, gone := range []string{
+		"Skills you can read",
+		"linetta_read_skill",
+		"dialogue-rhythm",
+		"flashback-voice",
+	} {
+		if strings.Contains(out.Brief, gone) {
+			t.Errorf("the brief still carries %q with the skills tools switched off; got:\n%s", gone, out.Brief)
+		}
+	}
+	if slices.Contains(out.IncludedSections, "skills") {
+		t.Errorf("the report claims the brief carries skills: included=%v", out.IncludedSections)
+	}
+	// The memory documents are NOT treated this way and must survive: they
+	// are content the writer still edits, not a pointer to a tool. See
+	// getStoryContext's own comment for the ruling.
+	if !strings.Contains(out.Brief, "PROFILE-BODY: no em dashes") {
+		t.Errorf("the curated memory went with the skills block; got:\n%s", out.Brief)
+	}
+}
+
+// The writer's switch is upstream of the client's per-request flag, and the
+// composition runs one way only: with the group off, include_skills=true
+// cannot put the block back. A client must not be able to ask its way past a
+// decision the writer made.
+func TestIncludeSkillsTrueCannotOverrideTheWritersSwitch(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
+	d.Settings = languageSettings(t, "en")
+	setToolGroups(t, d.Settings, ToolGroups{Memory: true, Skills: false})
+
+	on := true
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &on})
+	if err != nil {
+		t.Fatalf("getStoryContext: %v", err)
+	}
+	if strings.Contains(out.Brief, "Skills you can read") {
+		t.Errorf("include_skills=true put the block back over the writer's switch; got:\n%s", out.Brief)
+	}
+}
+
+// And with the group ON, nothing about the client's flag changes: the two
+// controls compose, they do not replace each other.
+func TestTheWritersSwitchLeavesIncludeSkillsAloneWhenTheGroupIsOn(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
+	d.Settings = languageSettings(t, "en")
+	setToolGroups(t, d.Settings, AllToolGroups())
+
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID})
+	if err != nil {
+		t.Fatalf("getStoryContext: %v", err)
+	}
+	if !strings.Contains(out.Brief, "Skills you can read") {
+		t.Errorf("the default brief lost its skills block; got:\n%s", out.Brief)
+	}
+	off := false
+	_, out, err = d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeSkills: &off})
+	if err != nil {
+		t.Fatalf("getStoryContext: %v", err)
+	}
+	if strings.Contains(out.Brief, "Skills you can read") {
+		t.Errorf("include_skills=false stopped working; got:\n%s", out.Brief)
+	}
+}
+
+func setToolGroups(t *testing.T, st *settings.Store, groups ToolGroups) {
+	t.Helper()
+	if _, err := st.Set(context.Background(), settings.Patch{
+		MemoryToolsEnabled: &groups.Memory,
+		SkillToolsEnabled:  &groups.Skills,
+	}); err != nil {
+		t.Fatalf("set tool groups: %v", err)
 	}
 }
