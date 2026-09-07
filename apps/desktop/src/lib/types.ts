@@ -622,6 +622,19 @@ export interface Settings {
    *  because a settings payload from an older engine simply omits it; every
    *  reader must treat "missing" as the default, which is ON. */
   agent_self_review_enabled?: boolean;
+  /** Provider ids whose pre-1.0 plaintext `api_key` is still sitting in
+   *  settings.json because the engine had nowhere to move it (#113). Derived
+   *  at load time and never persisted, so it is absent on every healthy
+   *  install and on any engine older than the fix. */
+  legacy_plaintext_providers?: string[];
+  /** The same, for the web-search key. */
+  legacy_plaintext_web_search?: boolean;
+  /** Why the move failed: "unsupported" (this platform has no secret store at
+   *  all — Linux today) or "error" (it has one and it refused, e.g. a locked
+   *  Keychain). The two need different sentences. */
+  legacy_plaintext_reason?: "unsupported" | "error" | (string & {});
+  /** The settings.json holding them, so the notice can name the file. */
+  legacy_plaintext_path?: string;
 }
 
 export interface SettingsPatch {
@@ -652,6 +665,11 @@ export interface SettingsPatch {
   mcp_consent_version?: number;
   mcp_consented_at?: number;
   agent_self_review_enabled?: boolean;
+  /** Deletes the plaintext keys the engine could not migrate out of
+   *  settings.json (#113). Destructive and one-way — where there is no secret
+   *  store the file is the only place those keys exist — so it is only ever
+   *  sent from a button the writer pressed. */
+  clear_legacy_plaintext_keys?: boolean;
 }
 
 export interface SnapshotEntry {

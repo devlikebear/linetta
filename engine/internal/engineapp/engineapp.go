@@ -88,6 +88,17 @@ func Open(ctx context.Context, opts Options) (*App, error) {
 		return nil, fmt.Errorf("ensure home: %w", err)
 	}
 
+	// Recover the memory workspaces the 1.0 pivot orphaned under
+	// <home>/companion (#114), before companion.NewService(home) below reads
+	// the new location. Best-effort, exactly like the index rebuilds in
+	// register: a writer whose app will not start because a recovery step
+	// failed is worse off than one whose old memories are still misplaced.
+	if rep := companion.MigrateLegacyMemory(home); !rep.Empty() {
+		for _, line := range rep.Lines() {
+			fmt.Fprintf(os.Stderr, "companion memory migration: %s\n", line)
+		}
+	}
+
 	appCtx, cancel := context.WithCancel(ctx)
 	st, err := store.Open(appCtx, filepath.Join(home, "library.db"))
 	if err != nil {

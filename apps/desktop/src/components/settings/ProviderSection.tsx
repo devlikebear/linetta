@@ -34,6 +34,12 @@ const PROVIDER_ORDER: { id: ProviderID; labelKey: MessageKey }[] = [
   { id: "openai", labelKey: "settings.providers.name.openai" },
 ];
 
+/** How long the "delete the plaintext key" button stays armed after the first
+ *  press (#113). Long enough to read the sentence it puts on screen and press
+ *  again on purpose; short enough that the arming cannot outlive the intent
+ *  and catch the writer on some unrelated visit back to this pane. */
+export const PLAINTEXT_DELETE_ARM_MS = 10_000;
+
 /** The i18n key naming one provider, for interpolation into a sentence that
  *  has to say which company it means — see the consent checkbox below. */
 const nameKeyFor = (id: ProviderID): MessageKey =>
@@ -93,6 +99,17 @@ interface Drafts {
   key: string;
   baseUrl: string;
   model: string;
+}
+
+/** What settings.get says about a pre-1.0 plaintext key still in the file.
+ *
+ *  `reason` decides which sentence the notice uses, and the two are not
+ *  interchangeable: "unsupported" means this platform has no secure storage at
+ *  all, so the only way out is deleting the key; anything else means a store
+ *  that exists refused, which the next launch may not. */
+interface PlaintextKeyNotice {
+  reason: string;
+  path: string;
 }
 
 /** providers.test's own result, kept apart from the section-level `error` for
@@ -282,6 +299,21 @@ export function ProviderSection() {
   // and it is fetched only when the writer asks.
   const [models, setModels] = useState<string[]>([]);
   const [modelsError, setModelsError] = useState<unknown>(null);
+  // #113: a key a pre-June build wrote into settings.json in plain text, which
+  // the engine could not move into secure storage on this platform. It is read
+  // from settings.get rather than providers.list because it is not a fact
+  // about a provider — it is a fact about the file, and the same notice covers
+  // the web-search key. null means there is nothing to say, which is the
+  // answer on every healthy install and from any engine older than the fix.
+  const [plaintextKey, setPlaintextKey] = useState<PlaintextKeyNotice | null>(null);
+  // Deleting is one-way and the key exists nowhere else, so the button asks
+  // once. Not a modal: this pane has none, and a confirmation the writer can
+  // walk away from by doing anything else is the gentler shape here. It is
+  // armed for PLAINTEXT_DELETE_ARM_MS and no longer — see the effect below.
+  const [confirmingPlaintextDelete, setConfirmingPlaintextDelete] = useState(false);
+  // Kept after the notice goes away, so the writer sees that the thing they
+  // pressed actually happened rather than the warning merely vanishing.
+  const [plaintextKeyDeleted, setPlaintextKeyDeleted] = useState(false);
   // The number of the newest providers.list issued. A ref rather than reducer
   // state because it is not rendered and because refresh() has to read the
   // number it just claimed, synchronously, before it awaits.
@@ -327,6 +359,39 @@ export function ProviderSection() {
   useEffect(() => {
     void refresh().catch(setError);
   }, [refresh]);
+
+  const refreshPlaintextKey = useCallback(async () => {
+    const current = await settingsApi.get();
+    const providers = current.legacy_plaintext_providers ?? [];
+    const webSearch = current.legacy_plaintext_web_search === true;
+    setPlaintextKey(
+      providers.length > 0 || webSearch
+        ? {
+            reason: current.legacy_plaintext_reason ?? "unsupported",
+            path: current.legacy_plaintext_path ?? "",
+          }
+        : null,
+    );
+  }, []);
+
+  useEffect(() => {
+    void refreshPlaintextKey().catch(setError);
+  }, [refreshPlaintextKey]);
+
+  // The confirmation disarms itself. Without this it stayed armed for the life
+  // of the pane: a writer who pressed once, went off to change a model or a
+  // base URL and came back was one press away from deleting a credential
+  // nothing else holds a copy of, with the sentence explaining that long since
+  // scrolled out of mind. Asking again costs one press; not asking costs the
+  // key.
+  useEffect(() => {
+    if (!confirmingPlaintextDelete) return;
+    const timer = window.setTimeout(
+      () => setConfirmingPlaintextDelete(false),
+      PLAINTEXT_DELETE_ARM_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [confirmingPlaintextDelete]);
 
   const guard = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -534,6 +599,18 @@ export function ProviderSection() {
       await refresh();
     });
 
+  // The only thing in this app that deletes a credential the writer owns
+  // without being able to put it back — on a platform with no secret store
+  // the settings file is the only place that key exists. It happens on the
+  // second press of the button and never on its own (#113).
+  const deletePlaintextKey = () =>
+    guard(async () => {
+      await settingsApi.set({ clear_legacy_plaintext_keys: true });
+      setConfirmingPlaintextDelete(false);
+      setPlaintextKeyDeleted(true);
+      await refreshPlaintextKey();
+    });
+
   const saveBaseUrl = async () => {
     const next = drafts.baseUrl.trim();
     // A blur that changed nothing is not a save. Without this, tabbing
@@ -644,6 +721,46 @@ export function ProviderSection() {
     <section className="settings-section" id="provider-settings" data-testid="provider-section">
       <h3>{t("settings.providers.title")}</h3>
       <p className="sd">{t("settings.providers.description")}</p>
+
+      {/* Above the provider picker, not inside it: a key sitting in plain text
+          is a fact about the file rather than about whichever provider happens
+          to be selected, and it can be true of several at once. */}
+      {plaintextKey ? (
+        <div className="modal-field" role="alert" data-testid="provider-plaintext-key">
+          <strong>{t("settings.providers.plaintextKey.title")}</strong>
+          <p className="sd">
+            {plaintextKey.reason === "error"
+              ? t("settings.providers.plaintextKey.failed")
+              : t("settings.providers.plaintextKey.unsupported")}
+          </p>
+          {plaintextKey.path ? (
+            <p className="sd" data-testid="provider-plaintext-key-path">
+              {t("settings.providers.plaintextKey.path", { path: plaintextKey.path })}
+            </p>
+          ) : null}
+          {confirmingPlaintextDelete ? (
+            <p className="sd" data-testid="provider-plaintext-key-confirm">
+              {t("settings.providers.plaintextKey.confirm")}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              confirmingPlaintextDelete
+                ? void deletePlaintextKey()
+                : setConfirmingPlaintextDelete(true)
+            }
+            data-testid="provider-plaintext-key-delete"
+          >
+            {t("settings.providers.plaintextKey.delete")}
+          </button>
+        </div>
+      ) : plaintextKeyDeleted ? (
+        <p className="sd" role="status" data-testid="provider-plaintext-key-deleted">
+          {t("settings.providers.plaintextKey.deleted")}
+        </p>
+      ) : null}
 
       <div className="modal-field" data-testid="provider-choices">
         {PROVIDER_ORDER.map(({ id, labelKey }) => (
