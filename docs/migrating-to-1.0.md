@@ -19,12 +19,36 @@ Remembered facts were never in the database — they live in a per-project
 `memory/experiences.jsonl` file, and an agent connected over MCP records and
 recalls them the same way the companion did.
 
-**Facts remembered before 1.0 are the exception.** 1.0 moved where that file
-is looked for: it was `<app data>/companion/<project id>/memory/`, and it is
-now `<app data>/<project id>/memory/`. Nothing was deleted, but nothing moved
-either, so an agent no longer recalls what the companion remembered. To bring
-those facts back, copy each project's directory out of `<app data>/companion/`
-up one level, into `<app data>/` beside the others. ([#114](https://github.com/devlikebear/linetta/issues/114) tracks doing it for you.)
+**Facts remembered before 1.0 needed rescuing, and Linetta now does it for
+you.** 1.0 moved where that file is looked for — it was
+`<app data>/companion/<project id>/memory/`, and it is now
+`<app data>/<project id>/memory/` — but nothing moved the file, so for a while
+an agent no longer recalled what the companion had remembered. Nothing was ever
+deleted.
+
+Since 1.2, Linetta moves those directories up one level when it starts, and
+removes the `companion` folder once it is empty. There is nothing to click:
+open the app and the facts are back where an agent reads them
+([#114](https://github.com/devlikebear/linetta/issues/114)).
+
+Two cases it deliberately leaves alone, because guessing would risk your data:
+
+- **A project that already has memories in the new place.** If both
+  `<app data>/companion/<project id>/` and `<app data>/<project id>/` exist,
+  Linetta touches neither — merging two `experiences.jsonl` files is not
+  something it will do behind your back. The file is one JSON object per line,
+  so you can append the old file's lines to the new one yourself.
+- **A `companion` folder holding anything other than project memory.** Only a
+  directory containing `memory/experiences.jsonl` is treated as memory and
+  moved; anything else stays, and so does the folder around it. A symlink is
+  not followed either.
+
+So a `<app data>/companion/` still there after an upgrade is holding something
+Linetta would not move without you — or, rarely, something it could not move,
+such as a folder it lacks permission to write to. Nothing in it was changed,
+and the manual fix is the same in every case: move the project directories up
+one level into `<app data>/` yourself, or merge the lines by hand where both
+files exist.
 
 ## What happened to your API keys, and what changes in 1.2
 

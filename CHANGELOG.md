@@ -85,6 +85,15 @@
   gone is not listed in Settings → Skills, which is also the only way to reach
   its history. Copy the folder yourself or keep it in git; tracked as
   [#119](https://github.com/devlikebear/linetta/issues/119).
+- Fixed facts remembered before 1.0 being unreachable. 1.0 changed where
+  `memory/experiences.jsonl` is looked for without moving the file, so every
+  fact the retired companion had been told to remember sat in
+  `<app data>/companion/<project id>/` where nothing read it, and the story
+  brief's `## Memories` section was silently empty. Linetta now moves those
+  directories into place at startup and removes the emptied `companion` folder.
+  Nothing is merged: a project that already has memories in the new location is
+  left untouched, along with its old directory
+  ([#114](https://github.com/devlikebear/linetta/issues/114)).
 
 ## v1.1.0 - 2026-08-31
 

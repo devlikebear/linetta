@@ -250,8 +250,11 @@ Important data includes:
 - `backups/YYYY-MM-DD/`: daily backups of `library.db`, kept for 14 days — the database only, nothing else on this list;
 - `skills/`: the `SKILL.md` documents an agent writes and reads, one folder per skill;
 - `<project id>/memory/experiences.jsonl`: facts an agent has been told to remember;
-- `companion/`: the same file for facts remembered before 1.0, which nothing reads
-  any more (see [Moving to Linetta 1.0](docs/migrating-to-1.0.md));
+- `companion/`: where facts remembered before 1.0 were left. Linetta moves them
+  up beside the others at startup and removes this folder; it stays only when
+  something in it cannot be moved safely — a project that already has memories
+  in the new place, or a directory that is not memory at all (see
+  [Moving to Linetta 1.0](docs/migrating-to-1.0.md));
 - `settings.json`: app preferences.
 
 Manual and agent-write snapshots are retained indefinitely. Autosave snapshots are thinned over time, from every save during the first day to daily snapshots after 30 days.
