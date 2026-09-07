@@ -35,8 +35,13 @@ func TestScreenRejectsInvisibleCharacters(t *testing.T) {
 		"zero width space":       "안녕​하세요",
 		"zero width joiner":      "a‍b",
 		"zero width no-break":    "a\uFEFFb",
-		"left-to-right isolate":  "a⁦b",
-		"right-to-left override": "a‮b",
+		// Escapes, not the literal characters. A bidi override in source
+		// reorders everything after it in a reviewer's editor and in a diff,
+		// which is the whole reason Screen refuses it -- writing it literally
+		// here would make this file argue against itself, and it is what the
+		// static analyser flags. Same treatment as the BOM above.
+		"left-to-right isolate":  "a\u2066b",
+		"right-to-left override": "a\u202Eb",
 		"tag character":          "a\U000e0041b",
 		"soft hyphen":            "a­b",
 		// Variation Selector Supplement: same invisible-payload shape as the
