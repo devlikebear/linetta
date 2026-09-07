@@ -92,10 +92,16 @@ type Deps struct {
 	// worse outcome than the bytes the switch was meant to save. They are the
 	// one thing the prompt cannot learn from anywhere else.
 	//
-	// Funcs, and read per turn like SelfReviewEnabled, because the server is
-	// rebuilt per run: prompt and tools have to change on the same turn or
-	// they contradict each other on exactly one message. A nil func means
-	// enabled, the same default-when-unwired rule the fields above follow.
+	// Funcs, and read per turn like SelfReviewEnabled: a writer who flips a
+	// switch must not have to restart the app to be believed. Run reads them
+	// ONCE, at the top of the turn, and that single reading decides both
+	// halves — Service.session rebuilds the cached tool session when the
+	// value has changed since the last turn, and openingMessages builds the
+	// prompt from the value the session was built for. Prompt and tools
+	// therefore change together or not at all; reading them in two places is
+	// what let them contradict each other on exactly one message. A nil func
+	// means enabled, the same default-when-unwired rule the fields above
+	// follow.
 	MemoryToolsEnabled func() bool
 	SkillToolsEnabled  func() bool
 	// Undo reverts a structural batch. It must be bound to the SAME storyops
@@ -113,7 +119,9 @@ type Service struct {
 
 	// The tool session is built on the first run rather than at start-up:
 	// a writer who never opens the panel should not pay for a second MCP
-	// server, and Open must not fail because of one.
+	// server, and Open must not fail because of one. It is then kept for the
+	// life of the process, and rebuilt only when the writer's tool budget
+	// changes — see session.
 	toolsMu sync.Mutex
 	tools   *toolSession
 	closed  bool
@@ -157,26 +165,57 @@ func (s *Service) Close() error {
 	if tools == nil {
 		return nil
 	}
-	return tools.Close()
+	// retire, not Close: wg.Wait has returned, so every turn has released its
+	// reference and retire closes immediately. Going through the same door as
+	// a rebuild keeps one closing path — and one closed flag — rather than a
+	// second one that could double-close a session a rebuild already retired.
+	return tools.retire()
 }
 
-// session returns the connected tool session, building it once. A failed
-// attempt leaves nothing cached, so the next run retries instead of
+// session returns a connected tool session built for groups, and hands the
+// caller a REFERENCE to it: whoever takes one owes exactly one release once
+// its last use is over, or a superseded session is never closed.
+//
+// The session is cached, because a writer who never opens the Settings pane
+// should not pay to stand up a second MCP server on every turn. But the tool
+// set is fixed when the server is registered, so a cache keyed on nothing is
+// how the two tool-budget switches (#99) came to need a restart while the
+// prompt — rebuilt every turn from the live switches — went on describing
+// tools the cached server had not registered. Keying the cache on the groups
+// makes the flip cost one rebuild and every other turn nothing.
+//
+// The superseded session is retired rather than closed: a turn already in
+// flight is still calling tools on it, and its self-review may go on doing so
+// after the turn ends. retire hands the closing to whichever of them lets go
+// last.
+//
+// A failed attempt leaves nothing cached, so the next run retries instead of
 // inheriting a broken session forever. Once the service is closed it always
 // refuses, rather than silently rebuilding a session Close just tore down.
-func (s *Service) session(ctx context.Context) (*toolSession, error) {
+func (s *Service) session(ctx context.Context, groups toolGroups) (*toolSession, error) {
 	s.toolsMu.Lock()
 	defer s.toolsMu.Unlock()
 	if s.closed {
 		return nil, errors.New("agent: service is closed")
 	}
 	if s.tools != nil {
-		return s.tools, nil
+		if s.tools.groups == groups {
+			s.tools.acquire()
+			return s.tools, nil
+		}
+		stale := s.tools
+		// Cleared before the rebuild, so a rebuild that fails leaves no
+		// session behind that would serve the previous budget forever.
+		s.tools = nil
+		if err := stale.retire(); err != nil {
+			logf("agent: retiring the superseded tool session: %v", err)
+		}
 	}
-	ts, err := connectTools(ctx, s.deps.Register)
+	ts, err := connectTools(ctx, s.deps.Register, groups)
 	if err != nil {
 		return nil, err
 	}
+	ts.acquire()
 	s.tools = ts
 	return ts, nil
 }

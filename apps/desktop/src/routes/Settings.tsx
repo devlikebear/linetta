@@ -298,6 +298,20 @@ export function Settings() {
     },
   ];
 
+  /* The tool budget, but only when it is a real measurement (#99).
+     Truthiness is not the test: an engine whose measurement failed answers
+     with a well-formed `{tools: 0, bytes: 0, …}` — nothing in that payload
+     says "unknown" — and gating on the object alone rendered "the agent
+     currently gets 0 tools — about 0.0 kB" over a tool set of nineteen.
+     A budget of zero tools is not a state this pane can be in: the agent
+     always keeps the manuscript tools, which no switch can remove. So zero
+     means the number is not known, and an unknown number is drawn the same
+     way an absent one is — not at all. The engine omits the key in that case
+     too; this is the second lock on the same door, because the pane is what
+     the writer reads and inventing a number here is the drift the whole
+     feature exists to avoid. */
+  const toolBudget = current?.tool_budget && current.tool_budget.tools > 0 ? current.tool_budget : null;
+
   const replayOnboardingTour = () => {
     clearStoredPhase(WORKSPACE_PENDING_STORAGE_KEY);
     storePhase(MANUAL_PHASE_STORAGE_KEY, "library");
@@ -551,11 +565,11 @@ export function Settings() {
             <section className="settings-section">
               <h3>{t("settings.tools.title")}</h3>
               <p className="sd">{t("settings.tools.description")}</p>
-              {current.tool_budget && (
+              {toolBudget && (
                 <p className="sd" data-testid="tool-budget-current">
                   {t("settings.tools.current", {
-                    tools: String(current.tool_budget.tools),
-                    size: formatToolBytes(current.tool_budget.bytes),
+                    tools: String(toolBudget.tools),
+                    size: formatToolBytes(toolBudget.bytes),
                   })}
                 </p>
               )}
@@ -570,11 +584,11 @@ export function Settings() {
                 <span className="sk-wrap">
                   <span className="sk">{t("settings.tools.memory.title")}</span>
                   <span className="sd">{t("settings.tools.memory.description")}</span>
-                  {current.tool_budget && (
+                  {toolBudget && (
                     <span className="sd" data-testid="tool-budget-memory">
                       {t("settings.tools.groupCost", {
-                        tools: String(current.tool_budget.memory.tools),
-                        size: formatToolBytes(current.tool_budget.memory.bytes),
+                        tools: String(toolBudget.memory.tools),
+                        size: formatToolBytes(toolBudget.memory.bytes),
                       })}
                     </span>
                   )}
@@ -592,11 +606,11 @@ export function Settings() {
                 <span className="sk-wrap">
                   <span className="sk">{t("settings.tools.skills.title")}</span>
                   <span className="sd">{t("settings.tools.skills.description")}</span>
-                  {current.tool_budget && (
+                  {toolBudget && (
                     <span className="sd" data-testid="tool-budget-skills">
                       {t("settings.tools.groupCost", {
-                        tools: String(current.tool_budget.skills.tools),
-                        size: formatToolBytes(current.tool_budget.skills.bytes),
+                        tools: String(toolBudget.skills.tools),
+                        size: formatToolBytes(toolBudget.skills.bytes),
                       })}
                     </span>
                   )}
@@ -610,6 +624,20 @@ export function Settings() {
 
             {category === "skills" && (mcpAvailable || agentAvailable) && (
             <>
+            {/* With the skills tools switched off (#99) this whole pane is
+                still fully usable and none of it reaches the agent: the list
+                below is not put in its prompt, linetta_read_skill is not
+                registered, and the self-improvement switch under it governs a
+                pass whose first act would be to call a tool the agent does
+                not have — so it can never fire. Hiding the pane would be
+                worse: the skills are the writer's documents and they are
+                still theirs to write. What was missing is the sentence saying
+                nobody is reading them, and where to change that. */}
+            {current.skill_tools_enabled === false && (
+              <p className="hint" data-testid="skills-tools-off">
+                {t("settings.skills.toolsOff", { pane: t("settings.tools.title") })}
+              </p>
+            )}
             {/* The self-improvement loop (#98). It sits above the skill list
                 rather than in the providers pane because what it produces is
                 skills: the writer who wants to know why a skill appeared they

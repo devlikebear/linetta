@@ -650,4 +650,61 @@ describe("Settings", () => {
     expect(screen.queryByTestId("tool-budget-current")).not.toBeInTheDocument();
     expect(screen.queryByTestId("tool-budget-memory")).not.toBeInTheDocument();
   });
+
+  // A budget of zero is not the same as no budget, and only one of them is
+  // true. When the engine's measurement fails it can answer with a
+  // well-formed {tools: 0, bytes: 0, …} — nothing in that payload says
+  // "unknown" — and a pane that gates on the object alone renders "the agent
+  // currently gets 0 tools — about 0.0 kB" over a tool set of nineteen. Zero
+  // is not a state this pane can honestly be in: the manuscript tools are
+  // unconditional and no switch removes them.
+  it("draws no numbers when the engine reports a budget of zero", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({
+      ...baseSettings,
+      tool_budget: {
+        tools: 0,
+        bytes: 0,
+        memory: { tools: 0, bytes: 0 },
+        skills: { tools: 0, bytes: 0 },
+      },
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    // The switches are still there — an unmeasurable budget does not take the
+    // writer's control away.
+    expect(await screen.findByRole("button", { name: /기억 툴/ })).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-budget-current")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tool-budget-memory")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tool-budget-skills")).not.toBeInTheDocument();
+  });
+
+  // With the skills tools off, the Skills pane still lets the writer author
+  // skills — which is right, they are the writer's documents — but nothing
+  // reads them, and the self-review switch below governs a pass that can
+  // never fire. The pane has to say so.
+  it("says so in the Skills pane when the skills tools are switched off", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings, skill_tools_enabled: false });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+    const notice = await screen.findByTestId("skills-tools-off");
+    // It names where to switch them back on, or the writer is told about a
+    // control they now have to hunt for.
+    expect(notice).toHaveTextContent("툴 예산");
+  });
+
+  it("shows no such notice while the skills tools are on", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-skills"));
+    expect(await screen.findByText(/스스로 익히기/)).toBeInTheDocument();
+    expect(screen.queryByTestId("skills-tools-off")).not.toBeInTheDocument();
+  });
 });

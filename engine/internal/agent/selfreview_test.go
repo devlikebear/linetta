@@ -299,6 +299,14 @@ func TestSelfReview_startsAtEightExecutedToolCallsAndNotAtSeven(t *testing.T) {
 				t.Fatalf("Run: %v", err)
 			}
 			waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+			// BEFORE Close, and that ordering is the test's own correctness:
+			// Close cancels every tracked run, the review among them, so a
+			// review that had not yet reached the provider when Close landed
+			// never will. Waiting for it afterwards was a race the machine
+			// won often enough to look like a passing test.
+			if tc.want > 0 {
+				waitFor(t, "the review to reach the provider", func() bool { return c.reviews() > 0 })
+			}
 			if err := svc.Close(); err != nil {
 				t.Fatalf("Close: %v", err)
 			}
@@ -307,11 +315,11 @@ func TestSelfReview_startsAtEightExecutedToolCallsAndNotAtSeven(t *testing.T) {
 				t.Errorf("a turn of %d tool calls considered a review %d times, want %d "+
 					"(the threshold is %d)", tc.toolCalls, got, tc.want, selfReviewThreshold)
 			}
+			// For the below-threshold case Close is the barrier: it waits for
+			// the turn's goroutine, which consults the threshold
+			// synchronously, so by here the answer is final.
 			if tc.want == 0 && c.reviews() != 0 {
 				t.Errorf("a turn below the threshold made %d review calls to the provider", c.reviews())
-			}
-			if tc.want > 0 {
-				waitFor(t, "the review to reach the provider", func() bool { return c.reviews() > 0 })
 			}
 		})
 	}

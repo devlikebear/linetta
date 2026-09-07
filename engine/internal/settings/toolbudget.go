@@ -46,7 +46,15 @@ type ToolBudgetGroup struct {
 // stays a pure function of the tool set — it can be called for a hypothetical
 // combination, and it cannot deadlock against the lock the store holds while
 // building the settings.get view.
-type ToolBudgetFunc func(memoryTools, skillTools bool) ToolBudget
+//
+// The bool is "this is a real measurement". A producer that could not measure
+// must return false, NOT a zero ToolBudget: a zero is a perfectly plausible
+// budget on the wire — nothing about `{"tools":0,"bytes":0}` says "unknown" —
+// and the pane that received one drew "the agent currently gets 0 tools,
+// about 0.0 kB" over a tool set of nineteen. An absent budget is the only
+// honest way to say the number is not known, and it is the case the pane
+// already knows how to draw: it draws nothing.
+type ToolBudgetFunc func(memoryTools, skillTools bool) (ToolBudget, bool)
 
 // WithToolBudget installs the measurement settings.get reports, and returns s
 // so it can be chained onto a constructor. A nil f (or no call at all) leaves
@@ -59,11 +67,17 @@ func (s *Store) WithToolBudget(f ToolBudgetFunc) *Store {
 }
 
 // toolBudgetView measures the budget for the switches as they stand, or
-// returns nil when nothing wired a producer.
+// returns nil when nothing wired a producer — or when the producer that is
+// wired could not measure.
 //
-// It reads the two switches through the accessors rather than under its own
-// lock: redactedSettingsView takes s.mu itself, and taking it again here is
-// the one shape of this that deadlocks.
+// The two switches arrive as arguments rather than being read back off the
+// store, and that is what keeps the answer self-consistent: the caller,
+// redactedSettingsView, is describing one SNAPSHOT of the config, and a
+// budget that went and read s.cfg again would be free to measure a different
+// one — a concurrent Set landing in between, or Set's own call on the `next`
+// it has not committed yet, which is how a pane could be told 16 tools beside
+// two switches that both say on. s.mu is taken here only for the producer
+// field, which any WithToolBudget can replace.
 func (s *Store) toolBudgetView(memoryTools, skillTools bool) *ToolBudget {
 	s.mu.RLock()
 	f := s.toolBudget
@@ -71,6 +85,9 @@ func (s *Store) toolBudgetView(memoryTools, skillTools bool) *ToolBudget {
 	if f == nil {
 		return nil
 	}
-	b := f(memoryTools, skillTools)
+	b, ok := f(memoryTools, skillTools)
+	if !ok {
+		return nil
+	}
 	return &b
 }

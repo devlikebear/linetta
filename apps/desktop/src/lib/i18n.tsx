@@ -887,6 +887,11 @@ const messages = {
     // 스스로 배우는 고리(#98). 작가가 시키지 않은 프로바이더 호출이므로
     // 설명이 그 사실을 먼저 말한다: 언제 도는지, 무엇을 남기는지, 끄면 무엇이
     // 멈추는지.
+    // 스킬 툴이 꺼져 있을 때(#99). 이 화면은 그대로 쓸 수 있지만, 여기서 쓴
+    // 스킬을 읽는 쪽이 없다는 사실 — 그리고 어디서 다시 켜는지 — 를 말해
+    // 주지 않으면 작가는 아무도 읽지 않는 문서를 계속 쓰게 된다.
+    "settings.skills.toolsOff":
+      "스킬 툴이 꺼져 있습니다. 아래 스킬은 에이전트에게 전달되지 않고, 에이전트가 스킬을 읽거나 쓸 수도 없습니다 — 바로 아래 '스스로 익히기'도 켜 두든 꺼 두든 동작하지 않습니다. 다시 켜려면 {pane}으로 가세요.",
     "settings.skills.selfReview.title": "스스로 익히기",
     "settings.skills.selfReview.enabled": "작업이 끝나면 배운 것을 정리",
     "settings.skills.selfReview.description":
@@ -1856,6 +1861,8 @@ const messages = {
     "settings.skills.title": "Skills",
     "settings.skills.description":
       "Notes on techniques the agent has worked out. They hold methods, not facts — facts live in the fact book and in memory.",
+    "settings.skills.toolsOff":
+      "The skills tools are switched off. The skills below are not given to the agent, and it can neither read nor write one — so the self-review switch under this notice never fires, whichever way it is set. Switch the tools back on under {pane}.",
     "settings.skills.selfReview.title": "Learning from its own work",
     "settings.skills.selfReview.enabled": "Review what a turn taught it",
     "settings.skills.selfReview.description":
@@ -2797,6 +2804,8 @@ const messages = {
     "settings.skills.title": "スキル",
     "settings.skills.description":
       "エージェントが身につけた手法を書き留める文書です。事実ではなく方法を書きます — 事実はファクトブックと記憶にあります。",
+    "settings.skills.toolsOff":
+      "スキルツールがオフになっています。下のスキルはエージェントに渡されず、エージェントがスキルを読むことも書くこともできません — すぐ下の「自分の仕事から学ぶ」も、オンオフにかかわらず動きません。もう一度オンにするには {pane} へ。",
     "settings.skills.selfReview.title": "自分の仕事から学ぶ",
     "settings.skills.selfReview.enabled": "作業のあとに学んだことを振り返る",
     "settings.skills.selfReview.description":

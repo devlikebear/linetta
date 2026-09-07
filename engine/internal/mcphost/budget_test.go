@@ -108,7 +108,10 @@ func TestDefaultsServeTheWholeToolSet(t *testing.T) {
 // stays reported whether or not it is currently on, because that is the price
 // the writer is deciding about.
 func TestMeasureToolBudgetTracksTheSwitches(t *testing.T) {
-	full := MeasureToolBudget(true, true)
+	full, ok := MeasureToolBudget(true, true)
+	if !ok {
+		t.Fatal("the tool set could not be measured at all")
+	}
 	if full.Tools != len(ReadToolNames)+len(WriteToolNames) {
 		t.Fatalf("default budget = %d tools, want %d (measurement failed?)",
 			full.Tools, len(ReadToolNames)+len(WriteToolNames))
@@ -121,7 +124,7 @@ func TestMeasureToolBudgetTracksTheSwitches(t *testing.T) {
 			full.Memory.Tools, full.Skills.Tools, len(MemoryToolNames), len(SkillToolNames))
 	}
 
-	none := MeasureToolBudget(false, false)
+	none, _ := MeasureToolBudget(false, false)
 	if none.Tools != full.Tools-full.Memory.Tools-full.Skills.Tools {
 		t.Errorf("with both groups off the budget is %d tools; %d minus the two groups is %d",
 			none.Tools, full.Tools, full.Tools-full.Memory.Tools-full.Skills.Tools)

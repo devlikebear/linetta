@@ -112,7 +112,7 @@ func TestToolBudget_reportedOnlyWhenMeasured(t *testing.T) {
 	}
 
 	var sawMemory, sawSkills bool
-	s.WithToolBudget(func(memoryTools, skillTools bool) ToolBudget {
+	s.WithToolBudget(func(memoryTools, skillTools bool) (ToolBudget, bool) {
 		sawMemory, sawSkills = memoryTools, skillTools
 		b := ToolBudget{
 			Tools:  16,
@@ -128,7 +128,7 @@ func TestToolBudget_reportedOnlyWhenMeasured(t *testing.T) {
 			b.Tools += b.Skills.Tools
 			b.Bytes += b.Skills.Bytes
 		}
-		return b
+		return b, true
 	})
 
 	got, err = s.Get(ctx)
@@ -177,8 +177,8 @@ func TestToolBudget_neverPersisted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	s.WithToolBudget(func(bool, bool) ToolBudget {
-		return ToolBudget{Tools: 19, Bytes: 27687}
+	s.WithToolBudget(func(bool, bool) (ToolBudget, bool) {
+		return ToolBudget{Tools: 19, Bytes: 27687}, true
 	})
 	if _, err := s.Set(ctx, Patch{MemoryToolsEnabled: boolPtr(false)}); err != nil {
 		t.Fatalf("Set: %v", err)
@@ -192,5 +192,26 @@ func TestToolBudget_neverPersisted(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "memory_tools_enabled") {
 		t.Errorf("settings.json is missing memory_tools_enabled:\n%s", body)
+	}
+}
+
+// A measurement that failed is not a measurement of zero, and the store is
+// where that distinction has to be kept: `{"tools":0,"bytes":0}` reaches the
+// pane as a perfectly ordinary budget, and the pane drew it — "the agent
+// currently gets 0 tools — about 0.0 kB" — over a tool set of nineteen. The
+// producer says false, the key goes missing, and the pane's existing
+// no-budget path draws nothing at all.
+func TestToolBudget_aFailedMeasurementIsNotABudgetOfZero(t *testing.T) {
+	ctx := context.Background()
+	s := newStoreOnTemp(t)
+	s.WithToolBudget(func(bool, bool) (ToolBudget, bool) { return ToolBudget{}, false })
+
+	got, err := s.Get(ctx)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ToolBudget != nil {
+		t.Errorf("a measurement that failed was reported as a budget of %+v; "+
+			"settings.get must omit it entirely", *got.ToolBudget)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -32,15 +33,85 @@ const maxToolResultChars = 24000
 // full: an agent that cannot write the manuscript has no reason to exist.
 type RegisterTools func(*mcp.Server)
 
-// toolSession is one connected client/server pair. One per engine: the tools
-// are stateless, and a session per run would re-handshake on every turn.
+// toolSession is one connected client/server pair. Normally one per engine:
+// the tools are stateless, and a session per run would re-handshake on every
+// turn. It is rebuilt only when the writer's tool budget changes, because the
+// tool set is fixed at registration time and a live server cannot be
+// re-registered — see Service.session.
 type toolSession struct {
 	client *mcp.ClientSession
 	server *mcp.ServerSession
+	// groups is the tool budget (#99) the server was BUILT for. The session
+	// is cached across turns, so this is the only thing that can tell a later
+	// turn whether the cached tools still match the switches its own prompt
+	// is about to describe.
+	groups toolGroups
+
+	// mu guards the retirement bookkeeping. A superseded session outlives the
+	// call that swapped it out: a turn already in flight holds it for its
+	// whole life, and its self-review for longer still. So a rebuild may not
+	// close it — it retires it, and the last holder to let go does the
+	// closing. Cancelling those turns instead would be a switch flip that
+	// kills the message the writer is waiting on.
+	mu      sync.Mutex
+	refs    int
+	retired bool
+	closed  bool
+}
+
+// acquire takes one reference. Only ever called under Service.toolsMu, so a
+// session handed to a turn can never be one already closed.
+func (s *toolSession) acquire() {
+	s.mu.Lock()
+	s.refs++
+	s.mu.Unlock()
+}
+
+// release drops one reference, closing the session if it has been retired and
+// this was the last holder. Every acquire owes exactly one release.
+func (s *toolSession) release() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	s.refs--
+	last := s.retired && s.refs <= 0 && !s.closed
+	if last {
+		s.closed = true
+	}
+	s.mu.Unlock()
+	if !last {
+		return nil
+	}
+	return s.Close()
+}
+
+// retire marks the session superseded so no further turn is handed it, and
+// closes it right away when nobody is holding it. A held session is closed by
+// its last release instead.
+func (s *toolSession) retire() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	s.retired = true
+	now := s.refs <= 0 && !s.closed
+	if now {
+		s.closed = true
+	}
+	s.mu.Unlock()
+	if !now {
+		return nil
+	}
+	return s.Close()
 }
 
 // connectTools builds the server, registers the tools and dials it in memory.
-func connectTools(ctx context.Context, register RegisterTools) (*toolSession, error) {
+// groups is recorded on the session rather than consulted here: what the
+// tools actually are is register's business (it reads the same switches off
+// the settings store), and this is the label that lets a later turn tell
+// whether that reading is still current.
+func connectTools(ctx context.Context, register RegisterTools, groups toolGroups) (*toolSession, error) {
 	if register == nil {
 		return nil, fmt.Errorf("agent: no tool registration")
 	}
@@ -63,7 +134,7 @@ func connectTools(ctx context.Context, register RegisterTools) (*toolSession, er
 		_ = ss.Close()
 		return nil, fmt.Errorf("agent: connect tool client: %w", err)
 	}
-	return &toolSession{client: cs, server: ss}, nil
+	return &toolSession{client: cs, server: ss, groups: groups}, nil
 }
 
 func (s *toolSession) Close() error {

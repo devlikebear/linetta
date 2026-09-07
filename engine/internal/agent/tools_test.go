@@ -51,7 +51,7 @@ func stubTools(seenRunID *string) RegisterTools {
 
 func newSession(t *testing.T, register RegisterTools) *toolSession {
 	t.Helper()
-	s, err := connectTools(context.Background(), register)
+	s, err := connectTools(context.Background(), register, allToolGroups())
 	if err != nil {
 		t.Fatalf("connectTools: %v", err)
 	}

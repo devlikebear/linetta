@@ -87,7 +87,9 @@
   removes the instructions that name its tools. With the memory tool off the
   recorded documents are still read back to the agent, which simply cannot add
   to them; with the skills tools off the skill list goes too, because a list
-  with no way to open a body is only names. Nothing is deleted either way.
+  with no way to open a body is only names. Nothing is deleted either way, and
+  either switch takes effect on your next message rather than at the next
+  restart.
 - Skills live in files, and **the daily backup does not carry them**: it is
   `VACUUM INTO` on `library.db` and copies nothing else under the data
   directory. It does carry their history — every write and delete lands a row

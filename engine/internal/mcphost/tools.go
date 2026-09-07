@@ -123,12 +123,16 @@ func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchI
 // Host.Restart (see mcpController.Enable), which builds a fresh server, so a
 // running server never serves a stale tool set.
 // The two optional groups are taken from d.Settings at the moment the server
-// is built, and that is what makes the switches live: the built-in agent
-// builds a fresh server for every run (agent/tools.go connectTools) and the
-// MCP host builds one per HTTP session (host.go's StreamableHTTPHandler), so
-// neither needs a restart to pick up a change. A nil Settings — the zero
-// ToolDeps a test registers, and a build with no store open — means the
-// defaults, which is every group on.
+// is built, which means a server already built serves the tool set it was
+// registered with until something builds another one. The MCP host builds one
+// per HTTP session (host.go's StreamableHTTPHandler), so an external client
+// picks up a change on its next connection. The built-in agent CACHES its
+// server across turns, so it is the agent's own business to notice a change
+// and rebuild — see agent.Service.session, which keys that cache on these
+// same two groups. Neither needs an engine restart.
+//
+// A nil Settings — the zero ToolDeps a test registers, and a build with no
+// store open — means the defaults, which is every group on.
 func (d ToolDeps) Register(s *mcp.Server, mode string) {
 	groups := d.toolGroups()
 	d.registerReadTools(s, groups)

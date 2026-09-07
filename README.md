@@ -185,6 +185,9 @@ the built-in agent and any MCP client (`memory_tools_enabled` and
 `skill_tools_enabled` in `settings.json`; both on by default). Switching a
 group off also removes the instructions that name its tools — a prompt telling
 an agent to use a tool it has not been given is worse than the tool's cost.
+Either switch takes effect on your very next message; there is nothing to
+restart. With the skills tools off the self-improvement pass cannot run at
+all, and the Skills pane says so.
 
 The two groups lose different things, and that is deliberate. With the memory
 tool off, what is already recorded is still read back to the agent — it just

@@ -59,10 +59,32 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tools, err := s.session(ctx)
+	// The two tool-budget switches (#99) are read ONCE, here, and the same
+	// value then decides both halves of the turn: which tools the session is
+	// built with, below, and which tools the prompt is allowed to name
+	// (openingMessages reads st.groups, it does not read the switches again).
+	// Reading them twice is how a flip mid-turn could still produce a prompt
+	// and a tool list that disagree — the one failure this feature exists to
+	// prevent.
+	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled)
+	tools, err := s.session(ctx, groups)
 	if err != nil {
 		return "", err
 	}
+	// The turn now holds a reference to the session, and owes exactly one
+	// release. Handed to the goroutine below on success; dropped here on
+	// every path that never gets that far, or a session the writer's next
+	// flip retires would never be closed.
+	handedOff := false
+	defer func() {
+		if handedOff {
+			return
+		}
+		if err := tools.release(); err != nil {
+			logf("agent: releasing the tool session: %v", err)
+		}
+	}()
+
 	schemas, err := tools.schemas(ctx)
 	if err != nil {
 		return "", err
@@ -121,13 +143,20 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		model:     resolved.Model,
 		session:   tools,
 		schemas:   schemas,
+		groups:    groups,
 		language:  s.language(),
 	}
 
+	handedOff = true
 	go func() {
 		defer cancel()
 		defer s.runs.finish(projectID, runID)
 		defer s.leave()
+		// Declared AFTER leave so it runs BEFORE it: Close waits on the wait
+		// group and then retires the session it snapshotted, so a release
+		// that landed after leave could let Close see a reference count that
+		// is not yet zero and skip the close entirely.
+		defer releaseSession(st.session)
 		// The highest-risk goroutine in the feature: nothing here may take
 		// the whole engine process down with it. A panic ends this one turn
 		// with an agent.error instead.
@@ -161,7 +190,21 @@ type loopState struct {
 	model    string
 	session  *toolSession
 	schemas  []llm.ToolSchema
+	// groups is the tool budget this turn was started with (#99), read once
+	// in Run. session was built for it and schemas is the tool list that came
+	// back from it, so a prompt built from this same value is the only way
+	// the two can be guaranteed to describe the same tools.
+	groups   toolGroups
 	language string
+}
+
+// releaseSession drops one reference and logs a close that failed. A helper
+// only so `defer` can carry it: a deferred method value would be fine, but
+// the error a close returns would then go nowhere at all.
+func releaseSession(ts *toolSession) {
+	if err := ts.release(); err != nil {
+		logf("agent: releasing the tool session: %v", err)
+	}
 }
 
 // Every payload below carries project_id beside run_id, spelled the same way
@@ -324,12 +367,14 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	if s.deps.Memory != nil {
 		profile, notes = s.deps.Memory.Memories(ctx, st.req.ProjectID)
 	}
-	// Read the two tool-budget switches HERE, in the same function that
-	// builds the prompt, rather than once when the service was constructed:
-	// the turn's tool server is built from the same store moments earlier
-	// (connectTools → mcphost.Register), so this is what keeps the prompt and
-	// the tool list describing the same turn. See Deps.MemoryToolsEnabled.
-	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled)
+	// The tool budget is taken from the TURN, not read from the switches
+	// again. Run read them once and built this turn's tool session for that
+	// same value (Service.session), so the prompt below can only name tools
+	// st.schemas actually contains. Re-reading here would put the flip back
+	// in the gap between the two — the writer switching the skills tools on
+	// mid-session would get a prompt telling the agent to record a skill with
+	// a tool this turn was never offered.
+	groups := st.groups
 	var skills []agentskills.Skill
 	// Not even asked for when the group is off: the list has no reader then
 	// (systemPrompt drops the block), and a skills read is filesystem work on

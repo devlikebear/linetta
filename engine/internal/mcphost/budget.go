@@ -91,8 +91,9 @@ func ToolNames(mode string, groups ToolGroups) []string {
 //
 // Once, because the tool set is static for the life of the process and the
 // measurement stands up a client/server pair. A failure yields an empty map,
-// which surfaces as a zero budget the pane simply does not draw — a number
-// nobody can measure must not become a number somebody made up.
+// which MeasureToolBudget reports as no budget at all rather than as a budget
+// of zero — a number nobody can measure must not become a number somebody
+// made up, and a zero on the wire is a number.
 var toolSchemaBytes = sync.OnceValue(measureToolSchemaBytes)
 
 func measureToolSchemaBytes() map[string]int {
@@ -145,8 +146,20 @@ func measureToolSchemaBytes() map[string]int {
 //
 // It satisfies settings.ToolBudgetFunc, which is how it reaches settings.get
 // without settings importing this //go:build !mobile package.
-func MeasureToolBudget(memoryTools, skillTools bool) settings.ToolBudget {
+//
+// The false return is the measurement having failed — the in-memory transport
+// refused, or tools/list did. It is NOT the same as a budget of zero, and the
+// difference is the whole reason the bool exists: measureToolSchemaBytes
+// answers a failure with an empty map, and summing an empty map produces a
+// perfectly well-formed {tools: 0, bytes: 0} that a pane cannot tell from a
+// real measurement of a server with no tools. Reporting no budget at all is
+// what makes the pane's own guard — draw the numbers only when there are
+// numbers — actually reachable.
+func MeasureToolBudget(memoryTools, skillTools bool) (settings.ToolBudget, bool) {
 	sizes := toolSchemaBytes()
+	if len(sizes) == 0 {
+		return settings.ToolBudget{}, false
+	}
 	groups := ToolGroups{Memory: memoryTools, Skills: skillTools}
 
 	sum := func(names []string) settings.ToolBudgetGroup {
@@ -166,5 +179,5 @@ func MeasureToolBudget(memoryTools, skillTools bool) settings.ToolBudget {
 		Bytes:  current.Bytes,
 		Memory: sum(MemoryToolNames),
 		Skills: sum(SkillToolNames),
-	}
+	}, true
 }

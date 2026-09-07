@@ -310,9 +310,16 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 			"verification status. Use them for real-world details instead of inventing facts.",
 	}, record(d, "linetta_get_fact_cards", d.getFactCards))
 
-	if !groups.Skills {
-		return
+	// A block rather than an early return: an early return is correct only
+	// while linetta_read_skill happens to be registered last, and a tool
+	// appended after it would silently vanish whenever the writer switched
+	// the skills group off — a missing tool nobody would think to look for.
+	if groups.Skills {
+		registerReadSkillTool(s, d)
 	}
+}
+
+func registerReadSkillTool(s *mcp.Server, d ToolDeps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_read_skill",
 		Description: "Read one skill in full — the whole how-to document, not the one-line description you " +
