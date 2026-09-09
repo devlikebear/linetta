@@ -974,6 +974,7 @@ const messages = {
     "settings.providers.model": "모델",
     "settings.providers.model.default": "프로바이더 기본값",
     "settings.providers.model.refresh": "새로고침",
+    "settings.providers.model.listFailed": "모델 목록을 가져오지 못했습니다. 아는 모델 이름을 직접 입력하거나, 비워 두면 프로바이더 기본값을 씁니다.",
     // Design spec 5.4: the sentence the writer ticks has to say *what*
     // leaves the machine, not only where it goes. The agent reads story
     // context, summaries and the character/plot/fact cards through its MCP
@@ -1933,6 +1934,7 @@ const messages = {
     "settings.providers.model": "Model",
     "settings.providers.model.default": "Provider default",
     "settings.providers.model.refresh": "Refresh",
+    "settings.providers.model.listFailed": "Could not load the model list. Type a model name you know, or leave it empty to use the provider default.",
     "settings.providers.consent":
       "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, and the list of my works; that the writer profile, the work notes and my skills' names and descriptions ride along with every request, the writer profile and any skill whose scope is every work being global rather than scoped to the work I have open; that after a tool-heavy turn one further call may go out asking what it learned, which I can switch off under Settings → Skills; and that all of it is sent to {provider} and nowhere else",
     "settings.providers.consent.customEndpoint": "the OpenAI-compatible endpoint set above",
@@ -2875,6 +2877,7 @@ const messages = {
     "settings.providers.model": "モデル",
     "settings.providers.model.default": "プロバイダーの既定値",
     "settings.providers.model.refresh": "更新",
+    "settings.providers.model.listFailed": "モデル一覧を取得できませんでした。知っているモデル名を直接入力するか、空のままにするとプロバイダーの既定値を使います。",
     "settings.providers.consent":
       "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧を読み取ることができ、さらに作家プロフィールと作品ノートとスキルの名前・説明が毎回のリクエストとともに送られ、そのうち作家プロフィールと適用範囲が「すべての作品」のスキルは開いている作品に限定されず、手のかかったターンのあとには何を学んだかを尋ねる呼び出しがもう一度送られることがあり（設定 → スキルでオフにできます）、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
     "settings.providers.consent.customEndpoint": "上で設定した OpenAI 互換エンドポイント",
