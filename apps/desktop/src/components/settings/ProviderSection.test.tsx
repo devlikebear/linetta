@@ -465,7 +465,9 @@ describe("ProviderSection", () => {
     await userEvent.click(screen.getByTestId("provider-model-refresh"));
 
     const modelError = await screen.findByTestId("provider-model-error");
-    expect(modelError.textContent).toBe("errors.providerUnreachable");
+    expect(modelError.textContent).toBe(
+      "settings.providers.model.listFailed errors.providerUnreachable",
+    );
     expect(screen.queryByTestId("provider-error")).toBeNull();
 
     const input = screen.getByTestId("provider-model-input") as HTMLInputElement;

@@ -915,8 +915,14 @@ export function ProviderSection() {
           {t("settings.providers.model.refresh")}
         </button>
         {modelsError ? (
+          // Leads with what actually failed and what to do about it. The
+          // reason sentence alone reads as a verdict on the credential — for
+          // auth_failed it says "sign in again", which is the wrong advice
+          // when the login works and only the list does not (#126). The
+          // reason still follows, because a 401 or a dead network is worth
+          // knowing; it just is not the headline.
           <p className="sd" data-testid="provider-model-error">
-            {rpcErrorMessage(modelsError, t)}
+            {t("settings.providers.model.listFailed")} {rpcErrorMessage(modelsError, t)}
           </p>
         ) : null}
       </div>
