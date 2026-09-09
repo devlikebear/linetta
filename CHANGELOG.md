@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.2.0 - 2026-09-06
+## v1.2.0 - 2026-09-09
 
 - Added a built-in AI writing agent: connect a provider — sign in with a
   ChatGPT account, or add an API key for Anthropic, Google Gemini, or an
@@ -118,6 +118,19 @@
   left in that file does nothing, because Linetta reads provider keys only from
   the OS credential store
   ([#113](https://github.com/devlikebear/linetta/issues/113)).
+- Fixed the model list for a ChatGPT (Codex) sign-in never loading, and the
+  failure saying to sign in again when the sign-in was fine. The list was
+  asked of the wrong host with the wrong caller version — a request that
+  either got a 401, which then spent a perfectly good refresh token, or a 400.
+  It now comes from the same backend the chat goes to and lists what that
+  account can use, `gpt-6-astra` first. A model list that still will not load
+  now says so, and says what to do — type a model name you know, or leave the
+  field empty for the provider default — with the reason after it rather than
+  as the headline ([#126](https://github.com/devlikebear/linetta/issues/126)).
+- Settings panes added since 1.1 — AI provider, Memory, MCP, Sync, Backup —
+  now read like the rest: help lines, counters and errors at the same small
+  muted size, buttons on the same style, and the provider chips on the same
+  segmented control.
 
 ## v1.1.0 - 2026-08-31
 
