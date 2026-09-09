@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.1 - 2026-09-09
+
+- Added an **Agent** button to the workspace toolbar, beside Contextual edit,
+  Story World and Fact Book. 1.2.0 opened the built-in agent's panel only from
+  `Cmd/Ctrl+J` and the command palette, so a writer who installed it saw no
+  sign of the feature the release was about. The button shows only in builds
+  that carry the agent, like the panel itself.
+
 ## v1.2.0 - 2026-09-09
 
 - Added a built-in AI writing agent: connect a provider — sign in with a

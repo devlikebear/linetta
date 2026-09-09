@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard } from "lucide-react";
+import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
 import { McpToggle } from "../components/McpToggle";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
@@ -1612,6 +1612,23 @@ export function Workspace() {
           >
             <BookOpen size={15} /> {t("factBook.title")}
           </button>
+          {/* The agent panel shipped in 1.2.0 reachable only by Cmd/Ctrl+J and
+              the command palette. A writer who installed the release saw the
+              three panel buttons here and concluded the feature was gone. It
+              sits with the other right-hand panels because it shares their
+              slot, and is gated on agent_available like everything else
+              about it. */}
+          {agentAvailable && (
+            <button
+              type="button"
+              className={`ws-tool${agentOpen ? " is-active" : ""}`}
+              onClick={toggleAgent}
+              title={t("workspace.command.agentPanel")}
+              data-testid="ws-tool-agent"
+            >
+              <Bot size={15} /> {t("agentPanel.title")}
+            </button>
+          )}
           <div className="ws-sep" />
           <button type="button" className="ws-tool" onClick={enterZen} data-tour="workspace-zen">
             <Maximize2 size={15} /> ZEN
