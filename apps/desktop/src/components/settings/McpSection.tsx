@@ -286,6 +286,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
       {!running && (
         <button
           type="button"
+          className="btn ghost sm"
           disabled={busy || !saved.consented}
           onClick={() => void enable()}
           data-testid="mcp-enable"
@@ -295,13 +296,15 @@ export function McpSection({ bridgePath }: McpSectionProps) {
       )}
       {running && (
         <>
-          <p data-testid="mcp-running">{t("settings.mcp.running", { port: String(port) })}</p>
-          <button type="button" disabled={busy} onClick={() => void disable()} data-testid="mcp-disable">
-            {t("settings.mcp.disable")}
-          </button>
-          <button type="button" disabled={busy} onClick={() => void regenerate()} data-testid="mcp-regenerate">
-            {t("settings.mcp.regenerate")}
-          </button>
+          <p className="sd" data-testid="mcp-running">{t("settings.mcp.running", { port: String(port) })}</p>
+          <div className="field-actions">
+            <button type="button" className="btn ghost sm" disabled={busy} onClick={() => void disable()} data-testid="mcp-disable">
+              {t("settings.mcp.disable")}
+            </button>
+            <button type="button" className="btn ghost sm" disabled={busy} onClick={() => void regenerate()} data-testid="mcp-regenerate">
+              {t("settings.mcp.regenerate")}
+            </button>
+          </div>
         </>
       )}
 
@@ -337,6 +340,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
                       confirmClient !== c.id && (
                         <button
                           type="button"
+                          className="btn ghost sm"
                           disabled={busyClient != null}
                           onClick={() => {
                             setConfirmClient(c.id);
@@ -368,6 +372,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
                       <pre>{clientPreview(c)}</pre>
                       <button
                         type="button"
+                        className="btn ghost sm"
                         disabled={busyClient != null}
                         onClick={() => void connectClient(c.id)}
                         data-testid={`mcp-client-${c.id}-apply`}
@@ -376,6 +381,7 @@ export function McpSection({ bridgePath }: McpSectionProps) {
                       </button>{" "}
                       <button
                         type="button"
+                        className="btn ghost sm"
                         disabled={busyClient != null}
                         onClick={() => setConfirmClient(null)}
                       >

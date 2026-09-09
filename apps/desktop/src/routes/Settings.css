@@ -220,16 +220,81 @@
   width: 100%;
 }
 
-/* Standalone descriptive paragraphs (.sd used outside a .set-row). */
-.settings .settings-section > .sd {
+/* Descriptive lines (.sd) anywhere in Settings.
+   App.css styles .sd only inside a .set-row, and the rule here used to reach
+   only a section's direct children. Every pane written since then puts its
+   help, counter and error lines inside a .modal-field, a details block or a
+   status card — and those fell through to the page's serif body size, so a
+   "0 / 1400자" counter or a refresh error read as large as a heading while
+   the same sentence one pane over was small and muted. One rule for all of
+   them; the direct-child form below only keeps its paragraph spacing. */
+.settings .sd {
   font-size: 12px;
   color: var(--muted);
-  margin: 6px 0 12px;
   line-height: 1.55;
+  margin: 6px 0 0;
 }
-.settings .settings-section > .sd code {
+.settings .settings-section > .sd {
+  margin: 6px 0 12px;
+}
+/* The two places App.css already spaced .sd on its own terms keep them: a
+   .set-row's second line sits tight under its label, and the folded legacy
+   block's note keeps its breathing room. */
+.settings .set-row .sd {
+  margin-top: 2px;
+}
+.settings .settings-legacy > .sd {
+  margin: 12px 0;
+}
+.settings .sd code {
   font-family: var(--font-mono);
   font-size: 11px;
+}
+/* <output> is inline by default; as a line under a field it needs to be a
+   line. */
+.settings output.sd {
+  display: block;
+}
+/* A sub-heading inside a section (백업에서 복원). Same caption voice as h3,
+   one step quieter, with room above it since it follows a card. */
+.settings .settings-section h4 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: var(--label-track);
+  text-transform: var(--label-case);
+  color: var(--muted);
+  margin: 22px 0 12px;
+}
+.settings .settings-section h4 + .restore-block > .sd:first-child {
+  margin-top: 0;
+}
+/* A checkbox with its sentence (폴더 동기화 사용). The same shape as
+   .modal-field.modal-check, which is what the provider consent uses. */
+.settings .set-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 12px 0 4px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  cursor: pointer;
+}
+.settings .set-toggle > input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+}
+/* Buttons that sit under a field or beside one another in a pane. */
+.settings .modal-field > .btn,
+.settings .modal-field > .btn + .btn {
+  margin-top: 8px;
+  margin-right: 6px;
+}
+.settings .field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .settings .settings-section-head,
@@ -372,9 +437,6 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-soft);
 }
 .settings .provider-test .sd {
   margin: 0;

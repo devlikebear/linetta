@@ -745,6 +745,7 @@ export function ProviderSection() {
           ) : null}
           <button
             type="button"
+            className="btn ghost sm"
             disabled={busy}
             onClick={() =>
               confirmingPlaintextDelete
@@ -762,11 +763,12 @@ export function ProviderSection() {
         </p>
       ) : null}
 
-      <div className="modal-field" data-testid="provider-choices">
+      <div className="modal-field settings-segmented" data-testid="provider-choices">
         {PROVIDER_ORDER.map(({ id, labelKey }) => (
           <button
             key={id}
             type="button"
+            className={id === active ? "is-selected" : undefined}
             disabled={busy}
             aria-pressed={id === active}
             onClick={() => void choose(id)}
@@ -801,6 +803,7 @@ export function ProviderSection() {
               </span>
               <button
                 type="button"
+                className="btn ghost sm"
                 disabled={busy}
                 onClick={() => void logoutCodex()}
                 data-testid="provider-codex-logout"
@@ -811,6 +814,7 @@ export function ProviderSection() {
           ) : (
             <button
               type="button"
+              className="btn ghost sm"
               disabled={busy}
               onClick={() => void startCodexLogin()}
               data-testid="provider-codex-login"
@@ -851,6 +855,7 @@ export function ProviderSection() {
           />
           <button
             type="button"
+            className="btn ghost sm"
             disabled={busy || !drafts.key.trim()}
             onClick={() => void saveKey()}
             data-testid="provider-key-save"
@@ -860,6 +865,7 @@ export function ProviderSection() {
           {current?.configured ? (
             <button
               type="button"
+              className="btn ghost sm"
               disabled={busy}
               onClick={() => void clearKey()}
               data-testid="provider-key-clear"
@@ -908,6 +914,7 @@ export function ProviderSection() {
         </datalist>
         <button
           type="button"
+          className="btn ghost sm"
           disabled={busy || !current?.configured}
           onClick={() => void loadModels()}
           data-testid="provider-model-refresh"
@@ -938,9 +945,10 @@ export function ProviderSection() {
         {t("settings.providers.consent", { provider: consentDestination })}
       </label>
 
-      <div className="modal-field">
+      <div className="modal-field provider-test">
         <button
           type="button"
+          className="btn ghost sm"
           disabled={busy || !consented || !configured}
           onClick={() => void runTest()}
           data-testid="provider-test"
@@ -954,10 +962,10 @@ export function ProviderSection() {
             status semantics natively rather than borrowing it from an
             explicit role, and is the better-supported way to say it. */}
         {shownTest?.ok ? (
-          <output data-testid="provider-test-ok">{t("settings.providers.test.ok")}</output>
+          <output className="provider-test-ok" data-testid="provider-test-ok">{t("settings.providers.test.ok")}</output>
         ) : null}
         {shownTest?.error ? (
-          <span role="alert" data-testid="provider-test-error">
+          <span className="provider-test-error" role="alert" data-testid="provider-test-error">
             {rpcErrorMessage(shownTest.error, t)}
           </span>
         ) : null}
