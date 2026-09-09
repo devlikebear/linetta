@@ -118,4 +118,16 @@ describe("Workspace agent panel wiring", () => {
     // Cmd+J is documented as bound to the agent panel, not as absent.
     expect(src).toContain("Cmd+J agent panel");
   });
+
+  it("has a toolbar button beside the other panel buttons, gated on agent_available", async () => {
+    const src = await workspace();
+    // 1.2.0 shipped the panel behind Cmd/Ctrl+J only; a writer installing the
+    // release saw no sign of it. The button must sit with the three panel
+    // buttons and carry the same gate as the panel itself.
+    const toolbar = src.slice(src.indexOf('title={t("factBook.title")}'), src.indexOf("data-tour=\"workspace-zen\""));
+    expect(toolbar).toContain("{agentAvailable && (");
+    expect(toolbar).toContain('data-testid="ws-tool-agent"');
+    expect(toolbar).toContain("onClick={toggleAgent}");
+    expect(toolbar).toContain('className={`ws-tool${agentOpen ? " is-active" : ""}`}');
+  });
 });
