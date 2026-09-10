@@ -1,5 +1,6 @@
 import { useI18n } from "./i18n";
 import type { MessageKey } from "./i18n";
+import { RPC_CODE_CONTENT_CONFLICT } from "./rpc";
 
 type Translate = ReturnType<typeof useI18n>["t"];
 
@@ -92,4 +93,22 @@ export function rpcErrorMessage(error: unknown, t: Translate): string {
     if (key) return t(key);
   }
   return String(error);
+}
+
+function codeOf(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "number" ? code : undefined;
+}
+
+/** Human-readable text for a failed scene save (autosave or manual).
+ *
+ *  A content-version conflict — the scene changed elsewhere since the editor
+ *  last read it — gets its own message, because the right next step really is
+ *  different: copy the buffer somewhere safe and reload, not just retry.
+ *  Matched on the engine's numeric RPC code rather than the message text,
+ *  since the code is a stable contract and the English sentence isn't. */
+export function saveErrorMessage(error: unknown, t: Translate): string {
+  if (codeOf(error) === RPC_CODE_CONTENT_CONFLICT) return t("editor.save.conflict");
+  return t("editor.save.failed");
 }

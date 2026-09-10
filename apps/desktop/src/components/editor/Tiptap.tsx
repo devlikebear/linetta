@@ -1,7 +1,7 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { FocusExtension } from "./FocusExtension";
+import { FocusExtension, focusKey } from "./FocusExtension";
 import { SearchHighlightExtension, SearchHighlightPluginKey } from "./SearchHighlightExtension";
 import "./Tiptap.css";
 
@@ -90,7 +90,10 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         StarterKit.configure({}),
         SearchHighlightExtension,
         ...(extensions ?? []),
-        ...(focus ? [FocusExtension] : []),
+        // Always present — toggling `focus` flips its `enabled` plugin state
+        // via a transaction meta below instead of adding/removing the
+        // extension, which would force an editor re-init (see deps note).
+        FocusExtension.configure({ enabled: !!focus }),
       ],
       content: initialDoc,
       autofocus: "end",
@@ -105,11 +108,21 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         if (onCharCount) onCharCount(countChars(doc));
       },
     },
-    // Re-create the editor only when the initial doc actually changes id/length —
-    // avoids cursor jumps from upstream re-renders. Toggling `focus` is rare,
-    // so an editor re-init (with cursor loss) is acceptable.
-    [initialKey, focus],
+    // Re-create the editor only when the initial doc actually changes id —
+    // avoids cursor jumps from upstream re-renders. `focus` is deliberately
+    // NOT a dep (#103): recreating the editor on every toggle re-injected the
+    // stale `initialDoc` prop instead of the live, possibly-edited document.
+    // The focus effect below reacts to the prop instead of remounting.
+    [initialKey],
   );
+
+  // React to `focus` toggling without recreating the editor (#103) — dispatch
+  // a no-op-to-history transaction meta that flips the FocusExtension plugin
+  // state in place, keeping the live document and cursor untouched.
+  useEffect(() => {
+    if (!editor) return;
+    editor.view.dispatch(editor.state.tr.setMeta(focusKey, { enabled: !!focus }));
+  }, [editor, focus]);
 
   useEffect(() => {
     if (!editor) return;

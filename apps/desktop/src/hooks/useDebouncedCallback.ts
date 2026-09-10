@@ -80,6 +80,11 @@ export function useKeyedDebouncedCallback<K, Args extends unknown[]>(
     return invoke;
   }, [delayMs]);
 
-  useEffect(() => () => callback.cancel(), [callback]);
+  // Flush rather than cancel on unmount: a pending save represents the
+  // writer's last keystrokes, and dropping it silently on navigate/unmount
+  // is how autosave loses the tail of an edit (#104). The only current
+  // caller of this hook is the scene-save debounce in Workspace, so this
+  // applies to every user of the hook today.
+  useEffect(() => () => callback.flush(), [callback]);
   return callback;
 }

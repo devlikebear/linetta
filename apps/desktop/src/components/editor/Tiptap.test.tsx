@@ -213,4 +213,34 @@ describe("TiptapEditor", () => {
     });
     await waitFor(() => expect(ref.current?.editor?.state.doc.textContent).toBe("민준는 민준의 시계를 보았다."));
   });
+
+  it("keeps freshly typed text when focus mode is toggled on and off (#103)", async () => {
+    const ref = createRef<TiptapHandle>();
+    const initialDoc = {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "처음 원고" }] }],
+    };
+
+    const { rerender } = render(
+      <TiptapEditor ref={ref} initialDoc={initialDoc} onChange={vi.fn()} focus={false} />,
+    );
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+
+    // Insert deterministically via editor commands rather than user-event
+    // (which depends on real DOM focus/selection timing and races with the
+    // editor's own `autofocus: "end"`), so this reliably reproduces "type,
+    // then toggle focus" regardless of run order.
+    act(() => {
+      ref.current?.editor?.commands.insertContentAt(1, "새로 쓴 문장. ");
+    });
+    expect(ref.current?.editor?.state.doc.textContent).toBe("새로 쓴 문장. 처음 원고");
+
+    // Toggling `focus` with the SAME `initialDoc` prop must not resurrect the
+    // stale prop over the live, just-typed document.
+    rerender(<TiptapEditor ref={ref} initialDoc={initialDoc} onChange={vi.fn()} focus={true} />);
+    expect(ref.current?.editor?.state.doc.textContent).toBe("새로 쓴 문장. 처음 원고");
+
+    rerender(<TiptapEditor ref={ref} initialDoc={initialDoc} onChange={vi.fn()} focus={false} />);
+    expect(ref.current?.editor?.state.doc.textContent).toBe("새로 쓴 문장. 처음 원고");
+  });
 });

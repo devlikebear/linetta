@@ -41,4 +41,18 @@ export class SceneSaveQueue<Result extends VersionedSaveResult = VersionedSaveRe
     });
     return run;
   }
+
+  /** Resolves once every in-flight or queued save has settled — success or
+   *  failure, it never rejects. Each per-scene tail already swallows its own
+   *  outcome (see `save` above), so this only has to wait on the current set
+   *  of tails; a save queued by a caller who is still awaiting a prior one on
+   *  the same key extends that key's own tail, so re-checking after the first
+   *  wait picks up anything that was still settling. */
+  async idle(): Promise<void> {
+    let pending = [...this.tails.values()];
+    while (pending.length > 0) {
+      await Promise.all(pending);
+      pending = [...this.tails.values()];
+    }
+  }
 }
