@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Restoring a single work from a backup now brings its work notes back with
+  it. 1.2.0 added per-work **work notes** (`agent_memory`, scope
+  `work_notes`) but `MergeProject`, the per-work restore path, copied only the
+  work's own tables and left memory out, so a restored work came back with
+  its notes silently empty — tracked as
+  [#116](https://github.com/devlikebear/linetta/issues/116). The startup
+  recovery screen, which replaces the whole library file, was never affected.
+  The global **writer profile** stays with the library and is never copied or
+  duplicated by a per-work restore.
+
 ## v1.2.1 - 2026-09-09
 
 - Added an **Agent** button to the workspace toolbar, beside Contextual edit,
