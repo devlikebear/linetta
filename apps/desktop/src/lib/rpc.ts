@@ -155,6 +155,12 @@ export async function folderSyncNow(): Promise<FolderSyncResult> {
   return invoke<FolderSyncResult>("folder_sync_now");
 }
 
+/** The engine's rpc.CodeContentConflict: a save was rejected because the
+ *  node's content changed since the caller last read it (optimistic-lock
+ *  mismatch on nodes.update_content). Kept in sync with
+ *  engine/internal/rpc/server.go. */
+export const RPC_CODE_CONTENT_CONFLICT = -32009;
+
 export class RpcError extends Error {
   readonly code?: number;
   readonly data?: unknown;

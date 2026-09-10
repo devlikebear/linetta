@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
+import { saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { NotePopover } from "../components/NotePopover";
@@ -265,6 +266,11 @@ export function Workspace() {
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);
+  // Bumped on every onChange (normal and ZEN). A save captures the revision
+  // it is saving before awaiting the RPC; if a newer edit landed while that
+  // save was in flight, the revision no longer matches when it resolves, so
+  // the buffer stays dirty instead of being marked clean under it (#106).
+  const editRevisionRef = useRef(0);
   const [notePopover, setNotePopover] = useState<{
     noteId: string;
     targetEl: HTMLElement;
@@ -301,6 +307,14 @@ export function Workspace() {
 
   const enterZen = useCallback(() => {
     savedSelectionRef.current = editorRef.current?.getSelection() ?? null;
+    // Mirror exitZen: ZEN mounts its own Tiptap instance from
+    // `load.initialDoc`, so if that still holds what the scene looked like
+    // on load, entering ZEN after editing would hand the ZEN editor a stale
+    // document (#103).
+    const liveDoc = editorRef.current?.getDoc();
+    if (liveDoc) {
+      setLoad((prev) => (prev ? { ...prev, initialDoc: liveDoc } : prev));
+    }
     setZenOpen(true);
   }, []);
 
@@ -795,7 +809,14 @@ export function Workspace() {
       if (!mod) return;
       if (e.key.toLowerCase() === "r") {
         e.preventDefault();
-        window.location.reload();
+        // Flush and wait for any pending/in-flight autosave before tearing
+        // the page down, so the last few keystrokes are not lost (#104).
+        // Referencing `flushPendingSave` here (declared further below) is
+        // safe: this handler only runs later, on a keydown event, by which
+        // point the whole component body — including that const — has
+        // already executed. See the toggleAgent note below for why it is
+        // not listed as a dependency of this effect.
+        void flushPendingSave().finally(() => window.location.reload());
       } else if (e.key.toLowerCase() === "p") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
@@ -832,24 +853,38 @@ export function Workspace() {
   const saveNow = useCallback(
     async (nodeId: string, doc: object) => {
       const isActive = () => loadRef.current?.node.id === nodeId;
+      // Snapshot the revision this save is for *before* awaiting the RPC. If
+      // onChange bumps it again while the request is in flight, a newer edit
+      // exists that this response did not cover — the buffer must stay dirty
+      // under it rather than being cleared out from under the writer (#106).
+      const rev = editRevisionRef.current;
       if (isActive()) setSaveStatus({ kind: "saving" });
       try {
         await sceneSaveQueue.save(nodeId, JSON.stringify(doc));
         if (isActive()) {
           setSaveStatus({ kind: "saved", at: Date.now() });
-          setEditorDirty(false);
+          if (rev === editRevisionRef.current) setEditorDirty(false);
         }
         refreshMentioned(nodeId);
       } catch (e) {
+        // A save failure must never blank the editor out from under the
+        // writer (#105) — surface it as a status, not a route-level error.
         if (isActive()) {
-          setSaveStatus({ kind: "error", message: String(e) });
-          setError(String(e));
+          setSaveStatus({ kind: "error", message: saveErrorMessage(e, t) });
         }
       }
     },
-    [refreshMentioned, sceneSaveQueue],
+    [refreshMentioned, sceneSaveQueue, t],
   );
   const debouncedSave = useKeyedDebouncedCallback(saveNow, SAVE_DEBOUNCE_MS);
+  // Flushes any pending debounced save and waits for every in-flight/queued
+  // scene save to settle. Callers await this before anything that would tear
+  // the editor down (navigating away, reloading) so the writer's last
+  // keystrokes are never silently dropped (#104).
+  const flushPendingSave = useCallback(async () => {
+    debouncedSave.flush();
+    await sceneSaveQueue.idle();
+  }, [debouncedSave, sceneSaveQueue]);
   const idleDirtyRef = useRef(false);
   const handleIdleCheckpoint = useCallback(async () => {
     if (!idleDirtyRef.current) return;
@@ -893,24 +928,30 @@ export function Workspace() {
         await navigateToNode({ id: result.node_id } as NodeRow);
         return;
       }
+      // Different project: this Workspace instance unmounts, so any pending
+      // autosave must land first (#104).
+      await flushPendingSave();
       navigate(`/workspace/${result.project_id}`, { state: { jumpToNodeId: result.node_id } });
     },
-    [load?.project.id, navigate, navigateToNode],
+    [flushPendingSave, load?.project.id, navigate, navigateToNode],
   );
 
   const handleManualSave = useCallback(
     async (doc: object) => {
       if (!load) return;
       debouncedSave.cancel(load.node.id);
+      const rev = editRevisionRef.current;
       setSaveStatus({ kind: "saving" });
       try {
         await sceneSaveQueue.save(load.node.id, JSON.stringify(doc));
         await snapshots.createManual(load.node.id, JSON.stringify(doc));
         setSaveStatus({ kind: "saved", at: Date.now() });
+        if (rev === editRevisionRef.current) setEditorDirty(false);
         showToast(t("workspace.toast.snapshotSaved"));
       } catch (e) {
-        setSaveStatus({ kind: "error", message: String(e) });
-        setError(String(e));
+        // Same contract as saveNow: never blank the editor on a save failure
+        // (#105).
+        setSaveStatus({ kind: "error", message: saveErrorMessage(e, t) });
       }
     },
     [debouncedSave, load, sceneSaveQueue, showToast, t],
@@ -1259,7 +1300,7 @@ export function Workspace() {
       id: "view-threads",
       section: sectionView,
       label: t("workspace.command.flowThreadView"),
-      run: () => navigate(`/workspace/${load.project.id}/threads`),
+      run: async () => { await flushPendingSave(); navigate(`/workspace/${load.project.id}/threads`); },
     });
     cmds.push({
       id: "version-restore",
@@ -1315,7 +1356,7 @@ export function Workspace() {
       id: "go-settings",
       section: sectionProject,
       label: t("workspace.command.openSettings"),
-      run: () => navigate("/settings"),
+      run: async () => { await flushPendingSave(); navigate("/settings"); },
     });
     if (gitSyncAvailable) {
       cmds.push({
@@ -1396,7 +1437,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable, flushPendingSave]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1534,7 +1575,16 @@ export function Workspace() {
   return (
     <main className="workspace">
       <header className="ws-top">
-        <Link to="/" className="ws-crumb">
+        <Link
+          to="/"
+          className="ws-crumb"
+          onClick={(e) => {
+            // This unmounts Workspace, so pending autosave must land first
+            // (#104) — let flushPendingSave run before the route changes.
+            e.preventDefault();
+            void flushPendingSave().finally(() => navigate("/"));
+          }}
+        >
           <span className="home"><ArrowLeft size={16} /></span>
           <span className="ws-crumb-path">
             <b>{load.project.title}</b>
@@ -1697,6 +1747,15 @@ export function Workspace() {
                 </button>
               </div>
             )}
+            {saveStatus.kind === "error" && (
+              /* A save failed (autosave or manual) — kept as an inline status
+                 next to the editor rather than a route-level error screen, so
+                 the unsaved buffer and the editor stay right where the writer
+                 can keep working or copy the text out (#105). */
+              <div className="mcp-conflict" role="alert" data-testid="save-error-banner">
+                <span className="sd">{saveStatus.message}</span>
+              </div>
+            )}
             <div className="scene-marker">
               <span>{sceneMarker}</span>
               <span className="rule" />
@@ -1715,6 +1774,7 @@ export function Workspace() {
               ref={editorRef}
               initialDoc={load.initialDoc}
               onChange={(doc) => {
+                editRevisionRef.current += 1;
                 debouncedSave(load.node.id, doc);
                 idleDirtyRef.current = true;
                 setEditorDirty(true);
@@ -1944,8 +2004,13 @@ export function Workspace() {
           sceneLabel={currentNodeLabel}
           target={isWebnovelProject ? episodeCharTarget : 0}
           onChange={(doc) => {
+            editRevisionRef.current += 1;
             debouncedSave(load.node.id, doc);
             idleDirtyRef.current = true;
+            // ZEN previously never marked the buffer dirty, which let an MCP
+            // change silently reload the scene out from under a writer typing
+            // in ZEN (#106) — same contract as the normal-mode onChange.
+            setEditorDirty(true);
             markActivity();
           }}
           onCharCount={setCharCount}

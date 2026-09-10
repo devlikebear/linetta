@@ -10,12 +10,17 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
  * the document edge. Empty paragraphs themselves are never highlighted — they
  * act as separators.
  */
-const focusKey = new PluginKey("linetta-focus");
+export const focusKey = new PluginKey<FocusPluginState>("linetta-focus");
 
 interface TopBlock {
   pos: number;
   size: number;
   empty: boolean;
+}
+
+interface FocusPluginState {
+  enabled: boolean;
+  decorations: DecorationSet;
 }
 
 function buildDecorations(state: any): DecorationSet {
@@ -69,19 +74,44 @@ function buildDecorations(state: any): DecorationSet {
   return DecorationSet.create(doc, decorations);
 }
 
-export const FocusExtension = Extension.create({
+/**
+ * `enabled` is a Tiptap extension option (set once, at construction) so the
+ * plugin's initial state matches the `focus` prop on first mount. After that
+ * the editor instance is kept alive across `focus` toggles (#103 — recreating
+ * it on every toggle re-injected the stale `initialDoc` prop instead of the
+ * live document) and Tiptap.tsx flips `enabled` by dispatching a transaction
+ * meta on `focusKey` instead.
+ */
+export const FocusExtension = Extension.create<{ enabled: boolean }>({
   name: "linettaFocus",
+  addOptions() {
+    return { enabled: true };
+  },
   addProseMirrorPlugins() {
+    const initialEnabled = this.options.enabled;
     return [
-      new Plugin({
+      new Plugin<FocusPluginState>({
         key: focusKey,
         state: {
-          init: (_, state) => buildDecorations(state),
-          apply: (_tr, _old, _oldState, newState) => buildDecorations(newState),
+          init: (_, state) => ({
+            enabled: initialEnabled,
+            decorations: initialEnabled ? buildDecorations(state) : DecorationSet.empty,
+          }),
+          apply(tr, old, _oldState, newState) {
+            const meta = tr.getMeta(focusKey) as { enabled?: boolean } | undefined;
+            const enabled = typeof meta?.enabled === "boolean" ? meta.enabled : old.enabled;
+            if (!enabled) {
+              return old.enabled === enabled && old.decorations === DecorationSet.empty
+                ? old
+                : { enabled, decorations: DecorationSet.empty };
+            }
+            if (!tr.docChanged && !tr.selectionSet && enabled === old.enabled) return old;
+            return { enabled, decorations: buildDecorations(newState) };
+          },
         },
         props: {
           decorations(state) {
-            return (this as any).getState(state);
+            return focusKey.getState(state)?.decorations ?? DecorationSet.empty;
           },
         },
       }),

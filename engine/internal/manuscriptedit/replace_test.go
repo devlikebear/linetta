@@ -180,6 +180,110 @@ func TestApplyReplaceFailsOnVersionMismatch(t *testing.T) {
 	}
 }
 
+// raceNodeRepo wraps a real *node.Repo and, on the first UpdateContentIfVersion
+// call for a watched node, injects a concurrent save (bumping content_version)
+// before delegating to the real conditional write. This simulates a save
+// landing in the window between ApplyReplace's version check and its write
+// (#107), which a plain UpdateContent + prior-check would silently clobber.
+type raceNodeRepo struct {
+	*node.Repo
+	watchNodeID   string
+	concurrentDoc string
+	concurrentNow int64
+	injected      bool
+}
+
+func (r *raceNodeRepo) UpdateContentIfVersion(ctx context.Context, id string, doc string, expectedVersion int, now int64) error {
+	if !r.injected && id == r.watchNodeID {
+		r.injected = true
+		if err := r.Repo.UpdateContent(ctx, id, r.concurrentDoc, r.concurrentNow); err != nil {
+			return err
+		}
+	}
+	return r.Repo.UpdateContentIfVersion(ctx, id, doc, expectedVersion, now)
+}
+
+func TestApplyReplaceFailsOnVersionMismatchFromConcurrentWriteRace(t *testing.T) {
+	f := newReplaceFixture(t)
+	if err := f.nodes.UpdateContent(f.ctx, f.first, replaceDoc("민호는 문장을 보았다."), 1_100); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	plan, err := f.svc.PlanReplace(f.ctx, ReplacePlanRequest{
+		ProjectID: f.pid, Query: "민호", Replacement: "민준",
+	})
+	if err != nil {
+		t.Fatalf("PlanReplace: %v", err)
+	}
+
+	concurrentDoc := replaceDoc("민호는 동시에 저장된 문장을 보았다.")
+	racy := &raceNodeRepo{
+		Repo:          f.nodes,
+		watchNodeID:   f.first,
+		concurrentDoc: concurrentDoc,
+		concurrentNow: 1_800,
+	}
+	svc := NewService(racy, f.snaps)
+
+	result, err := svc.ApplyReplace(f.ctx, plan, []string{plan.Candidates[0].ID}, 2_000)
+	if err != nil {
+		t.Fatalf("ApplyReplace: %v", err)
+	}
+	if result.Applied != 0 || len(result.Failures) != 1 || result.Failures[0].Reason != FailureVersionMismatch {
+		t.Fatalf("result = %+v, want version mismatch failure", result)
+	}
+	if result.Failures[0].NodeID != f.first {
+		t.Fatalf("failure node = %s, want %s", result.Failures[0].NodeID, f.first)
+	}
+
+	got, err := f.nodes.Get(f.ctx, f.first)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.ContentDoc == nil || !strings.Contains(*got.ContentDoc, "동시에 저장된") {
+		t.Fatalf("concurrent save should survive the clobbered write: %v", valueOrEmpty(got.ContentDoc))
+	}
+	if strings.Contains(*got.ContentDoc, "민준") {
+		t.Fatalf("replace must not have applied over the concurrent save: %v", *got.ContentDoc)
+	}
+}
+
+func TestApplyReplaceHappyPathStillAppliesAndBumpsVersion(t *testing.T) {
+	f := newReplaceFixture(t)
+	if err := f.nodes.UpdateContent(f.ctx, f.first, replaceDoc("민호는 문장을 보았다."), 1_100); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	before, err := f.nodes.Get(f.ctx, f.first)
+	if err != nil {
+		t.Fatalf("Get before: %v", err)
+	}
+
+	plan, err := f.svc.PlanReplace(f.ctx, ReplacePlanRequest{
+		ProjectID: f.pid, Query: "민호", Replacement: "민준",
+	})
+	if err != nil {
+		t.Fatalf("PlanReplace: %v", err)
+	}
+
+	result, err := f.svc.ApplyReplace(f.ctx, plan, []string{plan.Candidates[0].ID}, 2_000)
+	if err != nil {
+		t.Fatalf("ApplyReplace: %v", err)
+	}
+	if result.Applied != 1 || len(result.Failures) != 0 {
+		t.Fatalf("result = %+v, want applied=1 no failures", result)
+	}
+
+	after, err := f.nodes.Get(f.ctx, f.first)
+	if err != nil {
+		t.Fatalf("Get after: %v", err)
+	}
+	if after.ContentDoc == nil || !strings.Contains(*after.ContentDoc, "민준") || strings.Contains(*after.ContentDoc, "민호") {
+		t.Fatalf("content not replaced: %v", valueOrEmpty(after.ContentDoc))
+	}
+	if after.ContentVersion != before.ContentVersion+1 {
+		t.Fatalf("content_version = %d, want %d", after.ContentVersion, before.ContentVersion+1)
+	}
+}
+
 func replaceDoc(text string) string {
 	return `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + text + `"}]}]}`
 }

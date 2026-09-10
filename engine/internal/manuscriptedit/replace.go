@@ -80,6 +80,7 @@ type nodeRepo interface {
 	Get(ctx context.Context, id string) (node.Node, error)
 	ListByProject(ctx context.Context, projectID string) ([]node.Node, error)
 	UpdateContent(ctx context.Context, id string, doc string, now int64) error
+	UpdateContentIfVersion(ctx context.Context, id string, doc string, expectedVersion int, now int64) error
 }
 
 type snapshotRepo interface {
@@ -239,13 +240,22 @@ func (s *Service) ApplyReplace(ctx context.Context, plan ReplacePlan, candidateI
 			})
 			continue
 		}
-		if err := s.nodes.UpdateContent(ctx, n.ID, replaced.Doc, now); err != nil {
+		if err := s.nodes.UpdateContentIfVersion(ctx, n.ID, replaced.Doc, c.PreviewVersion, now); err != nil {
+			reason := FailureUpdate
+			message := err.Error()
+			if errors.Is(err, node.ErrContentConflict) {
+				// A save landed between our version check above and this
+				// write (#107); report it the same way as the read-time
+				// mismatch so callers see one consistent conflict signal.
+				reason = FailureVersionMismatch
+				message = "scene changed after preview; refresh preview"
+			}
 			result.Failures = append(result.Failures, ApplyFailure{
 				CandidateID: c.ID,
 				NodeID:      c.NodeID,
 				Breadcrumb:  c.Breadcrumb,
-				Reason:      FailureUpdate,
-				Message:     err.Error(),
+				Reason:      reason,
+				Message:     message,
 			})
 			continue
 		}

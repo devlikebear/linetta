@@ -38,4 +38,49 @@ describe("useKeyedDebouncedCallback", () => {
     expect(save).toHaveBeenCalledOnce();
     expect(save).toHaveBeenCalledWith("scene-a", { text: "latest" });
   });
+
+  it("flush invokes the pending callback immediately, before the delay elapses", () => {
+    vi.useFakeTimers();
+    const save = vi.fn();
+    const { result } = renderHook(() => useKeyedDebouncedCallback(save, 800));
+
+    act(() => {
+      result.current("scene-a", { text: "mid-sentence" });
+    });
+    expect(save).not.toHaveBeenCalled();
+
+    act(() => {
+      result.current.flush("scene-a");
+    });
+    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledWith("scene-a", { text: "mid-sentence" });
+
+    // Nothing left pending — advancing time fires nothing more.
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+    expect(save).toHaveBeenCalledOnce();
+  });
+
+  it("unmount flushes pending work instead of dropping it (#104)", () => {
+    vi.useFakeTimers();
+    const save = vi.fn();
+    const { result, unmount } = renderHook(() => useKeyedDebouncedCallback(save, 800));
+
+    act(() => {
+      result.current("scene-a", { text: "last keystrokes" });
+      vi.advanceTimersByTime(300);
+    });
+    expect(save).not.toHaveBeenCalled();
+
+    unmount();
+    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledWith("scene-a", { text: "last keystrokes" });
+
+    // No dangling timer left to fire and no leftover to double-fire.
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(save).toHaveBeenCalledOnce();
+  });
 });
