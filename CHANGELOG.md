@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Fixed five ways the editor could lose or overwrite what you typed, all in
+  the same save path. Toggling focus mode rebuilt the editor from the scene
+  as it was on load, discarding every edit since; entering ZEN did the same.
+  The last few keystrokes were dropped when you went back to the library,
+  jumped to another work from search, opened Threads or Settings from the
+  palette, or pressed `Cmd/Ctrl+R`, because the pending autosave was
+  cancelled rather than flushed. A failed save replaced the whole screen
+  with an error and unmounted the editor with your unsaved text in it; it is
+  now a line beside the editor, and a version conflict says so in its own
+  words. A save that finished after you had typed again marked the scene
+  clean, so an external change could reload over the newer text; the
+  editor now tracks an edit revision and only clears the flag for the
+  revision it actually saved (ZEN never set the flag at all — it does now).
+  And batch replace checked the scene's version before writing but wrote
+  unconditionally, so a save landing in between was overwritten; the write
+  is now version-checked too
+  ([#103](https://github.com/devlikebear/linetta/issues/103),
+  [#104](https://github.com/devlikebear/linetta/issues/104),
+  [#105](https://github.com/devlikebear/linetta/issues/105),
+  [#106](https://github.com/devlikebear/linetta/issues/106),
+  [#107](https://github.com/devlikebear/linetta/issues/107)).
 - Restoring a single work from a backup now brings its work notes back with
   it. 1.2.0 added per-work **work notes** (`agent_memory`, scope
   `work_notes`) but `MergeProject`, the per-work restore path, copied only the
