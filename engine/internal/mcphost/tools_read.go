@@ -327,12 +327,9 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 func registerReadSkillTool(s *mcp.Server, d ToolDeps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_read_skill",
-		Description: "Read one skill in full — the whole how-to document, not the one-line description you " +
-			"already have. There is no way to list skills here and you do not need one: every available " +
-			"skill is already named and described for you, in your instructions and in the story brief " +
-			"from linetta_get_story_context. Pick a name from there when its description matches what you " +
-			"are about to do, then read it. Scope writer means the skill applies to every work; scope work " +
-			"means it belongs to the one work named by project_id.",
+		Description: "Read one skill in full. Pick a name from your instructions or the story brief when " +
+			"its description matches what you are about to do, then read it. Scope writer means every " +
+			"work; scope work means the one work in project_id.",
 	}, record(d, "linetta_read_skill", d.readSkill))
 }
 

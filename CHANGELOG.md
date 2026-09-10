@@ -23,6 +23,18 @@
   [#105](https://github.com/devlikebear/linetta/issues/105),
   [#106](https://github.com/devlikebear/linetta/issues/106),
   [#107](https://github.com/devlikebear/linetta/issues/107)).
+- Trimmed the descriptions of three MCP tools — `linetta_apply_story_ops`,
+  `linetta_edit_skill` and `linetta_read_skill` — that had grown to restate
+  their own JSON schema (field lists, an apology for having no list tool) on
+  top of the workflow guidance an agent actually needs. Measured by
+  `MeasureToolBudget`, the three together dropped from 8,282B to 7,120B, and
+  the full 19-tool set a built-in or external agent is handed dropped from
+  27,687B to 26,525B. The workflow sentences that only live in these
+  descriptions — outline-structural batches are all-or-nothing and return
+  `undo_batch_id`, entity/thread/beat/fact/memory changes are not
+  batch-undoable, scene prose goes through `linetta_write_scene` instead —
+  are unchanged. Part of [#90](https://github.com/devlikebear/linetta/issues/90)
+  ([#132](https://github.com/devlikebear/linetta/issues/132)).
 - Restoring a single work from a backup now brings its work notes back with
   it. 1.2.0 added per-work **work notes** (`agent_memory`, scope
   `work_notes`) but `MergeProject`, the per-work restore path, copied only the

@@ -74,12 +74,10 @@ type undoOutput struct {
 func (d ToolDeps) registerBatchTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_apply_story_ops",
-		Description: "Apply a batch of story changes: outline nodes, storylines and beats, characters, " +
-			"places, relationships, Fact Book cards, and memories. Outline-structural batches are " +
-			"all-or-nothing — if one op fails the outline is put back — and return undo_batch_id. " +
-			"Entity, thread, beat, fact, and memory changes apply individually and are NOT batch-undoable; " +
-			"revert those with follow-up ops. " +
-			"Scene prose is NOT written here; use linetta_write_scene, which checks the version first.",
+		Description: "Apply a batch of story-structure changes. Outline-structural batches are " +
+			"all-or-nothing and return undo_batch_id; entity/thread/beat/fact/memory changes are NOT " +
+			"batch-undoable — revert with follow-up ops. Scene prose is NOT written here; use " +
+			"linetta_write_scene, which checks the version first.",
 	}, record(d, "linetta_apply_story_ops", d.applyStoryOps))
 
 	mcp.AddTool(s, &mcp.Tool{

@@ -3,8 +3,11 @@
 package mcphost
 
 import (
+	"context"
 	"slices"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
@@ -136,6 +139,93 @@ func TestMeasureToolBudgetTracksTheSwitches(t *testing.T) {
 	if none.Memory.Bytes != full.Memory.Bytes || none.Skills.Bytes != full.Skills.Bytes {
 		t.Error("a switched-off group stopped reporting what it costs, so the pane can no longer " +
 			"tell the writer what switching it back on would buy")
+	}
+}
+
+// Three tools carried most of the tool budget's weight: linetta_apply_story_ops,
+// linetta_edit_skill and linetta_read_skill together cost 8,282B, mostly
+// description prose that restated their own JSON schema (#132). This pins
+// what #132 measured after trimming them — a ceiling well below the old
+// total, not the old total itself, so a description creeping back up trips
+// it long before it gets back to 8,282B.
+func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
+	sizes := toolSchemaBytes()
+	if len(sizes) == 0 {
+		t.Fatal("could not measure tool schema bytes")
+	}
+
+	three := []string{"linetta_apply_story_ops", "linetta_edit_skill", "linetta_read_skill"}
+	sum := 0
+	for _, n := range three {
+		b, ok := sizes[n]
+		if !ok {
+			t.Fatalf("%s missing from the measured tool set", n)
+		}
+		sum += b
+	}
+	// #132 measured 7,120B after trimming (down from 8,282B). 7,400B leaves
+	// slack for incidental SDK schema-rendering drift without hiding a real
+	// description regrowth.
+	if sum > 7400 {
+		t.Errorf("linetta_apply_story_ops + linetta_edit_skill + linetta_read_skill = %dB, want <= 7400B "+
+			"(#132 trimmed them from 8282B to 7120B)", sum)
+	}
+
+	total := 0
+	for _, b := range sizes {
+		total += b
+	}
+	// #132 measured 26,525B for the full 19-tool set (down from 27,687B).
+	if total > 26900 {
+		t.Errorf("the full 19-tool budget is %dB, want <= 26900B (#132 trimmed it from 27687B to 26525B)", total)
+	}
+}
+
+// Guard against the three descriptions themselves growing back: #132 set a
+// byte target for each Description string (not the surrounding schema) so
+// that reviewing a future PR against this test catches a clause creeping
+// back in one sentence at a time.
+func TestTrimmedDescriptionsFitTheirByteTargets(t *testing.T) {
+	ctx := context.Background()
+	srv := mcp.NewServer(&mcp.Implementation{Name: ServerName, Version: ServerVersion}, nil)
+	ToolDeps{}.Register(srv, settings.MCPModeFull, AllToolGroups())
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	ss, err := srv.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("connect server: %v", err)
+	}
+	defer func() { _ = ss.Close() }()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "linetta-budget-test", Version: ServerVersion}, nil).
+		Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("connect client: %v", err)
+	}
+	defer func() { _ = cs.Close() }()
+
+	targets := map[string]int{
+		"linetta_apply_story_ops": 300,
+		"linetta_edit_skill":      600,
+		"linetta_read_skill":      280,
+	}
+	seen := map[string]bool{}
+	for tool, err := range cs.Tools(ctx, nil) {
+		if err != nil {
+			t.Fatalf("list tools: %v", err)
+		}
+		limit, ok := targets[tool.Name]
+		if !ok {
+			continue
+		}
+		seen[tool.Name] = true
+		if n := len(tool.Description); n > limit {
+			t.Errorf("%s description is %dB, want <= %dB: %q", tool.Name, n, limit, tool.Description)
+		}
+	}
+	for name := range targets {
+		if !seen[name] {
+			t.Errorf("%s was not served, could not check its description", name)
+		}
 	}
 }
 
