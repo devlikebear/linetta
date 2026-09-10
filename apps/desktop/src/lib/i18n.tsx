@@ -921,6 +921,10 @@ const messages = {
     "settings.skills.history": "기록",
     "settings.skills.history.restore": "이 버전으로 되돌리기",
     "settings.skills.history.empty": "기록이 없습니다.",
+    // #119: 백업이 스킬 폴더는 담지 않는다 — 파일이 사라져도 기록은 남는다.
+    "settings.skills.historyOnly.title": "기록에만 남은 스킬",
+    "settings.skills.historyOnly.description":
+      "파일은 없지만 이전 버전이 기록에 남아 있습니다. 이력을 열어 되살릴 수 있습니다.",
     // 기록 한 줄이 무엇을 담고 있는지. 삭제된 스킬을 되살릴 때 가장 크게
     // 쓰인다 — 되돌릴 판을 고르는 유일한 단서다.
     "settings.skills.reason.created": "처음 작성",
@@ -1893,6 +1897,11 @@ const messages = {
     "settings.skills.history": "History",
     "settings.skills.history.restore": "Restore this version",
     "settings.skills.history.empty": "No history yet.",
+    // #119: a backup never carries the skills folder — a name can survive
+    // in history after its file is gone.
+    "settings.skills.historyOnly.title": "Skills that survive only in history",
+    "settings.skills.historyOnly.description":
+      "The file is gone, but an older version is still in the history. Open it to bring the skill back.",
     "settings.skills.reason.created": "First written",
     "settings.skills.reason.edited": "Edited",
     "settings.skills.reason.deleted": "Deleted",
@@ -2838,6 +2847,11 @@ const messages = {
     "settings.skills.history": "履歴",
     "settings.skills.history.restore": "このバージョンに戻す",
     "settings.skills.history.empty": "履歴がありません。",
+    // #119: バックアップはスキルフォルダを含まない — ファイルが消えても
+    // 履歴には残る。
+    "settings.skills.historyOnly.title": "履歴にのみ残っているスキル",
+    "settings.skills.historyOnly.description":
+      "ファイルはありませんが、以前のバージョンが履歴に残っています。履歴を開いて復元できます。",
     "settings.skills.reason.created": "最初に作成",
     "settings.skills.reason.edited": "編集",
     "settings.skills.reason.deleted": "削除",

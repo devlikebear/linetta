@@ -295,6 +295,79 @@ SELECT rowid, id, scope, project_id, name, body, descript, author, reason, creat
 	return v, nil
 }
 
+// Orphan is one name recorded in skill_snapshots for a (scope, project)
+// that has no file on disk there — a version log entry
+// agentskills.Store.List can never surface, because List only reads
+// directories. See Orphaned.
+type Orphan struct {
+	Scope       Scope
+	ProjectID   string
+	Name        string
+	Description string
+	LatestAt    int64
+}
+
+// Orphaned returns one Orphan per distinct name recorded for (scope,
+// projectID) that is NOT a key in liveNames — a skill whose SKILL.md is
+// gone (deleted by hand, lost to a partial restore, or simply never carried
+// by the daily backup; see backup.go and this package's own doc comment)
+// but whose version log still remembers it. #119: skills.list only reads
+// <home>/skills, so a name missing from disk drops out of Settings even
+// though skills.restore can still recreate it from this same log — this
+// query is what lets a writer find that name again.
+//
+// liveNames is the caller's on-disk listing for the SAME (scope,
+// projectID), turned into a set. This package has no filesystem access
+// (agentskills.Store does, in store.go) so the exclusion happens here in Go
+// rather than in SQL; the handler that calls this (skills.orphaned) is the
+// one place both a Store and a History are already in hand.
+//
+// Only the latest row per name is considered, the same way Newest reads
+// only the last row for one name: a name that was created, edited, then
+// deleted only needs to be reported once, and its restore already reaches
+// back through the whole log regardless of which row this method surfaces.
+func (h *History) Orphaned(ctx context.Context, scope Scope, projectID string, liveNames map[string]bool) ([]Orphan, error) {
+	arg, err := projectArg(scope, projectID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := h.db.QueryContext(ctx, `
+SELECT name, descript, created_at
+  FROM skill_snapshots
+ WHERE scope = ? AND project_id IS ?
+ ORDER BY name ASC, rowid DESC`, string(scope), arg)
+	if err != nil {
+		return nil, fmt.Errorf("agentskills: orphaned versions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]Orphan, 0)
+	lastName := ""
+	haveLast := false
+	for rows.Next() {
+		var name, descript string
+		var createdAt int64
+		if err := rows.Scan(&name, &descript, &createdAt); err != nil {
+			return nil, fmt.Errorf("agentskills: orphaned versions: %w", err)
+		}
+		if haveLast && name == lastName {
+			continue // an older row for a name already handled
+		}
+		lastName, haveLast = name, true
+		if liveNames[name] {
+			continue // still on disk; skills.list already shows it
+		}
+		out = append(out, Orphan{
+			Scope: scope, ProjectID: projectID, Name: name,
+			Description: descript, LatestAt: createdAt,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("agentskills: orphaned versions: %w", err)
+	}
+	return out, nil
+}
+
 // rowScanner is satisfied by both *sql.Row and *sql.Rows, so scanVersion
 // serves List and Get alike.
 type rowScanner interface {

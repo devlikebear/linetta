@@ -39,6 +39,10 @@ type SkillHistory interface {
 	// against a window stops being true once the table outgrows it.
 	Newest(ctx context.Context, scope agentskills.Scope, projectID, name string) (agentskills.Version, error)
 	Get(ctx context.Context, id string) (agentskills.Version, error)
+	// Orphaned is skills.orphaned's data source (#119): the names
+	// skill_snapshots remembers for (scope, projectID) that liveNames — the
+	// caller's own on-disk listing — does not contain.
+	Orphaned(ctx context.Context, scope agentskills.Scope, projectID string, liveNames map[string]bool) ([]agentskills.Orphan, error)
 }
 
 // skillChangedPayload mirrors mcphost's skillChangedPayload
@@ -217,6 +221,102 @@ func ListSkills(store SkillStore) rpc.Handler {
 				out.Skills = append(out.Skills, summarize(s))
 			}
 			out.Diagnostics = append(out.Diagnostics, workDiags...)
+		}
+		return json.Marshal(out)
+	}
+}
+
+// ---- skills.orphaned -------------------------------------------------------
+
+// orphanedSkill is one row of the "history only" list: a name
+// skill_snapshots remembers that skills.list can no longer see, because its
+// SKILL.md is gone. No body — the writer opens skills.history for the name
+// (the same call the history pane already makes) to see versions and
+// restore one; this method only has to say the name exists and when it was
+// last written.
+type orphanedSkill struct {
+	Name        string            `json:"name"`
+	Scope       agentskills.Scope `json:"scope"`
+	ProjectID   string            `json:"project_id,omitempty"`
+	Description string            `json:"description"`
+	LatestAt    int64             `json:"latest_at"`
+}
+
+func wireOrphan(o agentskills.Orphan) orphanedSkill {
+	return orphanedSkill{
+		Name: o.Name, Scope: o.Scope, ProjectID: o.ProjectID,
+		Description: o.Description, LatestAt: o.LatestAt,
+	}
+}
+
+type orphanedSkillsParams struct {
+	ProjectID string `json:"project_id"`
+}
+
+type orphanedSkillsResult struct {
+	Skills []orphanedSkill `json:"skills"`
+}
+
+// liveNameSet turns a Store.List result into the set History.Orphaned
+// excludes by: a skill still on disk is already visible via skills.list,
+// and listing it again under "history only" would tell the writer their
+// file is gone when it is not.
+func liveNameSet(skills []agentskills.Skill) map[string]bool {
+	out := make(map[string]bool, len(skills))
+	for _, s := range skills {
+		out[s.Name] = true
+	}
+	return out
+}
+
+// OrphanedSkills returns a handler for skills.orphaned — #119's fix. A
+// backup carries library.db (and so skill_snapshots) but never the
+// <LINETTA_HOME>/skills directory, so restoring one can leave a skill's
+// version log intact with no file behind it; skills.list, which only reads
+// directories, then has no way to show that name at all. This method reads
+// the other source instead.
+//
+// It mirrors ListSkills' shape on purpose — writer scope always, work scope
+// only when a project_id is given — because it answers the same "what
+// exists for this writer, right now" question from the log rather than the
+// filesystem, and a caller (the Settings pane) already asks ListSkills this
+// way once per render.
+func OrphanedSkills(store SkillStore, history SkillHistory) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p orphanedSkillsParams
+		if len(params) > 0 {
+			if err := json.Unmarshal(params, &p); err != nil {
+				return nil, badParams(err)
+			}
+		}
+		projectID := strings.TrimSpace(p.ProjectID)
+
+		out := orphanedSkillsResult{Skills: make([]orphanedSkill, 0)}
+
+		writerLive, _, err := store.List(agentskills.ScopeWriter, "")
+		if err != nil {
+			return nil, skillErr(err)
+		}
+		writerOrphans, err := history.Orphaned(ctx, agentskills.ScopeWriter, "", liveNameSet(writerLive))
+		if err != nil {
+			return nil, historyErr(err)
+		}
+		for _, o := range writerOrphans {
+			out.Skills = append(out.Skills, wireOrphan(o))
+		}
+
+		if projectID != "" {
+			workLive, _, err := store.List(agentskills.ScopeWork, projectID)
+			if err != nil {
+				return nil, skillErr(err)
+			}
+			workOrphans, err := history.Orphaned(ctx, agentskills.ScopeWork, projectID, liveNameSet(workLive))
+			if err != nil {
+				return nil, historyErr(err)
+			}
+			for _, o := range workOrphans {
+				out.Skills = append(out.Skills, wireOrphan(o))
+			}
 		}
 		return json.Marshal(out)
 	}

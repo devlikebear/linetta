@@ -682,6 +682,26 @@
   flex: none;
   cursor: pointer;
 }
+/* #119: skill_snapshots remembers a name skills.list can no longer see,
+   because its SKILL.md is gone. Sits below the ordinary list, in its own
+   bordered band so it reads as a distinct state rather than more rows of
+   the same list. */
+.settings .skills-orphaned {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.settings .skills-orphaned h4 {
+  margin: 0;
+  font-family: var(--font-mono);
+}
+.settings .skills-orphaned .skills-row-static {
+  flex: 1 1 220px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .settings .skills-new,
 .settings .skills-detail {
   margin-top: 14px;

@@ -32,6 +32,17 @@
   recovery screen, which replaces the whole library file, was never affected.
   The global **writer profile** stays with the library and is never copied or
   duplicated by a per-work restore.
+- Fixed a skill whose file is gone from `<app data>/skills/` being
+  unreachable in Settings → Skills — no row, and no way to see it ever
+  existed. The daily backup still does not carry that folder, only
+  `library.db` (`VACUUM INTO`, nothing else under the data directory), so
+  that has not changed; what changed is that skill_snapshots' own row for the
+  name — landed by every write and delete, whether or not its file survives —
+  is now something the pane can reach. Settings → Skills lists any such name
+  under "Skills that survive only in history," and opens the same history
+  panel and the same restore button every other skill uses: `skills.restore`
+  could already recreate a skill from a version row, it just had no name to
+  restore ([#119](https://github.com/devlikebear/linetta/issues/119)).
 
 ## v1.2.1 - 2026-09-09
 
