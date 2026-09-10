@@ -20,6 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
@@ -227,8 +228,15 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		// inherited it.
 		MemoryToolsEnabled: deps.settings.MemoryToolsEnabled,
 		SkillToolsEnabled:  deps.settings.SkillToolsEnabled,
-		Undo: func(ctx context.Context, batchID string) error {
-			return deps.story.UndoApply(ctx, batchID, deps.clock)
+		Undo: func(ctx context.Context, batchID, snapshotID string) (string, string, error) {
+			if batchID != "" {
+				return "", "", deps.story.UndoApply(ctx, batchID, deps.clock)
+			}
+			n, err := tools.RestoreSnapshot(ctx, snapshotID)
+			if err != nil {
+				return "", "", err
+			}
+			return n.ProjectID, n.ID, nil
 		},
 		Clock: deps.clock,
 	}
@@ -277,35 +285,48 @@ func (c *agentController) Clear(ctx context.Context, projectID string) error {
 	return c.svc.Clear(ctx, projectID)
 }
 
-// Undo reverts a structural batch the agent applied. A batch that has aged
-// out of storyops' in-memory undo window is not the writer's mistake — it is
-// the ordinary result of a restart or a few more turns — so it gets its own
-// reason code rather than surfacing storyops' English sentence verbatim.
+// Undo reverts what the agent last did: a structural batch (batchID) or a
+// scene write's pre-write snapshot (snapshotID) — see rpc/handlers.AgentUndo
+// for the exactly-one-of validation this relies on. A batch that has aged out
+// of storyops' in-memory undo window, or a snapshot the writer's own cleanup
+// has since dropped, is not the writer's mistake — it is the ordinary result
+// of a restart, a few more turns, or normal retention — so both map to the
+// same reason code rather than surfacing the collaborator's English sentence
+// verbatim.
 //
-// A successful revert emits mcp.changed, exactly as the equivalent tool path
-// does (mcphost.ToolDeps.undoLastChange). It has to: RestoreOutline deletes
-// the nodes the batch created, and mcp.changed is the ONLY signal the
-// workspace refreshes its outline from. Without it the sidebar keeps listing
-// chapters and scenes that no longer exist in the database — a tree the
-// writer can click into and get errors.nodeNotFound from — immediately after
-// their own undo reported success.
+// A successful revert emits mcp.changed, exactly as the equivalent tool paths
+// do (mcphost.ToolDeps.undoLastChange, via UndoApply/RestoreSnapshot). It has
+// to: a batch undo's RestoreOutline deletes the nodes the batch created, and a
+// snapshot undo overwrites a scene's body outside the write path the panel
+// otherwise learns from — mcp.changed is the ONLY signal the workspace
+// refreshes from either way. Without it the sidebar and open editor keep
+// showing stale content immediately after the writer's own undo reported
+// success.
 //
-// The empty project id matches undoLastChange's own call: the batch id does
-// not carry a work, and useMcpChanges treats an empty project_id as "refresh
-// regardless" rather than filtering the event away.
-func (c *agentController) Undo(ctx context.Context, batchID string) error {
-	if err := c.svc.Undo(ctx, batchID); err != nil {
-		if errors.Is(err, storyops.ErrUndoBatchNotFound) {
+// The batch path's empty project id matches undoLastChange's own call: the
+// batch id does not carry a work, and useMcpChanges treats an empty
+// project_id as "refresh regardless" rather than filtering the event away.
+// The snapshot path always has a project id and node id — svc.Undo hands
+// back the restored scene's — so those are carried instead.
+func (c *agentController) Undo(ctx context.Context, batchID, snapshotID string) error {
+	projectID, nodeID, err := c.svc.Undo(ctx, batchID, snapshotID)
+	if err != nil {
+		if errors.Is(err, storyops.ErrUndoBatchNotFound) || errors.Is(err, snapshot.ErrNotFound) {
 			return &rpc.ReasonError{Reason: rpc.ReasonAgentUndoUnavailable, Err: err}
 		}
 		return err
 	}
 	if c.notify != nil {
-		c.notify("mcp.changed", mcphost.ChangedPayload{
+		payload := mcphost.ChangedPayload{
 			Tool:    "linetta_undo_last_change",
 			BatchID: batchID,
 			Source:  mcphost.SourceAgent,
-		})
+		}
+		if nodeID != "" {
+			payload.ProjectID = projectID
+			payload.NodeIDs = []string{nodeID}
+		}
+		c.notify("mcp.changed", payload)
 	}
 	return nil
 }

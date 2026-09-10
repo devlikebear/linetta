@@ -26,8 +26,9 @@ type fakeAgent struct {
 	clearErr error
 	cleared  string
 
-	undoErr error
-	undone  string
+	undoErr    error
+	undone     string
+	undoneSnap string
 }
 
 func (f *fakeAgent) Run(_ context.Context, projectID, nodeID, prompt string) (string, error) {
@@ -49,8 +50,8 @@ func (f *fakeAgent) Clear(_ context.Context, projectID string) error {
 	f.cleared = projectID
 	return f.clearErr
 }
-func (f *fakeAgent) Undo(_ context.Context, batchID string) error {
-	f.undone = batchID
+func (f *fakeAgent) Undo(_ context.Context, batchID, snapshotID string) error {
+	f.undone, f.undoneSnap = batchID, snapshotID
 	return f.undoErr
 }
 
@@ -154,6 +155,33 @@ func TestAgentUndo_requiresABatchID(t *testing.T) {
 	}
 	if f.undone != "" {
 		t.Errorf("controller was reached with an empty batch_id: undone = %q", f.undone)
+	}
+}
+
+// A scene write's undo goes through snapshot_id instead of batch_id (#112);
+// AgentUndo must accept it and hand it to the controller unchanged.
+func TestAgentUndo_acceptsASnapshotID(t *testing.T) {
+	f := &fakeAgent{}
+	if _, err := AgentUndo(f)(context.Background(), json.RawMessage(`{"snapshot_id":"s1"}`)); err != nil {
+		t.Fatalf("undo: %v", err)
+	}
+	if f.undoneSnap != "s1" || f.undone != "" {
+		t.Errorf("controller saw batch=%q snapshot=%q, want batch empty and snapshot s1", f.undone, f.undoneSnap)
+	}
+}
+
+// Exactly one of batch_id, snapshot_id is valid: neither and both are both
+// refused before the controller is reached.
+func TestAgentUndo_requiresExactlyOneOfBatchOrSnapshot(t *testing.T) {
+	f := &fakeAgent{}
+	if _, err := AgentUndo(f)(context.Background(), json.RawMessage(`{}`)); err == nil {
+		t.Fatal("neither batch_id nor snapshot_id must be refused")
+	}
+	if _, err := AgentUndo(f)(context.Background(), json.RawMessage(`{"batch_id":"b1","snapshot_id":"s1"}`)); err == nil {
+		t.Fatal("both batch_id and snapshot_id must be refused")
+	}
+	if f.undone != "" || f.undoneSnap != "" {
+		t.Errorf("controller was reached with invalid params: batch=%q snapshot=%q", f.undone, f.undoneSnap)
 	}
 }
 

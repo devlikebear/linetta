@@ -4,6 +4,7 @@ package engineapp
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/agenttest"
@@ -107,6 +108,112 @@ func TestAgentUndo_saysNothingChangedWhenTheBatchIsGone(t *testing.T) {
 	_, rpcErr := call(t, app, "agent.undo", `{"batch_id":"no-such-batch"}`)
 	if rpcErr == nil {
 		t.Fatal("agent.undo accepted a batch id that was never applied")
+	}
+	if log.saw("mcp.changed") {
+		t.Fatalf("a refused undo emitted mcp.changed: %s", log.paramsFor("mcp.changed"))
+	}
+}
+
+// The scenario #112 exists for: a scene write, the most common agent action,
+// must be revertible from the tool line the same way an outline batch is —
+// through snapshot_id rather than batch_id. A successful revert must still
+// tell the workspace the scene changed, or the open editor keeps showing the
+// agent's prose after the writer's own undo reported success.
+func TestAgentUndo_withASnapshotID_tellsTheWorkspaceTheSceneChanged(t *testing.T) {
+	app := openApp(t)
+	projectID, nodeID := seedProjectWithScene(t, app)
+	before := nodeContent(t, app, nodeID)
+
+	consent := `{"provider":"anthropic","providers":{"anthropic":{"api_key":"sk-test","consented_at":1700000000000}}}`
+	if _, rpcErr := call(t, app, "settings.set", consent); rpcErr != nil {
+		t.Fatalf("settings.set: %+v", rpcErr)
+	}
+
+	app.SetProviderFactoryForTest(agenttest.NewScriptedClientFactory(
+		agenttest.ScriptedTurn{ToolName: "linetta_write_scene",
+			ToolArgs: `{"node_id":"` + nodeID + `","text":"새로 쓴 문장.","expected_content_version":0}`},
+		agenttest.ScriptedTurn{Text: "1장을 다시 썼습니다."},
+	))
+
+	runLog := app.CaptureNotificationsForTest()
+	if _, rpcErr := call(t, app, "agent.run",
+		`{"project_id":"`+projectID+`","node_id":"`+nodeID+`","prompt":"1장을 다시 써줘"}`); rpcErr != nil {
+		t.Fatalf("agent.run: %+v", rpcErr)
+	}
+	waitForNotification(t, runLog, "agent.done")
+
+	// The snapshot id the panel would render its 되돌리기 button from: it
+	// reaches the panel only on agent.tool's resolving event, exactly like
+	// batch_id does for an outline batch.
+	var tool struct {
+		Name       string `json:"name"`
+		State      string `json:"state"`
+		SnapshotID string `json:"snapshot_id"`
+	}
+	if err := json.Unmarshal(runLog.paramsFor("agent.tool"), &tool); err != nil {
+		t.Fatalf("decode agent.tool: %v", err)
+	}
+	if tool.SnapshotID == "" {
+		t.Fatalf("agent.tool %s/%s carried no snapshot_id; there is nothing for undo to revert",
+			tool.Name, tool.State)
+	}
+	if got := nodeContent(t, app, nodeID); !strings.Contains(got, "새로 쓴 문장") {
+		t.Fatalf("scene was not written: %s", got)
+	}
+
+	// A fresh log, so the assertion below cannot pass on the mcp.changed the
+	// write itself emitted a moment ago.
+	undoLog := app.CaptureNotificationsForTest()
+	if _, rpcErr := call(t, app, "agent.undo", `{"snapshot_id":"`+tool.SnapshotID+`"}`); rpcErr != nil {
+		t.Fatalf("agent.undo: %+v", rpcErr)
+	}
+
+	// The revert really happened...
+	if got := nodeContent(t, app, nodeID); got != before {
+		t.Fatalf("scene was not restored: got %q, want %q", got, before)
+	}
+
+	// ...and the UI was told, or the open editor keeps showing the agent's
+	// prose after the writer's own undo reported success.
+	if !undoLog.saw("mcp.changed") {
+		t.Fatal("agent.undo emitted no mcp.changed; the editor would keep showing the reverted text")
+	}
+	var changed struct {
+		Tool      string   `json:"tool"`
+		ProjectID string   `json:"project_id"`
+		NodeIDs   []string `json:"node_ids"`
+		Source    string   `json:"source"`
+	}
+	if err := json.Unmarshal(undoLog.paramsFor("mcp.changed"), &changed); err != nil {
+		t.Fatalf("decode mcp.changed: %v", err)
+	}
+	if changed.Tool != "linetta_undo_last_change" {
+		t.Errorf("mcp.changed tool = %q, want linetta_undo_last_change", changed.Tool)
+	}
+	if changed.ProjectID != projectID {
+		t.Errorf("mcp.changed project_id = %q, want %q", changed.ProjectID, projectID)
+	}
+	if len(changed.NodeIDs) != 1 || changed.NodeIDs[0] != nodeID {
+		t.Errorf("mcp.changed node_ids = %v, want [%q]", changed.NodeIDs, nodeID)
+	}
+	if changed.Source != "agent" {
+		t.Errorf("mcp.changed source = %q, want agent", changed.Source)
+	}
+}
+
+// A snapshot the writer's own cleanup (or an id typed by hand) has already
+// dropped is the same ordinary case a stale batch id is: refused with
+// agent_undo_unavailable, not a raw error, and mcp.changed must stay silent.
+func TestAgentUndo_saysNothingChangedWhenTheSnapshotIsGone(t *testing.T) {
+	app := openApp(t)
+	log := app.CaptureNotificationsForTest()
+
+	_, rpcErr := call(t, app, "agent.undo", `{"snapshot_id":"no-such-snapshot"}`)
+	if rpcErr == nil {
+		t.Fatal("agent.undo accepted a snapshot id that does not exist")
+	}
+	if rpcErr.Data == nil || !strings.Contains(string(rpcErr.Data), "agent_undo_unavailable") {
+		t.Errorf("rpc error data = %s, want it to carry agent_undo_unavailable", rpcErr.Data)
 	}
 	if log.saw("mcp.changed") {
 		t.Fatalf("a refused undo emitted mcp.changed: %s", log.paramsFor("mcp.changed"))

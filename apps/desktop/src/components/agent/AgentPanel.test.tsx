@@ -729,6 +729,48 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
     expect(lines[2].textContent).toBe("agentPanel.tool.writeFailed · agentPanel.toolName.linetta_write_scene");
   });
 
+  // #112: a scene write/revise resolves with snapshot_id instead of
+  // batch_id, and the panel must offer the same undo button for it — the
+  // "씀 · 4-2 씬 [되돌리기]" flow the design doc promises, which previously
+  // never fired for prose.
+  it("offers undo on a line that carries a snapshot id instead of a batch id", async () => {
+    await renderReady();
+
+    await emit("agent-tool", { run_id: "r1", name: "linetta_write_scene", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_write_scene",
+      state: "done",
+      summary: "{}",
+      snapshot_id: "snap-1",
+    });
+
+    const button = screen.getByRole("button", { name: "agentPanel.tool.undo" });
+    expect(button).toBeTruthy();
+  });
+
+  it("calls agent.undo with the snapshot id on a scene write line", async () => {
+    rpc.agentUndo.mockImplementation(() => Promise.resolve({ ok: true }));
+    await renderReady();
+
+    await emit("agent-tool", { run_id: "r1", name: "linetta_write_scene", state: "started" });
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_write_scene",
+      state: "done",
+      summary: "{}",
+      snapshot_id: "snap-1",
+    });
+
+    const button = screen.getByRole("button", { name: "agentPanel.tool.undo" });
+    await act(async () => {
+      button.click();
+    });
+
+    expect(rpc.agentUndo).toHaveBeenCalledWith(undefined, "snap-1");
+    expect(screen.queryByRole("button", { name: "agentPanel.tool.undo" })).toBeNull();
+  });
+
   /** Emits one apply_story_ops call that resolved with a batch id, so the
    *  line under test has an undo button. */
   async function lineWithUndoButton() {
@@ -752,7 +794,7 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
       button.click();
     });
 
-    expect(rpc.agentUndo).toHaveBeenCalledWith("batch-1");
+    expect(rpc.agentUndo).toHaveBeenCalledWith("batch-1", undefined);
     expect(screen.queryByRole("button", { name: "agentPanel.tool.undo" })).toBeNull();
     expect(toolLines()[0].textContent).toBe(
       "agentPanel.tool.wrote · agentPanel.toolName.linetta_apply_story_opsagentPanel.tool.undone",
@@ -1252,7 +1294,7 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
       button.click();
     });
 
-    expect(rpc.agentUndo).toHaveBeenCalledWith("batch-restored");
+    expect(rpc.agentUndo).toHaveBeenCalledWith("batch-restored", undefined);
   });
 
   it("skips a tool row that fails to parse, without blanking the rest of the restored conversation", async () => {

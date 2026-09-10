@@ -4,6 +4,7 @@ package mcphost
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -352,6 +353,52 @@ func (d ToolDeps) allowedProjectID() string {
 		return ""
 	}
 	return strings.TrimSpace(d.Settings.MCPProjectID())
+}
+
+// RestoreSnapshot restores a scene's body to a prior snapshot's text,
+// snapshotting the current text first so the restore is itself revertible.
+// It is the shared body behind two callers that must not drift apart:
+// linetta_undo_last_change's snapshot branch (undoLastChange, this package)
+// and agent.undo's RPC path when the writer passes a snapshot id instead of
+// a batch id (engineapp.agentController.Undo) — see #112.
+//
+// Errors are returned plain rather than as an *mcp.CallToolResult so both
+// callers can format them their own way; snapshot.ErrNotFound is the
+// sentinel a caller checks for "nothing to restore" (mapped to
+// agent_undo_unavailable on the RPC path, to "snapshot not found" as a tool
+// error here).
+func (d ToolDeps) RestoreSnapshot(ctx context.Context, snapshotID string) (node.Node, error) {
+	if d.Snapshots == nil {
+		return node.Node{}, errors.New("version history is unavailable in this build")
+	}
+	snap, err := d.Snapshots.GetByID(ctx, snapshotID)
+	if err != nil {
+		return node.Node{}, err
+	}
+	n, err := d.Nodes.Get(ctx, snap.NodeID)
+	if err != nil {
+		return node.Node{}, err
+	}
+	// Mirrors requireNode's restriction check (a restricted server must not
+	// leak a scene outside its one allowed work); a no-op for the built-in
+	// agent, which allowedProjectID always exempts.
+	if restricted := d.allowedProjectID(); restricted != "" && n.ProjectID != restricted {
+		return node.Node{}, fmt.Errorf("scene %q is not available", n.ID)
+	}
+	curDoc := ""
+	if n.ContentDoc != nil {
+		curDoc = *n.ContentDoc
+	}
+	if _, _, err := d.Snapshots.CreateIfChanged(ctx, n.ID, curDoc, snapshot.ReasonManual, d.now()); err != nil {
+		return node.Node{}, fmt.Errorf("could not snapshot before restoring: %w", err)
+	}
+	if err := d.Nodes.UpdateContent(ctx, n.ID, snap.ContentDoc, d.now()); err != nil {
+		return node.Node{}, fmt.Errorf("could not restore the scene: %w", err)
+	}
+	if d.EnqueueSummary != nil {
+		d.EnqueueSummary(n.ID)
+	}
+	return n, nil
 }
 
 func entityKindFilter(kind string) string {

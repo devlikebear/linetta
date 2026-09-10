@@ -430,7 +430,11 @@ export const agent = {
   history: (projectId: string, limit?: number) =>
     rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),
   clear: (projectId: string) => rpcCall<{ ok: true }>("agent.clear", { project_id: projectId }),
-  undo: (batchId: string) => rpcCall<{ ok: true }>("agent.undo", { batch_id: batchId }),
+  // Exactly one of batchId/snapshotId is expected — an outline batch from
+  // linetta_apply_story_ops, or a scene write/revise's pre-write snapshot
+  // (#112). rpcCall drops the other since it stringifies as undefined.
+  undo: (batchId?: string, snapshotId?: string) =>
+    rpcCall<{ ok: true }>("agent.undo", { batch_id: batchId, snapshot_id: snapshotId }),
 };
 
 export const gitSync = {

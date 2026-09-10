@@ -68,11 +68,15 @@ func (t *transcript) appendAssistant(ctx context.Context, projectID, nodeID, run
 // toolEvent is what the panel renders as a chip under the reply: which tool
 // ran, whether it worked, and — for a write — what to undo.
 type toolEvent struct {
-	Name    string   `json:"name"`
-	Summary string   `json:"summary,omitempty"`
-	OK      bool     `json:"ok"`
-	BatchID string   `json:"batch_id,omitempty"`
-	NodeIDs []string `json:"node_ids,omitempty"`
+	Name    string `json:"name"`
+	Summary string `json:"summary,omitempty"`
+	OK      bool   `json:"ok"`
+	BatchID string `json:"batch_id,omitempty"`
+	// SnapshotID mirrors toolPayload.SnapshotID (loop.go) — a scene write or
+	// revise's pre-write snapshot, persisted so a reloaded history row still
+	// offers the same undo the live event did (#112).
+	SnapshotID string   `json:"snapshot_id,omitempty"`
+	NodeIDs    []string `json:"node_ids,omitempty"`
 }
 
 func (t *transcript) appendToolEvent(ctx context.Context, projectID, nodeID, runID string, ev toolEvent) error {

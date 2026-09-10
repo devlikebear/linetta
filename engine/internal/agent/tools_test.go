@@ -18,6 +18,7 @@ type echoIn struct {
 
 type echoOut struct {
 	UndoBatchID  string   `json:"undo_batch_id,omitempty"`
+	SnapshotID   string   `json:"snapshot_id,omitempty"`
 	ChangedNodes []string `json:"changed_nodes,omitempty"`
 }
 
@@ -48,7 +49,7 @@ func stubTools(seenRunID *string) RegisterTools {
 				}
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{&mcp.TextContent{Text: "echo: " + in.Text}},
-				}, echoOut{UndoBatchID: "batch-1", ChangedNodes: []string{"n1", "n2"}}, nil
+				}, echoOut{UndoBatchID: "batch-1", SnapshotID: "snap-1", ChangedNodes: []string{"n1", "n2"}}, nil
 			})
 	}
 }
@@ -100,6 +101,14 @@ func TestCall_returnsTextAndTheWriteMetadata(t *testing.T) {
 	}
 	if got.BatchID != "batch-1" {
 		t.Errorf("BatchID = %q, want batch-1", got.BatchID)
+	}
+	// A write tool never sets both in practice (#112: linetta_apply_story_ops
+	// sets undo_batch_id, linetta_write_scene/linetta_revise_scene set
+	// snapshot_id), but writeMetadata reads either independently, and this
+	// stub sets both to prove neither field's presence depends on the other's
+	// absence.
+	if got.SnapshotID != "snap-1" {
+		t.Errorf("SnapshotID = %q, want snap-1", got.SnapshotID)
 	}
 	if len(got.NodeIDs) != 2 || got.NodeIDs[0] != "n1" {
 		t.Errorf("NodeIDs = %v", got.NodeIDs)

@@ -35,6 +35,14 @@
   batch-undoable, scene prose goes through `linetta_write_scene` instead —
   are unchanged. Part of [#90](https://github.com/devlikebear/linetta/issues/90)
   ([#132](https://github.com/devlikebear/linetta/issues/132)).
+- A scene the agent wrote can now be reverted from its tool line, the same
+  way an outline batch already could. The agent panel only offered an undo
+  button when a tool call returned `batch_id`, but `linetta_write_scene` and
+  `linetta_revise_scene` — the agent's most common action — return
+  `snapshot_id` instead, so the "click undo on the line you just watched
+  change" flow the design doc promises never fired for prose — tracked as
+  [#112](https://github.com/devlikebear/linetta/issues/112). The panel now
+  offers undo whenever a line carries either.
 - Restoring a single work from a backup now brings its work notes back with
   it. 1.2.0 added per-work **work notes** (`agent_memory`, scope
   `work_notes`) but `MergeProject`, the per-work restore path, copied only the

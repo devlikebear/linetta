@@ -55,5 +55,5 @@ func (c *agentController) Cancel(context.Context, string) error { return nil }
 func (c *agentController) History(context.Context, string, int) (json.RawMessage, error) {
 	return json.RawMessage(`[]`), nil
 }
-func (c *agentController) Clear(context.Context, string) error { return nil }
-func (c *agentController) Undo(context.Context, string) error  { return errAgentUnavailable }
+func (c *agentController) Clear(context.Context, string) error        { return nil }
+func (c *agentController) Undo(context.Context, string, string) error { return errAgentUnavailable }

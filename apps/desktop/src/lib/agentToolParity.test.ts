@@ -115,7 +115,7 @@ describe("restored tool row parity with the engine's toolEvent", () => {
   it("finds the Go struct's tags (guards against the extraction silently breaking)", async () => {
     // Without this, a broken extraction makes every assertion below pass
     // vacuously — the exact failure mode this file exists to prevent.
-    expect(await toolEventTags()).toHaveLength(5);
+    expect(await toolEventTags()).toHaveLength(6);
   });
 
   it("reads a row written with the engine's own field names", async () => {
@@ -132,15 +132,18 @@ describe("restored tool row parity with the engine's toolEvent", () => {
     expect(parsed?.name).toBe("name-value");
     expect(parsed?.ok).toBe(true);
     expect(parsed?.batch_id).toBe("batch_id-value");
+    expect(parsed?.snapshot_id).toBe("snapshot_id-value");
   });
 
   it("carries every required field the engine's struct declares", async () => {
     const tags = await toolEventTags();
-    // The panel needs `name` and `ok` to draw the line and `batch_id` to offer
+    // The panel needs `name` and `ok` to draw the line, and `batch_id` or
+    // `snapshot_id` (#112: a scene write/revise's pre-write snapshot, the
+    // undo target linetta_apply_story_ops's batch_id never covers) to offer
     // undo. `summary` and `node_ids` are deliberately not mirrored — see the
     // notes on `Line` and on AgentToolPayload — so this asserts the direction
     // that matters: everything the panel DOES read must still exist in Go.
-    for (const needed of ["name", "ok", "batch_id"]) {
+    for (const needed of ["name", "ok", "batch_id", "snapshot_id"]) {
       expect(tags, `the panel reads ${needed} off a restored tool row`).toContain(needed);
     }
   });
