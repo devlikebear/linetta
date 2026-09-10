@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.2.2 - 2026-09-10
 
 - Fixed five ways the editor could lose or overwrite what you typed, all in
   the same save path. Toggling focus mode rebuilt the editor from the scene
