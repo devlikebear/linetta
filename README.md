@@ -93,8 +93,8 @@ and the OpenAI-compatible endpoint cannot be configured there; signing in
 with a ChatGPT account still works, since that path stores tokens in
 Linetta's data directory instead.
 
-Open the agent with `Cmd/Ctrl+J`; connect a provider first, or the panel
-prompts you to set one up. It reaches Linetta's tools the same way an
+Open the agent with the toolbar **Agent** button or `Cmd/Ctrl+J`; connect a
+provider first, or the panel prompts you to set one up. It reaches Linetta's tools the same way an
 external MCP client does, and every call it makes is recorded in the MCP
 activity log, which shows whether the built-in agent or an external client
 made it. A structural change — outline restructuring and the like — gets an
