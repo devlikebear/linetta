@@ -117,6 +117,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "skills.delete",
     "skills.history",
     "skills.list",
+    "skills.orphaned",
     "skills.read",
     "skills.restore",
     "skills.write",

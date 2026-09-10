@@ -23,6 +23,7 @@ const rpc = vi.hoisted(() => ({
   del: vi.fn(),
   history: vi.fn(),
   restore: vi.fn(),
+  orphaned: vi.fn(),
   projectsList: vi.fn(),
 }));
 
@@ -34,6 +35,7 @@ vi.mock("../../lib/rpc", () => ({
     delete: rpc.del,
     history: rpc.history,
     restore: rpc.restore,
+    orphaned: rpc.orphaned,
   },
   projects: { list: rpc.projectsList },
 }));
@@ -198,6 +200,7 @@ describe("SkillsSection", () => {
     rpc.write.mockImplementation((input: Over) => Promise.resolve(written(input)));
     rpc.del.mockResolvedValue({ versioned: true });
     rpc.history.mockResolvedValue({ versions: [] });
+    rpc.orphaned.mockResolvedValue({ skills: [] });
   });
 
   it("names who wrote each skill", async () => {
@@ -1063,5 +1066,85 @@ describe("SkillsSection", () => {
     const error = await screen.findByTestId("skills-error");
     expect(error).toHaveAttribute("role", "alert");
     expect(error.textContent).toContain("permission denied");
+  });
+
+  // #119: skill_snapshots remembers a name skills.list can no longer see,
+  // because its file is gone. This section is the only way a writer reaches
+  // it — it must render, name the right skill, and open the SAME history
+  // panel and SAME restore action every other skill uses.
+  describe("names that survive only in history (#119)", () => {
+    it("renders nothing when nothing is orphaned", async () => {
+      rpc.orphaned.mockResolvedValue({ skills: [] });
+      await mounted();
+      expect(screen.queryByTestId("skills-orphaned")).toBeNull();
+    });
+
+    it("lists an orphaned name and opens its history from the reused panel", async () => {
+      rpc.orphaned.mockResolvedValue({
+        skills: [
+          {
+            name: "old-voice",
+            scope: "writer",
+            description: "예전 말투",
+            latest_at: 1780200000000,
+          },
+        ],
+      });
+      // The file is genuinely gone: skills.read for this name answers the
+      // way agentskills.Store.Read does for one that is not on disk.
+      rpc.read.mockImplementation((_scope: string, _projectId: string, name: string) =>
+        name === "old-voice"
+          ? Promise.reject(new Error("agentskills: skill not found"))
+          : Promise.resolve(full()),
+      );
+      rpc.history.mockResolvedValue({
+        versions: [
+          {
+            id: "v1",
+            name: "old-voice",
+            scope: "writer",
+            description: "예전 말투",
+            author: "writer",
+            body: "마지막으로 남은 본문",
+            body_runes: 8,
+            reason: "deleted",
+            created_at: 1780200000000,
+          },
+        ],
+      });
+      rpc.restore.mockResolvedValue({ ...full({ body: "마지막으로 남은 본문", name: "old-voice" }), versioned: true });
+
+      await mounted();
+
+      const section = await screen.findByTestId("skills-orphaned");
+      expect(within(section).getByTestId("skill-orphaned-scope-writer-old-voice")).toHaveTextContent(
+        "settings.skills.scope.writer",
+      );
+      expect(section.textContent).toContain("old-voice");
+
+      await userEvent.click(within(section).getByTestId("skill-orphaned-open-writer-old-voice"));
+
+      // Opening it selects the name (so the detail head names it) and asks
+      // for its history — the same skills.history call the ordinary "History"
+      // button makes.
+      await waitFor(() => expect(rpc.history).toHaveBeenCalledWith("writer", "work-1", "old-voice"));
+      expect(await screen.findByTestId("skill-detail-name")).toHaveTextContent("old-voice");
+
+      // No file on disk: the read fails, and that failure is not hidden —
+      // except the history panel it opens onto must not be replaced by a
+      // "not found" line where the editor would otherwise be.
+      await waitFor(() => expect(rpc.read).toHaveBeenCalledWith("writer", "work-1", "old-voice"));
+      expect(screen.queryByTestId("skill-read-error")).toBeNull();
+
+      const panel = await screen.findByTestId("skill-history-panel");
+      expect(within(panel).getByTestId("skill-version-reason-v1")).toHaveTextContent(
+        "settings.skills.reason.deleted",
+      );
+      expect(screen.getByTestId("skill-version-preview")).toHaveTextContent("마지막으로 남은 본문");
+
+      // And the existing restore action works, unmodified.
+      await userEvent.click(screen.getByTestId("skill-history-restore"));
+      await waitFor(() => expect(rpc.restore).toHaveBeenCalledWith("v1"));
+    });
   });
 });

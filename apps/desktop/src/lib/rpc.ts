@@ -29,6 +29,7 @@ import type {
   MemoryDocument,
   MemoryState,
   Skill,
+  OrphanedSkillsResult,
   SkillDeleteResult,
   SkillScope,
   SkillVersion,
@@ -334,6 +335,10 @@ export const skills = {
       limit,
     }),
   restore: (id: string) => rpcCall<SkillWriteResult>("skills.restore", { id }),
+  /** #119: names skill_snapshots remembers for this scope/work that have no
+   *  file on disk — see OrphanedSkillsResult. Same "writer scope always,
+   *  work scope only with a project id" rule as `list`. */
+  orphaned: (projectId: string) => rpcCall<OrphanedSkillsResult>("skills.orphaned", { project_id: projectId }),
 };
 
 export interface BackupEntry {

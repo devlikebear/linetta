@@ -1146,6 +1146,27 @@ export interface SkillVersion {
   created_at: number;
 }
 
+/** One name skills.orphaned found in the version log with no file behind it
+ *  (#119): the daily backup carries skill_snapshots but never the
+ *  `<LINETTA_HOME>/skills` directory, so a skill lost from disk — by hand, or
+ *  by restoring that backup — drops out of skills.list even though its
+ *  history still has it. No body: the writer opens the same history panel
+ *  skills.history already feeds to see versions and restore one. */
+export interface OrphanedSkill {
+  name: string;
+  scope: SkillScope;
+  project_id?: string;
+  description: string;
+  latest_at: number;
+}
+
+/** skills.orphaned's shape: mirrors skills.list's "writer scope always, work
+ *  scope only with a project id" rule, answered from skill_snapshots instead
+ *  of the filesystem. */
+export interface OrphanedSkillsResult {
+  skills: OrphanedSkill[];
+}
+
 /** skills-changed's payload. "agent" and "external" come from mcphost's
  *  linetta_edit_skill tool (mcphost/tools_write.go); "writer" is a save made
  *  by the person at the keyboard, from skills.write, skills.delete or

@@ -436,6 +436,11 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("skills.delete", handlers.DeleteSkill(skillsStore, skillHistory, clock, skillNotify))
 	s.Handle("skills.history", handlers.SkillVersions(skillHistory))
 	s.Handle("skills.restore", handlers.RestoreSkill(skillsStore, skillHistory, clock, skillNotify))
+	// #119: skills.list only reads <LINETTA_HOME>/skills, so a name whose
+	// file was lost (the daily backup never carries that directory) drops
+	// out of Settings even though the version log still has it.
+	// skills.orphaned answers from skill_snapshots instead.
+	s.Handle("skills.orphaned", handlers.OrphanedSkills(skillsStore, skillHistory))
 	s.Handle("mcp.status", handlers.MCPStatus(mcpCtrl))
 	s.Handle("mcp.enable", handlers.MCPEnable(mcpCtrl))
 	s.Handle("mcp.disable", handlers.MCPDisable(mcpCtrl))

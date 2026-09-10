@@ -5,6 +5,7 @@ import { useI18n } from "../../lib/i18n";
 import { projects as projectsApi, skills as skillsApi } from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
 import type {
+  OrphanedSkill,
   Project,
   Skill,
   SkillChangedPayload,
@@ -115,6 +116,12 @@ export function SkillsSection() {
   const [diagnostics, setDiagnostics] = useState<{ path: string; message: string }[]>([]);
   const [listError, setListError] = useState<unknown>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, unknown>>({});
+  // #119: names skill_snapshots remembers for this scope/work that
+  // skills.list cannot see, because their SKILL.md is gone. Fetched
+  // alongside `rows`, on the same "list" ticket, so the two never disagree
+  // about which work they describe — but a failure here must not blank the
+  // skill list itself (see applyList), because it is the lesser of the two.
+  const [orphaned, setOrphaned] = useState<OrphanedSkill[]>([]);
 
   const [selected, setSelectedState] = useState<Target | null>(null);
   /** The open skill, readable from inside a promise callback. A delete's
@@ -242,17 +249,24 @@ export function SkillsSection() {
       // enabled toggle — can hold its pending state until the refreshed row
       // is actually on screen, rather than letting the checkbox snap back to
       // the old value in the gap.
-      return skillsApi.list(id).then(
-        (res) => {
-          if (!newest("list", ticket)) return;
-          setRows(res.skills ?? []);
-          setDiagnostics(res.diagnostics ?? []);
+      //
+      // skills.orphaned rides the same ticket as skills.list — they are
+      // both "what does this work's Settings pane show right now" — but
+      // settled independently (allSettled, not all): a broken orphaned
+      // query must not blank the skill list a writer is actively using, and
+      // a broken list query says nothing about whether the history-only
+      // section should go away.
+      return Promise.allSettled([skillsApi.list(id), skillsApi.orphaned(id)]).then(([listRes, orphanedRes]) => {
+        if (!newest("list", ticket)) return;
+        if (listRes.status === "fulfilled") {
+          setRows(listRes.value.skills ?? []);
+          setDiagnostics(listRes.value.diagnostics ?? []);
           setListError(null);
-        },
-        (e) => {
-          if (newest("list", ticket)) setListError(e);
-        },
-      );
+        } else {
+          setListError(listRes.reason);
+        }
+        setOrphaned(orphanedRes.status === "fulfilled" ? (orphanedRes.value.skills ?? []) : []);
+      });
     },
     [claim, newest],
   );
@@ -290,6 +304,14 @@ export function SkillsSection() {
   const selScope = selected?.scope ?? null;
   const selName = selected?.name ?? null;
 
+  // Set by openHistoryFor right before it selects a DIFFERENT skill, and
+  // consumed (reset to false) the one time the effect below runs because of
+  // that selection — see openHistoryFor's comment for why: opening a new
+  // skill ordinarily closes any history panel left open on the one before
+  // it, but opening #119's "history only" entry point is a request to show
+  // exactly that panel, for the skill it just selected.
+  const suppressHistoryReset = useRef(false);
+
   useEffect(() => {
     if (workId === null || selScope === null || selName === null) {
       setDetail(null);
@@ -307,7 +329,11 @@ export function SkillsSection() {
     setNotVersioned((cur) => (cur === openKey ? cur : null));
     setBehind(false);
     setAsking(false);
-    setHistoryOpen(false);
+    if (suppressHistoryReset.current) {
+      suppressHistoryReset.current = false;
+    } else {
+      setHistoryOpen(false);
+    }
     pending.current = null;
     skillsApi.read(selScope, workId, selName).then(
       (s) => {
@@ -572,9 +598,27 @@ export function SkillsSection() {
     );
   };
 
-  const openHistory = () => {
-    if (!selected || workId === null) return;
-    const target = selected;
+  /** Opens the history panel for `target`, selecting it first if it is not
+   *  already the open skill.
+   *
+   *  This is the single entry point for #119's "history only" section as
+   *  well as the ordinary detail view's history button — reusing the exact
+   *  same panel and the exact same `doRestore` rather than a second history
+   *  UI is the point of the fix. Selecting an orphaned name triggers the
+   *  usual detail read (the effect above), and that read fails with "not
+   *  found" — which is not swallowed here, because it is simply true: the
+   *  file really is gone. It renders next to the history panel instead of
+   *  in place of it, since the panel does not require `detail` to be set. */
+  const openHistoryFor = (target: Target) => {
+    if (workId === null) return;
+    const cur = selectedRef.current;
+    const isNewSelection = cur === null || cur.scope !== target.scope || cur.name !== target.name;
+    // Selecting a different skill runs the detail effect above, which
+    // otherwise always closes a history panel left open on the skill being
+    // left. This call means to open exactly that panel for the skill it is
+    // about to select, so tell that one effect run to leave it alone.
+    if (isNewSelection) suppressHistoryReset.current = true;
+    setSelected(target);
     setHistoryOpen(true);
     setVersions(null);
     setVersionId(null);
@@ -590,6 +634,11 @@ export function SkillsSection() {
         if (newest("history", ticket)) setHistoryError(e);
       },
     );
+  };
+
+  const openHistory = () => {
+    if (!selected) return;
+    openHistoryFor(selected);
   };
 
   const doRestore = () => {
@@ -862,6 +911,46 @@ export function SkillsSection() {
         </ul>
       )}
 
+      {/* #119: skills.list only reads <LINETTA_HOME>/skills, so a name the
+          version log still remembers but whose file is gone (a hand
+          deletion, or a restored backup — which never carries that
+          directory, see backup.go) has no row above. Shown only when
+          non-empty, right below the ordinary list, and never in its own
+          modal: it opens the SAME history panel and the SAME restore
+          action every other skill uses. */}
+      {orphaned.length > 0 && (
+        <div className="skills-orphaned" data-testid="skills-orphaned">
+          <h4>{t("settings.skills.historyOnly.title")}</h4>
+          <p className="sd">{t("settings.skills.historyOnly.description")}</p>
+          <ul className="skills-list" data-testid="skills-orphaned-list">
+            {orphaned.map((o) => {
+              const id = rowId(o.scope, o.name);
+              return (
+                <li className="skills-row" key={id} data-testid={`skill-orphaned-row-${id}`}>
+                  <span className="skills-row-static">
+                    <span className="skills-row-name">{o.name}</span>
+                    <span className="sd">{formatTime(o.latest_at)}</span>
+                  </span>
+                  <span className="skills-badges">
+                    <span className="skills-badge" data-testid={`skill-orphaned-scope-${id}`}>
+                      {t(scopeKey(o.scope))}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    data-testid={`skill-orphaned-open-${id}`}
+                    onClick={() => openHistoryFor({ scope: o.scope, name: o.name })}
+                  >
+                    {t("settings.skills.history")}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       {!creating && (
         <button type="button" className="btn ghost sm" data-testid="skills-new" onClick={() => setCreating(true)}>
           {t("settings.skills.new")}
@@ -956,7 +1045,15 @@ export function SkillsSection() {
             )}
           </div>
 
-          {readError != null && (
+          {/* Suppressed while the history panel is open: the only way to
+              reach it with `detail` still null is #119's "history only"
+              entry point, opening a name that has no file on disk — the
+              read failing "not found" is simply true, and the history panel
+              already says everything the writer needs. In the ordinary
+              flow the history button lives inside `{detail && …}`, so
+              `historyOpen` can only become true there once `detail` is
+              already set and `readError` is already null. */}
+          {readError != null && !historyOpen && (
             <p className="sd" role="alert" data-testid="skill-read-error">
               {rpcErrorMessage(readError, t)}
             </p>
@@ -1066,73 +1163,77 @@ export function SkillsSection() {
                   </div>
                 </div>
               )}
-
-              {historyOpen && (
-                <div className="skills-history" data-testid="skill-history-panel">
-                  <div className="skills-history-list">
-                    {versions === null && historyError == null && (
-                      <p className="sd">{t("common.loading")}</p>
-                    )}
-                    {versions !== null && versions.length === 0 && (
-                      <p className="sd" data-testid="skill-history-empty">
-                        {t("settings.skills.history.empty")}
-                      </p>
-                    )}
-                    {(versions ?? []).map((v) => (
-                      <button
-                        type="button"
-                        key={v.id}
-                        className={"skills-version" + (v.id === versionId ? " on" : "")}
-                        data-testid={`skill-version-${v.id}`}
-                        onClick={() => setVersionId(v.id)}
-                      >
-                        <span className="skills-version-time">{formatTime(v.created_at)}</span>
-                        {/* What happened, not just when. On a deleted skill's
-                            history this is the only thing that says which row
-                            holds the last body the writer had. */}
-                        <span className="skills-badge" data-testid={`skill-version-reason-${v.id}`}>
-                          {t(reasonKey(v.reason))}
-                        </span>
-                        <span className="skills-badge">{t(authorKey(v.author))}</span>
-                      </button>
-                    ))}
-                  </div>
-                  {/* The body travels with every row precisely so the writer
-                      can see what they are about to revert to; a version list
-                      you cannot preview is a list of timestamps. */}
-                  <pre className="skills-version-preview" data-testid="skill-version-preview">
-                    {selectedVersion?.body ?? ""}
-                  </pre>
-                  {historyError != null && (
-                    <p className="sd" role="alert" data-testid="skill-history-error">
-                      {rpcErrorMessage(historyError, t)}
-                    </p>
-                  )}
-                  <div className="skills-actions">
-                    <button
-                      type="button"
-                      className="btn ghost sm"
-                      data-testid="skill-history-close"
-                      onClick={() => setHistoryOpen(false)}
-                    >
-                      {t("common.close")}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn accent sm"
-                      data-testid="skill-history-restore"
-                      disabled={!selectedVersion}
-                      onClick={doRestore}
-                    >
-                      {t("settings.skills.history.restore")}
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           )}
 
-          {!detail && readError == null && <p className="sd">{t("common.loading")}</p>}
+          {/* Outside the `{detail && …}` fragment on purpose: #119's
+              "history only" rows open this panel for a name that has no
+              file on disk, so `detail` never loads for them, and the panel
+              — and `doRestore` — must not wait on it. `doRestore` does not
+              read `detail` either; it replaces the editor's state from
+              whatever it restores. */}
+          {historyOpen && (
+            <div className="skills-history" data-testid="skill-history-panel">
+              <div className="skills-history-list">
+                {versions === null && historyError == null && <p className="sd">{t("common.loading")}</p>}
+                {versions !== null && versions.length === 0 && (
+                  <p className="sd" data-testid="skill-history-empty">
+                    {t("settings.skills.history.empty")}
+                  </p>
+                )}
+                {(versions ?? []).map((v) => (
+                  <button
+                    type="button"
+                    key={v.id}
+                    className={"skills-version" + (v.id === versionId ? " on" : "")}
+                    data-testid={`skill-version-${v.id}`}
+                    onClick={() => setVersionId(v.id)}
+                  >
+                    <span className="skills-version-time">{formatTime(v.created_at)}</span>
+                    {/* What happened, not just when. On a deleted skill's
+                        history this is the only thing that says which row
+                        holds the last body the writer had. */}
+                    <span className="skills-badge" data-testid={`skill-version-reason-${v.id}`}>
+                      {t(reasonKey(v.reason))}
+                    </span>
+                    <span className="skills-badge">{t(authorKey(v.author))}</span>
+                  </button>
+                ))}
+              </div>
+              {/* The body travels with every row precisely so the writer
+                  can see what they are about to revert to; a version list
+                  you cannot preview is a list of timestamps. */}
+              <pre className="skills-version-preview" data-testid="skill-version-preview">
+                {selectedVersion?.body ?? ""}
+              </pre>
+              {historyError != null && (
+                <p className="sd" role="alert" data-testid="skill-history-error">
+                  {rpcErrorMessage(historyError, t)}
+                </p>
+              )}
+              <div className="skills-actions">
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  data-testid="skill-history-close"
+                  onClick={() => setHistoryOpen(false)}
+                >
+                  {t("common.close")}
+                </button>
+                <button
+                  type="button"
+                  className="btn accent sm"
+                  data-testid="skill-history-restore"
+                  disabled={!selectedVersion}
+                  onClick={doRestore}
+                >
+                  {t("settings.skills.history.restore")}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!detail && readError == null && !historyOpen && <p className="sd">{t("common.loading")}</p>}
         </div>
       )}
     </section>

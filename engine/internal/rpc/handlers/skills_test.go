@@ -223,6 +223,116 @@ func TestListSkillsRefusesAnUnusableWorkID(t *testing.T) {
 	wantInvalidParams(t, err)
 }
 
+// ---- skills.orphaned -------------------------------------------------------
+
+// #119: a skill deleted from disk (skills.delete records the last body, per
+// History.Record's doc comment, then removes the file) is invisible to
+// skills.list but must appear in skills.orphaned — that is the whole point
+// of the method.
+func TestOrphanedSkillsSurfacesANameDeletedFromDisk(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	seedSkill(t, st, agentskills.Skill{
+		Name: "old-voice", Scope: agentskills.ScopeWriter,
+		Description: "예전 말투", Enabled: true, Body: "본문\n",
+	}, 1000)
+	if _, err := DeleteSkill(st, hist, func() int64 { return 2000 }, func(string, any) {})(
+		ctx, json.RawMessage(`{"scope":"writer","name":"old-voice"}`)); err != nil {
+		t.Fatalf("skills.delete: %v", err)
+	}
+
+	raw, err := OrphanedSkills(st, hist)(ctx, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("skills.orphaned: %v", err)
+	}
+	var got orphanedSkillsResult
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Skills) != 1 || got.Skills[0].Name != "old-voice" {
+		t.Fatalf("skills.orphaned = %+v, want the deleted name", got.Skills)
+	}
+	if got.Skills[0].Scope != agentskills.ScopeWriter {
+		t.Errorf("scope = %q, want %q", got.Skills[0].Scope, agentskills.ScopeWriter)
+	}
+}
+
+// A skill that is still on disk must not also show up under "history
+// only" — that is what skills.list already shows, and duplicating it here
+// would tell the writer their file is gone when it is not.
+func TestOrphanedSkillsOmitsANameStillOnDisk(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	seedSkill(t, st, agentskills.Skill{
+		Name: "still-here", Scope: agentskills.ScopeWriter,
+		Description: "아직 있음", Enabled: true, Body: "본문\n",
+	}, 1000)
+	// seedSkill writes through the store directly, not through
+	// skills.write, so record the version by hand the way the RPC handler
+	// would — Orphaned only excludes by liveNames, so this row would show
+	// up if the exclusion were broken.
+	if err := hist.Record(ctx, agentskills.Skill{
+		Name: "still-here", Scope: agentskills.ScopeWriter,
+		Description: "아직 있음", Enabled: true, Body: "본문\n",
+	}, agentskills.ReasonCreated, 1000); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	raw, err := OrphanedSkills(st, hist)(ctx, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("skills.orphaned: %v", err)
+	}
+	var got orphanedSkillsResult
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Skills) != 0 {
+		t.Errorf("skills.orphaned = %+v, want none — the file is still on disk", got.Skills)
+	}
+}
+
+// With no project_id, work-scoped history is not queried at all — this
+// mirrors ListSkills' own "no work picked yet is legitimate" rule, since
+// ScopeWork has no directory (and no history query target) without one.
+func TestOrphanedSkillsWithNoWorkSelectedOnlyChecksWriterScope(t *testing.T) {
+	ctx, st, hist, projectID := realSkills(t)
+	seedSkill(t, st, agentskills.Skill{
+		Name: "work-skill", Scope: agentskills.ScopeWork, ProjectID: projectID,
+		Description: "작품 스킬", Enabled: true, Body: "본문\n",
+	}, 1000)
+	if _, err := DeleteSkill(st, hist, func() int64 { return 2000 }, func(string, any) {})(
+		ctx, json.RawMessage(`{"scope":"work","project_id":`+quote(projectID)+`,"name":"work-skill"}`)); err != nil {
+		t.Fatalf("skills.delete: %v", err)
+	}
+
+	raw, err := OrphanedSkills(st, hist)(ctx, json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatalf("skills.orphaned: %v", err)
+	}
+	var got orphanedSkillsResult
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Skills) != 0 {
+		t.Errorf("skills.orphaned with no project_id = %+v, want none (work scope not checked)", got.Skills)
+	}
+
+	raw, err = OrphanedSkills(st, hist)(ctx, json.RawMessage(`{"project_id":`+quote(projectID)+`}`))
+	if err != nil {
+		t.Fatalf("skills.orphaned with project_id: %v", err)
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(got.Skills) != 1 || got.Skills[0].Name != "work-skill" {
+		t.Fatalf("skills.orphaned with project_id = %+v, want the deleted work skill", got.Skills)
+	}
+}
+
+func TestOrphanedSkillsRefusesAnUnusableWorkID(t *testing.T) {
+	ctx, st, hist, _ := realSkills(t)
+	_, err := OrphanedSkills(st, hist)(ctx, json.RawMessage(`{"project_id":"../../etc"}`))
+	wantInvalidParams(t, err)
+}
+
 // ---- skills.read ----------------------------------------------------------
 
 // Read is the repair path. A skill over the body cap is refused by Guard and
@@ -1618,4 +1728,8 @@ func (failingHistory) Newest(context.Context, agentskills.Scope, string, string)
 
 func (failingHistory) Get(context.Context, string) (agentskills.Version, error) {
 	return agentskills.Version{}, errors.New("the database is not readable")
+}
+
+func (failingHistory) Orphaned(context.Context, agentskills.Scope, string, map[string]bool) ([]agentskills.Orphan, error) {
+	return nil, errors.New("the database is not readable")
 }

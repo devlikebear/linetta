@@ -461,3 +461,74 @@ func TestNewestRefusesAWriterScopeWithAWorkID(t *testing.T) {
 		t.Error("a writer skill with a work id must be refused, as List refuses it")
 	}
 }
+
+// #119: a name recorded in skill_snapshots but absent from liveNames (the
+// caller's on-disk listing) is an Orphan; a name present in liveNames is
+// not reported at all, because skills.list already shows it.
+func TestOrphanedReturnsANameMissingFromDisk(t *testing.T) {
+	ctx, h, _, _ := seedHistory(t)
+	if err := h.Record(ctx, writerSkill("gone-from-disk", "last body"), ReasonDeleted, 1000); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if err := h.Record(ctx, writerSkill("still-on-disk", "body"), ReasonCreated, 1000); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	got, err := h.Orphaned(ctx, ScopeWriter, "", map[string]bool{"still-on-disk": true})
+	if err != nil {
+		t.Fatalf("Orphaned: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "gone-from-disk" {
+		t.Fatalf("Orphaned = %+v, want only the name absent from liveNames", got)
+	}
+	if got[0].LatestAt != 1000 || got[0].Scope != ScopeWriter {
+		t.Errorf("Orphaned[0] = %+v, want the recorded scope and timestamp", got[0])
+	}
+}
+
+// A name edited or deleted more than once must be reported once, taken
+// from its latest row — not once per row in the log.
+func TestOrphanedCollapsesToTheLatestRowPerName(t *testing.T) {
+	ctx, h, _, _ := seedHistory(t)
+	if err := h.Record(ctx, writerSkill("x", "v1"), ReasonCreated, 1000); err != nil {
+		t.Fatalf("Record v1: %v", err)
+	}
+	if err := h.Record(ctx, writerSkill("x", "v2"), ReasonEdited, 2000); err != nil {
+		t.Fatalf("Record v2: %v", err)
+	}
+	if err := h.Record(ctx, writerSkill("x", "v3 (deleted)"), ReasonDeleted, 3000); err != nil {
+		t.Fatalf("Record v3: %v", err)
+	}
+
+	got, err := h.Orphaned(ctx, ScopeWriter, "", map[string]bool{})
+	if err != nil {
+		t.Fatalf("Orphaned: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("Orphaned = %+v, want one row for one name", got)
+	}
+	if got[0].LatestAt != 3000 {
+		t.Errorf("LatestAt = %d, want the last write's timestamp 3000", got[0].LatestAt)
+	}
+}
+
+// An empty liveNames set (no work id / an empty scope) must not error —
+// this is the same "nothing to exclude" case ListSkills answers with an
+// empty work-scope list.
+func TestOrphanedWithNoHistoryIsAnEmptySlice(t *testing.T) {
+	ctx, h, _, _ := seedHistory(t)
+	got, err := h.Orphaned(ctx, ScopeWriter, "", map[string]bool{})
+	if err != nil {
+		t.Fatalf("Orphaned: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("Orphaned = %+v, want none", got)
+	}
+}
+
+func TestOrphanedRefusesAWriterScopeWithAWorkID(t *testing.T) {
+	ctx, h, _, projectID := seedHistory(t)
+	if _, err := h.Orphaned(ctx, ScopeWriter, projectID, map[string]bool{}); err == nil {
+		t.Error("a writer scope with a work id must be refused, as List and Newest refuse it")
+	}
+}
