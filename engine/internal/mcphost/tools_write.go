@@ -172,18 +172,12 @@ func (d ToolDeps) registerMemoryTool(s *mcp.Server) {
 func (d ToolDeps) registerEditSkillTool(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_edit_skill",
-		Description: "Write one of your own skills: a durable how-to document you keep for next time — how " +
-			"this writer wants fight scenes paced, how a recurring character speaks. Every skill's name and " +
-			"description is put in front of you at the start of a session; linetta_read_skill opens one. " +
-			"Scope writer makes it global, across every work; scope work ties it to the one work in " +
-			"project_id. action create needs description and body; action patch takes either find and " +
-			"replace for a targeted edit (find must appear exactly once in the body) or body to replace the " +
-			"document wholesale, and can also change description or enabled on their own; action delete " +
-			"removes it. Every change is versioned, so the writer can revert what you write — if the " +
-			"result comes back with versioned false, the change was saved but that version row was not, " +
-			"so say so in your reply: the writer cannot revert that one edit. Keep a skill specific and " +
-			"short — the description is one line saying when to reach for it, and bodies are capped; the " +
-			"result says how much room is left.",
+		Description: "Write one of your own skills: a durable how-to for next time. Every skill's " +
+			"name+description is already in front of you; linetta_read_skill opens one. Scope writer is " +
+			"global; scope work ties it to project_id. For patch, find must appear exactly once. Every " +
+			"change is versioned; if versioned comes back false, say so in your reply — the writer cannot " +
+			"revert that edit. Keep skills specific and short; bodies are capped and the result says how " +
+			"much room is left.",
 	}, record(d, "linetta_edit_skill", d.editSkill))
 }
 
