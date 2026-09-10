@@ -178,8 +178,9 @@ type MergeResult struct {
 // brand-new project. Every row gets a fresh id, so nothing in the live library
 // is ever updated or deleted — the merge is purely additive. Copied tables:
 // projects, nodes, entities, mentions, relationships, threads, beats, notes,
-// node_snapshots, fact_cards, fact_sources, writing_stats. Library-level
-// history (companion transcripts, AI runs, MCP activity) stays with the
+// node_snapshots, fact_cards, fact_sources, writing_stats, agent_memory
+// (work_notes scope only). Library-level history (companion transcripts, AI
+// runs, MCP activity, the global writer_profile memory) stays with the
 // library it belongs to.
 func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, projectID, titleSuffix string, now time.Time) (MergeResult, error) {
 	src, done, err := openBackupCopy(ctx, backupPath, tempDir)
@@ -394,6 +395,17 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return row, true
 	}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy writing_stats: %w", err)
+	}
+
+	// agent_memory: only the per-project work_notes row travels with the
+	// work. The global writer_profile row (project_id IS NULL) stays with
+	// the library it belongs to, same as companion transcripts and MCP
+	// activity.
+	if err := copyRows(ctx, sdb, tx, "agent_memory", "scope = 'work_notes' AND project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		row["project_id"] = newProjectID
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy agent_memory: %w", err)
 	}
 
 	if lastOpenedNodeID.Valid {

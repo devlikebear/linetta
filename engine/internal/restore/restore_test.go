@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
@@ -41,6 +42,7 @@ func TestMergeProjectFromBackup(t *testing.T) {
 	notes := note.NewRepo(st)
 	facts := fact.NewRepo(st)
 	snaps := snapshot.NewRepo(st)
+	memory := agentmemory.NewRepo(st.DB())
 
 	p, err := projects.Create(ctx, now, project.NewInput{
 		Title: "원본", Genres: []string{"sf"}, LengthTarget: "short", DefaultPOV: "first",
@@ -88,6 +90,12 @@ func TestMergeProjectFromBackup(t *testing.T) {
 	}
 	if _, err := snaps.Create(ctx, leafID, doc, "manual", now); err != nil {
 		t.Fatalf("snapshot: %v", err)
+	}
+	if _, err := memory.Save(ctx, agentmemory.ScopeWorkNotes, p.ID, "민준은 3화부터 존댓말", now); err != nil {
+		t.Fatalf("work notes: %v", err)
+	}
+	if _, err := memory.Save(ctx, agentmemory.ScopeWriterProfile, "", "짧은 문장을 선호", now); err != nil {
+		t.Fatalf("writer profile: %v", err)
 	}
 
 	res, err := backup.RunManualRecovery(ctx, st.DB(), home, time.UnixMilli(2000))
@@ -205,5 +213,26 @@ func TestMergeProjectFromBackup(t *testing.T) {
 	snapEntries, err := snaps.ListForNode(ctx, mergedLeafID)
 	if err != nil || len(snapEntries) == 0 {
 		t.Fatalf("snapshots = %d err=%v", len(snapEntries), err)
+	}
+
+	mergedNotes, err := memory.Load(ctx, agentmemory.ScopeWorkNotes, merged.ProjectID)
+	if err != nil || mergedNotes.Body != "민준은 3화부터 존댓말" {
+		t.Fatalf("merged work notes = %+v err=%v", mergedNotes, err)
+	}
+	origNotes, err := memory.Load(ctx, agentmemory.ScopeWorkNotes, p.ID)
+	if err != nil || origNotes.Body != "민준은 3화부터 존댓말" {
+		t.Fatalf("original work notes disturbed: %+v err=%v", origNotes, err)
+	}
+
+	var profileCount int
+	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_memory WHERE scope = 'writer_profile'`).Scan(&profileCount); err != nil {
+		t.Fatalf("count writer_profile rows: %v", err)
+	}
+	if profileCount != 1 {
+		t.Fatalf("writer_profile rows = %d, want 1 (merge must not duplicate the global profile)", profileCount)
+	}
+	profile, err := memory.Load(ctx, agentmemory.ScopeWriterProfile, "")
+	if err != nil || profile.Body != "짧은 문장을 선호" {
+		t.Fatalf("writer profile = %+v err=%v", profile, err)
 	}
 }
