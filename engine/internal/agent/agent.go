@@ -104,10 +104,19 @@ type Deps struct {
 	// follow.
 	MemoryToolsEnabled func() bool
 	SkillToolsEnabled  func() bool
-	// Undo reverts a structural batch. It must be bound to the SAME storyops
-	// service the agent's tools use — undo batches live in memory on the
-	// service, so any other instance simply does not have the batch.
-	Undo  func(ctx context.Context, batchID string) error
+	// Undo reverts what the agent last did. Exactly one of batchID, snapshotID
+	// is expected to be non-empty — the caller (agent.undo's RPC handler)
+	// validates that before this is reached. A batch id must be bound to the
+	// SAME storyops service the agent's tools use: undo batches live in
+	// memory on the service, so any other instance simply does not have the
+	// batch. A snapshot id restores a scene's prose the same way
+	// mcphost.ToolDeps.RestoreSnapshot does — see
+	// engineapp.agentController.Undo (#112).
+	//
+	// The returned projectID/nodeID are empty for a batch undo (the batch id
+	// carries no scene) and set to the restored scene's for a snapshot undo,
+	// so the caller can emit mcp.changed with the right target either way.
+	Undo  func(ctx context.Context, batchID, snapshotID string) (projectID, nodeID string, err error)
 	Clock func() int64
 }
 
@@ -263,12 +272,14 @@ func (s *Service) Clear(ctx context.Context, projectID string) error {
 	return s.tr.clear(ctx, projectID)
 }
 
-// Undo reverts a structural batch the agent applied.
-func (s *Service) Undo(ctx context.Context, batchID string) error {
+// Undo reverts what the agent last did — a structural batch (batchID) or a
+// scene write's pre-write snapshot (snapshotID). Exactly one is expected to
+// be set; deps.Undo owns the branching (#112).
+func (s *Service) Undo(ctx context.Context, batchID, snapshotID string) (projectID, nodeID string, err error) {
 	if s.deps.Undo == nil {
-		return errors.New("agent: undo is not wired")
+		return "", "", errors.New("agent: undo is not wired")
 	}
-	return s.deps.Undo(ctx, batchID)
+	return s.deps.Undo(ctx, batchID, snapshotID)
 }
 
 // Cancel stops a run. An unknown run id is not an error: the writer's stop

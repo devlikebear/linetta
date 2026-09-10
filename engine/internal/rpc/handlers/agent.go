@@ -17,7 +17,10 @@ type AgentController interface {
 	Cancel(ctx context.Context, runID string) error
 	History(ctx context.Context, projectID string, limit int) (json.RawMessage, error)
 	Clear(ctx context.Context, projectID string) error
-	Undo(ctx context.Context, batchID string) error
+	// Undo reverts a structural batch (batchID) or restores a scene's
+	// pre-write snapshot (snapshotID). Exactly one is non-empty; AgentUndo
+	// validates that before calling this (#112).
+	Undo(ctx context.Context, batchID, snapshotID string) error
 }
 
 type agentRunParams struct {
@@ -108,7 +111,11 @@ func AgentClear(ctrl AgentController) rpc.Handler {
 }
 
 type agentUndoParams struct {
-	BatchID string `json:"batch_id"`
+	// Exactly one. A batch id undoes an outline batch from
+	// linetta_apply_story_ops; a snapshot id restores a scene write or
+	// revise's pre-write text — mirrors mcphost's undoInput (tools_batch.go).
+	BatchID    string `json:"batch_id,omitempty"`
+	SnapshotID string `json:"snapshot_id,omitempty"`
 }
 
 // AgentUndo returns a handler for agent.undo: the panel's revert button.
@@ -118,10 +125,15 @@ func AgentUndo(ctrl AgentController) rpc.Handler {
 		if len(params) > 0 {
 			_ = json.Unmarshal(params, &p)
 		}
-		if strings.TrimSpace(p.BatchID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "batch_id is required"}
+		batchID := strings.TrimSpace(p.BatchID)
+		snapshotID := strings.TrimSpace(p.SnapshotID)
+		switch {
+		case batchID == "" && snapshotID == "":
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "pass batch_id or snapshot_id"}
+		case batchID != "" && snapshotID != "":
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "pass either batch_id or snapshot_id, not both"}
 		}
-		if err := ctrl.Undo(ctx, p.BatchID); err != nil {
+		if err := ctrl.Undo(ctx, batchID, snapshotID); err != nil {
 			return nil, rpc.MethodErrorFrom(err)
 		}
 		return json.RawMessage(`{"ok":true}`), nil

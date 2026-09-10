@@ -217,30 +217,12 @@ func (d ToolDeps) undoLastChange(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, undoOutput{Reverted: "outline"}, nil
 	}
 
-	if d.Snapshots == nil {
-		return toolErr("version history is unavailable in this build"), undoOutput{}, nil
-	}
-	snap, err := d.Snapshots.GetByID(ctx, snapshotID)
+	n, err := d.RestoreSnapshot(ctx, snapshotID)
 	if err != nil {
-		return toolErr("snapshot %q not found", snapshotID), undoOutput{}, nil
-	}
-	n, errResult := d.requireNode(ctx, snap.NodeID)
-	if errResult != nil {
-		return errResult, undoOutput{}, nil
-	}
-	// Snapshot the current text first, so restoring is itself revertible.
-	curDoc := ""
-	if n.ContentDoc != nil {
-		curDoc = *n.ContentDoc
-	}
-	if _, _, err := d.Snapshots.CreateIfChanged(ctx, n.ID, curDoc, snapshot.ReasonManual, d.now()); err != nil {
-		return toolErr("could not snapshot before restoring: %v", err), undoOutput{}, nil
-	}
-	if err := d.Nodes.UpdateContent(ctx, n.ID, snap.ContentDoc, d.now()); err != nil {
+		if errors.Is(err, snapshot.ErrNotFound) {
+			return toolErr("snapshot %q not found", snapshotID), undoOutput{}, nil
+		}
 		return toolErr("could not restore the scene: %v", err), undoOutput{}, nil
-	}
-	if d.EnqueueSummary != nil {
-		d.EnqueueSummary(n.ID)
 	}
 	d.notifyChanged(n.ProjectID, "linetta_undo_last_change", []string{n.ID}, "")
 	return nil, undoOutput{Reverted: "scene", NodeID: n.ID}, nil

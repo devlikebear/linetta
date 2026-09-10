@@ -227,11 +227,12 @@ func (s *toolSession) schemas(ctx context.Context) ([]llm.ToolSchema, error) {
 // toolResult is one tool call reduced to what both the model and the panel
 // need: the text to feed back, and the write metadata the undo button uses.
 type toolResult struct {
-	Text      string
-	IsError   bool
-	BatchID   string
-	NodeIDs   []string
-	Truncated bool
+	Text       string
+	IsError    bool
+	BatchID    string
+	SnapshotID string
+	NodeIDs    []string
+	Truncated  bool
 }
 
 // call runs one tool. Every failure the model could have caused — a bad name,
@@ -264,7 +265,7 @@ func (s *toolSession) call(ctx context.Context, runID, name, arguments string) t
 
 	out := toolResult{IsError: res.IsError}
 	out.Text, out.Truncated = capText(textOf(res))
-	out.BatchID, out.NodeIDs = writeMetadata(res)
+	out.BatchID, out.SnapshotID, out.NodeIDs = writeMetadata(res)
 	return out
 }
 
@@ -291,28 +292,34 @@ func capText(s string) (string, bool) {
 		"Narrow the request if you need the rest.]", true
 }
 
-// writeMetadata pulls the undo batch and the touched scenes out of a write
-// tool's structured output, so the panel can offer "undo this" without the
-// loop knowing which tools are writes.
-func writeMetadata(res *mcp.CallToolResult) (string, []string) {
+// writeMetadata pulls the undo batch, the pre-write snapshot, and the touched
+// scenes out of a write tool's structured output, so the panel can offer
+// "undo this" without the loop knowing which tools are writes.
+//
+// snapshot_id is read the same way undo_batch_id is: linetta_apply_story_ops
+// (an outline batch) sets undo_batch_id, while linetta_write_scene and
+// linetta_revise_scene set snapshot_id instead — a tool call carries at most
+// one of the two, never both (#112).
+func writeMetadata(res *mcp.CallToolResult) (string, string, []string) {
 	if res.StructuredContent == nil {
-		return "", nil
+		return "", "", nil
 	}
 	raw, err := json.Marshal(res.StructuredContent)
 	if err != nil {
-		return "", nil
+		return "", "", nil
 	}
 	var meta struct {
 		UndoBatchID  string   `json:"undo_batch_id"`
+		SnapshotID   string   `json:"snapshot_id"`
 		ChangedNodes []string `json:"changed_nodes"`
 		NodeID       string   `json:"node_id"`
 	}
 	if err := json.Unmarshal(raw, &meta); err != nil {
-		return "", nil
+		return "", "", nil
 	}
 	nodes := meta.ChangedNodes
 	if len(nodes) == 0 && meta.NodeID != "" {
 		nodes = []string{meta.NodeID}
 	}
-	return meta.UndoBatchID, nodes
+	return meta.UndoBatchID, meta.SnapshotID, nodes
 }

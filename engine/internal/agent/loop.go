@@ -224,13 +224,17 @@ type deltaPayload struct {
 }
 
 type toolPayload struct {
-	RunID     string   `json:"run_id"`
-	ProjectID string   `json:"project_id"`
-	Name      string   `json:"name"`
-	State     string   `json:"state"` // started | done | error
-	Summary   string   `json:"summary,omitempty"`
-	BatchID   string   `json:"batch_id,omitempty"`
-	NodeIDs   []string `json:"node_ids,omitempty"`
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Name      string `json:"name"`
+	State     string `json:"state"` // started | done | error
+	Summary   string `json:"summary,omitempty"`
+	BatchID   string `json:"batch_id,omitempty"`
+	// SnapshotID is the pre-write snapshot a scene write or revise left
+	// behind, offered by the panel the same way BatchID is — the two are
+	// never both set for one call (#112).
+	SnapshotID string   `json:"snapshot_id,omitempty"`
+	NodeIDs    []string `json:"node_ids,omitempty"`
 }
 
 type usagePayload struct {
@@ -430,7 +434,8 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	}
 	s.notify("agent.tool", toolPayload{
 		RunID: st.runID, ProjectID: st.projectID, Name: call.Name, State: state,
-		Summary: summarize(result.Text), BatchID: result.BatchID, NodeIDs: result.NodeIDs,
+		Summary: summarize(result.Text), BatchID: result.BatchID, SnapshotID: result.SnapshotID,
+		NodeIDs: result.NodeIDs,
 	})
 	// Recorded with a context that survives the turn's own cancellation,
 	// unlike the tool call above: the call already ran — and may already
@@ -440,7 +445,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	// markRun (transcript.go).
 	if err := s.tr.appendToolEvent(context.WithoutCancel(ctx), st.req.ProjectID, st.req.NodeID, st.runID, toolEvent{
 		Name: call.Name, Summary: summarize(result.Text), OK: !result.IsError,
-		BatchID: result.BatchID, NodeIDs: result.NodeIDs,
+		BatchID: result.BatchID, SnapshotID: result.SnapshotID, NodeIDs: result.NodeIDs,
 	}); err != nil {
 		logf("transcript: %v", err)
 	}

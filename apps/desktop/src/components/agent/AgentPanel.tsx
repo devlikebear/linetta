@@ -53,6 +53,10 @@ type Line =
       summary: string;
       state: "running" | "ok" | "error";
       batchId?: string;
+      /** The pre-write snapshot a scene write or revise left behind — the
+       *  same "something to undo" as batchId, just for prose instead of an
+       *  outline batch (#112). A line carries at most one of the two. */
+      snapshotId?: string;
       undoing?: boolean;
       undone?: boolean;
       undoError?: string;
@@ -103,6 +107,11 @@ interface AgentToolPayload {
    *  English engine sentence. */
   summary?: string;
   batch_id?: string;
+  /** The pre-write snapshot id a scene write or revise call resolves with —
+   *  linetta_write_scene and linetta_revise_scene's counterpart to batch_id,
+   *  which only linetta_apply_story_ops sets (#112). A call carries at most
+   *  one of the two. */
+  snapshot_id?: string;
   /** The scenes the call touched, as opaque node ids. The panel would like to
    *  name the scene on the line ("씀 · 4-2 씬"), but ids are not labels and
    *  this component has no tree to resolve them against — a lookup per tool
@@ -164,6 +173,7 @@ interface RestoredToolEvent {
   name: string;
   ok: boolean;
   batch_id?: string;
+  snapshot_id?: string;
 }
 
 /** Parses one tool row's `content`. Null for anything that is not a usable
@@ -179,9 +189,14 @@ export function parseToolEvent(content: string): RestoredToolEvent | null {
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const { name, ok, batch_id: batchId } = parsed as Record<string, unknown>;
+  const { name, ok, batch_id: batchId, snapshot_id: snapshotId } = parsed as Record<string, unknown>;
   if (typeof name !== "string" || typeof ok !== "boolean") return null;
-  return { name, ok, batch_id: typeof batchId === "string" ? batchId : undefined };
+  return {
+    name,
+    ok,
+    batch_id: typeof batchId === "string" ? batchId : undefined,
+    snapshot_id: typeof snapshotId === "string" ? snapshotId : undefined,
+  };
 }
 
 /** How a restored turn ended, read off the last row of its run.
@@ -234,6 +249,7 @@ function linesFromHistory(rows: AgentHistoryRow[]): Line[] {
           summary: "",
           state: ev.ok ? "ok" : "error",
           batchId: ev.batch_id,
+          snapshotId: ev.snapshot_id,
         });
       }
       // An unparseable tool row still counts as a row of its run for the
@@ -637,6 +653,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
           summary: "",
           state: "running",
           batchId: payload.batch_id,
+          snapshotId: payload.snapshot_id,
         },
       ]);
       return;
@@ -656,6 +673,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
               state: payload.state === "error" ? "error" : "ok",
               summary: payload.summary ?? l.summary,
               batchId: payload.batch_id ?? l.batchId,
+              snapshotId: payload.snapshot_id ?? l.snapshotId,
             }
           : l,
       ),
@@ -723,13 +741,16 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     };
   }, []);
 
-  function handleUndo(id: string, batchId: string) {
+  // batchId/snapshotId: exactly one is set, mirroring the two sources a tool
+  // line's `showUndo` reads below — a structural batch from
+  // linetta_apply_story_ops, or a scene write/revise's pre-write snapshot.
+  function handleUndo(id: string, batchId: string | undefined, snapshotId: string | undefined) {
     // No `undoError: undefined` reset here: `showUndo` in the render loop
     // requires `!line.undoError`, so a line that already has one has no
     // button to click and can never reach this function.
     setLines((prev) => prev.map((l) => (l.kind === "tool" && l.id === id ? { ...l, undoing: true } : l)));
     agentApi
-      .undo(batchId)
+      .undo(batchId, snapshotId)
       .then(() => {
         // Same guard as the providers effect below: this resolves after an
         // await, and the writer may have closed the panel in between.
@@ -1045,7 +1066,11 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
             // lib/agentTools.ts for the full trace.
             const kind = toolKind(line.name);
             const labelKey = toolLabelKey(line.name);
-            const showUndo = Boolean(line.batchId) && !line.undone && !line.undoError;
+            // Revertible whenever the line carries something to undo — a
+            // structural batch id, or (#112) a scene write/revise's pre-write
+            // snapshot id. Which one is present decides how handleUndo calls
+            // agent.undo; the writer sees the same button either way.
+            const showUndo = Boolean(line.batchId || line.snapshotId) && !line.undone && !line.undoError;
             return (
               <div key={line.id} className={`tool-line tool-${line.state}`} data-testid="tool-line">
                 <span className="tool-label">{t(toolVerbKey(kind, line.state))}</span>
@@ -1055,7 +1080,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
                     type="button"
                     className="tool-undo"
                     disabled={line.undoing}
-                    onClick={() => handleUndo(line.id, line.batchId as string)}
+                    onClick={() => handleUndo(line.id, line.batchId, line.snapshotId)}
                   >
                     {t("agentPanel.tool.undo")}
                   </button>
