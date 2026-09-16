@@ -2773,11 +2773,11 @@ Apply superpowers:systematic-debugging. The most likely failure surfaces:
 
 ### Critical Files for Implementation
 
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/thread/repo.go
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/beat/repo.go
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/ai/context.go
-- /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src/components/ThreadSheet.tsx
-- /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src/routes/Workspace.tsx
+- ~/workspace/myworks/linetta/engine/internal/thread/repo.go
+- ~/workspace/myworks/linetta/engine/internal/beat/repo.go
+- ~/workspace/myworks/linetta/engine/internal/ai/context.go
+- ~/workspace/myworks/linetta/apps/desktop/src/components/ThreadSheet.tsx
+- ~/workspace/myworks/linetta/apps/desktop/src/routes/Workspace.tsx
 
 ---
 

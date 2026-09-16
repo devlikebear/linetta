@@ -12,7 +12,7 @@
 
 ## 사전 지식 (구현자 필독)
 
-- 루트 `/Users/changheonshin/workspace/myworks/linetta`. engine `engine/`(테스트 `cd engine && go test ./...`), FE `apps/desktop`(`npx tsc --noEmit`). 빌드 `bash scripts/build-engine.sh`. `main` 브랜치, no --no-verify, no push. LSP stale 무시.
+- 루트 `~/workspace/myworks/linetta`. engine `engine/`(테스트 `cd engine && go test ./...`), FE `apps/desktop`(`npx tsc --noEmit`). 빌드 `bash scripts/build-engine.sh`. `main` 브랜치, no --no-verify, no push. LSP stale 무시.
 - tars `pkg/memory`(이미 의존, v0.33.0): `AppendExperience(root string, exp memory.Experience) error`(EnsureWorkspace 자동, Summary 필수, Category 빈→"fact", Timestamp 영→now); `SearchExperiences(root string, opts memory.SearchOptions) ([]memory.Experience, error)`(대소문자 무시 substring on Summary/Tags/SourceSession, Category 정확일치, 최근순, 파일 없으면 `[]`); `Experience{Timestamp time.Time; Category,Summary string; Tags []string; SourceSession string; Importance int; Auto bool}`; `SearchOptions{Query,Category string; Limit int}`. import: `"github.com/devlikebear/tars/pkg/memory"`. 키워드 경로는 stdlib만(임베더/네트워크 없음). 파일 `<root>/memory/experiences.jsonl`.
 - 현재 companion 패키지(Phase 1):
   - `companion.go`: `Service` 구조체(필드 projects/threads/entities/relationships/plot/notify/factory/src/workDir/sessions/runner), `NewService(sessionsDir string, projects, threads, entities, relationships, plotBuilder, notify, factory, src, workDir)`, `gatherContext(ctx, projectID, nodeID string) (PromptData, error)`, `History`, `Send`, `Cancel`.

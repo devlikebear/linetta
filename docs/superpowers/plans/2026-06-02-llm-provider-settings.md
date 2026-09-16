@@ -12,7 +12,7 @@
 
 ## File Structure
 
-**tars** (`/Users/changheonshin/workspace/myworks/tars`):
+**tars** (`~/workspace/myworks/tars`):
 - Modify: `pkg/llm/exports.go` — re-export `ModelFetcher` / `NewModelFetcher`.
 
 **linetta engine**:
@@ -35,7 +35,7 @@
 ## Task 1: Export model fetcher from tars
 
 **Files:**
-- Modify: `/Users/changheonshin/workspace/myworks/tars/pkg/llm/exports.go`
+- Modify: `~/workspace/myworks/tars/pkg/llm/exports.go`
 
 - [ ] **Step 1: Add the re-exports** to `pkg/llm/exports.go` (after the existing `NewProvider` export):
 
@@ -47,13 +47,13 @@ func NewModelFetcher() ModelFetcher { return internal.NewModelFetcher() }
 
 - [ ] **Step 2: Build tars to verify it compiles**
 
-Run: `cd /Users/changheonshin/workspace/myworks/tars && go build ./...`
+Run: `cd ~/workspace/myworks/tars && go build ./...`
 Expected: no output (success).
 
 - [ ] **Step 3: Commit (in tars repo)**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/tars
+cd ~/workspace/myworks/tars
 git add pkg/llm/exports.go
 git commit -m "feat(llm): export ModelFetcher for embedding consumers"
 ```
@@ -66,7 +66,7 @@ git commit -m "feat(llm): export ModelFetcher for embedding consumers"
 - [ ] **Step 1: Add replace directive** at the end of `engine/go.mod`:
 
 ```
-replace github.com/devlikebear/tars => /Users/changheonshin/workspace/myworks/tars
+replace github.com/devlikebear/tars => ~/workspace/myworks/tars
 ```
 
 - [ ] **Step 2: Tidy + verify the export is visible**
@@ -619,7 +619,7 @@ git commit -m "feat(desktop): provider settings UI with model combobox + cli pat
 Run: `make test`
 Expected: PASS (Go tests, Vitest, Vite build, cargo check).
 
-- [ ] **Step 2: Tag tars release.** In `/Users/changheonshin/workspace/myworks/tars`: bump `VERSION.txt`, commit, `git tag v0.33.1`, push branch + tag (per user confirmation at this step).
+- [ ] **Step 2: Tag tars release.** In `~/workspace/myworks/tars`: bump `VERSION.txt`, commit, `git tag v0.33.1`, push branch + tag (per user confirmation at this step).
 
 - [ ] **Step 3: Switch linetta off replace:**
 ```bash

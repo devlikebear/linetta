@@ -21,7 +21,7 @@
 - [ ] **Step P1: Plan 1 is done**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git describe --tags --exact-match plan-1-library-done >/dev/null && echo ok
 git status --short  # must be empty
 ```
@@ -152,7 +152,7 @@ func TestCountChars_malformed_returnsZero(t *testing.T) {
 - [ ] **Step 2: Run — expect compile failure (`CountChars` undefined)**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/node/...
 ```
 
@@ -214,14 +214,14 @@ func walk(v interface{}) int {
 - [ ] **Step 4: Run — expect PASS (5 tests)**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/node/... -v
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/node/word_count.go engine/internal/node/word_count_test.go
 git commit -m "feat(node): Tiptap doc character counter"
 ```
@@ -386,7 +386,7 @@ func TestRepo_UpdateContent_rejectsMissingNode(t *testing.T) {
 - [ ] **Step 3: Run — expect compile failure**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/node/...
 ```
 
@@ -510,21 +510,21 @@ func scan(row scanner) (Node, error) {
 - [ ] **Step 5: Run — expect PASS (4 tests)**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/node/... -v
 ```
 
 - [ ] **Step 6: Run full suite**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./...
 ```
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/node/node.go engine/internal/node/repo.go engine/internal/node/repo_test.go
 git commit -m "feat(node): repo with Get / UpdateContent / SetLastOpened"
 ```
@@ -672,7 +672,7 @@ func TestLatestAutosaveTime(t *testing.T) {
 - [ ] **Step 3: Run — expect compile failure**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/snapshot/...
 ```
 
@@ -750,14 +750,14 @@ SELECT MAX(created_at) FROM node_snapshots
 - [ ] **Step 5: Run — PASS**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/snapshot/... -v
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/snapshot
 git commit -m "feat(snapshot): Create + LatestForNode + LatestAutosaveTime"
 ```
@@ -1012,7 +1012,7 @@ func SetLastOpened(nodes *node.Repo, now Clock) rpc.Handler {
 - [ ] **Step 4: Run nodes tests — PASS**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/rpc/handlers/... -run 'Node|SetLastOpened' -v
 ```
 
@@ -1091,14 +1091,14 @@ func CreateManualSnapshot(snaps *snapshot.Repo, now Clock) rpc.Handler {
 - [ ] **Step 8: Run full suite — all PASS**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./...
 ```
 
 - [ ] **Step 9: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/rpc/handlers/nodes.go engine/internal/rpc/handlers/nodes_test.go engine/internal/rpc/handlers/snapshots.go engine/internal/rpc/handlers/snapshots_test.go
 git commit -m "feat(rpc): nodes.* and snapshots.create_manual handlers"
 ```
@@ -1193,7 +1193,7 @@ func fail(format string, args ...any) {
 - [ ] **Step 2: Build to /tmp**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go build -o /tmp/linetta-engine-build ./cmd/linetta-engine
 ```
 
@@ -1228,7 +1228,7 @@ Expected:
 - [ ] **Step 4: Confirm clean tree, then commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git status --short  # only main.go modified
 git add engine/cmd/linetta-engine/main.go
 git commit -m "feat(engine): wire node + snapshot repos and handlers"
@@ -1252,7 +1252,7 @@ git commit -m "feat(engine): wire node + snapshot repos and handlers"
 - [ ] **Step 1: Install Tiptap**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm add @tiptap/react @tiptap/pm @tiptap/starter-kit
 ```
 
@@ -1420,7 +1420,7 @@ function countChars(node: any): number {
 - [ ] **Step 4: Type-check + build**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm tsc -b
 pnpm build
 ```
@@ -1430,7 +1430,7 @@ If TypeScript complains about `useEditor`'s 2nd argument (deps array), check the
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/package.json apps/desktop/pnpm-lock.yaml apps/desktop/src/components/editor
 git commit -m "feat(editor): Tiptap component wrapper with typewriter + manual save hook"
 ```
@@ -1446,7 +1446,7 @@ git commit -m "feat(editor): Tiptap component wrapper with typewriter + manual s
 - [ ] **Step 1: Make hooks dir**
 
 ```bash
-mkdir -p /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src/hooks
+mkdir -p ~/workspace/myworks/linetta/apps/desktop/src/hooks
 ```
 
 - [ ] **Step 2: Write `useDebouncedCallback.ts`**
@@ -1521,14 +1521,14 @@ export function useThrottledCallback<T extends (...args: any[]) => void>(
 - [ ] **Step 4: Type-check**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm tsc -b
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/hooks
 git commit -m "feat(hooks): useDebouncedCallback + useThrottledCallback"
 ```
@@ -1651,7 +1651,7 @@ export const snapshots = {
 - [ ] **Step 3: Type-check + build**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm tsc -b
 pnpm build
 ```
@@ -1659,7 +1659,7 @@ pnpm build
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib
 git commit -m "feat(rpc): nodes and snapshots API clients"
 ```
@@ -2003,7 +2003,7 @@ export function Workspace() {
 - [ ] **Step 4: Type-check + build**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm tsc -b
 pnpm build
 ```
@@ -2011,7 +2011,7 @@ pnpm build
 - [ ] **Step 5: Verify status**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git status --short
 ```
 Expected:
@@ -2022,7 +2022,7 @@ Expected:
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src
 git commit -m "feat(workspace): Tiptap edit mode + autosave + context panel"
 ```
@@ -2036,7 +2036,7 @@ Interactive. The controller pre-builds Rust + Go, then asks the human to run dev
 - [ ] **Step 1: Pre-warm builds**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 ./scripts/build-engine.sh
 (cd apps/desktop/src-tauri && cargo build) >/dev/null 2>&1 || true
 ```
@@ -2075,7 +2075,7 @@ If `sqlite3` isn't installed: `brew install sqlite` or skip the DB check.
 - [ ] **Step 5: Tag**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git tag plan-2-edit-done
 ```
 

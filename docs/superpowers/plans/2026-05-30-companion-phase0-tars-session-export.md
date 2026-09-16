@@ -12,7 +12,7 @@
 
 ## 작업 레포 / 사전 지식 (구현자 필독)
 
-- **모든 파일 경로는 tars 레포 기준이다: `/Users/changheonshin/workspace/myworks/tars`.** Linetta 레포가 아니다. 모든 git/go 명령은 tars 레포에서 실행한다.
+- **모든 파일 경로는 tars 레포 기준이다: `~/workspace/myworks/tars`.** Linetta 레포가 아니다. 모든 git/go 명령은 tars 레포에서 실행한다.
 - tars는 `main` 브랜치에서 작업한다(사용자 지시). `--no-verify` 금지, 훅 우회 금지. **push 및 릴리스 태그는 하지 않는다**(사용자가 직접 수행).
 - 커스텀 git 훅/CI 없음. 검증은 `go build ./...` + `go test ./...`.
 - export 패턴 레퍼런스(반드시 먼저 읽을 것): `pkg/llm/exports.go`, `pkg/memory/exports.go`. 둘 다 `import internal "…/internal/X"` + `type T = internal.T` + 얇은 함수 위임 구조다. `pkg/session`도 정확히 이 패턴을 따른다.

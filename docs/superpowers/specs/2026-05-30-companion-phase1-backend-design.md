@@ -1,7 +1,7 @@
 # Linetta 컴패니언 — Phase 1: 백엔드 (세션·스트리밍·제안 프로토콜) 설계
 
 > 작성일: 2026-05-30
-> 구현 레포: **Linetta** (`/Users/changheonshin/workspace/myworks/linetta`), engine 측. tars `pkg/session`·`pkg/memory`·`pkg/llm`를 import.
+> 구현 레포: **Linetta** (`~/workspace/myworks/linetta`), engine 측. tars `pkg/session`·`pkg/memory`·`pkg/llm`를 import.
 > 선행: Phase 0 완료 — tars `v0.33.0`로 `pkg/session` 공개됨(릴리스 확인 완료).
 
 ## 상위 맥락 (컴패니언 전체)

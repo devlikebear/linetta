@@ -12,7 +12,7 @@
 
 ## 사전 지식 (구현자 필독)
 
-- 경로 루트: `/Users/changheonshin/workspace/myworks/linetta`. FE: `apps/desktop`. 검증: `cd apps/desktop && npx tsc --noEmit`. FE 테스트 인프라 없음 → tsc + (실행기는) 타입 보장.
+- 경로 루트: `~/workspace/myworks/linetta`. FE: `apps/desktop`. 검증: `cd apps/desktop && npx tsc --noEmit`. FE 테스트 인프라 없음 → tsc + (실행기는) 타입 보장.
 - `main` 브랜치, `--no-verify` 금지, push 금지.
 - LSP stale 진단 무시, tsc 출력만 신뢰.
 - **이벤트 전달은 allowlist 기반**: `apps/desktop/src-tauri/src/engine.rs`의 notification match가 `ai.*`만 emit. companion 이벤트는 거기 등록해야 FE 도달(`.`→`-`).
@@ -684,7 +684,7 @@ Expected: 에러 0.
 
 Run: `cd apps/desktop/src-tauri && cargo build 2>&1 | tail -3`
 Expected: 성공.
-Run: `cd /Users/changheonshin/workspace/myworks/linetta && git diff --name-only da478e6..HEAD | grep '^engine/' || echo "engine untouched in phase2"`
+Run: `cd ~/workspace/myworks/linetta && git diff --name-only da478e6..HEAD | grep '^engine/' || echo "engine untouched in phase2"`
 (엔진 코드는 Phase 2에서 안 건드림 — 단 go.mod는 Phase 1에서 이미 변경됨; phase2 커밋 범위에 engine/ 변경이 없어야 함.)
 
 - [ ] **Step 3: 커밋(있으면)** — 이미 task별 커밋됨.

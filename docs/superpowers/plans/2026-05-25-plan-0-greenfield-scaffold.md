@@ -158,7 +158,7 @@ Expected: a commit with deletions only.
 
 - [ ] **Step 1: Overwrite `.gitignore`**
 
-Write the file `/Users/changheonshin/workspace/myworks/linetta/.gitignore`:
+Write the file `~/workspace/myworks/linetta/.gitignore`:
 ```gitignore
 # OS
 .DS_Store
@@ -190,7 +190,7 @@ apps/desktop/src-tauri/binaries/
 
 - [ ] **Step 2: Write a stub `README.md`**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/README.md`:
+Write `~/workspace/myworks/linetta/README.md`:
 ```markdown
 # Linetta
 
@@ -247,7 +247,7 @@ Expected: `engine/go.mod` now has `require github.com/devlikebear/tars v0.32.72`
 
 - [ ] **Step 3: Write a placeholder `main.go` that compiles**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/engine/cmd/linetta-engine/main.go`:
+Write `~/workspace/myworks/linetta/engine/cmd/linetta-engine/main.go`:
 ```go
 package main
 
@@ -301,7 +301,7 @@ We use newline-delimited JSON (NDJSON) — one JSONRPC message per line — for 
 
 - [ ] **Step 1: Write the failing test**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/engine/internal/rpc/codec_test.go`:
+Write `~/workspace/myworks/linetta/engine/internal/rpc/codec_test.go`:
 ```go
 package rpc
 
@@ -385,7 +385,7 @@ Expected: build error mentioning `NewCodec`, `Message`, `RawID`, `RawJSON` undef
 
 - [ ] **Step 3: Implement the codec**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/engine/internal/rpc/codec.go`:
+Write `~/workspace/myworks/linetta/engine/internal/rpc/codec.go`:
 ```go
 // Package rpc implements a minimal newline-delimited JSONRPC 2.0 codec
 // over arbitrary io.Reader/Writer pairs (typically os.Stdin/os.Stdout).
@@ -500,7 +500,7 @@ git commit -m "feat(rpc): NDJSON JSONRPC codec"
 
 - [ ] **Step 1: Write the failing handler test**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/engine/internal/rpc/handlers/ping_test.go`:
+Write `~/workspace/myworks/linetta/engine/internal/rpc/handlers/ping_test.go`:
 ```go
 package handlers
 
@@ -536,7 +536,7 @@ Expected: `undefined: Ping`.
 
 - [ ] **Step 3: Implement `Ping`**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/engine/internal/rpc/handlers/ping.go`:
+Write `~/workspace/myworks/linetta/engine/internal/rpc/handlers/ping.go`:
 ```go
 // Package handlers contains the RPC method implementations exposed by the
 // Linetta engine.
@@ -564,7 +564,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Write the failing server test**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/engine/internal/rpc/server_test.go`:
+Write `~/workspace/myworks/linetta/engine/internal/rpc/server_test.go`:
 ```go
 package rpc
 
@@ -648,7 +648,7 @@ cd ..
 
 - [ ] **Step 7: Implement the server**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/engine/internal/rpc/server.go`:
+Write `~/workspace/myworks/linetta/engine/internal/rpc/server.go`:
 ```go
 package rpc
 
@@ -779,7 +779,7 @@ git commit -m "feat(rpc): server with handler registry and ping handler"
 
 - [ ] **Step 1: Replace the placeholder `main.go`**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/engine/cmd/linetta-engine/main.go`:
+Write `~/workspace/myworks/linetta/engine/cmd/linetta-engine/main.go`:
 ```go
 package main
 
@@ -1522,7 +1522,7 @@ git commit -m "feat(desktop): JSONRPC stdio client + engine sidecar lifecycle"
 
 - [ ] **Step 1: Write the RPC helper**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/apps/desktop/src/lib/rpc.ts`:
+Write `~/workspace/myworks/linetta/apps/desktop/src/lib/rpc.ts`:
 ```ts
 import { invoke } from "@tauri-apps/api/core";
 
@@ -1533,7 +1533,7 @@ export async function enginePing(): Promise<string> {
 
 - [ ] **Step 2: Update `App.tsx` to call `enginePing`**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/apps/desktop/src/App.tsx`:
+Write `~/workspace/myworks/linetta/apps/desktop/src/App.tsx`:
 ```tsx
 import { useState } from "react";
 import { enginePing } from "./lib/rpc";
@@ -1597,7 +1597,7 @@ git commit -m "feat(desktop): UI calls engine_ping Tauri command"
 mkdir -p scripts
 ```
 
-Write `/Users/changheonshin/workspace/myworks/linetta/scripts/build-engine.sh`:
+Write `~/workspace/myworks/linetta/scripts/build-engine.sh`:
 ```bash
 #!/usr/bin/env bash
 # Build the Go engine into apps/desktop/src-tauri/binaries/ with the target-triple
@@ -1634,7 +1634,7 @@ echo "ok"
 
 - [ ] **Step 2: Write `scripts/dev.sh`**
 
-Write `/Users/changheonshin/workspace/myworks/linetta/scripts/dev.sh`:
+Write `~/workspace/myworks/linetta/scripts/dev.sh`:
 ```bash
 #!/usr/bin/env bash
 # Build the engine once, then start `tauri dev` (which runs `pnpm dev` for Vite).

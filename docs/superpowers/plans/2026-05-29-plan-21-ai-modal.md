@@ -120,7 +120,7 @@ export function commitGenerated(
 `textToParagraphs` 만 따로 검증. 프로젝트에 vitest 가 없으므로 `npx tsx` 로 즉석 검증 (tsx 가 없으면 node + 임시 ts→js 컴파일 대신, 아래 인라인 assert 를 임시 파일로 만들어 `npx tsx` 시도; 실패 시 타입체크만):
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 cat > /tmp/t2p.test.mjs <<'EOF'
 // Manual mirror of textToParagraphs logic for a sanity check.
 function textToParagraphs(text) {
@@ -163,7 +163,7 @@ node /tmp/t2p.test.mjs
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음. (Editor 타입은 `@tiptap/react` 에서 import; `setContent`/`insertContentAt` 는 Tiptap 표준 명령.)
@@ -171,7 +171,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib/editor/commitGenerated.ts
 git commit -m "feat(editor): commitGenerated — mode-aware plain-text commit helper"
 ```
@@ -189,7 +189,7 @@ plain text 보장 — schema 의 mark 상속 없음. `insertContentAt` 에 parag
 
 Tiptap `Editor` 인스턴스는 Workspace 의 `editorRef.current?.editor` 로 접근 (Plan 18 T12 에서 노출됨).
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Report Format
 
@@ -405,7 +405,7 @@ export function useAIGeneration() {
 ### Step 2: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음. (`AIDelta`/`AIReset`/`AIDone`/`AIError`/`AICancelled` 타입은 `lib/types.ts` 에 존재 — Plan 18.)
@@ -413,7 +413,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 3: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib/editor/useAIGeneration.ts
 git commit -m "feat(editor): useAIGeneration — React-state variations, no editor decoration"
 ```
@@ -426,7 +426,7 @@ Plan 21 Task 2. useGhostText 를 대체하는 훅 — 핵심 차이: PM decorati
 
 `useGhostText.ts` 는 아직 삭제하지 말 것 (Task 6 에서 Workspace 전환과 함께 삭제). 이 task 는 새 훅 추가만.
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Report Format
 
@@ -851,7 +851,7 @@ export function AIModal(props: Props) {
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음. (`CommitMode` from Task 1, `GenStatus`/`GenVariation` from Task 2, `TONE_PRESETS`/`AIOptions` 기존.)
@@ -859,7 +859,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/ai/AIModal.tsx apps/desktop/src/components/ai/AIModal.css
 git commit -m "feat(ai): AIModal — centered modal with mode selector + variation cards"
 ```
@@ -874,7 +874,7 @@ Plan 21 Task 3. AIPromptBar 를 대체하는 중앙 모달. focus-trap 은 백�
 
 `tonePresets` 의 `TONE_PRESETS` 와 `AIOptions` 는 기존 (Plan 11/18). `useAIGeneration` 의 타입은 Task 2.
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Report Format
 
@@ -1089,7 +1089,7 @@ extensions={[
 ### Step 8: 옛 파일 삭제
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 rm apps/desktop/src/components/editor/GhostExtension.ts
 rm apps/desktop/src/components/editor/GhostExtension.css
 rm apps/desktop/src/lib/editor/useGhostText.ts
@@ -1100,7 +1100,7 @@ rm apps/desktop/src/components/ai/AIPromptBar.css
 ### Step 9: 잔여 참조 검색
 
 ```bash
-grep -rn "GhostExtension\|useGhostText\|AIPromptBar\|ghostPluginKey\|aiPromptAnchor\|closeAIBar\b" /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src --include="*.ts" --include="*.tsx"
+grep -rn "GhostExtension\|useGhostText\|AIPromptBar\|ghostPluginKey\|aiPromptAnchor\|closeAIBar\b" ~/workspace/myworks/linetta/apps/desktop/src --include="*.ts" --include="*.tsx"
 ```
 
 기대: 결과 0개. 남아있으면 제거.
@@ -1108,9 +1108,9 @@ grep -rn "GhostExtension\|useGhostText\|AIPromptBar\|ghostPluginKey\|aiPromptAnc
 ### Step 10: 타입체크 + 엔진 빌드
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
-cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/engine && go test ./...
+cd ~/workspace/myworks/linetta && ./scripts/build-engine.sh
 ```
 
 기대: 타입체크 clean (잔여 import 0), 엔진 테스트 PASS, 빌드 성공.
@@ -1118,7 +1118,7 @@ cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
 ### Step 11: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/routes/Workspace.tsx
 git add -u apps/desktop/src/components/editor/ apps/desktop/src/lib/editor/ apps/desktop/src/components/ai/
 git commit -m "feat(workspace): replace ghost-text with AI modal; lock editor while open"
@@ -1137,7 +1137,7 @@ Plan 21 Task 4 — 통합 finale + 옛 인프라 삭제. 이전 task:
 
 `tiptapEditor.isEditable` 는 Tiptap Editor 표준 속성. `setEditable(bool)` 도 표준.
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Before You Begin
 

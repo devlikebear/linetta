@@ -12,7 +12,7 @@
 
 ## 작업 레포 / 사전 지식 (구현자 필독)
 
-- **모든 경로는 Linetta 레포: `/Users/changheonshin/workspace/myworks/linetta`.** engine 루트는 `engine/`. 테스트: `cd engine && go test ./...`. 빌드: repo root에서 `bash scripts/build-engine.sh`.
+- **모든 경로는 Linetta 레포: `~/workspace/myworks/linetta`.** engine 루트는 `engine/`. 테스트: `cd engine && go test ./...`. 빌드: repo root에서 `bash scripts/build-engine.sh`.
 - `main` 브랜치에서 작업. `--no-verify` 금지. push는 명시 요청 시에만.
 - LSP가 테스트 작성 직후 stale "undefined" 진단을 보일 수 있다 — 항상 실제 `go test` 출력만 신뢰.
 - **FE 작업 없음** (Phase 1은 engine 전용). 채팅 패널·rpc 클라이언트·제안 카드·적용은 Phase 2.

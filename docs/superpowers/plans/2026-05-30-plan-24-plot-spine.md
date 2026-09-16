@@ -16,7 +16,7 @@
 - 마이그레이션은 `engine/internal/store/migrations/*.sql`에 두면 `//go:embed migrations/*.sql` + 파일명 정렬로 자동 적용된다(`engine/internal/store/migrations.go`). 파일명만 올바르면 등록 코드는 필요 없다.
 - LSP가 테스트 작성 직후 "undefined" 류 진단을 잠깐 보일 수 있다. **항상 실제 `go test` / `npx tsc --noEmit` 출력만 신뢰**하고 LSP 힌트는 무시한다.
 - 프런트엔드는 테스트 인프라가 없다. FE 검증 = `cd apps/desktop && npx tsc --noEmit` 클린 + 수동 스모크.
-- 빌드 검증(엔진 바이너리)은 **repo root**(`/Users/changheonshin/workspace/myworks/linetta`)에서 `./build-engine.sh` 실행. 하위 디렉터리에서 실행하면 경로 오류.
+- 빌드 검증(엔진 바이너리)은 **repo root**(`~/workspace/myworks/linetta`)에서 `./build-engine.sh` 실행. 하위 디렉터리에서 실행하면 경로 오류.
 - 커밋은 각 Task 끝에서. `--no-verify` 금지, 훅 우회 금지. push는 하지 않는다(별도 지시 시에만).
 - 현재 브랜치는 `main`. 안전 태그 `pre-greenfield-20260525` 존재. 그대로 main에서 작업한다(기존 플랜과 동일).
 

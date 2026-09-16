@@ -1,7 +1,7 @@
 # Linetta 컴패니언 — Phase 0: tars `pkg/session` export 설계
 
 > 작성일: 2026-05-30
-> 구현 레포: **tars** (`/Users/changheonshin/workspace/myworks/tars`) — Linetta와 별개 git 모듈. 본 spec은 컴패니언 기능의 일부라 Linetta 문서에 보관하되, Phase 0의 코드 변경은 전적으로 tars 레포에서 일어난다.
+> 구현 레포: **tars** (`~/workspace/myworks/tars`) — Linetta와 별개 git 모듈. 본 spec은 컴패니언 기능의 일부라 Linetta 문서에 보관하되, Phase 0의 코드 변경은 전적으로 tars 레포에서 일어난다.
 
 ## 상위 맥락 — Linetta 컴패니언 (전체 비전)
 
@@ -92,7 +92,7 @@ hist, _ := session.LoadHistory(path, budget)     // 토큰 예산 내 최근 히
 
 - `VERSION.txt`를 다음 마이너로 범프(현재 `0.32.72` → 제안 `0.33.0`; 실제 값은 tars의 버전 규칙에 맞춰 플랜에서 확정).
 - tars 레포에 커밋. **원격 push 및 릴리스 태그는 사용자가 수행**(Go 모듈 프록시가 새 태그를 해석하려면 원격 반영 필요).
-- **Linetta 소비는 Phase 1로 분리.** 개발 중에는 Linetta `engine/go.mod`에 머신-로컬 `replace github.com/devlikebear/tars => /Users/changheonshin/workspace/myworks/tars`를 걸어 새 `pkg/session`을 빌드 검증(이 replace는 커밋하지 않음). 릴리스 시 `require`를 새 태그로 범프.
+- **Linetta 소비는 Phase 1로 분리.** 개발 중에는 Linetta `engine/go.mod`에 머신-로컬 `replace github.com/devlikebear/tars => ~/workspace/myworks/tars`를 걸어 새 `pkg/session`을 빌드 검증(이 replace는 커밋하지 않음). 릴리스 시 `require`를 새 태그로 범프.
 
 ## tars 레포 작업 규약 (플랜에서 확정)
 

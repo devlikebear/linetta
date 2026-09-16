@@ -120,7 +120,7 @@ func TestCountsFromContext_partialProjectMeta(t *testing.T) {
 ### Step 2: 실패 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -run TestCountsFromContext -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -run TestCountsFromContext -v
 ```
 
 기대: 컴파일 에러 (`CountsFromContext` 와 `PreviewCounts` 미존재).
@@ -187,7 +187,7 @@ func CountsFromContext(c Context) PreviewCounts {
 ### Step 5: 통과 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -v && gofmt -l ./internal/ai
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -v && gofmt -l ./internal/ai
 ```
 
 기대: 모든 ai 패키지 PASS. `gofmt -l` 빈 출력.
@@ -195,7 +195,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/a
 ### Step 6: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/ai/ai.go engine/internal/ai/context.go engine/internal/ai/context_test.go
 git commit -m "feat(ai): PreviewCounts type + CountsFromContext helper"
 ```
@@ -279,7 +279,7 @@ func TestPreviewContext_rejectsEmptyNodeID(t *testing.T) {
 ### Step 2: 실패 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/rpc/handlers -run TestPreviewContext -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/rpc/handlers -run TestPreviewContext -v
 ```
 
 기대: 컴파일 에러 (`PreviewContext` 미존재).
@@ -327,8 +327,8 @@ s.Handle("ai.preview_context", handlers.PreviewContext(contextBuilder))
 ### Step 5: 통과 확인 + 엔진 빌드
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./... && gofmt -l ./...
-cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
+cd ~/workspace/myworks/linetta/engine && go test ./... && gofmt -l ./...
+cd ~/workspace/myworks/linetta && ./scripts/build-engine.sh
 ```
 
 기대: 모든 패키지 PASS. `gofmt -l` 빈 출력. 엔진 빌드 성공.
@@ -336,7 +336,7 @@ cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
 ### Step 6: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/ai/ai.go engine/internal/rpc/handlers/ai.go engine/internal/rpc/handlers/ai_test.go engine/cmd/linetta-engine/main.go
 git commit -m "feat(rpc): add ai.preview_context — return PreviewCounts for a node"
 ```
@@ -415,7 +415,7 @@ import type { ContextCounts } from "../components/ai/AIContextChecklist";
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -423,7 +423,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib/types.ts apps/desktop/src/lib/rpc.ts
 git commit -m "feat(rpc-client): ai.previewContext — snake/camel mapping"
 ```
@@ -549,8 +549,8 @@ onClose={() => {
 ### Step 5: 타입체크 + 엔진 빌드 회귀 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/engine && go test ./...
 ```
 
 기대: 타입체크 clean. Engine 테스트 모두 PASS.
@@ -558,7 +558,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
 ### Step 6: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/routes/Workspace.tsx
 git commit -m "feat(workspace): real context counts from ai.preview_context RPC"
 ```

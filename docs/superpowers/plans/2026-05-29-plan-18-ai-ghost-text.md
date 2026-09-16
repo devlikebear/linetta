@@ -83,7 +83,7 @@ func TestBuildContext_projectMetaPopulated(t *testing.T) {
 - [ ] **Step 2: 실패 확인**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -run TestBuildContext_projectMetaPopulated -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -run TestBuildContext_projectMetaPopulated -v
 ```
 
 기대: 컴파일 에러 (`c.Project` 미존재). 의도된 실패.
@@ -157,7 +157,7 @@ return Context{
 - [ ] **Step 5: 테스트 통과 확인**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -v
 ```
 
 기대: 모든 ai 패키지 테스트 PASS.
@@ -165,7 +165,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/a
 - [ ] **Step 6: 커밋**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/ai/ai.go engine/internal/ai/context.go engine/internal/ai/context_test.go
 git commit -m "feat(ai): Context.Project carries project metadata (genres/length/POV)"
 ```
@@ -207,7 +207,7 @@ func TestBuildContext_selectionTextPassesThrough(t *testing.T) {
 ### Step 2: 실패 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -run TestBuildContext_selectionTextPassesThrough -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -run TestBuildContext_selectionTextPassesThrough -v
 ```
 
 기대: 컴파일 에러 (`c.SelectionText` 미존재 + `Build` 인자 수 불일치).
@@ -270,7 +270,7 @@ c, err := builder.Build(ctx, p.NodeID, p.Prompt, p.SelectionText, p.Options)
 ### Step 6: 통과 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./... -v 2>&1 | tail -20
+cd ~/workspace/myworks/linetta/engine && go test ./... -v 2>&1 | tail -20
 ```
 
 기대: 모든 패키지 PASS.
@@ -278,7 +278,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./... -v 2>&
 ### Step 7: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/ai/ai.go engine/internal/ai/context.go engine/internal/ai/context_test.go engine/internal/rpc/handlers/ai.go
 git commit -m "feat(ai): Build accepts selection_text; ai.run RPC plumbs it"
 ```
@@ -379,7 +379,7 @@ func TestBuildUser_projectMeta_unmappedValuesPassThrough(t *testing.T) {
 ### Step 2: 실패 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -run "TestBuildUser_projectMeta" -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -run "TestBuildUser_projectMeta" -v
 ```
 
 기대: 4개 모두 FAIL (`## 작품 설정` 헤더 없음).
@@ -456,7 +456,7 @@ func buildUser(c Context) string {
 ### Step 4: 통과 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -v
 ```
 
 기대: 모든 ai 테스트 PASS.
@@ -464,7 +464,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/a
 ### Step 5: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/ai/prompts.go engine/internal/ai/prompts_test.go
 git commit -m "feat(ai): render ## 작품 설정 section (genres/length/POV) at top of user prompt"
 ```
@@ -532,7 +532,7 @@ func TestBuildUser_selectionTextSection_appearsAfterCurrentSceneBeforeInstructio
 ### Step 2: 실패 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -run "TestBuildUser_selectionText" -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -run "TestBuildUser_selectionText" -v
 ```
 
 기대: 3개 모두 FAIL.
@@ -562,7 +562,7 @@ if len(c.Entities) > 0 {
 ### Step 4: 통과 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/ai -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/ai -v
 ```
 
 기대: 모든 ai 테스트 PASS.
@@ -570,7 +570,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/a
 ### Step 5: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/ai/prompts.go engine/internal/ai/prompts_test.go
 git commit -m "feat(ai): render ## 선택 영역 section between current scene and instructions"
 ```
@@ -609,7 +609,7 @@ export const ai = {
 ### Step 2: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -617,7 +617,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 3: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib/rpc.ts
 git commit -m "feat(rpc-client): ai.run accepts optional selection_text"
 ```
@@ -701,7 +701,7 @@ if ((e.metaKey || e.ctrlKey) && e.key === "p") {
 ### Step 5: 잔여 `Cmd+K` 참조 검색
 
 ```bash
-grep -rn "Cmd+K\|cmd+k" /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src --include="*.ts" --include="*.tsx"
+grep -rn "Cmd+K\|cmd+k" ~/workspace/myworks/linetta/apps/desktop/src --include="*.ts" --include="*.tsx"
 ```
 
 기대: 결과 0개. 남아있으면 동일 패턴으로 `Cmd+P`로 갱신.
@@ -709,7 +709,7 @@ grep -rn "Cmd+K\|cmd+k" /Users/changheonshin/workspace/myworks/linetta/apps/desk
 ### Step 6: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -717,7 +717,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 7: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/routes/Workspace.tsx apps/desktop/src/components/ShortcutsModal.tsx apps/desktop/src/routes/ThreadView.tsx apps/desktop/src/hooks/useFirstLeaf.ts
 git commit -m "feat(shortcuts): move command palette Cmd+K → Cmd+P (VSCode Quick Open convention)"
 ```
@@ -900,7 +900,7 @@ export function hasActiveGhost(editor: { state: { doc: any } } | null | undefine
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -908,7 +908,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/editor/GhostExtension.ts apps/desktop/src/components/editor/GhostExtension.css
 git commit -m "feat(editor): GhostExtension — Tiptap decoration plugin for inline AI ghost text"
 ```
@@ -950,7 +950,7 @@ addKeyboardShortcuts() {
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -958,7 +958,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/editor/GhostExtension.ts
 git commit -m "feat(editor): GhostExtension — Tab to accept, Esc to drop ghost"
 ```
@@ -1132,7 +1132,7 @@ editor.view.dispatch(tr);
 ### Step 2: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음. 있다면 `useEngineEvent` 경로 보정.
@@ -1140,7 +1140,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 3: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib/editor/useGhostText.ts
 git commit -m "feat(editor): useGhostText — stream AI deltas into GhostExtension"
 ```
@@ -1442,7 +1442,7 @@ function LengthChip({ options, onChange }: { options: AIOptions; onChange: (o: A
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음. (TONE_PRESETS 경로 / AIOptions 타입은 기존과 동일하므로 문제 없어야 한다.)
@@ -1450,7 +1450,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/ai/AIPromptBar.tsx apps/desktop/src/components/ai/AIPromptBar.css
 git commit -m "feat(ai): AIPromptBar — floating Cmd+I prompt with presets and tone chips"
 ```
@@ -1635,7 +1635,7 @@ export function totalContextItems(counts: ContextCounts): number {
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -1643,7 +1643,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/ai/AIContextChecklist.tsx apps/desktop/src/components/ai/AIContextChecklist.css
 git commit -m "feat(ai): AIContextChecklist popover — honest list of context items sent to LLM"
 ```
@@ -1830,7 +1830,7 @@ import { AIContextPanel } from "../components/ai/AIContextPanel";
 ### Step 2: 옛 AI 모드 파일 삭제
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 rm apps/desktop/src/components/ai/AIMode.tsx
 rm apps/desktop/src/components/ai/AIMode.css
 rm apps/desktop/src/components/ai/AIContextPanel.tsx
@@ -1839,7 +1839,7 @@ rm apps/desktop/src/components/ai/AIContextPanel.tsx
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음. 잔여 참조가 있으면 모두 제거.
@@ -1847,7 +1847,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 엔진 빌드 + 실행 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
+cd ~/workspace/myworks/linetta && ./scripts/build-engine.sh
 ```
 
 기대: 빌드 성공.
@@ -1881,7 +1881,7 @@ rm -rf /tmp/linetta-plan18 && LINETTA_HOME=/tmp/linetta-plan18 ./scripts/dev.sh
 ### Step 6: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/routes/Workspace.tsx
 git add -u apps/desktop/src/components/ai/  # 삭제된 파일 staging
 git commit -m "feat(workspace): Cmd+I ghost text UX replaces full-screen AI mode"

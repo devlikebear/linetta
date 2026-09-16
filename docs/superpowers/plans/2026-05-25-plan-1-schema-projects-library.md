@@ -21,7 +21,7 @@
 - [ ] **Step P1: Plan 0 is done**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git describe --tags --exact-match plan-0-scaffold-done >/dev/null && echo ok
 ./scripts/dev.sh &
 # Wait a few seconds, click Ping engine, see "engine says: pong", Ctrl-C.
@@ -175,7 +175,7 @@ func TestEnsureHome_createsDir(t *testing.T) {
 - [ ] **Step 2: Run — expect compile failure**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/paths/...
 ```
 Expected: undefined Home, DBPath, EnsureHome.
@@ -252,14 +252,14 @@ func EnsureHome() error {
 - [ ] **Step 4: Run — expect PASS**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/paths/...
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/paths
 git commit -m "feat(paths): resolve LINETTA_HOME / DB path / mkdir helper"
 ```
@@ -279,7 +279,7 @@ Note: this task writes the migration framework AND `0001_init.sql` content in tw
 - [ ] **Step 1: Add sqlite + uuid dependencies**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go get modernc.org/sqlite@v1.50.1
 go get github.com/google/uuid@v1.6.0
 ```
@@ -335,7 +335,7 @@ func TestApplyMigrations_appliesOnce(t *testing.T) {
 - [ ] **Step 3: Run — expect failure (ApplyMigrations undefined)**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/store/...
 ```
 
@@ -470,14 +470,14 @@ func parseVersion(name string) (int, error) {
 - [ ] **Step 5: Run — expect PASS**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/store/...
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/go.mod engine/go.sum engine/internal/store
 git commit -m "feat(store): embed migration runner + placeholder 0001"
 ```
@@ -620,7 +620,7 @@ CREATE TABLE ai_runs (
 - [ ] **Step 2: Run migrations test — still PASS**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/store/...
 ```
 
@@ -658,7 +658,7 @@ go test ./internal/store/...
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/store/migrations/0001_init.sql engine/internal/store/migrations_test.go
 git commit -m "feat(store): initial schema migration (full)"
 ```
@@ -804,7 +804,7 @@ go test ./internal/store/...
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/store/store.go engine/internal/store/store_test.go
 git commit -m "feat(store): Open() with pragmas + migrations"
 ```
@@ -1177,14 +1177,14 @@ func scan(row scanner) (Project, error) {
 - [ ] **Step 5: Run — PASS**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./internal/project/...
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/project
 git commit -m "feat(project): repo with Create (+first leaf), Get, List, Archive"
 ```
@@ -1419,7 +1419,7 @@ func ArchiveProject(repo *project.Repo, now Clock) rpc.Handler {
 - [ ] **Step 4: Run — PASS**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go test ./...
 ```
 Expected: all packages green.
@@ -1427,7 +1427,7 @@ Expected: all packages green.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/rpc/handlers/projects.go engine/internal/rpc/handlers/projects_test.go
 git commit -m "feat(rpc): projects.create/list/get/archive handlers"
 ```
@@ -1515,7 +1515,7 @@ func fail(format string, args ...any) {
 - [ ] **Step 2: Build + smoke**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine
+cd ~/workspace/myworks/linetta/engine
 go build -o /tmp/linetta-engine-build ./cmd/linetta-engine
 
 # Use a temp LINETTA_HOME so we don't touch the user's data
@@ -1536,7 +1536,7 @@ Expected stdout: three lines.
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/cmd/linetta-engine/main.go
 git commit -m "feat(engine): wire store + project handlers"
 ```
@@ -1565,7 +1565,7 @@ This refreshes the binary the Tauri sidecar will spawn.
 - [ ] **Step 1: Add dependency**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm add react-router-dom@^6
 ```
 
@@ -1668,7 +1668,7 @@ export function Settings() {
 - [ ] **Step 5: Type-check + smoke build**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm tsc -b
 pnpm build
 ```
@@ -1677,7 +1677,7 @@ Expected: silent success, `dist/` regenerated.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/package.json apps/desktop/pnpm-lock.yaml apps/desktop/src
 git commit -m "feat(desktop): add react-router and route stubs"
 ```
@@ -1826,7 +1826,7 @@ async fn engine_call(
 - [ ] **Step 4: Compile check**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src-tauri
+cd ~/workspace/myworks/linetta/apps/desktop/src-tauri
 cargo check
 cd ../..
 pnpm --filter . tsc -b 2>&1 || (cd apps/desktop && pnpm tsc -b)
@@ -1836,7 +1836,7 @@ Expected: both silent.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib apps/desktop/src-tauri/src/lib.rs
 git commit -m "feat(desktop): generic engine_call command + projects API client"
 ```
@@ -2347,7 +2347,7 @@ Append (do not replace — preserve existing rules) the following to `apps/deskt
 - [ ] **Step 5: Smoke-build**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm tsc -b
 pnpm build
 ```
@@ -2355,7 +2355,7 @@ pnpm build
 - [ ] **Step 6: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src
 git commit -m "feat(library): card grid + new project modal"
 ```
@@ -2411,14 +2411,14 @@ export function Workspace() {
 - [ ] **Step 2: Smoke**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm tsc -b
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/routes/Workspace.tsx
 git commit -m "feat(workspace): fetch and display project metadata (placeholder)"
 ```
@@ -2551,7 +2551,7 @@ Append to `apps/desktop/src/App.css`:
 - [ ] **Step 3: Smoke**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop
+cd ~/workspace/myworks/linetta/apps/desktop
 pnpm tsc -b
 pnpm build
 ```
@@ -2559,7 +2559,7 @@ pnpm build
 - [ ] **Step 4: Commit**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/routes/LibraryAll.tsx apps/desktop/src/App.css
 git commit -m "feat(library): full library page with archive tab"
 ```
@@ -2607,7 +2607,7 @@ In the terminal where `./scripts/dev.sh` ran, scroll back — there should be no
 
 ```bash
 # Ctrl-C the dev process.
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git tag plan-1-library-done
 ```
 

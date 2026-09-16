@@ -192,7 +192,7 @@ Create `apps/desktop/src/components/editor/AITargetExtension.css`:
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음. (`@tiptap/core`, `@tiptap/pm/state`, `@tiptap/pm/view` import 는 기존 익스텐션 — 예전 GhostExtension/FocusExtension — 과 동일 경로. `@tiptap/pm` 은 직접 의존.)
@@ -200,7 +200,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/editor/AITargetExtension.ts apps/desktop/src/components/editor/AITargetExtension.css
 git commit -m "feat(editor): AITargetExtension — highlight AI target (replace/insert/replaceAll)"
 ```
@@ -216,7 +216,7 @@ GhostExtension 은 Plan 21 에서 삭제됨 — 이건 더 단순 (decoration �
 
 이 task 는 익스텐션 정의만 — Workspace 연결은 Task 3.
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Report Format
 
@@ -240,7 +240,7 @@ Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `ma
 ### Step 1: 파일 rename
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git mv apps/desktop/src/components/ai/AIModal.tsx apps/desktop/src/components/ai/AIPanel.tsx
 git mv apps/desktop/src/components/ai/AIModal.css apps/desktop/src/components/ai/AIPanel.css
 ```
@@ -383,12 +383,12 @@ import { AIPanel } from "../components/ai/AIPanel";
 ### Step 5: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음. 잔여 `AIModal` 참조 0 확인:
 ```bash
-grep -rn "AIModal" /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src --include="*.ts" --include="*.tsx"
+grep -rn "AIModal" ~/workspace/myworks/linetta/apps/desktop/src --include="*.ts" --include="*.tsx"
 ```
 기대: 0 (모두 AIPanel 로). 남으면 교체.
 
@@ -405,7 +405,7 @@ grep -rn "AIModal" /Users/changheonshin/workspace/myworks/linetta/apps/desktop/s
 ### Step 7: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/ai/AIPanel.tsx apps/desktop/src/components/ai/AIPanel.css apps/desktop/src/routes/Workspace.tsx apps/desktop/src/App.css
 git commit -m "feat(ai): dock AI panel to right column (AIModal → AIPanel), drop backdrop"
 ```
@@ -420,7 +420,7 @@ AIPanel 내부 내용(모드 셀렉터, 프롬프트, chip, 결과 카드, ◀�
 
 `acceptAIModal`, `closeAIModal`, `aiModal` state, `gen`, `aiOptions`, `contextCounts`, `aiCtxChecklistOpen` 모두 기존 (Plan 21). 변수명 유지.
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Report Format
 
@@ -540,8 +540,8 @@ safety effect (라인 452 부근):
 ### Step 5: 타입체크 + 엔진 빌드
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/engine && go test ./...
 ```
 
 기대: 타입체크 clean, 엔진 테스트 PASS (엔진 무변경 — 회귀 확인).
@@ -549,7 +549,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
 ### Step 6: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/routes/Workspace.tsx
 git commit -m "feat(workspace): wire AI target highlight (setAITarget on open/mode, clear on accept/close)"
 ```
@@ -567,7 +567,7 @@ Plan 22 Task 3 (최종 구현). Task 1 의 AITargetExtension 을 에디터에 �
 
 `tiptapEditor.commands.setAITarget` / `clearAITarget` 는 Task 1 의 익스텐션이 declare module 로 타입 등록.
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Report Format
 

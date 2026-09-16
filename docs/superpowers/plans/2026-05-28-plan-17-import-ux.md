@@ -104,7 +104,7 @@ cd engine && go test ./internal/importmd -v
 - [ ] **Step 5: 커밋**
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/importmd/tree.go engine/internal/importmd/tree_test.go
 git commit -m "fix(importmd): allow leading whitespace on heading lines"
 ```
@@ -792,7 +792,7 @@ s.Handle("imports.preview", handlers.ImportPreview())
 
 ```bash
 cd engine && go test ./...
-cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
+cd ~/workspace/myworks/linetta && ./scripts/build-engine.sh
 ```
 
 기대: 모든 패키지 PASS, 엔진 바이너리 재생성.

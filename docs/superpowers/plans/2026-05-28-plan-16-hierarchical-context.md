@@ -1734,8 +1734,8 @@ git tag plan-16-hierarchical-context-done
 
 ### Critical Files for Implementation
 
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/node/repo.go
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/summarizer/summarizer.go
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/ai/context.go
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/ai/prompts.go
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/mention/repo.go
+- ~/workspace/myworks/linetta/engine/internal/node/repo.go
+- ~/workspace/myworks/linetta/engine/internal/summarizer/summarizer.go
+- ~/workspace/myworks/linetta/engine/internal/ai/context.go
+- ~/workspace/myworks/linetta/engine/internal/ai/prompts.go
+- ~/workspace/myworks/linetta/engine/internal/mention/repo.go

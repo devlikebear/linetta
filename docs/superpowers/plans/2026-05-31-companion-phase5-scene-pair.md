@@ -12,7 +12,7 @@
 
 ## 사전 지식 (구현자 필독)
 
-- 루트 `/Users/changheonshin/workspace/myworks/linetta`. engine `engine/`(`go test ./...`), FE `apps/desktop`(`npx tsc --noEmit`), 빌드 `bash scripts/build-engine.sh`(repo root). `main`, no --no-verify, no push. LSP stale 무시, 명령 출력만 신뢰.
+- 루트 `~/workspace/myworks/linetta`. engine `engine/`(`go test ./...`), FE `apps/desktop`(`npx tsc --noEmit`), 빌드 `bash scripts/build-engine.sh`(repo root). `main`, no --no-verify, no push. LSP stale 무시, 명령 출력만 신뢰.
 - proposal `Op`(engine `companion/proposal.go`) 현재 필드: Type, Ref, Name, Color, Summary, ThreadID, ThreadRef, NodeID, BeatID, Label, Description, Intensity, Outline, Text, Category, Kind, Role, EntityID, From, FromRef, To, ToRef, Notes. `knownOps` map. `validateProposal`: `refs` 맵이 create_thread+create_entity의 ref를 수집, 그 뒤 per-op switch. `block(body)` 헬퍼는 proposal_test.go에 있음.
 - FE `nodes.createSibling(referenceId, kind: "leaf"|"container", label, title) → NodeRow`. `relationships.createOne(NewRelationshipInput)`, `relationships.createPair(NewRelationshipPairInput{project_id,from_id,to_id,label,inverse_label,notes?})` — 둘 다 이미 존재. `applyProposal(ops, projectId, currentNodeId)`에 `refMap`(thread), `entityRefMap`. `ProposalOp`(types.ts), `ProposalCard.opLabel`.
 - prompt.go: `buildSystem` op 목록 줄 + id-규칙 블록. `## 씬` 섹션은 node_id 노출(Phase 2 fix).

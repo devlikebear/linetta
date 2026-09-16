@@ -1722,8 +1722,8 @@ git log -1 --decorate=short
 
 ### Critical Files for Implementation
 
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/store/migrations/0003_relationship_pair_id.sql
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/relationship/repo.go
-- /Users/changheonshin/workspace/myworks/linetta/engine/internal/rpc/handlers/relationships.go
-- /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src/components/RelationshipPicker.tsx
-- /Users/changheonshin/workspace/myworks/linetta/apps/desktop/src/components/EntitySheet.tsx
+- ~/workspace/myworks/linetta/engine/internal/store/migrations/0003_relationship_pair_id.sql
+- ~/workspace/myworks/linetta/engine/internal/relationship/repo.go
+- ~/workspace/myworks/linetta/engine/internal/rpc/handlers/relationships.go
+- ~/workspace/myworks/linetta/apps/desktop/src/components/RelationshipPicker.tsx
+- ~/workspace/myworks/linetta/apps/desktop/src/components/EntitySheet.tsx

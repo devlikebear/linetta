@@ -12,7 +12,7 @@
 
 ## 사전 지식 (구현자 필독)
 
-- 루트 `/Users/changheonshin/workspace/myworks/linetta`. engine `engine/`(`go test ./...`), FE `apps/desktop`(`npx tsc --noEmit`), 빌드 `bash scripts/build-engine.sh`. `main`, no --no-verify, no push. LSP stale 무시.
+- 루트 `~/workspace/myworks/linetta`. engine `engine/`(`go test ./...`), FE `apps/desktop`(`npx tsc --noEmit`), 빌드 `bash scripts/build-engine.sh`. `main`, no --no-verify, no push. LSP stale 무시.
 - proposal `Op`(engine `companion/proposal.go`) 현재 필드: Type, Ref, Name, Color, Summary, ThreadID, ThreadRef, NodeID, BeatID, Label, Description, Intensity, Outline, Text, Category. `knownOps` map, `validateProposal` switch, `ParseProposal`. add_beat의 node_id는 이미 optional(Phase 2 fix).
 - entity: FE `entities.create(input: NewEntityInput) → Entity`, `entities.update(input: UpdateEntityInput) → Entity` (이미 존재). `NewEntityInput{project_id, kind, name, role?}`, `UpdateEntityInput{id, kind?, name?, role?, summary?, attributes?}`, `EntityKind = "character"|"place"|"item"|"concept"`, `Entity{id, kind, name, role, summary, ...}`. (NewEntityInput에 summary 없음 → 생성 후 update로 보정.)
 - relationship: 엔진 핸들러 `relationships.create_one` (params = `relationship.NewInput{ProjectID,FromID,ToID,Label,Notes}` → JSON `{project_id, from_id, to_id, label, notes}`, project_id/from_id/to_id/label 필수). FE 타입 `NewRelationshipInput{project_id, from_id, to_id, label, notes?}`, `Relationship{...}` 이미 존재. **FE `relationships` rpc 네임스페이스는 없음 → 신설.**

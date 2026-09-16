@@ -94,7 +94,7 @@ mention 을 만드는 방법: 이 패키지의 `ResyncForNode(ctx, nodeID, []Fou
 ### Step 2: 실패 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/mention -run TestMentionedNodeIDs -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/mention -run TestMentionedNodeIDs -v
 ```
 
 기대: 컴파일 에러 (`MentionedNodeIDs` 미존재).
@@ -135,7 +135,7 @@ func (r *Repo) MentionedNodeIDs(ctx context.Context, entityID string) (ids []str
 ### Step 4: 통과 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/mention -v && gofmt -l ./internal/mention
+cd ~/workspace/myworks/linetta/engine && go test ./internal/mention -v && gofmt -l ./internal/mention
 ```
 
 기대: 모든 mention 테스트 PASS, gofmt 빈 출력.
@@ -143,7 +143,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/m
 ### Step 5: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/mention/repo.go engine/internal/mention/repo_test.go
 git commit -m "feat(mention): MentionedNodeIDs — distinct node_ids + project_id for an entity"
 ```
@@ -154,7 +154,7 @@ Plan 23 Task 1. 엔티티 등장 씬 타임라인의 데이터 쿼리. `entities
 
 `r.s` 는 `*store.Store`, `r.s.DB()` 로 `*sql.DB`. mentions 테이블 컬럼: `node_id`, `entity_id` (0001_init.sql). entities 테이블: `id`, `project_id`.
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Report Format
 
@@ -295,7 +295,7 @@ func TestEntityScenesHandler_emptyID(t *testing.T) {
 ### Step 2: 실패 확인
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./internal/rpc/handlers -run TestEntityScenes -v
+cd ~/workspace/myworks/linetta/engine && go test ./internal/rpc/handlers -run TestEntityScenes -v
 ```
 
 기대: 컴파일 에러 (`EntityScenes`, `SceneMention` 미존재).
@@ -394,8 +394,8 @@ s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))
 ### Step 5: 통과 확인 + 엔진 빌드
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./... && gofmt -l ./internal/rpc/handlers
-cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
+cd ~/workspace/myworks/linetta/engine && go test ./... && gofmt -l ./internal/rpc/handlers
+cd ~/workspace/myworks/linetta && ./scripts/build-engine.sh
 ```
 
 기대: 모든 패키지 PASS, gofmt 빈 출력, 엔진 빌드 성공.
@@ -403,7 +403,7 @@ cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
 ### Step 6: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add engine/internal/rpc/handlers/entities.go engine/internal/rpc/handlers/entities_test.go engine/cmd/linetta-engine/main.go
 git commit -m "feat(rpc): entities.scenes — document-ordered scenes where an entity appears"
 ```
@@ -416,7 +416,7 @@ Plan 23 Task 2. Task 1 의 `MentionedNodeIDs` 를 써서 멘션 node_id 집합 +
 
 main.go 변수: `entities.search` 등록부에서 mention/node repo 변수명 확인 후 정확히 전달.
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Before You Begin
 
@@ -470,7 +470,7 @@ export const entities = {
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -478,7 +478,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib/types.ts apps/desktop/src/lib/rpc.ts
 git commit -m "feat(rpc-client): entities.scenes + SceneMention type"
 ```
@@ -487,7 +487,7 @@ git commit -m "feat(rpc-client): entities.scenes + SceneMention type"
 
 Plan 23 Task 3. Task 2 의 `entities.scenes` RPC 의 FE 클라이언트. wire 모양 `{ node_id, label }` 그대로 (snake_case — EntitySheet 가 직접 소비).
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Report Format
 
@@ -634,8 +634,8 @@ useEffect(() => {
 ### Step 5: 타입체크 + 엔진 회귀
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/engine && go test ./...
 ```
 
 기대: 타입체크 clean, 엔진 테스트 PASS.
@@ -643,7 +643,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
 ### Step 6: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/EntitySheet.tsx apps/desktop/src/components/EntitySheet.css apps/desktop/src/routes/Workspace.tsx
 git commit -m "feat(entity-sheet): 등장 씬 timeline section + navigate to scene"
 ```
@@ -654,7 +654,7 @@ Plan 23 Task 4 (final). EntitySheet 에 "등장 씬" 섹션을 더하고, 항목
 
 `navigateToNode` 는 `.id` 만 읽으므로 `{ id: nodeId } as NodeRow` 최소 객체로 호출 가능 (`"children" in target` false → NodeRow 분기 → `nodes.get(id)`).
 
-Working directory: `/Users/changheonshin/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
+Working directory: `~/workspace/myworks/linetta`. Branch: `main`. Never push. Never skip hooks.
 
 ## Before You Begin
 

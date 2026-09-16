@@ -346,7 +346,7 @@ export function hasActiveGhost(editor: { state?: any; view?: { state: any } } | 
 ### Step 2: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -354,7 +354,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 3: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/editor/GhostExtension.ts
 git commit -m "feat(editor): GhostExtension state generalized to variations array"
 ```
@@ -427,7 +427,7 @@ addKeyboardShortcuts() {
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -435,7 +435,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/editor/GhostExtension.ts apps/desktop/src/components/editor/GhostExtension.css
 git commit -m "feat(editor): GhostExtension ArrowLeft/Right + indicator/error styles"
 ```
@@ -685,7 +685,7 @@ export function useGhostText(editor: Editor | null) {
 ### Step 2: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 없음.
@@ -693,7 +693,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 3: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/lib/editor/useGhostText.ts
 git commit -m "feat(editor): useGhostText — startVariations + multi-run event branching"
 ```
@@ -783,7 +783,7 @@ const submit = (preset: PresetID) => {
 ### Step 3: 타입체크
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
 ```
 
 기대: 에러 발생 — Workspace.tsx 의 `onRun={(preset, promptText) => ...}` 가 2-인자 콜백이라 새 시그니처와 맞지 않음. **Task 5 에서 Workspace.tsx 갱신 후 통과 예정.**
@@ -793,7 +793,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEm
 ### Step 4: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/components/ai/AIPromptBar.tsx apps/desktop/src/components/ai/AIPromptBar.css
 git commit -m "feat(ai): AIPromptBar — '변형 ×3' opt-in chip"
 ```
@@ -843,8 +843,8 @@ onRun={(preset, promptText, variationsOn) => {
 ### Step 2: 타입체크 + 엔진 빌드 회귀
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
-cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
+cd ~/workspace/myworks/linetta/apps/desktop && npx tsc --noEmit
+cd ~/workspace/myworks/linetta/engine && go test ./...
 ```
 
 기대: 타입체크 clean. Engine 테스트 모두 PASS (이 plan 은 engine 변경 없음).
@@ -852,7 +852,7 @@ cd /Users/changheonshin/workspace/myworks/linetta/engine && go test ./...
 ### Step 3: 커밋
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta
+cd ~/workspace/myworks/linetta
 git add apps/desktop/src/routes/Workspace.tsx
 git commit -m "feat(workspace): onRun branches to startVariations when chip on"
 ```
@@ -860,7 +860,7 @@ git commit -m "feat(workspace): onRun branches to startVariations when chip on"
 ### Step 4: 엔진 빌드 (회귀 확인)
 
 ```bash
-cd /Users/changheonshin/workspace/myworks/linetta && ./scripts/build-engine.sh
+cd ~/workspace/myworks/linetta && ./scripts/build-engine.sh
 ```
 
 기대: 빌드 성공.

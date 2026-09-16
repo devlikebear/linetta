@@ -12,7 +12,7 @@
 
 ## 사전 지식 (구현자 필독)
 
-- 루트 `/Users/changheonshin/workspace/myworks/linetta`. engine `engine/`, FE `apps/desktop`, 빌드 `bash scripts/build-engine.sh`(repo root), 브리지 `apps/desktop/src-tauri`(`cargo check`). `main`, no --no-verify, no push. LSP stale 무시, 명령 출력만 신뢰.
+- 루트 `~/workspace/myworks/linetta`. engine `engine/`, FE `apps/desktop`, 빌드 `bash scripts/build-engine.sh`(repo root), 브리지 `apps/desktop/src-tauri`(`cargo check`). `main`, no --no-verify, no push. LSP stale 무시, 명령 출력만 신뢰.
 - `companion/runner.go` 현재: `run(ctx, runID, path, msgs, client, now)` — 단일 Chat → dedup 스트리밍(companion.delta/reset) → full = resp.Message.Content||dedup.Final() → AppendMessage(assistant) → ParseProposal→companion.proposal → companion.done. 취소는 ctx.Err()→companion.cancelled. 페이로드 구조체(deltaPayload/resetPayload/donePayload/errorPayload/cancelledPayload/proposalPayload) 정의돼 있음.
 - `companion/companion.go` `Service`: 필드 sessions/projects/threads/entities/relationships/plot/notify/factory/src/workDir/memBase/runner. `NewService(sessionsDir, projects, threads, entities, relationships, plotBuilder, notify, factory, src, workDir)`. **`nodes`/`beats` repo 직접 필드 없음**(plot.Builder가 내부에 가짐) → 읽기 도구용으로 추가 필요.
 - `companion/proposal.go`: `extractFencedBlocks(s, lang string) []string` 헬퍼(linetta-proposal 추출에 사용). 재사용 가능.
