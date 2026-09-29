@@ -100,10 +100,11 @@ activity log, which shows whether the built-in agent or an external client
 made it. A structural change — outline restructuring and the like — gets an
 Undo button on its own line in the agent panel, good for one click while the
 app stays open; only the last eight are held, in memory, and none survive a
-restart. A scene-prose rewrite has no one-click undo yet, but it is not lost:
-Linetta snapshots the scene before every agent write and keeps that version
-indefinitely, so you can put the old text back from the scene's **Previous
-versions** sheet.
+restart. A scene the agent wrote can be reverted the same way from its tool
+line (the panel offers undo whenever a line carries a `batch_id` or a
+`snapshot_id`). Linetta also snapshots the scene before every agent write and
+keeps that version indefinitely, so you can put the old text back from the
+scene's **Previous versions** sheet.
 
 ### What the agent remembers
 
@@ -200,12 +201,12 @@ way, and switching a group back on restores it exactly.
 `library.db` and copies nothing else under your data directory. What it does
 carry is the version history: every write and every delete lands a row holding
 that skill's whole text in `library.db`, so the history survives even though
-the files do not. Two consequences worth knowing: a skill you have never
-edited through Linetta — one you hand-wrote into the folder and never saved
-from Settings — has no row anywhere, and a skill whose file is gone does not
-appear in Settings → Skills, so its history cannot be reached there either.
-If the skills folder matters to you, copy it yourself, or keep it in git
-([#119](https://github.com/devlikebear/linetta/issues/119)).
+the files do not. A skill whose file is gone still appears in Settings →
+Skills under "Skills that survive only in history," with the same history
+panel and restore button every other skill uses. One consequence worth
+knowing: a skill you have never edited through Linetta — one you hand-wrote
+into the folder and never saved from Settings — has no row anywhere. If the
+skills folder matters to you, copy it yourself, or keep it in git.
 
 ## Writing with your own agent (MCP)
 
@@ -244,9 +245,10 @@ can write a skill for its own work and is refused on a global one, for the same
 reason it is refused on the writer profile.
 
 The writer keeps the last word. Every scene write is snapshotted before it
-lands, and a recent outline restructuring can be reversed in one click — the
-last eight, until the app is restarted; entity, storyline, beat, fact-card and
-memory edits are logged but have to be reversed with another edit. `read_only` mode omits the writing tools
+lands, and a recent outline restructuring or scene-prose rewrite can be
+reversed in one click from the agent tool line — the last eight, until the
+app is restarted; entity, storyline, beat, fact-card and memory edits are
+logged but have to be reversed with another edit. `read_only` mode omits the writing tools
 entirely, and a scene you are part way through editing is never replaced behind
 your back — Linetta tells you the agent touched it and leaves your text alone
 until you choose.
