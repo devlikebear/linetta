@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+# swift-rs 1.0.x expects the native SwiftPM output layout and cross-compiles
+# through -Xswiftc. Xcode 27's default swiftbuild adds a conflicting macOS SDK.
+# Scope this compatibility wrapper to iOS commands; do not alter the toolchain.
+if [ "${1:-}" = build ]; then
+  shift
+  exec xcrun swift build --build-system native "$@"
+fi
+exec xcrun swift "$@"

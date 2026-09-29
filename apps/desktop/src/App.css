@@ -1632,7 +1632,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   display: none;
 }
 
-@media (max-width: 860px) {
+/* Shared mobile foundation, including landscape phones and full-width iPads. */
+@media (max-width: 860px), (max-width: 1366px) and (any-pointer: coarse) {
   html,
   body,
   #root {
@@ -1950,8 +1951,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 
 /* iPad tier: touch, 701–1366px wide, ≥600px tall. Layered AFTER the compact
-   (max-width: 860px) block so touch devices in the 701–860 overlap get these
-   rules, while mouse-only desktop windows keep the compact rules. Uses
+   mobile foundation so all tablet widths inherit touch controls and fixed
+   inspectors, while mouse-only desktop windows keep their existing rules. Uses
    `any-pointer: coarse` (touch input present) rather than `pointer: coarse`
    (primary pointer) so an attached trackpad / the iOS Simulator don't fall back
    to the desktop layout. */

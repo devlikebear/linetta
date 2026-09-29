@@ -3,10 +3,26 @@ import { describe, expect, it } from "vitest";
 import { readSource } from "../test/readSource";
 
 describe("Workspace compact layout", () => {
+  it("shares mobile controls with wide touch screens before applying iPad overrides", async () => {
+    const css = await readSource("App.css");
+    const sharedQuery = "@media (max-width: 860px), (max-width: 1366px) and (any-pointer: coarse)";
+    expect(css).toContain(sharedQuery);
+    const shared = css.slice(css.indexOf(sharedQuery), css.indexOf("/* iPad tier:"));
+    expect(shared).toContain(".mobile-outline-toggle {\n    display: inline-flex;");
+    expect(shared).toContain("overflow-x: auto");
+    expect(shared).toContain(".workspace .panel {\n    position: fixed;");
+  });
+
+  it("collapses the outline on wide landscape phones as well as tablets", async () => {
+    const workspace = await readSource("routes/Workspace.tsx");
+    expect(workspace).toContain('import { MOBILE_WORKSPACE_QUERY, useSizeClass }');
+    expect(workspace.match(/window.matchMedia\(MOBILE_WORKSPACE_QUERY\)/g)).toHaveLength(3);
+  });
+
   it("derives the size tier and seeds the outline rail per tier", async () => {
     const workspace = await readSource("routes/Workspace.tsx");
 
-    expect(workspace).toContain('import { useSizeClass } from "../hooks/useSizeClass"');
+    expect(workspace).toContain('import { MOBILE_WORKSPACE_QUERY, useSizeClass } from "../hooks/useSizeClass"');
     expect(workspace).toContain("const sizeClass = useSizeClass()");
     expect(workspace).toContain('import { reconcileInspector } from "../hooks/inspector"');
     expect(workspace).toContain("reconcileInspector(");
