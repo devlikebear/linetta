@@ -141,10 +141,14 @@ jobs:
           if [ -z "${build_number}" ]; then
             build_number="${GITHUB_RUN_NUMBER}"
           fi
+          if [[ ! "${build_number}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "iOS build_number must be a positive integer." >&2
+            exit 1
+          fi
           pnpm tauri ios build \
             --ci \
             --export-method "${IOS_EXPORT_METHOD}" \
-            --build-number "${build_number}"
+            --config "{\"bundle\":{\"iOS\":{\"bundleVersion\":\"${build_number}\"}}}"
 
       - name: Collect iOS release artifact
         shell: bash
@@ -155,6 +159,23 @@ jobs:
           find apps/desktop/src-tauri/target -type f -name '*.ipa' -exec cp {} dist/mobile/ios/ \; 2>/dev/null || true
           test "$(find dist/mobile/ios -type f -name '*.ipa' | wc -l | tr -d ' ')" -gt 0
           find dist/mobile/ios -type f -print | sort
+
+      - name: Validate iOS bundle metadata
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib, plistlib, re, zipfile
+          for artifact in pathlib.Path("dist/mobile/ios").glob("*.ipa"):
+              with zipfile.ZipFile(artifact) as archive:
+                  paths = [name for name in archive.namelist()
+                           if re.fullmatch(r"Payload/[^/]+\.app/Info\.plist", name)]
+                  assert len(paths) == 1, "Expected one application Info.plist"
+                  info = plistlib.loads(archive.read(paths[0]))
+              version = info["CFBundleVersion"]
+              assert re.fullmatch(r"[0-9]+(?:\.[0-9]+){0,2}", version), version
+              assert set(info["UIDeviceFamily"]) == {1, 2}, "Expected iPhone and iPad"
+              print(f"{artifact.name}: version={info['CFBundleShortVersionString']} build={version}")
+          PY
 
       - name: Upload iOS workflow artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

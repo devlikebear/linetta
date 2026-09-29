@@ -13,6 +13,13 @@ async function readRepo(path: string) {
 }
 
 describe("iOS dev simulator launcher", () => {
+  it("sets the iOS bundle version directly instead of appending a fourth version component", async () => {
+    const workflow = await readRepo(".github/workflows/mobile-release.yml");
+    expect(workflow).not.toContain('--build-number "${build_number}"');
+    expect(workflow).toContain('bundleVersion');
+    expect(workflow).toContain('Validate iOS bundle metadata');
+  });
+
   it("applies the Swift compatibility wrapper to CI and signed iOS builds", async () => {
     for (const workflow of ["mobile-engine.yml", "mobile-release.yml"]) {
       const source = await readRepo(`.github/workflows/${workflow}`);
