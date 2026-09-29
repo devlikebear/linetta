@@ -9,6 +9,10 @@ export type SizeClass = "compact" | "ipad" | "desktop";
 // `not (any-pointer: coarse)` therefore identifies a real mouse-only desktop.
 // Touch-capable iPads stay in the iPad tier through the largest regular iPad
 // landscape width (1366 CSS px); wider external displays can use desktop.
+// Keep in sync with the shared mobile foundation in App.css.
+export const MOBILE_WORKSPACE_QUERY =
+  "(max-width: 860px), (max-width: 1366px) and (any-pointer: coarse)";
+
 export const DESKTOP_QUERY = "(min-width: 1367px), (not (any-pointer: coarse))";
 export const IPAD_QUERY =
   "(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)";

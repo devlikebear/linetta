@@ -107,9 +107,9 @@ fn build_go_engine() {
             let sdkroot = env::var("SDKROOT").unwrap_or_else(|_| xcrun(sdk, &["--show-sdk-path"]));
             let clang = xcrun(sdk, &["--find", "clang"]);
             let minflag = if sdk == "iphonesimulator" {
-                "-mios-simulator-version-min=14.0"
+                "-mios-simulator-version-min=15.0"
             } else {
-                "-miphoneos-version-min=14.0"
+                "-miphoneos-version-min=15.0"
             };
             let wrapper = out_dir.join(format!("linetta-{sdk}-clangwrap.sh"));
             fs::write(

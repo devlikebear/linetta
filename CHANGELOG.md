@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed missing outline controls and inspector positioning on full-width iPads,
+  and aligned outline behavior with the compact layout on landscape iPhones.
+- Aligned the app and embedded engine on iOS/iPadOS 15.0, and made local and CI
+  iOS builds use the SwiftPM builder required by the current Swift bridge when
+  running Xcode 27. Native input and signed distribution QA remain pending.
+
 ## v1.2.2 - 2026-09-10
 
 - Fixed five ways the editor could lose or overwrite what you typed, all in

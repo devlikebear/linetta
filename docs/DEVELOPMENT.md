@@ -87,6 +87,39 @@ make build-mobile-ios-sim
 make smoke-mobile-ios-sim
 ```
 
+Open Xcode and complete its license and first-launch setup before running these
+commands. A license error from `xcrun simctl list devices available` blocks both
+native builds and simulator verification.
+
+The app and embedded engine target iOS/iPadOS 15.0 or newer. Tauri preserves an
+existing `apps/desktop/src-tauri/gen/apple/project.yml` during initialization.
+If an older generated project still targets 14.0, back up that file outside the
+generated directory, then run `make mobile-ios-init` to recreate it. Reapply any
+local native customizations from the backup before building.
+
+Use the Make targets for simulator builds and development: they prepend
+`scripts/ios-toolchain` to PATH so swift-rs uses SwiftPM's native build system.
+This avoids Xcode 27's default Swift build system mixing macOS and iOS SDK flags.
+For direct `pnpm tauri ios build` commands (including device builds), prepend the
+same absolute directory to PATH. This wrapper only changes `swift build`;
+compiler information queries still pass through to the selected Xcode toolchain.
+
+The smoke script defaults to an available iPhone. Verify iPad separately by
+choosing its UDID from `xcrun simctl list devices available`:
+
+```sh
+LINETTA_IOS_SIM_UDID="<iPad simulator UDID>" make smoke-mobile-ios-sim
+make dev-mobile-ios IOS_SIM="<installed iPad simulator name>"
+```
+
+The shared mobile CSS covers narrow desktop windows and touch screens up to
+1366 CSS pixels, including landscape phones. The iPad rules override it at
+701–1366 pixels wide and at least 600 pixels tall. Keep `MOBILE_WORKSPACE_QUERY`
+in `useSizeClass.ts` aligned with the shared media query in `App.css`, so outline
+state and rendered controls agree. Verify portrait and landscape, opening the
+outline and inspectors, and software-keyboard transitions on both device types.
+Browser layout checks do not replace the native engine smoke or device input QA.
+
 For local Android smoke testing, install the Android SDK and NDK and run:
 
 ```sh

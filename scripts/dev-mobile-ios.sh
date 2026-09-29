@@ -81,4 +81,5 @@ xcrun simctl boot "${device_udid}" >/dev/null 2>&1 || true
 xcrun simctl bootstatus "${device_udid}" -b >/dev/null
 
 cd "${ROOT}/apps/desktop"
+export PATH="${ROOT}/scripts/ios-toolchain:${PATH}"
 exec pnpm tauri ios dev "${SIM_NAME}"

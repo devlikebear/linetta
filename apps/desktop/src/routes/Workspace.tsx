@@ -36,7 +36,7 @@ import {
   readStoredPhase,
   shouldAutoStartOnboarding,
 } from "../components/onboarding/onboardingState";
-import { useSizeClass } from "../hooks/useSizeClass";
+import { MOBILE_WORKSPACE_QUERY, useSizeClass } from "../hooks/useSizeClass";
 import { reconcileInspector } from "../hooks/inspector";
 import type { InspectorState } from "../hooks/inspector";
 import { useKeyedDebouncedCallback } from "../hooks/useDebouncedCallback";
@@ -70,7 +70,7 @@ const LAST_OPENED_THROTTLE_MS = 5000;
 function seedRailCollapsed(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
   // Collapsed on touch/mobile tiers so the first workspace view is the editor.
-  const compactish = window.matchMedia("(max-width: 860px)").matches;
+  const compactish = window.matchMedia(MOBILE_WORKSPACE_QUERY).matches;
   const ipadTouch = window.matchMedia(
     "(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)",
   ).matches;
@@ -207,7 +207,7 @@ export function Workspace() {
   }, [load, sceneSaveQueue]);
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
-    const compact = window.matchMedia("(max-width: 860px)");
+    const compact = window.matchMedia(MOBILE_WORKSPACE_QUERY);
     const ipadTouch = window.matchMedia(
       "(min-width: 701px) and (max-width: 1366px) and (min-height: 600px) and (any-pointer: coarse)",
     );
@@ -1569,7 +1569,7 @@ export function Workspace() {
   const currentSceneTitle = load.node.title || currentNodeLabel;
   const handleOutlineSelect = (n: TreeNode) => {
     navigateToNode(n);
-    if (window.matchMedia("(max-width: 860px)").matches || sizeClass === "ipad") setRailCollapsed(true);
+    if (window.matchMedia(MOBILE_WORKSPACE_QUERY).matches || sizeClass === "ipad") setRailCollapsed(true);
   };
 
   return (

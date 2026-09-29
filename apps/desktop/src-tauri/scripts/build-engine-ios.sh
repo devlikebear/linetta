@@ -19,8 +19,8 @@ EOF
   echo "$wrapper"
 }
 
-DEV_CC="$(mk_wrap iphoneos "-miphoneos-version-min=13.0")"
-SIM_CC="$(mk_wrap iphonesimulator "-mios-simulator-version-min=13.0")"
+DEV_CC="$(mk_wrap iphoneos "-miphoneos-version-min=15.0")"
+SIM_CC="$(mk_wrap iphonesimulator "-mios-simulator-version-min=15.0")"
 
 cd "$ENGINE_DIR"
 CGO_ENABLED=1 GOOS=ios GOARCH=arm64 CC="$DEV_CC" \

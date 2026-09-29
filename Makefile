@@ -84,7 +84,7 @@ mobile-android-init: ## Generate the ignored Tauri Android project
 
 build-mobile-ios-sim: ## Build a no-sign iOS simulator app bundle
 	rm -rf apps/desktop/src-tauri/gen/apple/build/arm64-sim/Linetta.app apps/desktop/src-tauri/gen/apple/build/linetta-desktop_iOS.xcarchive
-	cd apps/desktop && pnpm tauri ios build --debug --target aarch64-sim --ci --no-sign
+	cd apps/desktop && PATH="$(CURDIR)/scripts/ios-toolchain:$$PATH" pnpm tauri ios build --debug --target aarch64-sim --ci --no-sign
 
 smoke-mobile-ios-sim: ## Build, install, launch, and verify the iOS simulator app
 	bash scripts/smoke-ios-simulator.sh

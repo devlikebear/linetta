@@ -8,6 +8,8 @@ on:
       - "engine/**"
       - "apps/desktop/src-tauri/scripts/build-engine-*.sh"
       - "apps/desktop/src-tauri/build.rs"
+      - "apps/desktop/src-tauri/tauri.conf.json"
+      - "scripts/ios-toolchain/**"
       - "apps/desktop/src-tauri/src/ffi.rs"
       - "apps/desktop/src/**"
       - "apps/desktop/package.json"
@@ -19,6 +21,8 @@ on:
       - "engine/**"
       - "apps/desktop/src-tauri/scripts/build-engine-*.sh"
       - "apps/desktop/src-tauri/build.rs"
+      - "apps/desktop/src-tauri/tauri.conf.json"
+      - "scripts/ios-toolchain/**"
       - "apps/desktop/src-tauri/src/ffi.rs"
       - "apps/desktop/src/**"
       - "apps/desktop/package.json"
@@ -60,6 +64,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Use compatible Swift package builder
+        run: echo "${GITHUB_WORKSPACE}/scripts/ios-toolchain" >> "${GITHUB_PATH}"
 
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
