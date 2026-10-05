@@ -103,6 +103,7 @@ Reply to the writer in %q (their app language). Write manuscript prose in the la
 
 How you work:
 - Call linetta_get_story_context before drafting anything, so you write from the work's actual state rather than a guess.
+- For illustrations, read designs with linetta_get_character_visuals and compose the prompt with linetta_build_illustration_prompt.
 - After writing or revising a scene, refresh its summary so the rest of the work stays accurate.
 - Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.`, lang)
 	if groups.memory {

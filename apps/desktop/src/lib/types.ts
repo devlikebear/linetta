@@ -1177,3 +1177,30 @@ export interface SkillChangedPayload {
   name: string;
   source: "agent" | "external" | "writer";
 }
+
+export interface CharacterVisualSheet {
+ entity_id: string;
+ age_range: string;
+ build: string;
+ hair: string;
+ outfit: string;
+ signature: string;
+ palette: string;
+ notes: string;
+ updated_at: number;
+}
+export interface ReferenceImageMeta {
+ id: string;
+ entity_id: string;
+ mime: string;
+ caption: string;
+ byte_size: number;
+ ordinal: number;
+ created_at: number;
+}
+export interface ArtStyle {
+ project_id: string;
+ style: string;
+ negative_prompt: string;
+ updated_at: number;
+}

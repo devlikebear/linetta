@@ -42,6 +42,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/summarizer"
 	"github.com/devlikebear/linetta/engine/internal/thread"
+	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
 const DefaultVersion = "1.2.2"
@@ -125,6 +126,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	snaps := snapshot.NewRepo(st)
 	writingStats := stats.NewRepo(st)
 	entities := entity.NewRepo(st)
+	visuals := visual.NewRepo(st)
 	mentions := mention.NewRepo(st)
 	threads := thread.NewRepo(st)
 	beats := beat.NewRepo(st)
@@ -264,6 +266,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		settingsStore: settingsStore,
 		home:          home,
 		repos: mcpToolRepos{
+			visuals:    visuals,
 			projects:   projects,
 			nodes:      nodes,
 			entities:   entities,
@@ -387,6 +390,15 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("entities.search", handlers.SearchEntities(entities))
 	s.Handle("entities.list", handlers.ListEntities(entities))
 	s.Handle("entities.get", handlers.GetEntity(entities))
+	s.Handle("visuals.get_sheet", handlers.GetVisualSheet(visuals))
+	s.Handle("visuals.set_sheet", handlers.SetVisualSheet(visuals, clock))
+	s.Handle("visuals.list_images", handlers.ListVisualImages(visuals))
+	s.Handle("visuals.get_image", handlers.GetVisualImage(visuals))
+	s.Handle("visuals.add_image", handlers.AddVisualImage(visuals, clock))
+	s.Handle("visuals.update_image", handlers.UpdateVisualImage(visuals))
+	s.Handle("visuals.delete_image", handlers.DeleteVisualImage(visuals))
+	s.Handle("visuals.get_art_style", handlers.GetArtStyle(visuals))
+	s.Handle("visuals.set_art_style", handlers.SetArtStyle(visuals, clock))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))

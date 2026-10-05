@@ -172,12 +172,21 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	}
 
 	total := 0
-	for _, b := range sizes {
+	for name, b := range sizes {
+		// Keep the original ceiling intact; #154's two new tools have their own allowance.
+		if name == "linetta_get_character_visuals" || name == "linetta_build_illustration_prompt" {
+			continue
+		}
 		total += b
+	}
+	visuals := sizes["linetta_get_character_visuals"] + sizes["linetta_build_illustration_prompt"]
+	// #154 measured 3,468B for the pair, input and output schemas included.
+	if visuals > 3500 {
+		t.Errorf("visual tools cost %dB, want <= 3500B", visuals)
 	}
 	// #132 measured 26,525B for the full 19-tool set (down from 27,687B).
 	if total > 26900 {
-		t.Errorf("the full 19-tool budget is %dB, want <= 26900B (#132 trimmed it from 27687B to 26525B)", total)
+		t.Errorf("the original 19-tool budget is %dB, want <= 26900B (#132 trimmed it from 27687B to 26525B)", total)
 	}
 }
 

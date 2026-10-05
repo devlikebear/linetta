@@ -7,6 +7,13 @@ import { I18nProvider } from "../lib/i18n";
 import { EntitySheet } from "./EntitySheet";
 
 const mocks = vi.hoisted(() => ({
+  visuals: {
+    getSheet: vi.fn().mockResolvedValue({ entity_id: "entity-1", age_range: "", build: "", hair: "", outfit: "", signature: "", palette: "", notes: "", updated_at: 0 }),
+    setSheet: vi.fn().mockResolvedValue({}), listImages: vi.fn().mockResolvedValue([]),
+    addImage: vi.fn(), getImage: vi.fn(), deleteImage: vi.fn(),
+    getArtStyle: vi.fn().mockResolvedValue({ project_id: "project-1", style: "", negative_prompt: "", updated_at: 0 }),
+    setArtStyle: vi.fn(),
+  },
   entities: {
     get: vi.fn(),
     update: vi.fn(),
@@ -20,6 +27,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/rpc", () => ({
+  visuals: mocks.visuals,
   entities: mocks.entities,
   relationships: mocks.relationships,
   settings: {
@@ -55,6 +63,45 @@ describe("EntitySheet", () => {
     </I18nProvider>,
   );
 
+  it("saves visual fields with the entity", async () => {
+    const user = userEvent.setup();
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    renderSheet();
+    await user.type(await screen.findByLabelText("머리"), "검은 머리");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(mocks.visuals.setSheet).toHaveBeenCalledWith(expect.objectContaining({ entity_id: "entity-1", hair: "검은 머리" })));
+  });
+
+  it("leaves an unchanged visual sheet untouched", async () => {
+    const user = userEvent.setup();
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    renderSheet();
+    await screen.findByLabelText("머리");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(mocks.entities.update).toHaveBeenCalled());
+    expect(mocks.visuals.setSheet).not.toHaveBeenCalled();
+  });
+
+  it("refuses an oversized reference before uploading", async () => {
+    const user = userEvent.setup();
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    renderSheet();
+    await user.upload(await screen.findByLabelText("참조 이미지 추가"), new File([new Uint8Array(5 * 1024 * 1024 + 1)], "large.png", { type: "image/png" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("이미지는 5 MB 이하여야 합니다.");
+    expect(mocks.visuals.addImage).not.toHaveBeenCalled();
+  });
+
+  it("uploads reference bytes as base64", async () => {
+    const user = userEvent.setup();
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    mocks.visuals.addImage.mockResolvedValue({ id: "i1", mime: "image/png", caption: "", byte_size: 3 });
+    mocks.visuals.getImage.mockResolvedValue({ mime: "image/png", data_base64: "YWJj" });
+    renderSheet();
+    const input = await screen.findByLabelText("참조 이미지 추가");
+    await user.upload(input, new File(["abc"], "ref.png", { type: "image/png" }));
+    await waitFor(() => expect(mocks.visuals.addImage).toHaveBeenCalledWith({ entity_id: "entity-1", mime: "image/png", caption: "", data_base64: "YWJj" }));
+  });
+
   it("saves a character role selected from core-role presets", async () => {
     const user = userEvent.setup();
     mocks.entities.get.mockResolvedValue(baseEntity);
@@ -80,6 +127,7 @@ describe("EntitySheet", () => {
     renderSheet();
 
     expect(await screen.findByDisplayValue("폐쇄 도시")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "인물 비주얼 시트" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "메인무대" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "특별한 장소" })).toBeInTheDocument();
   });

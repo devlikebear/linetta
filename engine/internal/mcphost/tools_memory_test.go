@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/visual"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -30,6 +31,7 @@ func newMemoryDeps(t *testing.T) (context.Context, ToolDeps, string) {
 		t.Fatalf("create project: %v", err)
 	}
 	d := ToolDeps{
+		Visuals:  visual.NewRepo(st),
 		Memory:   agentmemory.NewRepo(st.DB()),
 		Activity: NewActivityRepo(st.DB()),
 		Projects: project.NewRepo(st),

@@ -7,12 +7,20 @@ import { CanonPanel } from "./CanonPanel";
 import type { Entity, EntityKind, Relationship } from "../lib/types";
 
 const mocks = vi.hoisted(() => ({
+  visuals: {
+    getSheet: vi.fn().mockResolvedValue({ entity_id: "entity-1", age_range: "", build: "", hair: "", outfit: "", signature: "", palette: "", notes: "", updated_at: 0 }),
+    setSheet: vi.fn().mockResolvedValue({}), listImages: vi.fn().mockResolvedValue([]),
+    addImage: vi.fn(), getImage: vi.fn(), deleteImage: vi.fn(),
+    getArtStyle: vi.fn().mockResolvedValue({ project_id: "project-1", style: "", negative_prompt: "", updated_at: 0 }),
+    setArtStyle: vi.fn(),
+  },
   settingsGet: vi.fn(),
   entitiesList: vi.fn(),
   relationshipsList: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
+  visuals: mocks.visuals,
   // I18nProvider reads the language through the same module.
   settings: { get: mocks.settingsGet },
   entities: { list: mocks.entitiesList },
@@ -83,6 +91,17 @@ describe("CanonPanel", () => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
     mocks.entitiesList.mockResolvedValue(cast);
     mocks.relationshipsList.mockResolvedValue([rel("r1", "e1", "e2"), rel("r2", "e2", "e1")]);
+  });
+
+  it("saves the work art style", async () => {
+    const user = userEvent.setup();
+    mocks.visuals.setArtStyle.mockImplementation(async (value) => value);
+    renderPanel();
+    await user.click(screen.getByText("일러스트 화풍"));
+    await user.type(await screen.findByLabelText("화풍"), "수채화");
+    await user.type(screen.getByLabelText("네거티브 프롬프트"), "글자");
+    await user.click(screen.getByRole("button", { name: "저장" }));
+    await waitFor(() => expect(mocks.visuals.setArtStyle).toHaveBeenCalledWith(expect.objectContaining({ project_id: "project-1", style: "수채화", negative_prompt: "글자" })));
   });
 
   it("lists what the work registered, whatever the kind", async () => {

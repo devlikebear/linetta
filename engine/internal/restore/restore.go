@@ -179,8 +179,9 @@ type MergeResult struct {
 // is ever updated or deleted — the merge is purely additive. Copied tables:
 // projects, nodes, entities, mentions, relationships, threads, beats, notes,
 // node_snapshots, fact_cards, fact_sources, writing_stats, agent_memory
-// (work_notes scope only). Library-level history (companion transcripts, AI
-// runs, MCP activity, the global writer_profile memory) stays with the
+// (work_notes scope only), entity_visuals, entity_reference_images,
+// project_art_style. Library-level history (companion transcripts, AI runs,
+// MCP activity, the global writer_profile memory) stays with the
 // library it belongs to.
 func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, projectID, titleSuffix string, now time.Time) (MergeResult, error) {
 	src, done, err := openBackupCopy(ctx, backupPath, tempDir)
@@ -261,6 +262,24 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return row, true
 	}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy entities: %w", err)
+	}
+
+	for _, table := range []string{"entity_visuals", "entity_reference_images"} {
+		if err := copyRows(ctx, sdb, tx, table, "entity_id IN (SELECT id FROM entities WHERE project_id = ?)", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+			row["entity_id"] = entityMap[asString(row["entity_id"])]
+			if table == "entity_reference_images" {
+				row["id"] = uuid.NewString()
+			}
+			return row, true
+		}); err != nil {
+			return MergeResult{}, fmt.Errorf("copy %s: %w", table, err)
+		}
+	}
+	if err := copyRows(ctx, sdb, tx, "project_art_style", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		row["project_id"] = newProjectID
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy art style: %w", err)
 	}
 
 	if err := copyRows(ctx, sdb, tx, "mentions",
@@ -489,7 +508,12 @@ func copyRows(ctx context.Context, src *sql.DB, tx *sql.Tx, table, where string,
 		}
 		row := make(map[string]any, len(cols))
 		for i, c := range cols {
-			row[c] = normalizeValue(raw[i])
+			// Image bytes must remain BLOBs when the backup is merged.
+			if table == "entity_reference_images" && c == "data" {
+				row[c] = raw[i]
+			} else {
+				row[c] = normalizeValue(raw[i])
+			}
 		}
 		row, keep := remap(row)
 		if !keep {

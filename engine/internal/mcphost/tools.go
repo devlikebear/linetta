@@ -25,6 +25,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
+	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
 // MetaRunID is the MCP _meta key the built-in agent stamps each tool call
@@ -36,6 +37,7 @@ const MetaRunID = "linetta/run_id"
 // ToolDeps carries everything the tool layer reads from. Every field is a repo
 // the UI already uses, so an agent sees exactly what the writer sees.
 type ToolDeps struct {
+	Visuals    *visual.Repo
 	Projects   *project.Repo
 	Nodes      *node.Repo
 	Entities   *entity.Repo

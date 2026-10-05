@@ -178,7 +178,7 @@ Skills → Learning from its own work** (`agent_self_review_enabled` in
 `settings.json`) and Linetta does not make that call at all.
 
 **You can switch the memory and skills tools off entirely.** Every tool's full
-description travels in every request, so Linetta's nineteen tools are a
+description travels in every request, so Linetta's twenty-one tools are a
 standing cost on every turn — and the memory tool and the two skills tools are
 about a fifth of it. **Settings → Tool budget** says how many tools the agent
 currently gets and what each group costs, and turns either group off for both
@@ -207,6 +207,13 @@ panel and restore button every other skill uses. One consequence worth
 knowing: a skill you have never edited through Linetta — one you hand-wrote
 into the folder and never saved from Settings — has no row anywhere. If the
 skills folder matters to you, copy it yourself, or keep it in git.
+
+Character visual sheets hold appearance notes and up to eight reference images
+per character. Set the illustration style in Story World; sheets, images and
+style guides are included in library backups and restored works.
+`linetta_get_character_visuals` reads these designs and optional reference images;
+`linetta_build_illustration_prompt` builds a single illustration or four-panel
+prompt from them and your scene description.
 
 ## Writing with your own agent (MCP)
 

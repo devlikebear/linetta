@@ -30,6 +30,8 @@ var ReadToolNames = []string{
 	"linetta_where_does_appear",
 	"linetta_get_plot",
 	"linetta_get_fact_cards",
+	"linetta_get_character_visuals",
+	"linetta_build_illustration_prompt",
 	"linetta_read_skill",
 }
 
@@ -314,6 +316,8 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 		Description: "Return the work's Fact Book cards: source-backed research notes with their " +
 			"verification status. Use them for real-world details instead of inventing facts.",
 	}, record(d, "linetta_get_fact_cards", d.getFactCards))
+
+	registerVisualTools(s, d)
 
 	// A block rather than an early return: an early return is correct only
 	// while linetta_read_skill happens to be registered last, and a tool

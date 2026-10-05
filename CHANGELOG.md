@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added character visual sheets, up to eight reference images per character,
+  and a work-wide illustration style guide. The images travel with library
+  backups and restored works. Two read tools expose the designs and build
+  single-illustration or four-panel prompts from the writer's own descriptions
+  ([#154](https://github.com/devlikebear/linetta/issues/154)).
 - Fixed missing outline controls and inspector positioning on full-width iPads,
   and aligned outline behavior with the compact layout on landscape iPhones.
 - Aligned the app and embedded engine on iOS/iPadOS 15.0, and made local and CI

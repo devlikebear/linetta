@@ -22,6 +22,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
+	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
 // Mobile builds cannot host a local server, so MCP is compiled out entirely —
@@ -37,6 +38,7 @@ type mcpDeps struct {
 // mcpToolRepos mirrors the enabled build's shape so register() compiles
 // unchanged; mobile never reads these.
 type mcpToolRepos struct {
+	visuals      *visual.Repo
 	projects     *project.Repo
 	nodes        *node.Repo
 	entities     *entity.Repo

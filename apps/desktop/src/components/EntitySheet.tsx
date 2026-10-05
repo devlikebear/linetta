@@ -1,6 +1,8 @@
+import { CharacterVisualSection } from "./CharacterVisualSection";
+import { rpcErrorMessage } from "../lib/rpcMessage";
 import { useCallback, useEffect, useState } from "react";
-import type { Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput } from "../lib/types";
-import { entities, relationships } from "../lib/rpc";
+import type { CharacterVisualSheet, Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput } from "../lib/types";
+import { entities, relationships, visuals } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
 import { X, Plus, User, MapPin, Box, Lightbulb, Search } from "../lib/icons";
 import { displayNodeLabel, entityAttributePresets, entityKindLabel, entityRolePresets, useI18n } from "../lib/i18n";
@@ -26,6 +28,8 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
   const [entity, setEntity] = useState<Entity | null>(null);
   const [draft, setDraft] = useState<UpdateEntityInput | null>(null);
   const [attrRows, setAttrRows] = useState<{ key: string; value: string }[]>([]);
+  const [visualSheet, setVisualSheet] = useState<CharacterVisualSheet | null>(null);
+  const [visualDirty, setVisualDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rels, setRels] = useState<Relationship[]>([]);
@@ -58,7 +62,9 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
     setEntity(null);
     setError(null);
     setRels([]);
+    let cancelled = false;
     entities.get(entityId).then((e) => {
+      if (cancelled) return;
       setEntity(e);
       setDraft({
         id: e.id,
@@ -69,9 +75,10 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
         attributes: e.attributes,
       });
       setAttrRows(Object.entries(e.attributes).map(([key, value]) => ({ key, value })));
-    }).catch((e) => setError(String(e)));
-    refreshRels(entityId).catch((e) => setError(String(e)));
-  }, [entityId, refreshRels]);
+    }).catch((e) => { if (!cancelled) setError(rpcErrorMessage(e, t)); });
+    refreshRels(entityId).catch((e) => { if (!cancelled) setError(rpcErrorMessage(e, t)); });
+    return () => { cancelled = true; };
+  }, [entityId, refreshRels, t]);
 
   useEffect(() => {
     if (!entityId) {
@@ -85,6 +92,16 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
     return () => { cancelled = true; };
   }, [entityId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setVisualSheet(null);
+    setVisualDirty(false);
+    if (entityId) visuals.getSheet(entityId).then((sheet) => {
+      if (!cancelled) setVisualSheet(sheet);
+    }).catch((e) => { if (!cancelled) setError(rpcErrorMessage(e, t)); });
+    return () => { cancelled = true; };
+  }, [entityId, t]);
+
   if (!entityId) return null;
 
   const onSave = async () => {
@@ -97,11 +114,14 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
         if (row.key.trim() !== "") attributes[row.key.trim()] = row.value;
       }
       const saved = await entities.update({ ...draft, attributes });
+      if (draft.kind === "character" && visualDirty && visualSheet?.entity_id === draft.id) {
+        await visuals.setSheet(visualSheet);
+      }
       setEntity(saved);
       if (onSaved) onSaved(saved);
       onClose();
     } catch (e) {
-      setError(String(e));
+      setError(rpcErrorMessage(e, t));
     } finally {
       setSaving(false);
     }
@@ -277,6 +297,10 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
                 </button>
               </div>
             </div>
+
+            {kind === "character" && visualSheet?.entity_id === entity.id && (
+              <CharacterVisualSection key={entity.id} value={visualSheet} onChange={(sheet) => { setVisualSheet(sheet); setVisualDirty(true); }} />
+            )}
 
             <div className="sec">
               <h4>{t("entity.relationships")}</h4>

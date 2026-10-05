@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/visual"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -45,6 +46,7 @@ func newSkillDepsWithStore(t *testing.T) (context.Context, ToolDeps, string, str
 	}
 	home := t.TempDir()
 	d := ToolDeps{
+		Visuals:      visual.NewRepo(st),
 		Skills:       agentskills.NewStore(home),
 		SkillHistory: agentskills.NewHistory(st.DB()),
 		Activity:     NewActivityRepo(st.DB()),

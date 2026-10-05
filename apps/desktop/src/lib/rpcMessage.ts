@@ -21,6 +21,10 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // because another window or a connected agent removed it.
   node_not_found: "errors.nodeNotFound",
   project_not_found: "errors.projectNotFound",
+  image_not_found: "visual.notFound",
+  image_too_large: "visual.tooLarge",
+  unsupported_image_type: "visual.unsupported",
+  too_many_images: "visual.tooMany",
   entity_not_found: "errors.entityNotFound",
   thread_not_found: "errors.threadNotFound",
   beat_not_found: "errors.beatNotFound",
