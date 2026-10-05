@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.3.0 - 2026-10-05
 
 - Added character visual sheets, up to eight reference images per character,
   and a work-wide illustration style guide. The images travel with library

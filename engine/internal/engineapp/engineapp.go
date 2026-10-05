@@ -45,7 +45,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
-const DefaultVersion = "1.2.2"
+const DefaultVersion = "1.3.0"
 
 // Options configures an embedded engine instance.
 type Options struct {
