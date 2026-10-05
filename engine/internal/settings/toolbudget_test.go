@@ -215,3 +215,29 @@ func TestToolBudget_aFailedMeasurementIsNotABudgetOfZero(t *testing.T) {
 			"settings.get must omit it entirely", *got.ToolBudget)
 	}
 }
+
+func TestVisualWriteGroupPersistsAndDiscountsBudget(t *testing.T) {
+	t.Setenv("LINETTA_HOME", t.TempDir())
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.WithToolBudget(func(bool, bool) (ToolBudget, bool) {
+		return ToolBudget{Tools: 25, Bytes: 30000, VisualWrites: ToolBudgetGroup{Tools: 4, Bytes: 5000}}, true
+	})
+	disabled := true
+	c, err := s.Set(context.Background(), Patch{VisualWriteToolsDisabled: &disabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ToolBudget.Tools != 21 || c.ToolBudget.Bytes != 25000 {
+		t.Fatal(c.ToolBudget)
+	}
+	reopened, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reopened.VisualWriteToolsDisabled() {
+		t.Fatal("visual group setting did not persist")
+	}
+}

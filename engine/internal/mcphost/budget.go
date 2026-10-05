@@ -15,10 +15,12 @@ import (
 
 // ToolGroups says which optional tool groups a server registers (#99).
 //
-// Two groups, because the writer's two switches are what they answer to.
+// Optional memory, skills, and visual editing groups follow the writer's switches.
 // Everything not in a group is unconditional: the manuscript tools are what
 // an agent exists for, and there is no budget worth the writer losing them.
 type ToolGroups struct {
+	// DisableVisualWrites omits the optional visual editing tools.
+	DisableVisualWrites bool
 	// Memory is linetta_edit_memory.
 	Memory bool
 	// Skills is linetta_read_skill and linetta_edit_skill together. They are
@@ -33,7 +35,7 @@ type ToolGroups struct {
 // writer who never opens the pane keeps.
 func AllToolGroups() ToolGroups { return ToolGroups{Memory: true, Skills: true} }
 
-// ToolGroupsFrom reads the writer's two tool-budget switches (#99) off a
+// ToolGroupsFrom reads the writer's tool-budget switches off a
 // settings store. It is the ONE reading a caller is expected to make: whoever
 // builds a server passes the result to Register, and anyone who also has to
 // describe that server — a prompt, a cache key — uses the same value rather
@@ -46,8 +48,9 @@ func ToolGroupsFrom(store *settings.Store) ToolGroups {
 		return AllToolGroups()
 	}
 	return ToolGroups{
-		Memory: store.MemoryToolsEnabled(),
-		Skills: store.SkillToolsEnabled(),
+		DisableVisualWrites: store.VisualWriteToolsDisabled(),
+		Memory:              store.MemoryToolsEnabled(),
+		Skills:              store.SkillToolsEnabled(),
 	}
 }
 
@@ -61,9 +64,14 @@ var (
 	SkillToolNames  = []string{"linetta_read_skill", "linetta_edit_skill"}
 )
 
-// inGroup reports whether name belongs to a group that groups has switched
-// off, i.e. whether Register would leave it out.
+// VisualWriteToolNames lists the optional visual editing group.
+var VisualWriteToolNames = []string{"linetta_set_character_visuals", "linetta_set_art_style", "linetta_add_reference_image", "linetta_delete_reference_image"}
+
+// excludedByGroups reports whether Register would omit a disabled group member.
 func excludedByGroups(name string, groups ToolGroups) bool {
+	if groups.DisableVisualWrites && slices.Contains(VisualWriteToolNames, name) {
+		return true
+	}
 	if !groups.Memory && slices.Contains(MemoryToolNames, name) {
 		return true
 	}
@@ -192,9 +200,10 @@ func MeasureToolBudget(memoryTools, skillTools bool) (settings.ToolBudget, bool)
 
 	current := sum(ToolNames(settings.MCPModeFull, groups))
 	return settings.ToolBudget{
-		Tools:  current.Tools,
-		Bytes:  current.Bytes,
-		Memory: sum(MemoryToolNames),
-		Skills: sum(SkillToolNames),
+		VisualWrites: sum(VisualWriteToolNames),
+		Tools:        current.Tools,
+		Bytes:        current.Bytes,
+		Memory:       sum(MemoryToolNames),
+		Skills:       sum(SkillToolNames),
 	}, true
 }

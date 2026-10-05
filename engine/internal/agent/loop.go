@@ -70,6 +70,9 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	// registered, and because the label is the cache key, that turn's mistake
 	// is cached for every turn after it.
 	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled)
+	if s.deps.VisualWriteToolsDisabled != nil {
+		groups.disableVisualWrites = s.deps.VisualWriteToolsDisabled()
+	}
 	tools, err := s.session(ctx, groups)
 	if err != nil {
 		return "", err

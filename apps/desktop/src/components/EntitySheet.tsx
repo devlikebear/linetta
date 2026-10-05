@@ -301,7 +301,7 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
             </div>
 
             {kind === "character" && visualSheet?.entity_id === entity.id && (
-              <CharacterVisualSection key={entity.id} value={visualSheet} onChange={(sheet) => { setVisualSheet(sheet); setVisualDirty(true); }} />
+              <CharacterVisualSection key={entity.id} projectId={entity.project_id} value={visualSheet} onRefresh={(sheet) => { setVisualSheet(sheet); setVisualDirty(false); }} onChange={(sheet) => { setVisualSheet(sheet); setVisualDirty(true); }} />
             )}
 
             <div className="sec">

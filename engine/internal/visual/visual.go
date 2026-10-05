@@ -349,3 +349,52 @@ func BuildPrompt(style ArtStyle, chars []CharacterVisual, scene, format string) 
 	section("Negative prompt", style.NegativePrompt)
 	return b.String()
 }
+
+// RestoreSheet restores a saved sheet, including whether a row existed.
+func (r *Repo) RestoreSheet(ctx context.Context, before Sheet, existed bool) error {
+	if !existed {
+		_, err := r.s.DB().ExecContext(ctx, "DELETE FROM entity_visuals WHERE entity_id = ?", before.EntityID)
+		return err
+	}
+	_, err := r.SetSheet(ctx, before.UpdatedAt, before)
+	return err
+}
+
+// RestoreImage restores trusted undo bytes with their original identity and order.
+// The same capacity limit applies if other images were added after deletion.
+func (r *Repo) RestoreImage(ctx context.Context, image Image) error {
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var count int
+	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM entity_reference_images WHERE entity_id = ?", image.EntityID).Scan(&count); err != nil {
+		return err
+	}
+	if count >= MaxImagesPerEntity {
+		return ErrTooManyImages
+	}
+	_, err = tx.ExecContext(ctx, "INSERT INTO entity_reference_images (id, entity_id, mime, caption, byte_size, ordinal, created_at, data) VALUES (?,?,?,?,?,?,?,?)", image.ID, image.EntityID, image.MIME, image.Caption, image.ByteSize, image.Ordinal, image.CreatedAt, image.Data)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// HasArtStyle distinguishes an empty saved style from an unsaved draft.
+func (r *Repo) HasArtStyle(ctx context.Context, projectID string) (bool, error) {
+	var exists bool
+	err := r.s.DB().QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM project_art_style WHERE project_id = ?)", projectID).Scan(&exists)
+	return exists, err
+}
+
+// RestoreArtStyle restores the prior row, or removes a newly created one.
+func (r *Repo) RestoreArtStyle(ctx context.Context, before ArtStyle, existed bool) error {
+	if !existed {
+		_, err := r.s.DB().ExecContext(ctx, "DELETE FROM project_art_style WHERE project_id = ?", before.ProjectID)
+		return err
+	}
+	_, err := r.SetArtStyle(ctx, before.UpdatedAt, before)
+	return err
+}

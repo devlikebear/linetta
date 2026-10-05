@@ -1,3 +1,5 @@
+import { useEngineEvent } from "../hooks/useEngineEvent";
+import type { McpChangedPayload } from "../hooks/useMcpChanges";
 import { useEffect, useRef, useState } from "react";
 import { visuals } from "../lib/rpc";
 import type { CharacterVisualSheet, ReferenceImageMeta } from "../lib/types";
@@ -30,23 +32,33 @@ function ReferenceImage({ image }: Readonly<{ image: ReferenceImageMeta }>) {
   return <>{error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}<img ref={ref} src={src || undefined} alt={image.caption} width={96} height={96} style={{ objectFit: "contain" }} /></>;
 }
 
-export function CharacterVisualSection({ value, onChange }: Readonly<{
+export function CharacterVisualSection({ value, projectId, onChange, onRefresh }: Readonly<{
   value: CharacterVisualSheet;
+  projectId: string;
+  onRefresh: (value: CharacterVisualSheet) => void;
   onChange: (value: CharacterVisualSheet) => void;
 }>) {
   const { t } = useI18n();
+  const [revision, setRevision] = useState(0);
+  useEngineEvent<McpChangedPayload>("mcp-changed", (event) => {
+    if (event.project_id && event.project_id !== projectId) return;
+    if (event.tool === "linetta_undo_last_change" || ["linetta_set_character_visuals", "linetta_set_art_style", "linetta_add_reference_image", "linetta_delete_reference_image"].includes(event.tool ?? "")) setRevision((n) => n + 1);
+  });
   const [images, setImages] = useState<ReferenceImageMeta[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
   useEffect(() => {
     let cancelled = false;
+    if (revision > 0) visuals.getSheet(value.entity_id).then((sheet) => { if (!cancelled) onRefreshRef.current(sheet); }).catch((e) => { if (!cancelled) setError(e); });
     visuals.listImages(value.entity_id).then((list) => {
       if (!cancelled) { setImages(list); setLoaded(true); }
     }).catch((e) => { if (!cancelled) setError(e); });
     return () => { cancelled = true; };
-  }, [value.entity_id]);
+  }, [value.entity_id, revision]);
 
   const addImage = async (file: File) => {
     setError(null);

@@ -6,6 +6,14 @@ import { I18nProvider } from "../lib/i18n";
 import { CanonPanel } from "./CanonPanel";
 import type { Entity, EntityKind, Relationship } from "../lib/types";
 
+const events = vi.hoisted(() => ({ listeners: new Map<string, (event: { payload: unknown }) => void>() }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (name: string, listener: (event: { payload: unknown }) => void) => {
+    events.listeners.set(name, listener);
+    return Promise.resolve(() => events.listeners.delete(name));
+  },
+}));
+
 const mocks = vi.hoisted(() => ({
   visuals: {
     getSheet: vi.fn().mockResolvedValue({ entity_id: "entity-1", age_range: "", build: "", hair: "", outfit: "", signature: "", palette: "", notes: "", updated_at: 0 }),

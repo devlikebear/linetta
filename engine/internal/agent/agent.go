@@ -102,8 +102,9 @@ type Deps struct {
 	// what let them contradict each other on exactly one message. A nil func
 	// means enabled, the same default-when-unwired rule the fields above
 	// follow.
-	MemoryToolsEnabled func() bool
-	SkillToolsEnabled  func() bool
+	VisualWriteToolsDisabled func() bool
+	MemoryToolsEnabled       func() bool
+	SkillToolsEnabled        func() bool
 	// Undo reverts what the agent last did. Exactly one of batchID, snapshotID
 	// is expected to be non-empty — the caller (agent.undo's RPC handler)
 	// validates that before this is reached. A batch id must be bound to the

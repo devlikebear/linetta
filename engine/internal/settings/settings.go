@@ -131,8 +131,9 @@ type Config struct {
 	// pasted (they are content, and the writer still edits them in Settings),
 	// while the skills LIST goes with its tools, because a list of names is
 	// only ever a pointer to bodies linetta_read_skill would fetch.
-	MemoryToolsEnabled bool `json:"memory_tools_enabled"`
-	SkillToolsEnabled  bool `json:"skill_tools_enabled"`
+	VisualWriteToolsDisabled bool `json:"visual_write_tools_disabled"`
+	MemoryToolsEnabled       bool `json:"memory_tools_enabled"`
+	SkillToolsEnabled        bool `json:"skill_tools_enabled"`
 	// ToolBudget is what those two switches actually cost, measured from the
 	// tool set the engine would register right now — never a table written
 	// down here. Derived at settings.get time and never persisted, for the
@@ -275,6 +276,7 @@ type Patch struct {
 	MCPConsentVersion         *int                     `json:"mcp_consent_version,omitempty"`
 	MCPConsentedAt            *int64                   `json:"mcp_consented_at,omitempty"`
 	AgentSelfReviewEnabled    *bool                    `json:"agent_self_review_enabled,omitempty"`
+	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
 	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
 	// ClearLegacyPlaintextKeys, when true, deletes the plaintext keys load()
@@ -450,6 +452,7 @@ func (s *Store) load() error {
 	// writer's deliberate `false` and a settings.json from a build that
 	// predates the key as the same thing, and hand the tools back at every
 	// restart.
+	s.cfg.VisualWriteToolsDisabled = disk.VisualWriteToolsDisabled
 	if _, ok := raw["memory_tools_enabled"]; ok {
 		s.cfg.MemoryToolsEnabled = disk.MemoryToolsEnabled
 	}
@@ -721,6 +724,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.AgentSelfReviewEnabled != nil {
 		next.AgentSelfReviewEnabled = *p.AgentSelfReviewEnabled
 	}
+	if p.VisualWriteToolsDisabled != nil {
+		next.VisualWriteToolsDisabled = *p.VisualWriteToolsDisabled
+	}
 	if p.MemoryToolsEnabled != nil {
 		next.MemoryToolsEnabled = *p.MemoryToolsEnabled
 	}
@@ -833,9 +839,10 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		// The line everyone forgets: a field missing from this literal is
 		// never written to disk, so the writer's choice survives until the
 		// next restart and no further.
-		AgentSelfReviewEnabled: next.AgentSelfReviewEnabled,
-		MemoryToolsEnabled:     next.MemoryToolsEnabled,
-		SkillToolsEnabled:      next.SkillToolsEnabled,
+		AgentSelfReviewEnabled:   next.AgentSelfReviewEnabled,
+		VisualWriteToolsDisabled: next.VisualWriteToolsDisabled,
+		MemoryToolsEnabled:       next.MemoryToolsEnabled,
+		SkillToolsEnabled:        next.SkillToolsEnabled,
 	}
 	// sanitizeConfigForDisk has just blanked every api_key, which is right for
 	// every key the SecretStore holds. It is wrong for the pre-1.0 ones it
@@ -1038,6 +1045,10 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	// Measured here rather than stored, so it can never describe a tool set
 	// the engine no longer serves.
 	c.ToolBudget = s.toolBudgetView(c.MemoryToolsEnabled, c.SkillToolsEnabled)
+	if c.ToolBudget != nil && c.VisualWriteToolsDisabled {
+		c.ToolBudget.Tools -= c.ToolBudget.VisualWrites.Tools
+		c.ToolBudget.Bytes -= c.ToolBudget.VisualWrites.Bytes
+	}
 	// Which keys are still in plain text in settings.json, and why (#113).
 	// Names and a reason only — the values stay where they are, and the point
 	// of the notice is that the writer already has them.
@@ -1079,4 +1090,11 @@ func sanitizeConfigForDisk(c Config) Config {
 	}
 	c.Providers = providers
 	return c
+}
+
+// VisualWriteToolsDisabled reports the optional visual write group switch.
+func (s *Store) VisualWriteToolsDisabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.VisualWriteToolsDisabled
 }

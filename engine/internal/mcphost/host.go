@@ -24,13 +24,14 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/appversion"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
 // ServerName and ServerVersion identify this server to clients.
 const (
 	ServerName    = "linetta"
-	ServerVersion = "0.1.0"
+	ServerVersion = appversion.Version
 )
 
 // shutdownGrace bounds how long Stop waits for in-flight tool calls.

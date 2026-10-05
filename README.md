@@ -177,20 +177,21 @@ metered by your provider like any other call. Turn it off under **Settings →
 Skills → Learning from its own work** (`agent_self_review_enabled` in
 `settings.json`) and Linetta does not make that call at all.
 
-**You can switch the memory and skills tools off entirely.** Every tool's full
-description travels in every request, so Linetta's twenty-one tools are a
+**You can switch the memory, skills, and visual editing tools off entirely.** Every tool's full
+description travels in every request, so Linetta's twenty-five tools are a
 standing cost on every turn — and the memory tool and the two skills tools are
 about a fifth of it. **Settings → Tool budget** says how many tools the agent
-currently gets and what each group costs, and turns either group off for both
+currently gets and what each group costs, and turns each group off for both
 the built-in agent and any MCP client (`memory_tools_enabled` and
-`skill_tools_enabled` in `settings.json`; both on by default). Switching a
+`skill_tools_enabled` in `settings.json`; both on by default, and
+`visual_write_tools_disabled`, false by default). Switching a
 group off also removes the instructions that name its tools — a prompt telling
 an agent to use a tool it has not been given is worse than the tool's cost.
-Either switch takes effect on your very next message; there is nothing to
+Each switch takes effect on your very next message; there is nothing to
 restart. With the skills tools off the self-improvement pass cannot run at
 all, and the Skills pane says so.
 
-The two groups lose different things, and that is deliberate. With the memory
+The memory and skills groups lose different things. With the memory
 tool off, what is already recorded is still read back to the agent — it just
 cannot add to it, and you can still edit it yourself under Settings → Memory.
 With the skills tools off, the skill **list** goes too: a list with no
@@ -214,6 +215,17 @@ style guides are included in library backups and restored works.
 `linetta_get_character_visuals` reads these designs and optional reference images;
 `linetta_build_illustration_prompt` builds a single illustration or four-panel
 prompt from them and your scene description.
+
+Visual write tools (full mode): `linetta_set_character_visuals` (`project_id`, `name` or
+`entity_id`, optional `age_range`, `build`, `hair`, `outfit`, `signature`, `palette`, `notes`),
+`linetta_set_art_style` (`project_id`, optional `style`, `negative_prompt`),
+`linetta_add_reference_image` (`project_id`, `name` or `entity_id`, `data_base64`, `mime`, optional `caption`),
+and `linetta_delete_reference_image` (`image_id`). Omitted patch fields are unchanged;
+empty strings clear them. Images use PNG/JPEG/WebP/GIF, at most 5 MiB and 8 per character.
+Each returns `undo_batch_id` for the agent undo button or `linetta_undo_last_change`
+(`batch_id`); deleting an image retains its bytes and metadata in the bounded,
+in-memory undo window (8 changes; cleared on restart). Set
+`visual_write_tools_disabled` in settings to omit this optional group.
 
 ## Writing with your own agent (MCP)
 

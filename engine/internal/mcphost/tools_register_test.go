@@ -50,8 +50,9 @@ func storeWithGroups(t *testing.T, groups ToolGroups) *settings.Store {
 		t.Fatalf("settings store: %v", err)
 	}
 	if _, err := s.Set(context.Background(), settings.Patch{
-		MemoryToolsEnabled: &groups.Memory,
-		SkillToolsEnabled:  &groups.Skills,
+		VisualWriteToolsDisabled: &groups.DisableVisualWrites,
+		MemoryToolsEnabled:       &groups.Memory,
+		SkillToolsEnabled:        &groups.Skills,
 	}); err != nil {
 		t.Fatalf("settings set: %v", err)
 	}

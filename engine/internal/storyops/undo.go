@@ -75,6 +75,7 @@ func CountOutlineChanges(p Proposal) OutlineChangeCounts {
 type undoBatch struct {
 	projectID string
 	nodes     []node.Node
+	restore   func(context.Context) error
 }
 
 // undoState holds the outline snapshots taken before structural applies, kept
@@ -92,13 +93,22 @@ func (s *Service) rememberUndoBatch(projectID string, before []node.Node) string
 	if len(before) == 0 {
 		return ""
 	}
+	return s.rememberChange(undoBatch{projectID: projectID, nodes: before})
+}
+
+// RememberChange adds an undoable non-outline change to the same bounded window.
+func (s *Service) RememberChange(projectID string, restore func(context.Context) error) string {
+	return s.rememberChange(undoBatch{projectID: projectID, restore: restore})
+}
+
+func (s *Service) rememberChange(batch undoBatch) string {
 	id := uuid.NewString()
 	s.undo.mu.Lock()
 	defer s.undo.mu.Unlock()
 	if s.undo.batches == nil {
 		s.undo.batches = map[string]undoBatch{}
 	}
-	s.undo.batches[id] = undoBatch{projectID: projectID, nodes: before}
+	s.undo.batches[id] = batch
 	s.undo.order = append(s.undo.order, id)
 	for len(s.undo.order) > maxUndoBatches {
 		delete(s.undo.batches, s.undo.order[0])
@@ -107,12 +117,26 @@ func (s *Service) rememberUndoBatch(projectID string, before []node.Node) string
 	return id
 }
 
-func (s *Service) takeUndoBatch(id string) (undoBatch, bool) {
+// UndoApply reverts a recorded change. Failed restores stay available for retry.
+func (s *Service) UndoApply(ctx context.Context, batchID string, now func() int64) error {
 	s.undo.mu.Lock()
 	defer s.undo.mu.Unlock()
+	id := strings.TrimSpace(batchID)
 	batch, ok := s.undo.batches[id]
 	if !ok {
-		return undoBatch{}, false
+		return ErrUndoBatchNotFound
+	}
+	var err error
+	if batch.restore != nil {
+		err = batch.restore(ctx)
+	} else {
+		if s.nodes == nil {
+			return ErrUndoBatchNotFound
+		}
+		err = s.nodes.RestoreOutline(ctx, batch.projectID, batch.nodes, now())
+	}
+	if err != nil {
+		return err
 	}
 	delete(s.undo.batches, id)
 	for i, existing := range s.undo.order {
@@ -121,19 +145,7 @@ func (s *Service) takeUndoBatch(id string) (undoBatch, bool) {
 			break
 		}
 	}
-	return batch, true
-}
-
-// UndoApply puts the outline back the way it was before the applied batch.
-func (s *Service) UndoApply(ctx context.Context, batchID string, now func() int64) error {
-	batch, ok := s.takeUndoBatch(strings.TrimSpace(batchID))
-	if !ok {
-		return ErrUndoBatchNotFound
-	}
-	if s.nodes == nil {
-		return ErrUndoBatchNotFound
-	}
-	return s.nodes.RestoreOutline(ctx, batch.projectID, batch.nodes, now())
+	return nil
 }
 
 // snapshotOutline captures the tree so a failed batch can be rolled back and a
