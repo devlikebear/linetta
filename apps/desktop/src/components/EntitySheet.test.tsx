@@ -1,10 +1,18 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Entity } from "../lib/types";
 import { I18nProvider } from "../lib/i18n";
 import { EntitySheet } from "./EntitySheet";
+
+const events = vi.hoisted(() => ({ listeners: new Map<string, (event: { payload: unknown }) => void>() }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (name: string, listener: (event: { payload: unknown }) => void) => {
+    events.listeners.set(name, listener);
+    return Promise.resolve(() => events.listeners.delete(name));
+  },
+}));
 
 const mocks = vi.hoisted(() => ({
   visuals: {
@@ -62,6 +70,17 @@ describe("EntitySheet", () => {
       <EntitySheet entityId="entity-1" onClose={vi.fn()} {...props} />
     </I18nProvider>,
   );
+
+  it("refreshes the visual sheet and references after an MCP change", async () => {
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    renderSheet();
+    await screen.findByLabelText("머리");
+    mocks.visuals.getSheet.mockResolvedValueOnce({ entity_id: "entity-1", age_range: "", build: "", hair: "silver", outfit: "", signature: "", palette: "", notes: "", updated_at: 2 });
+    const reads = mocks.visuals.listImages.mock.calls.length;
+    act(() => events.listeners.get("mcp-changed")?.({ payload: { tool: "linetta_set_character_visuals" } }));
+    await waitFor(() => expect(screen.getByLabelText("머리")).toHaveValue("silver"));
+    expect(mocks.visuals.listImages.mock.calls.length).toBeGreaterThan(reads);
+  });
 
   it("saves visual fields with the entity", async () => {
     const user = userEvent.setup();

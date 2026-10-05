@@ -39,6 +39,10 @@ export const READ_TOOL_NAMES = [
 ] as const;
 
 export const WRITE_TOOL_NAMES = [
+  "linetta_set_character_visuals",
+  "linetta_set_art_style",
+  "linetta_add_reference_image",
+  "linetta_delete_reference_image",
   "linetta_create_work",
   "linetta_write_scene",
   "linetta_write_summary",

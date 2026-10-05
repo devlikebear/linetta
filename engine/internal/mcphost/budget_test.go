@@ -177,7 +177,17 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if name == "linetta_get_character_visuals" || name == "linetta_build_illustration_prompt" {
 			continue
 		}
+		if slices.Contains(VisualWriteToolNames, name) {
+			continue
+		}
 		total += b
+	}
+	writes := 0
+	for _, name := range VisualWriteToolNames {
+		writes += sizes[name]
+	}
+	if writes > 7000 {
+		t.Errorf("visual writes cost %dB, want <= 7000B", writes)
 	}
 	visuals := sizes["linetta_get_character_visuals"] + sizes["linetta_build_illustration_prompt"]
 	// #154 measured 3,468B for the pair, input and output schemas included.

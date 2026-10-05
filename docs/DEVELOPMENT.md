@@ -138,7 +138,8 @@ Claude Code, Claude Desktop — can work on the manuscript. It is off until the
 writer consents and enables it under **Settings → Connect an external agent**,
 binds `127.0.0.1` only, and requires a locally generated bearer token.
 
-The tool budget is 15. Read tools are always registered; write tools appear
+The default tool set has 25 tools (12 read, 13 write). Optional memory, skills,
+and visual-write groups can be switched off in Settings → Tool budget. Write tools appear
 only in `full` mode, so `read_only` omits them from `tools/list` entirely
 rather than refusing them at call time.
 
@@ -147,7 +148,8 @@ Read:
 - `linetta_list_works`, `linetta_get_outline`, `linetta_get_story_context`
 - `linetta_read_scene`, `linetta_list_characters`, `linetta_get_fact_cards`
 - `linetta_get_character_visuals`, `linetta_build_illustration_prompt`
-- plus mention, search, and relationship lookups
+- `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
+- `linetta_read_skill`
 
 Write (`full` mode only):
 
@@ -155,10 +157,20 @@ Write (`full` mode only):
   scene the writer edited meanwhile is never silently overwritten;
 - `linetta_revise_scene`: exact-string replacement with a `dry_run` preview;
 - `linetta_write_summary`, `linetta_apply_story_ops`;
-- `linetta_create_checkpoint`, `linetta_undo_last_change`.
+- `linetta_create_checkpoint`, `linetta_undo_last_change`;
+- `linetta_create_work`, `linetta_edit_memory`, `linetta_edit_skill`;
+- `linetta_set_character_visuals`, `linetta_set_art_style`;
+- `linetta_add_reference_image`, `linetta_delete_reference_image`.
 
-Every mutation is snapshotted first, recorded in the activity log, and rate
-limited inside the registration decorator — so a new tool cannot be added
+Visual editing: `linetta_set_character_visuals`, `linetta_set_art_style`,
+`linetta_add_reference_image`, `linetta_delete_reference_image` (full mode only).
+Each returns an `undo_batch_id` for `linetta_undo_last_change` or the agent undo button.
+The optional `visual_write_tools_disabled` setting omits this four-tool group.
+Undo retains up to eight changes in memory, including deleted image bytes and metadata;
+restarting clears the window. Restoring an image still enforces the eight-image limit.
+
+Scene writes are snapshotted, structural and visual changes return undo batch IDs.
+Every tool call is recorded in the activity log and rate limited inside the registration decorator — so a new tool cannot be added
 without inheriting the limit.
 
 `web_fetch` (from TARS `pkg/tools`) is still used by the Fact Book to capture a

@@ -20,6 +20,7 @@ package settings
 // way. engineapp hands Store a producer with WithToolBudget; a build that
 // wires none leaves Config.ToolBudget nil.
 type ToolBudget struct {
+	VisualWrites ToolBudgetGroup `json:"visual_writes"`
 	// Tools and Bytes describe what the built-in agent is offered with the
 	// writer's switches as they stand — the agent rather than the external
 	// server because the agent always registers the full set, so this is the

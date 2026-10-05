@@ -53,8 +53,9 @@ type ScopeLookup interface {
 // a caller might forget to fill, so every construction goes through
 // allToolGroups or resolveToolGroups and nothing builds one literally.
 type toolGroups struct {
-	memory bool
-	skills bool
+	disableVisualWrites bool
+	memory              bool
+	skills              bool
 }
 
 func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true} }
@@ -106,6 +107,9 @@ How you work:
 - For illustrations, read designs with linetta_get_character_visuals and compose the prompt with linetta_build_illustration_prompt.
 - After writing or revising a scene, refresh its summary so the rest of the work stays accurate.
 - Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.`, lang)
+	if !groups.disableVisualWrites {
+		b.WriteString("\n- Save designs with linetta_set_character_visuals / linetta_set_art_style, and manage references with linetta_add_reference_image / linetta_delete_reference_image. Omitted patch fields stay unchanged; empty strings clear them.")
+	}
 	if groups.memory {
 		b.WriteString("\n- Record something durable with linetta_edit_memory: how this writer works goes in writer_profile, what you learn about this work goes in work_notes. Both are read back to you at the start of every session, so replace a line that changed rather than adding a second one.\n")
 	} else {

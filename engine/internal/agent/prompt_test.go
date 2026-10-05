@@ -663,3 +663,18 @@ func TestResolveToolGroups_nilFuncsMeanEnabled(t *testing.T) {
 		t.Errorf("resolveToolGroups(nil, off) = %+v, want memory on and skills off", g)
 	}
 }
+
+func TestVisualWritePromptFollowsGroup(t *testing.T) {
+	groups := allToolGroups()
+	on := systemPrompt("en", agentmemory.Document{}, agentmemory.Document{}, nil, groups)
+	groups.disableVisualWrites = true
+	off := systemPrompt("en", agentmemory.Document{}, agentmemory.Document{}, nil, groups)
+	for _, name := range []string{"linetta_set_character_visuals", "linetta_set_art_style", "linetta_add_reference_image", "linetta_delete_reference_image"} {
+		if !strings.Contains(on, name) || strings.Contains(off, name) {
+			t.Fatalf("prompt group mismatch for %s", name)
+		}
+	}
+	if !strings.Contains(off, "linetta_get_character_visuals") {
+		t.Fatal("disabling writes removed visual reads")
+	}
+}

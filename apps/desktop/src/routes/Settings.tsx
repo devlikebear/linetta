@@ -573,6 +573,17 @@ export function Settings() {
                   })}
                 </p>
               )}
+              <button type="button" className="set-row set-row-btn" disabled={saving}
+                onClick={() => !saving && apply({ visual_write_tools_disabled: !current.visual_write_tools_disabled })}>
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.tools.visuals.title")}</span>
+                  <span className="sd">{t("settings.tools.visuals.description")}</span>
+                  {toolBudget?.visual_writes && <span className="sd">{t("settings.tools.groupCost", {
+                    tools: String(toolBudget.visual_writes.tools), size: formatToolBytes(toolBudget.visual_writes.bytes),
+                  })}</span>}
+                </span>
+                <span className={`switch${!current.visual_write_tools_disabled ? " on" : ""}`} />
+              </button>
               <button
                 type="button"
                 className="set-row set-row-btn"

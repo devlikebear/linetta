@@ -595,6 +595,7 @@ export interface ToolBudgetGroup {
  *  and `skills` are what each group costs when it is on. Every number is
  *  measured engine-side from the tools it would actually register. */
 export interface ToolBudget {
+  visual_writes?: ToolBudgetGroup;
   tools: number;
   bytes: number;
   memory: ToolBudgetGroup;
@@ -646,6 +647,7 @@ export interface Settings {
    *  skills tools are offered to any agent at all. Both optional and both
    *  default ON, so — like agent_self_review_enabled above — every reader
    *  must treat "missing" as on and test `!== false`, never truthiness. */
+  visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;
   /** What that tool set costs, measured by the engine from the tools it would
@@ -697,6 +699,7 @@ export interface SettingsPatch {
   mcp_consent_version?: number;
   mcp_consented_at?: number;
   agent_self_review_enabled?: boolean;
+  visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;
   /** Deletes the plaintext keys the engine could not migrate out of

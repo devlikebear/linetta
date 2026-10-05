@@ -22,6 +22,10 @@ import (
 // registered only in settings.MCPModeFull, so read_only does not merely refuse
 // writes — the tools are absent from tools/list.
 var WriteToolNames = []string{
+	"linetta_set_character_visuals",
+	"linetta_set_art_style",
+	"linetta_add_reference_image",
+	"linetta_delete_reference_image",
 	"linetta_create_work",
 	"linetta_write_scene",
 	"linetta_write_summary",
@@ -118,6 +122,9 @@ type writeSummaryOutput struct {
 // installed from here rather than by a separate pass off Register, so that
 // the decision and the tools sit in the same place a reader looks for either.
 func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
+	if !groups.DisableVisualWrites {
+		d.registerVisualWriteTools(s)
+	}
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_create_work",
 		Description: "Create a new work (novel) with its first chapter and scene, ready to draft. Returns " +

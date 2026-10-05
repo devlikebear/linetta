@@ -11,6 +11,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/appversion"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
@@ -45,7 +46,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
-const DefaultVersion = "1.3.0"
+const DefaultVersion = appversion.Version
 
 // Options configures an embedded engine instance.
 type Options struct {

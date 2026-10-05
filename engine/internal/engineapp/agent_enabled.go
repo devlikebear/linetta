@@ -226,8 +226,9 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		// built a server whose tools and whose cache-key label came from
 		// different answers, and the label being the key, every later turn
 		// inherited it.
-		MemoryToolsEnabled: deps.settings.MemoryToolsEnabled,
-		SkillToolsEnabled:  deps.settings.SkillToolsEnabled,
+		VisualWriteToolsDisabled: deps.settings.VisualWriteToolsDisabled,
+		MemoryToolsEnabled:       deps.settings.MemoryToolsEnabled,
+		SkillToolsEnabled:        deps.settings.SkillToolsEnabled,
 		Undo: func(ctx context.Context, batchID, snapshotID string) (string, string, error) {
 			if batchID != "" {
 				return "", "", deps.story.UndoApply(ctx, batchID, deps.clock)

@@ -235,3 +235,45 @@ func outlineSize(t *testing.T, app *App, projectID string) int {
 	}
 	return len(nodes)
 }
+
+// Visual writes use the same batch metadata the panel's undo button consumes.
+func TestAgentUndoVisualStyle(t *testing.T) {
+	app := openApp(t)
+	projectID, nodeID := seedProjectWithScene(t, app)
+	if _, rpcErr := call(t, app, "settings.set", `{"provider":"anthropic","providers":{"anthropic":{"api_key":"sk-test","consented_at":1700000000000}}}`); rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	app.SetProviderFactoryForTest(agenttest.NewScriptedClientFactory(
+		agenttest.ScriptedTurn{ToolName: "linetta_set_art_style", ToolArgs: `{"project_id":"` + projectID + `","style":"ink"}`},
+		agenttest.ScriptedTurn{Text: "Saved."},
+	))
+	log := app.CaptureNotificationsForTest()
+	if _, rpcErr := call(t, app, "agent.run", `{"project_id":"`+projectID+`","node_id":"`+nodeID+`","prompt":"Save ink art style"}`); rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	waitForNotification(t, log, "agent.done")
+	var tool struct {
+		BatchID string `json:"batch_id"`
+	}
+	if err := json.Unmarshal(log.paramsFor("agent.tool"), &tool); err != nil {
+		t.Fatal(err)
+	}
+	if tool.BatchID == "" {
+		t.Fatal("visual write did not reach the undo button")
+	}
+	result, rpcErr := call(t, app, "visuals.get_art_style", `{"project_id":"`+projectID+`"}`)
+	if rpcErr != nil || !strings.Contains(string(result), `"ink"`) {
+		t.Fatalf("style: %s %v", result, rpcErr)
+	}
+	undoLog := app.CaptureNotificationsForTest()
+	if _, rpcErr = call(t, app, "agent.undo", `{"batch_id":"`+tool.BatchID+`"}`); rpcErr != nil {
+		t.Fatal(rpcErr)
+	}
+	result, rpcErr = call(t, app, "visuals.get_art_style", `{"project_id":"`+projectID+`"}`)
+	if rpcErr != nil || strings.Contains(string(result), `"ink"`) {
+		t.Fatalf("undo: %s %v", result, rpcErr)
+	}
+	if !undoLog.saw("mcp.changed") {
+		t.Fatal("undo did not refresh desktop")
+	}
+}

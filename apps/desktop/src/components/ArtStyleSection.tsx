@@ -1,3 +1,5 @@
+import { useEngineEvent } from "../hooks/useEngineEvent";
+import type { McpChangedPayload } from "../hooks/useMcpChanges";
 import { useEffect, useState } from "react";
 import { visuals } from "../lib/rpc";
 import type { ArtStyle } from "../lib/types";
@@ -6,6 +8,11 @@ import { rpcErrorMessage } from "../lib/rpcMessage";
 
 export function ArtStyleSection({ projectId }: Readonly<{ projectId: string }>) {
   const { t } = useI18n();
+  const [revision, setRevision] = useState(0);
+  useEngineEvent<McpChangedPayload>("mcp-changed", (event) => {
+    if (event.project_id && event.project_id !== projectId) return;
+    if (event.tool === "linetta_undo_last_change" || ["linetta_set_character_visuals", "linetta_set_art_style", "linetta_add_reference_image", "linetta_delete_reference_image"].includes(event.tool ?? "")) setRevision((n) => n + 1);
+  });
   const [value, setValue] = useState<ArtStyle | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
@@ -14,7 +21,7 @@ export function ArtStyleSection({ projectId }: Readonly<{ projectId: string }>) 
     visuals.getArtStyle(projectId).then((style) => { if (!cancelled) setValue(style); })
       .catch((e) => { if (!cancelled) setError(e); });
     return () => { cancelled = true; };
-  }, [projectId]);
+  }, [projectId, revision]);
   return <details className="sec es-field">
     <summary>{t("visual.artTitle")}</summary>
     {error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}

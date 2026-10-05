@@ -60,7 +60,7 @@ type createCheckpointOutput struct {
 type undoInput struct {
 	// Exactly one. A batch id undoes a structural change from
 	// linetta_apply_story_ops; a snapshot id restores a scene's prose.
-	BatchID    string `json:"batch_id,omitempty" jsonschema:"undo_batch_id from linetta_apply_story_ops"`
+	BatchID    string `json:"batch_id,omitempty" jsonschema:"undo_batch_id from a write tool"`
 	SnapshotID string `json:"snapshot_id,omitempty" jsonschema:"snapshot_id from linetta_write_scene or linetta_create_checkpoint"`
 }
 
@@ -88,7 +88,7 @@ func (d ToolDeps) registerBatchTools(s *mcp.Server) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_undo_last_change",
-		Description: "Undo a change you just made. Pass batch_id to revert a structural batch from " +
+		Description: "Undo a change you just made. Pass batch_id to revert a visual change or structural batch from " +
 			"linetta_apply_story_ops, or snapshot_id to restore a scene's previous text. These are " +
 			"different paths: undoing a batch restores the outline and leaves scene bodies alone.",
 	}, record(d, "linetta_undo_last_change", d.undoLastChange))
@@ -214,7 +214,7 @@ func (d ToolDeps) undoLastChange(ctx context.Context, _ *mcp.CallToolRequest, in
 			return toolErr("could not undo the change: %v", err), undoOutput{}, nil
 		}
 		d.notifyChanged("", "linetta_undo_last_change", nil, batchID)
-		return nil, undoOutput{Reverted: "outline"}, nil
+		return nil, undoOutput{Reverted: "change"}, nil
 	}
 
 	n, err := d.RestoreSnapshot(ctx, snapshotID)
