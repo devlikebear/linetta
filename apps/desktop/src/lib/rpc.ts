@@ -1,3 +1,4 @@
+import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -557,3 +558,15 @@ export const plot = {
     rpcCall<PlotSpine>("plot.spine_panel", { node_id: nodeId }),
 };
 
+
+export const visuals = {
+ getSheet: (entityId: string) => rpcCall<CharacterVisualSheet>("visuals.get_sheet", { entity_id: entityId }),
+ setSheet: (sheet: Omit<CharacterVisualSheet, "updated_at">) => rpcCall<CharacterVisualSheet>("visuals.set_sheet", sheet),
+ listImages: (entityId: string) => rpcCall<ReferenceImageMeta[]>("visuals.list_images", { entity_id: entityId }),
+ getImage: (id: string) => rpcCall<ReferenceImageMeta & { data_base64: string }>("visuals.get_image", { id }),
+ addImage: (input: { entity_id: string; mime: string; caption: string; data_base64: string }) => rpcCall<ReferenceImageMeta>("visuals.add_image", input),
+ updateImage: (id: string, caption: string) => rpcCall<ReferenceImageMeta>("visuals.update_image", { id, caption }),
+ deleteImage: (id: string) => rpcCall<{ ok: boolean }>("visuals.delete_image", { id }),
+ getArtStyle: (projectId: string) => rpcCall<ArtStyle>("visuals.get_art_style", { project_id: projectId }),
+ setArtStyle: (style: Omit<ArtStyle, "updated_at">) => rpcCall<ArtStyle>("visuals.set_art_style", style),
+};

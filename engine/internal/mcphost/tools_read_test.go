@@ -19,6 +19,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/thread"
+	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
 // fakeCurated stands in for companion.Service, which mcphost must not import.
@@ -72,6 +73,7 @@ func newStoryContextDeps(t *testing.T, curated storycontext.CuratedMemorySource,
 		builder = builder.WithMemorySource(recall)
 	}
 	return ctx, ToolDeps{
+		Visuals:  visual.NewRepo(st),
 		Projects: projects,
 		Nodes:    nodes,
 		Context:  builder,

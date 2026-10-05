@@ -135,6 +135,15 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "threads.list",
     "threads.reopen",
     "threads.update",
+    "visuals.add_image",
+    "visuals.delete_image",
+    "visuals.get_art_style",
+    "visuals.get_image",
+    "visuals.get_sheet",
+    "visuals.list_images",
+    "visuals.set_art_style",
+    "visuals.set_sheet",
+    "visuals.update_image",
 ];
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

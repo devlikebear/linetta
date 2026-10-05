@@ -146,6 +146,7 @@ Read:
 
 - `linetta_list_works`, `linetta_get_outline`, `linetta_get_story_context`
 - `linetta_read_scene`, `linetta_list_characters`, `linetta_get_fact_cards`
+- `linetta_get_character_visuals`, `linetta_build_illustration_prompt`
 - plus mention, search, and relationship lookups
 
 Write (`full` mode only):

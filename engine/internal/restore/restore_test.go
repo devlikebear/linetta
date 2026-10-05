@@ -1,7 +1,10 @@
 package restore
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"github.com/devlikebear/linetta/engine/internal/visual"
 	"path/filepath"
 	"testing"
 	"time"
@@ -234,5 +237,91 @@ func TestMergeProjectFromBackup(t *testing.T) {
 	profile, err := memory.Load(ctx, agentmemory.ScopeWriterProfile, "")
 	if err != nil || profile.Body != "짧은 문장을 선호" {
 		t.Fatalf("writer profile = %+v err=%v", profile, err)
+	}
+}
+
+func TestMergeVisualsAndOlderBackup(t *testing.T) {
+	for _, old := range []bool{false, true} {
+		t.Run(fmt.Sprint(old), func(t *testing.T) {
+			ctx := context.Background()
+			home := t.TempDir()
+			st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			p, err := project.NewRepo(st).Create(ctx, 1, project.NewInput{Title: "Visual", LengthTarget: "short", DefaultPOV: "first"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			e, err := entity.NewRepo(st).Create(ctx, 1, entity.NewInput{ProjectID: p.ID, Name: "Hero"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := visual.NewRepo(st)
+			data := []byte("\x89PNG\r\n\x1a\nimage")
+			if _, err := r.SetSheet(ctx, 1, visual.Sheet{EntityID: e.ID, Hair: "red"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := r.SetArtStyle(ctx, 1, visual.ArtStyle{ProjectID: p.ID, Style: "ink"}); err != nil {
+				t.Fatal(err)
+			}
+			image, err := r.AddImage(ctx, 1, e.ID, "image/png", "ref", data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if old {
+				if _, err := st.DB().ExecContext(ctx, `DROP TABLE entity_visuals; DROP TABLE entity_reference_images; DROP TABLE project_art_style; DELETE FROM schema_migrations WHERE version = 20`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			backupPath := filepath.Join(home, "backup.db")
+			if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+				t.Fatal(err)
+			}
+			live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer live.Close()
+			merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			entities, err := entity.NewRepo(live).ListByProject(ctx, merged.ProjectID)
+			if err != nil || len(entities) != 1 {
+				t.Fatalf("entities: %v %v", entities, err)
+			}
+			repo := visual.NewRepo(live)
+			sheet, err := repo.GetSheet(ctx, entities[0].ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if old {
+				if !sheet.Empty() {
+					t.Fatal(sheet)
+				}
+				return
+			}
+			if sheet.Hair != "red" || sheet.EntityID == e.ID {
+				t.Fatal(sheet)
+			}
+			images, err := repo.ListImages(ctx, entities[0].ID)
+			if err != nil || len(images) != 1 || images[0].ID == image.ID {
+				t.Fatalf("images: %v %v", images, err)
+			}
+			got, err := repo.GetImage(ctx, images[0].ID)
+			if err != nil || !bytes.Equal(got.Data, data) {
+				t.Fatalf("bytes: %v", err)
+			}
+			var typ string
+			if err := live.DB().QueryRowContext(ctx, "SELECT typeof(data) FROM entity_reference_images").Scan(&typ); err != nil || typ != "blob" {
+				t.Fatalf("storage type: %s %v", typ, err)
+			}
+			style, err := repo.GetArtStyle(ctx, merged.ProjectID)
+			if err != nil || style.Style != "ink" {
+				t.Fatalf("style: %+v %v", style, err)
+			}
+		})
 	}
 }

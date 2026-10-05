@@ -25,6 +25,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
+	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
 // MCP ships on desktop and on the Mac App Store. It is deliberately NOT gated
@@ -44,6 +45,7 @@ type mcpDeps struct {
 // a second instance wired with fact/memory/reference sources — the builder the
 // AI runner uses stays untouched so its prompts do not change.
 type mcpToolRepos struct {
+	visuals    *visual.Repo
 	projects   *project.Repo
 	nodes      *node.Repo
 	entities   *entity.Repo
@@ -92,6 +94,7 @@ type agentToolDeps = mcphost.ToolDeps
 func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 	activity := mcphost.NewActivityRepo(deps.repos.db)
 	tools := mcphost.ToolDeps{
+		Visuals:    deps.repos.visuals,
 		Projects:   deps.repos.projects,
 		Nodes:      deps.repos.nodes,
 		Entities:   deps.repos.entities,

@@ -24,6 +24,10 @@ const (
 	// stay English for logs.
 	ReasonNodeNotFound         = "node_not_found"
 	ReasonProjectNotFound      = "project_not_found"
+	ReasonImageNotFound        = "image_not_found"
+	ReasonImageTooLarge        = "image_too_large"
+	ReasonUnsupportedImageType = "unsupported_image_type"
+	ReasonTooManyImages        = "too_many_images"
 	ReasonEntityNotFound       = "entity_not_found"
 	ReasonThreadNotFound       = "thread_not_found"
 	ReasonBeatNotFound         = "beat_not_found"

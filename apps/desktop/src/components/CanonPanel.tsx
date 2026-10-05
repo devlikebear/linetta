@@ -1,3 +1,4 @@
+import { ArtStyleSection } from "./ArtStyleSection";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Library, Search, X } from "lucide-react";
 import { entities as entitiesApi, relationships as relationshipsApi } from "../lib/rpc";
@@ -92,6 +93,8 @@ export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0 }:
           <X size={16} />
         </button>
       </div>
+
+      <ArtStyleSection key={projectId} projectId={projectId} />
 
       <div className="canon-controls">
         <p className="sd">{t("canon.description")}</p>
