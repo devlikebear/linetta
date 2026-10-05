@@ -4,7 +4,7 @@ import type { ArtStyle } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 
-export function ArtStyleSection({ projectId }: { projectId: string }) {
+export function ArtStyleSection({ projectId }: Readonly<{ projectId: string }>) {
   const { t } = useI18n();
   const [value, setValue] = useState<ArtStyle | null>(null);
   const [error, setError] = useState<unknown>(null);

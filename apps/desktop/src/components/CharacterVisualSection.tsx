@@ -6,7 +6,7 @@ import { rpcErrorMessage } from "../lib/rpcMessage";
 
 const fields = ["age_range", "build", "hair", "outfit", "signature", "palette", "notes"] as const;
 
-function ReferenceImage({ image }: { image: ReferenceImageMeta }) {
+function ReferenceImage({ image }: Readonly<{ image: ReferenceImageMeta }>) {
   const [src, setSrc] = useState("");
   const [error, setError] = useState<unknown>(null);
   const ref = useRef<HTMLImageElement>(null);
@@ -30,10 +30,10 @@ function ReferenceImage({ image }: { image: ReferenceImageMeta }) {
   return <>{error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}<img ref={ref} src={src || undefined} alt={image.caption} width={96} height={96} style={{ objectFit: "contain" }} /></>;
 }
 
-export function CharacterVisualSection({ value, onChange }: {
+export function CharacterVisualSection({ value, onChange }: Readonly<{
   value: CharacterVisualSheet;
   onChange: (value: CharacterVisualSheet) => void;
-}) {
+}>) {
   const { t } = useI18n();
   const [images, setImages] = useState<ReferenceImageMeta[]>([]);
   const [error, setError] = useState<unknown>(null);
@@ -56,8 +56,8 @@ export function CharacterVisualSection({ value, onChange }: {
     try {
       const data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result).split(",")[1]);
-        reader.onerror = () => reject(reader.error);
+        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result.split(",")[1] : "");
+        reader.onerror = () => reject(reader.error ?? new Error("file read failed"));
         reader.readAsDataURL(file);
       });
       const image = await visuals.addImage({ entity_id: value.entity_id, mime: file.type, caption: "", data_base64: data });

@@ -52,6 +52,8 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
           for (const e of fetched) next[e.id] = e;
           return next;
         });
+      }).catch(() => {
+        // best-effort: unresolved targets keep rendering by id
       });
       return cur;
     });

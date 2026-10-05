@@ -15,6 +15,8 @@ import (
 // base64 in JSON because that is what the JSON-RPC bridge carries; the 5 MiB
 // cap in visual.AddImage keeps one message a reasonable size.
 
+const errIDRequired = "id required"
+
 func visualError(err error) error {
 	if err == nil {
 		return nil
@@ -44,7 +46,7 @@ func GetVisualSheet(repo *visual.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in visual.Sheet
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.EntityID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		out, err := repo.GetSheet(ctx, in.EntityID)
 		if err != nil {
@@ -57,7 +59,7 @@ func SetVisualSheet(repo *visual.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in visual.Sheet
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.EntityID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		out, err := repo.SetSheet(ctx, now(), in)
 		if err != nil {
@@ -70,7 +72,7 @@ func ListVisualImages(repo *visual.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in visual.Sheet
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.EntityID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		out, err := repo.ListImages(ctx, in.EntityID)
 		if err != nil {
@@ -83,7 +85,7 @@ func GetVisualImage(repo *visual.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in idParam
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		img, err := repo.GetImage(ctx, in.ID)
 		out := visualImageResult{img.ImageMeta, base64.StdEncoding.EncodeToString(img.Data)}
@@ -102,7 +104,7 @@ func AddVisualImage(repo *visual.Repo, now Clock) rpc.Handler {
 			DataBase64 string `json:"data_base64"`
 		}
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.EntityID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		if len(in.DataBase64) > base64.StdEncoding.EncodedLen(visual.MaxImageBytes) {
 			return nil, visualError(visual.ErrImageTooLarge)
@@ -125,7 +127,7 @@ func UpdateVisualImage(repo *visual.Repo) rpc.Handler {
 			Caption string `json:"caption"`
 		}
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		out, err := repo.UpdateImageCaption(ctx, in.ID, in.Caption)
 		if err != nil {
@@ -138,7 +140,7 @@ func DeleteVisualImage(repo *visual.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in idParam
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		err := repo.DeleteImage(ctx, in.ID)
 		out := map[string]bool{"ok": true}
@@ -152,7 +154,7 @@ func GetArtStyle(repo *visual.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in visual.ArtStyle
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		out, err := repo.GetArtStyle(ctx, in.ProjectID)
 		if err != nil {
@@ -165,7 +167,7 @@ func SetArtStyle(repo *visual.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in visual.ArtStyle
 		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
-			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		out, err := repo.SetArtStyle(ctx, now(), in)
 		if err != nil {

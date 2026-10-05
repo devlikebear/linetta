@@ -76,8 +76,6 @@ func NewRepo(s *store.Store) *Repo { return &Repo{s: s} }
 
 type scanner interface{ Scan(...any) error }
 
-const sheetColumns = "entity_id, age_range, build, hair, outfit, signature, palette, notes, updated_at"
-
 func scanSheet(row scanner) (Sheet, error) {
 	var s Sheet
 	err := row.Scan(&s.EntityID, &s.AgeRange, &s.Build, &s.Hair, &s.Outfit, &s.Signature, &s.Palette, &s.Notes, &s.UpdatedAt)
@@ -86,7 +84,7 @@ func scanSheet(row scanner) (Sheet, error) {
 
 // GetSheet gives the editor an empty draft until the writer saves a design.
 func (r *Repo) GetSheet(ctx context.Context, entityID string) (Sheet, error) {
-	s, err := scanSheet(r.s.DB().QueryRowContext(ctx, "SELECT "+sheetColumns+" FROM entity_visuals WHERE entity_id = ?", entityID))
+	s, err := scanSheet(r.s.DB().QueryRowContext(ctx, "SELECT entity_id, age_range, build, hair, outfit, signature, palette, notes, updated_at FROM entity_visuals WHERE entity_id = ?", entityID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Sheet{EntityID: entityID}, nil
 	}
@@ -110,7 +108,7 @@ func (r *Repo) SetSheet(ctx context.Context, now int64, s Sheet) (Sheet, error) 
 	s.Palette = strings.TrimSpace(s.Palette)
 	s.Notes = strings.TrimSpace(s.Notes)
 	s.UpdatedAt = now
-	_, err := r.s.DB().ExecContext(ctx, `INSERT INTO entity_visuals (`+sheetColumns+`) VALUES (?,?,?,?,?,?,?,?,?)
+	_, err := r.s.DB().ExecContext(ctx, `INSERT INTO entity_visuals (entity_id, age_range, build, hair, outfit, signature, palette, notes, updated_at) VALUES (?,?,?,?,?,?,?,?,?)
  ON CONFLICT(entity_id) DO UPDATE SET age_range=excluded.age_range, build=excluded.build, hair=excluded.hair, outfit=excluded.outfit, signature=excluded.signature, palette=excluded.palette, notes=excluded.notes, updated_at=excluded.updated_at`,
 		s.EntityID, s.AgeRange, s.Build, s.Hair, s.Outfit, s.Signature, s.Palette, s.Notes, s.UpdatedAt)
 	return s, err
@@ -118,7 +116,7 @@ func (r *Repo) SetSheet(ctx context.Context, now int64, s Sheet) (Sheet, error) 
 
 // ListSheetsByProject returns every saved sheet in a work, keyed by entity id.
 func (r *Repo) ListSheetsByProject(ctx context.Context, projectID string) (map[string]Sheet, error) {
-	rows, err := r.s.DB().QueryContext(ctx, "SELECT "+sheetColumns+" FROM entity_visuals WHERE entity_id IN (SELECT id FROM entities WHERE project_id = ?)", projectID)
+	rows, err := r.s.DB().QueryContext(ctx, "SELECT entity_id, age_range, build, hair, outfit, signature, palette, notes, updated_at FROM entity_visuals WHERE entity_id IN (SELECT id FROM entities WHERE project_id = ?)", projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +131,6 @@ func (r *Repo) ListSheetsByProject(ctx context.Context, projectID string) (map[s
 	}
 	return out, rows.Err()
 }
-
-const imageColumns = "id, entity_id, mime, caption, byte_size, ordinal, created_at"
 
 func scanMeta(row scanner) (ImageMeta, error) {
 	var m ImageMeta
@@ -178,7 +174,7 @@ func (r *Repo) AddImage(ctx context.Context, now int64, entityID, mime, caption 
 		return ImageMeta{}, ErrTooManyImages
 	}
 	m := ImageMeta{ID: uuid.NewString(), EntityID: entityID, MIME: mime, Caption: strings.TrimSpace(caption), ByteSize: len(data), Ordinal: ordinal, CreatedAt: now}
-	_, err = tx.ExecContext(ctx, "INSERT INTO entity_reference_images ("+imageColumns+",data) VALUES (?,?,?,?,?,?,?,?)", m.ID, m.EntityID, m.MIME, m.Caption, m.ByteSize, m.Ordinal, m.CreatedAt, data)
+	_, err = tx.ExecContext(ctx, "INSERT INTO entity_reference_images (id, entity_id, mime, caption, byte_size, ordinal, created_at, data) VALUES (?,?,?,?,?,?,?,?)", m.ID, m.EntityID, m.MIME, m.Caption, m.ByteSize, m.Ordinal, m.CreatedAt, data)
 	if err != nil {
 		return ImageMeta{}, err
 	}
@@ -187,7 +183,7 @@ func (r *Repo) AddImage(ctx context.Context, now int64, entityID, mime, caption 
 
 // ListImages omits bytes so opening a sheet does not load every reference.
 func (r *Repo) ListImages(ctx context.Context, entityID string) ([]ImageMeta, error) {
-	rows, err := r.s.DB().QueryContext(ctx, "SELECT "+imageColumns+" FROM entity_reference_images WHERE entity_id = ? ORDER BY ordinal, id", entityID)
+	rows, err := r.s.DB().QueryContext(ctx, "SELECT id, entity_id, mime, caption, byte_size, ordinal, created_at FROM entity_reference_images WHERE entity_id = ? ORDER BY ordinal, id", entityID)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +202,7 @@ func (r *Repo) ListImages(ctx context.Context, entityID string) ([]ImageMeta, er
 // GetImage returns one reference image with its bytes.
 func (r *Repo) GetImage(ctx context.Context, id string) (Image, error) {
 	var i Image
-	err := r.s.DB().QueryRowContext(ctx, "SELECT "+imageColumns+", data FROM entity_reference_images WHERE id = ?", id).Scan(&i.ID, &i.EntityID, &i.MIME, &i.Caption, &i.ByteSize, &i.Ordinal, &i.CreatedAt, &i.Data)
+	err := r.s.DB().QueryRowContext(ctx, "SELECT id, entity_id, mime, caption, byte_size, ordinal, created_at, data FROM entity_reference_images WHERE id = ?", id).Scan(&i.ID, &i.EntityID, &i.MIME, &i.Caption, &i.ByteSize, &i.Ordinal, &i.CreatedAt, &i.Data)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Image{}, ErrImageNotFound
 	}
@@ -225,7 +221,7 @@ func (r *Repo) UpdateImageCaption(ctx context.Context, id, caption string) (Imag
 	if err := imageMutationError(result, err); err != nil {
 		return ImageMeta{}, err
 	}
-	return scanMeta(r.s.DB().QueryRowContext(ctx, "SELECT "+imageColumns+" FROM entity_reference_images WHERE id = ?", id))
+	return scanMeta(r.s.DB().QueryRowContext(ctx, "SELECT id, entity_id, mime, caption, byte_size, ordinal, created_at FROM entity_reference_images WHERE id = ?", id))
 }
 
 func imageMutationError(result sql.Result, err error) error {
