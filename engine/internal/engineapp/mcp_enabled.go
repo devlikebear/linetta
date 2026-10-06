@@ -25,6 +25,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
+	"github.com/devlikebear/linetta/engine/internal/style"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -46,6 +47,7 @@ type mcpDeps struct {
 // AI runner uses stays untouched so its prompts do not change.
 type mcpToolRepos struct {
 	visuals    *visual.Repo
+	style      *style.Repo
 	projects   *project.Repo
 	nodes      *node.Repo
 	entities   *entity.Repo
@@ -95,6 +97,7 @@ func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 	activity := mcphost.NewActivityRepo(deps.repos.db)
 	tools := mcphost.ToolDeps{
 		Visuals:    deps.repos.visuals,
+		Style:      deps.repos.style,
 		Projects:   deps.repos.projects,
 		Nodes:      deps.repos.nodes,
 		Entities:   deps.repos.entities,

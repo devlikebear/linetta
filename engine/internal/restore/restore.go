@@ -180,7 +180,7 @@ type MergeResult struct {
 // projects, nodes, entities, mentions, relationships, threads, beats, notes,
 // node_snapshots, fact_cards, fact_sources, writing_stats, agent_memory
 // (work_notes scope only), entity_visuals, entity_reference_images,
-// project_art_style. Library-level history (companion transcripts, AI runs,
+// project_art_style, project_style_rules. Library-level history (companion transcripts, AI runs,
 // MCP activity, the global writer_profile memory) stays with the
 // library it belongs to.
 func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, projectID, titleSuffix string, now time.Time) (MergeResult, error) {
@@ -280,6 +280,12 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return row, true
 	}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy art style: %w", err)
+	}
+	if err := copyRows(ctx, sdb, tx, "project_style_rules", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		row["project_id"] = newProjectID
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy style rules: %w", err)
 	}
 
 	if err := copyRows(ctx, sdb, tx, "mentions",

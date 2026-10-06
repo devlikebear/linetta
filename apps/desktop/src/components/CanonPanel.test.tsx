@@ -33,6 +33,12 @@ vi.mock("../lib/rpc", () => ({
   settings: { get: mocks.settingsGet },
   entities: { list: mocks.entitiesList },
   relationships: { list: mocks.relationshipsList },
+  // The style section mounts inside the panel and loads its rules on mount.
+  style: {
+    getRules: vi.fn().mockResolvedValue({ project_id: "p1", avoid_phrases: [], max_sentence_chars: 0, updated_at: 0 }),
+    setRules: vi.fn(),
+    check: vi.fn(),
+  },
 }));
 
 function entity(

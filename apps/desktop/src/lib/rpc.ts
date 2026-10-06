@@ -1,4 +1,4 @@
-import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle } from "./types";
+import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleCheckResult, StyleRules } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -569,4 +569,12 @@ export const visuals = {
  deleteImage: (id: string) => rpcCall<{ ok: boolean }>("visuals.delete_image", { id }),
  getArtStyle: (projectId: string) => rpcCall<ArtStyle>("visuals.get_art_style", { project_id: projectId }),
  setArtStyle: (style: Omit<ArtStyle, "updated_at">) => rpcCall<ArtStyle>("visuals.set_art_style", style),
+};
+
+export const style = {
+  getRules: (projectId: string) => rpcCall<StyleRules>("style.get_rules", { project_id: projectId }),
+  setRules: (rules: Omit<StyleRules, "updated_at">) => rpcCall<StyleRules>("style.set_rules", rules),
+  /** Checks one scene (or the scenes under a chapter) when nodeId is given, the whole work otherwise. */
+  check: (projectId: string, nodeId?: string) =>
+    rpcCall<StyleCheckResult>("style.check", { project_id: projectId, node_id: nodeId ?? "" }),
 };

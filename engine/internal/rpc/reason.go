@@ -29,6 +29,14 @@ const (
 	ReasonUnsupportedImageType = "unsupported_image_type"
 	ReasonTooManyImages        = "too_many_images"
 	ReasonEntityNotFound       = "entity_not_found"
+
+	// Style rules the writer typed that the engine will not store (#162).
+	// It refuses rather than trims, so these are things a writer meets and
+	// has to be told in their own language.
+	ReasonStyleTooManyPhrases = "style_too_many_phrases"
+	ReasonStylePhraseTooLong  = "style_phrase_too_long"
+	ReasonStyleSentenceLimit  = "style_sentence_limit"
+
 	ReasonThreadNotFound       = "thread_not_found"
 	ReasonBeatNotFound         = "beat_not_found"
 	ReasonRelationshipNotFound = "relationship_not_found"

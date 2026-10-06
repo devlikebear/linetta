@@ -20,6 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/style"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -321,6 +322,66 @@ func TestMergeVisualsAndOlderBackup(t *testing.T) {
 			style, err := repo.GetArtStyle(ctx, merged.ProjectID)
 			if err != nil || style.Style != "ink" {
 				t.Fatalf("style: %+v %v", style, err)
+			}
+		})
+	}
+}
+
+// A merged work brings its style rules with it (#162), and a backup taken
+// before the rules existed merges cleanly with none.
+func TestMergeProjectCopiesStyleRules(t *testing.T) {
+	for _, old := range []bool{false, true} {
+		name := "current backup"
+		if old {
+			name = "backup from before style rules"
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			home := t.TempDir()
+			st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			p, err := project.NewRepo(st).Create(ctx, 1, project.NewInput{Title: "Styled", LengthTarget: "short", DefaultPOV: "first"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := style.NewRepo(st).SetRules(ctx, 1, style.Rules{
+				ProjectID: p.ID, AvoidPhrases: []string{"그것은 마치", "수 있었다"}, MaxSentenceChars: 80,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if old {
+				if _, err := st.DB().ExecContext(ctx, `DROP TABLE project_style_rules; DELETE FROM schema_migrations WHERE version = 21`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			backupPath := filepath.Join(home, "backup.db")
+			if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+				t.Fatal(err)
+			}
+			live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer live.Close()
+			merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := style.NewRepo(live).GetRules(ctx, merged.ProjectID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if old {
+				if !got.Empty() {
+					t.Fatalf("rules from a backup that had none: %+v", got)
+				}
+				return
+			}
+			if len(got.AvoidPhrases) != 2 || got.AvoidPhrases[0] != "그것은 마치" || got.MaxSentenceChars != 80 || merged.ProjectID == p.ID {
+				t.Fatalf("merged rules = %+v", got)
 			}
 		})
 	}

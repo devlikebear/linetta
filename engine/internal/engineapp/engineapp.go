@@ -41,6 +41,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
+	"github.com/devlikebear/linetta/engine/internal/style"
 	"github.com/devlikebear/linetta/engine/internal/summarizer"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/linetta/engine/internal/visual"
@@ -128,6 +129,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	writingStats := stats.NewRepo(st)
 	entities := entity.NewRepo(st)
 	visuals := visual.NewRepo(st)
+	styles := style.NewRepo(st)
 	mentions := mention.NewRepo(st)
 	threads := thread.NewRepo(st)
 	beats := beat.NewRepo(st)
@@ -268,6 +270,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		home:          home,
 		repos: mcpToolRepos{
 			visuals:    visuals,
+			style:      styles,
 			projects:   projects,
 			nodes:      nodes,
 			entities:   entities,
@@ -400,6 +403,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("visuals.delete_image", handlers.DeleteVisualImage(visuals))
 	s.Handle("visuals.get_art_style", handlers.GetArtStyle(visuals))
 	s.Handle("visuals.set_art_style", handlers.SetArtStyle(visuals, clock))
+	s.Handle("style.get_rules", handlers.GetStyleRules(styles))
+	s.Handle("style.set_rules", handlers.SetStyleRules(styles, clock))
+	s.Handle("style.check", handlers.CheckStyle(styles, nodes))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))

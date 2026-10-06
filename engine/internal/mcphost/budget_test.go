@@ -180,7 +180,16 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if slices.Contains(VisualWriteToolNames, name) {
 			continue
 		}
+		// #162's style check carries its own allowance below.
+		if name == "linetta_analyze_style" {
+			continue
+		}
 		total += b
+	}
+	// #162 measured 1,815B for linetta_analyze_style, input and output schemas
+	// included — most of it the violation shape an agent has to read anyway.
+	if style := sizes["linetta_analyze_style"]; style > 1900 {
+		t.Errorf("linetta_analyze_style costs %dB, want <= 1900B", style)
 	}
 	writes := 0
 	for _, name := range VisualWriteToolNames {

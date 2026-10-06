@@ -1,0 +1,77 @@
+.style-section .style-hint {
+  margin: 6px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.style-section label {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.style-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.style-result {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.style-result p {
+  margin: 0 0 6px;
+}
+
+.style-violations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.style-violations li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.style-where {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+}
+
+button.style-where {
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.style-rule {
+  color: var(--muted);
+}
+
+.style-excerpt {
+  font-family: var(--font-serif);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}

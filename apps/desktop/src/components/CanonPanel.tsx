@@ -1,4 +1,5 @@
 import { ArtStyleSection } from "./ArtStyleSection";
+import { StyleSection } from "./StyleSection";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Library, Search, X } from "lucide-react";
 import { entities as entitiesApi, relationships as relationshipsApi } from "../lib/rpc";
@@ -27,9 +28,15 @@ interface Props {
   onClose: () => void;
   /** Bumped by the caller when an agent or another panel changed the work. */
   refreshKey?: number;
+  /** The scene open in the editor; the style check can be scoped to it. */
+  nodeId?: string;
+  /** Opens a scene named by a style-check result. */
+  onOpenNode?: (nodeId: string) => void;
+  /** Flushes the editor's pending save before a style check reads the manuscript. */
+  onBeforeStyleCheck?: () => Promise<void>;
 }
 
-export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0 }: Readonly<Props>) {
+export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck }: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
   const [rels, setRels] = useState<Relationship[]>([]);
@@ -95,6 +102,13 @@ export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0 }:
       </div>
 
       <ArtStyleSection key={projectId} projectId={projectId} />
+      <StyleSection
+        key={`style-${projectId}`}
+        projectId={projectId}
+        nodeId={nodeId}
+        onOpenNode={onOpenNode}
+        onBeforeCheck={onBeforeStyleCheck}
+      />
 
       <div className="canon-controls">
         <p className="sd">{t("canon.description")}</p>

@@ -22,6 +22,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
+	"github.com/devlikebear/linetta/engine/internal/style"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -39,6 +40,7 @@ type mcpDeps struct {
 // unchanged; mobile never reads these.
 type mcpToolRepos struct {
 	visuals      *visual.Repo
+	style        *style.Repo
 	projects     *project.Repo
 	nodes        *node.Repo
 	entities     *entity.Repo

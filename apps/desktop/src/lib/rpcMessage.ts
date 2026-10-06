@@ -25,6 +25,10 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   image_too_large: "visual.tooLarge",
   unsupported_image_type: "visual.unsupported",
   too_many_images: "visual.tooMany",
+  // Style rules the engine refuses rather than trims (#162).
+  style_too_many_phrases: "style.tooManyPhrases",
+  style_phrase_too_long: "style.phraseTooLong",
+  style_sentence_limit: "style.sentenceLimit",
   entity_not_found: "errors.entityNotFound",
   thread_not_found: "errors.threadNotFound",
   beat_not_found: "errors.beatNotFound",

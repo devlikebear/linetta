@@ -25,6 +25,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
+	"github.com/devlikebear/linetta/engine/internal/style"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -37,7 +38,10 @@ const MetaRunID = "linetta/run_id"
 // ToolDeps carries everything the tool layer reads from. Every field is a repo
 // the UI already uses, so an agent sees exactly what the writer sees.
 type ToolDeps struct {
-	Visuals    *visual.Repo
+	Visuals *visual.Repo
+	// Style holds each work's checkable style rules (#162). Nil in a build
+	// with no database open; the tool refuses rather than panicking.
+	Style      *style.Repo
 	Projects   *project.Repo
 	Nodes      *node.Repo
 	Entities   *entity.Repo
