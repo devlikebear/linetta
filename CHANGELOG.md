@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.0 - 2026-10-06
 
 - Fixed Markdown export silently dropping formatting the editor lets you
   apply. Bullet and numbered lists (nested ones included), code blocks, inline
