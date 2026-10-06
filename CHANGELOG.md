@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Linetta can update itself. **Check for Updates…** is in the tray menu and,
+  on macOS, in the Linetta menu: it looks up the latest GitHub release, asks
+  before downloading, and asks again before it installs and restarts, so
+  nothing is replaced under your hands. It also checks once shortly after
+  launch and offers each new release a single time. Every installer is signed
+  with an update key and the app refuses a download whose signature does not
+  match. Mac App Store installs are left to the App Store, and a build that
+  cannot replace itself points you to the release page instead. This starts
+  with the first release after v1.4.0 — v1.4.0 and earlier have no updater, so
+  that one upgrade is still by hand.
+
 ## v1.4.0 - 2026-10-06
 
 - Fixed Markdown export silently dropping formatting the editor lets you

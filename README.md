@@ -57,16 +57,16 @@ The direct macOS build is signed with an Apple Developer ID and notarized by App
 brew install --cask devlikebear/tap/linetta
 ```
 
-Upgrade an existing Homebrew installation with:
-
-```sh
-brew update
-brew reinstall --cask linetta
-```
+Linetta updates itself from then on: choose **Check for Updates…** in the
+Linetta menu or the tray menu. It also checks once after launch and asks before
+downloading anything. `brew upgrade --cask linetta` keeps working too.
 
 ### Windows and Linux
 
 Every [GitHub release](https://github.com/devlikebear/linetta/releases/latest) includes Windows NSIS and MSI installers plus Linux AppImage, `.deb`, and `.rpm` packages.
+
+These builds update themselves the same way, from **Check for Updates…** in the
+tray menu. The Mac App Store build is updated by the App Store instead.
 
 Intel Mac users can [build from source](#build-from-source).
 

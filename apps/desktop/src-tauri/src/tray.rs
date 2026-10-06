@@ -26,6 +26,9 @@ pub(crate) struct ShellPrefs {
     /// UI language pushed by the webview so tray menu labels match the app.
     #[serde(default)]
     pub language: String,
+    /// The release the startup update check last offered, so it asks once.
+    #[serde(default)]
+    pub update_announced: String,
 }
 
 impl Default for ShellPrefs {
@@ -33,6 +36,7 @@ impl Default for ShellPrefs {
         Self {
             close_to_tray: false,
             language: String::new(),
+            update_announced: String::new(),
         }
     }
 }
@@ -56,7 +60,7 @@ pub(crate) fn load_prefs(app: &tauri::AppHandle) -> ShellPrefs {
         .unwrap_or_default()
 }
 
-fn save_prefs(app: &tauri::AppHandle, prefs: &ShellPrefs) {
+pub(crate) fn save_prefs(app: &tauri::AppHandle, prefs: &ShellPrefs) {
     let Some(path) = prefs_path(app) else { return };
     if let Some(dir) = path.parent() {
         let _ = fs::create_dir_all(dir);
@@ -67,8 +71,8 @@ fn save_prefs(app: &tauri::AppHandle, prefs: &ShellPrefs) {
 }
 
 /// Menu labels in the writer's language. The engine owns the full i18n
-/// catalogue; the tray needs exactly two strings, so they live here rather
-/// than dragging a catalogue across the FFI boundary.
+/// catalogue; the tray needs only a handful of strings, so they live here
+/// rather than dragging a catalogue across the FFI boundary.
 fn labels(language: &str) -> (&'static str, &'static str) {
     if language.starts_with("en") {
         ("Open Linetta", "Quit Linetta")
@@ -83,6 +87,18 @@ fn build_menu(app: &tauri::AppHandle, language: &str) -> tauri::Result<Menu<taur
     let (open_label, quit_label) = labels(language);
     let open = MenuItem::with_id(app, "tray-open", open_label, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "tray-quit", quit_label, true, None::<&str>)?;
+    #[cfg(not(feature = "mas"))]
+    {
+        let updates = MenuItem::with_id(
+            app,
+            "tray-check-updates",
+            crate::updater::menu_label(language),
+            true,
+            None::<&str>,
+        )?;
+        Menu::with_items(app, &[&open, &updates, &quit])
+    }
+    #[cfg(feature = "mas")]
     Menu::with_items(app, &[&open, &quit])
 }
 
@@ -120,6 +136,8 @@ pub(crate) fn setup(app: &tauri::AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "tray-open" => show_main_window(app),
+            #[cfg(not(feature = "mas"))]
+            "tray-check-updates" => crate::updater::check(app, true),
             "tray-quit" => app.exit(0),
             _ => {}
         })
@@ -214,6 +232,8 @@ pub(crate) fn background_prefs_set(
             let _ = tray.set_menu(Some(menu));
         }
     }
+    #[cfg(not(feature = "mas"))]
+    crate::updater::relabel(&app, &snapshot.language);
 
     Ok(background_prefs_get(app.clone()))
 }

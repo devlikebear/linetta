@@ -10,6 +10,7 @@ The release workflow publishes:
 - a tarball of rendered winget manifests
 - a Flathub manifest starter
 - `linetta-mcp-macos`, `linetta-mcp-linux`, `linetta-mcp-windows.exe`
+- `latest.json` and one `.sig` per installer, for the in-app updater
 
 The `linetta-mcp` binaries are the stdio MCP bridge Claude Desktop launches.
 Direct-download builds already bundle it inside the app, and the settings pane
@@ -35,6 +36,45 @@ To get one locally, name the target:
 ```sh
 pnpm tauri build --config src-tauri/tauri.windows.conf.json
 pnpm tauri bundle --bundles nsis --config src-tauri/tauri.windows.conf.json
+```
+
+## In-app updates
+
+Direct-download builds update themselves with `tauri-plugin-updater`
+(`src-tauri/src/updater.rs`). The pieces, and what breaks without each:
+
+- `plugins.updater.pubkey` in `tauri.conf.json` is the only key an installed
+  copy trusts. Its private half is the `TAURI_SIGNING_PRIVATE_KEY` Actions
+  secret (`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if the key has one). **Losing
+  the private key strands every installed copy**: a new key means a new
+  `pubkey`, which only reaches people who reinstall by hand. Keep a backup
+  outside GitHub — a secret cannot be read back.
+- The bundle step adds `--config src-tauri/tauri.updater.conf.json` when the
+  secret is present. That turns on `createUpdaterArtifacts`, which signs each
+  installer and, on macOS, writes `Linetta.app.tar.gz` next to the app. It is
+  not in the base config because then every local `tauri bundle` would demand
+  the key.
+- On macOS the signed archive is published as `Linetta-macos.app.tar.gz`, so
+  the updater and the Homebrew cask download the same bytes.
+- `scripts/render-updater-manifest.sh` writes `latest.json` from the installers
+  that have a `.sig`. Installed copies poll
+  `releases/latest/download/latest.json`; platform keys are
+  `<os>-<arch>-<installer>` (`darwin-aarch64-app`, `windows-x86_64-nsis`,
+  `linux-x86_64-appimage`, ...), so a copy only ever takes the kind of package
+  it was installed from. A tag build with no signed installer fails at that
+  step instead of publishing a release that breaks update checks.
+
+Not covered: Mac App Store builds (the `mas` feature compiles the updater
+out), Flatpak, and development builds. Those show a pointer to the release
+page instead.
+
+To sign a local bundle the same way (the variable takes the key or a path to
+it):
+
+```sh
+TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/linetta-updater.key" \
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+  pnpm tauri build --bundles app --config src-tauri/tauri.updater.conf.json
 ```
 
 ## macOS Homebrew cask
