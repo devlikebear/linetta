@@ -11,6 +11,11 @@
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 10px;
+  /* The search stays in reach while the list scrolls under it. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-2);
 }
 
 .canon-controls .sd {
