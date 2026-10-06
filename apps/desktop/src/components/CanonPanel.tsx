@@ -1,4 +1,5 @@
 import { ArtStyleSection } from "./ArtStyleSection";
+import { StyleSection } from "./StyleSection";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Library, Search, X } from "lucide-react";
 import { entities as entitiesApi, relationships as relationshipsApi } from "../lib/rpc";
@@ -27,9 +28,15 @@ interface Props {
   onClose: () => void;
   /** Bumped by the caller when an agent or another panel changed the work. */
   refreshKey?: number;
+  /** The scene open in the editor; the style check can be scoped to it. */
+  nodeId?: string;
+  /** Opens a scene named by a style-check result. */
+  onOpenNode?: (nodeId: string) => void;
+  /** Flushes the editor's pending save before a style check reads the manuscript. */
+  onBeforeStyleCheck?: () => Promise<void>;
 }
 
-export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0 }: Readonly<Props>) {
+export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck }: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
   const [rels, setRels] = useState<Relationship[]>([]);
@@ -94,65 +101,77 @@ export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0 }:
         </button>
       </div>
 
-      <ArtStyleSection key={projectId} projectId={projectId} />
+      {/* One scrolling body under the head. The sections above the list can
+          be opened to any height — a style check's report runs long — and a
+          panel that only scrolled the list left them cut off beneath it. */}
+      <div className="panel-scroll canon-body">
+        <ArtStyleSection key={projectId} projectId={projectId} />
+        <StyleSection
+          key={`style-${projectId}`}
+          projectId={projectId}
+          nodeId={nodeId}
+          onOpenNode={onOpenNode}
+          onBeforeCheck={onBeforeStyleCheck}
+        />
 
-      <div className="canon-controls">
-        <p className="sd">{t("canon.description")}</p>
-        <label className="canon-search">
-          <Search size={13} aria-hidden="true" />
-          <input
-            type="search"
-            value={query}
-            aria-label={t("canon.searchLabel")}
-            placeholder={t("canon.searchPlaceholder")}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-        <div className="canon-kinds" role="tablist" aria-label={t("canon.kindsLabel")}>
-          {(["all", ...KINDS] as const).map((k) => (
+        <div className="canon-controls">
+          <p className="sd">{t("canon.description")}</p>
+          <label className="canon-search">
+            <Search size={13} aria-hidden="true" />
+            <input
+              type="search"
+              value={query}
+              aria-label={t("canon.searchLabel")}
+              placeholder={t("canon.searchPlaceholder")}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          <div className="canon-kinds" role="tablist" aria-label={t("canon.kindsLabel")}>
+            {(["all", ...KINDS] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={kind === k}
+                className={kind === k ? "is-active" : ""}
+                onClick={() => setKind(k)}
+              >
+                {k === "all" ? t("canon.kind.all") : t(`entity.kind.${k}`)} {countFor(k)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="canon-list">
+          {loading && <p className="canon-empty">{t("common.loading")}</p>}
+          {error != null && <p className="canon-empty" role="alert">{rpcErrorMessage(error, t)}</p>}
+          {!loading && error == null && shown.length === 0 && (
+            <p className="canon-empty">{query.trim() ? t("canon.noMatches") : t("canon.empty")}</p>
+          )}
+          {shown.map((e) => (
             <button
-              key={k}
+              key={e.id}
               type="button"
-              role="tab"
-              aria-selected={kind === k}
-              className={kind === k ? "is-active" : ""}
-              onClick={() => setKind(k)}
+              className="canon-row"
+              onClick={() => onOpenEntity(e.id)}
             >
-              {k === "all" ? t("canon.kind.all") : t(`entity.kind.${k}`)} {countFor(k)}
+              <span className="canon-row-head">
+                <span className="canon-name">{e.name}</span>
+                <span className="canon-kind">{t(`entity.kind.${e.kind}`)}</span>
+              </span>
+              {e.role && <span className="canon-role">{e.role}</span>}
+              {e.summary && <span className="canon-summary">{e.summary}</span>}
+              <span className="canon-meta">
+                {(e.aliases?.length ?? 0) > 0 && (
+                  <span>{t("canon.aliases", { list: (e.aliases ?? []).join(", ") })}</span>
+                )}
+                {(relCount.get(e.id) ?? 0) > 0 && (
+                  <span>{t("canon.relationships", { count: relCount.get(e.id) ?? 0 })}</span>
+                )}
+              </span>
             </button>
           ))}
         </div>
-      </div>
-
-      <div className="panel-scroll canon-list">
-        {loading && <p className="canon-empty">{t("common.loading")}</p>}
-        {error != null && <p className="canon-empty" role="alert">{rpcErrorMessage(error, t)}</p>}
-        {!loading && error == null && shown.length === 0 && (
-          <p className="canon-empty">{query.trim() ? t("canon.noMatches") : t("canon.empty")}</p>
-        )}
-        {shown.map((e) => (
-          <button
-            key={e.id}
-            type="button"
-            className="canon-row"
-            onClick={() => onOpenEntity(e.id)}
-          >
-            <span className="canon-row-head">
-              <span className="canon-name">{e.name}</span>
-              <span className="canon-kind">{t(`entity.kind.${e.kind}`)}</span>
-            </span>
-            {e.role && <span className="canon-role">{e.role}</span>}
-            {e.summary && <span className="canon-summary">{e.summary}</span>}
-            <span className="canon-meta">
-              {(e.aliases?.length ?? 0) > 0 && (
-                <span>{t("canon.aliases", { list: (e.aliases ?? []).join(", ") })}</span>
-              )}
-              {(relCount.get(e.id) ?? 0) > 0 && (
-                <span>{t("canon.relationships", { count: relCount.get(e.id) ?? 0 })}</span>
-              )}
-            </span>
-          </button>
-        ))}
       </div>
     </aside>
   );

@@ -138,7 +138,7 @@ Claude Code, Claude Desktop — can work on the manuscript. It is off until the
 writer consents and enables it under **Settings → Connect an external agent**,
 binds `127.0.0.1` only, and requires a locally generated bearer token.
 
-The default tool set has 25 tools (12 read, 13 write). Optional memory, skills,
+The default tool set has 26 tools (13 read, 13 write). Optional memory, skills,
 and visual-write groups can be switched off in Settings → Tool budget. Write tools appear
 only in `full` mode, so `read_only` omits them from `tools/list` entirely
 rather than refusing them at call time.
@@ -148,6 +148,9 @@ Read:
 - `linetta_list_works`, `linetta_get_outline`, `linetta_get_story_context`
 - `linetta_read_scene`, `linetta_list_characters`, `linetta_get_fact_cards`
 - `linetta_get_character_visuals`, `linetta_build_illustration_prompt`
+- `linetta_analyze_style`: holds a scene, a chapter or the whole work against
+  the writer's style rules (`internal/style`) and reports violations. It is
+  deterministic and model-free; tone is left to the caller
 - `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
 - `linetta_read_skill`
 

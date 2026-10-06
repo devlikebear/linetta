@@ -1201,6 +1201,34 @@ export interface ReferenceImageMeta {
  ordinal: number;
  created_at: number;
 }
+/** One work's checkable style rules (#162). */
+export interface StyleRules {
+  project_id: string;
+  avoid_phrases: string[];
+  /** In characters; 0 means no limit. */
+  max_sentence_chars: number;
+  updated_at: number;
+}
+export interface StyleViolation {
+  node_id: string;
+  label: string;
+  rule: "avoid_phrase" | "sentence_too_long";
+  /** 1-based, counting the scene's non-empty paragraphs. */
+  paragraph: number;
+  phrase?: string;
+  excerpt: string;
+  length?: number;
+  limit?: number;
+}
+/** style.check: the rules the check ran against, and what it found. */
+export interface StyleCheckResult {
+  rules: StyleRules;
+  scenes_checked: number;
+  /** Every violation found; `violations` may hold fewer when `truncated`. */
+  total: number;
+  violations: StyleViolation[];
+  truncated: boolean;
+}
 export interface ArtStyle {
  project_id: string;
  style: string;

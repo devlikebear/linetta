@@ -178,7 +178,7 @@ Skills → Learning from its own work** (`agent_self_review_enabled` in
 `settings.json`) and Linetta does not make that call at all.
 
 **You can switch the memory, skills, and visual editing tools off entirely.** Every tool's full
-description travels in every request, so Linetta's twenty-five tools are a
+description travels in every request, so Linetta's twenty-six tools are a
 standing cost on every turn — and the memory tool and the two skills tools are
 about a fifth of it. **Settings → Tool budget** says how many tools the agent
 currently gets and what each group costs, and turns each group off for both
@@ -215,6 +215,15 @@ style guides are included in library backups and restored works.
 `linetta_get_character_visuals` reads these designs and optional reference images;
 `linetta_build_illustration_prompt` builds a single illustration or four-panel
 prompt from them and your scene description.
+
+A work's **style rules** are the part of your style a machine can check:
+phrases to keep out and a sentence-length limit, kept under Story World →
+Style rules and check. The check lists each place a scene breaks a rule — the
+scene, the paragraph, the phrase — and changes nothing; what to do about it is
+yours to decide. `linetta_analyze_style` runs the same check for an agent, so
+one that drafted a scene can hold it against your rules before handing it
+back. It does not judge tone: that stays with the style notes in the brief and
+whoever reads them. Rules are in library backups and restored works.
 
 Visual write tools (full mode): `linetta_set_character_visuals` (`project_id`, `name` or
 `entity_id`, optional `age_range`, `build`, `hair`, `outfit`, `signature`, `palette`, `notes`),

@@ -1930,6 +1930,9 @@ export function Workspace() {
           <CanonPanel
             projectId={load.project.id}
             refreshKey={canonRefreshKey}
+            nodeId={load.node.id}
+            onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
+            onBeforeStyleCheck={flushPendingSave}
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
             onClose={() => {
               setCanonOpen(false);

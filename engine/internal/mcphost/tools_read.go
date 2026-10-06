@@ -33,6 +33,7 @@ var ReadToolNames = []string{
 	"linetta_get_fact_cards",
 	"linetta_get_character_visuals",
 	"linetta_build_illustration_prompt",
+	"linetta_analyze_style",
 	"linetta_read_skill",
 }
 
@@ -330,6 +331,7 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	}, record(d, "linetta_get_fact_cards", d.getFactCards))
 
 	registerVisualTools(s, d)
+	registerStyleTools(s, d)
 
 	// A block rather than an early return: an early return is correct only
 	// while linetta_read_skill happens to be registered last, and a tool

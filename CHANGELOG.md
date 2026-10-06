@@ -23,6 +23,19 @@
   formatting back in. It is a read format only: the write tools still take
   plain text, and `content_version` is the same for both
   ([#161](https://github.com/devlikebear/linetta/issues/161)).
+- Added style rules and a style check. Style notes have always told an agent
+  how your prose should read; nothing told you whether the prose it handed
+  back did. Under Story World → Style rules and check you can now list
+  phrases to keep out of a work and set a sentence-length limit, then check
+  the open scene or the whole work. The check names each place a rule is
+  broken — scene, paragraph, the phrase or the sentence's length, with an
+  excerpt you can click through to — and never edits anything. It runs in the
+  engine without a model, so the same scene and rules always give the same
+  report, and with no rules saved it says nothing was checked rather than
+  reporting a clean result. A new read tool, `linetta_analyze_style`, gives a
+  connected or built-in agent the same check; judging tone stays with the
+  agent and the style notes. Rules travel with library backups and restored
+  works ([#162](https://github.com/devlikebear/linetta/issues/162)).
 
 ## v1.3.0 - 2026-10-05
 
