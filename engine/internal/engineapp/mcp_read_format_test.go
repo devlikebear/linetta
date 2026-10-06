@@ -87,15 +87,19 @@ func TestMCPReadSceneDefaultStaysPlain(t *testing.T) {
 	seedFormattedScene(t, app, nodeID)
 
 	def, defRaw := readSceneAs(t, c, map[string]any{"node_id": nodeID})
-	_, plainRaw := readSceneAs(t, c, map[string]any{"node_id": nodeID, "format": "plain"})
-	if defRaw != plainRaw {
-		t.Errorf("format omitted and format=plain differ:\n%s\n%s", defRaw, plainRaw)
+	plain, plainRaw := readSceneAs(t, c, map[string]any{"node_id": nodeID, "format": "plain"})
+	// Compared by text, not by raw payload: the background summarizer may
+	// fill in the scene's summary between the two reads.
+	if def.Text != plain.Text {
+		t.Errorf("format omitted and format=plain differ:\n%q\n%q", def.Text, plain.Text)
 	}
 	if want := "도착\n그는 굵게 말했고 지도를 펼쳤다.\n물\n빵\n돌아오지 마라."; def.Text != want {
 		t.Errorf("plain read = %q, want %q", def.Text, want)
 	}
-	if strings.Contains(defRaw, `"format"`) {
-		t.Errorf("a default read grew a format field: %s", defRaw)
+	for _, raw := range []string{defRaw, plainRaw} {
+		if strings.Contains(raw, `"format"`) {
+			t.Errorf("a plain read grew a format field: %s", raw)
+		}
 	}
 }
 
