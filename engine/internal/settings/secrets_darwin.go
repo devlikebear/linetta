@@ -90,7 +90,7 @@ const (
 	errSecItemNotFound = -25300
 )
 
-func defaultSecretStore() SecretStore {
+func platformSecretStore() SecretStore {
 	return keychainSecretStore{service: keychainService}
 }
 

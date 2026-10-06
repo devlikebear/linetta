@@ -71,17 +71,7 @@ func openApp(t *testing.T) *App {
 	// a CI runner's real Codex CLI login leaks into every "fresh install"
 	// assertion in this package.
 	isolateHomeDir(t, t.TempDir())
-	// An in-memory secret store, not the OS keychain: the keychain is
-	// process-global and not scoped by Home, so without this a provider key a
-	// developer stored through ordinary app use would leak into every
-	// assertion here — and a test writing one would land in their real login
-	// keychain.
-	app, err := Open(context.Background(), Options{Home: home, Secrets: settings.NewMemorySecretStore()})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = app.Close() })
-	return app
+	return openTestApp(t, home)
 }
 
 func portFree(t *testing.T, port int) bool {

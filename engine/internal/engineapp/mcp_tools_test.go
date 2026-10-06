@@ -4,7 +4,6 @@ package engineapp
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,11 +29,7 @@ func startMCPServer(t *testing.T) (*App, *mcpClient) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("LINETTA_HOME", home)
-	app, err := Open(context.Background(), Options{Home: home})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = app.Close() })
+	app := openTestApp(t, home)
 
 	port := freeTestPort(t)
 	patch := fmt.Sprintf(

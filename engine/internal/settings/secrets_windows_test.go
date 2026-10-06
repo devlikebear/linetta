@@ -128,8 +128,8 @@ func TestCredentialSecretStore_rejectsOversizedValue(t *testing.T) {
 // make sure the concrete type actually satisfies it.
 func TestCredentialSecretStore_implementsSecretStore(t *testing.T) {
 	var _ SecretStore = credentialSecretStore{}
-	if _, ok := defaultSecretStore().(credentialSecretStore); !ok {
-		t.Fatalf("defaultSecretStore() = %T, want credentialSecretStore on Windows", defaultSecretStore())
+	if _, ok := platformSecretStore().(credentialSecretStore); !ok {
+		t.Fatalf("platformSecretStore() = %T, want credentialSecretStore on Windows", platformSecretStore())
 	}
 }
 

@@ -37,7 +37,7 @@ const (
 	credMaxBlobSize = 5 * 512
 )
 
-func defaultSecretStore() SecretStore {
+func platformSecretStore() SecretStore {
 	return credentialSecretStore{prefix: credentialTargetPrefix}
 }
 

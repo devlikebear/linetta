@@ -13,6 +13,6 @@ package settings
 // token from the discovery file and never touches a secret store. The desktop
 // app links the engine as a c-archive, so it always has cgo and the real
 // Keychain. Without this, a darwin bridge build fails to compile at all.
-func defaultSecretStore() SecretStore {
+func platformSecretStore() SecretStore {
 	return unsupportedSecretStore{}
 }

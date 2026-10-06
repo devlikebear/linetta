@@ -30,11 +30,7 @@ func TestOpenMigratesLegacyCompanionMemory(t *testing.T) {
 	const body = "{\"summary\":\"the lighthouse keeper is her brother\"}\n"
 	seedLegacyWorkspace(t, home, id, body)
 
-	app, err := Open(context.Background(), Options{Home: home, Secrets: settings.NewMemorySecretStore()})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer app.Close()
+	openTestApp(t, home)
 
 	got, err := os.ReadFile(filepath.Join(home, id, "memory", "experiences.jsonl"))
 	if err != nil {
