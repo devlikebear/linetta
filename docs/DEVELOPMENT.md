@@ -151,6 +151,11 @@ Read:
 - `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
 - `linetta_read_skill`
 
+`linetta_read_scene` returns plain prose by default — the form every write
+tool takes back. `format: "markdown"` returns the scene through
+`export.DocToMarkdown` instead, for carrying it out of Linetta with its
+formatting; it is not a form to write back.
+
 Write (`full` mode only):
 
 - `linetta_write_scene`: requires the `content_version` from a prior read, so a

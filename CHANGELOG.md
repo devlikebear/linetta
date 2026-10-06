@@ -15,6 +15,14 @@
   test holds the exporter's node list against the editor's real schema, so an
   editor extension added later cannot be forgotten the same way
   ([#160](https://github.com/devlikebear/linetta/issues/160)).
+- `linetta_read_scene` takes an optional `format`. Leave it out (or pass
+  `plain`) and the read is byte-for-byte what it was. Pass `markdown` and the
+  scene comes back with the writer's headings, emphasis, lists, links, quotes
+  and code intact, rendered by the same converter the Markdown export uses, so
+  an agent carrying a scene out of Linetta no longer has to guess the
+  formatting back in. It is a read format only: the write tools still take
+  plain text, and `content_version` is the same for both
+  ([#161](https://github.com/devlikebear/linetta/issues/161)).
 
 ## v1.3.0 - 2026-10-05
 

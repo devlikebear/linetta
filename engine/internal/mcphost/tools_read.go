@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
@@ -132,9 +133,17 @@ const maxUnlistedElements = 20
 type readSceneInput struct {
 	NodeID    string `json:"node_id" jsonschema:"id of the scene to read"`
 	ProjectID string `json:"project_id,omitempty" jsonschema:"optional; checked against the scene's work when given"`
+	Format    string `json:"format,omitempty" jsonschema:"plain (default) or markdown, which keeps lists, emphasis, links and code; read-only, write tools take plain text"`
 }
 
 func (in readSceneInput) scope() (string, string) { return in.ProjectID, in.NodeID }
+
+// Scene read formats. Plain is what every write tool takes back; markdown is
+// for carrying a scene out of Linetta with the writer's formatting intact.
+const (
+	sceneFormatPlain    = "plain"
+	sceneFormatMarkdown = "markdown"
+)
 
 type readSceneOutput struct {
 	NodeID         string `json:"node_id"`
@@ -147,7 +156,10 @@ type readSceneOutput struct {
 	// Named text, matching linetta_write_scene's input and set_scene_text's
 	// field (#73): the natural read→edit→write round trip should never fail
 	// on a renamed key.
-	Text           string `json:"text" jsonschema:"the scene's full prose"`
+	Text string `json:"text" jsonschema:"the scene's full prose"`
+	// Set only for a markdown read, so a default read is byte-identical to
+	// what it was before the option existed (#161).
+	Format         string `json:"format,omitempty"`
 	Summary        string `json:"summary,omitempty"`
 	SummaryIsStale bool   `json:"summary_is_stale"`
 }
@@ -664,6 +676,27 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 		return toolErr("node %q is a container (%s), not a scene; only scenes have body text", n.ID, n.Label),
 			readSceneOutput{}, nil
 	}
+	// Trimmed at the tool boundary, not in PlainText: the brief's renderer
+	// depends on that function's exact output. An untouched empty scene
+	// otherwise arrives as "\n", which an agent can misread as content.
+	text, format := strings.TrimSpace(storycontext.PlainText(n.ContentDoc)), ""
+	switch in.Format {
+	case "", sceneFormatPlain:
+	case sceneFormatMarkdown:
+		// The same converter the Markdown export uses — one rendering of a
+		// scene, not two that drift.
+		md := ""
+		if n.ContentDoc != nil {
+			var err error
+			if md, err = export.DocToMarkdown([]byte(*n.ContentDoc)); err != nil {
+				return toolErr("scene %q could not be rendered as markdown: %v", n.ID, err), readSceneOutput{}, nil
+			}
+		}
+		text, format = strings.TrimSpace(md), sceneFormatMarkdown
+	default:
+		return toolErr("format %q is not supported; use %q or %q", in.Format, sceneFormatPlain, sceneFormatMarkdown),
+			readSceneOutput{}, nil
+	}
 	return nil, readSceneOutput{
 		NodeID:         n.ID,
 		ProjectID:      n.ProjectID,
@@ -672,10 +705,8 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 		Status:         n.Status,
 		WordCount:      n.WordCount,
 		ContentVersion: n.ContentVersion,
-		// Trimmed at the tool boundary, not in PlainText: the brief's renderer
-		// depends on that function's exact output. An untouched empty scene
-		// otherwise arrives as "\n", which an agent can misread as content.
-		Text:           strings.TrimSpace(storycontext.PlainText(n.ContentDoc)),
+		Text:           text,
+		Format:         format,
 		Summary:        n.Summary,
 		SummaryIsStale: n.Summary == "" || n.SummaryForVersion != n.ContentVersion,
 	}, nil
