@@ -82,6 +82,18 @@ require_contains "apps/desktop/src-tauri/tauri.mas.conf.json" '"resources": []'
 # committed file even before the bridge is built.
 require_file "apps/desktop/src-tauri/resources/README.md"
 
+# In-app updates: the app trusts one public key, CI signs with the private
+# half, and latest.json is what installed copies poll. Dropping any link
+# strands every install on its current version without an error at build time.
+require_contains "apps/desktop/src-tauri/tauri.conf.json" '"pubkey":'
+require_contains "apps/desktop/src-tauri/tauri.conf.json" "releases/latest/download/latest.json"
+require_contains "apps/desktop/src-tauri/tauri.updater.conf.json" '"createUpdaterArtifacts": true'
+require_contains ".github/workflows/build.yml" "TAURI_SIGNING_PRIVATE_KEY"
+require_contains ".github/workflows/build.yml" "tauri.updater.conf.json"
+require_contains ".github/workflows/build.yml" "dist/Linetta-macos.app.tar.gz.sig"
+require_contains ".github/workflows/build.yml" "dist/latest.json"
+require_executable "scripts/render-updater-manifest.sh"
+
 require_file "packaging/README.md"
 require_file "packaging/flathub/com.devlikebear.linetta.yml"
 require_contains "packaging/flathub/com.devlikebear.linetta.yml" "app-id: com.devlikebear.linetta"
@@ -116,5 +128,28 @@ require_rendered_contains "${tmp}/Devlikebear.Linetta.installer.yaml" "Installer
 require_rendered_contains "${tmp}/Devlikebear.Linetta.installer.yaml" "InstallerUrl: https://github.com/devlikebear/linetta/releases/download/v0.4.0/Linetta_0.4.0_x64-setup.exe"
 require_rendered_contains "${tmp}/Devlikebear.Linetta.installer.yaml" "InstallerSha256: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF"
 require_rendered_contains "${tmp}/Devlikebear.Linetta.locale.en-US.yaml" "PackageName: Linetta"
+
+updater_assets="${tmp}/updater"
+mkdir -p "${updater_assets}"
+for asset in Linetta-macos.app.tar.gz Linetta_0.4.0_amd64.AppImage Linetta_0.4.0_x64-setup.exe; do
+  : > "${updater_assets}/${asset}"
+  printf 'sig-of-%s\n' "${asset}" > "${updater_assets}/${asset}.sig"
+done
+# Unsigned, so it must stay out of the manifest.
+: > "${updater_assets}/Linetta_0.4.0_amd64.deb"
+"${ROOT}/scripts/render-updater-manifest.sh" \
+  "0.4.0" \
+  "https://github.com/devlikebear/linetta/releases/download/v0.4.0" \
+  "${updater_assets}" > "${tmp}/latest.json" 2>/dev/null
+
+require_rendered_contains "${tmp}/latest.json" '"version": "0.4.0"'
+require_rendered_contains "${tmp}/latest.json" '"darwin-aarch64-app"'
+require_rendered_contains "${tmp}/latest.json" '"linux-x86_64-appimage"'
+require_rendered_contains "${tmp}/latest.json" '"windows-x86_64-nsis"'
+require_rendered_contains "${tmp}/latest.json" '"signature": "sig-of-Linetta-macos.app.tar.gz"'
+require_rendered_contains "${tmp}/latest.json" '"url": "https://github.com/devlikebear/linetta/releases/download/v0.4.0/Linetta_0.4.0_x64-setup.exe"'
+if grep -Fq '"linux-x86_64-deb"' "${tmp}/latest.json"; then
+  fail "latest.json lists an installer that has no signature"
+fi
 
 echo "distribution metadata ok"

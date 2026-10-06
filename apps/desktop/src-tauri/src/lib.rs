@@ -3,6 +3,8 @@ mod folder_sync;
 mod mcp_connect;
 #[cfg(desktop)]
 mod tray;
+#[cfg(all(desktop, not(feature = "mas")))]
+mod updater;
 #[cfg(all(target_os = "macos", feature = "mas"))]
 mod macos_bookmarks;
 
@@ -174,6 +176,9 @@ pub fn run() {
                 }
             }
         });
+    // Direct-download builds update themselves; the store updates MAS builds.
+    #[cfg(all(desktop, not(feature = "mas")))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     builder
         .setup(|app| {
             let handle = app.handle().clone();
@@ -191,6 +196,15 @@ pub fn run() {
                 if std::env::args().any(|a| a == "--hidden") {
                     tray::hide_to_tray(&handle);
                 }
+            }
+            #[cfg(all(desktop, not(feature = "mas")))]
+            {
+                handle.manage(updater::UpdaterState::default());
+                #[cfg(target_os = "macos")]
+                if let Err(e) = updater::setup_app_menu(&handle) {
+                    eprintln!("[linetta] update menu setup failed: {e}");
+                }
+                updater::schedule_startup_check(&handle);
             }
             let recovery_home = resolve_recovery_home(&handle).ok();
             let state = match mobile_engine_home(&handle)

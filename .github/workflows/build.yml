@@ -181,7 +181,21 @@ jobs:
           APPLE_API_KEY: ${{ steps.apple_signing.outputs.configured == 'true' && secrets.APPLE_API_KEY || '' }}
           APPLE_API_KEY_PATH: ${{ steps.apple_assets.outputs.api_key_path }}
           APPLE_TEAM_ID: ${{ steps.apple_signing.outputs.configured == 'true' && secrets.APPLE_TEAM_ID || '' }}
-        run: pnpm tauri bundle --bundles "${{ matrix.bundles }}" ${{ matrix.tauri_config }}
+          # Signs each installer for the in-app updater. The public half is
+          # plugins.updater.pubkey in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # Updater artifacts are opt-in per build: turning them on in
+          # tauri.conf.json would make every local bundle demand the key.
+          updater_config=""
+          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            updater_config="--config src-tauri/tauri.updater.conf.json"
+          else
+            echo "::warning::TAURI_SIGNING_PRIVATE_KEY is not configured. This build cannot be offered by the in-app updater."
+          fi
+          pnpm tauri bundle --bundles "${{ matrix.bundles }}" ${{ matrix.tauri_config }} ${updater_config}
 
       - name: Notarize and staple dmg
         if: runner.os == 'macOS' && steps.apple_signing.outputs.configured == 'true'
@@ -237,9 +251,27 @@ jobs:
           else
             cp "${bridge}" "dist/linetta-mcp-${{ matrix.artifact }}"
           fi
+          # An installer's updater signature travels next to it under the
+          # same name; scripts/render-updater-manifest.sh pairs them up.
+          copy_signatures() {
+            local sig
+            for sig in "$@"; do
+              if [ -f "${sig}" ]; then
+                cp "${sig}" dist/
+              fi
+            done
+          }
           case "${{ matrix.artifact }}" in
             macos)
-              tar -czf dist/Linetta-macos.app.tar.gz -C macos Linetta.app
+              # The updater signature covers the archive's bytes, so when the
+              # bundler signed one, that exact file is what ships — to the
+              # updater and to the Homebrew cask alike.
+              if [ -f macos/Linetta.app.tar.gz.sig ]; then
+                cp macos/Linetta.app.tar.gz dist/Linetta-macos.app.tar.gz
+                cp macos/Linetta.app.tar.gz.sig dist/Linetta-macos.app.tar.gz.sig
+              else
+                tar -czf dist/Linetta-macos.app.tar.gz -C macos Linetta.app
+              fi
               dmg_path="$(find dmg -maxdepth 1 -name '*.dmg' | head -n1)"
               if [ -n "${dmg_path}" ]; then
                 cp "${dmg_path}" dist/
@@ -249,10 +281,12 @@ jobs:
               cp appimage/*.AppImage dist/
               cp deb/*.deb dist/
               cp rpm/*.rpm dist/
+              copy_signatures appimage/*.AppImage.sig deb/*.deb.sig rpm/*.rpm.sig
               ;;
             windows)
               cp nsis/*-setup.exe dist/
               cp msi/*.msi dist/
+              copy_signatures nsis/*-setup.exe.sig msi/*.msi.sig
               ;;
           esac
           ls -la dist
@@ -320,6 +354,13 @@ jobs:
             echo "::warning::Windows installer not found; skipping winget metadata."
           fi
           cp packaging/flathub/com.devlikebear.linetta.yml dist/Linetta-flathub-manifest.yml
+
+          # Installed copies read this from releases/latest/download/latest.json.
+          # A release without it breaks their update check, so a release with
+          # no signed installer fails here rather than publishing.
+          scripts/render-updater-manifest.sh "${VERSION}" "${RELEASE_URL_BASE}" dist > release-metadata/latest.json
+          cp release-metadata/latest.json dist/latest.json
+          cat dist/latest.json
 
           (
             cd dist
@@ -391,6 +432,9 @@ jobs:
               url :url
               strategy :github_latest
             end
+
+            # The app updates itself from GitHub releases.
+            auto_updates true
 
             # The macOS build is published for Apple Silicon only.
             depends_on arch: :arm64

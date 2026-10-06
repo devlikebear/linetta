@@ -28,6 +28,14 @@
       ]
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYwOUY1RkFFNkI1MDgzNTUKUldSVmcxQnJybCtmOE15MjJwaXBCbzJhM2M0VWJyell3aGs4b252cEZMUXVta1ArN3l1enJnazcK",
+      "endpoints": [
+        "https://github.com/devlikebear/linetta/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "iOS": {
