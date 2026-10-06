@@ -121,13 +121,15 @@ func TestMCPAnalyzeStyleLeavesTheSceneAlone(t *testing.T) {
 	setStyleRules(t, app, projectID, []string{"정말"}, 0)
 	writeSceneText(t, c, nodeID, "정말 좋았다.", 0)
 
-	before, beforeRaw := readSceneAs(t, c, map[string]any{"node_id": nodeID})
+	// Text and version, not the raw payload: the background summarizer may
+	// write the scene's summary while the test runs, and that is not the check.
+	before, _ := readSceneAs(t, c, map[string]any{"node_id": nodeID})
 	if rep := analyzeStyle(t, c, map[string]any{"node_id": nodeID}); rep.Total != 1 {
 		t.Fatalf("report = %+v", rep)
 	}
-	after, afterRaw := readSceneAs(t, c, map[string]any{"node_id": nodeID})
-	if before.ContentVersion != after.ContentVersion || beforeRaw != afterRaw {
-		t.Errorf("the check changed the scene:\nbefore %s\nafter  %s", beforeRaw, afterRaw)
+	after, _ := readSceneAs(t, c, map[string]any{"node_id": nodeID})
+	if before.ContentVersion != after.ContentVersion || before.Text != after.Text {
+		t.Errorf("the check changed the scene:\nbefore %+v\nafter  %+v", before, after)
 	}
 }
 
