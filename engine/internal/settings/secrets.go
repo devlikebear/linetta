@@ -3,6 +3,7 @@ package settings
 import (
 	"errors"
 	"sync"
+	"testing"
 )
 
 const webSearchAPIKeySecretName = "web_search.api_key"
@@ -21,6 +22,25 @@ type SecretStore interface {
 	Exists(name string) (ok bool, err error)
 	Set(name, value string) error
 	Delete(name string) error
+}
+
+// defaultSecretStore is the backend a Store gets when the caller names none:
+// the OS credential store (platformSecretStore) in the app, and never that
+// inside a test binary.
+//
+// The OS store is process-global and not scoped by LINETTA_HOME, so a test
+// that reaches it against a t.TempDir() home still reads and writes the
+// developer's real login keychain: `go test` left the app's own mcp.token
+// item behind, and a differently-hashed test binary reading it back blocked on
+// a keychain access prompt until the test timeout. Under test the default is
+// therefore the no-backend store every Linux build already has, which also
+// makes an un-injected test behave the same on every OS. A test that wants
+// secrets to persist passes NewMemorySecretStore() explicitly.
+func defaultSecretStore() SecretStore {
+	if testing.Testing() {
+		return unsupportedSecretStore{}
+	}
+	return platformSecretStore()
 }
 
 // NewMemorySecretStore returns an in-memory secret backend for tests.

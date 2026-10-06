@@ -8,11 +8,7 @@ import (
 
 func TestAppHandlePing(t *testing.T) {
 	ctx := context.Background()
-	app, err := Open(ctx, Options{Home: t.TempDir()})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer app.Close()
+	app := openTestApp(t, t.TempDir())
 
 	resp, err := app.Handle(ctx, []byte(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
 	if err != nil {

@@ -2,12 +2,21 @@
 
 package settings
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+	"time"
+)
 
+// This test talks to the real login keychain, on purpose: it is the only
+// coverage the cgo backend has. It uses a per-run service name and deletes what
+// it creates, so it never shares an item with the app's own service
+// (keychainService) and never reads one a different test binary wrote — the
+// read that makes macOS put up an access prompt and park the test.
 func TestKeychainRoundTrip(t *testing.T) {
-	k := keychainSecretStore{service: "devlikebear.linetta.test"}
+	k := keychainSecretStore{service: fmt.Sprintf("devlikebear.linetta.test.%d", time.Now().UnixNano())}
 	const name = "roundtrip-key"
-	_ = k.Delete(name) // clean any leftover from a prior failed run
+	t.Cleanup(func() { _ = k.Delete(name) })
 
 	if _, ok, err := k.Get(name); err != nil || ok {
 		t.Fatalf("expected absent: ok=%v err=%v", ok, err)
