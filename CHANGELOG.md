@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.5.0 - 2026-10-06
 
 - Linetta can update itself. **Check for Updates…** is in the tray menu and,
   on macOS, in the Linetta menu: it looks up the latest GitHub release, asks
