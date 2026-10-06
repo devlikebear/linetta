@@ -38,7 +38,9 @@ vi.mock("../lib/rpc", () => ({
     getRules: vi.fn().mockResolvedValue({ project_id: "p1", avoid_phrases: [], max_sentence_chars: 0, updated_at: 0 }),
     setRules: vi.fn(),
     check: vi.fn(),
+    getDraft: vi.fn().mockResolvedValue({ pending: false, draft: { project_id: "p1", body: "", author: "", created_at: 0 }, limit: 2200 }),
   },
+  projects: { get: vi.fn().mockResolvedValue({ id: "p1", style_notes: "" }) },
 }));
 
 function entity(

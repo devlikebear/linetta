@@ -180,16 +180,21 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if slices.Contains(VisualWriteToolNames, name) {
 			continue
 		}
-		// #162's style check carries its own allowance below.
-		if name == "linetta_analyze_style" {
+		// #162's style check and #163's proposal carry their own allowances below.
+		if name == "linetta_analyze_style" || name == "linetta_propose_style_profile" {
 			continue
 		}
 		total += b
 	}
-	// #162 measured 1,815B for linetta_analyze_style, input and output schemas
-	// included — most of it the violation shape an agent has to read anyway.
-	if style := sizes["linetta_analyze_style"]; style > 1900 {
-		t.Errorf("linetta_analyze_style costs %dB, want <= 1900B", style)
+	// #162 measured 1,815B for linetta_analyze_style. #163 added the
+	// measurements to its output as an untyped field, which is why that cost
+	// only 72B (1,887B) rather than the ~900B a typed schema would have.
+	if style := sizes["linetta_analyze_style"]; style > 1950 {
+		t.Errorf("linetta_analyze_style costs %dB, want <= 1950B", style)
+	}
+	// #163 measured 868B for the proposal tool.
+	if propose := sizes["linetta_propose_style_profile"]; propose > 950 {
+		t.Errorf("linetta_propose_style_profile costs %dB, want <= 950B", propose)
 	}
 	writes := 0
 	for _, name := range VisualWriteToolNames {

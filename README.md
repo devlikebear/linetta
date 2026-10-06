@@ -178,7 +178,7 @@ Skills → Learning from its own work** (`agent_self_review_enabled` in
 `settings.json`) and Linetta does not make that call at all.
 
 **You can switch the memory, skills, and visual editing tools off entirely.** Every tool's full
-description travels in every request, so Linetta's twenty-six tools are a
+description travels in every request, so Linetta's twenty-seven tools are a
 standing cost on every turn — and the memory tool and the two skills tools are
 about a fifth of it. **Settings → Tool budget** says how many tools the agent
 currently gets and what each group costs, and turns each group off for both
@@ -224,6 +224,16 @@ yours to decide. `linetta_analyze_style` runs the same check for an agent, so
 one that drafted a scene can hold it against your rules before handing it
 back. It does not judge tone: that stays with the style notes in the brief and
 whoever reads them. Rules are in library backups and restored works.
+
+You do not have to describe your style from memory. Ask an agent to work it
+out from scenes you have already written: `linetta_analyze_style` also
+measures them — sentence lengths, how much is dialogue, how your sentences
+tend to end — and `linetta_propose_style_profile` saves what the agent makes
+of that as a **draft**. A draft is the agent's reading, not your instruction,
+so it stays out of your style notes and out of every brief until you approve
+it under Story World → Style, where you can edit it first, add it after your
+notes, replace them with it, or discard it. No tool approves a draft; only
+you do.
 
 Visual write tools (full mode): `linetta_set_character_visuals` (`project_id`, `name` or
 `entity_id`, optional `age_range`, `build`, `hair`, `outfit`, `signature`, `palette`, `notes`),

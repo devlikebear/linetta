@@ -4,6 +4,9 @@ package mcphost
 
 import (
 	"context"
+	"errors"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -43,16 +46,85 @@ type analyzeStyleOutput struct {
 	Total         int               `json:"total" jsonschema:"every violation found, listed or not"`
 	Violations    []style.Violation `json:"violations"`
 	Truncated     bool              `json:"truncated"`
+	// Counted from the same scenes (#163): the raw material for describing
+	// how this writer writes. It holds a style.Stats, typed as any on purpose:
+	// a typed field would put a twelve-property schema — about 900B — into
+	// every request of every turn, to describe keys that already say what
+	// they are (sentence_mean, dialogue_share, endings).
+	Stats any `json:"stats" jsonschema:"lengths in characters, shares 0-1"`
 }
+
+// ---------- linetta_propose_style_profile ----------
+//
+// The other half of #163. An agent can measure the writer's scenes and read
+// them, and from that describe the style in words — but what it writes is its
+// own reading, not the writer's wish. So it lands as a draft the writer sees
+// in Story World, and reaches the style notes only through the app's own
+// approve action. There is deliberately no MCP tool that approves.
+
+type proposeStyleProfileInput struct {
+	ProjectID string `json:"project_id" jsonschema:"id of the work"`
+	Profile   string `json:"profile" jsonschema:"the style in prose, at most 2200 characters"`
+}
+
+func (in proposeStyleProfileInput) scope() (string, string) { return in.ProjectID, "" }
+
+type proposeStyleProfileOutput struct {
+	ProjectID  string `json:"project_id"`
+	Status     string `json:"status"`
+	Characters int    `json:"characters"`
+	Limit      int    `json:"limit"`
+}
+
+// styleProfilePending is the only status a proposal can have: nothing an
+// agent does moves it further.
+const styleProfilePending = "pending_writer_approval"
 
 func registerStyleTools(s *mcp.Server, d ToolDeps) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_analyze_style",
-		Description: "Check a scene, a chapter, or the whole work against the writer's style rules: phrases " +
-			"to avoid and a sentence-length limit. Returns each violation with its scene, paragraph and an " +
-			"excerpt. Reads only; it changes nothing. It cannot judge tone or rhythm — hold the text " +
-			"against the style notes in the story brief for that yourself.",
+		Description: "Check a scene, a chapter, or the whole work against the writer's style rules " +
+			"(phrases to avoid, a sentence-length limit) and measure it (sentence lengths, dialogue " +
+			"share, common endings). Each violation comes with its scene, paragraph and an excerpt. " +
+			"Reads only. It cannot judge tone — hold the text against the style notes yourself.",
 	}, record(d, "linetta_analyze_style", d.analyzeStyle))
+}
+
+func (d ToolDeps) registerStyleWriteTools(s *mcp.Server) {
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_propose_style_profile",
+		Description: "Save a style profile you drew from the writer's own scenes (measure them with " +
+			"linetta_analyze_style, read a few) as a draft. The writer reviews it in Story World and it " +
+			"joins the style notes only if they approve: say it is waiting, and do not treat it as their " +
+			"preference. Replaces an earlier draft.",
+	}, record(d, "linetta_propose_style_profile", d.proposeStyleProfile))
+}
+
+func (d ToolDeps) proposeStyleProfile(ctx context.Context, _ *mcp.CallToolRequest, in proposeStyleProfileInput) (*mcp.CallToolResult, proposeStyleProfileOutput, error) {
+	if d.Style == nil {
+		return toolErr("style profiles are not available in this build"), proposeStyleProfileOutput{}, nil
+	}
+	p, errResult := d.requireProject(ctx, in.ProjectID)
+	if errResult != nil {
+		return errResult, proposeStyleProfileOutput{}, nil
+	}
+	draft, err := d.Style.SaveDraft(ctx, d.now(), p.ID, in.Profile, d.sourceOrExternal())
+	switch {
+	case errors.Is(err, style.ErrDraftEmpty):
+		return toolErr("profile is empty; describe the style in prose"), proposeStyleProfileOutput{}, nil
+	case errors.Is(err, style.ErrDraftTooLong):
+		return toolErr("profile is %d characters; the limit is %d — shorten it and call again",
+			utf8.RuneCountInString(strings.TrimSpace(in.Profile)), style.MaxProfileRunes), proposeStyleProfileOutput{}, nil
+	case err != nil:
+		return nil, proposeStyleProfileOutput{}, err
+	}
+	d.notifyChanged(p.ID, "linetta_propose_style_profile", nil, "")
+	return nil, proposeStyleProfileOutput{
+		ProjectID:  p.ID,
+		Status:     styleProfilePending,
+		Characters: utf8.RuneCountInString(draft.Body),
+		Limit:      style.MaxProfileRunes,
+	}, nil
 }
 
 func (d ToolDeps) analyzeStyle(ctx context.Context, _ *mcp.CallToolRequest, in analyzeStyleInput) (*mcp.CallToolResult, analyzeStyleOutput, error) {
@@ -79,7 +151,8 @@ func (d ToolDeps) analyzeStyle(ctx context.Context, _ *mcp.CallToolRequest, in a
 	if err != nil {
 		return nil, analyzeStyleOutput{}, err
 	}
-	rep := style.Check(style.ScenesUnder(nodes, in.NodeID), rules)
+	scenes := style.ScenesUnder(nodes, in.NodeID)
+	rep := style.Check(scenes, rules)
 
 	limit := in.Limit
 	if limit <= 0 {
@@ -96,5 +169,6 @@ func (d ToolDeps) analyzeStyle(ctx context.Context, _ *mcp.CallToolRequest, in a
 		Total:         rep.Total,
 		Violations:    rep.Violations,
 		Truncated:     rep.Truncated,
+		Stats:         style.Measure(scenes),
 	}, nil
 }

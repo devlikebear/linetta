@@ -23,6 +23,10 @@ func styleError(err error) error {
 		{style.ErrTooManyPhrases, rpc.ReasonStyleTooManyPhrases},
 		{style.ErrPhraseTooLong, rpc.ReasonStylePhraseTooLong},
 		{style.ErrSentenceLimit, rpc.ReasonStyleSentenceLimit},
+		{style.ErrNoDraft, rpc.ReasonStyleNoDraft},
+		{style.ErrDraftEmpty, rpc.ReasonStyleProfileEmpty},
+		{style.ErrNotesTooLong, rpc.ReasonStyleNotesTooLong},
+		{style.ErrDraftTooLong, rpc.ReasonStyleNotesTooLong},
 	}
 	for _, r := range reasons {
 		if errors.Is(err, r.err) {
@@ -106,4 +110,75 @@ func containsNode(list []node.Node, id string) bool {
 		}
 	}
 	return false
+}
+
+// styleDraftResult is style.get_draft's reply. Pending is false — and Draft
+// empty — when nothing is waiting, so the panel can tell "no draft" from a
+// failed read.
+type styleDraftResult struct {
+	Pending bool        `json:"pending"`
+	Draft   style.Draft `json:"draft"`
+	// Limit is the size an approved profile may be, in characters.
+	Limit int `json:"limit"`
+}
+
+// GetStyleDraft returns a handler for style.get_draft: the profile an agent
+// proposed and the writer has not yet approved or discarded (#163).
+func GetStyleDraft(repo *style.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ProjectID string `json:"project_id"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
+		}
+		draft, pending, err := repo.GetDraft(ctx, in.ProjectID)
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(styleDraftResult{Pending: pending, Draft: draft, Limit: style.MaxProfileRunes})
+	}
+}
+
+// ApproveStyleDraft returns a handler for style.approve_draft. This is the
+// writer's act and the only way a draft becomes style notes; it is on the
+// app's RPC surface and has no MCP counterpart, so an agent cannot approve
+// its own proposal.
+func ApproveStyleDraft(repo *style.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ProjectID string `json:"project_id"`
+			// Body is the text the writer approved: the draft, or their edit of it.
+			Body string `json:"body"`
+			// Mode is replace or append.
+			Mode string `json:"mode"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
+		}
+		notes, err := repo.ApproveDraft(ctx, now(), in.ProjectID, in.Body, in.Mode)
+		if errors.Is(err, style.ErrApproveMode) {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		if err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(map[string]string{"style_notes": notes})
+	}
+}
+
+// DiscardStyleDraft returns a handler for style.discard_draft.
+func DiscardStyleDraft(repo *style.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ProjectID string `json:"project_id"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
+		}
+		if err := repo.DiscardDraft(ctx, in.ProjectID); err != nil {
+			return nil, styleError(err)
+		}
+		return json.Marshal(map[string]bool{"ok": true})
+	}
 }

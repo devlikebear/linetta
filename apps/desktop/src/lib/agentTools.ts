@@ -53,6 +53,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_undo_last_change",
   "linetta_edit_memory",
   "linetta_edit_skill",
+  "linetta_propose_style_profile",
 ] as const;
 
 const READS: ReadonlySet<string> = new Set(READ_TOOL_NAMES);

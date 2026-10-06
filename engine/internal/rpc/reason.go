@@ -36,6 +36,12 @@ const (
 	ReasonStyleTooManyPhrases = "style_too_many_phrases"
 	ReasonStylePhraseTooLong  = "style_phrase_too_long"
 	ReasonStyleSentenceLimit  = "style_sentence_limit"
+	// Approving a style profile draft (#163): the draft another window
+	// already dealt with, an approval the writer emptied, and notes that
+	// would outgrow what a story brief carries.
+	ReasonStyleNoDraft      = "style_no_draft"
+	ReasonStyleProfileEmpty = "style_profile_empty"
+	ReasonStyleNotesTooLong = "style_notes_too_long"
 
 	ReasonThreadNotFound       = "thread_not_found"
 	ReasonBeatNotFound         = "beat_not_found"

@@ -138,7 +138,7 @@ Claude Code, Claude Desktop — can work on the manuscript. It is off until the
 writer consents and enables it under **Settings → Connect an external agent**,
 binds `127.0.0.1` only, and requires a locally generated bearer token.
 
-The default tool set has 26 tools (13 read, 13 write). Optional memory, skills,
+The default tool set has 27 tools (13 read, 14 write). Optional memory, skills,
 and visual-write groups can be switched off in Settings → Tool budget. Write tools appear
 only in `full` mode, so `read_only` omits them from `tools/list` entirely
 rather than refusing them at call time.
@@ -150,7 +150,8 @@ Read:
 - `linetta_get_character_visuals`, `linetta_build_illustration_prompt`
 - `linetta_analyze_style`: holds a scene, a chapter or the whole work against
   the writer's style rules (`internal/style`) and reports violations. It is
-  deterministic and model-free; tone is left to the caller
+  deterministic and model-free; tone is left to the caller. The same call
+  returns `stats` — counted measurements of the scenes read (`style.Measure`)
 - `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
 - `linetta_read_skill`
 
@@ -167,6 +168,10 @@ Write (`full` mode only):
 - `linetta_write_summary`, `linetta_apply_story_ops`;
 - `linetta_create_checkpoint`, `linetta_undo_last_change`;
 - `linetta_create_work`, `linetta_edit_memory`, `linetta_edit_skill`;
+- `linetta_propose_style_profile`: saves an agent's description of the
+  writer's style as a pending draft (`project_style_drafts`). Only the app's
+  `style.approve_draft` RPC moves a draft into `projects.style_notes`, and
+  so into the story brief; there is no MCP tool that approves;
 - `linetta_set_character_visuals`, `linetta_set_art_style`;
 - `linetta_add_reference_image`, `linetta_delete_reference_image`.
 
