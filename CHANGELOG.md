@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Fixed Markdown export silently dropping formatting the editor lets you
+  apply. Bullet and numbered lists (nested ones included), code blocks, inline
+  code, strikethrough, underline and links were written as bare text, so an
+  exported file — and every folder-sync and Git-sync copy — lost them, and
+  importing it back gave you paragraphs. They are now written as Markdown and
+  read back as the same nodes; blank lines inside a code block are kept, and a
+  `# comment` in code is no longer taken for a chapter heading on import.
+  Prose that merely looks like syntax (`- 그는 웃었다`, `1. 첫째`, a literal
+  `*` or `_`) is backslash-escaped on export so it comes back as prose. The
+  plain-text copy also dropped the text of code blocks; it keeps it now. A
+  test holds the exporter's node list against the editor's real schema, so an
+  editor extension added later cannot be forgotten the same way
+  ([#160](https://github.com/devlikebear/linetta/issues/160)).
+
 ## v1.3.0 - 2026-10-05
 
 - Added character visual sheets, up to eight reference images per character,

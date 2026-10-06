@@ -1,0 +1,18 @@
+{
+  "nodes": [
+    "blockquote",
+    "bulletList",
+    "codeBlock",
+    "doc",
+    "hardBreak",
+    "heading",
+    "horizontalRule",
+    "listItem",
+    "mention",
+    "noteMarker",
+    "orderedList",
+    "paragraph",
+    "text"
+  ],
+  "marks": ["bold", "code", "italic", "link", "strike", "underline"]
+}

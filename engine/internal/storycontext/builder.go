@@ -738,7 +738,7 @@ func walkDoc(v interface{}, sb *stringBuilder) {
 				walkDoc(c, sb)
 			}
 		}
-		if kind == "paragraph" || kind == "heading" || kind == "blockquote" {
+		if kind == "paragraph" || kind == "heading" || kind == "blockquote" || kind == "codeBlock" {
 			sb.WriteString("\n")
 		}
 	case []interface{}:
