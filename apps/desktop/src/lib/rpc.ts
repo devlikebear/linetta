@@ -1,4 +1,4 @@
-import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleCheckResult, StyleRules } from "./types";
+import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -577,4 +577,9 @@ export const style = {
   /** Checks one scene (or the scenes under a chapter) when nodeId is given, the whole work otherwise. */
   check: (projectId: string, nodeId?: string) =>
     rpcCall<StyleCheckResult>("style.check", { project_id: projectId, node_id: nodeId ?? "" }),
+  getDraft: (projectId: string) => rpcCall<StyleDraftState>("style.get_draft", { project_id: projectId }),
+  /** The writer's approval — the only way a draft becomes style notes. Returns the new notes. */
+  approveDraft: (projectId: string, body: string, mode: StyleApproveMode) =>
+    rpcCall<{ style_notes: string }>("style.approve_draft", { project_id: projectId, body, mode }),
+  discardDraft: (projectId: string) => rpcCall<{ ok: boolean }>("style.discard_draft", { project_id: projectId }),
 };

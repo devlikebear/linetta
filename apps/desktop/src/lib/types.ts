@@ -28,6 +28,7 @@ export interface UpdateProjectInput {
   outline_preset?: OutlinePreset;
   episode_char_target?: number;
   synopsis?: string;
+  style_notes?: string;
 }
 
 export interface NewProjectInput {
@@ -1229,6 +1230,15 @@ export interface StyleCheckResult {
   violations: StyleViolation[];
   truncated: boolean;
 }
+/** style.get_draft: a style profile an agent proposed, waiting for the writer (#163). */
+export interface StyleDraftState {
+  pending: boolean;
+  draft: { project_id: string; body: string; author: string; created_at: number };
+  /** The size an approved profile may be, in characters. */
+  limit: number;
+}
+/** Whether an approved draft replaces the style notes or is added after them. */
+export type StyleApproveMode = "replace" | "append";
 export interface ArtStyle {
  project_id: string;
  style: string;

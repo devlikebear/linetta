@@ -305,10 +305,10 @@ export const en: Translation = {
       },
       {
         name: 'Full',
-        body: 'All twenty-six. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
+        body: 'All twenty-seven. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
       }
     ],
-    toolsLabel: 'Twenty-six tools, not a hundred RPCs',
+    toolsLabel: 'Twenty-seven tools, not a hundred RPCs',
     toolsNote:
       'A client’s tool budget is finite and selection accuracy falls as the list grows, so the engine’s RPC surface is not exposed one-to-one. Access can also be pinned to a single work.',
     readLabel: 'Read',
@@ -330,6 +330,7 @@ export const en: Translation = {
       { name: 'linetta_delete_reference_image', note: 'Remove reference image' },
       { name: 'linetta_build_illustration_prompt', note: 'Illustration and four-panel prompts' },
       { name: 'linetta_analyze_style', note: 'Reports where prose breaks your style rules' },
+      { name: 'linetta_propose_style_profile', note: 'Drafts a style profile for you to approve' },
       {
         name: 'linetta_read_skill',
         note: 'Open one recorded how-to in full — the brief lists only names and descriptions'
@@ -660,10 +661,10 @@ export const ko: Translation = {
       },
       {
         name: '전체',
-        body: '26개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
+        body: '27개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
       }
     ],
-    toolsLabel: 'RPC 100개가 아니라, 툴 26개',
+    toolsLabel: 'RPC 100개가 아니라, 툴 27개',
     toolsNote:
       '클라이언트의 툴 예산은 유한하고 목록이 길어질수록 선택 정확도가 떨어집니다. 그래서 엔진 RPC를 1:1로 노출하지 않습니다. 접근을 한 작품으로 제한할 수도 있습니다.',
     readLabel: '읽기',
@@ -685,6 +686,7 @@ export const ko: Translation = {
       { name: 'linetta_delete_reference_image', note: '참조 이미지 삭제' },
       { name: 'linetta_build_illustration_prompt', note: '삽화와 4컷 프롬프트' },
       { name: 'linetta_analyze_style', note: '작가의 문체 규칙에 어긋난 곳을 찾아 보고' },
+      { name: 'linetta_propose_style_profile', note: '작가가 승인할 문체 프로필 초안 제안' },
       { name: 'linetta_read_skill', note: '기록해 둔 기법 하나를 본문까지 열기 — 브리프에는 이름과 설명만 실립니다' }
     ],
     writeTools: [
@@ -1010,10 +1012,10 @@ export const ja: Translation = {
       },
       {
         name: 'フル',
-        body: '26個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
+        body: '27個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
       }
     ],
-    toolsLabel: 'RPC 百個ではなく、ツール26個',
+    toolsLabel: 'RPC 百個ではなく、ツール27個',
     toolsNote:
       'クライアントのツール予算は有限で、一覧が伸びるほど選択の精度は落ちます。だからエンジンの RPC を1対1では公開しません。アクセスを一つの作品に限定することもできます。',
     readLabel: '読み取り',
@@ -1035,6 +1037,7 @@ export const ja: Translation = {
       { name: 'linetta_delete_reference_image', note: '参照画像を削除' },
       { name: 'linetta_build_illustration_prompt', note: '挿絵と4コマのプロンプト' },
       { name: 'linetta_analyze_style', note: '作者の文体ルールに反する箇所を報告' },
+      { name: 'linetta_propose_style_profile', note: '作者が承認する文体プロフィールの下書きを提案' },
       { name: 'linetta_read_skill', note: '記録された手法を一つ、本文まで開く — ブリーフには名前と説明だけが載ります' }
     ],
     writeTools: [

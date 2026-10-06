@@ -36,6 +36,22 @@
   connected or built-in agent the same check; judging tone stays with the
   agent and the style notes. Rules travel with library backups and restored
   works ([#162](https://github.com/devlikebear/linetta/issues/162)).
+- An agent can now work out your style from what you have already written,
+  so the style notes no longer have to start from a blank box.
+  `linetta_analyze_style` also returns measurements of the scenes it reads —
+  sentence lengths, how many sentences a paragraph holds, the share that is
+  dialogue, the commonest sentence endings — counted in the engine without a
+  model. A new write tool, `linetta_propose_style_profile`, saves the agent's
+  description as a draft of at most 2,200 characters. A draft is the agent's
+  reading and not your wish, so it is kept apart: it is in neither your style
+  notes nor any story brief until you approve it. Story World → Style shows a
+  waiting draft, lets you edit it, and then adds it after your notes, replaces
+  them with it, or discards it; the same section now lets you edit the style
+  notes themselves, which the app had no place for before. No MCP tool
+  approves a draft, in any mode
+  ([#163](https://github.com/devlikebear/linetta/issues/163)).
+- Story World now scrolls as a whole under its header. Its sections above the
+  list could be opened taller than the panel and were cut off.
 
 ## v1.3.0 - 2026-10-05
 

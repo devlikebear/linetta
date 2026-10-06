@@ -75,3 +75,39 @@ button.style-where {
   color: var(--ink);
   overflow-wrap: anywhere;
 }
+
+.style-section .style-rules-hint {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.style-badge {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.style-draft {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  display: grid;
+  gap: 6px;
+}
+
+.style-draft-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.style-draft .style-hint {
+  margin: 0;
+}

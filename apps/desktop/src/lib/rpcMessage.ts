@@ -29,6 +29,10 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   style_too_many_phrases: "style.tooManyPhrases",
   style_phrase_too_long: "style.phraseTooLong",
   style_sentence_limit: "style.sentenceLimit",
+  // Approving a proposed style profile (#163).
+  style_no_draft: "style.noDraft",
+  style_profile_empty: "style.profileEmpty",
+  style_notes_too_long: "style.notesTooLong",
   entity_not_found: "errors.entityNotFound",
   thread_not_found: "errors.threadNotFound",
   beat_not_found: "errors.beatNotFound",
