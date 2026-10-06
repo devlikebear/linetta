@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
@@ -361,4 +362,84 @@ func labels(nodes []node.Node) []string {
 		out = append(out, n.Label)
 	}
 	return out
+}
+
+// TestExportImportRoundTripKeepsFormatting is the #160 acceptance test at the
+// whole-project level: a scene using every body-level node and mark the editor
+// has must come back from export → import as the same document. Before #160
+// lists, code blocks, inline code, strikethrough, underline and links were
+// written as bare text and read back as paragraphs.
+func TestExportImportRoundTripKeepsFormatting(t *testing.T) {
+	ctx := context.Background()
+	now := int64(1000)
+	src := openLibrary(t, "src.db")
+
+	p, err := src.projects.Create(ctx, now, project.NewInput{
+		Title: "서식 있는 작품", Genres: []string{}, LengthTarget: "short", DefaultPOV: "first",
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	doc := `{"type":"doc","content":[
+	  {"type":"paragraph","content":[
+	    {"type":"text","text":"평문 "},
+	    {"type":"text","marks":[{"type":"link","attrs":{"href":"https://example.com/a"}}],"text":"링크"},
+	    {"type":"text","text":" "},
+	    {"type":"text","marks":[{"type":"code"}],"text":"make test"},
+	    {"type":"text","text":" "},
+	    {"type":"text","marks":[{"type":"strike"}],"text":"지움"},
+	    {"type":"text","text":" "},
+	    {"type":"text","marks":[{"type":"underline"}],"text":"밑줄"}
+	  ]},
+	  {"type":"bulletList","content":[
+	    {"type":"listItem","content":[
+	      {"type":"paragraph","content":[{"type":"text","text":"바깥"}]},
+	      {"type":"orderedList","attrs":{"start":1},"content":[
+	        {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"안"}]}]}
+	      ]}
+	    ]},
+	    {"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"둘"}]}]}
+	  ]},
+	  {"type":"codeBlock","attrs":{"language":"sh"},"content":[{"type":"text","text":"# 제목이 아니라 주석\n\n\n## 이것도"}]},
+	  {"type":"horizontalRule"},
+	  {"type":"paragraph","content":[{"type":"text","text":"- 줄표로 시작하는 대사"}]}
+	]}`
+	if err := src.nodes.UpdateContent(ctx, *p.LastOpenedNodeID, doc, now); err != nil {
+		t.Fatalf("scene content: %v", err)
+	}
+
+	payload, err := export.ExportProject(ctx, src.exportSources(), p.ID, "ko")
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+
+	dst := openLibrary(t, "dst.db")
+	importParams, _ := json.Marshal(map[string]string{"file_name": payload.SuggestedFilename, "content": payload.Markdown})
+	resultRaw, err := ImportMarkdown(dst.projects, dst.nodes, dst.entities, dst.relationships, dst.importExtras(), func() int64 { return 9000 })(ctx, importParams)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	var result struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := json.Unmarshal(resultRaw, &result); err != nil {
+		t.Fatalf("unmarshal import result: %v", err)
+	}
+	nodes, err := dst.nodes.ListByProject(ctx, result.ProjectID)
+	if err != nil {
+		t.Fatalf("list nodes: %v", err)
+	}
+	if len(nodes) != 1 || nodes[0].ContentDoc == nil {
+		t.Fatalf("imported nodes = %v; a '# 주석' in the code block must not become a scene", labels(nodes))
+	}
+	var want, got any
+	if err := json.Unmarshal([]byte(doc), &want); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(*nodes[0].ContentDoc), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("scene did not survive the round trip\nmarkdown:\n%s\n got %s\nwant %s", payload.Markdown, *nodes[0].ContentDoc, doc)
+	}
 }

@@ -109,7 +109,12 @@ func parseOutlineBody(text string) Outline {
 		stack = append(stack, n)
 	}
 
+	var fences fenceTracker
 	for _, ln := range strings.Split(text, "\n") {
+		if fences.inside(ln) {
+			bodyBuf = append(bodyBuf, ln)
+			continue
+		}
 		m := headingRe.FindStringSubmatch(ln)
 		if m == nil {
 			bodyBuf = append(bodyBuf, ln)
@@ -147,7 +152,13 @@ func stripLinettaAppendices(text string, captureLegacy bool) (mdmeta.Metadata, s
 	var meta mdmeta.Metadata
 	out := make([]string, 0, len(lines))
 
+	var fences fenceTracker
 	for i := 0; i < len(lines); {
+		if fences.inside(lines[i]) {
+			out = append(out, lines[i])
+			i++
+			continue
+		}
 		m := headingRe.FindStringSubmatch(lines[i])
 		if m == nil || len(m[1]) != 2 {
 			out = append(out, lines[i])

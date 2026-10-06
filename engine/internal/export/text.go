@@ -104,6 +104,13 @@ func plainBlocks(v any) []string {
 				return []string{plainInline(content)}
 			}
 			return []string{""}
+		case "codeBlock":
+			// A code block's children are bare text nodes, not blocks; the
+			// default branch below would recurse into them and find nothing.
+			if content, ok := t["content"].([]any); ok {
+				return []string{plainInline(content)}
+			}
+			return nil
 		case "horizontalRule":
 			return nil
 		default:
