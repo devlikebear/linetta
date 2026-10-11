@@ -21,6 +21,14 @@
   `apps/desktop/src-tauri/Info.ios.plist` fixed it. `make smoke-mobile-ios-sim`
   then passed on iPhone 18 Pro and iPad Pro 11-inch (M5), and both showed the
   first-work creation dialog. This is startup verification only.
+- Also on 2026-10-11, on the iPhone 18 Pro simulator: created a work, pasted a
+  Korean and English sentence into the first scene, saw it autosaved in
+  `library.db`, terminated the app, relaunched, and read the exact text back.
+  The viewport now uses `viewport-fit=cover` (no bars outside the safe area)
+  and `maximum-scale=1` (focusing an input no longer zooms the page), and
+  hover-only controls stay visible on touch so a work card opens on one tap.
+  Not covered: iPad, Korean composition from a keyboard, rapid scene switching,
+  backgrounding during a pending save.
 
 ## Required before an iOS release
 
