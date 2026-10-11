@@ -877,3 +877,36 @@ func TestRun_theTurnsPromptFollowsTheToolBudgetSwitches(t *testing.T) {
 		t.Errorf("the skill source was asked %d times with the skills tools off", skills.asked)
 	}
 }
+
+// The cap is the writer's to move (settings.agent_max_tool_calls): a turn
+// stops at the number the setting gives, not at the built-in default.
+func TestRun_theToolCallCapFollowsTheSetting(t *testing.T) {
+	const limit = 10
+	rec := &recorder{}
+	c := &scriptedClient{responses: []llm.ChatResponse{burstReply(maxIterations + 4), textReply("여기까지")}}
+	st := openStoreForAgentTests(t)
+	svc := New(Deps{
+		Providers:    fakeProviders{client: c},
+		History:      companion.NewHistoryRepo(st.DB()),
+		Scope:        fakeScope{titles: map[string]string{"p1": "제목"}},
+		Register:     stubTools(nil),
+		Notify:       rec.notify,
+		Language:     func() string { return "ko" },
+		Clock:        func() int64 { return 1700000000000 },
+		MaxToolCalls: func() int { return limit },
+	})
+	t.Cleanup(func() { _ = svc.Close() })
+
+	runID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "burst"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "agent.error", func() bool { return rec.has("agent.error") })
+
+	if got := rec.toolStarts(); got != limit {
+		t.Errorf("executed %d tool calls, want the configured %d", got, limit)
+	}
+	if p := rec.errorFor(runID); p == nil || !strings.Contains(p.Message, fmt.Sprintf("%d", limit)) {
+		t.Errorf("the wall's message does not name the configured cap: %+v", p)
+	}
+}

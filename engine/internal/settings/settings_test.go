@@ -510,6 +510,61 @@ func TestAgentSelfReviewEnabled_defaultsOnAndSurvivesADeliberateFalse(t *testing
 	}
 }
 
+// The built-in agent's per-turn tool-call cap: a default on a fresh install
+// and on a settings.json that predates the key, a value that survives a
+// reload, and a range that is enforced on the way in and on the way back.
+func TestAgentMaxToolCalls_defaultsPersistsAndStaysInRange(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	ctx := context.Background()
+
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := s.AgentMaxToolCalls(); got != DefaultAgentMaxToolCalls {
+		t.Fatalf("fresh install cap = %d, want %d", got, DefaultAgentMaxToolCalls)
+	}
+
+	for _, bad := range []int{0, MinAgentMaxToolCalls - 1, MaxAgentMaxToolCalls + 1, -5} {
+		if _, err := s.Set(ctx, Patch{AgentMaxToolCalls: intPtr(bad)}); err == nil {
+			t.Errorf("Set accepted agent_max_tool_calls = %d", bad)
+		}
+	}
+	if got := s.AgentMaxToolCalls(); got != DefaultAgentMaxToolCalls {
+		t.Errorf("a refused value changed the cap to %d", got)
+	}
+
+	if _, err := s.Set(ctx, Patch{AgentMaxToolCalls: intPtr(120)}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	s2, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("re-New: %v", err)
+	}
+	if got := s2.AgentMaxToolCalls(); got != 120 {
+		t.Errorf("cap after reload = %d, want 120 — missing from persist() or load()", got)
+	}
+
+	for name, body := range map[string]string{
+		"predates the key": `{"language":"en"}`,
+		"out of range":     `{"language":"en","agent_max_tool_calls":100000}`,
+	} {
+		legacy := t.TempDir()
+		t.Setenv("LINETTA_HOME", legacy)
+		if err := os.WriteFile(filepath.Join(legacy, "settings.json"), []byte(body), 0o600); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		s3, err := NewWithSecretStore(NewMemorySecretStore())
+		if err != nil {
+			t.Fatalf("%s: New: %v", name, err)
+		}
+		if got := s3.AgentMaxToolCalls(); got != DefaultAgentMaxToolCalls {
+			t.Errorf("%s: cap = %d, want the default %d", name, got, DefaultAgentMaxToolCalls)
+		}
+	}
+}
+
 /* ---------------------------------------------------------------------------
  * #113: a pre-1.0 plaintext api_key on a platform with no secret store.
  *

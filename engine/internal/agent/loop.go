@@ -17,11 +17,15 @@ import (
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
-// maxIterations caps the number of tool calls EXECUTED in a turn — not the
-// number of Chat round-trips. A single model response can legally ask for
-// many tool calls at once, and letting each one through uncounted is how a
-// runaway agent rewrites forty scenes instead of hitting the wall the writer
-// is supposed to see in the activity log.
+// maxIterations is the default cap on the number of tool calls EXECUTED in a
+// turn — not the number of Chat round-trips. A single model response can
+// legally ask for many tool calls at once, and letting each one through
+// uncounted is how a runaway agent rewrites forty scenes instead of hitting
+// the wall the writer is supposed to see in the activity log.
+//
+// The writer can move the cap in Settings (Deps.MaxToolCalls); this is what
+// a turn gets when nothing says otherwise, and it matches
+// settings.DefaultAgentMaxToolCalls.
 //
 // 48 rather than the original 24: an ordinary batch request — "summarise every
 // scene" — costs a read and a write per scene, so 24 cut a twelve-scene work
@@ -153,15 +157,16 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		// not req.ProjectID's raw form. Every agent.* notification carries it
 		// (#95 Task 7 review round 3), so a padded id can never make the
 		// panel's own equality check disagree with the engine's.
-		projectID: projectID,
-		req:       req,
-		client:    client,
-		provider:  resolved.ID,
-		model:     resolved.Model,
-		session:   tools,
-		schemas:   schemas,
-		groups:    groups,
-		language:  s.language(),
+		projectID:    projectID,
+		req:          req,
+		client:       client,
+		provider:     resolved.ID,
+		model:        resolved.Model,
+		session:      tools,
+		schemas:      schemas,
+		groups:       groups,
+		language:     s.language(),
+		maxToolCalls: s.maxToolCalls(),
 	}
 
 	handedOff = true
@@ -189,6 +194,16 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	return runID, nil
 }
 
+// maxToolCalls is the cap for the turn about to start.
+func (s *Service) maxToolCalls() int {
+	if s.deps.MaxToolCalls != nil {
+		if n := s.deps.MaxToolCalls(); n > 0 {
+			return n
+		}
+	}
+	return maxIterations
+}
+
 type loopState struct {
 	runID string
 	// projectID is the work this turn belongs to, trimmed. It is on every
@@ -213,6 +228,10 @@ type loopState struct {
 	// the two can be guaranteed to describe the same tools.
 	groups   toolGroups
 	language string
+	// maxToolCalls is this turn's tool-call cap, read once in Run so a
+	// settings change mid-turn cannot move a wall the turn is already
+	// counting towards.
+	maxToolCalls int
 }
 
 // releaseSession drops one reference and logs a close that failed. A helper
@@ -287,7 +306,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 	// the self-review is told about the turn (see selfreview.go): names, never
 	// arguments or results, so a background call the writer did not ask for
 	// carries none of their manuscript.
-	usedTools := make([]string, 0, maxIterations)
+	usedTools := make([]string, 0, st.maxToolCalls)
 	lastFailedTool := ""
 	repeats := 0
 
@@ -331,11 +350,11 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 				s.endCancelled(ctx, st)
 				return
 			}
-			// maxIterations bounds the TOTAL tool calls executed this turn,
+			// The cap bounds the TOTAL tool calls executed this turn,
 			// not the number of responses that asked for them — a single
 			// response can legally pack many calls into one, and this check
 			// runs before every one of them, not just once per round-trip.
-			if toolCalls >= maxIterations {
+			if toolCalls >= st.maxToolCalls {
 				s.stopAtWall(ctx, st, msgs, resp.Message.ToolCalls[i:],
 					fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls), toolCalls, usedTools)
 				return
@@ -368,7 +387,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 
 		// A response that used its entire allotment does not earn another
 		// tool-bearing round-trip just to be told no on its first tool call.
-		if toolCalls >= maxIterations {
+		if toolCalls >= st.maxToolCalls {
 			s.stopAtWall(ctx, st, msgs, nil,
 				fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls), toolCalls, usedTools)
 			return
