@@ -14,6 +14,10 @@
 }
 
 .tiptap-editor .ProseMirror {
+  /* Korean wraps between words (어절), not mid-word; overflow-wrap still
+     breaks a token longer than the line. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
   outline: none;
   caret-color: var(--ink);
   min-height: 4em; /* always click-able even when the doc is empty */

@@ -652,6 +652,13 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   color: var(--ink);
   border-color: var(--line-soft);
 }
+/* Touch has no hover. A control that only appears on :hover makes iOS spend
+   the first tap revealing it, so the card or row needs a second tap to open. */
+@media (hover: none) {
+  .book-action { opacity: 1; }
+  /* A keyboard shortcut hint means nothing without a keyboard. */
+  .lib-search-kbd { display: none; }
+}
 .book-menu {
   top: 44px;
   right: 10px;
@@ -808,6 +815,9 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .tree-scene-row:hover .tree-menu-btn,
 .tree-menu-btn:focus-visible {
   opacity: 1;
+}
+@media (hover: none) {
+  .tree-menu-btn { opacity: 1; }
 }
 .tree-menu-btn:hover { background: var(--surface-3); color: var(--ink); }
 .outline-menu {

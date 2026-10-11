@@ -400,7 +400,7 @@ export function Library() {
             <Upload size={15} /> {importing ? t("library.importing") : t("library.menu.importMarkdown")}
           </button>
           <button className="btn ghost" onClick={() => setSearchOpen(true)} data-tour="library-search">
-            <Search size={15} /> {t("library.menu.search")} <span className="kbd" style={{ marginLeft: 4 }}>⌘F</span>
+            <Search size={15} /> {t("library.menu.search")} <span className="kbd lib-search-kbd" style={{ marginLeft: 4 }}>⌘F</span>
           </button>
         </div>
 
@@ -492,31 +492,44 @@ export function Library() {
         />
       )}
 
-      {safetyOpen && !modalOpen && (
+      {safetyOpen && !modalOpen && (() => {
+        // Mobile builds have no Git sync and keep everything in the app's
+        // sandbox, where a container path tells the writer nothing.
+        const onDeviceOnly = diagnostics?.git_sync_available === false;
+        return (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal safety-modal">
             <h2>{t("library.safety.title")}</h2>
             <ul className="safety-list">
               <li>
                 <span>{t("library.safety.data")}</span>
-                <code>{diagnostics?.home ?? t("library.safety.checking")}</code>
+                {onDeviceOnly
+                  ? <strong>{t("library.safety.onDevice")}</strong>
+                  : <code>{diagnostics?.home ?? t("library.safety.checking")}</code>}
               </li>
               <li>
                 <span>{t("library.safety.backup")}</span>
-                <code>{settingsRow?.backup_dir ?? t("library.safety.checking")}</code>
+                {onDeviceOnly
+                  ? <strong>{t("library.safety.onDeviceBackup")}</strong>
+                  : <code>{settingsRow?.backup_dir ?? t("library.safety.checking")}</code>}
               </li>
-              <li>
-                <span>{t("library.safety.gitSync")}</span>
-                <strong>{settingsRow?.git_sync_dir ? t("library.safety.configured") : t("library.safety.disabled")}</strong>
-              </li>
+              {!onDeviceOnly && (
+                <li>
+                  <span>{t("library.safety.gitSync")}</span>
+                  <strong>{settingsRow?.git_sync_dir ? t("library.safety.configured") : t("library.safety.disabled")}</strong>
+                </li>
+              )}
             </ul>
             <div className="modal-actions">
-              <button type="button" onClick={() => navigate("/settings")}>{t("library.safety.gitSettings")}</button>
+              {!onDeviceOnly && (
+                <button type="button" onClick={() => navigate("/settings")}>{t("library.safety.gitSettings")}</button>
+              )}
               <button type="button" onClick={dismissSafety}>{t("library.safety.dismiss")}</button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {diagnosticsOpen && diagnostics && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">

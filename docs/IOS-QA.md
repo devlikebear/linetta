@@ -15,6 +15,28 @@
 - On 2026-09-29, `make ci` passed, including Go race tests, packaging checks,
   frontend tests/build, and Rust checks/tests. After CI workflow coverage was
   added, all 579 frontend tests passed.
+- On 2026-10-11, 1.5.0 built with Xcode 27 crashed at launch on the iOS 27
+  simulator: the iOS 27 SDK kills apps that have not adopted the UIScene
+  lifecycle. Tauri 2.12 (tao 0.37) plus the scene manifest in
+  `apps/desktop/src-tauri/Info.ios.plist` fixed it. `make smoke-mobile-ios-sim`
+  then passed on iPhone 18 Pro and iPad Pro 11-inch (M5), and both showed the
+  first-work creation dialog. This is startup verification only.
+- Also on 2026-10-11, on the iPhone 18 Pro simulator: created a work, pasted a
+  Korean and English sentence into the first scene, saw it autosaved in
+  `library.db`, terminated the app, relaunched, and read the exact text back.
+  The viewport now uses `viewport-fit=cover` (no bars outside the safe area)
+  and `maximum-scale=1` (focusing an input no longer zooms the page), and
+  hover-only controls stay visible on touch so a work card opens on one tap.
+  Not covered on iPhone: Korean composition from a keyboard, rapid scene
+  switching.
+- Also on 2026-10-11, on the iPad Pro 11-inch (M5) simulator: created a work,
+  typed "비가 온다." jamo by jamo on the on-screen Korean keyboard (including
+  the 온+다 final-consonant carry) and read the same text back from
+  `library.db`; typed one more syllable and pressed Home at once, and it was
+  saved; terminated, relaunched, and the scene showed the exact text. A scene
+  no longer takes focus when opened on touch, so the keyboard stays down until
+  the writer taps in. Not covered: rotation, multitasking windows, rapid scene
+  switching, external keyboard.
 
 ## Required before an iOS release
 

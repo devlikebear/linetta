@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Apps built with the iOS 27 SDK are killed at launch unless they adopt
+	     the UIScene lifecycle. Declaring the manifest makes tao (0.37+) run
+	     through its scene delegate. Linetta stays single-window: two scenes
+	     would edit the same library.db at once. -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+	</dict>
+</dict>
+</plist>
