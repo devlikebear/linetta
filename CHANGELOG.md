@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.6.0 - 2026-10-11
 
 - The built-in agent no longer stops mid-job without a word. When a turn runs
   into its tool-call limit — or the same tool fails three times running — the
