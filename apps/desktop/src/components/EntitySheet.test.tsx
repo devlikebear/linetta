@@ -16,7 +16,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const mocks = vi.hoisted(() => ({
   visuals: {
-    getSheet: vi.fn().mockResolvedValue({ entity_id: "entity-1", age_range: "", build: "", hair: "", outfit: "", signature: "", palette: "", notes: "", updated_at: 0 }),
+    getSheet: vi.fn(),
     setSheet: vi.fn().mockResolvedValue({}), listImages: vi.fn().mockResolvedValue([]),
     addImage: vi.fn(), getImage: vi.fn(), deleteImage: vi.fn(),
     getArtStyle: vi.fn().mockResolvedValue({ project_id: "project-1", style: "", negative_prompt: "", updated_at: 0 }),
@@ -43,6 +43,8 @@ vi.mock("../lib/rpc", () => ({
   },
 }));
 
+const emptySheet = { entity_id: "entity-1", age_range: "", build: "", hair: "", outfit: "", signature: "", palette: "", notes: "", updated_at: 0 };
+
 const baseEntity: Entity = {
   id: "entity-1",
   project_id: "project-1",
@@ -59,6 +61,10 @@ const baseEntity: Entity = {
 describe("EntitySheet", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    events.listeners.clear();
+    // mockReset, not just clearAllMocks: a queued mockResolvedValueOnce that a
+    // test never consumed would otherwise become the next test's initial load.
+    mocks.visuals.getSheet.mockReset().mockResolvedValue(emptySheet);
     mocks.relationships.listByEntity.mockResolvedValue([]);
     mocks.entities.scenes.mockResolvedValue([]);
     mocks.entities.update.mockImplementation(async (input) => ({ ...baseEntity, ...input }));
@@ -75,9 +81,16 @@ describe("EntitySheet", () => {
     mocks.entities.get.mockResolvedValue(baseEntity);
     renderSheet();
     await screen.findByLabelText("머리");
-    mocks.visuals.getSheet.mockResolvedValueOnce({ entity_id: "entity-1", age_range: "", build: "", hair: "silver", outfit: "", signature: "", palette: "", notes: "", updated_at: 2 });
+    // The field renders on commit, but the section subscribes in a passive
+    // effect that can flush later; emitting before then is silently dropped.
+    const emit = await waitFor(() => {
+      const listener = events.listeners.get("mcp-changed");
+      if (!listener) throw new Error("mcp-changed listener not registered yet");
+      return listener;
+    });
+    mocks.visuals.getSheet.mockResolvedValueOnce({ ...emptySheet, hair: "silver", updated_at: 2 });
     const reads = mocks.visuals.listImages.mock.calls.length;
-    act(() => events.listeners.get("mcp-changed")?.({ payload: { tool: "linetta_set_character_visuals" } }));
+    act(() => emit({ payload: { tool: "linetta_set_character_visuals" } }));
     await waitFor(() => expect(screen.getByLabelText("머리")).toHaveValue("silver"));
     expect(mocks.visuals.listImages.mock.calls.length).toBeGreaterThan(reads);
   });
