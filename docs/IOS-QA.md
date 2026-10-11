@@ -15,6 +15,12 @@
 - On 2026-09-29, `make ci` passed, including Go race tests, packaging checks,
   frontend tests/build, and Rust checks/tests. After CI workflow coverage was
   added, all 579 frontend tests passed.
+- On 2026-10-11, 1.5.0 built with Xcode 27 crashed at launch on the iOS 27
+  simulator: the iOS 27 SDK kills apps that have not adopted the UIScene
+  lifecycle. Tauri 2.12 (tao 0.37) plus the scene manifest in
+  `apps/desktop/src-tauri/Info.ios.plist` fixed it. `make smoke-mobile-ios-sim`
+  then passed on iPhone 18 Pro and iPad Pro 11-inch (M5), and both showed the
+  first-work creation dialog. This is startup verification only.
 
 ## Required before an iOS release
 
