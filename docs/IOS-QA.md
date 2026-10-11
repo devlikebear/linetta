@@ -27,8 +27,16 @@
   The viewport now uses `viewport-fit=cover` (no bars outside the safe area)
   and `maximum-scale=1` (focusing an input no longer zooms the page), and
   hover-only controls stay visible on touch so a work card opens on one tap.
-  Not covered: iPad, Korean composition from a keyboard, rapid scene switching,
-  backgrounding during a pending save.
+  Not covered on iPhone: Korean composition from a keyboard, rapid scene
+  switching.
+- Also on 2026-10-11, on the iPad Pro 11-inch (M5) simulator: created a work,
+  typed "비가 온다." jamo by jamo on the on-screen Korean keyboard (including
+  the 온+다 final-consonant carry) and read the same text back from
+  `library.db`; typed one more syllable and pressed Home at once, and it was
+  saved; terminated, relaunched, and the scene showed the exact text. A scene
+  no longer takes focus when opened on touch, so the keyboard stays down until
+  the writer taps in. Not covered: rotation, multitasking windows, rapid scene
+  switching, external keyboard.
 
 ## Required before an iOS release
 

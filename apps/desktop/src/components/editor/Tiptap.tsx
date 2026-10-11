@@ -96,7 +96,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         FocusExtension.configure({ enabled: !!focus }),
       ],
       content: initialDoc,
-      autofocus: "end",
+      // On touch, focusing raises the on-screen keyboard over a scene the
+      // writer has only just opened; let them tap in when they want to type.
+      autofocus: isTouchPrimary() ? false : "end",
       editorProps: {
         // Apply the global design-system prose typography to the editable area
         // so the real Tiptap surface matches the redesign's `.prose` styling.
@@ -295,6 +297,11 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
     </div>
   );
 });
+
+// True when the primary input cannot hover — phones and tablets used by touch.
+function isTouchPrimary(): boolean {
+  return typeof window !== "undefined" && !!window.matchMedia?.("(hover: none)").matches;
+}
 
 function contextMenuPos(editor: Editor, e: React.MouseEvent): number {
   try {

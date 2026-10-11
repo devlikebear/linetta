@@ -656,6 +656,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
    the first tap revealing it, so the card or row needs a second tap to open. */
 @media (hover: none) {
   .book-action { opacity: 1; }
+  /* A keyboard shortcut hint means nothing without a keyboard. */
+  .lib-search-kbd { display: none; }
 }
 .book-menu {
   top: 44px;
