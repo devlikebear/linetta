@@ -341,11 +341,74 @@ func TestRun_stopsAtTheIterationCap(t *testing.T) {
 	}
 	waitFor(t, "the run to end", func() bool { return rec.has("agent.done") || rec.has("agent.error") })
 
-	if c.count() > maxIterations {
-		t.Errorf("model called %d times, want at most %d", c.count(), maxIterations)
+	// The cap's worth of tool-bearing round-trips, plus the one wrap-up.
+	if c.count() > maxIterations+1 {
+		t.Errorf("model called %d times, want at most %d", c.count(), maxIterations+1)
 	}
 	if !rec.has("agent.error") {
 		t.Error("hitting the cap must be reported, not silently swallowed")
+	}
+}
+
+// The wall's notice tells the writer the reply says how far the turn got, so
+// the turn has to be given the chance to write that reply: one more
+// round-trip, with tool calls forbidden, whose text reaches the panel and the
+// transcript before the turn ends.
+func TestRun_theWallLetsTheModelSayWhereItStopped(t *testing.T) {
+	rec := &recorder{}
+	calls := make([]llm.ToolCall, maxIterations+2)
+	for i := range calls {
+		calls[i] = llm.ToolCall{ID: fmt.Sprintf("call-%d", i), Name: "echo", Arguments: `{"text":"hi"}`}
+	}
+	burst := llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", ToolCalls: calls}}
+	c := &scriptedClient{responses: []llm.ChatResponse{burst, textReply("12장까지 요약했습니다")}}
+	svc := newService(t, c, rec)
+
+	runID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "burst"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "agent.error", func() bool { return rec.has("agent.error") })
+
+	if got := rec.toolStarts(); got != maxIterations {
+		t.Errorf("executed %d tool calls, want %d — the wrap-up must not run any", got, maxIterations)
+	}
+	c.mu.Lock()
+	opts, msgs := c.lastOpts, append([]llm.ChatMessage(nil), c.lastMsgs...)
+	c.mu.Unlock()
+	if opts.ToolChoice == nil || opts.ToolChoice.Mode != llm.ToolChoiceModeNone {
+		t.Errorf("the wrap-up was sent with tool choice %v, want none", opts.ToolChoice)
+	}
+	// Every call the burst asked for is answered, run or not: a provider
+	// rejects a history with a tool call left hanging.
+	answered := map[string]bool{}
+	for _, m := range msgs {
+		if m.Role == "tool" {
+			answered[m.ToolCallID] = true
+		}
+	}
+	for _, call := range calls {
+		if !answered[call.ID] {
+			t.Errorf("tool call %s has no result in the wrap-up request", call.ID)
+		}
+	}
+
+	methods := rec.methods()
+	if len(methods) < 2 || methods[len(methods)-1] != "agent.error" || methods[len(methods)-2] != "agent.delta" {
+		t.Errorf("want the wrap-up's delta right before agent.error, got tail %v", methods[max(0, len(methods)-3):])
+	}
+	history, err := svc.History(context.Background(), "p1", 100)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	found := false
+	for _, m := range history {
+		if m.RunID == runID && m.Role == "assistant" && m.Content == "12장까지 요약했습니다" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the wrap-up reply is not in the transcript, so a follow-up turn cannot continue from it")
 	}
 }
 
@@ -538,9 +601,9 @@ func TestRun_iterationCapCountsExecutedToolCallsNotChatRoundTrips(t *testing.T) 
 		t.Errorf("executed %d tool calls for one response of %d, want exactly %d",
 			got, len(calls), maxIterations)
 	}
-	if c.count() != 1 {
-		t.Errorf("model was called %d times, want exactly 1 — the cap must trip within the "+
-			"response that exceeded it, not after another round-trip", c.count())
+	if c.count() != 2 {
+		t.Errorf("model was called %d times, want exactly 2 — the response that exceeded "+
+			"the cap, then the tool-less wrap-up", c.count())
 	}
 	for _, e := range rec.seen {
 		if e.Method != "agent.error" {
