@@ -22,7 +22,18 @@ import (
 // many tool calls at once, and letting each one through uncounted is how a
 // runaway agent rewrites forty scenes instead of hitting the wall the writer
 // is supposed to see in the activity log.
-const maxIterations = 24
+//
+// 48 rather than the original 24: an ordinary batch request — "summarise every
+// scene" — costs a read and a write per scene, so 24 cut a twelve-scene work
+// off partway through a job the writer asked for by name.
+const maxIterations = 48
+
+// wrapUpPrompt is the last thing a turn that ran into a wall is told. It is a
+// user-role message because that is the only role every provider accepts
+// after a tool result; %s is the wall's own description of itself.
+const wrapUpPrompt = "[system notice] This turn was stopped before it finished: %s. " +
+	"You cannot call any more tools in this turn. In the writer's language, say briefly " +
+	"what you finished, what is still left, and that they can ask you to continue."
 
 // maxRepeatedToolErrors ends a turn when the same TOOL — by name alone,
 // regardless of the exact error text — fails this many times in a row. Real
@@ -107,7 +118,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	// waits on the wait group — so a run that entered the group before
 	// registering its cancel would be invisible to that snapshot, never
 	// cancelled at all, and Close would block for the run's entire turn (up
-	// to 24 tool calls and every round-trip between them), not one
+	// to maxIterations tool calls and every round-trip between them), not one
 	// round-trip. Registering first leaves only the harmless ordering: a
 	// Close landing in the gap misses this run's cancel in its snapshot, but
 	// enter below then sees closed and refuses, so no turn ever starts.
@@ -315,7 +326,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 		}
 
 		msgs = append(msgs, resp.Message)
-		for _, call := range resp.Message.ToolCalls {
+		for i, call := range resp.Message.ToolCalls {
 			if ctx.Err() != nil {
 				s.endCancelled(ctx, st)
 				return
@@ -325,11 +336,8 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			// response can legally pack many calls into one, and this check
 			// runs before every one of them, not just once per round-trip.
 			if toolCalls >= maxIterations {
-				s.endAtWall(ctx, st, fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
-				// The wall ends the turn "done" on purpose (see endAtWall):
-				// twenty-four successful tool calls is work, and work is
-				// exactly what the review is for.
-				s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+				s.stopAtWall(ctx, st, msgs, resp.Message.ToolCalls[i:],
+					fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls), toolCalls, usedTools)
 				return
 			}
 
@@ -352,19 +360,78 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 				lastFailedTool, repeats = call.Name, 1
 			}
 			if repeats >= maxRepeatedToolErrors {
-				s.endAtWall(ctx, st, fmt.Sprintf("%s failed %d times in a row", call.Name, repeats))
-				s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+				s.stopAtWall(ctx, st, msgs, resp.Message.ToolCalls[i+1:],
+					fmt.Sprintf("%s failed %d times in a row", call.Name, repeats), toolCalls, usedTools)
 				return
 			}
 		}
 
 		// A response that used its entire allotment does not earn another
-		// round-trip just to be told no on its first tool call.
+		// tool-bearing round-trip just to be told no on its first tool call.
 		if toolCalls >= maxIterations {
-			s.endAtWall(ctx, st, fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls))
-			s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+			s.stopAtWall(ctx, st, msgs, nil,
+				fmt.Sprintf("stopped after %d tool calls in one turn", toolCalls), toolCalls, usedTools)
 			return
 		}
+	}
+}
+
+// stopAtWall ends a turn that ran into one of the loop's own limits, after
+// letting the model say where it stopped. pending is whatever the last
+// response asked for and the wall kept from running.
+func (s *Service) stopAtWall(ctx context.Context, st loopState, msgs []llm.ChatMessage, pending []llm.ToolCall, why string, toolCalls int, usedTools []string) {
+	s.wrapUp(ctx, st, msgs, pending, why)
+	// The writer pressing stop during the wrap-up is still the writer
+	// pressing stop.
+	if ctx.Err() != nil {
+		s.endCancelled(ctx, st)
+		return
+	}
+	s.endAtWall(ctx, st, why)
+	// The wall ends the turn "done" on purpose (see endAtWall): a turn that
+	// got this far did work, and work is exactly what the review is for.
+	s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+}
+
+// wrapUp gives a turn at the wall one last round-trip, with tool calls
+// forbidden, to tell the writer how far it got. Without it the panel shows a
+// column of tool lines and then the wall's notice, which promises a reply
+// that says where the work stopped — and the follow-up turn, which replays
+// replies but not tool rows (priorMessages), has nothing to continue from.
+//
+// Best effort: a wrap-up that fails changes nothing about how the turn ends.
+func (s *Service) wrapUp(ctx context.Context, st loopState, msgs []llm.ChatMessage, pending []llm.ToolCall, why string) {
+	// Every call the last response asked for needs a result before the
+	// provider will take another message, including the ones that never ran.
+	for _, call := range pending {
+		msgs = append(msgs, llm.ChatMessage{
+			Role:       "tool",
+			ToolCallID: call.ID,
+			Content:    "not run: " + why,
+		})
+	}
+	msgs = append(msgs, llm.ChatMessage{Role: "user", Content: fmt.Sprintf(wrapUpPrompt, why)})
+
+	// The schemas stay on the request — providers reject a history holding
+	// tool calls when no tools are declared — and the choice is what forbids
+	// them. A call that comes back anyway is simply not run.
+	resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
+		Tools:      st.schemas,
+		ToolChoice: llm.ToolChoiceNone(),
+		OnDelta: func(text string) {
+			s.notify("agent.delta", deltaPayload{RunID: st.runID, ProjectID: st.projectID, Text: text})
+		},
+	})
+	if err != nil {
+		logf("wrap-up for turn %s: %v", st.runID, err)
+		return
+	}
+	if strings.TrimSpace(resp.Message.Content) == "" {
+		return
+	}
+	if err := s.tr.appendAssistant(context.WithoutCancel(ctx), st.req.ProjectID, st.req.NodeID, st.runID,
+		resp.Message.Content, companion.HistoryStatusDone); err != nil {
+		logf("transcript: %v", err)
 	}
 }
 
@@ -463,7 +530,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 // before the wall actually happened: the scenes are written, the tool rows
 // carry live undo batch ids, and the reply the model already produced is a
 // real partial answer. Stamping those rows "failed" makes a turn that landed
-// twenty-four successful tool calls look identical to one that crashed before
+// dozens of successful tool calls look identical to one that crashed before
 // its first token, and hangs a retry button under work the writer can see in
 // their manuscript.
 func (s *Service) endAtWall(ctx context.Context, st loopState, message string) {
@@ -521,7 +588,7 @@ func classifyProviderError(id string, err error) (reason, message string) {
 
 // endWithReason ends a turn with a reason code the panel renders. status is
 // what every row of the run is stamped with, and it is NOT always "failed":
-// a turn that hit the iteration wall after twenty-four successful tool calls
+// a turn that hit the iteration wall after dozens of successful tool calls
 // produced real work, and marking it failed puts a retry button under a reply
 // that already landed (spec §10 gives the retry button to failed turns).
 // Provider errors and panics keep "failed"; walls end "done".
