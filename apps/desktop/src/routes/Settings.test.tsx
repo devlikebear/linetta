@@ -596,6 +596,38 @@ describe("Settings", () => {
     await waitFor(() => expect(screen.getByTestId("tool-budget-current")).toHaveTextContent("17"));
   });
 
+  it("saves the per-turn tool-call limit on blur and pulls an out-of-range value to the bound", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings });
+    mocks.settingsSet.mockImplementation((patch: Record<string, unknown>) =>
+      Promise.resolve({ ...baseSettings, ...patch }),
+    );
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    const input = (await screen.findByTestId("agent-max-tool-calls")) as HTMLInputElement;
+    // A payload from an engine that predates the key shows the default.
+    expect(input.value).toBe("48");
+
+    await user.clear(input);
+    await user.type(input, "120");
+    // Not per keystroke: "12" is in range too, and is not what was meant.
+    expect(mocks.settingsSet).not.toHaveBeenCalled();
+    await user.tab();
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ agent_max_tool_calls: 120 }),
+    );
+
+    const again = (await screen.findByTestId("agent-max-tool-calls")) as HTMLInputElement;
+    await waitFor(() => expect(again).not.toBeDisabled());
+    await user.clear(again);
+    await user.type(again, "5000{Enter}");
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenLastCalledWith({ agent_max_tool_calls: 200 }),
+    );
+  });
+
   // Both switches are ON unless the writer says otherwise, so the first click
   // sends false — and a payload from an engine that predates the keys must
   // still read as on, or upgrading would silently take the tools away.

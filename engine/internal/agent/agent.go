@@ -82,6 +82,10 @@ type Deps struct {
 	// degrades to the documented default" rule Memory and Skills follow, and
 	// the default here is on.
 	SelfReviewEnabled func() bool
+	// MaxToolCalls reports how many tool calls one turn may execute
+	// (settings.agent_max_tool_calls). Read once at the top of each turn. A
+	// nil func, or an answer below one, means maxIterations.
+	MaxToolCalls func() int
 	// MemoryToolsEnabled and SkillToolsEnabled report the writer's two
 	// tool-budget switches (#99, settings.memory_tools_enabled /
 	// skill_tools_enabled, both default on). Deps.Register already leaves the

@@ -113,6 +113,12 @@ type Config struct {
 	// and the writer can switch it off in Settings → Skills. Off means no
 	// second provider call and no skill written without the writer asking.
 	AgentSelfReviewEnabled bool `json:"agent_self_review_enabled"`
+	// AgentMaxToolCalls is how many tool calls the built-in agent may execute
+	// in one turn before it is stopped and asked to say how far it got. A
+	// batch job — "summarise every scene" — costs a read and a write per
+	// scene, so the right number depends on how long the writer's work is;
+	// the wall itself stays, because it is what stops a runaway turn.
+	AgentMaxToolCalls int `json:"agent_max_tool_calls"`
 	// MemoryToolsEnabled and SkillToolsEnabled are the writer's tool budget
 	// (#99). Every tool's whole JSON schema travels in every request, so the
 	// nineteen tools Linetta serves are a standing cost on every turn — the
@@ -276,6 +282,7 @@ type Patch struct {
 	MCPConsentVersion         *int                     `json:"mcp_consent_version,omitempty"`
 	MCPConsentedAt            *int64                   `json:"mcp_consented_at,omitempty"`
 	AgentSelfReviewEnabled    *bool                    `json:"agent_self_review_enabled,omitempty"`
+	AgentMaxToolCalls         *int                     `json:"agent_max_tool_calls,omitempty"`
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
 	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
@@ -363,6 +370,7 @@ func defaults(home string) Config {
 		// On by default: an agent that never notices what it learned is the
 		// feature not shipping. See Config.AgentSelfReviewEnabled.
 		AgentSelfReviewEnabled: true,
+		AgentMaxToolCalls:      DefaultAgentMaxToolCalls,
 		// On by default: a writer who never opens the tool-budget pane keeps
 		// exactly the tool set 1.2 shipped. See Config.MemoryToolsEnabled.
 		MemoryToolsEnabled: true,
@@ -446,6 +454,11 @@ func (s *Store) load() error {
 	// on at every restart.
 	if _, ok := raw["agent_self_review_enabled"]; ok {
 		s.cfg.AgentSelfReviewEnabled = disk.AgentSelfReviewEnabled
+	}
+	// Out of range — including the zero a file from a build that predates
+	// the key decodes to — keeps the default.
+	if validAgentMaxToolCalls(disk.AgentMaxToolCalls) {
+		s.cfg.AgentMaxToolCalls = disk.AgentMaxToolCalls
 	}
 	// The two tool-budget switches (#99), presence-guarded for the same
 	// reason: both default to true, so a plain assignment would read the
@@ -545,6 +558,28 @@ func (s *Store) AgentSelfReviewEnabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.AgentSelfReviewEnabled
+}
+
+// The built-in agent's per-turn tool-call cap. The floor keeps a turn long
+// enough to do a job at all; the ceiling keeps the cap a cap — every call's
+// result stays in the turn's context, so an unbounded turn ends at the
+// provider's context limit instead, which is a worse wall to hit.
+const (
+	DefaultAgentMaxToolCalls = 48
+	MinAgentMaxToolCalls     = 8
+	MaxAgentMaxToolCalls     = 200
+)
+
+func validAgentMaxToolCalls(n int) bool {
+	return n >= MinAgentMaxToolCalls && n <= MaxAgentMaxToolCalls
+}
+
+// AgentMaxToolCalls reports how many tool calls one turn of the built-in
+// agent may execute. Read per turn, like AgentSelfReviewEnabled.
+func (s *Store) AgentMaxToolCalls() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.AgentMaxToolCalls
 }
 
 // MemoryToolsEnabled reports whether linetta_edit_memory is offered (#99).
@@ -724,6 +759,13 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.AgentSelfReviewEnabled != nil {
 		next.AgentSelfReviewEnabled = *p.AgentSelfReviewEnabled
 	}
+	if p.AgentMaxToolCalls != nil {
+		if !validAgentMaxToolCalls(*p.AgentMaxToolCalls) {
+			return Config{}, fmt.Errorf("settings: agent_max_tool_calls %d out of range (%d-%d)",
+				*p.AgentMaxToolCalls, MinAgentMaxToolCalls, MaxAgentMaxToolCalls)
+		}
+		next.AgentMaxToolCalls = *p.AgentMaxToolCalls
+	}
 	if p.VisualWriteToolsDisabled != nil {
 		next.VisualWriteToolsDisabled = *p.VisualWriteToolsDisabled
 	}
@@ -840,6 +882,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		// never written to disk, so the writer's choice survives until the
 		// next restart and no further.
 		AgentSelfReviewEnabled:   next.AgentSelfReviewEnabled,
+		AgentMaxToolCalls:        next.AgentMaxToolCalls,
 		VisualWriteToolsDisabled: next.VisualWriteToolsDisabled,
 		MemoryToolsEnabled:       next.MemoryToolsEnabled,
 		SkillToolsEnabled:        next.SkillToolsEnabled,

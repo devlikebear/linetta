@@ -45,6 +45,10 @@ const JOB_BACKUP = "backup.daily";
 const JOB_GIT_SYNC = "git_sync";
 const JOB_FOLDER_SYNC = "folder_sync";
 const JOB_SUMMARIZER = "summarizer";
+// Mirrors engine/internal/settings: settings.set refuses anything outside.
+const DEFAULT_AGENT_MAX_TOOL_CALLS = 48;
+const MIN_AGENT_MAX_TOOL_CALLS = 8;
+const MAX_AGENT_MAX_TOOL_CALLS = 200;
 
 /** Sidebar categories (#82, 시안 A). One category renders at a time; the
  *  sidebar is the only scroll-free path to every setting. */
@@ -120,6 +124,7 @@ export function Settings() {
   const [folderDirDraft, setFolderDirDraft] = useState("");
   const [gitTmplDraft, setGitTmplDraft] = useState("");
   const [editorFontSizeDraft, setEditorFontSizeDraft] = useState("20");
+  const [maxToolCallsDraft, setMaxToolCallsDraft] = useState(String(DEFAULT_AGENT_MAX_TOOL_CALLS));
   const [editorLineHeightDraft, setEditorLineHeightDraft] = useState("1.92");
 
   useEffect(() => {
@@ -133,6 +138,7 @@ export function Settings() {
         setFolderDirDraft(s.folder_sync_dir);
         setGitTmplDraft(s.git_sync_commit_template);
         setEditorFontSizeDraft(String(s.editor_font_size ?? 20));
+        setMaxToolCallsDraft(String(s.agent_max_tool_calls ?? DEFAULT_AGENT_MAX_TOOL_CALLS));
         setEditorLineHeightDraft(String(s.editor_line_height ?? 1.92));
         setOpsRows(rows);
         setGitSyncAvailable(diag.git_sync_available ?? true);
@@ -195,6 +201,7 @@ export function Settings() {
       setCurrent(next);
       setLanguage(next.language);
       setEditorFontSizeDraft(String(next.editor_font_size ?? 20));
+      setMaxToolCallsDraft(String(next.agent_max_tool_calls ?? DEFAULT_AGENT_MAX_TOOL_CALLS));
       setEditorLineHeightDraft(String(next.editor_line_height ?? 1.92));
       dispatchAppEvent("linetta:settings-updated", next);
       setSavedAt(Date.now());
@@ -203,6 +210,21 @@ export function Settings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // An out-of-range or unparsable draft is pulled to the nearest bound
+  // rather than refused: the field has no error state of its own.
+  const commitMaxToolCalls = () => {
+    if (!current) return;
+    const saved = current.agent_max_tool_calls ?? DEFAULT_AGENT_MAX_TOOL_CALLS;
+    const parsed = Math.round(Number(maxToolCallsDraft));
+    if (maxToolCallsDraft.trim() === "" || !Number.isFinite(parsed)) {
+      setMaxToolCallsDraft(String(saved));
+      return;
+    }
+    const value = Math.min(MAX_AGENT_MAX_TOOL_CALLS, Math.max(MIN_AGENT_MAX_TOOL_CALLS, parsed));
+    setMaxToolCallsDraft(String(value));
+    if (value !== saved) void apply({ agent_max_tool_calls: value });
   };
 
 
@@ -628,6 +650,36 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.skill_tools_enabled !== false ? " on" : ""}`} />
               </button>
+              {/* The built-in agent's cap only: an external MCP client runs
+                  its own loop and never reads it. Saved on blur or Enter, not
+                  per keystroke — "120" passes through "12" on the way. */}
+              {agentAvailable && (
+                <div className="modal-field">
+                  <label htmlFor="agent-max-tool-calls">{t("settings.tools.maxCalls.title")}</label>
+                  <input
+                    id="agent-max-tool-calls"
+                    data-testid="agent-max-tool-calls"
+                    type="number"
+                    min={MIN_AGENT_MAX_TOOL_CALLS}
+                    max={MAX_AGENT_MAX_TOOL_CALLS}
+                    step={1}
+                    value={maxToolCallsDraft}
+                    onChange={(e) => setMaxToolCallsDraft(e.currentTarget.value)}
+                    onBlur={commitMaxToolCalls}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    disabled={saving}
+                  />
+                  <p className="sd">
+                    {t("settings.tools.maxCalls.description", {
+                      min: String(MIN_AGENT_MAX_TOOL_CALLS),
+                      max: String(MAX_AGENT_MAX_TOOL_CALLS),
+                      default: String(DEFAULT_AGENT_MAX_TOOL_CALLS),
+                    })}
+                  </p>
+                </div>
+              )}
             </section>
             )}
 

@@ -756,6 +756,9 @@ const messages = {
       "툴 설명은 요청마다 통째로 들어갑니다. 쓰지 않는 툴 묶음을 끄면 매 턴 그만큼을 아낍니다. 툴을 끄면 그 툴을 쓰라고 시키는 안내문도 함께 빠집니다.",
     "settings.tools.current": "지금 에이전트가 받는 툴: {tools}개 · 요청마다 약 {size}",
     "settings.tools.groupCost": "툴 {tools}개 · 약 {size}",
+    "settings.tools.maxCalls.title": "한 턴 도구 호출 한도",
+    "settings.tools.maxCalls.description":
+      "내장 에이전트가 한 번의 대화에서 도구를 이 횟수만큼 쓰면 멈추고 어디까지 했는지 알려 줍니다. 씬이 많은 작품을 한 번에 맡기려면 올리세요. 높일수록 한 턴의 비용도 커집니다. ({min}~{max}, 기본 {default})",
     "settings.tools.visuals.title": "비주얼 편집",
     "settings.tools.visuals.description": "에이전트가 인물 디자인, 화풍, 참조 이미지를 변경할 수 있습니다.",
     "settings.tools.memory.title": "기억 툴",
@@ -1808,6 +1811,9 @@ const messages = {
       "Every tool's full description travels in every request. Switching off a group you do not use gives that back on every turn. Turning a group off also removes the instructions that tell the agent to use it.",
     "settings.tools.current": "The agent currently gets {tools} tools — about {size} in every request",
     "settings.tools.groupCost": "{tools} tools · about {size}",
+    "settings.tools.maxCalls.title": "Tool calls per turn",
+    "settings.tools.maxCalls.description":
+      "The built-in agent stops after this many tool calls in one turn and says how far it got. Raise it to hand over a long work in one go; a higher limit also means a turn can cost more. ({min}–{max}, default {default})",
     "settings.tools.visuals.title": "Visual editing",
     "settings.tools.visuals.description": "Let the agent update character designs, art style and reference images.",
     "settings.tools.memory.title": "Memory tools",
@@ -2823,6 +2829,9 @@ const messages = {
       "ツールの説明はリクエストごとに丸ごと送られます。使わないツール群を切れば、毎ターンその分が戻ります。切ったツールを使うよう促す案内文も一緒に外れます。",
     "settings.tools.current": "いまエージェントが受け取るツール: {tools}個 · リクエストごとに約 {size}",
     "settings.tools.groupCost": "ツール {tools}個 · 約 {size}",
+    "settings.tools.maxCalls.title": "1ターンのツール呼び出し上限",
+    "settings.tools.maxCalls.description":
+      "内蔵エージェントは1回のやり取りでこの回数だけツールを使うと停止し、どこまで進んだかを伝えます。シーンの多い作品を一度に任せるなら上げてください。上げるほど1ターンの費用も大きくなります。({min}〜{max}、既定 {default})",
     "settings.tools.visuals.title": "ビジュアル編集",
     "settings.tools.visuals.description": "エージェントがキャラクターデザイン、画風、参照画像を変更できます。",
     "settings.tools.memory.title": "記憶ツール",

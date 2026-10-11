@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- The built-in agent no longer stops mid-job without a word. When a turn runs
+  into its tool-call limit — or the same tool fails three times running — the
+  agent now gets one last reply, with tools forbidden, to say what it finished
+  and what is left, so the notice that points you at "the reply" has a reply
+  to point at and sending "continue" picks the work up from there. The limit
+  itself went from 24 tool calls a turn to 48: summarising every scene costs a
+  read and a write per scene, and 24 cut a twelve-scene work off partway
+  ([#173](https://github.com/devlikebear/linetta/pull/173)).
+- You can set that limit yourself: **Settings → Tool budget → Tool calls per
+  turn** (`agent_max_tool_calls` in `settings.json`), from 8 to 200, default
+  48. Raise it to hand a long work over in one go; a higher limit also lets a
+  single turn cost more. It applies to the built-in agent only — an external
+  MCP client runs its own loop.
+- Fixed the iOS app being killed at launch when built with Xcode 27: it now
+  adopts the UIScene lifecycle (Tauri 2.12). Also on iOS, the white bands in
+  the status-bar and home-indicator areas are gone, focusing a small input no
+  longer leaves the page zoomed in, and a work card opens on the first tap
+  ([#172](https://github.com/devlikebear/linetta/pull/172)).
+- Built with Go 1.26.9, which fixes nine standard-library vulnerabilities in
+  `net/http`, `net/textproto` and `crypto/tls`
+  ([#174](https://github.com/devlikebear/linetta/pull/174)).
+
 ## v1.5.0 - 2026-10-06
 
 - Linetta can update itself. **Check for Updates…** is in the tray menu and,

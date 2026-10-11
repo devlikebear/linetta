@@ -644,6 +644,10 @@ export interface Settings {
    *  because a settings payload from an older engine simply omits it; every
    *  reader must treat "missing" as the default, which is ON. */
   agent_self_review_enabled?: boolean;
+  /** How many tool calls one turn of the built-in agent may execute before
+   *  it is stopped and asked to say how far it got. Missing (an older
+   *  engine) means the default, 48. */
+  agent_max_tool_calls?: number;
   /** The writer's tool budget (#99): whether the memory tool and the two
    *  skills tools are offered to any agent at all. Both optional and both
    *  default ON, so — like agent_self_review_enabled above — every reader
@@ -700,6 +704,7 @@ export interface SettingsPatch {
   mcp_consent_version?: number;
   mcp_consented_at?: number;
   agent_self_review_enabled?: boolean;
+  agent_max_tool_calls?: number;
   visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;

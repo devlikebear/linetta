@@ -217,6 +217,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		// Read per turn, like Language: switching the self-review off in
 		// Settings has to take effect on the writer's very next message.
 		SelfReviewEnabled: deps.settings.AgentSelfReviewEnabled,
+		MaxToolCalls:      deps.settings.AgentMaxToolCalls,
 		// The tool budget (#99), and the ONLY place it is read on the agent's
 		// path. Run calls these once per turn and passes the one answer to
 		// both halves: to the prompt, and to Register above as its groups
