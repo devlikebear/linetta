@@ -183,3 +183,116 @@ func TestRun_cancelLeavesTheRunCancelled(t *testing.T) {
 	waitFor(t, "the run to end", func() bool { return rec.hasTerminalFor(runID) })
 	assertAllStatus(t, statusesOf(t, svc, "p1", runID), companion.HistoryStatusCancelled)
 }
+
+// A turn whose last response carries nothing — or was cut off at the
+// provider's output ceiling — did not finish. It used to end as agent.done,
+// which the panel draws as nothing at all: tool lines, then a live send
+// button, and a writer asking whether it is still working.
+func TestRun_aTurnThatStopsWithoutFinishingSaysSo(t *testing.T) {
+	cases := []struct {
+		name string
+		last llm.ChatResponse
+		want string
+	}{
+		{
+			"an empty last response",
+			llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant"}, StopReason: "end_turn"},
+			rpc.ReasonAgentEmptyReply,
+		},
+		{
+			"a response cut off at the output ceiling",
+			llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant"}, StopReason: "max_tokens"},
+			rpc.ReasonAgentOutputTruncated,
+		},
+		{
+			"a reply cut off mid-sentence",
+			llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "The scene opens with"}, StopReason: "length"},
+			rpc.ReasonAgentOutputTruncated,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recorder{}
+			svc := newService(t, &scriptedClient{responses: []llm.ChatResponse{tc.last}}, rec)
+
+			runID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "rewrite every scene"})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			waitFor(t, "the run to end", func() bool { return rec.hasTerminalFor(runID) })
+
+			p := rec.errorFor(runID)
+			if p == nil {
+				t.Fatalf("the turn ended without an agent.error; the panel would show nothing")
+			}
+			if p.Reason != tc.want {
+				t.Fatalf("reason = %q, want %q", p.Reason, tc.want)
+			}
+			// The rows stay "done", the same as a turn that hit the tool wall:
+			// whatever it did before stopping really happened.
+			rows, err := svc.History(context.Background(), "p1", 0)
+			if err != nil {
+				t.Fatalf("History: %v", err)
+			}
+			for _, row := range rows {
+				if row.Status != companion.HistoryStatusDone {
+					t.Fatalf("row %s/%s has status %q, want done", row.Role, row.ID, row.Status)
+				}
+			}
+		})
+	}
+}
+
+// midReplyClient streams a little text and then holds its Chat call open
+// until released — a turn frozen mid-reply, which is what a panel mounting
+// in the middle of one finds.
+type midReplyClient struct {
+	streamed chan struct{}
+	release  chan struct{}
+}
+
+func (c *midReplyClient) Ask(context.Context, string) (string, error) { return "", nil }
+
+func (c *midReplyClient) Chat(ctx context.Context, _ []llm.ChatMessage, opts llm.ChatOptions) (llm.ChatResponse, error) {
+	opts.OnDelta("Reading the ")
+	opts.OnDelta("outline")
+	close(c.streamed)
+	select {
+	case <-c.release:
+	case <-ctx.Done():
+		return llm.ChatResponse{}, ctx.Err()
+	}
+	return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "Reading the outline. Done."}}, nil
+}
+
+// agent.status is how a panel that was not there for the start of a turn
+// finds out one is running, and gets the reply streamed so far.
+func TestStatus_reportsARunningTurnAndItsStreamedText(t *testing.T) {
+	rec := &recorder{}
+	client := &midReplyClient{streamed: make(chan struct{}), release: make(chan struct{})}
+	svc := newService(t, client, rec)
+
+	if st := svc.Status("p1"); st.Running {
+		t.Fatalf("status before a run = %+v", st)
+	}
+	runID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "hi"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	<-client.streamed
+
+	st := svc.Status(" p1 ")
+	if !st.Running || st.RunID != runID {
+		t.Fatalf("status mid-turn = %+v, want run %s running", st, runID)
+	}
+	if st.Text != "Reading the outline" {
+		t.Fatalf("streamed text = %q", st.Text)
+	}
+	if st.Seq != 2 {
+		t.Fatalf("seq = %d, want 2 (one per delta)", st.Seq)
+	}
+
+	close(client.release)
+	waitFor(t, "the run to end", func() bool { return rec.hasTerminalFor(runID) })
+	waitFor(t, "the work to be released", func() bool { return !svc.Status("p1").Running })
+}

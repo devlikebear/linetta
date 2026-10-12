@@ -269,6 +269,10 @@ func (c *agentController) History(ctx context.Context, projectID string, limit i
 	return json.Marshal(out)
 }
 
+func (c *agentController) Status(_ context.Context, projectID string) (json.RawMessage, error) {
+	return json.Marshal(c.svc.Status(projectID))
+}
+
 // agentHistoryRow is the panel's shape. companion.HistoryMessage has no JSON
 // tags — it is an internal row — so it is projected rather than marshalled.
 type agentHistoryRow struct {

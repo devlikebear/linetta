@@ -77,6 +77,13 @@ const (
 	// value stays in the English Message for logs.
 	ReasonAgentInternalError = "agent_internal_error"
 
+	// A turn that ended without the model finishing. Truncated: the provider
+	// cut the response off at its output ceiling. Empty: the last response
+	// carried neither text nor a tool call. Both used to end as agent.done,
+	// which the panel drew as nothing at all.
+	ReasonAgentOutputTruncated = "agent_output_truncated"
+	ReasonAgentEmptyReply      = "agent_empty_reply"
+
 	// agent.undo asking to revert a batch that has fallen out of the
 	// in-memory undo window (#93 fix round 1). This is not "not found" in the
 	// writer-did-something-wrong sense — storyops keeps only the last few

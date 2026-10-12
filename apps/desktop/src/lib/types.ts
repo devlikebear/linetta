@@ -560,6 +560,19 @@ export interface AgentRunResult {
   run_id: string;
 }
 
+/** agent.status — the turn running for a work, if any. What a panel that
+ *  mounts mid-turn rejoins it from: `seq` is the last agent.* event the turn
+ *  had emitted, `text` the reply streamed so far that is not yet a transcript
+ *  row, `tool` the tool it is inside. Mirrors agent.RunStatus (runs.go). */
+export interface AgentRunStatus {
+  running: boolean;
+  run_id?: string;
+  started_at?: number;
+  seq: number;
+  text?: string;
+  tool?: string;
+}
+
 /** agent.history — one row of the built-in agent's transcript (#93). Shape
  *  is the panel's projection of companion.HistoryMessage, not the engine's
  *  internal row (see agentHistoryRow in engine/internal/engineapp). */

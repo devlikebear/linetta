@@ -5,7 +5,9 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
+	"time"
 )
 
 // ErrBusy means the work already has a turn in flight. One run per work is
@@ -18,12 +20,48 @@ type runRegistry struct {
 	mu        sync.Mutex
 	byProject map[string]string             // projectID -> runID
 	cancels   map[string]context.CancelFunc // runID -> cancel
+	live      map[string]*liveRun           // runID -> what the turn is doing now
+}
+
+// liveRun is the part of a turn that exists nowhere else while it runs: when
+// it started, how many notifications it has emitted, the reply text that has
+// streamed but is not yet a transcript row, and the tool it is inside.
+//
+// It is what agent.status answers from. The panel is unmounted whenever the
+// writer leaves the workspace, and a panel that mounts mid-turn has only the
+// transcript to go on — which cannot say whether a turn is still running, and
+// holds none of the reply currently streaming.
+type liveRun struct {
+	startedAt int64
+	seq       int64
+	text      strings.Builder
+	tool      string
+}
+
+// RunStatus is one work's turn as agent.status reports it. Running false means
+// no turn holds the work, and every other field is zero.
+type RunStatus struct {
+	Running   bool   `json:"running"`
+	RunID     string `json:"run_id,omitempty"`
+	StartedAt int64  `json:"started_at,omitempty"`
+	// Seq is the number of the last notification the turn emitted. Every
+	// agent.* payload carries its own, so a panel that reads this status and
+	// then the transcript can tell which of the events it is holding are
+	// already reflected in what it read.
+	Seq int64 `json:"seq"`
+	// Text is the reply streamed so far that has not been written to the
+	// transcript yet — the half-finished message a panel mounting mid-turn
+	// would otherwise never see.
+	Text string `json:"text,omitempty"`
+	// Tool is the tool the turn is inside right now, if any.
+	Tool string `json:"tool,omitempty"`
 }
 
 func newRunRegistry() *runRegistry {
 	return &runRegistry{
 		byProject: map[string]string{},
 		cancels:   map[string]context.CancelFunc{},
+		live:      map[string]*liveRun{},
 	}
 }
 
@@ -36,7 +74,72 @@ func (r *runRegistry) start(projectID, runID string, cancel context.CancelFunc) 
 	}
 	r.byProject[projectID] = runID
 	r.cancels[runID] = cancel
+	r.live[runID] = &liveRun{startedAt: time.Now().UnixMilli()}
 	return nil
+}
+
+// status reports the turn holding projectID, if one does.
+func (r *runRegistry) status(projectID string) RunStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	runID, ok := r.byProject[projectID]
+	if !ok {
+		return RunStatus{}
+	}
+	st := RunStatus{Running: true, RunID: runID}
+	if run := r.live[runID]; run != nil {
+		st.StartedAt, st.Seq, st.Text, st.Tool = run.startedAt, run.seq, run.text.String(), run.tool
+	}
+	return st
+}
+
+// next numbers one notification of runID. A run the registry no longer holds
+// answers 0, which is never greater than a status the panel read — its events
+// are not ones a reattaching panel could be waiting on.
+func (r *runRegistry) next(runID string) int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.bump(runID)
+}
+
+func (r *runRegistry) bump(runID string) int64 {
+	run := r.live[runID]
+	if run == nil {
+		return 0
+	}
+	run.seq++
+	return run.seq
+}
+
+// streamed records reply text as it leaves the model and numbers its event.
+func (r *runRegistry) streamed(runID, text string) int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if run := r.live[runID]; run != nil {
+		run.text.WriteString(text)
+	}
+	return r.bump(runID)
+}
+
+// committed forgets the streamed text: the message it belonged to is over,
+// and what there was of it is the transcript's to report from here.
+func (r *runRegistry) committed(runID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if run := r.live[runID]; run != nil {
+		run.text.Reset()
+	}
+}
+
+// inTool marks the tool the turn is inside ("" on the way out) and numbers
+// the event announcing it.
+func (r *runRegistry) inTool(runID, name string) int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if run := r.live[runID]; run != nil {
+		run.tool = name
+	}
+	return r.bump(runID)
 }
 
 // cancel stops the named run and reports whether it was still running. A
@@ -63,6 +166,7 @@ func (r *runRegistry) finish(projectID, runID string) {
 		delete(r.byProject, projectID)
 	}
 	delete(r.cancels, runID)
+	delete(r.live, runID)
 }
 
 // cancelAll stops every run currently in flight. Used when the service is

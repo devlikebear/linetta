@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -270,6 +271,11 @@ func (s *Service) language() string {
 // History returns the panel's conversation for a work.
 func (s *Service) History(ctx context.Context, projectID string, limit int) ([]companion.HistoryMessage, error) {
 	return s.tr.load(ctx, projectID, limit)
+}
+
+// Status reports whether a turn is running for the work, and what it is doing.
+func (s *Service) Status(projectID string) RunStatus {
+	return s.runs.status(strings.TrimSpace(projectID))
 }
 
 // Clear drops the conversation. The activity log survives on purpose.

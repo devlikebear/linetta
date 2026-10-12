@@ -250,15 +250,21 @@ func releaseSession(ts *toolSession) {
 // remembers starting, which is exactly the inference three review rounds of
 // #95 kept finding a new gap in. The emitter knows the answer; it says it.
 
+// Seq numbers the turn's notifications from 1, in the order they were emitted.
+// agent.status reports the last one, so a panel that mounts mid-turn can drop
+// the events its status-and-transcript read already accounts for.
+
 type deltaPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	Seq       int64  `json:"seq"`
 	Text      string `json:"text"`
 }
 
 type toolPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	Seq       int64  `json:"seq"`
 	Name      string `json:"name"`
 	State     string `json:"state"` // started | done | error
 	Summary   string `json:"summary,omitempty"`
@@ -278,6 +284,7 @@ type usagePayload struct {
 type donePayload struct {
 	RunID     string       `json:"run_id"`
 	ProjectID string       `json:"project_id"`
+	Seq       int64        `json:"seq"`
 	Model     string       `json:"model,omitempty"`
 	Usage     usagePayload `json:"usage"`
 }
@@ -285,6 +292,7 @@ type donePayload struct {
 type errorPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	Seq       int64  `json:"seq"`
 	Reason    string `json:"reason"`
 	Message   string `json:"message"`
 }
@@ -292,6 +300,7 @@ type errorPayload struct {
 type cancelledPayload struct {
 	RunID     string `json:"run_id"`
 	ProjectID string `json:"project_id"`
+	Seq       int64  `json:"seq"`
 }
 
 // loop is the turn. It ends when the model stops asking for tools, when it
@@ -312,10 +321,8 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 
 	for {
 		resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
-			Tools: st.schemas,
-			OnDelta: func(text string) {
-				s.notify("agent.delta", deltaPayload{RunID: st.runID, ProjectID: st.projectID, Text: text})
-			},
+			Tools:   st.schemas,
+			OnDelta: func(text string) { s.streamDelta(st, text) },
 		})
 		if err != nil {
 			s.endWithError(ctx, st, err)
@@ -333,9 +340,21 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 				logf("transcript: %v", err)
 			}
 		}
+		// The message is over either way: what streamed is now a transcript
+		// row, or was nothing worth one.
+		s.runs.committed(st.runID)
 
 		if len(resp.Message.ToolCalls) == 0 {
-			s.notify("agent.done", donePayload{RunID: st.runID, ProjectID: st.projectID, Model: st.model, Usage: usage})
+			// A turn that ends here with nothing to show for its last
+			// round-trip did not finish — it stopped. Reporting it as done
+			// leaves the panel with a column of tool lines and a live send
+			// button, which reads as the agent having silently given up.
+			if reason, message, stopped := silentStop(resp); stopped {
+				s.endWithReason(ctx, st, reason, message, companion.HistoryStatusDone)
+				s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+				return
+			}
+			s.notify("agent.done", donePayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Model: st.model, Usage: usage})
 			// After the reply has gone, and only for a turn that did real
 			// work: ask what was learned. It runs on its own goroutine with
 			// its own context, so this returns immediately and the writer's
@@ -395,6 +414,33 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 	}
 }
 
+// streamDelta forwards reply text to the panel as it arrives, keeping a copy
+// for a panel that is not there to receive it (see liveRun).
+func (s *Service) streamDelta(st loopState, text string) {
+	seq := s.runs.streamed(st.runID, text)
+	s.notify("agent.delta", deltaPayload{RunID: st.runID, ProjectID: st.projectID, Seq: seq, Text: text})
+}
+
+// silentStop reports whether a response that asked for no tools ended the
+// turn without the model actually finishing, and with which reason.
+//
+// Two shapes do. The provider cut the response off at its output ceiling —
+// most often partway through a tool call carrying a whole scene, which leaves
+// no text and no usable call. Or the response is simply empty: no text, no
+// tool calls, which is what a ceiling spent entirely on reasoning looks like
+// from here. A reply that was cut off after some text is still reported, since
+// the writer is looking at a sentence that stops mid-way.
+func silentStop(resp llm.ChatResponse) (reason, message string, stopped bool) {
+	switch strings.ToLower(strings.TrimSpace(resp.StopReason)) {
+	case "max_tokens", "length", "max_output_tokens":
+		return rpc.ReasonAgentOutputTruncated, "the response hit the provider's output limit", true
+	}
+	if strings.TrimSpace(resp.Message.Content) == "" {
+		return rpc.ReasonAgentEmptyReply, "the model ended the turn without a reply (stop reason: " + resp.StopReason + ")", true
+	}
+	return "", "", false
+}
+
 // stopAtWall ends a turn that ran into one of the loop's own limits, after
 // letting the model say where it stopped. pending is whatever the last
 // response asked for and the wall kept from running.
@@ -437,10 +483,11 @@ func (s *Service) wrapUp(ctx context.Context, st loopState, msgs []llm.ChatMessa
 	resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
 		Tools:      st.schemas,
 		ToolChoice: llm.ToolChoiceNone(),
-		OnDelta: func(text string) {
-			s.notify("agent.delta", deltaPayload{RunID: st.runID, ProjectID: st.projectID, Text: text})
-		},
+		OnDelta:    func(text string) { s.streamDelta(st, text) },
 	})
+	// Whatever streamed is either about to become a transcript row or was cut
+	// off with the call; it is no longer the reply in progress.
+	defer s.runs.committed(st.runID)
 	if err != nil {
 		logf("wrap-up for turn %s: %v", st.runID, err)
 		return
@@ -511,7 +558,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 // off the request's _meta.
 func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) toolResult {
 	s.notify("agent.tool", toolPayload{
-		RunID: st.runID, ProjectID: st.projectID, Name: call.Name, State: "started",
+		RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.inTool(st.runID, call.Name), Name: call.Name, State: "started",
 		Summary: summarize(call.Arguments),
 	})
 
@@ -522,7 +569,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 		state = "error"
 	}
 	s.notify("agent.tool", toolPayload{
-		RunID: st.runID, ProjectID: st.projectID, Name: call.Name, State: state,
+		RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.inTool(st.runID, ""), Name: call.Name, State: state,
 		Summary: summarize(result.Text), BatchID: result.BatchID, SnapshotID: result.SnapshotID,
 		NodeIDs: result.NodeIDs,
 	})
@@ -560,7 +607,7 @@ func (s *Service) endCancelled(ctx context.Context, st loopState) {
 	if err := s.tr.markRun(ctx, st.runID, companion.HistoryStatusCancelled); err != nil {
 		logf("transcript: %v", err)
 	}
-	s.notify("agent.cancelled", cancelledPayload{RunID: st.runID, ProjectID: st.projectID})
+	s.notify("agent.cancelled", cancelledPayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID)})
 }
 
 // endWithError maps a provider failure to a reason code. The provider's own
@@ -615,7 +662,7 @@ func (s *Service) endWithReason(ctx context.Context, st loopState, reason, messa
 	if err := s.tr.markRun(ctx, st.runID, status); err != nil {
 		logf("transcript: %v", err)
 	}
-	s.notify("agent.error", errorPayload{RunID: st.runID, ProjectID: st.projectID, Reason: reason, Message: message})
+	s.notify("agent.error", errorPayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Reason: reason, Message: message})
 }
 
 func summarize(s string) string {
