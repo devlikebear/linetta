@@ -2,8 +2,11 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -285,5 +288,60 @@ func TestResolved_stringRedactsTheAPIKey(t *testing.T) {
 	}
 	if got := fmt.Sprintf("%v", Resolved{ID: "openai"}); strings.Contains(got, "APIKey:set") {
 		t.Errorf("an unset key reported as set: %s", got)
+	}
+}
+
+// The agent writes whole scenes into tool calls, and tars' default output
+// limit (16000) cuts a multi-scene response off partway. Options raises it —
+// but only for families known to accept the higher limit, because Anthropic
+// rejects a limit above the model's own.
+func TestOptions_raisesAnthropicOutputLimitForKnownFamilies(t *testing.T) {
+	cases := []struct {
+		provider, model string
+		want            int
+	}{
+		{"anthropic", "claude-opus-5-5", 64000},
+		{"anthropic", " Claude-Sonnet-5-5 ", 64000},
+		{"anthropic", "claude-haiku-4-5-20251001", 64000},
+		{"anthropic", "claude-opus-4-6", 64000},
+		// Not a family this build knows: tars keeps its own default.
+		{"anthropic", "claude-3-5-haiku-latest", 0},
+		{"anthropic", "minimax-m2", 0},
+		{"anthropic", "", 0},
+		// The limit is Anthropic's; the other providers name their own.
+		{"openai", "claude-opus-5-5", 0},
+		{"gemini-native", "gemini-2.5-pro", 0},
+		{"openai-codex", "gpt-5.3-codex", 0},
+	}
+	for _, tc := range cases {
+		got := Options(Resolved{ID: tc.provider, Model: tc.model, APIKey: "k"}).MaxTokens
+		if got != tc.want {
+			t.Errorf("Options(%s, %q).MaxTokens = %d, want %d", tc.provider, tc.model, got, tc.want)
+		}
+	}
+}
+
+// The limit has to survive tars' own resolution and reach the wire — an
+// Options field the client then ignored would change nothing.
+func TestOptions_anthropicOutputLimitReachesTheRequest(t *testing.T) {
+	var body struct {
+		MaxTokens int `json:"max_tokens"`
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer srv.Close()
+
+	client, err := llm.NewProvider(Options(Resolved{ID: "anthropic", Model: "claude-opus-5-5", APIKey: "k", BaseURL: srv.URL}))
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	if _, err := client.Chat(context.Background(), []llm.ChatMessage{{Role: "user", Content: "hi"}}, llm.ChatOptions{}); err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if body.MaxTokens != 64000 {
+		t.Fatalf("max_tokens on the wire = %d, want 64000", body.MaxTokens)
 	}
 }

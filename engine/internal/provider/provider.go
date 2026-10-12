@@ -81,7 +81,58 @@ func Options(r Resolved) llm.ProviderOptions {
 	} else {
 		opts.APIKey = strings.TrimSpace(r.APIKey)
 	}
+	if r.ID == settings.ProviderAnthropic {
+		opts.MaxTokens = anthropicMaxTokens(opts.Model)
+	}
 	return opts
+}
+
+// anthropicOutputCeiling is the output limit Linetta asks Anthropic for, in
+// place of the 16000 tars gives a client that names none.
+//
+// tars keeps its default low for callers that do not stream. The agent does,
+// and its unit of work is a scene: a response that rewrites three of them in
+// one go, with the model's thinking billed against the same limit, runs past
+// 16000 and is cut off mid tool call — which ends the turn with nothing
+// written. 64000 is the lowest ceiling any family below documents, so one
+// number is valid for all of them.
+const anthropicOutputCeiling = 64000
+
+// anthropicLargeOutputFamilies are the model families known to accept
+// anthropicOutputCeiling, matched by prefix so a dated or point release
+// ("claude-opus-5-5", "claude-haiku-4-5-20251001") counts.
+//
+// An explicit limit reaches the provider as written, and Anthropic rejects one
+// above the model's own — so a model this list does not name gets no explicit
+// limit at all and keeps tars' conservative default, rather than a request
+// that fails outright. That includes anything reached through a gateway under
+// a name of its own.
+//
+// This is the one place Linetta knows model names. It mirrors the families in
+// tars' internal/llmdefaults, which pkg/llm does not export; a family missing
+// here costs only the old, lower limit.
+var anthropicLargeOutputFamilies = []string{
+	"claude-fable-5",
+	"claude-mythos-5",
+	"claude-opus-5",
+	"claude-opus-4-8",
+	"claude-opus-4-7",
+	"claude-opus-4-6",
+	"claude-sonnet-5",
+	"claude-sonnet-4-6",
+	"claude-haiku-4-5",
+}
+
+// anthropicMaxTokens is the explicit output limit for model, or 0 to leave the
+// choice to tars.
+func anthropicMaxTokens(model string) int {
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	for _, family := range anthropicLargeOutputFamilies {
+		if strings.HasPrefix(normalized, family) {
+			return anthropicOutputCeiling
+		}
+	}
+	return 0
 }
 
 // ClientFactory builds an llm.Client. Production is llm.NewProvider; tests
