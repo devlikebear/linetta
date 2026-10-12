@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
   AgentRunResult,
+  AgentRunStatus,
   ApplyContextResult,
   ApplyContextSelection,
   Beat,
@@ -430,6 +431,7 @@ export const agent = {
   cancel: (runId: string) => rpcCall<{ ok: true }>("agent.cancel", { run_id: runId }),
   history: (projectId: string, limit?: number) =>
     rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),
+  status: (projectId: string) => rpcCall<AgentRunStatus>("agent.status", { project_id: projectId }),
   clear: (projectId: string) => rpcCall<{ ok: true }>("agent.clear", { project_id: projectId }),
   // Exactly one of batchId/snapshotId is expected — an outline batch from
   // linetta_apply_story_ops, or a scene write/revise's pre-write snapshot

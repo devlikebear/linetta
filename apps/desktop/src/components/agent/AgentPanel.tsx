@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, providers as providersApi } from "../../lib/rpc";
-import type { AgentHistoryRow } from "../../lib/types";
+import type { AgentHistoryRow, AgentRunStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
@@ -45,7 +45,16 @@ import "./AgentPanel.css";
  *  handler below. */
 type Line =
   | { kind: "user"; id: string; text: string }
-  | { kind: "assistant"; id: string; text: string; usage?: { input: number; output: number } }
+  | {
+      kind: "assistant";
+      id: string;
+      text: string;
+      usage?: { input: number; output: number };
+      /** Set on a restored line only: the run its row belongs to, so the
+       *  usage of a turn this panel rejoined partway can find its reply. A
+       *  live line carries the run in its id. */
+      runId?: string;
+    }
   | {
       kind: "tool";
       id: string;
@@ -85,21 +94,30 @@ type Line =
  *  put a sentence on screen the row does not support. */
 type NoticeLine =
   | { kind: "notice"; id: string; variant: "restored" }
+  /** The restored conversation stops mid-turn and agent.status says nothing is
+   *  running: the turn was cut short without an ending — the app was closed
+   *  on it. Unlike "restored" this is a statement, not a hedge. */
+  | { kind: "notice"; id: string; variant: "interrupted" }
   | { kind: "notice"; id: string; variant: "cancelled" }
   | { kind: "notice"; id: string; variant: "failed" }
   | { kind: "notice"; id: string; variant: "error"; reason: string };
 
-interface AgentDeltaPayload {
+/** What every agent.* payload carries. `seq` numbers a turn's events from 1 in
+ *  the order the engine emitted them; agent.status reports the last one, which
+ *  is how a panel that rejoins a turn tells the events its snapshot already
+ *  accounts for from the ones that come after it (see `rejoinedRef`). */
+interface AgentEventBase {
   run_id: string;
   /** The work this event belongs to. See `forThisProject`. */
   project_id: string;
+  seq?: number;
+}
+
+interface AgentDeltaPayload extends AgentEventBase {
   text: string;
 }
 
-interface AgentToolPayload {
-  run_id: string;
-  /** The work this event belongs to. See `forThisProject`. */
-  project_id: string;
+interface AgentToolPayload extends AgentEventBase {
   name: string;
   state: "started" | "done" | "error";
   /** Never rendered. See the `summary` note on `Line` and lib/agentTools.ts:
@@ -121,10 +139,7 @@ interface AgentToolPayload {
   node_ids?: string[];
 }
 
-interface AgentDonePayload {
-  run_id: string;
-  /** The work this event belongs to. See `forThisProject`. */
-  project_id: string;
+interface AgentDonePayload extends AgentEventBase {
   /** Never read, and deliberately kept — the same argument `summary` and
    *  `node_ids` above are kept on: the usage footer says what the turn cost,
    *  and which model produced it belongs on that line beside the token counts.
@@ -137,19 +152,12 @@ interface AgentDonePayload {
   usage: { input: number; output: number };
 }
 
-interface AgentErrorPayload {
-  run_id: string;
-  /** The work this event belongs to. See `forThisProject`. */
-  project_id: string;
+interface AgentErrorPayload extends AgentEventBase {
   reason: string;
   message: string;
 }
 
-interface AgentCancelledPayload {
-  run_id: string;
-  /** The work this event belongs to. See `forThisProject`. */
-  project_id: string;
-}
+type AgentCancelledPayload = AgentEventBase;
 
 /** The composer's growth cap, in px. Must match `max-height` on
  *  `.cmp-input textarea` in App.css — the CSS enforces it for a box that has
@@ -228,14 +236,14 @@ function endNoticeVariant(status: string): "failed" | "cancelled" | null {
  *  died mid-reply does not restore looking exactly like one that finished.
  *  Live, that is what agent.error and agent.cancelled draw; restored, `status`
  *  is the only trace either of them leaves. */
-function linesFromHistory(rows: AgentHistoryRow[]): Line[] {
+function linesFromHistory(rows: AgentHistoryRow[], liveRunId?: string): Line[] {
   const lines: Line[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (row.role === "user") {
       lines.push({ kind: "user", id: `history:${row.id}`, text: row.content });
     } else if (row.role === "assistant") {
-      lines.push({ kind: "assistant", id: `history:${row.id}`, text: row.content });
+      lines.push({ kind: "assistant", id: `history:${row.id}`, text: row.content, runId: row.run_id });
     } else if (row.role === "tool") {
       const ev = parseToolEvent(row.content);
       if (ev) {
@@ -266,6 +274,9 @@ function linesFromHistory(rows: AgentHistoryRow[]): Line[] {
     // 1.0 companion's, which this intent-scoped query never returns.)
     const endsRun = i === rows.length - 1 || rows[i + 1].run_id !== row.run_id;
     if (!endsRun) continue;
+    // A run this panel is following live gets its ending from the wire, with
+    // the reason the transcript does not keep.
+    if (liveRunId && row.run_id === liveRunId) continue;
     const variant = endNoticeVariant(row.status);
     if (variant) lines.push({ kind: "notice", id: `history:${row.id}:${variant}`, variant });
   }
@@ -291,17 +302,51 @@ function linesFromHistory(rows: AgentHistoryRow[]): Line[] {
  *  What they cannot say: the loop writes the assistant row BEFORE running the
  *  tool calls that came with it, so a turn killed in that window ends on an
  *  assistant row and reads here as settled. Nothing in the transcript
- *  distinguishes it (the row carries no "and it also asked for tools"), and
- *  the panel has no run-status RPC to ask — the plan deliberately does not add
- *  one. A missed notice is the safe direction of that error: the notice is a
- *  hedge, and claiming a finished turn may still be running would be worse
- *  than staying quiet. */
+ *  distinguishes it (the row carries no "and it also asked for tools").
+ *
+ *  Whether a turn IS running is no longer this function's to guess —
+ *  agent.status says. What is left for it is the other half: when nothing is
+ *  running, whether the conversation stops in a place a finished turn would
+ *  not have left it. A missed notice is the safe direction of that error. */
 function turnMayBeRunning(rows: AgentHistoryRow[]): boolean {
   const last = rows[rows.length - 1];
   if (!last) return false;
   if (endNoticeVariant(last.status)) return false;
   return last.role !== "assistant";
 }
+
+/** The id of one assistant bubble. A turn's reply is not one message: the
+ *  model says something, calls tools, and says something else, and each of
+ *  those belongs where it happened in the log. `segment` counts the tool
+ *  calls' interruptions, so text that arrives after a tool line opens a new
+ *  bubble under it instead of growing the one above it. */
+function assistantLineId(runId: string, segment: number): string {
+  return segment > 0 ? `assistant:${runId}:${segment}` : `assistant:${runId}`;
+}
+
+/** Whether `line` is a bubble of `runId`'s reply — live or restored. */
+function isReplyOf(line: Line, runId: string): line is Extract<Line, { kind: "assistant" }> {
+  if (line.kind !== "assistant") return false;
+  const base = `assistant:${runId}`;
+  return line.runId === runId || line.id === base || line.id.startsWith(`${base}:`);
+}
+
+/** How long the current turn has been going, ticking once a second. Its own
+ *  component so the tick re-renders one line rather than the whole log. */
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const total = Math.max(0, Math.floor((now - since) / 1000));
+  const seconds = String(total % 60).padStart(2, "0");
+  return <span className="agent-working-time">{`${Math.floor(total / 60)}:${seconds}`}</span>;
+}
+
+/** How close to the end of the log still counts as "reading the latest" — the
+ *  log follows new lines only while the writer is within this of the bottom. */
+const FOLLOW_THRESHOLD = 48;
 
 interface Props {
   onClose: () => void;
@@ -344,6 +389,10 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [turnRunId, setTurnRunId] = useState<string | null>(null);
+  // When the turn in progress started — the working line's clock. From the
+  // engine for a turn this panel rejoined, from this panel's own send
+  // otherwise.
+  const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   // The same value as `turnRunId`, readable from an async callback that
@@ -352,9 +401,10 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // before the round trip started. Written only through setTurn below, so the
   // two can never disagree.
   const turnRunIdRef = useRef<string | null>(null);
-  function setTurn(runId: string | null) {
+  function setTurn(runId: string | null, startedAt?: number) {
     turnRunIdRef.current = runId;
     setTurnRunId(runId);
+    setTurnStartedAt(runId === null ? null : startedAt ?? Date.now());
   }
 
   // The run this mount follows. handleSend below assigns it authoritatively
@@ -421,6 +471,37 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // above; the "may still be running" notice under the restored rows is what
   // that writer gets instead, which is what it is for.
   const abandonedRunsRef = useRef<Set<string>>(new Set());
+
+  // Which bubble of a run's reply the next chunk of text belongs to — see
+  // assistantLineId. Bumped by every tool call the run starts.
+  const segmentRef = useRef<Map<string, number>>(new Map());
+
+  // REJOINING A TURN THAT IS ALREADY RUNNING.
+  //
+  // A turn outlives the panel (#93): the writer closes it, or leaves the
+  // workspace, and the engine keeps working. A panel that mounts in the
+  // middle of one used to have only the transcript, which cannot say whether a
+  // turn is still running — so it drew the rows, guessed ("may still be in
+  // progress"), and offered a send button the engine would refuse.
+  //
+  // agent.status answers the question. The restore effect below reads it with
+  // the transcript, and when a turn is running this panel adopts it: the stop
+  // button, the working line, and the rest of its events.
+  //
+  // `rejoinedRef` is that snapshot's mark. Events of the run numbered at or
+  // below `seq` are already in what was read and are dropped; and because the
+  // snapshot is two reads that a busy turn can slip between, the run's ending
+  // re-reads the transcript once so the log settles on exactly what the engine
+  // recorded.
+  const rejoinedRef = useRef<{ runId: string; seq: number } | null>(null);
+  // Wire events are held from mount until the restore has decided what this
+  // panel is looking at, then replayed in order. Applying one early would
+  // adopt its run before the snapshot says where that run had got to.
+  const restoringRef = useRef(true);
+  const restoreHeldRef = useRef<Array<() => void>>([]);
+  // The work on screen, for callbacks that resolve after a jump to another.
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
 
   function acceptRun(runId: string): boolean {
     if (abandonedRunsRef.current.has(runId)) return false;
@@ -541,6 +622,11 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     currentRunIdRef.current = null;
     pendingToolRef.current.clear();
     toolOccurrenceRef.current.clear();
+    segmentRef.current.clear();
+    // The next work's restore decides afresh; until it has, hold its events.
+    rejoinedRef.current = null;
+    restoringRef.current = true;
+    restoreHeldRef.current = [];
     // A send for the work being left is still out. Its run id cannot be named
     // yet, so the send is fenced instead — read before discardSendWindow,
     // which is what clears the flag this asks. (A fence raised by an earlier
@@ -603,18 +689,72 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
    *  The project check comes first, ahead of the window: an event for another
    *  work must not even be held, or the flush would replay it into this
    *  work's log the moment this panel's own send lands. */
-  function whileNotSending<T extends { project_id: string }>(apply: (payload: T) => void) {
-    return (payload: T) => {
+  function whileNotSending<T extends AgentEventBase>(apply: (payload: T) => void) {
+    const handle = (payload: T) => {
       if (!forThisProject(payload)) return;
+      if (restoringRef.current) {
+        restoreHeldRef.current.push(() => handle(payload));
+        return;
+      }
+      // Already in the snapshot this panel rejoined the run from.
+      const rejoined = rejoinedRef.current;
+      if (rejoined && payload.run_id === rejoined.runId && payload.seq !== undefined && payload.seq <= rejoined.seq) {
+        return;
+      }
       if (deferDuringSend(() => apply(payload))) return;
       apply(payload);
     };
+    return handle;
+  }
+
+  /** Ends the restore hold and replays what it held, in arrival order. */
+  function releaseRestoreHold() {
+    restoringRef.current = false;
+    const held = restoreHeldRef.current;
+    restoreHeldRef.current = [];
+    for (const replay of held) replay();
+  }
+
+  /** Settles the log on the transcript once a rejoined run has ended.
+   *
+   *  Only while that run is still the last thing this panel did: once the
+   *  writer has sent another turn, the log holds lines the re-read would draw
+   *  a second time, and a cosmetic gap in an older turn is the better trade. */
+  function settleRejoinedRun(runId: string, usage?: { input: number; output: number }) {
+    if (rejoinedRef.current?.runId !== runId) return;
+    rejoinedRef.current = null;
+    const forProject = projectId;
+    agentApi
+      .history(forProject)
+      .then((rows) => {
+        if (!mountedRef.current || projectIdRef.current !== forProject) return;
+        if (currentRunIdRef.current !== runId || pendingSendRef.current) return;
+        const settled = linesFromHistory(rows, runId);
+        if (usage) {
+          for (let i = settled.length - 1; i >= 0; i--) {
+            const line = settled[i];
+            if (isReplyOf(line, runId)) {
+              settled[i] = { ...line, usage };
+              break;
+            }
+          }
+        }
+        setLines((prev) => [
+          ...settled,
+          // How the run ended, as the wire said it — the transcript keeps a
+          // status, not the reason.
+          ...prev.filter((l) => l.kind === "notice" && l.id.startsWith(`notice:${runId}:`)),
+        ]);
+      })
+      .catch(() => {
+        // The log as it stands is still a true account, just not a settled one.
+      });
   }
 
   useEngineEvent<AgentDeltaPayload>("agent-delta", whileNotSending<AgentDeltaPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
     setRunning(true);
-    const id = `assistant:${payload.run_id}`;
+    const id = assistantLineId(payload.run_id, segmentRef.current.get(payload.run_id) ?? 0);
     setLines((prev) => {
       const idx = prev.findIndex((l) => l.kind === "assistant" && l.id === id);
       if (idx === -1) return [...prev, { kind: "assistant", id, text: payload.text }];
@@ -633,6 +773,10 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
       toolOccurrenceRef.current.set(key, occurrence);
       const id = `${key}:${occurrence}`;
       pendingToolRef.current.set(key, id);
+      // Whatever the model says next comes after this line, in a bubble of its
+      // own; and the text before it has finished arriving.
+      segmentRef.current.set(payload.run_id, (segmentRef.current.get(payload.run_id) ?? 0) + 1);
+      setRunning(false);
       setLines((prev) => [
         ...prev,
         {
@@ -688,10 +832,17 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     // run's terminal event (acceptRun above already refused those).
     setTurn(null);
     setCanceling(false);
-    const id = `assistant:${payload.run_id}`;
-    setLines((prev) =>
-      prev.map((l) => (l.kind === "assistant" && l.id === id ? { ...l, usage: payload.usage } : l)),
-    );
+    // The turn's cost goes under the last thing it said.
+    setLines((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (!isReplyOf(prev[i], payload.run_id)) continue;
+        const next = [...prev];
+        next[i] = { ...(prev[i] as Extract<Line, { kind: "assistant" }>), usage: payload.usage };
+        return next;
+      }
+      return prev;
+    });
+    settleRejoinedRun(payload.run_id, payload.usage);
   }));
 
   // A mid-turn failure (Task 7). Stops the streaming indicator honestly
@@ -711,6 +862,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
       ...prev,
       { kind: "notice", id: `notice:${payload.run_id}:error`, variant: "error", reason: payload.reason },
     ]);
+    settleRejoinedRun(payload.run_id);
   }));
 
   useEngineEvent<AgentCancelledPayload>("agent-cancelled", whileNotSending<AgentCancelledPayload>((payload) => {
@@ -722,6 +874,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
       ...prev,
       { kind: "notice", id: `notice:${payload.run_id}:cancelled`, variant: "cancelled" },
     ]);
+    settleRejoinedRun(payload.run_id);
   }));
 
   // Undo is a per-line action, not a turn-level one: mark only the clicked
@@ -790,6 +943,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     setDraft("");
     setSendError(null);
     setSending(true);
+    followRef.current = true;
     // Open the send window before the call, not after: the engine has already
     // minted this turn's run id by the time run() returns, and an event for
     // it can reach the listener before the response reaches us.
@@ -922,8 +1076,8 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // Restore (Task 7): the conversation that was here before the panel
   // closed. #93 made the engine's turn outlive the RPC call, so a turn can
   // still be running when the panel reopens with nothing on screen yet —
-  // and there is no run-status RPC to ask; the plan deliberately does not
-  // add one (see the "restored" notice line below). Fires once `ready` is
+  // agent.status says whether one is, and the panel rejoins it (see
+  // rejoinedRef). Fires once `ready` is
   // known: fetching history for a panel about to show the "configure a
   // provider" notice instead of a log is pointless. Prepended rather than
   // replacing `lines`, on the small chance the writer already sent
@@ -931,34 +1085,89 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   useEffect(() => {
     if (ready !== true) return;
     let cancelled = false;
-    agentApi
-      .history(projectId)
-      .then((rows) => {
-        if (cancelled) return;
-        const restored = linesFromHistory(rows);
-        // The only signal available for "is a turn still running": whether
-        // the conversation ends in a settled turn. See turnMayBeRunning for
-        // what the rows can and cannot say about that.
-        if (turnMayBeRunning(rows)) {
-          // Keyed on the row it follows rather than a fixed string. With the
-          // project-switch reset above, no two restores can put a line in
-          // `lines` at once any more, so this is belt and braces and no test
-          // pins it — but a fixed key is what turned that missing reset into
-          // two interleaved conversations rather than a visibly stale one,
-          // and an id scheme every other Line already follows costs nothing.
-          const last = rows[rows.length - 1];
-          restored.push({ kind: "notice", id: `history:${last.id}:maybe-running`, variant: "restored" });
+    // Null when the engine cannot say (the call failed): the restore then
+    // falls back to what the rows alone suggest, the way it always did.
+    const readStatus = (): Promise<AgentRunStatus | null> =>
+      Promise.resolve()
+        .then(() => agentApi.status(projectId))
+        .catch(() => null);
+    const sameMoment = (a: AgentRunStatus, b: AgentRunStatus) =>
+      a.running === b.running && a.run_id === b.run_id && a.seq === b.seq;
+
+    (async () => {
+      let status = await readStatus();
+      let rows = await agentApi.history(projectId);
+      // Two reads are not one: a turn can write a row between them. Read the
+      // status again and, if the turn moved, the transcript with it — a turn
+      // busy enough to move every time is settled when it ends instead.
+      for (let attempt = 0; attempt < 2 && status?.running; attempt++) {
+        const again = await readStatus();
+        if (!again || sameMoment(status, again)) break;
+        status = again;
+        rows = await agentApi.history(projectId);
+      }
+      if (cancelled) return;
+
+      // A turn is running and nothing of this visit's is in the way: rejoin
+      // it. (A send still out for a work the writer left keeps its fence —
+      // see orphanedSendRef — and that turn stays the old hedge.)
+      const runId = status?.running ? status.run_id : undefined;
+      const rejoin =
+        status && runId && !orphanedSendRef.current && !pendingSendRef.current && currentRunIdRef.current === null;
+      const restored = linesFromHistory(rows, rejoin ? runId : undefined);
+      if (status && runId && rejoin) {
+        abandonedRunsRef.current.delete(runId);
+        currentRunIdRef.current = runId;
+        rejoinedRef.current = { runId, seq: status.seq };
+        // The reply streamed so far that is not a transcript row yet.
+        if (status.text) {
+          restored.push({ kind: "assistant", id: assistantLineId(runId, 0), text: status.text });
         }
-        if (restored.length > 0) setLines((prev) => [...restored, ...prev]);
-      })
-      .catch(() => {
-        // A failed restore is not worse than an empty panel — start fresh
-        // rather than blocking the log on it.
-      });
+        // The tool it is inside, drawn as running so the event that resolves
+        // it has a line to land on.
+        if (status.tool) {
+          const key = `${runId}:${status.tool}`;
+          const id = `${key}:1`;
+          toolOccurrenceRef.current.set(key, 1);
+          pendingToolRef.current.set(key, id);
+          segmentRef.current.set(runId, 1);
+          restored.push({ kind: "tool", id, name: status.tool, summary: "", state: "running" });
+        }
+        setTurn(runId, status.started_at);
+        setRunning(Boolean(status.text) && !status.tool);
+      } else if (turnMayBeRunning(rows)) {
+        // Keyed on the row it follows rather than a fixed string, the id
+        // scheme every other Line follows.
+        const last = rows[rows.length - 1];
+        // The engine says nothing is running, so a conversation that stops
+        // mid-turn was cut short. Without that answer — or with a turn this
+        // panel could not rejoin — the old hedge is the honest line.
+        const variant = status && !status.running ? "interrupted" : "restored";
+        restored.push({ kind: "notice", id: `history:${last.id}:${variant}`, variant });
+      }
+      if (restored.length > 0) setLines((prev) => [...restored, ...prev]);
+      // A reopened conversation opens on its latest line, not its first.
+      followRef.current = true;
+      releaseRestoreHold();
+    })().catch(() => {
+      // A failed restore is not worse than an empty panel — start fresh
+      // rather than blocking the log on it.
+      if (!cancelled) releaseRestoreHold();
+    });
     return () => {
       cancelled = true;
     };
   }, [ready, projectId]);
+
+  // Follow the conversation as it grows, unless the writer has scrolled up to
+  // read something — then stay put until they come back down.
+  const logRef = useRef<HTMLDivElement | null>(null);
+  const followRef = useRef(true);
+  function handleLogScroll() {
+    const el = logRef.current;
+    if (!el) return;
+    followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < FOLLOW_THRESHOLD;
+  }
 
   // Grow the composer with what is in it, up to the same cap App.css sets on
   // .cmp-input textarea. The starter chips fill in a whole sentence, so a
@@ -982,13 +1191,29 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // rendered verbatim. Reading the ref here rather than `turnRunId` state
   // means this stays correct even when a test drives raw agent-delta events
   // straight past the composer, with no run id ever assigned by hand.
-  const activeAssistantId = currentRunIdRef.current ? `assistant:${currentRunIdRef.current}` : null;
+  const activeAssistantId = currentRunIdRef.current
+    ? assistantLineId(currentRunIdRef.current, segmentRef.current.get(currentRunIdRef.current) ?? 0)
+    : null;
   const activeAssistantText = activeAssistantId
     ? lines.find((l): l is Extract<Line, { kind: "assistant" }> => l.kind === "assistant" && l.id === activeAssistantId)
         ?.text ?? ""
     : "";
   const shownActiveText = useSmoothStream(activeAssistantText, running);
   const busy = sending || turnRunId !== null;
+  // What the turn is doing, for the working line: inside a tool, writing its
+  // reply, or neither — which is the model thinking, or composing a tool call
+  // that can take minutes for a whole scene and streams nothing meanwhile.
+  const toolRunning = lines.some((l) => l.kind === "tool" && l.state === "running");
+  const workingKey = toolRunning
+    ? "agentPanel.working.tool"
+    : running
+      ? "agentPanel.working.writing"
+      : "agentPanel.working.thinking";
+
+  useEffect(() => {
+    const el = logRef.current;
+    if (el && followRef.current) el.scrollTop = el.scrollHeight;
+  }, [lines, shownActiveText, busy]);
 
   return (
     <aside className="panel agent-panel" onMouseDown={(e) => e.stopPropagation()}>
@@ -998,7 +1223,12 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
       </div>
       {ready === null ? null : ready ? (
         <>
-        <div className="panel-scroll agent-log cmp-stream" data-testid="agent-log">
+        <div
+          className="panel-scroll agent-log cmp-stream"
+          data-testid="agent-log"
+          ref={logRef}
+          onScroll={handleLogScroll}
+        >
           {lines.map((line) => {
             if (line.kind === "user") {
               return (
@@ -1034,7 +1264,9 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
               const text =
                 line.variant === "restored"
                   ? t("agentPanel.restore.mayBeRunning")
-                  : line.variant === "failed"
+                  : line.variant === "interrupted"
+                    ? t("agentPanel.restore.interrupted")
+                    : line.variant === "failed"
                     ? t("agentPanel.restore.failed")
                     : line.variant === "cancelled"
                       ? t("agentPanel.cancelled")
@@ -1095,6 +1327,20 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
               </div>
             );
           })}
+          {busy ? (
+            // The one line that says a turn is alive. Without it a turn that
+            // is thinking, or writing a scene into a tool call, looks exactly
+            // like one that has stopped: nothing streams for minutes.
+            <div className="agent-working" data-testid="agent-working" role="status">
+              <span className="agent-working-dots" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              <span>{t(workingKey)}</span>
+              {turnStartedAt !== null ? <Elapsed since={turnStartedAt} /> : null}
+            </div>
+          ) : null}
         </div>
         {sendError ? (
           <p className="agent-send-error" role="alert" data-testid="agent-send-error">

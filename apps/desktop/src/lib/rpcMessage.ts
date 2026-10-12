@@ -62,6 +62,11 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // Message carries the raw Go panic value for logs — this mapping is what
   // keeps that value off the screen.
   agent_internal_error: "errors.agentInternalError",
+  // A turn that stopped without the model finishing: cut off at the provider's
+  // output ceiling, or a last response with nothing in it. Both used to end as
+  // agent.done and draw nothing at all.
+  agent_output_truncated: "errors.agentOutputTruncated",
+  agent_empty_reply: "errors.agentEmptyReply",
   // The built-in agent's undo (#93 fix round 1). storyops keeps only the last
   // few batches in memory, so this is the ordinary result of a restart or a
   // few more turns — not a mistake the writer made.

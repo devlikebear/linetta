@@ -16,6 +16,9 @@ type AgentController interface {
 	Run(ctx context.Context, projectID, nodeID, prompt string) (string, error)
 	Cancel(ctx context.Context, runID string) error
 	History(ctx context.Context, projectID string, limit int) (json.RawMessage, error)
+	// Status reports the turn running for a work, if any — what a panel that
+	// mounts mid-turn needs to pick it back up.
+	Status(ctx context.Context, projectID string) (json.RawMessage, error)
 	Clear(ctx context.Context, projectID string) error
 	// Undo reverts a structural batch (batchID) or restores a scene's
 	// pre-write snapshot (snapshotID). Exactly one is non-empty; AgentUndo
@@ -84,6 +87,25 @@ func AgentHistory(ctrl AgentController) rpc.Handler {
 			_ = json.Unmarshal(params, &p)
 		}
 		out, err := ctrl.History(ctx, p.ProjectID, p.Limit)
+		if err != nil {
+			return nil, rpc.MethodErrorFrom(err)
+		}
+		return out, nil
+	}
+}
+
+type agentStatusParams struct {
+	ProjectID string `json:"project_id"`
+}
+
+// AgentStatus returns a handler for agent.status.
+func AgentStatus(ctrl AgentController) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p agentStatusParams
+		if len(params) > 0 {
+			_ = json.Unmarshal(params, &p)
+		}
+		out, err := ctrl.Status(ctx, p.ProjectID)
 		if err != nil {
 			return nil, rpc.MethodErrorFrom(err)
 		}

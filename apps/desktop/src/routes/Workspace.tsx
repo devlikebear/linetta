@@ -21,6 +21,7 @@ import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CanonPanel } from "../components/CanonPanel";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { AgentPanel } from "../components/agent/AgentPanel";
+import { useAgentRunning } from "../hooks/useAgentRunning";
 import { ContextualEditPanel } from "../components/contextual/ContextualEditPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { InlineEditableText } from "../components/InlineEditableText";
@@ -174,6 +175,8 @@ export function Workspace() {
   // writer must never be told to go configure something Settings won't show
   // them (#95).
   const [agentAvailable, setAgentAvailable] = useState(false);
+  // A turn outlives the panel, so the toolbar says when one is running.
+  const agentRunning = useAgentRunning(load?.project.id, agentAvailable);
   const [tourOpen, setTourOpen] = useState(false);
   const [mentioned, setMentioned] = useState<Entity[]>([]);
   const [autoMentionBusy, setAutoMentionBusy] = useState(false);
@@ -1677,6 +1680,15 @@ export function Workspace() {
               data-testid="ws-tool-agent"
             >
               <Bot size={15} /> {t("agentPanel.title")}
+              {agentRunning ? (
+                <span
+                  className="ws-tool-running"
+                  data-testid="ws-tool-agent-running"
+                  role="status"
+                  aria-label={t("agentPanel.runningBadge")}
+                  title={t("agentPanel.runningBadge")}
+                />
+              ) : null}
             </button>
           )}
           <div className="ws-sep" />

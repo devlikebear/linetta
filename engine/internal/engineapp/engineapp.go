@@ -478,6 +478,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("agent.run", handlers.AgentRun(agentCtrl))
 	s.Handle("agent.cancel", handlers.AgentCancel(agentCtrl))
 	s.Handle("agent.history", handlers.AgentHistory(agentCtrl))
+	s.Handle("agent.status", handlers.AgentStatus(agentCtrl))
 	s.Handle("agent.clear", handlers.AgentClear(agentCtrl))
 	s.Handle("agent.undo", handlers.AgentUndo(agentCtrl))
 	s.Handle("snapshots.list_for_node", handlers.ListSnapshotsForNode(snaps))

@@ -23,6 +23,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "agent.clear",
     "agent.history",
     "agent.run",
+    "agent.status",
     "agent.undo",
     "backup.create_recovery",
     "backup.list",
@@ -870,6 +871,7 @@ mod security_boundary_tests {
             "agent.run",
             "agent.cancel",
             "agent.history",
+            "agent.status",
             "agent.clear",
             "agent.undo",
         ] {

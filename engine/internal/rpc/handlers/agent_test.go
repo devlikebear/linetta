@@ -46,6 +46,10 @@ func (f *fakeAgent) History(_ context.Context, projectID string, limit int) (jso
 	}
 	return json.RawMessage(`[]`), nil
 }
+func (f *fakeAgent) Status(_ context.Context, projectID string) (json.RawMessage, error) {
+	return json.RawMessage(`{"running":true,"run_id":"run-1","seq":3,"project":"` + projectID + `"}`), nil
+}
+
 func (f *fakeAgent) Clear(_ context.Context, projectID string) error {
 	f.cleared = projectID
 	return f.clearErr
@@ -208,5 +212,22 @@ func TestAgentHistory_translatesControllerErrors(t *testing.T) {
 	var me *rpc.MethodError
 	if !errors.As(err, &me) || string(me.Data) != `{"reason":"project_not_found"}` {
 		t.Errorf("err = %v, want a MethodError carrying project_not_found", err)
+	}
+}
+
+func TestAgentStatusPassesTheProjectThrough(t *testing.T) {
+	out, err := AgentStatus(&fakeAgent{})(context.Background(), json.RawMessage(`{"project_id":"p1"}`))
+	if err != nil {
+		t.Fatalf("agent.status: %v", err)
+	}
+	var got struct {
+		Running bool   `json:"running"`
+		Project string `json:"project"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.Running || got.Project != "p1" {
+		t.Fatalf("got %s, want the controller's answer for p1", out)
 	}
 }
