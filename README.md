@@ -198,6 +198,16 @@ With the skills tools off, the skill **list** goes too: a list with no
 `linetta_read_skill` to open a body is only names. Nothing is deleted either
 way, and switching a group back on restores it exactly.
 
+**A turn stops after 48 tool calls unless you change it.** The built-in agent
+caps how many tools it calls in one turn; **Settings → Tool budget → Tool
+calls per turn** (`agent_max_tool_calls` in `settings.json`) moves the cap
+anywhere from 8 to 200. A higher cap lets you hand over a long job in one go,
+and it also means one turn can cost more. When a turn reaches the cap, or the
+same tool fails three times in a row, Linetta makes one more request with
+tools switched off so the agent can say what it finished and what is left;
+send "continue" and it picks up from there. A changed cap applies from the
+next turn, not to one already running. External MCP clients are not affected.
+
 **The daily backup does not carry the skills folder.** It is `VACUUM INTO` on
 `library.db` and copies nothing else under your data directory. What it does
 carry is the version history: every write and every delete lands a row holding
