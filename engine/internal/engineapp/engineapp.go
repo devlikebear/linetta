@@ -335,6 +335,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		skills:   skillsStore,
 		notify:   func(method string, params any) { _ = s.Notifier().Notify(method, params) },
 		clock:    clock,
+		logPath:  filepath.Join(home, "logs", "agent.log"),
 	})
 	a.closers = append(a.closers, stopAgent)
 	a.agentCtrl = agentCtrl

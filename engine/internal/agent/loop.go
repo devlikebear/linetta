@@ -618,6 +618,11 @@ func (s *Service) endWithError(ctx context.Context, st loopState, err error) {
 		return
 	}
 	reason, message := classifyProviderError(st.provider, err)
+	// The panel only ever shows the reason. The cause goes on record here, in
+	// Classify's form: its first line, capped, so a provider body cannot ride
+	// along whole. Without it, a timeout and a dead network look the same
+	// after the fact.
+	logf("run %s failed (%s, model %q): %v", st.runID, reason, st.model, provider.Classify(st.provider, err))
 	s.endWithReason(ctx, st, reason, message, companion.HistoryStatusFailed)
 }
 

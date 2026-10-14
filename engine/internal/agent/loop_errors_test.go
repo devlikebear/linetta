@@ -4,6 +4,9 @@ package agent
 
 import (
 	"context"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -59,6 +62,8 @@ func TestRun_providerFailureInsideATurnIsClassified(t *testing.T) {
 	}{
 		{"a revoked key", 401, rpc.ReasonProviderAuthFailed},
 		{"a rate limit", 429, rpc.ReasonProviderRateLimited},
+		{"a refused request", 400, rpc.ReasonProviderRejected},
+		{"an outage on the provider's side", 503, rpc.ReasonProviderUnavailable},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -295,4 +300,89 @@ func TestStatus_reportsARunningTurnAndItsStreamedText(t *testing.T) {
 	close(client.release)
 	waitFor(t, "the run to end", func() bool { return rec.hasTerminalFor(runID) })
 	waitFor(t, "the work to be released", func() bool { return !svc.Status("p1").Running })
+}
+
+// timeoutErr is what net/http hands back when http.Client.Timeout fires.
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string {
+	return "context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+}
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
+// A provider that took too long is not a network the writer has to go and
+// fix. This is the shape a Gemini stream that outlived tars' 30-second client
+// timeout arrives in: no status, the transport error as the cause. It must
+// not read "check your internet connection", and the cause must be on record
+// somewhere the panel's reason code is not.
+func TestRun_timeoutIsNotUnreachableAndIsLogged(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "logs", "agent.log")
+	setLogFile(logPath)
+	t.Cleanup(resetLogForTest)
+
+	rec := &recorder{}
+	svc := newService(t, &httpFailingClient{err: &llm.ProviderError{
+		Provider:  "gemini-native",
+		Operation: "stream",
+		Cause:     &url.Error{Op: "Post", URL: "https://example.test/v1beta/models/x:streamGenerateContent", Err: timeoutErr{}},
+	}}, rec)
+
+	runID, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "계속해줘"})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "the run to end", func() bool { return rec.hasTerminalFor(runID) })
+
+	p := rec.errorFor(runID)
+	if p == nil {
+		t.Fatalf("the turn did not end in agent.error: %v", rec.methods())
+	}
+	if p.Reason != rpc.ReasonProviderTimeout {
+		t.Errorf("reason = %q, want %q", p.Reason, rpc.ReasonProviderTimeout)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	for _, want := range []string{runID, rpc.ReasonProviderTimeout, "Client.Timeout exceeded"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("log does not record %q:\n%s", want, data)
+		}
+	}
+}
+
+// resetLogForTest puts logf back on stdout, so one test's log file does not
+// collect every later test's lines.
+func resetLogForTest() {
+	agentLog.mu.Lock()
+	defer agentLog.mu.Unlock()
+	if agentLog.file != nil {
+		_ = agentLog.file.Close()
+	}
+	agentLog.path, agentLog.file, agentLog.size = "", nil, 0
+}
+
+func TestLogRotatesAtTheCap(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "agent.log")
+	if err := os.WriteFile(logPath, make([]byte, logFileMax), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setLogFile(logPath)
+	t.Cleanup(resetLogForTest)
+
+	logf("after the cap")
+
+	old, err := os.Stat(logPath + ".1")
+	if err != nil || old.Size() != logFileMax {
+		t.Fatalf("full log was not moved aside: %v", err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "after the cap") || len(data) > 200 {
+		t.Errorf("fresh log = %q", data)
+	}
 }
