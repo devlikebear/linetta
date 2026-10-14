@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { useI18n } from "../../lib/i18n";
-import type { MessageKey } from "../../lib/i18n";
 import {
   codex as codexApi,
   openExternalUrl,
@@ -9,6 +8,7 @@ import {
   settings as settingsApi,
 } from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
+import { PROVIDER_ORDER, nameKeyFor } from "../../lib/providers";
 import type { CodexStatus, ProviderID, ProviderStatus } from "../../lib/types";
 
 /** Connect an AI provider (BYOK).
@@ -23,27 +23,11 @@ import type { CodexStatus, ProviderID, ProviderStatus } from "../../lib/types";
  *  and no wizard: the 1.0 onboarding flow is not coming back.
  */
 
-/** The order the engine's providers.list returns, kept explicit so the
- *  segmented control does not silently reorder when a response is cached.
- *  labelKey is written as a literal (not a template string) so a typo fails
- *  type-checking instead of silently falling through at render time. */
-const PROVIDER_ORDER: { id: ProviderID; labelKey: MessageKey }[] = [
-  { id: "openai-codex", labelKey: "settings.providers.name.openai-codex" },
-  { id: "anthropic", labelKey: "settings.providers.name.anthropic" },
-  { id: "gemini-native", labelKey: "settings.providers.name.gemini-native" },
-  { id: "openai", labelKey: "settings.providers.name.openai" },
-];
-
 /** How long the "delete the plaintext key" button stays armed after the first
  *  press (#113). Long enough to read the sentence it puts on screen and press
  *  again on purpose; short enough that the arming cannot outlive the intent
  *  and catch the writer on some unrelated visit back to this pane. */
 export const PLAINTEXT_DELETE_ARM_MS = 10_000;
-
-/** The i18n key naming one provider, for interpolation into a sentence that
- *  has to say which company it means — see the consent checkbox below. */
-const nameKeyFor = (id: ProviderID): MessageKey =>
-  PROVIDER_ORDER.find((p) => p.id === id)!.labelKey;
 
 /* ---------------------------------------------------------------------------
  * The server-derived state, and the one reducer that owns it.

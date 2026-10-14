@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, providers as providersApi } from "../../lib/rpc";
-import type { AgentHistoryRow, AgentRunStatus } from "../../lib/types";
+import type { AgentHistoryRow, AgentRunStatus, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
 import { useEngineEvent } from "../../hooks/useEngineEvent";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
+import { isProviderReady } from "../../lib/providers";
 import { Markdown } from "./Markdown";
+import { ProviderPicker } from "./ProviderPicker";
 import "./AgentPanel.css";
 
 /** The built-in agent's panel (#95).
@@ -370,6 +372,9 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // writer who is fully set up — a false claim about their own setup, not
   // just an ugly flash.
   const [ready, setReady] = useState<boolean | null>(null);
+  // The rows `ready` was read from, kept for the provider picker under the
+  // composer. Only ever replaced by a whole providers.list response.
+  const [providerRows, setProviderRows] = useState<ProviderStatus[]>([]);
   const [lines, setLines] = useState<Line[]>([]);
   // Whether the current run is still producing text. Feeds useSmoothStream:
   // while true the reply reveals gradually; once false it snaps to the full
@@ -1060,8 +1065,8 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
       .list()
       .then((rows) => {
         if (cancelled) return;
-        const active = rows.find((row) => row.active);
-        setReady(Boolean(active?.configured && active?.consented));
+        setProviderRows(rows);
+        setReady(isProviderReady(rows.find((row) => row.active)));
       })
       .catch(() => {
         // An unreachable engine is not "ready" either — fail closed to the
@@ -1424,6 +1429,15 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
               </button>
             )}
           </div>
+          <ProviderPicker
+            rows={providerRows}
+            disabled={busy}
+            // The picker only offers providers that are ready, so a change
+            // here keeps `ready` true and the conversation on screen; the
+            // rows are adopted for what the picker shows next.
+            onRows={setProviderRows}
+            onError={(err) => setSendError(rpcErrorMessage(err, t))}
+          />
         </div>
         </>
       ) : (
