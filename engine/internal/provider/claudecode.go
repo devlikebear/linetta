@@ -20,7 +20,7 @@ import (
 // this file is where both are settled once for every caller.
 //
 //   - Claude Code is a whole agent, with file, shell and web tools, the
-//     writer's CLAUDE.md, hooks, plugins and MCP servers. The consent
+//     writer's hooks, plugins and MCP servers. The consent
 //     sentence promises the manuscript goes to Anthropic and nowhere else, so
 //     the client Source.Client hands out is locked down by construction
 //     (lockedClaudeCode): no built-in tools, none of the writer's
@@ -152,10 +152,13 @@ func (c lockedClaudeCode) Chat(ctx context.Context, messages []llm.ChatMessage, 
 		ClaudeCodePermissionMode:    "default",
 		ClaudeCodePermissionHandler: onlyLinettaTools,
 		ClaudeCodeHarness: &llm.ClaudeCodeHarnessOptions{
-			// No CLAUDE.md, skills, plugins, hooks or the writer's own MCP
-			// servers: their setup is for their code, not this manuscript.
-			SafeMode:  true,
-			StrictMCP: true,
+			// None of the writer's settings files — so none of their hooks
+			// or plugins — and no MCP server but the agent's: their setup is
+			// for their code, not this manuscript. Not SafeMode: that also
+			// switches off the servers given with --mcp-config, which leaves
+			// Claude Code with no Linetta tools at all.
+			Restricted: true,
+			StrictMCP:  true,
 			// No browser integration, and only the environment a login
 			// needs — none of the shell's tokens or proxies ride along.
 			DisableChrome:      true,

@@ -1,6 +1,6 @@
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
-github.com/devlikebear/tars v0.61.0 h1:ubwunaCQ8gTxnSp8QV344sULQXUUE2mtv1Uq6P9yX4Y=
-github.com/devlikebear/tars v0.61.0/go.mod h1:lxeAPd143/V2OyFV9xjTG80IeOAfIQ4PIUaHQDxBc9U=
+github.com/devlikebear/tars v0.61.1-0.20261014101318-06b68c4dfe9b h1:Hg873bYA86BAjGVgr65LtUAxXIMWKXqi8AuieU/z/fI=
+github.com/devlikebear/tars v0.61.1-0.20261014101318-06b68c4dfe9b/go.mod h1:lxeAPd143/V2OyFV9xjTG80IeOAfIQ4PIUaHQDxBc9U=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/go-quicktest/qt v1.101.0 h1:O1K29Txy5P2OK0dGo59b7b0LR6wKfIhttaAhHUyn7eI=

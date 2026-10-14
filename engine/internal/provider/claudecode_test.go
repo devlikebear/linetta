@@ -132,7 +132,7 @@ func TestClaudeCode_isLockedDownWhateverTheCallerAsks(t *testing.T) {
 		t.Errorf("servers = %+v", o.ClaudeCodeMCPServers)
 	}
 	h := o.ClaudeCodeHarness
-	if h == nil || !h.SafeMode || !h.StrictMCP || !h.IsolateEnvironment || !h.DisableChrome {
+	if h == nil || !h.Restricted || h.SafeMode || !h.StrictMCP || !h.IsolateEnvironment || !h.DisableChrome {
 		t.Fatalf("harness = %+v", h)
 	}
 	if h.Tools == nil || len(h.Tools) != 0 {
@@ -167,7 +167,7 @@ func TestClaudeCode_isLockedDownWhateverTheCallerAsks(t *testing.T) {
 	if out, err := c.Ask(context.Background(), "ping"); err != nil || out != "OK" {
 		t.Errorf("Ask = %q, %v", out, err)
 	}
-	if rec.opts.ClaudeCodeHarness == nil || !rec.opts.ClaudeCodeHarness.SafeMode {
+	if rec.opts.ClaudeCodeHarness == nil || !rec.opts.ClaudeCodeHarness.Restricted {
 		t.Error("Ask bypassed the lock")
 	}
 }
