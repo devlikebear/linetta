@@ -843,9 +843,10 @@ func TestSet_storingAKeySupersedesTheUnmigratedPlaintextOne(t *testing.T) {
 // goroutine per message (internal/rpc/server.go:153), so they overlap. Both
 // touched the same legacyPlaintext.providers map: Get iterated it after
 // releasing mu (redactedSettingsView -> providerIDs, and persist ->
-// withLegacyPlaintextKeys), while forgetLegacyPlaintextFor deleted from it
-// under mu.Lock. Go turns that pair into "fatal error: concurrent map
-// iteration and map write" — a hard process abort, reached by pressing Clear
+// withLegacyPlaintextKeys), while the key-write path (then
+// forgetLegacyPlaintextFor) deleted from it under mu.Lock. Go turns that pair
+// into "fatal error: concurrent map iteration and map write" — a hard process
+// abort, reached by pressing Clear
 // in the very pane #113 exists to show. Under -race this test reported the
 // race before legacyPlaintextKeys.clone() existed.
 //
@@ -926,7 +927,7 @@ func TestLegacyPlaintextKeys_getAndForgetAreConcurrencySafe(t *testing.T) {
 
 // Two providers, each with a key still in plain text. Storing a key for one is
 // a decision about that one credential; the other's residue must survive it.
-// Without this, mutating forgetLegacyPlaintextFor to forget *every* provider
+// Without this, mutating legacyPlaintextKeys.without to drop *every* provider
 // on any key write passes the whole engine suite (#113 review).
 func TestSet_storingOneProvidersKeyKeepsTheOthersPlaintextResidue(t *testing.T) {
 	dir := seedLegacyPlaintextHome(t)
