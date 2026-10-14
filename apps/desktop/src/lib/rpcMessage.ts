@@ -40,13 +40,17 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   note_not_found: "errors.noteNotFound",
   fact_card_not_found: "errors.factCardNotFound",
   // The built-in agent's provider layer (#90/#91). These must stay mapped:
-  // the engine's English message for the last three carries the provider's
-  // own response body, and the fallback below would print it verbatim.
+  // the engine's English message for everything past consent carries the
+  // provider's own response body, and the fallback below would print it
+  // verbatim.
   provider_not_configured: "errors.providerNotConfigured",
   provider_consent_required: "errors.providerConsentRequired",
   provider_auth_failed: "errors.providerAuthFailed",
   provider_rate_limited: "errors.providerRateLimited",
   provider_unreachable: "errors.providerUnreachable",
+  provider_timeout: "errors.providerTimeout",
+  provider_rejected: "errors.providerRejected",
+  provider_unavailable: "errors.providerUnavailable",
   // The Codex login (#92). Its message names the two ports, since the fix is
   // closing whatever holds them. A failed login is not an RPC error at all —
   // codex.login_status reports it via CodexStatus.login_failed instead — so

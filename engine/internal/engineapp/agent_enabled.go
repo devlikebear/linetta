@@ -39,6 +39,7 @@ type agentDeps struct {
 	skills   *agentskills.Store
 	notify   func(method string, params any)
 	clock    func() int64
+	logPath  string
 }
 
 // agentMemorySource adapts *agentmemory.Repo to agent.MemorySource. The two
@@ -240,7 +241,8 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 			}
 			return n.ProjectID, n.ID, nil
 		},
-		Clock: deps.clock,
+		Clock:   deps.clock,
+		LogPath: deps.logPath,
 	}
 	svc := agent.New(built)
 	return &agentController{svc: svc, tools: tools, deps: built, notify: deps.notify}, svc.Close

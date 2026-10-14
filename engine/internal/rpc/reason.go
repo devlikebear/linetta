@@ -50,14 +50,23 @@ const (
 	ReasonFactCardNotFound     = "fact_card_not_found"
 
 	// The built-in agent's provider layer (#90). The first two are states the
-	// settings pane fixes; the last three are what the provider said, reduced
-	// to something the reader can act on. The provider's raw body stays in
-	// the English Message for logs and never becomes UI text.
+	// settings pane fixes; the rest are what the provider said, reduced to
+	// something the reader can act on. The provider's raw body stays in the
+	// English Message for logs and never becomes UI text.
+	//
+	// Unreachable means the network never got an answer. A timeout, a request
+	// the provider refused (4xx) and an outage on its side (5xx) each have
+	// their own code: all of them used to read "check your internet
+	// connection", which sent a writer with a working connection looking for
+	// a fault they did not have.
 	ReasonProviderNotConfigured   = "provider_not_configured"
 	ReasonProviderConsentRequired = "provider_consent_required"
 	ReasonProviderAuthFailed      = "provider_auth_failed"
 	ReasonProviderRateLimited     = "provider_rate_limited"
 	ReasonProviderUnreachable     = "provider_unreachable"
+	ReasonProviderTimeout         = "provider_timeout"
+	ReasonProviderRejected        = "provider_rejected"
+	ReasonProviderUnavailable     = "provider_unavailable"
 
 	// The Codex login (#92). The message has to name the two ports, because
 	// the fix is closing whatever holds them — usually a Codex CLI login. A

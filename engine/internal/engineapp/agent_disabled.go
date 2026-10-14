@@ -38,6 +38,7 @@ type agentDeps struct {
 	skills   *agentskills.Store
 	notify   func(method string, params any)
 	clock    func() int64
+	logPath  string
 }
 
 type agentController struct{}
