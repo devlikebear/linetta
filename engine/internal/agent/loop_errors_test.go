@@ -358,10 +358,7 @@ func TestRun_timeoutIsNotUnreachableAndIsLogged(t *testing.T) {
 func resetLogForTest() {
 	agentLog.mu.Lock()
 	defer agentLog.mu.Unlock()
-	if agentLog.file != nil {
-		_ = agentLog.file.Close()
-	}
-	agentLog.path, agentLog.file, agentLog.size = "", nil, 0
+	agentLog.path = ""
 }
 
 func TestLogRotatesAtTheCap(t *testing.T) {
@@ -384,5 +381,23 @@ func TestLogRotatesAtTheCap(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "after the cap") || len(data) > 200 {
 		t.Errorf("fresh log = %q", data)
+	}
+}
+
+// Nothing may hold the log open between lines: Windows refuses to delete or
+// rename an open file, which broke every test's temp-home cleanup there and
+// would block the rotation above.
+func TestLogHoldsNoHandleBetweenLines(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "logs", "agent.log")
+	setLogFile(logPath)
+	t.Cleanup(resetLogForTest)
+
+	logf("one line")
+	if err := os.Rename(logPath, logPath+".moved"); err != nil {
+		t.Fatalf("log still held after a write: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "logs")); err != nil {
+		t.Fatalf("log directory could not be removed: %v", err)
 	}
 }
