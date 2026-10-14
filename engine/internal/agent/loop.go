@@ -189,6 +189,10 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 					fmt.Sprintf("internal error: %v", r), companion.HistoryStatusFailed)
 			}
 		}()
+		if provider.IsSelfExecuting(st.provider) {
+			s.loopCLI(runCtx, st)
+			return
+		}
 		s.loop(runCtx, st)
 	}()
 	return runID, nil

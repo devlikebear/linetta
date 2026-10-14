@@ -14,12 +14,15 @@ import (
 // secret: Configured says a key or login exists, not what it is.
 type Status struct {
 	ID         string `json:"id"`
-	Auth       string `json:"auth"` // "oauth" | "api_key"
+	Auth       string `json:"auth"` // "oauth" | "api_key" | "cli"
 	Active     bool   `json:"active"`
 	Configured bool   `json:"configured"`
 	Consented  bool   `json:"consented"`
 	Model      string `json:"model,omitempty"`
 	BaseURL    string `json:"base_url,omitempty"`
+	// CLIPath is where the Claude Code CLI was found, for the pane to show;
+	// empty when it was not. Set only for "cli" providers.
+	CLIPath string `json:"cli_path,omitempty"`
 }
 
 // testTimeout bounds providers.test; a hung endpoint must not hang the pane.
@@ -30,8 +33,11 @@ const testTimeout = 30 * time.Second
 const testPrompt = "Reply with the single word OK."
 
 func authKind(id string) string {
-	if id == settings.ProviderOpenAICodex {
+	switch id {
+	case settings.ProviderOpenAICodex:
 		return "oauth"
+	case settings.ProviderClaudeCode:
+		return "cli"
 	}
 	return "api_key"
 }
@@ -61,6 +67,7 @@ func (s *Source) List() []Status {
 			Consented:  r.Consented(),
 			Model:      r.Model,
 			BaseURL:    r.BaseURL,
+			CLIPath:    r.CLIPath,
 		})
 	}
 	return out
@@ -79,6 +86,10 @@ func (s *Source) ListModels(ctx context.Context, id string) ([]string, error) {
 			Reason: rpc.ReasonProviderNotConfigured,
 			Err:    fmt.Errorf("%s: no credential", r.ID),
 		}
+	}
+	if r.ID == settings.ProviderClaudeCode {
+		// The CLI has no model list to ask for; offer its own aliases.
+		return append([]string(nil), claudeCodeModels...), nil
 	}
 	models, err := s.fetcher.FetchModels(ctx, Options(r))
 	if err != nil {

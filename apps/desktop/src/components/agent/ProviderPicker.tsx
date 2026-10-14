@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../lib/i18n";
 import { providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import { dispatchAppEvent } from "../../lib/appEvents";
-import { PROVIDER_ORDER, isProviderReady } from "../../lib/providers";
+import { isProviderReady, offeredProviders } from "../../lib/providers";
 import type { ProviderID, ProviderStatus } from "../../lib/types";
 
 /** Which provider and model the next turn goes to, and a way to change both
@@ -118,7 +118,7 @@ export function ProviderPicker({
           disabled={locked}
           onChange={(e) => chooseProvider(e.target.value as ProviderID)}
         >
-          {PROVIDER_ORDER.map(({ id, labelKey }) => {
+          {offeredProviders(rows).map(({ id, labelKey }) => {
             const row = rows.find((r) => r.id === id);
             // The active one stays enabled even if it somehow is not ready —
             // a <select> whose current value is a disabled option renders

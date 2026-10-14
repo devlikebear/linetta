@@ -4,8 +4,10 @@ package engineapp
 
 import (
 	"encoding/json"
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -44,6 +46,10 @@ func TestProvidersListIsRegisteredAndDescribesAFreshInstall(t *testing.T) {
 		{ID: "gemini-native", Auth: "api_key"},
 		{ID: "openai", Auth: "api_key"},
 	}
+	// The CLI provider exists only where a subprocess may be spawned.
+	if slices.Contains(settings.ValidProviders(), settings.ProviderClaudeCode) {
+		want = append(want, providerStatus{ID: "claude-code", Auth: "cli"})
+	}
 	if len(got) != len(want) {
 		t.Fatalf("providers.list returned %d entries, want %d: %s", len(got), len(want), result)
 	}
@@ -60,7 +66,10 @@ func TestProvidersListIsRegisteredAndDescribesAFreshInstall(t *testing.T) {
 			t.Errorf("%s active = %v, want %v", w.ID, got[i].Active, w.Active)
 		}
 		// A fresh install has no key and no login, and nothing is consented to.
-		if got[i].Configured {
+		// The CLI is the exception: "configured" there means the binary is
+		// installed on this machine, which a fresh Linetta home says nothing
+		// about.
+		if got[i].Configured && w.Auth != "cli" {
 			t.Errorf("%s reports configured on a fresh install", w.ID)
 		}
 		if got[i].Consented {

@@ -1810,3 +1810,73 @@ describe("ProviderSection", () => {
     });
   });
 });
+
+describe("ProviderSection — Claude Code CLI", () => {
+  const cliRow = (active: boolean, extras: Record<string, unknown> = {}) => ({
+    id: "claude-code",
+    auth: "cli",
+    active,
+    configured: Boolean(extras.cli_path),
+    consented: false,
+    ...extras,
+  });
+  const base = (active: string) =>
+    PROVIDER_IDS.map((id) => ({
+      id,
+      auth: id === "openai-codex" ? "oauth" : "api_key",
+      active: id === active,
+      configured: false,
+      consented: false,
+    }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    rpc.providersListModels.mockImplementation(() => Promise.resolve({ models: [] }));
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({}));
+    rpc.settingsSet.mockImplementation(() => Promise.resolve({}));
+    rpc.codexLoginStatus.mockResolvedValue({ logged_in: false });
+  });
+
+  it("is not offered by a build whose engine does not list it", async () => {
+    rpc.providersList.mockImplementation(() => Promise.resolve(base("openai-codex")));
+    render(<ProviderSection />);
+    await screen.findByTestId("provider-choice-openai");
+    expect(screen.queryByTestId("provider-choice-claude-code")).toBeNull();
+  });
+
+  it("shows where the CLI was found instead of a key field", async () => {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([...base(""), cliRow(true, { cli_path: "/Users/me/.local/bin/claude" })]),
+    );
+    render(<ProviderSection />);
+
+    const tab = await screen.findByTestId("provider-choice-claude-code");
+    expect(tab).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByTestId("provider-cli-found")).toHaveTextContent(
+      "settings.providers.cli.found:path=/Users/me/.local/bin/claude",
+    );
+    expect(screen.queryByTestId("provider-key")).toBeNull();
+    expect(screen.queryByTestId("provider-base-url")).toBeNull();
+  });
+
+  it("says so when the CLI is missing, and checks again on request", async () => {
+    rpc.providersList.mockImplementation(() => Promise.resolve([...base(""), cliRow(true)]));
+    render(<ProviderSection />);
+
+    await screen.findByTestId("provider-cli-missing");
+    const calls = rpc.providersList.mock.calls.length;
+    await userEvent.click(screen.getByTestId("provider-cli-recheck"));
+    await waitFor(() => expect(rpc.providersList.mock.calls.length).toBeGreaterThan(calls));
+  });
+
+  it("names Anthropic, reached through Claude Code, in the consent sentence", async () => {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([...base(""), cliRow(true, { cli_path: "/usr/local/bin/claude" })]),
+    );
+    render(<ProviderSection />);
+
+    expect(
+      await screen.findByText("settings.providers.consent:provider=settings.providers.consent.claudeCode"),
+    ).toBeTruthy();
+  });
+});

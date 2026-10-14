@@ -40,7 +40,14 @@ func Classify(id string, err error) error {
 	if reason == rpc.ReasonProviderUnreachable || reason == rpc.ReasonProviderRejected {
 		msg := strings.ToLower(err.Error())
 		switch {
-		case strings.Contains(msg, "api key is required"),
+		// The Claude Code CLI reports through its exit and its own words, not
+		// an HTTP status, so its failures are only ever recognisable here.
+		case strings.Contains(msg, "executable not found"):
+			reason = rpc.ReasonProviderNotConfigured
+		case strings.Contains(msg, "/login"),
+			strings.Contains(msg, "not logged in"),
+			strings.Contains(msg, "oauth token"),
+			strings.Contains(msg, "api key is required"),
 			strings.Contains(msg, "invalid api key"),
 			strings.Contains(msg, "api key not valid"),
 			strings.Contains(msg, "refresh token"),
@@ -48,6 +55,9 @@ func Classify(id string, err error) error {
 			strings.Contains(msg, "auth.json"):
 			reason = rpc.ReasonProviderAuthFailed
 		case strings.Contains(msg, "rate limit"),
+			strings.Contains(msg, "usage limit"),
+			strings.Contains(msg, "limit reached"),
+			strings.Contains(msg, "credit balance"),
 			strings.Contains(msg, "quota"),
 			strings.Contains(msg, "insufficient credit"):
 			reason = rpc.ReasonProviderRateLimited
@@ -88,7 +98,7 @@ func isTimeout(err error) bool {
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "client.timeout exceeded") ||
 		strings.Contains(msg, "deadline exceeded") ||
-		strings.Contains(msg, "timed out")
+		strings.Contains(msg, "timed out") // the CLI: "cli timed out: no output for 15m0s"
 }
 
 func firstLine(err error) string {

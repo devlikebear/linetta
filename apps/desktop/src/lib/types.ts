@@ -501,7 +501,7 @@ export interface GitSyncInitResult {
  *  OAuth inside the app; the other three take an API key. "openai" is the
  *  OpenAI-compatible family — base_url points it at OpenRouter, Ollama, LM
  *  Studio. */
-export type ProviderID = "openai-codex" | "anthropic" | "gemini-native" | "openai";
+export type ProviderID = "openai-codex" | "anthropic" | "gemini-native" | "openai" | "claude-code";
 export type WebSearchProvider = "brave" | "perplexity";
 
 export type AppLanguage = "ko" | "en" | "ja";
@@ -528,12 +528,16 @@ export interface ProviderPatch {
 /** providers.list — where each provider stands. Never carries a secret. */
 export interface ProviderStatus {
   id: ProviderID;
-  auth: "oauth" | "api_key";
+  /** "cli" is the Claude Code CLI: no key, the writer's own Claude login. */
+  auth: "oauth" | "api_key" | "cli";
   active: boolean;
+  /** For "cli", whether the binary was found — not whether it is signed in. */
   configured: boolean;
   consented: boolean;
   model?: string;
   base_url?: string;
+  /** Where the Claude Code CLI was found; absent when it was not. */
+  cli_path?: string;
 }
 
 /** codex.login_start — the address the shell opens in the OS browser. */
