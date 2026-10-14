@@ -318,3 +318,215 @@ func TestProviderConfigFor_logsASecretStoreReadFailure(t *testing.T) {
 		t.Fatalf("secret-store read failure was swallowed without a log line: %q", logs.String())
 	}
 }
+
+// refusingSetSecretStore refuses Set and otherwise passes through to an
+// in-memory store. With refuseAt zero it refuses every write — a build with no
+// backend, a keychain that stays locked. With refuseAt n it refuses only the
+// nth write since calls was last reset — one item the keychain turns away
+// while the rest, the rollback included, still go through.
+type refusingSetSecretStore struct {
+	SecretStore
+	refuseAt int
+	calls    int
+	err      error
+}
+
+func (r *refusingSetSecretStore) Set(name, value string) error {
+	r.calls++
+	if r.refuseAt == 0 || r.calls == r.refuseAt {
+		return r.err
+	}
+	return r.SecretStore.Set(name, value)
+}
+
+// settingsSnapshot is everything a refused settings.set must leave alone that
+// a caller can observe: the file, the store's in-memory config, and what a
+// fresh process would load from that file.
+type settingsSnapshot struct{ file, memory, reloaded string }
+
+func snapshotSettings(t *testing.T, s *Store, secrets SecretStore) settingsSnapshot {
+	t.Helper()
+	ctx := context.Background()
+	asJSON := func(c Config) string {
+		b, err := json.Marshal(c)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		return string(b)
+	}
+	got, err := s.Get(ctx)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	fresh, err := NewForHomeWithSecretStore(s.dir, secrets)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	reloaded, err := fresh.Get(ctx)
+	if err != nil {
+		t.Fatalf("Get after reload: %v", err)
+	}
+	return settingsSnapshot{
+		file:     readSettingsFile(t, s.dir),
+		memory:   asJSON(got),
+		reloaded: asJSON(reloaded),
+	}
+}
+
+func (want settingsSnapshot) assertUnchanged(t *testing.T, got settingsSnapshot) {
+	t.Helper()
+	if got.file != want.file {
+		t.Errorf("a refused settings.set rewrote settings.json:\nbefore: %s\nafter:  %s", want.file, got.file)
+	}
+	if got.memory != want.memory {
+		t.Errorf("a refused settings.set changed the in-memory config:\nbefore: %s\nafter:  %s", want.memory, got.memory)
+	}
+	if got.reloaded != want.reloaded {
+		t.Errorf("a refused settings.set changed what a reload sees:\nbefore: %s\nafter:  %s", want.reloaded, got.reloaded)
+	}
+}
+
+// The patch the desktop's provider pane sends when the writer saves an
+// OpenAI-compatible endpoint, against a store that refuses the key. It used
+// to come back as an error with base_url, model and both consented_at stamps
+// already in settings.json and in memory — the pane showed "not saved" while
+// the engine had half of it.
+func TestSet_aRefusedKeyLeavesTheRestOfThePatchUnwritten(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"locked keychain", errors.New("keychain is locked")},
+		{"no backend", ErrSecretStoreUnsupported},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("LINETTA_HOME", t.TempDir())
+			mem := NewMemorySecretStore()
+			secrets := &refusingSetSecretStore{SecretStore: mem, err: tc.err}
+			s, err := NewWithSecretStore(secrets)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			ctx := context.Background()
+			// Something on disk to compare against, written without a key.
+			if _, err := s.Set(ctx, Patch{
+				Theme:     strPtr("dark"),
+				Providers: map[string]ProviderPatch{"openai": {Model: strPtr("old-model")}},
+			}); err != nil {
+				t.Fatalf("Set seed: %v", err)
+			}
+			before := snapshotSettings(t, s, secrets)
+
+			now := int64(1_760_400_000_000)
+			_, err = s.Set(ctx, Patch{
+				Provider: strPtr("openai"),
+				Theme:    strPtr("light"),
+				Providers: map[string]ProviderPatch{
+					"openai": {
+						BaseURL:     strPtr("http://127.0.0.1:8791/v1"),
+						APIKey:      strPtr("test-key"),
+						Model:       strPtr("mock-model"),
+						ConsentedAt: int64Ptr(now),
+					},
+					"anthropic": {APIKey: strPtr("test-dummy"), ConsentedAt: int64Ptr(now)},
+				},
+			})
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("Set error = %v, want %v", err, tc.err)
+			}
+
+			before.assertUnchanged(t, snapshotSettings(t, s, secrets))
+			for _, id := range []string{"openai", "anthropic"} {
+				if v, ok, _ := mem.Get(providerAPIKeySecretName(id)); ok {
+					t.Errorf("%s key %q is in the secret store after a refused patch", id, v)
+				}
+			}
+		})
+	}
+}
+
+// Two keys in one patch and the store takes the first, then refuses the
+// second. The first must be put back — to its old value where there was one,
+// gone where there was not — or the keychain holds half a patch the caller
+// was told failed. Map order decides which key goes first, so this loops.
+func TestSet_aKeyRefusedPartwayRollsBackTheKeysAlreadyWritten(t *testing.T) {
+	t.Setenv("LINETTA_HOME", t.TempDir())
+	mem := NewMemorySecretStore()
+	if err := mem.Set(providerAPIKeySecretName("anthropic"), "sk-ant-old"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	secrets := &refusingSetSecretStore{SecretStore: mem, err: errors.New("keychain is locked")}
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := s.Set(ctx, Patch{Theme: strPtr("dark")}); err != nil {
+		t.Fatalf("Set seed: %v", err)
+	}
+	before := snapshotSettings(t, s, secrets)
+
+	secrets.refuseAt = 2
+	for i := 0; i < 20; i++ {
+		secrets.calls = 0
+		if _, err := s.Set(ctx, Patch{
+			Theme: strPtr("light"),
+			Providers: map[string]ProviderPatch{
+				"anthropic": {APIKey: strPtr("sk-ant-new"), Model: strPtr("claude-x")},
+				"openai":    {APIKey: strPtr("sk-openai-new"), Model: strPtr("gpt-x")},
+			},
+		}); err == nil {
+			t.Fatal("expected the second key write to be refused")
+		}
+		if v, ok, _ := mem.Get(providerAPIKeySecretName("anthropic")); !ok || v != "sk-ant-old" {
+			t.Fatalf("iteration %d: anthropic key = (%q, %v), want the old one restored", i, v, ok)
+		}
+		if v, ok, _ := mem.Get(providerAPIKeySecretName("openai")); ok {
+			t.Fatalf("iteration %d: openai key %q survived a refused patch", i, v)
+		}
+		before.assertUnchanged(t, snapshotSettings(t, s, secrets))
+	}
+}
+
+// The keys landed and then settings.json could not be written. The keys come
+// back out, so the keychain does not hold a patch the file and memory lack.
+func TestSet_aFailedFileWriteRollsBackTheKeys(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LINETTA_HOME", dir)
+	secrets := NewMemorySecretStore()
+	if err := secrets.Set(providerAPIKeySecretName("anthropic"), "sk-ant-old"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	s, err := NewWithSecretStore(secrets)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+	if _, err := s.Set(ctx, Patch{Theme: strPtr("dark")}); err != nil {
+		t.Fatalf("Set seed: %v", err)
+	}
+	before := snapshotSettings(t, s, secrets)
+
+	// persistWith writes settings.json.tmp and renames it; a directory in the
+	// way makes the write fail without touching settings.json.
+	if err := os.Mkdir(filepath.Join(dir, "settings.json.tmp"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if _, err := s.Set(ctx, Patch{
+		Theme: strPtr("light"),
+		Providers: map[string]ProviderPatch{
+			"anthropic": {APIKey: strPtr("sk-ant-new")},
+			"openai":    {APIKey: strPtr("sk-openai-new")},
+		},
+	}); err == nil {
+		t.Fatal("expected the settings.json write to fail")
+	}
+
+	if v, ok, _ := secrets.Get(providerAPIKeySecretName("anthropic")); !ok || v != "sk-ant-old" {
+		t.Errorf("anthropic key = (%q, %v), want the old one restored", v, ok)
+	}
+	if v, ok, _ := secrets.Get(providerAPIKeySecretName("openai")); ok {
+		t.Errorf("openai key %q survived a failed file write", v)
+	}
+	before.assertUnchanged(t, snapshotSettings(t, s, secrets))
+}
