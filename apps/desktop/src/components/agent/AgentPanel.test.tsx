@@ -912,6 +912,22 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     );
   });
 
+  it("shows the provider picker under the composer and locks it while a turn runs", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+
+    const picker = screen.getByTestId("agent-provider-select") as HTMLSelectElement;
+    expect(picker.value).toBe("anthropic");
+    expect(picker.disabled).toBe(false);
+
+    await type("이어서 써줘");
+    await pressEnter();
+
+    // The engine resolves the provider when a turn starts; a change mid-turn
+    // would not reach this one, so the picker does not pretend it could.
+    expect(picker.disabled).toBe(true);
+  });
+
   it("does not send on Shift+Enter", async () => {
     // jsdom does not simulate a browser's native newline-on-Enter behaviour
     // for a plain keydown dispatch, so this cannot assert a "\n" landed in
