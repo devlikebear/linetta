@@ -311,7 +311,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	codexSvc := codexauth.NewService(codexHome)
 	a.closers = append(a.closers, codexSvc.Close)
 
-	providerSrc := provider.NewSource(settingsStore, codexHome)
+	providerSrc := provider.NewSource(settingsStore, codexHome).WithCLIWorkDir(filepath.Join(home, "agent-cli"))
 	providers := providerService{src: providerSrc}
 	a.providerSrc = providerSrc
 

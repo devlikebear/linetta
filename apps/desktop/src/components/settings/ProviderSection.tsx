@@ -8,7 +8,7 @@ import {
   settings as settingsApi,
 } from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
-import { PROVIDER_ORDER, nameKeyFor } from "../../lib/providers";
+import { nameKeyFor, offeredProviders, takesApiKey } from "../../lib/providers";
 import type { CodexStatus, ProviderID, ProviderStatus } from "../../lib/types";
 
 /** Connect an AI provider (BYOK).
@@ -671,7 +671,11 @@ export function ProviderSection() {
   const consentDestination =
     active === "openai"
       ? current?.base_url?.trim() || t("settings.providers.consent.customEndpoint")
-      : t(nameKeyFor(active));
+      : active === "claude-code"
+        ? // Claude Code is the program, not the destination: what it sends
+          // goes to Anthropic, and the sentence the writer agrees to says so.
+          t("settings.providers.consent.claudeCode")
+        : t(nameKeyFor(active));
 
   // providers.test goes through Source.Client(), which requires Configured()
   // AND Consented() on the engine side — this is a server contract, not a UX
@@ -748,7 +752,7 @@ export function ProviderSection() {
       ) : null}
 
       <div className="modal-field settings-segmented" data-testid="provider-choices">
-        {PROVIDER_ORDER.map(({ id, labelKey }) => (
+        {offeredProviders(list).map(({ id, labelKey }) => (
           <button
             key={id}
             type="button"
@@ -814,7 +818,31 @@ export function ProviderSection() {
         </div>
       ) : null}
 
-      {active !== "openai-codex" ? (
+      {active === "claude-code" ? (
+        <div className="modal-field" data-testid="provider-cli">
+          {current?.cli_path ? (
+            <p className="sd" data-testid="provider-cli-found">
+              {t("settings.providers.cli.found", { path: current.cli_path })}
+            </p>
+          ) : (
+            <p className="sd" data-testid="provider-cli-missing">
+              {t("settings.providers.cli.missing")}
+            </p>
+          )}
+          <p className="sd">{t("settings.providers.cli.hint")}</p>
+          <button
+            type="button"
+            className="btn ghost sm"
+            disabled={busy}
+            onClick={() => void guard(refresh)}
+            data-testid="provider-cli-recheck"
+          >
+            {t("settings.providers.cli.recheck")}
+          </button>
+        </div>
+      ) : null}
+
+      {takesApiKey(active) ? (
         <div className="modal-field" data-testid="provider-key">
           <label htmlFor="provider-api-key">{t("settings.providers.apiKey")}</label>
           <input

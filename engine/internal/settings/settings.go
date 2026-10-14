@@ -17,15 +17,26 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/paths"
 )
 
-// Provider ids the built-in agent can use (#90). Each maps 1:1 to a tars
-// pkg/llm provider name. Codex authenticates with an OAuth login the app
-// performs itself (#92); the other three take an API key. "openai" is the
-// OpenAI-compatible family: base_url points it at OpenRouter, Ollama, LM Studio.
+// Provider ids the built-in agent can use (#90). Each maps to a tars pkg/llm
+// provider name. Codex authenticates with an OAuth login the app performs
+// itself (#92); anthropic, gemini-native and openai take an API key. "openai"
+// is the OpenAI-compatible family: base_url points it at OpenRouter, Ollama,
+// LM Studio.
+//
+// "claude-code" drives the writer's own installed Claude Code CLI under their
+// own Claude login; Linetta never sees a credential for it. The id is new on
+// purpose rather than the "claude-code-cli" pre-1.0 builds wrote: a 1.x
+// settings file still carrying that one keeps falling back to Codex (see
+// ActiveProvider) instead of silently switching an agent that works today to
+// a CLI the writer never chose in this version. tars knows it as
+// "claude-code-cli"; provider.Options does the mapping. It exists only in
+// builds that may spawn a subprocess — see ValidProviders.
 const (
 	ProviderOpenAICodex  = "openai-codex"
 	ProviderAnthropic    = "anthropic"
 	ProviderGeminiNative = "gemini-native"
 	ProviderOpenAI       = "openai"
+	ProviderClaudeCode   = "claude-code"
 )
 
 // AIDataSharingConsentVersion increments whenever the disclosed third-party
@@ -665,6 +676,12 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 			}
 			if pp.ConsentedAt != nil {
 				cfg.ConsentedAt = *pp.ConsentedAt
+			}
+			if pp.APIKey != nil && strings.TrimSpace(*pp.APIKey) != "" && id == ProviderClaudeCode {
+				// The CLI signs in with the writer's own Claude login. A key
+				// stored here would never be read, and a pane that accepted
+				// one would be telling the writer it mattered.
+				return Config{}, fmt.Errorf("settings: provider %q takes no api_key", id)
 			}
 			if pp.APIKey != nil {
 				// Deferred, not written here: setSecret deletes on "", so one

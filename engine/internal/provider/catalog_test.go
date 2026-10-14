@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
@@ -20,14 +21,14 @@ func (f *fakeFetcher) FetchModels(_ context.Context, opts llm.ProviderOptions) (
 	return f.models, f.err
 }
 
-func TestList_reportsTheFourInOrderWithState(t *testing.T) {
+func TestList_reportsEveryProviderInOrderWithState(t *testing.T) {
 	src, st, _ := newSource(t)
 	configure(t, st, "anthropic", "sk-ant-test", true)
 	got := src.List()
-	if len(got) != 4 {
-		t.Fatalf("List = %d entries, want 4", len(got))
+	wantIDs := settings.ValidProviders()
+	if len(got) != len(wantIDs) {
+		t.Fatalf("List = %d entries, want %d", len(got), len(wantIDs))
 	}
-	wantIDs := []string{"openai-codex", "anthropic", "gemini-native", "openai"}
 	for i, id := range wantIDs {
 		if got[i].ID != id {
 			t.Errorf("List[%d].ID = %q, want %q", i, got[i].ID, id)

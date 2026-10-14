@@ -8,19 +8,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 )
 
 func int64Ptr(v int64) *int64 { return &v }
-
-func TestValidProviders_isExactlyTheFour(t *testing.T) {
-	want := []string{"openai-codex", "anthropic", "gemini-native", "openai"}
-	if got := ValidProviders(); !slices.Equal(got, want) {
-		t.Fatalf("ValidProviders = %v, want %v", got, want)
-	}
-}
 
 func TestSet_providerPatch_roundTrips(t *testing.T) {
 	s := newStoreOnTemp(t)
