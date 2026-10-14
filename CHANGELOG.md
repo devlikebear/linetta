@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.7.0 - 2026-10-13
+
+- The agent panel now knows when a turn is still running. A turn keeps going
+  in the background when you close the panel or leave the work, but coming
+  back used to show only the saved conversation and a guess ("may still be in
+  progress") beside a send button that would be refused. The panel now picks
+  the running turn back up — stop button, the reply streamed so far, and
+  everything after — and the toolbar's agent button shows a dot while a turn
+  is running, panel open or not
+  ([#185](https://github.com/devlikebear/linetta/pull/185)).
+- A running turn says so. The last line of the conversation shows what the
+  agent is doing and for how long ("Thinking… 0:42"), so the minutes it can
+  spend writing a whole scene into a single tool call no longer look like it
+  has stopped. The conversation also follows new lines as they arrive, unless
+  you have scrolled up to read.
+- A turn that ends without an answer now tells you why. When the model
+  returned nothing, or its response was cut off at the provider's output
+  limit, the turn used to end silently: a column of "read" lines and nothing
+  after. Both now leave a notice, as does a turn cut short because the app
+  was closed on it, and sending "continue" picks the work up.
+- What the agent says after using a tool now appears below that tool's line,
+  where it happened, instead of being appended to its earlier message above.
+- Raised the output limit for Anthropic models from 16,000 to 64,000 tokens.
+  Rewriting several scenes in one response ran past the old limit and was cut
+  off partway through, with nothing written. This applies to the current
+  Claude families (Opus 4.6 and later, Sonnet 4.6 and later, Haiku 4.5, and
+  the 5 series); other models and providers keep their own defaults. Long
+  responses that used to be cut off now run to the end, so such a turn can
+  use more output tokens
+  ([#186](https://github.com/devlikebear/linetta/pull/186)).
+
 ## v1.6.0 - 2026-10-11
 
 - The built-in agent no longer stops mid-job without a word. When a turn runs
