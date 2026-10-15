@@ -17,15 +17,26 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/paths"
 )
 
-// Provider ids the built-in agent can use (#90). Each maps 1:1 to a tars
-// pkg/llm provider name. Codex authenticates with an OAuth login the app
-// performs itself (#92); the other three take an API key. "openai" is the
-// OpenAI-compatible family: base_url points it at OpenRouter, Ollama, LM Studio.
+// Provider ids the built-in agent can use (#90). Each maps to a tars pkg/llm
+// provider name. Codex authenticates with an OAuth login the app performs
+// itself (#92); anthropic, gemini-native and openai take an API key. "openai"
+// is the OpenAI-compatible family: base_url points it at OpenRouter, Ollama,
+// LM Studio.
+//
+// "claude-code" drives the writer's own installed Claude Code CLI under their
+// own Claude login; Linetta never sees a credential for it. The id is new on
+// purpose rather than the "claude-code-cli" pre-1.0 builds wrote: a 1.x
+// settings file still carrying that one keeps falling back to Codex (see
+// ActiveProvider) instead of silently switching an agent that works today to
+// a CLI the writer never chose in this version. tars knows it as
+// "claude-code-cli"; provider.Options does the mapping. It exists only in
+// builds that may spawn a subprocess — see ValidProviders.
 const (
 	ProviderOpenAICodex  = "openai-codex"
 	ProviderAnthropic    = "anthropic"
 	ProviderGeminiNative = "gemini-native"
 	ProviderOpenAI       = "openai"
+	ProviderClaudeCode   = "claude-code"
 )
 
 // AIDataSharingConsentVersion increments whenever the disclosed third-party
@@ -207,8 +218,9 @@ func (l legacyPlaintextKeys) any() bool {
 // clone returns a copy that is safe to hold after s.mu is released.
 //
 // Assigning the struct is not enough: the copy shares the same providers map,
-// and forgetLegacyPlaintextFor deletes from it under mu.Lock. A settings.get
-// arriving on another goroutine — RPC dispatch is one goroutine per message
+// and without() deletes from the map it works on — which is why it clones
+// first. Had it shared s.legacyPlaintext's map, a settings.get arriving on
+// another goroutine — RPC dispatch is one goroutine per message
 // (internal/rpc/server.go) — would then be iterating that map while it is
 // written, which Go does not merely race on but aborts the process for:
 // "fatal error: concurrent map iteration and map write". Every read of
@@ -240,6 +252,26 @@ func (l legacyPlaintextKeys) providerIDs() []string {
 	// an unordered one would reshuffle the notice on every settings.get.
 	slices.Sort(ids)
 	return ids
+}
+
+// without returns a copy minus the providers whose key the writer is storing
+// or clearing in this patch. Storing a new key for a provider — or clearing
+// it, which is the same button saying the opposite — is an explicit decision
+// about that credential, and after it the plaintext copy is not something to
+// preserve. Every other provider's residue stays.
+func (l legacyPlaintextKeys) without(pending []pendingSecret) legacyPlaintextKeys {
+	l = l.clone()
+	for _, ps := range pending {
+		for id := range l.providers {
+			if ps.name == providerAPIKeySecretName(id) {
+				delete(l.providers, id)
+			}
+		}
+	}
+	if !l.any() {
+		return legacyPlaintextKeys{}
+	}
+	return l
 }
 
 // note records one setSecret failure. A real error outranks "unsupported":
@@ -624,11 +656,11 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		next.Provider = *p.Provider
 	}
 	// Provider key writes are collected here and applied only after every
-	// validation below has passed. The SecretStore is the one side effect Set
-	// cannot roll back: writing a key (or deleting one, which an empty api_key
-	// means) before an invalid theme or an out-of-range mcp_port aborts the
-	// call would leave the keychain changed while the caller is told nothing
-	// happened. See applyPendingSecrets below the validations.
+	// validation below has passed. Writing a key (or deleting one, which an
+	// empty api_key means) before an invalid theme or an out-of-range
+	// mcp_port aborts the call would leave the keychain changed while the
+	// caller is told nothing happened. See applyPendingSecrets below the
+	// validations.
 	var pendingSecrets []pendingSecret
 	if len(p.Providers) > 0 {
 		// Validate every id before mutating anything. Map iteration order is
@@ -665,6 +697,12 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 			}
 			if pp.ConsentedAt != nil {
 				cfg.ConsentedAt = *pp.ConsentedAt
+			}
+			if pp.APIKey != nil && strings.TrimSpace(*pp.APIKey) != "" && id == ProviderClaudeCode {
+				// The CLI signs in with the writer's own Claude login. A key
+				// stored here would never be read, and a pane that accepted
+				// one would be telling the writer it mattered.
+				return Config{}, fmt.Errorf("settings: provider %q takes no api_key", id)
 			}
 			if pp.APIKey != nil {
 				// Deferred, not written here: setSecret deletes on "", so one
@@ -783,59 +821,89 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	}
 	next = normalizeEditorPreferences(next)
 
-	// The one path that deletes a credential the writer owns (#113). The file
-	// is rewritten without the plaintext keys first and the in-memory record
-	// dropped only once that write has landed: the other order would take the
-	// notice off the screen while the keys were still on disk.
+	// Everything that can still fail runs before anything a reader can see
+	// changes, and each step undoes the one before it if it fails: keys
+	// first, because the SecretStore is the side effect that can refuse (a
+	// locked keychain, a build with no backend at all); then the file, which
+	// takes the keys back out if it cannot be written; and memory last, which
+	// cannot fail. So a refused patch leaves the keychain, settings.json and
+	// s.cfg exactly as they were — settings.set is all-or-nothing, which the
+	// desktop's provider pane relies on.
+	//
+	// The legacy plaintext residue rides along in the same file write. The
+	// explicit clear (#113) drops all of it; otherwise a key the writer is
+	// storing or clearing right now supersedes that provider's plaintext copy.
+	// Both are computed here but only take effect once the write has landed:
+	// the other order would take the notice off the screen while the keys
+	// were still on disk.
 	s.mu.RLock()
 	legacy := s.legacyPlaintext.clone()
 	s.mu.RUnlock()
-	clearLegacy := p.ClearLegacyPlaintextKeys != nil && *p.ClearLegacyPlaintextKeys
-	if clearLegacy {
+	if p.ClearLegacyPlaintextKeys != nil && *p.ClearLegacyPlaintextKeys {
 		legacy = legacyPlaintextKeys{}
+	} else {
+		legacy = legacy.without(pendingSecrets)
+	}
+
+	undoSecrets, err := s.applyPendingSecrets(pendingSecrets)
+	if err != nil {
+		return Config{}, err
 	}
 	if err := s.persistWith(next, legacy); err != nil {
+		undoSecrets()
 		return Config{}, err
 	}
 
 	s.mu.Lock()
 	s.cfg = sanitizeConfigForMemory(next)
-	if clearLegacy {
-		s.legacyPlaintext = legacyPlaintextKeys{}
-	}
+	s.legacyPlaintext = legacy
 	s.mu.Unlock()
-
-	// Last, past every path that can still fail with nothing written. A
-	// SecretStore failure here (a locked keychain) is reported to the caller
-	// with the rest of the patch already applied — the ordering that keeps
-	// memory and disk in step; only the key did not take.
-	if err := s.applyPendingSecrets(pendingSecrets); err != nil {
-		return Config{}, err
-	}
-	// A key the writer has just stored or cleared supersedes the plaintext one
-	// still in the file for that provider, so the file stops carrying it. This
-	// is after applyPendingSecrets because only a write that actually landed
-	// counts, and it is why the rewrite is a second one.
-	if s.forgetLegacyPlaintextFor(pendingSecrets) {
-		if err := s.persist(next); err != nil {
-			return Config{}, err
-		}
-	}
 
 	return s.Get(ctx)
 }
 
-// pendingSecret is one deferred SecretStore write from a Set patch.
+// pendingSecret is one deferred SecretStore write from a Set patch. An empty
+// value means delete, the way setSecret reads it.
 type pendingSecret struct{ name, value string }
 
-func (s *Store) applyPendingSecrets(pending []pendingSecret) error {
-	for _, ps := range pending {
-		// setSecret deletes on "", so one field both sets and clears.
-		if err := s.setSecret(ps.name, ps.value); err != nil {
-			return err
+// applyPendingSecrets writes every pending secret or none of them. What each
+// name holds now is read before anything is written, so a refusal partway —
+// the second key turned away after the first was stored — can put the first
+// back. A read that fails aborts with nothing written: without the old value
+// there is nothing to roll back to.
+//
+// On success it returns the undo, for the caller to run if a later step (the
+// settings.json write) fails.
+func (s *Store) applyPendingSecrets(pending []pendingSecret) (undo func(), err error) {
+	prior := make([]pendingSecret, len(pending))
+	for i, ps := range pending {
+		value, ok, err := s.secrets.Get(ps.name)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			value = ""
+		}
+		prior[i] = pendingSecret{name: ps.name, value: value}
+	}
+	restore := func(n int) {
+		for i := n - 1; i >= 0; i-- {
+			if err := s.setSecret(prior[i].name, prior[i].value); err != nil {
+				// Nothing further to fall back on. Say so, rather than let the
+				// caller's error imply the keychain is as it was.
+				log.Printf("settings: restoring %s after a failed settings.set: %v", prior[i].name, err)
+			}
 		}
 	}
-	return nil
+	for i, ps := range pending {
+		if err := s.setSecret(ps.name, ps.value); err != nil {
+			// The refused write is restored too: a store that errors is not
+			// promising it changed nothing.
+			restore(i + 1)
+			return nil, err
+		}
+	}
+	return func() { restore(len(pending)) }, nil
 }
 
 // persist writes next, carrying forward whatever pre-1.0 plaintext keys the
@@ -929,35 +997,6 @@ func withLegacyPlaintextKeys(c Config, legacy legacyPlaintextKeys) Config {
 		c.Providers = providers
 	}
 	return c
-}
-
-// forgetLegacyPlaintextFor drops the record of any plaintext key the writer
-// has just deliberately replaced or cleared through settings.set. Storing a
-// new key for a provider — or clearing that provider's key, which is the same
-// button saying the opposite — is an explicit decision about that credential,
-// and after it the plaintext copy is not something to preserve. It returns
-// whether anything changed, so the caller knows to rewrite the file.
-func (s *Store) forgetLegacyPlaintextFor(pending []pendingSecret) bool {
-	if len(pending) == 0 {
-		return false
-	}
-	names := map[string]bool{}
-	for _, ps := range pending {
-		names[ps.name] = true
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	changed := false
-	for id := range s.legacyPlaintext.providers {
-		if names[providerAPIKeySecretName(id)] {
-			delete(s.legacyPlaintext.providers, id)
-			changed = true
-		}
-	}
-	if !s.legacyPlaintext.any() {
-		s.legacyPlaintext = legacyPlaintextKeys{}
-	}
-	return changed
 }
 
 func (s *Store) migrateProviderSecrets(providers map[string]ProviderConfig, legacy *legacyPlaintextKeys) (map[string]ProviderConfig, bool) {

@@ -189,6 +189,10 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 					fmt.Sprintf("internal error: %v", r), companion.HistoryStatusFailed)
 			}
 		}()
+		if provider.IsSelfExecuting(st.provider) {
+			s.loopCLI(runCtx, st)
+			return
+		}
 		s.loop(runCtx, st)
 	}()
 	return runID, nil
@@ -618,6 +622,11 @@ func (s *Service) endWithError(ctx context.Context, st loopState, err error) {
 		return
 	}
 	reason, message := classifyProviderError(st.provider, err)
+	// The panel only ever shows the reason. The cause goes on record here, in
+	// Classify's form: its first line, capped, so a provider body cannot ride
+	// along whole. Without it, a timeout and a dead network look the same
+	// after the fact.
+	logf("run %s failed (%s, model %q): %v", st.runID, reason, st.model, provider.Classify(st.provider, err))
 	s.endWithReason(ctx, st, reason, message, companion.HistoryStatusFailed)
 }
 

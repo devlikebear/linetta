@@ -124,6 +124,9 @@ type Deps struct {
 	// so the caller can emit mcp.changed with the right target either way.
 	Undo  func(ctx context.Context, batchID, snapshotID string) (projectID, nodeID string, err error)
 	Clock func() int64
+	// LogPath is where agent diagnostics go — failed turns among them. Empty
+	// keeps them on stdout (tests, the stdio engine).
+	LogPath string
 }
 
 // Service is the built-in agent. One per engine.
@@ -151,6 +154,9 @@ type Service struct {
 
 // New wires the service. Nothing connects until the first run.
 func New(d Deps) *Service {
+	if d.LogPath != "" {
+		setLogFile(d.LogPath)
+	}
 	return &Service{
 		deps: d,
 		tr:   &transcript{repo: d.History, clock: d.Clock},

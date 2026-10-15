@@ -1,5 +1,73 @@
 # Changelog
 
+## v1.8.0 - 2026-10-14
+
+- Claude Code is now an AI provider. If Claude Code is installed and you are
+  signed in to it, the built-in agent can run on your own Claude plan, with no
+  API key: pick **Claude Code** under **Settings → AI provider**, where
+  Linetta shows where it found the `claude` command (or that it did not), and
+  use the connection test to check you are signed in. Linetta runs it with
+  its own file, shell and web tools switched off, and with your own hooks,
+  plugins and other MCP servers left out, so the agent works on your
+  manuscript only through Linetta's tools — and what it sends goes to
+  Anthropic. The model list offers Claude Code's own `haiku`, `opus` and
+  `sonnet`. Not available in the Mac App Store or mobile builds, which cannot
+  start another program
+  ([#194](https://github.com/devlikebear/linetta/pull/194)).
+- The agent panel shows which provider and model your next message goes to,
+  under the message box, and you can change either one there without opening
+  Settings. Only providers that are set up and agreed to can be picked; the
+  others say they need setup. The choice is locked while a reply is running,
+  since a change only applies from the next message
+  ([#190](https://github.com/devlikebear/linetta/pull/190)).
+- Fixed Google Gemini stopping with "Could not reach this AI service" when a
+  reply took more than 30 seconds to begin — which is normal when the model
+  writes a whole scene in one go. Gemini replies now run as long as they need,
+  a reply that is cut off partway is reported instead of silently arriving
+  empty, and two tool calls in one Gemini response no longer lose the second
+  one ([#194](https://github.com/devlikebear/linetta/pull/194)).
+- Error messages from AI providers now say what actually went wrong. A reply
+  that took too long, a request the service refused, and a problem on the
+  service's side each have their own message; until now all of them said to
+  check your internet connection. The cause of a failed turn is also written
+  to `logs/agent.log` in Linetta's data folder, so it can be looked into
+  afterwards ([#192](https://github.com/devlikebear/linetta/pull/192)).
+- Saving AI provider settings is now all or nothing. When the system keychain
+  refused to store an API key, the rest of that save — the model, the address,
+  your consent — used to be kept anyway; now nothing in it is
+  ([#191](https://github.com/devlikebear/linetta/pull/191)).
+
+## v1.7.0 - 2026-10-13
+
+- The agent panel now knows when a turn is still running. A turn keeps going
+  in the background when you close the panel or leave the work, but coming
+  back used to show only the saved conversation and a guess ("may still be in
+  progress") beside a send button that would be refused. The panel now picks
+  the running turn back up — stop button, the reply streamed so far, and
+  everything after — and the toolbar's agent button shows a dot while a turn
+  is running, panel open or not
+  ([#185](https://github.com/devlikebear/linetta/pull/185)).
+- A running turn says so. The last line of the conversation shows what the
+  agent is doing and for how long ("Thinking… 0:42"), so the minutes it can
+  spend writing a whole scene into a single tool call no longer look like it
+  has stopped. The conversation also follows new lines as they arrive, unless
+  you have scrolled up to read.
+- A turn that ends without an answer now tells you why. When the model
+  returned nothing, or its response was cut off at the provider's output
+  limit, the turn used to end silently: a column of "read" lines and nothing
+  after. Both now leave a notice, as does a turn cut short because the app
+  was closed on it, and sending "continue" picks the work up.
+- What the agent says after using a tool now appears below that tool's line,
+  where it happened, instead of being appended to its earlier message above.
+- Raised the output limit for Anthropic models from 16,000 to 64,000 tokens.
+  Rewriting several scenes in one response ran past the old limit and was cut
+  off partway through, with nothing written. This applies to the current
+  Claude families (Opus 4.6 and later, Sonnet 4.6 and later, Haiku 4.5, and
+  the 5 series); other models and providers keep their own defaults. Long
+  responses that used to be cut off now run to the end, so such a turn can
+  use more output tokens
+  ([#186](https://github.com/devlikebear/linetta/pull/186)).
+
 ## v1.6.0 - 2026-10-11
 
 - The built-in agent no longer stops mid-job without a word. When a turn runs

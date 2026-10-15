@@ -186,3 +186,33 @@
 @media (prefers-reduced-motion: reduce) {
   .ws-tool-running { animation: none; }
 }
+
+/* Provider and model for the next turn, under the composer. Quiet chips
+   rather than form fields: it is read far more often than it is changed. */
+.agent-model-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.agent-model-chip {
+  padding: 3px 4px 3px 9px;
+  color: var(--muted);
+  max-width: 100%;
+}
+.agent-model-chip select {
+  max-width: 100%;
+  min-width: 0;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.agent-model-chip select:disabled { cursor: default; }
+.agent-model-chip:focus-within { border-color: var(--accent); }
+.agent-model-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}

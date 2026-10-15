@@ -2,12 +2,6 @@ package settings
 
 import "slices"
 
-// ValidProviders returns the provider ids settings.set accepts, in the order
-// the settings pane lists them.
-func ValidProviders() []string {
-	return []string{ProviderOpenAICodex, ProviderAnthropic, ProviderGeminiNative, ProviderOpenAI}
-}
-
 // ActiveProvider returns the provider the built-in agent uses. An id outside
 // the whitelist — a pre-1.0 "claude-code-cli" or "openrouter" still on disk —
 // is not an error: it stays on disk untouched and Codex is used instead.

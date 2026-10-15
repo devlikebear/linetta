@@ -66,7 +66,10 @@ func newSource(t *testing.T) (*Source, *settings.Store, string) {
 		t.Fatalf("settings: %v", err)
 	}
 	codexHome := filepath.Join(home, "codex")
-	return NewSource(st, codexHome), st, codexHome
+	// No real detection: it would start a login shell, and whether this
+	// machine has Claude Code installed is not what any test here is about.
+	src := NewSource(st, codexHome).WithCLIDetector(func(context.Context) string { return "" })
+	return src, st, codexHome
 }
 
 func reasonOf(t *testing.T, err error) string {
