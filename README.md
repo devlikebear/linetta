@@ -198,6 +198,15 @@ With the skills tools off, the skill **list** goes too: a list with no
 `linetta_read_skill` to open a body is only names. Nothing is deleted either
 way, and switching a group back on restores it exactly.
 
+**A turn stops after a set number of tool calls.** The built-in agent makes at
+most 48 tool calls in one turn by default. Change it under **Settings → Tool
+budget → Tool calls per turn** (`agent_max_tool_calls` in `settings.json`,
+8–200); a higher limit lets a long request finish in one turn, and also lets a
+turn cost more. When a turn reaches the limit, or the same tool fails three
+times in a row, Linetta makes one more request with tools switched off, so the
+agent says what it finished and what is left. Send "continue" to pick up from
+there.
+
 **The daily backup does not carry the skills folder.** It is `VACUUM INTO` on
 `library.db` and copies nothing else under your data directory. What it does
 carry is the version history: every write and every delete lands a row holding
