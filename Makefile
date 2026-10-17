@@ -35,7 +35,19 @@ audit-desktop: ## Check production frontend dependencies
 	cd apps/desktop && pnpm audit --prod
 
 audit-rust: ## Check RustSec advisories (requires cargo-audit)
-	cd apps/desktop/src-tauri && cargo audit
+	@# RUSTSEC-2026-0367/0368/0369 are zip 4.x extracting symlinks and Unix
+	@# permissions unconfined. zip 4 comes only from tauri-plugin-updater's
+	@# Windows build (no release takes zip >= 9 yet), which extracts an update
+	@# only after its minisign signature verifies — so a hostile archive needs
+	@# our updater key. Once the lockfile has no zip 4, drop these ignores.
+	@if ! grep -A1 -x 'name = "zip"' apps/desktop/src-tauri/Cargo.lock | grep -q '^version = "4\.'; then \
+		echo "zip 4.x is gone from Cargo.lock; remove the RUSTSEC-2026-0367/0368/0369 audit exceptions"; \
+		exit 1; \
+	fi
+	cd apps/desktop/src-tauri && cargo audit \
+		--ignore RUSTSEC-2026-0367 \
+		--ignore RUSTSEC-2026-0368 \
+		--ignore RUSTSEC-2026-0369
 
 test-go: ## Run Go engine tests (race detector on: the engine is concurrent)
 	@# -race, because the engine's shared state is reached from one goroutine
