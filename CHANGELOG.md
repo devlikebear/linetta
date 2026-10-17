@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.8.1 - 2026-10-17
+
+v1.8.0 was never published as a release, so this is the first release with
+the v1.8.0 changes below.
+
+- Long conversations with the built-in agent cost less. Once a conversation
+  outgrew the history the agent replays, the oldest message dropped out on
+  every turn, so the AI service could not reuse anything it had cached from
+  the turn before. The replayed history now keeps its starting point for as
+  long as it fits
+  ([#197](https://github.com/devlikebear/linetta/pull/197)).
+- With Anthropic, a turn that calls tools many times — reading scenes,
+  searching the manuscript — no longer resends everything read so far at full
+  price on every step. Each step now marks the newest tool result for caching,
+  so the next step reuses it
+  ([#198](https://github.com/devlikebear/linetta/pull/198)).
+- Updated rustls to 0.23.46 to pick up its security fixes
+  ([#196](https://github.com/devlikebear/linetta/pull/196)).
+
 ## v1.8.0 - 2026-10-14
 
 - Claude Code is now an AI provider. If Claude Code is installed and you are
