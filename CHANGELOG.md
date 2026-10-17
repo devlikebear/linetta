@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.8.2 - 2026-10-17
+
+- With Gemini, the built-in agent no longer stops when the model calls more
+  than one tool at once — reading two scenes together, say. Gemini rejected
+  the next step because each tool's result went back as a separate message;
+  the results of one step now go back together
+  ([#200](https://github.com/devlikebear/linetta/pull/200)).
+- With Gemini and no model chosen, the agent now uses `gemini-3.8-flash`.
+
 ## v1.8.1 - 2026-10-17
 
 v1.8.0 was never published as a release, so this is the first release with

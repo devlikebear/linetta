@@ -1,4 +1,4 @@
 package appversion
 
 // Version is the application version shared by diagnostics and MCP.
-const Version = "1.8.1"
+const Version = "1.8.2"
