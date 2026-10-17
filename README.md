@@ -205,7 +205,8 @@ budget → Tool calls per turn** (`agent_max_tool_calls` in `settings.json`,
 turn cost more. When a turn reaches the limit, or the same tool fails three
 times in a row, Linetta makes one more request with tools switched off, so the
 agent says what it finished and what is left. Send "continue" to pick up from
-there.
+there. A changed limit applies from the next turn, not to one already running.
+External MCP clients are not affected.
 
 **The daily backup does not carry the skills folder.** It is `VACUUM INTO` on
 `library.db` and copies nothing else under your data directory. What it does
