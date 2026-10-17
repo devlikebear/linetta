@@ -150,6 +150,12 @@ type Service struct {
 	// cancellation and unwind before it is safe to close the tool session
 	// or let the caller close the store underneath a turn that outlived it.
 	wg sync.WaitGroup
+
+	// historyStarts is, per work, the id of the message the last turn's
+	// replayed history began at (see priorMessages). Memory only: a restart
+	// costs one turn a cold cache, which is not worth a column.
+	historyMu     sync.Mutex
+	historyStarts map[string]string
 }
 
 // New wires the service. Nothing connects until the first run.
@@ -158,10 +164,21 @@ func New(d Deps) *Service {
 		setLogFile(d.LogPath)
 	}
 	return &Service{
-		deps: d,
-		tr:   &transcript{repo: d.History, clock: d.Clock},
-		runs: newRunRegistry(),
+		deps:          d,
+		tr:            &transcript{repo: d.History, clock: d.Clock},
+		runs:          newRunRegistry(),
+		historyStarts: make(map[string]string),
 	}
+}
+
+// replayHistory is priorMessages for one work, remembering where its window
+// began for the next turn.
+func (s *Service) replayHistory(projectID string, msgs []companion.HistoryMessage) []llm.ChatMessage {
+	s.historyMu.Lock()
+	defer s.historyMu.Unlock()
+	replay, start := priorMessages(msgs, s.historyStarts[projectID])
+	s.historyStarts[projectID] = start
+	return replay
 }
 
 // Close tears down the tool session. It cancels every turn still running,

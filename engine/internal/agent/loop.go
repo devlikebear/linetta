@@ -531,7 +531,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	}
 	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes, skills, groups)}}
 
-	prior, err := s.tr.load(ctx, st.req.ProjectID, 200)
+	prior, err := s.tr.load(ctx, st.req.ProjectID, historyLoadRows)
 	if err != nil {
 		logf("history: %v", err)
 	}
@@ -548,7 +548,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 		}
 		filtered = append(filtered, m)
 	}
-	msgs = append(msgs, priorMessages(filtered)...)
+	msgs = append(msgs, s.replayHistory(st.projectID, filtered)...)
 
 	scope := scopeLine(ctx, s.deps.Scope, st.req.ProjectID, st.req.NodeID)
 	return append(msgs, llm.ChatMessage{

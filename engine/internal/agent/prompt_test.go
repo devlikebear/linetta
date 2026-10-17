@@ -86,11 +86,11 @@ func TestScopeLine_omitsTheSceneWhenNoneIsOpen(t *testing.T) {
 // Tool rows are not replayed: they are the bulkiest thing in the transcript
 // and the model already saw their outcome in its own reply.
 func TestPriorMessages_dropsToolRowsAndKeepsOrder(t *testing.T) {
-	got := priorMessages([]companion.HistoryMessage{
+	got, _ := priorMessages([]companion.HistoryMessage{
 		{Role: "user", Content: "first"},
 		{Role: "tool", Content: `{"name":"linetta_write_scene"}`},
 		{Role: "assistant", Content: "second"},
-	})
+	}, "")
 	if len(got) != 2 {
 		t.Fatalf("got %d messages, want 2: %+v", len(got), got)
 	}
@@ -103,11 +103,11 @@ func TestPriorMessages_dropsToolRowsAndKeepsOrder(t *testing.T) {
 // is the end of the conversation, not its beginning.
 func TestPriorMessages_keepsTheNewestWithinBudget(t *testing.T) {
 	big := strings.Repeat("a", historyBudget-10)
-	got := priorMessages([]companion.HistoryMessage{
+	got, _ := priorMessages([]companion.HistoryMessage{
 		{Role: "user", Content: "oldest"},
 		{Role: "assistant", Content: big},
 		{Role: "user", Content: "newest"},
-	})
+	}, "")
 	joined := ""
 	for _, m := range got {
 		joined += m.Content
@@ -130,10 +130,10 @@ func TestPriorMessages_budgetsInCharactersNotBytes(t *testing.T) {
 	// 가 is 3 bytes in UTF-8: this is historyBudget-10 characters and
 	// roughly 3×historyBudget bytes.
 	big := strings.Repeat("가", historyBudget-10)
-	got := priorMessages([]companion.HistoryMessage{
+	got, _ := priorMessages([]companion.HistoryMessage{
 		{Role: "user", Content: big},
 		{Role: "assistant", Content: "네"},
-	})
+	}, "")
 	joined := ""
 	for _, m := range got {
 		joined += m.Content
@@ -145,11 +145,88 @@ func TestPriorMessages_budgetsInCharactersNotBytes(t *testing.T) {
 	}
 }
 
+// conversation builds n alternating rows of size runes each, with ids, the
+// shape a long chat has once it is past the budget.
+func conversation(n, size int) []companion.HistoryMessage {
+	msgs := make([]companion.HistoryMessage, 0, n)
+	for i := range n {
+		role := "user"
+		if i%2 == 1 {
+			role = "assistant"
+		}
+		msgs = append(msgs, companion.HistoryMessage{
+			ID: fmt.Sprintf("m%d", i), Role: role,
+			Content: fmt.Sprintf("%d:", i) + strings.Repeat("가", size),
+		})
+	}
+	return msgs
+}
+
+// The provider caches a request by its prefix. A window that dropped its
+// oldest message every turn would share no prefix with the turn before it, so
+// a long conversation must keep the same first message from turn to turn.
+func TestPriorMessages_keepsItsStartWhileTheConversationGrows(t *testing.T) {
+	history := conversation(50, 1000) // ~50,000 runes: already past the budget
+	first, start := priorMessages(history, "")
+	if start == "" {
+		t.Fatal("no start was returned for a non-empty window")
+	}
+
+	// Two more turns, still inside the headroom.
+	grown := append(append([]companion.HistoryMessage{}, history...), conversation(54, 1000)[50:]...)
+	for i := range grown[50:] {
+		grown[50+i].ID = fmt.Sprintf("n%d", i)
+	}
+	next, nextStart := priorMessages(grown, start)
+	if nextStart != start {
+		t.Fatalf("the window moved from %s to %s inside the headroom", start, nextStart)
+	}
+	for i, m := range first {
+		if next[i].Role != m.Role || next[i].Content != m.Content {
+			t.Fatalf("message %d changed between turns: the replay is no longer a prefix of the next one", i)
+		}
+	}
+	if len(next) != len(first)+4 {
+		t.Errorf("got %d messages, want the %d from before plus the 4 new ones", len(next), len(first))
+	}
+}
+
+// Past the headroom the window is refilled from the newest end, back to the
+// budget, so it never replays more than budget+headroom.
+func TestPriorMessages_refillsOncePastTheHeadroom(t *testing.T) {
+	history := conversation(80, 1000)
+	start := history[0].ID // a window from here is ~80,000 runes
+	got, nextStart := priorMessages(history, start)
+	if nextStart == start {
+		t.Fatal("a window past budget+headroom kept its start")
+	}
+	used := 0
+	for _, m := range got {
+		used += utf8.RuneCountInString(m.Content)
+	}
+	if used > historyBudget {
+		t.Errorf("refilled window is %d runes, over the %d budget", used, historyBudget)
+	}
+	if got[len(got)-1].Content != history[len(history)-1].Content {
+		t.Error("the refill dropped the newest message")
+	}
+}
+
+// A start that is no longer loaded — the conversation was cleared, or the row
+// aged out — refills rather than keeping nothing.
+func TestPriorMessages_unknownStartRefills(t *testing.T) {
+	history := conversation(4, 10)
+	got, start := priorMessages(history, "gone")
+	if len(got) != 4 || start != history[0].ID {
+		t.Fatalf("got %d messages starting at %q, want all 4 from %q", len(got), start, history[0].ID)
+	}
+}
+
 func TestPriorMessages_mapsRolesForTheModel(t *testing.T) {
-	got := priorMessages([]companion.HistoryMessage{
+	got, _ := priorMessages([]companion.HistoryMessage{
 		{Role: "user", Content: "q"},
 		{Role: "assistant", Content: "a"},
-	})
+	}, "")
 	if got[0].Role != "user" || got[1].Role != "assistant" {
 		t.Errorf("roles = %q,%q", got[0].Role, got[1].Role)
 	}
