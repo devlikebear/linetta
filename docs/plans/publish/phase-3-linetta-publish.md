@@ -13,10 +13,10 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
 
 ## 전제 조건
 
-- [ ] Phase 2 완료 및 사용자 승인
-- [ ] `linetta-artworks` 리포의 `docs/api.md`가 확정되어 있다
-- [ ] 운영 사이트가 떠 있고 본인 계정의 `can_publish`가 켜져 있다
-- [ ] 시작할 때 이 작업지시서를 `linetta` 리포의 `docs/plans/publish/`에 복사한다. 그 리포의 계획 문서 관례(주제별 폴더, 페이즈별 작업지시서, Checkpoint)와 같다
+- [x] Phase 2 완료 및 사용자 승인
+- [x] `linetta-artworks` 리포의 `docs/api.md`가 확정되어 있다
+- [x] 운영 사이트가 떠 있고 본인 계정의 `can_publish`가 켜져 있다
+- [x] 시작할 때 이 작업지시서를 `linetta` 리포의 `docs/plans/publish/`에 복사한다. 그 리포의 계획 문서 관례(주제별 폴더, 페이즈별 작업지시서, Checkpoint)와 같다
 
 ## linetta 리포에서 지킬 것
 
@@ -49,7 +49,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
 
 ### 작업 그룹 A: 회차를 엔진이 알게 하기
 
-- [ ] **T3.A.1** — 회차 판별을 Go로
+- [x] **T3.A.1** — 회차 판별을 Go로
   - 파일: `engine/internal/episode/episode.go`, `episode_test.go` (신규 패키지)
   - 내용:
     - 지금 회차 판별은 화면 쪽에만 있다: `apps/desktop/src/lib/outlineRepair.ts:96-140`(라벨 패턴), `apps/desktop/src/lib/outlineEpisode.ts:15-31`(`findEpisodeNode`). 같은 규칙을 Go로 옮긴다
@@ -59,7 +59,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
     - 단편(회차 구분이 없는 작품)은 작품 전체를 회차 하나로 본다
   - 검증: TS 쪽 테스트의 사례를 Go 테스트로 옮겨 두 구현이 같은 답을 내는지 확인한다. `go test ./internal/episode/...`
 
-- [ ] **T3.A.2** — 회차 단위 Markdown
+- [x] **T3.A.2** — 회차 단위 Markdown
   - 파일: `engine/internal/export/episode.go`, `episode_test.go`
   - 내용:
     - `ExportEpisodeMarkdown(ctx, nr *node.Repo, episodeNodeID string) (EpisodePayload, error)`. `EpisodePayload{Markdown, Title, CharCount, ContentHash}`
@@ -70,7 +70,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
 
 ### 작업 그룹 B: 게시 엔진
 
-- [ ] **T3.B.1** — 게시 상태 테이블
+- [x] **T3.B.1** — 게시 상태 테이블
   - 파일: `engine/internal/store/migrations/0023_publish.sql` (작업 시점의 다음 번호를 쓴다), `engine/internal/publish/state.go`
   - 내용:
     - `publish_works(project_id PK, remote_url, slug, blurb, serial_status, last_synced_at)`
@@ -78,7 +78,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
     - 독자용 소개글(`blurb`)은 여기에 둔다. `projects.synopsis`는 AI 맥락용 요약이라 쓰지 않는다
   - 검증: 마이그레이션 테스트 통과
 
-- [ ] **T3.B.2** — HTTP 클라이언트
+- [x] **T3.B.2** — HTTP 클라이언트
   - 파일: `engine/internal/publish/client.go`, `client_test.go`
   - 내용:
     - `docs/api.md`의 경로를 그대로 구현한다. 기준 주소의 기본값은 운영 사이트이고, 개발용으로 환경변수 `LINETTA_PUBLISH_BASE_URL`로 바꿀 수 있다
@@ -87,7 +87,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
     - 토큰과 본문을 로그에 남기지 않는다
   - 검증: `httptest` 서버로 정상, 401, 403, 413, 429, 시간 초과를 테스트한다
 
-- [ ] **T3.B.3** — 인증 정보 보관
+- [x] **T3.B.3** — 인증 정보 보관
   - 파일: `engine/internal/settings/secrets.go`, `engine/internal/publish/credential.go`
   - 내용:
     - 비밀값 이름 `publish.token`을 추가하고 기존 `SecretStore`(macOS 키체인, Windows 자격 증명 관리자)에 둔다
@@ -96,7 +96,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
     - 테스트에서는 `NewMemorySecretStore()`를 주입해 실제 키체인에 닿지 않게 한다
   - 검증: 저장, 조회, 삭제, 보안 저장소 미지원 시 파일 대체 경로를 테스트한다
 
-- [ ] **T3.B.4** — 연결 흐름
+- [x] **T3.B.4** — 연결 흐름
   - 파일: `engine/internal/publish/connect.go`, `connect_test.go`
   - 내용:
     - `codexauth.Service`(`engine/internal/codexauth/login.go`)의 구조를 본보기로 삼는다: `Start`가 주소를 바로 돌려주고, 백그라운드에서 기한을 두고 기다리고, `Status`는 토큰을 절대 돌려주지 않는다. 두 번째 `Start`가 첫 번째를 대체한다
@@ -105,7 +105,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
     - `Disconnect`는 로컬 토큰을 지운다. 서버 쪽 기기 해제는 웹 프로필에서 한다는 안내를 화면에 둔다
   - 검증: 가짜 서버로 승인, 거절, 만료, 취소를 테스트한다
 
-- [ ] **T3.B.5** — 게시 동작
+- [x] **T3.B.5** — 게시 동작
   - 파일: `engine/internal/publish/service.go`, `service_test.go`
   - 내용:
     - `WorkStatus(projectID)`: 로컬 회차 목록(T3.A.1)과 서버 목록(`GET works/{project_id}`)을 합쳐 회차별 상태를 낸다: 미게시, 공개됨, 수정됨(로컬 해시가 서버와 다름), 검토 중, 반려, 운영자 검토 대기, 비공개, 사이트에만 있음
@@ -115,7 +115,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
     - 네트워크 실패 때 원고와 로컬 상태를 바꾸지 않는다
   - 검증: 가짜 서버로 첫 게시, 재게시, 순서 변경 뒤 게시, 작품 미등록, 실패 시 상태 불변을 테스트한다
 
-- [ ] **T3.B.6** — RPC와 빌드 구분
+- [x] **T3.B.6** — RPC와 빌드 구분
   - 파일: `engine/internal/rpc/handlers/publish.go`, `engine/internal/engineapp/publish_enabled.go`, `publish_disabled.go`, `engine/internal/rpc/handlers/diagnostics.go`, `apps/desktop/src-tauri/src/lib.rs`
   - 내용:
     - RPC: `publish.connect_start`, `publish.connect_status`, `publish.disconnect`, `publish.work_status`, `publish.work_upsert`, `publish.episode_publish`, `publish.episode_set_visibility`
@@ -128,12 +128,12 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
 
 ### 작업 그룹 C: 화면
 
-- [ ] **T3.C.1** — RPC 래퍼와 타입
+- [x] **T3.C.1** — RPC 래퍼와 타입
   - 파일: `apps/desktop/src/lib/rpc.ts`, `apps/desktop/src/lib/types.ts`
   - 내용: `publishApi` 객체와 응답 타입. 사유 코드 문구를 `rpcMessage.ts`에 추가한다
   - 검증: `rpcAllowlist.test.ts` 통과
 
-- [ ] **T3.C.2** — 설정의 게시 항목
+- [x] **T3.C.2** — 설정의 게시 항목
   - 파일: `apps/desktop/src/routes/Settings.tsx`, `apps/desktop/src/components/settings/PublishSection.tsx`, `PublishSection.test.tsx`
   - 내용:
     - `SETTINGS_CATEGORIES`에 `publish`를 추가하고 `navGroups`에 항목을 넣는다. `publish_available`이 거짓이면 숨긴다
@@ -143,7 +143,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
     - 브라우저는 `openExternalUrl`로 연다
   - 검증: 컴포넌트 테스트에서 미연결, 대기(확인 코드 표시), 연결됨, 실패, 사용 불가 다섯 상태를 확인한다
 
-- [ ] **T3.C.3** — 게시 창
+- [x] **T3.C.3** — 게시 창
   - 파일: `apps/desktop/src/components/PublishDialog.tsx`, `PublishDialog.test.tsx`, `apps/desktop/src/routes/Workspace.tsx`
   - 내용:
     - 진입점: 아웃라인의 회차 줄 메뉴, 그리고 명령 팔레트의 기존 섹션 안의 명령 하나. 팔레트에 섹션을 새로 만들지 않는다
@@ -154,19 +154,19 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
     - "사이트에만 있는 회차"가 있으면 목록으로 보여주고 비공개 전환을 고르게 한다
   - 검증: 컴포넌트 테스트에서 첫 게시, 재게시, 미연결, 오류, 반려 상태를 확인한다
 
-- [ ] **T3.C.4** — 회차의 게시 상태 표시
+- [x] **T3.C.4** — 회차의 게시 상태 표시
   - 파일: 아웃라인 컴포넌트 (작업 시 위치 확인)
   - 내용: 연결된 상태에서 게시된 작품의 회차 줄에 상태를 작게 표시한다 (공개됨, 수정됨, 검토 중, 반려). 작품을 열 때와 게시 직후에만 서버 상태를 가져온다. 주기적으로 묻지 않는다
   - 검증: 오프라인에서 작품을 열어도 오류 없이 마지막으로 저장된 상태가 보인다
 
-- [ ] **T3.C.5** — 세 언어 문구
+- [x] **T3.C.5** — 세 언어 문구
   - 파일: `apps/desktop/src/lib/i18n.tsx`
   - 내용: 새 키를 `ko`, `en`, `ja` 세 맵에 모두 넣는다. 한국어가 기준이다
   - 검증: `i18n.catalog.test.ts` 통과
 
 ### 작업 그룹 D: MCP 툴
 
-- [ ] **T3.D.1** — 게시 툴
+- [x] **T3.D.1** — 게시 툴
   - 파일: `engine/internal/mcphost/tools_publish.go`, `tools_publish_test.go`, `apps/desktop/src/lib/agentTools.ts`
   - 내용:
     - `linetta_publish_status`(읽기): 작품의 회차별 게시 상태
@@ -179,7 +179,7 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
 
 ### 작업 그룹 E: 문서
 
-- [ ] **T3.E.1** — 문서와 정책
+- [x] **T3.E.1** — 문서와 정책
   - 파일: `README.md`, `CHANGELOG.md`, `docs/privacy-policy.md`, `docs/DEVELOPMENT.md`
   - 내용:
     - README에 게시 기능 절을 추가한다: 선택 기능이라는 점, 무엇이 어디로 전송되는지, 연결 정보가 어디에 저장되는지(Linux 포함), 연결 해제 방법
@@ -193,23 +193,23 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
 ## ✅ Phase 3 Checkpoint
 
 **구현 확인:**
-- [ ] 모든 작업 체크박스 완료
-- [ ] 게시하지 않는 사용자에게 달라지는 것이 없다: 연결하지 않은 상태에서 앱이 사이트로 요청을 보내지 않는다
+- [x] 모든 작업 체크박스 완료
+- [x] 게시하지 않는 사용자에게 달라지는 것이 없다: 연결하지 않은 상태에서 앱이 사이트로 요청을 보내지 않는다
 
 **자동 검증:**
-- [ ] `make test` 통과
-- [ ] `make test-mobile-engine` 통과
-- [ ] `make ci` 통과
+- [x] `make test` 통과
+- [x] `make test-mobile-engine` 통과
+- [x] `make ci` 통과
 
 **수동 확인 (사용자, 데스크톱 개발 빌드와 운영 사이트):**
-- [ ] 설정 > 게시에서 연결: 브라우저의 확인 코드가 앱과 같고, 허용하면 앱이 필명과 함께 "연결됨"으로 바뀐다
-- [ ] Phase 1에서 가져온 연재작을 연다: 이미 올라간 회차가 "공개됨"으로 보인다 (가져올 때 넣은 식별자가 맞는지 확인하는 항목이다)
-- [ ] 새 회차를 게시: 주소가 표시되고 사이트에서 읽힌다. 멘션의 `@`나 편집 흔적이 본문에 없다
-- [ ] 그 회차를 고친 뒤 상태가 "수정됨"으로 보이고, 다시 게시하면 같은 주소가 갱신된다
-- [ ] 회차를 비공개로 전환하면 사이트에서 404가 된다
-- [ ] 네트워크를 끊고 게시: 원고가 그대로이고 재시도 버튼이 보인다
-- [ ] MCP로 연결한 에이전트에게 회차 게시를 시키면 게시되고 활동 로그에 남는다
-- [ ] 웹 프로필에서 기기를 해제한 뒤 앱에서 게시하면 다시 연결하라는 안내가 보인다
+- [x] 설정 > 게시에서 연결: 브라우저의 확인 코드가 앱과 같고, 허용하면 앱이 필명과 함께 "연결됨"으로 바뀐다
+- [x] Phase 1에서 가져온 연재작을 연다: 이미 올라간 회차가 "공개됨"으로 보인다 (가져올 때 넣은 식별자가 맞는지 확인하는 항목이다)
+- [x] 새 회차를 게시: 주소가 표시되고 사이트에서 읽힌다. 멘션의 `@`나 편집 흔적이 본문에 없다
+- [x] 그 회차를 고친 뒤 상태가 "수정됨"으로 보이고, 다시 게시하면 같은 주소가 갱신된다
+- [x] 회차를 비공개로 전환하면 사이트에서 404가 된다
+- [x] 네트워크를 끊고 게시: 원고가 그대로이고 재시도 버튼이 보인다
+- [x] MCP로 연결한 에이전트에게 회차 게시를 시키면 게시되고 활동 로그에 남는다
+- [x] 웹 프로필에서 기기를 해제한 뒤 앱에서 게시하면 다시 연결하라는 안내가 보인다
 
 **완료 처리:**
 1. 위 항목이 모두 통과하면 완료한 작업, 자동 검증 결과, 수동 확인 항목을 사용자에게 보고한다.
@@ -219,6 +219,24 @@ _조사 기준: linetta v1.5.0 (커밋 `34cf973`). 아래의 파일 경로와 �
 ---
 
 ## 메모 / 주의
+
+- **Phase 3 완료 (2026-10-18)**
+  - 구현은 `linetta` 리포 `main`의 #202(회차 판별·게시용 Markdown), #206(게시 엔진과 화면), #207(MCP 툴과 문서)에 들어 있다(`8d63e21`). PR을 쌓아 올리다 #203·#204·#205가 `main`이 아닌 기반 브랜치로 병합되어, 같은 내용을 #206·#207로 다시 열어 `main`에 넣었다. 다음부터 PR을 쌓으면 아래 PR이 병합된 뒤 base를 `main`으로 바꾼다.
+  - 자동 검증: `main`에서 `make ci`, `make test-mobile-engine` 통과. 연결하지 않은 앱이 사이트로 요청을 보내지 않는 것은 조립 테스트로 고정했다.
+  - 수동 확인 1~8번은 엔진 단위로 운영 사이트에 대고 했다(컴퓨터 유즈를 쓸 수 없어서). 사용자 라이브러리 사본과 메모리 비밀 저장소로 엔진을 띄우고, 브라우저 승인과 기기 해제는 로그인된 Chrome에서 했다. 네트워크 끊김은 엔진 앞의 로컬 프록시를 끊어 재현했다. 데스크톱 개발 빌드의 화면은 사용자가 확인했다.
+    - 1 확인 코드 일치, 기기 이름 "Linetta (tesseract)" / 2 Phase 1의 신의 K-직장 생존기 1~5화가 공개됨(나머지 세 작품도 해시 대조로 공개됨) / 3 새 회차가 공개 주소에서 읽히고 저장된 본문에 `@`와 노트 표시가 없음 / 4 수정됨 → 같은 주소로 재게시, 페이지에 반영 / 5 비공개 전환 뒤 회차·작품 페이지 404(페이지 캐시 갱신에 몇 초) / 6 오프라인 게시는 `publish_unreachable`, 원고와 상태 그대로, 복구 뒤 재시도 성공 / 7 에이전트가 `linetta_publish_episode`로 게시, 활동 로그에 기록, 번호가 개요 순서대로 다시 매겨짐 / 8 웹에서 기기 해제 뒤 `publish_unauthorized`, 앱은 "해제됨"
+  - 시험 작품 "게시 시험"(`@devlikebear/linetta-publish-test`)은 회차 3개와 작품을 비공개로 돌려 두었다(삭제하지 않음). 시험 중 연결한 기기 둘은 웹에서 해제했다. 기존 네 작품은 건드리지 않았다.
+  - 앱 릴리스는 이 작업지시서의 범위가 아니다. 게시 기능이 든 Linetta 버전을 배포하기 전에는 다른 작가가 게시할 수 없다(Phase 4 가입 개방은 그 뒤).
+
+- **구현하면서 달라진 점**
+  - 작업지시서의 시그니처와 다른 곳: `episode.Resolve/List`는 개요 프리셋을 인자로 받는다(회차 라벨 규칙이 프리셋에 따라 다르다). `export.ExportEpisodeMarkdown`은 노드 ID 대신 `episode.Episode`를 받는다(단편은 작품 전체가 한 회차라 노드 하나로는 범위를 알 수 없다).
+  - 회차 Markdown은 씬마다 앞뒤 공백을 지우고 `* * *`로 잇는다. Phase 1 가져오기 도구와 같은 규칙이라 가져온 회차의 해시가 그대로 맞는다.
+  - `publish_episodes`에 `title`, `moderation_reason` 열을 더했다(사이트에만 남은 회차를 오프라인에서도 보여주려고).
+  - 연결 대기 취소는 따로 RPC를 두지 않고 `publish.disconnect`가 겸한다. RPC는 작업지시서대로 7개다.
+  - 게시 창은 회차 규칙 사본을 화면에 하나 더 두지 않으려고, 엔진이 주는 회차별 씬 ID(`leaf_ids`)로 소속 회차를 찾는다.
+  - 작품 주소(`slug`)는 첫 게시 때 선택 입력으로 받는다.
+  - MCP 두 툴은 1,958B로 줄이고 `budget_test.go`에 따로 허용량을 두었다.
+  - 마케팅 사이트(`apps/site`)의 MCP 툴 목록에는 게시 툴을 넣지 않았다. 릴리스 때 정한다.
 
 - **가입 개방과의 순서**: 이 기능이 든 Linetta 버전이 배포되기 전에는 다른 작가가 게시할 방법이 없다. Phase 4의 가입 개방은 그 릴리스 뒤에 한다.
 - **Mac App Store 심사**: 사용자가 만든 글을 공개 게시하는 기능이 생긴다. 심사에서 신고·차단 수단이나 계정 삭제 경로를 물을 수 있다. 신고 경로와 계정 삭제는 Phase 4에서 웹에 만든다. 스토어 제출은 Phase 4가 끝난 뒤에 하는 것을 권한다.
