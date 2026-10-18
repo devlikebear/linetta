@@ -1,0 +1,73 @@
+/* Publish dialog. Builds on the global modal (App.css): .backdrop.center,
+   .modal, .modal-field, .modal-actions, .btn. Only what is new lives here. */
+.publish-modal {
+  width: min(560px, 94%);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.publish-episode {
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+}
+
+.publish-episode-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.publish-url {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.publish-url code {
+  flex: 1 1 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.publish-review {
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--warn);
+}
+
+.publish-work {
+  margin-bottom: 16px;
+}
+
+.publish-work summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.publish-site-only ul {
+  list-style: none;
+  margin: 6px 0 14px;
+  padding: 0;
+}
+
+.publish-site-only li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.publish-site-only li > span:first-child {
+  flex: 1;
+  min-width: 0;
+}

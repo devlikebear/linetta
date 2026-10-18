@@ -3,6 +3,7 @@ import { RpcError } from "./rpc";
 import { reasonMessage, rpcErrorMessage } from "./rpcMessage";
 import { translate } from "./i18n";
 import type { MessageKey } from "./i18n";
+import { readAppFile } from "../test/readSource";
 
 const ko = (key: MessageKey, values?: Record<string, string | number>) =>
   translate("ko", key, values);
@@ -177,6 +178,25 @@ describe("reasonMessage", () => {
       // what the panel's notice used to render for an unmapped code.
       expect(shown, name).not.toContain("[object Object]");
       expect(shown, name).toContain("not_mapped_yet");
+    }
+  });
+});
+
+// Publishing (Phase 3) forwards the site's own failures, whose message is a
+// Korean sentence from the site. Every publish reason the engine can send
+// has to be mapped, or an English or Japanese writer reads that sentence.
+describe("publish reasons", () => {
+  it("maps every publish reason code in engine/internal/rpc/reason.go", async () => {
+    const reasonGo = await readAppFile("../../engine/internal/rpc/reason.go");
+    const codes = [...reasonGo.matchAll(/ReasonPublish\w+\s*=\s*"([a-z_]+)"/g)].map((m) => m[1]);
+    expect(codes.length).toBeGreaterThan(10);
+    for (const reason of codes) {
+      const error = new RpcError("publish.episode_publish", "사이트 오류 문장", -32602, { reason });
+      for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
+        const shown = rpcErrorMessage(error, t);
+        expect(shown, `${reason} in ${name}`).not.toContain("사이트 오류 문장");
+        expect(shown, `${reason} in ${name}`).not.toContain(reason);
+      }
     }
   });
 });

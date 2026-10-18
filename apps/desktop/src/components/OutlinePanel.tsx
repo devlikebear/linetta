@@ -1,8 +1,9 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
-import { AlertTriangle, ChevronLeft, Copy, FilePlus2, FolderPlus, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Copy, FilePlus2, FolderPlus, Globe, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { TreeNode } from "../hooks/useFirstLeaf";
 import { flatten, sumLeafChars } from "../hooks/useFirstLeaf";
-import type { NodeStatus } from "../lib/types";
+import type { NodeStatus, PublishEpisodeState } from "../lib/types";
+import { OUTLINE_BADGE_STATES, PUBLISH_STATE_KEYS } from "../lib/publish";
 import { displayNodeLabel, useI18n } from "../lib/i18n";
 import { InlineEditableText } from "./InlineEditableText";
 import { planNodeMove, type DropPosition } from "../lib/outlineMove";
@@ -17,6 +18,7 @@ import {
   type OutlineStructurePreset,
 } from "../lib/outlineRepair";
 import "./OutlinePanel.css";
+import "./PublishBadge.css";
 
 interface Props {
   tree: TreeNode[];
@@ -38,6 +40,12 @@ interface Props {
   onMoveNode?: (node: TreeNode, parentId: string | null, ordinal: number) => void;
   onDeleteNode?: (node: TreeNode) => void;
   onSetStatus?: (node: TreeNode, status: NodeStatus) => void;
+  /** Opens the publish dialog for the node's episode. Absent on builds that
+   *  cannot publish. */
+  onPublish?: (node: TreeNode) => void;
+  /** Linetta Works state per episode node, shown on the episode's row. Only
+   *  passed while connected; absent means no badges at all. */
+  publishStates?: ReadonlyMap<string, PublishEpisodeState>;
   onRepairOutline?: () => void;
   onUndoRepairOutline?: () => void;
   canUndoRepair?: boolean;
@@ -75,6 +83,8 @@ export function OutlinePanel({
   onMoveNode,
   onDeleteNode,
   onSetStatus,
+  onPublish,
+  publishStates,
   onRepairOutline,
   onUndoRepairOutline,
   canUndoRepair,
@@ -94,6 +104,11 @@ export function OutlinePanel({
   const outlineIssues = analyzeOutline(tree, t, outlinePreset);
   const partName = outlineRoleName(outlinePreset, "part", t);
   const chapterName = outlineRoleName(outlinePreset, "chapter", t);
+  // A top-level container holds several episodes — unless the work has no
+  // episode structure and it is the one episode, which the engine says by
+  // listing it.
+  const canPublish = (node: TreeNode) =>
+    Boolean(onPublish) && (node.kind === "leaf" || Boolean(node.parent_id) || Boolean(publishStates?.has(node.id)));
   const canOpenMenu = (node: TreeNode) =>
     Boolean(
       onRename ||
@@ -105,6 +120,7 @@ export function OutlinePanel({
         onMoveNodeDown ||
         onDeleteNode ||
         onSetStatus ||
+        canPublish(node) ||
         (node.kind === "leaf" && (onMoveSceneUp || onMoveSceneDown || onDeleteScene)),
     );
 
@@ -305,6 +321,7 @@ export function OutlinePanel({
             showEpisodeProgress={showEpisodeProgress}
             episodeCharTarget={episodeCharTarget}
             outlinePreset={outlinePreset}
+            publishStates={publishStates}
             editingNodeId={editingNodeId}
             onCommitRename={onRename ? commitRename : undefined}
             onCancelRename={() => setEditingNodeId(null)}
@@ -347,6 +364,11 @@ export function OutlinePanel({
           {onCopyText && (
             <button type="button" role="menuitem" onClick={() => runAction(onCopyText)}>
               <Copy size={13} /> {t("workspace.copyText")}
+            </button>
+          )}
+          {canPublish(menu.node) && (
+            <button type="button" role="menuitem" onClick={() => runAction(onPublish)} data-testid="outline-menu-publish">
+              <Globe size={13} /> {t("workspace.publishEpisode")}
             </button>
           )}
           {onSetStatus && (
@@ -506,6 +528,7 @@ function RailNode({
   showEpisodeProgress,
   episodeCharTarget,
   outlinePreset,
+  publishStates,
   editingNodeId,
   onCommitRename,
   onCancelRename,
@@ -525,6 +548,7 @@ function RailNode({
   showEpisodeProgress: boolean;
   episodeCharTarget: number;
   outlinePreset: OutlineStructurePreset;
+  publishStates?: ReadonlyMap<string, PublishEpisodeState>;
   editingNodeId: string | null;
   onCommitRename?: (node: TreeNode, title: string) => Promise<void>;
   onCancelRename: () => void;
@@ -579,6 +603,18 @@ function RailNode({
     </span>
   ) : null;
 
+  const publishState = publishStates?.get(node.id);
+  const publishBadge =
+    publishState && OUTLINE_BADGE_STATES.has(publishState) ? (
+      <span
+        className={`publish-badge is-${publishState}`}
+        title={t("publish.stateTitle", { state: t(PUBLISH_STATE_KEYS[publishState]) })}
+        data-testid={`outline-publish-${node.id}`}
+      >
+        {t(PUBLISH_STATE_KEYS[publishState])}
+      </span>
+    ) : null;
+
   if (node.kind === "leaf") {
     const active = node.id === currentId;
     const trailing = episodeProgress ?? <span className="sc-words">{node.word_count}</span>;
@@ -608,6 +644,7 @@ function RailNode({
             <StatusDot status={node.status} />
             <span className="sc-label">{label}</span>
             <span className="sc-title">{node.title}</span>
+            {publishBadge}
             {trailing}
           </button>
         )}
@@ -646,6 +683,7 @@ function RailNode({
               {titleEditor}
             </>
           ) : node.title ? ` · ${node.title}` : ""}
+          {publishBadge}
         </div>
         {hasMenu && (
           <button
@@ -673,6 +711,7 @@ function RailNode({
           {depth > 0 && <StatusDot status={node.status} />}
           <span className="ch-label">{label}</span>
           {editing ? titleEditor : node.title && <span className="ch-title">{node.title}</span>}
+          {publishBadge}
           {episodeProgress}
         </div>
         {hasMenu && (
@@ -704,6 +743,7 @@ function RailNode({
           showEpisodeProgress={showEpisodeProgress}
           episodeCharTarget={episodeCharTarget}
           outlinePreset={outlinePreset}
+          publishStates={publishStates}
           editingNodeId={editingNodeId}
           onCommitRename={onCommitRename}
           onCancelRename={onCancelRename}

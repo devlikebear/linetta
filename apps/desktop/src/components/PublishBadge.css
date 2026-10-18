@@ -1,0 +1,40 @@
+/* An episode's Linetta Works state, as a small pill: on outline rows and in
+   the publish dialog. */
+.publish-badge {
+  flex: none;
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.publish-badge.is-public {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.publish-badge.is-modified,
+.publish-badge.is-pending,
+.publish-badge.is-needs_review {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.publish-badge.is-rejected {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.tree-scene .publish-badge,
+.tree-chapter .publish-badge,
+.tree-part .publish-badge {
+  margin-left: 6px;
+  font-size: 9.5px;
+  text-transform: none;
+  letter-spacing: 0;
+}

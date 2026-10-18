@@ -265,6 +265,19 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		// TestProductionStoryContextBuilderCarriesEverySource guards.
 		WithSkillSource(skillBriefSource{store: skillsStore})
 
+	// Linetta Works publishing (Phase 3). Registered here, before the MCP
+	// host, because the publish tools publish through the same service.
+	_, stopPublish := setupPublish(publishDeps{
+		server:        s,
+		settingsStore: settingsStore,
+		projects:      projects,
+		nodes:         nodes,
+		db:            st.DB(),
+		language:      settingsLanguage,
+		clock:         clock,
+	})
+	a.closers = append(a.closers, stopPublish)
+
 	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
 		settingsStore: settingsStore,
 		home:          home,
@@ -345,6 +358,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		GitSyncAvailable: gitSyncAvailable,
 		MCPAvailable:     mcpAvailable,
 		AgentAvailable:   agentAvailable,
+		PublishAvailable: publishAvailable,
 	}
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, home, DefaultVersion, caps))

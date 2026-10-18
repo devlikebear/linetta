@@ -75,6 +75,27 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // few batches in memory, so this is the ordinary result of a restart or a
   // few more turns — not a mistake the writer made.
   agent_undo_unavailable: "errors.agentUndoUnavailable",
+  // Linetta Works publishing (Phase 3). Most are the site's own error codes
+  // carried through; its Korean message stays in the engine's English one
+  // and must not reach an English or Japanese reader.
+  publish_not_connected: "errors.publishNotConnected",
+  publish_consent_required: "errors.publishConsentRequired",
+  publish_unauthorized: "errors.publishUnauthorized",
+  publish_not_enabled: "errors.publishNotEnabled",
+  publish_quota_exceeded: "errors.publishQuotaExceeded",
+  publish_too_large: "errors.publishTooLarge",
+  publish_invalid_slug: "errors.publishInvalidSlug",
+  publish_slug_taken: "errors.publishSlugTaken",
+  publish_work_not_registered: "errors.publishWorkNotRegistered",
+  publish_episode_not_found: "errors.publishEpisodeNotFound",
+  publish_rate_limited: "errors.publishRateLimited",
+  publish_unreachable: "errors.publishUnreachable",
+  publish_timeout: "errors.publishTimeout",
+  publish_unavailable: "errors.publishUnavailable",
+  publish_rejected: "errors.publishRejected",
+  publish_not_episode: "errors.publishNotEpisode",
+  publish_empty_episode: "errors.publishEmptyEpisode",
+  publish_blurb_required: "errors.publishBlurbRequired",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

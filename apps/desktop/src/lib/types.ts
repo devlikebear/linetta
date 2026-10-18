@@ -353,6 +353,8 @@ export interface DiagnosticsSnapshot {
    *  builds, where internal/agent is compiled out entirely — the panel must
    *  not offer a feature the engine cannot run. */
   agent_available?: boolean;
+  /** False on builds that cannot publish to Linetta Works (iOS). */
+  publish_available?: boolean;
   /** Whether this library ever held a companion message. Decides whether the
    *  backup section offers the transcript export — a library that never used
    *  the companion has nothing to export. */
@@ -538,6 +540,94 @@ export interface ProviderStatus {
   base_url?: string;
   /** Where the Claude Code CLI was found; absent when it was not. */
   cli_path?: string;
+}
+
+/** publish.connect_status — Linetta Works connection. Never carries the
+ *  token or the pairing secret. */
+export type PublishConnectState = "disconnected" | "waiting" | "connected" | "failed";
+
+/** Why the last connection attempt did not end connected. "revoked" is the
+ *  site refusing a stored token: the writer removed this device on the web. */
+export type PublishFailureReason =
+  | "denied"
+  | "expired"
+  | "network"
+  | "claimed"
+  | "store"
+  | "failed"
+  | "revoked";
+
+export interface PublishConnectStatus {
+  state: PublishConnectState;
+  /** Shown while waiting; the browser shows the same code. */
+  confirm_code?: string;
+  verify_url?: string;
+  /** Epoch ms the pairing expires at. */
+  expires_at?: number;
+  pen_name?: string;
+  handle?: string;
+  site_url: string;
+  failure_reason?: PublishFailureReason;
+}
+
+/** An episode's publishing state, the site's status combined with whether the
+ *  local text still matches what was sent. */
+export type PublishEpisodeState =
+  | "unpublished"
+  | "public"
+  | "modified"
+  | "pending"
+  | "rejected"
+  | "needs_review"
+  | "private"
+  | "site_only";
+
+export type PublishSerialStatus = "ongoing" | "completed";
+
+export interface PublishEpisodeView {
+  node_id: string;
+  label: string;
+  title: string;
+  ordinal?: number;
+  /** The scenes the episode is made of. */
+  leaf_ids?: string[];
+  char_count: number;
+  empty?: boolean;
+  state: PublishEpisodeState;
+  /** The local text differs from the site's, whatever the state. */
+  modified?: boolean;
+  number?: number;
+  url?: string;
+  remote_status?: string;
+  moderation_reason?: string;
+  published_at?: string;
+}
+
+export interface PublishWorkView {
+  url: string;
+  slug: string;
+  blurb: string;
+  serial_status: PublishSerialStatus;
+  visibility?: string;
+}
+
+/** publish.work_status */
+export interface PublishWorkStatus {
+  project_id: string;
+  connected: boolean;
+  registered: boolean;
+  /** The site could not be reached; the remote half is the saved copy. */
+  offline?: boolean;
+  last_synced_at?: number;
+  work?: PublishWorkView;
+  episodes: PublishEpisodeView[];
+  site_only: PublishEpisodeView[];
+}
+
+/** publish.episode_publish */
+export interface PublishResult {
+  created: boolean;
+  episode: PublishEpisodeView;
 }
 
 /** codex.login_start — the address the shell opens in the OS browser. */

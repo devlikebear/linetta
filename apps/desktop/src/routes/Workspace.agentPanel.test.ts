@@ -71,7 +71,7 @@ describe("Workspace agent panel wiring", () => {
   it("tracks agent_available from diagnostics, alongside git_sync_available", async () => {
     const src = await workspace();
     expect(src).toContain(
-      'diagnosticsApi.get()\n      .then((d) => {\n        if (cancelled) return;\n        setGitSyncAvailable(d.git_sync_available ?? true);\n        setAgentAvailable(d.agent_available ?? false);\n      })',
+      'diagnosticsApi.get()\n      .then((d) => {\n        if (cancelled) return;\n        setGitSyncAvailable(d.git_sync_available ?? true);\n        setAgentAvailable(d.agent_available ?? false);\n        setPublishAvailable(d.publish_available ?? false);\n      })',
     );
   });
 
