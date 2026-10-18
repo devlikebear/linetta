@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.9.0 - 2026-10-18
 
 - Publish episodes to [Linetta Works](https://works.marvin-42.com), a reading
   site for fiction written in Linetta, straight from the app. It is optional
