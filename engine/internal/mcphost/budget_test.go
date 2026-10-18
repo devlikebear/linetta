@@ -184,6 +184,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if name == "linetta_analyze_style" || name == "linetta_propose_style_profile" {
 			continue
 		}
+		// Phase 3's publish pair carries its own allowance below.
+		if name == "linetta_publish_status" || name == "linetta_publish_episode" {
+			continue
+		}
 		total += b
 	}
 	// #162 measured 1,815B for linetta_analyze_style. #163 added the
@@ -195,6 +199,11 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// #163 measured 868B for the proposal tool.
 	if propose := sizes["linetta_propose_style_profile"]; propose > 950 {
 		t.Errorf("linetta_propose_style_profile costs %dB, want <= 950B", propose)
+	}
+	// Phase 3 measured 1,958B for the publish pair (1,231B status, 727B
+	// publish), after cutting the output schema to what an agent needs.
+	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"]; pub > 2050 {
+		t.Errorf("publish tools cost %dB, want <= 2050B", pub)
 	}
 	writes := 0
 	for _, name := range VisualWriteToolNames {

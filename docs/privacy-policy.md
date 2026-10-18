@@ -1,16 +1,16 @@
 # Linetta 개인정보 처리방침 / Privacy Policy
 
-_최종 업데이트 / Last updated / 最終更新: 2026-09-07_
+_최종 업데이트 / Last updated / 最終更新: 2026-10-18_
 
 ---
 
 ## 한국어
 
-Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local-first)** 데스크톱 앱입니다. 개발자(Changheon Shin / devlikebear)는 분석·광고·계정 서버를 운영하지 않으며 사용자 데이터를 수집하지 않습니다. 원고가 기기를 떠나는 경로는 사용자가 직접 설정한 것뿐입니다. 사용자가 연결한 AI 프로바이더로 원고를 보내는 내장 에이전트, 사용자가 직접 실행하는 외부 MCP 클라이언트, 사용자가 지정한 git 원격으로 푸시하는 GitHub 동기화, 그리고 사용자가 지정한 폴더(예: 클라우드 드라이브 폴더)로 복사하는 폴더 동기화이며, 아래 3항에서 모두 설명합니다.
+Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local-first)** 데스크톱 앱입니다. 개발자(Changheon Shin / devlikebear)는 앱을 위한 분석·광고·계정 서버를 운영하지 않으며 사용자 데이터를 수집하지 않습니다. 원고가 기기를 떠나는 경로는 사용자가 직접 설정한 것뿐입니다. 사용자가 연결한 AI 프로바이더로 원고를 보내는 내장 에이전트, 사용자가 직접 실행하는 외부 MCP 클라이언트, 사용자가 지정한 git 원격으로 푸시하는 GitHub 동기화, 사용자가 지정한 폴더(예: 클라우드 드라이브 폴더)로 복사하는 폴더 동기화, 그리고 사용자가 고른 회차만 웹소설 사이트 Linetta Works에 올리는 게시이며, 아래 3항에서 모두 설명합니다. 이 가운데 게시만 개발자가 운영하는 서버로 원고를 보냅니다.
 
 ### 1. 수집하는 정보
 **개발자가 수집하는 정보는 없습니다.** 앱은 다음을 하지 않습니다.
-- 사용자 계정 또는 로그인이 없습니다.
+- 앱 자체에는 사용자 계정 또는 로그인이 없습니다. 게시 기능을 쓰려면 Linetta Works 사이트의 계정을 앱에 연결해야 하며, 이는 아래 3.5항에서 설명합니다.
 - 분석(analytics)·추적(tracking)·텔레메트리·광고 식별자를 사용하지 않습니다.
 - 크래시 리포팅 등으로 사용자 데이터를 개발자 서버로 보내지 않습니다.
 
@@ -34,7 +34,7 @@ macOS App Store 빌드가 아닌 빌드에서는, 이미 Codex CLI로 로그인�
 macOS App Store 빌드를 포함한 모든 빌드가 이 파일 저장 방식을 사용하며, 이 토큰을 시스템 키체인에 저장하지 않습니다.
 
 ### 3. 원고가 기기를 떠나는 경우
-원고가 기기를 떠날 수 있는 경로는 아래에 적은 것들입니다. 어느 것도 사용자가 직접 설정하기 전에는 아무것도 보내지 않습니다. 내장 에이전트와 MCP는 사용자가 쓸 때만 동작하지만, GitHub 동기화와 폴더 동기화는 한 번 설정하고 나면 스스로 동작합니다.
+원고가 기기를 떠날 수 있는 경로는 아래에 적은 것들입니다. 어느 것도 사용자가 직접 설정하기 전에는 아무것도 보내지 않습니다. 내장 에이전트, MCP, 게시는 사용자가 쓸 때만 동작하지만, GitHub 동기화와 폴더 동기화는 한 번 설정하고 나면 스스로 동작합니다.
 
 #### 3.1 내장 에이전트 (사용자가 연결한 프로바이더)
 Linetta의 내장 에이전트는 사용자가 프로바이더를 직접 연결하기 전까지 호출할 대상이 없습니다. 지원하는 프로바이더는 넷입니다. ChatGPT(Codex)는 ChatGPT 계정으로 로그인해 연결하고, Anthropic·Google Gemini·OpenAI 호환 엔드포인트는 API 키로 연결합니다.
@@ -78,11 +78,19 @@ GitHub 동기화는 `설정 → GitHub 동기화`에서 사용자가 git 폴더�
 - **자격 증명은 필요 없습니다.** Linetta가 요구하는 것은 폴더뿐입니다. 거기 놓인 것을 누가 읽을 수 있는지는 사용자가 고른 폴더와, 그 폴더를 동기화하는 서비스가 있다면 그 서비스가 정합니다.
 - 개발자는 이 데이터를 수신·중계·저장하지 않습니다.
 
+#### 3.5 Linetta Works 게시
+게시는 `설정 → 게시`에서 사용자가 전송 안내에 동의하고 브라우저로 Linetta Works(works.marvin-42.com) 계정을 연결하기 전까지 꺼져 있으며, 그 전에는 앱이 사이트로 아무 요청도 보내지 않습니다. 연결한 뒤에도 스스로 동작하지 않고, 사용자가 회차의 게시 창에서 "게시"를 누르거나 사용자가 연결한 에이전트에게 회차 게시를 시켰을 때만 그 회차를 보냅니다. iOS 빌드에는 이 기능이 없습니다. Linetta Works는 Linetta 개발자가 운영하는 사이트입니다.
+
+- **어디로 가나.** Linetta Works 서버로 갑니다. 게시한 회차는 누구나 읽을 수 있게 공개됩니다. 사이트는 게시된 본문을 수위 검사를 위해 Anthropic API로 보냅니다.
+- **무엇이 가나.** 연결할 때는 이 기기의 이름(컴퓨터 이름을 넣은 "Linetta (…)")이 사이트의 기기 목록에 표시되도록 전송됩니다. 게시할 때는 그 회차의 제목과 본문, 회차 순서, 작품의 제목·장르·소개글·연재 상태·작품 주소, 앱 언어, 그리고 회차와 작품을 식별하는 Linetta 내부 ID가 전송됩니다. 게시하지 않은 회차, 메모, 인물·관계 시트, 팩트 카드, 에이전트 기억은 보내지 않습니다. 요청에는 앱 버전이 함께 실리며, 사이트는 인터넷 요청이 늘 그렇듯 접속 IP 주소를 받습니다.
+- **연결 정보.** 사이트가 한 번 내려주는 게시 토큰은 운영체제의 보안 저장소(macOS 키체인, Windows 자격 증명 관리자)에 저장합니다. 보안 저장소가 없는 Linux에서는 `<앱 데이터>/publish-token` 파일에 소유자만 읽을 수 있는 권한(0600)으로 저장합니다. 이 토큰으로 할 수 있는 일은 그 계정의 작품과 회차를 올리고 공개 여부를 바꾸는 것뿐입니다. 필명, 사이트 주소처럼 비밀이 아닌 연결 정보는 `settings.json`에 저장합니다.
+- **해제와 삭제.** `설정 → 게시`의 "연결 해제"는 이 기기에 저장된 연결 정보를 지웁니다. 사이트의 기기 목록에서 이 기기를 없애려면 사이트의 프로필에서 해제하십시오. 이미 올린 회차는 연결을 해제해도 사이트에 남으며, 앱의 게시 창이나 사이트의 내 작품에서 비공개로 돌리거나 삭제할 수 있습니다.
+
 ### 4. 데이터 판매·공유
-개발자는 사용자 데이터를 판매하거나 자체 목적으로 공유하지 않습니다. 원고가 다른 곳에 닿는 경로는 사용자가 직접 켜는 것뿐입니다. 내장 에이전트는 사용자가 연결한 프로바이더에 원고를 보내고, 사용자가 실행하는 MCP 클라이언트는 원고를 읽어 가며, GitHub 동기화는 사용자의 git 원격으로 원고를 푸시하고, 폴더 동기화는 사용자가 지정한 폴더로 원고를 복사합니다. 모두 위 3항과 같습니다.
+개발자는 사용자 데이터를 판매하거나 자체 목적으로 공유하지 않습니다. 원고가 다른 곳에 닿는 경로는 사용자가 직접 켜는 것뿐입니다. 내장 에이전트는 사용자가 연결한 프로바이더에 원고를 보내고, 사용자가 실행하는 MCP 클라이언트는 원고를 읽어 가며, GitHub 동기화는 사용자의 git 원격으로 원고를 푸시하고, 폴더 동기화는 사용자가 지정한 폴더로 원고를 복사하며, 게시는 사용자가 고른 회차를 Linetta Works에 공개합니다. 모두 위 3항과 같습니다.
 
 ### 5. 아동의 개인정보
-개발자는 아동을 포함한 사용자의 개인정보를 수집하지 않습니다. 아동 사용자는 연결하는 AI 프로바이더, MCP로 연결하는 클라이언트, 푸시하는 git 호스트, 그리고 동기화 폴더를 제공하는 클라우드 서비스 각각의 연령 요건 및 보호자 동의 요건도 충족해야 합니다.
+개발자는 아동을 포함한 사용자의 개인정보를 수집하지 않습니다. 아동 사용자는 연결하는 AI 프로바이더, MCP로 연결하는 클라이언트, 푸시하는 git 호스트, 동기화 폴더를 제공하는 클라우드 서비스, 그리고 게시하는 Linetta Works 각각의 연령 요건 및 보호자 동의 요건도 충족해야 합니다.
 
 ### 6. 변경 사항
 본 방침이 변경되면 이 페이지를 갱신하고 상단의 "최종 업데이트" 날짜를 수정합니다.
@@ -94,11 +102,11 @@ GitHub 동기화는 `설정 → GitHub 동기화`에서 사용자가 git 폴더�
 
 ## English
 
-Linetta (the "App") is a **local-first** desktop app for writing long-form fiction. The developer (Changheon Shin / devlikebear) operates no analytics, advertising, or account server and does not collect user data. The App takes your writing off this device only along paths you set up yourself: the built-in agent, which sends it to an AI provider you connect; an MCP client you run yourself; GitHub Sync, which pushes it to a git remote you choose; and Folder Sync, which copies it into a folder you choose, such as a cloud drive folder. Section 3 describes each of them.
+Linetta (the "App") is a **local-first** desktop app for writing long-form fiction. The developer (Changheon Shin / devlikebear) operates no analytics, advertising, or account server for the App and does not collect user data. The App takes your writing off this device only along paths you set up yourself: the built-in agent, which sends it to an AI provider you connect; an MCP client you run yourself; GitHub Sync, which pushes it to a git remote you choose; Folder Sync, which copies it into a folder you choose, such as a cloud drive folder; and Publishing, which puts only the episodes you choose on Linetta Works, a site for reading web fiction. Section 3 describes each of them. Of these, only Publishing sends your writing to a server the developer operates.
 
 ### 1. Information We Collect
 **The developer collects none.** The App:
-- has no user accounts or sign-in;
+- has no user accounts or sign-in of its own (Publishing connects an account on the Linetta Works site; see Section 3.5);
 - uses no analytics, tracking, telemetry, or advertising identifiers;
 - does not send any user data to the developer (including crash reports).
 
@@ -122,7 +130,7 @@ Signing out from Settings deletes Linetta's own file, `<app data>/codex/auth.jso
 Every build, including the macOS App Store build, uses this file store — Linetta does not put this token in the system keychain.
 
 ### 3. When Your Writing Leaves Your Device
-Your writing can leave this device along the paths described below. None of them sends anything until you set it up yourself. The built-in agent and MCP act only when you use them; GitHub Sync and Folder Sync, once you have set them up, run on their own.
+Your writing can leave this device along the paths described below. None of them sends anything until you set it up yourself. The built-in agent, MCP and Publishing act only when you use them; GitHub Sync and Folder Sync, once you have set them up, run on their own.
 
 #### 3.1 The Built-in Agent (a Provider You Connect)
 Linetta's built-in agent has nothing to call until you connect a provider yourself. Four are supported: ChatGPT (Codex), which you connect by signing in with your ChatGPT account, and Anthropic, Google Gemini, and an OpenAI-compatible endpoint, which you connect with an API key.
@@ -166,11 +174,19 @@ Folder Sync is off until you turn it on and choose a destination folder under `S
 - **No credential is involved.** Linetta asks for nothing but the folder. Who can read what lands there is decided by the folder you picked and by the service, if any, that syncs it.
 - The developer does not receive, relay, or store this data.
 
+#### 3.5 Publishing to Linetta Works
+Publishing is off until, under `Settings → Publishing`, you agree to what it sends and connect your Linetta Works (works.marvin-42.com) account in the browser; until then the App sends the site no requests at all. Once connected it still does nothing on its own: an episode is sent only when you press "Publish" in its publish dialog, or ask an agent you connected to publish it. The iOS build does not have this feature. Linetta Works is operated by the developer of Linetta.
+
+- **Where it goes.** To the Linetta Works server. A published episode is public for anyone to read. The site sends published text to the Anthropic API for content review.
+- **What goes.** When you connect, this device's name ("Linetta (…)" with your computer's name) is sent so it can appear in your device list on the site. When you publish, the episode's title and text, its place in the order, the work's title, genres, blurb, serial status and address, the App's language, and the Linetta internal IDs that identify the episode and the work are sent. Episodes you have not published, notes, character and relationship sheets, fact cards and agent memories are not sent. Requests carry the App's version, and the site receives your IP address, as with any internet request.
+- **Connection details.** The publish token the site hands out once is kept in your operating system's secure storage (the macOS Keychain, the Windows Credential Manager). Linux has none, so there it is kept in `<app data>/publish-token`, readable only by its owner (0600). The token can do one thing: put that account's works and episodes on the site and change whether they are public. Details that are not secret, such as your pen name and the site address, are kept in `settings.json`.
+- **Disconnecting and removing.** "Disconnect" under `Settings → Publishing` erases the connection stored on this device. To remove this device from your device list on the site, disconnect it from your profile there. Episodes you published stay on the site after you disconnect; make them private or delete them from the App's publish dialog or from My works on the site.
+
 ### 4. Selling or Sharing Data
-The developer does not sell user data or share it for the developer's own purposes. The only ways your writing reaches anyone else are the ones you turn on yourself: the built-in agent sends it to the provider you connected, an MCP client you run reads it, GitHub Sync pushes it to your git remote, and Folder Sync copies it into the folder you chose. Each is described in Section 3.
+The developer does not sell user data or share it for the developer's own purposes. The only ways your writing reaches anyone else are the ones you turn on yourself: the built-in agent sends it to the provider you connected, an MCP client you run reads it, GitHub Sync pushes it to your git remote, Folder Sync copies it into the folder you chose, and Publishing makes the episodes you choose public on Linetta Works. Each is described in Section 3.
 
 ### 5. Children's Privacy
-The developer collects no personal data from users, including children. Child users must also satisfy the age and parental-consent requirements of any AI provider they connect, any client they connect over MCP, the git host they push to, and any cloud service whose folder they sync into.
+The developer collects no personal data from users, including children. Child users must also satisfy the age and parental-consent requirements of any AI provider they connect, any client they connect over MCP, the git host they push to, any cloud service whose folder they sync into, and Linetta Works if they publish there.
 
 ### 6. Changes
 If this policy changes, we will update this page and revise the "Last updated" date above.
@@ -182,11 +198,11 @@ Contact: devlikebear@gmail.com
 
 ## 日本語
 
-Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆のための**ローカルファースト**なデスクトップアプリです。開発者（Changheon Shin / devlikebear）は、分析・広告・アカウント用サーバーを運営せず、ユーザーデータを収集しません。本アプリが原稿を端末の外に出すのは、ユーザー自身が設定した経路に限られます。ユーザーが接続した AI プロバイダーへ原稿を送信する内蔵エージェント、ユーザー自身が実行する外部 MCP クライアント、ユーザーが指定した git リモートへプッシュする GitHub 同期、そしてユーザーが指定したフォルダ（例: クラウドドライブのフォルダ）へコピーするフォルダ同期で、いずれも第3項で説明します。
+Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆のための**ローカルファースト**なデスクトップアプリです。開発者（Changheon Shin / devlikebear）は、本アプリのための分析・広告・アカウント用サーバーを運営せず、ユーザーデータを収集しません。本アプリが原稿を端末の外に出すのは、ユーザー自身が設定した経路に限られます。ユーザーが接続した AI プロバイダーへ原稿を送信する内蔵エージェント、ユーザー自身が実行する外部 MCP クライアント、ユーザーが指定した git リモートへプッシュする GitHub 同期、ユーザーが指定したフォルダ（例: クラウドドライブのフォルダ）へコピーするフォルダ同期、そしてユーザーが選んだエピソードだけを Web 小説サイト Linetta Works に公開する公開機能で、いずれも第3項で説明します。このうち公開機能だけが、開発者の運営するサーバーへ原稿を送信します。
 
 ### 1. 収集する情報
 **開発者が収集する情報はありません。** 本アプリは以下を行いません。
-- ユーザーアカウントやログインはありません。
+- 本アプリ自体にはユーザーアカウントやログインはありません。公開機能を使うには Linetta Works サイトのアカウントを本アプリに接続する必要があり、第3.5項で説明します。
 - 分析（analytics）・トラッキング・テレメトリ・広告識別子を使用しません。
 - クラッシュレポートなどでユーザーデータを開発者のサーバーへ送信しません。
 
@@ -210,7 +226,7 @@ macOS App Store ビルド以外では、すでに Codex CLI で済ませたサ�
 macOS App Store ビルドを含むすべてのビルドがこのファイル保存方式を使用し、このトークンをシステムキーチェーンには保存しません。
 
 ### 3. 原稿が端末を離れる場合
-原稿が端末を離れる可能性がある経路は、以下に挙げるものです。いずれもユーザー自身が設定するまで何も送信しません。内蔵エージェントと MCP はユーザーが使うときにのみ動作しますが、GitHub 同期とフォルダ同期は一度設定すると自動的に動作します。
+原稿が端末を離れる可能性がある経路は、以下に挙げるものです。いずれもユーザー自身が設定するまで何も送信しません。内蔵エージェント、MCP、公開機能はユーザーが使うときにのみ動作しますが、GitHub 同期とフォルダ同期は一度設定すると自動的に動作します。
 
 #### 3.1 内蔵エージェント（ユーザーが接続したプロバイダー）
 Linetta の内蔵エージェントは、ユーザー自身がプロバイダーを接続するまで呼び出す先がありません。対応するプロバイダーは四つです。ChatGPT（Codex）は ChatGPT アカウントでサインインして接続し、Anthropic・Google Gemini・OpenAI 互換エンドポイントは API キーで接続します。
@@ -254,11 +270,19 @@ GitHub 同期は、`設定 → GitHub 同期` でユーザーが git フォル�
 - **認証情報は不要です。** Linetta が求めるのはフォルダだけです。そこに置かれたものを誰が読めるかは、ユーザーが選んだフォルダと、それを同期するサービスがあればそのサービスによって決まります。
 - 開発者はこのデータを受信・中継・保存しません。
 
+#### 3.5 Linetta Works への公開
+公開機能は、`設定 → 公開` でユーザーが送信内容に同意し、ブラウザで Linetta Works（works.marvin-42.com）のアカウントを接続するまでオフで、それまで本アプリはサイトへ一切リクエストを送りません。接続した後も自動的には動作せず、ユーザーがエピソードの公開ウィンドウで「公開」を押したとき、またはユーザーが接続したエージェントにエピソードの公開を指示したときにだけ、そのエピソードを送信します。iOS ビルドにこの機能はありません。Linetta Works は Linetta の開発者が運営するサイトです。
+
+- **どこへ送られるか。** Linetta Works のサーバーへ送られます。公開したエピソードは誰でも読めるように公開されます。サイトは内容審査のため、公開された本文を Anthropic API へ送信します。
+- **何が送られるか。** 接続時には、サイトのデバイス一覧に表示されるよう、この端末の名前（コンピューター名を含む「Linetta (…)」）が送信されます。公開時には、そのエピソードのタイトルと本文、エピソードの順番、作品のタイトル・ジャンル・紹介文・連載状態・作品アドレス、本アプリの言語、そしてエピソードと作品を識別する Linetta 内部 ID が送信されます。公開していないエピソード、メモ、人物・関係シート、ファクトカード、エージェントの記憶は送信しません。リクエストには本アプリのバージョンが含まれ、サイトは通常のインターネット通信と同様に接続元の IP アドレスを受け取ります。
+- **接続情報。** サイトが一度だけ発行する公開用トークンは、OS の安全な保管場所（macOS のキーチェーン、Windows の資格情報マネージャー）に保存します。それがない Linux では、`<アプリデータ>/publish-token` ファイルに所有者だけが読める権限（0600）で保存します。このトークンでできるのは、そのアカウントの作品とエピソードを公開し、公開・非公開を切り替えることだけです。ペンネームやサイトのアドレスなど秘密でない接続情報は `settings.json` に保存します。
+- **解除と削除。** `設定 → 公開` の「接続を解除」は、この端末に保存された接続情報を削除します。サイトのデバイス一覧からこの端末を外すには、サイトのプロフィールで解除してください。公開済みのエピソードは接続を解除してもサイトに残り、本アプリの公開ウィンドウまたはサイトのマイ作品から非公開にしたり削除したりできます。
+
 ### 4. データの販売・共有
-開発者はユーザーデータを販売せず、開発者自身の目的で共有しません。原稿が他者に届く経路は、ユーザー自身が有効にするものだけです。内蔵エージェントはユーザーが接続したプロバイダーへ原稿を送信し、ユーザーが実行する MCP クライアントは原稿を読み取り、GitHub 同期はユーザーの git リモートへ原稿をプッシュし、フォルダ同期はユーザーが指定したフォルダへ原稿をコピーします。いずれも第3項のとおりです。
+開発者はユーザーデータを販売せず、開発者自身の目的で共有しません。原稿が他者に届く経路は、ユーザー自身が有効にするものだけです。内蔵エージェントはユーザーが接続したプロバイダーへ原稿を送信し、ユーザーが実行する MCP クライアントは原稿を読み取り、GitHub 同期はユーザーの git リモートへ原稿をプッシュし、フォルダ同期はユーザーが指定したフォルダへ原稿をコピーし、公開機能はユーザーが選んだエピソードを Linetta Works で公開します。いずれも第3項のとおりです。
 
 ### 5. 子どものプライバシー
-開発者は子どもを含むユーザーの個人情報を収集しません。子どもの利用者は、接続する AI プロバイダー、MCP で接続するクライアント、プッシュ先の git ホスト、そして同期先フォルダを提供するクラウドサービスそれぞれの年齢要件および保護者同意要件も満たす必要があります。
+開発者は子どもを含むユーザーの個人情報を収集しません。子どもの利用者は、接続する AI プロバイダー、MCP で接続するクライアント、プッシュ先の git ホスト、同期先フォルダを提供するクラウドサービス、そして公開先の Linetta Works それぞれの年齢要件および保護者同意要件も満たす必要があります。
 
 ### 6. 変更
 本ポリシーが変更された場合、このページを更新し、上部の「最終更新」日を改訂します。

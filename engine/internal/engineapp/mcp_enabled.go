@@ -20,6 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
@@ -71,10 +72,12 @@ type mcpToolRepos struct {
 	// server, the same way memory is — one home directory, one table.
 	skills       *agentskills.Store
 	skillHistory *agentskills.History
-	enqueue      func(nodeID string)
-	notify       func(method string, params any)
-	clock        func() int64
-	db           *sql.DB
+	// publish is nil on a build that cannot publish.
+	publish *publish.Service
+	enqueue func(nodeID string)
+	notify  func(method string, params any)
+	clock   func() int64
+	db      *sql.DB
 }
 
 // mcpController adapts *mcphost.Host to handlers.MCPController, translating
@@ -120,6 +123,12 @@ func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 		EnqueueSummary: deps.repos.enqueue,
 		Notify:         deps.repos.notify,
 		Clock:          deps.repos.clock,
+	}
+	// A nil *publish.Service in the interface field would be a non-nil
+	// Publisher that panics; leave the field nil instead, which the tools
+	// refuse cleanly.
+	if deps.repos.publish != nil {
+		tools.Publish = deps.repos.publish
 	}
 	// What the tool set costs, for the Settings pane's tool-budget group
 	// (#99). Wired here rather than where the store is built because this is
