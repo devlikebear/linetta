@@ -26,6 +26,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 - **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
 - **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a recent structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
+- **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish leave your device.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
 ## See Linetta in action
@@ -276,6 +277,7 @@ Once connected, an agent can:
 
 - read the outline, a scene, characters, fact cards, and a story brief;
 - draft and revise scenes, write summaries, and restructure the outline;
+- publish an episode to Linetta Works, once you have connected an account and published the work yourself (`full` mode only);
 - record what it changed, so you can see it in the activity log.
 
 The story brief also carries the writer profile and the work's notes described
@@ -304,6 +306,51 @@ until you choose.
 The endpoint binds `127.0.0.1` only, requires a token Linetta generates
 locally, and stops the moment you turn it off.
 
+## Publishing to Linetta Works
+
+[Linetta Works](https://works.marvin-42.com) is a reading site for fiction
+written in Linetta. Publishing to it is optional: nothing is sent to the site
+until you connect an account, and after that only the episodes you choose to
+publish.
+
+**Connect.** Open **Settings → Publishing**, read what publishing sends, tick
+the box, and press **Connect in browser**. The site opens in your browser with
+a confirmation code; check it matches the one Linetta shows and press
+**Allow**. Linetta then shows your pen name. This build of the feature is for
+desktop; it is hidden on iOS.
+
+**Publish.** Open an episode's menu in the outline — or a scene's, which
+publishes the episode it belongs to — and choose **Publish this episode…**, or
+use the command palette. The first time, Linetta asks for the blurb readers see
+and whether the work is ongoing or complete; the title and genres come from
+the work itself. The dialog shows the episode's address, with a copy and an
+open button. Edit the episode later and the outline marks it **Edited**;
+publish again and the same address shows the new text. Episode numbers follow
+your outline, and an episode you move or insert renumbers the ones after it —
+their old addresses redirect. You can make an episode private from the same
+dialog. An agent you connected (built-in or over MCP) can publish too, with
+`linetta_publish_episode`, but only after you have connected and published the
+work once yourself; it cannot connect an account or register a work.
+
+**What is sent, and where.** The published episode's title and text, its
+place in the order, and the work's title, genres, blurb, serial status and
+address go to the Linetta Works server, which is run by Linetta's developer,
+and are public for anyone to read. The site sends published text to the
+Anthropic API for content review. Unpublished episodes, notes, character
+sheets, fact cards and agent memories are never sent. See the
+[privacy policy](docs/privacy-policy.md), section 3.5.
+
+**Where the connection is kept.** The publish token is kept in the macOS
+Keychain or the Windows Credential Manager. Linux has no secure store Linetta
+can use, so there it is kept in `publish-token` in Linetta's data folder,
+readable only by your user. Your pen name and the site address are kept in
+`settings.json`.
+
+**Disconnect.** **Settings → Publishing → Disconnect** forgets the connection
+on this device. To remove the device from your device list on the site,
+disconnect it from your profile there. Episodes you published stay up until
+you make them private or delete them.
+
 ## Data and safety
 
 Linetta stores writing data on your device:
@@ -327,7 +374,8 @@ Important data includes:
   folder still here is not a sign that memories were left behind; see
   [Moving to Linetta 1.0](docs/migrating-to-1.0.md) for what it declines to
   move and what to do about each case;
-- `settings.json`: app preferences.
+- `settings.json`: app preferences, and the Linetta Works account this device is connected to (pen name and site address — not the token);
+- `publish-token`: on Linux only, the Linetta Works publish token, readable only by your user (elsewhere it is in the OS secure store).
 
 Manual and agent-write snapshots are retained indefinitely. Autosave snapshots are thinned over time, from every save during the first day to daily snapshots after 30 days.
 
@@ -350,7 +398,7 @@ Yes. Linetta supports Markdown import and export so your writing is not locked i
 
 ### Is my work uploaded to a Linetta cloud?
 
-No. Linetta has no cloud. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure.
+No. Linetta has no cloud that keeps your manuscript. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure. The one exception is a choice you make episode by episode: when you publish an episode to Linetta Works, that episode goes to the site so readers can read it.
 
 ## For contributors
 

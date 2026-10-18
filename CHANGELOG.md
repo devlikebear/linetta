@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+- Publish episodes to [Linetta Works](https://works.marvin-42.com), a reading
+  site for fiction written in Linetta, straight from the app. It is optional
+  and off until you connect: under **Settings → Publishing**, read what
+  publishing sends, agree, and connect your account in the browser by
+  matching a confirmation code. Nothing is sent to the site before that, and
+  afterwards only the episodes you publish.
+- **Publish this episode…** in an episode's (or a scene's) outline menu, and
+  in the command palette, opens the publish dialog. The first time a work goes
+  up it asks for the blurb readers see and whether the work is ongoing or
+  complete; title and genres come from the work. The dialog gives the
+  episode's address to copy or open, and can make it private again.
+- Once a work is on the site, the outline marks each episode **Public**,
+  **Edited** (changed since you published it), **In review**, **Rejected** or
+  **Private**. Publishing an edited episode again updates the same address.
+  Episode numbers follow your outline; moving or inserting an episode
+  renumbers the ones after it, and their old addresses redirect.
+- If publishing fails — no connection, an episode too long for the site, the
+  device disconnected on the web — your manuscript is left exactly as it was,
+  the dialog says why, and you can try again.
+- An agent you connected can see what is published
+  (`linetta_publish_status`) and publish an episode when you ask
+  (`linetta_publish_episode`), after you have connected and published the work
+  once yourself. Every publish is in the activity log.
+- The publish token is kept in the macOS Keychain or the Windows Credential
+  Manager, or on Linux in a `publish-token` file only your user can read. The
+  [privacy policy](docs/privacy-policy.md) now describes what publishing sends
+  (section 3.5).
+
 ## v1.8.2 - 2026-10-17
 
 - With Gemini, the built-in agent no longer stops when the model calls more
