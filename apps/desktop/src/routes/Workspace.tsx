@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot } from "lucide-react";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi } from "../lib/rpc";
 import { saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus } from "../lib/types";
+import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -27,6 +27,8 @@ import { OutlinePanel } from "../components/OutlinePanel";
 import { InlineEditableText } from "../components/InlineEditableText";
 import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
+import { PublishDialog } from "../components/PublishDialog";
+import { rememberSettingsCategory } from "./Settings";
 import { SearchModal } from "../components/SearchModal";
 import { OnboardingTour, type OnboardingTourStep } from "../components/onboarding/OnboardingTour";
 import {
@@ -175,6 +177,13 @@ export function Workspace() {
   // writer must never be told to go configure something Settings won't show
   // them (#95).
   const [agentAvailable, setAgentAvailable] = useState(false);
+  // Linetta Works publishing (Phase 3). Off on builds that cannot publish.
+  // The work's status is fetched when the work opens and after a publish —
+  // never on a timer — and only that, so a writer who is not connected
+  // costs the site nothing (the engine answers locally until they connect).
+  const [publishAvailable, setPublishAvailable] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<PublishWorkStatus | null>(null);
+  const [publishTarget, setPublishTarget] = useState<string | null>(null);
   // A turn outlives the panel, so the toolbar says when one is running.
   const agentRunning = useAgentRunning(load?.project.id, agentAvailable);
   const [tourOpen, setTourOpen] = useState(false);
@@ -407,10 +416,31 @@ export function Workspace() {
         if (cancelled) return;
         setGitSyncAvailable(d.git_sync_available ?? true);
         setAgentAvailable(d.agent_available ?? false);
+        setPublishAvailable(d.publish_available ?? false);
       })
       .catch(() => {});
     return () => { cancelled = true; };
   }, []);
+
+  const publishProjectId = load?.project.id;
+  useEffect(() => {
+    setPublishStatus(null);
+    if (!publishAvailable || !publishProjectId) return undefined;
+    let cancelled = false;
+    publishApi
+      .workStatus(publishProjectId)
+      .then((st) => { if (!cancelled) setPublishStatus(st); })
+      // Offline is answered from the saved copy, not as an error; what does
+      // reject (a revoked token, say) is the dialog's to explain.
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [publishAvailable, publishProjectId]);
+
+  // Badges only for a connected work the site knows; otherwise none at all.
+  const publishStates = useMemo(() => {
+    if (!publishStatus?.connected || !publishStatus.registered) return undefined;
+    return new Map(publishStatus.episodes.map((ep) => [ep.node_id, ep.state] as const));
+  }, [publishStatus]);
 
   const mentionExtension = useMemo(() => {
     if (!projectId) return null;
@@ -888,6 +918,19 @@ export function Workspace() {
     debouncedSave.flush();
     await sceneSaveQueue.idle();
   }, [debouncedSave, sceneSaveQueue]);
+  // The dialog publishes what is saved, so the last keystrokes are saved
+  // first — otherwise the site would get the text from a second ago.
+  const openPublish = useCallback(async (nodeId: string) => {
+    await flushPendingSave();
+    setPublishTarget(nodeId);
+  }, [flushPendingSave]);
+  const closePublish = useCallback(() => {
+    setPublishTarget(null);
+    // The site now has new text; the engine marked the episode's nodes
+    // published. Pull the tree so the status dots say so.
+    const current = loadRef.current;
+    if (current) void refreshTreeKeepNode(current.node.id).catch(() => {});
+  }, [refreshTreeKeepNode]);
   const idleDirtyRef = useRef(false);
   const handleIdleCheckpoint = useCallback(async () => {
     if (!idleDirtyRef.current) return;
@@ -1355,6 +1398,17 @@ export function Workspace() {
       label: t("workspace.command.copySceneText"),
       run: async () => { await copyNodeText(currentTreeNode); },
     });
+    if (publishAvailable) {
+      // In the export section: publishing is one more way the text leaves
+      // the app, and the palette's sections are fixed.
+      cmds.push({
+        id: "publish-episode",
+        section: sectionExport,
+        label: t("workspace.command.publishEpisode"),
+        keywords: ["publish", "upload", "linetta works", "게시", "연재", "올리기", "公開"],
+        run: () => { void openPublish(load.node.id); },
+      });
+    }
     cmds.push({
       id: "go-settings",
       section: sectionProject,
@@ -1440,7 +1494,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable, flushPendingSave]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable, flushPendingSave, publishAvailable, openPublish]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1726,6 +1780,8 @@ export function Workspace() {
           onMoveNode={handleMoveNodeTo}
           onDeleteNode={handleDeleteSceneFromOutline}
           onSetStatus={handleSetNodeStatus}
+          onPublish={publishAvailable ? (node) => { void openPublish(node.id); } : undefined}
+          publishStates={publishStates}
           onRepairOutline={handleRepairOutline}
           onUndoRepairOutline={handleUndoRepairOutline}
           canUndoRepair={Boolean(outlineUndoSnapshot)}
@@ -2046,6 +2102,20 @@ export function Workspace() {
       )}
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} agentAvailable={agentAvailable} />
+      {load && publishTarget && (
+        <PublishDialog
+          open
+          projectId={load.project.id}
+          nodeId={publishTarget}
+          onClose={closePublish}
+          onOpenSettings={() => {
+            setPublishTarget(null);
+            rememberSettingsCategory("publish");
+            void flushPendingSave().then(() => navigate("/settings"));
+          }}
+          onChanged={setPublishStatus}
+        />
+      )}
       <OnboardingTour
         open={tourOpen}
         steps={tourSteps}
