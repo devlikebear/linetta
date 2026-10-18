@@ -117,6 +117,10 @@ type Config struct {
 	MCPConsentVersion           int                       `json:"mcp_consent_version"`
 	MCPConsentedAt              int64                     `json:"mcp_consented_at"`
 	MCPTokenSet                 bool                      `json:"mcp_token_set,omitempty"` // read-only presence flag for settings.get
+	// PublishAccount is the Linetta Works account this device is connected
+	// to, nil when it is not. Written only by the publish connect flow (see
+	// publish.go); settings.set has no patch field for it.
+	PublishAccount *PublishAccount `json:"publish_account,omitempty"`
 	// AgentSelfReviewEnabled governs the built-in agent's self-improvement
 	// pass (#98 Task 10): after a turn that actually did work, the agent is
 	// asked separately whether anything is worth recording as a skill. It
@@ -503,6 +507,11 @@ func (s *Store) load() error {
 	}
 	if _, ok := raw["skill_tools_enabled"]; ok {
 		s.cfg.SkillToolsEnabled = disk.SkillToolsEnabled
+	}
+	// An account with no handle is not a connection; drop it rather than
+	// show "connected" to nobody.
+	if disk.PublishAccount != nil && disk.PublishAccount.Handle != "" {
+		s.cfg.PublishAccount = disk.PublishAccount
 	}
 	s.cfg = normalizeMCPPreferences(s.cfg)
 	// Migration cannot fail the load any more (#113). A pre-1.0 plaintext key
@@ -954,6 +963,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		VisualWriteToolsDisabled: next.VisualWriteToolsDisabled,
 		MemoryToolsEnabled:       next.MemoryToolsEnabled,
 		SkillToolsEnabled:        next.SkillToolsEnabled,
+		PublishAccount:           next.PublishAccount,
 	}
 	// sanitizeConfigForDisk has just blanked every api_key, which is right for
 	// every key the SecretStore holds. It is wrong for the pre-1.0 ones it

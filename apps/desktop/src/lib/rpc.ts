@@ -9,6 +9,12 @@ import type {
   Beat,
   CodexLoginStart,
   CodexStatus,
+  PublishConnectStatus,
+  PublishEpisodeView,
+  PublishResult,
+  PublishSerialStatus,
+  PublishWorkStatus,
+  PublishWorkView,
   ConsistencyInput,
   ConsistencyReport,
   ContextChangeInput,
@@ -420,6 +426,29 @@ export const codex = {
   loginStart: () => rpcCall<CodexLoginStart>("codex.login_start"),
   loginStatus: () => rpcCall<CodexStatus>("codex.login_status"),
   logout: () => rpcCall<{ ok: true }>("codex.logout"),
+};
+
+/** Linetta Works publishing (Phase 3). Nothing here reaches the site until
+ *  the writer connects: every call before that answers from this device. */
+export const publishApi = {
+  connectStart: (consented: boolean) =>
+    rpcCall<PublishConnectStatus>("publish.connect_start", { consented }),
+  connectStatus: () => rpcCall<PublishConnectStatus>("publish.connect_status"),
+  /** Also abandons a connection attempt still waiting for the browser. */
+  disconnect: () => rpcCall<{ ok: true }>("publish.disconnect"),
+  workStatus: (projectId: string) =>
+    rpcCall<PublishWorkStatus>("publish.work_status", { project_id: projectId }),
+  upsertWork: (input: { project_id: string; blurb: string; serial_status: PublishSerialStatus; slug?: string }) =>
+    rpcCall<PublishWorkView>("publish.work_upsert", input),
+  /** nodeId may be the episode or any scene inside it. */
+  publishEpisode: (nodeId: string) =>
+    rpcCall<PublishResult>("publish.episode_publish", { node_id: nodeId }),
+  setEpisodeVisibility: (projectId: string, nodeId: string, visibility: "public" | "private") =>
+    rpcCall<PublishEpisodeView>("publish.episode_set_visibility", {
+      project_id: projectId,
+      node_id: nodeId,
+      visibility,
+    }),
 };
 
 /** The built-in agent's loop (#93). Its panel is #95; these wrappers are the

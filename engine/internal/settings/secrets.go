@@ -12,6 +12,11 @@ const webSearchAPIKeySecretName = "web_search.api_key"
 // the local server. Kept in the secret store, never in settings.json.
 const mcpTokenSecretName = "mcp.token"
 
+// publishTokenSecretName holds the Linetta Works publish token (lwk_…) the
+// site hands this device once, when the writer approves it in the browser.
+// See publish.go.
+const publishTokenSecretName = "publish.token"
+
 func providerAPIKeySecretName(provider string) string {
 	return "provider." + provider + ".api_key"
 }

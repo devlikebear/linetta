@@ -100,6 +100,34 @@ const (
 	// out on its own. The writer can still reach the same change through
 	// snapshot history.
 	ReasonAgentUndoUnavailable = "agent_undo_unavailable"
+
+	// Publishing to Linetta Works (Phase 3). Most are the site's own error
+	// codes (docs/api.md in linetta-artworks) carried through; the site's
+	// Korean message stays in the English Message for logs. The rest are
+	// refusals the engine makes before anything is sent.
+	//
+	// Unauthorized is the site saying the token no longer works — the
+	// writer disconnected this device from their profile — and the engine
+	// has already forgotten it by the time the pane hears this. Not
+	// connected is the engine never having had one.
+	ReasonPublishNotConnected      = "publish_not_connected"
+	ReasonPublishConsentRequired   = "publish_consent_required"
+	ReasonPublishUnauthorized      = "publish_unauthorized"
+	ReasonPublishNotEnabled        = "publish_not_enabled"
+	ReasonPublishQuotaExceeded     = "publish_quota_exceeded"
+	ReasonPublishTooLarge          = "publish_too_large"
+	ReasonPublishInvalidSlug       = "publish_invalid_slug"
+	ReasonPublishSlugTaken         = "publish_slug_taken"
+	ReasonPublishWorkNotRegistered = "publish_work_not_registered"
+	ReasonPublishEpisodeNotFound   = "publish_episode_not_found"
+	ReasonPublishRateLimited       = "publish_rate_limited"
+	ReasonPublishUnreachable       = "publish_unreachable"
+	ReasonPublishTimeout           = "publish_timeout"
+	ReasonPublishUnavailable       = "publish_unavailable"
+	ReasonPublishRejected          = "publish_rejected"
+	ReasonPublishNotEpisode        = "publish_not_episode"
+	ReasonPublishEmptyEpisode      = "publish_empty_episode"
+	ReasonPublishBlurbRequired     = "publish_blurb_required"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine
