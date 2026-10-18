@@ -74,6 +74,10 @@ type ToolDeps struct {
 	// Write-side collaborators. Snapshots make every body change revertible;
 	// EnqueueSummary keeps agent prose in the summarizer's queue; Notify tells
 	// the running UI that something outside it changed the manuscript.
+	// Publish puts episodes on Linetta Works. Nil in a build or a test that
+	// wires none; the publish tools refuse rather than panicking.
+	Publish Publisher
+
 	Snapshots      *snapshot.Repo
 	Story          *storyops.Service
 	ManuscriptEdit *manuscriptedit.Service
