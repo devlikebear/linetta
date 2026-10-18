@@ -18,6 +18,7 @@ import { BackgroundSection } from "../components/settings/BackgroundSection";
 import { McpSection } from "../components/settings/McpSection";
 import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
+import { PublishSection } from "../components/settings/PublishSection";
 import { RestoreSection } from "../components/settings/RestoreSection";
 import { SkillsSection } from "../components/settings/SkillsSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
@@ -63,6 +64,7 @@ const SETTINGS_CATEGORIES = [
   "memory",
   "skills",
   "sync",
+  "publish",
   "backup",
 ] as const;
 type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
@@ -76,6 +78,17 @@ const CATEGORY_STORAGE_KEY = "linetta.settings.category";
  *  engine measures the number; this only chooses how to say it. */
 function formatToolBytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} kB`;
+}
+
+/** Open Settings on a given category next time it mounts — for a screen
+ *  elsewhere that sends the writer to one pane ("connect in Settings →
+ *  Publishing"). */
+export function rememberSettingsCategory(category: SettingsCategory): void {
+  try {
+    sessionStorage.setItem(CATEGORY_STORAGE_KEY, category);
+  } catch {
+    /* storage unavailable — Settings opens on its first category */
+  }
 }
 
 function initialCategory(): SettingsCategory {
@@ -108,6 +121,8 @@ export function Settings() {
   // #93 added this field to DiagnosticsSnapshot and set it from real
   // capability detection; nothing read it until now.
   const [agentAvailable, setAgentAvailable] = useState(false);
+  // Hidden on builds that cannot publish to Linetta Works (iOS).
+  const [publishAvailable, setPublishAvailable] = useState(false);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [category, setCategoryState] = useState<SettingsCategory>(initialCategory);
   // Nav visibility only; BackgroundSection keeps its own probe and content.
@@ -144,6 +159,7 @@ export function Settings() {
         setGitSyncAvailable(diag.git_sync_available ?? true);
         setMcpAvailable(diag.mcp_available ?? false);
         setAgentAvailable(diag.agent_available ?? false);
+        setPublishAvailable(diag.publish_available ?? false);
         setCompanionHistoryExists(diag.companion_history_exists ?? true);
       })
       // Inside an effect: keeping `t` out of the deps avoids re-running the
@@ -315,6 +331,9 @@ export function Settings() {
       label: t("settings.nav.groupData"),
       items: [
         { id: "sync", label: t("settings.nav.sync") },
+        // Publishing sends text off the device, like sync does, so it sits
+        // beside it rather than with the AI connections.
+        ...(publishAvailable ? [{ id: "publish" as const, label: t("settings.nav.publish") }] : []),
         { id: "backup", label: t("settings.nav.backupRestore") },
       ],
     },
@@ -572,6 +591,8 @@ export function Settings() {
             {category === "providers" && agentAvailable && <ProviderSection />}
 
             {category === "mcp" && mcpAvailable && <McpSection />}
+
+            {category === "publish" && <PublishSection available={publishAvailable} />}
 
             {/* The tool budget (#99). Both switches are ON by default, so they
                 read `!== false`: a settings payload from an engine that

@@ -353,6 +353,8 @@ export interface DiagnosticsSnapshot {
    *  builds, where internal/agent is compiled out entirely — the panel must
    *  not offer a feature the engine cannot run. */
   agent_available?: boolean;
+  /** False on builds that cannot publish to Linetta Works (iOS). */
+  publish_available?: boolean;
   /** Whether this library ever held a companion message. Decides whether the
    *  backup section offers the transcript export — a library that never used
    *  the companion has nothing to export. */
@@ -587,6 +589,8 @@ export interface PublishEpisodeView {
   label: string;
   title: string;
   ordinal?: number;
+  /** The scenes the episode is made of. */
+  leaf_ids?: string[];
   char_count: number;
   empty?: boolean;
   state: PublishEpisodeState;

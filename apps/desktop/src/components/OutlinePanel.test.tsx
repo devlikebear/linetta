@@ -606,4 +606,33 @@ describe("OutlinePanel", () => {
 
     await waitFor(() => expect(onRename).toHaveBeenCalledWith(scene, "First meeting"));
   });
+
+  it("marks an episode's Linetta Works state and leaves unpublished ones bare", () => {
+    renderOutline({
+      publishStates: new Map([
+        ["scene-1", "modified" as const],
+        ["chapter-1", "unpublished" as const],
+      ]),
+    });
+    expect(screen.getByTestId("outline-publish-scene-1")).toHaveTextContent("수정됨");
+    expect(screen.queryByTestId("outline-publish-chapter-1")).not.toBeInTheDocument();
+  });
+
+  it("shows no publishing marks at all without a status", () => {
+    renderOutline();
+    expect(screen.queryByTestId("outline-publish-scene-1")).not.toBeInTheDocument();
+  });
+
+  it("offers publishing from a scene, but not from a top-level container holding episodes", async () => {
+    const user = userEvent.setup();
+    const onPublish = vi.fn();
+    renderOutline({ onPublish });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /씬 1/ }));
+    await user.click(screen.getByTestId("outline-menu-publish"));
+    expect(onPublish).toHaveBeenCalledWith(scene);
+
+    fireEvent.contextMenu(screen.getByText("1장"));
+    expect(screen.queryByTestId("outline-menu-publish")).not.toBeInTheDocument();
+  });
 });
