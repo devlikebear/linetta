@@ -138,7 +138,7 @@ Claude Code, Claude Desktop — can work on the manuscript. It is off until the
 writer consents and enables it under **Settings → Connect an external agent**,
 binds `127.0.0.1` only, and requires a locally generated bearer token.
 
-The default tool set has 27 tools (13 read, 14 write). Optional memory, skills,
+The default tool set has 29 tools (14 read, 15 write). Optional memory, skills,
 and visual-write groups can be switched off in Settings → Tool budget. Write tools appear
 only in `full` mode, so `read_only` omits them from `tools/list` entirely
 rather than refusing them at call time.
@@ -154,6 +154,9 @@ Read:
   returns `stats` — counted measurements of the scenes read (`style.Measure`)
 - `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
 - `linetta_read_skill`
+- `linetta_publish_status`: each episode's state on Linetta Works (see
+  [Publishing](#publishing-to-linetta-works) below). Answers locally, without
+  contacting the site, when no account is connected
 
 `linetta_read_scene` returns plain prose by default — the form every write
 tool takes back. `format: "markdown"` returns the scene through
@@ -173,7 +176,11 @@ Write (`full` mode only):
   `style.approve_draft` RPC moves a draft into `projects.style_notes`, and
   so into the story brief; there is no MCP tool that approves;
 - `linetta_set_character_visuals`, `linetta_set_art_style`;
-- `linetta_add_reference_image`, `linetta_delete_reference_image`.
+- `linetta_add_reference_image`, `linetta_delete_reference_image`;
+- `linetta_publish_episode`: publishes one episode, or updates its text on the
+  site, through the same `publish.Service` the app's publish dialog uses.
+  Refused until the writer has connected an account and registered the work
+  in the app — there is deliberately no tool for either.
 
 Visual editing: `linetta_set_character_visuals`, `linetta_set_art_style`,
 `linetta_add_reference_image`, `linetta_delete_reference_image` (full mode only).
@@ -222,3 +229,42 @@ GitHub Actions workflows:
 - **Embedded engine link failure:** run `cd apps/desktop/src-tauri && cargo build` and inspect the Go archive output from `build.rs`.
 - **MCP client cannot connect:** confirm the server is on in Settings, that the port is not taken by something else, and that the token in your client config matches the current one.
 - **Backup or Git sync failure:** open Settings and inspect the operation status card for the latest error and timestamp.
+
+## Publishing to Linetta Works
+
+The desktop app can publish episodes to [Linetta Works](https://works.marvin-42.com)
+(Phase 3 of the Linetta Works roadmap; the work order is
+[`docs/plans/publish/phase-3-linetta-publish.md`](plans/publish/phase-3-linetta-publish.md)).
+The wire contract is the site's: `docs/api.md` in the linetta-artworks
+repository, `api_version` 1. Follow it rather than adjusting the client to
+whatever the server happens to do; a contract change is made there first.
+
+- `internal/episode` decides what an episode is (the same rules as
+  `apps/desktop/src/lib/outlineEpisode.ts`, which still has its own copy), and
+  `export.ExportEpisodeMarkdown` renders one for readers: scenes joined by
+  `* * *`, mentions without `@`, note anchors dropped. The content hash is the
+  SHA-256 of that Markdown, which the site recomputes.
+- `internal/publish` holds the HTTP client, the device-pairing flow
+  (`Connector`, shaped like `codexauth.Service`), and `Service`, which merges
+  the local episode list with the site's and publishes. `publish_works` and
+  `publish_episodes` (migration 0023) are a local copy of what the site said,
+  for offline display.
+- The token lives in the secret store as `publish.token`, or in
+  `<home>/publish-token` (0600) where there is none (Linux); the account's
+  non-secret details are `settings.json`'s `publish_account`.
+- `publish.*` RPCs are registered by `engineapp/publish_enabled.go`; the
+  `mobile` build registers refusing stubs (`publish_disabled.go`) and reports
+  `publish_available: false`, which hides the UI.
+- Nothing reaches the site before an account is connected:
+  `TestPublishMethodsAreRegisteredAndSendNothingUntilConnected` holds that.
+
+For development against a local server, point the engine elsewhere:
+
+```sh
+LINETTA_PUBLISH_BASE_URL=http://127.0.0.1:8090 make dev
+```
+
+The shell only opens `https://works.marvin-42.com` in the browser
+(`EXTERNAL_URL_HOSTS`), so against a local server open the connect URL the
+Settings pane shows by hand.
+

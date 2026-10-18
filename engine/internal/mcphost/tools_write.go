@@ -36,6 +36,7 @@ var WriteToolNames = []string{
 	"linetta_edit_memory",
 	"linetta_edit_skill",
 	"linetta_propose_style_profile",
+	"linetta_publish_episode",
 }
 
 // ---------- linetta_create_work ----------
@@ -166,6 +167,7 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 	d.registerReviseTool(s)
 	d.registerBatchTools(s)
 	d.registerStyleWriteTools(s)
+	d.registerPublishWriteTool(s)
 }
 
 func (d ToolDeps) registerMemoryTool(s *mcp.Server) {

@@ -35,6 +35,7 @@ var ReadToolNames = []string{
 	"linetta_build_illustration_prompt",
 	"linetta_analyze_style",
 	"linetta_read_skill",
+	"linetta_publish_status",
 }
 
 const defaultSearchLimit = 20
@@ -340,6 +341,7 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	if groups.Skills {
 		registerReadSkillTool(s, d)
 	}
+	d.registerPublishReadTool(s)
 }
 
 func registerReadSkillTool(s *mcp.Server, d ToolDeps) {
