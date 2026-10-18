@@ -108,6 +108,13 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "providers.list",
     "providers.list_models",
     "providers.test",
+    "publish.connect_start",
+    "publish.connect_status",
+    "publish.disconnect",
+    "publish.episode_publish",
+    "publish.episode_set_visibility",
+    "publish.work_status",
+    "publish.work_upsert",
     "relationships.create_one",
     "relationships.create_pair",
     "relationships.delete",
@@ -499,10 +506,16 @@ async fn open_path(
 /// command yet — the allowlist is here to be right before there is a caller,
 /// not to describe one.
 ///
-/// It is an exact match: the authorize endpoint is that host and nothing
-/// under it, and every subdomain admitted is another name a mistake could
-/// hide behind.
-const EXTERNAL_URL_HOSTS: [(&str, bool); 1] = [("auth.openai.com", false)];
+/// works.marvin-42.com is Linetta Works: the device-connect page the publish
+/// settings open, and the published episode and work pages the publish dialog
+/// opens.
+///
+/// Each is an exact match: the endpoint is that host and nothing under it,
+/// and every subdomain admitted is another name a mistake could hide behind.
+const EXTERNAL_URL_HOSTS: [(&str, bool); 2] = [
+    ("auth.openai.com", false),
+    ("works.marvin-42.com", false),
+];
 
 fn validate_external_url(raw: &str) -> Result<String, String> {
     let parsed = url::Url::parse(raw.trim()).map_err(|e| format!("invalid url: {e}"))?;
@@ -819,6 +832,10 @@ mod security_boundary_tests {
 
         assert!(validate_external_url("http://auth.openai.com/oauth/authorize").is_err());
         assert!(validate_external_url("https://example.com/").is_err());
+        assert!(validate_external_url("https://works.marvin-42.com/connect?pairing=abc").is_ok());
+        assert!(validate_external_url("https://works.marvin-42.com/@devlikebear/k-office-god/3").is_ok());
+        assert!(validate_external_url("https://evil.works.marvin-42.com/").is_err());
+        assert!(validate_external_url("http://works.marvin-42.com/").is_err());
         assert!(validate_external_url("file:///C:/Windows/System32").is_err());
         assert!(validate_external_url("javascript:alert(1)").is_err());
         assert!(validate_external_url("not a url").is_err());

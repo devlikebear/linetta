@@ -17,6 +17,9 @@ type Capabilities struct {
 	GitSyncAvailable bool
 	MCPAvailable     bool
 	AgentAvailable   bool
+	// PublishAvailable: this build can publish to Linetta Works. Off on
+	// mobile, where the Settings entry and the publish actions are hidden.
+	PublishAvailable bool
 }
 
 type diagnosticsPayload struct {
@@ -28,6 +31,7 @@ type diagnosticsPayload struct {
 	GitSyncAvailable bool   `json:"git_sync_available"`
 	MCPAvailable     bool   `json:"mcp_available"`
 	AgentAvailable   bool   `json:"agent_available"`
+	PublishAvailable bool   `json:"publish_available"`
 
 	// CompanionHistoryExists says whether this library has ever held a
 	// companion message. It is the durable half of "is this an existing
@@ -75,6 +79,7 @@ func DiagnosticsVersion(st *store.Store, home string, version string, caps Capab
 			GitSyncAvailable: caps.GitSyncAvailable,
 			MCPAvailable:     caps.MCPAvailable,
 			AgentAvailable:   caps.AgentAvailable,
+			PublishAvailable: caps.PublishAvailable,
 
 			CompanionHistoryExists: companionHistory,
 		}
