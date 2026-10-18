@@ -18,6 +18,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
@@ -55,6 +56,7 @@ type mcpToolRepos struct {
 	memory       *agentmemory.Repo
 	skills       *agentskills.Store
 	skillHistory *agentskills.History
+	publish      *publish.Service
 	enqueue      func(nodeID string)
 	notify       func(method string, params any)
 	clock        func() int64

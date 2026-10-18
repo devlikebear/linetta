@@ -267,7 +267,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 
 	// Linetta Works publishing (Phase 3). Registered here, before the MCP
 	// host, because the publish tools publish through the same service.
-	_, stopPublish := setupPublish(publishDeps{
+	publishSvc, stopPublish := setupPublish(publishDeps{
 		server:        s,
 		settingsStore: settingsStore,
 		projects:      projects,
@@ -305,10 +305,14 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			// the agent's own system prompt.
 			skills:       skillsStore,
 			skillHistory: skillHistory,
-			enqueue:      summ.Enqueue,
-			notify:       func(method string, params any) { _ = s.Notifier().Notify(method, params) },
-			clock:        clock,
-			db:           st.DB(),
+			// linetta_publish_status / linetta_publish_episode publish
+			// through the same service the publish dialog does, so an
+			// agent and the writer share one connection and one state.
+			publish: publishSvc,
+			enqueue: summ.Enqueue,
+			notify:  func(method string, params any) { _ = s.Notifier().Notify(method, params) },
+			clock:   clock,
+			db:      st.DB(),
 		},
 	})
 	a.closers = append(a.closers, stopMCP)
