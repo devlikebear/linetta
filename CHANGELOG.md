@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.9.1 - 2026-10-19
 
 - **Settings → Publishing** has a **Browse Linetta Works** button that opens
   the site in your browser, connected or not. It only opens the page; the app
