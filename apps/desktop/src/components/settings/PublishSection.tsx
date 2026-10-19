@@ -135,6 +135,18 @@ export function PublishSection({ available }: PublishSectionProps) {
     <section className="settings-section" id="publish-settings" data-testid="publish-section">
       <h3>{t("settings.publish.title")}</h3>
       <p className="sd">{t("settings.publish.description")}</p>
+      {site && (
+        <div className="field-actions">
+          <button
+            type="button"
+            className="btn ghost sm"
+            onClick={() => void guard(() => openExternalUrl(site))}
+            data-testid="publish-browse"
+          >
+            {t("settings.publish.browse")}
+          </button>
+        </div>
+      )}
 
       {state === "connected" && status && (
         <div className="modal-field" data-testid="publish-connected">

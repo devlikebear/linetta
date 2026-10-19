@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Settings → Publishing** has a **Browse Linetta Works** button that opens
+  the site in your browser, connected or not. It only opens the page; the app
+  sends nothing to the site.
+
 ## v1.9.0 - 2026-10-18
 
 - Publish episodes to [Linetta Works](https://works.marvin-42.com), a reading

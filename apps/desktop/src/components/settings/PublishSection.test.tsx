@@ -70,6 +70,13 @@ describe("PublishSection", () => {
     expect(rpc.openExternalUrl).toHaveBeenCalledWith(WAITING.verify_url);
   });
 
+  it("links to the site without connecting or sending anything", async () => {
+    render(<PublishSection available />);
+    await userEvent.click(await screen.findByTestId("publish-browse"));
+    expect(rpc.openExternalUrl).toHaveBeenCalledWith(SITE);
+    expect(rpc.connectStart).not.toHaveBeenCalled();
+  });
+
   it("waiting: shows the confirm code, polls every 1.5s, and lands on connected", async () => {
     rpc.connectStatus.mockResolvedValueOnce(WAITING);
     vi.useFakeTimers({ shouldAdvanceTime: true });
