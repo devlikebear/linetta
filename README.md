@@ -74,10 +74,12 @@ Intel Mac users can [build from source](#build-from-source).
 ## Writing with the built-in agent (BYOK)
 
 Linetta has a built-in writing agent, but it has nothing to call until you
-bring your own connection to a model. Four providers are supported: ChatGPT
-(Codex) by signing in with your ChatGPT account, and Anthropic, Google Gemini,
-or an OpenAI-compatible endpoint — OpenRouter, or a model running on your own
-machine — by API key.
+bring your own connection to a model. Five providers are supported: ChatGPT
+(Codex) by signing in with your ChatGPT account; Claude Code, which runs the
+`claude` CLI you already have installed under your own Claude sign-in, with no
+API key (Homebrew and direct-download builds only, not the Mac App Store
+build); and Anthropic, Google Gemini, or an OpenAI-compatible endpoint —
+OpenRouter, or a model running on your own machine — by API key.
 
 Turn it on in **Settings → AI provider**. Consent is per provider, and it
 gates even the connection test: that button is refused until you have given
@@ -95,7 +97,9 @@ with a ChatGPT account still works, since that path stores tokens in
 Linetta's data directory instead.
 
 Open the agent with the toolbar **Agent** button or `Cmd/Ctrl+J`; connect a
-provider first, or the panel prompts you to set one up. It reaches Linetta's tools the same way an
+provider first, or the panel prompts you to set one up. Two chips under the
+input box show the provider and model the next turn will use, and you can
+switch either one there between turns. It reaches Linetta's tools the same way an
 external MCP client does, and every call it makes is recorded in the MCP
 activity log, which shows whether the built-in agent or an external client
 made it. A structural change — outline restructuring and the like — gets an
@@ -176,7 +180,9 @@ skill to be wrong. Most turns answer "nothing" in one round trip; a turn that
 does write a skill costs up to five. It is on by default and it is
 metered by your provider like any other call. Turn it off under **Settings →
 Skills → Learning from its own work** (`agent_self_review_enabled` in
-`settings.json`) and Linetta does not make that call at all.
+`settings.json`) and Linetta does not make that call at all. The Claude Code
+provider never runs it, since that second turn would spend your plan's usage
+without you asking for it.
 
 **You can switch the memory, skills, and visual editing tools off entirely.** Every tool's full
 description travels in every request, so Linetta's twenty-seven tools are a
