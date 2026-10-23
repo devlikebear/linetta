@@ -42,6 +42,8 @@ _관련: #154 인물 비주얼 시트(`engine/internal/visual`), #158 비주얼 
 
 ## 확인되지 않은 가정 (Phase 1 첫 작업에서 스파이크로 검증)
 
+_2026-10-23 스파이크 결과: Codex는 실제 호출로 확인했다. `size`·`quality`는 무시되고 `gpt-5.3-codex-spark`는 ChatGPT 계정에서 거절돼 계획을 고쳤다. Gemini는 모델 목록만 확인했고, 생성은 결제가 설정된 키가 있어야 해서 아직 확인하지 못했다. 자세한 내용은 [`phase-1-generate.md`](./phase-1-generate.md#스파이크-기록)._
+
 - Codex 백엔드(`chatgpt.com/backend-api/codex/responses`)가 ChatGPT 로그인 토큰으로 `tools: [{"type":"image_generation"}]`를
   받아 `image_generation_call` 결과(base64)를 돌려준다. 공개 문서가 아닌 백엔드이므로 이벤트 모양, 스트리밍 필수 여부,
   툴의 `size`·`output_format`·`model` 파라미터를 받는지 직접 확인해야 한다.

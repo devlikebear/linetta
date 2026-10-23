@@ -72,7 +72,7 @@ Linetta 엔진:
   - 비율: `정사각` / `세로` / `가로`
   - 참조 이미지 싣기: 켬/끔, 실릴 이미지 썸네일 표시 (최대 4장)
 - `프롬프트 보기`: 조립된 프롬프트를 편집 가능한 텍스트로 보여준다. 고친 내용 그대로 보낸다
-- `생성`: 진행 중 표시. 실패 시 이유(동의 없음, 로그인 만료, 사용량 초과, 안전 정책 거절, 시간 초과)를 사람 말로
+- `생성`: 진행 중 표시(보통 25~35초). 실패 시 이유(동의 없음, 로그인 만료, 사용량 초과, Gemini 결제 필요, 안전 정책 거절, 시간 초과)를 사람 말로
 - 결과: 미리보기, `갤러리에 저장됨`, `다시 생성`(같은 입력으로 한 장 더)
 
 **작품 삽화 갤러리**
@@ -83,7 +83,7 @@ Linetta 엔진:
 
 ## tars tasks
 
-- [ ] **1.0 스파이크: Codex·Gemini 이미지 요청 모양 확인**
+- [ ] **1.0 스파이크: Codex·Gemini 이미지 요청 모양 확인** — Codex 완료, Gemini 생성은 결제가 설정된 키가 있어야 해서 남음 (아래 "스파이크 기록")
   - tars에 `//go:build integration` 테스트 `pkg/llm/image_spike_test.go`를 임시로 만든다. 커밋하지 않는다.
   - Codex: 로그인된 `auth.json`으로 `responses`에 다음을 보낸다.
     ```json
@@ -125,17 +125,24 @@ Linetta 엔진:
 - [ ] **1.2 `OpenAICodexClient.GenerateImage`**
   - 파일: `pkg/llm/openai_codex_image.go`
   - `chatWithCredential`의 인증 헤더, 401 갱신 재시도, rate limit 관찰(`setLastRateLimit`)을 그대로 쓴다. 요청 본문만 다르다.
-  - `Aspect`를 스파이크에서 확인한 `size`로 바꾼다 (예: square `1024x1024`, portrait `1024x1536`, landscape `1536x1024`).
+  - 툴은 `{"type":"image_generation","output_format":"jpeg"}`만 보낸다. `size`·`quality`는 무시되므로 보내지 않는다.
+  - `Aspect`는 instructions에 비율 문장으로 넣는다 (예: portrait → "Vertical portrait orientation, 2:3 aspect ratio.").
+  - instructions에 "이미지 툴이 실패하면 다시 시도하지 말 것"을 넣는다(거절 시 라우팅 모델이 스스로 재시도했다).
+  - `stream: true`, `tool_choice: {"type":"image_generation"}`는 필수로 둔다.
   - 참조 이미지는 `toCodexUserContent`처럼 `input_image` data URL로 싣는다.
-  - SSE에서 `image_generation_call`의 `result`를 디코드한다. 이미지가 없고 텍스트만 오면 거절로 본다.
-  - 테스트: `openai_codex_image_test.go`, `httptest` 서버로 성공 / 401 후 갱신 / 이미지 없음(거절) / 잘린 스트림 4케이스.
+  - SSE에서 `response.output_item.done`의 `image_generation_call`을 본다. `status: "completed"`면 `result`를 디코드하고,
+    `status: "failed"`면 `error.code`(예: `moderation_blocked`)를 담은 `ErrImageRefused`로 바로 끝낸다. 이미지 없이 끝나도 거절이다.
+  - 테스트: `openai_codex_image_test.go`, `httptest` 서버로 성공 / 401 후 갱신 / `failed` 항목(거절) / 이미지 없음 / 잘린 스트림 5케이스.
+    스트림 픽스처는 스파이크 기록의 이벤트 순서를 따른다(`keepalive` 포함).
 
 - [ ] **1.3 `GeminiNativeClient.GenerateImage`**
   - 파일: `pkg/llm/gemini_native_image.go`
-  - `x-goog-api-key` 헤더, `models/{model}:generateContent`, 비율은 `imageConfig.aspectRatio` (`1:1`, `2:3`, `3:2`)
+  - `x-goog-api-key` 헤더, `models/{model}:generateContent`, `responseModalities: ["IMAGE"]`, 비율은 `imageConfig.aspectRatio` (`1:1`, `2:3`, `3:2`).
+    `imageConfig.imageSize: "1K"`는 3.x 모델에만 보낸다.
   - 참조 이미지는 `inlineData` part로 프롬프트 앞에 싣는다.
   - `finishReason`이 안전 정책 계열이거나 이미지 part가 없으면 `ErrImageRefused`.
-  - 테스트: `gemini_native_image_test.go`, 성공 / 이미지 없음 / 4xx 오류 매핑 3케이스.
+  - 무료 등급 키의 `429 RESOURCE_EXHAUSTED`(`quotaId`에 `FreeTier`, `limit: 0`)는 `ErrImageBillingRequired`로 따로 구분한다.
+  - 테스트: `gemini_native_image_test.go`, 성공 / 이미지 없음 / 무료 등급 429 / 그 밖의 4xx 오류 매핑 4케이스.
 
 - [ ] **1.4 tars 반영과 Linetta 버전 올리기**
   - tars PR 머지 후 Linetta에서 `cd engine && go get github.com/devlikebear/tars@<commit>` 하고 `go mod tidy`
@@ -161,9 +168,11 @@ Linetta 엔진:
   - `ImageGenerator(id string) (llm.ImageGenerator, Resolved, error)`
     - `Resolve(id)`로 자격 증명을 얻고 `Configured()`가 아니면 `rpc.ReasonProviderNotConfigured`
     - 이미지 동의가 없으면 새 reason `rpc.ReasonImageConsentRequired` (`rpc/reason.go`)
-    - 모델은 `ImageProviders[id].Model`, 비었으면 스파이크에서 정한 기본값
+    - 모델은 `ImageProviders[id].Model`. 비었으면 Codex는 Codex 모델 목록의 첫 `visibility: list` 모델,
+      Gemini는 기본값 없이 "모델을 고르세요" 오류. `gpt-5.3-codex-spark`는 ChatGPT 계정에서 거절되므로 기본값으로 쓰지 않는다
     - 기존 `ClientFactory`로 만든 클라이언트가 `llm.ImageGenerator`를 구현하지 않으면 내부 오류
-  - `ListImageModels(ctx, id)`: Gemini는 `ListModels` 결과에서 이미지 출력 모델만(스파이크에서 정한 규칙), Codex는 라우팅 모델 목록
+  - `ListImageModels(ctx, id)`: Gemini는 이름에 `-image`가 있고 `generateContent`를 지원하는 모델만, Codex는 라우팅 모델 목록
+  - Gemini 무료 등급 오류는 새 reason `rpc.ReasonImageBillingRequired`로 바꾼다
   - 테스트: `image_test.go` — 미설정, 동의 없음, 모델 기본값, 허용 밖 id
 
 - [ ] **1.7 삽화 저장소**
@@ -205,7 +214,8 @@ Linetta 엔진:
   - 순서: 이미지 공급자 확인 → `ImageGenerator` → 참조 이미지 모으기(인물 순서대로 ordinal 0부터, 최대 4장) →
     `context.WithTimeout(180s)`로 생성 → 저장소 `Add` → 메타 반환
   - 프롬프트는 클라이언트가 보낸 것을 그대로 보낸다. 엔진이 몰래 덧붙이지 않는다(작가가 본 것이 보내는 것)
-  - 오류를 reason으로 나눈다: 미설정, 동의 없음, Codex 로그인 만료, rate limit, 거절(`ErrImageRefused`), 시간 초과, 상한 초과
+  - 오류를 reason으로 나눈다: 미설정, 동의 없음, Codex 로그인 만료, rate limit, Gemini 결제 필요, 거절(`ErrImageRefused`), 시간 초과, 상한 초과
+  - 가로·세로는 요청한 비율이 아니라 결과 바이트에서 읽는다(`image.DecodeConfig`). Codex는 요청과 다른 크기(`1374x1145` 등)를 돌려준다
   - 테스트: `service_test.go`, 가짜 `ImageGenerator`로 성공 저장, 참조 4장 제한, 거절 시 저장 안 함, 시간 초과
 
 - [ ] **1.10 RPC**
@@ -275,4 +285,59 @@ Linetta 엔진:
 
 ## 스파이크 기록
 
-_1.0을 마치면 여기에 적는다: 날짜, 확인한 모델 id, 요청·응답 모양, 기본 모델 결정, 가정과 달랐던 점._
+_2026-10-23. 스크래치 폴더의 Python 스크립트로 실제 요청을 보냈다. tars에 통합 테스트를 만들지 않았고 저장소에는 아무것도 남기지 않았다._
+
+### Codex (ChatGPT Plus 로그인, `~/.codex/auth.json`) — 실제 호출로 확인
+
+- **엔드포인트와 헤더**: tars `chatWithCredential`과 같다.
+  `POST https://chatgpt.com/backend-api/codex/responses`, `Authorization: Bearer`, `chatgpt-account-id`,
+  `OpenAI-Beta: responses=experimental`, `originator`, `Accept: text/event-stream`
+- **스트리밍 필수**: `stream: false`는 `400 {"detail":"Stream must be set to true"}`
+- **라우팅 모델**: `gpt-5.3-codex-spark`는
+  `400 {"detail":"The 'gpt-5.3-codex-spark' model is not supported when using Codex with a ChatGPT account."}`.
+  Codex 모델 목록(`visibility: list`)에 있는 `gpt-5.6-luna`로는 성공했다. 목록에는 `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`가 있다
+- **요청 본문** (성공한 모양):
+  ```json
+  {"model":"gpt-5.6-luna","instructions":"...","stream":true,"store":false,
+   "input":[{"type":"message","role":"user","content":[
+     {"type":"input_text","text":"<prompt>"},
+     {"type":"input_image","image_url":"data:image/jpeg;base64,..."}]}],
+   "tools":[{"type":"image_generation","output_format":"jpeg"}],
+   "tool_choice":{"type":"image_generation"}}
+  ```
+- **결과**: `response.output_item.done`의 `item.type == "image_generation_call"`,
+  `status: "completed"`, `result`(base64), `revised_prompt`, `output_format`, `size`, `quality`, `action`(`generate`/`edit`).
+  그 뒤에 빈 `message` 항목과 `response.completed`가 온다. `response.completed.response.tool_usage.image_gen`에 이미지 토큰 수가 있다.
+  이벤트 순서: `response.created` → `image_generation_call.in_progress` → `.generating` → (`.partial_image`) → `.completed`
+  → `output_item.done` → `response.completed`. 중간에 `keepalive`가 낄 수 있다
+- **툴 파라미터**:
+  - `output_format`: 지킨다(`jpeg`, `webp` 확인). JPEG 결과는 160~200 KB, WebP는 1.3 MB였다 → JPEG로 받는다
+  - `size`: 무시된다. `1024x1024`, `1024x1536`을 보내도 `1536x1024`가 나왔다. 프롬프트에
+    "Vertical portrait orientation, 2:3"을 넣으면 `1024x1536`이 나왔다. 그 밖에 `1374x1145`, `1672x941`도 나왔다
+  - `quality`: 무시된다. `high`를 보내도 결과는 늘 `quality: "low"`였다 (Plus 계정)
+  - `model: "gpt-image-2"`: 오류는 없었지만 반영 여부를 알 수 없다 → 보내지 않는다
+  - `partial_images: 1`: 지킨다. `response.image_generation_call.partial_image`(`partial_image_b64`)가 온다. 진행 미리보기는 Later
+- **참조 이미지**: `input_image`로 보낸 그림의 책상과 소품을 그대로 둔 채 요청대로 고쳐 그렸다
+  (`action: "edit"`, 이미지 입력 1536토큰). 인물 일관성에 쓸 수 있다
+- **`tool_choice`**: 없어도 생성했지만, 텍스트만 답하는 일을 막으려고 강제한다
+- **거절**: HTTP 200, `image_generation_call`이 `status: "failed"`,
+  `error: {"type":"image_generation_user_error","code":"moderation_blocked","moderation_details":{"moderation_stage":"output"}}`.
+  라우팅 모델이 스스로 한 번 더 시도해 두 번 실패했고 59초가 걸렸다
+- **소요 시간**: 성공 25~34초, 거절 59초. 180초 시간 제한이면 충분하다
+- **사용량 헤더**: 이미지 7장 뒤에도 `x-codex-primary-used-percent`가 0이었다. 이미지가 이 한도에 잡히는지는 알 수 없다
+
+### Gemini (`gemini-native` 키) — 모델 목록만 실제 확인, 생성은 미확인
+
+- **모델 목록**(`GET /v1beta/models`, 60개 중 이미지 출력 모델 6개):
+  `gemini-2.5-flash-image`, `gemini-3-pro-image-preview`, `gemini-3-pro-image`, `gemini-3.1-flash-image-preview`,
+  `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`. 이미지 출력을 알리는 필드가 따로 없어 이름으로 거른다
+- **생성 요청**: 시도한 세 모델 모두 `429 RESOURCE_EXHAUSTED`,
+  `quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `limit: 0`.
+  이 키의 프로젝트가 무료 등급이라 이미지 모델 할당량이 없다. 결제가 설정된 키가 있어야 한다.
+  UI 문구 예: "이 키는 무료 등급이라 이미지를 만들 수 없습니다. Google AI Studio에서 결제를 설정하세요"
+- **요청·응답 모양 (공식 문서 기준, 실제 호출로는 미확인)**:
+  `POST models/{model}:generateContent`,
+  `generationConfig: {responseModalities: ["IMAGE"], imageConfig: {aspectRatio: "2:3", imageSize: "1K"}}`
+  (`imageSize`는 3.x 모델만). 참조 이미지는 `inlineData{mimeType, data}` part.
+  응답은 `candidates[].content.parts[].inlineData{mimeType, data}`, 기본 `image/png`
+- **남은 확인**: 결제가 설정된 키로 성공 응답의 MIME과 바이트 크기(1K PNG가 5 MiB 안인지), 참조 이미지 반영, 안전 정책 거절 모양
