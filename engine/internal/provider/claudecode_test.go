@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -172,14 +173,63 @@ func TestClaudeCode_isLockedDownWhateverTheCallerAsks(t *testing.T) {
 	}
 }
 
-func TestClaudeCode_offersItsAliasesAsModels(t *testing.T) {
-	src, _, _, _ := claudeCodeSource(t, fakeCLI(t))
+func TestClaudeCode_offersAliasesThenFullModelIDs(t *testing.T) {
+	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	src, st, _, _ := claudeCodeSource(t, fakeCLI(t))
+	if _, err := st.Set(context.Background(), settings.Patch{
+		Providers: map[string]settings.ProviderPatch{settings.ProviderClaudeCode: {Model: strPtr("claude-pinned-1")}},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	models, err := src.ListModels(context.Background(), settings.ProviderClaudeCode)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(models, ",") != "haiku,opus,sonnet" {
+	if strings.Join(models[:3], ",") != "opus,sonnet,haiku" {
+		t.Errorf("aliases should lead: %v", models)
+	}
+	for _, want := range []string{"claude-opus-5-5", "claude-pinned-1"} {
+		if !slices.Contains(models, want) {
+			t.Errorf("models = %v, missing %q", models, want)
+		}
+	}
+}
+
+func TestClaudeCode_modelsMergeTheCLICacheAndTheLiveAnthropicList(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"x"},"additionalModelOptionsCache":[{"value":"claude-cached-1[1m]"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	src, st, _, _ := claudeCodeSource(t, fakeCLI(t))
+	f := &fakeFetcher{models: []string{"claude-live-9", "not-claude"}}
+	src.WithFetcher(f)
+
+	// No Anthropic key: nothing is fetched.
+	models, err := src.ListModels(context.Background(), settings.ProviderClaudeCode)
+	if err != nil || !slices.Contains(models, "claude-cached-1") || slices.Contains(models, "claude-live-9") {
+		t.Fatalf("without a key: %v, %v", models, err)
+	}
+	if f.seen.Provider != "" {
+		t.Fatalf("fetched without an Anthropic key: %+v", f.seen)
+	}
+
+	configure(t, st, settings.ProviderAnthropic, "sk-ant-test", false)
+	models, err = src.ListModels(context.Background(), settings.ProviderClaudeCode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(models, "claude-live-9") || slices.Contains(models, "not-claude") || !slices.Contains(models, "claude-cached-1") {
 		t.Errorf("models = %v", models)
+	}
+	if f.seen.Provider != "anthropic" || f.seen.APIKey != "sk-ant-test" {
+		t.Errorf("fetch options = %v", f.seen)
+	}
+
+	// A failed live lookup still lists the rest.
+	src.WithFetcher(&fakeFetcher{err: errors.New("boom")})
+	if models, err := src.ListModels(context.Background(), settings.ProviderClaudeCode); err != nil || !slices.Contains(models, "claude-opus-5-5") {
+		t.Errorf("after a failed fetch: %v, %v", models, err)
 	}
 }
 
