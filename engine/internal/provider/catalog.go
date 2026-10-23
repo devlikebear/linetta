@@ -95,6 +95,10 @@ func (s *Source) ListModels(ctx context.Context, id string) ([]string, error) {
 	if err != nil {
 		return nil, Classify(r.ID, err)
 	}
+	if r.ID == settings.ProviderOpenAICodex {
+		// Before the sort: the backend's order is what picks the default.
+		s.codexCache.put(r.CodexHome, models, time.Now())
+	}
 	sort.Strings(models)
 	return models, nil
 }
@@ -102,7 +106,7 @@ func (s *Source) ListModels(ctx context.Context, id string) ([]string, error) {
 // Test sends one short prompt through a real client. It runs through Client
 // on purpose: even the connection test sends nothing before consent.
 func (s *Source) Test(ctx context.Context, id string) error {
-	c, r, err := s.Client(id)
+	c, r, err := s.Client(ctx, id)
 	if err != nil {
 		return err
 	}

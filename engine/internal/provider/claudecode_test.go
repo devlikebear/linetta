@@ -65,7 +65,7 @@ func TestClaudeCode_isConfiguredByTheBinaryAlone(t *testing.T) {
 	if r.Configured() {
 		t.Error("configured without a CLI")
 	}
-	if _, _, err := src.Client(""); reasonOf(t, err) != rpc.ReasonProviderNotConfigured {
+	if _, _, err := src.Client(context.Background(), ""); reasonOf(t, err) != rpc.ReasonProviderNotConfigured {
 		t.Errorf("Client without a CLI: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestClaudeCode_isConfiguredByTheBinaryAlone(t *testing.T) {
 func TestClaudeCode_mapsToTarsAndPointsItAtTheBinary(t *testing.T) {
 	cli := fakeCLI(t)
 	src, _, _, built := claudeCodeSource(t, cli)
-	if _, _, err := src.Client(""); err != nil {
+	if _, _, err := src.Client(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
 	if built.Provider != "claude-code-cli" || built.Model != "opus" || built.APIKey != "" || built.BaseURL != "" {
@@ -106,7 +106,7 @@ func TestClaudeCode_mapsToTarsAndPointsItAtTheBinary(t *testing.T) {
 // Claude Code with nothing but Linetta's own MCP server.
 func TestClaudeCode_isLockedDownWhateverTheCallerAsks(t *testing.T) {
 	src, _, rec, _ := claudeCodeSource(t, fakeCLI(t))
-	c, _, err := src.Client("")
+	c, _, err := src.Client(context.Background(), "")
 	if err != nil {
 		t.Fatal(err)
 	}

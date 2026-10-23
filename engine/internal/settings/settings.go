@@ -43,10 +43,27 @@ const (
 // data-sharing terms materially change and renewed consent is required.
 const AIDataSharingConsentVersion = 1
 
-// DefaultOpenAICodexModel is the ChatGPT-account compatible Codex default.
-// Leaving the model empty lets tars fall back to gpt-5.3-codex, which is only
-// supported for API-backed Codex and returns 400 for ChatGPT account auth.
-const DefaultOpenAICodexModel = "gpt-5.3-codex-spark"
+// legacyOpenAICodexDefaultModel is the Codex model 1.x wrote into every
+// settings.json as its default, whether or not the writer ever chose it. The
+// ChatGPT backend has since stopped serving it to Plus accounts (400 "not
+// supported when using Codex with a ChatGPT account", 2026-10-23), though a
+// plan that still lists it may use it. A stored copy cannot say whether the
+// writer picked it, so it is left on disk and treated as "no choice made":
+// see UsesOpenAICodexDefaultModel.
+const legacyOpenAICodexDefaultModel = "gpt-5.3-codex-spark"
+
+// retiredOpenAICodexModel is the default before that one. No account is
+// served it any more, so it is dropped wherever it is read.
+const retiredOpenAICodexModel = "gpt-5.3-codex"
+
+// UsesOpenAICodexDefaultModel reports whether a stored Codex model means "the
+// writer has not chosen one": empty, or the legacy default above. For those
+// the provider layer picks the account's own first listed model at call time
+// instead of naming a slug that ages the day the backend retires it.
+func UsesOpenAICodexDefaultModel(model string) bool {
+	model = strings.TrimSpace(model)
+	return model == "" || model == legacyOpenAICodexDefaultModel
+}
 
 func validLanguages() []string { return []string{"ko", "en", "ja"} }
 
@@ -391,7 +408,7 @@ func defaults(home string) Config {
 	return Config{
 		Language:              "ko",
 		Provider:              ProviderOpenAICodex,
-		Providers:             map[string]ProviderConfig{ProviderOpenAICodex: {Model: DefaultOpenAICodexModel}},
+		Providers:             map[string]ProviderConfig{ProviderOpenAICodex: {}},
 		TypewriterDefault:     false,
 		Theme:                 "system",
 		Palette:               defaultPalette,
@@ -1069,8 +1086,8 @@ func (s *Store) runtimeProviderConfig(provider string, cfg ProviderConfig) Provi
 }
 
 func normalizeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig {
-	if provider == ProviderOpenAICodex && (cfg.Model == "" || cfg.Model == "gpt-5.3-codex") {
-		cfg.Model = DefaultOpenAICodexModel
+	if provider == ProviderOpenAICodex && cfg.Model == retiredOpenAICodexModel {
+		cfg.Model = ""
 	}
 	// base_url is not scrubbed here on purpose. Set rejects it for every id but
 	// "openai" (see the merge loop), which is the path the app writes through.

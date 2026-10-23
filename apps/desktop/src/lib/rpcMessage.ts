@@ -51,6 +51,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   provider_timeout: "errors.providerTimeout",
   provider_rejected: "errors.providerRejected",
   provider_unavailable: "errors.providerUnavailable",
+  provider_model_unsupported: "errors.providerModelUnsupported",
   // The Codex login (#92). Its message names the two ports, since the fix is
   // closing whatever holds them. A failed login is not an RPC error at all —
   // codex.login_status reports it via CodexStatus.login_failed instead — so

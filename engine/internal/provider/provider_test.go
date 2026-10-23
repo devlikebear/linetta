@@ -210,7 +210,7 @@ func TestClient_refusesWithoutACredentialAndNeverBuilds(t *testing.T) {
 		t.Fatal("factory must not run without a credential")
 		return nil, nil
 	})
-	_, _, err := src.Client("anthropic")
+	_, _, err := src.Client(context.Background(), "anthropic")
 	if reasonOf(t, err) != rpc.ReasonProviderNotConfigured {
 		t.Errorf("reason = %v", err)
 	}
@@ -223,7 +223,7 @@ func TestClient_refusesWithoutConsentAndNeverBuilds(t *testing.T) {
 		t.Fatal("factory must not run without consent")
 		return nil, nil
 	})
-	_, _, err := src.Client("anthropic")
+	_, _, err := src.Client(context.Background(), "anthropic")
 	if reasonOf(t, err) != rpc.ReasonProviderConsentRequired {
 		t.Errorf("reason = %v", err)
 	}
@@ -237,7 +237,7 @@ func TestClient_buildsWhenConfiguredAndConsented(t *testing.T) {
 		seen = opts
 		return fakeClient{ask: func(string) (string, error) { return "OK", nil }}, nil
 	})
-	c, r, err := src.Client("")
+	c, r, err := src.Client(context.Background(), "")
 	if err != nil {
 		t.Fatalf("Client: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestClient_classifiesFactoryFailures(t *testing.T) {
 	src.WithFactory(func(llm.ProviderOptions) (llm.Client, error) {
 		return nil, errors.New("api key is required for auth mode api-key")
 	})
-	_, _, err := src.Client("anthropic")
+	_, _, err := src.Client(context.Background(), "anthropic")
 	if reasonOf(t, err) != rpc.ReasonProviderAuthFailed {
 		t.Errorf("reason = %v", err)
 	}

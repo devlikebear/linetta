@@ -63,6 +63,9 @@ func Classify(id string, err error) error {
 			reason = rpc.ReasonProviderRateLimited
 		}
 	}
+	if reason == rpc.ReasonProviderRejected && rejectsModel(err.Error()) {
+		reason = rpc.ReasonProviderModelUnsupported
+	}
 	return &rpc.ReasonError{Reason: reason, Err: fmt.Errorf("%s: %s", id, firstLine(err))}
 }
 
@@ -81,6 +84,24 @@ func reasonForStatus(code int) string {
 		return rpc.ReasonProviderRejected
 	}
 	return rpc.ReasonProviderUnreachable
+}
+
+// rejectsModel reports a 400/404 whose body says the model is the problem —
+// Codex's "The 'x' model is not supported when using Codex with a ChatGPT
+// account", Gemini's "models/x is not found", Anthropic's not_found_error on
+// "model: x". Both halves are required, so a refusal that merely mentions a
+// model next to some other complaint stays a plain rejection.
+func rejectsModel(msg string) bool {
+	msg = strings.ToLower(msg)
+	if !strings.Contains(msg, "model") {
+		return false
+	}
+	for _, phrase := range []string{"not supported", "unsupported", "not found", "not_found", "does not exist"} {
+		if strings.Contains(msg, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 // isTimeout reports a request that was sent but not answered in time — an

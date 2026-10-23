@@ -67,6 +67,10 @@ const (
 	ReasonProviderTimeout         = "provider_timeout"
 	ReasonProviderRejected        = "provider_rejected"
 	ReasonProviderUnavailable     = "provider_unavailable"
+	// A rejection that names the model: this account or plan is not served
+	// the one asked for. Its own code because the fix is a different model,
+	// not a retry.
+	ReasonProviderModelUnsupported = "provider_model_unsupported"
 
 	// The Codex login (#92). The message has to name the two ports, because
 	// the fix is closing whatever holds them — usually a Codex CLI login. A

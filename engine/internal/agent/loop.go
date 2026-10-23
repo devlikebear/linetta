@@ -70,7 +70,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 			Err:    errors.New("agent: project_id is required"),
 		}
 	}
-	client, resolved, err := s.deps.Providers.Client("")
+	client, resolved, err := s.deps.Providers.Client(ctx, "")
 	if err != nil {
 		return "", err
 	}

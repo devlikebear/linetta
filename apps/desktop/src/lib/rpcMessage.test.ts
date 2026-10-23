@@ -104,6 +104,7 @@ describe("rpcErrorMessage", () => {
       "provider_timeout",
       "provider_rejected",
       "provider_unavailable",
+      "provider_model_unsupported",
     ]) {
       const err = new RpcError("providers.test", `anthropic: ${body}`, -32602, { reason });
       for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
