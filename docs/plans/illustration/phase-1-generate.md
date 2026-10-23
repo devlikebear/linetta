@@ -83,7 +83,7 @@ Linetta 엔진:
 
 ## tars tasks
 
-- [ ] **1.0 스파이크: Codex·Gemini 이미지 요청 모양 확인** — Codex 완료, Gemini 생성은 결제가 설정된 키가 있어야 해서 남음 (아래 "스파이크 기록")
+- [x] **1.0 스파이크: Codex·Gemini 이미지 요청 모양 확인** — 완료 (아래 "스파이크 기록")
   - tars에 `//go:build integration` 테스트 `pkg/llm/image_spike_test.go`를 임시로 만든다. 커밋하지 않는다.
   - Codex: 로그인된 `auth.json`으로 `responses`에 다음을 보낸다.
     ```json
@@ -129,6 +129,8 @@ Linetta 엔진:
   - `Aspect`는 instructions에 비율 문장으로 넣는다 (예: portrait → "Vertical portrait orientation, 2:3 aspect ratio.").
   - instructions에 "이미지 툴이 실패하면 다시 시도하지 말 것"을 넣는다(거절 시 라우팅 모델이 스스로 재시도했다).
   - `stream: true`, `tool_choice: {"type":"image_generation"}`는 필수로 둔다.
+  - SSE는 tars `createSSEScanner`(한 줄 최대 1 MiB)로 읽지 않는다. `result`가 담긴 줄은 JPEG로 약 225 KB지만
+    WebP나 `partial_images`를 쓰면 2 MB를 넘었다. 이미지 경로는 한 줄 상한 16 MiB의 스캐너를 따로 쓴다.
   - 참조 이미지는 `toCodexUserContent`처럼 `input_image` data URL로 싣는다.
   - SSE에서 `response.output_item.done`의 `image_generation_call`을 본다. `status: "completed"`면 `result`를 디코드하고,
     `status: "failed"`면 `error.code`(예: `moderation_blocked`)를 담은 `ErrImageRefused`로 바로 끝낸다. 이미지 없이 끝나도 거절이다.
@@ -138,9 +140,10 @@ Linetta 엔진:
 - [ ] **1.3 `GeminiNativeClient.GenerateImage`**
   - 파일: `pkg/llm/gemini_native_image.go`
   - `x-goog-api-key` 헤더, `models/{model}:generateContent`, `responseModalities: ["IMAGE"]`, 비율은 `imageConfig.aspectRatio` (`1:1`, `2:3`, `3:2`).
-    `imageConfig.imageSize: "1K"`는 3.x 모델에만 보낸다.
+    `imageConfig.imageSize: "1K"`는 3.x 모델에만 보낸다. `aspectRatio`는 늘 보낸다(빼면 가로가 나온다).
+  - 응답은 채팅 경로의 10 MiB `LimitReader`를 쓰지 않고 이미지 전용 상한(32 MiB)으로 읽는다. 3.x 응답의 `thoughtSignature`는 버린다.
+  - `finishReason`이 `STOP`이 아니거나(예: `PROHIBITED_CONTENT`) 이미지 part가 없으면 `finishReason`을 담은 `ErrImageRefused`.
   - 참조 이미지는 `inlineData` part로 프롬프트 앞에 싣는다.
-  - `finishReason`이 안전 정책 계열이거나 이미지 part가 없으면 `ErrImageRefused`.
   - 무료 등급 키의 `429 RESOURCE_EXHAUSTED`(`quotaId`에 `FreeTier`, `limit: 0`)는 `ErrImageBillingRequired`로 따로 구분한다.
   - 테스트: `gemini_native_image_test.go`, 성공 / 이미지 없음 / 무료 등급 429 / 그 밖의 4xx 오류 매핑 4케이스.
 
@@ -326,18 +329,41 @@ _2026-10-23. 스크래치 폴더의 Python 스크립트로 실제 요청을 보�
 - **소요 시간**: 성공 25~34초, 거절 59초. 180초 시간 제한이면 충분하다
 - **사용량 헤더**: 이미지 7장 뒤에도 `x-codex-primary-used-percent`가 0이었다. 이미지가 이 한도에 잡히는지는 알 수 없다
 
-### Gemini (`gemini-native` 키) — 모델 목록만 실제 확인, 생성은 미확인
+### Gemini (`gemini-native` 키) — 실제 호출로 확인 (2026-10-24, 결제가 설정된 프로젝트의 키)
 
+- **무료 등급 키**: 처음 쓴 키(무료 등급 프로젝트)는 이미지 모델 6개 모두 `429 RESOURCE_EXHAUSTED`,
+  `quotaId`가 `...-FreeTier`, `limit: 0`이었다. 결제를 설정한 뒤에도 그 키는 계속 429였고,
+  결제를 설정한 프로젝트의 키로 바꾸자 성공했다.
+  UI 문구 예: "이 키는 무료 등급 프로젝트의 키라 이미지를 만들 수 없습니다. 결제를 설정한 프로젝트의 키를 넣으세요"
 - **모델 목록**(`GET /v1beta/models`, 60개 중 이미지 출력 모델 6개):
   `gemini-2.5-flash-image`, `gemini-3-pro-image-preview`, `gemini-3-pro-image`, `gemini-3.1-flash-image-preview`,
-  `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`. 이미지 출력을 알리는 필드가 따로 없어 이름으로 거른다
-- **생성 요청**: 시도한 세 모델 모두 `429 RESOURCE_EXHAUSTED`,
-  `quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `limit: 0`.
-  이 키의 프로젝트가 무료 등급이라 이미지 모델 할당량이 없다. 결제가 설정된 키가 있어야 한다.
-  UI 문구 예: "이 키는 무료 등급이라 이미지를 만들 수 없습니다. Google AI Studio에서 결제를 설정하세요"
-- **요청·응답 모양 (공식 문서 기준, 실제 호출로는 미확인)**:
-  `POST models/{model}:generateContent`,
-  `generationConfig: {responseModalities: ["IMAGE"], imageConfig: {aspectRatio: "2:3", imageSize: "1K"}}`
-  (`imageSize`는 3.x 모델만). 참조 이미지는 `inlineData{mimeType, data}` part.
-  응답은 `candidates[].content.parts[].inlineData{mimeType, data}`, 기본 `image/png`
-- **남은 확인**: 결제가 설정된 키로 성공 응답의 MIME과 바이트 크기(1K PNG가 5 MiB 안인지), 참조 이미지 반영, 안전 정책 거절 모양
+  `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`. 이미지 출력을 알리는 필드가 따로 없어 이름으로 거른다.
+  `gemini-3-pro-image`는 비용 때문에 생성까지는 시험하지 않았다
+- **요청 본문** (성공한 모양):
+  ```json
+  {"contents":[{"role":"user","parts":[
+     {"inlineData":{"mimeType":"image/jpeg","data":"..."}},
+     {"text":"<prompt>"}]}],
+   "generationConfig":{"responseModalities":["IMAGE"],
+     "imageConfig":{"aspectRatio":"2:3","imageSize":"1K"}}}
+  ```
+- **결과**: HTTP 200, `candidates[0].finishReason: "STOP"`, `candidates[0].content.parts[]`에 `inlineData{mimeType, data}` 한 개.
+  3.x 모델은 같은 part에 `thoughtSignature`(이미지보다 큰 문자열)가 붙는다. 저장하지 않고 버린다.
+  `usageMetadata.candidatesTokensDetails`에 이미지 토큰 수(1K 1120, 2K 1680)
+
+  | 모델 | 설정 | MIME | 크기 | 바이트 | 시간 |
+  |---|---|---|---|---:|---:|
+  | `gemini-3.1-flash-image` | 2:3, 1K | `image/jpeg` | 848×1264 | 886 KB | 9.3 s |
+  | `gemini-3.1-flash-image` | 2:3, 2K | `image/jpeg` | 1696×2528 | 3.66 MB | 16.7 s |
+  | `gemini-3.1-flash-image` | 비율 없음, TEXT+IMAGE | `image/jpeg` | 1408×768 | 887 KB | 9.7 s |
+  | `gemini-3.1-flash-lite-image` | 3:2 | `image/jpeg` | 1264×848 | 749 KB | 3.6 s |
+  | `gemini-2.5-flash-image` | 2:3 (`imageSize` 없음) | `image/png` | 832×1248 | 1.55 MB | 8.7 s |
+  | `gemini-3.1-flash-image` | 16:9, 1K, 참조 1장 | `image/jpeg` | 1376×768 | 652 KB | 9.2 s |
+
+- **비율**: `aspectRatio`를 지킨다. 지정하지 않으면 문서와 달리 정사각이 아니라 가로(1408×768)가 나왔다 → 늘 보낸다
+- **`responseModalities: ["TEXT","IMAGE"]`**: 텍스트 part 없이 이미지만 왔다. `["IMAGE"]`로 고정한다
+- **참조 이미지**: Codex 결과 그림을 넣고 "반으로 잘라 접시에"라고 하자 책상·소품·화풍을 유지한 채 고쳐 그렸다(입력 이미지 258토큰)
+- **거절**: HTTP 200, `candidates[0].finishReason: "PROHIBITED_CONTENT"`, `content: {}`(part 없음), 8.3초.
+  `STOP`이 아니고 이미지 part가 없으면 `finishReason`을 담아 `ErrImageRefused`로 끝낸다
+- **응답 크기**: 2K 응답 JSON은 base64 이미지 4.9 MB + `thoughtSignature` 5.4 MB로 10 MB가 넘는다.
+  tars `gemini_native_chat.go`는 응답을 `io.LimitReader(resp.Body, 10*1024*1024)`로 읽으므로 이미지 경로는 따로 더 큰 상한을 둬야 한다
