@@ -1,6 +1,6 @@
 module github.com/devlikebear/linetta/engine
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/devlikebear/tars v0.63.1-0.20261017092114-9907a083ef2c
