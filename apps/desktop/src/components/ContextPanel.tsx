@@ -10,6 +10,7 @@ import { StatsSection } from "./StatsSection";
 import { DirectionSection } from "./DirectionSection";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
+import type { ContinuityChangedPayload } from "../lib/types";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -113,6 +114,18 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
   useEngineEvent<McpChangedPayload>("mcp-changed", (event) => {
     if (event.project_id && event.project_id !== project.id) return;
     if (event.tool !== "linetta_report_continuity") return;
+    continuityApi
+      .openCounts(project.id)
+      .then((res) => setContinuityCounts(res.counts))
+      .catch(() => {});
+  });
+  // continuity.set_status (the writer resolving or dismissing an
+  // observation from Story World, in this window or another) does not fire
+  // mcp-changed — that event is for an agent's own tool calls — so the
+  // badge would otherwise keep showing a count the writer already acted on
+  // until something unrelated remounted this panel.
+  useEngineEvent<ContinuityChangedPayload>("continuity-changed", (event) => {
+    if (event.project_id && event.project_id !== project.id) return;
     continuityApi
       .openCounts(project.id)
       .then((res) => setContinuityCounts(res.counts))

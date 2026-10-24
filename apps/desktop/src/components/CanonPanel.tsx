@@ -36,7 +36,7 @@ interface Props {
   /** Flushes the editor's pending save before a style check reads the manuscript. */
   onBeforeStyleCheck?: () => Promise<void>;
   /** Opens the Fact Book at a continuity observation's fact ref. */
-  onOpenFact?: (factId: string, claim: string) => void;
+  onOpenFact?: (factId: string) => void;
 }
 
 export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck, onOpenFact }: Readonly<Props>) {

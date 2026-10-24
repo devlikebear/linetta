@@ -155,4 +155,43 @@ describe("FactBookPanel", () => {
     );
     expect(mocks.factsCreateFromUrl).not.toHaveBeenCalled();
   });
+
+  // highlightFactId: a continuity observation's fact ref (code review caught
+  // that the fix must show the existing card, not prefill a new-card draft).
+  describe("highlightFactId", () => {
+    beforeEach(() => {
+      // jsdom does not implement scrollIntoView; the highlight effect calls it
+      // unconditionally once the target card is found.
+      Element.prototype.scrollIntoView = vi.fn();
+    });
+
+    it("fetches every fact in the work rather than only this scene's", async () => {
+      renderPanel({ highlightFactId: "fact-1" });
+
+      await screen.findByText("런던 일반 경찰은 항상 총기를 휴대한다");
+      // The ref may point at a card scoped to a different scene than the one
+      // open in the editor; the normal scene-scoped call would leave it out.
+      expect(mocks.factsList).toHaveBeenCalledWith("project-1", undefined);
+    });
+
+    it("highlights and scrolls to the card the ref points at", async () => {
+      renderPanel({ highlightFactId: "fact-1" });
+
+      const card = await screen.findByText("런던 일반 경찰은 항상 총기를 휴대한다");
+      const article = card.closest(".fact-card");
+      await waitFor(() => expect(article).toHaveClass("is-highlighted"));
+      expect(article).toHaveAttribute("id", "fact-card-fact-1");
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: "center" });
+    });
+
+    it("does not highlight or crash when the ref's card is not in the loaded list", async () => {
+      renderPanel({ highlightFactId: "fact-missing" });
+
+      const card = await screen.findByText("런던 일반 경찰은 항상 총기를 휴대한다");
+      // Give the highlight effect a turn to (not) run before asserting.
+      await Promise.resolve();
+      expect(card.closest(".fact-card")).not.toHaveClass("is-highlighted");
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
+  });
 });

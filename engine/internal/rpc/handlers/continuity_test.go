@@ -153,7 +153,10 @@ func TestContinuityHandlers_setStatus(t *testing.T) {
 	}
 	obsID := out.Checks[0].Observations[0].ID
 
-	res, err := SetContinuityStatus(f.repo, f.now)(context.Background(),
+	var method string
+	var payload any
+	notify := func(m string, p any) { method, payload = m, p }
+	res, err := SetContinuityStatus(f.repo, f.now, notify)(context.Background(),
 		json.RawMessage(`{"observation_id":"`+obsID+`","status":"dismissed"}`))
 	if err != nil {
 		t.Fatalf("SetContinuityStatus: %v", err)
@@ -161,6 +164,16 @@ func TestContinuityHandlers_setStatus(t *testing.T) {
 	var obs continuity.Observation
 	if err := json.Unmarshal(res, &obs); err != nil {
 		t.Fatalf("unmarshal: %v", err)
+	}
+	// A ContextPanel in another window — or the one the writer came back to
+	// after closing Story World — hears about this change rather than
+	// showing a stale open-observation count until something else happens
+	// to remount it.
+	if method != "continuity.changed" {
+		t.Errorf("method = %q, want continuity.changed", method)
+	}
+	if p, ok := payload.(continuityChangedPayload); !ok || p.ProjectID != f.pID || p.NodeID != f.nID {
+		t.Errorf("payload = %+v, want project_id %q and node_id %q", payload, f.pID, f.nID)
 	}
 	if obs.Status != continuity.StatusDismissed {
 		t.Errorf("status = %q, want %q", obs.Status, continuity.StatusDismissed)
@@ -180,10 +193,15 @@ func TestContinuityHandlers_setStatus_cannotTouchReplaced(t *testing.T) {
 
 	f.record(t) // a second, empty check replaces the first's open observation
 
-	_, err := SetContinuityStatus(f.repo, f.now)(context.Background(),
+	notified := ""
+	notify := func(m string, _ any) { notified = m }
+	_, err := SetContinuityStatus(f.repo, f.now, notify)(context.Background(),
 		json.RawMessage(`{"observation_id":"`+obsID+`","status":"resolved"}`))
 	if err == nil {
 		t.Fatal("SetStatus on a replaced observation should fail")
+	}
+	if notified != "" {
+		t.Errorf("a refused status change emitted %q; nothing changed", notified)
 	}
 }
 

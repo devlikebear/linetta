@@ -170,6 +170,11 @@ export function Workspace() {
   const outlinePreset = useMemo(() => outlinePresetById(load?.project.outline_preset), [load?.project.outline_preset]);
   const outlinePresetId = outlinePreset.id;
   const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
+  // A continuity observation's fact ref (story-assist Phase 2): which
+  // existing card to scroll to and highlight — distinct from
+  // factBookSelectedClaimRequest above, which fills the new-card form for a
+  // claim that has no card yet.
+  const [factBookHighlightId, setFactBookHighlightId] = useState<string | null>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
@@ -1172,14 +1177,18 @@ export function Workspace() {
   }, [selectionMenu]);
 
   // story-assist Phase 2: a continuity observation's fact ref opens the Fact
-  // Book at the claim continuity.list already resolved — no second lookup.
-  // factBookOpen's branch outranks canonOpen's in the render chain below, so
-  // closing it (onClose there) falls straight back to the ContinuitySection
-  // the writer came from, the same way EntitySheet already does for entity
+  // Book scrolled to and highlighting the card it already points at —
+  // factBookHighlightId, not factBookSelectedClaimRequest, which would
+  // instead fill the new-card form with that card's own claim text and
+  // read as "make a new one" (code review caught this: it risked a
+  // duplicate card for something that already existed). factBookOpen's
+  // branch outranks canonOpen's in the render chain below, so closing it
+  // (onClose there) falls straight back to the ContinuitySection the
+  // writer came from, the same way EntitySheet already does for entity
   // refs (see CanonPanel's own comment on that).
-  const openFactFromContinuity = useCallback((factId: string, claim: string) => {
+  const openFactFromContinuity = useCallback((factId: string) => {
     setFactBookOpen(true);
-    setFactBookSelectedClaimRequest({ id: factId, claim });
+    setFactBookHighlightId(factId);
   }, []);
 
 
@@ -1990,6 +1999,7 @@ export function Workspace() {
             projectId={load.project.id}
             nodeId={load.node.id}
             selectedClaimRequest={factBookSelectedClaimRequest}
+            highlightFactId={factBookHighlightId}
             onImpactCheck={(text) => {
               setContextualSeed({ text, autoCheck: true });
               setFactBookOpen(false);
@@ -2000,6 +2010,7 @@ export function Workspace() {
             onClose={() => {
               setFactBookOpen(false);
               setFactBookSelectedClaimRequest(null);
+              setFactBookHighlightId(null);
               focusEditor();
             }}
             onChanged={() => {

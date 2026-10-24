@@ -201,7 +201,11 @@ describe("ContinuitySection", () => {
     expect(onOpenNode).toHaveBeenCalledWith("n-prev");
   });
 
-  it("opens the Fact Book from a fact ref chip with its resolved claim", async () => {
+  // onOpenFact takes only the id: the caller (Workspace.tsx) scrolls to and
+  // highlights the card that already exists by id, rather than prefilling
+  // a new-card draft with its claim text (code review caught that risking
+  // a duplicate card).
+  it("opens the Fact Book from a fact ref chip by id", async () => {
     const onOpenFact = vi.fn();
     mocks.list.mockResolvedValue({
       checks: [
@@ -217,7 +221,7 @@ describe("ContinuitySection", () => {
 
     const chip = await screen.findByRole("button", { name: "하린은 왼손잡이다" });
     await user.click(chip);
-    expect(onOpenFact).toHaveBeenCalledWith("f-1", "하린은 왼손잡이다");
+    expect(onOpenFact).toHaveBeenCalledWith("f-1");
   });
 
   it("renders a ref chip as plain text when no handler is wired", async () => {

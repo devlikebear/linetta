@@ -1533,6 +1533,14 @@ export interface ContinuityCheck {
 export interface ContinuityOpenCounts {
   counts: Record<string, number>;
 }
+
+/** continuity-changed's payload: an observation's status changed from Story
+ *  World (continuity.set_status). ContextPanel's open-observation badge
+ *  listens for this rather than relying on an unrelated remount to notice. */
+export interface ContinuityChangedPayload {
+  project_id: string;
+  node_id?: string;
+}
 export interface ArtStyle {
  project_id: string;
  style: string;

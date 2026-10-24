@@ -284,6 +284,40 @@ describe("ContextPanel", () => {
     expect(onOpenContinuity).toHaveBeenCalledTimes(1);
   });
 
+  // continuity.set_status (a writer resolving an observation from Story
+  // World) does not fire mcp-changed — only an agent's own tool calls do —
+  // so the badge has to hear continuity-changed instead, or it would keep
+  // showing a count the writer already acted on.
+  it("refreshes the badge on a continuity-changed event rather than mcp-changed alone", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 2 } });
+    renderContextPanel({ onOpenContinuity: vi.fn() });
+
+    const badge = await screen.findByTestId("continuity-open-badge");
+    expect(badge).toHaveTextContent("2");
+
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 0 } });
+    act(() => {
+      events.listeners.get("continuity-changed")?.({ payload: { project_id: project.id, node_id: node.id } });
+    });
+
+    await waitFor(() => expect(screen.queryByTestId("continuity-open-badge")).not.toBeInTheDocument());
+  });
+
+  it("ignores a continuity-changed event for a different work", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 2 } });
+    renderContextPanel({ onOpenContinuity: vi.fn() });
+    await screen.findByTestId("continuity-open-badge");
+    const callsBefore = mocks.continuityOpenCounts.mock.calls.length;
+
+    act(() => {
+      events.listeners.get("continuity-changed")?.({ payload: { project_id: "other-project", node_id: node.id } });
+    });
+
+    // Give any stray refetch a turn to happen before asserting it did not.
+    await Promise.resolve();
+    expect(mocks.continuityOpenCounts.mock.calls.length).toBe(callsBefore);
+  });
+
   it("shows no badge when this scene has no open observations", async () => {
     mocks.continuityOpenCounts.mockResolvedValue({ counts: { other: 5 } });
     renderContextPanel({ onOpenContinuity: vi.fn() });

@@ -186,8 +186,21 @@ func continuityRefLabel(ctx context.Context, ref continuity.Ref, byID map[string
 	}
 }
 
-// SetContinuityStatus returns a handler for continuity.set_status.
-func SetContinuityStatus(repo *continuity.Repo, now Clock) rpc.Handler {
+// continuityChangedPayload mirrors mcphost's ChangedPayload and matches the
+// shape memory.changed/skills.changed already use: a listener must not have
+// to handle two shapes for the same notification method.
+type continuityChangedPayload struct {
+	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id,omitempty"`
+}
+
+// SetContinuityStatus returns a handler for continuity.set_status. notify
+// fires "continuity.changed" after a successful change, the same way
+// skills.write fires "skills.changed" — a different window's ContextPanel
+// does not otherwise hear about a status a writer changed from Story
+// World, and its open-observation badge would read stale until something
+// else happened to remount it.
+func SetContinuityStatus(repo *continuity.Repo, now Clock, notify func(method string, params any)) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {
 			ObservationID string `json:"observation_id"`
@@ -199,6 +212,9 @@ func SetContinuityStatus(repo *continuity.Repo, now Clock) rpc.Handler {
 		obs, err := repo.SetStatus(ctx, now(), in.ObservationID, in.Status)
 		if err != nil {
 			return nil, continuityError(err)
+		}
+		if notify != nil {
+			notify("continuity.changed", continuityChangedPayload{ProjectID: obs.ProjectID, NodeID: obs.NodeID})
 		}
 		return json.Marshal(obs)
 	}

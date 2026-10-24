@@ -453,7 +453,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("direction.get_scene_intent", handlers.GetSceneIntent(directionRepo))
 	s.Handle("direction.set_scene_intent", handlers.SetSceneIntent(directionRepo, clock))
 	s.Handle("continuity.list", handlers.ListContinuity(continuityRepo, nodes, entities, facts, beats))
-	s.Handle("continuity.set_status", handlers.SetContinuityStatus(continuityRepo, clock))
+	// continuity.set_status fires continuity.changed, so a ContextPanel
+	// showing the open-observation badge for the scene the writer just
+	// resolved or dismissed does not have to wait for an unrelated remount
+	// to notice (story-assist Phase 2).
+	s.Handle("continuity.set_status", handlers.SetContinuityStatus(continuityRepo, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
 	s.Handle("continuity.open_counts", handlers.ContinuityOpenCounts(continuityRepo))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))

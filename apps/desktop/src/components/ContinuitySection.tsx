@@ -26,8 +26,8 @@ interface Props {
   onOpenNode?: (nodeId: string) => void;
   /** Opens the EntitySheet for an entity ref. */
   onOpenEntity?: (entityId: string) => void;
-  /** Opens the Fact Book at a fact ref — id and its already-resolved claim text. */
-  onOpenFact?: (factId: string, claim: string) => void;
+  /** Opens the Fact Book scrolled to and highlighting the fact ref's own card. */
+  onOpenFact?: (factId: string) => void;
 }
 
 type Scope = "scene" | "work";
@@ -210,7 +210,7 @@ function SceneGroupRow({
   busyId: string | null;
   onOpenNode?: (nodeId: string) => void;
   onOpenEntity?: (entityId: string) => void;
-  onOpenFact?: (factId: string, claim: string) => void;
+  onOpenFact?: (factId: string) => void;
   onSetStatus: (observationId: string, next: ContinuityStatus) => void | Promise<void>;
 }>) {
   const { t } = useI18n();
@@ -270,7 +270,7 @@ function ObservationRow({
   busy: boolean;
   onOpenNode?: (nodeId: string) => void;
   onOpenEntity?: (entityId: string) => void;
-  onOpenFact?: (factId: string, claim: string) => void;
+  onOpenFact?: (factId: string) => void;
   onSetStatus: (observationId: string, next: ContinuityStatus) => void | Promise<void>;
 }>) {
   const { t } = useI18n();
@@ -335,7 +335,7 @@ function RefChip({
   refItem: ContinuityRef;
   onOpenNode?: (nodeId: string) => void;
   onOpenEntity?: (entityId: string) => void;
-  onOpenFact?: (factId: string, claim: string) => void;
+  onOpenFact?: (factId: string) => void;
 }>) {
   const { t } = useI18n();
   const label = refItem.label || t("continuity.refUnknown");
@@ -348,7 +348,7 @@ function RefChip({
   }
   if (refItem.type === "fact" && onOpenFact) {
     return (
-      <button type="button" className="chip continuity-ref" onClick={() => onOpenFact(refItem.id, refItem.label ?? "")}>
+      <button type="button" className="chip continuity-ref" onClick={() => onOpenFact(refItem.id)}>
         {label}
       </button>
     );
