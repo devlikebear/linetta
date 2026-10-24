@@ -68,6 +68,22 @@ const (
 	ReasonProviderRejected        = "provider_rejected"
 	ReasonProviderUnavailable     = "provider_unavailable"
 
+	// Illustration drawing. The provider's credential and the failures above
+	// are shared with the agent; these are what only drawing has. Off: no
+	// image provider chosen. Model required: Gemini has no default image
+	// model. Refused: a policy block, where the same prompt will not pass on
+	// retry. Billing required: a Gemini key from a free-tier project, which
+	// has no image quota at all — a rate limit it is not.
+	ReasonImageGenerationOff     = "image_generation_off"
+	ReasonImageConsentRequired   = "image_consent_required"
+	ReasonImageModelRequired     = "image_model_required"
+	ReasonImageRefused           = "image_refused"
+	ReasonImageBillingRequired   = "image_billing_required"
+	ReasonIllustrationNotFound   = "illustration_not_found"
+	ReasonIllustrationTooLarge   = "illustration_too_large"
+	ReasonTooManyIllustrations   = "too_many_illustrations"
+	ReasonIllustrationBadContent = "illustration_bad_content"
+
 	// The Codex login (#92). The message has to name the two ports, because
 	// the fix is closing whatever holds them — usually a Codex CLI login. A
 	// failed login attempt is not an RPC error at all — codex.login_status
