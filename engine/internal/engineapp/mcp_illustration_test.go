@@ -9,13 +9,11 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
-	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
 func sceneDoc(t *testing.T, app *App, nodeID string) string {
@@ -46,15 +44,16 @@ func tinyJPEG(t *testing.T) []byte {
 // keeps the picture where it was; one that leaves the line out takes it out;
 // a placeholder naming a picture the work does not have stays text.
 func TestMCPSceneRoundTripKeepsIllustrations(t *testing.T) {
-	home := t.TempDir()
-	app, c, projectID, nodeID := startWritableMCPAt(t, home)
+	app, c, projectID, nodeID := startWritableMCPAt(t, t.TempDir())
 
-	st, err := store.Open(context.Background(), filepath.Join(home, "library.db"))
-	if err != nil {
-		t.Fatal(err)
+	// The app's own gallery, not a second connection to library.db: a write
+	// from another connection while the engine holds the file can fail with
+	// SQLITE_BUSY, which busy_timeout does not retry (seen on Windows CI).
+	gallery, ok := app.mcpTools.Illustrations.(*illustration.Repo)
+	if !ok {
+		t.Fatalf("mcp tools gallery is %T", app.mcpTools.Illustrations)
 	}
-	t.Cleanup(func() { _ = st.Close() })
-	pic, err := illustration.NewRepo(st).Add(context.Background(), 1, illustration.NewInput{
+	pic, err := gallery.Add(context.Background(), 1, illustration.NewInput{
 		ProjectID: projectID, Prompt: "p", Provider: "openai-codex", Model: "m", Data: tinyJPEG(t),
 	})
 	if err != nil {
@@ -106,7 +105,7 @@ func TestMCPSceneRoundTripKeepsIllustrations(t *testing.T) {
 	if ids, _ := illustref.IDs(sceneDoc(t, app, nodeID)); len(ids) != 0 {
 		t.Fatalf("the picture is still in the scene: %v", ids)
 	}
-	if _, err := illustration.NewRepo(st).Get(context.Background(), pic.ID); err != nil {
+	if _, err := gallery.Get(context.Background(), pic.ID); err != nil {
 		t.Fatalf("the picture left the gallery: %v", err)
 	}
 }
