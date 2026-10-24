@@ -533,7 +533,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
 	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc, settingsLanguage))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships,
-		importmd.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts}, clock))
+		importmd.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts}, illustrations, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	return nil
 }

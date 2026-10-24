@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/importmd"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -32,7 +33,7 @@ type importMarkdownResult struct {
 // The renderer passes the file content as a string; the engine never reads
 // the disk. The file_name is used only to derive a fallback project title
 // when the markdown has no H1.
-func ImportMarkdown(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo, extras importmd.Extras, now Clock) rpc.Handler {
+func ImportMarkdown(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relationship.Repo, extras importmd.Extras, illustrations *illustration.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p importMarkdownParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -61,6 +62,11 @@ func ImportMarkdown(pr *project.Repo, nr *node.Repo, er *entity.Repo, rr *relati
 		}
 		if err := importmd.RestoreExtras(ctx, extras, ts, built.Project.ID, doc.Metadata, nodeIDMap, &built); err != nil {
 			return nil, importFailure(ctx, pr, built.Project.ID, err)
+		}
+		if illustrations != nil {
+			if err := importmd.RestoreIllustrations(ctx, illustrations, nr, ts, built.Project.ID, doc.Images, &built); err != nil {
+				return nil, importFailure(ctx, pr, built.Project.ID, err)
+			}
 		}
 		out := importMarkdownResult{
 			ProjectID:         built.Project.ID,
