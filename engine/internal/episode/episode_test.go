@@ -30,6 +30,12 @@ func container(id, parent string, ordinal int, label string) node.Node {
 	return n(id, parent, ordinal, node.KindContainer, label)
 }
 
+func leaf2(id, parent string, ordinal int, label string, wordCount int) node.Node {
+	out := leaf(id, parent, ordinal, label)
+	out.WordCount = wordCount
+	return out
+}
+
 func resolvedID(t *testing.T, nodes []node.Node, preset, id string) string {
 	t.Helper()
 	ep, err := resolve(nodes, preset, id)
@@ -177,6 +183,90 @@ func TestIsNumberedLabel(t *testing.T) {
 		if got := IsNumberedLabel(label); got != want {
 			t.Errorf("IsNumberedLabel(%q) = %v, want %v", label, got, want)
 		}
+	}
+}
+
+func textDoc(text string) string {
+	return `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + text + `"}]}]}`
+}
+
+// LastWritten picks the episode by what has text in it, not by outline
+// position: an empty 3화 past a written 2화 must not shadow 2화.
+func TestLastWritten_picksTheLastEpisodeWithWords(t *testing.T) {
+	nodes := []node.Node{
+		container("arc-1", "", 0, "1권"),
+		container("ep-1", "arc-1", 0, "1화"),
+		container("ep-2", "arc-1", 1, "2화"),
+		container("ep-3", "arc-1", 2, "3화"),
+		leaf2("s-1", "ep-1", 0, "씬 1", 120),
+		leaf2("s-2", "ep-2", 0, "씬 2", 80),
+		leaf2("s-3", "ep-3", 0, "씬 3", 0),
+	}
+	ep, found, err := lastWrittenFromNodes(nodes, webnovel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found || ep.NodeID != "ep-2" {
+		t.Fatalf("got %+v, found=%v, want ep-2", ep, found)
+	}
+}
+
+func TestLastWritten_nothingWrittenYet(t *testing.T) {
+	nodes := []node.Node{
+		container("arc-1", "", 0, "1권"),
+		container("ep-1", "arc-1", 0, "1화"),
+		leaf2("s-1", "ep-1", 0, "씬 1", 0),
+	}
+	_, found, err := lastWrittenFromNodes(nodes, webnovel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found {
+		t.Fatal("expected found=false when nothing has been written")
+	}
+}
+
+func TestLastWritten_readsTheStore(t *testing.T) {
+	ctx := context.Background()
+	s, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	p, err := project.NewRepo(s).Create(ctx, 1000, project.NewInput{
+		Title: "T", Genres: []string{}, LengthTarget: "series", DefaultPOV: "first",
+		OutlinePreset: webnovel,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nr := node.NewRepo(s)
+	first := *p.LastOpenedNodeID
+	second, err := nr.CreateSibling(ctx, first, node.KindLeaf, "2화", "", 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := nr.UpdateContent(ctx, first, textDoc("글이 있다"), 2000); err != nil {
+		t.Fatal(err)
+	}
+
+	ep, found, err := LastWritten(ctx, nr, p.ID, webnovel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found || ep.NodeID != first {
+		t.Fatalf("got %+v, found=%v, want %s", ep, found, first)
+	}
+
+	if err := nr.UpdateContent(ctx, second.ID, textDoc("둘째도 글이 있다"), 3000); err != nil {
+		t.Fatal(err)
+	}
+	ep, found, err = LastWritten(ctx, nr, p.ID, webnovel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found || ep.NodeID != second.ID {
+		t.Fatalf("got %+v, found=%v, want %s", ep, found, second.ID)
 	}
 }
 

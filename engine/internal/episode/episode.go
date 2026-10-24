@@ -198,6 +198,41 @@ func List(ctx context.Context, nr *node.Repo, projectID, preset string) ([]Episo
 	return episodes(nodes, preset), nil
 }
 
+// LastWritten returns the last episode, in outline order, that has at least
+// one scene with word_count > 0. found is false when nothing in the work has
+// been written yet. Story-assist Phase 1 uses this as the anchor for a
+// writer's focus (the project_focus table), and Phase 4's branch forecast
+// uses it as the episode to forecast from — both want "where the writer
+// actually is," not the outline's last node.
+func LastWritten(ctx context.Context, nr *node.Repo, projectID, preset string) (Episode, bool, error) {
+	nodes, err := nr.ListByProject(ctx, projectID)
+	if err != nil {
+		return Episode{}, false, err
+	}
+	return lastWrittenFromNodes(nodes, preset)
+}
+
+// lastWrittenFromNodes is LastWritten's pure core, taking the node list
+// directly so it shares test fixtures with episodes/resolve.
+func lastWrittenFromNodes(nodes []node.Node, preset string) (Episode, bool, error) {
+	wordCount := make(map[string]int, len(nodes))
+	for _, n := range nodes {
+		wordCount[n.ID] = n.WordCount
+	}
+	var last Episode
+	found := false
+	for _, ep := range episodes(nodes, preset) {
+		for _, leafID := range ep.LeafIDs {
+			if wordCount[leafID] > 0 {
+				last = ep
+				found = true
+				break
+			}
+		}
+	}
+	return last, found, nil
+}
+
 // Resolve returns the episode nodeID belongs to.
 func Resolve(ctx context.Context, nr *node.Repo, preset, nodeID string) (Episode, error) {
 	n, err := nr.Get(ctx, nodeID)
