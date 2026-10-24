@@ -170,6 +170,11 @@ export function Workspace() {
   const outlinePreset = useMemo(() => outlinePresetById(load?.project.outline_preset), [load?.project.outline_preset]);
   const outlinePresetId = outlinePreset.id;
   const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
+  // A continuity observation's fact ref (story-assist Phase 2): which
+  // existing card to scroll to and highlight — distinct from
+  // factBookSelectedClaimRequest above, which fills the new-card form for a
+  // claim that has no card yet.
+  const [factBookHighlightId, setFactBookHighlightId] = useState<string | null>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
@@ -1098,6 +1103,13 @@ export function Workspace() {
 
   const toggleFactBook = useCallback(() => {
     setFactBookSelectedClaimRequest(null);
+    // A continuity fact ref's target (story-assist Phase 2 review): without
+    // this, closing the panel and reopening it plainly from this same
+    // button would still carry a stale highlight target from whatever
+    // observation was last opened, scoping the list to the whole work
+    // instead of this scene and highlighting a card the writer has nothing
+    // to do with right now.
+    setFactBookHighlightId(null);
     setFactBookOpen((v) => {
       const next = !v;
       if (next) {
@@ -1117,6 +1129,7 @@ export function Workspace() {
       if (next) {
         setContextualSeed(null);
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
         setFactBookOpen(false);
         setCanonOpen(false);
         setAgentOpen(false);
@@ -1132,6 +1145,7 @@ export function Workspace() {
       const next = !v;
       if (next) {
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
         setAgentOpen(false);
@@ -1147,6 +1161,7 @@ export function Workspace() {
       const next = !v;
       if (next) {
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
         setCanonOpen(false);
@@ -1170,6 +1185,21 @@ export function Workspace() {
       claim: selectionMenu.text,
     });
   }, [selectionMenu]);
+
+  // story-assist Phase 2: a continuity observation's fact ref opens the Fact
+  // Book scrolled to and highlighting the card it already points at —
+  // factBookHighlightId, not factBookSelectedClaimRequest, which would
+  // instead fill the new-card form with that card's own claim text and
+  // read as "make a new one" (code review caught this: it risked a
+  // duplicate card for something that already existed). factBookOpen's
+  // branch outranks canonOpen's in the render chain below, so closing it
+  // (onClose there) falls straight back to the ContinuitySection the
+  // writer came from, the same way EntitySheet already does for entity
+  // refs (see CanonPanel's own comment on that).
+  const openFactFromContinuity = useCallback((factId: string) => {
+    setFactBookOpen(true);
+    setFactBookHighlightId(factId);
+  }, []);
 
 
   const runSelectionIllustrate = useCallback(() => {
@@ -1979,6 +2009,7 @@ export function Workspace() {
             projectId={load.project.id}
             nodeId={load.node.id}
             selectedClaimRequest={factBookSelectedClaimRequest}
+            highlightFactId={factBookHighlightId}
             onImpactCheck={(text) => {
               setContextualSeed({ text, autoCheck: true });
               setFactBookOpen(false);
@@ -1989,6 +2020,7 @@ export function Workspace() {
             onClose={() => {
               setFactBookOpen(false);
               setFactBookSelectedClaimRequest(null);
+              setFactBookHighlightId(null);
               focusEditor();
             }}
             onChanged={() => {
@@ -2062,6 +2094,7 @@ export function Workspace() {
             onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
             onBeforeStyleCheck={flushPendingSave}
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
+            onOpenFact={openFactFromContinuity}
             onClose={() => {
               setCanonOpen(false);
               focusEditor();
@@ -2098,6 +2131,7 @@ export function Workspace() {
               setLoad((prev) => (prev ? { ...prev, project: p } : prev))
             }
             tourTarget="workspace-context"
+            onOpenContinuity={() => setCanonOpen(true)}
           />
         ) : null}
       </div>

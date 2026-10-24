@@ -196,26 +196,30 @@ Skills → Learning from its own work** (`agent_self_review_enabled` in
 provider never runs it, since that second turn would spend your plan's usage
 without you asking for it.
 
-**You can switch the memory, skills, and visual editing tools off entirely.** Every tool's full
-description travels in every request, so Linetta's twenty-seven tools are a
-standing cost on every turn — and the memory tool and the two skills tools are
-about a fifth of it. **Settings → Tool budget** says how many tools the agent
-currently gets and what each group costs, and turns each group off for both
-the built-in agent and any MCP client (`memory_tools_enabled` and
-`skill_tools_enabled` in `settings.json`; both on by default, and
-`visual_write_tools_disabled`, false by default). Switching a
+**You can switch the memory, skills, review, and visual editing tools off
+entirely.** Every tool's full description travels in every request, so
+Linetta's thirty tools are a standing cost on every turn — and the memory
+tool, the two skills tools, and the continuity-check tool together are a
+meaningful share of it. **Settings → Tool budget** says how many tools the
+agent currently gets and what each group costs, and turns each group off for
+both the built-in agent and any MCP client (`memory_tools_enabled`,
+`skill_tools_enabled`, and `review_tools_enabled` in `settings.json`; all on
+by default, and `visual_write_tools_disabled`, false by default). Switching a
 group off also removes the instructions that name its tools — a prompt telling
 an agent to use a tool it has not been given is worse than the tool's cost.
 Each switch takes effect on your very next message; there is nothing to
 restart. With the skills tools off the self-improvement pass cannot run at
 all, and the Skills pane says so.
 
-The memory and skills groups lose different things. With the memory
+The memory, skills, and review groups lose different things. With the memory
 tool off, what is already recorded is still read back to the agent — it just
 cannot add to it, and you can still edit it yourself under Settings → Memory.
 With the skills tools off, the skill **list** goes too: a list with no
-`linetta_read_skill` to open a body is only names. Nothing is deleted either
-way, and switching a group back on restores it exactly.
+`linetta_read_skill` to open a body is only names. With the review tools off,
+`linetta_report_continuity` and the agent panel's continuity starter chip
+both go — observations already recorded stay exactly where they are in Story
+World. Nothing is deleted either way, and switching a group back on restores
+it exactly.
 
 **A turn stops after a set number of tool calls.** The built-in agent makes at
 most 48 tool calls in one turn by default. Change it under **Settings → Tool
@@ -274,6 +278,48 @@ Each returns `undo_batch_id` for the agent undo button or `linetta_undo_last_cha
 (`batch_id`); deleting an image retains its bytes and metadata in the bounded,
 in-memory undo window (8 changes; cleared on restart). Set
 `visual_write_tools_disabled` in settings to omit this optional group.
+
+### Continuity checks
+
+Ask the agent to check a scene's continuity — the "연속성 점검" starter chip
+does this in one click — and it reads the scene with paragraph numbers, holds
+it against Story World, your fact cards, earlier scenes, and your own
+direction, and records what it finds with `linetta_report_continuity`. The
+engine checks every quote and every reference before anything is stored: a
+quote has to be an exact substring of the numbered paragraphs it cites, and
+a reference has to name an entity, fact card, beat, or scene this work
+actually has. A call that fails either check is refused with a sentence the
+agent can act on, not silently accepted. An empty result — nothing wrong —
+is recorded too, so "I checked and it's fine" is on the record the same way
+a finding is.
+
+**Nothing in the manuscript changes.** What you get is a list, under Story
+World → Continuity checks: each finding's severity, category, summary, the
+exact quote and paragraph it is about, a reference chip you can click to
+open the entity, fact, or earlier scene it points at, and an optional
+suggestion. You open the scene, mark it dismissed or resolved, or leave it.
+If the scene's text has changed since the check, the group is flagged "본문이
+바뀜 · 다시 점검" so you know the finding may be stale. A badge in the
+right-hand scene panel shows how many open observations the current scene
+carries, with a click to Story World's continuity section.
+
+Continuity checks are a judgement call the agent makes when asked, not a
+background pass. They are a different thing from the automatic consistency
+re-check after a name or setting change (contextual edit): that one is
+deterministic (it catches a name it just renamed and missed) and shows a
+report immediately; continuity checks are the agent's own reading, held
+until you act on it, and they do not replace each other.
+
+Observations live in `library.db`, so they are in daily backups and travel
+with a work restored from one — including the writer's own dismissed and
+resolved judgements, which are work too valuable to lose on a restore.
+References inside an observation are remapped to the restored work's own
+ids; one that no longer resolves is dropped rather than left dangling. Turn
+the group off under **Settings → Tool budget → Check & propose**
+(`review_tools_enabled` in `settings.json`, on by default) to remove
+`linetta_report_continuity` and the starter chip for both the built-in agent
+and any MCP client; observations already recorded stay exactly where they
+are.
 
 ## Writing with your own agent (MCP)
 

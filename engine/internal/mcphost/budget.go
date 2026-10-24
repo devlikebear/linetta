@@ -29,11 +29,16 @@ type ToolGroups struct {
 	// smaller half of a 3 kB pair. The writer's question is whether the agent
 	// keeps skills at all.
 	Skills bool
+	// Review is linetta_report_continuity (story-assist Phase 2) and
+	// whatever Phase 3/4 add to ReviewToolNames: the agent's "check and
+	// record a judgement, the writer decides" tools, as opposed to the
+	// manuscript tools every mode keeps unconditionally.
+	Review bool
 }
 
 // AllToolGroups is the default — every group on, which is the tool set a
 // writer who never opens the pane keeps.
-func AllToolGroups() ToolGroups { return ToolGroups{Memory: true, Skills: true} }
+func AllToolGroups() ToolGroups { return ToolGroups{Memory: true, Skills: true, Review: true} }
 
 // ToolGroupsFrom reads the writer's tool-budget switches off a
 // settings store. It is the ONE reading a caller is expected to make: whoever
@@ -51,17 +56,24 @@ func ToolGroupsFrom(store *settings.Store) ToolGroups {
 		DisableVisualWrites: store.VisualWriteToolsDisabled(),
 		Memory:              store.MemoryToolsEnabled(),
 		Skills:              store.SkillToolsEnabled(),
+		Review:              store.ReviewToolsEnabled(),
 	}
 }
 
-// MemoryToolNames and SkillToolNames are each group's members. They are
-// subsets of ReadToolNames and WriteToolNames rather than a separate
-// inventory, and TestToolGroupNamesAreAllRealTools holds them to that: a
-// group naming a tool that does not exist would silently discount a budget by
-// bytes nothing was ever going to send.
+// MemoryToolNames, SkillToolNames and ReviewToolNames are each group's
+// members. They are subsets of ReadToolNames and WriteToolNames rather than
+// a separate inventory, and TestToolGroupNamesAreAllRealTools holds them to
+// that: a group naming a tool that does not exist would silently discount a
+// budget by bytes nothing was ever going to send.
 var (
 	MemoryToolNames = []string{"linetta_edit_memory"}
 	SkillToolNames  = []string{"linetta_read_skill", "linetta_edit_skill"}
+	// ReviewToolNames is story-assist's "check and record a judgement"
+	// group: Phase 2 adds linetta_report_continuity; Phase 3 and 4 add more
+	// to this same list rather than inventing a second group, because the
+	// writer's question — "let the agent check things and record what it
+	// finds, or not" — does not change across phases.
+	ReviewToolNames = []string{"linetta_report_continuity"}
 )
 
 // VisualWriteToolNames lists the optional visual editing group.
@@ -76,6 +88,9 @@ func excludedByGroups(name string, groups ToolGroups) bool {
 		return true
 	}
 	if !groups.Skills && slices.Contains(SkillToolNames, name) {
+		return true
+	}
+	if !groups.Review && slices.Contains(ReviewToolNames, name) {
 		return true
 	}
 	return false
@@ -180,12 +195,12 @@ func measureToolSchemaBytes() map[string]int {
 // real measurement of a server with no tools. Reporting no budget at all is
 // what makes the pane's own guard — draw the numbers only when there are
 // numbers — actually reachable.
-func MeasureToolBudget(memoryTools, skillTools bool) (settings.ToolBudget, bool) {
+func MeasureToolBudget(memoryTools, skillTools, reviewTools bool) (settings.ToolBudget, bool) {
 	sizes := toolSchemaBytes()
 	if len(sizes) == 0 {
 		return settings.ToolBudget{}, false
 	}
-	groups := ToolGroups{Memory: memoryTools, Skills: skillTools}
+	groups := ToolGroups{Memory: memoryTools, Skills: skillTools, Review: reviewTools}
 
 	sum := func(names []string) settings.ToolBudgetGroup {
 		g := settings.ToolBudgetGroup{}
@@ -205,5 +220,6 @@ func MeasureToolBudget(memoryTools, skillTools bool) (settings.ToolBudget, bool)
 		Bytes:        current.Bytes,
 		Memory:       sum(MemoryToolNames),
 		Skills:       sum(SkillToolNames),
+		Review:       sum(ReviewToolNames),
 	}, true
 }

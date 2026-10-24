@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/contextualedit"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
@@ -139,6 +140,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	notes := note.NewRepo(st)
 	relationships := relationship.NewRepo(st)
 	facts := fact.NewRepo(st)
+	continuityRepo := continuity.NewRepo(st)
 	manuscriptIndexer := manuscript.NewIndexer(st.DB())
 	manuscriptSearcher := manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer)
 	manuscriptEditor := manuscriptedit.NewService(nodes, snaps)
@@ -303,6 +305,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			entities:      entities,
 			mentions:      mentions,
 			facts:         facts,
+			beats:         beats,
+			threads:       threads,
+			continuity:    continuityRepo,
 			plot:          plotBuilder,
 			manuscript:    manuscriptSearcher,
 			context:       mcpContextBuilder,
@@ -447,6 +452,14 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("direction.set_focus", handlers.SetFocus(directionRepo, clock))
 	s.Handle("direction.get_scene_intent", handlers.GetSceneIntent(directionRepo))
 	s.Handle("direction.set_scene_intent", handlers.SetSceneIntent(directionRepo, clock))
+	s.Handle("continuity.list", handlers.ListContinuity(continuityRepo, nodes, entities, facts, beats))
+	// continuity.set_status fires continuity.changed, so a ContextPanel
+	// showing the open-observation badge for the scene the writer just
+	// resolved or dismissed does not have to wait for an unrelated remount
+	// to notice (story-assist Phase 2).
+	s.Handle("continuity.set_status", handlers.SetContinuityStatus(continuityRepo, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
+	s.Handle("continuity.open_counts", handlers.ContinuityOpenCounts(continuityRepo))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))

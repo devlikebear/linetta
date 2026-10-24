@@ -38,6 +38,7 @@ var WriteToolNames = []string{
 	"linetta_edit_skill",
 	"linetta_propose_style_profile",
 	"linetta_publish_episode",
+	"linetta_report_continuity",
 }
 
 // ---------- linetta_create_work ----------
@@ -165,6 +166,9 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 	}
 	if groups.Skills {
 		d.registerEditSkillTool(s)
+	}
+	if groups.Review {
+		d.registerContinuityWriteTools(s)
 	}
 
 	d.registerReviseTool(s)

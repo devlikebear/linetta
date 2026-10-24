@@ -739,18 +739,21 @@ func TestSystemPrompt_withBothGroupsOffNamesNoRemovedTool(t *testing.T) {
 }
 
 // The default is the prompt 1.2 shipped, and a nil func means the default: an
-// engineapp that forgets to wire one of the two must degrade to "on", not
-// silently strip the agent's memory.
+// engineapp that forgets to wire one of the three must degrade to "on", not
+// silently strip the agent's memory, skills, or review tools.
 func TestResolveToolGroups_nilFuncsMeanEnabled(t *testing.T) {
-	if g := resolveToolGroups(nil, nil); g != allToolGroups() {
-		t.Errorf("resolveToolGroups(nil, nil) = %+v, want every group on", g)
+	if g := resolveToolGroups(nil, nil, nil); g != allToolGroups() {
+		t.Errorf("resolveToolGroups(nil, nil, nil) = %+v, want every group on", g)
 	}
 	off := func() bool { return false }
-	if g := resolveToolGroups(off, nil); g.memory || !g.skills {
-		t.Errorf("resolveToolGroups(off, nil) = %+v, want memory off and skills on", g)
+	if g := resolveToolGroups(off, nil, nil); g.memory || !g.skills || !g.review {
+		t.Errorf("resolveToolGroups(off, nil, nil) = %+v, want memory off and the rest on", g)
 	}
-	if g := resolveToolGroups(nil, off); !g.memory || g.skills {
-		t.Errorf("resolveToolGroups(nil, off) = %+v, want memory on and skills off", g)
+	if g := resolveToolGroups(nil, off, nil); !g.memory || g.skills || !g.review {
+		t.Errorf("resolveToolGroups(nil, off, nil) = %+v, want skills off and the rest on", g)
+	}
+	if g := resolveToolGroups(nil, nil, off); !g.memory || !g.skills || g.review {
+		t.Errorf("resolveToolGroups(nil, nil, off) = %+v, want review off and the rest on", g)
 	}
 }
 

@@ -48,12 +48,29 @@ func sceneOf(n node.Node) Scene {
 	if n.ContentDoc == nil {
 		return sc
 	}
-	// The plain-text copy is the scene as a reader sees it: marks dropped,
-	// mentions as their names, one entry per paragraph.
-	text, err := export.DocToPlainText([]byte(*n.ContentDoc))
-	if err != nil || text == "" {
-		return sc
-	}
-	sc.Paragraphs = strings.Split(text, "\n\n")
+	sc.Paragraphs = Paragraphs(*n.ContentDoc)
 	return sc
+}
+
+// Paragraphs splits a scene's content doc into the ordered, non-empty
+// paragraphs a reader would see: marks dropped, mentions as their plain
+// names. 1-based numbering (as linetta_analyze_style reports it and
+// linetta_report_continuity cites it) is this slice's index + 1 — every
+// caller that numbers paragraphs for a writer or a model must build that
+// number from this exact list, or the two features' counts drift apart on
+// any scene with a blank line in it.
+func Paragraphs(contentDoc string) []string {
+	text, err := export.DocToPlainText([]byte(contentDoc))
+	if err != nil || text == "" {
+		return nil
+	}
+	raw := strings.Split(text, "\n\n")
+	out := make([]string, 0, len(raw))
+	for _, p := range raw {
+		if strings.TrimSpace(p) == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }

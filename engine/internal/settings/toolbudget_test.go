@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// The tool budget's two switches, through all five places a settings field
+// The tool budget's three switches, through all five places a settings field
 // can be silently lost — defaults, the accessor, persist()'s allowlist,
 // load()'s presence guard, and Set. This is the sibling of
 // TestAgentSelfReviewEnabled_defaultsOnAndSurvivesADeliberateFalse and it is
@@ -27,21 +27,22 @@ func TestToolBudgetSwitches_defaultOnAndSurviveADeliberateFalse(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	got, _ := s.Get(ctx)
-	if !got.MemoryToolsEnabled || !got.SkillToolsEnabled {
+	if !got.MemoryToolsEnabled || !got.SkillToolsEnabled || !got.ReviewToolsEnabled {
 		t.Fatalf("the tool groups do not default to on; a fresh install would ship an agent "+
-			"with no memory and no skills: %+v", got)
+			"with no memory, skills or review: %+v", got)
 	}
-	if !s.MemoryToolsEnabled() || !s.SkillToolsEnabled() {
+	if !s.MemoryToolsEnabled() || !s.SkillToolsEnabled() || !s.ReviewToolsEnabled() {
 		t.Error("the accessors the tool layer reads disagree with the config")
 	}
 
 	if _, err := s.Set(ctx, Patch{
 		MemoryToolsEnabled: boolPtr(false),
 		SkillToolsEnabled:  boolPtr(false),
+		ReviewToolsEnabled: boolPtr(false),
 	}); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
-	if s.MemoryToolsEnabled() || s.SkillToolsEnabled() {
+	if s.MemoryToolsEnabled() || s.SkillToolsEnabled() || s.ReviewToolsEnabled() {
 		t.Error("switching the tool groups off did not take effect in memory")
 	}
 
@@ -49,7 +50,7 @@ func TestToolBudgetSwitches_defaultOnAndSurviveADeliberateFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-New: %v", err)
 	}
-	if s2.MemoryToolsEnabled() || s2.SkillToolsEnabled() {
+	if s2.MemoryToolsEnabled() || s2.SkillToolsEnabled() || s2.ReviewToolsEnabled() {
 		t.Error("a deliberate false did not survive a reload — either persist() never wrote it, " +
 			"or load() overwrote it with the default")
 	}
@@ -57,6 +58,7 @@ func TestToolBudgetSwitches_defaultOnAndSurviveADeliberateFalse(t *testing.T) {
 	if _, err := s2.Set(ctx, Patch{
 		MemoryToolsEnabled: boolPtr(true),
 		SkillToolsEnabled:  boolPtr(true),
+		ReviewToolsEnabled: boolPtr(true),
 	}); err != nil {
 		t.Fatalf("Set back on: %v", err)
 	}
@@ -64,19 +66,20 @@ func TestToolBudgetSwitches_defaultOnAndSurviveADeliberateFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-New: %v", err)
 	}
-	if !s3.MemoryToolsEnabled() || !s3.SkillToolsEnabled() {
+	if !s3.MemoryToolsEnabled() || !s3.SkillToolsEnabled() || !s3.ReviewToolsEnabled() {
 		t.Error("switching the tool groups back on did not survive a reload — " +
-			"memory_tools_enabled / skill_tools_enabled are missing from persist()'s allowlist")
+			"memory_tools_enabled / skill_tools_enabled / review_tools_enabled are missing from persist()'s allowlist")
 	}
 
-	// One switch off must not drag the other with it: they are two decisions,
-	// and a writer who kept skills and dropped memory has to get that.
+	// One switch off must not drag the others with it: they are independent
+	// decisions, and a writer who kept skills and review and dropped memory
+	// has to get that.
 	if _, err := s3.Set(ctx, Patch{MemoryToolsEnabled: boolPtr(false)}); err != nil {
 		t.Fatalf("Set memory off: %v", err)
 	}
-	if s3.MemoryToolsEnabled() || !s3.SkillToolsEnabled() {
-		t.Errorf("the two switches are not independent: memory=%v skills=%v",
-			s3.MemoryToolsEnabled(), s3.SkillToolsEnabled())
+	if s3.MemoryToolsEnabled() || !s3.SkillToolsEnabled() || !s3.ReviewToolsEnabled() {
+		t.Errorf("the switches are not independent: memory=%v skills=%v review=%v",
+			s3.MemoryToolsEnabled(), s3.SkillToolsEnabled(), s3.ReviewToolsEnabled())
 	}
 
 	// A settings.json written by a build that predates the keys must still get
@@ -90,9 +93,9 @@ func TestToolBudgetSwitches_defaultOnAndSurviveADeliberateFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("legacy New: %v", err)
 	}
-	if !s4.MemoryToolsEnabled() || !s4.SkillToolsEnabled() {
+	if !s4.MemoryToolsEnabled() || !s4.SkillToolsEnabled() || !s4.ReviewToolsEnabled() {
 		t.Error("a settings.json written before these keys existed reads as a deliberate false, " +
-			"so upgrading would silently take the memory and skills tools away")
+			"so upgrading would silently take the memory, skills and review tools away")
 	}
 }
 
@@ -111,14 +114,15 @@ func TestToolBudget_reportedOnlyWhenMeasured(t *testing.T) {
 		t.Errorf("a store with no measurement wired reported a budget anyway: %+v", got.ToolBudget)
 	}
 
-	var sawMemory, sawSkills bool
-	s.WithToolBudget(func(memoryTools, skillTools bool) (ToolBudget, bool) {
-		sawMemory, sawSkills = memoryTools, skillTools
+	var sawMemory, sawSkills, sawReview bool
+	s.WithToolBudget(func(memoryTools, skillTools, reviewTools bool) (ToolBudget, bool) {
+		sawMemory, sawSkills, sawReview = memoryTools, skillTools, reviewTools
 		b := ToolBudget{
 			Tools:  16,
 			Bytes:  21694,
 			Memory: ToolBudgetGroup{Tools: 1, Bytes: 1357},
 			Skills: ToolBudgetGroup{Tools: 2, Bytes: 4636},
+			Review: ToolBudgetGroup{Tools: 1, Bytes: 500},
 		}
 		if memoryTools {
 			b.Tools += b.Memory.Tools
@@ -127,6 +131,10 @@ func TestToolBudget_reportedOnlyWhenMeasured(t *testing.T) {
 		if skillTools {
 			b.Tools += b.Skills.Tools
 			b.Bytes += b.Skills.Bytes
+		}
+		if reviewTools {
+			b.Tools += b.Review.Tools
+			b.Bytes += b.Review.Bytes
 		}
 		return b, true
 	})
@@ -138,12 +146,12 @@ func TestToolBudget_reportedOnlyWhenMeasured(t *testing.T) {
 	if got.ToolBudget == nil {
 		t.Fatal("a wired measurement did not reach settings.get")
 	}
-	if !sawMemory || !sawSkills {
-		t.Errorf("the measurement was not asked about the switches as they stand: memory=%v skills=%v",
-			sawMemory, sawSkills)
+	if !sawMemory || !sawSkills || !sawReview {
+		t.Errorf("the measurement was not asked about the switches as they stand: memory=%v skills=%v review=%v",
+			sawMemory, sawSkills, sawReview)
 	}
-	if got.ToolBudget.Tools != 19 {
-		t.Errorf("default budget = %d tools, want 19", got.ToolBudget.Tools)
+	if got.ToolBudget.Tools != 20 {
+		t.Errorf("default budget = %d tools, want 20", got.ToolBudget.Tools)
 	}
 
 	if _, err := s.Set(ctx, Patch{SkillToolsEnabled: boolPtr(false)}); err != nil {
@@ -153,8 +161,8 @@ func TestToolBudget_reportedOnlyWhenMeasured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.ToolBudget.Tools != 17 {
-		t.Errorf("budget with skills off = %d tools, want 17 — the pane's count does not track the switch",
+	if got.ToolBudget.Tools != 18 {
+		t.Errorf("budget with skills off = %d tools, want 18 — the pane's count does not track the switch",
 			got.ToolBudget.Tools)
 	}
 	// The price of what was given up stays visible: a writer cannot decide
@@ -177,7 +185,7 @@ func TestToolBudget_neverPersisted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	s.WithToolBudget(func(bool, bool) (ToolBudget, bool) {
+	s.WithToolBudget(func(bool, bool, bool) (ToolBudget, bool) {
 		return ToolBudget{Tools: 19, Bytes: 27687}, true
 	})
 	if _, err := s.Set(ctx, Patch{MemoryToolsEnabled: boolPtr(false)}); err != nil {
@@ -204,7 +212,7 @@ func TestToolBudget_neverPersisted(t *testing.T) {
 func TestToolBudget_aFailedMeasurementIsNotABudgetOfZero(t *testing.T) {
 	ctx := context.Background()
 	s := newStoreOnTemp(t)
-	s.WithToolBudget(func(bool, bool) (ToolBudget, bool) { return ToolBudget{}, false })
+	s.WithToolBudget(func(bool, bool, bool) (ToolBudget, bool) { return ToolBudget{}, false })
 
 	got, err := s.Get(ctx)
 	if err != nil {
@@ -222,7 +230,7 @@ func TestVisualWriteGroupPersistsAndDiscountsBudget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.WithToolBudget(func(bool, bool) (ToolBudget, bool) {
+	s.WithToolBudget(func(bool, bool, bool) (ToolBudget, bool) {
 		return ToolBudget{Tools: 25, Bytes: 30000, VisualWrites: ToolBudgetGroup{Tools: 4, Bytes: 5000}}, true
 	})
 	disabled := true

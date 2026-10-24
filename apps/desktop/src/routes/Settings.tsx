@@ -680,6 +680,31 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.skill_tools_enabled !== false ? " on" : ""}`} />
               </button>
+              {/* story-assist Phase 2: linetta_report_continuity, and
+                  whatever later phases add beside it. Same default-on,
+                  `!== false` read as the two switches above. */}
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving && apply({ review_tools_enabled: current.review_tools_enabled === false })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.tools.review.title")}</span>
+                  <span className="sd">{t("settings.tools.review.description")}</span>
+                  {toolBudget?.review && (
+                    <span className="sd" data-testid="tool-budget-review">
+                      {t("settings.tools.groupCost", {
+                        tools: String(toolBudget.review.tools),
+                        size: formatToolBytes(toolBudget.review.bytes),
+                      })}
+                    </span>
+                  )}
+                </span>
+                <span className={`switch${current.review_tools_enabled !== false ? " on" : ""}`} />
+              </button>
               {/* The built-in agent's cap only: an external MCP client runs
                   its own loop and never reads it. Saved on blur or Enter, not
                   per keystroke — "120" passes through "12" on the way. */}

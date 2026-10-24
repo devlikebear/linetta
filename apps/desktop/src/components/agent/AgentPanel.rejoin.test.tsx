@@ -15,6 +15,7 @@ const rpc = vi.hoisted(() => ({
   agentCancel: vi.fn(),
   agentHistory: vi.fn(),
   agentStatus: vi.fn(),
+  settingsGet: vi.fn(),
 }));
 
 const ev = vi.hoisted(() => ({
@@ -36,6 +37,7 @@ vi.mock("../../lib/rpc", () => ({
     history: rpc.agentHistory,
     status: rpc.agentStatus,
   },
+  settings: { get: rpc.settingsGet },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -97,6 +99,7 @@ beforeEach(() => {
   rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
   rpc.agentStatus.mockImplementation(() => Promise.resolve({ ...idle }));
   rpc.agentCancel.mockImplementation(() => Promise.resolve({ ok: true }));
+  rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
 });
 
 describe("AgentPanel rejoining a running turn", () => {

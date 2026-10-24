@@ -84,7 +84,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	// readings produces a turn whose prompt names a tool its own server never
 	// registered, and because the label is the cache key, that turn's mistake
 	// is cached for every turn after it.
-	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled)
+	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled)
 	if s.deps.VisualWriteToolsDisabled != nil {
 		groups.disableVisualWrites = s.deps.VisualWriteToolsDisabled()
 	}

@@ -234,6 +234,12 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // saved. Settings lists skills and holds an editor open on one, so
         // without this the next save silently overwrites what just landed.
         "skills.changed" => Some("skills-changed"),
+        // A continuity observation's status changed from Story World
+        // (story-assist Phase 2). The scene panel's open-observation badge
+        // reads a count fetched once; without this event it would keep
+        // showing an observation the writer just resolved or dismissed
+        // until something unrelated happened to remount the panel.
+        "continuity.changed" => Some("continuity-changed"),
         _ => None,
     }
 }
@@ -438,6 +444,16 @@ mod tests {
         // overwrites it.
         assert_eq!(notification_event("skills.changed"), Some("skills-changed"));
         assert_eq!(notification_event("skills.unmapped"), None);
+    }
+
+    #[test]
+    fn continuity_changed_is_forwarded_to_the_renderer() {
+        // The scene panel's open-observation badge is fetched once and
+        // cached. Without this event, resolving or dismissing an
+        // observation from Story World would leave the badge showing a
+        // stale count until an unrelated remount refreshed it.
+        assert_eq!(notification_event("continuity.changed"), Some("continuity-changed"));
+        assert_eq!(notification_event("continuity.unmapped"), None);
     }
 
     #[cfg(target_os = "windows")]

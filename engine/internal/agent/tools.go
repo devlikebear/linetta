@@ -47,7 +47,10 @@ type RegisterTools func(*mcp.Server, mcphost.ToolGroups)
 // literally the value that builds the server — rather than the two being read
 // separately and hoped to agree.
 func (g toolGroups) hostGroups() mcphost.ToolGroups {
-	return mcphost.ToolGroups{Memory: g.memory, Skills: g.skills, DisableVisualWrites: g.disableVisualWrites}
+	return mcphost.ToolGroups{
+		Memory: g.memory, Skills: g.skills, Review: g.review,
+		DisableVisualWrites: g.disableVisualWrites,
+	}
 }
 
 // toolSession is one connected client/server pair. Normally one per engine:

@@ -17,6 +17,7 @@ Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local
 ### 2. 데이터 저장 위치
 사용자가 작성한 원고·프로젝트·설정 등 기본 데이터는 **사용자 기기에 로컬로** 저장됩니다.
 - 집필 데이터: 기기의 로컬 데이터베이스
+- 에이전트가 "연속성 점검"으로 기록한 관찰(모순·새 사실·확인 필요 항목과 그 상태)도 같은 로컬 데이터베이스(`library.db`)에 저장되며, 원고 자체는 바뀌지 않습니다.
 - MCP 접속 토큰, AI 프로바이더 API 키 등 민감 정보: 운영체제의 보안 저장소(macOS 키체인, Windows 자격 증명 관리자). `settings.json`에는 저장하지 않습니다.
 
 개발자는 이 데이터에 접근할 수 없습니다.
@@ -114,6 +115,7 @@ Linetta (the "App") is a **local-first** desktop app for writing long-form ficti
 ### 2. Where Data Is Stored
 Core data you create — manuscripts, projects, and settings — is stored **locally on your device**.
 - Writing data: a local database on your device.
+- Observations an agent records while checking a scene's continuity (contradictions, new facts, and open questions, with their status) are stored in the same local database (`library.db`); the manuscript itself is never changed.
 - Sensitive values such as the MCP connection token and an AI provider API key: your operating system's secure store (macOS Keychain, Windows Credential Manager). They are never written to `settings.json`.
 
 The developer has no access to this data.
@@ -211,6 +213,7 @@ Linetta（以下「本アプリ」）は、長編小説・Web小説の執筆の�
 ### 2. データの保存場所
 ユーザーが作成した原稿・プロジェクト・設定などの基本データは、**ユーザーの端末内にローカルで**保存されます。
 - 執筆データ: 端末内のローカルデータベース
+- エージェントが「連続性チェック」で記録した観察（矛盾・新事実・確認が必要な項目とその状態）も、同じローカルデータベース（`library.db`）に保存されます。原稿本文は変更されません。
 - MCP 接続トークンや AI プロバイダーの API キーなどの機密情報: OS のセキュアストア（macOS キーチェーン、Windows 資格情報マネージャー）。`settings.json` には保存しません。
 
 開発者はこのデータにアクセスできません。
