@@ -119,12 +119,15 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 	written := 0
 	failures := make([]string, 0)
 	for _, p := range projs {
+		imageDir := export.SyncImageDir(p.Title, p.ID)
 		payload, err := export.ExportProject(ctx, export.Sources{
 			Projects:      s.Projects,
 			Nodes:         s.Nodes,
 			Entities:      s.Entities,
 			Relationships: s.Relationships,
 			Extras:        s.Extras,
+			Illustrations: s.Illustrations,
+			ImageDir:      imageDir,
 		}, p.ID, cfg.Language)
 		if err != nil {
 			msg := fmt.Sprintf("project %s export: %v", p.ID, err)
@@ -135,6 +138,12 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 		target := filepath.Join(dir, export.SyncFilename(p.Title, p.ID))
 		if err := atomicfile.Write(target, []byte(payload.Markdown), 0o644); err != nil {
 			msg := fmt.Sprintf("project %s write: %v", p.ID, err)
+			fmt.Fprintf(os.Stderr, "gitsync: %s\n", msg)
+			failures = append(failures, msg)
+			continue
+		}
+		if err := export.WriteImageDir(filepath.Join(dir, imageDir), payload.Images); err != nil {
+			msg := fmt.Sprintf("project %s pictures: %v", p.ID, err)
 			fmt.Fprintf(os.Stderr, "gitsync: %s\n", msg)
 			failures = append(failures, msg)
 			continue

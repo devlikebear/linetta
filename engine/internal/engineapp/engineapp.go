@@ -189,6 +189,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		entities:      entities,
 		relationships: relationships,
 		extras:        export.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts},
+		images:        exportImages{illustrations},
 		ops:           ops,
 	}
 	gitSyncer := setupGitSync(syncDeps)
