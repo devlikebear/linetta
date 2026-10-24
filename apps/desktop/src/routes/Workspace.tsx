@@ -5,7 +5,7 @@ import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi } from "../lib/rpc";
 import { saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
-import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
+import { sceneEditorExtensions } from "../components/editor/sceneExtensions";
 import { NotePopover } from "../components/NotePopover";
 import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus, IllustrationMeta } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
@@ -450,16 +450,16 @@ export function Workspace() {
     return new Map(publishStatus.episodes.map((ep) => [ep.node_id, ep.state] as const));
   }, [publishStatus]);
 
-  const mentionExtension = useMemo(() => {
-    if (!projectId) return null;
-    return buildMentionExtension({
-      search: async (query) => {
-        const results = await entitiesApi.search(projectId, query);
-        return results.map((e) => ({ id: e.id, name: e.name, role: e.role }));
-      },
-      onStateChange: setMentionState,
-    });
-  }, [projectId]);
+  // One list for the workspace editor and Zen: both must read every node a
+  // scene can hold, or the one missing a node opens the scene empty.
+  const sceneExtensions = useMemo(() => sceneEditorExtensions(buildMentionExtension({
+    search: async (query) => {
+      if (!projectId) return [];
+      const results = await entitiesApi.search(projectId, query);
+      return results.map((e) => ({ id: e.id, name: e.name, role: e.role }));
+    },
+    onStateChange: setMentionState,
+  })), [projectId]);
 
   const refreshMentioned = useCallback(async (nodeId: string) => {
     try { setMentioned(await mentionsApi.listForNode(nodeId)); }
@@ -1911,10 +1911,8 @@ export function Workspace() {
               typewriter={typewriter}
               focus={focus}
               onManualSave={handleManualSave}
-              extensions={[
-                ...(mentionExtension ? [mentionExtension] : []),
-                NoteMarkerExtension,
-              ]}
+              extensions={sceneExtensions}
+              contentErrorNotice={t("editor.contentUnreadable")}
               onMentionDoubleClick={(id) => {
                 setContextualEditOpen(false);
                 setEntitySheetId(id);
@@ -2136,6 +2134,7 @@ export function Workspace() {
           episodeCharCount={currentEpisodeCharCount}
           sceneLabel={currentNodeLabel}
           target={isWebnovelProject ? episodeCharTarget : 0}
+          extensions={sceneExtensions}
           onChange={(doc) => {
             editRevisionRef.current += 1;
             debouncedSave(load.node.id, doc);

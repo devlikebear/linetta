@@ -33,6 +33,7 @@ function renderZen(props: Partial<ComponentProps<typeof ZenMode>> = {}) {
         initialDoc={{ type: "doc", content: [{ type: "paragraph" }] }}
         charCount={100}
         sceneLabel="씬 1"
+        extensions={[]}
         onChange={vi.fn()}
         onCharCount={vi.fn()}
         onManualSave={vi.fn()}

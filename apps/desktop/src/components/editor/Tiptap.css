@@ -101,6 +101,18 @@
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 32%, transparent);
 }
 
+/* Shown when the scene holds nodes this editor can't read; the editor is
+   read-only and blank underneath it. */
+.tiptap-content-error {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--danger-wash);
+  color: var(--danger-strong);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* A gallery picture in the scene (IllustrationExtension). */
 .tiptap-editor .ProseMirror figure.illustration-node {
   margin: 1.4em auto;

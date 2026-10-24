@@ -1,3 +1,4 @@
+import type { AnyExtension } from "@tiptap/core";
 import { useEffect, useRef, useState } from "react";
 import "./ZenMode.css";
 import { TiptapEditor, type TiptapHandle } from "./editor/Tiptap";
@@ -11,6 +12,9 @@ interface Props {
   sceneLabel: string;
   /** Target character count for the progress bar; 0 disables the bar. */
   target?: number;
+  /** The workspace editor's extension list (`sceneEditorExtensions`), so Zen
+   *  reads the same nodes the scene was written with. */
+  extensions: AnyExtension[];
   onChange: (doc: object) => void;
   onCharCount: (n: number) => void;
   onManualSave: (doc: object) => void;
@@ -25,6 +29,7 @@ export function ZenMode({
   episodeCharCount,
   sceneLabel,
   target = 0,
+  extensions,
   onChange,
   onCharCount,
   onManualSave,
@@ -105,6 +110,8 @@ export function ZenMode({
             onMountEditor?.(h);
           }}
           initialDoc={initialDoc}
+          extensions={extensions}
+          contentErrorNotice={t("editor.contentUnreadable")}
           onChange={onChange}
           onCharCount={onCharCount}
           onManualSave={onManualSave}

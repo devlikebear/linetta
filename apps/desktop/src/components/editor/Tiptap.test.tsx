@@ -2,6 +2,7 @@ import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { buildMentionExtension } from "./MentionExtension";
 import { TiptapEditor, type TiptapHandle } from "./Tiptap";
 
 const emptyDoc = {
@@ -34,7 +35,79 @@ function rectList(): DOMRectList {
   return list;
 }
 
+const mentionDoc = {
+  type: "doc",
+  content: [{
+    type: "paragraph",
+    content: [
+      { type: "text", text: "그날 " },
+      { type: "mention", attrs: { id: "ent-1", label: "민호" } },
+      { type: "text", text: "는 웃었다." },
+    ],
+  }],
+};
+
 describe("TiptapEditor", () => {
+  // Tiptap opens a doc with an unknown node type as an empty paragraph. If the
+  // editor then saved, the scene would be overwritten with nothing.
+  it("holds a doc it cannot read read-only and never reports the empty fallback", async () => {
+    const ref = createRef<TiptapHandle>();
+    const onChange = vi.fn();
+    const onCharCount = vi.fn();
+    const onManualSave = vi.fn();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { getByRole } = render(
+      <TiptapEditor
+        ref={ref}
+        initialDoc={mentionDoc}
+        onChange={onChange}
+        onCharCount={onCharCount}
+        onManualSave={onManualSave}
+        contentErrorNotice="읽지 못하는 내용"
+      />,
+    );
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+    warn.mockRestore();
+    const editor = ref.current!.editor!;
+
+    expect(editor.isEditable).toBe(false);
+    expect(getByRole("alert")).toHaveTextContent("읽지 못하는 내용");
+    expect(ref.current!.getDoc()).toBe(mentionDoc);
+    expect(onCharCount).toHaveBeenLastCalledWith("그날 는 웃었다.".length);
+
+    act(() => {
+      editor.commands.insertContent("!");
+    });
+    fireEvent.keyDown(window, { key: "s", metaKey: true, ctrlKey: true });
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onManualSave).not.toHaveBeenCalled();
+    expect(ref.current!.getDoc()).toBe(mentionDoc);
+    expect(ref.current!.replaceAllMatches("그날", "그 밤")).toBeNull();
+  });
+
+  it("opens a doc its extensions define as usual", async () => {
+    const ref = createRef<TiptapHandle>();
+    const onChange = vi.fn();
+    const { queryByRole } = render(
+      <TiptapEditor
+        ref={ref}
+        initialDoc={mentionDoc}
+        onChange={onChange}
+        extensions={[buildMentionExtension({ search: async () => [], onStateChange: () => {} })]}
+        contentErrorNotice="읽지 못하는 내용"
+      />,
+    );
+    await waitFor(() => expect(ref.current?.editor).toBeTruthy());
+
+    expect(ref.current!.editor!.isEditable).toBe(true);
+    expect(queryByRole("alert")).toBeNull();
+    act(() => {
+      ref.current!.editor!.commands.insertContent("!");
+    });
+    expect(JSON.stringify(onChange.mock.lastCall![0])).toContain("\"mention\"");
+  });
+
   it("marks an empty focused editor so the visible caret affordance can render", async () => {
     const user = userEvent.setup();
     const { container } = render(<TiptapEditor initialDoc={emptyDoc} onChange={vi.fn()} />);

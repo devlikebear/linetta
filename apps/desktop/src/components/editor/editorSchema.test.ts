@@ -4,8 +4,8 @@ import { getSchema } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { describe, expect, it } from "vitest";
 import { buildMentionExtension } from "./MentionExtension";
-import { NoteMarkerExtension } from "./NoteMarkerExtension";
 import { IllustrationExtension } from "./IllustrationExtension";
+import { sceneEditorExtensions } from "./sceneExtensions";
 
 // The engine's markdown exporter keeps its own list of the nodes and marks it
 // handles, and a Go test holds that list against this same file. If you add or
@@ -19,11 +19,10 @@ const fixture = resolve(
 describe("editor schema", () => {
   it("matches the node and mark list the markdown exporter is tested against", () => {
     const schema = getSchema([
-      // The same set Tiptap.tsx and Workspace.tsx mount.
+      // The same set Tiptap.tsx mounts for every scene editor.
       StarterKit.configure({}),
       IllustrationExtension,
-      buildMentionExtension({ search: async () => [], onStateChange: () => {} }),
-      NoteMarkerExtension,
+      ...sceneEditorExtensions(buildMentionExtension({ search: async () => [], onStateChange: () => {} })),
     ]);
     const expected = JSON.parse(readFileSync(fixture, "utf8")) as { nodes: string[]; marks: string[] };
 
