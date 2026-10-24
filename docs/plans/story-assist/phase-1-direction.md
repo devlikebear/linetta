@@ -61,7 +61,7 @@ _예상 소요: 1.5~2일_
 
 ### A. 저장
 
-- [ ] **1.A.1 마이그레이션**
+- [x] **1.A.1 마이그레이션**
   - 파일: `engine/internal/store/migrations/0024_writer_direction.sql`
   - 내용:
     ```sql
@@ -86,7 +86,7 @@ _예상 소요: 1.5~2일_
     ```
   - 검증: `CGO_ENABLED=0 go test ./internal/store/...` (`migrations_test.go`가 순번과 적용을 확인)
 
-- [ ] **1.A.2 `direction` 패키지: 타입과 한도**
+- [x] **1.A.2 `direction` 패키지: 타입과 한도**
   - 파일: `engine/internal/direction/direction.go`
   - 내용:
     - 상수
@@ -105,7 +105,7 @@ _예상 소요: 1.5~2일_
     - 목록 정규화: 앞뒤 공백을 지우고, 빈 항목을 버리고, 중복을 없앤다. 대소문자 접기는 `style.foldCase` 방식과 같게 한다.
   - 참조: `engine/internal/style/draft.go`, `engine/internal/agentmemory/agentmemory.go`
 
-- [ ] **1.A.3 Repo**
+- [x] **1.A.3 Repo**
   - 파일: `engine/internal/direction/repo.go`, `repo_test.go`
   - 함수:
     ```go
@@ -140,7 +140,7 @@ _예상 소요: 1.5~2일_
 
 ### B. 브리프
 
-- [ ] **1.B.1 ContextKey 사슬 추가**
+- [x] **1.B.1 ContextKey 사슬 추가**
   - 파일: `engine/internal/storycontext/types.go`, `builder.go`
   - 내용:
     - `ContextKeyDirection ContextKey = "direction"`를 추가한다.
@@ -177,7 +177,7 @@ _예상 소요: 1.5~2일_
     - `lib/types.ts` `AIContextKey`에 `"direction"`을 추가한다.
     - AI 맥락 체크리스트가 키 목록을 갖고 있으면 그 목록에도 추가한다.
 
-- [ ] **1.B.2 렌더링**
+- [x] **1.B.2 렌더링**
   - 파일: `engine/internal/storycontext/render.go`, `render_test.go`
   - 내용:
     - `buildUser`의 **첫 섹션**("## 작품 설정"보다 앞)에 둔다.
@@ -200,14 +200,14 @@ _예상 소요: 1.5~2일_
     - `ContextSelection.Direction=false`면 빠진다.
   - 검증: `cd engine && CGO_ENABLED=0 go test ./internal/storycontext/...`
 
-- [ ] **1.B.3 MCP 브리프 입력과 보고**
+- [x] **1.B.3 MCP 브리프 입력과 보고**
   - 파일: `engine/internal/mcphost/tools_read.go`, `tools_read_test.go`
   - 내용:
     - `IncludeDirection *bool`. 설명: `"set false to leave out the writer's direction (current focus and this scene's intent); on by default"`
     - `sectionReport`가 direction의 포함 여부와 비어 있음을 보고한다.
   - 테스트: read_only 모드에서도 방향이 브리프에 나온다. 읽기 도구 경로이기 때문이다.
 
-- [ ] **1.B.4 engineapp 배선**
+- [x] **1.B.4 engineapp 배선**
   - 파일: `engine/internal/engineapp/engineapp.go`
   - 내용:
     - `direction.NewRepo(...)`를 만든다.
@@ -216,7 +216,7 @@ _예상 소요: 1.5~2일_
 
 ### C. RPC와 복원
 
-- [ ] **1.C.1 RPC 핸들러**
+- [x] **1.C.1 RPC 핸들러**
   - 파일: `engine/internal/rpc/handlers/direction.go`, `direction_test.go`
   - 메서드:
     - `direction.get_focus {project_id}` → `FocusState`
@@ -230,7 +230,7 @@ _예상 소요: 1.5~2일_
     - `cd engine && CGO_ENABLED=0 go test ./internal/rpc/handlers/ -run Direction`
     - `pnpm --dir apps/desktop test -- rpcAllowlist.test.ts --run`
 
-- [ ] **1.C.2 작품 단위 복원**
+- [x] **1.C.2 작품 단위 복원**
   - 파일: `engine/internal/restore/restore.go`, 복원 테스트
   - 내용:
     - `project_focus`: project_id를 새 id로 바꾸고, `anchor_node_id`는 node id 매핑으로 바꾼다. 매핑에 없으면 NULL로 둔다.
@@ -240,13 +240,13 @@ _예상 소요: 1.5~2일_
 
 ### D. 에이전트와 화면
 
-- [ ] **1.D.1 에이전트 지침 한 줄**
+- [x] **1.D.1 에이전트 지침 한 줄**
   - 파일: `engine/internal/agent/prompt.go`, `prompt_test.go`
   - 내용: "How you work" 목록에 다음 줄을 추가한다.
     > The story brief's Writer's Direction section is the writer's own instruction. Follow it over your own judgment; if a request conflicts with it, say so before acting. You cannot edit it — if it looks out of date, tell the writer.
   - 테스트: 프롬프트에 이 줄이 있다. 그룹 스위치와는 관계없다.
 
-- [ ] **1.D.2 `DirectionSection` 컴포넌트**
+- [x] **1.D.2 `DirectionSection` 컴포넌트**
   - 파일: `apps/desktop/src/components/DirectionSection.tsx`, `.css`, `.test.tsx`
   - props: `{ projectId: string; nodeId?: string }`
   - 화면:
@@ -268,11 +268,11 @@ _예상 소요: 1.5~2일_
     - 낡음 배지와 [그대로 유지]
     - 씬이 없을 때 씬 의도 영역 숨김
 
-- [ ] **1.D.3 `ContextPanel`에 배치**
+- [x] **1.D.3 `ContextPanel`에 배치**
   - 파일: `apps/desktop/src/components/ContextPanel.tsx`
   - 내용: 현재 씬의 사이드 패널 상단에 `DirectionSection`을 접을 수 있게 둔다. 접힘 상태는 localStorage에 저장하고, 읽기·쓰기 실패는 무시한다.
 
-- [ ] **1.D.4 다국어**
+- [x] **1.D.4 다국어**
   - 파일: `apps/desktop/src/lib/i18n.tsx`
   - 키:
     - `direction.focus.title`, `direction.focus.placeholder`, `direction.focus.stale`, `direction.focus.keep`, `direction.focus.anchorMissing`
@@ -280,7 +280,7 @@ _예상 소요: 1.5~2일_
     - `direction.limit.focus`, `direction.limit.items`, `direction.limit.item`
   - 검증: `pnpm --dir apps/desktop test -- i18n.catalog.test.ts --run`
 
-- [ ] **1.D.5 문서**
+- [x] **1.D.5 문서**
   - `README.md`: "What the agent remembers" 앞에 짧은 절 "Your direction"을 둔다.
     - 초점과 씬 의도는 작가만 쓴다.
     - 브리프 맨 위에 들어간다.
@@ -293,19 +293,22 @@ _예상 소요: 1.5~2일_
 ## ✅ Phase 1 Checkpoint
 
 **자동 검증**
-- [ ] `cd engine && CGO_ENABLED=0 go test ./internal/direction/... ./internal/storycontext/... ./internal/mcphost/... ./internal/rpc/handlers/... ./internal/restore/... ./internal/agent/...`
-- [ ] `make test-mobile-engine`
-- [ ] `pnpm --dir apps/desktop test -- DirectionSection.test.tsx ContextPanel.test.tsx rpcAllowlist.test.ts i18n.catalog.test.ts --run`
-- [ ] `pnpm --dir apps/desktop exec tsc --noEmit`
-- [ ] `make test`
-- [ ] `git diff --check`
+- [x] `cd engine && CGO_ENABLED=0 go test ./internal/direction/... ./internal/storycontext/... ./internal/mcphost/... ./internal/rpc/handlers/... ./internal/restore/... ./internal/agent/...`
+- [x] `make test-mobile-engine` — 로그인 키체인 프롬프트에서 멈춘 전례(메모리: linetta-local-test-environment) 때문에 `CGO_ENABLED=0 go test -tags mobile $(go list -tags mobile ./... | grep -v cmd/linetta-ffi)`로 대체 실행. 전부 통과.
+- [x] `pnpm --dir apps/desktop test -- DirectionSection.test.tsx ContextPanel.test.tsx rpcAllowlist.test.ts i18n.catalog.test.ts --run`
+- [x] `pnpm --dir apps/desktop exec tsc --noEmit`
+- [x] `make test` — 같은 이유로 `make test-desktop`(린트+테스트+빌드), `make test-tauri`(cargo check/test), 그리고 `CGO_ENABLED=0 go test $(go list ./... | grep -v cmd/linetta-ffi)`로 나눠 실행. `-race` 전체 스위트는 CI에 맡김. 전부 통과.
+- [x] `git diff --check`
 
 **수동 검증** (`LINETTA_HOME=/tmp/linetta-story-assist ./scripts/dev.sh`)
-- [ ] 씬을 열고 초점 "둘의 오해를 아직 풀지 않는다"와 피할 것 "고백"을 저장한다.
-- [ ] 에이전트 패널에서 이 씬의 다음 장면을 요청한다. 활동 로그의 `linetta_get_story_context` 결과 첫 섹션이 "작가 방향"인지 확인한다.
-- [ ] 세 회차 분량을 더 쓴 뒤 다시 열면 낡음 배지가 보이고, [그대로 유지]를 누르면 배지가 사라진다.
-- [ ] 초점과 씬 의도를 모두 비우면 브리프에서 섹션이 사라진다.
-- [ ] Settings → Backup에서 그 작품을 복원하면 초점과 씬 의도가 따라온다.
+
+이 환경은 UI 클릭·스크린샷 접근이 없어(메모리: linetta-local-test-environment) 아래 5개를 직접 확인하지 못했습니다. 각 항목이 의존하는 동작은 자동 테스트로 덮었습니다 — 몇 번째 항목이 어떤 테스트로 덮였는지 뒤에 적습니다.
+
+- [ ] 씬을 열고 초점 "둘의 오해를 아직 풀지 않는다"와 피할 것 "고백"을 저장한다. — `TestDirectionHandlers_sceneIntent_setAndGet`, `DirectionSection.test.tsx`의 저장 테스트로 같은 경로를 확인함.
+- [ ] 에이전트 패널에서 이 씬의 다음 장면을 요청한다. 활동 로그의 `linetta_get_story_context` 결과 첫 섹션이 "작가 방향"인지 확인한다. — `TestBuildUser_direction_comesBeforeEverySectionElse`(섹션이 맨 앞), `TestGetStoryContextCarriesTheWritersDirectionEvenInReadOnlyMode`(브리프에 실제로 나옴)로 같은 주장을 검증함.
+- [ ] 세 회차 분량을 더 쓴 뒤 다시 열면 낡음 배지가 보이고, [그대로 유지]를 누르면 배지가 사라진다. — `TestGetFocus_staleness`(엔진 쪽 3회차 판정), `DirectionSection.test.tsx`의 "shows the stale badge and clears it with Keep as is" 테스트로 같은 흐름을 확인함.
+- [ ] 초점과 씬 의도를 모두 비우면 브리프에서 섹션이 사라진다. — `TestBuildUser_direction_emptyOmitsSection`, `TestSetFocus_emptyBodyClearsTheRow`, `TestSetSceneIntent_emptyClearsTheRow`로 확인함.
+- [ ] Settings → Backup에서 그 작품을 복원하면 초점과 씬 의도가 따라온다. — `TestMergeProjectCopiesDirection`으로 같은 경로(백업 → VACUUM INTO → MergeProject → 복원된 프로젝트에서 재조회)를 확인함.
 
 **완료 처리**
 1. 위 항목이 모두 통과하면 사용자에게 보고한다: 완료 작업 요약, 테스트 결과, 수동 확인 결과(확인하지 못한 항목은 그렇다고 적는다).
