@@ -18,6 +18,15 @@ interface Props {
   projectId: string;
   nodeId: string;
   selectedClaimRequest?: { id: string; claim: string } | null;
+  /** Scrolls to and highlights an existing card by id — a continuity
+   *  observation's fact ref (story-assist Phase 2), which may point at a
+   *  card scoped to a different scene than the one open in the editor.
+   *  While set, the list fetches every fact in the work rather than only
+   *  this scene's, so the target card is never missing from the list it is
+   *  supposed to highlight. Distinct from selectedClaimRequest: that one
+   *  fills the new-card form for a claim that does not have a card yet;
+   *  this one shows a card that already does. */
+  highlightFactId?: string | null;
   onClose: () => void;
   onChanged?: () => void;
   onImpactCheck?: (text: string) => void;
@@ -41,6 +50,7 @@ export function FactBookPanel({
   projectId,
   nodeId,
   selectedClaimRequest,
+  highlightFactId,
   onClose,
   onChanged,
   onImpactCheck,
@@ -54,20 +64,26 @@ export function FactBookPanel({
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [noteKind, setNoteKind] = useState<"ok" | "error">("ok");
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const claimInputRef = useRef<HTMLInputElement | null>(null);
   const handledClaimRequestRef = useRef<string | null>(null);
+  const handledHighlightRef = useRef<string | null>(null);
 
   const loadFacts = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      setCards(await factsApi.list(projectId, nodeId));
+      // While highlighting a specific card, fetch the whole work rather
+      // than only this scene's facts — the card a continuity observation
+      // points at may belong to a scene other than the one open in the
+      // editor, and the normal scene-scoped list would leave it out.
+      setCards(await factsApi.list(projectId, highlightFactId ? undefined : nodeId));
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [projectId, nodeId]);
+  }, [projectId, nodeId, highlightFactId]);
 
   useEffect(() => { void loadFacts(); }, [loadFacts]);
 
@@ -83,6 +99,28 @@ export function FactBookPanel({
     setNote("");
     claimInputRef.current?.focus();
   }, [selectedClaimRequest]);
+
+  // A continuity observation's fact ref: show the card that already exists
+  // rather than prefilling the new-card form with its claim text, which
+  // would read as "make a new one" and risked a duplicate (story-assist
+  // Phase 2 review). Waits for loadFacts so the target is actually in
+  // `cards` before marking it handled — a ref to a card that was deleted
+  // since the observation was recorded simply never highlights, the same
+  // "no longer resolves" handling story-assist already gives other refs.
+  useEffect(() => {
+    if (!highlightFactId || handledHighlightRef.current === highlightFactId) return;
+    if (loading) return;
+    if (!cards.some((c) => c.id === highlightFactId)) return;
+    handledHighlightRef.current = highlightFactId;
+    setHighlightedId(highlightFactId);
+  }, [highlightFactId, cards, loading]);
+
+  // Separate from the effect above so the scroll runs against the DOM the
+  // highlight class just committed, not the one from before it existed.
+  useEffect(() => {
+    if (!highlightedId) return;
+    document.getElementById(`fact-card-${highlightedId}`)?.scrollIntoView({ block: "center" });
+  }, [highlightedId]);
 
   const saveCard = async () => {
     const claim = claimDraft.trim();
@@ -173,7 +211,11 @@ export function FactBookPanel({
         {error && <p className="fact-empty">{t("factBook.failed", { error })}</p>}
         {!loading && !error && cards.length === 0 && <p className="fact-empty">{t("factBook.empty")}</p>}
         {cards.map((card) => (
-          <article key={card.id} className="fact-card">
+          <article
+            key={card.id}
+            id={`fact-card-${card.id}`}
+            className={`fact-card${card.id === highlightedId ? " is-highlighted" : ""}`}
+          >
             <div className="fact-card-head">
               <span className={`fact-status ${card.status}`}>{t(statusKey(card.status))}</span>
               <span className="fact-scope">{card.node_id ? t("factBook.currentScene") : t("factBook.projectWide")}</span>

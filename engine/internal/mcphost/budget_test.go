@@ -18,18 +18,26 @@ import (
 // not there — both silent.
 func TestToolGroupNamesAreAllRealTools(t *testing.T) {
 	all := append(append([]string{}, ReadToolNames...), WriteToolNames...)
-	for _, group := range [][]string{MemoryToolNames, SkillToolNames} {
+	groups := [][]string{MemoryToolNames, SkillToolNames, ReviewToolNames}
+	for _, group := range groups {
 		for _, n := range group {
 			if !slices.Contains(all, n) {
 				t.Errorf("group names %q, which is in neither ReadToolNames nor WriteToolNames", n)
 			}
 		}
 	}
-	// And the two groups must not overlap: a tool counted twice would make
-	// the pane's arithmetic wrong in a way nothing else notices.
-	for _, n := range MemoryToolNames {
-		if slices.Contains(SkillToolNames, n) {
-			t.Errorf("%q is in both the memory and the skills group", n)
+	// And no two groups may overlap: a tool counted twice would make the
+	// pane's arithmetic wrong in a way nothing else notices.
+	for i, a := range groups {
+		for j, b := range groups {
+			if i >= j {
+				continue
+			}
+			for _, n := range a {
+				if slices.Contains(b, n) {
+					t.Errorf("%q is in two tool-budget groups at once", n)
+				}
+			}
 		}
 	}
 }
@@ -41,10 +49,11 @@ func TestToolGroupNamesAreAllRealTools(t *testing.T) {
 func TestToolNamesMatchesWhatTheServerActuallyServes(t *testing.T) {
 	for _, mode := range []string{settings.MCPModeReadOnly, settings.MCPModeFull} {
 		for _, groups := range []ToolGroups{
-			{Memory: true, Skills: true},
-			{Memory: false, Skills: true},
-			{Memory: true, Skills: false},
-			{Memory: false, Skills: false},
+			{Memory: true, Skills: true, Review: true},
+			{Memory: false, Skills: true, Review: true},
+			{Memory: true, Skills: false, Review: true},
+			{Memory: true, Skills: true, Review: false},
+			{Memory: false, Skills: false, Review: false},
 		} {
 			t.Run(nameFor(mode, groups), func(t *testing.T) {
 				// Sorted on both sides: tools/list returns names in the
@@ -70,7 +79,8 @@ func TestAGroupThatIsOffIsAbsentFromToolsListInBothModes(t *testing.T) {
 	for _, mode := range []string{settings.MCPModeReadOnly, settings.MCPModeFull} {
 		t.Run(mode, func(t *testing.T) {
 			off := registeredToolNamesWithGroups(t, mode, ToolGroups{})
-			for _, n := range append(append([]string{}, MemoryToolNames...), SkillToolNames...) {
+			optional := append(append(append([]string{}, MemoryToolNames...), SkillToolNames...), ReviewToolNames...)
+			for _, n := range optional {
 				if slices.Contains(off, n) {
 					t.Errorf("%s: %q is still served with its group switched off", mode, n)
 				}
@@ -79,7 +89,7 @@ func TestAGroupThatIsOffIsAbsentFromToolsListInBothModes(t *testing.T) {
 			// the writer a manuscript tool.
 			on := registeredToolNamesWithGroups(t, mode, AllToolGroups())
 			for _, n := range on {
-				if slices.Contains(MemoryToolNames, n) || slices.Contains(SkillToolNames, n) {
+				if slices.Contains(optional, n) {
 					continue
 				}
 				if !slices.Contains(off, n) {
@@ -111,7 +121,7 @@ func TestDefaultsServeTheWholeToolSet(t *testing.T) {
 // stays reported whether or not it is currently on, because that is the price
 // the writer is deciding about.
 func TestMeasureToolBudgetTracksTheSwitches(t *testing.T) {
-	full, ok := MeasureToolBudget(true, true)
+	full, ok := MeasureToolBudget(true, true, true)
 	if !ok {
 		t.Fatal("the tool set could not be measured at all")
 	}
@@ -119,24 +129,27 @@ func TestMeasureToolBudgetTracksTheSwitches(t *testing.T) {
 		t.Fatalf("default budget = %d tools, want %d (measurement failed?)",
 			full.Tools, len(ReadToolNames)+len(WriteToolNames))
 	}
-	if full.Bytes <= 0 || full.Memory.Bytes <= 0 || full.Skills.Bytes <= 0 {
+	if full.Bytes <= 0 || full.Memory.Bytes <= 0 || full.Skills.Bytes <= 0 || full.Review.Bytes <= 0 {
 		t.Fatalf("budget carries no bytes: %+v", full)
 	}
-	if full.Memory.Tools != len(MemoryToolNames) || full.Skills.Tools != len(SkillToolNames) {
-		t.Errorf("group tool counts = memory %d skills %d, want %d and %d",
-			full.Memory.Tools, full.Skills.Tools, len(MemoryToolNames), len(SkillToolNames))
+	if full.Memory.Tools != len(MemoryToolNames) || full.Skills.Tools != len(SkillToolNames) || full.Review.Tools != len(ReviewToolNames) {
+		t.Errorf("group tool counts = memory %d skills %d review %d, want %d, %d and %d",
+			full.Memory.Tools, full.Skills.Tools, full.Review.Tools,
+			len(MemoryToolNames), len(SkillToolNames), len(ReviewToolNames))
 	}
 
-	none, _ := MeasureToolBudget(false, false)
-	if none.Tools != full.Tools-full.Memory.Tools-full.Skills.Tools {
-		t.Errorf("with both groups off the budget is %d tools; %d minus the two groups is %d",
-			none.Tools, full.Tools, full.Tools-full.Memory.Tools-full.Skills.Tools)
+	none, _ := MeasureToolBudget(false, false, false)
+	groupTools := full.Memory.Tools + full.Skills.Tools + full.Review.Tools
+	groupBytes := full.Memory.Bytes + full.Skills.Bytes + full.Review.Bytes
+	if none.Tools != full.Tools-groupTools {
+		t.Errorf("with every group off the budget is %d tools; %d minus the groups is %d",
+			none.Tools, full.Tools, full.Tools-groupTools)
 	}
-	if none.Bytes != full.Bytes-full.Memory.Bytes-full.Skills.Bytes {
-		t.Errorf("with both groups off the budget is %d bytes; %d minus the two groups is %d",
-			none.Bytes, full.Bytes, full.Bytes-full.Memory.Bytes-full.Skills.Bytes)
+	if none.Bytes != full.Bytes-groupBytes {
+		t.Errorf("with every group off the budget is %d bytes; %d minus the groups is %d",
+			none.Bytes, full.Bytes, full.Bytes-groupBytes)
 	}
-	if none.Memory.Bytes != full.Memory.Bytes || none.Skills.Bytes != full.Skills.Bytes {
+	if none.Memory.Bytes != full.Memory.Bytes || none.Skills.Bytes != full.Skills.Bytes || none.Review.Bytes != full.Review.Bytes {
 		t.Error("a switched-off group stopped reporting what it costs, so the pane can no longer " +
 			"tell the writer what switching it back on would buy")
 	}
@@ -188,6 +201,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if name == "linetta_publish_status" || name == "linetta_publish_episode" {
 			continue
 		}
+		// story-assist Phase 2's report tool carries its own allowance below.
+		if name == "linetta_report_continuity" {
+			continue
+		}
 		total += b
 	}
 	// #162 measured 1,815B for linetta_analyze_style. #163 added the
@@ -205,6 +222,12 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"]; pub > 2050 {
 		t.Errorf("publish tools cost %dB, want <= 2050B", pub)
 	}
+	// story-assist Phase 2 measured 3,436B for linetta_report_continuity —
+	// the nested observations[].refs[] schema is most of it, and that
+	// structure is the whole point of engine-side validation.
+	if report := sizes["linetta_report_continuity"]; report > 3600 {
+		t.Errorf("linetta_report_continuity costs %dB, want <= 3600B", report)
+	}
 	writes := 0
 	for _, name := range VisualWriteToolNames {
 		writes += sizes[name]
@@ -220,10 +243,13 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// #132 measured 26,525B for the full 19-tool set (down from 27,687B).
 	// story-assist Phase 1 added linetta_get_story_context's IncludeDirection
 	// field (the switch behind storycontext.ContextKeyDirection, matching
-	// IncludeSkills), measured at 26,976B — the ceiling moves up with it.
-	if total > 27100 {
-		t.Errorf("the original 19-tool budget is %dB, want <= 27100B "+
-			"(#132 trimmed it from 27687B to 26525B; story-assist Phase 1 raised it to 27100B for IncludeDirection)", total)
+	// IncludeSkills), measured at 26,976B. story-assist Phase 2 added
+	// linetta_read_scene's numbered field, measured at 27,279B — the
+	// ceiling moves up with it; linetta_report_continuity carries its own
+	// allowance above and is excluded from this total.
+	if total > 27400 {
+		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 27400B "+
+			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B then 27400B)", total)
 	}
 }
 
@@ -282,6 +308,9 @@ func nameFor(mode string, g ToolGroups) string {
 	}
 	if g.Skills {
 		s += "+skills"
+	}
+	if g.Review {
+		s += "+review"
 	}
 	return s
 }

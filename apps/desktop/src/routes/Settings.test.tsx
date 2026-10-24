@@ -596,6 +596,34 @@ describe("Settings", () => {
     await waitFor(() => expect(screen.getByTestId("tool-budget-current")).toHaveTextContent("17"));
   });
 
+  // story-assist Phase 2's Review group follows the same contract as Memory
+  // and Skills above: on by default, its own measured cost shown whether or
+  // not it is currently on, and a click flips exactly that one switch.
+  it("shows the Review group's cost and flips only that switch", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({
+      ...baseSettings,
+      tool_budget: {
+        tools: 20,
+        bytes: 29000,
+        memory: { tools: 1, bytes: 1357 },
+        skills: { tools: 2, bytes: 4636 },
+        review: { tools: 1, bytes: 1313 },
+      },
+    });
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    expect(screen.getByTestId("tool-budget-review")).toHaveTextContent("1.3 kB");
+
+    mocks.settingsSet.mockResolvedValue({ ...baseSettings, review_tools_enabled: false });
+    await user.click(screen.getByRole("button", { name: /점검·제안/ }));
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ review_tools_enabled: false }),
+    );
+  });
+
   it("saves the per-turn tool-call limit on blur and pulls an out-of-range value to the bound", async () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
     mocks.settingsGet.mockResolvedValue({ ...baseSettings });

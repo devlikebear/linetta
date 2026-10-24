@@ -309,6 +309,38 @@ func TestSetSceneIntent_dedupsAndTrimsKeepAvoid(t *testing.T) {
 	}
 }
 
+// Phase 1 PR #227's known issue: Goal was only TrimSpace'd, so a pasted
+// multi-line goal — or one with doubled internal spaces — survived as
+// several lines instead of the "one-line goal" contract SceneIntent's own
+// doc comment promises. Folding must match normalizeList's own rule for
+// keep/avoid items, so the two fields read consistently.
+func TestSetSceneIntent_foldsInternalWhitespaceInGoal(t *testing.T) {
+	f := newFixture(t)
+	nodeID := f.episodes[0]
+	out, err := f.repo.SetSceneIntent(context.Background(), 1000, SceneIntent{
+		NodeID: nodeID, Goal: "  거리를   좁힌다\n\n하지만   들키지 않는다  ",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "거리를 좁힌다 하지만 들키지 않는다"
+	if out.Goal != want {
+		t.Errorf("goal = %q, want %q (internal newlines and runs of spaces folded to one space)", out.Goal, want)
+	}
+
+	// The fold happens before the limit check, not after: a goal that only
+	// LOOKS short because of doubled whitespace must not slip past
+	// MaxGoalRunes once collapsed, and a round trip through GetSceneIntent
+	// must return exactly what was stored.
+	got, present, err := f.repo.GetSceneIntent(context.Background(), nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !present || got.Goal != want {
+		t.Errorf("GetSceneIntent = %q (present=%v), want %q", got.Goal, present, want)
+	}
+}
+
 func TestSetSceneIntent_rejectsNonScene(t *testing.T) {
 	f := newFixture(t)
 	containerID := f.episodes[1]

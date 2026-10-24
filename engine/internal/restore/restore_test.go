@@ -12,6 +12,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
@@ -470,5 +471,162 @@ func TestMergeProjectCopiesDirection(t *testing.T) {
 	if !present || intent.Goal != "거리를 좁힌다" || len(intent.Keep) != 1 || intent.Keep[0] != "침묵" ||
 		len(intent.Avoid) != 1 || intent.Avoid[0] != "고백" {
 		t.Fatalf("merged scene intent = %+v, present=%v", intent, present)
+	}
+}
+
+// Story-assist Phase 2, 2.C.2: continuity checks and observations follow a
+// work through a backup and restore. The policy is deliberate and
+// user-confirmed (2026-10-24): an observation's writer judgement (dismissed,
+// resolved) is work that must not vanish on restore, unlike Phase 3/4's
+// evidence packages and forecasts.
+func TestMergeProjectCopiesContinuity(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "연속성", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := *p.LastOpenedNodeID
+	if err := nodes.UpdateContent(ctx, leaf,
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"하린은 왼손으로 검을 뽑았다."}]}]}`, 1000); err != nil {
+		t.Fatal(err)
+	}
+	n, err := nodes.Get(ctx, leaf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entities := entity.NewRepo(st)
+	harin, err := entities.Create(ctx, 1000, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "하린"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	threads := thread.NewRepo(st)
+	th, err := threads.Create(ctx, thread.NewInput{ProjectID: p.ID, Name: "줄기"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beats := beat.NewRepo(st)
+	bt, err := beats.Create(ctx, beat.NewInput{ThreadID: th.ID, Label: "첫 전투"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	contRepo := continuity.NewRepo(st)
+	check, err := contRepo.Record(ctx, 1500, continuity.ReportInput{
+		ProjectID: p.ID, NodeID: leaf, SceneVersion: n.ContentVersion,
+		Note: "한 번 확인함",
+		Observations: []continuity.ObservationInput{
+			{
+				Category: continuity.CategoryCharacter, Kind: continuity.KindContradiction,
+				Severity: continuity.SeverityMedium, Summary: "왼손/오른손 불일치",
+				ParagraphFrom: 1, ParagraphTo: 1, Quote: "하린은 왼손으로 검을 뽑았다.",
+				Refs: []continuity.Ref{
+					{Type: continuity.RefTypeEntity, ID: harin.ID},
+					{Type: continuity.RefTypeBeat, ID: bt.ID},
+					// A ref to an id that is not actually in this work —
+					// remapContinuityRefs must drop it rather than leave a
+					// dangling pointer across the restore.
+					{Type: continuity.RefTypeEntity, ID: "no-such-entity"},
+				},
+			},
+			{
+				Category: continuity.CategoryOther, Kind: continuity.KindQuestion,
+				Severity: continuity.SeverityLow, Summary: "확인이 필요한 대목",
+				ParagraphFrom: 1, ParagraphTo: 1, Quote: "하린은 왼손으로 검을 뽑았다.",
+			},
+		},
+	}, continuity.SourceAgent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checks, err := contRepo.List(ctx, continuity.ListFilter{ProjectID: p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(checks) != 1 || len(checks[0].Observations) != 2 {
+		t.Fatalf("test setup: checks = %+v", checks)
+	}
+	dismissedID := checks[0].Observations[1].ID
+	if _, err := contRepo.SetStatus(ctx, 1600, dismissedID, continuity.StatusDismissed); err != nil {
+		t.Fatal(err)
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mergedRepo := continuity.NewRepo(live)
+	mergedChecks, err := mergedRepo.List(ctx, continuity.ListFilter{ProjectID: merged.ProjectID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mergedChecks) != 1 {
+		t.Fatalf("merged checks = %+v, want 1", mergedChecks)
+	}
+	mc := mergedChecks[0]
+	if mc.ID == check.ID {
+		t.Fatal("the merged check must get a fresh id")
+	}
+	if mc.Note != "한 번 확인함" || mc.ContentVersion != n.ContentVersion || mc.Source != continuity.SourceAgent {
+		t.Fatalf("merged check = %+v", mc)
+	}
+	if mc.Stale {
+		t.Fatal("a scene restored at the same content_version must not read as stale")
+	}
+	if len(mc.Observations) != 2 {
+		t.Fatalf("merged observations = %d, want 2", len(mc.Observations))
+	}
+
+	var contradiction, question continuity.Observation
+	for _, o := range mc.Observations {
+		switch o.Kind {
+		case continuity.KindContradiction:
+			contradiction = o
+		case continuity.KindQuestion:
+			question = o
+		}
+	}
+	if question.Status != continuity.StatusDismissed {
+		t.Errorf("the writer's dismiss must survive the restore: status = %q", question.Status)
+	}
+	if len(contradiction.Refs) != 2 {
+		t.Fatalf("contradiction refs = %+v, want 2 (the dangling entity ref must be dropped)", contradiction.Refs)
+	}
+	var sawEntity, sawBeat bool
+	for _, ref := range contradiction.Refs {
+		switch ref.Type {
+		case continuity.RefTypeEntity:
+			sawEntity = true
+			if ref.ID == harin.ID {
+				t.Error("entity ref must be remapped to the copy's own entity id")
+			}
+		case continuity.RefTypeBeat:
+			sawBeat = true
+			if ref.ID == bt.ID {
+				t.Error("beat ref must be remapped to the copy's own beat id")
+			}
+		}
+	}
+	if !sawEntity || !sawBeat {
+		t.Fatalf("expected one entity ref and one beat ref, got %+v", contradiction.Refs)
 	}
 }

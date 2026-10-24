@@ -10,6 +10,7 @@ package restore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/google/uuid"
@@ -182,9 +184,9 @@ type MergeResult struct {
 // node_snapshots, fact_cards, fact_sources, writing_stats, agent_memory
 // (work_notes scope only), entity_visuals, entity_reference_images,
 // project_art_style, project_style_rules, illustrations, project_focus,
-// scene_intents. Library-level history (companion transcripts, AI runs,
-// MCP activity, the global writer_profile memory) stays with the
-// library it belongs to.
+// scene_intents, continuity_checks, continuity_observations. Library-level
+// history (companion transcripts, AI runs, MCP activity, the global
+// writer_profile memory) stays with the library it belongs to.
 func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, projectID, titleSuffix string, now time.Time) (MergeResult, error) {
 	src, done, err := openBackupCopy(ctx, backupPath, tempDir)
 	if err != nil {
@@ -211,6 +213,10 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	nodeMap := map[string]string{}
 	entityMap := map[string]string{}
 	threadMap := map[string]string{}
+	// beatMap lets continuity_observations' refs_json (story-assist Phase 2)
+	// follow a beat ref to its new id, the same way entityMap and cardMap do
+	// for entity and fact refs.
+	beatMap := map[string]string{}
 	cardMap := map[string]string{}
 	pairMap := map[string]string{}
 
@@ -383,7 +389,9 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			if !ok {
 				return nil, false
 			}
-			row["id"] = uuid.NewString()
+			newID := uuid.NewString()
+			beatMap[asString(row["id"])] = newID
+			row["id"] = newID
 			row["thread_id"] = th
 			if n := asString(row["node_id"]); n != "" {
 				if mapped, ok := nodeMap[n]; ok {
@@ -491,6 +499,56 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return row, true
 	}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy agent_memory: %w", err)
+	}
+
+	// continuity_checks and continuity_observations (story-assist Phase 2).
+	// A check or observation has nothing to mean without its scene, so both
+	// are dropped — not nulled — when their node did not come along, the
+	// same rule scene_intents follows above. Status and content_version
+	// travel unchanged: a restored scene at the same version keeps the
+	// same staleness verdict it had before the backup. Deliberately
+	// included rather than left with evidence packages and forecasts
+	// (Phase 3/4) — see docs/plans/story-assist/phase-2-continuity.md's
+	// 2.C.2: an observation is tied to a scene and a quote from it, so its
+	// meaning survives the remap in a way a proposal or a forecast does
+	// not, and the writer's own dismiss/resolve judgement is work the
+	// restore must not erase.
+	checkMap := map[string]string{}
+	if err := copyRows(ctx, sdb, tx, "continuity_checks",
+		"node_id IN (SELECT id FROM nodes WHERE project_id = ?)", []any{projectID},
+		func(row map[string]any) (map[string]any, bool) {
+			n, ok := nodeMap[asString(row["node_id"])]
+			if !ok {
+				return nil, false
+			}
+			newID := uuid.NewString()
+			checkMap[asString(row["id"])] = newID
+			row["id"] = newID
+			row["node_id"] = n
+			row["project_id"] = newProjectID
+			return row, true
+		}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy continuity_checks: %w", err)
+	}
+	if err := copyRows(ctx, sdb, tx, "continuity_observations",
+		"node_id IN (SELECT id FROM nodes WHERE project_id = ?)", []any{projectID},
+		func(row map[string]any) (map[string]any, bool) {
+			n, ok := nodeMap[asString(row["node_id"])]
+			if !ok {
+				return nil, false
+			}
+			c, ok := checkMap[asString(row["check_id"])]
+			if !ok {
+				return nil, false
+			}
+			row["id"] = uuid.NewString()
+			row["check_id"] = c
+			row["node_id"] = n
+			row["project_id"] = newProjectID
+			row["refs_json"] = remapContinuityRefs(asString(row["refs_json"]), nodeMap, entityMap, cardMap, beatMap)
+			return row, true
+		}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy continuity_observations: %w", err)
 	}
 
 	if lastOpenedNodeID.Valid {
@@ -634,6 +692,48 @@ func rewriteIllustrationIDs(row map[string]any, ids map[string]string) {
 	if next, changed, err := illustref.RewriteIDs(doc, ids); err == nil && changed {
 		row["content_doc"] = next
 	}
+}
+
+// remapContinuityRefs rewrites a continuity_observations.refs_json value
+// for the merge's fresh ids. entity, fact and beat ids are remapped the way
+// the rest of the merge maps them; a ref whose target did not come along
+// (no mapping for it) is DROPPED rather than kept dangling — a ref the
+// screen cannot resolve would be a chip pointing nowhere. A scene ref maps
+// through nodeMap the same way, dropped if its scene did not come along
+// either. Malformed JSON copies through as "[]" rather than failing the
+// whole merge over one observation's refs.
+func remapContinuityRefs(raw string, nodeMap, entityMap, cardMap, beatMap map[string]string) string {
+	var refs []continuity.Ref
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &refs)
+	}
+	out := make([]continuity.Ref, 0, len(refs))
+	for _, ref := range refs {
+		var mapped string
+		var ok bool
+		switch ref.Type {
+		case continuity.RefTypeEntity:
+			mapped, ok = entityMap[ref.ID]
+		case continuity.RefTypeFact:
+			mapped, ok = cardMap[ref.ID]
+		case continuity.RefTypeBeat:
+			mapped, ok = beatMap[ref.ID]
+		case continuity.RefTypeScene:
+			mapped, ok = nodeMap[ref.ID]
+		default:
+			continue
+		}
+		if !ok {
+			continue
+		}
+		ref.ID = mapped
+		out = append(out, ref)
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return "[]"
+	}
+	return string(b)
 }
 
 func asString(v any) string {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { NodeRow, Project, Entity, EntityKind } from "../lib/types";
-import { projects as projectsApi } from "../lib/rpc";
+import { projects as projectsApi, continuity as continuityApi } from "../lib/rpc";
 import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book, Search } from "../lib/icons";
 import { InlineEditableText } from "./InlineEditableText";
@@ -8,6 +8,9 @@ import { localeForLanguage, useI18n } from "../lib/i18n";
 import type { EpisodeStatusCounts } from "../hooks/useFirstLeaf";
 import { StatsSection } from "./StatsSection";
 import { DirectionSection } from "./DirectionSection";
+import { useEngineEvent } from "../hooks/useEngineEvent";
+import type { McpChangedPayload } from "../hooks/useMcpChanges";
+import type { ContinuityChangedPayload } from "../lib/types";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -35,6 +38,10 @@ interface Props {
   onProjectChanged?: (project: Project) => void;
   onProjectTitleChange?: (title: string) => void | Promise<void>;
   tourTarget?: string;
+  /** Opens Story World's continuity section, scoped to this scene
+   *  (story-assist Phase 2). Omitted entirely when the caller has not
+   *  wired it, the same optional-prop convention onAutoMention follows. */
+  onOpenContinuity?: () => void;
 }
 
 const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
@@ -75,13 +82,56 @@ function storeDirectionCollapsed(collapsed: boolean) {
   }
 }
 
-export function ContextPanel({ project, node, charCount, todayChars = null, episodeStock = null, statsRefreshKey = null, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, autoMentionFound = 0, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget }: Readonly<Props>) {
+export function ContextPanel({ project, node, charCount, todayChars = null, episodeStock = null, statsRefreshKey = null, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, autoMentionFound = 0, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget, onOpenContinuity }: Readonly<Props>) {
   const { language, t } = useI18n();
   const locale = localeForLanguage(language);
   const target = TARGET_WORDS[project.length_target] ?? 90000;
   const pct = target > 0 ? Math.min(100, Math.round((project.word_count / target) * 100)) : 0;
   const isWebnovelProject = project.outline_preset === "webnovel";
   const episodeCharTarget = project.episode_char_target > 0 ? project.episode_char_target : 5000;
+
+  // story-assist Phase 2: how many open continuity observations this scene
+  // carries, for a badge the writer can act on without opening Story World
+  // first just to find out. Fetched work-wide (continuity.open_counts) and
+  // looked up by node id, rather than once per scene, since the writer
+  // moves between scenes far more often than an agent reports a new check.
+  const [continuityCounts, setContinuityCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let cancelled = false;
+    continuityApi
+      .openCounts(project.id)
+      .then((res) => {
+        if (!cancelled) setContinuityCounts(res.counts);
+      })
+      .catch(() => {
+        /* The badge just stays off; it is a convenience, not a status the
+           writer depends on to know their work is safe. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id]);
+  useEngineEvent<McpChangedPayload>("mcp-changed", (event) => {
+    if (event.project_id && event.project_id !== project.id) return;
+    if (event.tool !== "linetta_report_continuity") return;
+    continuityApi
+      .openCounts(project.id)
+      .then((res) => setContinuityCounts(res.counts))
+      .catch(() => {});
+  });
+  // continuity.set_status (the writer resolving or dismissing an
+  // observation from Story World, in this window or another) does not fire
+  // mcp-changed — that event is for an agent's own tool calls — so the
+  // badge would otherwise keep showing a count the writer already acted on
+  // until something unrelated remounted this panel.
+  useEngineEvent<ContinuityChangedPayload>("continuity-changed", (event) => {
+    if (event.project_id && event.project_id !== project.id) return;
+    continuityApi
+      .openCounts(project.id)
+      .then((res) => setContinuityCounts(res.counts))
+      .catch(() => {});
+  });
+  const continuityOpenCount = continuityCounts[node.id] ?? 0;
   const [overview, setOverview] = useState(project.outline ?? "");
   const [synopsis, setSynopsis] = useState(project.synopsis ?? "");
   const [synopsisBusy, setSynopsisBusy] = useState<"rewrite" | "clear" | null>(null);
@@ -189,6 +239,11 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
             <span style={{ flex: 1 }} />
             <SaveStatusPill status={saveStatus} />
           </div>
+          {continuityOpenCount > 0 && onOpenContinuity && (
+            <button type="button" className="chip" data-testid="continuity-open-badge" onClick={onOpenContinuity}>
+              {t("continuity.openBadge", { count: String(continuityOpenCount) })}
+            </button>
+          )}
           {todayChars !== null && (
             <div className="scene-today">
               {t("workspace.todayChars", { count: todayChars.toLocaleString(locale) })}

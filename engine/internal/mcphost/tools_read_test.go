@@ -358,3 +358,80 @@ func TestSectionReportMatchesTheBriefForBothSources(t *testing.T) {
 		t.Errorf("external report should not list memories as empty: empty=%v", extOut.EmptySections)
 	}
 }
+
+/* ---------------------------------------------------------------------------
+ * story-assist Phase 2, 2.B.1: linetta_read_scene's numbered option. The
+ * contract is paragraph numbers a continuity report can cite — and those
+ * numbers must be the ones style.Paragraphs (and so linetta_analyze_style
+ * and linetta_report_continuity) would also produce for the same scene.
+ * ------------------------------------------------------------------------ */
+
+func TestReadScene_numberedPrefixesEachParagraph(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	doc := `{"type":"doc","content":[
+		{"type":"paragraph","content":[{"type":"text","text":"첫 문단."}]},
+		{"type":"paragraph","content":[{"type":"text","text":"둘째 문단."}]}
+	]}`
+	if err := d.Nodes.UpdateContent(ctx, nodeID, doc, 10); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+
+	_, out, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID, Numbered: true})
+	if err != nil {
+		t.Fatalf("readScene: %v", err)
+	}
+	want := "[1] 첫 문단.\n\n[2] 둘째 문단."
+	if out.Text != want {
+		t.Errorf("readScene numbered text = %q, want %q", out.Text, want)
+	}
+}
+
+// The numbers a numbered read hands out must be the exact numbers
+// linetta_analyze_style (and so linetta_report_continuity's validation)
+// would assign the same scene — see style.Paragraphs' doc comment.
+func TestReadScene_numberedMatchesStyleParagraphs(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	doc := `{"type":"doc","content":[
+		{"type":"paragraph","content":[{"type":"text","text":"하나."}]},
+		{"type":"paragraph"},
+		{"type":"paragraph","content":[{"type":"text","text":"둘."}]}
+	]}`
+	if err := d.Nodes.UpdateContent(ctx, nodeID, doc, 10); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+
+	_, out, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID, Numbered: true})
+	if err != nil {
+		t.Fatalf("readScene: %v", err)
+	}
+	want := "[1] 하나.\n\n[2] 둘."
+	if out.Text != want {
+		t.Errorf("readScene numbered text = %q, want %q (an empty paragraph must not get its own number)", out.Text, want)
+	}
+}
+
+func TestReadScene_numberedWithMarkdownIsRefused(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	res, _, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID, Numbered: true, Format: sceneFormatMarkdown})
+	if err != nil {
+		t.Fatalf("readScene: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("readScene(numbered=true, format=markdown) should be a tool error")
+	}
+}
+
+func TestReadScene_withoutNumberedIsUnchanged(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"평범한 문단."}]}]}`
+	if err := d.Nodes.UpdateContent(ctx, nodeID, doc, 10); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	_, out, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID})
+	if err != nil {
+		t.Fatalf("readScene: %v", err)
+	}
+	if strings.Contains(out.Text, "[1]") {
+		t.Errorf("a plain read without numbered=true must not be prefixed; got %q", out.Text)
+	}
+}

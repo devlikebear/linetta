@@ -10,6 +10,8 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
@@ -25,6 +27,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -49,6 +52,9 @@ type mcpToolRepos struct {
 	entities      *entity.Repo
 	mentions      *mention.Repo
 	facts         *fact.Repo
+	beats         *beat.Repo
+	threads       *thread.Repo
+	continuity    *continuity.Repo
 	plot          *plot.Builder
 	manuscript    *manuscript.Searcher
 	context       *storycontext.ContextBuilder

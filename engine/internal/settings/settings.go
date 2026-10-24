@@ -177,6 +177,13 @@ type Config struct {
 	VisualWriteToolsDisabled bool `json:"visual_write_tools_disabled"`
 	MemoryToolsEnabled       bool `json:"memory_tools_enabled"`
 	SkillToolsEnabled        bool `json:"skill_tools_enabled"`
+	// ReviewToolsEnabled is story-assist's "check and record a judgement"
+	// group (#99-shaped, same switch pattern as the two above):
+	// linetta_report_continuity in Phase 2, and whatever Phase 3/4 add to
+	// mcphost.ReviewToolNames. Defaults to ON for the same reason Memory and
+	// Skills do — a writer who never opens this pane keeps the tool set the
+	// release that shipped it had.
+	ReviewToolsEnabled bool `json:"review_tools_enabled"`
 	// ToolBudget is what those two switches actually cost, measured from the
 	// tool set the engine would register right now — never a table written
 	// down here. Derived at settings.get time and never persisted, for the
@@ -344,6 +351,7 @@ type Patch struct {
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
 	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
+	ReviewToolsEnabled        *bool                    `json:"review_tools_enabled,omitempty"`
 	// ImageProvider "" turns illustration drawing off.
 	ImageProvider  *string                       `json:"image_provider,omitempty"`
 	ImageProviders map[string]ImageProviderPatch `json:"image_providers,omitempty"`
@@ -436,6 +444,7 @@ func defaults(home string) Config {
 		// exactly the tool set 1.2 shipped. See Config.MemoryToolsEnabled.
 		MemoryToolsEnabled: true,
 		SkillToolsEnabled:  true,
+		ReviewToolsEnabled: true,
 	}
 }
 
@@ -533,6 +542,9 @@ func (s *Store) load() error {
 	}
 	if _, ok := raw["skill_tools_enabled"]; ok {
 		s.cfg.SkillToolsEnabled = disk.SkillToolsEnabled
+	}
+	if _, ok := raw["review_tools_enabled"]; ok {
+		s.cfg.ReviewToolsEnabled = disk.ReviewToolsEnabled
 	}
 	// An account with no handle is not a connection; drop it rather than
 	// show "connected" to nobody.
@@ -668,6 +680,15 @@ func (s *Store) SkillToolsEnabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg.SkillToolsEnabled
+}
+
+// ReviewToolsEnabled reports whether the Review tool group (story-assist
+// Phase 2's linetta_report_continuity, and later phases' additions to it) is
+// offered. Read per server build, like MemoryToolsEnabled.
+func (s *Store) ReviewToolsEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.ReviewToolsEnabled
 }
 
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
@@ -851,6 +872,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.SkillToolsEnabled != nil {
 		next.SkillToolsEnabled = *p.SkillToolsEnabled
 	}
+	if p.ReviewToolsEnabled != nil {
+		next.ReviewToolsEnabled = *p.ReviewToolsEnabled
+	}
 	if next.WebSearchProvider == "" {
 		next.WebSearchProvider = "brave"
 	}
@@ -992,6 +1016,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		VisualWriteToolsDisabled: next.VisualWriteToolsDisabled,
 		MemoryToolsEnabled:       next.MemoryToolsEnabled,
 		SkillToolsEnabled:        next.SkillToolsEnabled,
+		ReviewToolsEnabled:       next.ReviewToolsEnabled,
 		PublishAccount:           next.PublishAccount,
 		ImageProvider:            next.ImageProvider,
 		ImageProviders:           next.ImageProviders,
@@ -1167,7 +1192,7 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	// What the tool set the two switches govern actually costs (#99).
 	// Measured here rather than stored, so it can never describe a tool set
 	// the engine no longer serves.
-	c.ToolBudget = s.toolBudgetView(c.MemoryToolsEnabled, c.SkillToolsEnabled)
+	c.ToolBudget = s.toolBudgetView(c.MemoryToolsEnabled, c.SkillToolsEnabled, c.ReviewToolsEnabled)
 	if c.ToolBudget != nil && c.VisualWriteToolsDisabled {
 		c.ToolBudget.Tools -= c.ToolBudget.VisualWrites.Tools
 		c.ToolBudget.Bytes -= c.ToolBudget.VisualWrites.Bytes

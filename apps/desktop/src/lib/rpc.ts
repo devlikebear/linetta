@@ -1,5 +1,6 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
+import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
 import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, ImageProviderStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
@@ -645,4 +646,18 @@ export const direction = {
   /** goal, keep and avoid all empty clears the scene's intent. */
   setSceneIntent: (nodeId: string, goal: string, keep: string[], avoid: string[]) =>
     rpcCall<SceneIntent>("direction.set_scene_intent", { node_id: nodeId, goal, keep, avoid }),
+};
+
+/** Continuity checks (story-assist Phase 2): engine-verified observations an agent recorded. */
+export const continuity = {
+  list: (projectId: string, nodeId?: string, statuses?: ContinuityStatus[]) =>
+    rpcCall<{ checks: ContinuityCheck[] }>("continuity.list", {
+      project_id: projectId,
+      node_id: nodeId,
+      statuses,
+    }),
+  setStatus: (observationId: string, status: ContinuityStatus) =>
+    rpcCall<ContinuityObservation>("continuity.set_status", { observation_id: observationId, status }),
+  openCounts: (projectId: string) =>
+    rpcCall<ContinuityOpenCounts>("continuity.open_counts", { project_id: projectId }),
 };
