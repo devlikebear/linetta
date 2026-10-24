@@ -13,6 +13,8 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
@@ -27,6 +29,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -51,11 +54,22 @@ type ToolDeps struct {
 	Entities   *entity.Repo
 	Mentions   *mention.Repo
 	Facts      *fact.Repo
+	// Beats and Threads back linetta_report_continuity's beat refs: a beat
+	// carries no project_id of its own, only a thread_id, so checking a beat
+	// ref belongs to this work means resolving its thread (story-assist
+	// Phase 2). Nil in a build with no database open; the tool refuses
+	// rather than panicking.
+	Beats      *beat.Repo
+	Threads    *thread.Repo
 	Plot       *plot.Builder
 	Manuscript *manuscript.Searcher
 	Context    *storycontext.ContextBuilder
 	Settings   *settings.Store
 	Activity   *ActivityRepo
+	// Continuity stores each scene's continuity checks and observations
+	// (story-assist Phase 2). Nil in a build with no database open; the
+	// tool refuses rather than panicking.
+	Continuity *continuity.Repo
 
 	// Memory is the two curated documents every agent reads. Nil in a build
 	// with no database open; the tool refuses rather than panicking.

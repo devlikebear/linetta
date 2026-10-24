@@ -57,20 +57,26 @@ type toolGroups struct {
 	disableVisualWrites bool
 	memory              bool
 	skills              bool
+	// review is story-assist's "check and record a judgement" group
+	// (linetta_report_continuity in Phase 2; more from later phases).
+	review bool
 }
 
-func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true} }
+func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true, review: true} }
 
-// resolveToolGroups reads the two Deps funcs, treating a nil func as enabled
-// — the same "unwired collaborator degrades to the documented default" rule
-// Deps.SelfReviewEnabled follows.
-func resolveToolGroups(memory, skills func() bool) toolGroups {
+// resolveToolGroups reads the three Deps funcs, treating a nil func as
+// enabled — the same "unwired collaborator degrades to the documented
+// default" rule Deps.SelfReviewEnabled follows.
+func resolveToolGroups(memory, skills, review func() bool) toolGroups {
 	g := allToolGroups()
 	if memory != nil {
 		g.memory = memory()
 	}
 	if skills != nil {
 		g.skills = skills()
+	}
+	if review != nil {
+		g.review = review()
 	}
 	return g
 }
@@ -133,6 +139,9 @@ How you work:
 	// it, and the agent following it is the only one who can see that it did.
 	if groups.skills {
 		b.WriteString("- Record a technique with linetta_edit_skill once a complex task shows you a procedure worth repeating — the order of steps, not the facts. And the moment following a skill shows it is wrong, patch that skill before you move on; a stale procedure is followed every session until someone fixes it.\n")
+	}
+	if groups.review {
+		b.WriteString("- To check a scene's continuity, read it with linetta_read_scene numbered=true, get the brief, look earlier scenes up with linetta_where_does_appear / linetta_search_manuscript, and record what you find with linetta_report_continuity. Report contradictions with the work's own record, not taste; an empty result is fine. Do not fix the prose unless the writer asks.\n")
 	}
 	b.WriteString(memoryBlock(profile, notes, groups.memory))
 	if groups.skills {

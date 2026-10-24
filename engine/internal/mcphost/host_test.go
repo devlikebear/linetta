@@ -347,7 +347,7 @@ func TestTheHostResolvesTheToolBudgetForEverySessionItBuilds(t *testing.T) {
 	if len(seen) != 2 {
 		t.Fatalf("the second connection built %d servers in total, want 2", len(seen))
 	}
-	if want := (ToolGroups{Memory: true, Skills: false}); seen[1] != want {
+	if want := (ToolGroups{Memory: true, Skills: false, Review: true}); seen[1] != want {
 		t.Errorf("the session opened after the flip was built with %+v, want %+v — an "+
 			"external client would need an engine restart to see the switch", seen[1], want)
 	}

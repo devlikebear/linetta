@@ -23,6 +23,8 @@ const (
 	MaxQuoteRunes = 300
 	// MaxRefsPerObservation bounds how many refs one observation may cite.
 	MaxRefsPerObservation = 5
+	// MaxNoteRunes bounds a check's free-text note.
+	MaxNoteRunes = 500
 )
 
 // Categories: what kind of record an observation is about. category=direction
@@ -144,24 +146,27 @@ func ValidRefType(v string) bool {
 // earlier chapter said any more than it can invent what the current one
 // says.
 type Ref struct {
-	Type      string `json:"type"`
-	ID        string `json:"id"`
-	Paragraph int    `json:"paragraph,omitempty"`
-	Quote     string `json:"quote,omitempty"`
+	Type string `json:"type" jsonschema:"one of: entity, fact, beat, scene"`
+	ID   string `json:"id" jsonschema:"the id of the entity, fact card, beat, or scene (node) this observation points at"`
+	// Paragraph and Quote apply only when type is scene: the earlier scene's
+	// own paragraph number (as linetta_read_scene numbered=true would show
+	// it) and the exact text copied from it.
+	Paragraph int    `json:"paragraph,omitempty" jsonschema:"for type=scene only: the paragraph number in THAT scene, read numbered"`
+	Quote     string `json:"quote,omitempty" jsonschema:"for type=scene only: text copied exactly from that scene's paragraph"`
 }
 
 // ObservationInput is one finding exactly as a model reports it, before
 // Validate and Record give it an id, a check, and a status.
 type ObservationInput struct {
-	Category      string `json:"category"`
-	Kind          string `json:"kind"`
-	Severity      string `json:"severity"`
-	Summary       string `json:"summary"`
-	Suggestion    string `json:"suggestion,omitempty"`
-	ParagraphFrom int    `json:"paragraph_from"`
-	ParagraphTo   int    `json:"paragraph_to"`
-	Quote         string `json:"quote"`
-	Refs          []Ref  `json:"refs,omitempty"`
+	Category      string `json:"category" jsonschema:"one of: character, place, item, relationship, timeline, fact, plot, direction, other — direction means the writer's own scene intent or current focus"`
+	Kind          string `json:"kind" jsonschema:"one of: contradiction (disagrees with the work's own record — must cite a ref), gap (establishes something new; the writer decides whether to register it), question (an ambiguous passage)"`
+	Severity      string `json:"severity" jsonschema:"one of: high, medium, low"`
+	Summary       string `json:"summary" jsonschema:"what you found, in one or two sentences, at most 300 characters"`
+	Suggestion    string `json:"suggestion,omitempty" jsonschema:"optional: how it might be fixed, at most 300 characters — not an instruction to fix it yourself"`
+	ParagraphFrom int    `json:"paragraph_from" jsonschema:"first paragraph number this observation is about, as linetta_read_scene numbered=true showed it"`
+	ParagraphTo   int    `json:"paragraph_to" jsonschema:"last paragraph number (equal to paragraph_from for a single paragraph)"`
+	Quote         string `json:"quote" jsonschema:"text copied EXACTLY from those numbered paragraphs, at most 300 characters — never paraphrased or invented"`
+	Refs          []Ref  `json:"refs,omitempty" jsonschema:"what this observation points at — an entity, fact, beat, or earlier scene this work actually has; required for kind=contradiction"`
 }
 
 // Observation is one stored finding.
@@ -213,11 +218,11 @@ type CheckWithObservations struct {
 // slice is a clean check, not an error — "I looked and found nothing" is a
 // result worth keeping.
 type ReportInput struct {
-	ProjectID    string             `json:"project_id,omitempty"`
-	NodeID       string             `json:"node_id"`
-	SceneVersion int                `json:"scene_version"`
-	Observations []ObservationInput `json:"observations"`
-	Note         string             `json:"note,omitempty"`
+	ProjectID    string             `json:"project_id,omitempty" jsonschema:"optional; checked against the scene's work when given"`
+	NodeID       string             `json:"node_id" jsonschema:"id of the scene this check is about"`
+	SceneVersion int                `json:"scene_version" jsonschema:"the content_version linetta_read_scene returned when you read it; refused if the scene changed since"`
+	Observations []ObservationInput `json:"observations" jsonschema:"what you found; an empty list records a clean check — that is a valid result, not a failure"`
+	Note         string             `json:"note,omitempty" jsonschema:"free-text note about the check itself (what you compared it against), at most 500 characters"`
 }
 
 // ReportStatusWaitingForWriter is the only status Record's Report carries:

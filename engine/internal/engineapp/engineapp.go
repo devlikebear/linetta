@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/contextualedit"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
@@ -139,6 +140,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	notes := note.NewRepo(st)
 	relationships := relationship.NewRepo(st)
 	facts := fact.NewRepo(st)
+	continuityRepo := continuity.NewRepo(st)
 	manuscriptIndexer := manuscript.NewIndexer(st.DB())
 	manuscriptSearcher := manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer)
 	manuscriptEditor := manuscriptedit.NewService(nodes, snaps)
@@ -303,6 +305,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			entities:      entities,
 			mentions:      mentions,
 			facts:         facts,
+			beats:         beats,
+			threads:       threads,
+			continuity:    continuityRepo,
 			plot:          plotBuilder,
 			manuscript:    manuscriptSearcher,
 			context:       mcpContextBuilder,

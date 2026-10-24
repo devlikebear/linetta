@@ -63,6 +63,9 @@ func Validate(in ReportInput, paragraphs []string, lookup RefLookup) []Problem {
 		add(GlobalIndex, "report has %d observations; linetta_report_continuity takes at most %d per call — "+
 			"split the check across turns or drop the lowest-value findings", n, MaxObservationsPerReport)
 	}
+	if n := utf8.RuneCountInString(strings.TrimSpace(in.Note)); n > MaxNoteRunes {
+		add(GlobalIndex, "note is %d characters; the limit is %d", n, MaxNoteRunes)
+	}
 
 	for i, obs := range in.Observations {
 		num := i + 1 // 1-based, matching how the writer sees observations listed
