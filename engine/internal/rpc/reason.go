@@ -149,6 +149,11 @@ const (
 	ReasonPublishNotEpisode        = "publish_not_episode"
 	ReasonPublishEmptyEpisode      = "publish_empty_episode"
 	ReasonPublishBlurbRequired     = "publish_blurb_required"
+	// A picture in the episode is bigger than the site takes.
+	ReasonPublishImageTooLarge = "publish_image_too_large"
+	// The episode shows more pictures than the site takes (per episode or
+	// per work).
+	ReasonPublishTooManyImages = "publish_too_many_images"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine

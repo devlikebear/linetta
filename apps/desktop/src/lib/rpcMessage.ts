@@ -109,6 +109,8 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   publish_not_episode: "errors.publishNotEpisode",
   publish_empty_episode: "errors.publishEmptyEpisode",
   publish_blurb_required: "errors.publishBlurbRequired",
+  publish_image_too_large: "errors.publishImageTooLarge",
+  publish_too_many_images: "errors.publishTooManyImages",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

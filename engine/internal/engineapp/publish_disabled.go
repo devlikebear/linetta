@@ -27,6 +27,8 @@ type publishDeps struct {
 	db            *sql.DB
 	language      func(context.Context) string
 	clock         func() int64
+	// images is the gallery: published episodes carry their pictures.
+	images publish.Illustrations
 }
 
 func setupPublish(deps publishDeps) (*publish.Service, func() error) {

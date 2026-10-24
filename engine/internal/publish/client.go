@@ -155,6 +155,15 @@ type RemoteEpisode struct {
 	URL              string `json:"url"`
 	PublishedAt      string `json:"published_at"`
 	Updated          string `json:"updated"`
+	// Images are the pictures the site holds for the episode.
+	Images []RemoteImage `json:"images,omitempty"`
+}
+
+// RemoteImage is a picture the site holds for an episode. The bytes under an
+// illustration id never change, so a matching hash means nothing to upload.
+type RemoteImage struct {
+	IllustrationID string `json:"illustration_id"`
+	SHA256         string `json:"sha256"`
 }
 
 // EpisodeInput is the body of PUT works/{project_id}/episodes/{node_id}.
@@ -245,6 +254,18 @@ func (c *Client) PutEpisode(ctx context.Context, token, projectID, nodeID string
 	return out.Created, out.Episode, err
 }
 
+// PutEpisodeImage uploads one picture an episode's text shows. The body is
+// the image bytes; the site answers the same thing again without a change.
+func (c *Client) PutEpisodeImage(ctx context.Context, token, projectID, nodeID, illustrationID, mime string, data []byte) (created bool, img RemoteImage, err error) {
+	var out struct {
+		Created bool        `json:"created"`
+		Image   RemoteImage `json:"image"`
+	}
+	path := episodePath(projectID, nodeID) + "/images/" + url.PathEscape(illustrationID)
+	err = c.send(ctx, http.MethodPut, path, token, data, mime, &out)
+	return out.Created, out.Image, err
+}
+
 // SetEpisodeVisibility makes an episode public or private.
 func (c *Client) SetEpisodeVisibility(ctx context.Context, token, projectID, nodeID, visibility string) (RemoteEpisode, error) {
 	var out struct {
@@ -284,14 +305,19 @@ func (c *Client) do(ctx context.Context, method, path, token string, body, out a
 			return err
 		}
 	}
-	err := c.once(ctx, method, path, token, payload, out)
+	return c.send(ctx, method, path, token, payload, "application/json", out)
+}
+
+// send is do with the body already encoded as contentType.
+func (c *Client) send(ctx context.Context, method, path, token string, payload []byte, contentType string, out any) error {
+	err := c.once(ctx, method, path, token, payload, contentType, out)
 	if method == http.MethodPut && retryable(ctx, err) {
 		select {
 		case <-ctx.Done():
 			return err
 		case <-time.After(c.retryDelay):
 		}
-		err = c.once(ctx, method, path, token, payload, out)
+		err = c.once(ctx, method, path, token, payload, contentType, out)
 	}
 	return err
 }
@@ -311,7 +337,7 @@ func retryable(ctx context.Context, err error) bool {
 	return true
 }
 
-func (c *Client) once(ctx context.Context, method, path, token string, payload []byte, out any) error {
+func (c *Client) once(ctx context.Context, method, path, token string, payload []byte, contentType string, out any) error {
 	var reader io.Reader
 	if payload != nil {
 		reader = bytes.NewReader(payload)
@@ -323,7 +349,7 @@ func (c *Client) once(ctx context.Context, method, path, token string, payload [
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 	if payload != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", contentType)
 	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -377,7 +403,14 @@ const (
 	CodeNotFound          = "not_found"
 	CodeRateLimited       = "rate_limited"
 	CodeAlreadyClaimed    = "already_claimed"
+	CodeImagesMissing     = "images_missing"
+	CodeImageChanged      = "image_changed"
 )
+
+// MaxImagesPerEpisode is the site's limit on pictures in one episode
+// (docs/api.md, "한도"). The app stops before uploading any when an
+// episode shows more.
+const MaxImagesPerEpisode = 30
 
 // IsCode reports whether err is the site answering with code.
 func IsCode(err error, code string) bool {
