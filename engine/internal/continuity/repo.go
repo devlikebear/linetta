@@ -20,6 +20,18 @@ var ErrNotFound = errors.New("continuity observation not found")
 // scene.
 var ErrNodeRequired = errors.New("continuity: node_id required")
 
+// ErrInvalidStatus is returned when SetStatus is asked to set a status
+// outside open/dismissed/resolved/replaced.
+var ErrInvalidStatus = errors.New("continuity: invalid status")
+
+// ErrCannotSetReplaced is returned when SetStatus is asked to set replaced
+// directly — that status is Record's alone to assign.
+var ErrCannotSetReplaced = errors.New("continuity: cannot set status to replaced directly")
+
+// ErrObservationReplaced is returned when SetStatus is asked to change an
+// observation a later check has already replaced.
+var ErrObservationReplaced = errors.New("continuity: observation was replaced by a later check")
+
 // Repo stores continuity checks and observations in library.db, so they
 // travel with the backup (restore.MergeProject carries both tables).
 type Repo struct{ s *store.Store }
@@ -205,10 +217,10 @@ SELECT id, check_id, project_id, node_id, category, kind, severity, summary, sug
 // writer clicked something.
 func (r *Repo) SetStatus(ctx context.Context, now int64, observationID, status string) (Observation, error) {
 	if status == StatusReplaced {
-		return Observation{}, fmt.Errorf("continuity: set_status: cannot set status to %q directly", StatusReplaced)
+		return Observation{}, ErrCannotSetReplaced
 	}
 	if !ValidStatus(status) {
-		return Observation{}, fmt.Errorf("continuity: set_status: invalid status %q", status)
+		return Observation{}, ErrInvalidStatus
 	}
 
 	cur, err := r.getObservation(ctx, observationID)
@@ -216,7 +228,7 @@ func (r *Repo) SetStatus(ctx context.Context, now int64, observationID, status s
 		return Observation{}, err
 	}
 	if cur.Status == StatusReplaced {
-		return Observation{}, fmt.Errorf("continuity: set_status: observation %q was replaced by a later check; its status cannot change", observationID)
+		return Observation{}, ErrObservationReplaced
 	}
 
 	res, err := r.s.DB().ExecContext(ctx,

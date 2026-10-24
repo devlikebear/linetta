@@ -51,6 +51,13 @@ const (
 	ReasonDirectionItemTooLong  = "direction_item_too_long"
 	ReasonDirectionNotScene     = "direction_not_scene"
 
+	// Continuity checks (story-assist Phase 2). An observation's status can
+	// go stale under the writer's own hands — another window resolved it,
+	// or a fresh check replaced it — while this one still shows the open
+	// action buttons, so this is a failure a writer actually meets.
+	ReasonContinuityObservationNotFound = "continuity_observation_not_found"
+	ReasonContinuityObservationReplaced = "continuity_observation_replaced"
+
 	ReasonThreadNotFound       = "thread_not_found"
 	ReasonBeatNotFound         = "beat_not_found"
 	ReasonRelationshipNotFound = "relationship_not_found"

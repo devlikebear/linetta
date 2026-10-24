@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
-import { agent as agentApi, providers as providersApi } from "../../lib/rpc";
+import { agent as agentApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import type { AgentHistoryRow, AgentRunStatus, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
@@ -372,6 +372,12 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // writer who is fully set up — a false claim about their own setup, not
   // just an ugly flash.
   const [ready, setReady] = useState<boolean | null>(null);
+  // story-assist Phase 2 (2.C.3): the continuity starter chip calls
+  // linetta_report_continuity, which is absent when the writer has switched
+  // the Review tool group off in Settings. Defaults to true — the on-by-
+  // default switch — so the chip does not flash hidden on every open while
+  // settings.get is still in flight.
+  const [reviewToolsEnabled, setReviewToolsEnabled] = useState(true);
   // The rows `ready` was read from, kept for the provider picker under the
   // composer. Only ever replaced by a whole providers.list response.
   const [providerRows, setProviderRows] = useState<ProviderStatus[]>([]);
@@ -1078,6 +1084,24 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .get()
+      .then((s) => {
+        if (cancelled) return;
+        setReviewToolsEnabled(s.review_tools_enabled !== false);
+      })
+      .catch(() => {
+        // Fail open: the chip's own tool call would refuse if the group
+        // really is off, which is a clearer failure than hiding a chip the
+        // writer expects to see over a transient settings.get error.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Restore (Task 7): the conversation that was here before the panel
   // closed. #93 made the engine's turn outlive the RPC call, so a turn can
   // still be running when the panel reopens with nothing on screen yet —
@@ -1367,14 +1391,16 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
             >
               {t("agentPanel.starters.draftScene.label")}
             </button>
-            <button
-              type="button"
-              className="chip"
-              data-testid="agent-starter-continuity"
-              onClick={() => setDraft(t("agentPanel.starters.continuity.prompt"))}
-            >
-              {t("agentPanel.starters.continuity.label")}
-            </button>
+            {reviewToolsEnabled ? (
+              <button
+                type="button"
+                className="chip"
+                data-testid="agent-starter-checkContinuity"
+                onClick={() => setDraft(t("agentPanel.starters.checkContinuity.prompt"))}
+              >
+                {t("agentPanel.starters.checkContinuity.label")}
+              </button>
+            ) : null}
             <button
               type="button"
               className="chip"

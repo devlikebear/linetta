@@ -779,6 +779,8 @@ export interface ToolBudget {
   bytes: number;
   memory: ToolBudgetGroup;
   skills: ToolBudgetGroup;
+  /** story-assist Phase 2: linetta_report_continuity's group. */
+  review: ToolBudgetGroup;
 }
 
 export interface Settings {
@@ -836,6 +838,9 @@ export interface Settings {
   visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;
+  /** story-assist Phase 2: linetta_report_continuity and later phases'
+   *  additions to it. Optional, default ON, same read rule as the two above. */
+  review_tools_enabled?: boolean;
   /** What that tool set costs, measured by the engine from the tools it would
    *  actually register — never a table maintained here, which is how the site's
    *  tool counts drifted. Absent on a build that cannot measure it (mobile),
@@ -892,6 +897,7 @@ export interface SettingsPatch {
   visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;
+  review_tools_enabled?: boolean;
   /** Deletes the plaintext keys the engine could not migrate out of
    *  settings.json (#113). Destructive and one-way — where there is no secret
    *  store the file is the only place those keys exist — so it is only ever
@@ -1459,6 +1465,73 @@ export interface SceneIntent {
 export interface SceneIntentState {
   present: boolean;
   intent: SceneIntent;
+}
+
+/** story-assist Phase 2: categories, kinds, severities and statuses an observation carries. */
+export type ContinuityCategory =
+  | "character"
+  | "place"
+  | "item"
+  | "relationship"
+  | "timeline"
+  | "fact"
+  | "plot"
+  | "direction"
+  | "other";
+export type ContinuityKind = "contradiction" | "gap" | "question";
+export type ContinuitySeverity = "high" | "medium" | "low";
+export type ContinuityStatus = "open" | "dismissed" | "resolved" | "replaced";
+export type ContinuityRefType = "entity" | "fact" | "beat" | "scene";
+
+/** One ref an observation cites, with the display name continuity.list resolved. */
+export interface ContinuityRef {
+  type: ContinuityRefType;
+  id: string;
+  paragraph?: number;
+  quote?: string;
+  /** Empty when the ref no longer resolves (its target was deleted since). */
+  label?: string;
+}
+
+/** One stored continuity observation. */
+export interface ContinuityObservation {
+  id: string;
+  check_id: string;
+  project_id: string;
+  node_id: string;
+  category: ContinuityCategory;
+  kind: ContinuityKind;
+  severity: ContinuitySeverity;
+  summary: string;
+  suggestion: string;
+  paragraph_from: number;
+  paragraph_to: number;
+  quote: string;
+  refs: ContinuityRef[];
+  status: ContinuityStatus;
+  status_at: number;
+  created_at: number;
+}
+
+/** One continuity check (a scene's reading) plus its observations, from continuity.list. */
+export interface ContinuityCheck {
+  id: string;
+  project_id: string;
+  node_id: string;
+  /** The checked scene's outline path, e.g. "1부 / 1장 / 씬 3". */
+  breadcrumb: string;
+  content_version: number;
+  source: "agent" | "external";
+  note: string;
+  checked_at: number;
+  /** True once the scene's current content_version no longer matches this check's. */
+  stale: boolean;
+  observations: ContinuityObservation[];
+}
+
+/** continuity.open_counts's reply: node_id -> open observation count. */
+export interface ContinuityOpenCounts {
+  counts: Record<string, number>;
 }
 export interface ArtStyle {
  project_id: string;

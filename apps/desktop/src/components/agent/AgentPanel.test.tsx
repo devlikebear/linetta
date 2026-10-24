@@ -11,6 +11,7 @@ const rpc = vi.hoisted(() => ({
   agentRun: vi.fn(),
   agentCancel: vi.fn(),
   agentHistory: vi.fn(),
+  settingsGet: vi.fn(),
 }));
 
 // Same approach as useMcpChanges.test.tsx: a hoisted listener map standing in
@@ -31,6 +32,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../../lib/rpc", () => ({
   providers: { list: rpc.providersList },
   agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory },
+  settings: { get: rpc.settingsGet },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -251,6 +253,10 @@ describe("AgentPanel", () => {
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
 
   it("renders the unconfigured notice when no provider is active at all", async () => {
@@ -392,6 +398,10 @@ describe("AgentPanel messages and streaming (#95 Task 4)", () => {
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -488,6 +498,10 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
 
   function toolLines(): HTMLElement[] {
@@ -891,6 +905,10 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
 
   function botBubbles(): HTMLElement[] {
@@ -1023,14 +1041,27 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     expect(composer().value).toBe("agentPanel.starters.draftScene.prompt");
 
     await act(async () => {
-      screen.getByTestId("agent-starter-continuity").click();
+      screen.getByTestId("agent-starter-checkContinuity").click();
     });
-    expect(composer().value).toBe("agentPanel.starters.continuity.prompt");
+    expect(composer().value).toBe("agentPanel.starters.checkContinuity.prompt");
 
     await act(async () => {
       screen.getByTestId("agent-starter-nextScene").click();
     });
     expect(composer().value).toBe("agentPanel.starters.nextScene.prompt");
+  });
+
+  // story-assist Phase 2, 2.C.3: the chip calls linetta_report_continuity,
+  // which is absent from the agent's tool set when the writer has switched
+  // the Review group off — showing the chip then would promise a turn the
+  // tool call itself refuses.
+  it("hides the checkContinuity chip when the Review tool group is off", async () => {
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: false }));
+    await renderReady();
+
+    expect(screen.queryByTestId("agent-starter-checkContinuity")).toBeNull();
+    expect(screen.getByTestId("agent-starter-draftScene")).toBeTruthy();
+    expect(screen.getByTestId("agent-starter-nextScene")).toBeTruthy();
   });
 
   it("hides the starting chips once the conversation has a turn in it", async () => {
@@ -1111,6 +1142,10 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
 
   function botBubbles(): HTMLElement[] {
