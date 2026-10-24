@@ -244,12 +244,14 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// story-assist Phase 1 added linetta_get_story_context's IncludeDirection
 	// field (the switch behind storycontext.ContextKeyDirection, matching
 	// IncludeSkills), measured at 26,976B. story-assist Phase 2 added
-	// linetta_read_scene's numbered field, measured at 27,279B — the
-	// ceiling moves up with it; linetta_report_continuity carries its own
-	// allowance above and is excluded from this total.
-	if total > 27400 {
-		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 27400B "+
-			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B then 27400B)", total)
+	// linetta_read_scene's numbered field, measured at 27,279B. story-assist
+	// Phase 3 (3.A.2) added storyops.Op.Aliases, which linetta_apply_story_ops
+	// shares, measured at 27,446B — the ceiling moves up with it;
+	// linetta_report_continuity carries its own allowance above and is
+	// excluded from this total.
+	if total > 27500 {
+		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 27500B "+
+			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}
 }
 

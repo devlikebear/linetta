@@ -33,6 +33,28 @@ func TestOpTypeSchemaTagListsEveryValidOp(t *testing.T) {
 	}
 }
 
+// Op.Aliases documents different behavior per op (create_entity sets,
+// update_entity only adds) — story-assist Phase 3's 3.A.2 add-only rule.
+// This pins the tag's wording so a later edit cannot silently drop the
+// "never removing" half an agent needs to know update_entity is safe to
+// call without first reading the entity's current aliases.
+func TestAliasesSchemaTagDescribesAddOnlyUpdate(t *testing.T) {
+	field, ok := reflect.TypeOf(Op{}).FieldByName("Aliases")
+	if !ok {
+		t.Fatal("Op has no Aliases field")
+	}
+	tag := field.Tag.Get("jsonschema")
+	if tag == "" {
+		t.Fatal("Op.Aliases has no jsonschema tag; agents cannot learn the add-only rule")
+	}
+	if !strings.Contains(tag, "update_entity") {
+		t.Errorf("Op.Aliases jsonschema tag does not mention update_entity: %q", tag)
+	}
+	if !strings.Contains(tag, "never") {
+		t.Errorf("Op.Aliases jsonschema tag does not say aliases are never removed: %q", tag)
+	}
+}
+
 func TestUnknownOpErrorNamesTheValidOps(t *testing.T) {
 	err := ValidateProposal(Proposal{Ops: []Op{{Type: "add_character"}}})
 	if err == nil {
