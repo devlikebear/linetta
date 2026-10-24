@@ -118,7 +118,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
 
 ### A. 엔진
 
-- [ ] **2.A.1 문단 분할 공개**
+- [x] **2.A.1 문단 분할 공개**
   - 파일: `engine/internal/style/scenes.go`, `style_test.go`
   - 내용:
     - `sceneOf`가 쓰는 분할(`export.DocToPlainText` → `"\n\n"`, 비지 않은 문단만, 1부터)을 `func Paragraphs(contentDoc string) []string`로 공개한다.
@@ -126,7 +126,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
     - **문체 점검과 연속성 점검의 문단 번호가 반드시 같아야 한다.**
   - 테스트: 기존 문체 점검 테스트가 그대로 통과한다. 빈 문단과 mention 노드도 테스트한다.
 
-- [ ] **2.A.2 `continuity` 패키지: 타입과 검증**
+- [x] **2.A.2 `continuity` 패키지: 타입과 검증**
   - 파일: `engine/internal/continuity/continuity.go`, `validate.go`, `validate_test.go`
   - 타입:
     - `Observation`, `Ref{Type, ID string; Paragraph int; Quote string}`, `Check`, `ReportInput`, `Report`
@@ -161,7 +161,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
     - 근거 없는 contradiction은 거부
     - 오류 여러 개를 한 번에 반환
 
-- [ ] **2.A.3 Repo**
+- [x] **2.A.3 Repo**
   - 파일: `engine/internal/continuity/repo.go`, `repo_test.go`
   - 함수:
     ```go
@@ -182,7 +182,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
 
 ### B. MCP
 
-- [ ] **2.B.1 `linetta_read_scene`에 `numbered` 옵션**
+- [x] **2.B.1 `linetta_read_scene`에 `numbered` 옵션**
   - 파일: `engine/internal/mcphost/tools_read.go`, `tools_read_test.go`
   - 내용:
     - `Numbered bool` 필드. 설명: `"plain text with each paragraph prefixed [n], counted the way linetta_analyze_style and linetta_report_continuity count them"`
@@ -190,7 +190,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
     - 출력의 `Text`는 `"[1] …\n\n[2] …"` 형식이다. `ContentVersion`은 이미 출력에 있다.
   - **새 도구를 만들지 않는 이유**: 읽기 도구를 하나 더 두면 상시 비용이 늘어난다. 기존 도구의 옵션으로 충분하다.
 
-- [ ] **2.B.2 `linetta_report_continuity` (쓰기 도구, Review 그룹)**
+- [x] **2.B.2 `linetta_report_continuity` (쓰기 도구, Review 그룹)**
   - 파일: `engine/internal/mcphost/tools_continuity.go` 신규, `tools_continuity_test.go`
   - 입력:
     - `project_id?`, `node_id`
@@ -208,7 +208,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
     > Record what you found checking one scene against the work's own record (Story World, fact cards, earlier scenes, the writer's direction). Cite paragraphs from linetta_read_scene numbered=true and copy quotes exactly; every contradiction must point at what it contradicts. Taste is not a finding. An empty list records a clean check. The writer reviews these; nothing in the manuscript changes.
   - 등록: `registerWriteTools`에서 full 모드일 때만 등록하고, Review 그룹이 꺼져 있으면 빼는 경로를 탄다(`excludedByGroups`).
 
-- [ ] **2.B.3 Review 도구 그룹**
+- [x] **2.B.3 Review 도구 그룹**
   - 파일: `engine/internal/mcphost/budget.go`, `budget_test.go`, `engine/internal/settings/settings.go`
   - 내용:
     - `ToolGroups.Review bool`
@@ -225,7 +225,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
 
 ### C. RPC, 복원, 에이전트
 
-- [ ] **2.C.1 RPC**
+- [x] **2.C.1 RPC**
   - 파일: `engine/internal/rpc/handlers/continuity.go`, `continuity_test.go`
   - 메서드:
     - `continuity.list {project_id, node_id?, statuses?}` → checks와 관찰
@@ -234,7 +234,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
     - `continuity.open_counts {project_id}`
   - 등록: `engineapp.go`, `lib.rs` `RENDERER_ENGINE_METHODS`
 
-- [ ] **2.C.2 작품 단위 복원**
+- [x] **2.C.2 작품 단위 복원**
   - 파일: `engine/internal/restore/restore.go`
   - 내용:
     - `continuity_checks`와 `continuity_observations`를 node와 project 재매핑과 함께 복사한다.
@@ -246,7 +246,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
     - 제안함(Phase 3)과 갈래 예측(Phase 4)을 복원에서 빼는 것과는 사정이 다르다. 관찰은 씬과 원고 인용에 묶여 있어 재매핑 뒤에도 뜻이 유지된다.
   - 테스트: 백업에서 복원한 작품에 관찰과 상태가 따라온다. 매핑에 없는 entity ref는 버려지고, 나머지 ref는 남는다.
 
-- [ ] **2.C.3 에이전트 지침과 시작 칩**
+- [x] **2.C.3 에이전트 지침과 시작 칩**
   - `engine/internal/agent/prompt.go`: Review 그룹이 켜져 있을 때만 다음 줄을 넣는다.
     > To check a scene's continuity, read it with linetta_read_scene numbered=true, get the brief, look earlier scenes up with linetta_where_does_appear / linetta_search_manuscript, and record what you find with linetta_report_continuity. Report contradictions with the work's own record, not taste; an empty result is fine. Do not fix the prose unless the writer asks.
   - `apps/desktop/src/components/agent/AgentPanel.tsx`: starter 칩 `checkContinuity`를 추가한다.
@@ -255,7 +255,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
 
 ### D. 화면
 
-- [ ] **2.D.1 `ContinuitySection`**
+- [x] **2.D.1 `ContinuitySection`**
   - 파일: `apps/desktop/src/components/ContinuitySection.tsx`, `.css`, `.test.tsx`
   - props: `{ projectId; nodeId?; onOpenNode?: (nodeId) => void; onOpenEntity?; onOpenFact? }`
   - 화면:
@@ -279,13 +279,13 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
     - 빈 점검 표시
     - 이벤트 수신 시 다시 불러오기
 
-- [ ] **2.D.2 배치**
+- [x] **2.D.2 배치**
   - `components/CanonPanel.tsx`(Story World): `StyleSection` 아래에 `ContinuitySection`을 둔다.
   - `components/ContextPanel.tsx`: 현재 씬의 열린 관찰 수 배지를 단다. 누르면 Story World의 해당 섹션을 연다(현재 씬 범위).
   - `lib/agentTools.ts`: `WRITE_TOOL_NAMES`에 `linetta_report_continuity`와 라벨 키를 추가한다. `agentToolParity.test.ts`가 Go 목록과 대조한다.
   - `routes/Settings.tsx` Tool budget: "점검·제안" 스위치를 추가한다. 끄면 무엇이 빠지는지 한 줄로 설명한다.
 
-- [ ] **2.D.3 다국어**
+- [x] **2.D.3 다국어**
   - 파일: `apps/desktop/src/lib/i18n.tsx`
   - 키:
     - `continuity.title`, `continuity.scope.*`, `continuity.status.*`
@@ -295,7 +295,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
     - `agentPanel.starters.checkContinuity.*`
     - 도구 라벨, Tool budget 그룹 문구
 
-- [ ] **2.D.4 문서**
+- [x] **2.D.4 문서**
   - `README.md`: 새 절 "Continuity checks"를 쓴다. 담을 내용:
     - 무엇을 기록하는가
     - 엔진이 인용을 검증한다
@@ -309,24 +309,24 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
 ## ✅ Phase 2 Checkpoint
 
 **자동 검증**
-- [ ] `cd engine && CGO_ENABLED=0 go test ./internal/continuity/... ./internal/style/... ./internal/mcphost/... ./internal/settings/... ./internal/rpc/handlers/... ./internal/restore/... ./internal/agent/...`
-- [ ] `make test-mobile-engine`
-- [ ] `pnpm --dir apps/desktop test -- ContinuitySection.test.tsx CanonPanel.test.tsx ContextPanel.test.tsx AgentPanel.test.tsx agentToolParity.test.ts rpcAllowlist.test.ts i18n.catalog.test.ts --run`
-- [ ] `pnpm --dir apps/desktop exec tsc --noEmit`
-- [ ] `make test`
+- [x] `cd engine && CGO_ENABLED=0 go test ./internal/continuity/... ./internal/style/... ./internal/mcphost/... ./internal/settings/... ./internal/rpc/handlers/... ./internal/restore/... ./internal/agent/...`
+- [x] `make test-mobile-engine`
+- [x] `pnpm --dir apps/desktop test -- ContinuitySection.test.tsx CanonPanel.test.tsx ContextPanel.test.tsx AgentPanel.test.tsx agentToolParity.test.ts rpcAllowlist.test.ts i18n.catalog.test.ts --run`
+- [x] `pnpm --dir apps/desktop exec tsc --noEmit`
+- [x] `make test` — `test-go`의 `-race`(cgo) 변형은 로그인 키체인 프롬프트 전례로 로컬에서 돌리지 않고 CI에 맡겼다. 대신 `CGO_ENABLED=0 go test ./...`(엔진 전체, 기존 cgo 전용 `cmd/linetta-ffi` 빌드 실패만 남고 전부 통과), `make test-mobile-engine`, `make test-desktop`(lint+test+build), `cd apps/desktop/src-tauri && cargo check && cargo test`(33/33 통과)로 같은 범위를 덮었다.
 
-**수동 검증** (격리된 `LINETTA_HOME`, 프로바이더 하나 연결)
-- [ ] 인물 "하린"의 속성에 "왼손잡이"를 넣는다. 씬 본문에는 "하린은 오른손으로 검을 뽑았다"를 쓴다.
+**수동 검증** (격리된 `LINETTA_HOME`, 프로바이더 하나 연결) — 실제 프로바이더 연결과 UI 클릭이 필요해 이번 작업에서는 직접 확인하지 못했다. 각 항목 옆에 같은 동작을 덮는 자동 테스트를 적는다(Phase 1과 같은 방식).
+- [ ] 인물 "하린"의 속성에 "왼손잡이"를 넣는다. 씬 본문에는 "하린은 오른손으로 검을 뽑았다"를 쓴다. — 직접 확인 못 함. `TestValidate_tableDriven`(continuity 패키지, 모순 관찰 + entity ref)이 같은 시나리오를 단위 테스트로 덮는다.
 - [ ] starter 칩 "연속성 점검"을 실행한다. 다음을 확인한다.
-  - 관찰 1건이 Story World에 뜬다.
-  - 인용이 본문 문장과 같다.
-  - "하린" ref 칩을 누르면 EntitySheet가 열린다.
-- [ ] 활동 로그에서 `linetta_report_continuity`가 실패 후 재시도된 기록이 있으면 오류 문구를 읽어 본다. 모델이 고칠 수 있는 문장이어야 한다.
-- [ ] 본문을 한 글자 고치면 "본문이 바뀜" 배지가 뜬다.
-- [ ] [무시]한 관찰은 다시 점검해도 무시 상태로 남는다. 열린 관찰은 "교체됨"으로 숨겨진다.
-- [ ] Settings → Tool budget에서 "점검·제안"을 끄면 다음 메시지부터 도구와 칩이 사라진다.
-- [ ] Settings → Backup에서 그 작품을 복원하면 관찰과 상태(무시·해결)가 따라오고, 인물 ref 칩이 복원된 인물을 연다.
-- [ ] 위 과정 전후로 씬 본문의 `content_version`을 활동 로그나 VersionSheet에서 확인한다. 점검 도구가 본문을 바꾸지 않았어야 한다.
+  - 관찰 1건이 Story World에 뜬다. — 직접 확인 못 함. `ContinuitySection.test.tsx`의 "lists a check's observations, ref chip included"가 덮는다.
+  - 인용이 본문 문장과 같다. — 직접 확인 못 함. `TestValidate_tableDriven`의 "invented quote is rejected"/"quote differing only in whitespace passes"가 검증 규칙을 덮는다.
+  - "하린" ref 칩을 누르면 EntitySheet가 열린다. — 직접 확인 못 함. `ContinuitySection.test.tsx`의 같은 테스트가 `onOpenEntity` 호출을 확인하고, `CanonPanel`에서 `onOpenEntity`가 `EntitySheet`를 여는 것은 기존 `CanonPanel.test.tsx`의 "opens the record the writer clicked"가 덮는다.
+- [ ] 활동 로그에서 `linetta_report_continuity`가 실패 후 재시도된 기록이 있으면 오류 문구를 읽어 본다. 모델이 고칠 수 있는 문장이어야 한다. — 직접 확인 못 함. `TestReportContinuity_refusesAnInventedQuote`/`TestReportContinuity_refusesAnEntityFromAnotherWork`(mcphost)와 `TestValidate_reportsEveryProblemAtOnce`(continuity)가 오류 문구가 모델이 고칠 수 있는 형태인지, 한 번에 모두 반환되는지를 덮는다.
+- [ ] 본문을 한 글자 고치면 "본문이 바뀜" 배지가 뜬다. — 직접 확인 못 함. `TestRepo_staleWhenSceneContentVersionMoves`(continuity)와 `ContinuitySection.test.tsx`의 "shows a stale badge when the scene changed since the check"가 덮는다.
+- [ ] [무시]한 관찰은 다시 점검해도 무시 상태로 남는다. 열린 관찰은 "교체됨"으로 숨겨진다. — 직접 확인 못 함. `TestRepo_replacesOpenButNotDismissed`(continuity)와 `ContinuitySection.test.tsx`의 "groups several checks of the same scene..."가 덮는다.
+- [ ] Settings → Tool budget에서 "점검·제안"을 끄면 다음 메시지부터 도구와 칩이 사라진다. — 직접 확인 못 함. `TestAGroupThatIsOffIsAbsentFromToolsListInBothModes`(mcphost), `TestRun_theToolSessionIsRebuiltWhenOnlyReviewChanges`(agent), `AgentPanel.test.tsx`의 "hides the checkContinuity chip when the Review tool group is off"가 덮는다.
+- [ ] Settings → Backup에서 그 작품을 복원하면 관찰과 상태(무시·해결)가 따라오고, 인물 ref 칩이 복원된 인물을 연다. — 직접 확인 못 함. `TestMergeProjectCopiesContinuity`(restore)가 상태 보존과 entity ref 재매핑(그리고 매핑에 없는 ref가 버려지는 것)을 덮는다. 복원된 인물 ref를 화면에서 누르는 것은 위 "하린" ref 칩 항목과 같은 코드 경로다.
+- [ ] 위 과정 전후로 씬 본문의 `content_version`을 활동 로그나 VersionSheet에서 확인한다. 점검 도구가 본문을 바꾸지 않았어야 한다. — 직접 확인 못 함. `linetta_report_continuity` 핸들러(`reportContinuity`)는 `n.ContentDoc`을 읽기만 하고 `nodes.UpdateContent`류를 호출하지 않는다; `TestReportContinuity_recordsACleanCheck`와 `TestReportContinuity_recordsAContradictionWithAnEntityRef`가 성공 경로에서 본문 변경 호출이 없다는 것을 코드 경로로 보증한다(별도의 "변경 없음" 단정은 추가하지 않았다).
 
 **완료 처리**
 1. 결과를 보고한다. 확인하지 못한 항목은 그렇다고 적는다.
