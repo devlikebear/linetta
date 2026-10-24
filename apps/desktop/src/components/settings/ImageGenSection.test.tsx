@@ -84,7 +84,7 @@ describe("ImageGenSection", () => {
     expect(consent.parentElement).toHaveTextContent("settings.images.consent:provider=settings.providers.name.gemini-native");
     fireEvent.click(consent);
     await waitFor(() => {
-      const patch = rpc.settingsSet.mock.calls.at(-1)?.[0];
+      const patch = rpc.settingsSet.mock.calls[rpc.settingsSet.mock.calls.length - 1]?.[0];
       expect(patch.image_providers["gemini-native"].consented_at).toBeGreaterThan(0);
     });
   });
