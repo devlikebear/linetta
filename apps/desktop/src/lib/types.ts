@@ -659,6 +659,8 @@ export interface PublishEpisodeView {
   leaf_ids?: string[];
   char_count: number;
   empty?: boolean;
+  /** Pictures in the episode that the published text leaves out. */
+  illustrations_omitted?: number;
   state: PublishEpisodeState;
   /** The local text differs from the site's, whatever the state. */
   modified?: boolean;

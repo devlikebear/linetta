@@ -53,7 +53,10 @@ type EpisodeView struct {
 	LeafIDs   []string `json:"leaf_ids,omitempty"`
 	CharCount int      `json:"char_count"`
 	Empty     bool     `json:"empty,omitempty"`
-	State     string   `json:"state"`
+	// IllustrationsOmitted is how many pictures in the episode the published
+	// text leaves out.
+	IllustrationsOmitted int    `json:"illustrations_omitted,omitempty"`
+	State                string `json:"state"`
 	// Modified is true when the local text differs from the site's,
 	// whatever the state. "modified" is only the state of a public episode;
 	// a private one with new text is still private.
@@ -300,6 +303,7 @@ func merge(ep localEpisode, r *RemoteEpisode) EpisodeView {
 	v := EpisodeView{
 		NodeID: ep.NodeID, Label: ep.Label, Title: ep.payload.Title, Ordinal: ep.Ordinal, LeafIDs: ep.LeafIDs,
 		CharCount: ep.payload.CharCount, Empty: ep.payload.Markdown == "", State: EpisodeUnpublished,
+		IllustrationsOmitted: ep.payload.IllustrationsOmitted,
 	}
 	if r == nil {
 		return v
