@@ -184,7 +184,7 @@ export function IllustrationDialog({ projectId, sourceNodeId, initialScene, onCl
         </div>
 
         <div className="illustration-options">
-          <div className="modal-field settings-segmented" role="group">
+          <div className="modal-field illustration-seg" role="group">
             {(["single", "four_panel"] as IllustrationFormat[]).map((f) => (
               <button
                 key={f}
@@ -197,7 +197,7 @@ export function IllustrationDialog({ projectId, sourceNodeId, initialScene, onCl
               </button>
             ))}
           </div>
-          <div className="modal-field settings-segmented" role="group" aria-label={t("illustration.aspect")}>
+          <div className="modal-field illustration-seg" role="group" aria-label={t("illustration.aspect")}>
             {ASPECTS.map((a) => (
               <button
                 key={a}
