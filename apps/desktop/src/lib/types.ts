@@ -586,6 +586,8 @@ export interface IllustrationMeta {
   height: number;
   byte_size: number;
   created_at: number;
+  /** The scenes that show the picture, from illustrations.list. */
+  used_in?: Array<{ node_id: string; label: string; title?: string }>;
 }
 
 /** illustrations.compose — the prompt for the writer to read before drawing. */

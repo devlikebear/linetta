@@ -176,3 +176,20 @@
     grid-template-columns: 1fr;
   }
 }
+
+.illustration-thumb-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.illustration-detail-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

@@ -14,6 +14,8 @@ interface Props {
   refreshKey?: number;
   onClose: () => void;
   onNew: () => void;
+  /** Puts a picture into the open scene. Absent when no scene is open. */
+  onInsert?: (meta: IllustrationMeta) => void;
 }
 
 function formatBytes(n: number): string {
@@ -28,15 +30,21 @@ function Thumb({ meta, onOpen }: { meta: IllustrationMeta; onOpen: () => void })
     <button type="button" className="illustration-thumb" onClick={onOpen} data-testid={`illustration-thumb-${meta.id}`}>
       {url ? <img src={url} alt={meta.caption} /> : <span className="illustration-thumb-empty" />}
       {meta.caption ? <span className="illustration-thumb-caption">{meta.caption}</span> : null}
+      {meta.used_in?.length ? <ThumbBadge /> : null}
     </button>
   );
+}
+
+function ThumbBadge() {
+  const { t } = useI18n();
+  return <span className="illustration-thumb-badge">{t("illustration.inUse")}</span>;
 }
 
 /* A work's illustrations: everything drawn for it, newest first. Each one
  * keeps the prompt that was sent, so a picture can be understood (and drawn
  * again) later. The footer says what they cost in library.db, because every
  * daily backup carries them. */
-export function IllustrationGallery({ projectId, refreshKey, onClose, onNew }: Props) {
+export function IllustrationGallery({ projectId, refreshKey, onClose, onNew, onInsert }: Props) {
   const { t, language } = useI18n();
   const [items, setItems] = useState<IllustrationMeta[] | null>(null);
   const [usage, setUsage] = useState({ count: 0, bytes: 0 });
@@ -85,6 +93,7 @@ export function IllustrationGallery({ projectId, refreshKey, onClose, onNew }: P
           <Detail
             meta={open}
             locale={language}
+            onInsert={onInsert}
             onBack={() => setOpenId(null)}
             onChanged={(next) => setItems((cur) => cur?.map((m) => (m.id === next.id ? next : m)) ?? cur)}
             onDeleted={() => {
@@ -120,12 +129,14 @@ export function IllustrationGallery({ projectId, refreshKey, onClose, onNew }: P
 function Detail({
   meta,
   locale,
+  onInsert,
   onBack,
   onChanged,
   onDeleted,
 }: {
   meta: IllustrationMeta;
   locale?: string;
+  onInsert?: (meta: IllustrationMeta) => void;
   onBack: () => void;
   onChanged: (meta: IllustrationMeta) => void;
   onDeleted: () => void;
@@ -188,14 +199,32 @@ function Detail({
             <label>{t("illustration.detail.prompt")}</label>
             <pre className="illustration-detail-prompt">{meta.prompt}</pre>
           </div>
+          {meta.used_in?.length ? (
+            <div className="modal-field" data-testid="illustration-used-in">
+              <label>{t("illustration.usedIn")}</label>
+              <p className="sd">{meta.used_in.map((s) => [s.label, s.title].filter(Boolean).join(" · ")).join(", ")}</p>
+            </div>
+          ) : null}
           {error ? (
             <p className="sd" role="alert">
               {rpcErrorMessage(error, t)}
             </p>
           ) : null}
-          <button type="button" className="btn ghost sm" onClick={() => void remove()} data-testid="illustration-delete">
-            {armed ? t("illustration.deleteConfirm") : t("illustration.delete")}
-          </button>
+          <div className="illustration-detail-actions">
+            <button
+              type="button"
+              className="btn accent sm"
+              disabled={!onInsert}
+              title={onInsert ? undefined : t("illustration.noScene")}
+              onClick={() => onInsert?.({ ...meta, caption: caption.trim() })}
+              data-testid="illustration-insert"
+            >
+              {t("illustration.insert")}
+            </button>
+            <button type="button" className="btn ghost sm" onClick={() => void remove()} data-testid="illustration-delete">
+              {armed ? t("illustration.deleteConfirm") : t("illustration.delete")}
+            </button>
+          </div>
         </div>
       </div>
     </div>
