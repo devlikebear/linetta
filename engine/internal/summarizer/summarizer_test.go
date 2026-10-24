@@ -60,8 +60,7 @@ func TestSummarizer_writesSummaryAndMatchesVersion(t *testing.T) {
 	}, "summary lands")
 
 	n, _ := nodes.Get(ctx, *p.LastOpenedNodeID)
-	// The version stamp is what makes the summary cacheable and what stops the
-	// worker from overwriting a summary an agent wrote.
+	// The version stamp is what makes the summary cacheable.
 	if n.SummaryForVersion != n.ContentVersion {
 		t.Errorf("versions: summary_for=%d content=%d", n.SummaryForVersion, n.ContentVersion)
 	}
@@ -130,6 +129,53 @@ func TestSummarizer_reRunsAfterContentChange(t *testing.T) {
 		n, _ := nodes.Get(ctx, *p.LastOpenedNodeID)
 		return strings.HasPrefix(n.Summary, "나")
 	}, "summary follows the new text")
+}
+
+// The bug this guards against: an agent revised a scene, judged its summary
+// still true and left it, and the next story brief swapped that summary for
+// the scene's first three sentences — so the agent drafting the next episode
+// never learned how this one ended.
+func TestSummarizer_keepsAWrittenSummaryAfterTheSceneIsEdited(t *testing.T) {
+	_, nodes, p := newFixture(t)
+	ctx := context.Background()
+	id := *p.LastOpenedNodeID
+	_ = nodes.UpdateContent(ctx, id, longDoc(strings.Repeat("가", 200)), 1100)
+	n, _ := nodes.Get(ctx, id)
+	_ = nodes.SetWrittenSummary(ctx, id, "도윤은 결국 입사 서류에 서명한 셈이 된다.", n.ContentVersion)
+
+	_ = nodes.UpdateContent(ctx, id, longDoc(strings.Repeat("나", 200)), 1200)
+	New(nodes).RefreshNow(ctx, id)
+
+	got, _ := nodes.Get(ctx, id)
+	if got.Summary != "도윤은 결국 입사 서류에 서명한 셈이 된다." {
+		t.Fatalf("written summary was replaced: %q", got.Summary)
+	}
+	// Kept, not re-stamped: it is still stale, and says so.
+	if got.SummaryFresh() || !got.SummaryWritten {
+		t.Errorf("want a stale written summary, got for=%d content=%d written=%v",
+			got.SummaryForVersion, got.ContentVersion, got.SummaryWritten)
+	}
+}
+
+func TestSummarizer_rollsUpAStaleWrittenChildAsWritten(t *testing.T) {
+	_, nodes, p := newFixture(t)
+	ctx := context.Background()
+	part, _ := nodes.CreateSibling(ctx, *p.LastOpenedNodeID, "container", "1부", "", 1100)
+	scene, _ := nodes.CreateChild(ctx, part.ID, "leaf", "3화", "", 1110)
+	_ = nodes.UpdateContent(ctx, scene.ID, longDoc(strings.Repeat("가", 200)), 1200)
+	sc, _ := nodes.Get(ctx, scene.ID)
+	_ = nodes.SetWrittenSummary(ctx, scene.ID, "서명은 키오스크에서 이미 받아 두었다.", sc.ContentVersion)
+	_ = nodes.UpdateContent(ctx, scene.ID, longDoc(strings.Repeat("나", 200)), 1300)
+
+	New(nodes).RefreshNow(ctx, part.ID)
+
+	gotPart, _ := nodes.Get(ctx, part.ID)
+	if !strings.Contains(gotPart.Summary, "서명은 키오스크에서") {
+		t.Errorf("part rollup dropped the written scene summary: %q", gotPart.Summary)
+	}
+	if strings.Contains(gotPart.Summary, "나나나") {
+		t.Errorf("part rollup used the scene's opening instead: %q", gotPart.Summary)
+	}
 }
 
 func TestSummarizer_enqueueIsNonBlocking(t *testing.T) {

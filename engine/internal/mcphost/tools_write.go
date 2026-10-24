@@ -90,10 +90,11 @@ type writeSceneOutput struct {
 	// LinkedElements reports the registered story elements this write linked
 	// automatically (#72), so the agent can spot a homonym gone wrong.
 	LinkedElements []mention.Linked `json:"linked_elements,omitempty" jsonschema:"story elements named in the text, linked automatically"`
-	// SummaryIsPlaceholder is always true after a write: Linetta fills the
-	// scene summary with the opening lines cut to length, which is a
-	// placeholder rather than a summary. Story briefs are built from these, so
-	// leaving it costs the next brief its accuracy.
+	// SummaryIsPlaceholder is always true after a write: the scene's summary
+	// no longer describes it. A summary someone wrote stays and briefs show it
+	// marked as an earlier draft's; otherwise Linetta fills in the opening
+	// lines cut to length. Story briefs are built from these, so leaving it
+	// costs the next brief its accuracy.
 	SummaryIsPlaceholder bool `json:"summary_is_placeholder"`
 }
 
@@ -395,7 +396,7 @@ func (d ToolDeps) writeSummary(ctx context.Context, _ *mcp.CallToolRequest, in w
 		forVersion = *in.ExpectedContentVersion
 	}
 
-	if err := d.Nodes.SetSummary(ctx, n.ID, summary, forVersion); err != nil {
+	if err := d.Nodes.SetWrittenSummary(ctx, n.ID, summary, forVersion); err != nil {
 		return toolErr("could not write the summary: %v", err), writeSummaryOutput{}, nil
 	}
 	d.notifyChanged(n.ProjectID, "linetta_write_summary", []string{n.ID}, "")
