@@ -174,7 +174,12 @@ func (r *Repo) SetSceneIntent(ctx context.Context, now int64, in SceneIntent) (S
 		return SceneIntent{}, ErrNotScene
 	}
 
-	goal := strings.TrimSpace(in.Goal)
+	// "목표 한 줄" is the contract (direction.go's SceneIntent doc comment,
+	// phase-1-direction.md): strings.Fields+Join folds internal newlines and
+	// runs of whitespace into one space each, the same way normalizeList
+	// folds a keep/avoid item — TrimSpace alone would have let a pasted
+	// multi-line goal through as several lines.
+	goal := strings.Join(strings.Fields(in.Goal), " ")
 	if utf8.RuneCountInString(goal) > MaxGoalRunes {
 		return SceneIntent{}, ErrGoalTooLong
 	}
