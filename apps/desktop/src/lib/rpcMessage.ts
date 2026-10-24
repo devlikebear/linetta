@@ -33,6 +33,13 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   style_no_draft: "style.noDraft",
   style_profile_empty: "style.profileEmpty",
   style_notes_too_long: "style.notesTooLong",
+  // The writer's own direction (story-assist Phase 1): refused rather than
+  // trimmed, the same reason the style codes above are.
+  direction_focus_too_long: "direction.limit.focus",
+  direction_goal_too_long: "direction.limit.goal",
+  direction_too_many_items: "direction.limit.items",
+  direction_item_too_long: "direction.limit.item",
+  direction_not_scene: "direction.notScene",
   entity_not_found: "errors.entityNotFound",
   thread_not_found: "errors.threadNotFound",
   beat_not_found: "errors.beatNotFound",

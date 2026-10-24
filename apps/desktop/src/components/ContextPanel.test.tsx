@@ -33,6 +33,16 @@ vi.mock("./StatsSection", () => ({
   StatsSection: () => <div data-testid="stats-section" />,
 }));
 
+vi.mock("./DirectionSection", () => ({
+  DirectionSection: ({
+    projectId, nodeId, collapsed, onToggleCollapsed,
+  }: { projectId: string; nodeId?: string; collapsed?: boolean; onToggleCollapsed?: (c: boolean) => void }) => (
+    <div data-testid="direction-section" data-project-id={projectId} data-node-id={nodeId} data-collapsed={String(collapsed)}>
+      <button type="button" onClick={() => onToggleCollapsed?.(!collapsed)}>toggle-direction</button>
+    </div>
+  ),
+}));
+
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
@@ -92,6 +102,31 @@ function renderContextPanel(props: Partial<ComponentProps<typeof ContextPanel>> 
 }
 
 describe("ContextPanel", () => {
+  it("places the writer's direction section at the top of the panel, wired to the open project and scene", async () => {
+    renderContextPanel();
+    const section = await screen.findByTestId("direction-section");
+    expect(section).toHaveAttribute("data-project-id", "project-1");
+    expect(section).toHaveAttribute("data-node-id", "scene-1");
+
+    const scroll = document.querySelector(".panel-scroll");
+    expect(scroll?.firstElementChild).toBe(section);
+  });
+
+  it("persists the direction section's collapse state to localStorage and restores it on remount", async () => {
+    window.localStorage.removeItem("linetta:direction:collapsed");
+    const { unmount } = renderContextPanel();
+    const section = await screen.findByTestId("direction-section");
+    expect(section).toHaveAttribute("data-collapsed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "toggle-direction" }));
+    await waitFor(() => expect(window.localStorage.getItem("linetta:direction:collapsed")).toBe("1"));
+    unmount();
+
+    renderContextPanel();
+    expect(await screen.findByTestId("direction-section")).toHaveAttribute("data-collapsed", "true");
+    window.localStorage.removeItem("linetta:direction:collapsed");
+  });
+
   it("shows and saves project overview and synopsis as separate fields", async () => {
     vi.useFakeTimers();
     const onProjectChanged = vi.fn();
