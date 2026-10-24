@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
@@ -138,4 +139,73 @@ func ClassifyImage(id string, err error) error {
 		return &rpc.ReasonError{Reason: rpc.ReasonImageBillingRequired, Err: err}
 	}
 	return Classify(id, err)
+}
+
+// ImageStatus is what the image settings pane shows per image provider. Like
+// Status it never carries a secret.
+type ImageStatus struct {
+	ID         string `json:"id"`
+	Active     bool   `json:"active"`
+	Configured bool   `json:"configured"` // the agent provider's key or login exists
+	Consented  bool   `json:"consented"`  // image consent, not the agent's
+	Model      string `json:"model,omitempty"`
+}
+
+// ImageList describes every image provider, in ValidImageProviders order.
+func (s *Source) ImageList() []ImageStatus {
+	active := s.settings.ActiveImageProvider()
+	out := make([]ImageStatus, 0, len(settings.ValidImageProviders()))
+	for _, id := range settings.ValidImageProviders() {
+		st := ImageStatus{
+			ID:        id,
+			Active:    id == active,
+			Consented: s.settings.HasImageConsent(id),
+			Model:     s.settings.ImageProviderConfigFor(id).Model,
+		}
+		if r, err := s.Resolve(id); err == nil {
+			st.Configured = r.Configured()
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
+// DrawReference is one reference image for Draw.
+type DrawReference struct {
+	MIME string
+	Data []byte
+}
+
+// DrawRequest and DrawResult are Draw's plain-typed request and answer, so a
+// caller can draw without linking tars/pkg/llm.
+type DrawRequest struct {
+	Prompt     string
+	References []DrawReference
+	Aspect     string // "square", "portrait" or "landscape"
+}
+
+type DrawResult struct {
+	Data          []byte
+	MIME          string
+	RevisedPrompt string
+	Provider      string
+	Model         string
+}
+
+// Draw draws one image with the writer's image provider, gated the way
+// ImageGenerator is. Failures come back classified (ClassifyImage).
+func (s *Source) Draw(ctx context.Context, req DrawRequest) (DrawResult, error) {
+	gen, r, err := s.ImageGenerator(ctx, "")
+	if err != nil {
+		return DrawResult{}, err
+	}
+	refs := make([]llm.ContentBlock, 0, len(req.References))
+	for _, ref := range req.References {
+		refs = append(refs, llm.ContentBlock{Type: "image", MediaType: ref.MIME, Data: base64.StdEncoding.EncodeToString(ref.Data)})
+	}
+	res, err := gen.GenerateImage(ctx, llm.ImageRequest{Prompt: req.Prompt, References: refs, Aspect: llm.ImageAspect(req.Aspect)})
+	if err != nil {
+		return DrawResult{}, ClassifyImage(r.ID, err)
+	}
+	return DrawResult{Data: res.Data, MIME: res.MediaType, RevisedPrompt: res.RevisedPrompt, Provider: r.ID, Model: r.Model}, nil
 }

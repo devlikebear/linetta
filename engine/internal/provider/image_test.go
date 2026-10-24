@@ -191,3 +191,63 @@ func TestClassifyImage(t *testing.T) {
 		t.Fatal("the cause must survive")
 	}
 }
+
+type recordingImageClient struct {
+	fakeClient
+	got *llm.ImageRequest
+	res llm.ImageResult
+	err error
+}
+
+func (c recordingImageClient) GenerateImage(_ context.Context, req llm.ImageRequest) (llm.ImageResult, error) {
+	*c.got = req
+	return c.res, c.err
+}
+
+func TestDraw(t *testing.T) {
+	src, st, _, _ := newImageSource(t)
+	configure(t, st, settings.ProviderGeminiNative, "AIza-test", false)
+	setImage(t, st, settings.ProviderGeminiNative, "gemini-3.1-flash-image", true)
+	got := &llm.ImageRequest{}
+	src.WithFactory(func(llm.ProviderOptions) (llm.Client, error) {
+		return recordingImageClient{got: got, res: llm.ImageResult{Data: []byte("img"), MediaType: "image/jpeg", RevisedPrompt: "r"}}, nil
+	})
+
+	res, err := src.Draw(context.Background(), DrawRequest{
+		Prompt: "p", Aspect: "portrait", References: []DrawReference{{MIME: "image/png", Data: []byte("ref")}},
+	})
+	if err != nil {
+		t.Fatalf("Draw: %v", err)
+	}
+	if string(res.Data) != "img" || res.MIME != "image/jpeg" || res.RevisedPrompt != "r" || res.Provider != settings.ProviderGeminiNative || res.Model != "gemini-3.1-flash-image" {
+		t.Fatalf("result = %+v", res)
+	}
+	if got.Prompt != "p" || got.Aspect != llm.ImageAspectPortrait || len(got.References) != 1 ||
+		got.References[0].Type != "image" || got.References[0].MediaType != "image/png" || got.References[0].Data != "cmVm" {
+		t.Fatalf("request = %+v", *got)
+	}
+
+	src.WithFactory(func(llm.ProviderOptions) (llm.Client, error) {
+		return recordingImageClient{got: got, err: fmt.Errorf("x: %w", llm.ErrImageRefused)}, nil
+	})
+	if _, err := src.Draw(context.Background(), DrawRequest{Prompt: "p"}); reasonOf(t, err) != rpc.ReasonImageRefused {
+		t.Fatalf("refusal: %v", err)
+	}
+}
+
+func TestImageList(t *testing.T) {
+	src, st, _, _ := newImageSource(t)
+	configure(t, st, settings.ProviderGeminiNative, "AIza-test", false)
+	setImage(t, st, settings.ProviderGeminiNative, "gemini-3.1-flash-image", true)
+
+	got := src.ImageList()
+	if len(got) != 2 || got[0].ID != settings.ProviderOpenAICodex || got[1].ID != settings.ProviderGeminiNative {
+		t.Fatalf("list = %+v", got)
+	}
+	if got[0].Active || got[0].Configured || got[0].Consented {
+		t.Fatalf("codex = %+v, want nothing set", got[0])
+	}
+	if g := got[1]; !g.Active || !g.Configured || !g.Consented || g.Model != "gemini-3.1-flash-image" {
+		t.Fatalf("gemini = %+v", g)
+	}
+}
