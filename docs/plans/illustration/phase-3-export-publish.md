@@ -18,7 +18,7 @@ _상태: 3.1~3.3 완료(2026-10-24). 3.4~3.5(Works 게시)는 별도 계획으�
 
 - **내보내기·가져오기는 파일 하나**: 데스크톱 내보내기와 가져오기는 `.md` 한 개만 저장하고 연다(MAS 샌드박스에서 옆 폴더를 쓰거나 읽을 권한이 없다). 그래서 내보낸 파일은 본문에 참조형 이미지 `![캡션][illustration-<id>]`를 두고, 파일 끝에 그림마다 한 번 `[illustration-<id>]: data:<mime>;base64,...` 정의를 둔다. 본문은 읽기 쉽게 남고, 같은 그림을 두 번 써도 한 번만 담긴다. 가져오기는 이 정의만 읽는다(상대 경로 파일은 읽지 않는다).
 - **동기화는 이미지 파일**: 동기화 폴더는 엔진(또는 MAS에서는 Rust 쪽 복사)이 쓸 수 있으므로 `<작품 파일 이름>.images/<id>.<ext>`에 파일로 쓰고 본문은 `![캡션](<폴더>/<id>.<ext>)`로 가리킨다. Git diff에 base64가 쌓이지 않는다.
-- **Works 게시(3.4~3.5)는 미룸**: `linetta-works` 저장소 쪽 API 합의가 먼저 필요해서 별도 계획(linetta-works 쪽)으로 진행한다. Phase 2의 "삽화는 아직 게시되지 않습니다" 안내는 그대로 둔다.
+- **Works 게시(3.4~3.5)는 Works 사이트 저장소로 옮김**: 사이트 저장소 `linetta-artworks`의 `docs/plans/artworks-phase-5-illustrations.md`(Phase 5 회차 삽화)가 이어받는다. 앱 쪽 작업은 그 문서의 작업 그룹 D다. 그때까지 Phase 2의 "삽화는 아직 게시되지 않습니다" 안내는 그대로 둔다.
 
 ## Non-goals
 
@@ -57,7 +57,7 @@ _상태: 3.1~3.3 완료(2026-10-24). 3.4~3.5(Works 게시)는 별도 계획으�
 
 ## Publish tasks (Linetta + Linetta Works) — 미룸
 
-_별도 linetta-works 계획으로 옮긴다. 아래는 그때 참고할 초안이다._
+_`linetta-artworks`의 `docs/plans/artworks-phase-5-illustrations.md`로 옮겼다. 아래는 처음 초안이고, 확정한 설계(본문의 `illustration:<id>` 참조, 그림 먼저 올리기, 글과 그림을 함께 보는 수위 검사)는 그 문서를 따른다._
 
 - [ ] **3.4 Works API 합의 (linetta-works 저장소)**
   - 회차 이미지 업로드 엔드포인트를 정한다. 예: `PUT works/{project_id}/episodes/{node_id}/images/{illustration_id}` (바이트, MIME)
