@@ -5,8 +5,6 @@ package mcphost
 import (
 	"context"
 	"encoding/json"
-	"sort"
-	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/visual"
@@ -86,61 +84,11 @@ func (d ToolDeps) resolveVisualCharacters(ctx context.Context, projectID string,
 	if err != nil {
 		return nil, toolErr("could not read characters: %v", err)
 	}
-	sort.Slice(all, func(i, j int) bool {
-		if all[i].Name == all[j].Name {
-			return all[i].ID < all[j].ID
-		}
-		return all[i].Name < all[j].Name
-	})
-	chars := []entity.Entity{}
-	available := []string{}
-	for _, e := range all {
-		if e.Kind == entity.KindCharacter {
-			chars = append(chars, e)
-			available = append(available, e.Name)
-		}
+	chars, err := visual.ResolveCharacters(all, ids, names)
+	if err != nil {
+		return nil, toolErr("%s", err.Error())
 	}
-	if len(ids) == 0 && len(names) == 0 {
-		return chars, nil
-	}
-	selected := map[string]bool{}
-	for _, id := range ids {
-		found := false
-		for _, e := range chars {
-			if e.ID == strings.TrimSpace(id) {
-				selected[e.ID] = true
-				found = true
-			}
-		}
-		if !found {
-			return nil, toolErr("character %q is not in this work", id)
-		}
-	}
-	for _, name := range names {
-		matches := []string{}
-		for _, e := range chars {
-			for _, candidate := range append([]string{e.Name}, e.Aliases...) {
-				if strings.EqualFold(strings.TrimSpace(candidate), strings.TrimSpace(name)) {
-					matches = append(matches, e.ID)
-					break
-				}
-			}
-		}
-		if len(matches) == 0 {
-			return nil, toolErr("unknown character %q; available characters: %s", name, strings.Join(available, ", "))
-		}
-		if len(matches) > 1 {
-			return nil, toolErr("ambiguous character %q; use entity_ids", name)
-		}
-		selected[matches[0]] = true
-	}
-	out := []entity.Entity{}
-	for _, e := range chars {
-		if selected[e.ID] {
-			out = append(out, e)
-		}
-	}
-	return out, nil
+	return chars, nil
 }
 func (d ToolDeps) getCharacterVisuals(ctx context.Context, _ *mcp.CallToolRequest, in characterVisualsInput) (*mcp.CallToolResult, characterVisualsOutput, error) {
 	out := characterVisualsOutput{Characters: []visualCharacter{}, SkippedImageIDs: []string{}}
@@ -212,19 +160,9 @@ func (d ToolDeps) buildIllustrationPrompt(ctx context.Context, _ *mcp.CallToolRe
 	if d.Visuals == nil {
 		return toolErr("character visuals are unavailable in this build"), out, nil
 	}
-	if strings.TrimSpace(in.Scene) == "" {
-		return toolErr("scene is required"), out, nil
-	}
-	if len(in.EntityIDs) == 0 && len(in.Names) == 0 {
-		// Unlike the read tool, defaulting to the whole cast here would put
-		// characters in the picture who are not in the scene.
-		return toolErr("name the characters in the picture with names or entity_ids"), out, nil
-	}
-	if in.Format == "" {
-		in.Format = visual.FormatSingle
-	}
-	if in.Format != visual.FormatSingle && in.Format != visual.FormatFourPanel {
-		return toolErr("format must be single or four_panel"), out, nil
+	req := visual.ComposeInput{EntityIDs: in.EntityIDs, Names: in.Names, Scene: in.Scene, Format: in.Format}
+	if err := req.Validate(); err != nil {
+		return toolErr("%s", err.Error()), out, nil
 	}
 	p, refusal := d.requireProject(ctx, in.ProjectID)
 	if refusal != nil {
@@ -240,35 +178,18 @@ func (d ToolDeps) buildIllustrationPrompt(ctx context.Context, _ *mcp.CallToolRe
 		}
 		out.SceneLabel = n.Label
 	}
-	chars, refusal := d.resolveVisualCharacters(ctx, p.ID, in.EntityIDs, in.Names)
-	if refusal != nil {
-		return refusal, out, nil
-	}
-	style, err := d.Visuals.GetArtStyle(ctx, p.ID)
+	all, err := d.Entities.ListByProject(ctx, p.ID)
 	if err != nil {
-		return toolErr("could not read art style: %v", err), out, nil
+		return toolErr("could not read characters: %v", err), out, nil
 	}
-	designs := []visual.CharacterVisual{}
-	for _, e := range chars {
-		sheet, err := d.Visuals.GetSheet(ctx, e.ID)
-		if err != nil {
-			return toolErr("could not read design: %v", err), out, nil
-		}
-		images, err := d.Visuals.ListImages(ctx, e.ID)
-		if err != nil {
-			return toolErr("could not read references: %v", err), out, nil
-		}
-		designs = append(designs, visual.CharacterVisual{Name: e.Name, Role: e.Role, Sheet: sheet, Images: images})
-		out.Characters = append(out.Characters, promptCharacter{e.ID, e.Name})
-		if sheet.Empty() {
-			out.MissingSheets = append(out.MissingSheets, e.Name)
-		}
-		for _, img := range images {
-			out.ReferenceImageIDs = append(out.ReferenceImageIDs, img.ID)
-		}
+	c, err := d.Visuals.Compose(ctx, p.ID, all, req)
+	if err != nil {
+		return toolErr("%s", err.Error()), out, nil
 	}
-	out.Format = in.Format
-	out.NegativePrompt = style.NegativePrompt
-	out.Prompt = visual.BuildPrompt(style, designs, in.Scene, in.Format)
+	for _, ch := range c.Characters {
+		out.Characters = append(out.Characters, promptCharacter{ch.EntityID, ch.Name})
+	}
+	out.Prompt, out.NegativePrompt, out.Format = c.Prompt, c.NegativePrompt, c.Format
+	out.ReferenceImageIDs, out.MissingSheets = c.ReferenceImageIDs, c.MissingSheets
 	return nil, out, nil
 }
