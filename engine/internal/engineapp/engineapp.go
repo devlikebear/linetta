@@ -189,6 +189,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		entities:      entities,
 		relationships: relationships,
 		extras:        export.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts},
+		images:        exportImages{illustrations},
 		ops:           ops,
 	}
 	gitSyncer := setupGitSync(syncDeps)
@@ -526,12 +527,13 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		Entities:      entities,
 		Relationships: relationships,
 		Extras:        export.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts},
+		Illustrations: exportImages{illustrations},
 	}, settingsLanguage))
-	s.Handle("export.node", handlers.ExportNode(nodes))
+	s.Handle("export.node", handlers.ExportNode(nodes, exportImages{illustrations}))
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
 	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc, settingsLanguage))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships,
-		importmd.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts}, clock))
+		importmd.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts}, illustrations, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	return nil
 }

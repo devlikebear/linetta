@@ -358,6 +358,11 @@ func parseBlockLines(lines []string, inItem bool) []TiptapBlock {
 			i++
 			continue
 		}
+		if block, ok := illustrationBlock(ln); ok {
+			blocks = append(blocks, block)
+			i++
+			continue
+		}
 		if m := blockHeadRE.FindStringSubmatch(ln); m != nil {
 			blocks = append(blocks, TiptapBlock{
 				Type:    "heading",

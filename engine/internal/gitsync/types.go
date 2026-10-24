@@ -37,6 +37,9 @@ type Syncer struct {
 	Entities      *entity.Repo
 	Relationships *relationship.Repo
 	Extras        export.Extras
+	// Illustrations supplies the scenes' pictures, written beside each
+	// work's file in its export.SyncImageDir. Nil leaves them out.
+	Illustrations export.IllustrationSource
 	Run           CmdRunner
 	Now           func() time.Time
 	Ops           *opsstatus.Repo

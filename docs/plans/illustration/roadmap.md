@@ -1,7 +1,7 @@
 # 삽화 생성·삽입 — 로드맵
 
 _작성일: 2026-10-23_
-_상태: Phase 1 완료(2026-10-24, #218) / Phase 2 완료(2026-10-24) / Phase 3 대기_
+_상태: Phase 1 완료(2026-10-24, #218) / Phase 2 완료(2026-10-24, #221) / Phase 3 내보내기·동기화·가져오기 완료(2026-10-24), Works 게시는 별도 계획_
 _관련: #154 인물 비주얼 시트(`engine/internal/visual`), #158 비주얼 MCP 쓰기 툴, #160 에디터 스키마 패리티_
 
 ## Overview
@@ -98,9 +98,9 @@ _2026-10-23 스파이크 결과: Codex는 실제 호출로 확인했다. `size`�
 
 ### Next
 
-3. **Phase 3 — 내보내기·동기화·게시** ([`phase-3-export-publish.md`](./phase-3-export-publish.md))
-   - 끝나면: Markdown 내보내기와 폴더/Git 동기화에 이미지 파일이 함께 나가고, Works에 게시한 회차에 삽화가 보인다.
-   - Works 쪽 작업(`linetta-works` 저장소)이 함께 필요하다.
+3. **Phase 3 — 내보내기·동기화·게시** ([`phase-3-export-publish.md`](./phase-3-export-publish.md)) — 3.1~3.3 ✅
+   - 끝나면: Markdown 내보내기(파일 하나에 data URI로 내장)와 가져오기, 폴더/Git 동기화(`.images` 폴더)에 삽화가 따라간다.
+   - Works 게시(3.4~3.5)는 `linetta-works` 저장소 API 합의가 먼저라 별도 계획으로 미뤘다.
 
 ### Later
 

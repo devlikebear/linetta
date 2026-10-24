@@ -222,7 +222,10 @@ func renderBlock(n map[string]any, o *MarkdownOptions) []string {
 		if !ok || o.Illustration == nil {
 			return nil
 		}
-		return []string{o.Illustration(id, caption)}
+		if s := o.Illustration(id, caption); s != "" {
+			return []string{s}
+		}
+		return nil
 	case "codeBlock":
 		return []string{renderCodeBlock(n, content)}
 	case "bulletList":
