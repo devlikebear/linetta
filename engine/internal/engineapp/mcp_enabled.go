@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
@@ -47,19 +48,20 @@ type mcpDeps struct {
 // a second instance wired with fact/memory/reference sources — the builder the
 // AI runner uses stays untouched so its prompts do not change.
 type mcpToolRepos struct {
-	visuals    *visual.Repo
-	style      *style.Repo
-	projects   *project.Repo
-	nodes      *node.Repo
-	entities   *entity.Repo
-	mentions   *mention.Repo
-	facts      *fact.Repo
-	plot       *plot.Builder
-	manuscript *manuscript.Searcher
-	context    *storycontext.ContextBuilder
-	snapshots  *snapshot.Repo
-	story      *storyops.Service
-	msEdit     *manuscriptedit.Service
+	visuals       *visual.Repo
+	illustrations illustref.Index
+	style         *style.Repo
+	projects      *project.Repo
+	nodes         *node.Repo
+	entities      *entity.Repo
+	mentions      *mention.Repo
+	facts         *fact.Repo
+	plot          *plot.Builder
+	manuscript    *manuscript.Searcher
+	context       *storycontext.ContextBuilder
+	snapshots     *snapshot.Repo
+	story         *storyops.Service
+	msEdit        *manuscriptedit.Service
 	// memory is the two curated documents linetta_edit_memory writes. The
 	// same *agentmemory.Repo the companion reads them back through and the
 	// settings pane edits: one row per document, one writer per row at a
@@ -99,19 +101,20 @@ type agentToolDeps = mcphost.ToolDeps
 func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 	activity := mcphost.NewActivityRepo(deps.repos.db)
 	tools := mcphost.ToolDeps{
-		Visuals:    deps.repos.visuals,
-		Style:      deps.repos.style,
-		Projects:   deps.repos.projects,
-		Nodes:      deps.repos.nodes,
-		Entities:   deps.repos.entities,
-		Mentions:   deps.repos.mentions,
-		Facts:      deps.repos.facts,
-		Plot:       deps.repos.plot,
-		Manuscript: deps.repos.manuscript,
-		Context:    deps.repos.context,
-		Settings:   deps.settingsStore,
-		Activity:   activity,
-		Memory:     deps.repos.memory,
+		Visuals:       deps.repos.visuals,
+		Illustrations: deps.repos.illustrations,
+		Style:         deps.repos.style,
+		Projects:      deps.repos.projects,
+		Nodes:         deps.repos.nodes,
+		Entities:      deps.repos.entities,
+		Mentions:      deps.repos.mentions,
+		Facts:         deps.repos.facts,
+		Plot:          deps.repos.plot,
+		Manuscript:    deps.repos.manuscript,
+		Context:       deps.repos.context,
+		Settings:      deps.settingsStore,
+		Activity:      activity,
+		Memory:        deps.repos.memory,
 
 		Skills:       deps.repos.skills,
 		SkillHistory: deps.repos.skillHistory,

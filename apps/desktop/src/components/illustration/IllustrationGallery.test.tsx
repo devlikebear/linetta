@@ -93,3 +93,43 @@ describe("IllustrationGallery", () => {
     expect(onNew).toHaveBeenCalled();
   });
 });
+
+describe("IllustrationGallery and scenes", () => {
+  URL.createObjectURL = vi.fn(() => "blob:img");
+  URL.revokeObjectURL = vi.fn();
+  beforeEach(() => {
+    Object.values(rpc).forEach((f) => f.mockReset());
+    rpc.get.mockImplementation((id: string) => Promise.resolve({ ...meta(id), data_base64: btoa("jpg") }));
+  });
+
+  it("marks a picture in use, names its scenes, and inserts it with the edited caption", async () => {
+    rpc.list.mockResolvedValue({
+      items: [meta("a", { caption: "우산", used_in: [{ node_id: "n1", label: "3화", title: "비" }] })],
+      count: 1,
+      bytes: 900_000,
+    });
+    rpc.update.mockResolvedValue(meta("a", { caption: "표지" }));
+    const onInsert = vi.fn();
+    render(<IllustrationGallery projectId="p" onClose={() => {}} onNew={() => {}} onInsert={onInsert} />);
+
+    expect(await screen.findByTestId("illustration-thumb-a")).toHaveTextContent("illustration.inUse");
+    fireEvent.click(screen.getByTestId("illustration-thumb-a"));
+    expect(screen.getByTestId("illustration-used-in")).toHaveTextContent("3화 · 비");
+
+    fireEvent.change(screen.getByTestId("illustration-caption"), { target: { value: " 표지 " } });
+    fireEvent.click(screen.getByTestId("illustration-insert"));
+    expect(onInsert).toHaveBeenCalledWith(expect.objectContaining({ id: "a", caption: "표지" }));
+  });
+
+  it("cannot insert with no scene open, and says why a delete was refused", async () => {
+    rpc.list.mockResolvedValue({ items: [meta("a")], count: 1, bytes: 1 });
+    rpc.remove.mockRejectedValue({ code: -32602, message: "in use", data: { reason: "illustration_in_use" } });
+    render(<IllustrationGallery projectId="p" onClose={() => {}} onNew={() => {}} />);
+    fireEvent.click(await screen.findByTestId("illustration-thumb-a"));
+    expect(screen.getByTestId("illustration-insert")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("illustration-delete"));
+    fireEvent.click(screen.getByTestId("illustration-delete"));
+    expect(await screen.findByText("errors.illustrationInUse")).toBeInTheDocument();
+    expect(screen.getByTestId("illustration-delete")).toHaveTextContent("illustration.delete");
+  });
+});

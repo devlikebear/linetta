@@ -36,7 +36,7 @@ func TestExportNodeHandler(t *testing.T) {
 	f := newNodeFixture(t)
 	// seed content
 	_ = f.nodes
-	h := ExportNode(f.nodes)
+	h := ExportNode(f.nodes, nil)
 	res, err := h(context.Background(), json.RawMessage(`{"node_id":"`+f.nID+`"}`))
 	if err != nil {
 		t.Fatalf("handler: %v", err)

@@ -38,7 +38,7 @@ const cast = [
 ];
 
 function renderDialog(extra: Partial<Parameters<typeof IllustrationDialog>[0]> = {}) {
-  const props = { projectId: "p", onClose: vi.fn(), onSaved: vi.fn(), onOpenSettings: vi.fn(), ...extra };
+  const props = { projectId: "p", onClose: vi.fn(), onSaved: vi.fn(), onInsert: vi.fn(), onOpenSettings: vi.fn(), ...extra };
   render(<IllustrationDialog {...props} />);
   return props;
 }
@@ -100,6 +100,8 @@ describe("IllustrationDialog", () => {
     );
     await waitFor(() => expect(props.onSaved).toHaveBeenCalledWith({ id: "i1" }));
     expect(screen.getByTestId("illustration-result")).toHaveTextContent("illustration.saved");
+    fireEvent.click(screen.getByTestId("illustration-result-insert"));
+    expect(props.onInsert).toHaveBeenCalledWith({ id: "i1" });
   });
 
   it("says why it cannot draw and links to the settings", async () => {

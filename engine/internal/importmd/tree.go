@@ -13,6 +13,9 @@ type Document struct {
 	Outline  Outline
 	Metadata mdmeta.Metadata
 	Warnings []string
+	// Images are the pictures the file embedded, by the id its references
+	// use. RestoreIllustrations puts them in the new work's gallery.
+	Images map[string]ImportedImage
 }
 
 // Outline is the heading hierarchy extracted from a markdown document.
@@ -58,6 +61,7 @@ func ParseDocument(text string) Document {
 		body = text
 		warnings = append(warnings, WarnFrontmatterUnreadable)
 	}
+	body, images := extractIllustrationDefs(body)
 	legacy, stripped := stripLinettaAppendices(body, meta.Empty())
 	if meta.Empty() {
 		meta.Entities = append(meta.Entities, legacy.Entities...)
@@ -67,6 +71,7 @@ func ParseDocument(text string) Document {
 		Outline:  parseOutlineBody(stripped),
 		Metadata: mdmeta.Normalize(meta),
 		Warnings: warnings,
+		Images:   images,
 	}
 }
 

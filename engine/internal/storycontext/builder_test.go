@@ -928,3 +928,61 @@ func TestBuildFullSurvivesNoCuratedMemorySource(t *testing.T) {
 		t.Errorf("got %q / %q", c.WriterProfile, c.WorkNotes)
 	}
 }
+
+// A scene revised after its summary was written keeps that summary in the
+// next scene's brief, marked stale — not the revised scene's opening lines,
+// which say nothing about how it ends. A derived summary gone stale is still
+// dropped for the trim, as before.
+func TestBuildContext_nearby_keepsAStaleWrittenSummaryAndMarksIt(t *testing.T) {
+	f := newCtxFixture(t)
+	ctx := context.Background()
+	p := f.project(t, project.NewInput{Genres: []string{"SF"}, LengthTarget: "series", DefaultPOV: "first"})
+	nodes := f.nodes
+	docOf := func(text string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + text + `"}]}]}`
+	}
+	ep3, _ := nodes.CreateSibling(ctx, *p.LastOpenedNodeID, "leaf", "3화", "", 1100)
+	ep4, _ := nodes.CreateSibling(ctx, ep3.ID, "leaf", "4화", "", 1110)
+	ep2 := *p.LastOpenedNodeID
+
+	_ = nodes.UpdateContent(ctx, ep3.ID, docOf("서명 칸이 떴다."), 1200)
+	got3, _ := nodes.Get(ctx, ep3.ID)
+	_ = nodes.SetWrittenSummary(ctx, ep3.ID, "확인된 서명은 입사 서류의 것이었다.", got3.ContentVersion)
+	_ = nodes.UpdateContent(ctx, ep3.ID, docOf("서명 칸이 떴다. 숫자 하나만 고쳤다."), 1300)
+
+	built, err := f.builder().Build(ctx, ep4.ID, "이어 써줘", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	var found bool
+	for _, ss := range built.Hierarchical.NearbyLeafSummaries {
+		if ss.NodeID != ep3.ID {
+			continue
+		}
+		found = true
+		if ss.Body != "확인된 서명은 입사 서류의 것이었다." || !ss.Stale {
+			t.Errorf("3화 nearby = %+v, want the written summary marked stale", ss)
+		}
+	}
+	if !found {
+		t.Fatalf("3화 missing from nearby: %+v", built.Hierarchical.NearbyLeafSummaries)
+	}
+	if user := buildUser(built); !strings.Contains(user, "(고치기 전 원고의 요약) 확인된 서명은") {
+		t.Errorf("brief does not mark the stale summary:\n%s", user)
+	}
+
+	// The derived case, for contrast: a stale opening cut is not worth keeping.
+	_ = nodes.UpdateContent(ctx, ep2, docOf("2화 본문"), 1400)
+	got2, _ := nodes.Get(ctx, ep2)
+	_ = nodes.SetSummary(ctx, ep2, "2화 옛 첫머리", got2.ContentVersion)
+	_ = nodes.UpdateContent(ctx, ep2, docOf("2화 새 본문"), 1500)
+	built, err = f.builder().Build(ctx, ep3.ID, "이어 써줘", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, ss := range built.Hierarchical.NearbyLeafSummaries {
+		if ss.NodeID == ep2 && (strings.TrimSpace(ss.Body) != "2화 새 본문" || ss.Stale) {
+			t.Errorf("2화 nearby = %+v, want the trim of the current text", ss)
+		}
+	}
+}

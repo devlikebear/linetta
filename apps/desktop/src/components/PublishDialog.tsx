@@ -262,6 +262,11 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
                   {shown?.number ? ` · ${t("publish.number", { number: String(shown.number) })}` : ""}
                 </p>
                 {episode.empty && <p className="sd" role="alert">{t("errors.publishEmptyEpisode")}</p>}
+                {episode.illustrations_omitted ? (
+                  <p className="sd" data-testid="publish-illustrations-omitted">
+                    {t("publish.illustrationsOmitted", { count: episode.illustrations_omitted })}
+                  </p>
+                ) : null}
                 {episode.modified && episode.state !== "modified" && onSite && (
                   <p className="sd">{t("publish.differsFromSite")}</p>
                 )}

@@ -190,7 +190,7 @@ func TestExportImportRoundTripCompleteness(t *testing.T) {
 	// ---- import into a fresh library ----
 	dst := openLibrary(t, "dst.db")
 	importParams, _ := json.Marshal(map[string]string{"file_name": payload.SuggestedFilename, "content": payload.Markdown})
-	resultRaw, err := ImportMarkdown(dst.projects, dst.nodes, dst.entities, dst.relationships, dst.importExtras(), func() int64 { return 9000 })(ctx, importParams)
+	resultRaw, err := ImportMarkdown(dst.projects, dst.nodes, dst.entities, dst.relationships, dst.importExtras(), nil, func() int64 { return 9000 })(ctx, importParams)
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestImportV1FrontmatterStillWorks(t *testing.T) {
 		"      name: 리나\n" +
 		"---\n\n# 옛 작품\n\n## 씬 1\n\n본문.\n"
 	params, _ := json.Marshal(map[string]string{"file_name": "old.md", "content": content})
-	raw, err := ImportMarkdown(dst.projects, dst.nodes, dst.entities, dst.relationships, dst.importExtras(), func() int64 { return 1000 })(ctx, params)
+	raw, err := ImportMarkdown(dst.projects, dst.nodes, dst.entities, dst.relationships, dst.importExtras(), nil, func() int64 { return 1000 })(ctx, params)
 	if err != nil {
 		t.Fatalf("import v1: %v", err)
 	}
@@ -415,7 +415,7 @@ func TestExportImportRoundTripKeepsFormatting(t *testing.T) {
 
 	dst := openLibrary(t, "dst.db")
 	importParams, _ := json.Marshal(map[string]string{"file_name": payload.SuggestedFilename, "content": payload.Markdown})
-	resultRaw, err := ImportMarkdown(dst.projects, dst.nodes, dst.entities, dst.relationships, dst.importExtras(), func() int64 { return 9000 })(ctx, importParams)
+	resultRaw, err := ImportMarkdown(dst.projects, dst.nodes, dst.entities, dst.relationships, dst.importExtras(), nil, func() int64 { return 9000 })(ctx, importParams)
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}

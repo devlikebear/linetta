@@ -190,12 +190,24 @@ UPDATE projects
 	return nil
 }
 
-// SetSummary writes the LLM-generated summary and the version it was generated
-// for. Does NOT touch updated_at — derived field, not user content.
+// SetSummary writes a summary Linetta derived itself (a scene's opening, a
+// container's rolled-up children) and the version it was derived from. Does
+// NOT touch updated_at — derived field, not user content.
 func (r *Repo) SetSummary(ctx context.Context, id string, summary string, forVersion int) error {
+	return r.setSummary(ctx, id, summary, forVersion, false)
+}
+
+// SetWrittenSummary writes a summary someone wrote — an agent, an imported
+// manuscript — for the given version. The summarizer leaves it alone after
+// the node changes; only another write replaces it.
+func (r *Repo) SetWrittenSummary(ctx context.Context, id string, summary string, forVersion int) error {
+	return r.setSummary(ctx, id, summary, forVersion, true)
+}
+
+func (r *Repo) setSummary(ctx context.Context, id string, summary string, forVersion int, written bool) error {
 	res, err := r.s.DB().ExecContext(ctx, `
-UPDATE nodes SET summary = ?, summary_for_version = ? WHERE id = ?`,
-		summary, forVersion, id)
+UPDATE nodes SET summary = ?, summary_for_version = ?, summary_written = ? WHERE id = ?`,
+		summary, forVersion, written, id)
 	if err != nil {
 		return err
 	}
@@ -232,7 +244,7 @@ func (r *Repo) SetLastOpened(ctx context.Context, projectID, nodeID string, now 
 const baseSelect = `
 SELECT id, project_id, parent_id, ordinal, kind, label, title,
        content_doc, status, word_count, summary, content_version,
-       summary_for_version, created_at, updated_at
+       summary_for_version, summary_written, created_at, updated_at
 FROM nodes`
 
 type scanner interface{ Scan(...any) error }
@@ -245,7 +257,7 @@ func scan(row scanner) (Node, error) {
 	)
 	if err := row.Scan(&n.ID, &n.ProjectID, &parentID, &n.Ordinal, &n.Kind, &n.Label, &n.Title,
 		&contentDoc, &n.Status, &n.WordCount, &n.Summary, &n.ContentVersion,
-		&n.SummaryForVersion, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		&n.SummaryForVersion, &n.SummaryWritten, &n.CreatedAt, &n.UpdatedAt); err != nil {
 		return Node{}, err
 	}
 	if parentID.Valid {
@@ -957,11 +969,11 @@ func (r *Repo) RestoreOutline(ctx context.Context, projectID string, snapshot []
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
                    content_doc, status, word_count, summary, content_version,
-                   summary_for_version, created_at, updated_at)
-VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   summary_for_version, summary_written, created_at, updated_at)
+VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ID, n.ProjectID, n.Ordinal, n.Kind, n.Label, n.Title, contentDoc,
 			n.Status, n.WordCount, n.Summary, n.ContentVersion, n.SummaryForVersion,
-			n.CreatedAt, now); err != nil {
+			n.SummaryWritten, n.CreatedAt, now); err != nil {
 			return err
 		}
 	}

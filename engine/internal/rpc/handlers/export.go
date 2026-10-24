@@ -66,14 +66,15 @@ type exportNodeParams struct {
 	NodeID string `json:"node_id"`
 }
 
-// ExportNode returns a handler for export.node.
-func ExportNode(nr *node.Repo) rpc.Handler {
+// ExportNode returns a handler for export.node. The scene's pictures are
+// embedded in the file.
+func ExportNode(nr *node.Repo, illustrations export.IllustrationSource) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var p exportNodeParams
 		if err := json.Unmarshal(params, &p); err != nil || p.NodeID == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node_id required"}
 		}
-		out, err := export.ExportNode(ctx, nr, p.NodeID)
+		out, err := export.ExportNode(ctx, nr, p.NodeID, illustrations)
 		if err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
