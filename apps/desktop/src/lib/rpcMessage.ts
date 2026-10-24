@@ -51,6 +51,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   provider_timeout: "errors.providerTimeout",
   provider_rejected: "errors.providerRejected",
   provider_unavailable: "errors.providerUnavailable",
+  provider_model_unsupported: "errors.providerModelUnsupported",
   // Illustration drawing: what only drawing has. The provider failures above
   // apply to it too.
   image_generation_off: "errors.imageGenerationOff",

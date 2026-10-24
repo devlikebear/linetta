@@ -21,7 +21,7 @@ import (
 // never cached: changing the model in settings applies to the next message
 // without restarting the engine. *provider.Source satisfies this.
 type ProviderSource interface {
-	Client(id string) (llm.Client, provider.Resolved, error)
+	Client(ctx context.Context, id string) (llm.Client, provider.Resolved, error)
 }
 
 // MemorySource reads the curated memories for one turn. An interface rather

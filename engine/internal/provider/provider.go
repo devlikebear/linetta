@@ -162,6 +162,8 @@ type Source struct {
 	factory   ClientFactory
 	fetcher   llm.ModelFetcher
 	cli       *cliDetector
+	// codexCache is the Codex model list a turn picks its default from.
+	codexCache codexModelCache
 	// cliWorkDir is where the Claude Code CLI runs: an empty directory of
 	// Linetta's own. A Finder-launched app's working directory is "/", and
 	// the CLI's file tools — switched off, but the directory is still its
@@ -248,7 +250,10 @@ func (s *Source) Resolve(id string) (Resolved, error) {
 // activity when the provider is not configured or not consented to. The
 // consent rule is "not a byte leaves without it", and this is the only path
 // that produces something able to send one, so the check lives here.
-func (s *Source) Client(id string) (llm.Client, Resolved, error) {
+//
+// For Codex with no model chosen, the returned Resolved carries the model the
+// account's list picked (see codexModel), so the caller logs what was used.
+func (s *Source) Client(ctx context.Context, id string) (llm.Client, Resolved, error) {
 	r, err := s.Resolve(id)
 	if err != nil {
 		return nil, Resolved{}, err
@@ -264,6 +269,9 @@ func (s *Source) Client(id string) (llm.Client, Resolved, error) {
 			Reason: rpc.ReasonProviderConsentRequired,
 			Err:    fmt.Errorf("%s: consent required", r.ID),
 		}
+	}
+	if r.ID == settings.ProviderOpenAICodex {
+		r.Model = s.codexModel(ctx, r)
 	}
 	if r.ID == settings.ProviderClaudeCode {
 		pointTarsAtCLI(r.CLIPath)

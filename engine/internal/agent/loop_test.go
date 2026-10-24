@@ -79,7 +79,7 @@ type fakeProviders struct {
 	err    error
 }
 
-func (f fakeProviders) Client(string) (llm.Client, provider.Resolved, error) {
+func (f fakeProviders) Client(context.Context, string) (llm.Client, provider.Resolved, error) {
 	return f.client, provider.Resolved{ID: "anthropic", Model: "test-model"}, f.err
 }
 
