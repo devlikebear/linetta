@@ -1,3 +1,14 @@
+//go:build cgo
+
+// ffi.go uses cgo (it exports C-callable functions), so with CGO_ENABLED=0
+// the file is excluded from the build entirely and startEngine, stopEngine,
+// handleRequest and setGoNotifier/emitNotify do not exist — pre-existing on
+// main, not introduced by story-assist. This file needs the same gate ffi.go
+// gets implicitly, or `go test ./...` under CGO_ENABLED=0 (the variant the
+// repo's own convention uses locally, to avoid the login-keychain prompt a
+// cgo test can trigger) fails to even build this package, over symbols a
+// non-cgo build was never going to have in the first place.
+
 package main
 
 import (
