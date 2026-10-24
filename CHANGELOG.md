@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- With **Claude Code** as the AI provider, the model list now offers full
+  model ids such as `claude-opus-5-5` after the `opus`, `sonnet` and `haiku`
+  aliases, so you can pin an exact model. The list comes from the models your
+  Claude Code has cached, a built-in list, and — if you also set up an
+  Anthropic API key — Anthropic's own current list. The aliases still come
+  first and still follow the newest model of each tier.
+
 ## v1.9.1 - 2026-10-19
 
 - **Settings → Publishing** has a **Browse Linetta Works** button that opens
