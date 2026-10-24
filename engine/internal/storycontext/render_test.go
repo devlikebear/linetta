@@ -729,6 +729,24 @@ func TestBuildUser_direction_staleFocusAppendsNote(t *testing.T) {
 	}
 }
 
+// Review finding f1: direction.Repo.GetFocus reports EpisodesSince=-1 when
+// the anchor episode's node was deleted. That must not flow into the
+// "%d episodes ago" template verbatim — "-1 episodes ago" is nonsense in a
+// section the agent is told is binding.
+func TestBuildUser_direction_staleFocusWithMissingAnchorNamesItInsteadOfACount(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction:  DirectionBrief{Focus: "초점", FocusStale: true, FocusEpisodesSince: -1},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "기준 회차를 찾을 수 없음") {
+		t.Fatalf("missing anchor-missing note. got:\n%s", got)
+	}
+	if strings.Contains(got, "-1회차") {
+		t.Fatalf("must not render the raw -1 count. got:\n%s", got)
+	}
+}
+
 func TestBuildUser_direction_freshFocusHasNoStalenessNote(t *testing.T) {
 	c := Context{SceneLabel: "씬 1", Direction: DirectionBrief{Focus: "초점", FocusStale: false}}
 	got := buildUser(c)

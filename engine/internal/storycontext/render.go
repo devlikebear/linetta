@@ -487,12 +487,24 @@ func renderDirection(d DirectionBrief, lang string) string {
 		b.WriteString(langPick(lang, "지금의 초점: ", "Current focus: ", "今の焦点: "))
 		b.WriteString(focus)
 		if d.FocusStale {
-			b.WriteString(fmt.Sprintf(
-				langPick(lang,
-					" (%d회차 전에 정한 초점 — 따르기 전에 작가에게 아직 유효한지 확인)",
-					" (set %d episodes ago — check with the writer that it still holds before following it)",
-					" (%d話前に決めた焦点 — 従う前に作家にまだ有効か確認)"),
-				d.FocusEpisodesSince))
+			if d.FocusEpisodesSince < 0 {
+				// The anchor episode was recorded but no longer exists (its
+				// node was deleted) — direction.Repo.GetFocus's -1 case.
+				// There is no episode count to report, so this must not
+				// share the "%d episodes ago" template below: a stray -1
+				// reads as the focus being from the future, not stale.
+				b.WriteString(langPick(lang,
+					" (기준 회차를 찾을 수 없음 — 따르기 전에 작가에게 아직 유효한지 확인)",
+					" (anchor episode not found — check with the writer that it still holds before following it)",
+					" (基準の話が見つかりません — 従う前に作家にまだ有効か確認)"))
+			} else {
+				b.WriteString(fmt.Sprintf(
+					langPick(lang,
+						" (%d회차 전에 정한 초점 — 따르기 전에 작가에게 아직 유효한지 확인)",
+						" (set %d episodes ago — check with the writer that it still holds before following it)",
+						" (%d話前に決めた焦点 — 従う前に作家にまだ有効か確認)"),
+					d.FocusEpisodesSince))
+			}
 		}
 		b.WriteString("\n")
 	}
