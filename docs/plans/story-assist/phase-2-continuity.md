@@ -239,7 +239,12 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
   - 내용:
     - `continuity_checks`와 `continuity_observations`를 node와 project 재매핑과 함께 복사한다.
     - `refs_json` 안의 scene id도 재매핑한다. entity, fact, beat id는 복원 때 새 id가 되므로, 매핑 표가 있으면 그것으로 바꾸고 없으면 그 ref를 버린다.
-  - 다른 방식: 관찰은 언제든 다시 만들 수 있는 산출물이다. 그래서 복원 대상에서 **명시적으로 빼는 것**도 받아들일 만하다. 어느 쪽으로 할지 구현 시작 때 사용자에게 한 번 묻는다. 권장은 복사다.
+    - 상태(`open` / `dismissed` / `resolved` / `replaced`)와 `content_version`은 그대로 옮긴다. 복원된 씬의 버전이 같으면 낡음 판정도 그대로 유지된다.
+    - 함수 머리 주석(`restore.go:181`)의 테이블 목록에 두 테이블을 추가한다.
+  - **정책 확정 (2026-10-24, 사용자 결정): 관찰은 작품 단위 복원에 포함한다.**
+    - 작가가 무시하거나 해결로 표시한 판단도 작업 기록이다. 복원했는데 그 기록이 사라지면, 같은 관찰을 다시 검토해야 한다.
+    - 제안함(Phase 3)과 갈래 예측(Phase 4)을 복원에서 빼는 것과는 사정이 다르다. 관찰은 씬과 원고 인용에 묶여 있어 재매핑 뒤에도 뜻이 유지된다.
+  - 테스트: 백업에서 복원한 작품에 관찰과 상태가 따라온다. 매핑에 없는 entity ref는 버려지고, 나머지 ref는 남는다.
 
 - [ ] **2.C.3 에이전트 지침과 시작 칩**
   - `engine/internal/agent/prompt.go`: Review 그룹이 켜져 있을 때만 다음 줄을 넣는다.
@@ -320,6 +325,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
 - [ ] 본문을 한 글자 고치면 "본문이 바뀜" 배지가 뜬다.
 - [ ] [무시]한 관찰은 다시 점검해도 무시 상태로 남는다. 열린 관찰은 "교체됨"으로 숨겨진다.
 - [ ] Settings → Tool budget에서 "점검·제안"을 끄면 다음 메시지부터 도구와 칩이 사라진다.
+- [ ] Settings → Backup에서 그 작품을 복원하면 관찰과 상태(무시·해결)가 따라오고, 인물 ref 칩이 복원된 인물을 연다.
 - [ ] 위 과정 전후로 씬 본문의 `content_version`을 활동 로그나 VersionSheet에서 확인한다. 점검 도구가 본문을 바꾸지 않았어야 한다.
 
 **완료 처리**
