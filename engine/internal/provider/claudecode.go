@@ -45,9 +45,21 @@ const claudeCodeCLIPathEnv = "CLAUDE_CODE_CLI_PATH"
 const claudeCodeToolPrefix = "mcp__linetta__"
 
 // claudeCodeModels is what providers.list_models offers. The CLI has no model
-// list to ask; these are its own aliases, each following Anthropic's newest
-// model of that tier, and any full model id typed in settings still works.
-var claudeCodeModels = []string{"haiku", "opus", "sonnet"}
+// list to ask, so tars assembles one the way its own server does: the live
+// Anthropic list when the writer also set up an Anthropic key, the ids the
+// CLI cached in ~/.claude.json, tars' built-in catalog, and the model the
+// writer already picked so it never drops out. The aliases lead — each
+// follows Anthropic's newest model of its tier. A failed live lookup is not
+// an error here: the CLI is what runs, and the rest of the list still is.
+func (s *Source) claudeCodeModels(ctx context.Context, current string) []string {
+	var live []string
+	if a, err := s.Resolve(settings.ProviderAnthropic); err == nil && a.Configured() {
+		if ids, err := s.fetcher.FetchModels(ctx, Options(a)); err == nil {
+			live = llm.ClaudeModelIDs(ids)
+		}
+	}
+	return llm.MergeClaudeCodeCLIModels(live, llm.ReadClaudeCodeCLIModelCache(), llm.ClaudeCodeCLIModelCatalog(), []string{current})
+}
 
 // IsSelfExecuting reports whether a provider runs its own tool loop, so the
 // agent must hand it tools over MCP rather than execute ToolCalls itself.
