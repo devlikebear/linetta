@@ -51,6 +51,17 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   provider_timeout: "errors.providerTimeout",
   provider_rejected: "errors.providerRejected",
   provider_unavailable: "errors.providerUnavailable",
+  // Illustration drawing: what only drawing has. The provider failures above
+  // apply to it too.
+  image_generation_off: "errors.imageGenerationOff",
+  image_consent_required: "errors.imageConsentRequired",
+  image_model_required: "errors.imageModelRequired",
+  image_refused: "errors.imageRefused",
+  image_billing_required: "errors.imageBillingRequired",
+  illustration_not_found: "errors.illustrationNotFound",
+  illustration_too_large: "errors.illustrationTooLarge",
+  too_many_illustrations: "errors.tooManyIllustrations",
+  illustration_bad_content: "errors.illustrationBadContent",
   // The Codex login (#92). Its message names the two ports, since the fix is
   // closing whatever holds them. A failed login is not an RPC error at all —
   // codex.login_status reports it via CodexStatus.login_failed instead — so

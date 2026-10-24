@@ -18,6 +18,7 @@ import { BackgroundSection } from "../components/settings/BackgroundSection";
 import { McpSection } from "../components/settings/McpSection";
 import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
+import { ImageGenSection } from "../components/settings/ImageGenSection";
 import { PublishSection } from "../components/settings/PublishSection";
 import { RestoreSection } from "../components/settings/RestoreSection";
 import { SkillsSection } from "../components/settings/SkillsSection";
@@ -59,6 +60,7 @@ const SETTINGS_CATEGORIES = [
   "editor",
   "writing",
   "providers",
+  "images",
   "mcp",
   "tools",
   "memory",
@@ -310,6 +312,9 @@ export function Settings() {
             label: t("settings.nav.groupConnect"),
             items: [
               ...(agentAvailable ? [{ id: "providers" as const, label: t("settings.nav.providers") }] : []),
+              // Drawing borrows the agent providers' credentials, so it sits
+              // right under them and rides the same condition.
+              ...(agentAvailable ? [{ id: "images" as const, label: t("settings.nav.images") }] : []),
               ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.nav.mcp") }] : []),
               // The tool budget (#99) governs what the built-in agent AND an
               // external client are offered, so it sits between the two panes
@@ -589,6 +594,10 @@ export function Settings() {
             )}
 
             {category === "providers" && agentAvailable && <ProviderSection />}
+
+            {category === "images" && agentAvailable && (
+              <ImageGenSection onOpenProviders={() => setCategory("providers")} />
+            )}
 
             {category === "mcp" && mcpAvailable && <McpSection />}
 

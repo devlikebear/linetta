@@ -180,7 +180,7 @@ type MergeResult struct {
 // projects, nodes, entities, mentions, relationships, threads, beats, notes,
 // node_snapshots, fact_cards, fact_sources, writing_stats, agent_memory
 // (work_notes scope only), entity_visuals, entity_reference_images,
-// project_art_style, project_style_rules. Library-level history (companion transcripts, AI runs,
+// project_art_style, project_style_rules, illustrations. Library-level history (companion transcripts, AI runs,
 // MCP activity, the global writer_profile memory) stays with the
 // library it belongs to.
 func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, projectID, titleSuffix string, now time.Time) (MergeResult, error) {
@@ -280,6 +280,21 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return row, true
 	}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy art style: %w", err)
+	}
+	if err := copyRows(ctx, sdb, tx, "illustrations", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		row["id"] = uuid.NewString()
+		row["project_id"] = newProjectID
+		// The scene a picture was drawn from, if it came along; a scene the
+		// backup no longer has leaves the picture without one, as deleting
+		// the scene would.
+		if n, ok := nodeMap[asString(row["source_node_id"])]; ok {
+			row["source_node_id"] = n
+		} else {
+			row["source_node_id"] = nil
+		}
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy illustrations: %w", err)
 	}
 	if err := copyRows(ctx, sdb, tx, "project_style_rules", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
 		row["project_id"] = newProjectID
@@ -515,7 +530,7 @@ func copyRows(ctx context.Context, src *sql.DB, tx *sql.Tx, table, where string,
 		row := make(map[string]any, len(cols))
 		for i, c := range cols {
 			// Image bytes must remain BLOBs when the backup is merged.
-			if table == "entity_reference_images" && c == "data" {
+			if (table == "entity_reference_images" || table == "illustrations") && c == "data" {
 				row[c] = raw[i]
 			} else {
 				row[c] = normalizeValue(raw[i])

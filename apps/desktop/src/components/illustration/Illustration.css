@@ -1,0 +1,178 @@
+/* The illustration dialog and gallery sit on the global modal shell
+   (App.css: .backdrop.center, .modal, .modal-field, .modal-actions, .btn).
+   The toggles, chips and image grid are their own. */
+
+.modal.illustration-modal {
+  width: min(640px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.modal.illustration-gallery {
+  width: min(920px, 94vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.illustration-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.illustration-chips button {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.illustration-chips button.is-selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+
+/* The same segmented look as Settings' .settings-segmented, which is scoped
+   to the settings page. */
+.illustration-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.illustration-seg button {
+  min-width: 64px;
+  min-height: 30px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.illustration-seg button.is-selected {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.illustration-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.illustration-prompt textarea {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.illustration-result img {
+  display: block;
+  max-width: 100%;
+  max-height: 52vh;
+  margin: 12px auto 4px;
+  border-radius: var(--r-md);
+}
+
+.illustration-gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.illustration-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.illustration-thumb {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.illustration-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.illustration-thumb-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 120px;
+  background: var(--surface-3);
+}
+
+.illustration-thumb-caption {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 85%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.illustration-detail {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.illustration-detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.illustration-detail-body img {
+  width: 100%;
+  border-radius: var(--r-md);
+}
+
+.illustration-detail-prompt {
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.illustration-gallery-foot {
+  justify-content: space-between;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .illustration-detail-body {
+    grid-template-columns: 1fr;
+  }
+}

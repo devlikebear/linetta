@@ -1,4 +1,5 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
+import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, ImageProviderStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -420,6 +421,24 @@ export const providers = {
   listModels: (provider: string) =>
     rpcCall<{ models: string[] }>("providers.list_models", { provider }),
   test: (provider: string) => rpcCall<{ ok: true }>("providers.test", { provider }),
+};
+
+export const imageProviders = {
+  list: () => rpcCall<ImageProviderStatus[]>("image_providers.list"),
+  listModels: (provider: string) =>
+    rpcCall<{ models: string[] }>("image_providers.list_models", { provider }),
+};
+
+export const illustrations = {
+  compose: (input: { project_id: string; entity_ids?: string[]; names?: string[]; scene: string; format?: IllustrationFormat }) =>
+    rpcCall<IllustrationComposition>("illustrations.compose", input),
+  /** Runs as long as the provider draws — about 30 s for Codex. */
+  generate: (input: IllustrationGenerateInput) => rpcCall<IllustrationMeta>("illustrations.generate", input),
+  list: (projectId: string) =>
+    rpcCall<{ items: IllustrationMeta[]; count: number; bytes: number }>("illustrations.list", { project_id: projectId }),
+  get: (id: string) => rpcCall<IllustrationMeta & { data_base64: string }>("illustrations.get", { id }),
+  update: (id: string, caption: string) => rpcCall<IllustrationMeta>("illustrations.update", { id, caption }),
+  delete: (id: string) => rpcCall<{ ok: boolean }>("illustrations.delete", { id }),
 };
 
 export const codex = {

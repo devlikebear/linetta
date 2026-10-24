@@ -3,7 +3,7 @@ module github.com/devlikebear/linetta/engine
 go 1.26.10
 
 require (
-	github.com/devlikebear/tars v0.65.1-0.20261023131025-c14b7fab6af9
+	github.com/devlikebear/tars v0.65.1-0.20261024014548-378e7479d33c
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	golang.org/x/sys v0.45.0

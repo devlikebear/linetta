@@ -20,6 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/importmd"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
@@ -490,6 +491,19 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("providers.list", handlers.ProvidersList(providers))
 	s.Handle("providers.list_models", handlers.ProvidersListModels(providers))
 	s.Handle("providers.test", handlers.ProvidersTest(providers))
+	// Illustration drawing. The painter is the provider's Draw, gated on the
+	// image consent; the gallery and the prompt preview never reach a provider.
+	imageProviders := imageProviderService{src: providerSrc}
+	illustrations := illustration.NewRepo(st)
+	illustrationSvc := illustration.NewService(illustrations, visuals, illustrationPainter{src: providerSrc}, clock)
+	s.Handle("image_providers.list", handlers.ImageProvidersList(imageProviders))
+	s.Handle("image_providers.list_models", handlers.ImageProvidersListModels(imageProviders))
+	s.Handle("illustrations.compose", handlers.IllustrationsCompose(visuals, entities))
+	s.Handle("illustrations.generate", handlers.IllustrationsGenerate(illustrationSvc))
+	s.Handle("illustrations.list", handlers.IllustrationsList(illustrations))
+	s.Handle("illustrations.get", handlers.IllustrationsGet(illustrations))
+	s.Handle("illustrations.update", handlers.IllustrationsUpdate(illustrations))
+	s.Handle("illustrations.delete", handlers.IllustrationsDelete(illustrations))
 	codex := codexService{svc: codexSvc}
 	s.Handle("codex.login_start", handlers.CodexLoginStart(codex))
 	s.Handle("codex.login_status", handlers.CodexLoginStatus(codex))
