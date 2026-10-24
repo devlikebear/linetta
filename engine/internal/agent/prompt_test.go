@@ -44,6 +44,19 @@ func TestSystemPrompt_tellsTheAgentToReadContextFirst(t *testing.T) {
 	}
 }
 
+// Story-assist Phase 1: the agent is told the Writer's Direction brief
+// section is binding, cannot be edited by the agent, and flags staleness
+// rather than silently following or discarding it. Unlike the memory and
+// skills bullets this one is not behind a tool-group switch.
+func TestSystemPrompt_statesTheWritersDirectionIsBinding(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"Writer's Direction", "cannot edit it"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing %q; got:\n%s", want, got)
+		}
+	}
+}
+
 // The standing habit (#98 Task 10). The background self-review is the safety
 // net; this bullet is the agent noticing at the moment it happens, while it
 // still remembers why the procedure worked. Both halves have to be there: a

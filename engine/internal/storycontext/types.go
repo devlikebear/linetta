@@ -4,7 +4,11 @@
 // LLM client code; renderers return plain strings.
 package storycontext
 
-import "github.com/devlikebear/linetta/engine/internal/plot"
+import (
+	"strings"
+
+	"github.com/devlikebear/linetta/engine/internal/plot"
+)
 
 // Tone preset identifiers. `my` keeps the existing style_notes-driven behavior;
 // the others append a fixed tone instruction to the system prompt. Empty string
@@ -60,6 +64,14 @@ const (
 	// ContextSelection.Skills below, Enabled, ApplyContextSelection, and
 	// getStoryContextInput.IncludeSkills on the wire.
 	ContextKeySkills ContextKey = "skills"
+	// ContextKeyDirection is the writer's own instruction: the work's
+	// current focus and this scene's intent (story-assist Phase 1). Its own
+	// key, with the full chain beside it (ContextSelection.Direction below,
+	// Enabled, ApplyContextSelection, getStoryContextInput.IncludeDirection,
+	// sectionReport) — the same discipline ContextKeySkills' comment above
+	// describes, for the same reason: a key with no switch behind it is a
+	// control that does not exist.
+	ContextKeyDirection ContextKey = "direction"
 )
 
 // ContextSelection mirrors the AI panel checklist. Nil means "use the default",
@@ -80,6 +92,7 @@ type ContextSelection struct {
 	Memories      *bool `json:"memories,omitempty"`
 	References    *bool `json:"references,omitempty"`
 	Skills        *bool `json:"skills,omitempty"`
+	Direction     *bool `json:"direction,omitempty"`
 }
 
 // DefaultContextSelection returns the nil-pointer default: every section is on.
@@ -117,6 +130,8 @@ func (s ContextSelection) Enabled(key ContextKey) bool {
 		return enabledByDefault(s.References)
 	case ContextKeySkills:
 		return enabledByDefault(s.Skills)
+	case ContextKeyDirection:
+		return enabledByDefault(s.Direction)
 	default:
 		return true
 	}
@@ -135,6 +150,23 @@ type ProjectMeta struct {
 	LengthTarget string   `json:"length_target"`
 	DefaultPOV   string   `json:"default_pov"`
 	Synopsis     string   `json:"synopsis"`
+}
+
+// DirectionBrief is the writer's own direction (story-assist Phase 1):
+// the work's current focus and this scene's intent. Populated from
+// DirectionSource, never from an MCP write tool — see Context.Direction.
+type DirectionBrief struct {
+	Focus              string   `json:"focus,omitempty"`
+	FocusStale         bool     `json:"focus_stale,omitempty"`
+	FocusEpisodesSince int      `json:"focus_episodes_since,omitempty"`
+	SceneGoal          string   `json:"scene_goal,omitempty"`
+	Keep               []string `json:"keep,omitempty"`
+	Avoid              []string `json:"avoid,omitempty"`
+}
+
+// Empty reports whether there is nothing in the brief worth a section.
+func (d DirectionBrief) Empty() bool {
+	return strings.TrimSpace(d.Focus) == "" && strings.TrimSpace(d.SceneGoal) == "" && len(d.Keep) == 0 && len(d.Avoid) == 0
 }
 
 // PreviewCounts is the structural summary of a built Context, used by the
@@ -180,11 +212,16 @@ type ContextPreview struct {
 // final prompt. Stored as ai_runs.context_json so the user can later see
 // exactly what was sent.
 type Context struct {
-	ProjectID     string              `json:"project_id"`
-	NodeID        string              `json:"node_id"`
-	SceneLabel    string              `json:"scene_label"`
-	SceneText     string              `json:"scene_text"`
-	PrevSummary   string              `json:"prev_summary"`
+	ProjectID   string `json:"project_id"`
+	NodeID      string `json:"node_id"`
+	SceneLabel  string `json:"scene_label"`
+	SceneText   string `json:"scene_text"`
+	PrevSummary string `json:"prev_summary"`
+	// Direction is the writer's own instruction: the work's current focus and
+	// this scene's intent. Only the app writes it (no MCP tool does), and it
+	// renders first in the user message because direction buried among the
+	// evidence is read as optional.
+	Direction     DirectionBrief      `json:"direction,omitempty"`
 	Project       ProjectMeta         `json:"project"`
 	Outline       string              `json:"outline"`
 	Hierarchical  HierarchicalContext `json:"hierarchical"`

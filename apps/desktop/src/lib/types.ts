@@ -316,7 +316,8 @@ export type AIContextKey =
   | "style_notes"
   | "facts"
   | "memories"
-  | "references";
+  | "references"
+  | "direction";
 
 export type AIContextSelection = Record<AIContextKey, boolean>;
 
@@ -1427,6 +1428,38 @@ export interface StyleDraftState {
 }
 /** Whether an approved draft replaces the style notes or is added after them. */
 export type StyleApproveMode = "replace" | "append";
+
+/**
+ * The writer's current focus for a work (story-assist Phase 1), and what
+ * direction.get_focus can tell about it right now. Present is false when no
+ * focus is set — a valid state, not an error.
+ */
+export interface FocusState {
+  project_id: string;
+  body: string;
+  anchor_node_id?: string;
+  set_at: number;
+  present: boolean;
+  /** -1 when the anchor episode was recorded but no longer exists. */
+  episodes_since: number;
+  stale: boolean;
+}
+
+/** One scene's intent (story-assist Phase 1): its goal, and what to keep or avoid. */
+export interface SceneIntent {
+  node_id: string;
+  project_id: string;
+  goal: string;
+  keep: string[];
+  avoid: string[];
+  updated_at: number;
+}
+
+/** direction.get_scene_intent's reply. */
+export interface SceneIntentState {
+  present: boolean;
+  intent: SceneIntent;
+}
 export interface ArtStyle {
  project_id: string;
  style: string;

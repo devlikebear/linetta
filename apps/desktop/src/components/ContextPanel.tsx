@@ -7,6 +7,7 @@ import { InlineEditableText } from "./InlineEditableText";
 import { localeForLanguage, useI18n } from "../lib/i18n";
 import type { EpisodeStatusCounts } from "../hooks/useFirstLeaf";
 import { StatsSection } from "./StatsSection";
+import { DirectionSection } from "./DirectionSection";
 
 export type SaveStatus =
   | { kind: "idle" }
@@ -53,6 +54,27 @@ const TARGET_WORDS: Record<Project["length_target"], number> = {
   series: 200000,
 };
 
+// Story-assist Phase 1's collapse state. Read/write failures (storage
+// disabled, quota, a non-browser test environment) are ignored — the
+// section simply falls back to open every time, which is the safer default.
+const DIRECTION_COLLAPSED_KEY = "linetta:direction:collapsed";
+
+function readDirectionCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(DIRECTION_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function storeDirectionCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(DIRECTION_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    /* benign; the collapse state just does not persist this session */
+  }
+}
+
 export function ContextPanel({ project, node, charCount, todayChars = null, episodeStock = null, statsRefreshKey = null, typewriter, onToggleTypewriter, saveStatus, mentionedEntities, onMentionClick, onAutoMention, autoMentionBusy, autoMentionFound = 0, onOpenThread, onProjectChanged, onProjectTitleChange, tourTarget }: Readonly<Props>) {
   const { language, t } = useI18n();
   const locale = localeForLanguage(language);
@@ -65,6 +87,12 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
   const [synopsisBusy, setSynopsisBusy] = useState<"rewrite" | "clear" | null>(null);
   const overviewSaveTimer = useRef<number | null>(null);
   const synopsisSaveTimer = useRef<number | null>(null);
+  const [directionCollapsed, setDirectionCollapsed] = useState<boolean>(() => readDirectionCollapsed());
+
+  const toggleDirectionCollapsed = (collapsed: boolean) => {
+    setDirectionCollapsed(collapsed);
+    storeDirectionCollapsed(collapsed);
+  };
 
   useEffect(() => {
     setOverview(project.outline ?? "");
@@ -142,6 +170,16 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
       </div>
 
       <div className="panel-scroll">
+        {/* 작가 방향 — the writer's own current focus and this scene's intent
+            (story-assist Phase 1). First, so it is seen before anything
+            else, the same reason the story brief renders it first. */}
+        <DirectionSection
+          projectId={project.id}
+          nodeId={node.id}
+          collapsed={directionCollapsed}
+          onToggleCollapsed={toggleDirectionCollapsed}
+        />
+
         {/* 이 씬 — stats */}
         <div className="sec">
           <h4>{t("workspace.thisScene")}</h4>

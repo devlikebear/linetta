@@ -104,6 +104,9 @@ type getStoryContextInput struct {
 	// against reporting a section whose control does not exist, so a skills
 	// key with no way to set it would be the same defect one level up.
 	IncludeSkills *bool `json:"include_skills,omitempty" jsonschema:"set false to leave the skills list out; it is on by default and is the only place this brief says which skills exist"`
+	// IncludeDirection is the switch behind storycontext.ContextKeyDirection,
+	// for the same reason IncludeSkills exists beside ContextKeySkills.
+	IncludeDirection *bool `json:"include_direction,omitempty" jsonschema:"set false to leave out the writer's direction (current focus and this scene's intent); on by default"`
 }
 
 func (in getStoryContextInput) scope() (string, string) { return in.ProjectID, in.NodeID }
@@ -572,6 +575,7 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 			References: in.IncludeReferences,
 			Plot:       in.IncludePlot,
 			Skills:     includeSkills,
+			Direction:  in.IncludeDirection,
 		},
 	}
 	c, err := d.Context.BuildFull(ctx, n.ID, "", "", opts)
@@ -659,6 +663,9 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		// that ordering.
 		{"skills", len(c.Skills) > 0},
 		{"references", len(c.References) > 0},
+		// "direction" has its own switch too (IncludeDirection →
+		// ContextKeyDirection), unlike the curated memory pair.
+		{"direction", !c.Direction.Empty()},
 		{"style_notes", strings.TrimSpace(c.StyleNotes) != ""},
 	}
 	included, empty = []string{}, []string{}

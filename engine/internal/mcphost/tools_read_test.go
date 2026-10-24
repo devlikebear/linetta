@@ -255,6 +255,68 @@ func TestGetStoryContextForAnExternalClientCarriesEverything(t *testing.T) {
 	}
 }
 
+// fakeDirection stands in for direction.Repo, which mcphost must not import
+// (storycontext.DirectionSource is the seam).
+type fakeDirection struct {
+	focus         string
+	focusPresent  bool
+	stale         bool
+	episodesSince int
+	goal          string
+	keep, avoid   []string
+	intentPresent bool
+}
+
+func (f fakeDirection) FocusFor(context.Context, string) (storycontext.DirectionFocus, bool, error) {
+	return storycontext.DirectionFocus{Body: f.focus, Stale: f.stale, EpisodesSince: f.episodesSince}, f.focusPresent, nil
+}
+
+func (f fakeDirection) SceneIntentFor(context.Context, string) (storycontext.DirectionSceneIntent, bool, error) {
+	return storycontext.DirectionSceneIntent{Goal: f.goal, Keep: f.keep, Avoid: f.avoid}, f.intentPresent, nil
+}
+
+// The writer's direction is read-only content with no MCP write tool behind
+// it (story-assist Phase 1), so it must reach the brief through the read
+// tool's path regardless of which write-tool groups are enabled — including
+// the read_only mode where none are.
+func TestGetStoryContextCarriesTheWritersDirectionEvenInReadOnlyMode(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	d.Context = d.Context.WithDirectionSource(fakeDirection{
+		focus: "둘의 오해를 아직 풀지 않는다", focusPresent: true,
+		goal: "거리를 좁힌다", keep: []string{"침묵"}, avoid: []string{"고백"}, intentPresent: true,
+	})
+
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, ToolGroups{})
+	if err != nil {
+		t.Fatalf("getStoryContext: %v", err)
+	}
+	for _, want := range []string{"작가 방향", "둘의 오해를 아직 풀지 않는다", "거리를 좁힌다", "침묵", "고백"} {
+		if !strings.Contains(out.Brief, want) {
+			t.Errorf("read_only brief missing %q; got:\n%s", want, out.Brief)
+		}
+	}
+	if !slices.Contains(out.IncludedSections, "direction") {
+		t.Errorf("sectionReport should list direction as included; got %+v", out.IncludedSections)
+	}
+}
+
+func TestGetStoryContextIncludeDirectionFalseOmitsIt(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	d.Context = d.Context.WithDirectionSource(fakeDirection{focus: "초점", focusPresent: true})
+
+	off := false
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeDirection: &off}, AllToolGroups())
+	if err != nil {
+		t.Fatalf("getStoryContext: %v", err)
+	}
+	if strings.Contains(out.Brief, "작가 방향") || strings.Contains(out.Brief, "초점") {
+		t.Errorf("IncludeDirection=false must omit the section; got:\n%s", out.Brief)
+	}
+	if !slices.Contains(out.EmptySections, "direction") {
+		t.Errorf("sectionReport should list direction as empty; got %+v", out.EmptySections)
+	}
+}
+
 // sectionReport must describe the brief the caller actually receives, not the
 // context that was built before suppression. For the agent, with no recall
 // log wired, suppressing the curated documents must flip "memories" from

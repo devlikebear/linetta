@@ -218,8 +218,12 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		t.Errorf("visual tools cost %dB, want <= 3500B", visuals)
 	}
 	// #132 measured 26,525B for the full 19-tool set (down from 27,687B).
-	if total > 26900 {
-		t.Errorf("the original 19-tool budget is %dB, want <= 26900B (#132 trimmed it from 27687B to 26525B)", total)
+	// story-assist Phase 1 added linetta_get_story_context's IncludeDirection
+	// field (the switch behind storycontext.ContextKeyDirection, matching
+	// IncludeSkills), measured at 26,976B — the ceiling moves up with it.
+	if total > 27100 {
+		t.Errorf("the original 19-tool budget is %dB, want <= 27100B "+
+			"(#132 trimmed it from 27687B to 26525B; story-assist Phase 1 raised it to 27100B for IncludeDirection)", total)
 	}
 }
 

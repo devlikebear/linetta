@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/contextualedit"
+	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
@@ -256,6 +257,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// halves of one log.
 	skillHistory := agentskills.NewHistory(st.DB())
 
+	// The writer's own direction (story-assist Phase 1): the work's current
+	// focus and a scene's intent. Shared between the RPC handlers below
+	// (direction.get_focus etc., the app's only way to write it) and the
+	// story brief's Direction section just below — one table, one repo.
+	directionRepo := direction.NewRepo(st, nodes, projects)
+
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
@@ -267,7 +274,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		// (#98 Task 7). Without it linetta_read_skill is undiscoverable and
 		// nothing anywhere goes red — which is what
 		// TestProductionStoryContextBuilderCarriesEverySource guards.
-		WithSkillSource(skillBriefSource{store: skillsStore})
+		WithSkillSource(skillBriefSource{store: skillsStore}).
+		WithDirectionSource(directionBriefSource{repo: directionRepo})
 
 	// Linetta Works publishing (Phase 3). Registered here, before the MCP
 	// host, because the publish tools publish through the same service.
@@ -434,6 +442,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("style.get_draft", handlers.GetStyleDraft(styles))
 	s.Handle("style.approve_draft", handlers.ApproveStyleDraft(styles, clock))
 	s.Handle("style.discard_draft", handlers.DiscardStyleDraft(styles))
+	s.Handle("direction.get_focus", handlers.GetFocus(directionRepo))
+	s.Handle("direction.set_focus", handlers.SetFocus(directionRepo, clock))
+	s.Handle("direction.get_scene_intent", handlers.GetSceneIntent(directionRepo))
+	s.Handle("direction.set_scene_intent", handlers.SetSceneIntent(directionRepo, clock))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))

@@ -1,4 +1,5 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
+import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, ImageProviderStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
@@ -632,4 +633,16 @@ export const style = {
   approveDraft: (projectId: string, body: string, mode: StyleApproveMode) =>
     rpcCall<{ style_notes: string }>("style.approve_draft", { project_id: projectId, body, mode }),
   discardDraft: (projectId: string) => rpcCall<{ ok: boolean }>("style.discard_draft", { project_id: projectId }),
+};
+
+/** The writer's own direction (story-assist Phase 1): no MCP tool can write either. */
+export const direction = {
+  getFocus: (projectId: string) => rpcCall<FocusState>("direction.get_focus", { project_id: projectId }),
+  /** Empty body clears the focus. The engine, not the caller, picks the anchor episode. */
+  setFocus: (projectId: string, body: string) =>
+    rpcCall<FocusState>("direction.set_focus", { project_id: projectId, body }),
+  getSceneIntent: (nodeId: string) => rpcCall<SceneIntentState>("direction.get_scene_intent", { node_id: nodeId }),
+  /** goal, keep and avoid all empty clears the scene's intent. */
+  setSceneIntent: (nodeId: string, goal: string, keep: string[], avoid: string[]) =>
+    rpcCall<SceneIntent>("direction.set_scene_intent", { node_id: nodeId, goal, keep, avoid }),
 };

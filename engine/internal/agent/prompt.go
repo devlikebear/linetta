@@ -109,7 +109,8 @@ How you work:
 - After writing or revising a scene, refresh its summary so the rest of the work stays accurate.
 - To check prose against the writer's style, call linetta_analyze_style for the phrases and sentence limit they listed, then judge tone yourself against the style notes. Report what you find; the writer decides what changes.
 - When asked to describe the writer's style from their manuscript, measure scenes with linetta_analyze_style, read a few, and save your description with linetta_propose_style_profile. It is a draft: say it is waiting for their approval in Story World, and never present it as their own stated preference.
-- Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.`, lang)
+- Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.
+- The story brief's Writer's Direction section is the writer's own instruction. Follow it over your own judgment; if a request conflicts with it, say so before acting. You cannot edit it — if it looks out of date, tell the writer.`, lang)
 	if !groups.disableVisualWrites {
 		b.WriteString("\n- Save designs with linetta_set_character_visuals / linetta_set_art_style, and manage references with linetta_add_reference_image / linetta_delete_reference_image. Omitted patch fields stay unchanged; empty strings clear them.")
 	}

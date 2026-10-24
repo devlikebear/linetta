@@ -111,6 +111,18 @@ line (the panel offers undo whenever a line carries a `batch_id` or a
 keeps that version indefinitely, so you can put the old text back from the
 scene's **Previous versions** sheet.
 
+### Your direction
+
+A work has a **current focus** — what to concentrate on for the next few
+episodes — and any scene can have its own **intent**: a one-line goal, what
+to keep, what to avoid. Both are yours to write; no agent tool can set
+either. They sit at the very top of the story brief, ahead of everything
+else, under a "Writer's Direction" heading the built-in agent treats as
+binding — and the same brief is what a connected MCP client reads too, read-only
+mode included. Set the focus and it is three episodes' worth of actually-
+written scenes later, the app and the brief both flag it as possibly stale
+and ask you to confirm it still holds.
+
 ### What the agent remembers
 
 Linetta keeps two short documents an agent reads: a **writer profile** — how
