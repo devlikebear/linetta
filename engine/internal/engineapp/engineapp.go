@@ -287,6 +287,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		db:            st.DB(),
 		language:      settingsLanguage,
 		clock:         clock,
+		images:        exportImages{illustrations},
 	})
 	a.closers = append(a.closers, stopPublish)
 

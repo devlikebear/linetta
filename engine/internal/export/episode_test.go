@@ -19,6 +19,12 @@ func paragraphs(texts ...string) string {
 
 func episodeFixture(t *testing.T, docs ...string) (episode.Episode, func() EpisodePayload) {
 	t.Helper()
+	return episodeFixtureKnowing(t, nil, docs...)
+}
+
+// episodeFixtureKnowing is episodeFixture with known as the work's gallery.
+func episodeFixtureKnowing(t *testing.T, known map[string]bool, docs ...string) (episode.Episode, func() EpisodePayload) {
+	t.Helper()
 	_, pr, nr, _, _ := newExportFixture(t)
 	ctx := context.Background()
 	p, err := pr.Create(ctx, 1, project.NewInput{
@@ -51,7 +57,7 @@ func episodeFixture(t *testing.T, docs ...string) (episode.Episode, func() Episo
 		t.Fatal(err)
 	}
 	return resolved, func() EpisodePayload {
-		out, err := ExportEpisodeMarkdown(ctx, nr, resolved, p.Title)
+		out, err := ExportEpisodeMarkdown(ctx, nr, resolved, p.Title, known)
 		if err != nil {
 			t.Fatal(err)
 		}

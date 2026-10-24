@@ -27,6 +27,8 @@ type publishDeps struct {
 	db            *sql.DB
 	language      func(context.Context) string
 	clock         func() int64
+	// images is the gallery: published episodes carry their pictures.
+	images publish.Illustrations
 }
 
 // setupPublish registers the publish.* handlers and returns the service the
@@ -36,7 +38,8 @@ func setupPublish(deps publishDeps) (*publish.Service, func() error) {
 	creds := publish.NewCredentials(deps.settingsStore)
 	state := publish.NewStateRepo(deps.db)
 	connector := publish.NewConnector(client, creds, state.Clear)
-	svc := publish.NewService(client, creds, connector, state, deps.projects, deps.nodes, deps.language, deps.clock)
+	svc := publish.NewService(client, creds, connector, state, deps.projects, deps.nodes, deps.language, deps.clock).
+		WithIllustrations(deps.images)
 
 	s := deps.server
 	s.Handle("publish.connect_start", handlers.PublishConnectStart(connector))

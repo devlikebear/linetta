@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -40,7 +42,14 @@ type fakeFailure struct {
 type fakeWork struct {
 	work     Work
 	episodes []RemoteEpisode
+	// images are the uploaded pictures: node id → illustration id → hash.
+	images map[string]map[string]string
+	// imageTypes records each upload's Content-Type, keyed like images.
+	imageTypes map[string]string
 }
+
+// fakePictureRef is the site's rule for a picture in body_md.
+var fakePictureRef = regexp.MustCompile(`!\[(?:\\.|[^\]\\])*\]\(illustration:([A-Za-z0-9_-]{1,100})\)`)
 
 const fakeToken = "lwk_test_token"
 
@@ -55,6 +64,7 @@ func newFakeSite(t *testing.T) *fakeSite {
 	mux.HandleFunc("GET /api/artworks/works/{pid}", f.auth(f.getWork))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}/episodes/{nid}", f.auth(f.putEpisode))
 	mux.HandleFunc("PATCH /api/artworks/works/{pid}/episodes/{nid}", f.auth(f.patchEpisode))
+	mux.HandleFunc("PUT /api/artworks/works/{pid}/episodes/{nid}/images/{iid}", f.auth(f.putImage))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}/episodes:reorder", f.auth(f.reorder))
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -212,6 +222,41 @@ func (f *fakeSite) getWork(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"work": work.work, "episodes": work.episodes})
 }
 
+func (f *fakeSite) putImage(w http.ResponseWriter, r *http.Request) {
+	data, err := io.ReadAll(r.Body)
+	if err != nil || len(data) == 0 {
+		writeErr(w, 400, CodeInvalidRequest)
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	work, ok := f.works[r.PathValue("pid")]
+	if !ok {
+		writeErr(w, 404, CodeNotFound)
+		return
+	}
+	nid, iid := r.PathValue("nid"), r.PathValue("iid")
+	sum := sha256.Sum256(data)
+	hash := hex.EncodeToString(sum[:])
+	if work.images == nil {
+		work.images, work.imageTypes = map[string]map[string]string{}, map[string]string{}
+	}
+	if work.images[nid] == nil {
+		work.images[nid] = map[string]string{}
+	}
+	if old, ok := work.images[nid][iid]; ok {
+		if old != hash {
+			writeErr(w, 409, CodeImageChanged)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"created": false, "image": RemoteImage{IllustrationID: iid, SHA256: hash}})
+		return
+	}
+	work.images[nid][iid] = hash
+	work.imageTypes[nid+"/"+iid] = r.Header.Get("Content-Type")
+	writeJSON(w, 200, map[string]any{"created": true, "image": RemoteImage{IllustrationID: iid, SHA256: hash}})
+}
+
 func (f *fakeSite) putEpisode(w http.ResponseWriter, r *http.Request) {
 	var in EpisodeInput
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Number < 1 || in.BodyMD == "" {
@@ -231,6 +276,18 @@ func (f *fakeSite) putEpisode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	nid := r.PathValue("nid")
+	var missing []string
+	var refs []string
+	for _, m := range fakePictureRef.FindAllStringSubmatch(in.BodyMD, -1) {
+		if _, ok := work.images[nid][m[1]]; !ok {
+			missing = append(missing, m[1])
+		}
+		refs = append(refs, m[1])
+	}
+	if len(missing) > 0 {
+		writeJSON(w, 409, map[string]any{"code": CodeImagesMissing, "message": "missing", "missing": missing})
+		return
+	}
 	idx := -1
 	for i, ep := range work.episodes {
 		if ep.NodeID == nid {
@@ -250,6 +307,20 @@ func (f *fakeSite) putEpisode(w http.ResponseWriter, r *http.Request) {
 	ep.Number, ep.Title, ep.ContentHash = in.Number, in.Title, in.ContentHash
 	ep.CharCount = len([]rune(strings.Join(strings.Fields(in.BodyMD), "")))
 	ep.URL = fmt.Sprintf("%s/%d", work.work.URL, in.Number)
+	// Pictures the text no longer shows go, as on the site.
+	keep := map[string]string{}
+	ep.Images = nil
+	for _, id := range refs {
+		if sum, ok := work.images[nid][id]; ok {
+			if _, dup := keep[id]; !dup {
+				ep.Images = append(ep.Images, RemoteImage{IllustrationID: id, SHA256: sum})
+			}
+			keep[id] = sum
+		}
+	}
+	if work.images != nil {
+		work.images[nid] = keep
+	}
 	if idx >= 0 {
 		work.episodes[idx] = ep
 	} else {

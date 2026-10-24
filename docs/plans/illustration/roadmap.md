@@ -100,7 +100,7 @@ _2026-10-23 스파이크 결과: Codex는 실제 호출로 확인했다. `size`�
 
 3. **Phase 3 — 내보내기·동기화·게시** ([`phase-3-export-publish.md`](./phase-3-export-publish.md)) — 3.1~3.3 ✅
    - 끝나면: Markdown 내보내기(파일 하나에 data URI로 내장)와 가져오기, 폴더/Git 동기화(`.images` 폴더)에 삽화가 따라간다.
-   - Works 게시(3.4~3.5)는 `linetta-artworks`의 Phase 5 작업지시서(`docs/plans/artworks-phase-5-illustrations.md`)로 옮겼다. 앱 쪽은 그 문서의 작업 그룹 D다.
+   - Works 게시(3.4~3.5)는 `linetta-artworks`의 Phase 5 작업지시서(`docs/plans/artworks-phase-5-illustrations.md`)로 옮겼다. 앱 쪽은 그 문서의 작업 그룹 D이고 2026-10-24 구현했다. 운영 반영은 사이트 배포 뒤 앱 릴리스 순서다.
 
 ### Later
 

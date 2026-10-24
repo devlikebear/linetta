@@ -218,9 +218,16 @@ describe("PublishDialog", () => {
     expect(screen.getByTestId("publish-submit")).toBeDisabled();
   });
 
-  it("says when the episode's pictures stay behind", async () => {
-    rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ illustrations_omitted: 2 })] }));
+  it("says the episode's pictures go up with it", async () => {
+    rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ illustrations: 2 })] }));
     renderDialog();
-    expect(await screen.findByTestId("publish-illustrations-omitted")).toHaveTextContent("publish.illustrationsOmitted");
+    expect(await screen.findByTestId("publish-illustrations")).toHaveTextContent("publish.illustrations");
+  });
+
+  it("says nothing about pictures for an episode without any", async () => {
+    rpc.workStatus.mockResolvedValue(status({ episodes: [episode()] }));
+    renderDialog();
+    await screen.findByTestId("publish-episode");
+    expect(screen.queryByTestId("publish-illustrations")).toBeNull();
   });
 });
