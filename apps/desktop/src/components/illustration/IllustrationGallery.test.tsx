@@ -130,5 +130,6 @@ describe("IllustrationGallery and scenes", () => {
     fireEvent.click(screen.getByTestId("illustration-delete"));
     fireEvent.click(screen.getByTestId("illustration-delete"));
     expect(await screen.findByText("errors.illustrationInUse")).toBeInTheDocument();
+    expect(screen.getByTestId("illustration-delete")).toHaveTextContent("illustration.delete");
   });
 });

@@ -4,6 +4,7 @@ _상위 로드맵: [`roadmap.md`](./roadmap.md)_
 _목표: 갤러리의 삽화를 씬 본문에 넣고, 본문을 읽고 고치는 모든 경로에서 삽화가 사라지거나 깨지지 않게 하는 수직 슬라이스_
 _예상 소요: 3~4일_
 _전제: Phase 1 완료 (`illustrations` 테이블, 갤러리, `illustrations.get`)_
+_상태: 완료 (2026-10-24)_
 
 ## Goal
 
@@ -46,25 +47,25 @@ Markdown 내보내기와 Works 게시는 이 단계에서 삽화를 싣지 않�
 
 ## Desktop tasks
 
-- [ ] **2.1 `illustration` 노드와 NodeView**
+- [x] **2.1 `illustration` 노드와 NodeView** — Zen 모드 에디터에서도 빠지지 않도록 `Tiptap.tsx`의 기본 확장에 넣었다
   - `IllustrationExtension.ts`: `Node.create({ name: "illustration", group: "block", atom: true, draggable: true })`,
     attrs `id`, `caption`. `NoteMarkerExtension.ts`의 구성 방식을 따른다
   - `IllustrationNodeView.tsx`: `useIllustrationImage(id)`로 그린다. 로딩, 없음, 오류 상태. 캡션은 그 자리에서 고친다
   - `insertIllustration(id, caption)` 명령을 Tiptap imperative handle에 더한다
   - 테스트: `IllustrationExtension.test.ts` — JSON 왕복, 없는 id 자리표시, 캡션 수정이 attrs에 반영
 
-- [ ] **2.2 스키마 패리티 갱신**
+- [x] **2.2 스키마 패리티 갱신**
   - `editor_schema.json`의 `nodes`에 `illustration` 추가, `editorSchema.test.ts`의 확장 목록에 등록
   - 이 변경으로 Go 쪽 패리티 테스트가 실패하는 것이 정상이다. 2.4에서 내보내기가 이 노드를 어떻게 다룰지 정하면 통과한다
 
-- [ ] **2.3 넣기 진입점**
+- [x] **2.3 넣기 진입점**
   - 갤러리 항목과 생성 결과에 `씬에 넣기`. 열린 씬이 없으면 버튼을 막고 이유를 보인다
   - 갤러리에서 에디터로 끌어 놓기
   - 갤러리 항목에 `사용 중` 표시(어느 씬에 쓰였는지 목록, 클릭하면 이동)
 
 ## Engine tasks
 
-- [ ] **2.4 내보내기·평문·글자 수·검색**
+- [x] **2.4 내보내기·평문·글자 수·검색**
   - `export/markdown.go` `renderBlock`에 `case "illustration"`: 이 단계에서는 아무것도 내보내지 않는다(`nil`).
     Phase 3에서 이미지 링크로 바꾼다
   - `export/text.go`: 평문에서 빠진다(현재 기본 분기가 자식 없는 노드를 버리므로 테스트로 고정만 한다)
@@ -72,10 +73,10 @@ Markdown 내보내기와 Works 게시는 이 단계에서 삽화를 싣지 않�
   - 글자 수(`node.Repo.UpdateContent`의 계산 경로)와 `manuscript/indexer.go`가 삽화를 세지 않음을 테스트로 고정
   - 테스트: `markdown_test.go`, `text_test.go`, `episode_test.go`, 스키마 패리티 테스트 통과
 
-- [ ] **2.5 찾기/바꾸기·맥락 편집이 삽화를 보존**
+- [x] **2.5 찾기/바꾸기·맥락 편집이 삽화를 보존**
   - `manuscriptedit/replace.go`, `contextualedit`은 텍스트 노드만 고친다. 삽화가 있는 문서로 일괄 바꾸기 후 노드가 그대로인지 테스트
 
-- [ ] **2.6 에이전트 읽기/쓰기 왕복**
+- [x] **2.6 에이전트 읽기/쓰기 왕복** — 자리표시·id 다루기는 `engine/internal/illustref` 한 곳에 있다. story-ops `set_scene_text`도 같은 길을 탄다
   - 문제: `linetta_write_scene`은 씬 본문을 통째로 바꾼다. 삽화를 모르는 에이전트가 다시 쓰면 삽화가 사라진다
   - `tools_read.go`의 씬 본문 텍스트에 삽화를 한 줄 자리표시로 넣는다: `[[illustration:<id>|<caption>]]`
   - `tools_write.go`의 텍스트 → 문서 변환에서 그 줄을 `illustration` 노드로 되살린다. 모르는 id는 일반 텍스트로 둔다
@@ -83,13 +84,13 @@ Markdown 내보내기와 Works 게시는 이 단계에서 삽화를 싣지 않�
   - 내장 에이전트도 같은 툴 경로를 쓰는지 확인하고, 따로 쓰면 같은 변환 함수를 쓰게 한다
   - 테스트: 읽기 → 그대로 쓰기 왕복에서 문서 동일, 자리표시 삭제 시 노드 제거, 가짜 id는 텍스트
 
-- [ ] **2.7 사용처 조회와 삭제 보호**
+- [x] **2.7 사용처 조회와 삭제 보호**
   - `illustration.Repo.UsedIn(ctx, projectID, id) ([]NodeRef, error)`: 작품 씬들의 `content_doc`을 `LIKE '%"illustration"%'`로 거른 뒤 JSON으로 확인
   - `illustrations.list`가 항목마다 `used_in`을 돌려준다
   - `illustrations.delete`는 사용 중이면 새 reason `rpc.ReasonIllustrationInUse`와 씬 목록으로 거절. 스냅샷 안의 참조는 막지 않는다(복원하면 자리표시로 보인다)
   - 테스트: 사용 중 삭제 거절, 본문에서 뺀 뒤 삭제 성공
 
-- [ ] **2.8 병합 복원 시 본문 안 id 다시 쓰기**
+- [x] **2.8 병합 복원 시 본문 안 id 다시 쓰기**
   - Phase 1의 삽화 id 재매핑 표로, 복원한 노드의 `content_doc`과 스냅샷 문서 안 `illustration` attrs의 `id`를 바꾼다
   - 테스트: 삽화를 넣은 씬이 있는 작품을 병합 복원하면 새 작품의 씬이 새 삽화 id를 가리키고 이미지가 열린다
 
@@ -98,18 +99,18 @@ Markdown 내보내기와 Works 게시는 이 단계에서 삽화를 싣지 않�
 ### ✅ Checkpoint: Phase 2 완료 확인
 
 **구현 확인:**
-- [ ] 씬에 넣은 삽화가 저장 후 다시 열어도 보이고, `content_doc`에는 id와 캡션만 있다
-- [ ] 글자 수, 원고 검색, 평문 내보내기에 삽화가 끼지 않는다
-- [ ] 에이전트가 씬을 읽고 그대로 다시 쓰면 삽화가 남는다
+- [x] 씬에 넣은 삽화가 저장 후 다시 열어도 보이고, `content_doc`에는 id와 캡션만 있다
+- [x] 글자 수, 원고 검색, 평문 내보내기에 삽화가 끼지 않는다
+- [x] 에이전트가 씬을 읽고 그대로 다시 쓰면 삽화가 남는다
 
 **실행 확인:**
-- [ ] `cd engine && CGO_ENABLED=0 go test ./...` 통과 (스키마 패리티 포함), `make test-mobile-engine` 통과
-- [ ] `make test-desktop` 통과
+- [x] `cd engine && CGO_ENABLED=0 go test ./...` 통과 (스키마 패리티 포함), `make test-mobile-engine` 통과
+- [x] `make test-desktop` 통과
 
 **수동 확인:**
-- [ ] 삽화를 넣은 씬에서 스냅샷을 복원하고, 작품 전체 바꾸기를 하고, 에이전트에게 문장 다듬기를 시켜도 삽화가 자리에 있다
-- [ ] 사용 중인 삽화는 갤러리에서 지울 수 없고, 쓰인 씬으로 이동할 수 있다
-- [ ] 게시 화면에 "삽화 N장은 아직 게시되지 않습니다"가 보인다
+- [x] 삽화를 넣은 씬에서 스냅샷을 복원하고, 작품 전체 바꾸기를 하고, 에이전트에게 문장 다듬기를 시켜도 삽화가 자리에 있다
+- [x] 사용 중인 삽화는 갤러리에서 지울 수 없고, 쓰인 씬으로 이동할 수 있다
+- [x] 게시 화면에 "삽화 N장은 아직 게시되지 않습니다"가 보인다
 
 **이 체크포인트를 통과하면 사용자에게 확인 요청 후 Phase 3로 진행.**
 실패하면 실패 항목을 보고하고, 사용자와 원인을 파악해 고친 뒤 다시 확인한다.

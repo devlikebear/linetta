@@ -1,7 +1,7 @@
 # 삽화 생성·삽입 — 로드맵
 
 _작성일: 2026-10-23_
-_상태: Phase 1 완료(2026-10-24, #218) / Phase 2 진행 중_
+_상태: Phase 1 완료(2026-10-24, #218) / Phase 2 완료(2026-10-24) / Phase 3 대기_
 _관련: #154 인물 비주얼 시트(`engine/internal/visual`), #158 비주얼 MCP 쓰기 툴, #160 에디터 스키마 패리티_
 
 ## Overview
@@ -93,7 +93,7 @@ _2026-10-23 스파이크 결과: Codex는 실제 호출로 확인했다. `size`�
 
 1. **Phase 1 — 삽화 생성과 갤러리** ([`phase-1-generate.md`](./phase-1-generate.md)) ✅
    - 끝나면: 설정에서 ChatGPT나 Gemini를 고르고, 씬에서 삽화를 만들어 작품 갤러리에서 본다.
-2. **Phase 2 — 씬 본문 삽입** ([`phase-2-insert.md`](./phase-2-insert.md))
+2. **Phase 2 — 씬 본문 삽입** ([`phase-2-insert.md`](./phase-2-insert.md)) ✅
    - 끝나면: 갤러리의 삽화를 씬에 넣고, 저장·스냅샷·에이전트 편집·복원 후에도 삽화가 남는다.
 
 ### Next

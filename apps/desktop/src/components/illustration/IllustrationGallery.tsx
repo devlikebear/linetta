@@ -165,6 +165,7 @@ function Detail({
       await illustrationsApi.delete(meta.id);
       onDeleted();
     } catch (e) {
+      setArmed(false);
       setError(e);
     }
   };
