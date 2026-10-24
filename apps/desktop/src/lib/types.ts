@@ -316,7 +316,8 @@ export type AIContextKey =
   | "style_notes"
   | "facts"
   | "memories"
-  | "references";
+  | "references"
+  | "direction";
 
 export type AIContextSelection = Record<AIContextKey, boolean>;
 

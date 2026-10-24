@@ -168,6 +168,11 @@ func buildUser(c Context) string {
 
 	capPlotDescriptions(&c.Plot, plotMaxChars)
 
+	// Story-assist Phase 1: the writer's own direction goes first, ahead of
+	// everything else including project meta. A direction buried among the
+	// evidence is read as optional — see Context.Direction's comment.
+	b.WriteString(renderDirection(c.Direction, lang))
+
 	// Plan 18 project meta: a one-line summary of the user-configured genres,
 	// length target, and default POV. Sits above everything else so the model
 	// frames the entire context within the writer's stated intent.
@@ -466,6 +471,50 @@ func skillScopeLabel(lang, scope string) string {
 		return langPick(lang, "이 작품", "this work", "この作品")
 	}
 	return langPick(lang, "작가", "writer", "書き手")
+}
+
+// renderDirection renders the "Writer's Direction" section: the work's
+// current focus and this scene's intent (story-assist Phase 1). Returns ""
+// when there is nothing to show — a template heading over blank fields reads
+// as noise, not as a signal the writer set nothing on purpose.
+func renderDirection(d DirectionBrief, lang string) string {
+	if d.Empty() {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(langPick(lang, "## 작가 방향 (반드시 따름)\n", "## Writer's Direction (binding)\n", "## 作家の方向性（必ず従う）\n"))
+	if focus := strings.TrimSpace(d.Focus); focus != "" {
+		b.WriteString(langPick(lang, "지금의 초점: ", "Current focus: ", "今の焦点: "))
+		b.WriteString(focus)
+		if d.FocusStale {
+			b.WriteString(fmt.Sprintf(
+				langPick(lang,
+					" (%d회차 전에 정한 초점 — 따르기 전에 작가에게 아직 유효한지 확인)",
+					" (set %d episodes ago — check with the writer that it still holds before following it)",
+					" (%d話前に決めた焦点 — 従う前に作家にまだ有効か確認)"),
+				d.FocusEpisodesSince))
+		}
+		b.WriteString("\n")
+	}
+	if goal := strings.TrimSpace(d.SceneGoal); goal != "" {
+		b.WriteString(langPick(lang, "이 씬의 목표: ", "This scene's goal: ", "このシーンの目標: "))
+		b.WriteString(goal)
+		b.WriteString("\n")
+	}
+	if len(d.Keep) > 0 {
+		b.WriteString(langPick(lang, "지킬 것:\n", "Keep:\n", "守ること:\n"))
+		for _, item := range d.Keep {
+			b.WriteString("- " + item + "\n")
+		}
+	}
+	if len(d.Avoid) > 0 {
+		b.WriteString(langPick(lang, "피할 것:\n", "Avoid:\n", "避けること:\n"))
+		for _, item := range d.Avoid {
+			b.WriteString("- " + item + "\n")
+		}
+	}
+	b.WriteString("\n")
+	return b.String()
 }
 
 // renderProjectMeta returns a one-line "장르: X, Y · 분량: Z · 시점: W"

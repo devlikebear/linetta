@@ -40,6 +40,7 @@ type ContextBuilder struct {
 	curatedMemorySource CuratedMemorySource
 	skillSource         SkillSource
 	referenceSource     ReferenceSource
+	directionSource     DirectionSource
 	projects            *project.Repo
 	nodes               *node.Repo
 	mentions            *mention.Repo
@@ -126,6 +127,30 @@ type ReferenceSource interface {
 	ContextReferences(ctx context.Context, projectID, nodeID string) ([]ReferenceBrief, error)
 }
 
+// DirectionFocus is the work's current focus, as DirectionSource reports it.
+type DirectionFocus struct {
+	Body          string
+	Stale         bool
+	EpisodesSince int
+}
+
+// DirectionSceneIntent is one scene's intent, as DirectionSource reports it.
+type DirectionSceneIntent struct {
+	Goal  string
+	Keep  []string
+	Avoid []string
+}
+
+// DirectionSource supplies the writer's own direction for the brief: the
+// work's current focus and this scene's intent. Optional — without it the
+// Direction section stays empty. Declared as an interface, not a dependency
+// on internal/direction's concrete types, so this package does not import
+// direction (matching FactSource/SkillSource/ReferenceSource's shape).
+type DirectionSource interface {
+	FocusFor(ctx context.Context, projectID string) (DirectionFocus, bool, error)
+	SceneIntentFor(ctx context.Context, nodeID string) (DirectionSceneIntent, bool, error)
+}
+
 // WithFactSource wires the optional Fact Book section.
 func (b *ContextBuilder) WithFactSource(s FactSource) *ContextBuilder {
 	b.factSource = s
@@ -154,6 +179,13 @@ func (b *ContextBuilder) WithSkillSource(s SkillSource) *ContextBuilder {
 // WithReferenceSource wires the optional references section.
 func (b *ContextBuilder) WithReferenceSource(s ReferenceSource) *ContextBuilder {
 	b.referenceSource = s
+	return b
+}
+
+// WithDirectionSource wires the optional writer-direction section (the
+// work's current focus and this scene's intent).
+func (b *ContextBuilder) WithDirectionSource(s DirectionSource) *ContextBuilder {
+	b.directionSource = s
 	return b
 }
 
@@ -273,6 +305,19 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			references = got
 		}
 	}
+	var direction DirectionBrief
+	if b.directionSource != nil {
+		if focus, present, err := b.directionSource.FocusFor(ctx, n.ProjectID); err == nil && present {
+			direction.Focus = focus.Body
+			direction.FocusStale = focus.Stale
+			direction.FocusEpisodesSince = focus.EpisodesSince
+		}
+		if intent, present, err := b.directionSource.SceneIntentFor(ctx, nodeID); err == nil && present {
+			direction.SceneGoal = intent.Goal
+			direction.Keep = intent.Keep
+			direction.Avoid = intent.Avoid
+		}
+	}
 
 	return Context{
 		ProjectID:   proj.ID,
@@ -299,6 +344,7 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		WorkNotes:     workNotes,
 		Skills:        skills,
 		References:    references,
+		Direction:     direction,
 		StyleNotes:    proj.StyleNotes,
 		SelectionText: selectionText,
 		UserPrompt:    prompt,
@@ -383,6 +429,11 @@ func ApplyContextSelection(c Context) Context {
 	// ContextKeySkills' comment in types.go.
 	if !s.Enabled(ContextKeySkills) {
 		c.Skills = nil
+	}
+	// Its own key too, for the same reason: see ContextKeyDirection's
+	// comment in types.go.
+	if !s.Enabled(ContextKeyDirection) {
+		c.Direction = DirectionBrief{}
 	}
 	return c
 }
