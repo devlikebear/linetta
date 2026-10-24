@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -301,7 +302,7 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 		Name: "linetta_read_scene",
 		Description: "Read one scene's text as plain prose, with its content_version. Any later write to " +
 			"this scene must pass the content_version you got here, so the writer's own edits are never " +
-			"silently overwritten.",
+			"silently overwritten. [[illustration:...]] lines are pictures.",
 	}, record(d, "linetta_read_scene", d.readScene))
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -692,7 +693,7 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 		md := ""
 		if n.ContentDoc != nil {
 			var err error
-			if md, err = export.DocToMarkdown([]byte(*n.ContentDoc)); err != nil {
+			if md, err = export.DocToMarkdownWith([]byte(*n.ContentDoc), export.MarkdownOptions{Illustration: illustref.Placeholder}); err != nil {
 				return toolErr("scene %q could not be rendered as markdown: %v", n.ID, err), readSceneOutput{}, nil
 			}
 		}

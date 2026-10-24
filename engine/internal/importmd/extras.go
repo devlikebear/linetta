@@ -133,7 +133,7 @@ func AlignNodes(ctx context.Context, nr *node.Repo, now int64, projectID string,
 			}
 		}
 		if m.Summary != "" && created.Kind == "leaf" {
-			if err := nr.SetSummary(ctx, created.ID, m.Summary, created.ContentVersion); err != nil {
+			if err := nr.SetWrittenSummary(ctx, created.ID, m.Summary, created.ContentVersion); err != nil {
 				return nil, err
 			}
 		}

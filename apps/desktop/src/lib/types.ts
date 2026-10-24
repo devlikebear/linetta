@@ -542,6 +542,74 @@ export interface ProviderStatus {
   cli_path?: string;
 }
 
+/** The providers that can draw illustrations. Their key or login is the
+ *  agent provider's; their consent and model are their own. */
+export type ImageProviderID = "openai-codex" | "gemini-native";
+
+/** One image provider's stored entry. Never holds a credential. */
+export interface ImageProviderConfig {
+  model?: string;
+  /** Image consent, epoch ms; absent or 0 means none. Not the agent's. */
+  consented_at?: number;
+}
+
+export interface ImageProviderPatch {
+  model?: string;
+  consented_at?: number;
+}
+
+/** image_providers.list — where each image provider stands. */
+export interface ImageProviderStatus {
+  id: ImageProviderID;
+  active: boolean;
+  /** The agent provider's key or login exists. */
+  configured: boolean;
+  consented: boolean;
+  model?: string;
+}
+
+export type IllustrationAspect = "square" | "portrait" | "landscape";
+export type IllustrationFormat = "single" | "four_panel";
+
+/** One stored illustration, without its bytes. */
+export interface IllustrationMeta {
+  id: string;
+  project_id: string;
+  source_node_id?: string;
+  caption: string;
+  /** Exactly what was sent to the provider. */
+  prompt: string;
+  provider: string;
+  model: string;
+  mime: string;
+  width: number;
+  height: number;
+  byte_size: number;
+  created_at: number;
+  /** The scenes that show the picture, from illustrations.list. */
+  used_in?: Array<{ node_id: string; label: string; title?: string }>;
+}
+
+/** illustrations.compose — the prompt for the writer to read before drawing. */
+export interface IllustrationComposition {
+  prompt: string;
+  negative_prompt: string;
+  format: IllustrationFormat;
+  characters: Array<{ entity_id: string; name: string }>;
+  reference_image_ids: string[];
+  missing_sheets: string[];
+}
+
+export interface IllustrationGenerateInput {
+  project_id: string;
+  source_node_id?: string;
+  prompt: string;
+  character_ids?: string[];
+  include_references?: boolean;
+  aspect?: IllustrationAspect;
+  caption?: string;
+}
+
 /** publish.connect_status — Linetta Works connection. Never carries the
  *  token or the pairing secret. */
 export type PublishConnectState = "disconnected" | "waiting" | "connected" | "failed";
@@ -593,6 +661,8 @@ export interface PublishEpisodeView {
   leaf_ids?: string[];
   char_count: number;
   empty?: boolean;
+  /** Pictures in the episode that the published text leaves out. */
+  illustrations_omitted?: number;
   state: PublishEpisodeState;
   /** The local text differs from the site's, whatever the state. */
   modified?: boolean;
@@ -720,6 +790,9 @@ export interface Settings {
    *  `providers.list` for the ids this build can actually drive. */
   provider: ProviderID | (string & {});
   providers?: Record<string, ProviderConfig>;
+  /** Absent or "" while illustration drawing is off. */
+  image_provider?: ImageProviderID | "";
+  image_providers?: Record<string, ImageProviderConfig>;
   typewriter_default: boolean;
   focus_default: boolean;
   theme: ThemePreference;
@@ -787,6 +860,9 @@ export interface SettingsPatch {
   language?: AppLanguage;
   provider?: ProviderID;
   providers?: Record<string, ProviderPatch>;
+  /** "" turns illustration drawing off. */
+  image_provider?: ImageProviderID | "";
+  image_providers?: Record<string, ImageProviderPatch>;
   typewriter_default?: boolean;
   focus_default?: boolean;
   theme?: ThemePreference;

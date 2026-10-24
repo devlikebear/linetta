@@ -29,6 +29,7 @@ type syncDeps struct {
 	entities      *entity.Repo
 	relationships *relationship.Repo
 	extras        export.Extras
+	images        export.IllustrationSource
 	ops           *opsstatus.Repo
 }
 

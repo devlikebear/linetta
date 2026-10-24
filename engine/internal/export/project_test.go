@@ -119,7 +119,7 @@ func TestExportNode_returnsLeafBodyOnly(t *testing.T) {
 	})
 	_ = nr.UpdateContent(ctx, *p.LastOpenedNodeID,
 		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"단편"}]}]}`, 100)
-	out, err := ExportNode(ctx, nr, *p.LastOpenedNodeID)
+	out, err := ExportNode(ctx, nr, *p.LastOpenedNodeID, nil)
 	if err != nil {
 		t.Fatalf("ExportNode: %v", err)
 	}

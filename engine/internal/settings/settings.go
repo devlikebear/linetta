@@ -138,6 +138,11 @@ type Config struct {
 	// to, nil when it is not. Written only by the publish connect flow (see
 	// publish.go); settings.set has no patch field for it.
 	PublishAccount *PublishAccount `json:"publish_account,omitempty"`
+	// ImageProvider draws illustrations (see image.go). It is "" until the
+	// writer turns drawing on; credentials come from Providers, and
+	// ImageProviders holds each image provider's model and consent.
+	ImageProvider  string                         `json:"image_provider,omitempty"`
+	ImageProviders map[string]ImageProviderConfig `json:"image_providers,omitempty"`
 	// AgentSelfReviewEnabled governs the built-in agent's self-improvement
 	// pass (#98 Task 10): after a turn that actually did work, the agent is
 	// asked separately whether anything is worth recording as a skill. It
@@ -339,6 +344,9 @@ type Patch struct {
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
 	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
+	// ImageProvider "" turns illustration drawing off.
+	ImageProvider  *string                       `json:"image_provider,omitempty"`
+	ImageProviders map[string]ImageProviderPatch `json:"image_providers,omitempty"`
 	// ClearLegacyPlaintextKeys, when true, deletes the plaintext keys load()
 	// could not migrate from settings.json (#113). One-way and destructive:
 	// on a platform with no secret store the file is the only place those
@@ -456,6 +464,7 @@ func (s *Store) load() error {
 	if disk.Provider != "" {
 		s.cfg.Provider = disk.Provider
 	}
+	loadImageSettings(&s.cfg, disk)
 	s.cfg.TypewriterDefault = disk.TypewriterDefault
 	s.cfg.FocusDefault = disk.FocusDefault
 	if disk.Theme != "" && slices.Contains(validThemes(), disk.Theme) {
@@ -742,6 +751,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		}
 		next.Providers = merged
 	}
+	if err := applyImagePatch(&next, p); err != nil {
+		return Config{}, err
+	}
 	if p.TypewriterDefault != nil {
 		next.TypewriterDefault = *p.TypewriterDefault
 	}
@@ -981,6 +993,8 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		MemoryToolsEnabled:       next.MemoryToolsEnabled,
 		SkillToolsEnabled:        next.SkillToolsEnabled,
 		PublishAccount:           next.PublishAccount,
+		ImageProvider:            next.ImageProvider,
+		ImageProviders:           next.ImageProviders,
 	}
 	// sanitizeConfigForDisk has just blanked every api_key, which is right for
 	// every key the SecretStore holds. It is wrong for the pre-1.0 ones it

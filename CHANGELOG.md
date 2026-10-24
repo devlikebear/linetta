@@ -1,5 +1,52 @@
 # Changelog
 
+## v1.10.0 - 2026-10-24
+
+- **Illustrations.** Choose ChatGPT or Gemini under **Settings → Image
+  generation** to draw pictures for your scenes. It is off until you choose
+  one, and it uses the sign-in or key you already set up for that AI
+  provider, with its own consent. A picture is drawn only when you press
+  generate.
+- **Draw this scene** in the editor's selection menu, **Draw an
+  illustration** in the command palette, or the gallery opens the drawing
+  dialog. Describe the scene and pick the characters (the ones mentioned in
+  the scene are already picked). Then choose a single picture or four panels,
+  the aspect, and whether to send reference images. **Build prompt** shows
+  exactly what will be sent; you can edit it, and what you edited is what
+  goes.
+- Each work keeps its pictures in a gallery (the **Illustrations** button,
+  or **Open illustration gallery**), up to 200 per work. The gallery shows
+  the prompt each picture was drawn from and which model drew it. You can
+  edit captions and delete pictures there.
+- **Insert into scene** puts a picture into the manuscript at the cursor,
+  where you can edit its caption. The gallery marks pictures **In use** and
+  names the scene, and will not delete a picture a scene still uses.
+  Character counts, search and replace ignore pictures.
+- Markdown export carries the pictures inside the one `.md` file, and
+  importing that file brings them back into the new work's gallery. Folder
+  and Git sync write them as image files in a `<work>.images` folder beside
+  the manuscript. Plain-text export and publishing to Linetta Works leave
+  pictures out for now; the publish dialog says how many.
+- An agent reading a scene sees each picture as an `[[illustration:…]]`
+  line. Writing the line back keeps the picture where it was; dropping the
+  line takes it out of the scene but leaves it in the gallery.
+- A scene summary the built-in agent wrote is no longer replaced by the
+  scene's first few sentences after the scene is edited. The next episode's
+  context still gets that summary, marked as describing the earlier draft,
+  until the agent writes a new one.
+- The built-in agent now reads the work's context — your style notes
+  included — before it writes or revises a scene in a turn, so a one-line
+  fix follows your style notes too.
+- With **Claude Code** as the AI provider, the model list now offers full
+  model ids such as `claude-opus-5-5` after the `opus`, `sonnet` and `haiku`
+  aliases, so you can pin an exact model. The list comes from the models your
+  Claude Code has cached, a built-in list, and — if you also set up an
+  Anthropic API key — Anthropic's own current list. The aliases still come
+  first and still follow the newest model of each tier.
+- Security: built with Go 1.26.10 and updated `rustls-webpki` and
+  `webpki-root-certs`, for the advisories about a compromised intermediate
+  certificate.
+
 ## v1.9.1 - 2026-10-19
 
 - **Settings → Publishing** has a **Browse Linetta Works** button that opens

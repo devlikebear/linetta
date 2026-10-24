@@ -37,6 +37,9 @@ type StageResult struct {
 	Skipped    bool     `json:"skipped"`
 	StagingDir string   `json:"staging_dir"`
 	Files      []string `json:"files"`
+	// ImageDirs names every exported work's picture folder, whether or not
+	// it holds anything now, so the copy can remove pictures no scene uses.
+	ImageDirs []string `json:"image_dirs"`
 }
 
 // ReportInput is sent by Tauri (MAS) after the privileged copy completes.
@@ -56,6 +59,9 @@ type Syncer struct {
 	Entities      *entity.Repo
 	Relationships *relationship.Repo
 	Extras        export.Extras
+	// Illustrations supplies the scenes' pictures, written beside each
+	// work's file in its export.SyncImageDir. Nil leaves them out.
+	Illustrations export.IllustrationSource
 	Now           func() time.Time
 	Ops           *opsstatus.Repo
 }
@@ -65,24 +71,29 @@ func New(s *settings.Store, p *project.Repo, n *node.Repo, e *entity.Repo, r *re
 	return &Syncer{Settings: s, Projects: p, Nodes: n, Entities: e, Relationships: r, Now: time.Now}
 }
 
-// exportAll writes every non-archived project's markdown into destDir.
-func (s *Syncer) exportAll(ctx context.Context, destDir, language string) (int, error) {
+// exportAll writes every non-archived project's markdown, and its pictures,
+// into destDir. It returns the picture folder of every project it wrote.
+func (s *Syncer) exportAll(ctx context.Context, destDir, language string) (int, []string, error) {
 	projs, err := s.Projects.List(ctx, project.ListFilter{IncludeArchived: false, Limit: 1000})
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	written := 0
+	imageDirs := []string{}
 	failures := make([]string, 0)
 	for _, p := range projs {
+		imageDir := export.SyncImageDir(p.Title, p.ID)
 		payload, err := export.ExportProject(ctx, export.Sources{
 			Projects:      s.Projects,
 			Nodes:         s.Nodes,
 			Entities:      s.Entities,
 			Relationships: s.Relationships,
 			Extras:        s.Extras,
+			Illustrations: s.Illustrations,
+			ImageDir:      imageDir,
 		}, p.ID, language)
 		if err != nil {
 			msg := fmt.Sprintf("project %s export: %v", p.ID, err)
@@ -97,10 +108,17 @@ func (s *Syncer) exportAll(ctx context.Context, destDir, language string) (int, 
 			failures = append(failures, msg)
 			continue
 		}
+		if err := export.WriteImageDir(filepath.Join(destDir, imageDir), payload.Images); err != nil {
+			msg := fmt.Sprintf("project %s pictures: %v", p.ID, err)
+			fmt.Fprintf(os.Stderr, "folder sync: %s\n", msg)
+			failures = append(failures, msg)
+			continue
+		}
+		imageDirs = append(imageDirs, imageDir)
 		written++
 	}
 	if len(failures) > 0 {
-		return written, fmt.Errorf("%d project(s) failed: %s", len(failures), strings.Join(failures, "; "))
+		return written, imageDirs, fmt.Errorf("%d project(s) failed: %s", len(failures), strings.Join(failures, "; "))
 	}
 	nowFn := s.Now
 	if nowFn == nil {
@@ -108,12 +126,12 @@ func (s *Syncer) exportAll(ctx context.Context, destDir, language string) (int, 
 	}
 	manifest, err := export.BuildSyncManifest(projs, nowFn())
 	if err != nil {
-		return written, fmt.Errorf("build sync manifest: %w", err)
+		return written, imageDirs, fmt.Errorf("build sync manifest: %w", err)
 	}
 	if err := atomicfile.Write(filepath.Join(destDir, export.SyncManifestFilename), manifest, 0o644); err != nil {
-		return written, fmt.Errorf("write sync manifest: %w", err)
+		return written, imageDirs, fmt.Errorf("write sync manifest: %w", err)
 	}
-	return written, nil
+	return written, imageDirs, nil
 }
 
 // RunOnce writes directly to FolderSyncDir (non-MAS) and records ops status.
@@ -140,7 +158,7 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 		summary.Skipped = true
 		return summary, nil
 	}
-	n, werr := s.exportAll(ctx, cfg.FolderSyncDir, cfg.Language)
+	n, _, werr := s.exportAll(ctx, cfg.FolderSyncDir, cfg.Language)
 	summary.FilesWritten = n
 	summary.FilesCopied = n
 	if werr != nil {
@@ -166,20 +184,33 @@ func (s *Syncer) Stage(ctx context.Context) (StageResult, error) {
 	if err := os.RemoveAll(staging); err != nil {
 		return StageResult{}, err
 	}
-	if _, err := s.exportAll(ctx, staging, cfg.Language); err != nil {
+	_, imageDirs, err := s.exportAll(ctx, staging, cfg.Language)
+	if err != nil {
 		return StageResult{}, err
 	}
 	entries, err := os.ReadDir(staging)
 	if err != nil {
 		return StageResult{}, err
 	}
+	// Top-level files, then each picture folder's files as "<dir>/<name>" —
+	// the only nesting the copy accepts.
 	files := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if !e.IsDir() {
 			files = append(files, e.Name())
+			continue
+		}
+		pictures, err := os.ReadDir(filepath.Join(staging, e.Name()))
+		if err != nil {
+			return StageResult{}, err
+		}
+		for _, pic := range pictures {
+			if !pic.IsDir() {
+				files = append(files, e.Name()+"/"+pic.Name())
+			}
 		}
 	}
-	return StageResult{StagingDir: staging, Files: files}, nil
+	return StageResult{StagingDir: staging, Files: files, ImageDirs: imageDirs}, nil
 }
 
 // Report records ops status after Tauri completes the MAS copy.

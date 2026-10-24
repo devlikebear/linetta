@@ -8,6 +8,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
@@ -182,11 +183,12 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	if err != nil {
 		return Context{}, err
 	}
-	// Prefer the LLM-cached summary when fresh; fall back to the 300-rune trim.
+	// Prefer the cached summary when there is one worth reading (see
+	// node.SummaryUsable); fall back to the 300-rune trim.
 	prevSummary := ""
 	if prev != nil {
-		if prev.Summary != "" && prev.SummaryForVersion == prev.ContentVersion {
-			prevSummary = prev.Summary
+		if s, _ := prev.SummaryUsable(); s != "" {
+			prevSummary = s
 		} else {
 			prevSummary = trimRunes(docToPlainText(prev.ContentDoc), prevSummaryMaxRunes)
 		}
@@ -436,12 +438,12 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 				continue
 			}
 			lf := leaves[j]
-			body := freshLeafSummary(lf)
+			body, stale := freshLeafSummary(lf)
 			if body == "" {
 				continue
 			}
 			out.NearbyLeafSummaries = append(out.NearbyLeafSummaries, SceneSummary{
-				NodeID: lf.ID, Label: node.BreadcrumbLabel(byID, lf), Body: body,
+				NodeID: lf.ID, Label: node.BreadcrumbLabel(byID, lf), Body: body, Stale: stale,
 			})
 			nearbyIDs = append(nearbyIDs, lf.ID)
 		}
@@ -554,7 +556,7 @@ func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, e
 			continue
 		}
 		out = append(out, SceneSummary{
-			NodeID: n.ID, Label: node.BreadcrumbLabel(byID, n), Body: n.Summary,
+			NodeID: n.ID, Label: node.BreadcrumbLabel(byID, n), Body: n.Summary, Stale: !n.SummaryFresh(),
 		})
 		if len(out) >= 2 {
 			break
@@ -563,28 +565,30 @@ func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, e
 	return out, nil
 }
 
-// freshLeafSummary returns the cached summary if the version matches; otherwise
+// freshLeafSummary returns the cached summary when it is worth reading — fresh,
+// or written and stale, which it reports (see node.SummaryUsable); otherwise
 // it falls back to a 300-rune trim of the plaintext body. Empty string if no
 // content at all (e.g. the leaf was just created and has no doc yet).
-func freshLeafSummary(n node.Node) string {
-	if n.Summary != "" && n.SummaryForVersion == n.ContentVersion {
-		return n.Summary
+func freshLeafSummary(n node.Node) (string, bool) {
+	if s, stale := n.SummaryUsable(); s != "" {
+		return s, stale
 	}
 	if n.ContentDoc != nil {
 		plain := docToPlainText(n.ContentDoc)
 		if plain == "" {
-			return ""
+			return "", false
 		}
-		return trimRunes(plain, prevSummaryMaxRunes)
+		return trimRunes(plain, prevSummaryMaxRunes), false
 	}
-	return ""
+	return "", false
 }
 
 // refreshAndRead returns n.Summary if fresh; otherwise it calls the refresher
 // synchronously and re-reads the row. Empty string is returned if the refresh
-// failed to land (better than a stale string).
+// failed to land (better than a stale derived string). A written summary the
+// refresher left alone is returned as it stands.
 func (b *ContextBuilder) refreshAndRead(ctx context.Context, n node.Node) string {
-	if n.Summary != "" && n.SummaryForVersion == n.ContentVersion {
+	if n.SummaryFresh() {
 		return n.Summary
 	}
 	if b.refresher != nil {
@@ -594,10 +598,8 @@ func (b *ContextBuilder) refreshAndRead(ctx context.Context, n node.Node) string
 	if err != nil {
 		return ""
 	}
-	if got.Summary != "" && got.SummaryForVersion == got.ContentVersion {
-		return got.Summary
-	}
-	return ""
+	s, _ := got.SummaryUsable()
+	return s
 }
 
 // loadRelationships returns relationships whose both endpoints appear in the
@@ -732,6 +734,13 @@ func walkDoc(v interface{}, sb *stringBuilder) {
 			}
 			return
 		}
+		// An illustration travels as its placeholder line, so an agent that
+		// rewrites the scene can keep the picture where it is.
+		if id, caption, ok := illustref.Attrs(t); ok {
+			sb.WriteString(illustref.Placeholder(id, caption))
+			sb.WriteString("\n")
+			return
+		}
 		// Block-level node: recurse children, then add a newline.
 		if content, ok := t["content"].([]interface{}); ok {
 			for _, c := range content {
@@ -819,8 +828,8 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 	synopsis := strings.TrimSpace(c.Project.Synopsis)
 	add(ContextKeySynopsis, "작품 시놉시스", boolCount(synopsis != ""), synopsis, false)
 
-	add(ContextKeyNearbyScenes, "직전·직후 씬 발췌", len(c.Hierarchical.NearbyLeafSummaries), renderSceneSummariesPreview(c.Hierarchical.NearbyLeafSummaries), false)
-	add(ContextKeyRelatedScenes, "관련 과거 씬 (멘션 RAG)", len(c.RelatedScenes), renderSceneSummariesPreview(c.RelatedScenes), false)
+	add(ContextKeyNearbyScenes, "직전·직후 씬 발췌", len(c.Hierarchical.NearbyLeafSummaries), renderSceneSummariesPreview(c.Hierarchical.NearbyLeafSummaries, c.Options.Language), false)
+	add(ContextKeyRelatedScenes, "관련 과거 씬 (멘션 RAG)", len(c.RelatedScenes), renderSceneSummariesPreview(c.RelatedScenes, c.Options.Language), false)
 	add(ContextKeyPlot, "플롯 (스토리라인&비트)", countPlotBeats(c.Plot), renderPlotPreview(c.Plot), false)
 	add(ContextKeyEntities, "세계관 요소", len(c.Entities), renderEntitiesPreview(c.Entities), false)
 	add(ContextKeyRelationships, "관계", len(c.Relationships), renderRelationshipsPreview(c.Relationships), false)
@@ -894,10 +903,10 @@ func countPlotBeats(spine plot.Spine) int {
 	return n
 }
 
-func renderSceneSummariesPreview(scenes []SceneSummary) string {
+func renderSceneSummariesPreview(scenes []SceneSummary, lang string) string {
 	var b strings.Builder
 	for _, s := range scenes {
-		b.WriteString(fmt.Sprintf("- [%s] %s\n", s.Label, s.Body))
+		b.WriteString(fmt.Sprintf("- [%s] %s%s\n", s.Label, staleMark(s.Stale, lang), s.Body))
 	}
 	return b.String()
 }

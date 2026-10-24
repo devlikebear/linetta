@@ -88,8 +88,7 @@ func (s *Source) ListModels(ctx context.Context, id string) ([]string, error) {
 		}
 	}
 	if r.ID == settings.ProviderClaudeCode {
-		// The CLI has no model list to ask for; offer its own aliases.
-		return append([]string(nil), claudeCodeModels...), nil
+		return s.claudeCodeModels(ctx, r.Model), nil
 	}
 	models, err := s.fetcher.FetchModels(ctx, Options(r))
 	if err != nil {

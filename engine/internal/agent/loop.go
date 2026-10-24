@@ -167,6 +167,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		groups:       groups,
 		language:     s.language(),
 		maxToolCalls: s.maxToolCalls(),
+		brief:        newBriefGate(schemas),
 	}
 
 	handedOff = true
@@ -236,6 +237,9 @@ type loopState struct {
 	// settings change mid-turn cannot move a wall the turn is already
 	// counting towards.
 	maxToolCalls int
+	// brief holds a prose write back until the turn has read the story
+	// brief (briefgate.go).
+	brief *briefGate
 }
 
 // releaseSession drops one reference and logs a close that failed. A helper
@@ -566,7 +570,13 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 		Summary: summarize(call.Arguments),
 	})
 
-	result := st.session.call(ctx, st.runID, call.Name, call.Arguments)
+	var result toolResult
+	if refusal := st.brief.refusal(call.Name); refusal != "" {
+		result = toolResult{IsError: true, Text: refusal}
+	} else {
+		result = st.session.call(ctx, st.runID, call.Name, call.Arguments)
+		st.brief.ran(call.Name, !result.IsError)
+	}
 
 	state := "done"
 	if result.IsError {

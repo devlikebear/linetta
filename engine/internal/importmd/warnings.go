@@ -38,4 +38,11 @@ const (
 	// WarnFactCardsSkipped: some fact cards failed validation on re-create and
 	// were dropped.
 	WarnFactCardsSkipped = "import.fact_cards_skipped"
+	// WarnIllustrationsMissing: a scene showed a picture the file did not
+	// carry; it was kept as its placeholder line.
+	WarnIllustrationsMissing = "import.illustrations_missing"
+	// WarnIllustrationsRejected: a picture the file carried could not be put
+	// in the gallery (too large, not an image, or the gallery full); it was
+	// kept as its placeholder line.
+	WarnIllustrationsRejected = "import.illustrations_rejected"
 )

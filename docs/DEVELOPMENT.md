@@ -223,6 +223,61 @@ GitHub Actions workflows:
 - `.github/workflows/mobile-engine.yml`: verifies the mobile-tagged engine and uploads iOS and Android engine artifacts;
 - `.github/workflows/mobile-release.yml`: builds signed Tauri mobile artifacts and can upload them to an existing GitHub release.
 
+## Mac App Store release
+
+The Mac App Store build is sandboxed and built, signed and uploaded from a
+maintainer's Mac; no workflow does it. Credentials, certificates and the
+provisioning profile live in `~/.linetta/apple/` and are never committed.
+
+### One-time setup
+
+1. `~/.linetta/apple/config.env` defines the App Store Connect API key:
+   `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APPLE_TEAM_ID`
+   and `AUTH_KEY_PATH` (the `.p8` file beside it).
+2. `bash scripts/setup-mas-apple.sh` registers the bundle id, creates the Mac
+   App Distribution and Mac Installer Distribution certificates, and writes
+   `linetta-mas.provisionprofile`. It creates real Apple resources and Apple
+   caps distribution certificates per account, so run it once; the script's
+   header describes the manual fallback when the API refuses a certificate.
+3. Append the identities `security find-identity -v -p codesigning` reports,
+   and the profile path, to `config.env`:
+   ```sh
+   MAS_APP_IDENTITY="Apple Distribution: <name> (<team id>)"
+   MAS_INSTALLER_IDENTITY="Mac Installer Distribution: <name> (<team id>)"
+   MAS_PROFILE_PATH="$HOME/.linetta/apple/linetta-mas.provisionprofile"
+   ```
+4. In App Store Connect, create the macOS app record for bundle id
+   `com.devlikebear.linetta`. An upload is matched to it by bundle id.
+
+### Each release
+
+Build, sign and package the installer:
+
+```sh
+make release-mas-local
+```
+
+The package lands at
+`apps/desktop/src-tauri/target/release/bundle/macos/Linetta.pkg`. Then upload it:
+
+```sh
+mkdir -p "$HOME/.appstoreconnect/private_keys"
+cp "$HOME/.linetta/apple/AuthKey_<key id>.p8" "$HOME/.appstoreconnect/private_keys/"   # once: altool looks here
+set -a; . "$HOME/.linetta/apple/config.env"; set +a
+PKG="apps/desktop/src-tauri/target/release/bundle/macos/Linetta.pkg"
+xcrun altool --validate-app -f "${PKG}" -t macos \
+  --apiKey "${APP_STORE_CONNECT_KEY_ID}" --apiIssuer "${APP_STORE_CONNECT_ISSUER_ID}"
+xcrun altool --upload-app -f "${PKG}" -t macos \
+  --apiKey "${APP_STORE_CONNECT_KEY_ID}" --apiIssuer "${APP_STORE_CONNECT_ISSUER_ID}"
+```
+
+- Fix any asset or entitlement error validation reports and rebuild before
+  uploading.
+- If altool is unavailable, upload the same `.pkg` with Transporter.app using
+  the same API key.
+- The upload is done when the build appears in App Store Connect under
+  TestFlight → Builds, first as "Processing".
+
 ## Troubleshooting
 
 - **Engine startup failure:** use the desktop diagnostic screen to retry and copy diagnostics.
@@ -232,9 +287,7 @@ GitHub Actions workflows:
 
 ## Publishing to Linetta Works
 
-The desktop app can publish episodes to [Linetta Works](https://works.marvin-42.com)
-(Phase 3 of the Linetta Works roadmap; the work order is
-[`docs/plans/publish/phase-3-linetta-publish.md`](plans/publish/phase-3-linetta-publish.md)).
+The desktop app can publish episodes to [Linetta Works](https://works.marvin-42.com).
 The wire contract is the site's: `docs/api.md` in the linetta-artworks
 repository, `api_version` 1. Follow it rather than adjusting the client to
 whatever the server happens to do; a contract change is made there first.
@@ -268,3 +321,11 @@ The shell only opens `https://works.marvin-42.com` in the browser
 (`EXTERNAL_URL_HOSTS`), so against a local server open the connect URL the
 Settings pane shows by hand.
 
+## Plan documents
+
+`docs/plans/<feature>/` holds work orders for work that is still in progress:
+a `roadmap.md` and one document per phase. When the work has shipped, delete
+its folder in the same pull request that finishes it, or the next one. Git
+history keeps every plan, and what is still worth knowing afterwards belongs in
+this guide or the README, where it stays current. Logs, audit output and
+one-off reports do not go in the repository.

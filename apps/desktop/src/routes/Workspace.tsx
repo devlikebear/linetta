@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot } from "lucide-react";
+import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot, Image as ImageIcon } from "lucide-react";
 import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi } from "../lib/rpc";
 import { saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus } from "../lib/types";
+import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus, IllustrationMeta } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -29,6 +29,8 @@ import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
 import { PublishDialog } from "../components/PublishDialog";
 import { rememberSettingsCategory } from "./Settings";
+import { IllustrationDialog } from "../components/illustration/IllustrationDialog";
+import { IllustrationGallery } from "../components/illustration/IllustrationGallery";
 import { SearchModal } from "../components/SearchModal";
 import { OnboardingTour, type OnboardingTourStep } from "../components/onboarding/OnboardingTour";
 import {
@@ -177,6 +179,12 @@ export function Workspace() {
   // writer must never be told to go configure something Settings won't show
   // them (#95).
   const [agentAvailable, setAgentAvailable] = useState(false);
+  // Illustrations: the drawing dialog (with what it was opened from) and the
+  // work's gallery. Both are modals over the editor rather than right-hand
+  // panels, so they never compete with the four panels for that slot.
+  const [illustrationDialog, setIllustrationDialog] = useState<{ scene?: string; sourceNodeId?: string } | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryRefresh, setGalleryRefresh] = useState(0);
   // Linetta Works publishing (Phase 3). Off on builds that cannot publish.
   // The work's status is fetched when the work opens and after a publish —
   // never on a timer — and only that, so a writer who is not connected
@@ -1164,6 +1172,28 @@ export function Workspace() {
   }, [selectionMenu]);
 
 
+  const runSelectionIllustrate = useCallback(() => {
+    if (!selectionMenu || selectionMenu.kind !== "selection") return;
+    setSelectionMenu(null);
+    setIllustrationDialog({ scene: selectionMenu.text, sourceNodeId: load?.node.id });
+  }, [selectionMenu, load]);
+
+  // A picture goes in at the editor's selection, which the modal leaves
+  // where the writer had it.
+  const insertIllustration = useCallback((meta: IllustrationMeta) => {
+    editorRef.current?.insertIllustration(meta.id, meta.caption);
+    setGalleryOpen(false);
+    setIllustrationDialog(null);
+    showToast(t("illustration.inserted"));
+  }, [showToast, t]);
+
+  const openImageSettings = useCallback(() => {
+    setIllustrationDialog(null);
+    setGalleryOpen(false);
+    rememberSettingsCategory("images");
+    void flushPendingSave().then(() => navigate("/settings"));
+  }, [flushPendingSave, navigate]);
+
   const copyNodeText = useCallback(async (node: Pick<TreeNode, "id">) => {
     try {
       const payload = await exportApi.nodeText(node.id);
@@ -1487,6 +1517,22 @@ export function Workspace() {
         run: toggleAgent,
       });
     }
+    if (agentAvailable) {
+      cmds.push({
+        id: "illustration-new",
+        section: sectionProject,
+        label: t("workspace.command.illustrate"),
+        keywords: ["illustration", "image", "draw", "삽화", "그림", "이미지", "挿絵"],
+        run: () => setIllustrationDialog({ sourceNodeId: load.node.id }),
+      });
+      cmds.push({
+        id: "illustration-gallery",
+        section: sectionProject,
+        label: t("workspace.command.illustrations"),
+        keywords: ["illustration", "gallery", "삽화", "갤러리", "挿絵"],
+        run: () => setGalleryOpen(true),
+      });
+    }
     cmds.push({
       id: "show-shortcuts",
       section: sectionHelp,
@@ -1745,6 +1791,17 @@ export function Workspace() {
               ) : null}
             </button>
           )}
+          {agentAvailable && (
+            <button
+              type="button"
+              className={`ws-tool${galleryOpen ? " is-active" : ""}`}
+              onClick={() => setGalleryOpen(true)}
+              title={t("workspace.command.illustrations")}
+              data-testid="ws-tool-illustrations"
+            >
+              <ImageIcon size={15} /> {t("illustration.gallery")}
+            </button>
+          )}
           <div className="ws-sep" />
           <button type="button" className="ws-tool" onClick={enterZen} data-tour="workspace-zen">
             <Maximize2 size={15} /> ZEN
@@ -1876,6 +1933,11 @@ export function Workspace() {
                 <button type="button" role="menuitem" onClick={runSelectionFactCheck}>
                   <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
                 </button>
+                {agentAvailable && selectionMenu.kind === "selection" ? (
+                  <button type="button" role="menuitem" onClick={runSelectionIllustrate}>
+                    <ImageIcon size={13} /> {t("workspace.selectionMenu.illustrate")}
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -2102,6 +2164,26 @@ export function Workspace() {
       )}
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} agentAvailable={agentAvailable} />
+      {load && galleryOpen && (
+        <IllustrationGallery
+          projectId={load.project.id}
+          refreshKey={galleryRefresh}
+          onClose={() => setGalleryOpen(false)}
+          onNew={() => setIllustrationDialog({ sourceNodeId: load.node.id })}
+          onInsert={load.node.kind === "leaf" ? insertIllustration : undefined}
+        />
+      )}
+      {load && illustrationDialog && (
+        <IllustrationDialog
+          projectId={load.project.id}
+          sourceNodeId={illustrationDialog.sourceNodeId}
+          initialScene={illustrationDialog.scene}
+          onClose={() => setIllustrationDialog(null)}
+          onSaved={() => setGalleryRefresh((n) => n + 1)}
+          onInsert={load.node.kind === "leaf" ? insertIllustration : undefined}
+          onOpenSettings={openImageSettings}
+        />
+      )}
       {load && publishTarget && (
         <PublishDialog
           open

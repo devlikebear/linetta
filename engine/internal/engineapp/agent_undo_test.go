@@ -130,6 +130,9 @@ func TestAgentUndo_withASnapshotID_tellsTheWorkspaceTheSceneChanged(t *testing.T
 	}
 
 	app.SetProviderFactoryForTest(agenttest.NewScriptedClientFactory(
+		// The brief first, as every prose write must (agent/briefgate.go).
+		agenttest.ScriptedTurn{ToolName: "linetta_get_story_context",
+			ToolArgs: `{"project_id":"` + projectID + `","node_id":"` + nodeID + `"}`},
 		agenttest.ScriptedTurn{ToolName: "linetta_write_scene",
 			ToolArgs: `{"node_id":"` + nodeID + `","text":"새로 쓴 문장.","expected_content_version":0}`},
 		agenttest.ScriptedTurn{Text: "1장을 다시 썼습니다."},
