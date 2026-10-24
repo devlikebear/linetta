@@ -19,6 +19,15 @@ func langIsJapanese(lang string) bool {
 }
 
 // langPick returns the string for the app language; Korean is the default.
+// staleMark prefixes a summary written for an earlier version of its scene,
+// so a model reading the brief knows the scene has changed since.
+func staleMark(stale bool, lang string) string {
+	if !stale {
+		return ""
+	}
+	return langPick(lang, "(고치기 전 원고의 요약) ", "(summary of an earlier draft) ", "(修正前の原稿の要約) ")
+}
+
 func langPick(lang, ko, en, ja string) string {
 	if langIsEnglish(lang) {
 		return en
@@ -185,7 +194,7 @@ func buildUser(c Context) string {
 	if len(c.Hierarchical.NearbyLeafSummaries) > 0 {
 		b.WriteString(langPick(lang, "## 직전·직후 씬 발췌\n", "## Adjacent Scene Excerpts\n", "## 前後シーンの抜粋\n"))
 		for _, ss := range c.Hierarchical.NearbyLeafSummaries {
-			b.WriteString(fmt.Sprintf("- [%s] %s\n", node.DisplayBreadcrumb(ss.Label, lang), ss.Body))
+			b.WriteString(fmt.Sprintf("- [%s] %s%s\n", node.DisplayBreadcrumb(ss.Label, lang), staleMark(ss.Stale, lang), ss.Body))
 		}
 		b.WriteString("\n")
 	}
@@ -193,7 +202,7 @@ func buildUser(c Context) string {
 	if len(c.RelatedScenes) > 0 {
 		b.WriteString(langPick(lang, "## 관련 과거 씬\n", "## Related Past Scenes\n", "## 関連する過去シーン\n"))
 		for _, ss := range c.RelatedScenes {
-			b.WriteString(fmt.Sprintf("- [%s] %s\n", node.DisplayBreadcrumb(ss.Label, lang), ss.Body))
+			b.WriteString(fmt.Sprintf("- [%s] %s%s\n", node.DisplayBreadcrumb(ss.Label, lang), staleMark(ss.Stale, lang), ss.Body))
 		}
 		b.WriteString("\n")
 	}

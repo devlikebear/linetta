@@ -3,8 +3,10 @@
 // There is no language model behind it any more. A short scene is its own
 // summary; a longer one gets its opening cut at a sentence; a container gets
 // its children rolled up. An agent connected over MCP replaces any of these
-// with a real summary through linetta_write_summary, and the freshness check
-// in summarizeOneDepth is what stops this from overwriting that.
+// with a real summary through linetta_write_summary, and summarizeOneDepth
+// never overwrites that one — not even after the scene is edited and the
+// summary goes stale. A stale written summary of a revised scene still knows
+// how the scene ends; the opening cut that used to replace it does not.
 package summarizer
 
 import (
@@ -114,7 +116,7 @@ func (s *Summarizer) summarizeOneDepth(ctx context.Context, nodeID string, depth
 		s.recordError(ctx, nodeID, err.Error())
 		return
 	}
-	if n.Summary != "" && n.SummaryForVersion == n.ContentVersion {
+	if n.SummaryFresh() || (n.Summary != "" && n.SummaryWritten) {
 		return
 	}
 	switch n.Kind {
@@ -172,7 +174,7 @@ func (s *Summarizer) summarizeContainer(ctx context.Context, n node.Node, depth 
 	}
 	// Recurse into stale children first so we have fresh summaries to roll up.
 	for _, c := range children {
-		if c.Summary == "" || c.SummaryForVersion != c.ContentVersion {
+		if !c.SummaryFresh() {
 			s.summarizeOneDepth(ctx, c.ID, depth+1)
 		}
 	}

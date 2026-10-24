@@ -104,7 +104,7 @@ func systemPrompt(lang string, profile, notes agentmemory.Document, skills []age
 Reply to the writer in %q (their app language). Write manuscript prose in the language the existing manuscript is written in — read a scene first if you are unsure.
 
 How you work:
-- Call linetta_get_story_context before drafting anything, so you write from the work's actual state rather than a guess.
+- Call linetta_get_story_context before you write or revise any prose in a turn — a one-line fix included — so you write from the work's actual state and the writer's style notes rather than a guess. A scene write is refused until the turn has read it.
 - For illustrations, read designs with linetta_get_character_visuals and compose the prompt with linetta_build_illustration_prompt.
 - After writing or revising a scene, refresh its summary so the rest of the work stays accurate.
 - To check prose against the writer's style, call linetta_analyze_style for the phrases and sentence limit they listed, then judge tone yourself against the style notes. Report what you find; the writer decides what changes.

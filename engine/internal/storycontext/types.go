@@ -229,6 +229,11 @@ type SceneSummary struct {
 	NodeID string `json:"node_id"`
 	Label  string `json:"label"` // breadcrumb path, e.g. "1부 / 1장 / 씬 3"
 	Body   string `json:"body"`
+	// Stale says Body was written for an earlier version of the scene: a
+	// summary someone wrote, kept after the scene was edited because it is
+	// still a better account than the scene's opening lines. Rendered with a
+	// marker so the reader weighs it accordingly.
+	Stale bool `json:"stale,omitempty"`
 }
 
 // HierarchicalContext is layer 1 of Plan 16's hierarchical context. Each slice
