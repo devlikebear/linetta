@@ -130,6 +130,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	writingStats := stats.NewRepo(st)
 	entities := entity.NewRepo(st)
 	visuals := visual.NewRepo(st)
+	illustrations := illustration.NewRepo(st)
 	styles := style.NewRepo(st)
 	mentions := mention.NewRepo(st)
 	threads := thread.NewRepo(st)
@@ -238,7 +239,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	mcpStory := storyops.New(projects, nodes, threads, beats, entities, relationships).
 		WithFacts(facts).
 		WithSnapshots(snaps).
-		WithMemory(companionSvc)
+		WithMemory(companionSvc).
+		WithIllustrations(illustrations)
 
 	// One Store for the skills the agent writes for itself, shared between
 	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below),
@@ -283,20 +285,21 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		settingsStore: settingsStore,
 		home:          home,
 		repos: mcpToolRepos{
-			visuals:    visuals,
-			style:      styles,
-			projects:   projects,
-			nodes:      nodes,
-			entities:   entities,
-			mentions:   mentions,
-			facts:      facts,
-			plot:       plotBuilder,
-			manuscript: manuscriptSearcher,
-			context:    mcpContextBuilder,
-			snapshots:  snaps,
-			story:      mcpStory,
-			msEdit:     manuscriptEditor,
-			memory:     memRepo,
+			visuals:       visuals,
+			illustrations: illustrations,
+			style:         styles,
+			projects:      projects,
+			nodes:         nodes,
+			entities:      entities,
+			mentions:      mentions,
+			facts:         facts,
+			plot:          plotBuilder,
+			manuscript:    manuscriptSearcher,
+			context:       mcpContextBuilder,
+			snapshots:     snaps,
+			story:         mcpStory,
+			msEdit:        manuscriptEditor,
+			memory:        memRepo,
 			// The skills the agent writes for itself live as SKILL.md files
 			// under the same home the rest of Linetta's own material does,
 			// with their versions in the database beside the manuscript's.
@@ -339,7 +342,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	agentStory := storyops.New(projects, nodes, threads, beats, entities, relationships).
 		WithFacts(facts).
 		WithSnapshots(snaps).
-		WithMemory(companionSvc)
+		WithMemory(companionSvc).
+		WithIllustrations(illustrations)
 
 	agentCtrl, stopAgent := setupAgent(agentDeps{
 		tools:    mcpTools,
@@ -494,7 +498,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// Illustration drawing. The painter is the provider's Draw, gated on the
 	// image consent; the gallery and the prompt preview never reach a provider.
 	imageProviders := imageProviderService{src: providerSrc}
-	illustrations := illustration.NewRepo(st)
 	illustrationSvc := illustration.NewService(illustrations, visuals, illustrationPainter{src: providerSrc}, clock)
 	s.Handle("image_providers.list", handlers.ImageProvidersList(imageProviders))
 	s.Handle("image_providers.list_models", handlers.ImageProvidersListModels(imageProviders))

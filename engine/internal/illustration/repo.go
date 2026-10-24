@@ -203,6 +203,24 @@ func (r *Repo) Usage(ctx context.Context, projectID string) (count int, bytes in
 	return count, bytes, err
 }
 
+// IDsInProject is every illustration id in a work's gallery.
+func (r *Repo) IDsInProject(ctx context.Context, projectID string) (map[string]bool, error) {
+	rows, err := r.s.DB().QueryContext(ctx, "SELECT id FROM illustrations WHERE project_id = ?", projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // Get returns one illustration with its bytes.
 func (r *Repo) Get(ctx context.Context, id string) (Illustration, error) {
 	var i Illustration

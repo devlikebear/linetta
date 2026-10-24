@@ -11,6 +11,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -140,7 +141,8 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 		Description: "Replace a scene's body with new prose. Call linetta_read_scene first and pass the " +
 			"content_version it returned: if the writer edited the scene since then the write is refused, " +
 			"so their work is never silently overwritten. The previous text is snapshotted first and the " +
-			"returned snapshot_id restores it. Registered story elements named in the text are linked " +
+			"returned snapshot_id restores it. Keep [[illustration:...]] lines to keep their pictures. " +
+			"Registered story elements named in the text are linked " +
 			"automatically and reported in linked_elements. Linetta then files the scene's opening lines " +
 			"as a placeholder summary; call linetta_write_summary afterwards so the story brief carries a " +
 			"real one.",
@@ -290,6 +292,11 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 	doc, err := storyops.PlainTextToTiptapDoc(in.Text)
 	if err != nil {
 		return toolErr("could not convert the text: %v", err), writeSceneOutput{}, nil
+	}
+	if d.Illustrations != nil {
+		if doc, err = illustref.KeepProjects(ctx, d.Illustrations, n.ProjectID, doc); err != nil {
+			return toolErr("could not check the scene's illustrations: %v", err), writeSceneOutput{}, nil
+		}
 	}
 	// Agent prose gets its registered names linked on the way in (#72):
 	// without this, a scene written over MCP never reaches

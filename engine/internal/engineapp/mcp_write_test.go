@@ -14,7 +14,13 @@ import (
 // startWritableMCP brings up a server in full mode with one seeded scene.
 func startWritableMCP(t *testing.T) (*App, *mcpClient, string, string) {
 	t.Helper()
-	home := t.TempDir()
+	return startWritableMCPAt(t, t.TempDir())
+}
+
+// startWritableMCPAt is startWritableMCP on a library under home, for a test
+// that also opens that library itself.
+func startWritableMCPAt(t *testing.T, home string) (*App, *mcpClient, string, string) {
+	t.Helper()
 	t.Setenv("LINETTA_HOME", home)
 	app := openTestApp(t, home)
 
