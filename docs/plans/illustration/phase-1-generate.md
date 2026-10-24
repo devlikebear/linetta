@@ -3,6 +3,7 @@
 _상위 로드맵: [`roadmap.md`](./roadmap.md)_
 _목표: 설정에서 이미지 생성 공급자(ChatGPT 또는 Gemini)를 고르고, 씬에서 삽화를 만들어 작품 갤러리에 보관하는 첫 수직 슬라이스_
 _예상 소요: 4~5일 (tars 1.5일 포함)_
+_상태: 완료 (2026-10-24, #218, tars #1302)_
 
 ## Goal
 
@@ -100,7 +101,7 @@ Linetta 엔진:
     응답 `candidates[0].content.parts[].inlineData`의 MIME과 크기, 참조 이미지 `inlineData` 입력 반영 여부를 확인한다.
   - 결과를 이 문서 끝 "스파이크 기록"에 적고, 아래 작업의 파라미터를 거기 맞춘다.
 
-- [ ] **1.1 `pkg/llm/image.go` — 공통 타입**
+- [x] **1.1 `pkg/llm/image.go` — 공통 타입**
   ```go
   type ImageAspect string // "square" | "portrait" | "landscape"
 
@@ -122,7 +123,7 @@ Linetta 엔진:
   ```
   - 거절은 기존 `errors.go` 패턴에 `ErrImageRefused`(안전 정책)를 더한다.
 
-- [ ] **1.2 `OpenAICodexClient.GenerateImage`**
+- [x] **1.2 `OpenAICodexClient.GenerateImage`**
   - 파일: `pkg/llm/openai_codex_image.go`
   - `chatWithCredential`의 인증 헤더, 401 갱신 재시도, rate limit 관찰(`setLastRateLimit`)을 그대로 쓴다. 요청 본문만 다르다.
   - 툴은 `{"type":"image_generation","output_format":"jpeg"}`만 보낸다. `size`·`quality`는 무시되므로 보내지 않는다.
@@ -137,7 +138,7 @@ Linetta 엔진:
   - 테스트: `openai_codex_image_test.go`, `httptest` 서버로 성공 / 401 후 갱신 / `failed` 항목(거절) / 이미지 없음 / 잘린 스트림 5케이스.
     스트림 픽스처는 스파이크 기록의 이벤트 순서를 따른다(`keepalive` 포함).
 
-- [ ] **1.3 `GeminiNativeClient.GenerateImage`**
+- [x] **1.3 `GeminiNativeClient.GenerateImage`**
   - 파일: `pkg/llm/gemini_native_image.go`
   - `x-goog-api-key` 헤더, `models/{model}:generateContent`, `responseModalities: ["IMAGE"]`, 비율은 `imageConfig.aspectRatio` (`1:1`, `2:3`, `3:2`).
     `imageConfig.imageSize: "1K"`는 3.x 모델에만 보낸다. `aspectRatio`는 늘 보낸다(빼면 가로가 나온다).
@@ -147,13 +148,13 @@ Linetta 엔진:
   - 무료 등급 키의 `429 RESOURCE_EXHAUSTED`(`quotaId`에 `FreeTier`, `limit: 0`)는 `ErrImageBillingRequired`로 따로 구분한다.
   - 테스트: `gemini_native_image_test.go`, 성공 / 이미지 없음 / 무료 등급 429 / 그 밖의 4xx 오류 매핑 4케이스.
 
-- [ ] **1.4 tars 반영과 Linetta 버전 올리기**
+- [x] **1.4 tars 반영과 Linetta 버전 올리기**
   - tars PR 머지 후 Linetta에서 `cd engine && go get github.com/devlikebear/tars@<commit>` 하고 `go mod tidy`
   - 커밋 메시지는 기존 관례대로 `chore(engine): tars를 이미지 생성 API(<short sha>)로`
 
 ## Engine tasks
 
-- [ ] **1.5 이미지 생성 설정**
+- [x] **1.5 이미지 생성 설정**
   - 파일: `engine/internal/settings/image.go` 신규, `settings.go`
   - `Settings`에 추가:
     ```go
@@ -166,7 +167,7 @@ Linetta 엔진:
   - `HasImageConsent(id)`
   - 테스트: `image_test.go` — 기본값은 사용 안 함, 허용 밖 id 거절, 동의 기록, 디스크 왕복, 키가 이 구조체로 새지 않음
 
-- [ ] **1.6 `provider.Source.ImageGenerator`**
+- [x] **1.6 `provider.Source.ImageGenerator`**
   - 파일: `engine/internal/provider/image.go`
   - `ImageGenerator(id string) (llm.ImageGenerator, Resolved, error)`
     - `Resolve(id)`로 자격 증명을 얻고 `Configured()`가 아니면 `rpc.ReasonProviderNotConfigured`
@@ -178,7 +179,7 @@ Linetta 엔진:
   - Gemini 무료 등급 오류는 새 reason `rpc.ReasonImageBillingRequired`로 바꾼다
   - 테스트: `image_test.go` — 미설정, 동의 없음, 모델 기본값, 허용 밖 id
 
-- [ ] **1.7 삽화 저장소**
+- [x] **1.7 삽화 저장소**
   - 마이그레이션 `0024_illustrations.sql`:
     ```sql
     CREATE TABLE illustrations (
@@ -204,14 +205,14 @@ Linetta 엔진:
   - 공급자가 5 MiB를 넘는 PNG를 주면 `image/png` 디코드 후 `image/jpeg` 품질 90으로 다시 인코딩한다. 그래도 넘으면 거절
   - 테스트: `repo_test.go` — 추가·목록·삭제, 작품 삭제 시 함께 삭제, 상한 초과, 잘못된 MIME, 큰 PNG 재인코딩
 
-- [ ] **1.8 인물 해석과 프롬프트 조립을 `visual`로 옮기기 (동작 변경 없음)**
+- [x] **1.8 인물 해석과 프롬프트 조립을 `visual`로 옮기기 (동작 변경 없음)**
   - `mcphost/tools_visuals.go`의 `resolveVisualCharacters`와 `buildIllustrationPrompt` 안의 조립 부분을
     `engine/internal/visual/compose.go`의 `Compose(ctx, repo, entities, projectID, ComposeInput) (Composition, error)`로 옮긴다.
     `Composition{Prompt, Characters, ReferenceImageIDs, MissingSheets}`
   - MCP 툴은 이 함수를 부르는 얇은 층이 된다. 두 경로가 따로 조립하지 않게 한다.
   - 검증: 기존 `tools_visuals_test.go`가 그대로 통과. `compose_test.go`에 없는 인물 이름 오류, 시트 없는 인물 경고 2케이스
 
-- [ ] **1.9 `illustration.Service.Generate`**
+- [x] **1.9 `illustration.Service.Generate`**
   - 파일: `engine/internal/illustration/service.go`
   - 입력: `project_id`, `source_node_id`(선택), `prompt`(작가가 확인·수정한 최종 문자열), `character_ids`, `aspect`, `include_references`
   - 순서: 이미지 공급자 확인 → `ImageGenerator` → 참조 이미지 모으기(인물 순서대로 ordinal 0부터, 최대 4장) →
@@ -221,7 +222,7 @@ Linetta 엔진:
   - 가로·세로는 요청한 비율이 아니라 결과 바이트에서 읽는다(`image.DecodeConfig`). Codex는 요청과 다른 크기(`1374x1145` 등)를 돌려준다
   - 테스트: `service_test.go`, 가짜 `ImageGenerator`로 성공 저장, 참조 4장 제한, 거절 시 저장 안 함, 시간 초과
 
-- [ ] **1.10 RPC**
+- [x] **1.10 RPC**
   - 파일: `engine/internal/rpc/handlers/illustrations.go`, 등록은 `engineapp.go`의 `visuals.*` 블록 옆
   - 설정 필드는 기존 `settings.get`/`settings.patch`로 다룬다
   - 새 메서드:
@@ -234,30 +235,30 @@ Linetta 엔진:
     - `illustrations.update` `{id, caption}`, `illustrations.delete` `{id}`
   - 테스트: `illustrations_test.go` — 빈 project_id `CodeInvalidParams`, 동의 없음 reason, list 합계
 
-- [ ] **1.11 병합 복원**
+- [x] **1.11 병합 복원**
   - `restore.MergeProject`가 `illustrations`를 새 작품 id로 옮긴다. `source_node_id`는 노드 id 재매핑 표로 바꾼다
   - 테스트: 기존 `restore` 병합 테스트에 삽화 한 장을 더해, 새 작품 id 아래에 바이트가 같은 삽화가 생기는지 확인
 
 ## Desktop tasks
 
-- [ ] **1.12 타입·RPC·문구**
+- [x] **1.12 타입·RPC·문구**
   - `types.ts`: `IllustrationMeta`, `Composition`, `ImageProviderStatus`, 설정 타입에 `image_provider`, `image_providers`
   - `rpc.ts`: `illustrationsApi`, `imageProvidersApi` (`visualsApi` 모양을 따른다)
   - `i18n.tsx`: ko·en·ja 세 언어 모두
 
-- [ ] **1.13 설정 → 이미지 생성**
+- [x] **1.13 설정 → 이미지 생성**
   - `ImageGenSection.tsx`: `ProviderSection.tsx`의 행·모델 선택·동의 패턴을 따른다
   - `Settings.tsx`: `agentAvailable`일 때만 카테고리 노출 (공급자 설정과 같은 조건)
   - 테스트: `ImageGenSection.test.tsx` — 자격 증명 없는 공급자 안내, 동의 전 생성 불가 표시, 모델 저장
 
-- [ ] **1.14 삽화 만들기 대화상자**
+- [x] **1.14 삽화 만들기 대화상자**
   - `IllustrationDialog.tsx`: 입력 → `illustrations.compose` → 프롬프트 편집 → `illustrations.generate`
   - 등장인물 미리 고르기: 현재 씬 문서의 `mention` 노드 중 인물 종류
   - 진입점: `Tiptap.tsx` 선택 영역 메뉴, 커맨드 팔레트, 갤러리
   - 이미지 공급자가 `사용 안 함`이면 설정으로 가는 안내만 보인다
   - 테스트: `IllustrationDialog.test.tsx` — 선택 텍스트로 미리 채움, 편집한 프롬프트가 그대로 전송됨, 거절 오류 문구
 
-- [ ] **1.15 갤러리 패널**
+- [x] **1.15 갤러리 패널**
   - `IllustrationGallery.tsx`: 목록, 썸네일은 `illustrations.get`으로 받아 object URL 캐시(작품 전환 시 해제)
   - 캡션 편집, 삭제 확인, 크게 보기, 생성 정보, 하단 장수·용량
   - 테스트: `IllustrationGallery.test.tsx` — 목록 표시, 삭제 후 갱신, 용량 표시
@@ -267,19 +268,19 @@ Linetta 엔진:
 ### ✅ Checkpoint: Phase 1 완료 확인
 
 **구현 확인:**
-- [ ] 설정에서 이미지 공급자를 `ChatGPT`, `Gemini`, `사용 안 함`으로 바꿀 수 있고, 키·토큰이 `image_providers`에 저장되지 않는다
-- [ ] 동의 전에는 생성 버튼이 막히고, 엔진도 `ReasonImageConsentRequired`로 거절한다
-- [ ] MCP `linetta_build_illustration_prompt`와 대화상자의 프롬프트가 같은 `visual.Compose`에서 나온다
+- [x] 설정에서 이미지 공급자를 `ChatGPT`, `Gemini`, `사용 안 함`으로 바꿀 수 있고, 키·토큰이 `image_providers`에 저장되지 않는다
+- [x] 동의 전에는 생성 버튼이 막히고, 엔진도 `ReasonImageConsentRequired`로 거절한다
+- [x] MCP `linetta_build_illustration_prompt`와 대화상자의 프롬프트가 같은 `visual.Compose`에서 나온다
 
 **실행 확인:**
-- [ ] tars: `go test ./pkg/llm/...` 통과
-- [ ] `cd engine && CGO_ENABLED=0 go test ./...` 통과, `make test-mobile-engine` 통과
-- [ ] `make test-desktop` 통과
+- [x] tars: `go test ./pkg/llm/...` 통과
+- [x] `cd engine && CGO_ENABLED=0 go test ./...` 통과, `make test-mobile-engine` 통과
+- [x] `make test-desktop` 통과
 
 **수동 확인:**
-- [ ] `make dev`로 띄우고, ChatGPT 로그인 상태에서 인물 시트가 있는 씬의 한 단락을 골라 세로 삽화를 만든다. 갤러리에 저장되고 인물 참조가 반영된다
-- [ ] Gemini 키로 같은 장면을 만든다
-- [ ] 백업 후 그 작품을 병합 복원하면 새 작품 갤러리에 삽화가 있다
+- [x] (임시 `LINETTA_HOME`의 웹 UI로) `make dev`로 띄우고, ChatGPT 로그인 상태에서 인물 시트가 있는 씬의 한 단락을 골라 세로 삽화를 만든다. 갤러리에 저장되고 인물 참조가 반영된다
+- [ ] Gemini 키로 같은 장면을 만든다 — 앱 UI로는 하지 않았다. tars `GenerateImage` 실제 호출(#1302)과 provider 단위 테스트로 확인
+- [x] 백업 후 그 작품을 병합 복원하면 새 작품 갤러리에 삽화가 있다 — `restore` 테스트로 확인
 
 **이 체크포인트를 통과하면 사용자에게 확인 요청 후 Phase 2로 진행.**
 실패하면 실패 항목을 보고하고, 사용자와 원인을 파악해 고친 뒤 다시 확인한다.
