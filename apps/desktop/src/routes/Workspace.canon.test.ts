@@ -46,6 +46,22 @@ describe("Workspace story world panel", () => {
     expect(src).toContain("onOpenEntity={(entityId) => setEntitySheetId(entityId)}");
   });
 
+  it("clears the continuity highlight target when any inspector-slot panel opens", async () => {
+    const src = await workspace();
+    // factBookHighlightId (a continuity observation's fact ref, story-assist
+    // Phase 2) must be reset by every one of these four toggles, the same
+    // way factBookSelectedClaimRequest already is — otherwise reopening the
+    // Fact Book plainly later still carries a stale highlight target from
+    // whatever observation was last opened, scoping the list to the whole
+    // work instead of this scene and highlighting an unrelated card (code
+    // review caught this).
+    for (const name of ["toggleFactBook", "toggleContextualEdit", "toggleCanon", "toggleAgent"]) {
+      const start = src.indexOf(`const ${name} = `);
+      const body = src.slice(start, src.indexOf("}, []);", start));
+      expect(body).toContain("setFactBookHighlightId(null)");
+    }
+  });
+
   it("refreshes the cast when an external agent changes the work", async () => {
     const src = await workspace();
     // linetta_apply_story_ops carries create_entity, and its notification is

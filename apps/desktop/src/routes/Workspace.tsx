@@ -1103,6 +1103,13 @@ export function Workspace() {
 
   const toggleFactBook = useCallback(() => {
     setFactBookSelectedClaimRequest(null);
+    // A continuity fact ref's target (story-assist Phase 2 review): without
+    // this, closing the panel and reopening it plainly from this same
+    // button would still carry a stale highlight target from whatever
+    // observation was last opened, scoping the list to the whole work
+    // instead of this scene and highlighting a card the writer has nothing
+    // to do with right now.
+    setFactBookHighlightId(null);
     setFactBookOpen((v) => {
       const next = !v;
       if (next) {
@@ -1122,6 +1129,7 @@ export function Workspace() {
       if (next) {
         setContextualSeed(null);
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
         setFactBookOpen(false);
         setCanonOpen(false);
         setAgentOpen(false);
@@ -1137,6 +1145,7 @@ export function Workspace() {
       const next = !v;
       if (next) {
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
         setAgentOpen(false);
@@ -1152,6 +1161,7 @@ export function Workspace() {
       const next = !v;
       if (next) {
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
         setCanonOpen(false);
