@@ -41,6 +41,13 @@ vi.mock("../lib/rpc", () => ({
     getDraft: vi.fn().mockResolvedValue({ pending: false, draft: { project_id: "p1", body: "", author: "", created_at: 0 }, limit: 2200 }),
   },
   projects: { get: vi.fn().mockResolvedValue({ id: "p1", style_notes: "" }) },
+  // The continuity section mounts inside the panel and loads its checks on
+  // mount (story-assist Phase 2).
+  continuity: {
+    list: vi.fn().mockResolvedValue({ checks: [] }),
+    setStatus: vi.fn(),
+    openCounts: vi.fn().mockResolvedValue({ counts: {} }),
+  },
 }));
 
 function entity(
@@ -192,5 +199,13 @@ describe("CanonPanel", () => {
     mocks.entitiesList.mockResolvedValue([...cast, entity("e5", "도경")]);
     rerender(panel({ refreshKey: 1 }));
     await waitFor(() => expect(screen.getByText("도경")).toBeTruthy());
+  });
+
+  // story-assist Phase 2, 2.D.2: the continuity section lives below the
+  // style section inside Story World, not as a separate panel.
+  it("carries the continuity section below the style section", async () => {
+    renderPanel();
+    await screen.findByText("해윤");
+    expect(screen.getByText("연속성 점검")).toBeTruthy();
   });
 });

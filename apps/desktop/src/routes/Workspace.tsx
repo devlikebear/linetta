@@ -1171,6 +1171,17 @@ export function Workspace() {
     });
   }, [selectionMenu]);
 
+  // story-assist Phase 2: a continuity observation's fact ref opens the Fact
+  // Book at the claim continuity.list already resolved — no second lookup.
+  // factBookOpen's branch outranks canonOpen's in the render chain below, so
+  // closing it (onClose there) falls straight back to the ContinuitySection
+  // the writer came from, the same way EntitySheet already does for entity
+  // refs (see CanonPanel's own comment on that).
+  const openFactFromContinuity = useCallback((factId: string, claim: string) => {
+    setFactBookOpen(true);
+    setFactBookSelectedClaimRequest({ id: factId, claim });
+  }, []);
+
 
   const runSelectionIllustrate = useCallback(() => {
     if (!selectionMenu || selectionMenu.kind !== "selection") return;
@@ -2062,6 +2073,7 @@ export function Workspace() {
             onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
             onBeforeStyleCheck={flushPendingSave}
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
+            onOpenFact={openFactFromContinuity}
             onClose={() => {
               setCanonOpen(false);
               focusEditor();
@@ -2098,6 +2110,7 @@ export function Workspace() {
               setLoad((prev) => (prev ? { ...prev, project: p } : prev))
             }
             tourTarget="workspace-context"
+            onOpenContinuity={() => setCanonOpen(true)}
           />
         ) : null}
       </div>

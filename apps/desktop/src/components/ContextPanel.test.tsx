@@ -7,11 +7,23 @@ import { I18nProvider } from "../lib/i18n";
 import { projects } from "../lib/rpc";
 import { ContextPanel } from "./ContextPanel";
 
+// The continuity badge (story-assist Phase 2) mounts useEngineEvent for its
+// mcp-changed refresh, same as CanonPanel/StyleSection — this stands in for
+// Tauri's event bus the same way their test files do.
+const events = vi.hoisted(() => ({ listeners: new Map<string, (event: { payload: unknown }) => void>() }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (name: string, listener: (event: { payload: unknown }) => void) => {
+    events.listeners.set(name, listener);
+    return Promise.resolve(() => events.listeners.delete(name));
+  },
+}));
+
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   projectsUpdate: vi.fn(),
   projectsRewriteSynopsis: vi.fn(),
   projectsClearSynopsis: vi.fn(),
+  continuityOpenCounts: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -22,6 +34,10 @@ vi.mock("../lib/rpc", () => ({
     update: mocks.projectsUpdate,
     rewriteSynopsis: mocks.projectsRewriteSynopsis,
     clearSynopsis: mocks.projectsClearSynopsis,
+  },
+  // story-assist Phase 2: the open-observation badge's one RPC call.
+  continuity: {
+    openCounts: mocks.continuityOpenCounts,
   },
 }));
 
@@ -50,6 +66,7 @@ afterEach(() => {
 
 beforeEach(() => {
   mocks.settingsGet.mockResolvedValue({ language: "ko" });
+  mocks.continuityOpenCounts.mockResolvedValue({ counts: {} });
 });
 
 const project: Project = {
@@ -251,5 +268,35 @@ describe("ContextPanel", () => {
     expect(screen.getByLabelText("Project overview")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Logline, theme, main flow")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Scan scene/ })).toBeInTheDocument();
+  });
+
+  // story-assist Phase 2, 2.D.2: the badge is this scene's own share of a
+  // work-wide map, and it is a button only when the caller wired somewhere
+  // for it to open.
+  it("shows the open-observation badge for this scene and opens continuity on click", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 2, other: 5 } });
+    const onOpenContinuity = vi.fn();
+    renderContextPanel({ onOpenContinuity });
+
+    const badge = await screen.findByTestId("continuity-open-badge");
+    expect(badge).toHaveTextContent("2");
+    await userEvent.click(badge);
+    expect(onOpenContinuity).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows no badge when this scene has no open observations", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { other: 5 } });
+    renderContextPanel({ onOpenContinuity: vi.fn() });
+
+    await screen.findByText("이 씬");
+    expect(screen.queryByTestId("continuity-open-badge")).not.toBeInTheDocument();
+  });
+
+  it("shows no badge when the caller has not wired onOpenContinuity", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 3 } });
+    renderContextPanel();
+
+    await waitFor(() => expect(mocks.continuityOpenCounts).toHaveBeenCalled());
+    expect(screen.queryByTestId("continuity-open-badge")).not.toBeInTheDocument();
   });
 });
