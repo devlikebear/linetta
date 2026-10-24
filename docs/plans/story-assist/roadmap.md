@@ -3,7 +3,7 @@
 _작성일: 2026-10-24_
 _상태: 계획 (구현 전)_
 _근거: [`inkos-analysis.md`](./inkos-analysis.md) — InkOS 소스 분석_
-_관련: [`../webnovel-ux/contextual-editor-phase-3-context-consistency.md`](../webnovel-ux/contextual-editor-phase-3-context-consistency.md) — 이름·설정 변경 뒤의 결정적 일관성 재검사(구현 완료)_
+_관련: `engine/internal/contextualedit` — 이름·설정 변경 뒤의 결정적 일관성 재검사(구현 완료. 계획서는 git 이력에 있음)_
 
 ## Overview
 
