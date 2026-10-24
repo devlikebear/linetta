@@ -313,7 +313,7 @@ CREATE INDEX continuity_obs_project ON continuity_observations(project_id, statu
 - [x] `make test-mobile-engine`
 - [x] `pnpm --dir apps/desktop test -- ContinuitySection.test.tsx CanonPanel.test.tsx ContextPanel.test.tsx AgentPanel.test.tsx agentToolParity.test.ts rpcAllowlist.test.ts i18n.catalog.test.ts --run`
 - [x] `pnpm --dir apps/desktop exec tsc --noEmit`
-- [x] `make test` — `test-go`의 `-race`(cgo) 변형은 로그인 키체인 프롬프트 전례로 로컬에서 돌리지 않고 CI에 맡겼다. 대신 `CGO_ENABLED=0 go test ./...`(엔진 전체, 기존 cgo 전용 `cmd/linetta-ffi` 빌드 실패만 남고 전부 통과), `make test-mobile-engine`, `make test-desktop`(lint+test+build), `cd apps/desktop/src-tauri && cargo check && cargo test`(33/33 통과)로 같은 범위를 덮었다.
+- [x] `make test` — `test-go`의 `-race`(cgo) 변형은 로그인 키체인 프롬프트 전례로 로컬에서 돌리지 않고 CI에 맡겼다. 대신 `CGO_ENABLED=0 go test ./...`(엔진 전체, 전부 통과 — `cmd/linetta-ffi`의 cgo 빌드 태그 문제도 같은 범위에서 고쳤다, 아래 참고), `make test-mobile-engine`, `make test-desktop`(lint+test+build), `cd apps/desktop/src-tauri && cargo check && cargo test`(33/33 통과)로 같은 범위를 덮었다. 덧붙여 `cmd/linetta-ffi`(main에 이미 있던 문제: `ffi_test.go`에 cgo 빌드 태그가 없어 `CGO_ENABLED=0`에서 `ffi.go`가 내보내던 심볼을 여전히 참조해 빌드 실패)는 `//go:build cgo`로 고쳤다. `go vet ./...`와 `go test ./cmd/linetta-ffi/...`(기본 cgo)로 CI의 `-race` 경로가 바뀌지 않았음을 확인했다(별도 `fix:` 커밋).
 
 **수동 검증** (격리된 `LINETTA_HOME`, 프로바이더 하나 연결) — 실제 프로바이더 연결과 UI 클릭이 필요해 이번 작업에서는 직접 확인하지 못했다. 각 항목 옆에 같은 동작을 덮는 자동 테스트를 적는다(Phase 1과 같은 방식).
 - [ ] 인물 "하린"의 속성에 "왼손잡이"를 넣는다. 씬 본문에는 "하린은 오른손으로 검을 뽑았다"를 쓴다. — 직접 확인 못 함. `TestValidate_tableDriven`(continuity 패키지, 모순 관찰 + entity ref)이 같은 시나리오를 단위 테스트로 덮는다.
