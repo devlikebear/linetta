@@ -5,6 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { describe, expect, it } from "vitest";
 import { buildMentionExtension } from "./MentionExtension";
 import { NoteMarkerExtension } from "./NoteMarkerExtension";
+import { IllustrationExtension } from "./IllustrationExtension";
 
 // The engine's markdown exporter keeps its own list of the nodes and marks it
 // handles, and a Go test holds that list against this same file. If you add or
@@ -20,6 +21,7 @@ describe("editor schema", () => {
     const schema = getSchema([
       // The same set Tiptap.tsx and Workspace.tsx mount.
       StarterKit.configure({}),
+      IllustrationExtension,
       buildMentionExtension({ search: async () => [], onStateChange: () => {} }),
       NoteMarkerExtension,
     ]);

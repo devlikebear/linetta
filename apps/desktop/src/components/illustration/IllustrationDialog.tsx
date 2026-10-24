@@ -28,6 +28,8 @@ interface Props {
   initialScene?: string;
   onClose: () => void;
   onSaved?: (meta: IllustrationMeta) => void;
+  /** Puts the finished picture into the open scene. Absent with no scene. */
+  onInsert?: (meta: IllustrationMeta) => void;
   onOpenSettings: () => void;
 }
 
@@ -37,7 +39,7 @@ const ASPECTS: IllustrationAspect[] = ["portrait", "square", "landscape"];
  * prompt that will be sent (and edit it), then generate. Nothing reaches a
  * provider before the Generate button, and what is sent is exactly the text
  * in the prompt box. */
-export function IllustrationDialog({ projectId, sourceNodeId, initialScene, onClose, onSaved, onOpenSettings }: Props) {
+export function IllustrationDialog({ projectId, sourceNodeId, initialScene, onClose, onSaved, onInsert, onOpenSettings }: Props) {
   const { t } = useI18n();
   const [provider, setProvider] = useState<ImageProviderStatus | null | undefined>(undefined);
   const [cast, setCast] = useState<Entity[]>([]);
@@ -267,6 +269,11 @@ export function IllustrationDialog({ projectId, sourceNodeId, initialScene, onCl
           <figure className="illustration-result" data-testid="illustration-result">
             {resultUrl ? <img src={resultUrl} alt={scene} /> : null}
             <figcaption className="sd">{t("illustration.saved")}</figcaption>
+            {onInsert ? (
+              <button type="button" className="btn ghost sm" onClick={() => onInsert(result)} data-testid="illustration-result-insert">
+                {t("illustration.insert")}
+              </button>
+            ) : null}
           </figure>
         ) : null}
 

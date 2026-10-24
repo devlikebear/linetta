@@ -1,5 +1,6 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { IllustrationExtension } from "./IllustrationExtension";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FocusExtension, focusKey } from "./FocusExtension";
 import { SearchHighlightExtension, SearchHighlightPluginKey } from "./SearchHighlightExtension";
@@ -28,6 +29,8 @@ export interface TiptapHandle {
   addNoteMarker: (noteId: string) => void;
   /** Remove the first note-marker atom with the given noteId. */
   removeNoteMarker: (noteId: string) => void;
+  /** Insert a gallery illustration as a block at the selection. */
+  insertIllustration: (id: string, caption: string) => void;
   /** Underlying Tiptap Editor instance (null until first mount). Used by
    *  ghost-text + Cmd+I AI prompt bar to read selection and dispatch commands. */
   editor: Editor | null;
@@ -89,6 +92,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
       extensions: [
         StarterKit.configure({}),
         SearchHighlightExtension,
+        // In the base set, not in `extensions`: Zen mode mounts its own
+        // editor with no extras, and an editor without the node drops it.
+        IllustrationExtension,
         ...(extensions ?? []),
         // Always present — toggling `focus` flips its `enabled` plugin state
         // via a transaction meta below instead of adding/removing the
@@ -243,6 +249,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
       },
       addNoteMarker: (noteId: string) => {
         (editor?.commands as any)?.addNoteMarker?.(noteId);
+      },
+      insertIllustration: (id: string, caption: string) => {
+        editor?.chain().focus().insertIllustration(id, caption).run();
       },
       removeNoteMarker: (noteId: string) => {
         (editor?.commands as any)?.removeNoteMarker?.(noteId);

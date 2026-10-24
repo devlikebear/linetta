@@ -100,3 +100,45 @@
   background: color-mix(in oklch, var(--accent) 28%, transparent);
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--accent) 32%, transparent);
 }
+
+/* A gallery picture in the scene (IllustrationExtension). */
+.tiptap-editor .ProseMirror figure.illustration-node {
+  margin: 1.4em auto;
+  max-width: 100%;
+  text-align: center;
+}
+.tiptap-editor .ProseMirror .illustration-node-frame img {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 0 auto;
+  border-radius: var(--r-md);
+}
+.tiptap-editor .ProseMirror figure.illustration-node.is-selected .illustration-node-frame img,
+.tiptap-editor .ProseMirror figure.illustration-node.ProseMirror-selectednode .illustration-node-frame img {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.tiptap-editor .ProseMirror .illustration-node-placeholder {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  color: var(--muted);
+  font-size: 13px;
+}
+.tiptap-editor .ProseMirror .illustration-node-caption {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tiptap-editor .ProseMirror .illustration-node-caption:focus {
+  outline: none;
+  color: var(--ink);
+}

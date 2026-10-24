@@ -7,12 +7,13 @@ function blobUrl(base64: string, mime: string): string {
   return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
-/** An object URL for one stored illustration, fetched on demand and revoked
- *  when the component lets go of it. null while loading or when it failed. */
-export function useIllustrationImage(id: string | null): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+/** One stored illustration as an object URL, fetched on demand and revoked
+ *  when the component lets go of it. `failed` is set when the picture could
+ *  not be loaded — usually because it was deleted from the gallery. */
+export function useIllustrationImageState(id: string | null): { url: string | null; failed: boolean } {
+  const [state, setState] = useState<{ url: string | null; failed: boolean }>({ url: null, failed: false });
   useEffect(() => {
-    setUrl(null);
+    setState({ url: null, failed: false });
     if (!id) return undefined;
     let made: string | null = null;
     let cancelled = false;
@@ -21,15 +22,20 @@ export function useIllustrationImage(id: string | null): string | null {
       .then((img) => {
         if (cancelled) return;
         made = blobUrl(img.data_base64, img.mime);
-        setUrl(made);
+        setState({ url: made, failed: false });
       })
       .catch(() => {
-        /* the caller shows its own placeholder */
+        if (!cancelled) setState({ url: null, failed: true });
       });
     return () => {
       cancelled = true;
       if (made) URL.revokeObjectURL(made);
     };
   }, [id]);
-  return url;
+  return state;
+}
+
+/** The object URL alone; null while loading or when it failed. */
+export function useIllustrationImage(id: string | null): string | null {
+  return useIllustrationImageState(id).url;
 }

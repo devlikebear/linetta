@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 )
 
 // DocToMarkdown parses a Tiptap JSON document and returns its markdown rendering.
@@ -20,6 +22,19 @@ import (
 // used to fall through to "children only", which turned lists, code blocks
 // and links into unmarked prose without telling anyone.
 func DocToMarkdown(raw []byte) (string, error) {
+	return DocToMarkdownWith(raw, MarkdownOptions{})
+}
+
+// MarkdownOptions changes what DocToMarkdownWith writes for nodes whose
+// rendering depends on the reader.
+type MarkdownOptions struct {
+	// Illustration renders an illustration node as one block. Nil leaves the
+	// picture out, which is what the exports do until they carry images.
+	Illustration func(id, caption string) string
+}
+
+// DocToMarkdownWith is DocToMarkdown with opts.
+func DocToMarkdownWith(raw []byte, opts MarkdownOptions) (string, error) {
 	if len(raw) == 0 {
 		return "", nil
 	}
@@ -27,7 +42,7 @@ func DocToMarkdown(raw []byte) (string, error) {
 	if err := json.Unmarshal(raw, &node); err != nil {
 		return "", fmt.Errorf("export: parse doc: %w", err)
 	}
-	blocks := renderBlocks(blockChildren(node))
+	blocks := renderBlocks(blockChildren(node), &opts)
 	if len(blocks) == 0 {
 		return "", nil
 	}
@@ -43,6 +58,10 @@ const (
 	// handlingStructure: carried by the document structure or the frontmatter
 	// rather than by inline syntax.
 	handlingStructure = "structure"
+	// handlingOmitted: left out of the export on purpose. An illustration is
+	// a picture in library.db; until exports write image files it is dropped
+	// here, and only MarkdownOptions.Illustration renders it.
+	handlingOmitted = "omitted"
 )
 
 var editorNodes = map[string]string{
@@ -60,7 +79,8 @@ var editorNodes = map[string]string{
 	// Written as `@label`; the entity itself travels in the frontmatter.
 	"mention": handlingStructure,
 	// A margin-note anchor. The note travels in the frontmatter (mdmeta.Note).
-	"noteMarker": handlingStructure,
+	"noteMarker":   handlingStructure,
+	"illustration": handlingOmitted,
 }
 
 var editorMarks = map[string]string{
@@ -158,19 +178,19 @@ func blockChildren(v any) []any {
 
 // renderBlocks renders each block node to its markdown text (no trailing
 // newline). Blocks that render to nothing — an empty paragraph — are skipped.
-func renderBlocks(nodes []any) []string {
+func renderBlocks(nodes []any, o *MarkdownOptions) []string {
 	var out []string
 	for _, n := range nodes {
 		m, ok := n.(map[string]any)
 		if !ok {
 			continue
 		}
-		out = append(out, renderBlock(m)...)
+		out = append(out, renderBlock(m, o)...)
 	}
 	return out
 }
 
-func renderBlock(n map[string]any) []string {
+func renderBlock(n map[string]any, o *MarkdownOptions) []string {
 	kind, _ := n["type"].(string)
 	content, _ := n["content"].([]any)
 	switch kind {
@@ -190,20 +210,26 @@ func renderBlock(n map[string]any) []string {
 		}
 		return []string{strings.Repeat("#", level) + " " + renderInlines(content)}
 	case "blockquote":
-		inner := strings.Join(renderBlocks(content), "\n\n")
+		inner := strings.Join(renderBlocks(content, o), "\n\n")
 		if inner == "" {
 			return []string{">"}
 		}
 		return []string{prefixLines(inner, "> ")}
 	case "horizontalRule":
 		return []string{"---"}
+	case illustref.NodeType:
+		id, caption, ok := illustref.Attrs(n)
+		if !ok || o.Illustration == nil {
+			return nil
+		}
+		return []string{o.Illustration(id, caption)}
 	case "codeBlock":
 		return []string{renderCodeBlock(n, content)}
 	case "bulletList":
-		return []string{renderList(content, func(int) string { return "- " })}
+		return []string{renderList(content, o, func(int) string { return "- " })}
 	case "orderedList":
 		start := intAttr(n, "start", 1)
-		return []string{renderList(content, func(i int) string { return strconv.Itoa(start+i) + ". " })}
+		return []string{renderList(content, o, func(i int) string { return strconv.Itoa(start+i) + ". " })}
 	default:
 		// Unknown node. Keep whatever it holds rather than dropping it: block
 		// children as blocks, inline children as a paragraph.
@@ -217,7 +243,7 @@ func renderBlock(n map[string]any) []string {
 			}
 			return []string{text}
 		}
-		return renderBlocks(content)
+		return renderBlocks(content, o)
 	}
 }
 
@@ -287,7 +313,7 @@ func longestRun(s string, ch byte) int {
 // renderList renders list items. A list whose items each hold one paragraph
 // (plus, optionally, nested lists) is written tight; anything else is loose,
 // so a second paragraph inside an item stays inside it.
-func renderList(items []any, marker func(i int) string) string {
+func renderList(items []any, o *MarkdownOptions, marker func(i int) string) string {
 	type item struct {
 		blocks []string
 		tight  bool
@@ -300,7 +326,7 @@ func renderList(items []any, marker func(i int) string) string {
 			continue
 		}
 		children, _ := m["content"].([]any)
-		it := item{blocks: renderBlocks(children), tight: tightItem(children)}
+		it := item{blocks: renderBlocks(children, o), tight: tightItem(children)}
 		if !it.tight {
 			tight = false
 		}

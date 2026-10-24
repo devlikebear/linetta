@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/google/uuid"
 )
@@ -33,7 +34,22 @@ var (
 	ErrTooLarge        = errors.New("illustration exceeds 5 MiB")
 	ErrBadContent      = errors.New("illustration is not a JPEG, PNG or WebP image")
 	ErrTooMany         = errors.New("at most 200 illustrations per work")
+	// ErrInUse: the picture is in a scene; take it out of the scene first.
+	ErrInUse = errors.New("illustration is used in a scene")
 )
+
+// SceneRef is a scene a picture appears in.
+type SceneRef struct {
+	NodeID string `json:"node_id"`
+	Label  string `json:"label"`
+	Title  string `json:"title,omitempty"`
+}
+
+// InUseError is ErrInUse with the scenes that hold the picture.
+type InUseError struct{ Scenes []SceneRef }
+
+func (e *InUseError) Error() string { return ErrInUse.Error() }
+func (e *InUseError) Unwrap() error { return ErrInUse }
 
 // Meta describes a stored illustration without its bytes.
 type Meta struct {
@@ -50,6 +66,9 @@ type Meta struct {
 	Height    int    `json:"height"`
 	ByteSize  int    `json:"byte_size"`
 	CreatedAt int64  `json:"created_at"`
+	// UsedIn lists the scenes that show the picture. Filled by the gallery
+	// listing, not stored.
+	UsedIn []SceneRef `json:"used_in,omitempty"`
 }
 
 // Illustration is one picture with its bytes.
@@ -203,6 +222,55 @@ func (r *Repo) Usage(ctx context.Context, projectID string) (count int, bytes in
 	return count, bytes, err
 }
 
+// UsageByProject maps each picture a work's scenes show to those scenes.
+// Only the scenes' current text counts: an older version that
+// shows a picture does not keep it in use, and restoring that version after
+// the picture is gone shows its placeholder.
+func (r *Repo) UsageByProject(ctx context.Context, projectID string) (map[string][]SceneRef, error) {
+	rows, err := r.s.DB().QueryContext(ctx,
+		`SELECT id, label, title, content_doc FROM nodes
+		 WHERE project_id = ? AND kind = 'leaf' AND content_doc LIKE '%"illustration"%'
+		 ORDER BY ordinal, id`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string][]SceneRef{}
+	for rows.Next() {
+		var ref SceneRef
+		var doc string
+		if err := rows.Scan(&ref.NodeID, &ref.Label, &ref.Title, &doc); err != nil {
+			return nil, err
+		}
+		ids, err := illustref.IDs(doc)
+		if err != nil {
+			continue
+		}
+		for _, id := range ids {
+			out[id] = append(out[id], ref)
+		}
+	}
+	return out, rows.Err()
+}
+
+// IDsInProject is every illustration id in a work's gallery.
+func (r *Repo) IDsInProject(ctx context.Context, projectID string) (map[string]bool, error) {
+	rows, err := r.s.DB().QueryContext(ctx, "SELECT id FROM illustrations WHERE project_id = ?", projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
 // Get returns one illustration with its bytes.
 func (r *Repo) Get(ctx context.Context, id string) (Illustration, error) {
 	var i Illustration
@@ -223,8 +291,24 @@ func (r *Repo) UpdateCaption(ctx context.Context, id, caption string) (Meta, err
 	return scanMeta(r.s.DB().QueryRowContext(ctx, "SELECT "+metaColumns+" FROM illustrations WHERE id = ?", id))
 }
 
-// Delete removes one illustration.
+// Delete removes one illustration from the gallery. A picture a scene shows
+// is refused with an *InUseError naming the scenes.
 func (r *Repo) Delete(ctx context.Context, id string) error {
+	var projectID string
+	err := r.s.DB().QueryRowContext(ctx, "SELECT project_id FROM illustrations WHERE id = ?", id).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	usage, err := r.UsageByProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if scenes := usage[id]; len(scenes) > 0 {
+		return &InUseError{Scenes: scenes}
+	}
 	result, err := r.s.DB().ExecContext(ctx, "DELETE FROM illustrations WHERE id = ?", id)
 	return mutationError(result, err)
 }

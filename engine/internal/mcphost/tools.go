@@ -15,6 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -39,6 +40,9 @@ const MetaRunID = "linetta/run_id"
 // the UI already uses, so an agent sees exactly what the writer sees.
 type ToolDeps struct {
 	Visuals *visual.Repo
+	// Illustrations is the galleries' index: linetta_write_scene keeps a
+	// placeholder as a picture only when it names one of the work's own.
+	Illustrations illustref.Index
 	// Style holds each work's checkable style rules (#162). Nil in a build
 	// with no database open; the tool refuses rather than panicking.
 	Style      *style.Repo

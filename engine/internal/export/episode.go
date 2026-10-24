@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/devlikebear/linetta/engine/internal/episode"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/node"
 )
 
@@ -28,6 +29,9 @@ type EpisodePayload struct {
 	// ContentHash is the lowercase hex SHA-256 of Markdown's UTF-8 bytes,
 	// which the site recomputes and compares (docs/api.md in linetta-artworks).
 	ContentHash string `json:"content_hash"`
+	// IllustrationsOmitted counts the pictures in the episode's scenes that
+	// the published text leaves out, until publishing uploads images.
+	IllustrationsOmitted int `json:"illustrations_omitted,omitempty"`
 }
 
 // ExportEpisodeMarkdown renders an episode's scenes for publishing: each
@@ -39,6 +43,7 @@ type EpisodePayload struct {
 // workTitle titles an episode that is the whole work.
 func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episode, workTitle string) (EpisodePayload, error) {
 	var parts []string
+	omitted := 0
 	for _, id := range ep.LeafIDs {
 		n, err := nr.Get(ctx, id)
 		if err != nil {
@@ -51,6 +56,11 @@ func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episod
 		if err != nil {
 			return EpisodePayload{}, fmt.Errorf("export episode %s: %w", ep.NodeID, err)
 		}
+		pictures, err := illustref.IDs(*n.ContentDoc)
+		if err != nil {
+			return EpisodePayload{}, fmt.Errorf("export episode %s: %w", ep.NodeID, err)
+		}
+		omitted += len(pictures)
 		if md = strings.TrimSpace(collapseBlankLines(md)); md != "" {
 			parts = append(parts, md)
 		}
@@ -61,6 +71,8 @@ func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episod
 		Title:       EpisodeTitle(ep, workTitle),
 		CharCount:   CharCount(md),
 		ContentHash: ContentHash(md),
+
+		IllustrationsOmitted: omitted,
 	}, nil
 }
 

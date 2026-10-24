@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/google/uuid"
 )
@@ -241,6 +242,13 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	for _, oldID := range nodeOrder {
 		nodeMap[oldID] = uuid.NewString()
 	}
+	// Pictures get their new ids before the scenes are copied, so each
+	// scene and each of its versions can point at the copy of the picture
+	// it shows rather than at the original work's.
+	illustrationMap, err := illustrationIDMap(ctx, sdb, projectID)
+	if err != nil {
+		return MergeResult{}, err
+	}
 	for _, oldID := range nodeOrder {
 		if err := copyRows(ctx, sdb, tx, "nodes", "id = ?", []any{oldID}, func(row map[string]any) (map[string]any, bool) {
 			row["id"] = nodeMap[asString(row["id"])]
@@ -248,6 +256,7 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			if p := asString(row["parent_id"]); p != "" {
 				row["parent_id"] = nodeMap[p]
 			}
+			rewriteIllustrationIDs(row, illustrationMap)
 			return row, true
 		}); err != nil {
 			return MergeResult{}, fmt.Errorf("copy nodes: %w", err)
@@ -282,7 +291,7 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return MergeResult{}, fmt.Errorf("copy art style: %w", err)
 	}
 	if err := copyRows(ctx, sdb, tx, "illustrations", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
-		row["id"] = uuid.NewString()
+		row["id"] = illustrationMap[asString(row["id"])]
 		row["project_id"] = newProjectID
 		// The scene a picture was drawn from, if it came along; a scene the
 		// backup no longer has leaves the picture without one, as deleting
@@ -394,6 +403,7 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			}
 			row["id"] = uuid.NewString()
 			row["node_id"] = n
+			rewriteIllustrationIDs(row, illustrationMap)
 			return row, true
 		}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy node_snapshots: %w", err)
@@ -558,6 +568,37 @@ func normalizeValue(v any) any {
 		return string(b)
 	}
 	return v
+}
+
+// illustrationIDMap assigns every picture in the backed-up work a new id.
+func illustrationIDMap(ctx context.Context, src *sql.DB, projectID string) (map[string]string, error) {
+	rows, err := src.QueryContext(ctx, `SELECT id FROM illustrations WHERE project_id = ?`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("read illustrations: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = uuid.NewString()
+	}
+	return out, rows.Err()
+}
+
+// rewriteIllustrationIDs points a copied document's pictures at their
+// copies. A document that does not parse is copied as it is: the merge never
+// fails over a scene it could not read.
+func rewriteIllustrationIDs(row map[string]any, ids map[string]string) {
+	doc, ok := row["content_doc"].(string)
+	if !ok || len(ids) == 0 {
+		return
+	}
+	if next, changed, err := illustref.RewriteIDs(doc, ids); err == nil && changed {
+		row["content_doc"] = next
+	}
 }
 
 func asString(v any) string {

@@ -62,6 +62,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   illustration_too_large: "errors.illustrationTooLarge",
   too_many_illustrations: "errors.tooManyIllustrations",
   illustration_bad_content: "errors.illustrationBadContent",
+  illustration_in_use: "errors.illustrationInUse",
   // The Codex login (#92). Its message names the two ports, since the fix is
   // closing whatever holds them. A failed login is not an RPC error at all —
   // codex.login_status reports it via CodexStatus.login_failed instead — so

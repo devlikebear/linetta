@@ -10,6 +10,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/ptrutil"
@@ -39,6 +40,7 @@ type Service struct {
 	facts         *fact.Repo
 	snaps         *snapshot.Repo
 	memory        MemoryRecorder
+	illustrations illustref.Index
 
 	undo undoState
 }
@@ -64,6 +66,13 @@ func (s *Service) WithFacts(repo *fact.Repo) *Service {
 // WithSnapshots enables the companion-before snapshot on set_scene_text.
 func (s *Service) WithSnapshots(snaps *snapshot.Repo) *Service {
 	s.snaps = snaps
+	return s
+}
+
+// WithIllustrations lets set_scene_text keep only placeholders that name a
+// picture in the work's own gallery.
+func (s *Service) WithIllustrations(idx illustref.Index) *Service {
+	s.illustrations = idx
 	return s
 }
 
@@ -203,6 +212,9 @@ func (s *Service) applyOneOp(
 		}
 		doc, err := PlainTextToTiptapDoc(op.Text)
 		if err != nil {
+			return err
+		}
+		if doc, err = illustref.KeepProjects(ctx, s.illustrations, projectID, doc); err != nil {
 			return err
 		}
 		if err := s.nodes.UpdateContent(ctx, *targetNodeID, doc, now()); err != nil {
@@ -725,6 +737,7 @@ type tiptapDoc struct {
 
 type tiptapBlock struct {
 	Type    string         `json:"type"`
+	Attrs   map[string]any `json:"attrs,omitempty"`
 	Content []tiptapInline `json:"content,omitempty"`
 }
 
@@ -738,6 +751,15 @@ var paragraphBreakRE = regexp.MustCompile(`\n{2,}`)
 func normalizeSceneTextForVerify(text string) string {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	// A placeholder line is its own block once written, however it was
+	// separated from the prose around it.
+	placed := strings.Split(normalized, "\n")
+	for i, line := range placed {
+		if _, _, ok := illustref.Parse(line); ok {
+			placed[i] = "\n" + strings.TrimSpace(line) + "\n"
+		}
+	}
+	normalized = strings.Join(placed, "\n")
 	normalized = paragraphBreakRE.ReplaceAllString(normalized, "\n\n")
 	lines := strings.Split(normalized, "\n")
 	for i, line := range lines {
@@ -748,28 +770,43 @@ func normalizeSceneTextForVerify(text string) string {
 
 // PlainTextToTiptapDoc converts plain scene text (paragraphs separated by
 // blank lines, hard breaks inside paragraphs) into the Tiptap document JSON
-// the editor stores.
+// the editor stores. A line that is an illustration placeholder becomes the
+// illustration node, between the paragraphs around it.
 func PlainTextToTiptapDoc(text string) (string, error) {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
 	blocks := paragraphBreakRE.Split(normalized, -1)
 	paragraphs := make([]tiptapBlock, 0, len(blocks))
 	for _, block := range blocks {
-		lines := strings.Split(block, "\n")
-		content := make([]tiptapInline, 0, len(lines)*2)
-		for i, line := range lines {
-			if i > 0 {
+		var content []tiptapInline
+		started := false
+		flush := func() {
+			paragraph := tiptapBlock{Type: "paragraph"}
+			if len(content) > 0 {
+				paragraph.Content = content
+			}
+			paragraphs = append(paragraphs, paragraph)
+			content, started = nil, false
+		}
+		for _, line := range strings.Split(block, "\n") {
+			if id, caption, ok := illustref.Parse(line); ok {
+				if started {
+					flush()
+				}
+				paragraphs = append(paragraphs, tiptapBlock{Type: illustref.NodeType, Attrs: map[string]any{"id": id, "caption": caption}})
+				continue
+			}
+			if started {
 				content = append(content, tiptapInline{Type: "hardBreak"})
 			}
+			started = true
 			if line != "" {
 				content = append(content, tiptapInline{Type: "text", Text: line})
 			}
 		}
-		paragraph := tiptapBlock{Type: "paragraph"}
-		if len(content) > 0 {
-			paragraph.Content = content
+		if started {
+			flush()
 		}
-		paragraphs = append(paragraphs, paragraph)
 	}
 	if len(paragraphs) == 0 {
 		paragraphs = append(paragraphs, tiptapBlock{Type: "paragraph"})
@@ -814,6 +851,11 @@ func plainTextFromDoc(raw *string) string {
 				if s, ok := t["text"].(string); ok {
 					sb.WriteString(s)
 				}
+			}
+			if id, caption, ok := illustref.Attrs(t); ok {
+				sb.WriteString(illustref.Placeholder(id, caption))
+				sb.WriteString("\n\n")
+				return
 			}
 			if t["type"] == "hardBreak" {
 				sb.WriteString("\n")

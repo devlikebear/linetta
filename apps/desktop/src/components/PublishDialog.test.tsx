@@ -217,4 +217,10 @@ describe("PublishDialog", () => {
     expect(await screen.findByTestId("publish-no-episode")).toBeInTheDocument();
     expect(screen.getByTestId("publish-submit")).toBeDisabled();
   });
+
+  it("says when the episode's pictures stay behind", async () => {
+    rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ illustrations_omitted: 2 })] }));
+    renderDialog();
+    expect(await screen.findByTestId("publish-illustrations-omitted")).toHaveTextContent("publish.illustrationsOmitted");
+  });
 });

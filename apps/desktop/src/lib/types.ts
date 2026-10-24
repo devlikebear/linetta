@@ -586,6 +586,8 @@ export interface IllustrationMeta {
   height: number;
   byte_size: number;
   created_at: number;
+  /** The scenes that show the picture, from illustrations.list. */
+  used_in?: Array<{ node_id: string; label: string; title?: string }>;
 }
 
 /** illustrations.compose — the prompt for the writer to read before drawing. */
@@ -659,6 +661,8 @@ export interface PublishEpisodeView {
   leaf_ids?: string[];
   char_count: number;
   empty?: boolean;
+  /** Pictures in the episode that the published text leaves out. */
+  illustrations_omitted?: number;
   state: PublishEpisodeState;
   /** The local text differs from the site's, whatever the state. */
   modified?: boolean;

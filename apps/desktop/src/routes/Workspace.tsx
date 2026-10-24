@@ -7,7 +7,7 @@ import { saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
 import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus } from "../lib/types";
+import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus, IllustrationMeta } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -1178,6 +1178,15 @@ export function Workspace() {
     setIllustrationDialog({ scene: selectionMenu.text, sourceNodeId: load?.node.id });
   }, [selectionMenu, load]);
 
+  // A picture goes in at the editor's selection, which the modal leaves
+  // where the writer had it.
+  const insertIllustration = useCallback((meta: IllustrationMeta) => {
+    editorRef.current?.insertIllustration(meta.id, meta.caption);
+    setGalleryOpen(false);
+    setIllustrationDialog(null);
+    showToast(t("illustration.inserted"));
+  }, [showToast, t]);
+
   const openImageSettings = useCallback(() => {
     setIllustrationDialog(null);
     setGalleryOpen(false);
@@ -2161,6 +2170,7 @@ export function Workspace() {
           refreshKey={galleryRefresh}
           onClose={() => setGalleryOpen(false)}
           onNew={() => setIllustrationDialog({ sourceNodeId: load.node.id })}
+          onInsert={load.node.kind === "leaf" ? insertIllustration : undefined}
         />
       )}
       {load && illustrationDialog && (
@@ -2170,6 +2180,7 @@ export function Workspace() {
           initialScene={illustrationDialog.scene}
           onClose={() => setIllustrationDialog(null)}
           onSaved={() => setGalleryRefresh((n) => n + 1)}
+          onInsert={load.node.kind === "leaf" ? insertIllustration : undefined}
           onOpenSettings={openImageSettings}
         />
       )}

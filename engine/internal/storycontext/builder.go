@@ -8,6 +8,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
@@ -730,6 +731,13 @@ func walkDoc(v interface{}, sb *stringBuilder) {
 			if s, ok := t["text"].(string); ok {
 				sb.WriteString(s)
 			}
+			return
+		}
+		// An illustration travels as its placeholder line, so an agent that
+		// rewrites the scene can keep the picture where it is.
+		if id, caption, ok := illustref.Attrs(t); ok {
+			sb.WriteString(illustref.Placeholder(id, caption))
+			sb.WriteString("\n")
 			return
 		}
 		// Block-level node: recurse children, then add a newline.
