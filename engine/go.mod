@@ -2,6 +2,8 @@ module github.com/devlikebear/linetta/engine
 
 go 1.26.10
 
+toolchain go1.27.3
+
 require (
 	github.com/devlikebear/tars v0.65.1-0.20261024014548-378e7479d33c
 	github.com/google/uuid v1.6.0
