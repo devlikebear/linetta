@@ -3,6 +3,7 @@ package restore
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"image"
 	"image/jpeg"
 	"path/filepath"
@@ -10,8 +11,10 @@ import (
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/illustration"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
@@ -43,6 +46,14 @@ func TestMergeProjectCopiesIllustrations(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := repo.Add(ctx, 6, illustration.NewInput{ProjectID: p.ID, Prompt: "q", Provider: "openai-codex", Model: "n", Data: jpg.Bytes()}); err != nil {
+		t.Fatal(err)
+	}
+	// The scene shows the picture, and so does an older version of it.
+	shown := fmt.Sprintf(`{"type":"doc","content":[{"type":"illustration","attrs":{"id":%q,"caption":"우산"}}]}`, drawn.ID)
+	if err := node.NewRepo(st).UpdateContent(ctx, scene.ID, shown, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := snapshot.NewRepo(st).Create(ctx, scene.ID, shown, snapshot.ReasonManual, 8); err != nil {
 		t.Fatal(err)
 	}
 	backupPath := filepath.Join(home, "backup.db")
@@ -81,5 +92,25 @@ func TestMergeProjectCopiesIllustrations(t *testing.T) {
 	var typ string
 	if err := live.DB().QueryRowContext(ctx, "SELECT typeof(data) FROM illustrations LIMIT 1").Scan(&typ); err != nil || typ != "blob" {
 		t.Fatalf("storage type: %s %v", typ, err)
+	}
+
+	// The copied scene and its copied version point at the copied picture.
+	copiedScene, err := node.NewRepo(live).Get(ctx, *copyOfDrawn.SourceNodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ids, _ := illustref.IDs(*copiedScene.ContentDoc); len(ids) != 1 || ids[0] != copyOfDrawn.ID {
+		t.Fatalf("copied scene shows %v, want the copy %s", ids, copyOfDrawn.ID)
+	}
+	snaps, err := snapshot.NewRepo(live).ListForNode(ctx, copiedScene.ID)
+	if err != nil || len(snaps) == 0 {
+		t.Fatalf("copied versions: %v %v", snaps, err)
+	}
+	var snapDoc string
+	if err := live.DB().QueryRowContext(ctx, "SELECT content_doc FROM node_snapshots WHERE node_id = ? LIMIT 1", copiedScene.ID).Scan(&snapDoc); err != nil {
+		t.Fatal(err)
+	}
+	if ids, _ := illustref.IDs(snapDoc); len(ids) != 1 || ids[0] != copyOfDrawn.ID {
+		t.Fatalf("copied version shows %v, want the copy %s", ids, copyOfDrawn.ID)
 	}
 }

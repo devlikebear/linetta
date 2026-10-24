@@ -43,6 +43,7 @@ func illustrationError(err error) error {
 		{illustration.ErrTooLarge, rpc.ReasonIllustrationTooLarge},
 		{illustration.ErrTooMany, rpc.ReasonTooManyIllustrations},
 		{illustration.ErrBadContent, rpc.ReasonIllustrationBadContent},
+		{illustration.ErrInUse, rpc.ReasonIllustrationInUse},
 	}
 	for _, r := range reasons {
 		if errors.Is(err, r.err) {
@@ -136,6 +137,13 @@ func IllustrationsList(repo *illustration.Repo) rpc.Handler {
 		items, err := repo.ListByProject(ctx, in.ProjectID)
 		if err != nil {
 			return nil, illustrationError(err)
+		}
+		usage, err := repo.UsageByProject(ctx, in.ProjectID)
+		if err != nil {
+			return nil, illustrationError(err)
+		}
+		for i := range items {
+			items[i].UsedIn = usage[items[i].ID]
 		}
 		count, size, err := repo.Usage(ctx, in.ProjectID)
 		if err != nil {

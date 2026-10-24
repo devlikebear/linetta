@@ -167,3 +167,44 @@ func TestImageProviderHandlers(t *testing.T) {
 		t.Fatalf("models = %s, %v", out, err)
 	}
 }
+
+func TestIllustrationsListShowsUsageAndDeleteRefusesAPictureInUse(t *testing.T) {
+	ctx := context.Background()
+	s, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	p, err := project.NewRepo(s).Create(ctx, 1, project.NewInput{Title: "T", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := illustration.NewRepo(s)
+	var jpg bytes.Buffer
+	if err := jpeg.Encode(&jpg, image.NewRGBA(image.Rect(0, 0, 3, 3)), nil); err != nil {
+		t.Fatal(err)
+	}
+	m, err := repo.Add(ctx, 1, illustration.NewInput{ProjectID: p.ID, Prompt: "p", Provider: "x", Model: "y", Data: jpg.Bytes()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := fmt.Sprintf(`{"type":"doc","content":[{"type":"illustration","attrs":{"id":%q,"caption":""}}]}`, m.ID)
+	if _, err := s.DB().ExecContext(ctx, "UPDATE nodes SET content_doc = ? WHERE id = ?", doc, *p.LastOpenedNodeID); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := IllustrationsList(repo)(ctx, json.RawMessage(fmt.Sprintf(`{"project_id":%q}`, p.ID)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list struct {
+		Items []illustration.Meta `json:"items"`
+	}
+	if err := json.Unmarshal(out, &list); err != nil || len(list.Items[0].UsedIn) != 1 || list.Items[0].UsedIn[0].NodeID != *p.LastOpenedNodeID {
+		t.Fatalf("list = %s, %v", out, err)
+	}
+	_, err = IllustrationsDelete(repo)(ctx, json.RawMessage(fmt.Sprintf(`{"id":%q}`, m.ID)))
+	if _, reason := reasonOfMethodError(t, err); reason != rpc.ReasonIllustrationInUse {
+		t.Fatalf("delete of a picture in use: reason %q", reason)
+	}
+}

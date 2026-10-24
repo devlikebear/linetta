@@ -83,6 +83,7 @@ const (
 	ReasonIllustrationTooLarge   = "illustration_too_large"
 	ReasonTooManyIllustrations   = "too_many_illustrations"
 	ReasonIllustrationBadContent = "illustration_bad_content"
+	ReasonIllustrationInUse      = "illustration_in_use"
 
 	// The Codex login (#92). The message has to name the two ports, because
 	// the fix is closing whatever holds them — usually a Codex CLI login. A
