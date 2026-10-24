@@ -181,7 +181,8 @@ type MergeResult struct {
 // projects, nodes, entities, mentions, relationships, threads, beats, notes,
 // node_snapshots, fact_cards, fact_sources, writing_stats, agent_memory
 // (work_notes scope only), entity_visuals, entity_reference_images,
-// project_art_style, project_style_rules, illustrations. Library-level history (companion transcripts, AI runs,
+// project_art_style, project_style_rules, illustrations, project_focus,
+// scene_intents. Library-level history (companion transcripts, AI runs,
 // MCP activity, the global writer_profile memory) stays with the
 // library it belongs to.
 func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, projectID, titleSuffix string, now time.Time) (MergeResult, error) {
@@ -312,6 +313,22 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return MergeResult{}, fmt.Errorf("copy style rules: %w", err)
 	}
 
+	// project_focus (story-assist Phase 1): the writer's current focus.
+	// anchor_node_id is remapped like illustrations' source_node_id above —
+	// NULL if the anchor scene did not come along with the backup, which the
+	// writer meets as "anchor episode not found" rather than a dangling id.
+	if err := copyRows(ctx, sdb, tx, "project_focus", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		row["project_id"] = newProjectID
+		if n, ok := nodeMap[asString(row["anchor_node_id"])]; ok {
+			row["anchor_node_id"] = n
+		} else {
+			row["anchor_node_id"] = nil
+		}
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy project_focus: %w", err)
+	}
+
 	if err := copyRows(ctx, sdb, tx, "mentions",
 		"node_id IN (SELECT id FROM nodes WHERE project_id = ?)", []any{projectID},
 		func(row map[string]any) (map[string]any, bool) {
@@ -392,6 +409,24 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			return row, true
 		}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy notes: %w", err)
+	}
+
+	// scene_intents (story-assist Phase 1): one scene's goal, keep and
+	// avoid. Dropped, not nulled, when its scene did not come along — a
+	// scene_intents row has nothing to mean without its scene, unlike
+	// project_focus's anchor.
+	if err := copyRows(ctx, sdb, tx, "scene_intents",
+		"node_id IN (SELECT id FROM nodes WHERE project_id = ?)", []any{projectID},
+		func(row map[string]any) (map[string]any, bool) {
+			n, ok := nodeMap[asString(row["node_id"])]
+			if !ok {
+				return nil, false
+			}
+			row["node_id"] = n
+			row["project_id"] = newProjectID
+			return row, true
+		}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy scene_intents: %w", err)
 	}
 
 	if err := copyRows(ctx, sdb, tx, "node_snapshots",

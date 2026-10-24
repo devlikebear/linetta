@@ -43,6 +43,14 @@ const (
 	ReasonStyleProfileEmpty = "style_profile_empty"
 	ReasonStyleNotesTooLong = "style_notes_too_long"
 
+	// The writer's own direction (story-assist Phase 1): limits are refused
+	// rather than trimmed, the same reason style's are above.
+	ReasonDirectionFocusTooLong = "direction_focus_too_long"
+	ReasonDirectionGoalTooLong  = "direction_goal_too_long"
+	ReasonDirectionTooManyItems = "direction_too_many_items"
+	ReasonDirectionItemTooLong  = "direction_item_too_long"
+	ReasonDirectionNotScene     = "direction_not_scene"
+
 	ReasonThreadNotFound       = "thread_not_found"
 	ReasonBeatNotFound         = "beat_not_found"
 	ReasonRelationshipNotFound = "relationship_not_found"

@@ -12,6 +12,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -384,5 +385,90 @@ func TestMergeProjectCopiesStyleRules(t *testing.T) {
 				t.Fatalf("merged rules = %+v", got)
 			}
 		})
+	}
+}
+
+// Story-assist Phase 1: project_focus and scene_intents must follow a work
+// through a backup and restore, with anchor_node_id and node_id remapped to
+// the copy's own node ids.
+func TestMergeProjectCopiesDirection(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "Directed", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstLeaf := *p.LastOpenedNodeID
+	if err := nodes.UpdateContent(ctx, firstLeaf,
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"글"}]}]}`, 1000); err != nil {
+		t.Fatal(err)
+	}
+
+	dirRepo := direction.NewRepo(st, nodes, projects)
+	if _, err := dirRepo.SetFocus(ctx, 1000, p.ID, "둘의 오해를 아직 풀지 않는다"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dirRepo.SetSceneIntent(ctx, 1000, direction.SceneIntent{
+		NodeID: firstLeaf, Goal: "거리를 좁힌다", Keep: []string{"침묵"}, Avoid: []string{"고백"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if merged.ProjectID == p.ID {
+		t.Fatal("merge must create a new project id")
+	}
+
+	mergedProjects := project.NewRepo(live)
+	mergedNodes := node.NewRepo(live)
+	mergedRepo := direction.NewRepo(live, mergedNodes, mergedProjects)
+
+	focus, err := mergedRepo.GetFocus(ctx, merged.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !focus.Present || focus.Body != "둘의 오해를 아직 풀지 않는다" {
+		t.Fatalf("merged focus = %+v", focus)
+	}
+	if focus.AnchorNodeID == "" || focus.AnchorNodeID == firstLeaf {
+		t.Fatalf("anchor must be remapped to the copy's own node id, got %q (original %q)", focus.AnchorNodeID, firstLeaf)
+	}
+
+	mergedP, err := mergedProjects.Get(ctx, merged.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergedLeaf := *mergedP.LastOpenedNodeID
+	if focus.AnchorNodeID != mergedLeaf {
+		t.Fatalf("anchor = %q, want the copy's first leaf %q", focus.AnchorNodeID, mergedLeaf)
+	}
+
+	intent, present, err := mergedRepo.GetSceneIntent(ctx, mergedLeaf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !present || intent.Goal != "거리를 좁힌다" || len(intent.Keep) != 1 || intent.Keep[0] != "침묵" ||
+		len(intent.Avoid) != 1 || intent.Avoid[0] != "고백" {
+		t.Fatalf("merged scene intent = %+v, present=%v", intent, present)
 	}
 }
