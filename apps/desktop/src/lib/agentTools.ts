@@ -55,6 +55,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_edit_memory",
   "linetta_edit_skill",
   "linetta_propose_style_profile",
+  "linetta_register_work",
   "linetta_publish_episode",
   "linetta_report_continuity",
   "linetta_propose_story_ops",
