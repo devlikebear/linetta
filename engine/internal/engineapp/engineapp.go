@@ -492,6 +492,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("proposals.pending_count", handlers.ProposalsPendingCount(proposalsSvc))
 	s.Handle("proposals.extraction_estimate", handlers.ExtractionEstimate(proposalsSvc))
 	s.Handle("proposals.extraction_progress", handlers.ExtractionProgress(proposalsSvc))
+	s.Handle("proposals.undo", handlers.UndoProposals(proposalsSvc, clock))
+
+	s.Handle("forecast.list", handlers.ListForecasts(forecastSvc, projects, nodes, entities, facts))
+	s.Handle("forecast.select", handlers.SelectForecast(forecastSvc, clock))
+	s.Handle("forecast.clear_selection", handlers.ClearForecastSelection(forecastSvc))
+	s.Handle("forecast.delete", handlers.DeleteForecast(forecastSvc))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))

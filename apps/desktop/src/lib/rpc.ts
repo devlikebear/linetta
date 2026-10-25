@@ -5,7 +5,9 @@ import type {
   AcceptSuggestionsResult,
   ExtractionEstimate,
   ExtractionProgress,
+  Forecast,
   ProposalOp,
+  SelectForecastResult,
   SuggestionBatch,
   SuggestionItemStatus,
 } from "./types";
@@ -688,4 +690,24 @@ export const proposals = {
     rpcCall<ExtractionEstimate>("proposals.extraction_estimate", { project_id: projectId }),
   extractionProgress: (projectId: string) =>
     rpcCall<ExtractionProgress>("proposals.extraction_progress", { project_id: projectId }),
+  /** Reverts one purpose=forecast structural batch (AcceptSuggestionsResult's
+   *  undo_batch_ids / SuggestionItem.undo_batch_id) — the outline, and any
+   *  beat an add_beat item added onto a scene the batch created. */
+  undo: (projectId: string, batchId: string) =>
+    rpcCall<{ ok: boolean }>("proposals.undo", { project_id: projectId, batch_id: batchId }),
+};
+
+/** "Where the story could go" (story-assist Phase 4): possible
+ *  continuations an agent drafted with linetta_save_forecast, for the
+ *  writer to compare. Select/clearSelection/delete are direct RPCs — no
+ *  LLM turn. Never canon: see the Forecast type's own doc comment. */
+export const forecast = {
+  list: (projectId: string) =>
+    rpcCall<{ forecasts: Forecast[] }>("forecast.list", { project_id: projectId }),
+  select: (forecastId: string, branchId: string) =>
+    rpcCall<SelectForecastResult>("forecast.select", { forecast_id: forecastId, branch_id: branchId }),
+  clearSelection: (projectId: string) =>
+    rpcCall<{ ok: boolean }>("forecast.clear_selection", { project_id: projectId }),
+  delete: (forecastId: string) =>
+    rpcCall<{ ok: boolean }>("forecast.delete", { forecast_id: forecastId }),
 };
