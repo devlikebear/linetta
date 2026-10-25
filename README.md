@@ -493,9 +493,12 @@ open button. Edit the episode later and the outline marks it **Edited**;
 publish again and the same address shows the new text. Episode numbers follow
 your outline, and an episode you move or insert renumbers the ones after it —
 their old addresses redirect. You can make an episode private from the same
-dialog. An agent you connected (built-in or over MCP) can publish too, with
-`linetta_publish_episode`, but only after you have connected and published the
-work once yourself; it cannot connect an account or register a work.
+dialog. An agent you connected (built-in or over MCP) can publish too, once
+you have connected your account. Ask it to publish an episode of a work that
+is not on the site yet and it registers the work first with
+`linetta_register_work`, using a blurb you wrote or approved, then publishes
+with `linetta_publish_episode`. It can also change the blurb or mark the work
+complete. Only you can connect an account.
 
 **What is sent, and where.** The published episode's title and text, its
 place in the order, and the work's title, genres, blurb, serial status and
