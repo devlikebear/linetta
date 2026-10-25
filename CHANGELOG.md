@@ -1,5 +1,53 @@
 # Changelog
 
+## v1.11.0 - 2026-10-25
+
+- **Ask the agent about a passage.** Select text in a scene, right-click,
+  and choose **Ask the agent**. The agent panel opens with the passage
+  quoted above the message box. Ask about it, or say what to change. A
+  change goes into that scene only. **Polish**, **Get feedback** and
+  **Expand** fill in a request for you, and you still press send. The passage
+  stays in the conversation as a quote, so a follow-up like "now make it
+  shorter" knows what "it" is.
+- **Writer's Direction.** The scene panel now starts with a **Current
+  focus** for the work (what to concentrate on for the next few episodes)
+  and **This scene's intent** (a one-line goal, what to keep, what to
+  avoid). Only you write them. The built-in agent and connected MCP clients
+  read them first and treat them as binding. Three written episodes after
+  you set the focus, the app asks whether it still holds.
+- **Continuity checks.** Ask the agent to check a scene's continuity (the
+  **Check continuity** chip does it in one click). It holds the scene
+  against Story World, your fact cards, earlier scenes and your direction,
+  and records what it finds. Every finding quotes the scene exactly and
+  points at something the work really has. The manuscript is not changed.
+  Findings wait under **Story World → Continuity checks**, where you can
+  dismiss or resolve them, and the scene panel shows how many are open.
+- **Suggestions inbox.** Characters, places, relationships, fact cards and
+  other world elements the agent draws from the manuscript now go to a
+  suggestions inbox rather than straight into Story World. You accept,
+  edit or reject them one at a time. A candidate that looks like someone
+  you already have is flagged, and you can make it an alias instead of a
+  duplicate. Small changes you ask for directly still apply right away.
+- **Fill Story World after an import.** After you import a Markdown
+  manuscript, Linetta offers to fill Story World from it. It shows the
+  episode count and a rough token estimate before anything runs. The agent
+  works episode by episode and sends what it finds to the suggestions inbox.
+- **Settings → Tool budget** has a new **Check & propose** group. Turning it
+  off removes the continuity and suggestion tools and their chips. Nothing
+  already recorded is deleted.
+- Publishing an episode to Linetta Works now uploads its illustrations as
+  well. Readers see them in the same place as in the manuscript, and they
+  are reviewed along with the text. An episode can carry up to 30 pictures.
+  Pictures already on the site are not sent again.
+- Fixed: opening a scene with @mentions or notes in Zen mode could save it
+  as an empty scene. The editor now refuses to edit or save a scene it
+  cannot fully read, and says so, instead of treating it as empty.
+- Fixed: with **Codex** as the AI provider and no model chosen, requests
+  failed on a ChatGPT account because the old default model is no longer
+  offered. Linetta now uses the first model your account offers.
+- Security: the engine is built with Go 1.27.3, which includes the October
+  2026 standard-library security fixes.
+
 ## v1.10.0 - 2026-10-24
 
 - **Illustrations.** Choose ChatGPT or Gemini under **Settings → Image
