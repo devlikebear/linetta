@@ -21,7 +21,7 @@
   background: var(--surface);
   color: var(--ink);
   outline: none;
-  resize: none;
+  resize: vertical;
 }
 .ts-beat-label:focus,
 .ts-beat-desc:focus { border-color: var(--accent); }

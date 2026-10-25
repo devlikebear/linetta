@@ -26,8 +26,8 @@ export function ArtStyleSection({ projectId }: Readonly<{ projectId: string }>) 
     <summary>{t("visual.artTitle")}</summary>
     {error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}
     {value && <>
-      <label>{t("visual.style")}<textarea value={value.style} disabled={saving} onChange={(e) => setValue({ ...value, style: e.target.value })} /></label>
-      <label>{t("visual.negative")}<textarea value={value.negative_prompt} disabled={saving} onChange={(e) => setValue({ ...value, negative_prompt: e.target.value })} /></label>
+      <label>{t("visual.style")}<textarea rows={4} value={value.style} disabled={saving} onChange={(e) => setValue({ ...value, style: e.target.value })} /></label>
+      <label>{t("visual.negative")}<textarea rows={4} value={value.negative_prompt} disabled={saving} onChange={(e) => setValue({ ...value, negative_prompt: e.target.value })} /></label>
       <button type="button" className="btn accent sm" disabled={saving} onClick={async () => {
         setSaving(true); setError(null);
         try { setValue(await visuals.setArtStyle(value)); } catch (e) { setError(e); } finally { setSaving(false); }

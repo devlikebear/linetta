@@ -32,7 +32,7 @@
   background: var(--surface);
   color: var(--ink);
   outline: none;
-  resize: none;
+  resize: vertical;
 }
 .plot-beat-edit .attr-value:focus,
 .plot-beat-edit textarea:focus { border-color: var(--accent); }
