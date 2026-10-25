@@ -167,6 +167,61 @@ describe("ContinuitySection", () => {
     await waitFor(() => expect(mocks.list).toHaveBeenCalledWith("p", undefined));
   });
 
+  it("opens, scopes to the current scene and switches to the open tab when focusRequest changes", async () => {
+    mocks.list.mockResolvedValue({ checks: [] });
+    const user = userEvent.setup();
+    const { rerender, container } = render(
+      <I18nProvider>
+        <ContinuitySection projectId="p" nodeId="n1" focusRequest={null} />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledWith("p", "n1"));
+
+    // Move away from the defaults first, so the assertions below prove the
+    // focusRequest handler actually reset them rather than finding them
+    // already at their initial values.
+    await user.click(screen.getByTestId("continuity-scope-work"));
+    await user.click(screen.getByTestId("continuity-status-dismissed"));
+    expect(container.querySelector("details")?.open).toBe(false);
+    mocks.list.mockClear();
+
+    rerender(
+      <I18nProvider>
+        <ContinuitySection projectId="p" nodeId="n1" focusRequest={1} />
+      </I18nProvider>,
+    );
+
+    expect(container.querySelector("details")?.open).toBe(true);
+    expect(screen.getByTestId("continuity-scope-scene")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("continuity-status-open")).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledWith("p", "n1"));
+  });
+
+  it("ignores a focusRequest that has not changed, so it does not fight a writer who just closed the section", async () => {
+    mocks.list.mockResolvedValue({ checks: [] });
+    const { rerender, container } = render(
+      <I18nProvider>
+        <ContinuitySection projectId="p" nodeId="n1" focusRequest={1} />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(container.querySelector("details")?.open).toBe(true));
+
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    act(() => {
+      details.open = false;
+      details.dispatchEvent(new Event("toggle", { bubbles: false }));
+    });
+    expect(container.querySelector("details")?.open).toBe(false);
+
+    // Same focusRequest value again — re-rendering must not reopen it.
+    rerender(
+      <I18nProvider>
+        <ContinuitySection projectId="p" nodeId="n1" focusRequest={1} />
+      </I18nProvider>,
+    );
+    expect(container.querySelector("details")?.open).toBe(false);
+  });
+
   it("shows the empty-work message when nothing has ever been checked", async () => {
     mocks.list.mockResolvedValue({ checks: [] });
     renderSection();

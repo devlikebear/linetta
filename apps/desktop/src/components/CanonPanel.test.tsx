@@ -215,6 +215,25 @@ describe("CanonPanel", () => {
     expect(screen.getByText("연속성 점검")).toBeTruthy();
   });
 
+  // story-assist followups: the open-observations badge (ContextPanel ->
+  // Workspace.openContinuityForScene) bumps continuityFocusRequest, which
+  // CanonPanel must forward to ContinuitySection's own focusRequest prop
+  // so the section opens, scopes to the current scene and shows the open
+  // tab — not just land on Story World collapsed and work-scoped.
+  it("forwards continuityFocusRequest to ContinuitySection so it opens scoped to the current scene", async () => {
+    const { container } = renderPanel({ nodeId: "n1", continuityFocusRequest: 1 });
+    await screen.findByText("해윤");
+
+    await waitFor(() => {
+      const details = Array.from(container.querySelectorAll("details")).find(
+        (d) => d.querySelector("summary")?.textContent === "연속성 점검",
+      );
+      expect(details?.open).toBe(true);
+    });
+    expect(screen.getByTestId("continuity-scope-scene")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("continuity-status-open")).toHaveAttribute("aria-selected", "true");
+  });
+
   // story-assist Phase 3 (3.D.3): the badge is the only entry point into the
   // suggestions inbox from Story World, and it must not exist when there is
   // nothing pending — a badge that always shows "0" is not a notification.

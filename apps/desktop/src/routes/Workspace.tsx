@@ -144,6 +144,13 @@ export function Workspace() {
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
   const [canonOpen, setCanonOpen] = useState(false);
+  // Bumped by openContinuityForScene (ContextPanel's open-observations
+  // badge) so CanonPanel/ContinuitySection pull the continuity section
+  // open and scope it to the current scene instead of landing collapsed
+  // and scoped to the whole work. Reset to null by every other toggle
+  // below, the same way factBookHighlightId already is, so a later plain
+  // open of Story World does not replay a stale request.
+  const [continuityFocusRequest, setContinuityFocusRequest] = useState<number | null>(null);
   const [agentOpen, setAgentOpen] = useState(() => Boolean((location.state as { fillStoryWorldPrompt?: string } | null)?.fillStoryWorldPrompt));
   // The Library import dialog's "시작" button lands here with the
   // extraction prompt already typed into the agent panel's composer — the
@@ -1187,6 +1194,7 @@ export function Workspace() {
     // instead of this scene and highlighting a card the writer has nothing
     // to do with right now.
     setFactBookHighlightId(null);
+    setContinuityFocusRequest(null);
     setFactBookOpen((v) => {
       const next = !v;
       if (next) {
@@ -1207,6 +1215,7 @@ export function Workspace() {
         setContextualSeed(null);
         setFactBookSelectedClaimRequest(null);
         setFactBookHighlightId(null);
+        setContinuityFocusRequest(null);
         setFactBookOpen(false);
         setCanonOpen(false);
         setAgentOpen(false);
@@ -1223,6 +1232,7 @@ export function Workspace() {
       if (next) {
         setFactBookSelectedClaimRequest(null);
         setFactBookHighlightId(null);
+        setContinuityFocusRequest(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
         setAgentOpen(false);
@@ -1239,6 +1249,7 @@ export function Workspace() {
       if (next) {
         setFactBookSelectedClaimRequest(null);
         setFactBookHighlightId(null);
+        setContinuityFocusRequest(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
         setCanonOpen(false);
@@ -1247,6 +1258,25 @@ export function Workspace() {
       }
       return next;
     });
+  }, []);
+
+  // story-assist followups: the open-observations badge (ContextPanel) must
+  // not just open Story World — it must land on the open tab of the
+  // current scene's continuity section, already expanded. Reuses the same
+  // "close every other inspector-slot panel, clear stale highlight state"
+  // shape every toggle above follows, then bumps continuityFocusRequest so
+  // ContinuitySection (via CanonPanel) reacts even when canonOpen was
+  // already true and a plain setCanonOpen(true) would be a no-op render.
+  const openContinuityForScene = useCallback(() => {
+    setFactBookSelectedClaimRequest(null);
+    setFactBookHighlightId(null);
+    setFactBookOpen(false);
+    setContextualEditOpen(false);
+    setAgentOpen(false);
+    setEntitySheetId(null);
+    setThreadSheetId(null);
+    setCanonOpen(true);
+    setContinuityFocusRequest((n) => (n ?? 0) + 1);
   }, []);
 
   const runSelectionFactCheck = useCallback(() => {
@@ -2218,6 +2248,7 @@ export function Workspace() {
             onBeforeStyleCheck={flushPendingSave}
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
             onOpenFact={openFactFromContinuity}
+            continuityFocusRequest={continuityFocusRequest}
             onOpenProposals={() => {
               setCanonOpen(false);
               setProposalInboxOpen(true);
@@ -2284,7 +2315,7 @@ export function Workspace() {
               setLoad((prev) => (prev ? { ...prev, project: p } : prev))
             }
             tourTarget="workspace-context"
-            onOpenContinuity={() => setCanonOpen(true)}
+            onOpenContinuity={openContinuityForScene}
           />
         ) : null}
       </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
 import { continuity as continuityApi } from "../lib/rpc";
@@ -28,6 +28,13 @@ interface Props {
   onOpenEntity?: (entityId: string) => void;
   /** Opens the Fact Book scrolled to and highlighting the fact ref's own card. */
   onOpenFact?: (factId: string) => void;
+  /** Bumped by the caller (ContextPanel's open-observations badge, via
+   *  Workspace) to pull this section open, scope it to the current scene
+   *  and switch to the open tab — so clicking "열린 관찰 N" actually shows
+   *  them instead of leaving the section collapsed and scoped to the
+   *  whole work. Any new value (not the initial one) re-triggers this;
+   *  undefined/null never does. */
+  focusRequest?: number | null;
 }
 
 type Scope = "scene" | "work";
@@ -78,7 +85,14 @@ function groupByScene(checks: ContinuityCheck[]): SceneGroup[] {
   return order.map((id) => groups.get(id) as SceneGroup);
 }
 
-export function ContinuitySection({ projectId, nodeId, onOpenNode, onOpenEntity, onOpenFact }: Readonly<Props>) {
+export function ContinuitySection({
+  projectId,
+  nodeId,
+  onOpenNode,
+  onOpenEntity,
+  onOpenFact,
+  focusRequest,
+}: Readonly<Props>) {
   const { t } = useI18n();
   const [scope, setScope] = useState<Scope>(nodeId ? "scene" : "work");
   const [status, setStatus] = useState<SelectableStatus>("open");
@@ -86,6 +100,26 @@ export function ContinuitySection({ projectId, nodeId, onOpenNode, onOpenEntity,
   const [error, setError] = useState<unknown>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  const [open, setOpen] = useState(false);
+
+  // A new focusRequest value (the badge click) pulls the section open,
+  // scopes it to the current scene (when one is open) and switches to the
+  // open tab, the same reset-on-switch pattern the inspector-slot panels
+  // follow in Workspace.tsx. The ref starts at a sentinel distinct from
+  // every real focusRequest value on purpose, not at focusRequest itself:
+  // Workspace bumps the counter and mounts this component (via CanonPanel's
+  // key) in the very same render, so on first mount focusRequest already
+  // holds its "new" value — seeding the ref with that same value would make
+  // the check below see no change and silently skip the open.
+  const lastFocusRequestRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    if (focusRequest === lastFocusRequestRef.current) return;
+    lastFocusRequestRef.current = focusRequest;
+    if (focusRequest == null) return;
+    setOpen(true);
+    setStatus("open");
+    if (nodeId) setScope("scene");
+  }, [focusRequest, nodeId]);
 
   // The data arrives from outside this component — an agent's tool call —
   // so it reloads on the engine's change event rather than only on mount,
@@ -138,7 +172,11 @@ export function ContinuitySection({ projectId, nodeId, onOpenNode, onOpenEntity,
   );
 
   return (
-    <details className="sec es-field continuity-section">
+    <details
+      className="sec es-field continuity-section"
+      open={open}
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
       <summary>{t("continuity.title")}</summary>
       {error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}
 
