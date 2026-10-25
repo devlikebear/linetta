@@ -161,10 +161,9 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 		// purpose=forecast's structural items (create_outline_node,
 		// create_scene) batch together into ONE ApplyOpsWithRefs call, so
 		// storyops' "whole structural batch is all-or-nothing, with one
-		// undo" guarantee covers them as a unit — see this package's
-		// allowedOpTypes/forecastOpTypes comment and
-		// docs/plans/story-assist/phase-4-forecast.md's 4.A.5 decision.
-		// Every other op type (add_beat) still applies one item at a time
+		// undo" guarantee covers them as a unit — see this package's own
+		// allowedOpTypes/forecastOpTypes comment above. Every other op
+		// type (add_beat) still applies one item at a time
 		// in the loop below, exactly as every other purpose always has.
 		handled := map[string]bool{}               // item ids this pre-pass has already given an outcome
 		structuralAcceptedIDs := map[string]bool{} // item ids accepted as part of THIS call's structural batch

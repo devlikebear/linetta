@@ -1,8 +1,8 @@
 package forecast
 
-// Limits. Phase 4 forces these in code — InkOS leaves the 2–5 / 1–10 range
-// to the tool description only (docs/plans/story-assist/inkos-analysis.md
-// §3's "리네타가 더 잘할 수 있는 점").
+// Limits. Linetta forces these in code — InkOS, the project this feature
+// took its cue from, leaves the 2–5 branch / 1–10 episode range to the
+// tool description only, which a model can simply ignore.
 const (
 	MinBranches = 2
 	MaxBranches = 5

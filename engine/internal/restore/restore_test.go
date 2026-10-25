@@ -16,6 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -702,5 +703,72 @@ func TestMergeProjectExcludesStoryProposals(t *testing.T) {
 	}
 	if proposalCount != 0 {
 		t.Errorf("merged project carries %d story_proposals, want 0 (excluded by design)", proposalCount)
+	}
+}
+
+// TestMergeProjectExcludesForecasts is story-assist Phase 4's own version
+// of the exclusion test above: a forecast's base_node_id, input_hashes_json
+// and branches_json (decisions[]/risks[] refs) all still name the ORIGINAL
+// library's ids, so restore.MergeProject must not try to remap and copy it
+// — see the comment beside forecasts' exclusion in restore.go.
+func TestMergeProjectExcludesForecasts(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	entities := entity.NewRepo(st)
+	threads := thread.NewRepo(st)
+	beats := beat.NewRepo(st)
+	facts := fact.NewRepo(st)
+	relationships := relationship.NewRepo(st)
+	directionRepo := direction.NewRepo(st, nodes, projects)
+
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "예측 제외", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	forecastSvc := forecast.New(st, forecast.Deps{
+		Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships,
+		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
+	})
+	_, problems, err := forecastSvc.Save(ctx, 1000, forecast.SaveInput{
+		ProjectID: p.ID, Divergence: "다음 회차 갈래?", Horizon: 3,
+		Branches: []forecast.BranchInput{
+			{Title: "갈래 1", Premise: "전제1", Beats: []forecast.BranchBeat{{EpisodeOffset: 1, Summary: "비트"}}},
+			{Title: "갈래 2", Premise: "전제2", Beats: []forecast.BranchBeat{{EpisodeOffset: 1, Summary: "비트"}}},
+		},
+	}, forecast.SourceAgent)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("Save() problems=%+v err=%v", problems, err)
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	if err := live.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM forecasts WHERE project_id = ?`, merged.ProjectID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf("merged project carries %d forecasts, want 0 (excluded by design)", count)
 	}
 }

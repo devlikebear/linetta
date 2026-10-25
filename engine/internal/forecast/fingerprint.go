@@ -1,8 +1,9 @@
 // Package forecast holds story-assist Phase 4: possible continuations
 // ("branches") an agent drafts for the writer to compare, saved through
 // linetta_save_forecast and never read by anything that builds the
-// outline, the manuscript or Story World. See
-// docs/plans/story-assist/phase-4-forecast.md.
+// outline, the manuscript or Story World. See the README's "Where the
+// story could go" section and docs/DEVELOPMENT.md's "Review group" for
+// the user- and developer-facing shape of this.
 package forecast
 
 import (

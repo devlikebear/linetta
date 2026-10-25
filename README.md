@@ -123,6 +123,14 @@ mode included. Set the focus and it is three episodes' worth of actually-
 written scenes later, the app and the brief both flag it as possibly stale
 and ask you to confirm it still holds.
 
+If you have picked a branch in **Where the story could go** (below), it
+appears right after the scene intent, labelled a plan — never canon — with
+its title, premise, and beats. If the outline, manuscript, Story World, or
+your own direction changed since the branch was drawn, the brief says so
+and asks the agent to check with you before following it. Turning the
+Writer's Direction switch off in the AI context checklist removes the plan
+along with the rest of the section.
+
 ### What the agent remembers
 
 Linetta keeps two short documents an agent reads: a **writer profile** — how
@@ -367,6 +375,52 @@ Turn the group off under **Settings → Tool budget → Check & propose**
 `linetta_propose_story_ops` and the "Story World 채우기" starter chip for
 both the built-in agent and any MCP client — items already in the inbox
 stay exactly where they are.
+
+### Where the story could go
+
+Ask the agent "다음 회차 전개 갈래 3개를 만들어 줘" — or press the starter chip — and
+it drafts 2–5 possible continuations from your last written episode and
+saves them with `linetta_save_forecast`. **Nothing is canon.** The outline,
+the manuscript, and Story World do not change; what you get is a sheet,
+opened from the command palette ("갈래 예측 열기") or a button on the outline
+panel's header, where every branch sits side by side: a title and premise,
+an episode-by-episode beat timeline, risk badges you can click through to
+the character, fact, or scene they are about, and — folded by default —
+the character decisions, projected changes, open questions, and how the
+branch fits your own direction.
+
+**Picking a branch is a direct click, not a chat turn.** [이 갈래 고르기] and
+[선택 해제] call the engine straight away; no agent runs, and your activity
+log gains no new entry. The branch you pick appears in the next brief's
+Writer's Direction section as a **plan** — see "Your direction" above — so
+every later turn, built-in agent or MCP client, sees it without being told
+again. If you want it in the outline, press [개요 반영 제안 요청]: it fills the
+agent panel with a ready-to-send request, the agent proposes scenes and
+beats to the suggestions inbox (never writes directly), and you apply them
+there like any other suggestion. Accepting a forecast's structural
+proposal gets its own one-click undo in the inbox, reverting the outline
+change and anything hung on it together.
+
+A forecast goes stale the moment canon it was drawn from changes —
+anything in the outline, the manuscript (any episode's text, not only the
+one you diverged from), Story World, or your own direction — and the sheet
+says what moved, e.g. "정사가 바뀜: 인물 2개, 3화 본문". The check runs fresh
+every time you open the sheet, so undoing the change that made a forecast
+stale makes it fresh again; nothing here is a one-way flag. A stale
+forecast can still be picked — the warning follows the choice into the
+toast, not a refusal.
+
+Forecasts live in `library.db` but are **not** carried over when you
+restore a single work from a backup, for the same reason the suggestions
+inbox is not: a branch's own references, and the episode it diverged from,
+still name ids from the library it came from, and a forecast costs nothing
+to draft again by asking the agent. Turn the group off under
+**Settings → Tool budget → Check & propose** (`review_tools_enabled` in
+`settings.json`, shared with continuity checks and the suggestions inbox,
+on by default) to remove `linetta_save_forecast` and its starter chip for
+both the built-in agent and any MCP client — forecasts already saved stay
+exactly where they are, and you can still open the sheet and pick among
+them.
 
 ## Writing with your own agent (MCP)
 

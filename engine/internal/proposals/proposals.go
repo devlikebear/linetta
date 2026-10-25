@@ -10,7 +10,7 @@
 // manuscript, or more than a few items at once: a case the apply tool's
 // immediate, barely-undoable writes were never meant to carry.
 //
-// See docs/plans/story-assist/phase-3-proposals-import.md.
+// See the README's "Suggestions inbox" section.
 package proposals
 
 import (

@@ -3,7 +3,7 @@
 // work's own record — Story World, fact cards, earlier scenes, or the
 // writer's own direction — or leaves something undecided. Nothing here is
 // canon, and nothing here changes the manuscript; it is a list the writer
-// reviews in Story World. See docs/plans/story-assist/phase-2-continuity.md.
+// reviews in Story World. See the README's "Continuity checks" section.
 package continuity
 
 // Limits bound what one report may contain. Validate enforces them at the

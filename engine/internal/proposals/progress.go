@@ -23,8 +23,7 @@ type Progress struct {
 // Estimate is what Library's "Story World 채우기" dialog shows before the
 // writer starts an extraction sweep: the whole manuscript's size and a
 // rough input-token budget. It is deliberately an estimate, not a cost
-// preview — see the package's Non-goals in
-// docs/plans/story-assist/phase-3-proposals-import.md.
+// preview — the real cost follows the connected provider's own terms.
 type Estimate struct {
 	Episodes    int `json:"episodes"`
 	Chars       int `json:"chars"`
