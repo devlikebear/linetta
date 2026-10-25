@@ -201,8 +201,9 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if name == "linetta_publish_status" || name == "linetta_publish_episode" {
 			continue
 		}
-		// story-assist Phase 2's report tool carries its own allowance below.
-		if name == "linetta_report_continuity" {
+		// story-assist Phase 2's report tool, and Phase 3's propose tool,
+		// carry their own allowances below.
+		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" {
 			continue
 		}
 		total += b
@@ -227,6 +228,14 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// structure is the whole point of engine-side validation.
 	if report := sizes["linetta_report_continuity"]; report > 3600 {
 		t.Errorf("linetta_report_continuity costs %dB, want <= 3600B", report)
+	}
+	// story-assist Phase 3 measured 7,849B for linetta_propose_story_ops —
+	// the items[].op schema is the whole storyops.Op struct (every op's
+	// fields, shared with linetta_apply_story_ops), which is the cost of
+	// one schema describing every allowed op rather than eight narrower
+	// ones.
+	if propose := sizes["linetta_propose_story_ops"]; propose > 8100 {
+		t.Errorf("linetta_propose_story_ops costs %dB, want <= 8100B", propose)
 	}
 	writes := 0
 	for _, name := range VisualWriteToolNames {

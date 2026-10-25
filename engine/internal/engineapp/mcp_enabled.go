@@ -23,6 +23,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
@@ -65,12 +66,16 @@ type mcpToolRepos struct {
 	beats      *beat.Repo
 	threads    *thread.Repo
 	continuity *continuity.Repo
+	// proposals holds story-structure change candidates waiting for the
+	// writer to accept them one by one (story-assist Phase 3). Shared with
+	// the proposals.* RPC handlers — one Service, one undo-free apply path.
+	proposals  *proposals.Service
 	plot       *plot.Builder
-	manuscript    *manuscript.Searcher
-	context       *storycontext.ContextBuilder
-	snapshots     *snapshot.Repo
-	story         *storyops.Service
-	msEdit        *manuscriptedit.Service
+	manuscript *manuscript.Searcher
+	context    *storycontext.ContextBuilder
+	snapshots  *snapshot.Repo
+	story      *storyops.Service
+	msEdit     *manuscriptedit.Service
 	// memory is the two curated documents linetta_edit_memory writes. The
 	// same *agentmemory.Repo the companion reads them back through and the
 	// settings pane edits: one row per document, one writer per row at a
@@ -121,6 +126,7 @@ func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 		Beats:         deps.repos.beats,
 		Threads:       deps.repos.threads,
 		Continuity:    deps.repos.continuity,
+		Proposals:     deps.repos.proposals,
 		Plot:          deps.repos.plot,
 		Manuscript:    deps.repos.manuscript,
 		Context:       deps.repos.context,
