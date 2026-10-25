@@ -44,7 +44,14 @@ _전제: Phase 1~3 완료. linetta-artworks Phase 5(회차 삽화 게시) 배포
 
 ## Tasks
 
-- [ ] **4.1 삽화 요청 저장과 서비스**
+- [x] **4.1 삽화 요청 저장과 서비스**
+  - 구현(2026-10-25): `0031_illustration_requests.sql`, `illustration/requests.go`(`RequestService`), RPC `illustration_requests.list|get|approve|reject`, 알림 `illustrations.changed`(`ChangedEvent`), 사유 코드 3개와 세 언어 문구
+  - 계획과 다른 점
+    - `negative_prompt`는 두지 않았다. `Generate`는 프롬프트를 그대로 보내고, 대화상자도 조립된 프롬프트 하나만 쓴다
+    - 대상 노드 삭제는 트리거 대신, 요청을 읽거나 승인할 때 사라진 노드의 대기·실패 요청을 `cancelled`로 바꾼다(`cancelOrphans`)
+    - 목적 `representative`는 표에는 있지만, 채울 노드 필드가 4.3에서 생기므로 그때까지 `Submit`이 거절한다
+    - 씬에 넣기는 읽은 버전 위에만 쓰고(`UpdateContentIfVersion`) 충돌하면 세 번까지 다시 시도한다. 넣지 못하면 요청은 `done`이고 `placed_at` 없이 `error`에 사유를 남긴다
+    - 승인은 `pending`·`failed` → `generating`을 조건부로 바꿔 두 번 눌러도 한 번만 그린다. 실패한 요청은 다시 승인할 수 있다
   - 새 표 `illustration_requests`:
     - `id`, `project_id`, `target_node_id`(씬 또는 화·장, 노드가 지워지면 요청은 `cancelled`)
     - `purpose`: `insert`(씬에 넣기), `representative`(그 노드의 대표), `gallery`(갤러리에만)

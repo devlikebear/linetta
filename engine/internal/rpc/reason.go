@@ -109,6 +109,11 @@ const (
 	ReasonIllustrationInUse      = "illustration_in_use"
 	// The picture is the work's cover on Linetta Works.
 	ReasonIllustrationIsCover = "illustration_is_cover"
+	// Pictures an agent asked for (illustration Phase 4).
+	ReasonIllustrationRequestNotFound = "illustration_request_not_found"
+	// Already approved, rejected or cancelled (another window, say).
+	ReasonIllustrationRequestDecided  = "illustration_request_decided"
+	ReasonTooManyIllustrationRequests = "too_many_illustration_requests"
 
 	// The Codex login (#92). The message has to name the two ports, because
 	// the fix is closing whatever holds them — usually a Codex CLI login. A

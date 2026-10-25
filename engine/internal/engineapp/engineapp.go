@@ -574,6 +574,16 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("illustrations.get", handlers.IllustrationsGet(illustrations))
 	s.Handle("illustrations.update", handlers.IllustrationsUpdate(illustrations))
 	s.Handle("illustrations.delete", handlers.IllustrationsDelete(illustrations))
+	// Pictures agents asked for. Only the writer's approve draws one.
+	illustrationRequests := illustration.NewRequestService(illustrations, illustrationSvc, nodes, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) })
+	if err := illustrationRequests.RecoverInterrupted(ctx); err != nil {
+		return err
+	}
+	s.Handle("illustration_requests.list", handlers.IllustrationRequestsList(illustrationRequests))
+	s.Handle("illustration_requests.get", handlers.IllustrationRequestsGet(illustrationRequests))
+	s.Handle("illustration_requests.approve", handlers.IllustrationRequestsApprove(illustrationRequests))
+	s.Handle("illustration_requests.reject", handlers.IllustrationRequestsReject(illustrationRequests))
 	codex := codexService{svc: codexSvc}
 	s.Handle("codex.login_start", handlers.CodexLoginStart(codex))
 	s.Handle("codex.login_status", handlers.CodexLoginStatus(codex))
