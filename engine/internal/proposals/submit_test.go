@@ -100,7 +100,7 @@ func (e *testEnv) savedSelectedForecast(t *testing.T) forecast.Forecast {
 	if err != nil || len(problems) != 0 {
 		t.Fatalf("savedSelectedForecast Save: err=%v problems=%+v", err, problems)
 	}
-	selected, err := e.forecasts.Select(ctx, now(), f.ID, "b1")
+	selected, err := e.forecasts.Select(ctx, now(), e.project.ID, f.ID, "b1")
 	if err != nil {
 		t.Fatalf("savedSelectedForecast Select: %v", err)
 	}

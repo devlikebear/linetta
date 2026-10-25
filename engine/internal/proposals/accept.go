@@ -376,10 +376,25 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 				// this beat, or it survives its own scene's disappearance
 				// pointing at nothing — see migration 0029's
 				// story_proposal_items.undo_batch_id comment.
-				for _, dep := range it.DependsOn {
-					if owner, ok := itemByID[dep]; ok && owner.UndoBatchID != "" {
+				//
+				// Read from op.NodeRef — the ref the ACTUALLY APPLIED op
+				// still carries, via the same refOwner map
+				// effectiveMissingDependency's gate above just used — not
+				// from it.DependsOn, which is Submit's reading of the
+				// ORIGINAL op and goes stale the moment an edit drops the
+				// ref (review finding f1, 2026-10-25): an edit that
+				// rewrites this add_beat to point at a direct node_id
+				// instead (dropping node_ref entirely, same pattern
+				// TestAccept_editDroppingARefDependencyIsNotBlockedByThe-
+				// StaleDependency exercises for create_relationship) no
+				// longer names any sibling at all, so it.DependsOn's old
+				// entry would tag this item with an unrelated structural
+				// batch's undo id — later undoing THAT batch would delete
+				// THIS beat as a side effect, even though the two have
+				// nothing to do with each other.
+				if op.Type == "add_beat" && op.NodeRef != "" {
+					if owner, ok := itemByID[refOwner[op.NodeRef]]; ok && owner.UndoBatchID != "" {
 						it.UndoBatchID = owner.UndoBatchID
-						break
 					}
 				}
 			}
@@ -553,9 +568,20 @@ func resultIDFor(it Item, op storyops.Op, applied storyops.ApplyOpsResult, refs 
 	}
 }
 
-// refOwnerMap maps a declared ref (a create_entity/create_thread item's own
-// op.ref, as stored — never rewritten by an edit) to the id of the item
-// that declared it.
+// refOwnerMap maps a declared ref (a create_entity/create_thread/
+// create_scene/create_outline_node item's own op.ref, as stored — never
+// rewritten by an edit) to the id of the item that declared it.
+//
+// create_scene/create_outline_node are included alongside create_entity/
+// create_thread so that purpose=forecast's add_beat items get the same
+// dependency-gate protection non-forecast items already have (review
+// finding f3, 2026-10-25): without this, accepting an add_beat whose
+// node_ref names a structural sibling that was never requested in this
+// call (reachable from ProposalInbox — checking an item auto-selects its
+// dependency, but unchecking the dependency afterward does not un-check
+// it) skipped effectiveMissingDependency's "depends on X, which has not
+// been accepted" refusal entirely and fell through to a raw storyops
+// "scene ref/id not found" failure instead.
 func refOwnerMap(items []Item) map[string]string {
 	out := map[string]string{}
 	for _, it := range items {
@@ -563,7 +589,7 @@ func refOwnerMap(items []Item) map[string]string {
 			continue
 		}
 		switch it.Op.Type {
-		case "create_entity", "create_thread":
+		case "create_entity", "create_thread", "create_scene", "create_outline_node":
 			out[it.Op.Ref] = it.ID
 		}
 	}

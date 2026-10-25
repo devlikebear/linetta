@@ -334,6 +334,17 @@ export function Workspace() {
     void refreshTodayChars(load.project.id);
   }, [saveCompletedAt, load?.project.id, refreshTodayChars]);
   useEffect(() => { setOutlineUndoSnapshot(null); }, [projectId]);
+  // ForecastSheet's own projectId prop is load.project.id, which still
+  // names the OLD project until the "Initial load" effect's async fetch
+  // for the new one resolves (load is never reset to null in between) —
+  // unlike this effect, which fires the instant the URL param changes.
+  // Without this, a jump to another project (global search, LibraryAll.tsx)
+  // while the sheet is open leaves it showing the old project's forecast
+  // cards, each wired to the old project's forecast_id, for as long as that
+  // fetch takes — long enough for a click on [이 갈래 고르기]/[삭제] to land
+  // forecast.select/forecast.delete against a project the writer no longer
+  // believes they are looking at (review finding f2, 2026-10-25).
+  useEffect(() => { setForecastSheetOpen(false); }, [projectId]);
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);

@@ -117,7 +117,7 @@ func TestCanonUnchangedThroughSaveListSelectClearDelete(t *testing.T) {
 	afterList := dumpCanon(t, env.st.DB())
 	assertCanonUnchanged(t, before, afterList)
 
-	if _, err := svc.Select(ctx, 10_001, f.ID, "b1"); err != nil {
+	if _, err := svc.Select(ctx, 10_001, env.project.ID, f.ID, "b1"); err != nil {
 		t.Fatalf("Select: %v", err)
 	}
 	afterSelect := dumpCanon(t, env.st.DB())
@@ -129,7 +129,7 @@ func TestCanonUnchangedThroughSaveListSelectClearDelete(t *testing.T) {
 	afterClear := dumpCanon(t, env.st.DB())
 	assertCanonUnchanged(t, before, afterClear)
 
-	if err := svc.Delete(ctx, f.ID); err != nil {
+	if err := svc.Delete(ctx, env.project.ID, f.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	afterDelete := dumpCanon(t, env.st.DB())

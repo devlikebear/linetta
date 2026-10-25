@@ -112,7 +112,7 @@ describe("ForecastSheet", () => {
       await user.click(screen.getAllByTestId("forecast-choose")[0]);
     });
 
-    expect(mocks.select).toHaveBeenCalledWith("f-1", "b1");
+    expect(mocks.select).toHaveBeenCalledWith("project-1", "f-1", "b1");
     // Only the direct RPC fired; nothing resembling an agent run was touched.
     expect(mocks.select).toHaveBeenCalledTimes(1);
   });
@@ -188,7 +188,7 @@ describe("ForecastSheet", () => {
       await user.click(screen.getByTestId("forecast-delete"));
     });
 
-    expect(mocks.delete).toHaveBeenCalledWith("f-1");
+    expect(mocks.delete).toHaveBeenCalledWith("project-1", "f-1");
   });
 
   it("shows the empty state when there are no forecasts", async () => {

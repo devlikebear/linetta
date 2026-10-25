@@ -2,6 +2,7 @@ package proposals
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -295,5 +296,113 @@ func TestAccept_forecast_addBeatAcceptedInALaterCallStillRidesTheStructuralUndoB
 	}
 	if it.UndoBatchID != "" {
 		t.Errorf("add_beat item UndoBatchID = %q, want cleared after Undo", it.UndoBatchID)
+	}
+}
+
+// TestAccept_forecast_editDroppingTheNodeRefDoesNotInheritAnUnrelatedUndoBatch
+// is review finding f1: an add_beat item's undo_batch_id used to be read
+// off its STORED depends_on (Submit's reading of the original op), not the
+// ref the actually-applied (possibly edited) op still carries. An edit that
+// drops node_ref for a direct node_id pointing at a totally unrelated,
+// already-existing scene must not tag the resulting beat with the
+// structural sibling's batch — undoing that batch must not delete a beat
+// that has nothing to do with it.
+func TestAccept_forecast_editDroppingTheNodeRefDoesNotInheritAnUnrelatedUndoBatch(t *testing.T) {
+	env := newTestEnv(t)
+	th, err := env.threads.Create(context.Background(), thread.NewInput{ProjectID: env.project.ID, Name: "주 갈래"})
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	sub, _ := mustSubmitForecast(t, env, []ItemInput{
+		{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "맞선 장면", AfterNodeID: env.sceneID}},
+		{Op: storyops.Op{Type: "add_beat", ThreadID: th.ID, NodeRef: "s1", Label: "맞선 비트"}},
+	})
+	sceneItemID, beatItemID := sub.Items[0].ID, sub.Items[1].ID
+
+	// Accept the structural item alone — it gets its own undo batch.
+	res1, err := env.svc.Accept(context.Background(), now(), env.project.ID, []string{sceneItemID}, nil)
+	if err != nil {
+		t.Fatalf("Accept call 1: %v", err)
+	}
+	if len(res1.UndoBatchIDs) != 1 || res1.UndoBatchIDs[0] == "" {
+		t.Fatalf("UndoBatchIDs after call 1 = %+v, want exactly one batch id", res1.UndoBatchIDs)
+	}
+	batchID := res1.UndoBatchIDs[0]
+
+	// Accept the add_beat item with an edit that drops node_ref entirely,
+	// pointing it instead at env.sceneID — a real, already-existing scene
+	// that has nothing to do with the structural batch above.
+	edits := map[string]storyops.Op{
+		beatItemID: {Type: "add_beat", ThreadID: th.ID, NodeID: env.sceneID, Label: "무관한 장면의 비트"},
+	}
+	res2, err := env.svc.Accept(context.Background(), now()+1, env.project.ID, []string{beatItemID}, edits)
+	if err != nil {
+		t.Fatalf("Accept call 2: %v", err)
+	}
+	if len(res2.Items) != 1 || res2.Items[0].Status != StatusAccepted {
+		t.Fatalf("call 2 items = %+v", res2.Items)
+	}
+	if res2.Items[0].UndoBatchID != "" {
+		t.Fatalf("add_beat item's UndoBatchID = %q, want empty — the edit no longer references the structural batch",
+			res2.Items[0].UndoBatchID)
+	}
+
+	// The edit carries no ref of its own (same as this package's own
+	// TestAccept_editDroppingARefDependencyIsNotBlockedByTheStaleDependency),
+	// so the applied beat's own id is identified by its label rather than
+	// Result.CreatedID — resultIDFor's ref-tracking fallback is specific to
+	// create_entity/create_thread edits and plays no part here.
+	beforeUndo, err := env.beats.ListByThread(context.Background(), th.ID)
+	if err != nil {
+		t.Fatalf("ListByThread before Undo: %v", err)
+	}
+	if len(beforeUndo) != 1 || beforeUndo[0].Label != "무관한 장면의 비트" {
+		t.Fatalf("beats before Undo = %+v, want exactly the accepted one", beforeUndo)
+	}
+
+	// Undoing the UNRELATED structural batch must leave this beat alone.
+	if err := env.svc.Undo(context.Background(), now()+2, env.project.ID, batchID); err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	afterUndo, err := env.beats.ListByThread(context.Background(), th.ID)
+	if err != nil {
+		t.Fatalf("ListByThread after Undo: %v", err)
+	}
+	if len(afterUndo) != 1 || afterUndo[0].Label != "무관한 장면의 비트" {
+		t.Fatalf("beats after Undo = %+v, want the unrelated beat still there — it never depended on the undone batch", afterUndo)
+	}
+}
+
+// TestAccept_forecast_addBeatWithoutItsStructuralSiblingRefusesWithADependencyError
+// is review finding f3: accepting a forecast add_beat item without its
+// structural sibling (the scene it names by node_ref) — reachable from
+// ProposalInbox, since unchecking an auto-selected dependency does not also
+// uncheck the dependent — must fail with the same friendly "depends on …,
+// which has not been accepted" error every other dependency gate in this
+// file gives, not storyops' raw "scene ref/id not found".
+func TestAccept_forecast_addBeatWithoutItsStructuralSiblingRefusesWithADependencyError(t *testing.T) {
+	env := newTestEnv(t)
+	th, err := env.threads.Create(context.Background(), thread.NewInput{ProjectID: env.project.ID, Name: "주 갈래"})
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	sub, _ := mustSubmitForecast(t, env, []ItemInput{
+		{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "맞선 장면", AfterNodeID: env.sceneID}},
+		{Op: storyops.Op{Type: "add_beat", ThreadID: th.ID, NodeRef: "s1", Label: "맞선 비트"}},
+	})
+	beatItemID := sub.Items[1].ID
+
+	// Accept ONLY the add_beat item — its structural sibling (the scene it
+	// depends on) is deliberately left pending/unrequested.
+	res, err := env.svc.Accept(context.Background(), now(), env.project.ID, []string{beatItemID}, nil)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	if len(res.Items) != 1 || res.Items[0].Status != StatusFailed {
+		t.Fatalf("items = %+v, want the add_beat item refused", res.Items)
+	}
+	msg := res.Items[0].Result.Error
+	if !strings.Contains(msg, "depends on") || !strings.Contains(msg, "has not been accepted") {
+		t.Errorf("error = %q, want the friendly dependency-missing message, not a raw storyops failure", msg)
 	}
 }

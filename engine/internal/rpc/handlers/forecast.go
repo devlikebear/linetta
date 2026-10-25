@@ -167,26 +167,34 @@ func ListForecasts(svc *forecast.Service, projects *project.Repo, nodes *node.Re
 func SelectForecast(svc *forecast.Service, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {
+			ProjectID  string `json:"project_id"`
 			ForecastID string `json:"forecast_id"`
 			BranchID   string `json:"branch_id"`
 		}
-		if err := json.Unmarshal(params, &in); err != nil ||
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" ||
 			strings.TrimSpace(in.ForecastID) == "" || strings.TrimSpace(in.BranchID) == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		if svc == nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: "forecasts are not available"}
 		}
-		f, err := svc.Select(ctx, now(), in.ForecastID, in.BranchID)
+		f, err := svc.Select(ctx, now(), in.ProjectID, in.ForecastID, in.BranchID)
 		if err != nil {
 			if errors.Is(err, forecast.ErrNotFound) {
 				return nil, rpc.NotFound(rpc.ReasonForecastNotFound, err.Error())
 			}
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
 		}
+		// The selection itself already succeeded and committed — only the
+		// staleness warning on top of it is still in flight, so a failure
+		// here must not be reported as stale:false (indistinguishable from
+		// "actually fresh") or swallowed into a refusal of a select that
+		// already happened. Surface it as its own error instead (review
+		// finding f7, 2026-10-25); ListForecasts already does the same for
+		// the equivalent failure in List.
 		reasons, err := svc.Stale(ctx, f)
 		if err != nil {
-			reasons = nil
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(struct {
 			OK      bool                   `json:"ok"`
@@ -221,15 +229,17 @@ func ClearForecastSelection(svc *forecast.Service) rpc.Handler {
 func DeleteForecast(svc *forecast.Service) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {
+			ProjectID  string `json:"project_id"`
 			ForecastID string `json:"forecast_id"`
 		}
-		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ForecastID) == "" {
+		if err := json.Unmarshal(params, &in); err != nil ||
+			strings.TrimSpace(in.ProjectID) == "" || strings.TrimSpace(in.ForecastID) == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
 		}
 		if svc == nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: "forecasts are not available"}
 		}
-		if err := svc.Delete(ctx, in.ForecastID); err != nil {
+		if err := svc.Delete(ctx, in.ProjectID, in.ForecastID); err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(struct {

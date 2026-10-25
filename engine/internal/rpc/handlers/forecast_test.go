@@ -22,6 +22,7 @@ import (
 )
 
 type forecastFix struct {
+	st           *store.Store
 	svc          *forecast.Service
 	proposalsSvc *proposals.Service
 	projects     *project.Repo
@@ -75,7 +76,7 @@ func newForecastHandlerFixture(t *testing.T) forecastFix {
 	proposalsSvc := proposals.New(st, so, entities, threads, beats, facts, nodes, projects, nil).WithForecasts(svc)
 
 	return forecastFix{
-		svc: svc, proposalsSvc: proposalsSvc, projects: projects, nodes: nodes,
+		st: st, svc: svc, proposalsSvc: proposalsSvc, projects: projects, nodes: nodes,
 		entities: entities, threads: threads, beats: beats,
 		pID: p.ID, sceneID: sceneID, now: func() int64 { return 2000 },
 	}
@@ -167,7 +168,7 @@ func TestSelectForecast_warnsOnStaleButSucceeds(t *testing.T) {
 	}
 
 	h := SelectForecast(f.svc, f.now)
-	params, _ := json.Marshal(map[string]any{"forecast_id": saved.ID, "branch_id": "b1"})
+	params, _ := json.Marshal(map[string]any{"project_id": f.pID, "forecast_id": saved.ID, "branch_id": "b1"})
 	raw, err := h(ctx, params)
 	if err != nil {
 		t.Fatalf("handler error: %v", err)
@@ -196,9 +197,112 @@ func TestSelectForecast_warnsOnStaleButSucceeds(t *testing.T) {
 func TestSelectForecast_unknownForecastID(t *testing.T) {
 	f := newForecastHandlerFixture(t)
 	h := SelectForecast(f.svc, f.now)
-	params, _ := json.Marshal(map[string]any{"forecast_id": "no-such", "branch_id": "b1"})
+	params, _ := json.Marshal(map[string]any{"project_id": f.pID, "forecast_id": "no-such", "branch_id": "b1"})
 	if _, err := h(context.Background(), params); err == nil {
 		t.Fatal("want an error for an unknown forecast id")
+	}
+}
+
+// Review finding f2: forecast.select/delete used to take no project_id at
+// all, so a forecast_id left over from a project the writer has since
+// navigated away from (ForecastSheet does not reset mid-navigation) could
+// change or delete a DIFFERENT project's forecast with no error at all.
+// Select and Delete now scope to the given project_id the same way every
+// other forecast.* method already does.
+func TestSelectForecast_refusesAForecastThatBelongsToAnotherProject(t *testing.T) {
+	f := newForecastHandlerFixture(t)
+	ctx := context.Background()
+	saved, _, err := f.svc.Save(ctx, f.now(), forecast.SaveInput{
+		ProjectID: f.pID, Divergence: "질문", Horizon: 3, Branches: twoHandlerBranches(),
+	}, forecast.SourceAgent)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	other, err := f.projects.Create(ctx, 1, project.NewInput{
+		Title: "다른 작품", Genres: []string{}, LengthTarget: "short", DefaultPOV: "first",
+	})
+	if err != nil {
+		t.Fatalf("create other project: %v", err)
+	}
+
+	h := SelectForecast(f.svc, f.now)
+	params, _ := json.Marshal(map[string]any{"project_id": other.ID, "forecast_id": saved.ID, "branch_id": "b1"})
+	if _, err := h(ctx, params); err == nil {
+		t.Fatal("want an error selecting a forecast with a project_id that does not own it")
+	}
+
+	if _, found, err := f.svc.Selected(ctx, f.pID); err != nil || found {
+		t.Fatalf("Selected on the real project = found=%v err=%v, want none — the cross-project select must not have landed", found, err)
+	}
+}
+
+func TestDeleteForecast_doesNotDeleteAForecastThatBelongsToAnotherProject(t *testing.T) {
+	f := newForecastHandlerFixture(t)
+	ctx := context.Background()
+	saved, _, err := f.svc.Save(ctx, f.now(), forecast.SaveInput{
+		ProjectID: f.pID, Divergence: "질문", Horizon: 3, Branches: twoHandlerBranches(),
+	}, forecast.SourceAgent)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	other, err := f.projects.Create(ctx, 1, project.NewInput{
+		Title: "다른 작품", Genres: []string{}, LengthTarget: "short", DefaultPOV: "first",
+	})
+	if err != nil {
+		t.Fatalf("create other project: %v", err)
+	}
+
+	h := DeleteForecast(f.svc)
+	// Not-found-shaped, same as DeleteForecast's own "tolerant, not an
+	// error" doc comment for an id that never existed at all.
+	params, _ := json.Marshal(map[string]any{"project_id": other.ID, "forecast_id": saved.ID})
+	if _, err := h(ctx, params); err != nil {
+		t.Fatalf("delete handler with the wrong project_id: %v", err)
+	}
+
+	rows, err := f.svc.List(ctx, f.pID)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %+v, want the forecast to still exist — delete named a project that does not own it", rows)
+	}
+}
+
+// Review finding f7: SelectForecast used to discard a failure from its own
+// staleness check and report stale:false — indistinguishable from an
+// actually-fresh forecast. The selection itself (already committed) must
+// not be reported as a clean success when the warning on top of it could
+// not actually be computed.
+func TestSelectForecast_surfacesAStalenessCheckFailureInsteadOfReportingFresh(t *testing.T) {
+	f := newForecastHandlerFixture(t)
+	ctx := context.Background()
+	saved, _, err := f.svc.Save(ctx, f.now(), forecast.SaveInput{
+		ProjectID: f.pID, Divergence: "질문", Horizon: 3, Branches: twoHandlerBranches(),
+	}, forecast.SourceAgent)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Break Stale's own read path (Inputs -> direction.Repo.ListSceneIntents)
+	// without touching anything Select itself reads (only the forecasts
+	// table) — so Select still succeeds and only the staleness check fails.
+	if _, err := f.st.DB().ExecContext(ctx, "DROP TABLE scene_intents"); err != nil {
+		t.Fatalf("drop scene_intents: %v", err)
+	}
+
+	h := SelectForecast(f.svc, f.now)
+	params, _ := json.Marshal(map[string]any{"project_id": f.pID, "forecast_id": saved.ID, "branch_id": "b1"})
+	raw, err := h(ctx, params)
+	if err == nil {
+		t.Fatalf("want an error when the staleness check itself fails, got an ok response: %s", raw)
+	}
+
+	// The selection must still have committed — Select itself completed
+	// before Stale's own read failed.
+	sel, found, err := f.svc.Selected(ctx, f.pID)
+	if err != nil || !found || sel.SelectedBranch != "b1" {
+		t.Fatalf("Selected = %+v found=%v err=%v, want the branch still selected despite the staleness check failing", sel, found, err)
 	}
 }
 
@@ -211,7 +315,7 @@ func TestClearForecastSelectionAndDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if _, err := f.svc.Select(ctx, f.now(), saved.ID, "b1"); err != nil {
+	if _, err := f.svc.Select(ctx, f.now(), f.pID, saved.ID, "b1"); err != nil {
 		t.Fatalf("Select: %v", err)
 	}
 
@@ -225,7 +329,7 @@ func TestClearForecastSelectionAndDelete(t *testing.T) {
 	}
 
 	deleteH := DeleteForecast(f.svc)
-	params, _ = json.Marshal(map[string]any{"forecast_id": saved.ID})
+	params, _ = json.Marshal(map[string]any{"project_id": f.pID, "forecast_id": saved.ID})
 	if _, err := deleteH(ctx, params); err != nil {
 		t.Fatalf("delete handler: %v", err)
 	}
@@ -248,7 +352,7 @@ func TestUndoProposals_revertsStructuralBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if _, err := f.svc.Select(ctx, f.now(), saved.ID, "b1"); err != nil {
+	if _, err := f.svc.Select(ctx, f.now(), f.pID, saved.ID, "b1"); err != nil {
 		t.Fatalf("Select: %v", err)
 	}
 

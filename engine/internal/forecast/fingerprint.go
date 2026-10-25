@@ -26,12 +26,19 @@ import (
 )
 
 // field separates the columns of one row before hashing; unit separates rows
-// of a group. Both are control characters that cannot appear in the
-// free-text fields being hashed (summaries, claims, …), so two different
-// rows can never collide into the same bytes under concatenation.
+// of a group; listSep separates the elements of a list-valued column
+// (aliases, Keep/Avoid, an attribute map's entries) from each other. All
+// three are control characters that cannot appear in the free-text fields
+// being hashed (summaries, claims, aliases, …), so two different rows — or
+// two different groupings of the same list elements — can never collide
+// into the same bytes under concatenation. listSep is its own character,
+// distinct from field/unit: reusing either of those for a nested list would
+// let a list's own join reintroduce exactly the collision this separation
+// scheme exists to rule out one level up (review finding f6, 2026-10-25).
 const (
-	field = "\x1f"
-	unit  = "\x1e"
+	field   = "\x1f"
+	unit    = "\x1e"
+	listSep = "\x1d"
 )
 
 // Deps is what Inputs needs to read a project's canon. Every repo is the
@@ -58,12 +65,16 @@ type Deps struct {
 // never read here — none of them is canon (phase-4-forecast.md's own
 // list of what a forecast's input fingerprint excludes).
 type InputHashes struct {
-	Project       string            `json:"project"`
-	Outline       string            `json:"outline"`
+	Project string `json:"project"`
+	Outline string `json:"outline"`
+	// Episodes/Entities/Relationships/Facts are per-row, keyed by id — not a
+	// single aggregate hash — so Diff can report how many rows actually
+	// changed (review finding f5, 2026-10-25): an aggregate hash can only
+	// say "this group differs", never "N of them".
 	Episodes      map[string]string `json:"episodes"`
-	Entities      string            `json:"entities"`
-	Relationships string            `json:"relationships"`
-	Facts         string            `json:"facts"`
+	Entities      map[string]string `json:"entities"`
+	Relationships map[string]string `json:"relationships"`
+	Facts         map[string]string `json:"facts"`
 	Plot          string            `json:"plot"`
 	Direction     string            `json:"direction"`
 	// EpisodeLabels maps an episode's node id to its current label, for
@@ -74,28 +85,61 @@ type InputHashes struct {
 
 // Fingerprint is the single sha256 a forecast row stores: a hash over every
 // group hash, sorted group-name first so the result does not depend on
-// struct field order. Episodes' per-episode hashes are folded in the same
-// way, keyed by node id.
+// struct field order. Episodes/Entities/Relationships/Facts' per-row hashes
+// are folded in the same way, each keyed by its own row id.
 func (h InputHashes) Fingerprint() string {
 	lines := []string{
 		"project" + field + h.Project,
 		"outline" + field + h.Outline,
-		"entities" + field + h.Entities,
-		"relationships" + field + h.Relationships,
-		"facts" + field + h.Facts,
 		"plot" + field + h.Plot,
 		"direction" + field + h.Direction,
 	}
-	episodeIDs := make([]string, 0, len(h.Episodes))
-	for id := range h.Episodes {
-		episodeIDs = append(episodeIDs, id)
-	}
-	sort.Strings(episodeIDs)
-	for _, id := range episodeIDs {
-		lines = append(lines, "episode:"+id+field+h.Episodes[id])
-	}
+	lines = append(lines, foldGroup("episode", h.Episodes)...)
+	lines = append(lines, foldGroup("entity", h.Entities)...)
+	lines = append(lines, foldGroup("relationship", h.Relationships)...)
+	lines = append(lines, foldGroup("fact", h.Facts)...)
 	sort.Strings(lines)
 	return hashLines(lines)
+}
+
+// foldGroup turns a per-row hash map into one "prefix:id"+hash line per
+// row, sorted by id so the result does not depend on map iteration order —
+// Fingerprint's own convention, shared by every per-row group.
+func foldGroup(prefix string, rows map[string]string) []string {
+	ids := make([]string, 0, len(rows))
+	for id := range rows {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	lines := make([]string, 0, len(ids))
+	for _, id := range ids {
+		lines = append(lines, prefix+":"+id+field+rows[id])
+	}
+	return lines
+}
+
+// changedRowIDs reports, sorted, every id present (with a hash) in either
+// old or now whose hash differs between them — added, removed and changed
+// rows all count, since each one row is something the writer's forecast was
+// not actually drawn from. Shared by every per-row group's Diff entry.
+func changedRowIDs(old, now map[string]string) []string {
+	changed := map[string]bool{}
+	for id, h := range old {
+		if now[id] != h {
+			changed[id] = true
+		}
+	}
+	for id, h := range now {
+		if old[id] != h {
+			changed[id] = true
+		}
+	}
+	ids := make([]string, 0, len(changed))
+	for id := range changed {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // StaleReason names one group of canon that changed between two
@@ -120,11 +164,17 @@ func Diff(old, now InputHashes) []StaleReason {
 	}
 	group("project", old.Project, now.Project)
 	group("outline", old.Outline, now.Outline)
-	group("entities", old.Entities, now.Entities)
-	group("relationships", old.Relationships, now.Relationships)
-	group("facts", old.Facts, now.Facts)
 	group("plot", old.Plot, now.Plot)
 	group("direction", old.Direction, now.Direction)
+
+	rowGroup := func(name string, oldRows, nowRows map[string]string) {
+		if ids := changedRowIDs(oldRows, nowRows); len(ids) > 0 {
+			reasons = append(reasons, StaleReason{Group: name, Count: len(ids)})
+		}
+	}
+	rowGroup("entities", old.Entities, now.Entities)
+	rowGroup("relationships", old.Relationships, now.Relationships)
+	rowGroup("facts", old.Facts, now.Facts)
 
 	changedEpisodes := map[string]bool{}
 	for id, h := range old.Episodes {
@@ -170,10 +220,21 @@ func Inputs(ctx context.Context, deps Deps, projectID string) (InputHashes, erro
 	if err != nil {
 		return InputHashes{}, err
 	}
+	genres := append([]string{}, proj.Genres...)
+	sort.Strings(genres)
 	out.Project = hashLines([]string{
 		"synopsis" + field + proj.Synopsis,
 		"outline" + field + proj.Outline,
 		"style_notes" + field + proj.StyleNotes,
+		// Genres/DefaultPOV/LengthTarget feed the brief exactly the same way
+		// Synopsis/Outline/StyleNotes above do (storycontext/builder.go
+		// renders all six into the Project section) — missing them here let
+		// a writer change the project's genre or POV without the forecast
+		// drawn from the old one ever going stale (review finding f4,
+		// 2026-10-25).
+		"genres" + field + strings.Join(genres, listSep),
+		"default_pov" + field + proj.DefaultPOV,
+		"length_target" + field + proj.LengthTarget,
 	})
 
 	nodes, err := deps.Nodes.ListByProject(ctx, projectID)
@@ -218,37 +279,34 @@ func Inputs(ctx context.Context, deps Deps, projectID string) (InputHashes, erro
 	if err != nil {
 		return InputHashes{}, err
 	}
-	entityLines := make([]string, 0, len(entities))
+	out.Entities = make(map[string]string, len(entities))
 	for _, e := range entities {
 		aliases := append([]string{}, e.Aliases...)
 		sort.Strings(aliases)
-		entityLines = append(entityLines, strings.Join([]string{
-			e.ID, e.Kind, e.Name, strings.Join(aliases, ","), e.Role, e.Summary, hashAttrs(e.Attributes),
+		out.Entities[e.ID] = hashLine(strings.Join([]string{
+			e.ID, e.Kind, e.Name, strings.Join(aliases, listSep), e.Role, e.Summary, hashAttrs(e.Attributes),
 		}, field))
 	}
-	out.Entities = hashLines(entityLines)
 
 	rels, err := deps.Relationships.ListByProject(ctx, projectID)
 	if err != nil {
 		return InputHashes{}, err
 	}
-	relLines := make([]string, 0, len(rels))
+	out.Relationships = make(map[string]string, len(rels))
 	for _, rel := range rels {
-		relLines = append(relLines, strings.Join([]string{
+		out.Relationships[rel.ID] = hashLine(strings.Join([]string{
 			rel.ID, rel.FromID, rel.ToID, rel.Label, rel.Notes,
 		}, field))
 	}
-	out.Relationships = hashLines(relLines)
 
 	facts, err := deps.Facts.List(ctx, fact.ListFilter{ProjectID: projectID, Limit: allFacts})
 	if err != nil {
 		return InputHashes{}, err
 	}
-	factLines := make([]string, 0, len(facts))
+	out.Facts = make(map[string]string, len(facts))
 	for _, f := range facts {
-		factLines = append(factLines, strings.Join([]string{f.ID, f.Claim, f.Result, f.Status}, field))
+		out.Facts[f.ID] = hashLine(strings.Join([]string{f.ID, f.Claim, f.Result, f.Status}, field))
 	}
-	out.Facts = hashLines(factLines)
 
 	threads, err := deps.Threads.ListByProject(ctx, projectID, true)
 	if err != nil {
@@ -299,7 +357,7 @@ func Inputs(ctx context.Context, deps Deps, projectID string) (InputHashes, erro
 		avoid := append([]string{}, si.Avoid...)
 		sort.Strings(avoid)
 		directionLines = append(directionLines, strings.Join([]string{
-			"intent", si.NodeID, si.Goal, strings.Join(keep, ","), strings.Join(avoid, ","),
+			"intent", si.NodeID, si.Goal, strings.Join(keep, listSep), strings.Join(avoid, listSep),
 		}, field))
 	}
 	out.Direction = hashLines(directionLines)
@@ -325,7 +383,7 @@ func hashAttrs(attrs map[string]string) string {
 	for _, k := range keys {
 		parts = append(parts, k+"="+attrs[k])
 	}
-	return strings.Join(parts, ",")
+	return strings.Join(parts, listSep)
 }
 
 // hashLines sorts lines (so the result does not depend on the order rows
@@ -340,5 +398,16 @@ func hashLines(lines []string) string {
 		h.Write([]byte(l))
 		h.Write([]byte(unit))
 	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// hashLine is hashLines for exactly one row — a per-row entry in a group
+// keyed by id (Entities/Relationships/Facts), where "sort many lines, then
+// sha256" would be wasted work and would needlessly store the row's own
+// free text in the stored input_hashes_json blob instead of a fixed-size
+// digest.
+func hashLine(s string) string {
+	h := sha256.New()
+	h.Write([]byte(s))
 	return hex.EncodeToString(h.Sum(nil))
 }

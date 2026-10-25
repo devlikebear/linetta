@@ -704,10 +704,16 @@ export const proposals = {
 export const forecast = {
   list: (projectId: string) =>
     rpcCall<{ forecasts: Forecast[] }>("forecast.list", { project_id: projectId }),
-  select: (forecastId: string, branchId: string) =>
-    rpcCall<SelectForecastResult>("forecast.select", { forecast_id: forecastId, branch_id: branchId }),
+  // project_id scopes select/delete to the caller's own project (review
+  // finding f2) — without it, a stale forecast_id left over from a project
+  // the writer has since navigated away from could change or delete a
+  // DIFFERENT project's forecast with no error at all.
+  select: (projectId: string, forecastId: string, branchId: string) =>
+    rpcCall<SelectForecastResult>("forecast.select", {
+      project_id: projectId, forecast_id: forecastId, branch_id: branchId,
+    }),
   clearSelection: (projectId: string) =>
     rpcCall<{ ok: boolean }>("forecast.clear_selection", { project_id: projectId }),
-  delete: (forecastId: string) =>
-    rpcCall<{ ok: boolean }>("forecast.delete", { forecast_id: forecastId }),
+  delete: (projectId: string, forecastId: string) =>
+    rpcCall<{ ok: boolean }>("forecast.delete", { project_id: projectId, forecast_id: forecastId }),
 };

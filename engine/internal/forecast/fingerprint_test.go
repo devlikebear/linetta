@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/project"
 )
 
 func TestInputs_sameDataSameHashRegardlessOfOrder(t *testing.T) {
@@ -37,8 +38,8 @@ VALUES (?, ?, 'character', ?, '[]', '', '', '{}', ?, ?)`,
 	if err != nil {
 		t.Fatalf("Inputs B: %v", err)
 	}
-	if hashA.Entities != hashB.Entities {
-		t.Errorf("Entities hash differs by insertion order: %q vs %q", hashA.Entities, hashB.Entities)
+	if !mapsEqual(hashA.Entities, hashB.Entities) {
+		t.Errorf("Entities hash differs by insertion order: %v vs %v", hashA.Entities, hashB.Entities)
 	}
 	// The two envs' own opening scenes have different (randomly generated)
 	// node ids, so their Outline/Episodes groups legitimately differ —
@@ -133,7 +134,7 @@ func TestInputs_entityEditChangesEntitiesGroup(t *testing.T) {
 		t.Fatalf("Inputs after: %v", err)
 	}
 
-	if before.Entities == after.Entities {
+	if mapsEqual(before.Entities, after.Entities) {
 		t.Error("entities hash did not change after an entity edit")
 	}
 	if before.Outline != after.Outline || before.Plot != after.Plot {
@@ -230,4 +231,153 @@ func TestInputs_revertingCanonRevertsHashes(t *testing.T) {
 	}
 }
 
+// Review finding f4: storycontext/builder.go renders Genres/DefaultPOV/
+// LengthTarget into the Project section of the brief right alongside
+// Synopsis/Outline/StyleNotes, so a forecast drawn from one genre/POV must
+// go stale once the writer changes it — the same way it already does for a
+// Synopsis edit (covered by TestInputs_entityEditChangesEntitiesGroup's
+// sibling tests above, none of which touch these three fields).
+func TestInputs_projectGenresPOVOrLengthTargetChangeStalesTheProjectGroup(t *testing.T) {
+	ctx := context.Background()
+	env := newTestEnv(t)
+
+	before, err := Inputs(ctx, env.deps, env.project.ID)
+	if err != nil {
+		t.Fatalf("Inputs before: %v", err)
+	}
+
+	if _, err := env.projects.Update(ctx, 1_000, project.UpdateInput{
+		ID:           env.project.ID,
+		Genres:       &[]string{"스릴러"},
+		DefaultPOV:   strPtr("first"),
+		LengthTarget: strPtr("novel"),
+	}); err != nil {
+		t.Fatalf("update project: %v", err)
+	}
+
+	after, err := Inputs(ctx, env.deps, env.project.ID)
+	if err != nil {
+		t.Fatalf("Inputs after: %v", err)
+	}
+	if before.Project == after.Project {
+		t.Error("project hash did not change after genres/default_pov/length_target changed")
+	}
+	reasons := Diff(before, after)
+	found := false
+	for _, r := range reasons {
+		if r.Group == "project" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Diff did not report the project group changed: %+v", reasons)
+	}
+}
+
+// Review finding f5: Diff used to hardcode Count:1 for every non-episode
+// group regardless of how many rows actually changed, so the writer-facing
+// "인물 {count}개" banner always said 1 character even when several did.
+// Entities/Relationships/Facts are now per-row maps precisely so this count
+// is real — pinned here with three entities and two edits.
+func TestDiff_entitiesCountIsTheNumberOfRowsThatActuallyChanged(t *testing.T) {
+	ctx := context.Background()
+	env := newTestEnv(t)
+
+	e1, err := env.entities.Create(ctx, 1_000, entity.NewInput{ProjectID: env.project.ID, Kind: "character", Name: "하린"})
+	if err != nil {
+		t.Fatalf("create entity 1: %v", err)
+	}
+	e2, err := env.entities.Create(ctx, 1_001, entity.NewInput{ProjectID: env.project.ID, Kind: "character", Name: "유진"})
+	if err != nil {
+		t.Fatalf("create entity 2: %v", err)
+	}
+	if _, err := env.entities.Create(ctx, 1_002, entity.NewInput{ProjectID: env.project.ID, Kind: "character", Name: "untouched"}); err != nil {
+		t.Fatalf("create entity 3: %v", err)
+	}
+
+	before, err := Inputs(ctx, env.deps, env.project.ID)
+	if err != nil {
+		t.Fatalf("Inputs before: %v", err)
+	}
+
+	if err := env.entities.Update(ctx, 1_003, entity.UpdateInput{ID: e1.ID, Summary: strPtr("수정 1")}); err != nil {
+		t.Fatalf("update entity 1: %v", err)
+	}
+	if err := env.entities.Update(ctx, 1_004, entity.UpdateInput{ID: e2.ID, Summary: strPtr("수정 2")}); err != nil {
+		t.Fatalf("update entity 2: %v", err)
+	}
+
+	after, err := Inputs(ctx, env.deps, env.project.ID)
+	if err != nil {
+		t.Fatalf("Inputs after: %v", err)
+	}
+
+	reasons := Diff(before, after)
+	for _, r := range reasons {
+		if r.Group == "entities" {
+			if r.Count != 2 {
+				t.Errorf("entities stale count = %d, want 2 (the untouched third entity must not be counted)", r.Count)
+			}
+			return
+		}
+	}
+	t.Fatalf("Diff did not report the entities group changed: %+v", reasons)
+}
+
+// Review finding f6: hashAttrs and the comma-joined alias/Keep/Avoid lists
+// used to collide a single attribute whose value itself contains a comma
+// with a later split of that same attribute into two — both produced the
+// byte-identical "a=1,b=2" line, so the entities hash (and Diff's count)
+// missed the change entirely. listSep (a control character, not a comma)
+// closes that gap.
+func TestInputs_attributeContainingACommaDoesNotCollideWithASplitAttribute(t *testing.T) {
+	ctx := context.Background()
+	env := newTestEnv(t)
+
+	e, err := env.entities.Create(ctx, 1_000, entity.NewInput{ProjectID: env.project.ID, Kind: "character", Name: "하린"})
+	if err != nil {
+		t.Fatalf("create entity: %v", err)
+	}
+	if err := env.entities.Update(ctx, 1_001, entity.UpdateInput{
+		ID: e.ID, Attributes: &map[string]string{"a": "1,b=2"},
+	}); err != nil {
+		t.Fatalf("set initial attribute: %v", err)
+	}
+
+	before, err := Inputs(ctx, env.deps, env.project.ID)
+	if err != nil {
+		t.Fatalf("Inputs before: %v", err)
+	}
+
+	if err := env.entities.Update(ctx, 1_002, entity.UpdateInput{
+		ID: e.ID, Attributes: &map[string]string{"a": "1", "b": "2"},
+	}); err != nil {
+		t.Fatalf("update entity attributes: %v", err)
+	}
+
+	after, err := Inputs(ctx, env.deps, env.project.ID)
+	if err != nil {
+		t.Fatalf("Inputs after: %v", err)
+	}
+	if mapsEqual(before.Entities, after.Entities) {
+		t.Error("splitting one comma-containing attribute into two did not change the entities hash — a real change collided with the old state")
+	}
+}
+
 func strPtr(s string) *string { return &s }
+
+// mapsEqual compares two per-row hash maps (Entities/Relationships/Facts) —
+// Go has no == for maps, and reflect.DeepEqual would also report two nil
+// maps as equal to two empty-but-non-nil ones differently from what these
+// tests mean by "unchanged", so a small explicit comparison is clearer here.
+func mapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}

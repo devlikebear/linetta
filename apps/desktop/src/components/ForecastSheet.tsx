@@ -71,7 +71,7 @@ export function ForecastSheet({ projectId, onClose, onOpenEntity, onOpenFact, on
     async (f: Forecast, branch: ForecastBranch) => {
       setBusyId(f.id);
       try {
-        const res = await forecastApi.select(f.id, branch.id);
+        const res = await forecastApi.select(projectId, f.id, branch.id);
         if (res.stale) {
           showToast(t("forecast.toast.selectedStale"));
         } else {
@@ -84,7 +84,7 @@ export function ForecastSheet({ projectId, onClose, onOpenEntity, onOpenFact, on
         setBusyId(null);
       }
     },
-    [showToast, t],
+    [projectId, showToast, t],
   );
 
   const deselect = useCallback(
@@ -107,7 +107,7 @@ export function ForecastSheet({ projectId, onClose, onOpenEntity, onOpenFact, on
     async (f: Forecast) => {
       setBusyId(f.id);
       try {
-        await forecastApi.delete(f.id);
+        await forecastApi.delete(projectId, f.id);
         showToast(t("forecast.toast.deleted"));
         setRevision((n) => n + 1);
       } catch (e) {
@@ -116,7 +116,7 @@ export function ForecastSheet({ projectId, onClose, onOpenEntity, onOpenFact, on
         setBusyId(null);
       }
     },
-    [showToast, t],
+    [projectId, showToast, t],
   );
 
   const requestReflection = useCallback(

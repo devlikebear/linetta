@@ -119,10 +119,22 @@ func (s *Service) List(ctx context.Context, projectID string) ([]ListedForecast,
 // still be selected: the engine does not gate this (phase-4-forecast.md's
 // 4.C.1 "정책을 한 곳(엔진)에 둔다"); callers surface the staleness as a
 // warning, not a refusal.
-func (s *Service) Select(ctx context.Context, now int64, forecastID, branchID string) (Forecast, error) {
+//
+// projectID must name the forecast's own project, or Select reports
+// ErrNotFound exactly as it would for an id that does not exist at all —
+// the same ownership-check shape Get's own doc comment describes every ref
+// lookup in this codebase follows. Without this, a caller holding a stale
+// forecast_id from a project the writer has since navigated away from (the
+// desktop app's ForecastSheet does not unmount mid-navigation) could change
+// a DIFFERENT project's selected branch with no error at all (review
+// finding f2, 2026-10-25).
+func (s *Service) Select(ctx context.Context, now int64, projectID, forecastID, branchID string) (Forecast, error) {
 	f, err := s.get(ctx, forecastID)
 	if err != nil {
 		return Forecast{}, err
+	}
+	if f.ProjectID != strings.TrimSpace(projectID) {
+		return Forecast{}, ErrNotFound
 	}
 	branchID = strings.TrimSpace(branchID)
 	found := false
@@ -166,11 +178,15 @@ func (s *Service) ClearSelection(ctx context.Context, projectID string) error {
 	return err
 }
 
-// Delete removes one forecast. Not an error when it did not exist —
-// proposals.Reject's own "retrying a batch request" tolerance, applied to
-// a single delete.
-func (s *Service) Delete(ctx context.Context, forecastID string) error {
-	_, err := s.store.DB().ExecContext(ctx, `DELETE FROM forecasts WHERE id = ?`, forecastID)
+// Delete removes one forecast, scoped to projectID so a forecast_id left
+// over from a project the caller is no longer looking at cannot delete
+// another project's row (review finding f2, 2026-10-25 — same ownership
+// concern as Select above). Not an error when it did not exist, or existed
+// in a different project — proposals.Reject's own "retrying a batch
+// request" tolerance, applied to a single delete.
+func (s *Service) Delete(ctx context.Context, projectID, forecastID string) error {
+	_, err := s.store.DB().ExecContext(ctx,
+		`DELETE FROM forecasts WHERE id = ? AND project_id = ?`, forecastID, projectID)
 	return err
 }
 

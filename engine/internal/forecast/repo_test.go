@@ -258,14 +258,14 @@ func TestSelect_oneSelectionPerProject(t *testing.T) {
 		t.Fatalf("Save f2: %v", err)
 	}
 
-	if _, err := svc.Select(ctx, 10_002, f1.ID, "b1"); err != nil {
+	if _, err := svc.Select(ctx, 10_002, env.project.ID, f1.ID, "b1"); err != nil {
 		t.Fatalf("Select f1: %v", err)
 	}
 	if _, found, err := svc.Selected(ctx, env.project.ID); err != nil || !found {
 		t.Fatalf("Selected after f1 select: found=%v err=%v", found, err)
 	}
 
-	if _, err := svc.Select(ctx, 10_003, f2.ID, "b2"); err != nil {
+	if _, err := svc.Select(ctx, 10_003, env.project.ID, f2.ID, "b2"); err != nil {
 		t.Fatalf("Select f2: %v", err)
 	}
 	sel, found, err := svc.Selected(ctx, env.project.ID)
@@ -300,7 +300,7 @@ func TestSelect_rejectsUnknownBranchID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if _, err := svc.Select(ctx, 10_001, f.ID, "b99"); err == nil {
+	if _, err := svc.Select(ctx, 10_001, env.project.ID, f.ID, "b99"); err == nil {
 		t.Fatal("want an error selecting a branch id that does not exist")
 	}
 }
@@ -314,7 +314,7 @@ func TestClearSelection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if _, err := svc.Select(ctx, 10_001, f.ID, "b1"); err != nil {
+	if _, err := svc.Select(ctx, 10_001, env.project.ID, f.ID, "b1"); err != nil {
 		t.Fatalf("Select: %v", err)
 	}
 	if err := svc.ClearSelection(ctx, env.project.ID); err != nil {
@@ -339,7 +339,7 @@ func TestDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save: %v", err)
 	}
-	if err := svc.Delete(ctx, f.ID); err != nil {
+	if err := svc.Delete(ctx, env.project.ID, f.ID); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
 	rows, err := svc.List(ctx, env.project.ID)
@@ -351,7 +351,7 @@ func TestDelete(t *testing.T) {
 	}
 
 	// Deleting an id that no longer exists is not an error.
-	if err := svc.Delete(ctx, f.ID); err != nil {
+	if err := svc.Delete(ctx, env.project.ID, f.ID); err != nil {
 		t.Fatalf("Delete again: %v", err)
 	}
 }
