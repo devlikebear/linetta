@@ -271,6 +271,22 @@ func (s *Service) updateItemUndoBatch(ctx context.Context, tx dbTx, itemID, batc
 	return err
 }
 
+// restoreItemFull writes back an item's status, result, status_at and
+// undo_batch_id together in one statement — proposals.Undo's compensation
+// path, where a failed storyops.UndoApply means every column the earlier
+// "carry to pending" transaction touched must return to exactly what it
+// was, not just the ones a narrower helper happens to cover.
+func (s *Service) restoreItemFull(ctx context.Context, tx dbTx, it Item) error {
+	resultJSON, err := json.Marshal(it.Result)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx,
+		`UPDATE story_proposal_items SET status = ?, result_json = ?, status_at = ?, undo_batch_id = ? WHERE id = ?`,
+		it.Status, string(resultJSON), it.StatusAt, nullableString(it.UndoBatchID), it.ID)
+	return err
+}
+
 // listItemsByUndoBatch returns every item tagged with batchID in
 // projectID — proposals.undo's own "what does this batch cover" query.
 func (s *Service) listItemsByUndoBatch(ctx context.Context, tx dbTx, projectID, batchID string) ([]Item, error) {
