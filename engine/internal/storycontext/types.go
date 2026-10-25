@@ -162,11 +162,51 @@ type DirectionBrief struct {
 	SceneGoal          string   `json:"scene_goal,omitempty"`
 	Keep               []string `json:"keep,omitempty"`
 	Avoid              []string `json:"avoid,omitempty"`
+	// PlannedBranch is the writer's chosen forecast branch (story-assist
+	// Phase 4), rendered right after the scene intent above: a plan, never
+	// canon, and never written by an MCP tool — only the app's direct
+	// forecast.select RPC sets it. Nil when nothing is selected. Rides the
+	// same ContextKeyDirection switch as the rest of this struct on
+	// purpose — see ContextKeyDirection's own comment for why this package
+	// does not mint a key for every section.
+	PlannedBranch *PlannedBranchBrief `json:"planned_branch,omitempty"`
+}
+
+// PlannedBranchBrief is DirectionBrief's view of the selected forecast
+// branch: just enough to brief an agent, not the full comparison (risks,
+// decisions, …) the writer already looked at in the forecast sheet.
+type PlannedBranchBrief struct {
+	Title   string              `json:"title"`
+	Premise string              `json:"premise"`
+	Beats   []PlannedBranchBeat `json:"beats,omitempty"`
+	// Stale is true once canon has changed since this branch was drawn.
+	// StaleReasons names what, in the app's own language — see
+	// DirectionStaleReason.
+	Stale        bool                   `json:"stale,omitempty"`
+	StaleReasons []DirectionStaleReason `json:"stale_reasons,omitempty"`
+}
+
+// PlannedBranchBeat is one episode-sized beat of the selected branch. Kept
+// as structured data rather than a pre-formatted string so render.go can
+// phrase "episode_offset 이후" in the brief's own language (ko/en/ja).
+type PlannedBranchBeat struct {
+	EpisodeOffset int    `json:"episode_offset"`
+	Summary       string `json:"summary"`
+}
+
+// DirectionStaleReason mirrors forecast.StaleReason without this package
+// importing the forecast package — the same reason DirectionFocus and
+// DirectionSceneIntent do not import direction's concrete types.
+type DirectionStaleReason struct {
+	Group         string   `json:"group"`
+	Count         int      `json:"count,omitempty"`
+	EpisodeLabels []string `json:"episode_labels,omitempty"`
 }
 
 // Empty reports whether there is nothing in the brief worth a section.
 func (d DirectionBrief) Empty() bool {
-	return strings.TrimSpace(d.Focus) == "" && strings.TrimSpace(d.SceneGoal) == "" && len(d.Keep) == 0 && len(d.Avoid) == 0
+	return strings.TrimSpace(d.Focus) == "" && strings.TrimSpace(d.SceneGoal) == "" &&
+		len(d.Keep) == 0 && len(d.Avoid) == 0 && d.PlannedBranch == nil
 }
 
 // PreviewCounts is the structural summary of a built Context, used by the

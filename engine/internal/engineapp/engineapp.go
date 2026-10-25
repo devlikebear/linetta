@@ -22,6 +22,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/importmd"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
@@ -276,6 +277,16 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// story brief's Direction section just below — one table, one repo.
 	directionRepo := direction.NewRepo(st, nodes, projects)
 
+	// Possible continuations an agent drafted for the writer to compare
+	// (story-assist Phase 4). Shared between linetta_save_forecast
+	// (below), the forecast.* RPC handlers (below) and the story brief's
+	// Direction section just above's planned-branch note — one table, one
+	// Service, the same discipline directionRepo follows.
+	forecastSvc := forecast.New(st, forecast.Deps{
+		Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships,
+		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
+	})
+
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
@@ -288,7 +299,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		// nothing anywhere goes red — which is what
 		// TestProductionStoryContextBuilderCarriesEverySource guards.
 		WithSkillSource(skillBriefSource{store: skillsStore}).
-		WithDirectionSource(directionBriefSource{repo: directionRepo})
+		WithDirectionSource(directionBriefSource{repo: directionRepo, forecast: forecastSvc})
 
 	// Linetta Works publishing (Phase 3). Registered here, before the MCP
 	// host, because the publish tools publish through the same service.

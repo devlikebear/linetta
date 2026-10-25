@@ -801,3 +801,99 @@ func TestApplyContextSelection_directionFalseRemovesIt(t *testing.T) {
 		t.Fatalf("Direction=false must clear the brief's direction, got %+v", got.Direction)
 	}
 }
+
+// Story-assist Phase 4: the selected forecast branch, rendered right after
+// the scene intent inside the Writer's Direction section.
+
+func TestBuildUser_plannedBranch_absentOmitsIt(t *testing.T) {
+	c := Context{SceneLabel: "씬 1", Direction: DirectionBrief{Focus: "초점"}}
+	got := buildUser(c)
+	if strings.Contains(got, "고른 다음 전개") {
+		t.Fatalf("no planned branch was set, but the section rendered. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_plannedBranch_rendersTitlePremiseAndBeats(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction: DirectionBrief{
+			Focus: "초점",
+			PlannedBranch: &PlannedBranchBrief{
+				Title:   "맞선다",
+				Premise: "주인공이 물러서지 않는다.",
+				Beats:   []PlannedBranchBeat{{EpisodeOffset: 1, Summary: "첫 비트"}},
+			},
+		},
+	}
+	got := buildUser(c)
+	for _, want := range []string{
+		"고른 다음 전개 (계획 — 정사 아님",
+		"제목: 맞선다",
+		"전제: 주인공이 물러서지 않는다.",
+		"1화 이후: 첫 비트",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q. got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "정사가 바뀐 뒤의 계획") {
+		t.Fatalf("a fresh plan must not carry the staleness note. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_plannedBranch_staleAppendsReasons(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction: DirectionBrief{
+			Focus: "초점",
+			PlannedBranch: &PlannedBranchBrief{
+				Title: "맞선다", Premise: "전제",
+				Stale: true,
+				StaleReasons: []DirectionStaleReason{
+					{Group: "entities", Count: 2},
+					{Group: "episodes", EpisodeLabels: []string{"3화"}},
+				},
+			},
+		},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "정사가 바뀐 뒤의 계획") {
+		t.Fatalf("missing staleness note. got:\n%s", got)
+	}
+	if !strings.Contains(got, "인물 2개") {
+		t.Fatalf("missing entities reason. got:\n%s", got)
+	}
+	if !strings.Contains(got, "3화 본문") {
+		t.Fatalf("missing episodes reason. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_plannedBranch_presentEvenWithNoFocusOrSceneGoal(t *testing.T) {
+	// A planned branch alone must not be swallowed by DirectionBrief.Empty()
+	// just because focus/scene-goal/keep/avoid are all unset.
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction: DirectionBrief{
+			PlannedBranch: &PlannedBranchBrief{Title: "맞선다", Premise: "전제"},
+		},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "작가 방향") || !strings.Contains(got, "제목: 맞선다") {
+		t.Fatalf("direction section with only a planned branch did not render. got:\n%s", got)
+	}
+}
+
+func TestApplyContextSelection_directionFalseAlsoRemovesPlannedBranch(t *testing.T) {
+	off := false
+	c := Context{
+		ProjectID: "p1",
+		Direction: DirectionBrief{
+			PlannedBranch: &PlannedBranchBrief{Title: "맞선다", Premise: "전제"},
+		},
+		Options: Options{Context: ContextSelection{Direction: &off}},
+	}
+	got := ApplyContextSelection(c)
+	if got.Direction.PlannedBranch != nil {
+		t.Errorf("PlannedBranch = %+v, want nil once the direction switch is off", got.Direction.PlannedBranch)
+	}
+}

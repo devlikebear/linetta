@@ -525,8 +525,70 @@ func renderDirection(d DirectionBrief, lang string) string {
 			b.WriteString("- " + item + "\n")
 		}
 	}
+	if d.PlannedBranch != nil {
+		b.WriteString(renderPlannedBranch(*d.PlannedBranch, lang))
+	}
 	b.WriteString("\n")
 	return b.String()
+}
+
+// renderPlannedBranch renders the writer's selected forecast branch
+// (story-assist Phase 4) as a labelled PLAN, never canon — the heading
+// itself says so, so a model skimming the brief cannot mistake it for
+// something already written.
+func renderPlannedBranch(p PlannedBranchBrief, lang string) string {
+	var b strings.Builder
+	b.WriteString(langPick(lang,
+		"작가가 고른 다음 전개 (계획 — 정사 아님, 쓰면서 달라질 수 있음):\n",
+		"Writer's chosen next development (a plan — not canon, may change while writing):\n",
+		"作家が選んだ次の展開（計画 — 正史ではない。書きながら変わる可能性あり）:\n"))
+	b.WriteString(langPick(lang, "제목: ", "Title: ", "タイトル: ") + p.Title + "\n")
+	if premise := strings.TrimSpace(p.Premise); premise != "" {
+		b.WriteString(langPick(lang, "전제: ", "Premise: ", "前提: ") + premise + "\n")
+	}
+	for _, beat := range p.Beats {
+		b.WriteString(fmt.Sprintf(
+			langPick(lang, "- %d화 이후: %s\n", "- %d episode(s) ahead: %s\n", "- %d話後: %s\n"),
+			beat.EpisodeOffset, beat.Summary))
+	}
+	if p.Stale {
+		reasons := make([]string, 0, len(p.StaleReasons))
+		for _, r := range p.StaleReasons {
+			reasons = append(reasons, formatStaleReason(r, lang))
+		}
+		b.WriteString(fmt.Sprintf(langPick(lang,
+			"정사가 바뀐 뒤의 계획: (%s). 따르기 전에 작가에게 확인\n",
+			"This plan predates a canon change: (%s). Check with the writer before following it\n",
+			"正史が変わった後の計画: (%s)。従う前に作家に確認\n"),
+			strings.Join(reasons, ", ")))
+	}
+	return b.String()
+}
+
+// formatStaleReason names one changed canon group the way the writer
+// reads it in the forecast sheet — "인물 2개" / "3화 본문" — so the brief's
+// stale notice and the sheet's own stale banner say the same thing.
+func formatStaleReason(r DirectionStaleReason, lang string) string {
+	switch r.Group {
+	case "episodes":
+		return fmt.Sprintf(langPick(lang, "%s 본문", "%s text", "%sの本文"), strings.Join(r.EpisodeLabels, ", "))
+	case "entities":
+		return fmt.Sprintf(langPick(lang, "인물 %d개", "%d characters", "人物%d件"), r.Count)
+	case "relationships":
+		return fmt.Sprintf(langPick(lang, "관계 %d개", "%d relationships", "関係%d件"), r.Count)
+	case "facts":
+		return fmt.Sprintf(langPick(lang, "팩트 %d개", "%d facts", "ファクト%d件"), r.Count)
+	case "plot":
+		return langPick(lang, "플롯", "the plot", "プロット")
+	case "outline":
+		return langPick(lang, "개요", "the outline", "アウトライン")
+	case "project":
+		return langPick(lang, "작품 설정", "the project settings", "作品設定")
+	case "direction":
+		return langPick(lang, "작가 방향", "the writer's direction", "作家の方向性")
+	default:
+		return r.Group
+	}
 }
 
 // renderProjectMeta returns a one-line "장르: X, Y · 분량: Z · 시점: W"

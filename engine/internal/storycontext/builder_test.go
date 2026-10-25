@@ -986,3 +986,68 @@ func TestBuildContext_nearby_keepsAStaleWrittenSummaryAndMarksIt(t *testing.T) {
 		}
 	}
 }
+
+// fakeDirectionSource is a minimal DirectionSource for testing the
+// builder's own wiring (story-assist Phase 4's PlannedBranchFor call),
+// without going through direction.Repo/forecast.Service.
+type fakeDirectionSource struct {
+	plan        DirectionPlannedBranch
+	planPresent bool
+}
+
+func (f fakeDirectionSource) FocusFor(ctx context.Context, projectID string) (DirectionFocus, bool, error) {
+	return DirectionFocus{}, false, nil
+}
+
+func (f fakeDirectionSource) SceneIntentFor(ctx context.Context, nodeID string) (DirectionSceneIntent, bool, error) {
+	return DirectionSceneIntent{}, false, nil
+}
+
+func (f fakeDirectionSource) PlannedBranchFor(ctx context.Context, projectID string) (DirectionPlannedBranch, bool, error) {
+	return f.plan, f.planPresent, nil
+}
+
+func TestBuildFull_plannedBranchFlowsIntoDirectionBrief(t *testing.T) {
+	f := newCtxFixture(t)
+	p := f.project(t, project.NewInput{LengthTarget: "novel", DefaultPOV: "first"})
+
+	builder := f.builder().WithDirectionSource(fakeDirectionSource{
+		planPresent: true,
+		plan: DirectionPlannedBranch{
+			Title: "맞선다", Premise: "주인공이 물러서지 않는다.",
+			Beats: []DirectionPlannedBeat{{EpisodeOffset: 1, Summary: "첫 비트"}},
+			Stale: true, StaleReasons: []DirectionStaleReason{{Group: "entities", Count: 2}},
+		},
+	})
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "이어 써줘", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got.Direction.PlannedBranch == nil {
+		t.Fatal("PlannedBranch not populated from DirectionSource.PlannedBranchFor")
+	}
+	pb := got.Direction.PlannedBranch
+	if pb.Title != "맞선다" || pb.Premise != "주인공이 물러서지 않는다." {
+		t.Errorf("PlannedBranch = %+v", pb)
+	}
+	if len(pb.Beats) != 1 || pb.Beats[0].EpisodeOffset != 1 || pb.Beats[0].Summary != "첫 비트" {
+		t.Errorf("PlannedBranch.Beats = %+v", pb.Beats)
+	}
+	if !pb.Stale || len(pb.StaleReasons) != 1 || pb.StaleReasons[0].Group != "entities" {
+		t.Errorf("PlannedBranch stale/reasons = %+v", pb)
+	}
+}
+
+func TestBuildFull_noPlannedBranchWhenNoneSelected(t *testing.T) {
+	f := newCtxFixture(t)
+	p := f.project(t, project.NewInput{LengthTarget: "novel", DefaultPOV: "first"})
+
+	builder := f.builder().WithDirectionSource(fakeDirectionSource{planPresent: false})
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "이어 써줘", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got.Direction.PlannedBranch != nil {
+		t.Errorf("PlannedBranch = %+v, want nil when nothing is selected", got.Direction.PlannedBranch)
+	}
+}

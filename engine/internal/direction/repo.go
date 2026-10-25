@@ -150,6 +150,31 @@ func (r *Repo) GetSceneIntent(ctx context.Context, nodeID string) (SceneIntent, 
 	return si, true, nil
 }
 
+// ListSceneIntents returns every scene intent set for projectID, in no
+// particular order — story-assist Phase 4's fingerprint hashes them after
+// sorting by node id itself, so callers needing a stable order do that
+// sorting there rather than here.
+func (r *Repo) ListSceneIntents(ctx context.Context, projectID string) ([]SceneIntent, error) {
+	rows, err := r.s.DB().QueryContext(ctx,
+		"SELECT node_id, goal, keep_json, avoid_json, updated_at FROM scene_intents WHERE project_id = ?", projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []SceneIntent{}
+	for rows.Next() {
+		si := SceneIntent{ProjectID: projectID}
+		var keepJSON, avoidJSON string
+		if err := rows.Scan(&si.NodeID, &si.Goal, &keepJSON, &avoidJSON, &si.UpdatedAt); err != nil {
+			return nil, err
+		}
+		si.Keep = decodeList(keepJSON)
+		si.Avoid = decodeList(avoidJSON)
+		out = append(out, si)
+	}
+	return out, rows.Err()
+}
+
 func decodeList(raw string) []string {
 	var out []string
 	if err := json.Unmarshal([]byte(raw), &out); err != nil || out == nil {
