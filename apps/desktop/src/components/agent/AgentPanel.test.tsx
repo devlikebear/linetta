@@ -47,7 +47,7 @@ vi.mock("../../lib/i18n", () => ({
   }),
 }));
 
-import { AgentPanel } from "./AgentPanel";
+import { AgentPanel, splitSelection } from "./AgentPanel";
 
 function row(overrides: Partial<ProviderStatus> = {}): ProviderStatus {
   return {
@@ -922,7 +922,7 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     await type("다음 문단을 이어서 써줘");
     await pressEnter();
 
-    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "다음 문단을 이어서 써줘", NODE_ID);
+    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "다음 문단을 이어서 써줘", NODE_ID, undefined);
     // The composer clears and the writer's own line lands in the log.
     expect(composer().value).toBe("");
     expect(screen.getByTestId("agent-log").querySelector(".msg.user .msg-bubble")?.textContent).toBe(
@@ -2275,8 +2275,107 @@ describe("AgentPanel ownership ordering (#95 Task 7 final review)", () => {
     // And the affordance has to be telling the truth: the press goes out.
     await pressEnter();
     expect(rpc.agentRun).toHaveBeenCalledTimes(2);
-    expect(rpc.agentRun).toHaveBeenLastCalledWith(OTHER_PROJECT_ID, "B작품 요청", NODE_ID);
+    expect(rpc.agentRun).toHaveBeenLastCalledWith(OTHER_PROJECT_ID, "B작품 요청", NODE_ID, undefined);
     // The refused send for the work the writer left is still not news here.
     expect(screen.getByTestId("agent-log").textContent).not.toContain("A작품 요청");
+  });
+});
+
+// A passage the writer highlighted and sent from the editor's selection menu
+// rides along with their next message as agent.run's `selection`.
+describe("AgentPanel selected passage", () => {
+  type Request = { id: number; text: string; nodeId: string };
+
+  function panelWith(request: Request | null, nodeId = NODE_ID) {
+    return (
+      <MemoryRouter>
+        <AgentPanel onClose={vi.fn()} projectId={PROJECT_ID} nodeId={nodeId} selectionRequest={request} />
+      </MemoryRouter>
+    );
+  }
+
+  async function renderWith(request: Request | null) {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ configured: true, consented: true })]),
+    );
+    const view = render(panelWith(request));
+    await screen.findByTestId("agent-log");
+    return view;
+  }
+
+  const passage = { id: 1, text: "소매 끝에는 볼펜 자국이 잔뜩 묻어 있었다.", nodeId: NODE_ID };
+
+  it("attaches the passage above the composer and sends it with the next message", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderWith(passage);
+
+    expect(screen.getByTestId("agent-attachment").textContent).toContain(passage.text);
+    await type("이 문장 자연스러워?");
+    await pressEnter();
+
+    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "이 문장 자연스러워?", NODE_ID, passage.text);
+    expect(screen.queryByTestId("agent-attachment")).toBeNull();
+    expect(screen.getByTestId("agent-user-selection").textContent).toBe(passage.text);
+  });
+
+  it("sends nothing extra once the writer removes the passage", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderWith(passage);
+
+    await act(async () => {
+      screen.getByTestId("agent-attachment-remove").click();
+    });
+    await type("안녕");
+    await pressEnter();
+
+    expect(rpc.agentRun.mock.calls[0][3]).toBeUndefined();
+  });
+
+  it("replaces the passage when a new one arrives while the panel is open", async () => {
+    const view = await renderWith(passage);
+    await act(async () => {
+      view.rerender(panelWith({ id: 2, text: "새로 고른 문단", nodeId: NODE_ID }));
+    });
+    expect(screen.getByTestId("agent-attachment").textContent).toContain("새로 고른 문단");
+  });
+
+  // The engine tells the agent the passage is in the open scene; once the
+  // writer has moved to another scene that would be a lie.
+  it("drops the passage when the open scene is no longer the one it came from", async () => {
+    const view = await renderWith(passage);
+    await act(async () => {
+      view.rerender(panelWith(passage, "node-2"));
+    });
+    expect(screen.queryByTestId("agent-attachment")).toBeNull();
+  });
+
+  it("hands the passage back when the send is refused", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.reject(new Error("busy")));
+    await renderWith(passage);
+    await type("다듬어 줘");
+    await pressEnter();
+    expect(screen.getByTestId("agent-attachment").textContent).toContain(passage.text);
+  });
+
+  it("offers passage starters that fill the composer without sending", async () => {
+    await renderWith(passage);
+    await act(async () => {
+      screen.getByTestId("agent-selection-starter-polish").click();
+    });
+    expect(composer().value).toBe("agentPanel.selectionStarters.polish.prompt");
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+  });
+
+  it("restores a sent passage as a quote, apart from the writer's words", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([historyRow({ content: "<selection>\n첫 줄\n둘째 줄\n</selection>\n\n줄여 줘" })]),
+    );
+    await renderWith(null);
+    expect(screen.getByTestId("agent-user-selection").textContent).toBe("첫 줄\n둘째 줄");
+    expect(screen.getByTestId("agent-log").querySelector(".msg.user .msg-bubble")?.textContent).toBe("줄여 줘");
+  });
+
+  it("leaves a message that merely mentions the tag alone", () => {
+    expect(splitSelection("<selection> 태그가 뭐야?")).toEqual({ text: "<selection> 태그가 뭐야?" });
   });
 });

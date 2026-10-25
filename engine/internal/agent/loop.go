@@ -55,6 +55,9 @@ type RunRequest struct {
 	ProjectID string
 	NodeID    string
 	Prompt    string
+	// Selection is a passage the writer highlighted in the open scene and
+	// sent along with the prompt, or "". See withSelection.
+	Selection string
 }
 
 // Run starts a turn and returns its id immediately; progress arrives as
@@ -144,6 +147,10 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		return "", err
 	}
 
+	// The passage is folded into the prompt before anything sees it, so the
+	// transcript row, the replay of later turns and this turn's message all
+	// carry the same text: a follow-up "now shorten it" still knows what "it" is.
+	req.Prompt = withSelection(req.Selection, req.Prompt)
 	if err := s.tr.appendUser(runCtx, projectID, req.NodeID, runID, req.Prompt); err != nil {
 		s.runs.finish(projectID, runID)
 		s.leave()

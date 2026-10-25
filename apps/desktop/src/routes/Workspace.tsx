@@ -223,6 +223,16 @@ export function Workspace() {
   const [autoMentionFound, setAutoMentionFound] = useState(0);
   const [autoMentionScanKey, setAutoMentionScanKey] = useState(0);
   const factBookSelectionSeqRef = useRef(0);
+  // A passage the selection menu sent to the agent panel. The id makes a
+  // second send of the same text still a new request; the node id ties the
+  // passage to the scene it was cut from (see AgentPanel's selectionRequest).
+  const [agentSelection, setAgentSelection] = useState<{ id: number; text: string; nodeId: string } | null>(null);
+  const agentSelectionSeqRef = useRef(0);
+  // Spent once the panel closes: reopening it later must not attach a
+  // passage the writer already dealt with (or dismissed) again.
+  useEffect(() => {
+    if (!agentOpen) setAgentSelection(null);
+  }, [agentOpen]);
   const loadRef = useRef<LoadState | null>(null);
   // The keydown effect below registers once with an intentionally empty dep
   // array (toggleAgent is a stable useCallback), so it cannot see later
@@ -1228,6 +1238,21 @@ export function Workspace() {
   }, []);
 
 
+  const runSelectionAskAgent = useCallback(() => {
+    if (!selectionMenu || selectionMenu.kind !== "selection" || !load) return;
+    setSelectionMenu(null);
+    setFactBookSelectedClaimRequest(null);
+    setFactBookHighlightId(null);
+    setFactBookOpen(false);
+    setContextualEditOpen(false);
+    setCanonOpen(false);
+    setProposalInboxOpen(false);
+    setEntitySheetId(null);
+    setThreadSheetId(null);
+    setAgentOpen(true);
+    setAgentSelection({ id: ++agentSelectionSeqRef.current, text: selectionMenu.text, nodeId: load.node.id });
+  }, [selectionMenu, load]);
+
   const runSelectionIllustrate = useCallback(() => {
     if (!selectionMenu || selectionMenu.kind !== "selection") return;
     setSelectionMenu(null);
@@ -1998,9 +2023,14 @@ export function Workspace() {
                   <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
                 </button>
                 {agentAvailable && selectionMenu.kind === "selection" ? (
-                  <button type="button" role="menuitem" onClick={runSelectionIllustrate}>
-                    <ImageIcon size={13} /> {t("workspace.selectionMenu.illustrate")}
-                  </button>
+                  <>
+                    <button type="button" role="menuitem" onClick={runSelectionAskAgent}>
+                      <Bot size={13} /> {t("workspace.selectionMenu.askAgent")}
+                    </button>
+                    <button type="button" role="menuitem" onClick={runSelectionIllustrate}>
+                      <ImageIcon size={13} /> {t("workspace.selectionMenu.illustrate")}
+                    </button>
+                  </>
                 ) : null}
               </div>
             )}
@@ -2154,6 +2184,7 @@ export function Workspace() {
             projectId={load.project.id}
             nodeId={load.node.id}
             initialDraft={agentInitialDraft}
+            selectionRequest={agentSelection}
             onClose={() => {
               setAgentOpen(false);
               focusEditor();

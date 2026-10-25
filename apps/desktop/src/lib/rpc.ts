@@ -484,8 +484,9 @@ export const publishApi = {
  *  only way the renderer can reach agent.* today — a manual JSON-RPC call is
  *  the alternative until the panel calls them. */
 export const agent = {
-  run: (projectId: string, prompt: string, nodeId?: string) =>
-    rpcCall<AgentRunResult>("agent.run", { project_id: projectId, node_id: nodeId, prompt }),
+  /** selection: a passage the writer highlighted in the open scene. */
+  run: (projectId: string, prompt: string, nodeId?: string, selection?: string) =>
+    rpcCall<AgentRunResult>("agent.run", { project_id: projectId, node_id: nodeId, prompt, selection }),
   cancel: (runId: string) => rpcCall<{ ok: true }>("agent.cancel", { run_id: runId }),
   history: (projectId: string, limit?: number) =>
     rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),

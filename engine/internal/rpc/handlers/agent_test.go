@@ -15,6 +15,7 @@ type fakeAgent struct {
 	sawProject string
 	sawPrompt  string
 	sawNode    string
+	sawSel     string
 
 	cancelErr error
 	cancelled string
@@ -31,8 +32,8 @@ type fakeAgent struct {
 	undoneSnap string
 }
 
-func (f *fakeAgent) Run(_ context.Context, projectID, nodeID, prompt string) (string, error) {
-	f.sawProject, f.sawPrompt, f.sawNode = projectID, prompt, nodeID
+func (f *fakeAgent) Run(_ context.Context, projectID, nodeID, prompt, selection string) (string, error) {
+	f.sawProject, f.sawPrompt, f.sawNode, f.sawSel = projectID, prompt, nodeID, selection
 	return f.runID, f.runErr
 }
 func (f *fakeAgent) Cancel(_ context.Context, runID string) error {
@@ -82,6 +83,17 @@ func TestAgentRun_returnsTheRunID(t *testing.T) {
 
 // The busy reason has to survive the handler, or the panel prints the
 // engine's English sentence instead of a translated one.
+func TestAgentRun_passesTheSelectionThrough(t *testing.T) {
+	f := &fakeAgent{runID: "run-1"}
+	if _, err := AgentRun(f)(context.Background(),
+		json.RawMessage(`{"project_id":"p1","node_id":"n1","prompt":"이거 어때?","selection":"소매 끝"}`)); err != nil {
+		t.Fatalf("AgentRun: %v", err)
+	}
+	if f.sawSel != "소매 끝" || f.sawPrompt != "이거 어때?" {
+		t.Errorf("controller saw selection=%q prompt=%q", f.sawSel, f.sawPrompt)
+	}
+}
+
 func TestAgentRun_carriesTheBusyReasonThrough(t *testing.T) {
 	f := &fakeAgent{runErr: &rpc.ReasonError{Reason: rpc.ReasonAgentBusy, Err: errors.New("busy")}}
 	_, err := AgentRun(f)(context.Background(), json.RawMessage(`{"project_id":"p1","prompt":"x"}`))

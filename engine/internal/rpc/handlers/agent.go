@@ -13,7 +13,8 @@ import (
 // build tag (the agent itself is //go:build !mobile), and handlers must never
 // link tars/pkg/llm.
 type AgentController interface {
-	Run(ctx context.Context, projectID, nodeID, prompt string) (string, error)
+	// selection is a passage the writer highlighted in the open scene, or "".
+	Run(ctx context.Context, projectID, nodeID, prompt, selection string) (string, error)
 	Cancel(ctx context.Context, runID string) error
 	History(ctx context.Context, projectID string, limit int) (json.RawMessage, error)
 	// Status reports the turn running for a work, if any — what a panel that
@@ -30,6 +31,7 @@ type agentRunParams struct {
 	ProjectID string `json:"project_id"`
 	NodeID    string `json:"node_id,omitempty"`
 	Prompt    string `json:"prompt"`
+	Selection string `json:"selection,omitempty"`
 }
 
 type agentRunResult struct {
@@ -47,7 +49,7 @@ func AgentRun(ctrl AgentController) rpc.Handler {
 		if strings.TrimSpace(p.Prompt) == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "prompt is required"}
 		}
-		runID, err := ctrl.Run(ctx, p.ProjectID, p.NodeID, p.Prompt)
+		runID, err := ctrl.Run(ctx, p.ProjectID, p.NodeID, p.Prompt, p.Selection)
 		if err != nil {
 			return nil, rpc.MethodErrorFrom(err)
 		}
