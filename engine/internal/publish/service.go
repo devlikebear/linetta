@@ -36,7 +36,8 @@ const (
 // writer's long blurb or a project's eleventh genre is refused or trimmed
 // before anything is sent, instead of bouncing as invalid_request.
 const (
-	maxBlurbRunes = 2000
+	// MaxBlurbRunes is exported so the agent's tool can say why it refused.
+	MaxBlurbRunes = 2000
 	maxGenres     = 10
 	maxGenreRunes = 20
 )
@@ -384,8 +385,8 @@ func (s *Service) UpsertWork(ctx context.Context, in UpsertInput) (WorkView, err
 	if blurb == "" {
 		return WorkView{}, reason(rpc.ReasonPublishBlurbRequired, errors.New("publish: a blurb is required"))
 	}
-	if utf8.RuneCountInString(blurb) > maxBlurbRunes {
-		return WorkView{}, reason(rpc.ReasonPublishRejected, fmt.Errorf("publish: blurb is over %d characters", maxBlurbRunes))
+	if utf8.RuneCountInString(blurb) > MaxBlurbRunes {
+		return WorkView{}, reason(rpc.ReasonPublishRejected, fmt.Errorf("publish: blurb is over %d characters", MaxBlurbRunes))
 	}
 	serial := in.SerialStatus
 	if serial == "" {

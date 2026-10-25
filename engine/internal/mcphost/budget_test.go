@@ -197,8 +197,8 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if name == "linetta_analyze_style" || name == "linetta_propose_style_profile" {
 			continue
 		}
-		// Phase 3's publish pair carries its own allowance below.
-		if name == "linetta_publish_status" || name == "linetta_publish_episode" {
+		// Phase 3's publish tools carry their own allowance below.
+		if name == "linetta_publish_status" || name == "linetta_publish_episode" || name == "linetta_register_work" {
 			continue
 		}
 		// story-assist Phase 2's report tool, and Phase 3's propose tool,
@@ -220,8 +220,9 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	}
 	// Phase 3 measured 1,958B for the publish pair (1,231B status, 727B
 	// publish), after cutting the output schema to what an agent needs.
-	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"]; pub > 2050 {
-		t.Errorf("publish tools cost %dB, want <= 2050B", pub)
+	// linetta_register_work joined them at 690B (publish now 694B): 2,615B.
+	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"] + sizes["linetta_register_work"]; pub > 2700 {
+		t.Errorf("publish tools cost %dB, want <= 2700B", pub)
 	}
 	// story-assist Phase 2 measured 3,436B for linetta_report_continuity —
 	// the nested observations[].refs[] schema is most of it, and that

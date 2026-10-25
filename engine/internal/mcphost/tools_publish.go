@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -14,11 +15,12 @@ import (
 )
 
 // Publisher is the slice of internal/publish the publish tools use. An agent
-// can look at what is on Linetta Works and publish an episode, and that is
-// all: connecting the account and registering the work are the writer's to
-// do in the app, so there is no tool for either.
+// can look at what is on Linetta Works, register a work and publish its
+// episodes. Connecting the account is the writer's alone — it is approved in
+// their browser — so there is no tool for it.
 type Publisher interface {
 	WorkStatus(ctx context.Context, projectID string) (publish.WorkStatus, error)
+	UpsertWork(ctx context.Context, in publish.UpsertInput) (publish.WorkView, error)
 	PublishEpisode(ctx context.Context, nodeID string) (publish.PublishResult, error)
 }
 
@@ -57,6 +59,22 @@ type publishStatusOutput struct {
 	SiteOnly []publishedEpisode `json:"site_only,omitempty"`
 }
 
+// ---------- linetta_register_work ----------
+
+type registerWorkInput struct {
+	ProjectID string `json:"project_id,omitempty"`
+	Blurb     string `json:"blurb,omitempty" jsonschema:"the introduction readers see; required the first time, empty keeps the current one"`
+	// SerialStatus is ongoing or completed; empty keeps it (ongoing for a new work).
+	SerialStatus string `json:"serial_status,omitempty"`
+}
+
+func (in registerWorkInput) scope() (string, string) { return in.ProjectID, "" }
+
+type registerWorkOutput struct {
+	WorkURL      string `json:"work_url"`
+	SerialStatus string `json:"serial_status"`
+}
+
 // ---------- linetta_publish_episode ----------
 
 type publishEpisodeInput struct {
@@ -84,12 +102,17 @@ func (d ToolDeps) registerPublishReadTool(s *mcp.Server) {
 	}, record(d, "linetta_publish_status", d.publishStatus))
 }
 
-func (d ToolDeps) registerPublishWriteTool(s *mcp.Server) {
+func (d ToolDeps) registerPublishWriteTools(s *mcp.Server) {
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_register_work",
+		Description: "Register the work on Linetta Works with its blurb, or change its blurb or serial status " +
+			"there. Only when the writer asks, with a blurb they wrote or approved. Title and genres come " +
+			"from the work.",
+	}, record(d, "linetta_register_work", d.registerWork))
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_publish_episode",
 		Description: "Publish one episode to Linetta Works for anyone to read, or update its text there. Only " +
-			"when the writer asks. Needs the account connected and the work registered in the app first; " +
-			"you cannot do either.",
+			"when the writer asks. The work must be registered first (linetta_register_work).",
 	}, record(d, "linetta_publish_episode", d.publishEpisode))
 }
 
@@ -128,6 +151,43 @@ func toPublishedEpisode(ep publish.EpisodeView) publishedEpisode {
 	}
 }
 
+func (d ToolDeps) registerWork(ctx context.Context, _ *mcp.CallToolRequest, in registerWorkInput) (*mcp.CallToolResult, registerWorkOutput, error) {
+	if d.Publish == nil {
+		return toolErr("publishing is not available in this build"), registerWorkOutput{}, nil
+	}
+	p, errResult := d.requireProject(ctx, in.ProjectID)
+	if errResult != nil {
+		return errResult, registerWorkOutput{}, nil
+	}
+	blurb, serial := strings.TrimSpace(in.Blurb), strings.TrimSpace(in.SerialStatus)
+	// The site wants the blurb on every update; a writer who only says "mark
+	// it completed" should not need the agent to retype it.
+	if blurb == "" || serial == "" {
+		ws, err := d.Publish.WorkStatus(ctx, p.ID)
+		if err != nil {
+			return toolErr("%s", publishFailure(err)), registerWorkOutput{}, nil
+		}
+		if ws.Work != nil {
+			if blurb == "" {
+				blurb = ws.Work.Blurb
+			}
+			if serial == "" {
+				serial = ws.Work.SerialStatus
+			}
+		}
+	}
+	if n := utf8.RuneCountInString(blurb); n > publish.MaxBlurbRunes {
+		return toolErr("the blurb is %d characters; the site takes at most %d", n, publish.MaxBlurbRunes), registerWorkOutput{}, nil
+	}
+	w, err := d.Publish.UpsertWork(ctx, publish.UpsertInput{ProjectID: p.ID, Blurb: blurb, SerialStatus: serial})
+	if err != nil {
+		return toolErr("%s", publishFailure(err)), registerWorkOutput{}, nil
+	}
+	// An open publish dialog or outline badge reads the work's state.
+	d.notifyChanged(p.ID, "linetta_register_work", nil, "")
+	return nil, registerWorkOutput{WorkURL: w.URL, SerialStatus: w.SerialStatus}, nil
+}
+
 func (d ToolDeps) publishEpisode(ctx context.Context, _ *mcp.CallToolRequest, in publishEpisodeInput) (*mcp.CallToolResult, publishEpisodeOutput, error) {
 	if d.Publish == nil {
 		return toolErr("publishing is not available in this build"), publishEpisodeOutput{}, nil
@@ -164,8 +224,12 @@ func publishFailure(err error) string {
 		return "the writer disconnected this device on the Linetta Works site. They reconnect in " +
 			"Settings → Publishing; you cannot do it for them"
 	case rpc.ReasonPublishWorkNotRegistered:
-		return "this work is not on Linetta Works yet. The writer registers it the first time they publish " +
-			"from the app's publish dialog (it needs a blurb); you cannot do it for them"
+		return "this work is not on Linetta Works yet. Register it with linetta_register_work first; it " +
+			"needs a blurb the writer wrote or approved"
+	case rpc.ReasonPublishBlurbRequired:
+		return "a blurb is required to register the work; ask the writer for one or offer a draft for them to approve"
+	case rpc.ReasonPublishSlugTaken, rpc.ReasonPublishInvalidSlug:
+		return "the site could not give the work an address from its title; the writer can choose one in the app's publish dialog"
 	case rpc.ReasonPublishNotEnabled:
 		return "publishing is not open for the writer's account yet"
 	case rpc.ReasonPublishEmptyEpisode:

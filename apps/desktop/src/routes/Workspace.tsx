@@ -23,6 +23,7 @@ import { ProposalInbox } from "../components/ProposalInbox";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { AgentPanel } from "../components/agent/AgentPanel";
 import { useAgentRunning } from "../hooks/useAgentRunning";
+import type { McpChangedPayload } from "../hooks/useMcpChanges";
 import { ContextualEditPanel } from "../components/contextual/ContextualEditPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { InlineEditableText } from "../components/InlineEditableText";
@@ -206,7 +207,8 @@ export function Workspace() {
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryRefresh, setGalleryRefresh] = useState(0);
   // Linetta Works publishing (Phase 3). Off on builds that cannot publish.
-  // The work's status is fetched when the work opens and after a publish —
+  // The work's status is fetched when the work opens and after a publish
+  // (the writer's or an agent's) —
   // never on a timer — and only that, so a writer who is not connected
   // costs the site nothing (the engine answers locally until they connect).
   const [publishAvailable, setPublishAvailable] = useState(false);
@@ -473,6 +475,17 @@ export function Workspace() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [publishAvailable, publishProjectId]);
+
+  // An agent registering the work or publishing an episode changes what the
+  // badges should say, so those two tools refetch the status the same way.
+  useEngineEvent<McpChangedPayload>("mcp-changed", (payload) => {
+    if (!publishAvailable || !publishProjectId || payload.project_id !== publishProjectId) return;
+    if (payload.tool !== "linetta_register_work" && payload.tool !== "linetta_publish_episode") return;
+    publishApi
+      .workStatus(publishProjectId)
+      .then((st) => { if (loadRef.current?.project.id === st.project_id) setPublishStatus(st); })
+      .catch(() => {});
+  });
 
   // Badges only for a connected work the site knows; otherwise none at all.
   const publishStates = useMemo(() => {
