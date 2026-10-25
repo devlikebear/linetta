@@ -1581,7 +1581,11 @@ export interface ContinuityChangedPayload {
 
 export type SuggestionPurpose = "general" | "import_extraction" | "forecast";
 export type SuggestionSource = "agent" | "external";
-export type SuggestionItemStatus = "pending" | "accepted" | "rejected" | "failed";
+/** "reverting" means proposals.Undo has committed to revert this item but
+ *  has not yet confirmed the outcome — the engine's own StatusReverting.
+ *  ProposalInbox shows it as "되돌리는 중 · 확인 필요" and disables its
+ *  accept checkbox; proposals.accept refuses it outright either way. */
+export type SuggestionItemStatus = "pending" | "accepted" | "rejected" | "failed" | "reverting";
 
 /** One quote an agent cited, with the scene's breadcrumb proposals.list resolved. */
 export interface SuggestionEvidence {

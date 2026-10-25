@@ -317,4 +317,43 @@ describe("ProposalInbox", () => {
     renderInbox();
     expect(await screen.findByText("쌓인 제안이 없습니다.")).toBeTruthy();
   });
+
+  it("shows a reverting item as in-progress and disables its checkbox", async () => {
+    mocks.list.mockResolvedValue({
+      proposals: [batch([item({ status: "reverting", undo_batch_id: "batch-1" })])],
+    });
+    renderInbox();
+    await screen.findByText("새 인물: 하린 — 검술 사범");
+    expect(await screen.findByText("되돌리는 중 · 확인 필요")).toBeTruthy();
+    const checkbox = screen.getByRole("checkbox", { name: "새 인물: 하린 — 검술 사범" });
+    expect(checkbox).toBeDisabled();
+  });
+
+  it("never selects or accepts a reverting item alongside a pending one", async () => {
+    mocks.list.mockResolvedValue({
+      proposals: [
+        batch([
+          item({ id: "item-pending", status: "pending" }),
+          item({ id: "item-reverting", status: "reverting", summary: "되돌리는 중 항목", undo_batch_id: "batch-1" }),
+        ]),
+      ],
+    });
+    mocks.accept.mockResolvedValue({
+      items: [item({ id: "item-pending", status: "accepted", result: { created_id: "e-1" } })],
+    });
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByText("되돌리는 중 항목");
+
+    const revertingCheckbox = screen.getByRole("checkbox", { name: "되돌리는 중 항목" });
+    expect(revertingCheckbox).toBeDisabled();
+    await user.click(revertingCheckbox); // disabled — must not select it
+    expect(revertingCheckbox).not.toBeChecked();
+
+    const pendingCheckbox = screen.getByRole("checkbox", { name: "새 인물: 하린 — 검술 사범" });
+    await user.click(pendingCheckbox);
+    await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
+
+    await waitFor(() => expect(mocks.accept).toHaveBeenCalledWith("project-1", ["item-pending"], undefined));
+  });
 });

@@ -99,6 +99,10 @@
   color: var(--danger, #c0392b);
 }
 
+.pi-note-reverting {
+  font-style: italic;
+}
+
 .pi-evidence {
   list-style: none;
   margin: 6px 0 0;

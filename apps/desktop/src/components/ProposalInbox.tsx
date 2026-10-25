@@ -181,15 +181,18 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
     () => (batchFilter === "all" ? batches ?? [] : (batches ?? []).filter((b) => b.id === batchFilter)),
     [batches, batchFilter],
   );
-  // Shown statuses are "pending" (awaiting a decision) and "failed" (the
+  // Shown statuses are "pending" (awaiting a decision), "failed" (the
   // writer tried to accept it and storyops refused — the row stays so the
-  // error and an edit-and-retry are both still reachable). "accepted" and
-  // "rejected" are done; they disappear from the inbox once they are.
+  // error and an edit-and-retry are both still reachable), and
+  // "reverting" (proposals.Undo has committed to revert this item but has
+  // not yet confirmed the outcome — see proposals.StatusReverting's own
+  // doc comment on the engine side). "accepted" and "rejected" are done;
+  // they disappear from the inbox once they are.
   const visibleItemsByGroup = useMemo(() => {
     const groups = new Map<GroupKind, SuggestionItem[]>();
     for (const b of visibleBatches) {
       for (const it of b.items) {
-        if (it.status !== "pending" && it.status !== "failed") continue;
+        if (it.status !== "pending" && it.status !== "failed" && it.status !== "reverting") continue;
         const k = groupKindFor(it.op);
         const list = groups.get(k) ?? [];
         list.push(it);
@@ -201,6 +204,12 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
 
   const toggleSelect = useCallback(
     (item: SuggestionItem) => {
+      // Reverting is never a selectable outcome — proposals.Accept
+      // refuses it outright (the engine's own duplicate-creation guard),
+      // and the checkbox is disabled for exactly this reason; this guard
+      // is defense in depth against anything that calls toggleSelect
+      // directly.
+      if (item.status === "reverting") return;
       setSelected((prev) => {
         const next = new Set(prev);
         if (next.has(item.id)) {
@@ -396,12 +405,18 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
                         <input
                           type="checkbox"
                           checked={selected.has(item.id)}
+                          disabled={item.status === "reverting"}
                           onChange={() => toggleSelect(item)}
                           aria-label={item.summary}
                         />
                         <span className="pi-summary">{item.summary}</span>
                       </label>
 
+                      {item.status === "reverting" && (
+                        <p className="pi-note pi-note-reverting" data-testid={`proposal-item-reverting-${item.id}`}>
+                          {t("proposals.item.reverting")}
+                        </p>
+                      )}
                       {item.blocked_by_rejected && (
                         <p className="pi-note pi-note-blocked">{t("proposals.item.blockedByRejected")}</p>
                       )}
