@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.12.1 - 2026-10-25
+
+- Fixed: the open-observations badge in the scene panel opened Story World
+  with the continuity section collapsed, or not at all while the Fact Book
+  was open. It now opens the continuity section on this scene's open
+  observations.
+- Fixed: the button that reopens a dismissed or resolved observation read
+  like a status label. It now says **Reopen**.
+- Fixed: undoing accepted outline suggestions could leave some of them stuck
+  if a write failed partway. The undo now keeps them retryable.
+
 ## v1.12.0 - 2026-10-25
 
 - **Where the story could go.** Ask the agent for possible branches of the
