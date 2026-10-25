@@ -173,3 +173,102 @@ func TestApplyOpsRememberWithoutMemory(t *testing.T) {
 		t.Fatalf("failure = %+v, want a clear memory-unavailable message", res.Failures[0])
 	}
 }
+
+// story-assist Phase 3 (3.A.2): create_entity sets aliases, update_entity
+// only adds to them, and a seeded Refs lets a later call resolve a ref an
+// earlier batch declared.
+
+func TestApplyOpsCreateEntitySetsAliases(t *testing.T) {
+	svc, _, _, projectID, _ := newTestService(t)
+	res := svc.ApplyOps(context.Background(), projectID, "", Proposal{
+		Ops: []Op{{Type: "create_entity", Ref: "e1", Name: "하린", Aliases: []string{"Ha-rin", " 하린 "}}},
+	}, now())
+	if res.IsError() {
+		t.Fatalf("failures = %+v", res.Failures)
+	}
+	entID := res.Created["entity:e1"]
+	if entID == "" {
+		t.Fatal("no created entity id recorded")
+	}
+	ent, err := svc.entities.Get(context.Background(), entID)
+	if err != nil {
+		t.Fatalf("get entity: %v", err)
+	}
+	if len(ent.Aliases) != 2 || ent.Aliases[0] != "Ha-rin" || ent.Aliases[1] != "하린" {
+		t.Fatalf("aliases = %+v, want [Ha-rin 하린] (trimmed, in order)", ent.Aliases)
+	}
+}
+
+func TestApplyOpsUpdateEntityAddsAliasesWithoutDroppingExisting(t *testing.T) {
+	svc, _, _, projectID, _ := newTestService(t)
+	ctx := context.Background()
+	create := svc.ApplyOps(ctx, projectID, "", Proposal{
+		Ops: []Op{{Type: "create_entity", Ref: "e1", Name: "하린", Aliases: []string{"Ha-rin"}}},
+	}, now())
+	if create.IsError() {
+		t.Fatalf("create failures = %+v", create.Failures)
+	}
+	entID := create.Created["entity:e1"]
+
+	update := svc.ApplyOps(ctx, projectID, "", Proposal{
+		Ops: []Op{{Type: "update_entity", EntityID: entID, Aliases: []string{"HA-RIN", "검술 사범"}}},
+	}, now())
+	if update.IsError() {
+		t.Fatalf("update failures = %+v", update.Failures)
+	}
+	ent, err := svc.entities.Get(ctx, entID)
+	if err != nil {
+		t.Fatalf("get entity: %v", err)
+	}
+	// "HA-RIN" case-insensitively duplicates "Ha-rin" and must not be added
+	// twice; "검술 사범" is new and must be appended; "Ha-rin" must survive.
+	if len(ent.Aliases) != 2 {
+		t.Fatalf("aliases = %+v, want exactly 2 (Ha-rin kept, HA-RIN deduped, 검술 사범 added)", ent.Aliases)
+	}
+	if ent.Aliases[0] != "Ha-rin" {
+		t.Errorf("aliases[0] = %q, want original alias kept first", ent.Aliases[0])
+	}
+	foundNew := false
+	for _, a := range ent.Aliases {
+		if a == "검술 사범" {
+			foundNew = true
+		}
+		if strings.EqualFold(a, "HA-RIN") && a != "Ha-rin" {
+			t.Errorf("duplicate case-insensitive alias %q added alongside %q", a, "Ha-rin")
+		}
+	}
+	if !foundNew {
+		t.Fatalf("aliases = %+v, want 검술 사범 added", ent.Aliases)
+	}
+}
+
+func TestApplyOpsWithRefsSeedResolvesRelationship(t *testing.T) {
+	svc, _, _, projectID, _ := newTestService(t)
+	ctx := context.Background()
+
+	// An earlier call created this entity and is the ref's owner; a later
+	// call only has the resulting real id, seeded in as if it were the ref.
+	ent, err := svc.entities.Create(ctx, 1_000, entity.NewInput{ProjectID: projectID, Name: "하린"})
+	if err != nil {
+		t.Fatalf("seed entity: %v", err)
+	}
+
+	res, refs := svc.ApplyOpsWithRefs(ctx, projectID, "", Proposal{
+		Ops: []Op{
+			{Type: "create_entity", Ref: "e2", Name: "유나"},
+			{Type: "create_relationship", FromRef: "e1", ToRef: "e2", Label: "스승"},
+		},
+	}, Refs{Entities: map[string]string{"e1": ent.ID}}, now())
+	if res.IsError() {
+		t.Fatalf("failures = %+v", res.Failures)
+	}
+	if res.Applied != 2 {
+		t.Fatalf("applied = %d, want 2", res.Applied)
+	}
+	if refs.Entities["e1"] != ent.ID {
+		t.Errorf("seeded ref e1 = %q, want preserved as %q", refs.Entities["e1"], ent.ID)
+	}
+	if refs.Entities["e2"] == "" {
+		t.Error("new ref e2 was not recorded in the returned Refs")
+	}
+}

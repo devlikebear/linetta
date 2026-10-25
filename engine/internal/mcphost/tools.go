@@ -24,6 +24,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
@@ -48,12 +49,12 @@ type ToolDeps struct {
 	Illustrations illustref.Index
 	// Style holds each work's checkable style rules (#162). Nil in a build
 	// with no database open; the tool refuses rather than panicking.
-	Style      *style.Repo
-	Projects   *project.Repo
-	Nodes      *node.Repo
-	Entities   *entity.Repo
-	Mentions   *mention.Repo
-	Facts      *fact.Repo
+	Style    *style.Repo
+	Projects *project.Repo
+	Nodes    *node.Repo
+	Entities *entity.Repo
+	Mentions *mention.Repo
+	Facts    *fact.Repo
 	// Beats and Threads back linetta_report_continuity's beat refs: a beat
 	// carries no project_id of its own, only a thread_id, so checking a beat
 	// ref belongs to this work means resolving its thread (story-assist
@@ -70,6 +71,10 @@ type ToolDeps struct {
 	// (story-assist Phase 2). Nil in a build with no database open; the
 	// tool refuses rather than panicking.
 	Continuity *continuity.Repo
+	// Proposals holds story-structure change candidates waiting for the
+	// writer to accept them one by one (story-assist Phase 3). Nil in a
+	// build with no database open; the tool refuses rather than panicking.
+	Proposals *proposals.Service
 
 	// Memory is the two curated documents every agent reads. Nil in a build
 	// with no database open; the tool refuses rather than panicking.

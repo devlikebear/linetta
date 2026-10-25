@@ -84,10 +84,10 @@ function functionBody(src: string, signature: string): string {
 const PROJECT_ID = "project-1";
 const NODE_ID = "node-1";
 
-function renderPanel(onClose = vi.fn()) {
+function renderPanel(onClose = vi.fn(), initialDraft?: string) {
   return render(
     <MemoryRouter>
-      <AgentPanel onClose={onClose} projectId={PROJECT_ID} nodeId={NODE_ID} />
+      <AgentPanel onClose={onClose} projectId={PROJECT_ID} nodeId={NODE_ID} initialDraft={initialDraft} />
     </MemoryRouter>,
   );
 }
@@ -114,11 +114,11 @@ async function pressEnter(shiftKey = false) {
 /** Renders with a ready (configured + consented) provider and waits for the
  *  log to mount, so message tests can start emitting engine events right
  *  away. */
-async function renderReady(onClose = vi.fn()) {
+async function renderReady(onClose = vi.fn(), initialDraft?: string) {
   rpc.providersList.mockImplementation(() =>
     Promise.resolve([row({ configured: true, consented: true })]),
   );
-  const view = renderPanel(onClose);
+  const view = renderPanel(onClose, initialDraft);
   await screen.findByTestId("agent-log");
   return view;
 }
@@ -1029,6 +1029,15 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     expect(screen.queryByTestId("agent-log")?.querySelector(".msg.user")).toBeNull();
   });
 
+  // story-assist 3.D.3: the Library import dialog's "시작" button lands
+  // here with the extraction prompt already typed, the same contract a
+  // starter chip has — filled, never sent.
+  it("pre-fills the composer from initialDraft without sending", async () => {
+    await renderReady(vi.fn(), "회차 순서대로 Story World를 채워줘");
+    expect(composer().value).toBe("회차 순서대로 Story World를 채워줘");
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+  });
+
   it("fills the composer from each starting chip without sending", async () => {
     await renderReady();
 
@@ -1046,6 +1055,11 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     expect(composer().value).toBe("agentPanel.starters.checkContinuity.prompt");
 
     await act(async () => {
+      screen.getByTestId("agent-starter-fillStoryWorld").click();
+    });
+    expect(composer().value).toBe("agentPanel.starters.fillStoryWorld.prompt");
+
+    await act(async () => {
       screen.getByTestId("agent-starter-nextScene").click();
     });
     expect(composer().value).toBe("agentPanel.starters.nextScene.prompt");
@@ -1054,12 +1068,15 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
   // story-assist Phase 2, 2.C.3: the chip calls linetta_report_continuity,
   // which is absent from the agent's tool set when the writer has switched
   // the Review group off — showing the chip then would promise a turn the
-  // tool call itself refuses.
-  it("hides the checkContinuity chip when the Review tool group is off", async () => {
+  // tool call itself refuses. story-assist Phase 3 (3.D.3): the
+  // fillStoryWorld chip calls linetta_propose_story_ops, which lives in the
+  // same Review group, and hides for the same reason.
+  it("hides the checkContinuity and fillStoryWorld chips when the Review tool group is off", async () => {
     rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: false }));
     await renderReady();
 
     expect(screen.queryByTestId("agent-starter-checkContinuity")).toBeNull();
+    expect(screen.queryByTestId("agent-starter-fillStoryWorld")).toBeNull();
     expect(screen.getByTestId("agent-starter-draftScene")).toBeTruthy();
     expect(screen.getByTestId("agent-starter-nextScene")).toBeTruthy();
   });

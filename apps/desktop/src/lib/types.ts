@@ -1168,6 +1168,9 @@ export interface ProposalOp {
   kind?: string;
   role?: string;
   attributes?: Record<string, string>;
+  /** create_entity sets aliases; update_entity only adds to the existing
+   *  list and never removes one (story-assist Phase 3, 3.A.2). */
+  aliases?: string[];
   entity_id?: string;
   from?: string;
   from_ref?: string;
@@ -1540,6 +1543,109 @@ export interface ContinuityOpenCounts {
 export interface ContinuityChangedPayload {
   project_id: string;
   node_id?: string;
+}
+
+// ---------- Suggestions inbox (story-assist Phase 3) ----------
+//
+// An agent's linetta_propose_story_ops candidates, and the writer's
+// item-by-item accept/reject of them. Op reuses ProposalOp (the same
+// storyops.Op mirror linetta_apply_story_ops' own pending-approval preview
+// uses) rather than a second copy of the same 30-odd fields.
+
+export type SuggestionPurpose = "general" | "import_extraction";
+export type SuggestionSource = "agent" | "external";
+export type SuggestionItemStatus = "pending" | "accepted" | "rejected" | "failed";
+
+/** One quote an agent cited, with the scene's breadcrumb proposals.list resolved. */
+export interface SuggestionEvidence {
+  node_id: string;
+  paragraph: number;
+  quote: string;
+  breadcrumb?: string;
+}
+
+/** A possible match against an existing entity (entity_id set) or another
+ *  pending item's create_entity (item_id set) — informational only; the
+ *  engine never merges on its own. */
+export interface SuggestionDuplicate {
+  entity_id?: string;
+  item_id?: string;
+  name: string;
+  kind: string;
+  matched: "exact" | "exact_kind_mismatch";
+}
+
+export interface SuggestionItemResult {
+  created_id?: string;
+  error?: string;
+}
+
+/** One stored proposal item, from proposals.list. */
+export interface SuggestionItem {
+  id: string;
+  proposal_id: string;
+  ordinal: number;
+  op_type: ProposalOpType;
+  op: ProposalOp;
+  /** Human-readable headline, e.g. "새 인물: 하린 — 검술 사범". */
+  summary: string;
+  depends_on: string[];
+  /** True when a dependency's item was rejected — "의존 항목이 거절됨". */
+  blocked_by_rejected: boolean;
+  evidence: SuggestionEvidence[];
+  from_node_ids: string[];
+  duplicates: SuggestionDuplicate[];
+  status: SuggestionItemStatus;
+  result: SuggestionItemResult;
+  status_at: number;
+}
+
+/** One submitted batch plus its items, from proposals.list. */
+export interface SuggestionBatch {
+  id: string;
+  project_id: string;
+  purpose: SuggestionPurpose;
+  source: SuggestionSource;
+  summary: string;
+  created_at: number;
+  items: SuggestionItem[];
+}
+
+/** proposals.accept's reply: each requested item's outcome. */
+export interface AcceptSuggestionsResult {
+  items: SuggestionItem[];
+}
+
+/** proposals.extraction_progress's reply: how far a purpose=import_extraction
+ *  sweep has gotten, and which episode to continue from. */
+export interface ExtractionProgress {
+  total_episodes: number;
+  covered_episodes: number;
+  next_episode?: {
+    node_id: string;
+    label: string;
+    title: string;
+    ordinal: number;
+    whole?: boolean;
+  };
+  pending_items: number;
+}
+
+/** proposals.extraction_estimate's reply: the whole manuscript's size and a
+ *  rough input-token budget, shown before a sweep starts. An estimate, not
+ *  a billed cost. */
+export interface ExtractionEstimate {
+  episodes: number;
+  chars: number;
+  input_tokens: number;
+}
+
+/** proposals-changed's payload: the inbox itself changed — an agent
+ *  submitted a batch, or the writer accepted/rejected an item. Separate
+ *  from mcp-changed, which means an MCP client wrote the manuscript. */
+export interface ProposalsChangedPayload {
+  project_id: string;
+  kinds: string[];
 }
 export interface ArtStyle {
  project_id: string;

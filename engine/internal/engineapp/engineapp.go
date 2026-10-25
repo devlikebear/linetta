@@ -33,6 +33,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -246,6 +247,16 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithMemory(companionSvc).
 		WithIllustrations(illustrations)
 
+	// Story-structure proposals (story-assist Phase 3): an agent's
+	// linetta_propose_story_ops candidates, and the writer's accept/reject
+	// of them through the proposals.* RPCs below, share this one Service —
+	// Submit and Accept must agree on what a ref or an id resolves to. Its
+	// own storyops instance needs neither snapshots nor memory: the
+	// allowed proposal ops never touch scene text or the keyword memory.
+	proposalsStory := storyops.New(projects, nodes, threads, beats, entities, relationships).WithFacts(facts)
+	proposalsSvc := proposals.New(st, proposalsStory, entities, threads, beats, facts, nodes, projects,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) })
+
 	// One Store for the skills the agent writes for itself, shared between
 	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below),
 	// the story brief's own skills list (just below) and the built-in
@@ -308,6 +319,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			beats:         beats,
 			threads:       threads,
 			continuity:    continuityRepo,
+			proposals:     proposalsSvc,
 			plot:          plotBuilder,
 			manuscript:    manuscriptSearcher,
 			context:       mcpContextBuilder,
@@ -460,6 +472,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("continuity.set_status", handlers.SetContinuityStatus(continuityRepo, clock,
 		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
 	s.Handle("continuity.open_counts", handlers.ContinuityOpenCounts(continuityRepo))
+	s.Handle("proposals.list", handlers.ListProposals(proposalsSvc, nodes, entities, threads))
+	s.Handle("proposals.accept", handlers.AcceptProposals(proposalsSvc, clock))
+	s.Handle("proposals.reject", handlers.RejectProposals(proposalsSvc, clock))
+	s.Handle("proposals.pending_count", handlers.ProposalsPendingCount(proposalsSvc))
+	s.Handle("proposals.extraction_estimate", handlers.ExtractionEstimate(proposalsSvc))
+	s.Handle("proposals.extraction_progress", handlers.ExtractionProgress(proposalsSvc))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))

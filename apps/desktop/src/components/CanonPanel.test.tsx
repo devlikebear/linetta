@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   entitiesList: vi.fn(),
   relationshipsList: vi.fn(),
+  proposalsPendingCount: vi.fn().mockResolvedValue({ count: 0 }),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -47,6 +48,10 @@ vi.mock("../lib/rpc", () => ({
     list: vi.fn().mockResolvedValue({ checks: [] }),
     setStatus: vi.fn(),
     openCounts: vi.fn().mockResolvedValue({ counts: {} }),
+  },
+  // story-assist Phase 3: the "제안함 N" badge is its own fetch.
+  proposals: {
+    pendingCount: mocks.proposalsPendingCount,
   },
 }));
 
@@ -114,6 +119,7 @@ describe("CanonPanel", () => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
     mocks.entitiesList.mockResolvedValue(cast);
     mocks.relationshipsList.mockResolvedValue([rel("r1", "e1", "e2"), rel("r2", "e2", "e1")]);
+    mocks.proposalsPendingCount.mockResolvedValue({ count: 0 });
   });
 
   it("saves the work art style", async () => {
@@ -207,5 +213,23 @@ describe("CanonPanel", () => {
     renderPanel();
     await screen.findByText("해윤");
     expect(screen.getByText("연속성 점검")).toBeTruthy();
+  });
+
+  // story-assist Phase 3 (3.D.3): the badge is the only entry point into the
+  // suggestions inbox from Story World, and it must not exist when there is
+  // nothing pending — a badge that always shows "0" is not a notification.
+  it("hides the suggestions badge when nothing is pending", async () => {
+    renderPanel();
+    await screen.findByText("해윤");
+    expect(screen.queryByText(/제안함/)).toBeNull();
+  });
+
+  it("shows the suggestions badge and opens the inbox on click", async () => {
+    mocks.proposalsPendingCount.mockResolvedValue({ count: 3 });
+    const onOpenProposals = vi.fn();
+    renderPanel({ onOpenProposals });
+    const badge = await screen.findByText("제안함 3");
+    await userEvent.click(badge);
+    expect(onOpenProposals).toHaveBeenCalledTimes(1);
   });
 });

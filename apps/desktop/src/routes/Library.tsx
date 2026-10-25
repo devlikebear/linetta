@@ -8,17 +8,23 @@ import {
   exportApi,
   backupApi,
   openPath,
+  proposals as proposalsApi,
+  providers as providersApi,
 } from "../lib/rpc";
 import type {
   DiagnosticsSnapshot,
+  ExtractionEstimate,
   ImportPreviewResult,
   NewProjectInput,
   Project,
+  ProviderStatus,
   SearchResult,
   Settings as SettingsRow,
 } from "../lib/types";
+import { isProviderReady, nameKeyFor } from "../lib/providers";
 import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
+import { ImportFillDialog } from "../components/ImportFillDialog";
 import { SearchModal } from "../components/SearchModal";
 import { pickAndReadMarkdown } from "../lib/importLoad";
 import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
@@ -69,6 +75,13 @@ export function Library() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
   const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
+  const [providerRows, setProviderRows] = useState<ProviderStatus[]>([]);
+  // The project a Markdown import just created, while the "Story World
+  // 채우기" dialog decides whether to send the writer straight to
+  // Workspace or to the agent panel with the extraction prompt queued
+  // (story-assist 3.D.3). Null means the dialog is closed.
+  const [importFillProjectId, setImportFillProjectId] = useState<string | null>(null);
+  const [importFillEstimate, setImportFillEstimate] = useState<ExtractionEstimate | null>(null);
   const navigate = useNavigate();
   const { showToast } = useToast();
 
@@ -105,6 +118,40 @@ export function Library() {
       });
     return () => { cancelled = true; };
   }, [showToast, t]);
+
+  // Whether to offer "Story World 채우기" after an import depends on a
+  // provider actually being connected — an agent with nowhere to run
+  // cannot read the manuscript, so the dialog would just be a dead end
+  // (story-assist 3.D.3).
+  useEffect(() => {
+    let cancelled = false;
+    providersApi
+      .list()
+      .then((rows) => {
+        if (!cancelled) setProviderRows(rows);
+      })
+      .catch(() => {
+        /* no providers configured yet is a normal state, not a failure */
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!importFillProjectId) {
+      setImportFillEstimate(null);
+      return;
+    }
+    let cancelled = false;
+    proposalsApi
+      .extractionEstimate(importFillProjectId)
+      .then((est) => {
+        if (!cancelled) setImportFillEstimate(est);
+      })
+      .catch(() => {
+        /* the dialog shows a loading state and nothing worse */
+      });
+    return () => { cancelled = true; };
+  }, [importFillProjectId]);
 
   const handleCreate = async (input: NewProjectInput) => {
     const created = await projectsApi.create(input);
@@ -147,12 +194,33 @@ export function Library() {
       }
       showToast(msg);
       setPending(null);
-      navigate(`/workspace/${res.project_id}`);
+      const activeProvider = providerRows.find((row) => row.active);
+      if (total > 0 && isProviderReady(activeProvider)) {
+        setImportFillProjectId(res.project_id);
+      } else {
+        navigate(`/workspace/${res.project_id}`);
+      }
     } catch (err) {
       showToast(t("library.toast.importFailed", { error: String(err) }));
     } finally {
       setImporting(false);
     }
+  };
+
+  const activeProvider = providerRows.find((row) => row.active);
+
+  const closeImportFill = () => {
+    if (!importFillProjectId) return;
+    navigate(`/workspace/${importFillProjectId}`);
+    setImportFillProjectId(null);
+  };
+
+  const startImportFill = () => {
+    if (!importFillProjectId) return;
+    navigate(`/workspace/${importFillProjectId}`, {
+      state: { fillStoryWorldPrompt: t("agentPanel.starters.fillStoryWorld.prompt") },
+    });
+    setImportFillProjectId(null);
   };
 
   const openBackupFolder = async () => {
@@ -489,6 +557,16 @@ export function Library() {
           busy={importing}
           onConfirm={confirmImport}
           onCancel={() => setPending(null)}
+        />
+      )}
+
+      {importFillProjectId && (
+        <ImportFillDialog
+          estimate={importFillEstimate}
+          providerNameKey={activeProvider ? nameKeyFor(activeProvider.id) : undefined}
+          model={activeProvider?.model}
+          onStart={startImportFill}
+          onLater={closeImportFill}
         />
       )}
 

@@ -19,6 +19,7 @@ import { autoMentionDoc, countAutoMentionCandidates } from "../lib/editor/autoMe
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CanonPanel } from "../components/CanonPanel";
+import { ProposalInbox } from "../components/ProposalInbox";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { AgentPanel } from "../components/agent/AgentPanel";
 import { useAgentRunning } from "../hooks/useAgentRunning";
@@ -56,6 +57,8 @@ import { planChapterCreation, type CreateNodeStep } from "../lib/outlineCreate";
 import { normalizePlatformProfile, transformPlatformText } from "../lib/platformProfiles";
 import { SceneSaveQueue } from "../lib/sceneSaveQueue";
 import { useMcpChanges } from "../hooks/useMcpChanges";
+import { useEngineEvent } from "../hooks/useEngineEvent";
+import type { ProposalsChangedPayload } from "../lib/types";
 import {
   buildTree,
   countEpisodeStatus,
@@ -140,15 +143,25 @@ export function Workspace() {
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
   const [canonOpen, setCanonOpen] = useState(false);
-  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(() => Boolean((location.state as { fillStoryWorldPrompt?: string } | null)?.fillStoryWorldPrompt));
+  // The Library import dialog's "시작" button lands here with the
+  // extraction prompt already typed into the agent panel's composer — the
+  // writer still presses send (story-assist 3.D.3). Read once, lazily, so
+  // navigating away and the state clearing afterward does not lose it.
+  const [agentInitialDraft] = useState(() => (location.state as { fillStoryWorldPrompt?: string } | null)?.fillStoryWorldPrompt ?? "");
+  const [proposalInboxOpen, setProposalInboxOpen] = useState(false);
   // Bumped when an external agent changes the work, so the story world list
-  // reflects the three characters it just said it created (#28).
+  // reflects the three characters it just said it created (#28). Also
+  // bumped on proposals-changed (story-assist Phase 3): accepting a
+  // proposal changes entities/facts/threads/beats the same way, and no
+  // dedicated per-kind event exists to tell this panel to refetch.
   const [canonRefreshKey, setCanonRefreshKey] = useState(0);
   const prevInspectorRef = useRef<InspectorState>({
     factBook: false,
     contextual: false,
     canon: false,
     agent: false,
+    proposalInbox: false,
   });
   useEffect(() => {
     const next: InspectorState = {
@@ -156,14 +169,16 @@ export function Workspace() {
       contextual: contextualEditOpen,
       canon: canonOpen,
       agent: agentOpen,
+      proposalInbox: proposalInboxOpen,
     };
     const corrected = reconcileInspector(prevInspectorRef.current, next, sizeClass);
     if (corrected.factBook !== next.factBook) setFactBookOpen(corrected.factBook);
     if (corrected.contextual !== next.contextual) setContextualEditOpen(corrected.contextual);
     if (corrected.canon !== next.canon) setCanonOpen(corrected.canon);
     if (corrected.agent !== next.agent) setAgentOpen(corrected.agent);
+    if (corrected.proposalInbox !== next.proposalInbox) setProposalInboxOpen(corrected.proposalInbox);
     prevInspectorRef.current = corrected;
-  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen, agentOpen]);
+  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen, agentOpen, proposalInboxOpen]);
   const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
@@ -549,6 +564,16 @@ export function Workspace() {
     onSceneChanged: (nodeId) => { void reloadSceneFromEngine(nodeId); },
   });
 
+  // story-assist Phase 3: accepting a proposal changes entities/facts/
+  // threads/beats the same way linetta_apply_story_ops does, but through
+  // the writer's own click rather than an MCP client — proposals.changed,
+  // not mcp.changed. CanonPanel's "제안함 N" badge and entity list both
+  // read off this same bump.
+  useEngineEvent<ProposalsChangedPayload>("proposals-changed", (event) => {
+    if (event.project_id && projectId && event.project_id !== projectId) return;
+    setCanonRefreshKey((k) => k + 1);
+  });
+
   const refreshTreeKeepNode = useCallback(
     async (currentNodeId: string) => {
       if (!projectId) return;
@@ -798,14 +823,15 @@ export function Workspace() {
     (async () => {
       try {
         const p = await projects.get(projectId);
-        const jumpTo = (location.state as { jumpToNodeId?: string } | null)?.jumpToNodeId;
+        const state = location.state as { jumpToNodeId?: string; fillStoryWorldPrompt?: string } | null;
+        const jumpTo = state?.jumpToNodeId;
         const target = jumpTo ?? p.last_opened_node_id;
         if (!target) throw new Error("project has no opened node");
         const next = await fetchTree(projectId, target);
         if (!cancelled) {
           setLoad(next);
           setCharCount(next.node.word_count);
-          if (jumpTo) navigate(location.pathname, { replace: true, state: null });
+          if (jumpTo || state?.fillStoryWorldPrompt) navigate(location.pathname, { replace: true, state: null });
         }
       } catch (e) {
         if (!cancelled) setError(String(e));
@@ -1415,6 +1441,16 @@ export function Workspace() {
       hint: t("workspace.command.sceneVersionsHint"),
       keywords: ["history", "rollback", "diff", "version", "restore", "히스토리", "버전", "복원", "비교"],
       run: () => setVersionSheetNodeId(load.node.id),
+    });
+    cmds.push({
+      id: "proposals-open",
+      section: sectionProject,
+      label: t("proposals.openInbox"),
+      keywords: ["suggestions", "inbox", "propose", "제안함", "제안", "수락"],
+      run: () => {
+        setCanonOpen(false);
+        setProposalInboxOpen(true);
+      },
     });
     cmds.push({
       id: "export-project",
@@ -2095,8 +2131,21 @@ export function Workspace() {
             onBeforeStyleCheck={flushPendingSave}
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
             onOpenFact={openFactFromContinuity}
+            onOpenProposals={() => {
+              setCanonOpen(false);
+              setProposalInboxOpen(true);
+            }}
             onClose={() => {
               setCanonOpen(false);
+              focusEditor();
+            }}
+          />
+        ) : proposalInboxOpen && load ? (
+          <ProposalInbox
+            projectId={load.project.id}
+            onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
+            onClose={() => {
+              setProposalInboxOpen(false);
               focusEditor();
             }}
           />
@@ -2104,6 +2153,7 @@ export function Workspace() {
           <AgentPanel
             projectId={load.project.id}
             nodeId={load.node.id}
+            initialDraft={agentInitialDraft}
             onClose={() => {
               setAgentOpen(false);
               focusEditor();

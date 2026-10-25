@@ -357,9 +357,13 @@ interface Props {
   /** The currently open editor's node id — agent.run's scope argument and
    *  the only material the engine gets for "which scene do you mean". */
   nodeId: string;
+  /** Pre-fills the composer on mount without sending it — the Library
+   *  import dialog's "시작" button lands here with the extraction prompt
+   *  already typed, same as a starter chip. The writer still presses send. */
+  initialDraft?: string;
 }
 
-export function AgentPanel({ onClose, projectId, nodeId }: Props) {
+export function AgentPanel({ onClose, projectId, nodeId, initialDraft }: Props) {
   const { t } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
   // credential without consent is refused server-side — Source.Client()
@@ -397,7 +401,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // `canceling` guards agent.cancel the same way handleUndo guards
   // agent.undo — one click, one call, even if the writer clicks again before
   // the round trip returns.
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft ?? "");
   const [sending, setSending] = useState(false);
   const [turnRunId, setTurnRunId] = useState<string | null>(null);
   // When the turn in progress started — the working line's clock. From the
@@ -1399,6 +1403,16 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
                 onClick={() => setDraft(t("agentPanel.starters.checkContinuity.prompt"))}
               >
                 {t("agentPanel.starters.checkContinuity.label")}
+              </button>
+            ) : null}
+            {reviewToolsEnabled ? (
+              <button
+                type="button"
+                className="chip"
+                data-testid="agent-starter-fillStoryWorld"
+                onClick={() => setDraft(t("agentPanel.starters.fillStoryWorld.prompt"))}
+              >
+                {t("agentPanel.starters.fillStoryWorld.label")}
               </button>
             ) : null}
             <button

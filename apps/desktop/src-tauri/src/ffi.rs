@@ -240,6 +240,15 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // showing an observation the writer just resolved or dismissed
         // until something unrelated happened to remount the panel.
         "continuity.changed" => Some("continuity-changed"),
+        // The proposals inbox changed — an agent submitted a batch
+        // (linetta_propose_story_ops), or the writer accepted/rejected an
+        // item (story-assist Phase 3). This is NOT mcp.changed: that name
+        // means an MCP client wrote the manuscript, and an accept/reject
+        // click is the writer's own action, applied through storyops just
+        // like any other change. CanonPanel's "제안함 N" badge and the
+        // inbox itself read a count fetched once; without this event they
+        // would stay stale until something unrelated remounted them.
+        "proposals.changed" => Some("proposals-changed"),
         _ => None,
     }
 }
@@ -454,6 +463,17 @@ mod tests {
         // stale count until an unrelated remount refreshed it.
         assert_eq!(notification_event("continuity.changed"), Some("continuity-changed"));
         assert_eq!(notification_event("continuity.unmapped"), None);
+    }
+
+    #[test]
+    fn proposals_changed_is_forwarded_to_the_renderer() {
+        // CanonPanel's "제안함 N" badge and the inbox itself are fetched
+        // once and cached. Without this event, an agent submitting a
+        // batch or the writer accepting/rejecting an item would leave
+        // both showing a stale count until an unrelated remount refreshed
+        // them (story-assist Phase 3).
+        assert_eq!(notification_event("proposals.changed"), Some("proposals-changed"));
+        assert_eq!(notification_event("proposals.unmapped"), None);
     }
 
     #[cfg(target_os = "windows")]

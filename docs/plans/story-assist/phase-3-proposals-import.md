@@ -88,7 +88,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
 
 ### A. 공용 기반
 
-- [ ] **3.A.1 인용 검증을 `evidence` 패키지로 옮김**
+- [x] **3.A.1 인용 검증을 `evidence` 패키지로 옮김**
   - 파일: `engine/internal/evidence/evidence.go`, `evidence_test.go`. 이에 맞춰 `engine/internal/continuity/validate.go`도 고친다.
   - 내용:
     - Phase 2의 문단 범위 검사와 정규화 부분 문자열 검사를 옮긴다.
@@ -96,7 +96,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
     - 오류 문구는 그대로 유지한다. Phase 2 테스트가 계속 통과해야 한다.
   - 이유: 패키지 두 개가 같은 검사를 따로 구현하면 인용 규칙이 갈라진다. 검사하는 길은 하나만 둔다.
 
-- [ ] **3.A.2 storyops: 별칭 필드와 미리 묶인 ref**
+- [x] **3.A.2 storyops: 별칭 필드와 미리 묶인 ref**
   - 파일: `engine/internal/storyops/ops.go`, `apply.go`, `apply_test.go`, `ops_schema_test.go`
   - 내용:
     - `Op.Aliases []string` (`json:"aliases,omitempty"`)
@@ -117,7 +117,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
 
 ### B. 제안함 엔진
 
-- [ ] **3.B.1 `proposals` 패키지: 접수 검증**
+- [x] **3.B.1 `proposals` 패키지: 접수 검증**
   - 파일: `engine/internal/proposals/proposals.go`, `submit.go`, `submit_test.go`
   - 허용 op
     - `create_entity`, `update_entity`, `create_relationship`, `create_fact_card`, `create_thread`, `update_thread`, `add_beat`, `update_beat`
@@ -136,7 +136,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
   - 문제가 하나라도 있으면 아무것도 저장하지 않는다. 문제를 모두 돌려준다 (Phase 2와 같은 재시도 방식).
   - 한도: 묶음 1개에 항목 60개, 항목 1개에 근거 3개
 
-- [ ] **3.B.2 중복 후보 판정**
+- [x] **3.B.2 중복 후보 판정**
   - 파일: `engine/internal/proposals/dedupe.go`, `dedupe_test.go`
   - 정규화: NFKC → 대소문자 접기 → 공백·가운뎃점·하이픈 제거
   - 비교 대상:
@@ -151,7 +151,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
     - pending끼리의 일치
     - 종류가 다른 경우
 
-- [ ] **3.B.3 수락, 거절, 수정**
+- [x] **3.B.3 수락, 거절, 수정**
   - 파일: `engine/internal/proposals/accept.go`, `accept_test.go`
   - 함수:
     ```go
@@ -179,7 +179,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
     - 별칭 전환
     - 부분 실패
 
-- [ ] **3.B.4 원고 추출 진행률과 예상 분량**
+- [x] **3.B.4 원고 추출 진행률과 예상 분량**
   - 파일: `engine/internal/proposals/progress.go`, `progress_test.go`
   - 함수:
     ```go
@@ -199,7 +199,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
 
 ### C. MCP와 에이전트
 
-- [ ] **3.C.1 `linetta_propose_story_ops` (쓰기 도구, Review 그룹)**
+- [x] **3.C.1 `linetta_propose_story_ops` (쓰기 도구, Review 그룹)**
   - 파일: `engine/internal/mcphost/tools_proposals.go` 신규, `tools_proposals_test.go`, `budget.go` (`ReviewToolNames`에 추가)
   - 입력:
     - `project_id`, `summary`
@@ -212,14 +212,14 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
     > Suggest world elements (characters, places, items, concepts, relationships, fact cards, storylines, beats) for the writer to accept one by one. Nothing is applied. Use it for anything drawn from the manuscript or for more than a few items; reuse existing entity ids from linetta_list_characters instead of proposing duplicates. Cite evidence from linetta_read_scene numbered=true where you can.
   - 성공하면 `notifyChanged(projectID, "linetta_propose_story_ops", nil, "")`
 
-- [ ] **3.C.2 에이전트 지침**
+- [x] **3.C.2 에이전트 지침**
   - 파일: `engine/internal/agent/prompt.go`, `prompt_test.go`. Review 그룹이 켜져 있을 때만 넣는다.
     > Changes you are asked for directly and that are small go through linetta_apply_story_ops. Anything drawn from the manuscript, or more than a few world elements at once, goes through linetta_propose_story_ops: the writer accepts it item by item.
     > When asked to fill Story World from the manuscript, work episode by episode in outline order, starting where the tool's progress says. Check what already exists first, propose with purpose=import_extraction and from_node_ids, and stop before your tool budget runs out to tell the writer how far you got and to say "continue".
 
 ### D. RPC와 화면
 
-- [ ] **3.D.1 RPC**
+- [x] **3.D.1 RPC**
   - 파일: `engine/internal/rpc/handlers/proposals.go`, `proposals_test.go`
   - 메서드:
     - `proposals.list {project_id, statuses?}` → 묶음과 항목
@@ -232,7 +232,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
     - `proposals.extraction_progress {project_id}`
   - 등록: `engineapp.go`, `lib.rs` `RENDERER_ENGINE_METHODS`
 
-- [ ] **3.D.2 `ProposalInbox`**
+- [x] **3.D.2 `ProposalInbox`**
   - 파일: `apps/desktop/src/components/ProposalInbox.tsx`, `.css`, `.test.tsx`
   - 형태: Workspace의 오른쪽 sheet. `VersionSheet`처럼 연다.
   - 화면:
@@ -257,7 +257,7 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
     - 실패 표시
     - 이벤트 갱신
 
-- [ ] **3.D.3 진입점**
+- [x] **3.D.3 진입점**
   - `components/CanonPanel.tsx` 머리에 "제안함 N" 배지를 단다. N이 0이면 숨긴다.
   - `routes/Workspace.tsx`: 커맨드 팔레트 항목 "제안함 열기"를 추가한다.
   - `routes/Library.tsx`의 Markdown 가져오기가 성공한 직후, 프로바이더가 연결되어 있으면 "Story World 채우기" 다이얼로그를 띄운다.
@@ -268,13 +268,13 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
   - `components/agent/AgentPanel.tsx`: starter 칩 `fillStoryWorld`를 추가한다. Review 그룹이 꺼져 있으면 숨긴다.
   - `lib/agentTools.ts`: `WRITE_TOOL_NAMES`와 라벨
 
-- [ ] **3.D.4 복원 정책**
+- [x] **3.D.4 복원 정책**
   - 파일: `engine/internal/restore/restore.go`
   - 내용: 제안함은 **작품 단위 복원 대상에서 뺀다.** 함수 머리 주석에 그 이유를 쓴다.
     - pending op는 원래 서재의 entity id를 가리킨다. 복원으로 id가 바뀌면 뜻을 잃는다.
     - 제안은 언제든 다시 만들 수 있다.
 
-- [ ] **3.D.5 다국어와 문서**
+- [x] **3.D.5 다국어와 문서**
   - `lib/i18n.tsx`:
     - `proposals.*` (제목, 종류, 중복, 의존, 적용과 거절, 결과 토스트)
     - `importFill.*` (다이얼로그)
@@ -289,21 +289,27 @@ CREATE INDEX story_proposal_items_project ON story_proposal_items(project_id, st
 ## ✅ Phase 3 Checkpoint
 
 **자동 검증**
-- [ ] `cd engine && CGO_ENABLED=0 go test ./internal/evidence/... ./internal/continuity/... ./internal/storyops/... ./internal/proposals/... ./internal/mcphost/... ./internal/rpc/handlers/... ./internal/agent/...`
-- [ ] `make test-mobile-engine`
-- [ ] `pnpm --dir apps/desktop test -- ProposalInbox.test.tsx CanonPanel.test.tsx AgentPanel.test.tsx agentToolParity.test.ts rpcAllowlist.test.ts i18n.catalog.test.ts --run`
-- [ ] `pnpm --dir apps/desktop exec tsc --noEmit`
-- [ ] `make test`
+- [x] `cd engine && CGO_ENABLED=0 go test ./internal/evidence/... ./internal/continuity/... ./internal/storyops/... ./internal/proposals/... ./internal/mcphost/... ./internal/rpc/handlers/... ./internal/agent/...`
+- [x] `make test-mobile-engine`
+- [x] `pnpm --dir apps/desktop test -- ProposalInbox.test.tsx CanonPanel.test.tsx AgentPanel.test.tsx agentToolParity.test.ts rpcAllowlist.test.ts i18n.catalog.test.ts --run`
+- [x] `pnpm --dir apps/desktop exec tsc --noEmit`
+- [x] `make test` — `test-go`의 cgo `-race` 전체 스위트는 이 기기에서 로그인 키체인 프롬프트로 멈추므로 (알려진 제약, linetta-local-test-environment) 대신 `cd engine && CGO_ENABLED=0 go test ./...`로 돌렸다(통과). `bash scripts/validate-story-core-deps.sh`, `make test-desktop`, `make test-tauri`는 그대로 돌렸다(모두 통과). `-race` 전체 스위트는 CI에 맡긴다.
 
-**수동 검증** (격리된 `LINETTA_HOME`, 프로바이더 하나 연결)
+**수동 검증** (격리된 `LINETTA_HOME`, 프로바이더 하나 연결) — 실제 프로바이더 연결과 UI 클릭이 필요해 이번 턴에서는 직접 확인하지 못했다. 각 항목 옆에 같은 동작을 덮는 자동 테스트를 적는다.
 - [ ] 회차 5개짜리 Markdown 원고를 가져온다. "Story World 채우기" 다이얼로그에 회차 수, 글자 수, 어림 토큰이 보인다.
+  - 자동 테스트: `Library.importFill.test.tsx`("shows the dialog with the estimate when a provider is connected" 등), `proposals.TestExtractionEstimate_sizesTheWholeManuscript`
 - [ ] [시작] → 패널에 문구가 채워진다 → 보내기. 다음을 확인한다.
   - 제안함에 후보가 쌓인다.
   - Story World에는 **아직 아무것도 생기지 않았다.**
+  - 자동 테스트: `AgentPanel.test.tsx`("pre-fills the composer from initialDraft without sending" — 보내지 않음), `Library.importFill.test.tsx`("'시작' sends the writer to Workspace with the extraction prompt queued, not sent"), `proposals.TestSubmit_acceptsAllowedOpsAndStoresPending`(status가 pending으로만 남음 — storyops 미적용)
 - [ ] 미리 만들어 둔 인물 "김민호"와 후보 "김 민호"가 중복으로 표시된다. [별칭으로]를 누른 뒤 적용하면 김민호의 별칭이 늘어난다.
+  - 자동 테스트: `proposals.TestSubmit_flagsDuplicateAgainstExistingEntity`, `proposals.TestAccept_aliasConversionEdit`, `ProposalInbox.test.tsx`("converts a duplicate candidate into an alias of the existing entity")
 - [ ] 관계 후보만 선택하고 적용하면 "인물 생성이 먼저 필요" 안내가 나온다. 인물을 함께 선택하면 둘 다 적용된다.
+  - 자동 테스트: `proposals.TestAccept_refusedWhenDependencyMissing`, `proposals.TestAccept_withDependencyAcceptedTogether`, `ProposalInbox.test.tsx`("auto-selects an unmet dependency and notes it")
 - [ ] 도구 호출 한도로 턴이 멈춘 뒤 "계속"을 보내면, 진행률에 표시된 다음 회차부터 이어진다.
+  - 자동 테스트: `proposals.TestExtractionProgress_tracksCoverageAndNextEpisode`(다음 회차 계산만 검증; 턴이 실제로 멈췄다가 이어지는 것은 모델 행동이라 끝까지는 덮지 못한다), `agent/prompt_test.go`의 `TestSystemPrompt_statesProposeVsApplyWhenReviewOn`(그 지침 문구가 프롬프트에 들어가는 것까지 보증)
 - [ ] 직접 "인물 하나 만들어 줘"라고 부탁하면 제안함을 거치지 않고 바로 만들어진다(apply 경로).
+  - `linetta_apply_story_ops` 자체는 이번 Phase에서 바뀌지 않았고 기존 `storyops` 전체 테스트가 그대로 통과한다. 다만 어느 경로를 쓸지는 `agent/prompt.go`의 지침을 읽은 모델이 고르는 것이라 그 선택 자체는 코드로 강제하지 않으며, 이 항목도 직접 확인하지 못했다.
 
 **완료 처리**
 1. 결과를 보고한다. 확인하지 못한 항목은 그렇다고 적는다.

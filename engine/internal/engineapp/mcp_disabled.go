@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
@@ -55,6 +56,7 @@ type mcpToolRepos struct {
 	beats         *beat.Repo
 	threads       *thread.Repo
 	continuity    *continuity.Repo
+	proposals     *proposals.Service
 	plot          *plot.Builder
 	manuscript    *manuscript.Searcher
 	context       *storycontext.ContextBuilder

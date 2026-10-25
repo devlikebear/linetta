@@ -55,6 +55,10 @@ type Op struct {
 	Role       string            `json:"role,omitempty" jsonschema:"create_entity preset role (in every brief): characters 주인공, 공동 주인공, 조연, 빌런, 라이벌, 멘토, 조력자; places 메인 무대, 특별한 장소, 일상 거점, 위험 구역, 금지된 장소, 기억의 장소, 권력의 중심; other/empty only where mentioned"`
 	EntityID   string            `json:"entity_id,omitempty"`
 	Attributes map[string]string `json:"attributes,omitempty"`
+	// Aliases: create_entity sets them; update_entity only ADDS to the
+	// existing list and never removes an alias (story-assist Phase 3, same
+	// rule context edit Phase 3 follows for its own alias field).
+	Aliases []string `json:"aliases,omitempty" jsonschema:"create_entity: sets aliases; update_entity: adds to existing aliases, never removing one"`
 
 	// create_scene
 	AfterNodeID   string `json:"after_node_id,omitempty"`

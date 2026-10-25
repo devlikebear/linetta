@@ -5,10 +5,12 @@ export interface InspectorState {
   contextual: boolean;
   canon: boolean;
   agent: boolean;
+  /** The suggestions inbox (story-assist Phase 3). */
+  proposalInbox: boolean;
 }
 
 type Key = keyof InspectorState;
-const PRIORITY: Key[] = ["factBook", "contextual", "canon", "agent"];
+const PRIORITY: Key[] = ["factBook", "contextual", "canon", "agent", "proposalInbox"];
 
 export function reconcileInspector(
   prev: InspectorState,

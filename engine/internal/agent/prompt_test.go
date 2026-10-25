@@ -73,6 +73,27 @@ func TestSystemPrompt_statesTheRecordAndPatchHabit(t *testing.T) {
 	}
 }
 
+// story-assist Phase 3 (3.C.2): the propose-vs-apply split and the
+// extraction-sweep habit are only meaningful instructions when the Review
+// group is on — linetta_propose_story_ops is absent otherwise.
+func TestSystemPrompt_statesProposeVsApplyWhenReviewOn(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"linetta_propose_story_ops", "linetta_apply_story_ops", "import_extraction", "continue"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing %q with review on; got:\n%s", want, got)
+		}
+	}
+}
+
+func TestSystemPrompt_withReviewOffDropsThePropose(t *testing.T) {
+	groups := allToolGroups()
+	groups.review = false
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, groups)
+	if strings.Contains(got, "linetta_propose_story_ops") {
+		t.Error("linetta_propose_story_ops must not be named when review is off")
+	}
+}
+
 func TestScopeLine_namesTheWorkAndTheOpenScene(t *testing.T) {
 	s := fakeScope{
 		titles: map[string]string{"p1": "은하수를 여행하는"},

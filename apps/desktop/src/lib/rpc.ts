@@ -1,6 +1,14 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
+import type {
+  AcceptSuggestionsResult,
+  ExtractionEstimate,
+  ExtractionProgress,
+  ProposalOp,
+  SuggestionBatch,
+  SuggestionItemStatus,
+} from "./types";
 import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, ImageProviderStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
@@ -660,4 +668,23 @@ export const continuity = {
     rpcCall<ContinuityObservation>("continuity.set_status", { observation_id: observationId, status }),
   openCounts: (projectId: string) =>
     rpcCall<ContinuityOpenCounts>("continuity.open_counts", { project_id: projectId }),
+};
+
+/** The suggestions inbox (story-assist Phase 3): an agent's
+ *  linetta_propose_story_ops candidates, and the writer's item-by-item
+ *  accept/reject of them. Nothing here applies anything on its own except
+ *  accept, which runs the chosen items through storyops. */
+export const proposals = {
+  list: (projectId: string, statuses?: SuggestionItemStatus[]) =>
+    rpcCall<{ proposals: SuggestionBatch[] }>("proposals.list", { project_id: projectId, statuses }),
+  accept: (projectId: string, itemIds: string[], edits?: Record<string, ProposalOp>) =>
+    rpcCall<AcceptSuggestionsResult>("proposals.accept", { project_id: projectId, item_ids: itemIds, edits }),
+  reject: (projectId: string, itemIds: string[]) =>
+    rpcCall<{ ok: boolean }>("proposals.reject", { project_id: projectId, item_ids: itemIds }),
+  pendingCount: (projectId: string) =>
+    rpcCall<{ count: number }>("proposals.pending_count", { project_id: projectId }),
+  extractionEstimate: (projectId: string) =>
+    rpcCall<ExtractionEstimate>("proposals.extraction_estimate", { project_id: projectId }),
+  extractionProgress: (projectId: string) =>
+    rpcCall<ExtractionProgress>("proposals.extraction_progress", { project_id: projectId }),
 };

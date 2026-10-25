@@ -186,7 +186,10 @@ type MergeResult struct {
 // project_art_style, project_style_rules, illustrations, project_focus,
 // scene_intents, continuity_checks, continuity_observations. Library-level
 // history (companion transcripts, AI runs, MCP activity, the global
-// writer_profile memory) stays with the library it belongs to.
+// writer_profile memory) stays with the library it belongs to. Deliberately
+// NOT copied: story_proposals and story_proposal_items (story-assist
+// Phase 3) — see the comment where continuity's own copy sits below for why
+// that one is included and this one is not.
 func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, projectID, titleSuffix string, now time.Time) (MergeResult, error) {
 	src, done, err := openBackupCopy(ctx, backupPath, tempDir)
 	if err != nil {
@@ -507,12 +510,29 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	// same rule scene_intents follows above. Status and content_version
 	// travel unchanged: a restored scene at the same version keeps the
 	// same staleness verdict it had before the backup. Deliberately
-	// included rather than left with evidence packages and forecasts
-	// (Phase 3/4) — see docs/plans/story-assist/phase-2-continuity.md's
-	// 2.C.2: an observation is tied to a scene and a quote from it, so its
-	// meaning survives the remap in a way a proposal or a forecast does
-	// not, and the writer's own dismiss/resolve judgement is work the
-	// restore must not erase.
+	// included rather than left with story-structure proposals (Phase 3)
+	// and forecasts (Phase 4) — see
+	// docs/plans/story-assist/phase-2-continuity.md's 2.C.2: an observation
+	// is tied to a scene and a quote from it, so its meaning survives the
+	// remap in a way a proposal or a forecast does not, and the writer's
+	// own dismiss/resolve judgement is work the restore must not erase.
+	//
+	// story_proposals and story_proposal_items (story-assist Phase 3) are
+	// the opposite case, and on purpose: a pending item's op_json still
+	// names the ORIGINAL library's entity/thread/node ids (ref_bindings_json
+	// too, for whichever refs an earlier accept already resolved), and a
+	// create_relationship item's from_ref/to_ref may point at a sibling
+	// item that has not been accepted yet and so has no id of its own to
+	// remap in the first place. Rewriting every one of those references
+	// through nodeMap/entityMap/threadMap would mean parsing and
+	// reconstructing arbitrary storyops.Op JSON for every allowed op type —
+	// exactly the "two implementations of one op format" risk
+	// docs/plans/story-assist/phase-3-proposals-import.md's 3.A.2 already
+	// avoided once by giving storyops.ApplyOpsWithRefs a seedable Refs
+	// instead of a second applier. A dangling id restoring the work with a
+	// twisted meaning is worse than losing something the writer can just
+	// ask the agent to propose again: linetta_propose_story_ops has no
+	// state of its own to carry forward, so nothing here is lost for good.
 	checkMap := map[string]string{}
 	if err := copyRows(ctx, sdb, tx, "continuity_checks",
 		"node_id IN (SELECT id FROM nodes WHERE project_id = ?)", []any{projectID},

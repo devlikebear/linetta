@@ -1,11 +1,12 @@
 package continuity
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf8"
 
-	"golang.org/x/text/unicode/norm"
+	"github.com/devlikebear/linetta/engine/internal/evidence"
 )
 
 // RefLookup answers whether a ref an observation cites exists in the work
@@ -105,13 +106,11 @@ func validateOne(add func(idx int, format string, args ...any), num int, obs Obs
 		add(idx, "observation %d: quote is %d characters; the limit is %d", num, n, MaxQuoteRunes)
 	}
 
-	rangeOK := validateRange(add, num, obs.ParagraphFrom, obs.ParagraphTo, len(paragraphs))
-	if rangeOK && quote != "" {
-		haystack := strings.Join(paragraphs[obs.ParagraphFrom-1:obs.ParagraphTo], "\n")
-		if !containsNormalized(haystack, quote) {
-			add(idx, "observation %d: quote not found in %s; copy it exactly from the numbered text or "+
-				"drop the observation", num, paragraphsPhrase(obs.ParagraphFrom, obs.ParagraphTo))
-		}
+	// VerifyQuote always runs, even with an empty quote (already reported
+	// above as its own problem): the writer still deserves a clear range
+	// error when paragraph_from/paragraph_to themselves are invalid.
+	if err := evidence.VerifyQuote(paragraphs, obs.ParagraphFrom, obs.ParagraphTo, quote); err != nil {
+		addEvidenceRangeProblem(add, idx, num, err)
 	}
 
 	if len(obs.Refs) > MaxRefsPerObservation {
@@ -171,35 +170,9 @@ func validateRef(add func(idx int, format string, args ...any), num, refIdx int,
 			add(idx, "observation %d ref %d: quote is %d characters; the limit is %d", num, refIdx, n, MaxQuoteRunes)
 			return
 		}
-		if ref.Paragraph < 1 || ref.Paragraph > len(scenePars) {
-			add(idx, "observation %d ref %d: paragraph %d is out of range; scene %q has %d paragraphs",
-				num, refIdx, ref.Paragraph, ref.ID, len(scenePars))
-			return
+		if err := evidence.VerifyQuote(scenePars, ref.Paragraph, ref.Paragraph, quote); err != nil {
+			addEvidenceSceneRefProblem(add, idx, num, refIdx, ref.ID, err)
 		}
-		if !containsNormalized(scenePars[ref.Paragraph-1], quote) {
-			add(idx, "observation %d ref %d: quote not found in scene %q paragraph %d; copy it exactly or drop the quote",
-				num, refIdx, ref.ID, ref.Paragraph)
-		}
-	}
-}
-
-// validateRange checks an observation's 1-based [paragraph_from,
-// paragraph_to] range against a scene with n paragraphs, adding a Problem
-// and returning false when it is invalid.
-func validateRange(add func(idx int, format string, args ...any), num int, from, to, n int) bool {
-	idx := num - 1
-	switch {
-	case from < 1:
-		add(idx, "observation %d: paragraph_from %d must be at least 1", num, from)
-		return false
-	case to < from:
-		add(idx, "observation %d: paragraph_to %d is before paragraph_from %d", num, to, from)
-		return false
-	case to > n:
-		add(idx, "observation %d: paragraph %d is out of range; the scene has %d paragraphs", num, to, n)
-		return false
-	default:
-		return true
 	}
 }
 
@@ -210,15 +183,47 @@ func paragraphsPhrase(from, to int) string {
 	return fmt.Sprintf("paragraphs %d–%d", from, to)
 }
 
-// containsNormalized reports whether quote appears in haystack once both are
-// NFC-normalized and their whitespace runs are folded to a single space —
-// so a quote that differs from the manuscript only in composed-vs-decomposed
-// Hangul or in how many spaces sit between two words still passes, while a
-// quote with different WORDS does not.
-func containsNormalized(haystack, quote string) bool {
-	return strings.Contains(normalizeForCompare(haystack), normalizeForCompare(quote))
+// addEvidenceRangeProblem turns an evidence.VerifyQuote error from an
+// observation's own [paragraph_from, paragraph_to] check into the exact
+// wording this package used before the check moved to evidence.VerifyQuote
+// (3.A.1) — a model that has already learned to fix one of these phrasings
+// must keep seeing it.
+func addEvidenceRangeProblem(add func(idx int, format string, args ...any), idx, num int, err error) {
+	var ee *evidence.Error
+	if !errors.As(err, &ee) {
+		add(idx, "observation %d: %v", num, err)
+		return
+	}
+	switch ee.Kind {
+	case evidence.FromTooSmall:
+		add(idx, "observation %d: paragraph_from %d must be at least 1", num, ee.From)
+	case evidence.ToBeforeFrom:
+		add(idx, "observation %d: paragraph_to %d is before paragraph_from %d", num, ee.To, ee.From)
+	case evidence.OutOfRange:
+		add(idx, "observation %d: paragraph %d is out of range; the scene has %d paragraphs", num, ee.To, ee.N)
+	case evidence.QuoteNotFound:
+		add(idx, "observation %d: quote not found in %s; copy it exactly from the numbered text or "+
+			"drop the observation", num, paragraphsPhrase(ee.From, ee.To))
+	}
 }
 
-func normalizeForCompare(s string) string {
-	return strings.Join(strings.Fields(norm.NFC.String(s)), " ")
+// addEvidenceSceneRefProblem is addEvidenceRangeProblem's counterpart for a
+// RefTypeScene ref, whose from and to are always the same single Paragraph —
+// so FromTooSmall and OutOfRange collapse into the one "paragraph %d is out
+// of range" wording this package used before 3.A.1, and ToBeforeFrom cannot
+// occur.
+func addEvidenceSceneRefProblem(add func(idx int, format string, args ...any), idx, num, refIdx int, sceneID string, err error) {
+	var ee *evidence.Error
+	if !errors.As(err, &ee) {
+		add(idx, "observation %d ref %d: %v", num, refIdx, err)
+		return
+	}
+	switch ee.Kind {
+	case evidence.FromTooSmall, evidence.OutOfRange:
+		add(idx, "observation %d ref %d: paragraph %d is out of range; scene %q has %d paragraphs",
+			num, refIdx, ee.To, sceneID, ee.N)
+	case evidence.QuoteNotFound:
+		add(idx, "observation %d ref %d: quote not found in scene %q paragraph %d; copy it exactly or drop the quote",
+			num, refIdx, sceneID, ee.To)
+	}
 }
