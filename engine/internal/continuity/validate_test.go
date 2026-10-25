@@ -94,7 +94,11 @@ func TestValidate_tableDriven(t *testing.T) {
 		{
 			name: "invented quote is rejected",
 			in: ReportInput{NodeID: "n1", Observations: []ObservationInput{
-				func() ObservationInput { o := validObservation(); o.Quote = "이런 문장은 본문에 없다."; return o }(),
+				func() ObservationInput {
+					o := validObservation()
+					o.Quote = "이런 문장은 본문에 없다."
+					return o
+				}(),
 			}},
 			wantErr: true,
 			substr:  "quote not found in paragraph 1",

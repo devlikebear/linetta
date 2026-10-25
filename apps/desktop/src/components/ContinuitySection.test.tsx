@@ -113,6 +113,27 @@ describe("ContinuitySection", () => {
     expect(screen.queryByText("하린이 왼손잡이라는 설정과 맞지 않는다")).not.toBeInTheDocument();
   });
 
+  it("reopens a dismissed observation via a dedicated action label, not the status label", async () => {
+    mocks.list.mockResolvedValue({
+      checks: [check({ observations: [observation({ id: "obs-dismissed", status: "dismissed" })] })],
+    });
+    mocks.setStatus.mockResolvedValue({ ...observation(), status: "open" });
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByTestId("continuity-status-dismissed");
+    await user.click(screen.getByTestId("continuity-status-dismissed"));
+    await screen.findByText("하린이 왼손잡이라는 설정과 맞지 않는다");
+
+    // "다시 열기" (reopen), not "열림" (the open status label) — the
+    // button describes the action it takes, not a state it shows.
+    const reopenButton = await screen.findByRole("button", { name: "다시 열기" });
+    expect(screen.queryByRole("button", { name: "열림" })).not.toBeInTheDocument();
+
+    await user.click(reopenButton);
+    await waitFor(() => expect(mocks.setStatus).toHaveBeenCalledWith("obs-dismissed", "open"));
+  });
+
   it("filters by status tab", async () => {
     mocks.list.mockResolvedValue({
       checks: [
@@ -144,6 +165,61 @@ describe("ContinuitySection", () => {
 
     await user.click(screen.getByTestId("continuity-scope-work"));
     await waitFor(() => expect(mocks.list).toHaveBeenCalledWith("p", undefined));
+  });
+
+  it("opens, scopes to the current scene and switches to the open tab when focusRequest changes", async () => {
+    mocks.list.mockResolvedValue({ checks: [] });
+    const user = userEvent.setup();
+    const { rerender, container } = render(
+      <I18nProvider>
+        <ContinuitySection projectId="p" nodeId="n1" focusRequest={null} />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledWith("p", "n1"));
+
+    // Move away from the defaults first, so the assertions below prove the
+    // focusRequest handler actually reset them rather than finding them
+    // already at their initial values.
+    await user.click(screen.getByTestId("continuity-scope-work"));
+    await user.click(screen.getByTestId("continuity-status-dismissed"));
+    expect(container.querySelector("details")?.open).toBe(false);
+    mocks.list.mockClear();
+
+    rerender(
+      <I18nProvider>
+        <ContinuitySection projectId="p" nodeId="n1" focusRequest={1} />
+      </I18nProvider>,
+    );
+
+    expect(container.querySelector("details")?.open).toBe(true);
+    expect(screen.getByTestId("continuity-scope-scene")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("continuity-status-open")).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledWith("p", "n1"));
+  });
+
+  it("ignores a focusRequest that has not changed, so it does not fight a writer who just closed the section", async () => {
+    mocks.list.mockResolvedValue({ checks: [] });
+    const { rerender, container } = render(
+      <I18nProvider>
+        <ContinuitySection projectId="p" nodeId="n1" focusRequest={1} />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(container.querySelector("details")?.open).toBe(true));
+
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    act(() => {
+      details.open = false;
+      details.dispatchEvent(new Event("toggle", { bubbles: false }));
+    });
+    expect(container.querySelector("details")?.open).toBe(false);
+
+    // Same focusRequest value again — re-rendering must not reopen it.
+    rerender(
+      <I18nProvider>
+        <ContinuitySection projectId="p" nodeId="n1" focusRequest={1} />
+      </I18nProvider>,
+    );
+    expect(container.querySelector("details")?.open).toBe(false);
   });
 
   it("shows the empty-work message when nothing has ever been checked", async () => {

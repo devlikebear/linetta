@@ -62,6 +62,53 @@ describe("Workspace story world panel", () => {
     }
   });
 
+  it("clears the continuity focus request when any inspector-slot panel opens", async () => {
+    const src = await workspace();
+    // continuityFocusRequest (the open-observations badge's own "pull the
+    // section open" signal) must be reset by every one of these four
+    // toggles, the same way factBookHighlightId already is above —
+    // otherwise opening, say, the Fact Book plainly later and then Story
+    // World again would replay a stale badge click and force the
+    // continuity section open/scene-scoped even though the writer never
+    // clicked the badge this time.
+    for (const name of ["toggleFactBook", "toggleContextualEdit", "toggleCanon", "toggleAgent"]) {
+      const start = src.indexOf(`const ${name} = `);
+      const body = src.slice(start, src.indexOf("}, []);", start));
+      expect(body).toContain("setContinuityFocusRequest(null)");
+    }
+  });
+
+  it("opens Story World's continuity section scoped to the current scene from the open-observations badge", async () => {
+    const src = await workspace();
+    // ContextPanel's badge must not just flip canonOpen — it needs its own
+    // handler so CanonPanel/ContinuitySection can tell "plain open" apart
+    // from "open and show me this scene's open observations", including
+    // when canonOpen was already true (a plain setCanonOpen(true) would be
+    // a no-op re-render there).
+    expect(src).toContain("onOpenContinuity={openContinuityForScene}");
+
+    const start = src.indexOf("const openContinuityForScene = ");
+    expect(start).toBeGreaterThan(-1);
+    const body = src.slice(start, src.indexOf("}, []);", start));
+    // Same "close every other inspector-slot panel and sheet, clear stale
+    // highlight state" shape the toggles above follow...
+    expect(body).toContain("setFactBookHighlightId(null)");
+    expect(body).toContain("setFactBookOpen(false)");
+    expect(body).toContain("setContextualEditOpen(false)");
+    expect(body).toContain("setAgentOpen(false)");
+    expect(body).toContain("setEntitySheetId(null)");
+    expect(body).toContain("setThreadSheetId(null)");
+    // ...then actually opens Story World and bumps the counter
+    // ContinuitySection watches, even if it was already open.
+    expect(body).toContain("setCanonOpen(true)");
+    expect(body).toContain("setContinuityFocusRequest(");
+  });
+
+  it("forwards the continuity focus request into CanonPanel", async () => {
+    const src = await workspace();
+    expect(src).toContain("continuityFocusRequest={continuityFocusRequest}");
+  });
+
   it("refreshes the cast when an external agent changes the work", async () => {
     const src = await workspace();
     // linetta_apply_story_ops carries create_entity, and its notification is

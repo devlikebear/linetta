@@ -41,10 +41,15 @@ interface Props {
    *  hides the badge — a caller that has nowhere to send the click should
    *  not show one. */
   onOpenProposals?: () => void;
+  /** Bumped by the caller (ContextPanel's open-observations badge) to pull
+   *  ContinuitySection open, scoped to the current scene. Forwarded
+   *  verbatim — see ContinuitySection's own doc comment on focusRequest. */
+  continuityFocusRequest?: number | null;
 }
 
 export function CanonPanel({
   projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck, onOpenFact, onOpenProposals,
+  continuityFocusRequest,
 }: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
@@ -150,6 +155,7 @@ export function CanonPanel({
           onOpenNode={onOpenNode}
           onOpenEntity={onOpenEntity}
           onOpenFact={onOpenFact}
+          focusRequest={continuityFocusRequest}
         />
 
         <div className="canon-controls">
