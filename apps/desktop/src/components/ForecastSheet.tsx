@@ -430,4 +430,3 @@ function BranchCard({
     </div>
   );
 }
-
