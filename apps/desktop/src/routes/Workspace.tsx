@@ -20,6 +20,7 @@ import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CanonPanel } from "../components/CanonPanel";
 import { ProposalInbox } from "../components/ProposalInbox";
+import { ForecastSheet } from "../components/ForecastSheet";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { AgentPanel } from "../components/agent/AgentPanel";
 import { useAgentRunning } from "../hooks/useAgentRunning";
@@ -150,6 +151,18 @@ export function Workspace() {
   // navigating away and the state clearing afterward does not lose it.
   const [agentInitialDraft] = useState(() => (location.state as { fillStoryWorldPrompt?: string } | null)?.fillStoryWorldPrompt ?? "");
   const [proposalInboxOpen, setProposalInboxOpen] = useState(false);
+  // "Where the story could go" (story-assist Phase 4).
+  const [forecastSheetOpen, setForecastSheetOpen] = useState(false);
+  // Fills the agent panel's composer from outside it — the forecast
+  // sheet's [개요 반영 제안 요청] button. The nonce is the dependency
+  // AgentPanel's own effect keys off, so the identical sentence sent twice
+  // still lands the second time.
+  const [agentDraftRequest, setAgentDraftRequest] = useState<{ text: string; nonce: number } | null>(null);
+  const requestAgentDraft = useCallback((text: string) => {
+    setAgentDraftRequest((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }));
+    setForecastSheetOpen(false);
+    setAgentOpen(true);
+  }, []);
   // Bumped when an external agent changes the work, so the story world list
   // reflects the three characters it just said it created (#28). Also
   // bumped on proposals-changed (story-assist Phase 3): accepting a
@@ -162,6 +175,7 @@ export function Workspace() {
     canon: false,
     agent: false,
     proposalInbox: false,
+    forecast: false,
   });
   useEffect(() => {
     const next: InspectorState = {
@@ -170,6 +184,7 @@ export function Workspace() {
       canon: canonOpen,
       agent: agentOpen,
       proposalInbox: proposalInboxOpen,
+      forecast: forecastSheetOpen,
     };
     const corrected = reconcileInspector(prevInspectorRef.current, next, sizeClass);
     if (corrected.factBook !== next.factBook) setFactBookOpen(corrected.factBook);
@@ -177,8 +192,9 @@ export function Workspace() {
     if (corrected.canon !== next.canon) setCanonOpen(corrected.canon);
     if (corrected.agent !== next.agent) setAgentOpen(corrected.agent);
     if (corrected.proposalInbox !== next.proposalInbox) setProposalInboxOpen(corrected.proposalInbox);
+    if (corrected.forecast !== next.forecast) setForecastSheetOpen(corrected.forecast);
     prevInspectorRef.current = corrected;
-  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen, agentOpen, proposalInboxOpen]);
+  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen, agentOpen, proposalInboxOpen, forecastSheetOpen]);
   const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
@@ -582,6 +598,15 @@ export function Workspace() {
   useEngineEvent<ProposalsChangedPayload>("proposals-changed", (event) => {
     if (event.project_id && projectId && event.project_id !== projectId) return;
     setCanonRefreshKey((k) => k + 1);
+    // story-assist Phase 4 (4.A.5): accepting a purpose=forecast batch can
+    // create outline structure (create_outline_node/create_scene) — the
+    // one way proposals.accept ever changes the tree itself, not just
+    // Story World. Nothing else refetches it, so this panel would
+    // otherwise keep showing the outline from before the writer's own
+    // accept click.
+    if (event.kinds?.includes("outline") && loadRef.current) {
+      void refreshTreeKeepNode(loadRef.current.node.id);
+    }
   });
 
   const refreshTreeKeepNode = useCallback(
@@ -1478,6 +1503,17 @@ export function Workspace() {
       },
     });
     cmds.push({
+      id: "forecast-open",
+      section: sectionProject,
+      label: t("workspace.command.openForecasts"),
+      keywords: ["forecast", "branch", "갈래", "예측", "전개"],
+      run: () => {
+        setCanonOpen(false);
+        setProposalInboxOpen(false);
+        setForecastSheetOpen(true);
+      },
+    });
+    cmds.push({
       id: "export-project",
       section: sectionExport,
       label: t("workspace.command.exportProject"),
@@ -1937,6 +1973,11 @@ export function Workspace() {
           episodeCharTarget={episodeCharTarget}
           onOutlinePresetChange={handleOutlinePresetChange}
           tourTarget="workspace-outline"
+          onOpenForecasts={() => {
+            setCanonOpen(false);
+            setProposalInboxOpen(false);
+            setForecastSheetOpen(true);
+          }}
         />
         <section className={`ws-editor${focus ? " focus-mode" : ""}`} data-tour="workspace-editor">
           <div className="editor-col">
@@ -2179,12 +2220,26 @@ export function Workspace() {
               focusEditor();
             }}
           />
+        ) : forecastSheetOpen && load ? (
+          <ForecastSheet
+            projectId={load.project.id}
+            onOpenEntity={(entityId) => setEntitySheetId(entityId)}
+            onOpenFact={openFactFromContinuity}
+            onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
+            onRequestOutlineReflection={requestAgentDraft}
+            onClose={() => {
+              setForecastSheetOpen(false);
+              focusEditor();
+            }}
+          />
         ) : agentOpen && agentAvailable && load ? (
           <AgentPanel
             projectId={load.project.id}
             nodeId={load.node.id}
             initialDraft={agentInitialDraft}
             selectionRequest={agentSelection}
+            externalDraft={agentDraftRequest?.text}
+            externalDraftNonce={agentDraftRequest?.nonce}
             onClose={() => {
               setAgentOpen(false);
               focusEditor();

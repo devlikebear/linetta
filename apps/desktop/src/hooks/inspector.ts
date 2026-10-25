@@ -7,10 +7,12 @@ export interface InspectorState {
   agent: boolean;
   /** The suggestions inbox (story-assist Phase 3). */
   proposalInbox: boolean;
+  /** "Where the story could go" (story-assist Phase 4). */
+  forecast: boolean;
 }
 
 type Key = keyof InspectorState;
-const PRIORITY: Key[] = ["factBook", "contextual", "canon", "agent", "proposalInbox"];
+const PRIORITY: Key[] = ["factBook", "contextual", "canon", "agent", "proposalInbox", "forecast"];
 
 export function reconcileInspector(
   prev: InspectorState,

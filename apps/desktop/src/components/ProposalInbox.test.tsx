@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   accept: vi.fn(),
   reject: vi.fn(),
+  undo: vi.fn(),
   extractionProgress: vi.fn(),
   settingsGet: vi.fn(),
 }));
@@ -28,6 +29,7 @@ vi.mock("../lib/rpc", () => ({
     list: mocks.list,
     accept: mocks.accept,
     reject: mocks.reject,
+    undo: mocks.undo,
     pendingCount: vi.fn().mockResolvedValue({ count: 0 }),
     extractionEstimate: vi.fn(),
     extractionProgress: mocks.extractionProgress,
@@ -114,6 +116,40 @@ describe("ProposalInbox", () => {
     await user.click(screen.getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
     await waitFor(() => expect(mocks.accept).toHaveBeenCalledWith("project-1", ["item-1"], undefined));
+  });
+
+  // story-assist Phase 4 (4.C.2): accepting a purpose=forecast structural
+  // batch returns undo_batch_ids; the inbox offers a revert button for it
+  // until the next accept/reject, or until it is used.
+  it("offers a revert button after accepting a structural batch, and it calls proposals.undo", async () => {
+    mocks.list.mockResolvedValue({ proposals: [batch([item()])] });
+    mocks.accept.mockResolvedValue({
+      items: [item({ status: "accepted", result: { created_id: "n-1" }, undo_batch_id: "batch-1" })],
+      undo_batch_ids: ["batch-1"],
+    });
+    mocks.undo.mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByText("새 인물: 하린 — 검술 사범");
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
+
+    const undoButton = await screen.findByTestId("proposal-inbox-undo");
+    await user.click(undoButton);
+    expect(mocks.undo).toHaveBeenCalledWith("project-1", "batch-1");
+    await waitFor(() => expect(screen.queryByTestId("proposal-inbox-undo")).not.toBeInTheDocument());
+  });
+
+  it("does not offer a revert button when accept returns no undo batch", async () => {
+    mocks.list.mockResolvedValue({ proposals: [batch([item()])] });
+    mocks.accept.mockResolvedValue({ items: [item({ status: "accepted", result: { created_id: "e-1" } })] });
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByText("새 인물: 하린 — 검술 사범");
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
+    await waitFor(() => expect(mocks.accept).toHaveBeenCalled());
+    expect(screen.queryByTestId("proposal-inbox-undo")).not.toBeInTheDocument();
   });
 
   it("auto-selects an unmet dependency and notes it", async () => {

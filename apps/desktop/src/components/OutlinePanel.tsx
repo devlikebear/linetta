@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
-import { AlertTriangle, ChevronLeft, Copy, FilePlus2, FolderPlus, Globe, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Compass, Copy, FilePlus2, FolderPlus, Globe, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { TreeNode } from "../hooks/useFirstLeaf";
 import { flatten, sumLeafChars } from "../hooks/useFirstLeaf";
 import type { NodeStatus, PublishEpisodeState } from "../lib/types";
@@ -53,6 +53,10 @@ interface Props {
   episodeCharTarget?: number;
   onOutlinePresetChange?: (presetId: OutlinePresetId) => void;
   tourTarget?: string;
+  /** Opens "Where the story could go" (story-assist Phase 4). Omitted
+   *  entirely hides the button — a caller with nowhere to send the click
+   *  should not show one. */
+  onOpenForecasts?: () => void;
 }
 
 type MenuState = {
@@ -92,6 +96,7 @@ export function OutlinePanel({
   episodeCharTarget = 5000,
   onOutlinePresetChange,
   tourTarget,
+  onOpenForecasts,
 }: Props) {
   const { language, t } = useI18n();
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -253,6 +258,18 @@ export function OutlinePanel({
       <div className="rail-head">
         <span className="lbl">{t("workspace.outline")}</span>
         <div className="rail-actions">
+          {onOpenForecasts ? (
+            <button
+              type="button"
+              className="rail-forecast"
+              onClick={onOpenForecasts}
+              aria-label={t("workspace.command.openForecasts")}
+              title={t("workspace.command.openForecasts")}
+              data-testid="outline-open-forecasts"
+            >
+              <Compass size={14} />
+            </button>
+          ) : null}
           <button
             type="button"
             className={`rail-doctor${doctorOpen ? " is-active" : ""}`}

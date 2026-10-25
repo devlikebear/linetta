@@ -18,6 +18,10 @@
   color: var(--muted);
 }
 
+.proposal-inbox .pi-undo {
+  padding: 0 14px 8px;
+}
+
 .proposal-inbox .pi-loading,
 .proposal-inbox .pi-error {
   padding: 10px 14px;

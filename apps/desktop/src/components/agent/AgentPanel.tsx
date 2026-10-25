@@ -379,9 +379,25 @@ interface Props {
    *  shown and sent only while `nodeId` is still the scene it came from —
    *  the engine tells the agent the passage is in the open scene. */
   selectionRequest?: { id: number; text: string; nodeId: string } | null;
+  /** Replaces the composer's text on an already-mounted panel — the
+   *  forecast sheet's [개요 반영 제안 요청] button (story-assist Phase 4),
+   *  which fills the same sentence a starter chip would but from a panel
+   *  that does not own AgentPanel's draft state. Paired with
+   *  externalDraftNonce: this only re-applies when the nonce changes, so
+   *  typing over it is never silently reverted on an unrelated re-render. */
+  externalDraft?: string;
+  externalDraftNonce?: number;
 }
 
-export function AgentPanel({ onClose, projectId, nodeId, initialDraft, selectionRequest }: Props) {
+export function AgentPanel({
+  onClose,
+  projectId,
+  nodeId,
+  initialDraft,
+  selectionRequest,
+  externalDraft,
+  externalDraftNonce,
+}: Props) {
   const { t } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
   // credential without consent is refused server-side — Source.Client()
@@ -424,6 +440,14 @@ export function AgentPanel({ onClose, projectId, nodeId, initialDraft, selection
     selectionRequest ? { text: selectionRequest.text, nodeId: selectionRequest.nodeId } : null,
   );
   const attachment = attached && attached.nodeId === nodeId ? attached : null;
+  // See externalDraft's own doc comment above. The nonce, not the text, is
+  // the dependency: a caller sending the identical sentence twice (two
+  // clicks on the same forecast branch) must still land it the second time,
+  // which a text-only dependency would skip as "unchanged".
+  useEffect(() => {
+    if (externalDraftNonce === undefined || externalDraft === undefined) return;
+    setDraft(externalDraft);
+  }, [externalDraftNonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sending, setSending] = useState(false);
   const [turnRunId, setTurnRunId] = useState<string | null>(null);
   // When the turn in progress started — the working line's clock. From the

@@ -110,6 +110,11 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
   const [busy, setBusy] = useState(false);
   const [batchFilter, setBatchFilter] = useState<string>("all");
   const [progress, setProgress] = useState<ExtractionProgress | null>(null);
+  // story-assist Phase 4 (4.A.5/4.C.2): the most recent accept call's
+  // structural undo batch, if any — purpose=forecast's outline-reflection
+  // items only. Cleared on the next accept/reject or once used, so the
+  // button never offers to revert a batch the writer already moved past.
+  const [lastUndoBatchId, setLastUndoBatchId] = useState<string | null>(null);
 
   useEngineEvent<McpChangedPayload>("mcp-changed", (event) => {
     if (event.project_id && event.project_id !== projectId) return;
@@ -256,6 +261,7 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
       showToast(t("proposals.toast.applied", { succeeded, failed }));
       setSelected(new Set());
       setDrafts({});
+      setLastUndoBatchId(res.undo_batch_ids?.[0] ?? null);
       setRevision((n) => n + 1);
     } catch (e) {
       showToast(rpcErrorMessage(e, t));
@@ -271,6 +277,27 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
       await proposalsApi.reject(projectId, [...selected]);
       showToast(t("proposals.toast.rejected", { count: selected.size }));
       setSelected(new Set());
+      setLastUndoBatchId(null);
+      setRevision((n) => n + 1);
+    } catch (e) {
+      showToast(rpcErrorMessage(e, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // story-assist Phase 4: reverts the structural batch applySelected just
+  // created (purpose=forecast's create_outline_node/create_scene items,
+  // plus any add_beat that depended on one) — the outline, and the beats,
+  // together. Scoped to one batch id, not "undo everything selected":
+  // 4.A.5's own undo is already scoped that way.
+  async function undoLastBatch() {
+    if (!lastUndoBatchId) return;
+    setBusy(true);
+    try {
+      await proposalsApi.undo(projectId, lastUndoBatchId);
+      showToast(t("proposals.toast.undone"));
+      setLastUndoBatchId(null);
       setRevision((n) => n + 1);
     } catch (e) {
       showToast(rpcErrorMessage(e, t));
@@ -306,6 +333,14 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
       {progress && (
         <div className="pi-progress" data-testid="proposal-inbox-progress">
           {t("proposals.progress", { covered: progress.covered_episodes, total: progress.total_episodes })}
+        </div>
+      )}
+
+      {lastUndoBatchId && (
+        <div className="pi-undo">
+          <button type="button" className="chip" disabled={busy} onClick={undoLastBatch} data-testid="proposal-inbox-undo">
+            {t("proposals.undoBatch")}
+          </button>
         </div>
       )}
 
