@@ -45,6 +45,9 @@ func illustrationError(err error) error {
 		{illustration.ErrBadContent, rpc.ReasonIllustrationBadContent},
 		{illustration.ErrInUse, rpc.ReasonIllustrationInUse},
 		{illustration.ErrIsCover, rpc.ReasonIllustrationIsCover},
+		{illustration.ErrRequestNotFound, rpc.ReasonIllustrationRequestNotFound},
+		{illustration.ErrNotPending, rpc.ReasonIllustrationRequestDecided},
+		{illustration.ErrTooManyPending, rpc.ReasonTooManyIllustrationRequests},
 	}
 	for _, r := range reasons {
 		if errors.Is(err, r.err) {
@@ -120,6 +123,95 @@ func IllustrationsGenerate(gen IllustrationGenerator) rpc.Handler {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
 		}
 		out, err := gen.Generate(ctx, in)
+		if err != nil {
+			return nil, illustrationError(err)
+		}
+		return json.Marshal(out)
+	}
+}
+
+// IllustrationRequestService keeps the pictures agents asked for until the
+// writer approves (draws) or rejects them.
+type IllustrationRequestService interface {
+	List(ctx context.Context, projectID string, statuses []string) ([]illustration.Request, error)
+	Get(ctx context.Context, id string) (illustration.Request, error)
+	Approve(ctx context.Context, id string, edits illustration.ApproveEdits) (illustration.Request, error)
+	Reject(ctx context.Context, id string) (illustration.Request, error)
+}
+
+// IllustrationRequestsList serves illustration_requests.list: a work's
+// requests newest first, optionally only some statuses.
+func IllustrationRequestsList(svc IllustrationRequestService) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p struct {
+			ProjectID string   `json:"project_id"`
+			Statuses  []string `json:"statuses"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil || strings.TrimSpace(p.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		out, err := svc.List(ctx, p.ProjectID, p.Statuses)
+		if err != nil {
+			return nil, illustrationError(err)
+		}
+		return json.Marshal(out)
+	}
+}
+
+type illustrationRequestParams struct {
+	ID string `json:"id"`
+	illustration.ApproveEdits
+}
+
+func decodeRequestParams(params json.RawMessage) (illustrationRequestParams, error) {
+	var p illustrationRequestParams
+	if err := json.Unmarshal(params, &p); err != nil || strings.TrimSpace(p.ID) == "" {
+		return p, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+	}
+	return p, nil
+}
+
+// IllustrationRequestsGet serves illustration_requests.get.
+func IllustrationRequestsGet(svc IllustrationRequestService) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		p, err := decodeRequestParams(params)
+		if err != nil {
+			return nil, err
+		}
+		out, err := svc.Get(ctx, p.ID)
+		if err != nil {
+			return nil, illustrationError(err)
+		}
+		return json.Marshal(out)
+	}
+}
+
+// IllustrationRequestsApprove serves illustration_requests.approve: the
+// writer's click that draws the picture, with what they changed on the card
+// (prompt, aspect, caption, include_references). It returns when the drawing
+// is done or failed, like illustrations.generate.
+func IllustrationRequestsApprove(svc IllustrationRequestService) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		p, err := decodeRequestParams(params)
+		if err != nil {
+			return nil, err
+		}
+		out, err := svc.Approve(ctx, p.ID, p.ApproveEdits)
+		if err != nil {
+			return nil, illustrationError(err)
+		}
+		return json.Marshal(out)
+	}
+}
+
+// IllustrationRequestsReject serves illustration_requests.reject.
+func IllustrationRequestsReject(svc IllustrationRequestService) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		p, err := decodeRequestParams(params)
+		if err != nil {
+			return nil, err
+		}
+		out, err := svc.Reject(ctx, p.ID)
 		if err != nil {
 			return nil, illustrationError(err)
 		}
