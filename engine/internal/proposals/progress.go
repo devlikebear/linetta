@@ -135,7 +135,7 @@ func (s *Service) ExtractionEstimate(ctx context.Context, projectID string) (Est
 func (s *Service) listItemsForPurpose(ctx context.Context, projectID, purpose string) ([]Item, error) {
 	rows, err := s.store.DB().QueryContext(ctx,
 		`SELECT i.id, i.proposal_id, i.project_id, i.ordinal, i.op_json, i.depends_on_json, i.evidence_json,
-		        i.from_node_ids_json, i.duplicates_json, i.status, i.result_json, i.status_at
+		        i.from_node_ids_json, i.duplicates_json, i.status, i.result_json, i.status_at, i.undo_batch_id
 		   FROM story_proposal_items i
 		   JOIN story_proposals p ON p.id = i.proposal_id
 		  WHERE i.project_id = ? AND p.purpose = ?`,

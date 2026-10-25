@@ -248,6 +248,23 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithMemory(companionSvc).
 		WithIllustrations(illustrations)
 
+	// The writer's own direction (story-assist Phase 1): the work's current
+	// focus and a scene's intent. Shared between the RPC handlers below
+	// (direction.get_focus etc., the app's only way to write it) and the
+	// story brief's Direction section just below — one table, one repo.
+	directionRepo := direction.NewRepo(st, nodes, projects)
+
+	// Possible continuations an agent drafted for the writer to compare
+	// (story-assist Phase 4). Shared between linetta_save_forecast
+	// (below), the forecast.* RPC handlers (below), the proposals Service
+	// just below (purpose=forecast's own ForecastID check) and the story
+	// brief's Direction section just below's planned-branch note — one
+	// table, one Service, the same discipline directionRepo follows.
+	forecastSvc := forecast.New(st, forecast.Deps{
+		Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships,
+		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
+	})
+
 	// Story-structure proposals (story-assist Phase 3): an agent's
 	// linetta_propose_story_ops candidates, and the writer's accept/reject
 	// of them through the proposals.* RPCs below, share this one Service —
@@ -256,7 +273,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// allowed proposal ops never touch scene text or the keyword memory.
 	proposalsStory := storyops.New(projects, nodes, threads, beats, entities, relationships).WithFacts(facts)
 	proposalsSvc := proposals.New(st, proposalsStory, entities, threads, beats, facts, nodes, projects,
-		func(method string, params any) { _ = s.Notifier().Notify(method, params) })
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }).
+		WithForecasts(forecastSvc)
 
 	// One Store for the skills the agent writes for itself, shared between
 	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below),
@@ -270,22 +288,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// (below) reverts through the same rows. Two instances would be two
 	// halves of one log.
 	skillHistory := agentskills.NewHistory(st.DB())
-
-	// The writer's own direction (story-assist Phase 1): the work's current
-	// focus and a scene's intent. Shared between the RPC handlers below
-	// (direction.get_focus etc., the app's only way to write it) and the
-	// story brief's Direction section just below — one table, one repo.
-	directionRepo := direction.NewRepo(st, nodes, projects)
-
-	// Possible continuations an agent drafted for the writer to compare
-	// (story-assist Phase 4). Shared between linetta_save_forecast
-	// (below), the forecast.* RPC handlers (below) and the story brief's
-	// Direction section just above's planned-branch note — one table, one
-	// Service, the same discipline directionRepo follows.
-	forecastSvc := forecast.New(st, forecast.Deps{
-		Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships,
-		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
-	})
 
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).

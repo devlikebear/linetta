@@ -21,6 +21,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/episode"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -36,18 +37,17 @@ const (
 	// filling Story World after an import — ExtractionProgress and
 	// ExtractionEstimate only count items with this purpose.
 	PurposeImportExtraction = "import_extraction"
-	// PurposeForecast is Phase 4's (branch-forecast op bundles). Submit
-	// refuses it until that phase ships — see Submit's doc comment.
+	// PurposeForecast marks a batch that turns a forecast's selected
+	// branch (story-assist Phase 4) into outline structure: the only
+	// purpose create_outline_node and create_scene may appear under, and
+	// the only one that requires ForecastID. See Submit's doc comment.
 	PurposeForecast = "forecast"
 )
 
 // ValidPurpose reports whether v is a purpose this phase supports.
-// purpose=forecast is deliberately NOT included: it is a real value the
-// schema will eventually accept, but Phase 4 is what gives it meaning, so
-// Submit refuses it by name rather than lumping it in with a garbage string.
 func ValidPurpose(v string) bool {
 	switch v {
-	case PurposeGeneral, PurposeImportExtraction:
+	case PurposeGeneral, PurposeImportExtraction, PurposeForecast:
 		return true
 	default:
 		return false
@@ -93,14 +93,51 @@ var allowedOpTypes = map[string]bool{
 	"update_beat":         true,
 }
 
-// AllowedOpTypes returns the accepted op types, sorted, for error messages.
-func AllowedOpTypes() []string {
-	out := make([]string, 0, len(allowedOpTypes))
-	for op := range allowedOpTypes {
+// forecastOpTypes REPLACES allowedOpTypes for purpose=forecast — a batch
+// turning a forecast's selected branch into outline structure only ever
+// builds structure and the beats hung on it, never a character, fact or
+// relationship (those are not what "reflect this branch in the outline"
+// means; an agent reaching for one of those still uses purpose=general).
+// create_scene carries no body (storyops.Op has no field for one on that
+// op), so phase-4-forecast.md's "본문 없음" is the shape itself, not an
+// extra check here.
+var forecastOpTypes = map[string]bool{
+	"create_outline_node": true,
+	"create_scene":        true,
+	"add_beat":            true,
+}
+
+// AllowedOpTypes returns the ops Submit accepts for purpose=general and
+// purpose=import_extraction, sorted, for error messages.
+func AllowedOpTypes() []string { return sortedOpTypes(allowedOpTypes) }
+
+// AllowedOpTypesForForecast returns the ops Submit accepts for
+// purpose=forecast, sorted, for error messages.
+func AllowedOpTypesForForecast() []string { return sortedOpTypes(forecastOpTypes) }
+
+// isRefDeclaringOp reports whether an op's Ref field, once resolved by
+// Submit's pass 1, names a ref another item in the same batch can depend
+// on — create_entity/create_thread (every purpose) and, under
+// purpose=forecast, create_scene/create_outline_node: storyops.applyOneOp
+// registers all four the same way, into nodeRefs/entityRefs/threadRefs
+// under op.Ref, not op.NodeRef (that field names a ref/id this op points
+// AT, never the one it declares).
+func isRefDeclaringOp(opType string) bool {
+	switch opType {
+	case "create_entity", "create_thread", "create_scene", "create_outline_node":
+		return true
+	default:
+		return false
+	}
+}
+
+func sortedOpTypes(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for op := range set {
 		out = append(out, op)
 	}
-	// Small, fixed set — a literal sort is clearer here than importing sort
-	// for eight strings that never change shape at runtime.
+	// A handful of strings that never change shape at runtime — a literal
+	// sort is clearer here than importing sort for that.
 	for i := 1; i < len(out); i++ {
 		for j := i; j > 0 && out[j-1] > out[j]; j-- {
 			out[j-1], out[j] = out[j], out[j-1]
@@ -152,10 +189,14 @@ type ItemInput struct {
 
 // SubmitInput is what linetta_propose_story_ops takes.
 type SubmitInput struct {
-	ProjectID string      `json:"project_id"`
-	Summary   string      `json:"summary,omitempty" jsonschema:"one line describing the whole batch"`
-	Purpose   string      `json:"purpose,omitempty" jsonschema:"one of: general, import_extraction"`
-	Items     []ItemInput `json:"items" jsonschema:"what to propose, at most 60 per call"`
+	ProjectID string `json:"project_id"`
+	Summary   string `json:"summary,omitempty" jsonschema:"one line describing the whole batch"`
+	Purpose   string `json:"purpose,omitempty" jsonschema:"one of: general, import_extraction, forecast"`
+	// ForecastID is required when Purpose is PurposeForecast: the
+	// forecast this batch reflects into the outline. That forecast must
+	// have a selected branch — Submit refuses the batch otherwise.
+	ForecastID string      `json:"forecast_id,omitempty" jsonschema:"required for purpose=forecast: the forecast whose selected branch this batch reflects into the outline"`
+	Items      []ItemInput `json:"items" jsonschema:"what to propose, at most 60 per call"`
 }
 
 // Duplicate is a possible match the dedupe pass found for a create_entity
@@ -197,13 +238,23 @@ type Item struct {
 	Status      string          `json:"status"`
 	Result      ItemResult      `json:"result"`
 	StatusAt    int64           `json:"status_at"`
+	// UndoBatchID is set on a purpose=forecast item once it is accepted as
+	// part of a structural batch (the create_outline_node/create_scene
+	// items applied together in one ApplyOpsWithRefs call) or as an
+	// add_beat item that depended on one of them. proposals.undo uses it
+	// to find every item a single storyops undo batch must carry back to
+	// pending together. Empty for every other accepted item.
+	UndoBatchID string `json:"undo_batch_id,omitempty"`
 }
 
 // Proposal is one submitted batch's header row.
 type Proposal struct {
-	ID          string            `json:"id"`
-	ProjectID   string            `json:"project_id"`
-	Purpose     string            `json:"purpose"`
+	ID        string `json:"id"`
+	ProjectID string `json:"project_id"`
+	Purpose   string `json:"purpose"`
+	// ForecastID is set when Purpose is PurposeForecast: the forecast
+	// this batch's items reflect into the outline.
+	ForecastID  string            `json:"forecast_id,omitempty"`
 	Source      string            `json:"source"`
 	Summary     string            `json:"summary"`
 	RefBindings map[string]string `json:"ref_bindings"`
@@ -235,6 +286,10 @@ type Service struct {
 	facts    *fact.Repo
 	nodes    *node.Repo
 	projects *project.Repo
+	// forecasts is nil until WithForecasts wires it. Submit needs it only
+	// for purpose=forecast (to confirm ForecastID exists in this project
+	// and has a selected branch) — every other purpose never touches it.
+	forecasts *forecast.Service
 
 	// notify, when set, is called after Accept/Reject change a proposal's
 	// status — the Go -> ffi.rs -> frontend "proposals.changed" path
@@ -259,6 +314,16 @@ func New(
 		nodes: nodes, projects: projects,
 		notify: notify,
 	}
+}
+
+// WithForecasts wires purpose=forecast's own check: ForecastID must name a
+// forecast in this project with a selected branch. Optional, matching
+// storyops.Service's own WithFacts/WithSnapshots chain — a Service built
+// without it simply refuses every purpose=forecast submission, the same
+// way a nil skills store answers "no skills" rather than panicking.
+func (s *Service) WithForecasts(f *forecast.Service) *Service {
+	s.forecasts = f
+	return s
 }
 
 func (s *Service) fireNotify(method string, params any) {

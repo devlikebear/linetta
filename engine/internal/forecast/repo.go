@@ -190,6 +190,21 @@ func (s *Service) Selected(ctx context.Context, projectID string) (Forecast, boo
 	return f, true, nil
 }
 
+// Get returns one forecast by id, regardless of staleness or project —
+// proposals.Submit (purpose=forecast) uses this and checks ProjectID and
+// SelectedBranch itself, the same ownership-check shape every other ref
+// lookup in this codebase follows.
+func (s *Service) Get(ctx context.Context, id string) (Forecast, bool, error) {
+	f, err := s.get(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return Forecast{}, false, nil
+	}
+	if err != nil {
+		return Forecast{}, false, err
+	}
+	return f, true, nil
+}
+
 // Stale reports whether f is stale against its project's canon RIGHT NOW,
 // and why — the single-forecast version of what List computes for every
 // row at once. storycontext's direction adapter uses this to decide

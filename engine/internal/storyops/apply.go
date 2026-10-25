@@ -323,14 +323,25 @@ func (s *Service) applyOneOp(
 		if err != nil {
 			return err
 		}
-		_, err = s.beats.Create(ctx, beat.NewInput{
+		b, err := s.beats.Create(ctx, beat.NewInput{
 			ThreadID:    threadID,
 			NodeID:      beatNodeID,
 			Label:       op.Label,
 			Description: op.Description,
 			Intensity:   op.Intensity,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		// op.Ref has no other use for add_beat (nothing in this op
+		// catalogue references a beat by ref), but proposals.Accept sets
+		// one anyway purely to read the created id back the same way it
+		// does for create_entity/create_scene — see createdIDFor's
+		// add_beat case.
+		if op.Ref != "" {
+			created["beat:"+op.Ref] = b.ID
+		}
+		return nil
 	case "update_beat":
 		in := beat.UpdateInput{ID: op.BeatID, Label: op.Label, Intensity: op.Intensity}
 		if strings.TrimSpace(op.Description) != "" {

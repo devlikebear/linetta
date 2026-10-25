@@ -48,6 +48,19 @@ func (l refLookup) HasBeat(id string) bool {
 	return err == nil && th.ProjectID == l.projectID
 }
 
+// HasNode reports whether nodeID is ANY node (container or leaf) of this
+// project — create_scene's after_node_*/create_outline_node's
+// parent_node_*/after_node_* (story-assist Phase 4, purpose=forecast) can
+// legitimately point at a container, unlike IsLeafNode's scene-only check
+// below.
+func (l refLookup) HasNode(nodeID string) bool {
+	if l.s.nodes == nil || nodeID == "" {
+		return false
+	}
+	n, err := l.s.nodes.Get(l.ctx, nodeID)
+	return err == nil && n.ProjectID == l.projectID
+}
+
 // IsLeafNode reports whether nodeID is a leaf scene of this project —
 // from_node_ids, add_beat/create_fact_card's optional node binding, and
 // evidence's node_id all require this.
