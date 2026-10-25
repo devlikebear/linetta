@@ -260,6 +260,22 @@ func (s *Service) updateItemStatus(ctx context.Context, tx dbTx, itemID, status 
 	return err
 }
 
+// updateItemStatusOnly changes status and status_at ONLY — leaving
+// result_json and undo_batch_id exactly as they were. This is
+// proposals.Undo's first transaction, carrying every item a batch covers
+// to StatusReverting before storyops.UndoApply ever runs: the point of
+// reverting is that result_json (the created id, undone or not) and
+// undo_batch_id (the handle a retry or ReconcileReverting needs to find
+// these same items again) must survive untouched until the outcome is
+// actually known, so this helper — unlike updateItemStatus — must never
+// touch those two columns.
+func (s *Service) updateItemStatusOnly(ctx context.Context, tx dbTx, itemID, status string, now int64) error {
+	_, err := tx.ExecContext(ctx,
+		`UPDATE story_proposal_items SET status = ?, status_at = ? WHERE id = ?`,
+		status, now, itemID)
+	return err
+}
+
 // updateItemUndoBatch tags itemID with batchID (or clears it when batchID
 // is ""). Set alongside updateItemStatus, never instead of it: the two
 // columns are independent so a status update to pending (proposals.undo)
@@ -293,6 +309,31 @@ func (s *Service) listItemsByUndoBatch(ctx context.Context, tx dbTx, projectID, 
 	rows, err := tx.QueryContext(ctx,
 		`SELECT `+itemColumns+` FROM story_proposal_items WHERE project_id = ? AND undo_batch_id = ? ORDER BY ordinal ASC`,
 		projectID, batchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Item
+	for rows.Next() {
+		it, err := scanItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
+// listItemsByStatus returns every item across every project carrying
+// status, ordered so items from the same undo batch land together —
+// ReconcileReverting's own "what needs reconciling" query at engine
+// startup, where there is no single project to scope to yet (unlike
+// listItemsByUndoBatch, which proposals.Undo already knows the project and
+// batch id for).
+func (s *Service) listItemsByStatus(ctx context.Context, tx dbTx, status string) ([]Item, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT `+itemColumns+` FROM story_proposal_items WHERE status = ? ORDER BY project_id ASC, undo_batch_id ASC, ordinal ASC`,
+		status)
 	if err != nil {
 		return nil, err
 	}
