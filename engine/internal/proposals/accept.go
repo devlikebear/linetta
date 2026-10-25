@@ -44,6 +44,22 @@ func kindForOp(opType string) string {
 // storyops.ValidateProposal, and every referenced id checked against this
 // project) before being applied in the edited item's place.
 //
+// The dependency gate is computed fresh from the op actually being
+// applied — the edit, when there is one — not from the item's stored
+// depends_on: depends_on is Submit's own reading of the ORIGINAL op, and
+// an edit that drops a ref (e.g. switching a create_relationship from a
+// from_ref to a real existing id) must not keep waiting on a dependency
+// the edited op no longer has. A sibling's ref ownership is read off the
+// stored items themselves (their own op.ref never changes, even when an
+// edit elsewhere converts the TYPE a ref was declared under — see
+// resultIDFor below), so this still gives the identical answer
+// depends_on's original computation would for an unedited item.
+//
+// A previously FAILED item can be retried in a later call (edited or not)
+// — a terminal "no second chance" would contradict the inbox's own retry
+// affordance (3.D.2's [편집] stays live on a failed row). Only accepted
+// and rejected are terminal.
+//
 // Items are applied in the proposal's own ordinal order — not the order
 // itemIDs was given in — because a later item's ref may depend on an
 // earlier one created earlier in the SAME call. Items from different
@@ -59,6 +75,13 @@ func kindForOp(opType string) string {
 // itself. "하나가 실패해도 나머지는 진행한다" (3.B.3) already asks for
 // per-item, not per-batch, commit semantics, so this is the right shape
 // even without that constraint.
+//
+// A failure persisting an item's own status/result (e.g. a disk error)
+// aborts the whole call rather than being swallowed: Accept must never
+// tell the caller an item is "accepted" when the row behind it still
+// reads "pending", because a later retry would then call
+// ApplyOpsWithRefs a second time for the same item and create its entity
+// twice.
 func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemIDs []string, edits map[string]storyops.Op) (AcceptResult, error) {
 	projectID = strings.TrimSpace(projectID)
 	requested, err := s.getItemsByIDs(ctx, projectID, itemIDs)
@@ -108,15 +131,28 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 				seedRefFrom(seeded, it)
 			}
 		}
+		// refOwner maps a declared ref to the item that declared it —
+		// read from the STORED items' own op.ref, which never changes
+		// even when an edit converts that item into a different op type
+		// (the alias-conversion path: create_entity -> update_entity).
+		// This is what lets the dependency gate below be recomputed from
+		// whatever op is actually about to be applied, instead of
+		// trusting the possibly-stale depends_on an earlier Submit call
+		// computed for the UNedited op.
+		refOwner := refOwnerMap(all)
 
 		changed := false
 		for _, it := range all { // ordinal order — listItemsByProposal already sorts by ordinal
-			if !wanted[it.ID] || it.Status != StatusPending {
-				if wanted[it.ID] && it.Status != StatusPending {
-					// Already decided (accepted/rejected/failed earlier) —
-					// report its current state rather than silently
-					// skipping, so a caller retrying a batch request can
-					// tell the item is settled.
+			// pending: not yet decided. failed: decided once, but not
+			// terminal — a later call (edited or not) may retry it.
+			// accepted/rejected are the only terminal statuses.
+			retryable := it.Status == StatusPending || it.Status == StatusFailed
+			if !wanted[it.ID] || !retryable {
+				if wanted[it.ID] && !retryable {
+					// Already settled (accepted/rejected) — report its
+					// current state rather than silently skipping, so a
+					// caller retrying a batch request can tell the item
+					// is done.
 					outcomes[it.ID] = it
 				}
 				continue
@@ -127,7 +163,9 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 				validated, err := s.validateEditedOp(lookup, seeded, edited)
 				if err != nil {
 					it.Status, it.Result, it.StatusAt = StatusFailed, ItemResult{Error: err.Error()}, now
-					_ = s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now)
+					if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
+						return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+					}
 					outcomes[it.ID] = it
 					changed = true
 					continue
@@ -144,12 +182,14 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 				op = validated
 			}
 
-			if missing := firstMissingDependency(it.DependsOn, committed); missing != "" {
+			if missing := effectiveMissingDependency(op, it.ID, refOwner, committed); missing != "" {
 				label := dependencyLabel(itemByID, missing)
 				it.Status = StatusFailed
 				it.Result = ItemResult{Error: fmt.Sprintf("depends on %q, which has not been accepted", label)}
 				it.StatusAt = now
-				_ = s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now)
+				if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
+					return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+				}
 				outcomes[it.ID] = it
 				changed = true
 				continue
@@ -166,13 +206,34 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 				it.Result = ItemResult{Error: msg}
 			} else {
 				it.Status = StatusAccepted
-				it.Result = ItemResult{CreatedID: createdIDFor(op, applied, newRefs)}
+				resultID := resultIDFor(it, op, applied, newRefs)
+				it.Result = ItemResult{CreatedID: resultID}
 				committed[it.ID] = true
 				seeded = newRefs
+				// Fold this item's own ref (declared under its ORIGINAL
+				// op type, e.g. create_entity, regardless of what op was
+				// actually applied) into seeded, so a sibling in this
+				// same call that still references it — and
+				// updateProposalRefBindings below, for a later call —
+				// both resolve it correctly even when an edit changed
+				// what this item's op applies (f4: the alias-conversion
+				// path, where ApplyOpsWithRefs' own newRefs has nothing
+				// under this ref because the applied op was update_entity,
+				// not create_entity).
+				if it.Op.Ref != "" && resultID != "" {
+					switch it.Op.Type {
+					case "create_entity":
+						seeded.Entities[it.Op.Ref] = resultID
+					case "create_thread":
+						seeded.Threads[it.Op.Ref] = resultID
+					}
+				}
 				kinds[kindForOp(op.Type)] = true
 			}
 			it.StatusAt = now
-			_ = s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now)
+			if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
+				return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+			}
 			outcomes[it.ID] = it
 			changed = true
 		}
@@ -297,10 +358,81 @@ func createdIDFor(op storyops.Op, applied storyops.ApplyOpsResult, refs storyops
 	}
 }
 
-func firstMissingDependency(dependsOn []string, committed map[string]bool) string {
-	for _, dep := range dependsOn {
-		if !committed[dep] {
-			return dep
+// resultIDFor is createdIDFor plus the alias-conversion fallback (f4): when
+// an item ORIGINALLY declared a ref as a create_entity/create_thread (so a
+// sibling may still reference that ref), but the op actually applied this
+// time is an edit that changed its type to update_entity/update_thread
+// (the alias-conversion path has no other way to say "this ref now means
+// an existing id"), createdIDFor finds nothing under the new op type —
+// fall back to the id the edit targeted, so both a sibling in this same
+// call and a later Accept call rebuilding seeded refs from storage
+// (seedRefFrom, reading this same Result.CreatedID back) resolve it
+// instead of silently losing the ref.
+func resultIDFor(it Item, op storyops.Op, applied storyops.ApplyOpsResult, refs storyops.Refs) string {
+	if id := createdIDFor(op, applied, refs); id != "" {
+		return id
+	}
+	if it.Op.Ref == "" {
+		return ""
+	}
+	switch {
+	case it.Op.Type == "create_entity" && op.Type == "update_entity":
+		return op.EntityID
+	case it.Op.Type == "create_thread" && op.Type == "update_thread":
+		return op.ThreadID
+	default:
+		return ""
+	}
+}
+
+// refOwnerMap maps a declared ref (a create_entity/create_thread item's own
+// op.ref, as stored — never rewritten by an edit) to the id of the item
+// that declared it.
+func refOwnerMap(items []Item) map[string]string {
+	out := map[string]string{}
+	for _, it := range items {
+		if it.Op.Ref == "" {
+			continue
+		}
+		switch it.Op.Type {
+		case "create_entity", "create_thread":
+			out[it.Op.Ref] = it.ID
+		}
+	}
+	return out
+}
+
+// effectiveMissingDependency reports the first sibling item (by id) that
+// op — the op actually about to be applied, which may be an edit — still
+// references by an undeclared ref and that has not been committed yet.
+// Computed fresh from op rather than from the item's stored depends_on, so
+// an edit that drops a ref-based dependency (e.g. switching a
+// create_relationship from a from_ref to a real existing id) is not kept
+// waiting on a dependency it no longer has (f1); for an unedited op this
+// gives the identical answer depends_on's own computation at Submit time
+// did, since refOwner is built from the same ref declarations.
+func effectiveMissingDependency(op storyops.Op, selfID string, refOwner map[string]string, committed map[string]bool) string {
+	check := func(ref string) string {
+		if ref == "" {
+			return ""
+		}
+		owner, ok := refOwner[ref]
+		if !ok || owner == selfID || committed[owner] {
+			return ""
+		}
+		return owner
+	}
+	switch op.Type {
+	case "create_relationship":
+		if m := check(op.FromRef); m != "" {
+			return m
+		}
+		if m := check(op.ToRef); m != "" {
+			return m
+		}
+	case "add_beat":
+		if m := check(op.ThreadRef); m != "" {
+			return m
 		}
 	}
 	return ""

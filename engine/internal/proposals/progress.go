@@ -34,9 +34,23 @@ type Estimate struct {
 // ExtractionProgress reports which episodes a purpose=import_extraction
 // sweep has already drawn at least one item from (any status — a
 // rejected/failed item still means the agent read that episode), and which
-// to read next. "Covered" means an item's from_node_ids overlaps the
-// episode's own LeafIDs, computed from episode.List so this agrees with
-// every other episode-aware feature in the codebase.
+// to read next. "Covered" means an item's from_node_ids, OR one of its
+// cited evidence scenes, overlaps the episode's own LeafIDs, computed from
+// episode.List so this agrees with every other episode-aware feature in
+// the codebase.
+//
+// Evidence counts too, not just from_node_ids: Submit does not require an
+// item to set from_node_ids (it is the progress mechanism's own hint, not
+// something storyops or Accept needs), so an agent that cited a scene as
+// evidence without also filling from_node_ids must still mark that
+// episode read — otherwise NextEpisode keeps naming the same episode
+// forever and the agent burns its tool budget re-reading it.
+//
+// This still cannot see an episode with nothing worth proposing AT ALL
+// (zero items, so zero evidence too) — Submit refuses an empty batch, so
+// there is no signal an agent can send for "I read it, there was
+// nothing." That gap is a known limitation, not something this function
+// can close on its own.
 func (s *Service) ExtractionProgress(ctx context.Context, projectID string) (Progress, error) {
 	episodes, err := s.episodesFor(ctx, projectID)
 	if err != nil {
@@ -50,6 +64,11 @@ func (s *Service) ExtractionProgress(ctx context.Context, projectID string) (Pro
 	for _, it := range items {
 		for _, leaf := range it.FromNodeIDs {
 			coveredLeaf[leaf] = true
+		}
+		for _, ev := range it.Evidence {
+			if ev.NodeID != "" {
+				coveredLeaf[ev.NodeID] = true
+			}
 		}
 	}
 

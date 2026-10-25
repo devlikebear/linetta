@@ -134,3 +134,34 @@ func TestExtractionEstimate_growsWithMoreManuscriptText(t *testing.T) {
 		t.Fatalf("chars = %d, want more than before (%d) after adding a scene", after.Chars, before.Chars)
 	}
 }
+
+// Review fixup (f5): an item that only cites evidence from a scene — no
+// from_node_ids — must still mark that scene's episode covered, or
+// NextEpisode keeps naming the same episode forever even though the agent
+// already read it and found something worth citing.
+func TestExtractionProgress_evidenceAloneCountsAsCoverage(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Purpose:   PurposeImportExtraction,
+		Items: []ItemInput{{
+			Op:       storyops.Op{Type: "create_entity", Name: "하린"},
+			Evidence: []EvidenceInput{{NodeID: env.sceneID, Paragraph: 1, Quote: "오른손으로 검을"}},
+			// Deliberately no FromNodeIDs: the agent cited evidence but
+			// did not also fill the progress hint.
+		}},
+	})
+
+	progress, err := env.svc.ExtractionProgress(ctx, env.project.ID)
+	if err != nil {
+		t.Fatalf("ExtractionProgress: %v", err)
+	}
+	if progress.CoveredEpisodes != 1 {
+		t.Fatalf("covered = %d, want 1 (evidence alone should count as coverage)", progress.CoveredEpisodes)
+	}
+	if progress.NextEpisode != nil {
+		t.Fatalf("next episode = %+v, want nil (every episode covered via evidence)", progress.NextEpisode)
+	}
+}

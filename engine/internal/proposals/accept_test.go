@@ -241,3 +241,167 @@ func TestReject_doesNotCascadeToDependents(t *testing.T) {
 		t.Fatalf("dependent item = %+v, want left pending (not cascaded)", dependent)
 	}
 }
+
+// Review fixup (f1): editing an item to drop its ref-based dependency must
+// not keep it waiting on that dependency. The relationship item below
+// originally depends on the entity item via from_ref/to_ref; the edit
+// replaces both with real existing entity ids and removes the refs
+// entirely, so the dependency no longer applies.
+func TestAccept_editDroppingARefDependencyIsNotBlockedByTheStaleDependency(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	e1, err := env.entities.Create(ctx, now(), entity.NewInput{ProjectID: env.project.ID, Name: "실제 인물 1"})
+	if err != nil {
+		t.Fatalf("seed entity 1: %v", err)
+	}
+	e2, err := env.entities.Create(ctx, now(), entity.NewInput{ProjectID: env.project.ID, Name: "실제 인물 2"})
+	if err != nil {
+		t.Fatalf("seed entity 2: %v", err)
+	}
+
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_entity", Ref: "e1", Name: "하린"}},
+			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e1", Label: "자기자신"}},
+		},
+	})
+	relationshipItem := sub.Items[1]
+	if len(relationshipItem.DependsOn) == 0 {
+		t.Fatal("test setup: relationship item must depend on the entity item")
+	}
+
+	// Accept ONLY the relationship item, with an edit that drops the refs
+	// in favor of two real, unrelated existing entities — the entity item
+	// (sub.Items[0]) is deliberately left pending/unaccepted.
+	edits := map[string]storyops.Op{
+		relationshipItem.ID: {Type: "create_relationship", From: e1.ID, To: e2.ID, Label: "동료"},
+	}
+	res, err := env.svc.Accept(ctx, now(), env.project.ID, []string{relationshipItem.ID}, edits)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	if res.Items[0].Status != StatusAccepted {
+		t.Fatalf("item = %+v, want accepted — the edit no longer references the unaccepted entity item", res.Items[0])
+	}
+}
+
+// Review fixup (f3): a previously failed item must be retryable, not stuck
+// forever — the inbox's [편집] action on a failed row promises exactly this.
+func TestAccept_retriesAPreviouslyFailedItem(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_entity", Ref: "e1", Name: "하린"}},
+			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e1", Label: "자기자신"}},
+		},
+	})
+	relationshipItem := sub.Items[1]
+
+	// First call: the relationship fails because its dependency was not
+	// accepted alongside it.
+	first, err := env.svc.Accept(ctx, now(), env.project.ID, []string{relationshipItem.ID}, nil)
+	if err != nil {
+		t.Fatalf("first Accept error: %v", err)
+	}
+	if first.Items[0].Status != StatusFailed {
+		t.Fatalf("setup: item = %+v, want failed", first.Items[0])
+	}
+
+	// Second call: accept the dependency and retry the failed item together.
+	second, err := env.svc.Accept(ctx, now(), env.project.ID, []string{sub.Items[0].ID, relationshipItem.ID}, nil)
+	if err != nil {
+		t.Fatalf("second Accept error: %v", err)
+	}
+	for _, it := range second.Items {
+		if it.Status != StatusAccepted {
+			t.Fatalf("item %+v, want accepted on retry", it)
+		}
+	}
+}
+
+// Review fixup (f4): a create_entity item converted by edit into
+// update_entity{entity_id} (the alias-conversion path) must still let a
+// sibling relationship resolve its from_ref/to_ref to the entity the alias
+// now points at.
+func TestAccept_aliasConvertedItemStillSeedsItsRefForSiblings(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	existing, err := env.entities.Create(ctx, now(), entity.NewInput{ProjectID: env.project.ID, Name: "김민호", Kind: "character"})
+	if err != nil {
+		t.Fatalf("seed entity: %v", err)
+	}
+
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_entity", Ref: "e1", Name: "김 민호", Kind: "character"}},
+			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e1", Label: "자기자신"}},
+		},
+	})
+	createItem, relItem := sub.Items[0], sub.Items[1]
+
+	edits := map[string]storyops.Op{
+		createItem.ID: {Type: "update_entity", EntityID: existing.ID, Aliases: []string{"김 민호"}},
+	}
+	res, err := env.svc.Accept(ctx, now(), env.project.ID, []string{createItem.ID, relItem.ID}, edits)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	var createOut, relOut Item
+	for _, it := range res.Items {
+		switch it.ID {
+		case createItem.ID:
+			createOut = it
+		case relItem.ID:
+			relOut = it
+		}
+	}
+	if createOut.Status != StatusAccepted {
+		t.Fatalf("create item = %+v, want accepted", createOut)
+	}
+	if createOut.Result.CreatedID != existing.ID {
+		t.Fatalf("create item result = %+v, want created_id = %q (the aliased entity)", createOut.Result, existing.ID)
+	}
+	if relOut.Status != StatusAccepted {
+		t.Fatalf("relationship item = %+v, want accepted — from_ref/to_ref should resolve via the alias conversion", relOut)
+	}
+}
+
+// Review fixup (f4), cross-call case: the alias conversion happens in one
+// Accept call; a sibling relationship is accepted in a LATER call. The
+// seeded ref must be rebuilt correctly from storage (seedRefFrom reading
+// back Result.CreatedID), not just carried in memory within one call.
+func TestAccept_aliasConvertedRefSurvivesAcrossSeparateAcceptCalls(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	existing, err := env.entities.Create(ctx, now(), entity.NewInput{ProjectID: env.project.ID, Name: "김민호", Kind: "character"})
+	if err != nil {
+		t.Fatalf("seed entity: %v", err)
+	}
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_entity", Ref: "e1", Name: "김 민호", Kind: "character"}},
+			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e1", Label: "자기자신"}},
+		},
+	})
+	createItem, relItem := sub.Items[0], sub.Items[1]
+
+	edits := map[string]storyops.Op{
+		createItem.ID: {Type: "update_entity", EntityID: existing.ID, Aliases: []string{"김 민호"}},
+	}
+	if _, err := env.svc.Accept(ctx, now(), env.project.ID, []string{createItem.ID}, edits); err != nil {
+		t.Fatalf("first Accept error: %v", err)
+	}
+
+	second, err := env.svc.Accept(ctx, now(), env.project.ID, []string{relItem.ID}, nil)
+	if err != nil {
+		t.Fatalf("second Accept error: %v", err)
+	}
+	if second.Items[0].Status != StatusAccepted {
+		t.Fatalf("relationship item (later call) = %+v, want accepted", second.Items[0])
+	}
+}
