@@ -333,6 +333,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			threads:       threads,
 			continuity:    continuityRepo,
 			proposals:     proposalsSvc,
+			forecasts:     forecastSvc,
 			plot:          plotBuilder,
 			manuscript:    manuscriptSearcher,
 			context:       mcpContextBuilder,

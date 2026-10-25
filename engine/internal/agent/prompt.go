@@ -145,6 +145,7 @@ How you work:
 		b.WriteString("- To check a scene's continuity, read it with linetta_read_scene numbered=true, get the brief, look earlier scenes up with linetta_where_does_appear / linetta_search_manuscript, and record what you find with linetta_report_continuity. Report contradictions with the work's own record, not taste; an empty result is fine. Do not fix the prose unless the writer asks.\n")
 		b.WriteString("- Changes you are asked for directly and that are small go through linetta_apply_story_ops. Anything drawn from the manuscript, or more than a few world elements at once, goes through linetta_propose_story_ops: the writer accepts it item by item.\n")
 		b.WriteString("- When asked to fill Story World from the manuscript, work episode by episode in outline order, starting where the tool's progress says. Check what already exists first, propose with purpose=import_extraction and from_node_ids, and stop before your tool budget runs out to tell the writer how far you got and to say \"continue\".\n")
+		b.WriteString("- Asked where the story could go next, read the brief and save the options with linetta_save_forecast instead of only describing them; the writer compares and picks in the app. A chosen branch appears in the brief's direction section as a plan, not canon. Asked to put a chosen branch into the outline, propose it with linetta_propose_story_ops purpose=forecast.\n")
 	}
 	b.WriteString(memoryBlock(profile, notes, groups.memory))
 	if groups.skills {

@@ -65,26 +65,26 @@ const (
 type BranchBeat struct {
 	// EpisodeOffset counts forward from the forecast's base episode: 1 is
 	// the very next episode, up to Horizon.
-	EpisodeOffset int    `json:"episode_offset"`
-	Summary       string `json:"summary"`
+	EpisodeOffset int    `json:"episode_offset" jsonschema:"1..horizon: how many episodes ahead of the base episode this beat falls"`
+	Summary       string `json:"summary" jsonschema:"what happens in this beat, up to 240 characters"`
 }
 
 // CharDecision is one character's choice at the branch point — InkOS's
 // characterDecisions:[{character,decision}]. EntityID is validated against
 // the work, the same strictness Phase 3's proposals apply to every ref.
 type CharDecision struct {
-	EntityID string `json:"entity_id"`
-	Decision string `json:"decision"`
+	EntityID string `json:"entity_id" jsonschema:"id of an existing character in this work"`
+	Decision string `json:"decision" jsonschema:"what they decide or do, up to 300 characters"`
 }
 
 // ProjectedChanges is what the branch would leave different in Story World
 // if it played out — InkOS's projectedChanges, with "hooks" renamed to
 // Linetta's own "threads" concept.
 type ProjectedChanges struct {
-	Characters    []string `json:"characters,omitempty"`
-	Relationships []string `json:"relationships,omitempty"`
-	World         []string `json:"world,omitempty"`
-	Threads       []string `json:"threads,omitempty"`
+	Characters    []string `json:"characters,omitempty" jsonschema:"at most 5 short notes on how characters would change"`
+	Relationships []string `json:"relationships,omitempty" jsonschema:"at most 5 short notes on how relationships would change"`
+	World         []string `json:"world,omitempty" jsonschema:"at most 5 short notes on how Story World elements would change"`
+	Threads       []string `json:"threads,omitempty" jsonschema:"at most 5 short notes on how storylines would change"`
 }
 
 // Risk is one way the branch could go wrong, naming the kind and — where
@@ -92,24 +92,24 @@ type ProjectedChanges struct {
 // the writer can jump straight to it. At most one of EntityID/FactID/NodeID
 // is normally set, but nothing requires exactly one.
 type Risk struct {
-	Kind        string `json:"kind"` // continuity|causality|character|direction|pacing|other
-	Description string `json:"description"`
-	EntityID    string `json:"entity_id,omitempty"`
-	FactID      string `json:"fact_id,omitempty"`
-	NodeID      string `json:"node_id,omitempty"`
+	Kind        string `json:"kind" jsonschema:"one of: continuity, causality, character, direction, pacing, other"`
+	Description string `json:"description" jsonschema:"up to 300 characters"`
+	EntityID    string `json:"entity_id,omitempty" jsonschema:"id of an existing character this risk is about, if any"`
+	FactID      string `json:"fact_id,omitempty" jsonschema:"id of an existing fact card this risk is about, if any"`
+	NodeID      string `json:"node_id,omitempty" jsonschema:"id of an existing scene this risk is about, if any"`
 }
 
 // BranchInput is what linetta_save_forecast submits for one branch —
 // everything Branch has except ID, which the engine assigns.
 type BranchInput struct {
-	Title        string           `json:"title"`
-	Premise      string           `json:"premise"`
-	Beats        []BranchBeat     `json:"beats"`
-	Decisions    []CharDecision   `json:"decisions,omitempty"`
+	Title        string           `json:"title" jsonschema:"up to 80 characters"`
+	Premise      string           `json:"premise" jsonschema:"up to 600 characters"`
+	Beats        []BranchBeat     `json:"beats" jsonschema:"1..10 beats, in order"`
+	Decisions    []CharDecision   `json:"decisions,omitempty" jsonschema:"at most 6"`
 	Changes      ProjectedChanges `json:"changes,omitempty"`
-	Risks        []Risk           `json:"risks,omitempty"`
-	Unknowns     []string         `json:"unknowns,omitempty"`
-	DirectionFit string           `json:"direction_fit,omitempty"`
+	Risks        []Risk           `json:"risks,omitempty" jsonschema:"at most 5; cite conflicts with the work's own record here"`
+	Unknowns     []string         `json:"unknowns,omitempty" jsonschema:"at most 5 open questions this branch leaves, each up to 200 characters"`
+	DirectionFit string           `json:"direction_fit,omitempty" jsonschema:"up to 300 characters: how this branch serves the writer's current focus and intent"`
 }
 
 // Branch is one stored continuation: a BranchInput plus its engine-assigned

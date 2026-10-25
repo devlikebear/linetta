@@ -94,6 +94,27 @@ func TestSystemPrompt_withReviewOffDropsThePropose(t *testing.T) {
 	}
 }
 
+// story-assist Phase 4 (4.B.2): the forecast-vs-reflect-in-outline split is
+// only meaningful when the Review group is on — linetta_save_forecast is
+// absent otherwise.
+func TestSystemPrompt_statesForecastHabitWhenReviewOn(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"linetta_save_forecast", "purpose=forecast"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing %q with review on; got:\n%s", want, got)
+		}
+	}
+}
+
+func TestSystemPrompt_withReviewOffDropsTheForecastHabit(t *testing.T) {
+	groups := allToolGroups()
+	groups.review = false
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, groups)
+	if strings.Contains(got, "linetta_save_forecast") {
+		t.Error("linetta_save_forecast must not be named when review is off")
+	}
+}
+
 func TestScopeLine_namesTheWorkAndTheOpenScene(t *testing.T) {
 	s := fakeScope{
 		titles: map[string]string{"p1": "은하수를 여행하는"},

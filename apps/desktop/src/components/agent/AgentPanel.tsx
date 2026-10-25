@@ -1493,6 +1493,16 @@ export function AgentPanel({ onClose, projectId, nodeId, initialDraft, selection
             >
               {t("agentPanel.starters.nextScene.label")}
             </button>
+            {reviewToolsEnabled ? (
+              <button
+                type="button"
+                className="chip"
+                data-testid="agent-starter-forecastNext"
+                onClick={() => setDraft(t("agentPanel.starters.forecastNext.prompt"))}
+              >
+                {t("agentPanel.starters.forecastNext.label")}
+              </button>
+            ) : null}
           </div>
         ) : null}
         <div className="cmp-input-wrap">

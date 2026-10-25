@@ -58,6 +58,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_publish_episode",
   "linetta_report_continuity",
   "linetta_propose_story_ops",
+  "linetta_save_forecast",
 ] as const;
 
 const READS: ReadonlySet<string> = new Set(READ_TOOL_NAMES);
