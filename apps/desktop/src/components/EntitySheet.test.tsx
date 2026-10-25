@@ -32,6 +32,11 @@ const mocks = vi.hoisted(() => ({
     delete: vi.fn(),
   },
   settingsGet: vi.fn(),
+  publishApi: {
+    connectStatus: vi.fn().mockResolvedValue({ state: "disconnected", site_url: "https://works.marvin-42.com" }),
+    sheetGet: vi.fn().mockResolvedValue({ published: false }),
+    sheetSet: vi.fn(),
+  },
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -41,6 +46,7 @@ vi.mock("../lib/rpc", () => ({
   settings: {
     get: mocks.settingsGet,
   },
+  publishApi: mocks.publishApi,
 }));
 
 const emptySheet = { entity_id: "entity-1", age_range: "", build: "", hair: "", outfit: "", signature: "", palette: "", notes: "", updated_at: 0 };
@@ -69,6 +75,8 @@ describe("EntitySheet", () => {
     mocks.entities.scenes.mockResolvedValue([]);
     mocks.entities.update.mockImplementation(async (input) => ({ ...baseEntity, ...input }));
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
+    mocks.publishApi.connectStatus.mockResolvedValue({ state: "disconnected", site_url: "https://works.marvin-42.com" });
+    mocks.publishApi.sheetGet.mockResolvedValue({ published: false });
   });
 
   const renderSheet = (props: Partial<ComponentProps<typeof EntitySheet>> = {}) => render(
@@ -209,5 +217,28 @@ describe("EntitySheet", () => {
     await user.click(screen.getByRole("button", { name: "작품 전체 변경" }));
 
     expect(onContextChange).toHaveBeenCalledWith("entity-1");
+  });
+
+  it("hides the Linetta Works toggle until this device is connected", async () => {
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    renderSheet();
+    await screen.findByLabelText("머리");
+    await waitFor(() => expect(mocks.publishApi.connectStatus).toHaveBeenCalled());
+    expect(screen.queryByTestId("sheet-publish")).toBeNull();
+    expect(mocks.publishApi.sheetGet).not.toHaveBeenCalled();
+  });
+
+  it("turns publishing on for the sheet when connected", async () => {
+    const user = userEvent.setup();
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    mocks.publishApi.connectStatus.mockResolvedValue({ state: "connected", site_url: "https://works.marvin-42.com" });
+    mocks.publishApi.sheetSet.mockResolvedValue({ published: true });
+    renderSheet();
+    const toggle = await screen.findByTestId("sheet-publish-toggle");
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+    expect(mocks.publishApi.sheetSet).toHaveBeenCalledWith("entity-1", true);
+    expect(screen.getByTestId("sheet-publish")).toHaveTextContent("시트와 표지 올리기");
   });
 });

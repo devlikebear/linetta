@@ -218,3 +218,24 @@ func TestConcurrentAddsRespectTheLimit(t *testing.T) {
 		t.Fatal("no add was refused at the limit")
 	}
 }
+
+func TestDeleteRefusesTheWorksCover(t *testing.T) {
+	f := fixture(t)
+	m, err := f.repo.Add(f.ctx, 10, NewInput{ProjectID: f.project, Prompt: "p", Provider: "openai-codex", Model: "m", Data: encodeJPEG(t, 8, 8)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.DB().ExecContext(f.ctx,
+		`INSERT INTO publish_covers (project_id, illustration_id, updated_at) VALUES (?, ?, 1)`, f.project, m.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repo.Delete(f.ctx, m.ID); !errors.Is(err, ErrIsCover) {
+		t.Fatalf("Delete cover = %v, want ErrIsCover", err)
+	}
+	if _, err := f.s.DB().ExecContext(f.ctx, `DELETE FROM publish_covers`); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.repo.Delete(f.ctx, m.ID); err != nil {
+		t.Fatalf("Delete after the cover is unset: %v", err)
+	}
+}

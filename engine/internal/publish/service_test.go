@@ -22,6 +22,7 @@ type serviceFixture struct {
 	state    *StateRepo
 	nodes    *node.Repo
 	project  project.Project
+	store    *store.Store
 	arcID    string
 	// episodes are the leaf episodes 1화, 2화 … under 1권, in order.
 	episodes []string
@@ -53,7 +54,7 @@ func newServiceFixture(t *testing.T, n int) *serviceFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &serviceFixture{site: newFakeSite(t), nodes: nodes, project: p, arcID: *first.ParentID}
+	f := &serviceFixture{site: newFakeSite(t), nodes: nodes, project: p, store: st, arcID: *first.ParentID}
 	f.episodes = []string{first.ID}
 	for i := 1; i < n; i++ {
 		prev := f.episodes[len(f.episodes)-1]

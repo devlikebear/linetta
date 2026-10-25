@@ -46,6 +46,13 @@ type fakeWork struct {
 	images map[string]map[string]string
 	// imageTypes records each upload's Content-Type, keyed like images.
 	imageTypes map[string]string
+	// sheets is the last sheet set PUT, as sent; sheetState is the
+	// moderation the site reports for each (default "pending").
+	sheets     []SheetInput
+	relations  []SheetRelation
+	sheetState map[string]string
+	// portraits: entity id → hash of the uploaded portrait.
+	portraits map[string]string
 }
 
 // fakePictureRef is the site's rule for a picture in body_md.
@@ -66,6 +73,11 @@ func newFakeSite(t *testing.T) *fakeSite {
 	mux.HandleFunc("PATCH /api/artworks/works/{pid}/episodes/{nid}", f.auth(f.patchEpisode))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}/episodes/{nid}/images/{iid}", f.auth(f.putImage))
 	mux.HandleFunc("PUT /api/artworks/works/{pid}/episodes:reorder", f.auth(f.reorder))
+	mux.HandleFunc("GET /api/artworks/works/{pid}/entities", f.auth(f.getSheets))
+	mux.HandleFunc("PUT /api/artworks/works/{pid}/entities", f.auth(f.putSheets))
+	mux.HandleFunc("PUT /api/artworks/works/{pid}/entities/{eid}/portrait", f.auth(f.putPortrait))
+	mux.HandleFunc("PUT /api/artworks/works/{pid}/cover", f.auth(f.putCover))
+	mux.HandleFunc("DELETE /api/artworks/works/{pid}/cover", f.auth(f.deleteCover))
 	f.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.requests = append(f.requests, r.Method+" "+r.URL.Path)
@@ -387,4 +399,112 @@ func (f *fakeSite) reorder(w http.ResponseWriter, r *http.Request) {
 	}
 	work.episodes = next
 	writeJSON(w, 200, map[string]any{"episodes": next})
+}
+
+// remoteSheets answers like the site: the sheets in the order sent.
+func (w *fakeWork) remoteSheets() []RemoteSheet {
+	out := []RemoteSheet{}
+	for _, in := range w.sheets {
+		state := w.sheetState[in.EntityID]
+		if state == "" {
+			state = "pending"
+		}
+		out = append(out, RemoteSheet{EntityID: in.EntityID, Kind: in.Kind, Name: in.Name, PortraitSHA256: in.PortraitSHA256, Moderation: state})
+	}
+	return out
+}
+
+func (f *fakeSite) getSheets(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	work, ok := f.works[r.PathValue("pid")]
+	if !ok {
+		writeErr(w, 404, CodeNotFound)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"entities": work.remoteSheets(), "relationships": work.relations})
+}
+
+func (f *fakeSite) putSheets(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Entities      []SheetInput    `json:"entities"`
+		Relationships []SheetRelation `json:"relationships"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Entities == nil {
+		writeErr(w, 400, CodeInvalidRequest)
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	work, ok := f.works[r.PathValue("pid")]
+	if !ok {
+		writeErr(w, 404, CodeNotFound)
+		return
+	}
+	for _, s := range in.Entities {
+		if s.PortraitSHA256 != "" && work.portraits[s.EntityID] != s.PortraitSHA256 {
+			writeErr(w, 400, "images_missing")
+			return
+		}
+	}
+	work.sheets, work.relations = in.Entities, in.Relationships
+	writeJSON(w, 200, map[string]any{"entities": work.remoteSheets(), "relationships": work.relations})
+}
+
+func (f *fakeSite) putPortrait(w http.ResponseWriter, r *http.Request) {
+	data, err := io.ReadAll(r.Body)
+	if err != nil || len(data) == 0 {
+		writeErr(w, 400, CodeInvalidRequest)
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	work, ok := f.works[r.PathValue("pid")]
+	if !ok {
+		writeErr(w, 404, CodeNotFound)
+		return
+	}
+	if work.portraits == nil {
+		work.portraits = map[string]string{}
+	}
+	sum := sha256.Sum256(data)
+	work.portraits[r.PathValue("eid")] = hex.EncodeToString(sum[:])
+	writeJSON(w, 200, map[string]any{"created": true})
+}
+
+func (f *fakeSite) putCover(w http.ResponseWriter, r *http.Request) {
+	data, err := io.ReadAll(r.Body)
+	if err != nil || len(data) == 0 {
+		writeErr(w, 400, CodeInvalidRequest)
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	work, ok := f.works[r.PathValue("pid")]
+	if !ok {
+		writeErr(w, 404, CodeNotFound)
+		return
+	}
+	sum := sha256.Sum256(data)
+	work.work.Cover = &RemoteCover{IllustrationID: r.URL.Query().Get("illustration_id"), SHA256: hex.EncodeToString(sum[:]), Moderation: "pending"}
+	writeJSON(w, 200, map[string]any{"created": true, "cover": work.work.Cover})
+}
+
+func (f *fakeSite) deleteCover(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	work, ok := f.works[r.PathValue("pid")]
+	if !ok {
+		writeErr(w, 404, CodeNotFound)
+		return
+	}
+	deleted := work.work.Cover != nil
+	work.work.Cover = nil
+	writeJSON(w, 200, map[string]any{"deleted": deleted})
+}
+
+func (f *fakeSite) work(pid string) *fakeWork {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.works[pid]
 }

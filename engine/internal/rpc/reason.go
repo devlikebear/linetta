@@ -107,6 +107,8 @@ const (
 	ReasonTooManyIllustrations   = "too_many_illustrations"
 	ReasonIllustrationBadContent = "illustration_bad_content"
 	ReasonIllustrationInUse      = "illustration_in_use"
+	// The picture is the work's cover on Linetta Works.
+	ReasonIllustrationIsCover = "illustration_is_cover"
 
 	// The Codex login (#92). The message has to name the two ports, because
 	// the fix is closing whatever holds them — usually a Codex CLI login. A
@@ -182,6 +184,8 @@ const (
 	// The episode shows more pictures than the site takes (per episode or
 	// per work).
 	ReasonPublishTooManyImages = "publish_too_many_images"
+	// More sheets are turned on than the site takes for one work.
+	ReasonPublishTooManySheets = "publish_too_many_sheets"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine

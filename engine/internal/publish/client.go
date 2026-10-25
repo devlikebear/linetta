@@ -128,6 +128,54 @@ type Work struct {
 	Visibility      string   `json:"visibility"`
 	URL             string   `json:"url"`
 	LastPublishedAt string   `json:"last_published_at"`
+	// Cover is the site's copy of the cover, nil when the work has none.
+	Cover *RemoteCover `json:"cover"`
+}
+
+// RemoteCover is the cover the site holds for a work. It is moderated apart
+// from the work, so a cover under review does not hide the work.
+type RemoteCover struct {
+	IllustrationID   string `json:"illustration_id"`
+	SHA256           string `json:"sha256"`
+	Moderation       string `json:"moderation"`
+	ModerationReason string `json:"moderation_reason"`
+}
+
+// SheetInput is one sheet in PUT works/{project_id}/entities. The site
+// replaces the whole set with what it is sent.
+type SheetInput struct {
+	EntityID   string           `json:"entity_id"`
+	Kind       string           `json:"kind"`
+	Name       string           `json:"name"`
+	Aliases    []string         `json:"aliases"`
+	Role       string           `json:"role"`
+	Summary    string           `json:"summary"`
+	Attributes []SheetAttribute `json:"attributes"`
+	// PortraitSHA256 names a portrait uploaded first (PutSheetPortrait).
+	PortraitSHA256 string `json:"portrait_sha256,omitempty"`
+}
+
+// SheetAttribute is one attribute, in the order the site shows it.
+type SheetAttribute struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// SheetRelation is a relationship between two sheets in the same request.
+type SheetRelation struct {
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Label string `json:"label"`
+}
+
+// RemoteSheet is a sheet as the site has it, with its moderation state.
+type RemoteSheet struct {
+	EntityID         string `json:"entity_id"`
+	Kind             string `json:"kind"`
+	Name             string `json:"name"`
+	PortraitSHA256   string `json:"portrait_sha256"`
+	Moderation       string `json:"moderation"`
+	ModerationReason string `json:"moderation_reason"`
 }
 
 // WorkInput is the body of PUT works/{project_id}. Optional fields left
@@ -283,6 +331,55 @@ func (c *Client) ReorderEpisodes(ctx context.Context, token, projectID string, o
 	}
 	err := c.do(ctx, http.MethodPut, workPath(projectID)+"/episodes:reorder", token, map[string][]string{"order": order}, &out)
 	return out.Episodes, err
+}
+
+// GetSheets returns the sheets and relationships the site has for a work.
+func (c *Client) GetSheets(ctx context.Context, token, projectID string) ([]RemoteSheet, []SheetRelation, error) {
+	var out struct {
+		Entities      []RemoteSheet   `json:"entities"`
+		Relationships []SheetRelation `json:"relationships"`
+	}
+	err := c.do(ctx, http.MethodGet, workPath(projectID)+"/entities", token, nil, &out)
+	return out.Entities, out.Relationships, err
+}
+
+// PutSheets replaces the work's sheets on the site: sheets left out are
+// removed with their portraits and relationships.
+func (c *Client) PutSheets(ctx context.Context, token, projectID string, sheets []SheetInput, relations []SheetRelation) ([]RemoteSheet, error) {
+	if sheets == nil {
+		sheets = []SheetInput{}
+	}
+	if relations == nil {
+		relations = []SheetRelation{}
+	}
+	var out struct {
+		Entities []RemoteSheet `json:"entities"`
+	}
+	body := map[string]any{"entities": sheets, "relationships": relations}
+	err := c.do(ctx, http.MethodPut, workPath(projectID)+"/entities", token, body, &out)
+	return out.Entities, err
+}
+
+// PutSheetPortrait uploads a sheet's portrait. Sent before PutSheets, which
+// names it by hash.
+func (c *Client) PutSheetPortrait(ctx context.Context, token, projectID, entityID, mime string, data []byte) error {
+	path := workPath(projectID) + "/entities/" + url.PathEscape(entityID) + "/portrait"
+	return c.send(ctx, http.MethodPut, path, token, data, mime, nil)
+}
+
+// PutCover uploads the work's cover. The same bytes again change nothing.
+func (c *Client) PutCover(ctx context.Context, token, projectID, illustrationID, mime string, data []byte) (RemoteCover, error) {
+	var out struct {
+		Cover RemoteCover `json:"cover"`
+	}
+	path := workPath(projectID) + "/cover?illustration_id=" + url.QueryEscape(illustrationID)
+	err := c.send(ctx, http.MethodPut, path, token, data, mime, &out)
+	return out.Cover, err
+}
+
+// DeleteCover takes the work's cover down.
+func (c *Client) DeleteCover(ctx context.Context, token, projectID string) error {
+	return c.do(ctx, http.MethodDelete, workPath(projectID)+"/cover", token, nil, nil)
 }
 
 func workPath(projectID string) string {

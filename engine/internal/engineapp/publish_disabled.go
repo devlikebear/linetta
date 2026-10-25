@@ -29,6 +29,8 @@ type publishDeps struct {
 	clock         func() int64
 	// images is the gallery: published episodes carry their pictures.
 	images publish.Illustrations
+	// sheets are the writer's sheets; unused where publishing is off.
+	sheets publish.SheetSource
 }
 
 func setupPublish(deps publishDeps) (*publish.Service, func() error) {
@@ -42,6 +44,7 @@ func setupPublish(deps publishDeps) (*publish.Service, func() error) {
 		"publish.connect_start", "publish.connect_status", "publish.disconnect",
 		"publish.work_status", "publish.work_upsert",
 		"publish.episode_publish", "publish.episode_set_visibility",
+		"publish.sheet_get", "publish.sheet_set", "publish.cover_set", "publish.sheets_sync",
 	} {
 		deps.server.Handle(method, unavailable)
 	}

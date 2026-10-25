@@ -5,6 +5,7 @@ import { useI18n } from "../lib/i18n";
 import { openExternalUrl, publishApi } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { PUBLISH_STATE_KEYS, findPublishEpisode } from "../lib/publish";
+import { PublishSheetsSection } from "./PublishSheetsSection";
 import type {
   PublishConnectStatus,
   PublishEpisodeView,
@@ -331,6 +332,16 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
                   </button>
                 </div>
               </details>
+            )}
+
+            {registered && status?.sheets && (
+              <PublishSheetsSection
+                projectId={projectId}
+                sheets={status.sheets}
+                busy={busy}
+                run={guard}
+                onSynced={refresh}
+              />
             )}
 
             {status && status.site_only.length > 0 && (
