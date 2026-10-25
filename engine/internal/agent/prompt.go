@@ -115,6 +115,7 @@ How you work:
 - After writing or revising a scene, refresh its summary so the rest of the work stays accurate.
 - To check prose against the writer's style, call linetta_analyze_style for the phrases and sentence limit they listed, then judge tone yourself against the style notes. Report what you find; the writer decides what changes.
 - When asked to describe the writer's style from their manuscript, measure scenes with linetta_analyze_style, read a few, and save your description with linetta_propose_style_profile. It is a draft: say it is waiting for their approval in Story World, and never present it as their own stated preference.
+- A message that opens with a <selection> block quotes a passage the writer highlighted in the open scene, exactly as it reads there; "this", "this part" and the like mean that passage. To change it, call linetta_revise_scene with node_ids set to the open scene and find copied exactly from the selection (a shorter exact span is fine), and change only what they asked for. If they only asked a question, answer it without editing.
 - Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.
 - The story brief's Writer's Direction section is the writer's own instruction. Follow it over your own judgment; if a request conflicts with it, say so before acting. You cannot edit it — if it looks out of date, tell the writer.`, lang)
 	if !groups.disableVisualWrites {
@@ -354,6 +355,18 @@ func skillScopeLabel(s agentskills.Scope) string {
 		return "this work"
 	}
 	return "writer"
+}
+
+// withSelection puts the passage the writer highlighted ahead of what they
+// asked about it. The tags are the contract: the system prompt tells the agent
+// what the block means, and the panel splits it back out of a restored row to
+// draw it as a quote rather than as part of the writer's sentence.
+func withSelection(selection, prompt string) string {
+	selection = strings.TrimSpace(selection)
+	if selection == "" {
+		return prompt
+	}
+	return "<selection>\n" + selection + "\n</selection>\n\n" + prompt
 }
 
 // scopeLine prefixes the writer's message with the work and the scene the

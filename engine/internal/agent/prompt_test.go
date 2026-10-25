@@ -792,3 +792,20 @@ func TestVisualWritePromptFollowsGroup(t *testing.T) {
 		t.Fatal("disabling writes removed visual reads")
 	}
 }
+
+// No selection leaves the prompt exactly as typed: a bare <selection> block
+// would read to the model as a passage the writer meant and forgot to paste.
+func TestWithSelection_leavesAPlainPromptAlone(t *testing.T) {
+	if got := withSelection("  \n", "안녕"); got != "안녕" {
+		t.Errorf("withSelection = %q, want the prompt unchanged", got)
+	}
+}
+
+func TestSystemPrompt_explainsTheSelectionBlock(t *testing.T) {
+	got := systemPrompt("ko", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"<selection>", "linetta_revise_scene"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("system prompt is missing %q", want)
+		}
+	}
+}

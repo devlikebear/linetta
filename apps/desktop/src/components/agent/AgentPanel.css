@@ -216,3 +216,59 @@
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* A passage sent from the editor's selection menu, waiting above the
+ * composer for the next send. Clamped: the writer can select a whole scene,
+ * and the composer must stay on screen. */
+.agent-attachment {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--line);
+  background: var(--surface);
+  border-radius: 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.agent-attachment > svg { flex: none; margin-top: 3px; opacity: 0.6; }
+.agent-attachment-text {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+  font-family: var(--font-serif);
+}
+.agent-attachment-remove {
+  flex: none;
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.agent-attachment-remove:hover { opacity: 1; }
+
+/* The same passage, after it was sent: quoted above the writer's bubble. */
+.agent-selection-quote {
+  max-width: 84%;
+  margin: 0 0 4px;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--line);
+  color: var(--ink-soft);
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
