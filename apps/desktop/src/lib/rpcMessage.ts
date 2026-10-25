@@ -95,6 +95,13 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // few batches in memory, so this is the ordinary result of a restart or a
   // few more turns — not a mistake the writer made.
   agent_undo_unavailable: "errors.agentUndoUnavailable",
+  // story-assist Phase 4: forecast.select naming a forecast id that is
+  // gone (deleted in another window), and proposals.undo asking to
+  // revert a structural batch that has aged out of storyops' in-memory
+  // undo window — no snapshot fallback for either, unlike
+  // agent_undo_unavailable above.
+  forecast_not_found: "errors.forecastNotFound",
+  proposals_undo_unavailable: "errors.proposalsUndoUnavailable",
   // Linetta Works publishing (Phase 3). Most are the site's own error codes
   // carried through; its Korean message stays in the engine's English one
   // and must not reach an English or Japanese reader.

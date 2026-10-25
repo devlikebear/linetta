@@ -2379,3 +2379,76 @@ describe("AgentPanel selected passage", () => {
     expect(splitSelection("<selection> 태그가 뭐야?")).toEqual({ text: "<selection> 태그가 뭐야?" });
   });
 });
+
+// story-assist Phase 4: the forecast sheet's [개요 반영 제안 요청] button fills
+// the composer from outside through externalDraft/externalDraftNonce. The
+// panel unmounts on close, so it cannot remember which nonce it already
+// applied — onExternalDraftApplied is how the caller (Workspace.tsx) learns
+// to clear its own request, or the same stale request would come back and
+// overwrite a fresh draft the next time the writer opens the panel.
+describe("AgentPanel external draft (story-assist Phase 4)", () => {
+  function panelWith(
+    externalDraft: string | undefined,
+    externalDraftNonce: number | undefined,
+    onExternalDraftApplied: (() => void) | undefined,
+    initialDraft?: string,
+  ) {
+    return (
+      <MemoryRouter>
+        <AgentPanel
+          onClose={vi.fn()}
+          projectId={PROJECT_ID}
+          nodeId={NODE_ID}
+          initialDraft={initialDraft}
+          externalDraft={externalDraft}
+          externalDraftNonce={externalDraftNonce}
+          onExternalDraftApplied={onExternalDraftApplied}
+        />
+      </MemoryRouter>
+    );
+  }
+
+  async function renderWith(
+    externalDraft: string | undefined,
+    externalDraftNonce: number | undefined,
+    onExternalDraftApplied: (() => void) | undefined,
+    initialDraft?: string,
+  ) {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ configured: true, consented: true })]),
+    );
+    const view = render(panelWith(externalDraft, externalDraftNonce, onExternalDraftApplied, initialDraft));
+    await screen.findByTestId("agent-log");
+    return view;
+  }
+
+  it("fills the composer from the external draft and tells the caller it was applied", async () => {
+    const applied = vi.fn();
+    await renderWith("개요 반영 제안 요청 문구", 1, applied);
+    expect(composer().value).toBe("개요 반영 제안 요청 문구");
+    expect(applied).toHaveBeenCalledTimes(1);
+  });
+
+  // The regression itself (#231 fix round): closing the panel unmounts it,
+  // and reopening it used to rerun the external-draft effect on mount with
+  // the same old nonce, stomping whatever initialDraft (or draft the writer
+  // had started typing) the fresh mount should have shown instead. The fix
+  // is Workspace.tsx clearing its request once onExternalDraftApplied fires
+  // above — modelled here by the second mount simply not receiving the
+  // external draft props anymore, the way a cleared caller would render it.
+  it("does not reapply a stale external draft after the caller clears it and the panel reopens", async () => {
+    const applied = vi.fn();
+    const view = await renderWith("개요 반영 제안 요청 문구", 1, applied);
+    expect(composer().value).toBe("개요 반영 제안 요청 문구");
+
+    // Close (unmount) the panel — AgentPanel carries no state across this.
+    view.unmount();
+
+    // Reopen: the caller honoured onExternalDraftApplied and cleared its
+    // request, so this mount gets no external draft at all — only whatever
+    // fresh initialDraft applies to a new open (here, the writer's own
+    // in-progress draft from the Library import flow).
+    await renderWith(undefined, undefined, undefined, "작가가 쓰던 초안");
+    expect(composer().value).toBe("작가가 쓰던 초안");
+  });
+});

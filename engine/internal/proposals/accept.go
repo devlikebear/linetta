@@ -165,8 +165,7 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 		// allowedOpTypes/forecastOpTypes comment above. Every other op
 		// type (add_beat) still applies one item at a time
 		// in the loop below, exactly as every other purpose always has.
-		handled := map[string]bool{}               // item ids this pre-pass has already given an outcome
-		structuralAcceptedIDs := map[string]bool{} // item ids accepted as part of THIS call's structural batch
+		handled := map[string]bool{} // item ids this pre-pass has already given an outcome
 		var structuralBatchID string
 		if proposal.Purpose == PurposeForecast {
 			type pendingStructural struct {
@@ -251,7 +250,6 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 						it.UndoBatchID = structuralBatchID
 						it.StatusAt = now
 						committed[it.ID] = true
-						structuralAcceptedIDs[it.ID] = true
 						if it.Op.Ref != "" && resultID != "" {
 							seeded.Nodes[it.Op.Ref] = resultID
 						}
@@ -263,6 +261,12 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 								return AcceptResult{}, fmt.Errorf("persist item %s undo batch: %w", it.ID, werr)
 							}
 						}
+						// Keep itemByID current for this SAME call's main
+						// loop below: an add_beat item processed right
+						// after this pre-pass depends on this item's
+						// UndoBatchID to tag itself, and itemByID was built
+						// from `all` before this pre-pass ran.
+						itemByID[it.ID] = it
 						outcomes[it.ID] = it
 						handled[it.ID] = true
 					}
@@ -362,19 +366,20 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 					}
 				}
 				kinds[kindForOp(op.Type)] = true
-				// An add_beat item that depended on one of THIS call's
-				// structural items (a scene/node the forecast batch just
-				// created) rides the same undo batch: undoing the outline
-				// also has to delete this beat, or it survives its own
-				// scene's disappearance pointing at nothing — see
-				// migration 0029's story_proposal_items.undo_batch_id
-				// comment.
-				if structuralBatchID != "" {
-					for _, dep := range it.DependsOn {
-						if structuralAcceptedIDs[dep] {
-							it.UndoBatchID = structuralBatchID
-							break
-						}
+				// An add_beat item that depends on a structural item
+				// (a scene/node a forecast batch created) rides that
+				// item's OWN undo batch — whether that structural item
+				// was accepted in THIS call (itemByID was just refreshed
+				// by the pre-pass above) or an earlier one (itemByID's
+				// initial load from `all` already carries its stored
+				// undo_batch_id). Undoing the outline also has to delete
+				// this beat, or it survives its own scene's disappearance
+				// pointing at nothing — see migration 0029's
+				// story_proposal_items.undo_batch_id comment.
+				for _, dep := range it.DependsOn {
+					if owner, ok := itemByID[dep]; ok && owner.UndoBatchID != "" {
+						it.UndoBatchID = owner.UndoBatchID
+						break
 					}
 				}
 			}

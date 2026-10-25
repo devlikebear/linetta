@@ -387,6 +387,15 @@ interface Props {
    *  typing over it is never silently reverted on an unrelated re-render. */
   externalDraft?: string;
   externalDraftNonce?: number;
+  /** Called once the panel has applied externalDraft/externalDraftNonce to
+   *  the composer. The caller's job is to clear whatever it fed in (set its
+   *  own request state back to null) — this panel unmounts on close, so the
+   *  nonce it applied is forgotten the moment the writer reopens it, and the
+   *  same stale request would overwrite a fresh initialDraft (or whatever
+   *  the writer had started typing) all over again. Without this callback
+   *  the caller has no event to clear on, since nothing else tells it the
+   *  request was consumed. */
+  onExternalDraftApplied?: () => void;
 }
 
 export function AgentPanel({
@@ -397,6 +406,7 @@ export function AgentPanel({
   selectionRequest,
   externalDraft,
   externalDraftNonce,
+  onExternalDraftApplied,
 }: Props) {
   const { t } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
@@ -447,6 +457,7 @@ export function AgentPanel({
   useEffect(() => {
     if (externalDraftNonce === undefined || externalDraft === undefined) return;
     setDraft(externalDraft);
+    onExternalDraftApplied?.();
   }, [externalDraftNonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sending, setSending] = useState(false);
   const [turnRunId, setTurnRunId] = useState<string | null>(null);

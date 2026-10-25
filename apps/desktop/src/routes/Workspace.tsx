@@ -163,6 +163,11 @@ export function Workspace() {
     setForecastSheetOpen(false);
     setAgentOpen(true);
   }, []);
+  // AgentPanel unmounts on close, so it cannot remember which nonce it
+  // already applied. Without clearing this, reopening the panel later reruns
+  // the same external-draft effect on mount and overwrites whatever the
+  // writer had typed (or a fresh initialDraft) with the stale request.
+  const clearAgentDraftRequest = useCallback(() => setAgentDraftRequest(null), []);
   // Bumped when an external agent changes the work, so the story world list
   // reflects the three characters it just said it created (#28). Also
   // bumped on proposals-changed (story-assist Phase 3): accepting a
@@ -2240,6 +2245,7 @@ export function Workspace() {
             selectionRequest={agentSelection}
             externalDraft={agentDraftRequest?.text}
             externalDraftNonce={agentDraftRequest?.nonce}
+            onExternalDraftApplied={clearAgentDraftRequest}
             onClose={() => {
               setAgentOpen(false);
               focusEditor();

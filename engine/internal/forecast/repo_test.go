@@ -2,6 +2,7 @@ package forecast
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
@@ -140,6 +141,56 @@ func TestSave_validatesEntityFactNodeRefs(t *testing.T) {
 	}
 	if len(problems) != 0 {
 		t.Fatalf("problems = %+v, want none once entity_id is real", problems)
+	}
+}
+
+// A risk's node_id is the scene the writer clicks through to open in the
+// editor (ForecastSheet's risk-ref button → Workspace.navigateToNode), which
+// treats whatever id it is given as a leaf and opens it with no further
+// check. A container id (an episode or part) would open as an empty
+// document and risk autosave writing prose into it — the same leaf-only
+// rule Phase 2 holds continuity's own scene refs to. This covers both
+// directions: the existing leaf scene passes, a container is rejected.
+func TestSave_validatesRiskNodeRefIsALeafScene(t *testing.T) {
+	ctx := context.Background()
+	env := newTestEnv(t)
+	svc := New(env.st, env.deps)
+
+	container, err := env.nodes.CreateChild(ctx, env.sceneID, "container", "1부", "1부", 1_000)
+	if err != nil {
+		t.Fatalf("create container: %v", err)
+	}
+
+	branches := twoBranches()
+	branches[0].Risks = []Risk{{Kind: "continuity", Description: "컨테이너를 가리킴", NodeID: container.ID}}
+	_, problems, err := svc.Save(ctx, 10_000, SaveInput{
+		ProjectID: env.project.ID, Divergence: "질문", Horizon: 3, Branches: branches,
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Save error: %v", err)
+	}
+	if len(problems) == 0 {
+		t.Fatal("want a problem for a risk node_id that names a container, not a leaf scene")
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "is not a leaf scene in this work") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want one naming node_id as not a leaf scene", problems)
+	}
+
+	branches[0].Risks = []Risk{{Kind: "continuity", Description: "씬을 가리킴", NodeID: env.sceneID}}
+	_, problems, err = svc.Save(ctx, 10_000, SaveInput{
+		ProjectID: env.project.ID, Divergence: "질문", Horizon: 3, Branches: branches,
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Save error: %v", err)
+	}
+	if len(problems) != 0 {
+		t.Fatalf("problems = %+v, want none once node_id names the leaf scene", problems)
 	}
 }
 

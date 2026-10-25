@@ -222,3 +222,78 @@ func TestUndo_unknownBatchID(t *testing.T) {
 		t.Errorf("Undo = %v, want ErrUndoBatchNotFound", err)
 	}
 }
+
+// TestAccept_forecast_addBeatAcceptedInALaterCallStillRidesTheStructuralUndoBatch
+// is review finding f3: a writer who accepts the structural item (the
+// scene) alone first, then accepts the dependent add_beat item in a
+// SEPARATE, later Accept call, must still have that add_beat item tagged
+// with the structural item's own undo batch — so proposals.undo on that
+// batch deletes the beat too, instead of leaving it orphaned with the
+// item stuck at "accepted".
+func TestAccept_forecast_addBeatAcceptedInALaterCallStillRidesTheStructuralUndoBatch(t *testing.T) {
+	env := newTestEnv(t)
+	th, err := env.threads.Create(context.Background(), thread.NewInput{ProjectID: env.project.ID, Name: "주 갈래"})
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	sub, _ := mustSubmitForecast(t, env, []ItemInput{
+		{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "맞선 장면", AfterNodeID: env.sceneID}},
+		{Op: storyops.Op{Type: "add_beat", ThreadID: th.ID, NodeRef: "s1", Label: "맞선 비트"}},
+	})
+	sceneItemID, beatItemID := sub.Items[0].ID, sub.Items[1].ID
+
+	// Call 1: accept the structural item alone.
+	res1, err := env.svc.Accept(context.Background(), now(), env.project.ID, []string{sceneItemID}, nil)
+	if err != nil {
+		t.Fatalf("Accept call 1: %v", err)
+	}
+	if len(res1.UndoBatchIDs) != 1 || res1.UndoBatchIDs[0] == "" {
+		t.Fatalf("UndoBatchIDs after call 1 = %+v, want exactly one batch id", res1.UndoBatchIDs)
+	}
+	batchID := res1.UndoBatchIDs[0]
+
+	// Call 2: accept the dependent add_beat item in a SEPARATE call.
+	res2, err := env.svc.Accept(context.Background(), now()+1, env.project.ID, []string{beatItemID}, nil)
+	if err != nil {
+		t.Fatalf("Accept call 2: %v", err)
+	}
+	if len(res2.Items) != 1 || res2.Items[0].Status != StatusAccepted {
+		t.Fatalf("call 2 items = %+v", res2.Items)
+	}
+	if res2.Items[0].UndoBatchID != batchID {
+		t.Fatalf("add_beat item's UndoBatchID = %q, want %q (the structural item's own batch, accepted earlier)",
+			res2.Items[0].UndoBatchID, batchID)
+	}
+	beatID := res2.Items[0].Result.CreatedID
+	if beatID == "" {
+		t.Fatal("add_beat item has no created id")
+	}
+
+	// Undo the structural batch: both the scene AND the beat created in
+	// the LATER call must go, and the add_beat item must be retryable.
+	if err := env.svc.Undo(context.Background(), now()+2, env.project.ID, batchID); err != nil {
+		t.Fatalf("Undo: %v", err)
+	}
+	if _, err := env.nodes.Get(context.Background(), res1.Items[0].Result.CreatedID); err == nil {
+		t.Error("scene still exists after Undo")
+	}
+	beats, err := env.beats.ListByThread(context.Background(), th.ID)
+	if err != nil {
+		t.Fatalf("ListByThread: %v", err)
+	}
+	for _, b := range beats {
+		if b.ID == beatID {
+			t.Fatalf("beat %q (accepted in a later call) still exists after undoing its structural batch", beatID)
+		}
+	}
+	it, err := env.svc.getItem(context.Background(), env.svc.store.DB(), beatItemID)
+	if err != nil {
+		t.Fatalf("getItem: %v", err)
+	}
+	if it.Status != StatusPending {
+		t.Errorf("add_beat item status = %q, want pending after Undo", it.Status)
+	}
+	if it.UndoBatchID != "" {
+		t.Errorf("add_beat item UndoBatchID = %q, want cleared after Undo", it.UndoBatchID)
+	}
+}

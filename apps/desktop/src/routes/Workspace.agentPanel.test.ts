@@ -119,6 +119,20 @@ describe("Workspace agent panel wiring", () => {
     expect(src).toContain("Cmd+J agent panel");
   });
 
+  // story-assist Phase 4 fix round: AgentPanel unmounts on close, so it
+  // cannot remember which externalDraftNonce it already applied. Reopening
+  // it used to rerun the same mount-time effect with the stale
+  // agentDraftRequest, overwriting whatever the writer had typed next time.
+  // Workspace must clear the request once AgentPanel reports it was
+  // consumed, or the regression comes right back.
+  it("clears agentDraftRequest once AgentPanel reports it applied the draft", async () => {
+    const src = await workspace();
+    expect(src).toContain(
+      "const clearAgentDraftRequest = useCallback(() => setAgentDraftRequest(null), []);",
+    );
+    expect(src).toContain("onExternalDraftApplied={clearAgentDraftRequest}");
+  });
+
   it("has a toolbar button beside the other panel buttons, gated on agent_available", async () => {
     const src = await workspace();
     // 1.2.0 shipped the panel behind Cmd/Ctrl+J only; a writer installing the

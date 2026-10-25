@@ -51,12 +51,20 @@ func (l refLookup) HasFact(id string) bool {
 	return err == nil && f.ProjectID == l.projectID
 }
 
-func (l refLookup) HasNode(id string) bool {
+// IsLeafNode reports whether id is a leaf scene of this project —
+// proposals.refLookup's own convention (engine/internal/proposals/
+// lookup.go). A risk's node_id is a scene reference the writer clicks
+// through to open in the editor (ForecastSheet's risk-ref button, via
+// Workspace.navigateToNode), so it is held to the same leaf-only rule
+// Phase 2's continuity observations use for their own scene refs: a
+// container (an episode or part) opened as if it were a scene would show
+// an empty document and risk autosave writing prose into a container.
+func (l refLookup) IsLeafNode(id string) bool {
 	if l.nodes == nil || id == "" {
 		return false
 	}
 	n, err := l.nodes.Get(l.ctx, id)
-	return err == nil && n.ProjectID == l.projectID
+	return err == nil && n.ProjectID == l.projectID && n.Kind == node.KindLeaf
 }
 
 // Validate checks a save against every rule phase-4-forecast.md's 4.A.2
@@ -162,8 +170,8 @@ func validateBranch(lookup refLookup, add func(int, string, ...any), i int, b Br
 		if r.FactID != "" && !lookup.HasFact(r.FactID) {
 			add(i, "branch %d risk %d: fact_id %q not found in this work", i+1, ri+1, r.FactID)
 		}
-		if r.NodeID != "" && !lookup.HasNode(r.NodeID) {
-			add(i, "branch %d risk %d: node_id %q not found in this work", i+1, ri+1, r.NodeID)
+		if r.NodeID != "" && !lookup.IsLeafNode(r.NodeID) {
+			add(i, "branch %d risk %d: node_id %q is not a leaf scene in this work", i+1, ri+1, r.NodeID)
 		}
 	}
 
