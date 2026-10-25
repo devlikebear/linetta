@@ -22,6 +22,11 @@ const mocks = vi.hoisted(() => ({
   searchQuery: vi.fn(),
   openPath: vi.fn(),
   createRecoveryBackup: vi.fn(),
+  // story-assist 3.D.3: no provider connected by default, so the
+  // existing tests' import flow keeps navigating straight to Workspace
+  // without the "Story World 채우기" dialog in the way.
+  providersList: vi.fn().mockResolvedValue([]),
+  extractionEstimate: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -51,6 +56,12 @@ vi.mock("../lib/rpc", () => ({
   openPath: mocks.openPath,
   backupApi: {
     createRecovery: mocks.createRecoveryBackup,
+  },
+  providers: {
+    list: mocks.providersList,
+  },
+  proposals: {
+    extractionEstimate: mocks.extractionEstimate,
   },
 }));
 

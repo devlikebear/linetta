@@ -168,3 +168,13 @@
 .canon-meta span {
   overflow-wrap: anywhere;
 }
+
+.canon-proposals-badge {
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  padding: 2px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
