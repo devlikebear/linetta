@@ -5,14 +5,6 @@
   line-height: 1.5;
 }
 
-.style-section label {
-  display: grid;
-  gap: 5px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-
 .style-actions {
   display: flex;
   flex-wrap: wrap;

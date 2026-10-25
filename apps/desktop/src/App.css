@@ -1015,6 +1015,8 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   font-size: 10.5px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted);
   display: flex; align-items: center; justify-content: space-between;
 }
+details.sec > summary { cursor: pointer; }
+details.sec[open] > summary { margin-bottom: 10px; }
 .sec-empty { margin: 0; color: var(--muted-2); font-size: 13px; font-style: italic; }
 
 /* ---- Stats ---- */
@@ -1139,7 +1141,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .ai-mode-pill.on { background: var(--ink); color: var(--surface); border-color: var(--ink); }
 
 .ai-textarea {
-  width: 100%; resize: none;
+  width: 100%; resize: vertical;
   border: 1px solid var(--line); border-radius: var(--r-md);
   background: var(--surface); padding: 13px 14px;
   font-family: var(--font-serif); font-size: 15px; line-height: 1.6; color: var(--ink);
@@ -1266,7 +1268,11 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .es-kind-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-family: var(--font-mono); padding: 3px 9px; border-radius: 999px; background: var(--surface-3); color: var(--ink-soft); }
 .es-role { border: 0; background: transparent; font-size: 12px; color: var(--muted); font-family: var(--font-mono); outline: none; flex: 1; }
 
-.es-field textarea, .es-field input { width: 100%; border: 1px solid var(--line-soft); border-radius: var(--r-sm); background: var(--surface); padding: 9px 11px; font-size: 13px; font-family: var(--font-serif); line-height: 1.6; color: var(--ink); outline: none; resize: none; }
+.es-field label { display: grid; gap: 5px; margin-bottom: 10px; font-size: 12px; color: var(--ink-soft); }
+.es-field textarea, .es-field input { width: 100%; border: 1px solid var(--line-soft); border-radius: var(--r-sm); background: var(--surface); padding: 9px 11px; font-size: 13px; font-family: var(--font-ui); line-height: 1.6; color: var(--ink); outline: none; }
+/* Grows with its text where field-sizing is supported; the drag handle covers the rest. */
+.es-field textarea { resize: vertical; field-sizing: content; min-height: calc(3lh + 20px); max-height: 60vh; }
+.es-field textarea[rows="1"] { min-height: 0; }
 .es-field textarea:focus, .es-field input:focus { border-color: var(--accent); }
 
 .attr-grid { display: flex; flex-direction: column; gap: 6px; }
@@ -1447,6 +1453,7 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
   background: var(--paper); padding: 10px 12px; font-size: 14px; outline: none; color: var(--ink);
   font-family: var(--font-serif); resize: none;
 }
+.modal-field textarea { resize: vertical; }
 .modal-field select {
   min-height: 32px;
   padding: 6px 34px 6px 10px;
