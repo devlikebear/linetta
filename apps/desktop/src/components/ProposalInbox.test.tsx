@@ -140,6 +140,49 @@ describe("ProposalInbox", () => {
     await waitFor(() => expect(screen.queryByTestId("proposal-inbox-undo")).not.toBeInTheDocument());
   });
 
+  // Review finding (round 5, 2026-10-25): with batchFilter=="all", the
+  // writer can select structural items from two DIFFERENT proposals (two
+  // separate outline-reflection batches) and apply them together. accept.go
+  // then creates one undo batch PER proposal, so undo_batch_ids can have
+  // more than one entry — keeping only the first used to leave the second
+  // batch with no revert button at all.
+  it("offers one revert button per undo batch when a single accept spans two proposals", async () => {
+    const itemA = item({ id: "item-a", proposal_id: "p-a", summary: "묶음 A 구조 항목" });
+    const itemB = item({ id: "item-b", proposal_id: "p-b", summary: "묶음 B 구조 항목" });
+    mocks.list.mockResolvedValue({
+      proposals: [batch([itemA], { id: "p-a" }), batch([itemB], { id: "p-b" })],
+    });
+    mocks.accept.mockResolvedValue({
+      items: [
+        item({ id: "item-a", status: "accepted", result: { created_id: "n-a" }, undo_batch_id: "batch-A" }),
+        item({ id: "item-b", status: "accepted", result: { created_id: "n-b" }, undo_batch_id: "batch-B" }),
+      ],
+      undo_batch_ids: ["batch-A", "batch-B"],
+    });
+    mocks.undo.mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByText("묶음 A 구조 항목");
+    await screen.findByText("묶음 B 구조 항목");
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[0]);
+    await user.click(checkboxes[1]);
+    await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
+
+    const undoButtons = await screen.findAllByTestId("proposal-inbox-undo");
+    expect(undoButtons).toHaveLength(2);
+
+    // Revert the SECOND batch — the one a single-id implementation would
+    // have silently dropped.
+    await user.click(undoButtons[1]);
+    expect(mocks.undo).toHaveBeenCalledWith("project-1", "batch-B");
+
+    // The first batch's own revert button must still be there — undoing
+    // one batch must not clear the other.
+    await waitFor(() => expect(screen.getAllByTestId("proposal-inbox-undo")).toHaveLength(1));
+    expect(mocks.undo).not.toHaveBeenCalledWith("project-1", "batch-A");
+  });
+
   it("does not offer a revert button when accept returns no undo batch", async () => {
     mocks.list.mockResolvedValue({ proposals: [batch([item()])] });
     mocks.accept.mockResolvedValue({ items: [item({ status: "accepted", result: { created_id: "e-1" } })] });

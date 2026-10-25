@@ -264,6 +264,78 @@ func TestSubmit_forecast_acceptsStructuralOpsWithRefChain(t *testing.T) {
 	}
 }
 
+// Review finding (round 5, 2026-10-25): resolveNodeRef's own doc comment
+// says a ref must be "declared by a create_scene/create_outline_node item
+// EARLIER in this batch", but declaredRefs is built from a pass over every
+// item regardless of position, so a LATER item's ref used to resolve here
+// too. Accept applies a forecast's structural batch strictly in ordinal
+// (submission) order, so a forward reference would not fail here — it
+// would fail at Accept time instead, rolling back the WHOLE structural
+// batch (including any sibling that had nothing wrong with it) and
+// reporting the rolled-back sibling with a confusing, unrelated error
+// message. Submit must catch this itself, the same way it already catches
+// every other node_ref problem.
+func TestSubmit_forecast_rejectsAForwardReferencingNodeRef(t *testing.T) {
+	env := newTestEnv(t)
+	f := env.savedSelectedForecast(t)
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{
+			// ordinal 0 anchors to ordinal 1's ref — declared, but LATER.
+			{Op: storyops.Op{Type: "create_scene", Ref: "s2", Label: "맞선 다음", AfterNodeRef: "s1"}},
+			{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "맞선 장면", AfterNodeID: env.sceneID}},
+		},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "is not earlier in this batch") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want a forward-reference problem on item 1", problems)
+	}
+
+	// Nothing-stored-on-any-problem discipline (Submit's own rule, pinned
+	// the same way TestSubmit_nothingStoredWhenAnyItemHasAProblem does): a
+	// retry in the correct order must start clean, not find leftover items.
+	all, err := env.svc.listProposals(context.Background(), env.project.ID, nil)
+	if err != nil {
+		t.Fatalf("listProposals: %v", err)
+	}
+	if len(all) != 0 {
+		t.Fatalf("stored %d proposals, want 0 (all-or-nothing on a bad submission)", len(all))
+	}
+}
+
+// A self-reference (an item's own after_node_ref naming its own ref) must
+// be refused the same way — dep == i is caught by the same dep >= i check.
+func TestSubmit_forecast_rejectsASelfReferencingNodeRef(t *testing.T) {
+	env := newTestEnv(t)
+	f := env.savedSelectedForecast(t)
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "자기 참조", AfterNodeRef: "s1"}},
+		},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "is not earlier in this batch") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want a forward-reference problem for the self-reference", problems)
+	}
+}
+
 func TestSubmit_forecast_createSceneRequiresAnchor(t *testing.T) {
 	env := newTestEnv(t)
 	f := env.savedSelectedForecast(t)

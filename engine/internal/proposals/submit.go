@@ -210,6 +210,22 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 							num, label, ref, dep+1)
 						break
 					}
+					// declaredRefs is built from a single pass over every
+					// item regardless of position, so without this check a
+					// LATER item's ref (dep >= i, including dep == i, a
+					// self-reference) would resolve here even though
+					// Accept applies ops.go's structural batch strictly in
+					// ordinal order: the anchor would not exist yet when
+					// this item's turn came, failing the whole structural
+					// batch (and rolling back any sibling that WOULD have
+					// succeeded) instead of being caught here with a clear
+					// message (review finding, 2026-10-25).
+					if dep >= i {
+						add(i, "item %d: %s %q is declared by item %d, which is not earlier in this batch — "+
+							"list the scene/outline node an item anchors to before the item that anchors to it",
+							num, label, ref, dep+1)
+						break
+					}
 					dependsOnIdx[i] = append(dependsOnIdx[i], dep)
 				} else if lookup.HasNode(ref) {
 					// a real id placed in the ref field.
