@@ -177,10 +177,14 @@ Write (`full` mode only):
   so into the story brief; there is no MCP tool that approves;
 - `linetta_set_character_visuals`, `linetta_set_art_style`;
 - `linetta_add_reference_image`, `linetta_delete_reference_image`;
+- `linetta_register_work`: registers the work on the site with a blurb, or
+  changes its blurb or serial status, through `publish.Service.UpsertWork`.
+  An empty field keeps the site's current value;
 - `linetta_publish_episode`: publishes one episode, or updates its text on the
   site, through the same `publish.Service` the app's publish dialog uses.
-  Refused until the writer has connected an account and registered the work
-  in the app — there is deliberately no tool for either;
+  Refused until the work is registered. Both are refused until the writer
+  has connected an account in the app — there is deliberately no tool for
+  that, since pairing is approved in the writer's browser;
 - `linetta_report_continuity`, `linetta_propose_story_ops`,
   `linetta_save_forecast`: the story-assist Review group — see below.
 

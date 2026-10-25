@@ -1,5 +1,26 @@
 # Changelog
 
+## v1.12.0 - 2026-10-25
+
+- **Where the story could go.** Ask the agent for possible branches of the
+  next episode (the **Next development branches** chip does it in one
+  click). It saves 2–5 continuations side by side: a premise, an
+  episode-by-episode beat timeline and risk badges. Nothing is canon: the
+  outline, the manuscript and Story World do not change. Open them from the
+  command palette (**Open forecasts**) or the outline panel's header. Pick
+  one and it goes into the agent's brief as a plan. To put it in the
+  outline, ask the agent to propose it, then accept the scenes and beats in
+  the suggestions inbox, where one click undoes them together. When the
+  outline, the manuscript, Story World or your direction changes, a branch
+  is marked stale and the sheet says what changed.
+- **The agent can register a work on Linetta Works.** Ask it to publish an
+  episode of a work that is not on the site yet. It writes or takes a blurb
+  you approve, registers the work, then publishes the episode. It can also
+  change the blurb or mark the work complete. Connecting your account is
+  still yours to do in **Settings → Publishing**.
+- Fixed: after the agent published an episode, the outline's publishing
+  badges did not update until you reopened the work.
+
 ## v1.11.0 - 2026-10-25
 
 - **Ask the agent about a passage.** Select text in a scene, right-click,
