@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { reconcileInspector, type InspectorState } from "./inspector";
 
-const S = (f: boolean, x: boolean, c = false, a = false, p = false): InspectorState => ({
+const S = (f: boolean, x: boolean, c = false, a = false, p = false, fc = false): InspectorState => ({
   factBook: f,
   contextual: x,
   canon: c,
   agent: a,
   proposalInbox: p,
+  forecast: fc,
 });
 
 describe("reconcileInspector", () => {
@@ -55,6 +56,11 @@ describe("reconcileInspector", () => {
     // on the narrow tier rather than stacking behind them (#95).
     const out = reconcileInspector(S(true, false, false, false), S(true, false, false, true), "ipad");
     expect(out).toEqual(S(false, false, false, true));
+  });
+
+  it("treats the forecast sheet as one of the exclusive panels (story-assist Phase 4)", () => {
+    const out = reconcileInspector(S(true, false, false, false, false, false), S(true, false, false, false, false, true), "ipad");
+    expect(out).toEqual(S(false, false, false, false, false, true));
   });
 
   it("closes the agent panel when another panel takes the slot", () => {

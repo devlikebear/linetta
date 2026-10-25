@@ -22,6 +22,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/importmd"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
@@ -247,6 +248,23 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithMemory(companionSvc).
 		WithIllustrations(illustrations)
 
+	// The writer's own direction (story-assist Phase 1): the work's current
+	// focus and a scene's intent. Shared between the RPC handlers below
+	// (direction.get_focus etc., the app's only way to write it) and the
+	// story brief's Direction section just below — one table, one repo.
+	directionRepo := direction.NewRepo(st, nodes, projects)
+
+	// Possible continuations an agent drafted for the writer to compare
+	// (story-assist Phase 4). Shared between linetta_save_forecast
+	// (below), the forecast.* RPC handlers (below), the proposals Service
+	// just below (purpose=forecast's own ForecastID check) and the story
+	// brief's Direction section just below's planned-branch note — one
+	// table, one Service, the same discipline directionRepo follows.
+	forecastSvc := forecast.New(st, forecast.Deps{
+		Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships,
+		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
+	})
+
 	// Story-structure proposals (story-assist Phase 3): an agent's
 	// linetta_propose_story_ops candidates, and the writer's accept/reject
 	// of them through the proposals.* RPCs below, share this one Service —
@@ -255,7 +273,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// allowed proposal ops never touch scene text or the keyword memory.
 	proposalsStory := storyops.New(projects, nodes, threads, beats, entities, relationships).WithFacts(facts)
 	proposalsSvc := proposals.New(st, proposalsStory, entities, threads, beats, facts, nodes, projects,
-		func(method string, params any) { _ = s.Notifier().Notify(method, params) })
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }).
+		WithForecasts(forecastSvc)
 
 	// One Store for the skills the agent writes for itself, shared between
 	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below),
@@ -270,12 +289,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// halves of one log.
 	skillHistory := agentskills.NewHistory(st.DB())
 
-	// The writer's own direction (story-assist Phase 1): the work's current
-	// focus and a scene's intent. Shared between the RPC handlers below
-	// (direction.get_focus etc., the app's only way to write it) and the
-	// story brief's Direction section just below — one table, one repo.
-	directionRepo := direction.NewRepo(st, nodes, projects)
-
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
@@ -288,7 +301,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		// nothing anywhere goes red — which is what
 		// TestProductionStoryContextBuilderCarriesEverySource guards.
 		WithSkillSource(skillBriefSource{store: skillsStore}).
-		WithDirectionSource(directionBriefSource{repo: directionRepo})
+		WithDirectionSource(directionBriefSource{repo: directionRepo, forecast: forecastSvc})
 
 	// Linetta Works publishing (Phase 3). Registered here, before the MCP
 	// host, because the publish tools publish through the same service.
@@ -320,6 +333,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			threads:       threads,
 			continuity:    continuityRepo,
 			proposals:     proposalsSvc,
+			forecasts:     forecastSvc,
 			plot:          plotBuilder,
 			manuscript:    manuscriptSearcher,
 			context:       mcpContextBuilder,
@@ -478,6 +492,12 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("proposals.pending_count", handlers.ProposalsPendingCount(proposalsSvc))
 	s.Handle("proposals.extraction_estimate", handlers.ExtractionEstimate(proposalsSvc))
 	s.Handle("proposals.extraction_progress", handlers.ExtractionProgress(proposalsSvc))
+	s.Handle("proposals.undo", handlers.UndoProposals(proposalsSvc, clock))
+
+	s.Handle("forecast.list", handlers.ListForecasts(forecastSvc, projects, nodes, entities, facts))
+	s.Handle("forecast.select", handlers.SelectForecast(forecastSvc, clock))
+	s.Handle("forecast.clear_selection", handlers.ClearForecastSelection(forecastSvc))
+	s.Handle("forecast.delete", handlers.DeleteForecast(forecastSvc))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))

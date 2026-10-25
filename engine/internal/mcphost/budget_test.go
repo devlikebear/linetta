@@ -201,9 +201,9 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if name == "linetta_publish_status" || name == "linetta_publish_episode" {
 			continue
 		}
-		// story-assist Phase 2's report tool, and Phase 3's propose tool,
-		// carry their own allowances below.
-		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" {
+		// story-assist Phase 2's report tool, Phase 3's propose tool, and
+		// Phase 4's save-forecast tool carry their own allowances below.
+		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" || name == "linetta_save_forecast" {
 			continue
 		}
 		total += b
@@ -236,6 +236,12 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// ones.
 	if propose := sizes["linetta_propose_story_ops"]; propose > 8100 {
 		t.Errorf("linetta_propose_story_ops costs %dB, want <= 8100B", propose)
+	}
+	// story-assist Phase 4's save-forecast tool measured 3,701B: branches[]
+	// nests beats[], decisions[], changes{} and risks[] — one schema
+	// describing a whole branch, repeated up to 5 times per call.
+	if save := sizes["linetta_save_forecast"]; save > 3900 {
+		t.Errorf("linetta_save_forecast costs %dB, want <= 3900B", save)
 	}
 	writes := 0
 	for _, name := range VisualWriteToolNames {

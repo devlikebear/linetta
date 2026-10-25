@@ -40,10 +40,24 @@ func (s *Service) insertProposal(ctx context.Context, tx dbTx, p Proposal) error
 		return err
 	}
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO story_proposals (id, project_id, purpose, source, summary, ref_bindings_json, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.ProjectID, p.Purpose, p.Source, p.Summary, bindingsJSON, p.CreatedAt)
+		`INSERT INTO story_proposals (id, project_id, purpose, forecast_id, source, summary, ref_bindings_json, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.ProjectID, p.Purpose, nullableString(p.ForecastID), p.Source, p.Summary, bindingsJSON, p.CreatedAt)
 	return err
+}
+
+// getProposal returns one proposal's header row — Accept needs Purpose to
+// decide whether a proposal's structural items batch together
+// (purpose=forecast) or apply one at a time like every other purpose.
+func (s *Service) getProposal(ctx context.Context, tx dbTx, id string) (Proposal, error) {
+	row := tx.QueryRowContext(ctx,
+		`SELECT id, project_id, purpose, forecast_id, source, summary, ref_bindings_json, created_at
+		   FROM story_proposals WHERE id = ?`, id)
+	p, err := scanProposal(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Proposal{}, ErrNotFound
+	}
+	return p, err
 }
 
 func (s *Service) insertItem(ctx context.Context, tx dbTx, it Item) error {
@@ -82,7 +96,7 @@ func (s *Service) insertItem(ctx context.Context, tx dbTx, it Item) error {
 }
 
 const itemColumns = `id, proposal_id, project_id, ordinal, op_json, depends_on_json, evidence_json,
-       from_node_ids_json, duplicates_json, status, result_json, status_at`
+       from_node_ids_json, duplicates_json, status, result_json, status_at, undo_batch_id`
 
 func (s *Service) getItem(ctx context.Context, tx dbTx, id string) (Item, error) {
 	row := tx.QueryRowContext(ctx, `SELECT `+itemColumns+` FROM story_proposal_items WHERE id = ?`, id)
@@ -177,7 +191,7 @@ func (s *Service) listPendingCreateEntityItems(ctx context.Context, projectID st
 // status.
 func (s *Service) listProposals(ctx context.Context, projectID string, statuses []string) ([]ProposalWithItems, error) {
 	rows, err := s.store.DB().QueryContext(ctx,
-		`SELECT id, project_id, purpose, source, summary, ref_bindings_json, created_at
+		`SELECT id, project_id, purpose, forecast_id, source, summary, ref_bindings_json, created_at
 		   FROM story_proposals WHERE project_id = ? ORDER BY created_at DESC`, projectID)
 	if err != nil {
 		return nil, err
@@ -246,6 +260,38 @@ func (s *Service) updateItemStatus(ctx context.Context, tx dbTx, itemID, status 
 	return err
 }
 
+// updateItemUndoBatch tags itemID with batchID (or clears it when batchID
+// is ""). Set alongside updateItemStatus, never instead of it: the two
+// columns are independent so a status update to pending (proposals.undo)
+// and a status update to accepted (Accept) can each touch only the column
+// they mean to.
+func (s *Service) updateItemUndoBatch(ctx context.Context, tx dbTx, itemID, batchID string) error {
+	_, err := tx.ExecContext(ctx,
+		`UPDATE story_proposal_items SET undo_batch_id = ? WHERE id = ?`, nullableString(batchID), itemID)
+	return err
+}
+
+// listItemsByUndoBatch returns every item tagged with batchID in
+// projectID — proposals.undo's own "what does this batch cover" query.
+func (s *Service) listItemsByUndoBatch(ctx context.Context, tx dbTx, projectID, batchID string) ([]Item, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT `+itemColumns+` FROM story_proposal_items WHERE project_id = ? AND undo_batch_id = ? ORDER BY ordinal ASC`,
+		projectID, batchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Item
+	for rows.Next() {
+		it, err := scanItem(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
 func (s *Service) updateProposalRefBindings(ctx context.Context, tx dbTx, proposalID string, bindings map[string]string) error {
 	bindingsJSON, err := marshalStringMap(bindings)
 	if err != nil {
@@ -275,10 +321,12 @@ type rowScanner interface {
 func scanItem(row rowScanner) (Item, error) {
 	var it Item
 	var opJSON, dependsJSON, evidenceJSON, fromNodesJSON, dupesJSON, resultJSON string
+	var undoBatchID sql.NullString
 	if err := row.Scan(&it.ID, &it.ProposalID, &it.ProjectID, &it.Ordinal, &opJSON, &dependsJSON,
-		&evidenceJSON, &fromNodesJSON, &dupesJSON, &it.Status, &resultJSON, &it.StatusAt); err != nil {
+		&evidenceJSON, &fromNodesJSON, &dupesJSON, &it.Status, &resultJSON, &it.StatusAt, &undoBatchID); err != nil {
 		return Item{}, err
 	}
+	it.UndoBatchID = undoBatchID.String
 	if err := json.Unmarshal([]byte(opJSON), &it.Op); err != nil {
 		return Item{}, fmt.Errorf("decode op: %w", err)
 	}
@@ -307,15 +355,27 @@ func scanItem(row rowScanner) (Item, error) {
 func scanProposal(row rowScanner) (Proposal, error) {
 	var p Proposal
 	var bindingsJSON string
-	if err := row.Scan(&p.ID, &p.ProjectID, &p.Purpose, &p.Source, &p.Summary, &bindingsJSON, &p.CreatedAt); err != nil {
+	var forecastID sql.NullString
+	if err := row.Scan(&p.ID, &p.ProjectID, &p.Purpose, &forecastID, &p.Source, &p.Summary, &bindingsJSON, &p.CreatedAt); err != nil {
 		return Proposal{}, err
 	}
+	p.ForecastID = forecastID.String
 	bindings, err := unmarshalStringMap(bindingsJSON)
 	if err != nil {
 		return Proposal{}, fmt.Errorf("decode ref_bindings: %w", err)
 	}
 	p.RefBindings = bindings
 	return p, nil
+}
+
+// nullableString turns an empty string into a SQL NULL so an optional
+// column (forecast_id) reads back empty rather than "" vs NULL mattering
+// to a future query.
+func nullableString(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func marshalStringSlice(v []string) (string, error) {

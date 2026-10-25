@@ -14,6 +14,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
@@ -57,6 +58,7 @@ type mcpToolRepos struct {
 	threads       *thread.Repo
 	continuity    *continuity.Repo
 	proposals     *proposals.Service
+	forecasts     *forecast.Service
 	plot          *plot.Builder
 	manuscript    *manuscript.Searcher
 	context       *storycontext.ContextBuilder

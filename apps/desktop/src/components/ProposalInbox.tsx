@@ -110,6 +110,19 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
   const [busy, setBusy] = useState(false);
   const [batchFilter, setBatchFilter] = useState<string>("all");
   const [progress, setProgress] = useState<ExtractionProgress | null>(null);
+  // story-assist Phase 4 (4.A.5/4.C.2): the most recent accept call's
+  // structural undo batches, if any — purpose=forecast's outline-reflection
+  // items only. An array, not a single id: with batchFilter=="all" the
+  // writer can select structural items from more than one proposal before
+  // clicking "모두 적용" (toggleSelect/visibleItemsByGroup place no
+  // per-batch limit on `selected`), and accept.go's byProposal loop then
+  // creates one undo batch PER proposal — keeping only the first would
+  // leave every batch after it with no way to revert through this UI at
+  // all (review finding, 2026-10-25). Each id is cleared independently
+  // (undoBatch below) once used; the whole array is cleared on the next
+  // accept/reject, so the buttons never offer to revert a batch the writer
+  // already moved past.
+  const [lastUndoBatchIds, setLastUndoBatchIds] = useState<string[]>([]);
 
   useEngineEvent<McpChangedPayload>("mcp-changed", (event) => {
     if (event.project_id && event.project_id !== projectId) return;
@@ -256,6 +269,7 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
       showToast(t("proposals.toast.applied", { succeeded, failed }));
       setSelected(new Set());
       setDrafts({});
+      setLastUndoBatchIds(res.undo_batch_ids ?? []);
       setRevision((n) => n + 1);
     } catch (e) {
       showToast(rpcErrorMessage(e, t));
@@ -271,6 +285,28 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
       await proposalsApi.reject(projectId, [...selected]);
       showToast(t("proposals.toast.rejected", { count: selected.size }));
       setSelected(new Set());
+      setLastUndoBatchIds([]);
+      setRevision((n) => n + 1);
+    } catch (e) {
+      showToast(rpcErrorMessage(e, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // story-assist Phase 4: reverts ONE structural batch applySelected just
+  // created (purpose=forecast's create_outline_node/create_scene items,
+  // plus any add_beat that depended on one) — the outline, and the beats,
+  // together. Scoped to one batch id, not "undo everything selected":
+  // 4.A.5's own undo is already scoped that way. Removes only this one id
+  // from lastUndoBatchIds on success, leaving any other still-pending
+  // batch's own revert button in place.
+  async function undoBatch(batchId: string) {
+    setBusy(true);
+    try {
+      await proposalsApi.undo(projectId, batchId);
+      showToast(t("proposals.toast.undone"));
+      setLastUndoBatchIds((prev) => prev.filter((id) => id !== batchId));
       setRevision((n) => n + 1);
     } catch (e) {
       showToast(rpcErrorMessage(e, t));
@@ -306,6 +342,23 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
       {progress && (
         <div className="pi-progress" data-testid="proposal-inbox-progress">
           {t("proposals.progress", { covered: progress.covered_episodes, total: progress.total_episodes })}
+        </div>
+      )}
+
+      {lastUndoBatchIds.length > 0 && (
+        <div className="pi-undo">
+          {lastUndoBatchIds.map((batchId) => (
+            <button
+              key={batchId}
+              type="button"
+              className="chip"
+              disabled={busy}
+              onClick={() => undoBatch(batchId)}
+              data-testid="proposal-inbox-undo"
+            >
+              {t("proposals.undoBatch")}
+            </button>
+          ))}
         </div>
       )}
 

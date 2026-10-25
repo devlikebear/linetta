@@ -5,7 +5,9 @@ import type {
   AcceptSuggestionsResult,
   ExtractionEstimate,
   ExtractionProgress,
+  Forecast,
   ProposalOp,
+  SelectForecastResult,
   SuggestionBatch,
   SuggestionItemStatus,
 } from "./types";
@@ -688,4 +690,30 @@ export const proposals = {
     rpcCall<ExtractionEstimate>("proposals.extraction_estimate", { project_id: projectId }),
   extractionProgress: (projectId: string) =>
     rpcCall<ExtractionProgress>("proposals.extraction_progress", { project_id: projectId }),
+  /** Reverts one purpose=forecast structural batch (AcceptSuggestionsResult's
+   *  undo_batch_ids / SuggestionItem.undo_batch_id) — the outline, and any
+   *  beat an add_beat item added onto a scene the batch created. */
+  undo: (projectId: string, batchId: string) =>
+    rpcCall<{ ok: boolean }>("proposals.undo", { project_id: projectId, batch_id: batchId }),
+};
+
+/** "Where the story could go" (story-assist Phase 4): possible
+ *  continuations an agent drafted with linetta_save_forecast, for the
+ *  writer to compare. Select/clearSelection/delete are direct RPCs — no
+ *  LLM turn. Never canon: see the Forecast type's own doc comment. */
+export const forecast = {
+  list: (projectId: string) =>
+    rpcCall<{ forecasts: Forecast[] }>("forecast.list", { project_id: projectId }),
+  // project_id scopes select/delete to the caller's own project (review
+  // finding f2) — without it, a stale forecast_id left over from a project
+  // the writer has since navigated away from could change or delete a
+  // DIFFERENT project's forecast with no error at all.
+  select: (projectId: string, forecastId: string, branchId: string) =>
+    rpcCall<SelectForecastResult>("forecast.select", {
+      project_id: projectId, forecast_id: forecastId, branch_id: branchId,
+    }),
+  clearSelection: (projectId: string) =>
+    rpcCall<{ ok: boolean }>("forecast.clear_selection", { project_id: projectId }),
+  delete: (projectId: string, forecastId: string) =>
+    rpcCall<{ ok: boolean }>("forecast.delete", { project_id: projectId, forecast_id: forecastId }),
 };

@@ -14,6 +14,14 @@ import (
 // (Status failed, Result.Error set) without anything being written for it.
 type AcceptResult struct {
 	Items []Item `json:"items"`
+	// UndoBatchIDs lists every storyops undo batch this call created —
+	// purpose=forecast's structural batches only (the create_outline_node/
+	// create_scene items applied together in one ApplyOpsWithRefs call).
+	// Usually at most one entry: a single accept call almost always
+	// targets one proposal's structural items. The panel's "되돌리기"
+	// button on a forecast's outline-reflection proposal reads this to
+	// call proposals.undo.
+	UndoBatchIDs []string `json:"undo_batch_ids,omitempty"`
 }
 
 // kindForOp names what Story World area an op touches, for the
@@ -32,6 +40,8 @@ func kindForOp(opType string) string {
 		return "thread"
 	case "add_beat", "update_beat":
 		return "beat"
+	case "create_outline_node", "create_scene":
+		return "outline"
 	default:
 		return ""
 	}
@@ -109,9 +119,14 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 	}
 
 	outcomes := map[string]Item{} // item id -> its final Item, across every proposal processed
+	var undoBatchIDs []string
 
 	for proposalID, wantedIDs := range byProposal {
 		all, err := s.listItemsByProposal(ctx, s.store.DB(), proposalID)
+		if err != nil {
+			return AcceptResult{}, err
+		}
+		proposal, err := s.getProposal(ctx, s.store.DB(), proposalID)
 		if err != nil {
 			return AcceptResult{}, err
 		}
@@ -123,7 +138,7 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 		lookup := s.lookupFor(ctx, projectID)
 		committed := map[string]bool{} // item ids whose op is already applied (DB or this call)
 		itemByID := map[string]Item{}  // every item in this proposal, by id
-		seeded := storyops.Refs{Entities: map[string]string{}, Threads: map[string]string{}}
+		seeded := storyops.Refs{Entities: map[string]string{}, Threads: map[string]string{}, Nodes: map[string]string{}}
 		for _, it := range all {
 			itemByID[it.ID] = it
 			if it.Status == StatusAccepted {
@@ -142,7 +157,129 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 		refOwner := refOwnerMap(all)
 
 		changed := false
+
+		// purpose=forecast's structural items (create_outline_node,
+		// create_scene) batch together into ONE ApplyOpsWithRefs call, so
+		// storyops' "whole structural batch is all-or-nothing, with one
+		// undo" guarantee covers them as a unit — see this package's own
+		// allowedOpTypes/forecastOpTypes comment above. Every other op
+		// type (add_beat) still applies one item at a time
+		// in the loop below, exactly as every other purpose always has.
+		handled := map[string]bool{} // item ids this pre-pass has already given an outcome
+		var structuralBatchID string
+		if proposal.Purpose == PurposeForecast {
+			type pendingStructural struct {
+				it Item
+				op storyops.Op
+			}
+			var structural []pendingStructural
+			for _, it := range all {
+				if !wanted[it.ID] {
+					continue
+				}
+				if it.Status != StatusPending && it.Status != StatusFailed {
+					continue // settled — the main loop below reports it
+				}
+				op := it.Op
+				if edited, ok := edits[it.ID]; ok {
+					validated, err := s.validateEditedOp(lookup, seeded, edited)
+					if err != nil {
+						it.Status, it.Result, it.StatusAt = StatusFailed, ItemResult{Error: err.Error()}, now
+						if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
+							return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+						}
+						outcomes[it.ID] = it
+						changed = true
+						handled[it.ID] = true
+						continue
+					}
+					if validated.Ref == "" && it.Op.Ref != "" && isRefDeclaringOp(it.Op.Type) {
+						validated.Ref = it.Op.Ref
+					}
+					op = validated
+				}
+				if op.Type != "create_outline_node" && op.Type != "create_scene" {
+					continue // add_beat — handled by the main loop below
+				}
+				structural = append(structural, pendingStructural{it: it, op: op})
+			}
+
+			if len(structural) > 0 {
+				ops := make([]storyops.Op, len(structural))
+				for idx, p := range structural {
+					ops[idx] = p.op
+				}
+				applied, newRefs := s.storyops.ApplyOpsWithRefs(ctx, projectID, "",
+					storyops.Proposal{Ops: ops}, seeded, func() int64 { return now })
+				failureAt := map[int]string{}
+				for _, f := range applied.Failures {
+					failureAt[f.Index] = f.Error
+				}
+				if applied.IsError() {
+					generic := "apply failed"
+					if len(applied.Failures) > 0 {
+						generic = applied.Failures[0].Error
+					}
+					for idx, p := range structural {
+						it := p.it
+						msg := generic
+						if m, ok := failureAt[idx]; ok {
+							msg = m
+						}
+						it.Status = StatusFailed
+						it.Result = ItemResult{Error: msg}
+						it.StatusAt = now
+						if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
+							return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+						}
+						outcomes[it.ID] = it
+						handled[it.ID] = true
+					}
+					changed = true
+				} else {
+					seeded = newRefs
+					structuralBatchID = applied.UndoBatchID
+					if structuralBatchID != "" {
+						undoBatchIDs = append(undoBatchIDs, structuralBatchID)
+					}
+					for _, p := range structural {
+						it, op := p.it, p.op
+						resultID := resultIDFor(it, op, applied, newRefs)
+						it.Status = StatusAccepted
+						it.Result = ItemResult{CreatedID: resultID}
+						it.UndoBatchID = structuralBatchID
+						it.StatusAt = now
+						committed[it.ID] = true
+						if it.Op.Ref != "" && resultID != "" {
+							seeded.Nodes[it.Op.Ref] = resultID
+						}
+						if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
+							return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+						}
+						if structuralBatchID != "" {
+							if werr := s.updateItemUndoBatch(ctx, s.store.DB(), it.ID, structuralBatchID); werr != nil {
+								return AcceptResult{}, fmt.Errorf("persist item %s undo batch: %w", it.ID, werr)
+							}
+						}
+						// Keep itemByID current for this SAME call's main
+						// loop below: an add_beat item processed right
+						// after this pre-pass depends on this item's
+						// UndoBatchID to tag itself, and itemByID was built
+						// from `all` before this pre-pass ran.
+						itemByID[it.ID] = it
+						outcomes[it.ID] = it
+						handled[it.ID] = true
+					}
+					kinds["outline"] = true
+					changed = true
+				}
+			}
+		}
+
 		for _, it := range all { // ordinal order — listItemsByProposal already sorts by ordinal
+			if handled[it.ID] {
+				continue // already given an outcome by the structural pre-pass above
+			}
 			// pending: not yet decided. failed: decided once, but not
 			// terminal — a later call (edited or not) may retry it.
 			// accepted/rejected are the only terminal statuses.
@@ -229,10 +366,46 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 					}
 				}
 				kinds[kindForOp(op.Type)] = true
+				// An add_beat item that depends on a structural item
+				// (a scene/node a forecast batch created) rides that
+				// item's OWN undo batch — whether that structural item
+				// was accepted in THIS call (itemByID was just refreshed
+				// by the pre-pass above) or an earlier one (itemByID's
+				// initial load from `all` already carries its stored
+				// undo_batch_id). Undoing the outline also has to delete
+				// this beat, or it survives its own scene's disappearance
+				// pointing at nothing — see migration 0029's
+				// story_proposal_items.undo_batch_id comment.
+				//
+				// Read from op.NodeRef — the ref the ACTUALLY APPLIED op
+				// still carries, via the same refOwner map
+				// effectiveMissingDependency's gate above just used — not
+				// from it.DependsOn, which is Submit's reading of the
+				// ORIGINAL op and goes stale the moment an edit drops the
+				// ref (review finding f1, 2026-10-25): an edit that
+				// rewrites this add_beat to point at a direct node_id
+				// instead (dropping node_ref entirely, same pattern
+				// TestAccept_editDroppingARefDependencyIsNotBlockedByThe-
+				// StaleDependency exercises for create_relationship) no
+				// longer names any sibling at all, so it.DependsOn's old
+				// entry would tag this item with an unrelated structural
+				// batch's undo id — later undoing THAT batch would delete
+				// THIS beat as a side effect, even though the two have
+				// nothing to do with each other.
+				if op.Type == "add_beat" && op.NodeRef != "" {
+					if owner, ok := itemByID[refOwner[op.NodeRef]]; ok && owner.UndoBatchID != "" {
+						it.UndoBatchID = owner.UndoBatchID
+					}
+				}
 			}
 			it.StatusAt = now
 			if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
 				return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+			}
+			if it.UndoBatchID != "" {
+				if werr := s.updateItemUndoBatch(ctx, s.store.DB(), it.ID, it.UndoBatchID); werr != nil {
+					return AcceptResult{}, fmt.Errorf("persist item %s undo batch: %w", it.ID, werr)
+				}
 			}
 			outcomes[it.ID] = it
 			changed = true
@@ -250,6 +423,7 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 			result.Items = append(result.Items, it)
 		}
 	}
+	result.UndoBatchIDs = undoBatchIDs
 	s.fireNotify("proposals.changed", proposalsChangedPayload{ProjectID: projectID, Kinds: sortedKinds(kinds)})
 	return result, nil
 }
@@ -328,6 +502,8 @@ func seedRefFrom(seeded storyops.Refs, it Item) {
 		seeded.Entities[it.Op.Ref] = it.Result.CreatedID
 	case "create_thread":
 		seeded.Threads[it.Op.Ref] = it.Result.CreatedID
+	case "create_scene", "create_outline_node":
+		seeded.Nodes[it.Op.Ref] = it.Result.CreatedID
 	}
 }
 
@@ -338,6 +514,9 @@ func mergeRefs(r storyops.Refs) map[string]string {
 	}
 	for k, v := range r.Threads {
 		out["thread:"+k] = v
+	}
+	for k, v := range r.Nodes {
+		out["node:"+k] = v
 	}
 	return out
 }
@@ -353,6 +532,10 @@ func createdIDFor(op storyops.Op, applied storyops.ApplyOpsResult, refs storyops
 		return refs.Threads[op.Ref]
 	case "create_fact_card":
 		return applied.Created["fact:"+op.Ref]
+	case "create_scene", "create_outline_node":
+		return refs.Nodes[op.Ref]
+	case "add_beat":
+		return applied.Created["beat:"+op.Ref]
 	default:
 		return ""
 	}
@@ -385,9 +568,20 @@ func resultIDFor(it Item, op storyops.Op, applied storyops.ApplyOpsResult, refs 
 	}
 }
 
-// refOwnerMap maps a declared ref (a create_entity/create_thread item's own
-// op.ref, as stored — never rewritten by an edit) to the id of the item
-// that declared it.
+// refOwnerMap maps a declared ref (a create_entity/create_thread/
+// create_scene/create_outline_node item's own op.ref, as stored — never
+// rewritten by an edit) to the id of the item that declared it.
+//
+// create_scene/create_outline_node are included alongside create_entity/
+// create_thread so that purpose=forecast's add_beat items get the same
+// dependency-gate protection non-forecast items already have (review
+// finding f3, 2026-10-25): without this, accepting an add_beat whose
+// node_ref names a structural sibling that was never requested in this
+// call (reachable from ProposalInbox — checking an item auto-selects its
+// dependency, but unchecking the dependency afterward does not un-check
+// it) skipped effectiveMissingDependency's "depends on X, which has not
+// been accepted" refusal entirely and fell through to a raw storyops
+// "scene ref/id not found" failure instead.
 func refOwnerMap(items []Item) map[string]string {
 	out := map[string]string{}
 	for _, it := range items {
@@ -395,7 +589,7 @@ func refOwnerMap(items []Item) map[string]string {
 			continue
 		}
 		switch it.Op.Type {
-		case "create_entity", "create_thread":
+		case "create_entity", "create_thread", "create_scene", "create_outline_node":
 			out[it.Op.Ref] = it.ID
 		}
 	}
@@ -434,6 +628,9 @@ func effectiveMissingDependency(op storyops.Op, selfID string, refOwner map[stri
 		if m := check(op.ThreadRef); m != "" {
 			return m
 		}
+		if m := check(op.NodeRef); m != "" {
+			return m
+		}
 	}
 	return ""
 }
@@ -459,7 +656,13 @@ func dependencyLabel(byID map[string]Item, id string) string {
 // refs (seeded — both earlier-accepted items and items accepted earlier in
 // the SAME Accept call).
 func (s *Service) validateEditedOp(lookup refLookup, seeded storyops.Refs, op storyops.Op) (storyops.Op, error) {
-	if !allowedOpTypes[op.Type] {
+	// allowedOpTypes ∪ forecastOpTypes, not just allowedOpTypes: an edit on
+	// a purpose=forecast item (create_outline_node/create_scene) must stay
+	// as acceptable as the unedited op Submit already stored — Accept has
+	// no purpose value of its own to pick the narrower list with, and a
+	// writer's edit changing a forecast item's TYPE across the two lists
+	// entirely is not a case worth refusing specially here.
+	if !allowedOpTypes[op.Type] && !forecastOpTypes[op.Type] {
 		return op, fmt.Errorf("op %q cannot be proposed; use linetta_apply_story_ops or linetta_write_scene instead", op.Type)
 	}
 	single := storyops.Proposal{Ops: []storyops.Op{op}}

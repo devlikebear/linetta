@@ -180,7 +180,50 @@ Write (`full` mode only):
 - `linetta_publish_episode`: publishes one episode, or updates its text on the
   site, through the same `publish.Service` the app's publish dialog uses.
   Refused until the writer has connected an account and registered the work
-  in the app — there is deliberately no tool for either.
+  in the app — there is deliberately no tool for either;
+- `linetta_report_continuity`, `linetta_propose_story_ops`,
+  `linetta_save_forecast`: the story-assist Review group — see below.
+
+### The Review group: check-and-record tools
+
+Three tools share one on-by-default switch, `review_tools_enabled` in
+`settings.json` (**Settings → Tool budget → Check & propose**), and
+`mcphost.ReviewToolNames`:
+
+- `linetta_report_continuity` (Phase 2) records an agent's reading of one
+  scene against Story World, fact cards, earlier scenes and the writer's
+  direction — contradictions, gaps, questions. Written straight to
+  `continuity_observations`: an observation already IS the review, so
+  there is no separate approve step, only the writer's own dismiss/resolve.
+- `linetta_propose_story_ops` (Phase 3) and `linetta_save_forecast`
+  (Phase 4) are drafts instead: nothing they write ever reaches Story
+  World, the outline or the manuscript on its own. A proposal sits in
+  `story_proposals`/`story_proposal_items` until the writer's own
+  `proposals.accept` click runs it through `storyops.ApplyOpsWithRefs` —
+  no MCP tool accepts one. A forecast's branch becomes a plan only
+  through the writer's own `forecast.select` click, and reaching the
+  outline from there is a SECOND draft: `linetta_propose_story_ops
+  purpose=forecast`, through the same inbox.
+
+All three verify citations mechanically rather than trusting the model:
+`linetta_report_continuity`'s quotes and `linetta_propose_story_ops`'s
+evidence are checked against the cited scene's actual numbered paragraphs
+(`evidence.VerifyQuote`), and every `*_ref`/`*_id` a call names is checked
+against this project's own rows. A ref that is not declared by something
+else in the same call and does not resolve to a real id is refused, never
+guessed at by name — the one exception by design is `storyops`'s own
+apply path (`linetta_apply_story_ops`, and the inside of an already-
+accepted batch), which still falls back to a name search.
+
+A successful write fires `mcp.changed` like every other tool (so the
+writer's screen refetches), plus its own inbox event when something a
+writer clicks, not an agent, changes state: `continuity.changed` when a
+status changes, `proposals.changed` when an item is accepted or rejected
+(carrying which Story World `kinds` moved, `"outline"` included since
+Phase 4's structural accepts). There is no `forecast.changed`: picking,
+clearing or deleting a forecast is a direct RPC in the same window that
+asked for it, and the brief that shows a chosen branch is rebuilt fresh
+every turn anyway.
 
 Visual editing: `linetta_set_character_visuals`, `linetta_set_art_style`,
 `linetta_add_reference_image`, `linetta_delete_reference_image` (full mode only).

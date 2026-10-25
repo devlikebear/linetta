@@ -3,7 +3,7 @@
 // scene's intent (its one-line goal, what to keep, what to avoid).
 //
 // This is an instruction the writer gives, not something the agent
-// discovers or drafts — see docs/plans/story-assist/phase-1-direction.md.
+// discovers or drafts — see the README's "Your direction" section.
 // Nothing in this package calls a model; it only stores, bounds and reports
 // staleness.
 package direction

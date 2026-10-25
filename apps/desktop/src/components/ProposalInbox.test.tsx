@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   accept: vi.fn(),
   reject: vi.fn(),
+  undo: vi.fn(),
   extractionProgress: vi.fn(),
   settingsGet: vi.fn(),
 }));
@@ -28,6 +29,7 @@ vi.mock("../lib/rpc", () => ({
     list: mocks.list,
     accept: mocks.accept,
     reject: mocks.reject,
+    undo: mocks.undo,
     pendingCount: vi.fn().mockResolvedValue({ count: 0 }),
     extractionEstimate: vi.fn(),
     extractionProgress: mocks.extractionProgress,
@@ -114,6 +116,83 @@ describe("ProposalInbox", () => {
     await user.click(screen.getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
     await waitFor(() => expect(mocks.accept).toHaveBeenCalledWith("project-1", ["item-1"], undefined));
+  });
+
+  // story-assist Phase 4 (4.C.2): accepting a purpose=forecast structural
+  // batch returns undo_batch_ids; the inbox offers a revert button for it
+  // until the next accept/reject, or until it is used.
+  it("offers a revert button after accepting a structural batch, and it calls proposals.undo", async () => {
+    mocks.list.mockResolvedValue({ proposals: [batch([item()])] });
+    mocks.accept.mockResolvedValue({
+      items: [item({ status: "accepted", result: { created_id: "n-1" }, undo_batch_id: "batch-1" })],
+      undo_batch_ids: ["batch-1"],
+    });
+    mocks.undo.mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByText("새 인물: 하린 — 검술 사범");
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
+
+    const undoButton = await screen.findByTestId("proposal-inbox-undo");
+    await user.click(undoButton);
+    expect(mocks.undo).toHaveBeenCalledWith("project-1", "batch-1");
+    await waitFor(() => expect(screen.queryByTestId("proposal-inbox-undo")).not.toBeInTheDocument());
+  });
+
+  // Review finding (round 5, 2026-10-25): with batchFilter=="all", the
+  // writer can select structural items from two DIFFERENT proposals (two
+  // separate outline-reflection batches) and apply them together. accept.go
+  // then creates one undo batch PER proposal, so undo_batch_ids can have
+  // more than one entry — keeping only the first used to leave the second
+  // batch with no revert button at all.
+  it("offers one revert button per undo batch when a single accept spans two proposals", async () => {
+    const itemA = item({ id: "item-a", proposal_id: "p-a", summary: "묶음 A 구조 항목" });
+    const itemB = item({ id: "item-b", proposal_id: "p-b", summary: "묶음 B 구조 항목" });
+    mocks.list.mockResolvedValue({
+      proposals: [batch([itemA], { id: "p-a" }), batch([itemB], { id: "p-b" })],
+    });
+    mocks.accept.mockResolvedValue({
+      items: [
+        item({ id: "item-a", status: "accepted", result: { created_id: "n-a" }, undo_batch_id: "batch-A" }),
+        item({ id: "item-b", status: "accepted", result: { created_id: "n-b" }, undo_batch_id: "batch-B" }),
+      ],
+      undo_batch_ids: ["batch-A", "batch-B"],
+    });
+    mocks.undo.mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByText("묶음 A 구조 항목");
+    await screen.findByText("묶음 B 구조 항목");
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[0]);
+    await user.click(checkboxes[1]);
+    await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
+
+    const undoButtons = await screen.findAllByTestId("proposal-inbox-undo");
+    expect(undoButtons).toHaveLength(2);
+
+    // Revert the SECOND batch — the one a single-id implementation would
+    // have silently dropped.
+    await user.click(undoButtons[1]);
+    expect(mocks.undo).toHaveBeenCalledWith("project-1", "batch-B");
+
+    // The first batch's own revert button must still be there — undoing
+    // one batch must not clear the other.
+    await waitFor(() => expect(screen.getAllByTestId("proposal-inbox-undo")).toHaveLength(1));
+    expect(mocks.undo).not.toHaveBeenCalledWith("project-1", "batch-A");
+  });
+
+  it("does not offer a revert button when accept returns no undo batch", async () => {
+    mocks.list.mockResolvedValue({ proposals: [batch([item()])] });
+    mocks.accept.mockResolvedValue({ items: [item({ status: "accepted", result: { created_id: "e-1" } })] });
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByText("새 인물: 하린 — 검술 사범");
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "선택 항목 적용" }));
+    await waitFor(() => expect(mocks.accept).toHaveBeenCalled());
+    expect(screen.queryByTestId("proposal-inbox-undo")).not.toBeInTheDocument();
   });
 
   it("auto-selects an unmet dependency and notes it", async () => {

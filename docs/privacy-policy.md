@@ -19,6 +19,7 @@ Linetta("앱")는 장편소설·웹소설 집필을 위한 **로컬 우선(local
 - 집필 데이터: 기기의 로컬 데이터베이스
 - 에이전트가 "연속성 점검"으로 기록한 관찰(모순·새 사실·확인 필요 항목과 그 상태)도 같은 로컬 데이터베이스(`library.db`)에 저장되며, 원고 자체는 바뀌지 않습니다.
 - 에이전트가 `linetta_propose_story_ops`로 올린 제안함 후보(인물·장소·관계·팩트 등)도 같은 로컬 데이터베이스에 저장됩니다. 작가가 Story World의 제안함에서 항목별로 수락하기 전까지는 Story World에 아무것도 반영되지 않습니다.
+- 에이전트가 `linetta_save_forecast`로 저장한 갈래 예측(갈래별 전제·비트·위험 등)도 같은 로컬 데이터베이스에 저장됩니다. 개요·원고·Story World는 바뀌지 않으며, 작가가 고른 갈래만 다음 브리프에 계획으로 들어갑니다.
 - MCP 접속 토큰, AI 프로바이더 API 키 등 민감 정보: 운영체제의 보안 저장소(macOS 키체인, Windows 자격 증명 관리자). `settings.json`에는 저장하지 않습니다.
 
 개발자는 이 데이터에 접근할 수 없습니다.
@@ -119,6 +120,7 @@ Core data you create — manuscripts, projects, and settings — is stored **loc
 - Writing data: a local database on your device.
 - Observations an agent records while checking a scene's continuity (contradictions, new facts, and open questions, with their status) are stored in the same local database (`library.db`); the manuscript itself is never changed.
 - Suggestions an agent submits with `linetta_propose_story_ops` (candidate characters, places, relationships, fact cards, and more) are stored in the same local database too. Nothing reaches Story World until you accept an item from the suggestions inbox, one at a time.
+- Narrative forecasts an agent saves with `linetta_save_forecast` (branches with their premise, beats, and risks) are stored in the same local database too. The outline, manuscript, and Story World never change; only the branch you pick enters the next brief as a plan.
 - Sensitive values such as the MCP connection token and an AI provider API key: your operating system's secure store (macOS Keychain, Windows Credential Manager). They are never written to `settings.json`.
 
 The developer has no access to this data.

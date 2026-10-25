@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
@@ -18,15 +20,16 @@ import (
 )
 
 type testEnv struct {
-	svc      *Service
-	nodes    *node.Repo
-	entities *entity.Repo
-	threads  *thread.Repo
-	beats    *beat.Repo
-	projects *project.Repo
-	storyops *storyops.Service
-	project  project.Project
-	sceneID  string
+	svc       *Service
+	nodes     *node.Repo
+	entities  *entity.Repo
+	threads   *thread.Repo
+	beats     *beat.Repo
+	projects  *project.Repo
+	storyops  *storyops.Service
+	forecasts *forecast.Service
+	project   project.Project
+	sceneID   string
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -64,14 +67,45 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("set scene content: %v", err)
 	}
 
-	svc := New(st, so, entities, threads, beats, facts, nodes, projects, nil)
+	directionRepo := direction.NewRepo(st, nodes, projects)
+	forecasts := forecast.New(st, forecast.Deps{
+		Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships,
+		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
+	})
+
+	svc := New(st, so, entities, threads, beats, facts, nodes, projects, nil).WithForecasts(forecasts)
 	return &testEnv{
 		svc: svc, nodes: nodes, entities: entities, threads: threads, beats: beats,
-		projects: projects, storyops: so, project: p, sceneID: sceneID,
+		projects: projects, storyops: so, forecasts: forecasts, project: p, sceneID: sceneID,
 	}
 }
 
 func now() int64 { return 10_000 }
+
+// savedSelectedForecast saves a 2-branch forecast and selects branch "b1",
+// for purpose=forecast tests that need a valid forecast_id to submit
+// against.
+func (e *testEnv) savedSelectedForecast(t *testing.T) forecast.Forecast {
+	t.Helper()
+	ctx := context.Background()
+	f, problems, err := e.forecasts.Save(ctx, now(), forecast.SaveInput{
+		ProjectID:  e.project.ID,
+		Divergence: "다음 회차 갈래?",
+		Horizon:    3,
+		Branches: []forecast.BranchInput{
+			{Title: "갈래 1", Premise: "주인공이 맞선다.", Beats: []forecast.BranchBeat{{EpisodeOffset: 1, Summary: "첫 비트"}}},
+			{Title: "갈래 2", Premise: "주인공이 물러선다.", Beats: []forecast.BranchBeat{{EpisodeOffset: 1, Summary: "첫 비트"}}},
+		},
+	}, forecast.SourceAgent)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("savedSelectedForecast Save: err=%v problems=%+v", err, problems)
+	}
+	selected, err := e.forecasts.Select(ctx, now(), e.project.ID, f.ID, "b1")
+	if err != nil {
+		t.Fatalf("savedSelectedForecast Select: %v", err)
+	}
+	return selected
+}
 
 func TestSubmit_acceptsAllowedOpsAndStoresPending(t *testing.T) {
 	env := newTestEnv(t)
@@ -113,18 +147,234 @@ func TestSubmit_rejectsDisallowedOp(t *testing.T) {
 	}
 }
 
-func TestSubmit_rejectsForecastPurposeAsUnsupported(t *testing.T) {
+func TestSubmit_forecast_requiresForecastID(t *testing.T) {
 	env := newTestEnv(t)
 	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
 		ProjectID: env.project.ID,
 		Purpose:   PurposeForecast,
-		Items:     []ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "x"}}},
+		Items:     []ItemInput{{Op: storyops.Op{Type: "create_scene", Label: "새 장면", AfterNodeID: env.sceneID}}},
 	}, SourceAgent)
 	if err != nil {
 		t.Fatalf("Submit error: %v", err)
 	}
-	if len(problems) == 0 || !strings.Contains(problems[0].Message, "not supported yet") {
-		t.Fatalf("problems = %+v, want a 'not supported yet' refusal for forecast", problems)
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "forecast_id is required") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want a forecast_id-required problem", problems)
+	}
+}
+
+func TestSubmit_forecast_rejectsUnknownForecastID(t *testing.T) {
+	env := newTestEnv(t)
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: "no-such-forecast",
+		Items: []ItemInput{{Op: storyops.Op{Type: "create_scene", Label: "새 장면", AfterNodeID: env.sceneID}}},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "not found") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want a not-found problem", problems)
+	}
+}
+
+func TestSubmit_forecast_rejectsForecastWithNoSelection(t *testing.T) {
+	env := newTestEnv(t)
+	f, problems, err := env.forecasts.Save(context.Background(), now(), forecast.SaveInput{
+		ProjectID: env.project.ID, Divergence: "질문", Horizon: 3,
+		Branches: []forecast.BranchInput{
+			{Title: "갈래 1", Premise: "전제1", Beats: []forecast.BranchBeat{{EpisodeOffset: 1, Summary: "비트"}}},
+			{Title: "갈래 2", Premise: "전제2", Beats: []forecast.BranchBeat{{EpisodeOffset: 1, Summary: "비트"}}},
+		},
+	}, forecast.SourceAgent)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("Save: err=%v problems=%+v", err, problems)
+	}
+	_, subProblems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{{Op: storyops.Op{Type: "create_scene", Label: "새 장면", AfterNodeID: env.sceneID}}},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range subProblems {
+		if strings.Contains(p.Message, "no selected branch") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want a no-selected-branch problem", subProblems)
+	}
+}
+
+func TestSubmit_forecast_onlyAllowsStructuralAndBeatOps(t *testing.T) {
+	env := newTestEnv(t)
+	f := env.savedSelectedForecast(t)
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "몰래 끼운 인물", Kind: "character"}}},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "cannot be proposed for purpose=forecast") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want create_entity rejected under purpose=forecast", problems)
+	}
+}
+
+func TestSubmit_forecast_acceptsStructuralOpsWithRefChain(t *testing.T) {
+	env := newTestEnv(t)
+	f := env.savedSelectedForecast(t)
+	th, err := env.threads.Create(context.Background(), thread.NewInput{ProjectID: env.project.ID, Name: "주 갈래"})
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	res, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_scene", Ref: "newscene", Label: "맞선다", AfterNodeID: env.sceneID}},
+			{Op: storyops.Op{Type: "add_beat", ThreadID: th.ID, NodeRef: "newscene", Label: "맞선다"}},
+		},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	if len(problems) != 0 {
+		t.Fatalf("problems = %+v, want none", problems)
+	}
+	if len(res.Items) != 2 {
+		t.Fatalf("items = %+v", res.Items)
+	}
+}
+
+// Review finding (round 5, 2026-10-25): resolveNodeRef's own doc comment
+// says a ref must be "declared by a create_scene/create_outline_node item
+// EARLIER in this batch", but declaredRefs is built from a pass over every
+// item regardless of position, so a LATER item's ref used to resolve here
+// too. Accept applies a forecast's structural batch strictly in ordinal
+// (submission) order, so a forward reference would not fail here — it
+// would fail at Accept time instead, rolling back the WHOLE structural
+// batch (including any sibling that had nothing wrong with it) and
+// reporting the rolled-back sibling with a confusing, unrelated error
+// message. Submit must catch this itself, the same way it already catches
+// every other node_ref problem.
+func TestSubmit_forecast_rejectsAForwardReferencingNodeRef(t *testing.T) {
+	env := newTestEnv(t)
+	f := env.savedSelectedForecast(t)
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{
+			// ordinal 0 anchors to ordinal 1's ref — declared, but LATER.
+			{Op: storyops.Op{Type: "create_scene", Ref: "s2", Label: "맞선 다음", AfterNodeRef: "s1"}},
+			{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "맞선 장면", AfterNodeID: env.sceneID}},
+		},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "is not earlier in this batch") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want a forward-reference problem on item 1", problems)
+	}
+
+	// Nothing-stored-on-any-problem discipline (Submit's own rule, pinned
+	// the same way TestSubmit_nothingStoredWhenAnyItemHasAProblem does): a
+	// retry in the correct order must start clean, not find leftover items.
+	all, err := env.svc.listProposals(context.Background(), env.project.ID, nil)
+	if err != nil {
+		t.Fatalf("listProposals: %v", err)
+	}
+	if len(all) != 0 {
+		t.Fatalf("stored %d proposals, want 0 (all-or-nothing on a bad submission)", len(all))
+	}
+}
+
+// A self-reference (an item's own after_node_ref naming its own ref) must
+// be refused the same way — dep == i is caught by the same dep >= i check.
+func TestSubmit_forecast_rejectsASelfReferencingNodeRef(t *testing.T) {
+	env := newTestEnv(t)
+	f := env.savedSelectedForecast(t)
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "자기 참조", AfterNodeRef: "s1"}},
+		},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "is not earlier in this batch") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want a forward-reference problem for the self-reference", problems)
+	}
+}
+
+func TestSubmit_forecast_createSceneRequiresAnchor(t *testing.T) {
+	env := newTestEnv(t)
+	f := env.savedSelectedForecast(t)
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{{Op: storyops.Op{Type: "create_scene", Label: "앵커 없음"}}},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "requires after_node_id or after_node_ref") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want an anchor-required problem", problems)
+	}
+}
+
+func TestSubmit_forecast_rejectsUndeclaredNodeRef(t *testing.T) {
+	env := newTestEnv(t)
+	f := env.savedSelectedForecast(t)
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Purpose: PurposeForecast, ForecastID: f.ID,
+		Items: []ItemInput{{Op: storyops.Op{Type: "add_beat", NodeRef: "not-declared-anywhere", Label: "비트"}}},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit error: %v", err)
+	}
+	found := false
+	for _, p := range problems {
+		if strings.Contains(p.Message, "not declared by any create_scene/create_outline_node item") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("problems = %+v, want a not-declared node_ref problem", problems)
 	}
 }
 

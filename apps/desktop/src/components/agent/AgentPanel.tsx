@@ -379,9 +379,35 @@ interface Props {
    *  shown and sent only while `nodeId` is still the scene it came from —
    *  the engine tells the agent the passage is in the open scene. */
   selectionRequest?: { id: number; text: string; nodeId: string } | null;
+  /** Replaces the composer's text on an already-mounted panel — the
+   *  forecast sheet's [개요 반영 제안 요청] button (story-assist Phase 4),
+   *  which fills the same sentence a starter chip would but from a panel
+   *  that does not own AgentPanel's draft state. Paired with
+   *  externalDraftNonce: this only re-applies when the nonce changes, so
+   *  typing over it is never silently reverted on an unrelated re-render. */
+  externalDraft?: string;
+  externalDraftNonce?: number;
+  /** Called once the panel has applied externalDraft/externalDraftNonce to
+   *  the composer. The caller's job is to clear whatever it fed in (set its
+   *  own request state back to null) — this panel unmounts on close, so the
+   *  nonce it applied is forgotten the moment the writer reopens it, and the
+   *  same stale request would overwrite a fresh initialDraft (or whatever
+   *  the writer had started typing) all over again. Without this callback
+   *  the caller has no event to clear on, since nothing else tells it the
+   *  request was consumed. */
+  onExternalDraftApplied?: () => void;
 }
 
-export function AgentPanel({ onClose, projectId, nodeId, initialDraft, selectionRequest }: Props) {
+export function AgentPanel({
+  onClose,
+  projectId,
+  nodeId,
+  initialDraft,
+  selectionRequest,
+  externalDraft,
+  externalDraftNonce,
+  onExternalDraftApplied,
+}: Props) {
   const { t } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
   // credential without consent is refused server-side — Source.Client()
@@ -424,6 +450,15 @@ export function AgentPanel({ onClose, projectId, nodeId, initialDraft, selection
     selectionRequest ? { text: selectionRequest.text, nodeId: selectionRequest.nodeId } : null,
   );
   const attachment = attached && attached.nodeId === nodeId ? attached : null;
+  // See externalDraft's own doc comment above. The nonce, not the text, is
+  // the dependency: a caller sending the identical sentence twice (two
+  // clicks on the same forecast branch) must still land it the second time,
+  // which a text-only dependency would skip as "unchanged".
+  useEffect(() => {
+    if (externalDraftNonce === undefined || externalDraft === undefined) return;
+    setDraft(externalDraft);
+    onExternalDraftApplied?.();
+  }, [externalDraftNonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sending, setSending] = useState(false);
   const [turnRunId, setTurnRunId] = useState<string | null>(null);
   // When the turn in progress started — the working line's clock. From the
@@ -1493,6 +1528,16 @@ export function AgentPanel({ onClose, projectId, nodeId, initialDraft, selection
             >
               {t("agentPanel.starters.nextScene.label")}
             </button>
+            {reviewToolsEnabled ? (
+              <button
+                type="button"
+                className="chip"
+                data-testid="agent-starter-forecastNext"
+                onClick={() => setDraft(t("agentPanel.starters.forecastNext.prompt"))}
+              >
+                {t("agentPanel.starters.forecastNext.label")}
+              </button>
+            ) : null}
           </div>
         ) : null}
         <div className="cmp-input-wrap">

@@ -275,6 +275,13 @@ func (f fakeDirection) SceneIntentFor(context.Context, string) (storycontext.Dir
 	return storycontext.DirectionSceneIntent{Goal: f.goal, Keep: f.keep, Avoid: f.avoid}, f.intentPresent, nil
 }
 
+// PlannedBranchFor: this package has no forecast fixture to wire up here
+// (story-assist Phase 4), so fakeDirection always reports "nothing
+// selected" — the same as a real work with no forecast picked.
+func (f fakeDirection) PlannedBranchFor(context.Context, string) (storycontext.DirectionPlannedBranch, bool, error) {
+	return storycontext.DirectionPlannedBranch{}, false, nil
+}
+
 // The writer's direction is read-only content with no MCP write tool behind
 // it (story-assist Phase 1), so it must reach the brief through the read
 // tool's path regardless of which write-tool groups are enabled — including

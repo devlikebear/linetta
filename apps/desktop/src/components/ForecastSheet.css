@@ -1,0 +1,266 @@
+.forecast-sheet .fs-title-ic {
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.forecast-sheet .fs-loading,
+.forecast-sheet .fs-empty,
+.forecast-sheet .fs-error {
+  padding: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.forecast-sheet .fs-error {
+  color: var(--danger, #c0392b);
+}
+
+.forecast-sheet .fs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 10px 14px 16px;
+  overflow-y: auto;
+}
+
+.forecast-sheet .fs-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.forecast-sheet .fs-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.forecast-sheet .fs-divergence {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.forecast-sheet .fs-badge-noncanon {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--line-soft, #eee);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.forecast-sheet .fs-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.forecast-sheet .fs-stale-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, orange 18%, transparent);
+  color: #9a5b00;
+  font-size: 12px;
+}
+
+.forecast-sheet .fs-branches {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+@media (max-width: 560px) {
+  .forecast-sheet .fs-branches {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+}
+
+.forecast-sheet .fs-branch {
+  flex: 0 0 240px;
+  border: 1px solid var(--line-soft, #eee);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .forecast-sheet .fs-branch {
+    flex: 1 1 auto;
+  }
+}
+
+.forecast-sheet .fs-branch-selected {
+  border-color: var(--t-teal, #2b7a78);
+  box-shadow: 0 0 0 1px var(--t-teal, #2b7a78) inset;
+}
+
+.forecast-sheet .fs-branch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.forecast-sheet .fs-branch-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.forecast-sheet .fs-badge-selected {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--t-teal, #2b7a78);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.forecast-sheet .fs-branch-premise {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.forecast-sheet .fs-beats {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.forecast-sheet .fs-beat-offset {
+  font-weight: 600;
+  margin-right: 4px;
+  color: var(--muted);
+}
+
+.forecast-sheet .fs-risks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.forecast-sheet .fs-risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.forecast-sheet .fs-risk-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--line-soft, #eee);
+  color: var(--muted);
+}
+
+.forecast-sheet .fs-risk-continuity {
+  background: color-mix(in srgb, #c0392b 18%, transparent);
+  color: #9a2a1d;
+}
+
+.forecast-sheet .fs-risk-causality {
+  background: color-mix(in srgb, #8e44ad 18%, transparent);
+  color: #6c3483;
+}
+
+.forecast-sheet .fs-risk-character {
+  background: color-mix(in srgb, #2980b9 18%, transparent);
+  color: #1f618d;
+}
+
+.forecast-sheet .fs-risk-direction {
+  background: color-mix(in srgb, #16a085 18%, transparent);
+  color: #117a65;
+}
+
+.forecast-sheet .fs-risk-pacing {
+  background: color-mix(in srgb, #d35400 18%, transparent);
+  color: #a04000;
+}
+
+.forecast-sheet .fs-risk-ref {
+  border: none;
+  background: none;
+  font-size: 11px;
+  color: var(--t-blue, #2980b9);
+  cursor: pointer;
+  padding: 0;
+}
+
+.forecast-sheet .fs-details-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.forecast-sheet .fs-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  border-top: 1px solid var(--line-soft, #eee);
+  padding-top: 6px;
+}
+
+.forecast-sheet .fs-detail-group h5 {
+  margin: 0 0 2px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.forecast-sheet .fs-detail-group ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.forecast-sheet .fs-detail-group p {
+  margin: 0;
+}
+
+.forecast-sheet .fs-branch-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.forecast-sheet .fs-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.forecast-sheet .fs-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--danger, #c0392b);
+}

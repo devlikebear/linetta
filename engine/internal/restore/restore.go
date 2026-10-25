@@ -188,8 +188,9 @@ type MergeResult struct {
 // history (companion transcripts, AI runs, MCP activity, the global
 // writer_profile memory) stays with the library it belongs to. Deliberately
 // NOT copied: story_proposals and story_proposal_items (story-assist
-// Phase 3) — see the comment where continuity's own copy sits below for why
-// that one is included and this one is not.
+// Phase 3), nor forecasts (story-assist Phase 4) — see the comment where
+// continuity's own copy sits below for why that one is included and these
+// two are not.
 func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, projectID, titleSuffix string, now time.Time) (MergeResult, error) {
 	src, done, err := openBackupCopy(ctx, backupPath, tempDir)
 	if err != nil {
@@ -511,11 +512,10 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	// travel unchanged: a restored scene at the same version keeps the
 	// same staleness verdict it had before the backup. Deliberately
 	// included rather than left with story-structure proposals (Phase 3)
-	// and forecasts (Phase 4) — see
-	// docs/plans/story-assist/phase-2-continuity.md's 2.C.2: an observation
-	// is tied to a scene and a quote from it, so its meaning survives the
-	// remap in a way a proposal or a forecast does not, and the writer's
-	// own dismiss/resolve judgement is work the restore must not erase.
+	// and forecasts (Phase 4): an observation is tied to a scene and a
+	// quote from it, so its meaning survives the remap in a way a
+	// proposal or a forecast does not, and the writer's own dismiss/
+	// resolve judgement is work the restore must not erase.
 	//
 	// story_proposals and story_proposal_items (story-assist Phase 3) are
 	// the opposite case, and on purpose: a pending item's op_json still
@@ -526,13 +526,29 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	// remap in the first place. Rewriting every one of those references
 	// through nodeMap/entityMap/threadMap would mean parsing and
 	// reconstructing arbitrary storyops.Op JSON for every allowed op type —
-	// exactly the "two implementations of one op format" risk
-	// docs/plans/story-assist/phase-3-proposals-import.md's 3.A.2 already
-	// avoided once by giving storyops.ApplyOpsWithRefs a seedable Refs
-	// instead of a second applier. A dangling id restoring the work with a
+	// exactly the "two implementations of one op format" risk Phase 3
+	// already avoided once by giving storyops.ApplyOpsWithRefs a seedable
+	// Refs instead of a second applier. A dangling id restoring the work with a
 	// twisted meaning is worse than losing something the writer can just
 	// ask the agent to propose again: linetta_propose_story_ops has no
 	// state of its own to carry forward, so nothing here is lost for good.
+	//
+	// forecasts (story-assist Phase 4) is left out of the merge for the
+	// same reason as story_proposals, one level further in: base_node_id
+	// names the ORIGINAL library's last-written episode, input_hashes_json
+	// is a fingerprint over that same original state (remapping it would
+	// make a fresh forecast look stale, or a stale one look fresh, for no
+	// reason the writer caused), and a branch's own decisions[].entity_id/
+	// risks[].entity_id/fact_id/node_id point at original entity/fact/node
+	// ids nested inside branches_json — storyops.Op JSON all over again,
+	// the exact "two implementations of one op format" risk the
+	// story_proposals comment above already declined to take on. A
+	// forecast is cheap to regenerate (linetta_save_forecast takes no
+	// state from the old one), so losing it on restore costs the writer a
+	// re-ask, not a decision they already made — selecting a branch is the
+	// one part of a forecast that is NOT regenerated for free, but that
+	// choice already lives on, un-aged, as a plan in the brief once the
+	// writer re-picks it.
 	checkMap := map[string]string{}
 	if err := copyRows(ctx, sdb, tx, "continuity_checks",
 		"node_id IN (SELECT id FROM nodes WHERE project_id = ?)", []any{projectID},

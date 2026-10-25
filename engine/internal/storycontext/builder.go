@@ -141,14 +141,35 @@ type DirectionSceneIntent struct {
 	Avoid []string
 }
 
+// DirectionPlannedBranch is the writer's selected forecast branch, as
+// DirectionSource reports it (story-assist Phase 4).
+type DirectionPlannedBranch struct {
+	Title        string
+	Premise      string
+	Beats        []DirectionPlannedBeat
+	Stale        bool
+	StaleReasons []DirectionStaleReason
+}
+
+// DirectionPlannedBeat is one beat of DirectionPlannedBranch.
+type DirectionPlannedBeat struct {
+	EpisodeOffset int
+	Summary       string
+}
+
 // DirectionSource supplies the writer's own direction for the brief: the
-// work's current focus and this scene's intent. Optional — without it the
-// Direction section stays empty. Declared as an interface, not a dependency
-// on internal/direction's concrete types, so this package does not import
-// direction (matching FactSource/SkillSource/ReferenceSource's shape).
+// work's current focus, this scene's intent, and the branch (if any) the
+// writer picked out of a forecast. Optional — without it the Direction
+// section stays empty. Declared as an interface, not a dependency on
+// internal/direction's (or internal/forecast's) concrete types, so this
+// package does not import either (matching FactSource/SkillSource's shape).
 type DirectionSource interface {
 	FocusFor(ctx context.Context, projectID string) (DirectionFocus, bool, error)
 	SceneIntentFor(ctx context.Context, nodeID string) (DirectionSceneIntent, bool, error)
+	// PlannedBranchFor returns the project's currently selected forecast
+	// branch, if any. present is false when nothing is selected — never
+	// treated as an error, the same convention FocusFor/SceneIntentFor use.
+	PlannedBranchFor(ctx context.Context, projectID string) (DirectionPlannedBranch, bool, error)
 }
 
 // WithFactSource wires the optional Fact Book section.
@@ -316,6 +337,16 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			direction.SceneGoal = intent.Goal
 			direction.Keep = intent.Keep
 			direction.Avoid = intent.Avoid
+		}
+		if plan, present, err := b.directionSource.PlannedBranchFor(ctx, n.ProjectID); err == nil && present {
+			beats := make([]PlannedBranchBeat, 0, len(plan.Beats))
+			for _, bt := range plan.Beats {
+				beats = append(beats, PlannedBranchBeat{EpisodeOffset: bt.EpisodeOffset, Summary: bt.Summary})
+			}
+			direction.PlannedBranch = &PlannedBranchBrief{
+				Title: plan.Title, Premise: plan.Premise, Beats: beats,
+				Stale: plan.Stale, StaleReasons: plan.StaleReasons,
+			}
 		}
 	}
 

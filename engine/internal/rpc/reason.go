@@ -58,6 +58,10 @@ const (
 	ReasonContinuityObservationNotFound = "continuity_observation_not_found"
 	ReasonContinuityObservationReplaced = "continuity_observation_replaced"
 
+	// forecast.select naming a forecast id that does not exist (story-assist
+	// Phase 4) — deleted, or from another work.
+	ReasonForecastNotFound = "forecast_not_found"
+
 	ReasonThreadNotFound       = "thread_not_found"
 	ReasonBeatNotFound         = "beat_not_found"
 	ReasonRelationshipNotFound = "relationship_not_found"
@@ -136,6 +140,15 @@ const (
 	// out on its own. The writer can still reach the same change through
 	// snapshot history.
 	ReasonAgentUndoUnavailable = "agent_undo_unavailable"
+
+	// proposals.undo asking to revert a structural batch (story-assist
+	// Phase 4's purpose=forecast outline-reflection) that has aged out of
+	// storyops' in-memory undo window, or was already undone. Unlike
+	// ReasonAgentUndoUnavailable there is no snapshot fallback — a
+	// structural batch has no per-scene snapshot — so this gets its own
+	// message rather than reusing that one's "restore from snapshot
+	// history" wording.
+	ReasonProposalsUndoUnavailable = "proposals_undo_unavailable"
 
 	// Publishing to Linetta Works (Phase 3). Most are the site's own error
 	// codes (docs/api.md in linetta-artworks) carried through; the site's

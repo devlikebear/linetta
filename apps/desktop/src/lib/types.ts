@@ -1552,7 +1552,7 @@ export interface ContinuityChangedPayload {
 // storyops.Op mirror linetta_apply_story_ops' own pending-approval preview
 // uses) rather than a second copy of the same 30-odd fields.
 
-export type SuggestionPurpose = "general" | "import_extraction";
+export type SuggestionPurpose = "general" | "import_extraction" | "forecast";
 export type SuggestionSource = "agent" | "external";
 export type SuggestionItemStatus = "pending" | "accepted" | "rejected" | "failed";
 
@@ -1598,6 +1598,10 @@ export interface SuggestionItem {
   status: SuggestionItemStatus;
   result: SuggestionItemResult;
   status_at: number;
+  /** Set once this item is accepted as part of a purpose=forecast
+   *  structural batch (or an add_beat that depended on one) — pass it to
+   *  proposals.undo to revert the whole batch together. */
+  undo_batch_id?: string;
 }
 
 /** One submitted batch plus its items, from proposals.list. */
@@ -1605,6 +1609,9 @@ export interface SuggestionBatch {
   id: string;
   project_id: string;
   purpose: SuggestionPurpose;
+  /** Set when purpose is "forecast": the forecast this batch reflects
+   *  into the outline. */
+  forecast_id?: string;
   source: SuggestionSource;
   summary: string;
   created_at: number;
@@ -1614,6 +1621,9 @@ export interface SuggestionBatch {
 /** proposals.accept's reply: each requested item's outcome. */
 export interface AcceptSuggestionsResult {
   items: SuggestionItem[];
+  /** Every storyops undo batch this call created — usually at most one.
+   *  Show a "되돌리기" button keyed to the first entry when non-empty. */
+  undo_batch_ids?: string[];
 }
 
 /** proposals.extraction_progress's reply: how far a purpose=import_extraction
@@ -1646,6 +1656,97 @@ export interface ExtractionEstimate {
 export interface ProposalsChangedPayload {
   project_id: string;
   kinds: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Forecasts (story-assist Phase 4): possible continuations an agent drafted
+// for the writer to compare. Never canon — see forecast.list's own doc
+// comment. Named Forecast* throughout, distinct from the Suggestion* names
+// the inbox uses (Phase 3's own convention).
+
+export type ForecastSource = "agent" | "external";
+export type ForecastRiskKind = "continuity" | "causality" | "character" | "direction" | "pacing" | "other";
+
+export interface ForecastBranchBeat {
+  episode_offset: number;
+  summary: string;
+}
+
+/** One character's choice at the branch point, with the entity's current
+ *  name resolved by forecast.list — empty if the entity was since deleted. */
+export interface ForecastDecision {
+  entity_id: string;
+  decision: string;
+  entity_name?: string;
+}
+
+export interface ForecastProjectedChanges {
+  characters?: string[];
+  relationships?: string[];
+  world?: string[];
+  threads?: string[];
+}
+
+/** One way a branch could go wrong, with whichever ref it names resolved
+ *  to display text by forecast.list. */
+export interface ForecastRisk {
+  kind: ForecastRiskKind;
+  description: string;
+  entity_id?: string;
+  fact_id?: string;
+  node_id?: string;
+  entity_name?: string;
+  fact_claim?: string;
+  node_breadcrumb?: string;
+}
+
+/** One stored continuation. */
+export interface ForecastBranch {
+  id: string;
+  title: string;
+  premise: string;
+  beats: ForecastBranchBeat[];
+  decisions?: ForecastDecision[];
+  changes?: ForecastProjectedChanges;
+  risks?: ForecastRisk[];
+  unknowns?: string[];
+  direction_fit?: string;
+}
+
+/** What changed since a forecast's input fingerprint was taken —
+ *  "characters" with count 2, or "episodes" with the changed episodes'
+ *  own labels. */
+export interface ForecastStaleReason {
+  group: string;
+  count?: number;
+  episode_labels?: string[];
+}
+
+/** One row of forecast.list: a saved comparison plus its staleness,
+ *  recomputed fresh on every call — never a cached flag. */
+export interface Forecast {
+  id: string;
+  project_id: string;
+  divergence: string;
+  base_node_id?: string;
+  horizon: number;
+  branches: ForecastBranch[];
+  source: ForecastSource;
+  selected_branch?: string;
+  selected_at?: number;
+  created_at: number;
+  stale: boolean;
+  reasons?: ForecastStaleReason[];
+  /** The episode these branches were drawn from, e.g. "3화". */
+  base_episode_label?: string;
+}
+
+/** forecast.select's reply: confirmation plus the staleness warning — a
+ *  stale forecast may still be selected (the engine does not refuse it). */
+export interface SelectForecastResult {
+  ok: boolean;
+  stale: boolean;
+  reasons?: ForecastStaleReason[];
 }
 export interface ArtStyle {
  project_id: string;

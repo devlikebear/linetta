@@ -15,9 +15,13 @@ import (
 // new pending proposal. Nothing is applied — that only happens through
 // Accept.
 //
-// purpose=forecast is refused by name: Phase 4 is what gives it meaning
-// (branch-forecast op bundles, create_scene/create_outline_node allowed
-// only there), and this phase does not implement it.
+// purpose=forecast (story-assist Phase 4) turns a forecast's selected
+// branch into outline structure: it requires ForecastID to name a forecast
+// in this project that has a branch selected, and it REPLACES the usual
+// allowed-op list with forecastOpTypes (create_outline_node, create_scene,
+// add_beat) — not every general-purpose op widened to include those two,
+// because reflecting a branch into the outline is never also a place to
+// smuggle in a character or a fact card.
 //
 // Every problem found is returned together, the same retry shape
 // continuity.Validate uses: if there is even one problem, nothing is
@@ -42,13 +46,29 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 	if purpose == "" {
 		purpose = PurposeGeneral
 	}
+	opAllowList := allowedOpTypes
+	forecastID := ""
 	switch purpose {
 	case PurposeGeneral, PurposeImportExtraction:
 		// ok
 	case PurposeForecast:
-		add(GlobalIndex, "purpose=forecast is not supported yet; use general or import_extraction")
+		opAllowList = forecastOpTypes
+		forecastID = strings.TrimSpace(in.ForecastID)
+		if forecastID == "" {
+			add(GlobalIndex, "forecast_id is required when purpose=forecast")
+		} else if projectID != "" {
+			if s.forecasts == nil {
+				add(GlobalIndex, "forecast_id %q not found", forecastID)
+			} else if f, ok, err := s.forecasts.Get(ctx, forecastID); err != nil {
+				return SubmitResult{}, nil, err
+			} else if !ok || f.ProjectID != projectID {
+				add(GlobalIndex, "forecast_id %q not found in this work", forecastID)
+			} else if f.SelectedBranch == "" {
+				add(GlobalIndex, "forecast %q has no selected branch yet; pick one in the forecast sheet first", forecastID)
+			}
+		}
 	default:
-		add(GlobalIndex, "purpose %q is not valid; use general or import_extraction", purpose)
+		add(GlobalIndex, "purpose %q is not valid; use general, import_extraction or forecast", purpose)
 	}
 	if n := len(in.Items); n == 0 {
 		add(GlobalIndex, "items is required; propose at least one")
@@ -75,18 +95,25 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 	}
 
 	// Pass 1: op allow-list + shape validation + normalization, and collect
-	// which ref each create_entity/create_thread item declares (assigning
-	// one from the item's own id when the model left Ref empty, so an item
-	// with no explicit ref can still be depended on by another item in the
-	// same batch, and so Accept always has a ref to seed storyops with).
+	// which ref each ref-declaring item declares (create_entity/
+	// create_thread, and — purpose=forecast only — create_scene/
+	// create_outline_node, which storyops applies under op.Ref exactly the
+	// same way). Assigns one from the item's own id when the model left
+	// Ref empty, so an item with no explicit ref can still be depended on
+	// by another item in the same batch, and so Accept always has a ref to
+	// seed storyops with.
+	allowedList := AllowedOpTypes()
+	if purpose == PurposeForecast {
+		allowedList = AllowedOpTypesForForecast()
+	}
 	ops := make([]storyops.Op, len(in.Items))
 	declaredRefs := map[string]int{} // ref -> item index
 	for i, item := range in.Items {
 		op := item.Op
-		if !allowedOpTypes[op.Type] {
-			add(i, "item %d: op %q cannot be proposed; use linetta_apply_story_ops for a direct small "+
-				"change or linetta_write_scene for manuscript text. Proposable ops: %s",
-				i+1, op.Type, strings.Join(AllowedOpTypes(), ", "))
+		if !opAllowList[op.Type] {
+			add(i, "item %d: op %q cannot be proposed for purpose=%s; use linetta_apply_story_ops for a "+
+				"direct small change or linetta_write_scene for manuscript text. Proposable ops: %s",
+				i+1, op.Type, purpose, strings.Join(allowedList, ", "))
 			ops[i] = op
 			continue
 		}
@@ -97,10 +124,14 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 			continue
 		}
 		op = single.Ops[0]
-		if op.Type == "create_entity" || op.Type == "create_thread" {
-			if strings.TrimSpace(op.Ref) == "" {
-				op.Ref = itemIDs[i]
-			}
+		// add_beat gets an auto ref too, same as the others, purely so
+		// Accept's createdIDFor can read its created beat id back —
+		// nothing else in the op catalogue ever depends ON a beat's ref,
+		// so it is not added to declaredRefs below.
+		if (isRefDeclaringOp(op.Type) || op.Type == "add_beat") && strings.TrimSpace(op.Ref) == "" {
+			op.Ref = itemIDs[i]
+		}
+		if isRefDeclaringOp(op.Type) {
 			declaredRefs[op.Ref] = i
 		}
 		ops[i] = op
@@ -118,7 +149,7 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 	dependsOnIdx := make([][]int, len(in.Items))
 	for i, item := range in.Items {
 		op := ops[i]
-		if !allowedOpTypes[op.Type] {
+		if !opAllowList[op.Type] {
 			continue // already reported in pass 1
 		}
 		num := i + 1
@@ -158,6 +189,83 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 				}
 			}
 		}
+		// resolveNodeRef is create_scene/create_outline_node's own
+		// after_node_*/parent_node_* (purpose=forecast only): any node,
+		// container or leaf, declared by a create_scene/create_outline_node
+		// item earlier in this batch, or a real existing node id. storyops'
+		// own apply-time check is what catches "parent must be a
+		// container" — Submit only confirms the id/ref resolves to
+		// something in this work, the same division IsLeafNode draws for
+		// every other op below.
+		resolveNodeRef := func(id, ref, label string) {
+			switch {
+			case id != "":
+				if !lookup.HasNode(id) {
+					add(i, "item %d: %s %q not found in this work", num, label, id)
+				}
+			case ref != "":
+				if dep, ok := declaredRefs[ref]; ok {
+					if ops[dep].Type != "create_scene" && ops[dep].Type != "create_outline_node" {
+						add(i, "item %d: %s %q is declared by item %d, which does not create a node",
+							num, label, ref, dep+1)
+						break
+					}
+					// declaredRefs is built from a single pass over every
+					// item regardless of position, so without this check a
+					// LATER item's ref (dep >= i, including dep == i, a
+					// self-reference) would resolve here even though
+					// Accept applies ops.go's structural batch strictly in
+					// ordinal order: the anchor would not exist yet when
+					// this item's turn came, failing the whole structural
+					// batch (and rolling back any sibling that WOULD have
+					// succeeded) instead of being caught here with a clear
+					// message (review finding, 2026-10-25).
+					if dep >= i {
+						add(i, "item %d: %s %q is declared by item %d, which is not earlier in this batch — "+
+							"list the scene/outline node an item anchors to before the item that anchors to it",
+							num, label, ref, dep+1)
+						break
+					}
+					dependsOnIdx[i] = append(dependsOnIdx[i], dep)
+				} else if lookup.HasNode(ref) {
+					// a real id placed in the ref field.
+				} else {
+					add(i, "item %d: %s %q is not declared by any create_scene/create_outline_node item "+
+						"in this batch and is not an existing node id", num, label, ref)
+				}
+			}
+		}
+		// resolveLeafNodeRef is add_beat's node_id/node_ref: unlike
+		// resolveNodeRef above, the target must be (or become) a scene,
+		// never a container — a beat anchors to something the writer
+		// reads, not a folder.
+		resolveLeafNodeRef := func(id, ref, label string) {
+			switch {
+			case id != "":
+				if !lookup.IsLeafNode(id) {
+					add(i, "item %d: %s %q is not a leaf scene in this work", num, label, id)
+				}
+			case ref != "":
+				if dep, ok := declaredRefs[ref]; ok {
+					if ops[dep].Type == "create_outline_node" && ops[dep].Kind == "container" {
+						add(i, "item %d: %s %q refers to item %d, which creates a container, not a scene",
+							num, label, ref, dep+1)
+						break
+					}
+					if ops[dep].Type != "create_scene" && ops[dep].Type != "create_outline_node" {
+						add(i, "item %d: %s %q is declared by item %d, which does not create a scene",
+							num, label, ref, dep+1)
+						break
+					}
+					dependsOnIdx[i] = append(dependsOnIdx[i], dep)
+				} else if lookup.IsLeafNode(ref) {
+					// a real leaf id placed in the ref field.
+				} else {
+					add(i, "item %d: %s %q is not declared by any create_scene/create_outline_node item "+
+						"in this batch and is not an existing leaf scene", num, label, ref)
+				}
+			}
+		}
 
 		switch op.Type {
 		case "update_entity":
@@ -167,9 +275,7 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 			resolveEntityRef(op.To, op.ToRef, "to/to_ref")
 		case "add_beat":
 			resolveThreadRef(op.ThreadID, op.ThreadRef, "thread_id/thread_ref")
-			if op.NodeID != "" && !lookup.IsLeafNode(op.NodeID) {
-				add(i, "item %d: node_id %q is not a leaf scene in this work", num, op.NodeID)
-			}
+			resolveLeafNodeRef(op.NodeID, op.NodeRef, "node_id/node_ref")
 		case "update_beat":
 			if !lookup.HasBeat(op.BeatID) {
 				add(i, "item %d: beat_id %q not found in this work; check it with linetta_get_plot", num, op.BeatID)
@@ -180,6 +286,20 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 			if op.NodeID != "" && !lookup.IsLeafNode(op.NodeID) {
 				add(i, "item %d: node_id %q is not a leaf scene in this work", num, op.NodeID)
 			}
+		case "create_scene":
+			resolveNodeRef(op.AfterNodeID, op.AfterNodeRef, "after_node_id/after_node_ref")
+			if strings.TrimSpace(op.AfterNodeID) == "" && strings.TrimSpace(op.AfterNodeRef) == "" {
+				// Accept applies a forecast proposal's structural ops with
+				// no "current scene" context (nodeID=""), unlike
+				// linetta_apply_story_ops' own call — so there is no
+				// fallback to fall back TO. Submit requires an anchor up
+				// front rather than letting Accept fail later with a
+				// confusing "after_node_id required".
+				add(i, "item %d: create_scene requires after_node_id or after_node_ref for purpose=forecast", num)
+			}
+		case "create_outline_node":
+			resolveNodeRef(op.ParentNodeID, op.ParentNodeRef, "parent_node_id/parent_node_ref")
+			resolveNodeRef(op.AfterNodeID, op.AfterNodeRef, "after_node_id/after_node_ref")
 		}
 
 		for _, nodeID := range item.FromNodeIDs {
@@ -235,6 +355,7 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 		ID:          uuid.NewString(),
 		ProjectID:   projectID,
 		Purpose:     purpose,
+		ForecastID:  forecastID,
 		Source:      source,
 		Summary:     strings.TrimSpace(in.Summary),
 		RefBindings: map[string]string{},

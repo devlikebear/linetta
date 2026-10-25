@@ -12,8 +12,8 @@ import (
 
 // direction.* serve the writer's own direction (story-assist Phase 1): the
 // work's current focus and a scene's intent. The app's RPC surface is the
-// only way to write either — there is no MCP tool for them (see
-// docs/plans/story-assist/phase-1-direction.md's "에이전트는 쓸 수 없다").
+// only way to write either — there is deliberately no MCP tool for them,
+// so an agent can read but never set either.
 
 func directionError(err error) error {
 	reasons := []struct {

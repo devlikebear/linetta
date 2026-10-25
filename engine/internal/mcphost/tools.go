@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
@@ -75,6 +76,10 @@ type ToolDeps struct {
 	// writer to accept them one by one (story-assist Phase 3). Nil in a
 	// build with no database open; the tool refuses rather than panicking.
 	Proposals *proposals.Service
+	// Forecasts holds possible continuations an agent drafted for the
+	// writer to compare (story-assist Phase 4). Nil in a build with no
+	// database open; the tool refuses rather than panicking.
+	Forecasts *forecast.Service
 
 	// Memory is the two curated documents every agent reads. Nil in a build
 	// with no database open; the tool refuses rather than panicking.

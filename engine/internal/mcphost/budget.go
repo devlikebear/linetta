@@ -70,11 +70,11 @@ var (
 	SkillToolNames  = []string{"linetta_read_skill", "linetta_edit_skill"}
 	// ReviewToolNames is story-assist's "check and record a judgement"
 	// group: Phase 2 adds linetta_report_continuity; Phase 3 adds
-	// linetta_propose_story_ops; Phase 4 adds more to this same list rather
-	// than inventing a second group, because the writer's question — "let
-	// the agent check things and record what it finds, or not" — does not
-	// change across phases.
-	ReviewToolNames = []string{"linetta_report_continuity", "linetta_propose_story_ops"}
+	// linetta_propose_story_ops; Phase 4 adds linetta_save_forecast to this
+	// same list rather than inventing a second group, because the writer's
+	// question — "let the agent check things and record what it finds, or
+	// not" — does not change across phases.
+	ReviewToolNames = []string{"linetta_report_continuity", "linetta_propose_story_ops", "linetta_save_forecast"}
 )
 
 // VisualWriteToolNames lists the optional visual editing group.
