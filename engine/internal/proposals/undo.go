@@ -89,6 +89,20 @@ func (s *Service) Undo(ctx context.Context, now int64, projectID, batchID string
 		// item back to exactly what it was before the transaction above,
 		// so a retry with the same batchID finds the batch still in
 		// storyops' undo window and the items still tagged for it.
+		//
+		// KNOWN GAP (tracked as a follow-up, not fixed here): if this
+		// compensating write ALSO fails, the item is left at pending with
+		// result cleared and no undo_batch_id, while the outline node the
+		// now-failed UndoApply never touched (its own transaction rolled
+		// back) is still sitting there, orphaned — no proposal item
+		// points at it any more. Accept() only skips an item whose status
+		// is accepted (see its committed[it.ID] gate in accept.go), so a
+		// writer who simply retries "accept" on that pending item gets a
+		// SECOND scene/node created alongside the orphaned first one,
+		// not a clean retry. Recovering automatically from a double DB
+		// failure needs a state beyond plain pending (e.g. a terminal
+		// "needs_review" status) and a migration to add it; out of scope
+		// for this fix.
 		restoreErr := s.restoreItems(ctx, items)
 		if errors.Is(err, storyops.ErrUndoBatchNotFound) {
 			err = ErrUndoBatchNotFound
