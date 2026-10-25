@@ -113,6 +113,27 @@ describe("ContinuitySection", () => {
     expect(screen.queryByText("하린이 왼손잡이라는 설정과 맞지 않는다")).not.toBeInTheDocument();
   });
 
+  it("reopens a dismissed observation via a dedicated action label, not the status label", async () => {
+    mocks.list.mockResolvedValue({
+      checks: [check({ observations: [observation({ id: "obs-dismissed", status: "dismissed" })] })],
+    });
+    mocks.setStatus.mockResolvedValue({ ...observation(), status: "open" });
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByTestId("continuity-status-dismissed");
+    await user.click(screen.getByTestId("continuity-status-dismissed"));
+    await screen.findByText("하린이 왼손잡이라는 설정과 맞지 않는다");
+
+    // "다시 열기" (reopen), not "열림" (the open status label) — the
+    // button describes the action it takes, not a state it shows.
+    const reopenButton = await screen.findByRole("button", { name: "다시 열기" });
+    expect(screen.queryByRole("button", { name: "열림" })).not.toBeInTheDocument();
+
+    await user.click(reopenButton);
+    await waitFor(() => expect(mocks.setStatus).toHaveBeenCalledWith("obs-dismissed", "open"));
+  });
+
   it("filters by status tab", async () => {
     mocks.list.mockResolvedValue({
       checks: [

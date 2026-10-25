@@ -315,7 +315,7 @@ function ObservationRow({
         )}
         {o.status !== "open" && (
           <button type="button" className="btn sm" disabled={busy} onClick={() => void onSetStatus(o.id, "open")}>
-            {t("continuity.status.open")}
+            {t("continuity.action.reopen")}
           </button>
         )}
       </div>
