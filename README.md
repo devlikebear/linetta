@@ -321,6 +321,53 @@ the group off under **Settings → Tool budget → Check & propose**
 and any MCP client; observations already recorded stay exactly where they
 are.
 
+### Suggestions inbox
+
+Ask the agent to create one character, place, or relationship directly and
+it applies right away with `linetta_apply_story_ops` — the small-change
+path, same as before. Anything pulled from the manuscript, or more than a
+few world elements at once, goes through a different tool,
+`linetta_propose_story_ops`: nothing is applied. Each candidate — a
+character, place, item, concept, relationship, fact card, storyline, or
+beat — lands in the **suggestions inbox** instead, grouped by kind, for you
+to accept, edit, or reject one at a time. A badge on Story World's header
+("제안함 N") shows how many are waiting; opening it, or running "제안함 열기"
+from the command palette, shows the inbox as a sheet beside the editor.
+
+Each candidate shows why the agent proposed it: the quote it cited from the
+manuscript, with a link to open that scene, and any citations it offered
+when asked for more than one. A new character or place whose name or alias
+normalizes to the same text as one you already have — ignoring spacing,
+case, and the middle dot — is flagged "같은 대상일 수 있음"; you can turn it
+into an alias of the existing record with one click instead of creating a
+duplicate. The engine only flags the match — it never merges on its own. A
+relationship that depends on a character candidate you have not accepted
+yet is marked "생성이 먼저 필요"; selecting it selects that character too, so
+accepting never leaves a dangling reference. Rejecting an item never
+cascades to whatever depended on it — that item just stays in the inbox,
+marked as blocked, until you decide.
+
+Right after importing a Markdown manuscript, if a provider is connected,
+Linetta offers to fill Story World from it: a dialog shows the episode
+count, character count, and a rough input-token estimate (an estimate, not
+a billed cost) before anything runs. Starting it opens the agent panel with
+the extraction request already typed — you still press send, the same as a
+starter chip. The agent works through the manuscript episode by episode,
+checks what already exists first, and proposes with citations as it goes;
+if it runs into its tool-call budget partway through, tell it to continue
+and it picks up from the first episode it has not covered yet, using the
+engine's own progress count rather than guessing.
+
+Suggestions live in `library.db` alongside everything else, but they are
+deliberately **not** carried over when you restore a single work from a
+backup: a pending item's reference still names ids from the library it came
+from, and a suggestion costs nothing to make again by asking the agent.
+Turn the group off under **Settings → Tool budget → Check & propose**
+(`review_tools_enabled` in `settings.json`, on by default) to remove
+`linetta_propose_story_ops` and the "Story World 채우기" starter chip for
+both the built-in agent and any MCP client — items already in the inbox
+stay exactly where they are.
+
 ## Writing with your own agent (MCP)
 
 Connecting an outside agent over MCP is a different thing from connecting a

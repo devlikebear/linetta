@@ -19,9 +19,11 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -628,5 +630,77 @@ func TestMergeProjectCopiesContinuity(t *testing.T) {
 	}
 	if !sawEntity || !sawBeat {
 		t.Fatalf("expected one entity ref and one beat ref, got %+v", contradiction.Refs)
+	}
+}
+
+// TestMergeProjectExcludesStoryProposals is story-assist 3.D.4: a pending
+// proposal's op_json/ref_bindings_json still name the ORIGINAL library's
+// ids, so restore.MergeProject must not try to remap and copy it the way it
+// does continuity's checks and observations — see the comment beside
+// story_proposals' exclusion in restore.go.
+func TestMergeProjectExcludesStoryProposals(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	entities := entity.NewRepo(st)
+	threads := thread.NewRepo(st)
+	beats := beat.NewRepo(st)
+	facts := fact.NewRepo(st)
+	relationships := relationship.NewRepo(st)
+
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "제안함 제외", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	so := storyops.New(projects, nodes, threads, beats, entities, relationships).WithFacts(facts)
+	propSvc := proposals.New(st, so, entities, threads, beats, facts, nodes, projects, nil)
+	sub, problems, err := propSvc.Submit(ctx, 1000, proposals.SubmitInput{
+		ProjectID: p.ID,
+		Items:     []proposals.ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "하린"}}},
+	}, proposals.SourceAgent)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("Submit() problems=%+v err=%v", problems, err)
+	}
+	if sub.ProposalID == "" {
+		t.Fatal("test setup: no proposal stored")
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	if err := live.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM story_proposal_items WHERE project_id = ?`, merged.ProjectID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf("merged project carries %d story_proposal_items, want 0 (excluded by design)", count)
+	}
+	var proposalCount int
+	if err := live.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM story_proposals WHERE project_id = ?`, merged.ProjectID).Scan(&proposalCount); err != nil {
+		t.Fatal(err)
+	}
+	if proposalCount != 0 {
+		t.Errorf("merged project carries %d story_proposals, want 0 (excluded by design)", proposalCount)
 	}
 }
