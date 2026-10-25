@@ -80,9 +80,19 @@ func (s directionBriefSource) PlannedBranchFor(ctx context.Context, projectID st
 		return storycontext.DirectionPlannedBranch{}, false, nil
 	}
 
+	// A failure here must not collapse to Stale:false — that would read as
+	// "checked and fresh" when it was never actually checked, the exact
+	// anti-pattern already fixed in forecast.go's SelectForecast (review
+	// finding f7). Unlike that RPC handler (which has already committed a
+	// successful Select and so reports the failure as its own error), this
+	// adapter has no successful primary action to protect: propagating the
+	// error up drops the whole planned-branch section, the same "error ==
+	// absent" convention Selected's own error handling just above already
+	// follows, and the one the builder's call site (storycontext/
+	// builder.go) already expects from every DirectionSource method.
 	reasons, err := s.forecast.Stale(ctx, f)
 	if err != nil {
-		reasons = nil
+		return storycontext.DirectionPlannedBranch{}, false, err
 	}
 	staleReasons := make([]storycontext.DirectionStaleReason, 0, len(reasons))
 	for _, r := range reasons {
