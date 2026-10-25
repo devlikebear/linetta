@@ -693,6 +693,33 @@ export interface PublishWorkStatus {
   work?: PublishWorkView;
   episodes: PublishEpisodeView[];
   site_only: PublishEpisodeView[];
+  sheets: PublishSheetsStatus;
+}
+
+/** A sheet or the cover as the site has it. The state uses the episode
+ *  states that apply: public, pending, rejected, needs_review. */
+export interface PublishSheetView {
+  entity_id: string;
+  kind: EntityKind;
+  name: string;
+  state: PublishEpisodeState;
+  moderation_reason?: string;
+}
+
+export interface PublishCoverView {
+  illustration_id: string;
+  state: PublishEpisodeState;
+  moderation_reason?: string;
+}
+
+/** Sheets and the cover (Works Phase 8): the writer's choices always, the
+ *  site's half only when remote is true. */
+export interface PublishSheetsStatus {
+  chosen: number;
+  cover_id?: string;
+  remote: boolean;
+  sheets: PublishSheetView[];
+  cover?: PublishCoverView;
 }
 
 /** publish.episode_publish */

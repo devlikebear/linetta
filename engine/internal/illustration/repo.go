@@ -36,6 +36,9 @@ var (
 	ErrTooMany         = errors.New("at most 200 illustrations per work")
 	// ErrInUse: the picture is in a scene; take it out of the scene first.
 	ErrInUse = errors.New("illustration is used in a scene")
+	// ErrIsCover: the picture is the work's cover on Linetta Works; choose
+	// another cover (or none) first.
+	ErrIsCover = errors.New("illustration is the work's cover")
 )
 
 // SceneRef is a scene a picture appears in.
@@ -308,6 +311,14 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 	}
 	if scenes := usage[id]; len(scenes) > 0 {
 		return &InUseError{Scenes: scenes}
+	}
+	var cover int
+	err = r.s.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM publish_covers WHERE illustration_id = ?", id).Scan(&cover)
+	if err != nil {
+		return err
+	}
+	if cover > 0 {
+		return ErrIsCover
 	}
 	result, err := r.s.DB().ExecContext(ctx, "DELETE FROM illustrations WHERE id = ?", id)
 	return mutationError(result, err)

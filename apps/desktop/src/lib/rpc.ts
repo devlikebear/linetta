@@ -26,6 +26,7 @@ import type {
   PublishEpisodeView,
   PublishResult,
   PublishSerialStatus,
+  PublishSheetsStatus,
   PublishWorkStatus,
   PublishWorkView,
   ConsistencyInput,
@@ -480,6 +481,16 @@ export const publishApi = {
       node_id: nodeId,
       visibility,
     }),
+  /** Whether the writer turned on publishing for a sheet (Works Phase 8). */
+  sheetGet: (entityId: string) => rpcCall<{ published: boolean }>("publish.sheet_get", { entity_id: entityId }),
+  /** Changes the choice only; sheetsSync sends it. */
+  sheetSet: (entityId: string, published: boolean) =>
+    rpcCall<{ published: boolean }>("publish.sheet_set", { entity_id: entityId, published }),
+  /** An empty id clears the cover. */
+  setCover: (projectId: string, illustrationId: string) =>
+    rpcCall<{ cover_id: string }>("publish.cover_set", { project_id: projectId, illustration_id: illustrationId }),
+  /** Sends the chosen sheets and cover to the site. */
+  sheetsSync: (projectId: string) => rpcCall<PublishSheetsStatus>("publish.sheets_sync", { project_id: projectId }),
 };
 
 /** The built-in agent's loop (#93). Its panel is #95; these wrappers are the

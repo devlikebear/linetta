@@ -71,6 +71,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   too_many_illustrations: "errors.tooManyIllustrations",
   illustration_bad_content: "errors.illustrationBadContent",
   illustration_in_use: "errors.illustrationInUse",
+  illustration_is_cover: "errors.illustrationIsCover",
   // The Codex login (#92). Its message names the two ports, since the fix is
   // closing whatever holds them. A failed login is not an RPC error at all —
   // codex.login_status reports it via CodexStatus.login_failed instead — so
@@ -125,6 +126,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   publish_blurb_required: "errors.publishBlurbRequired",
   publish_image_too_large: "errors.publishImageTooLarge",
   publish_too_many_images: "errors.publishTooManyImages",
+  publish_too_many_sheets: "errors.publishTooManySheets",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

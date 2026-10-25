@@ -44,6 +44,7 @@ func illustrationError(err error) error {
 		{illustration.ErrTooMany, rpc.ReasonTooManyIllustrations},
 		{illustration.ErrBadContent, rpc.ReasonIllustrationBadContent},
 		{illustration.ErrInUse, rpc.ReasonIllustrationInUse},
+		{illustration.ErrIsCover, rpc.ReasonIllustrationIsCover},
 	}
 	for _, r := range reasons {
 		if errors.Is(err, r.err) {

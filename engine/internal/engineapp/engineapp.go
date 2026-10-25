@@ -314,6 +314,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		language:      settingsLanguage,
 		clock:         clock,
 		images:        exportImages{illustrations},
+		sheets:        publishSheets{entities: entities, relationships: relationships, visuals: visuals},
 	})
 	a.closers = append(a.closers, stopPublish)
 

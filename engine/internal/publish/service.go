@@ -92,6 +92,9 @@ type WorkStatus struct {
 	Work         *WorkView     `json:"work,omitempty"`
 	Episodes     []EpisodeView `json:"episodes"`
 	SiteOnly     []EpisodeView `json:"site_only"`
+	// Sheets is the sheets and cover: the writer's choices always, the
+	// site's copy when it answered.
+	Sheets SheetsStatus `json:"sheets"`
 }
 
 // PublishResult is the outcome of publishing one episode.
@@ -133,6 +136,8 @@ type Service struct {
 	// illustrations is nil until WithIllustrations: published text then
 	// shows no pictures.
 	illustrations Illustrations
+	// sheets is nil until WithSheets: the work then publishes no sheets.
+	sheets SheetSource
 
 	// mu serialises calls that change the site. Two publishes of one work
 	// racing would each compute an episode order from a list the other is
@@ -226,6 +231,9 @@ func (s *Service) WorkStatus(ctx context.Context, projectID string) (WorkStatus,
 		return WorkStatus{}, err
 	}
 	out := WorkStatus{ProjectID: projectID, Episodes: []EpisodeView{}, SiteOnly: []EpisodeView{}}
+	if out.Sheets, err = s.localSheetsStatus(ctx, projectID); err != nil {
+		return WorkStatus{}, err
+	}
 	tok, err := s.token()
 	if err != nil {
 		for _, ep := range local {
@@ -244,6 +252,11 @@ func (s *Service) WorkStatus(ctx context.Context, projectID string) (WorkStatus,
 		}
 		out.Registered, out.LastSyncedAt = true, w.LastSyncedAt
 		out.Work = workView(w, work.Visibility)
+		// The sheets are a second request; without them the episodes are
+		// still worth showing.
+		if err := s.remoteSheetsStatus(ctx, tok, projectID, work, &out.Sheets); err != nil {
+			log.Printf("publish: read sheets: %v", err)
+		}
 	case isNotFound(err):
 		// Not on the site (or deleted there): nothing saved about it is true.
 		if err := s.state.Forget(ctx, projectID); err != nil {
