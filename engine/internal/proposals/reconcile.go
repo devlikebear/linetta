@@ -67,6 +67,16 @@ func (s *Service) reconcileBatch(ctx context.Context, now int64, projectID, batc
 	}
 
 	if anyNodeExists {
+		// restoreItems writes back exactly the Status each Item struct
+		// carries — fine for Undo's own use (its items are read BEFORE
+		// step 1 moves them to reverting, so Status is still the
+		// original "accepted"), but reverting here was just read
+		// straight from the DB, so Status reads "reverting". Set it
+		// explicitly, or this would write "reverting" right back over
+		// itself and report accepted without actually changing anything.
+		for i := range reverting {
+			reverting[i].Status = StatusAccepted
+		}
 		if err := s.restoreItems(ctx, reverting); err != nil {
 			return "", fmt.Errorf("restore to accepted: %w", err)
 		}
