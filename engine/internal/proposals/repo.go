@@ -12,6 +12,18 @@ import (
 // ErrNotFound is returned when a proposal or item id does not exist.
 var ErrNotFound = errors.New("proposal not found")
 
+// List returns every batch for projectID whose items match statuses (an
+// empty list means every status), newest first — proposals.list's data.
+func (s *Service) List(ctx context.Context, projectID string, statuses []string) ([]ProposalWithItems, error) {
+	return s.listProposals(ctx, projectID, statuses)
+}
+
+// PendingCount returns how many pending items projectID has —
+// proposals.pending_count and CanonPanel's badge.
+func (s *Service) PendingCount(ctx context.Context, projectID string) (int, error) {
+	return s.countPending(ctx, projectID)
+}
+
 // dbTx is satisfied by both *sql.DB and *sql.Tx — every helper below takes
 // one so Submit/Accept can run their reads and writes in a single
 // transaction while a read-only caller (List, pending_count) can pass the
