@@ -97,7 +97,7 @@ type Branch struct {
 
 ### A. 엔진
 
-- [ ] **4.A.1 입력 지문**
+- [x] **4.A.1 입력 지문**
   - 파일: `engine/internal/forecast/fingerprint.go`, `fingerprint_test.go`
   - 함수:
     ```go
@@ -122,7 +122,7 @@ type Branch struct {
     - forecasts 테이블에 써도 해시가 그대로다.
     - 정사를 원래대로 되돌리면 해시도 원래대로 돌아온다.
 
-- [ ] **4.A.2 검증과 저장**
+- [x] **4.A.2 검증과 저장**
   - 파일: `engine/internal/forecast/forecast.go`, `validate.go`, `repo.go`, `*_test.go`
   - 검증 규칙
     - 갈래 2~5개, horizon 1~10
@@ -141,13 +141,13 @@ type Branch struct {
     - `Selected(projectID)`: 가장 최근에 선택된 예측 1개
   - 선택은 작품당 하나만 둔다. 새로 고르면 이전 선택을 지운다.
 
-- [ ] **4.A.3 정사 보호 테스트**
+- [x] **4.A.3 정사 보호 테스트**
   - 파일: `engine/internal/forecast/canon_test.go`
   - 내용: InkOS `forecast-fixture.ts`의 리네타판이다.
     - 정사 테이블과 제안함 테이블을 행 단위 해시로 덤프한다: projects, nodes, entities, relationships, fact_cards, threads, beats, project_focus, scene_intents, story_proposal_items.
     - `Save → List → Select → ClearSelection → Delete`를 실행한 전후로 덤프가 같은지 확인한다.
 
-- [ ] **4.A.4 브리프에 고른 갈래**
+- [x] **4.A.4 브리프에 고른 갈래**
   - 파일: `engine/internal/storycontext/types.go`, `render.go`, `render_test.go`. 소스 주입은 `DirectionSource`를 확장한다.
   - 내용:
     - `DirectionBrief.PlannedBranch *PlannedBranchBrief{Title, Premise string; Beats []string; Stale bool; StaleReasons []string}`
@@ -160,7 +160,7 @@ type Branch struct {
     - 낡음 문구
     - direction이 꺼지면 함께 빠짐
 
-- [ ] **4.A.5 제안함 확장: purpose=forecast**
+- [x] **4.A.5 제안함 확장: purpose=forecast**
   - 파일: `engine/internal/proposals/submit.go`, `accept.go`, 테스트
   - 내용:
     - purpose=forecast일 때만 `create_outline_node`, `create_scene`(본문 없음), `add_beat`를 허용한다.
@@ -171,7 +171,7 @@ type Branch struct {
 
 ### B. MCP와 에이전트
 
-- [ ] **4.B.1 `linetta_save_forecast` (쓰기 도구, Review 그룹)**
+- [x] **4.B.1 `linetta_save_forecast` (쓰기 도구, Review 그룹)**
   - 파일: `engine/internal/mcphost/tools_forecast.go`, `tools_forecast_test.go`, `budget.go` (`ReviewToolNames`에 추가)
   - 입력: `{project_id, divergence, horizon, branches[]}`. 갈래에 id 필드는 없다.
   - 출력: `{forecast_id, branch_ids, base_episode_label, status: "waiting_for_writer"}`
@@ -179,7 +179,7 @@ type Branch struct {
     > Save 2–5 possible continuations from the latest written episode for the writer to compare. Not canon: the outline, manuscript and Story World do not change, and the writer picks a branch (or none) in the app. Draw every branch from the brief; put conflicts with the work's record under risks, citing the entity or fact.
   - 읽기 도구는 따로 두지 않는다. 고른 갈래는 브리프로 전달된다. 다른 갈래를 다시 볼 필요가 생기면 Next에서 판단한다.
 
-- [ ] **4.B.2 에이전트 지침과 시작 칩**
+- [x] **4.B.2 에이전트 지침과 시작 칩**
   - `agent/prompt.go`: Review 그룹이 켜져 있을 때만 넣는다.
     > Asked where the story could go next, read the brief and save the options with linetta_save_forecast instead of only describing them; the writer compares and picks in the app. A chosen branch appears in the brief's direction section as a plan, not canon. Asked to put a chosen branch into the outline, propose it with linetta_propose_story_ops purpose=forecast.
   - `AgentPanel.tsx` starter 칩:
@@ -188,7 +188,7 @@ type Branch struct {
 
 ### C. RPC와 화면
 
-- [ ] **4.C.1 RPC**
+- [x] **4.C.1 RPC**
   - 파일: `engine/internal/rpc/handlers/forecast.go`, `forecast_test.go`
   - 메서드:
     - `forecast.list {project_id}` → 예측 목록(stale, reasons, 기준 회차 라벨, 갈래)
@@ -199,7 +199,7 @@ type Branch struct {
   - 등록: `engineapp.go`, `lib.rs` `RENDERER_ENGINE_METHODS`
   - 낡은 예측도 고를 수 있다. 다만 RPC 응답과 화면 양쪽에 경고를 보인다. **정책을 한 곳(엔진)에 둔다.** InkOS처럼 코어는 허용하고 UI만 막는 식으로 갈라지지 않게 한다.
 
-- [ ] **4.C.2 `ForecastSheet`**
+- [x] **4.C.2 `ForecastSheet`**
   - 파일: `apps/desktop/src/components/ForecastSheet.tsx`, `.css`, `.test.tsx`
   - 화면:
     - 예측 목록(최신순). 각 예측의 머리:
@@ -223,7 +223,7 @@ type Branch struct {
     - 낡음 배너와 사유
     - 개요 반영 요청 시 패널 입력이 채워짐
 
-- [ ] **4.C.3 복원 정책, 다국어, 문서**
+- [x] **4.C.3 복원 정책, 다국어, 문서**
   - `restore.go`: 예측은 작품 단위 복원에서 뺀다. 비정사이고, 원래 서재의 id를 참조하기 때문이다. 이 이유를 주석으로 남긴다.
   - `lib/i18n.tsx`:
     - `forecast.*` (제목, 정사 아님, 낡음과 사유 묶음 이름, 위험 종류, 고르기, 해제, 삭제, 개요 반영)
@@ -240,18 +240,18 @@ type Branch struct {
 ## ✅ Phase 4 Checkpoint
 
 **자동 검증**
-- [ ] `cd engine && CGO_ENABLED=0 go test ./internal/forecast/... ./internal/proposals/... ./internal/storycontext/... ./internal/mcphost/... ./internal/rpc/handlers/... ./internal/agent/... ./internal/episode/...`
-- [ ] `make test-mobile-engine`
-- [ ] `pnpm --dir apps/desktop test -- ForecastSheet.test.tsx AgentPanel.test.tsx agentToolParity.test.ts rpcAllowlist.test.ts i18n.catalog.test.ts --run`
-- [ ] `pnpm --dir apps/desktop exec tsc --noEmit`
-- [ ] `make test`
+- [x] `cd engine && CGO_ENABLED=0 go test ./internal/forecast/... ./internal/proposals/... ./internal/storycontext/... ./internal/mcphost/... ./internal/rpc/handlers/... ./internal/agent/... ./internal/episode/...`
+- [x] `make test-mobile-engine`
+- [x] `pnpm --dir apps/desktop test -- ForecastSheet.test.tsx AgentPanel.test.tsx agentToolParity.test.ts rpcAllowlist.test.ts i18n.catalog.test.ts --run`
+- [x] `pnpm --dir apps/desktop exec tsc --noEmit`
+- [x] `make test`의 구성 요소를 각각 돌렸다: `CGO_ENABLED=0 go test ./...`(cmd/linetta-ffi 제외, -race 없이 — 사용자 결정사항: -race 전체 스위트는 CI), `make test-desktop`, `make test-tauri`. 세 가지 모두 통과.
 
 **수동 검증** (격리된 `LINETTA_HOME`, 프로바이더 하나 연결)
-- [ ] starter 칩 `forecastNext`를 실행한다. 갈래 3개가 sheet에 나란히 보인다. 개요와 Story World에는 변화가 없다.
-- [ ] 한 갈래를 고른다. 활동 로그에 새 도구 호출이 생기지 않아야 한다(직접 RPC). 다음 턴 브리프의 "작가 방향"에 고른 갈래가 계획으로 들어간다.
-- [ ] 마지막 회차 본문을 한 문장 고치고 sheet를 다시 연다. "정사가 바뀜: N화 본문" 배너가 보인다. 문장을 되돌리면 배너가 사라진다.
-- [ ] [개요 반영 제안 요청] → 보내기 → 제안함에 장면 후보가 쌓인다 → 적용하면 개요에 생기고, 되돌리기 버튼으로 한 번에 되돌릴 수 있다.
-- [ ] 갈래 6개를 저장하려는 시도(도구를 직접 호출하는 테스트로 대신해도 된다)가 오류로 돌아온다.
+- [ ] (수동 미확인 — 실제 프로바이더 필요) starter 칩 `forecastNext`를 실행한다. 갈래 3개가 sheet에 나란히 보인다. 개요와 Story World에는 변화가 없다. 대체 자동 테스트: `forecast.Validate`의 2~5개 범위 테스트(`forecast/repo_test.go`), `ForecastSheet.test.tsx`의 카드 렌더 테스트, `TestCanonUnchangedThroughSaveListSelectClearDelete`(정사 불변).
+- [ ] (수동 미확인) 한 갈래를 고른다. 활동 로그에 새 도구 호출이 생기지 않아야 한다(직접 RPC). 다음 턴 브리프의 "작가 방향"에 고른 갈래가 계획으로 들어간다. 대체 자동 테스트: `ForecastSheet.test.tsx`의 "choosing a branch calls forecast.select directly", `storycontext`의 `TestBuildFull_plannedBranchFlowsIntoDirectionBrief`/렌더 테스트.
+- [ ] (수동 미확인) 마지막 회차 본문을 한 문장 고치고 sheet를 다시 연다. "정사가 바뀜: N화 본문" 배너가 보인다. 문장을 되돌리면 배너가 사라진다. 대체 자동 테스트: `forecast.TestInputs_bodyEditChangesOnlyThatEpisode`/`TestInputs_revertingCanonRevertsHashes`, `handlers.TestListForecasts_staleAndRefNames`, `ForecastSheet.test.tsx`의 stale 배너 테스트.
+- [ ] (수동 미확인) [개요 반영 제안 요청] → 보내기 → 제안함에 장면 후보가 쌓인다 → 적용하면 개요에 생기고, 되돌리기 버튼으로 한 번에 되돌릴 수 있다. 대체 자동 테스트: `proposals.TestAccept_forecast_batchesStructuralOpsInOneApplyCall`/`TestUndo_revertsStructuralBatchAndDependentBeats`, `handlers.TestUndoProposals_revertsStructuralBatch`, `ProposalInbox.test.tsx`의 되돌리기 버튼 테스트.
+- [x] 갈래 6개를 저장하려는 시도(도구를 직접 호출하는 테스트로 대신했다)가 오류로 돌아온다 — `forecast.TestSave_rejectsTooFewOrTooManyBranches`, `mcphost.TestSaveForecast_refusesTooManyBranches`.
 
 **완료 처리**
 1. 결과를 보고한다. 확인하지 못한 항목은 그렇다고 적는다.

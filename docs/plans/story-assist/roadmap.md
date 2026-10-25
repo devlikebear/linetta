@@ -1,7 +1,7 @@
 # 이야기 점검·방향 도구 — 로드맵
 
 _작성일: 2026-10-24_
-_상태: 계획 (구현 전)_
+_상태: 모든 페이즈(1~4) 구현 완료. 이 폴더는 Phase 4 PR에서 삭제된다 — DEVELOPMENT.md "Plan documents" 규칙._
 _근거: [`inkos-analysis.md`](./inkos-analysis.md) — InkOS 소스 분석_
 _관련: `engine/internal/contextualedit` — 이름·설정 변경 뒤의 결정적 일관성 재검사(구현 완료. 계획서는 git 이력에 있음)_
 
