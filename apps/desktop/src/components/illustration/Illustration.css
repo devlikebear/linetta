@@ -193,3 +193,87 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* A picture an agent asked for (illustration Phase 4): the card under the
+   agent panel's tool line and in the gallery's requests section. */
+.illustration-request {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.illustration-request.is-rejected,
+.illustration-request.is-cancelled {
+  opacity: 0.7;
+}
+
+.illustration-request-head {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.illustration-request-status {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid var(--line);
+}
+
+.illustration-request-status.is-pending,
+.illustration-request-status.is-failed {
+  background: var(--ink);
+  color: var(--surface);
+  border-color: var(--ink);
+}
+
+.illustration-request-note {
+  margin: 0;
+  font-size: 13px;
+}
+
+.illustration-request .modal-field {
+  margin: 0;
+}
+
+.illustration-request-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.illustration-request-done img {
+  display: block;
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 8px;
+  border: 1px solid var(--line-soft);
+}
+
+.illustration-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+  /* Several long prompts must not push the gallery out of the modal. */
+  flex: none;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.illustration-requests h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.illustration-thumb-badge.is-representative {
+  top: auto;
+  bottom: 6px;
+}

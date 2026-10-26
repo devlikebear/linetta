@@ -35,6 +35,12 @@ vi.mock("../../lib/rpc", () => ({
   settings: { get: rpc.settingsGet },
 }));
 
+// The approval card has its own tests (IllustrationRequestCard.test.tsx);
+// here only where the panel puts it matters.
+vi.mock("../illustration/IllustrationRequestCard", () => ({
+  IllustrationRequestCard: ({ requestId }: { requestId: string }) => <div data-testid="request-card">{requestId}</div>,
+}));
+
 vi.mock("../../lib/i18n", () => ({
   // The keys are the contract under test, not the prose, so echo them back.
   useI18n: () => ({
@@ -537,6 +543,21 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
     const lines = toolLines();
     expect(lines).toHaveLength(1);
     expect(lines[0].textContent).toBe("agentPanel.tool.read · agentPanel.toolName.linetta_search_manuscript");
+  });
+
+  it("puts an illustration request's approval card under its line", async () => {
+    await renderReady();
+    await emit("agent-tool", { run_id: "r1", name: "linetta_request_illustration", state: "started" });
+    expect(screen.queryByTestId("request-card")).toBeNull();
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_request_illustration",
+      state: "done",
+      request_id: "req-1",
+    });
+    const card = await screen.findByTestId("request-card");
+    expect(card).toHaveTextContent("req-1");
+    expect(toolLines()[0].nextElementSibling).toBe(card);
   });
 
   it("names the tool in the writer's language and never shows the engine's summary", async () => {

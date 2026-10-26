@@ -18,6 +18,7 @@ import {
   type OutlineStructurePreset,
 } from "../lib/outlineRepair";
 import "./OutlinePanel.css";
+import { RepresentativeThumb } from "./illustration/RepresentativeThumb";
 import "./PublishBadge.css";
 
 interface Props {
@@ -46,6 +47,8 @@ interface Props {
   /** Linetta Works state per episode node, shown on the episode's row. Only
    *  passed while connected; absent means no badges at all. */
   publishStates?: ReadonlyMap<string, PublishEpisodeState>;
+  /** node id → the picture that stands for it (illustration Phase 4). */
+  representatives?: ReadonlyMap<string, string>;
   onRepairOutline?: () => void;
   onUndoRepairOutline?: () => void;
   canUndoRepair?: boolean;
@@ -89,6 +92,7 @@ export function OutlinePanel({
   onSetStatus,
   onPublish,
   publishStates,
+  representatives,
   onRepairOutline,
   onUndoRepairOutline,
   canUndoRepair,
@@ -339,6 +343,7 @@ export function OutlinePanel({
             episodeCharTarget={episodeCharTarget}
             outlinePreset={outlinePreset}
             publishStates={publishStates}
+            representatives={representatives}
             editingNodeId={editingNodeId}
             onCommitRename={onRename ? commitRename : undefined}
             onCancelRename={() => setEditingNodeId(null)}
@@ -546,6 +551,7 @@ function RailNode({
   episodeCharTarget,
   outlinePreset,
   publishStates,
+  representatives,
   editingNodeId,
   onCommitRename,
   onCancelRename,
@@ -566,6 +572,8 @@ function RailNode({
   episodeCharTarget: number;
   outlinePreset: OutlineStructurePreset;
   publishStates?: ReadonlyMap<string, PublishEpisodeState>;
+  /** node id → the picture that stands for it (illustration Phase 4). */
+  representatives?: ReadonlyMap<string, string>;
   editingNodeId: string | null;
   onCommitRename?: (node: TreeNode, title: string) => Promise<void>;
   onCancelRename: () => void;
@@ -632,6 +640,9 @@ function RailNode({
       </span>
     ) : null;
 
+  const representative = representatives?.get(node.id);
+  const representativeThumb = representative ? <RepresentativeThumb illustrationId={representative} /> : null;
+
   if (node.kind === "leaf") {
     const active = node.id === currentId;
     const trailing = episodeProgress ?? <span className="sc-words">{node.word_count}</span>;
@@ -661,6 +672,7 @@ function RailNode({
             <StatusDot status={node.status} />
             <span className="sc-label">{label}</span>
             <span className="sc-title">{node.title}</span>
+            {representativeThumb}
             {publishBadge}
             {trailing}
           </button>
@@ -700,6 +712,7 @@ function RailNode({
               {titleEditor}
             </>
           ) : node.title ? ` · ${node.title}` : ""}
+          {representativeThumb}
           {publishBadge}
         </div>
         {hasMenu && (
@@ -728,6 +741,7 @@ function RailNode({
           {depth > 0 && <StatusDot status={node.status} />}
           <span className="ch-label">{label}</span>
           {editing ? titleEditor : node.title && <span className="ch-title">{node.title}</span>}
+          {representativeThumb}
           {publishBadge}
           {episodeProgress}
         </div>
@@ -761,6 +775,7 @@ function RailNode({
           episodeCharTarget={episodeCharTarget}
           outlinePreset={outlinePreset}
           publishStates={publishStates}
+          representatives={representatives}
           editingNodeId={editingNodeId}
           onCommitRename={onCommitRename}
           onCancelRename={onCancelRename}

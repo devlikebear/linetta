@@ -235,7 +235,10 @@ type toolResult struct {
 	BatchID    string
 	SnapshotID string
 	NodeIDs    []string
-	Truncated  bool
+	// RequestID is the illustration request linetta_request_illustration
+	// left, so the panel can put the writer's approval card under the line.
+	RequestID string
+	Truncated bool
 }
 
 // call runs one tool. Every failure the model could have caused — a bad name,
@@ -268,7 +271,7 @@ func (s *toolSession) call(ctx context.Context, runID, name, arguments string) t
 
 	out := toolResult{IsError: res.IsError}
 	out.Text, out.Truncated = capText(textOf(res))
-	out.BatchID, out.SnapshotID, out.NodeIDs = writeMetadata(res)
+	out.BatchID, out.SnapshotID, out.NodeIDs, out.RequestID = writeMetadata(res)
 	return out
 }
 
@@ -303,26 +306,30 @@ func capText(s string) (string, bool) {
 // (an outline batch) sets undo_batch_id, while linetta_write_scene and
 // linetta_revise_scene set snapshot_id instead — a tool call carries at most
 // one of the two, never both (#112).
-func writeMetadata(res *mcp.CallToolResult) (string, string, []string) {
+//
+// request_id is linetta_request_illustration's: not something to undo, but
+// a picture waiting for the writer's approval on a card under the line.
+func writeMetadata(res *mcp.CallToolResult) (batchID, snapshotID string, nodeIDs []string, requestID string) {
 	if res.StructuredContent == nil {
-		return "", "", nil
+		return "", "", nil, ""
 	}
 	raw, err := json.Marshal(res.StructuredContent)
 	if err != nil {
-		return "", "", nil
+		return "", "", nil, ""
 	}
 	var meta struct {
 		UndoBatchID  string   `json:"undo_batch_id"`
 		SnapshotID   string   `json:"snapshot_id"`
 		ChangedNodes []string `json:"changed_nodes"`
 		NodeID       string   `json:"node_id"`
+		RequestID    string   `json:"request_id"`
 	}
 	if err := json.Unmarshal(raw, &meta); err != nil {
-		return "", "", nil
+		return "", "", nil, ""
 	}
 	nodes := meta.ChangedNodes
 	if len(nodes) == 0 && meta.NodeID != "" {
 		nodes = []string{meta.NodeID}
 	}
-	return meta.UndoBatchID, meta.SnapshotID, nodes
+	return meta.UndoBatchID, meta.SnapshotID, nodes, meta.RequestID
 }

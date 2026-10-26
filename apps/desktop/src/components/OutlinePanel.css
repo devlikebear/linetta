@@ -247,3 +247,15 @@
 .episode-meter-fill.is-complete {
   background: var(--t-teal);
 }
+
+/* The picture that stands for a node (illustration Phase 4). */
+.representative-thumb {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--line-soft);
+  vertical-align: middle;
+  margin-left: 4px;
+}

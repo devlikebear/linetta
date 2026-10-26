@@ -77,6 +77,9 @@ type toolEvent struct {
 	// offers the same undo the live event did (#112).
 	SnapshotID string   `json:"snapshot_id,omitempty"`
 	NodeIDs    []string `json:"node_ids,omitempty"`
+	// RequestID mirrors toolPayload.RequestID, so a reloaded history row
+	// still shows the illustration request's card.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 func (t *transcript) appendToolEvent(ctx context.Context, projectID, nodeID, runID string, ev toolEvent) error {

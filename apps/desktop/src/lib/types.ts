@@ -591,6 +591,54 @@ export interface IllustrationMeta {
   used_in?: Array<{ node_id: string; label: string; title?: string }>;
 }
 
+/** What an agent asked to have drawn (illustration Phase 4). Nothing is
+ *  drawn until the writer approves it on a card. */
+export type IllustrationRequestPurpose = "insert" | "representative" | "gallery";
+export type IllustrationRequestStatus = "pending" | "generating" | "done" | "rejected" | "failed" | "cancelled";
+
+export interface IllustrationRequest {
+  id: string;
+  project_id: string;
+  /** The scene (insert) or the scene/episode (representative). */
+  target_node_id?: string;
+  purpose: IllustrationRequestPurpose;
+  prompt: string;
+  character_ids: string[];
+  include_references: boolean;
+  aspect: IllustrationAspect;
+  caption: string;
+  /** The agent's one line to the writer. */
+  note: string;
+  source: "agent" | "external";
+  status: IllustrationRequestStatus;
+  illustration_id?: string;
+  /** Set once the drawing went where the purpose said. */
+  placed_at?: number;
+  error?: string;
+  created_at: number;
+  decided_at?: number;
+}
+
+/** illustrations.representatives: node id → the picture that stands for it. */
+export type IllustrationRepresentatives = Record<string, string>;
+
+/** What the writer changed on the card before drawing. */
+export interface IllustrationRequestEdits {
+  prompt?: string;
+  aspect?: IllustrationAspect;
+  caption?: string;
+  include_references?: boolean;
+}
+
+/** illustrations-changed's payload: a request was left, decided, drawn or
+ *  failed. node_ids are scenes a drawing was put into. */
+export interface IllustrationsChangedPayload {
+  project_id: string;
+  request_id: string;
+  status: IllustrationRequestStatus;
+  node_ids?: string[];
+}
+
 /** illustrations.compose — the prompt for the writer to read before drawing. */
 export interface IllustrationComposition {
   prompt: string;

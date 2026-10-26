@@ -6,10 +6,36 @@ const rpc = vi.hoisted(() => ({
   get: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
+  representatives: vi.fn(),
+  setRepresentative: vi.fn(),
+  requests: vi.fn(),
+  requestGet: vi.fn(),
+  providers: vi.fn(),
+  node: vi.fn(),
+}));
+
+// The gallery and its request cards listen for illustrations-changed; this
+// stands in for Tauri's event bus the way CanonPanel's tests do.
+const events = vi.hoisted(() => ({ listeners: new Map<string, (event: { payload: unknown }) => void>() }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (name: string, listener: (event: { payload: unknown }) => void) => {
+    events.listeners.set(name, listener);
+    return Promise.resolve(() => events.listeners.delete(name));
+  },
 }));
 
 vi.mock("../../lib/rpc", () => ({
-  illustrations: { list: rpc.list, get: rpc.get, update: rpc.update, delete: rpc.remove },
+  illustrations: {
+    list: rpc.list,
+    get: rpc.get,
+    update: rpc.update,
+    delete: rpc.remove,
+    representatives: rpc.representatives,
+    setRepresentative: rpc.setRepresentative,
+  },
+  illustrationRequests: { list: rpc.requests, get: rpc.requestGet, approve: vi.fn(), reject: vi.fn() },
+  imageProviders: { list: rpc.providers },
+  nodes: { get: rpc.node },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -49,6 +75,10 @@ describe("IllustrationGallery", () => {
   beforeEach(() => {
     Object.values(rpc).forEach((f) => f.mockReset());
     rpc.get.mockImplementation((id: string) => Promise.resolve({ ...meta(id), data_base64: btoa("jpg") }));
+    rpc.representatives.mockResolvedValue({});
+    rpc.requests.mockResolvedValue([]);
+    rpc.providers.mockResolvedValue([]);
+    rpc.node.mockResolvedValue({ id: "s1", label: "씬 1", title: "" });
   });
 
   it("shows the gallery with what it costs, and says so when empty", async () => {
@@ -100,6 +130,10 @@ describe("IllustrationGallery and scenes", () => {
   beforeEach(() => {
     Object.values(rpc).forEach((f) => f.mockReset());
     rpc.get.mockImplementation((id: string) => Promise.resolve({ ...meta(id), data_base64: btoa("jpg") }));
+    rpc.representatives.mockResolvedValue({});
+    rpc.requests.mockResolvedValue([]);
+    rpc.providers.mockResolvedValue([]);
+    rpc.node.mockResolvedValue({ id: "s1", label: "씬 1", title: "" });
   });
 
   it("marks a picture in use, names its scenes, and inserts it with the edited caption", async () => {
@@ -131,5 +165,78 @@ describe("IllustrationGallery and scenes", () => {
     fireEvent.click(screen.getByTestId("illustration-delete"));
     expect(await screen.findByText("errors.illustrationInUse")).toBeInTheDocument();
     expect(screen.getByTestId("illustration-delete")).toHaveTextContent("illustration.delete");
+  });
+});
+
+describe("IllustrationGallery, agents and representatives", () => {
+  URL.createObjectURL = vi.fn(() => "blob:img");
+  URL.revokeObjectURL = vi.fn();
+  beforeEach(() => {
+    Object.values(rpc).forEach((f) => f.mockReset());
+    rpc.get.mockImplementation((id: string) => Promise.resolve({ ...meta(id), data_base64: btoa("jpg") }));
+    rpc.list.mockResolvedValue({ items: [meta("a", { caption: "우산" })], count: 1, bytes: 900_000 });
+    rpc.representatives.mockResolvedValue({});
+    rpc.requests.mockResolvedValue([]);
+    rpc.providers.mockResolvedValue([{ id: "gemini-native", active: true, configured: true, consented: true }]);
+    rpc.node.mockResolvedValue({ id: "s1", label: "씬 1", title: "" });
+    rpc.setRepresentative.mockResolvedValue({ previous: "" });
+  });
+
+  it("lists the requests still waiting, oldest first, as cards", async () => {
+    const request = (id: string, created: number) => ({
+      id,
+      project_id: "p",
+      target_node_id: "s1",
+      purpose: "insert",
+      prompt: `prompt ${id}`,
+      character_ids: [],
+      include_references: false,
+      aspect: "portrait",
+      caption: "",
+      note: `note ${id}`,
+      source: "external",
+      status: "pending",
+      created_at: created,
+    });
+    rpc.requests.mockResolvedValue([request("r2", 2), request("r1", 1)]);
+    render(<IllustrationGallery projectId="p" onClose={() => {}} onNew={() => {}} />);
+    const section = await screen.findByTestId("illustration-requests");
+    const cards = section.querySelectorAll('[data-testid="illustration-request"]');
+    expect(cards).toHaveLength(2);
+    expect(cards[0]).toHaveTextContent("note r1");
+    expect(cards[0]).toHaveTextContent("illustrationRequest.fromExternal");
+    expect(rpc.requests).toHaveBeenCalledWith("p", ["pending", "generating", "failed"]);
+  });
+
+  it("makes a picture stand for the scene or its episode, and takes it back", async () => {
+    const changed = vi.fn();
+    render(
+      <IllustrationGallery
+        projectId="p"
+        onClose={() => {}}
+        onNew={() => {}}
+        targets={[{ id: "s1", label: "씬 1" }, { id: "e1", label: "1화" }]}
+        nodeLabel={(id) => (id === "e1" ? "1화" : "씬 1")}
+        onRepresentativesChanged={changed}
+      />,
+    );
+    fireEvent.click(await screen.findByTestId("illustration-thumb-a"));
+    rpc.representatives.mockResolvedValue({ e1: "a" });
+    fireEvent.click(screen.getByTestId("illustration-set-representative-e1"));
+    await waitFor(() => expect(rpc.setRepresentative).toHaveBeenCalledWith("e1", "a"));
+    await waitFor(() => expect(changed).toHaveBeenCalled());
+    expect(await screen.findByTestId("illustration-representative-of")).toHaveTextContent("1화");
+    fireEvent.click(screen.getByTestId("illustration-clear-representative-e1"));
+    await waitFor(() => expect(rpc.setRepresentative).toHaveBeenLastCalledWith("e1", ""));
+    // The scene's button stays a "set" button: it is the episode's picture.
+    expect(screen.getByTestId("illustration-set-representative-s1")).toBeInTheDocument();
+  });
+
+  it("badges a picture that stands for something", async () => {
+    rpc.representatives.mockResolvedValue({ s1: "a" });
+    render(<IllustrationGallery projectId="p" onClose={() => {}} onNew={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("illustration-thumb-a")).toHaveTextContent("illustration.representative"),
+    );
   });
 });

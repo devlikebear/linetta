@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot, Image as ImageIcon } from "lucide-react";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi } from "../lib/rpc";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi, illustrations as illustrationsApi, illustrationRequests as illustrationRequestsApi } from "../lib/rpc";
 import { saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
 import { sceneEditorExtensions } from "../components/editor/sceneExtensions";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus, IllustrationMeta } from "../lib/types";
+import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus, IllustrationMeta, IllustrationsChangedPayload } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -33,7 +33,8 @@ import { ShortcutsModal } from "../components/ShortcutsModal";
 import { PublishDialog } from "../components/PublishDialog";
 import { rememberSettingsCategory } from "./Settings";
 import { IllustrationDialog } from "../components/illustration/IllustrationDialog";
-import { IllustrationGallery } from "../components/illustration/IllustrationGallery";
+import { IllustrationGallery, type RepresentativeTarget } from "../components/illustration/IllustrationGallery";
+import { RepresentativeThumb } from "../components/illustration/RepresentativeThumb";
 import { SearchModal } from "../components/SearchModal";
 import { OnboardingTour, type OnboardingTourStep } from "../components/onboarding/OnboardingTour";
 import {
@@ -234,6 +235,11 @@ export function Workspace() {
   const [illustrationDialog, setIllustrationDialog] = useState<{ scene?: string; sourceNodeId?: string } | null>(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryRefresh, setGalleryRefresh] = useState(0);
+  // Illustration Phase 4: which picture stands for which node (outline and
+  // scene header), and how many agent requests wait for the writer (the
+  // gallery button's badge).
+  const [representatives, setRepresentatives] = useState<ReadonlyMap<string, string>>(new Map());
+  const [openIllustrationRequests, setOpenIllustrationRequests] = useState(0);
   // Linetta Works publishing (Phase 3). Off on builds that cannot publish.
   // The work's status is fetched when the work opens and after a publish
   // (the writer's or an agent's) —
@@ -1359,6 +1365,63 @@ export function Workspace() {
     void flushPendingSave().then(() => navigate("/settings"));
   }, [flushPendingSave, navigate]);
 
+  // The work whose pictures the state below describes; an answer for a work
+  // the writer has since left is dropped.
+  const illustrationProjectRef = useRef(projectId);
+  illustrationProjectRef.current = projectId;
+  const refreshIllustrationState = useCallback(async (pId: string) => {
+    try {
+      const [reps, waiting] = await Promise.all([
+        illustrationsApi.representatives(pId),
+        illustrationRequestsApi.list(pId, ["pending", "failed"]),
+      ]);
+      if (illustrationProjectRef.current !== pId) return;
+      setRepresentatives(new Map(Object.entries(reps)));
+      setOpenIllustrationRequests(waiting.length);
+    } catch {
+      /* benign: the outline and the badge just show nothing new */
+    }
+  }, []);
+
+  useEffect(() => {
+    setRepresentatives(new Map());
+    setOpenIllustrationRequests(0);
+    if (projectId && agentAvailable) void refreshIllustrationState(projectId);
+  }, [projectId, agentAvailable, refreshIllustrationState]);
+
+  // A request left, drawn or decided — by the panel's card, the gallery, or
+  // an external agent. A drawing put into the open scene reloads it, the
+  // same way an agent's prose does, unless the writer has unsaved typing
+  // (their next save then meets the version check instead).
+  useEngineEvent<IllustrationsChangedPayload>("illustrations-changed", (payload) => {
+    if (!projectId || payload.project_id !== projectId) return;
+    void refreshIllustrationState(projectId);
+    const open = loadRef.current?.node.id;
+    if (open && payload.node_ids?.includes(open) && !editorDirty) void reloadSceneFromEngine(open);
+  });
+
+  // What the gallery can make a picture stand for: the open scene and the
+  // episode (or chapter) it sits in.
+  const nodeLabels = useMemo(() => {
+    const out = new Map<string, string>();
+    const walk = (list: TreeNode[]) => {
+      for (const n of list) {
+        out.set(n.id, [displayNodeLabel(language, n.label), n.title].filter(Boolean).join(" · "));
+        walk(n.children);
+      }
+    };
+    walk(load?.tree ?? []);
+    return out;
+  }, [load?.tree, language]);
+  const representativeTargets = useMemo<RepresentativeTarget[]>(() => {
+    if (!load) return [];
+    const targets: RepresentativeTarget[] = [];
+    if (load.node.kind === "leaf") targets.push({ id: load.node.id, label: nodeLabels.get(load.node.id) ?? load.node.label });
+    const parent = load.node.parent_id;
+    if (parent && nodeLabels.has(parent)) targets.push({ id: parent, label: nodeLabels.get(parent) ?? "" });
+    return targets;
+  }, [load, nodeLabels]);
+
   const copyNodeText = useCallback(async (node: Pick<TreeNode, "id">) => {
     try {
       const payload = await exportApi.nodeText(node.id);
@@ -1986,6 +2049,11 @@ export function Workspace() {
               data-testid="ws-tool-illustrations"
             >
               <ImageIcon size={15} /> {t("illustration.gallery")}
+              {openIllustrationRequests > 0 ? (
+                <span className="ws-tool-badge" data-testid="ws-illustration-requests-badge">
+                  {t("illustrationRequest.pendingBadge", { count: openIllustrationRequests })}
+                </span>
+              ) : null}
             </button>
           )}
           <div className="ws-sep" />
@@ -2025,6 +2093,7 @@ export function Workspace() {
           onSetStatus={handleSetNodeStatus}
           onPublish={publishAvailable ? (node) => { void openPublish(node.id); } : undefined}
           publishStates={publishStates}
+          representatives={representatives}
           onRepairOutline={handleRepairOutline}
           onUndoRepairOutline={handleUndoRepairOutline}
           canUndoRepair={Boolean(outlineUndoSnapshot)}
@@ -2074,6 +2143,9 @@ export function Workspace() {
             )}
             <div className="scene-marker">
               <span>{sceneMarker}</span>
+              {representatives.get(load.node.id) ? (
+                <RepresentativeThumb illustrationId={representatives.get(load.node.id) ?? ""} className="is-scene" />
+              ) : null}
               <span className="rule" />
             </div>
             <h1 className="scene-title">
@@ -2301,6 +2373,7 @@ export function Workspace() {
             externalDraft={agentDraftRequest?.text}
             externalDraftNonce={agentDraftRequest?.nonce}
             onExternalDraftApplied={clearAgentDraftRequest}
+            onOpenImageSettings={openImageSettings}
             onClose={() => {
               setAgentOpen(false);
               focusEditor();
@@ -2401,6 +2474,10 @@ export function Workspace() {
           onClose={() => setGalleryOpen(false)}
           onNew={() => setIllustrationDialog({ sourceNodeId: load.node.id })}
           onInsert={load.node.kind === "leaf" ? insertIllustration : undefined}
+          targets={representativeTargets}
+          nodeLabel={(id) => nodeLabels.get(id) ?? ""}
+          onRepresentativesChanged={() => void refreshIllustrationState(load.project.id)}
+          onOpenSettings={openImageSettings}
         />
       )}
       {load && illustrationDialog && (
