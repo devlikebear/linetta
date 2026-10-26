@@ -18,6 +18,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
@@ -45,6 +46,13 @@ const MetaRunID = "linetta/run_id"
 // the UI already uses, so an agent sees exactly what the writer sees.
 type ToolDeps struct {
 	Visuals *visual.Repo
+	// Gallery and IllustrationRequests back the illustration tools
+	// (illustration Phase 4): reading the gallery, choosing a picture to
+	// stand for a node, and leaving a request the writer approves. Nil in a
+	// build or a test that wires none; the tools refuse rather than
+	// panicking.
+	Gallery              *illustration.Repo
+	IllustrationRequests *illustration.RequestService
 	// Illustrations is the galleries' index: linetta_write_scene keeps a
 	// placeholder as a picture only when it names one of the work's own.
 	Illustrations illustref.Index

@@ -45,6 +45,7 @@ func illustrationError(err error) error {
 		{illustration.ErrBadContent, rpc.ReasonIllustrationBadContent},
 		{illustration.ErrInUse, rpc.ReasonIllustrationInUse},
 		{illustration.ErrIsCover, rpc.ReasonIllustrationIsCover},
+		{illustration.ErrIsRepresentative, rpc.ReasonIllustrationIsRepresentative},
 		{illustration.ErrRequestNotFound, rpc.ReasonIllustrationRequestNotFound},
 		{illustration.ErrNotPending, rpc.ReasonIllustrationRequestDecided},
 		{illustration.ErrTooManyPending, rpc.ReasonTooManyIllustrationRequests},

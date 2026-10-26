@@ -27,6 +27,8 @@ var WriteToolNames = []string{
 	"linetta_set_art_style",
 	"linetta_add_reference_image",
 	"linetta_delete_reference_image",
+	"linetta_request_illustration",
+	"linetta_set_representative_illustration",
 	"linetta_create_work",
 	"linetta_write_scene",
 	"linetta_write_summary",
@@ -132,6 +134,7 @@ type writeSummaryOutput struct {
 func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 	if !groups.DisableVisualWrites {
 		d.registerVisualWriteTools(s)
+		d.registerIllustrationWriteTools(s)
 	}
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_create_work",

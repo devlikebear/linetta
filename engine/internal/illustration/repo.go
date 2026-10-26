@@ -39,6 +39,9 @@ var (
 	// ErrIsCover: the picture is the work's cover on Linetta Works; choose
 	// another cover (or none) first.
 	ErrIsCover = errors.New("illustration is the work's cover")
+	// ErrIsRepresentative: the picture stands for a scene or an episode;
+	// choose another one (or none) for it first.
+	ErrIsRepresentative = errors.New("illustration is a scene's or episode's representative picture")
 )
 
 // SceneRef is a scene a picture appears in.
@@ -320,8 +323,80 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 	if cover > 0 {
 		return ErrIsCover
 	}
+	var representative int
+	err = r.s.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM node_representative_illustrations WHERE illustration_id = ?", id).Scan(&representative)
+	if err != nil {
+		return err
+	}
+	if representative > 0 {
+		return ErrIsRepresentative
+	}
 	result, err := r.s.DB().ExecContext(ctx, "DELETE FROM illustrations WHERE id = ?", id)
 	return mutationError(result, err)
+}
+
+// SetRepresentative makes illustrationID the picture that stands for the
+// node (a scene, an episode or a part), or takes the node's picture away when
+// illustrationID is empty. It returns the node's previous picture ("" for
+// none), so a caller can undo. The picture must be in the node's own work.
+func (r *Repo) SetRepresentative(ctx context.Context, now int64, nodeID, illustrationID string) (string, error) {
+	var projectID string
+	err := r.s.DB().QueryRowContext(ctx, "SELECT project_id FROM nodes WHERE id = ?", nodeID).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNodeNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	var previous string
+	err = tx.QueryRowContext(ctx, "SELECT illustration_id FROM node_representative_illustrations WHERE node_id = ?", nodeID).Scan(&previous)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	if illustrationID == "" {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM node_representative_illustrations WHERE node_id = ?", nodeID); err != nil {
+			return "", err
+		}
+		return previous, tx.Commit()
+	}
+	var owner string
+	err = tx.QueryRowContext(ctx, "SELECT project_id FROM illustrations WHERE id = ?", illustrationID).Scan(&owner)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && owner != projectID) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO node_representative_illustrations (node_id, project_id, illustration_id, updated_at)
+		VALUES (?,?,?,?) ON CONFLICT(node_id) DO UPDATE SET illustration_id = excluded.illustration_id, updated_at = excluded.updated_at`,
+		nodeID, projectID, illustrationID, now); err != nil {
+		return "", err
+	}
+	return previous, tx.Commit()
+}
+
+// Representatives maps each node of the work that has a representative
+// picture to that picture's id.
+func (r *Repo) Representatives(ctx context.Context, projectID string) (map[string]string, error) {
+	rows, err := r.s.DB().QueryContext(ctx, "SELECT node_id, illustration_id FROM node_representative_illustrations WHERE project_id = ?", projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var nodeID, illustrationID string
+		if err := rows.Scan(&nodeID, &illustrationID); err != nil {
+			return nil, err
+		}
+		out[nodeID] = illustrationID
+	}
+	return out, rows.Err()
 }
 
 func mutationError(result sql.Result, err error) error {

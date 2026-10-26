@@ -109,6 +109,8 @@ const (
 	ReasonIllustrationInUse      = "illustration_in_use"
 	// The picture is the work's cover on Linetta Works.
 	ReasonIllustrationIsCover = "illustration_is_cover"
+	// The picture stands for a scene or an episode (illustration Phase 4.3).
+	ReasonIllustrationIsRepresentative = "illustration_is_representative"
 	// Pictures an agent asked for (illustration Phase 4).
 	ReasonIllustrationRequestNotFound = "illustration_request_not_found"
 	// Already approved, rejected or cancelled (another window, say).

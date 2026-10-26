@@ -109,3 +109,51 @@ func TestMCPSceneRoundTripKeepsIllustrations(t *testing.T) {
 		t.Fatalf("the picture left the gallery: %v", err)
 	}
 }
+
+// An external MCP client can only leave a request: it shows up for the
+// writer through illustration_requests.list, marked external, with nothing
+// drawn; and a gallery picture can be made a scene's representative.
+func TestMCPIllustrationRequestReachesTheWriter(t *testing.T) {
+	home := t.TempDir()
+	app, c, projectID, nodeID := startWritableMCPAt(t, home)
+
+	res := c.callTool("linetta_request_illustration", map[string]any{
+		"project_id": projectID, "node_id": nodeID, "purpose": "insert", "prompt": "비 오는 골목", "note": "씬 1",
+	})
+	var out struct {
+		RequestID string `json:"request_id"`
+		Status    string `json:"status"`
+	}
+	if err := json.Unmarshal([]byte(structuredJSON(t, res)), &out); err != nil || out.Status != "waiting_for_writer" || out.RequestID == "" {
+		t.Fatalf("request = %s, %v", structuredJSON(t, res), err)
+	}
+	raw, rpcErr := call(t, app, "illustration_requests.list", fmt.Sprintf(`{"project_id":%q}`, projectID))
+	if rpcErr != nil {
+		t.Fatalf("list: %+v", rpcErr)
+	}
+	var list []illustration.Request
+	if err := json.Unmarshal(raw, &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != out.RequestID || list[0].Source != illustration.SourceExternal ||
+		list[0].Status != illustration.RequestPending || list[0].TargetNodeID != nodeID {
+		t.Fatalf("list = %+v", list)
+	}
+
+	gallery := app.mcpTools.Gallery
+	if gallery == nil || app.mcpTools.IllustrationRequests == nil {
+		t.Fatal("the MCP tools have no gallery or requests")
+	}
+	pic, err := gallery.Add(context.Background(), 1, illustration.NewInput{ProjectID: projectID, Prompt: "p", Provider: "x", Model: "m", Data: tinyJPEG(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.callTool("linetta_set_representative_illustration", map[string]any{"node_id": nodeID, "illustration_id": pic.ID})
+	reps, err := gallery.Representatives(context.Background(), projectID)
+	if err != nil || reps[nodeID] != pic.ID {
+		t.Fatalf("representatives = %v, %v", reps, err)
+	}
+	if _, rpcErr := call(t, app, "illustrations.delete", fmt.Sprintf(`{"id":%q}`, pic.ID)); rpcErr == nil || !strings.Contains(string(rpcErr.Data), "illustration_is_representative") {
+		t.Fatalf("deleting a representative picture: %+v", rpcErr)
+	}
+}

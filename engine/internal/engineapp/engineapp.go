@@ -332,12 +332,38 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	})
 	a.closers = append(a.closers, stopPublish)
 
+	// The built-in agent's provider layer (#90). Resolves the writer's
+	// provider settings into a client on demand; nothing here dials until an
+	// agent run or a connection test asks it to. Codex's auth.json lives under
+	// the data directory so the App Store build can reach it.
+	// The Codex login (#92) writes into Linetta's own directory; the provider
+	// decides which directory to read from, and may prefer an existing Codex
+	// CLI login when Linetta has none.
+	codexHome := filepath.Join(home, "codex")
+	codexSvc := codexauth.NewService(codexHome)
+	a.closers = append(a.closers, codexSvc.Close)
+
+	providerSrc := provider.NewSource(settingsStore, codexHome).WithCLIWorkDir(filepath.Join(home, "agent-cli"))
+
+	// Illustration drawing. The painter is the provider's Draw, gated on the
+	// image consent; the gallery and the prompt preview never reach a
+	// provider. Built before the MCP host because its illustration tools
+	// leave requests here (illustration Phase 4): only the writer's approve
+	// draws one.
+	illustrationSvc := illustration.NewService(illustrations, visuals, illustrationPainter{src: providerSrc}, clock)
+	illustrationRequests := illustration.NewRequestService(illustrations, illustrationSvc, nodes, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) })
+	if err := illustrationRequests.RecoverInterrupted(ctx); err != nil {
+		return err
+	}
+
 	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
 		settingsStore: settingsStore,
 		home:          home,
 		repos: mcpToolRepos{
 			visuals:       visuals,
 			illustrations: illustrations,
+			requests:      illustrationRequests,
 			style:         styles,
 			projects:      projects,
 			nodes:         nodes,
@@ -378,18 +404,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	})
 	a.closers = append(a.closers, stopMCP)
 
-	// The built-in agent's provider layer (#90). Resolves the writer's
-	// provider settings into a client on demand; nothing here dials until an
-	// agent run or a connection test asks it to. Codex's auth.json lives under
-	// the data directory so the App Store build can reach it.
-	// The Codex login (#92) writes into Linetta's own directory; the provider
-	// decides which directory to read from, and may prefer an existing Codex
-	// CLI login when Linetta has none.
-	codexHome := filepath.Join(home, "codex")
-	codexSvc := codexauth.NewService(codexHome)
-	a.closers = append(a.closers, codexSvc.Close)
-
-	providerSrc := provider.NewSource(settingsStore, codexHome).WithCLIWorkDir(filepath.Join(home, "agent-cli"))
 	providers := providerService{src: providerSrc}
 	a.providerSrc = providerSrc
 
@@ -579,7 +593,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// Illustration drawing. The painter is the provider's Draw, gated on the
 	// image consent; the gallery and the prompt preview never reach a provider.
 	imageProviders := imageProviderService{src: providerSrc}
-	illustrationSvc := illustration.NewService(illustrations, visuals, illustrationPainter{src: providerSrc}, clock)
 	s.Handle("image_providers.list", handlers.ImageProvidersList(imageProviders))
 	s.Handle("image_providers.list_models", handlers.ImageProvidersListModels(imageProviders))
 	s.Handle("illustrations.compose", handlers.IllustrationsCompose(visuals, entities))
@@ -588,12 +601,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("illustrations.get", handlers.IllustrationsGet(illustrations))
 	s.Handle("illustrations.update", handlers.IllustrationsUpdate(illustrations))
 	s.Handle("illustrations.delete", handlers.IllustrationsDelete(illustrations))
-	// Pictures agents asked for. Only the writer's approve draws one.
-	illustrationRequests := illustration.NewRequestService(illustrations, illustrationSvc, nodes, clock,
-		func(method string, params any) { _ = s.Notifier().Notify(method, params) })
-	if err := illustrationRequests.RecoverInterrupted(ctx); err != nil {
-		return err
-	}
 	s.Handle("illustration_requests.list", handlers.IllustrationRequestsList(illustrationRequests))
 	s.Handle("illustration_requests.get", handlers.IllustrationRequestsGet(illustrationRequests))
 	s.Handle("illustration_requests.approve", handlers.IllustrationRequestsApprove(illustrationRequests))
