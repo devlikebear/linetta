@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.13.0 - 2026-10-26
+
+- **Publish character sheets and a cover to Linetta Works.** Each sheet in
+  Story World has a **Publish on Linetta Works** checkbox, shown once this
+  device is connected to the site. It is off by default, and turning it on
+  first reminds you to check for spoilers. A published sheet sends its name,
+  aliases, role, summary, attributes, relationship names and its first
+  reference image. Notes are never sent. Pick a cover from your gallery in
+  the publish dialog's **World, characters and cover** section.
+- Fixed: the text boxes in Story World and the character and storyline
+  sheets could not be resized and used the manuscript's serif font. They now
+  grow with their content, can be dragged taller, and use the UI font.
+- Fixed: if undoing accepted outline suggestions failed twice in a row, the
+  suggestions could be accepted again and create a duplicate scene. They now
+  wait as "reverting · needs a check" until the app sorts them out from the
+  outline itself, which it also does when it starts.
+
 ## v1.12.1 - 2026-10-25
 
 - Fixed: the open-observations badge in the scene panel opened Story World
