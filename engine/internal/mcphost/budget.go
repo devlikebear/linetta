@@ -80,9 +80,15 @@ var (
 // VisualWriteToolNames lists the optional visual editing group.
 var VisualWriteToolNames = []string{"linetta_set_character_visuals", "linetta_set_art_style", "linetta_add_reference_image", "linetta_delete_reference_image"}
 
+// IllustrationWriteToolNames are the illustration Phase 4 write tools. The
+// visual-writes switch hides them with the group above (they change the
+// pictures a work shows), but they keep their own byte allowance
+// (budget_test.go) so the group's earlier ceiling still means what it said.
+var IllustrationWriteToolNames = []string{"linetta_request_illustration", "linetta_set_representative_illustration"}
+
 // excludedByGroups reports whether Register would omit a disabled group member.
 func excludedByGroups(name string, groups ToolGroups) bool {
-	if groups.DisableVisualWrites && slices.Contains(VisualWriteToolNames, name) {
+	if groups.DisableVisualWrites && (slices.Contains(VisualWriteToolNames, name) || slices.Contains(IllustrationWriteToolNames, name)) {
 		return true
 	}
 	if !groups.Memory && slices.Contains(MemoryToolNames, name) {
@@ -216,7 +222,7 @@ func MeasureToolBudget(memoryTools, skillTools, reviewTools bool) (settings.Tool
 
 	current := sum(ToolNames(settings.MCPModeFull, groups))
 	return settings.ToolBudget{
-		VisualWrites: sum(VisualWriteToolNames),
+		VisualWrites: sum(append(append([]string{}, VisualWriteToolNames...), IllustrationWriteToolNames...)),
 		Tools:        current.Tools,
 		Bytes:        current.Bytes,
 		Memory:       sum(MemoryToolNames),

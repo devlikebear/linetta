@@ -67,7 +67,12 @@ _전제: Phase 1~3 완료. linetta-artworks Phase 5(회차 삽화 게시) 배포
   - `illustrations.changed` 알림으로 화면이 다시 읽는다. 생성 중 앱을 끄면 `generating`을 `failed`(사유 "앱이 닫혀 중단됨")로 되돌린다
   - 테스트: 요청·승인·거절, 상한, 노드 삭제 시 취소, 목적별 처리(씬 끝에 넣기, 대표 지정), 생성 실패 시 `failed`와 사유
 
-- [ ] **4.2 MCP·에이전트 도구**
+- [x] **4.2 MCP·에이전트 도구**
+  - 구현(2026-10-26): `mcphost/tools_illustrations.go`, `ToolDeps.Gallery`·`IllustrationRequests`, 에이전트 안내(`prompt.go`), 패널 도구 이름(`agentTools.ts`)과 세 언어 이름
+  - 쓰기 두 도구는 `IllustrationWriteToolNames`로 묶어 "시각 쓰기" 스위치가 함께 숨긴다. 스키마 예산은 세 도구 합 3,205B를 재고 3,400B 몫을 따로 두었다(기존 27,500B 합계에서 뺐다)
+  - `scene`만 주면 `visual.Repo.Compose`로 비주얼 시트·화풍을 실은 프롬프트를 만들고, 인물이 있으면 참조 이미지를 싣도록(`include_references`) 요청한다. `prompt`를 주면 그대로 쓴다
+  - 요청 서비스가 MCP 도구보다 먼저 있어야 해서 engineapp에서 공급자(`providerSrc`)와 삽화 서비스 생성을 MCP 설정 앞으로 옮겼다
+  - `linetta_list_illustrations`는 요청을 최신 20개까지 돌려준다
   - `linetta_request_illustration` (쓰기 도구, 기본 켜짐. `DisableVisualWrites`처럼 끌 수 있는 그룹에 넣는다)
     - 입력: `project_id`, `node_id`, `purpose`, `scene`(장면 설명) 또는 `prompt`(완성된 프롬프트), `entity_ids`/`names`, `aspect`, `caption`, `note`
     - `scene`만 주면 `visual.Repo.Compose`로 비주얼 시트와 화풍을 실은 프롬프트를 만든다(`linetta_build_illustration_prompt`와 같은 조립)
@@ -84,7 +89,8 @@ _전제: Phase 1~3 완료. linetta-artworks Phase 5(회차 삽화 게시) 배포
   - 에이전트 안내(`prompt.go`): 삽화를 부탁받으면 요청을 남기고 "카드에서 승인해 달라"고 말한다. 승인 전에 됐다고 말하지 않는다
   - 테스트: 도구 입력 검증, `scene`만 준 요청의 프롬프트 조립, 목록 출력, 대표 지정과 되돌리기, 예산
 
-- [ ] **4.3 대표 삽화**
+- [ ] **4.3 대표 삽화** (엔진 부분은 4.2와 함께 했다. RPC와 화면은 4.4에서)
+  - 구현(2026-10-26): 노드 열 대신 표 `node_representative_illustrations`(`0032`)를 두었다. 노드 쿼리를 건드리지 않고, 노드를 지우면 함께 지워진다(`publish_covers`와 같은 방식). `Repo.SetRepresentative`(이전 값을 돌려줘 되돌리기에 쓴다), `Representatives`, 삭제 막기 `ErrIsRepresentative`(사유 `illustration_is_representative`), 요청 목적 `representative`
   - `nodes.representative_illustration_id`(삽화가 지워지면 NULL). 어떤 종류의 노드든 하나
   - 대표로 지정된 삽화는 본문에 쓰인 삽화처럼 지울 수 없게 막는다(`InUseError`에 "대표 삽화" 사유를 더함)
   - RPC: `nodes.set_representative_illustration`(노드 id, 삽화 id 또는 null), `illustrations.list`의 `Meta`에 `representative_of`

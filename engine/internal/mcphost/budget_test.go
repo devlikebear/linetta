@@ -193,6 +193,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if slices.Contains(VisualWriteToolNames, name) {
 			continue
 		}
+		// Illustration Phase 4's three tools carry their own allowance below.
+		if name == "linetta_list_illustrations" || slices.Contains(IllustrationWriteToolNames, name) {
+			continue
+		}
 		// #162's style check and #163's proposal carry their own allowances below.
 		if name == "linetta_analyze_style" || name == "linetta_propose_style_profile" {
 			continue
@@ -255,6 +259,15 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// #154 measured 3,468B for the pair, input and output schemas included.
 	if visuals > 3500 {
 		t.Errorf("visual tools cost %dB, want <= 3500B", visuals)
+	}
+	// Illustration Phase 4 measured 3,205B for its three tools (list 1,129B,
+	// request 1,369B, set representative 707B).
+	illustrations := sizes["linetta_list_illustrations"]
+	for _, name := range IllustrationWriteToolNames {
+		illustrations += sizes[name]
+	}
+	if illustrations > 3400 {
+		t.Errorf("illustration tools cost %dB, want <= 3400B", illustrations)
 	}
 	// #132 measured 26,525B for the full 19-tool set (down from 27,687B).
 	// story-assist Phase 1 added linetta_get_story_context's IncludeDirection

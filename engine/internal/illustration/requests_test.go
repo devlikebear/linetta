@@ -220,14 +220,14 @@ func TestRequest_submitChecksBeforeStoring(t *testing.T) {
 		t.Fatal(err)
 	}
 	cases := map[string]SubmitInput{
-		"empty prompt":           {Purpose: PurposeGallery, Prompt: " "},
-		"insert without scene":   {Purpose: PurposeInsert},
-		"insert into episode":    {Purpose: PurposeInsert, TargetNodeID: part.ID},
-		"representative for now": {Purpose: PurposeRepresentative, TargetNodeID: f.scene},
-		"unknown purpose":        {Purpose: "cover"},
-		"bad aspect":             {Purpose: PurposeGallery, Aspect: "wide"},
-		"bad source":             {Purpose: PurposeGallery, Source: "writer"},
-		"unknown character":      {Purpose: PurposeGallery, CharacterIDs: []string{"ghost"}},
+		"empty prompt":                  {Purpose: PurposeGallery, Prompt: " "},
+		"insert without scene":          {Purpose: PurposeInsert},
+		"insert into episode":           {Purpose: PurposeInsert, TargetNodeID: part.ID},
+		"representative without a node": {Purpose: PurposeRepresentative},
+		"unknown purpose":               {Purpose: "cover"},
+		"bad aspect":                    {Purpose: PurposeGallery, Aspect: "wide"},
+		"bad source":                    {Purpose: PurposeGallery, Source: "writer"},
+		"unknown character":             {Purpose: PurposeGallery, CharacterIDs: []string{"ghost"}},
 	}
 	for name, in := range cases {
 		in.ProjectID = f.project
@@ -302,5 +302,25 @@ func TestRequest_recoverInterrupted(t *testing.T) {
 	got, _ := f.svc.Get(f.ctx, r.ID)
 	if got.Status != RequestFailed || got.Error == "" {
 		t.Fatalf("got = %+v", got)
+	}
+}
+
+func TestRequest_representativePurposeSetsTheNodesPicture(t *testing.T) {
+	f := newRequestFixture(t)
+	part, err := f.nodes.CreateRoot(f.ctx, f.project, node.KindContainer, "1화", "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := f.submit(t, SubmitInput{TargetNodeID: part.ID, Purpose: PurposeRepresentative, Aspect: AspectLandscape})
+	done, err := f.svc.Approve(f.ctx, r.ID, ApproveEdits{})
+	if err != nil || done.PlacedAt == nil {
+		t.Fatalf("done = %+v, %v", done, err)
+	}
+	reps, err := f.repo.Representatives(f.ctx, f.project)
+	if err != nil || reps[part.ID] != done.IllustrationID {
+		t.Fatalf("representatives = %v, %v", reps, err)
+	}
+	if n, _ := f.nodes.Get(f.ctx, f.scene); n.ContentDoc != nil && strings.Contains(*n.ContentDoc, "illustration") {
+		t.Fatal("a representative picture went into a scene")
 	}
 }

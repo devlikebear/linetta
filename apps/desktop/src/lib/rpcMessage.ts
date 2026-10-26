@@ -72,6 +72,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   illustration_bad_content: "errors.illustrationBadContent",
   illustration_in_use: "errors.illustrationInUse",
   illustration_is_cover: "errors.illustrationIsCover",
+  illustration_is_representative: "errors.illustrationIsRepresentative",
   // Pictures an agent asked for (illustration Phase 4).
   illustration_request_not_found: "errors.illustrationRequestNotFound",
   illustration_request_decided: "errors.illustrationRequestDecided",

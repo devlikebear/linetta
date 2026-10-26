@@ -19,8 +19,8 @@ const (
 	// writer moves it where it belongs. An agent does not know where the
 	// writer's cursor is, and guessing a paragraph would be worse.
 	PurposeInsert = "insert"
-	// PurposeRepresentative makes it the target node's representative
-	// picture (Phase 4.3).
+	// PurposeRepresentative makes it the picture that stands for the target
+	// node, a scene or an episode (Repo.SetRepresentative).
 	PurposeRepresentative = "representative"
 	// PurposeGallery only keeps it in the gallery.
 	PurposeGallery = "gallery"
@@ -190,15 +190,15 @@ func (s *RequestService) checkSubmit(ctx context.Context, in *SubmitInput) error
 		return fmt.Errorf("%w: source must be agent or external", ErrInvalidInput)
 	}
 	switch in.Purpose {
-	case PurposeInsert, PurposeGallery:
-	case PurposeRepresentative:
-		// The node field it fills arrives with Phase 4.3.
-		return fmt.Errorf("%w: representative pictures are not available yet", ErrInvalidInput)
+	case PurposeInsert, PurposeRepresentative, PurposeGallery:
 	default:
-		return fmt.Errorf("%w: purpose must be insert or gallery", ErrInvalidInput)
+		return fmt.Errorf("%w: purpose must be insert, representative or gallery", ErrInvalidInput)
 	}
 	if in.Purpose == PurposeInsert && in.TargetNodeID == "" {
 		return fmt.Errorf("%w: a picture to insert needs the scene's node_id", ErrInvalidInput)
+	}
+	if in.Purpose == PurposeRepresentative && in.TargetNodeID == "" {
+		return fmt.Errorf("%w: a representative picture needs the scene's or episode's node_id", ErrInvalidInput)
 	}
 	if err := s.repo.checkPlace(ctx, in.ProjectID, in.TargetNodeID, in.CharacterIDs); err != nil {
 		return err
@@ -391,6 +391,9 @@ func (s *RequestService) place(ctx context.Context, r Request, meta Meta) error 
 	switch r.Purpose {
 	case PurposeInsert:
 		return s.appendToScene(ctx, r.TargetNodeID, meta.ID, meta.Caption)
+	case PurposeRepresentative:
+		_, err := s.repo.SetRepresentative(ctx, s.now(), r.TargetNodeID, meta.ID)
+		return err
 	}
 	return nil
 }

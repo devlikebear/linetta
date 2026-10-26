@@ -16,7 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
-	"github.com/devlikebear/linetta/engine/internal/illustref"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
@@ -54,13 +54,15 @@ type mcpDeps struct {
 // AI runner uses stays untouched so its prompts do not change.
 type mcpToolRepos struct {
 	visuals       *visual.Repo
-	illustrations illustref.Index
-	style         *style.Repo
-	projects      *project.Repo
-	nodes         *node.Repo
-	entities      *entity.Repo
-	mentions      *mention.Repo
-	facts         *fact.Repo
+	illustrations *illustration.Repo
+	// requests are the pictures agents asked for (illustration Phase 4).
+	requests *illustration.RequestService
+	style    *style.Repo
+	projects *project.Repo
+	nodes    *node.Repo
+	entities *entity.Repo
+	mentions *mention.Repo
+	facts    *fact.Repo
 	// beats and threads back linetta_report_continuity's beat refs: a beat
 	// carries only a thread_id, so checking one belongs to this work means
 	// resolving its thread (story-assist Phase 2).
@@ -121,25 +123,27 @@ type agentToolDeps = mcphost.ToolDeps
 func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 	activity := mcphost.NewActivityRepo(deps.repos.db)
 	tools := mcphost.ToolDeps{
-		Visuals:       deps.repos.visuals,
-		Illustrations: deps.repos.illustrations,
-		Style:         deps.repos.style,
-		Projects:      deps.repos.projects,
-		Nodes:         deps.repos.nodes,
-		Entities:      deps.repos.entities,
-		Mentions:      deps.repos.mentions,
-		Facts:         deps.repos.facts,
-		Beats:         deps.repos.beats,
-		Threads:       deps.repos.threads,
-		Continuity:    deps.repos.continuity,
-		Proposals:     deps.repos.proposals,
-		Forecasts:     deps.repos.forecasts,
-		Plot:          deps.repos.plot,
-		Manuscript:    deps.repos.manuscript,
-		Context:       deps.repos.context,
-		Settings:      deps.settingsStore,
-		Activity:      activity,
-		Memory:        deps.repos.memory,
+		Visuals:              deps.repos.visuals,
+		Illustrations:        deps.repos.illustrations,
+		Gallery:              deps.repos.illustrations,
+		IllustrationRequests: deps.repos.requests,
+		Style:                deps.repos.style,
+		Projects:             deps.repos.projects,
+		Nodes:                deps.repos.nodes,
+		Entities:             deps.repos.entities,
+		Mentions:             deps.repos.mentions,
+		Facts:                deps.repos.facts,
+		Beats:                deps.repos.beats,
+		Threads:              deps.repos.threads,
+		Continuity:           deps.repos.continuity,
+		Proposals:            deps.repos.proposals,
+		Forecasts:            deps.repos.forecasts,
+		Plot:                 deps.repos.plot,
+		Manuscript:           deps.repos.manuscript,
+		Context:              deps.repos.context,
+		Settings:             deps.settingsStore,
+		Activity:             activity,
+		Memory:               deps.repos.memory,
 
 		Skills:       deps.repos.skills,
 		SkillHistory: deps.repos.skillHistory,

@@ -15,7 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
-	"github.com/devlikebear/linetta/engine/internal/illustref"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -47,32 +47,34 @@ type mcpDeps struct {
 // unchanged; mobile never reads these.
 type mcpToolRepos struct {
 	visuals       *visual.Repo
-	illustrations illustref.Index
-	style         *style.Repo
-	projects      *project.Repo
-	nodes         *node.Repo
-	entities      *entity.Repo
-	mentions      *mention.Repo
-	facts         *fact.Repo
-	beats         *beat.Repo
-	threads       *thread.Repo
-	continuity    *continuity.Repo
-	proposals     *proposals.Service
-	forecasts     *forecast.Service
-	plot          *plot.Builder
-	manuscript    *manuscript.Searcher
-	context       *storycontext.ContextBuilder
-	snapshots     *snapshot.Repo
-	story         *storyops.Service
-	msEdit        *manuscriptedit.Service
-	memory        *agentmemory.Repo
-	skills        *agentskills.Store
-	skillHistory  *agentskills.History
-	publish       *publish.Service
-	enqueue       func(nodeID string)
-	notify        func(method string, params any)
-	clock         func() int64
-	db            *sql.DB
+	illustrations *illustration.Repo
+	// requests are the pictures agents asked for (illustration Phase 4).
+	requests     *illustration.RequestService
+	style        *style.Repo
+	projects     *project.Repo
+	nodes        *node.Repo
+	entities     *entity.Repo
+	mentions     *mention.Repo
+	facts        *fact.Repo
+	beats        *beat.Repo
+	threads      *thread.Repo
+	continuity   *continuity.Repo
+	proposals    *proposals.Service
+	forecasts    *forecast.Service
+	plot         *plot.Builder
+	manuscript   *manuscript.Searcher
+	context      *storycontext.ContextBuilder
+	snapshots    *snapshot.Repo
+	story        *storyops.Service
+	msEdit       *manuscriptedit.Service
+	memory       *agentmemory.Repo
+	skills       *agentskills.Store
+	skillHistory *agentskills.History
+	publish      *publish.Service
+	enqueue      func(nodeID string)
+	notify       func(method string, params any)
+	clock        func() int64
+	db           *sql.DB
 }
 
 // mcpController answers status queries with a disabled state and refuses
