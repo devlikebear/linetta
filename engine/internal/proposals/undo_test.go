@@ -187,3 +187,207 @@ func TestUndo_undoApplyFailureRestoresItemsForRetry(t *testing.T) {
 		t.Errorf("Get scene after retried Undo: %v, want ErrNotFound", err)
 	}
 }
+
+// TestUndo_doubleFailureLeavesItemRevertingAndBlocksReaccept covers the
+// gap PR #236 left open: step 2 (storyops.UndoApply) fails AND the
+// compensating write back to accepted (step 2's own restoreItems) also
+// fails. The batch's items must be left at StatusReverting with their
+// original result and undo_batch_id intact (step 1 only ever touches
+// status/status_at) — not at pending with the outline's node still
+// standing, which is what let a re-Accept create a duplicate node before
+// this fix. Accept must refuse a reverting item outright, and a sibling
+// item that still depends on it (not yet accepted) must fail with an
+// unmet-dependency error rather than being allowed to apply ahead of it.
+func TestUndo_doubleFailureLeavesItemRevertingAndBlocksReaccept(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	th, err := env.threads.Create(ctx, thread.NewInput{ProjectID: env.project.ID, Name: "주 갈래"})
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+
+	// Submit three items in one proposal: the structural scene, a beat
+	// riding its ref (accepted together with it below), and a SECOND beat
+	// on the same ref left pending — the dependent item whose fate this
+	// test also checks.
+	sub, _ := mustSubmitForecast(t, env, []ItemInput{
+		{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "맞선 장면", AfterNodeID: env.sceneID}},
+		{Op: storyops.Op{Type: "add_beat", ThreadID: th.ID, NodeRef: "s1", Label: "맞선 비트"}},
+		{Op: storyops.Op{Type: "add_beat", ThreadID: th.ID, NodeRef: "s1", Label: "두 번째 비트"}},
+	})
+	sceneItemID, beatItemID, pendingDependentID := sub.Items[0].ID, sub.Items[1].ID, sub.Items[2].ID
+
+	res, err := env.svc.Accept(ctx, now(), env.project.ID, []string{sceneItemID, beatItemID}, nil)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	if len(res.UndoBatchIDs) != 1 {
+		t.Fatalf("UndoBatchIDs = %+v, want exactly one", res.UndoBatchIDs)
+	}
+	batchID := res.UndoBatchIDs[0]
+	sceneID, beatID := res.Items[0].Result.CreatedID, res.Items[1].Result.CreatedID
+
+	before, err := env.svc.getItem(ctx, env.svc.store.DB(), sceneItemID)
+	if err != nil {
+		t.Fatalf("getItem (before): %v", err)
+	}
+
+	// Force storyops.UndoApply's own outline write to fail (same as the
+	// existing undoApplyFailure test), AND force the compensating write
+	// back to accepted to fail too — scoped with WHEN so step 1's own
+	// write to 'reverting' still succeeds.
+	if _, err := env.svc.store.DB().ExecContext(ctx,
+		`CREATE TRIGGER fail_node_delete BEFORE DELETE ON nodes
+		 BEGIN SELECT RAISE(ABORT, 'forced failure for test'); END;`); err != nil {
+		t.Fatalf("create node trigger: %v", err)
+	}
+	if _, err := env.svc.store.DB().ExecContext(ctx,
+		`CREATE TRIGGER fail_restore_to_accepted BEFORE UPDATE ON story_proposal_items
+		 WHEN NEW.status = 'accepted'
+		 BEGIN SELECT RAISE(ABORT, 'forced failure for test'); END;`); err != nil {
+		t.Fatalf("create item trigger: %v", err)
+	}
+
+	err = env.svc.Undo(ctx, now(), env.project.ID, batchID)
+	if err == nil {
+		t.Fatal("Undo succeeded despite forced UndoApply and compensation failures")
+	}
+	if errors.Is(err, ErrUndoBatchNotFound) {
+		t.Fatalf("Undo error = %v, want a real failure, not ErrUndoBatchNotFound", err)
+	}
+
+	// The outline and the beat are both untouched — RestoreOutline's own
+	// transaction rolled back.
+	if _, err := env.nodes.Get(ctx, sceneID); err != nil {
+		t.Errorf("Get scene: %v, want it to still exist", err)
+	}
+	if _, err := env.beats.Get(ctx, beatID); err != nil {
+		t.Errorf("Get beat: %v, want it to still exist", err)
+	}
+
+	// Both covered items are stuck at reverting, not pending — with their
+	// ORIGINAL result and undo_batch_id intact, exactly as step 1 left
+	// them.
+	for _, id := range []string{sceneItemID, beatItemID} {
+		it, err := env.svc.getItem(ctx, env.svc.store.DB(), id)
+		if err != nil {
+			t.Fatalf("getItem %s: %v", id, err)
+		}
+		if it.Status != StatusReverting {
+			t.Errorf("item %s status = %q, want reverting", id, it.Status)
+		}
+		if it.UndoBatchID != batchID {
+			t.Errorf("item %s UndoBatchID = %q, want %q (preserved)", id, it.UndoBatchID, batchID)
+		}
+	}
+	after, err := env.svc.getItem(ctx, env.svc.store.DB(), sceneItemID)
+	if err != nil {
+		t.Fatalf("getItem (after): %v", err)
+	}
+	if after.Result.CreatedID != before.Result.CreatedID {
+		t.Errorf("scene item result = %+v, want unchanged %+v", after.Result, before.Result)
+	}
+
+	nodesBefore, err := env.nodes.ListByProject(ctx, env.project.ID)
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+
+	// Re-accepting the reverting items must not apply them again — no
+	// second node, no status change.
+	res2, err := env.svc.Accept(ctx, now(), env.project.ID, []string{sceneItemID, beatItemID}, nil)
+	if err != nil {
+		t.Fatalf("Accept (reverting items) error: %v", err)
+	}
+	for _, it := range res2.Items {
+		if it.Status != StatusReverting {
+			t.Errorf("re-Accept item %s status = %q, want reverting (untouched)", it.ID, it.Status)
+		}
+	}
+	nodesAfter, err := env.nodes.ListByProject(ctx, env.project.ID)
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+	if len(nodesAfter) != len(nodesBefore) {
+		t.Errorf("node count changed from %d to %d — re-Accept must not create a duplicate node", len(nodesBefore), len(nodesAfter))
+	}
+
+	// The sibling item still waiting on the scene's ref must fail with an
+	// unmet-dependency error, not be allowed to apply ahead of it.
+	res3, err := env.svc.Accept(ctx, now(), env.project.ID, []string{pendingDependentID}, nil)
+	if err != nil {
+		t.Fatalf("Accept (pending dependent) error: %v", err)
+	}
+	if len(res3.Items) != 1 || res3.Items[0].Status != StatusFailed {
+		t.Fatalf("pending dependent Accept result = %+v, want exactly one failed item", res3.Items)
+	}
+	if res3.Items[0].Result.Error == "" {
+		t.Error("pending dependent's failure has no error message")
+	}
+}
+
+// TestUndo_finalizeFailureAfterSuccessfulUndoApplyLeavesItemReverting
+// covers the other half of the double-failure gap: storyops.UndoApply
+// (step 2) succeeds — the outline is actually restored — but the
+// finalize write (step 3, carrying items the rest of the way to pending)
+// fails. The items must stay at reverting with their ORIGINAL result and
+// undo_batch_id (step 1 never touches those columns), and the covered
+// add_beat item's beat must already be gone — finalizeReverted deletes it
+// before attempting the write that then fails, exactly like a successful
+// Undo would.
+func TestUndo_finalizeFailureAfterSuccessfulUndoApplyLeavesItemReverting(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	batchID, itemIDs, sceneID, beatID, _ := setUpAcceptedStructuralBatch(t, env)
+
+	before, err := env.svc.getItem(ctx, env.svc.store.DB(), itemIDs[0])
+	if err != nil {
+		t.Fatalf("getItem (before): %v", err)
+	}
+
+	// Scoped with WHEN so step 1's write to 'reverting' still succeeds —
+	// only the finalize write to 'pending' is blocked.
+	if _, err := env.svc.store.DB().ExecContext(ctx,
+		`CREATE TRIGGER fail_finalize_to_pending BEFORE UPDATE ON story_proposal_items
+		 WHEN NEW.status = 'pending'
+		 BEGIN SELECT RAISE(ABORT, 'forced failure for test'); END;`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	err = env.svc.Undo(ctx, now(), env.project.ID, batchID)
+	if err == nil {
+		t.Fatal("Undo succeeded despite a forced finalize failure")
+	}
+
+	// The outline really did move: UndoApply itself succeeded.
+	if _, err := env.nodes.Get(ctx, sceneID); err == nil {
+		t.Error("scene still exists — UndoApply should have succeeded here")
+	} else if !errors.Is(err, node.ErrNotFound) {
+		t.Errorf("Get scene: %v, want ErrNotFound", err)
+	}
+	// The beat is already gone too — finalizeReverted deletes it before
+	// the transaction that then fails.
+	if _, err := env.beats.Get(ctx, beatID); err == nil {
+		t.Error("beat still exists — finalizeReverted should have deleted it before the failed write")
+	}
+
+	for _, id := range itemIDs {
+		it, err := env.svc.getItem(ctx, env.svc.store.DB(), id)
+		if err != nil {
+			t.Fatalf("getItem %s: %v", id, err)
+		}
+		if it.Status != StatusReverting {
+			t.Errorf("item %s status = %q, want reverting", id, it.Status)
+		}
+		if it.UndoBatchID != batchID {
+			t.Errorf("item %s UndoBatchID = %q, want %q (preserved)", id, it.UndoBatchID, batchID)
+		}
+	}
+	after, err := env.svc.getItem(ctx, env.svc.store.DB(), itemIDs[0])
+	if err != nil {
+		t.Fatalf("getItem (after): %v", err)
+	}
+	if after.Result.CreatedID != before.Result.CreatedID {
+		t.Errorf("scene item result = %+v, want unchanged %+v", after.Result, before.Result)
+	}
+}

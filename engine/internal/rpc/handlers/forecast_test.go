@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
+	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 
@@ -392,5 +395,191 @@ func TestUndoProposals_unknownBatchID(t *testing.T) {
 	params, _ := json.Marshal(map[string]any{"project_id": f.pID, "batch_id": "no-such"})
 	if _, err := h(context.Background(), params); err == nil {
 		t.Fatal("want an error for an unknown batch id")
+	}
+}
+
+// TestUndoProposals_retryAfterReconcileToPendingSucceeds covers the
+// handler's own wiring on top of proposals.Undo's reconcile retry path: a
+// finalize failure after a successful storyops.UndoApply leaves the item
+// at reverting, and retrying the SAME handler call afterward must answer
+// with ok=true (no error) once ReconcileReverting resolves it to
+// pending from the outline's own fact — not
+// proposals_undo_unavailable, even though storyops itself now answers
+// ErrUndoBatchNotFound for this batch id.
+func TestUndoProposals_retryAfterReconcileToPendingSucceeds(t *testing.T) {
+	f := newForecastHandlerFixture(t)
+	ctx := context.Background()
+	th, err := f.threads.Create(ctx, thread.NewInput{ProjectID: f.pID, Name: "주 갈래"})
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	saved, _, err := f.svc.Save(ctx, f.now(), forecast.SaveInput{
+		ProjectID: f.pID, Divergence: "질문", Horizon: 3, Branches: twoHandlerBranches(),
+	}, forecast.SourceAgent)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := f.svc.Select(ctx, f.now(), f.pID, saved.ID, "b1"); err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+
+	sub, problems, err := f.proposalsSvc.Submit(ctx, f.now(), proposals.SubmitInput{
+		ProjectID: f.pID, Purpose: proposals.PurposeForecast, ForecastID: saved.ID,
+		Items: []proposals.ItemInput{
+			{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "맞선 장면", AfterNodeID: f.sceneID}},
+			{Op: storyops.Op{Type: "add_beat", ThreadID: th.ID, NodeRef: "s1", Label: "비트"}},
+		},
+	}, proposals.SourceAgent)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("Submit: err=%v problems=%+v", err, problems)
+	}
+	ids := []string{sub.Items[0].ID, sub.Items[1].ID}
+	res, err := f.proposalsSvc.Accept(ctx, f.now(), f.pID, ids, nil)
+	if err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if len(res.UndoBatchIDs) != 1 {
+		t.Fatalf("UndoBatchIDs = %+v", res.UndoBatchIDs)
+	}
+	batchID := res.UndoBatchIDs[0]
+	sceneID := res.Items[0].Result.CreatedID
+
+	// Block the finalize write (status -> pending) only — step 1's own
+	// write to 'reverting' must still succeed.
+	if _, err := f.st.DB().ExecContext(ctx,
+		`CREATE TRIGGER fail_finalize_to_pending BEFORE UPDATE ON story_proposal_items
+		 WHEN NEW.status = 'pending'
+		 BEGIN SELECT RAISE(ABORT, 'forced failure for test'); END;`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	h := UndoProposals(f.proposalsSvc, f.now)
+	params, _ := json.Marshal(map[string]any{"project_id": f.pID, "batch_id": batchID})
+	if _, err := h(ctx, params); err == nil {
+		t.Fatal("first undo call succeeded despite a forced finalize failure")
+	}
+	// Sanity: UndoApply itself really did succeed (the outline moved),
+	// so the retry below exercises the ErrUndoBatchNotFound/reconcile
+	// path, not a repeat of the same transient failure.
+	if _, err := f.nodes.Get(ctx, sceneID); err == nil {
+		t.Fatal("scene still exists — the first call's UndoApply should have succeeded")
+	}
+
+	if _, err := f.st.DB().ExecContext(ctx, `DROP TRIGGER fail_finalize_to_pending`); err != nil {
+		t.Fatalf("drop trigger: %v", err)
+	}
+
+	if _, err := h(ctx, params); err != nil {
+		t.Fatalf("retry undo handler: %v, want nil (reconciled to pending)", err)
+	}
+}
+
+// TestUndoProposals_reconciledToAcceptedAnswersUndoUnavailable covers the
+// handler's other outcome: once storyops' in-memory undo window no
+// longer holds a batch id at all (evicted past maxUndoBatches — the same
+// thing an engine restart does to every batch), but the outline fact
+// says the batch never actually left (its structural item's node is
+// still there, because this test never called Undo on it), the handler
+// must answer proposals_undo_unavailable — not silently succeed, and not
+// a generic internal error.
+func TestUndoProposals_reconciledToAcceptedAnswersUndoUnavailable(t *testing.T) {
+	f := newForecastHandlerFixture(t)
+	ctx := context.Background()
+	saved, _, err := f.svc.Save(ctx, f.now(), forecast.SaveInput{
+		ProjectID: f.pID, Divergence: "질문", Horizon: 3, Branches: twoHandlerBranches(),
+	}, forecast.SourceAgent)
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := f.svc.Select(ctx, f.now(), f.pID, saved.ID, "b1"); err != nil {
+		t.Fatalf("Select: %v", err)
+	}
+
+	sub, problems, err := f.proposalsSvc.Submit(ctx, f.now(), proposals.SubmitInput{
+		ProjectID: f.pID, Purpose: proposals.PurposeForecast, ForecastID: saved.ID,
+		Items: []proposals.ItemInput{
+			{Op: storyops.Op{Type: "create_scene", Ref: "s1", Label: "맞선 장면", AfterNodeID: f.sceneID}},
+		},
+	}, proposals.SourceAgent)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("Submit: err=%v problems=%+v", err, problems)
+	}
+	res, err := f.proposalsSvc.Accept(ctx, f.now(), f.pID, []string{sub.Items[0].ID}, nil)
+	if err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	if len(res.UndoBatchIDs) != 1 {
+		t.Fatalf("UndoBatchIDs = %+v", res.UndoBatchIDs)
+	}
+	batchID := res.UndoBatchIDs[0]
+	sceneID := res.Items[0].Result.CreatedID
+
+	// Reproduce exactly what proposals.Undo's step 1 does to this item —
+	// reverting, result and undo_batch_id untouched — without ever
+	// calling storyops, so the batch's window entry is untouched by this
+	// write.
+	if _, err := f.st.DB().ExecContext(ctx,
+		`UPDATE story_proposal_items SET status = 'reverting', status_at = ? WHERE id = ?`,
+		f.now(), sub.Items[0].ID); err != nil {
+		t.Fatalf("move to reverting: %v", err)
+	}
+
+	// Evict batchID from storyops' in-memory undo window (at most 8
+	// entries) the same way an engine restart would empty it — by
+	// accepting 8 more independent structural batches, none of which
+	// touch sceneID.
+	for i := 0; i < 8; i++ {
+		s2, problems, err := f.proposalsSvc.Submit(ctx, f.now(), proposals.SubmitInput{
+			ProjectID: f.pID, Purpose: proposals.PurposeForecast, ForecastID: saved.ID,
+			Items: []proposals.ItemInput{
+				{Op: storyops.Op{Type: "create_scene", Ref: fmt.Sprintf("x%d", i), Label: "장면", AfterNodeID: f.sceneID}},
+			},
+		}, proposals.SourceAgent)
+		if err != nil || len(problems) != 0 {
+			t.Fatalf("Submit filler %d: err=%v problems=%+v", i, err, problems)
+		}
+		if _, err := f.proposalsSvc.Accept(ctx, f.now(), f.pID, []string{s2.Items[0].ID}, nil); err != nil {
+			t.Fatalf("Accept filler %d: %v", i, err)
+		}
+	}
+
+	h := UndoProposals(f.proposalsSvc, f.now)
+	params, _ := json.Marshal(map[string]any{"project_id": f.pID, "batch_id": batchID})
+	_, err = h(ctx, params)
+	if err == nil {
+		t.Fatal("want proposals_undo_unavailable, got nil")
+	}
+	var me *rpc.MethodError
+	if !errors.As(err, &me) {
+		t.Fatalf("want *rpc.MethodError, got %T: %v", err, err)
+	}
+	var data struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.Unmarshal(me.Data, &data)
+	if data.Reason != rpc.ReasonProposalsUndoUnavailable {
+		t.Errorf("reason = %q, want %q", data.Reason, rpc.ReasonProposalsUndoUnavailable)
+	}
+
+	// The outline fact this was decided from: the node really is still
+	// there, and reconcile must have restored the item to accepted
+	// rather than leaving it stuck at reverting.
+	if _, err := f.nodes.Get(ctx, sceneID); err != nil {
+		t.Errorf("Get scene: %v, want it to still exist", err)
+	}
+	it, err := f.proposalsSvc.List(ctx, f.pID, []string{proposals.StatusAccepted})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	found := false
+	for _, p := range it {
+		for _, item := range p.Items {
+			if item.ID == sub.Items[0].ID && item.Status == proposals.StatusAccepted && item.UndoBatchID == batchID {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("scene item was not restored to accepted+batchID by reconcile")
 	}
 }

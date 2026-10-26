@@ -62,6 +62,31 @@ const (
 )
 
 // Statuses a proposal item can carry.
+//
+// accepted -> reverting -> pending is proposals.Undo's own path for a
+// purpose=forecast structural batch (and every add_beat item riding its
+// UndoBatchID — see Item.UndoBatchID): reverting means "the writer asked
+// to revert this and Undo's first transaction has recorded that", nothing
+// more — storyops may not have been asked to put the outline back yet, or
+// was and this package has not finished writing that fact down yet.
+// result_json and undo_batch_id are left exactly as Accept wrote them for
+// as long as an item is reverting, on purpose: if the follow-up write
+// (storyops.UndoApply, or this package's own pending-finalize/
+// accepted-restore transaction) never lands, a reverting item still
+// carries everything ReconcileReverting needs to ask the outline itself
+// what actually happened and finish the job from DB facts, never a guess
+// (see undo.go and reconcile.go). Accept refuses a reverting item — see
+// its retryable check in accept.go — so a writer cannot re-accept it and
+// create a second node/scene while the first one's fate is still
+// undetermined.
+//
+// Migration 0028's own column comment ("pending|accepted|rejected|failed")
+// is stale now that reverting exists, and is deliberately left that way:
+// store/migrations.go pins every already-applied migration file's sha256
+// checksum for good, so editing 0028's SQL — even just a comment — makes
+// every existing library.db refuse to start with "migration ... checksum
+// changed after it was applied". This const block, not that comment, is
+// the up-to-date list.
 const (
 	StatusPending  = "pending"
 	StatusAccepted = "accepted"
@@ -72,6 +97,11 @@ const (
 	// this package has no edit-in-place for a stored item's op, only
 	// Accept's edits map for one-shot corrections at accept time).
 	StatusFailed = "failed"
+	// StatusReverting marks an item proposals.Undo has committed to
+	// revert but has not yet confirmed the outcome of — see the doc
+	// comment above. Never set by Accept or Reject; only Undo and
+	// ReconcileReverting write it.
+	StatusReverting = "reverting"
 )
 
 // allowedOpTypes is the non-structural, non-destructive subset of

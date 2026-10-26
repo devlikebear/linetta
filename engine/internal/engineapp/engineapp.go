@@ -276,6 +276,20 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		func(method string, params any) { _ = s.Notifier().Notify(method, params) }).
 		WithForecasts(forecastSvc)
 
+	// Resolve any proposal item a crash left stuck at StatusReverting
+	// before the RPC server takes a single request: storyops' own
+	// in-memory undo window (storyops.maxUndoBatches, at most 8 batches)
+	// is gone on restart, so proposals.Undo's own retry path can never
+	// reach these on its own — see proposals.ReconcileReverting's doc
+	// comment. Best-effort, same discipline as the companion memory
+	// migration above: a writer whose app will not start because this
+	// failed is worse off than one whose reverting item is still
+	// reverting (Accept already refuses it either way, so nothing
+	// destructive happens if this is skipped).
+	if err := proposalsSvc.ReconcileReverting(ctx, clock()); err != nil {
+		fmt.Fprintf(os.Stderr, "proposals reconcile at startup: %v\n", err)
+	}
+
 	// One Store for the skills the agent writes for itself, shared between
 	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below),
 	// the story brief's own skills list (just below) and the built-in
