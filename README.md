@@ -111,6 +111,15 @@ line (the panel offers undo whenever a line carries a `batch_id` or a
 keeps that version indefinitely, so you can put the old text back from the
 scene's **Previous versions** sheet.
 
+To ask about a passage, select it in the editor and choose **Ask the agent**
+from the selection menu. The agent panel opens with the selected paragraphs
+quoted above the input box; remove them with ✕, or send a different selection
+to replace them. With a quote attached and the input empty, quick chips fill
+in a request to polish, comment on or expand it, and you press send yourself.
+The quote goes with your message and stays in the conversation, so a follow-up
+such as "make it shorter" still knows which paragraph you meant. Asked only a
+question, the agent changes nothing.
+
 ### Your direction
 
 A work has a **current focus** — what to concentrate on for the next few
@@ -422,6 +431,31 @@ both the built-in agent and any MCP client — forecasts already saved stay
 exactly where they are, and you can still open the sheet and pick among
 them.
 
+## Illustrations
+
+Linetta can draw illustrations for a scene with an image provider you choose.
+It is off until you pick one in **Settings → Image generation**: ChatGPT or
+Gemini, using the sign-in or key from the AI provider settings, with its own
+consent box separate from the agent's. ChatGPT counts against your plan's
+usage; Gemini is billed per image by Google AI.
+
+Select a passage and choose **Draw this scene**, or use the command palette
+or the gallery. Describe the scene, pick the characters (those mentioned in
+the scene are preselected), choose a single picture or four panels, the
+aspect, and whether to send up to four reference images from the character
+visual sheets. Linetta builds the prompt from the scene, the characters'
+looks and the work's art style; you can edit it, and it is sent exactly as
+written. Nothing is drawn until you press **Generate**.
+
+Pictures are kept in the work's gallery (toolbar **Illustrations**), up to
+200 per work and 5 MiB each, with the prompt, provider and model they came
+from. **Insert into scene** places one in the text at the cursor; a picture
+used in a scene shows **In use** and cannot be deleted until you take it out.
+Illustrations are included in library backups, carried by Markdown export and
+import (embedded in the single `.md` file) and by folder and Git sync (as
+files in a `<work>.images/` folder beside the manuscript), and go up with an
+episode you publish to Linetta Works.
+
 ## Writing with your own agent (MCP)
 
 Connecting an outside agent over MCP is a different thing from connecting a
@@ -500,12 +534,13 @@ is not on the site yet and it registers the work first with
 with `linetta_publish_episode`. It can also change the blurb or mark the work
 complete. Only you can connect an account.
 
-**What is sent, and where.** The published episode's title and text, its
-place in the order, and the work's title, genres, blurb, serial status and
-address go to the Linetta Works server, which is run by Linetta's developer,
-and are public for anyone to read. The site sends published text to the
-Anthropic API for content review. Unpublished episodes, notes, character
-sheets, fact cards and agent memories are never sent. See the
+**What is sent, and where.** The published episode's title and text, the
+illustrations placed in it, its place in the order, and the work's title,
+genres, blurb, serial status and address go to the Linetta Works server,
+which is run by Linetta's developer, and are public for anyone to read. The
+site sends published text and illustrations to the Anthropic API for content
+review. Unpublished episodes, notes, fact cards and agent memories are never
+sent. See the
 [privacy policy](docs/privacy-policy.md), section 3.5.
 
 **Where the connection is kept.** The publish token is kept in the macOS
