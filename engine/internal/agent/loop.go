@@ -289,6 +289,9 @@ type toolPayload struct {
 	// never both set for one call (#112).
 	SnapshotID string   `json:"snapshot_id,omitempty"`
 	NodeIDs    []string `json:"node_ids,omitempty"`
+	// RequestID is the illustration request the call left (illustration
+	// Phase 4); the panel shows its approval card under the line.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 type usagePayload struct {
@@ -592,7 +595,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	s.notify("agent.tool", toolPayload{
 		RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.inTool(st.runID, ""), Name: call.Name, State: state,
 		Summary: summarize(result.Text), BatchID: result.BatchID, SnapshotID: result.SnapshotID,
-		NodeIDs: result.NodeIDs,
+		NodeIDs: result.NodeIDs, RequestID: result.RequestID,
 	})
 	// Recorded with a context that survives the turn's own cancellation,
 	// unlike the tool call above: the call already ran — and may already
@@ -602,7 +605,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	// markRun (transcript.go).
 	if err := s.tr.appendToolEvent(context.WithoutCancel(ctx), st.req.ProjectID, st.req.NodeID, st.runID, toolEvent{
 		Name: call.Name, Summary: summarize(result.Text), OK: !result.IsError,
-		BatchID: result.BatchID, SnapshotID: result.SnapshotID, NodeIDs: result.NodeIDs,
+		BatchID: result.BatchID, SnapshotID: result.SnapshotID, NodeIDs: result.NodeIDs, RequestID: result.RequestID,
 	}); err != nil {
 		logf("transcript: %v", err)
 	}

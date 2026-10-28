@@ -175,3 +175,18 @@ func TestCall_malformedArgumentsComeBackAsAnErrorResult(t *testing.T) {
 		t.Fatal("want IsError")
 	}
 }
+
+// linetta_request_illustration's request_id rides on the tool line, so the
+// panel can put the writer's approval card under it (illustration Phase 4).
+func TestWriteMetadata_readsAnIllustrationRequest(t *testing.T) {
+	res := &mcp.CallToolResult{StructuredContent: map[string]any{
+		"request_id": "req-1", "status": "waiting_for_writer", "prompt": "p",
+	}}
+	batch, snap, nodes, request := writeMetadata(res)
+	if request != "req-1" || batch != "" || snap != "" || len(nodes) != 0 {
+		t.Fatalf("got batch=%q snap=%q nodes=%v request=%q", batch, snap, nodes, request)
+	}
+	if _, _, _, request := writeMetadata(&mcp.CallToolResult{}); request != "" {
+		t.Fatalf("no structured content gave request %q", request)
+	}
+}

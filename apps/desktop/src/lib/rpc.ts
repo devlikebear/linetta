@@ -11,7 +11,7 @@ import type {
   SuggestionBatch,
   SuggestionItemStatus,
 } from "./types";
-import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, ImageProviderStatus } from "./types";
+import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, IllustrationRepresentatives, IllustrationRequest, IllustrationRequestEdits, IllustrationRequestStatus, ImageProviderStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -452,6 +452,23 @@ export const illustrations = {
   get: (id: string) => rpcCall<IllustrationMeta & { data_base64: string }>("illustrations.get", { id }),
   update: (id: string, caption: string) => rpcCall<IllustrationMeta>("illustrations.update", { id, caption }),
   delete: (id: string) => rpcCall<{ ok: boolean }>("illustrations.delete", { id }),
+  /** node id → the picture that stands for that scene, episode or part. */
+  representatives: (projectId: string) =>
+    rpcCall<IllustrationRepresentatives>("illustrations.representatives", { project_id: projectId }),
+  /** An empty illustrationId clears the node's picture. */
+  setRepresentative: (nodeId: string, illustrationId: string) =>
+    rpcCall<{ previous: string }>("illustrations.set_representative", { node_id: nodeId, illustration_id: illustrationId }),
+};
+
+/** Pictures agents asked for. Only approve draws, and it runs as long as
+ *  the provider draws (like illustrations.generate). */
+export const illustrationRequests = {
+  list: (projectId: string, statuses?: IllustrationRequestStatus[]) =>
+    rpcCall<IllustrationRequest[]>("illustration_requests.list", { project_id: projectId, statuses }),
+  get: (id: string) => rpcCall<IllustrationRequest>("illustration_requests.get", { id }),
+  approve: (id: string, edits: IllustrationRequestEdits) =>
+    rpcCall<IllustrationRequest>("illustration_requests.approve", { id, ...edits }),
+  reject: (id: string) => rpcCall<IllustrationRequest>("illustration_requests.reject", { id }),
 };
 
 export const codex = {

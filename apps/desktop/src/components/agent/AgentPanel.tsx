@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Bot, Quote, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
@@ -11,6 +11,7 @@ import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { isProviderReady } from "../../lib/providers";
 import { Markdown } from "./Markdown";
 import { ProviderPicker } from "./ProviderPicker";
+import { IllustrationRequestCard } from "../illustration/IllustrationRequestCard";
 import "./AgentPanel.css";
 
 /** The built-in agent's panel (#95).
@@ -70,6 +71,9 @@ type Line =
        *  same "something to undo" as batchId, just for prose instead of an
        *  outline batch (#112). A line carries at most one of the two. */
       snapshotId?: string;
+      /** The illustration request linetta_request_illustration left; its
+       *  approval card is drawn under the line (illustration Phase 4). */
+      requestId?: string;
       undoing?: boolean;
       undone?: boolean;
       undoError?: string;
@@ -141,6 +145,8 @@ interface AgentToolPayload extends AgentEventBase {
    *  itself would be worse than rendering nothing, so the line carries the
    *  tool's label alone until a later task hands the panel the outline. */
   node_ids?: string[];
+  /** linetta_request_illustration's request, for the approval card. */
+  request_id?: string;
 }
 
 interface AgentDonePayload extends AgentEventBase {
@@ -186,6 +192,7 @@ interface RestoredToolEvent {
   ok: boolean;
   batch_id?: string;
   snapshot_id?: string;
+  request_id?: string;
 }
 
 /** Parses one tool row's `content`. Null for anything that is not a usable
@@ -201,13 +208,14 @@ export function parseToolEvent(content: string): RestoredToolEvent | null {
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const { name, ok, batch_id: batchId, snapshot_id: snapshotId } = parsed as Record<string, unknown>;
+  const { name, ok, batch_id: batchId, snapshot_id: snapshotId, request_id: requestId } = parsed as Record<string, unknown>;
   if (typeof name !== "string" || typeof ok !== "boolean") return null;
   return {
     name,
     ok,
     batch_id: typeof batchId === "string" ? batchId : undefined,
     snapshot_id: typeof snapshotId === "string" ? snapshotId : undefined,
+    request_id: typeof requestId === "string" ? requestId : undefined,
   };
 }
 
@@ -272,6 +280,7 @@ function linesFromHistory(rows: AgentHistoryRow[], liveRunId?: string): Line[] {
           state: ev.ok ? "ok" : "error",
           batchId: ev.batch_id,
           snapshotId: ev.snapshot_id,
+          requestId: ev.request_id,
         });
       }
       // An unparseable tool row still counts as a row of its run for the
@@ -396,6 +405,9 @@ interface Props {
    *  the caller has no event to clear on, since nothing else tells it the
    *  request was consumed. */
   onExternalDraftApplied?: () => void;
+  /** Opens Settings → image generation, for an illustration request card
+   *  whose provider is not set up yet. */
+  onOpenImageSettings?: () => void;
 }
 
 export function AgentPanel({
@@ -407,6 +419,7 @@ export function AgentPanel({
   externalDraft,
   externalDraftNonce,
   onExternalDraftApplied,
+  onOpenImageSettings,
 }: Props) {
   const { t } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
@@ -890,6 +903,7 @@ export function AgentPanel({
               summary: payload.summary ?? l.summary,
               batchId: payload.batch_id ?? l.batchId,
               snapshotId: payload.snapshot_id ?? l.snapshotId,
+              requestId: payload.request_id ?? l.requestId,
             }
           : l,
       ),
@@ -1422,27 +1436,32 @@ export function AgentPanel({
             // agent.undo; the writer sees the same button either way.
             const showUndo = Boolean(line.batchId || line.snapshotId) && !line.undone && !line.undoError;
             return (
-              <div key={line.id} className={`tool-line tool-${line.state}`} data-testid="tool-line">
-                <span className="tool-label">{t(toolVerbKey(kind, line.state))}</span>
-                {labelKey ? <span className="tool-name"> · {t(labelKey)}</span> : null}
-                {showUndo ? (
-                  <button
-                    type="button"
-                    className="tool-undo"
-                    disabled={line.undoing}
-                    onClick={() => handleUndo(line.id, line.batchId, line.snapshotId)}
-                  >
-                    {t("agentPanel.tool.undo")}
-                  </button>
+              <Fragment key={line.id}>
+                <div className={`tool-line tool-${line.state}`} data-testid="tool-line">
+                  <span className="tool-label">{t(toolVerbKey(kind, line.state))}</span>
+                  {labelKey ? <span className="tool-name"> · {t(labelKey)}</span> : null}
+                  {showUndo ? (
+                    <button
+                      type="button"
+                      className="tool-undo"
+                      disabled={line.undoing}
+                      onClick={() => handleUndo(line.id, line.batchId, line.snapshotId)}
+                    >
+                      {t("agentPanel.tool.undo")}
+                    </button>
+                  ) : null}
+                  {line.undone ? <span className="tool-undone">{t("agentPanel.tool.undone")}</span> : null}
+                  {line.undoError ? (
+                    <span className="tool-undo-error" role="alert">
+                      {" "}
+                      {line.undoError}
+                    </span>
+                  ) : null}
+                </div>
+                {line.requestId ? (
+                  <IllustrationRequestCard requestId={line.requestId} onOpenSettings={onOpenImageSettings} />
                 ) : null}
-                {line.undone ? <span className="tool-undone">{t("agentPanel.tool.undone")}</span> : null}
-                {line.undoError ? (
-                  <span className="tool-undo-error" role="alert">
-                    {" "}
-                    {line.undoError}
-                  </span>
-                ) : null}
-              </div>
+              </Fragment>
             );
           })}
           {busy ? (

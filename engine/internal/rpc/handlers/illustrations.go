@@ -220,6 +220,44 @@ func IllustrationRequestsReject(svc IllustrationRequestService) rpc.Handler {
 	}
 }
 
+// IllustrationsRepresentatives serves illustrations.representatives: for
+// each node of the work that has one, the picture that stands for it.
+func IllustrationsRepresentatives(repo *illustration.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p struct {
+			ProjectID string `json:"project_id"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil || strings.TrimSpace(p.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		out, err := repo.Representatives(ctx, p.ProjectID)
+		if err != nil {
+			return nil, illustrationError(err)
+		}
+		return json.Marshal(out)
+	}
+}
+
+// IllustrationsSetRepresentative serves illustrations.set_representative:
+// the writer choosing (or, with an empty illustration_id, clearing) the
+// picture that stands for a scene, an episode or a part.
+func IllustrationsSetRepresentative(repo *illustration.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p struct {
+			NodeID         string `json:"node_id"`
+			IllustrationID string `json:"illustration_id"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil || strings.TrimSpace(p.NodeID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "node_id required"}
+		}
+		previous, err := repo.SetRepresentative(ctx, now(), p.NodeID, strings.TrimSpace(p.IllustrationID))
+		if err != nil {
+			return nil, illustrationError(err)
+		}
+		return json.Marshal(map[string]string{"previous": previous})
+	}
+}
+
 func IllustrationsList(repo *illustration.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {

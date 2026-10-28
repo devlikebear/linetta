@@ -249,6 +249,11 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // inbox itself read a count fetched once; without this event they
         // would stay stale until something unrelated remounted them.
         "proposals.changed" => Some("proposals-changed"),
+        // An illustration request was left, approved, drawn, failed or
+        // rejected (illustration Phase 4). The agent panel's approval card
+        // and the gallery's requests section read it; when a drawing was
+        // put into a scene, node_ids names it so an open editor reloads.
+        "illustrations.changed" => Some("illustrations-changed"),
         _ => None,
     }
 }
@@ -473,6 +478,7 @@ mod tests {
         // both showing a stale count until an unrelated remount refreshed
         // them (story-assist Phase 3).
         assert_eq!(notification_event("proposals.changed"), Some("proposals-changed"));
+        assert_eq!(notification_event("illustrations.changed"), Some("illustrations-changed"));
         assert_eq!(notification_event("proposals.unmapped"), None);
     }
 
