@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.13.1 - 2026-10-30
+
+- Fixed: in the installed app, illustrations showed only their caption, both
+  in the gallery and in the manuscript. They now show the picture again. The
+  pictures themselves were never lost.
+
 ## v1.13.0 - 2026-10-26
 
 - **Publish character sheets and a cover to Linetta Works.** Each sheet in
