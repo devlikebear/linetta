@@ -187,6 +187,7 @@ func TestService_firstPublishThenModifiedThenRepublishKeepsTheAddress(t *testing
 		t.Fatalf("status = %+v", ws.Episodes)
 	}
 
+	oldHash := f.site.episodes(f.project.ID)[0].ContentHash
 	if err := f.nodes.UpdateContent(ctx, f.episodes[0], doc("고친 본문"), 500); err != nil {
 		t.Fatal(err)
 	}
@@ -199,8 +200,16 @@ func TestService_firstPublishThenModifiedThenRepublishKeepsTheAddress(t *testing
 	if again.Created || again.Episode.URL != first.Episode.URL || again.Episode.State != EpisodePublic {
 		t.Fatalf("republish = %+v (first %s)", again, first.Episode.URL)
 	}
-	if got := f.site.episodes(f.project.ID); len(got) != 1 {
+	got := f.site.episodes(f.project.ID)
+	if len(got) != 1 {
 		t.Fatalf("site has %d episodes, want 1", len(got))
+	}
+	if got[0].ContentHash == oldHash {
+		t.Fatal("the site still holds the text from before the edit")
+	}
+	ws, _ = f.svc.WorkStatus(ctx, f.project.ID)
+	if ws.Episodes[0].State != EpisodePublic || ws.Episodes[0].Modified {
+		t.Fatalf("after republish: %+v", ws.Episodes[0])
 	}
 }
 
