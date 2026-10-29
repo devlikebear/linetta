@@ -14,6 +14,10 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
+// firstRunTimeout bounds the scheduler's immediate run, a real VACUUM INTO
+// that can take several seconds on a busy Windows runner.
+const firstRunTimeout = 30 * time.Second
+
 func openSeededStore(t *testing.T) (*store.Store, string) {
 	t.Helper()
 	home := t.TempDir()
@@ -229,12 +233,12 @@ func TestStart_runsImmediatelyAndCallsRetention(t *testing.T) {
 
 	select {
 	case <-calls:
-	case <-time.After(2 * time.Second):
+	case <-time.After(firstRunTimeout):
 		t.Fatal("immediate run did not invoke onTick")
 	}
 	select {
 	case <-retentionRan:
-	case <-time.After(2 * time.Second):
+	case <-time.After(firstRunTimeout):
 		t.Fatal("retention callback not invoked")
 	}
 	// Confirm backup file actually landed.
@@ -284,10 +288,12 @@ func TestStartStopCancelsLongWait(t *testing.T) {
 			return false
 		},
 		nil)
+	// A failure below must not leave the scheduler backing up a closed store.
+	t.Cleanup(stop)
 
 	select {
 	case <-waiting:
-	case <-time.After(2 * time.Second):
+	case <-time.After(firstRunTimeout):
 		t.Fatal("scheduler did not enter wait")
 	}
 	done := make(chan struct{})
