@@ -26,7 +26,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 - **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
 - **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a recent structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
-- **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish leave your device.
+- **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish — and the Story World sheets and cover you choose to make public — leave your device.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
 ## See Linetta in action
@@ -456,6 +456,29 @@ import (embedded in the single `.md` file) and by folder and Git sync (as
 files in a `<work>.images/` folder beside the manuscript), and go up with an
 episode you publish to Linetta Works.
 
+A picture can also stand for a scene, an episode or a part. In the gallery,
+open a picture and make it the representative of its scene or episode; it then
+shows as a small image on that row of the outline and at the top of the scene,
+and the gallery marks it **Representative**. A representative picture, like one
+used as the Works cover, cannot be deleted until you unset it.
+
+**Agents ask; you approve.** An agent — the built-in one or one connected over
+MCP — cannot draw. It can leave a request with `linetta_request_illustration`:
+the scene, what the picture is for (insert at the end of a scene, represent a
+scene, episode or part, or just keep in the gallery), and a prompt, or a scene
+description Linetta turns into one from the visual sheets and art style. Each
+request appears as a card under the agent's tool line and in the gallery's
+**Agent requests** section, and the toolbar **Illustrations** button counts
+the ones waiting. On the card you can edit the prompt, aspect, caption and
+reference images, then **Generate** or reject it; nothing is drawn or sent to
+the image provider before you press it. Requests from an MCP client are marked
+as external, and a work holds at most 20 waiting requests.
+`linetta_list_illustrations` lets the agent see the gallery and how its recent
+requests were decided, and `linetta_set_representative_illustration` sets or
+clears a representative from pictures already in the gallery, with an undo.
+The two write tools are hidden by the same switch as the other visual write
+tools, and `read_only` mode keeps only the list.
+
 ## Writing with your own agent (MCP)
 
 Connecting an outside agent over MCP is a different thing from connecting a
@@ -476,6 +499,7 @@ Once connected, an agent can:
 
 - read the outline, a scene, characters, fact cards, and a story brief;
 - draft and revise scenes, write summaries, and restructure the outline;
+- ask for an illustration, which waits for your approval before anything is drawn (`full` mode only);
 - publish an episode to Linetta Works, once you have connected an account and published the work yourself (`full` mode only);
 - record what it changed, so you can see it in the activity log.
 
@@ -534,13 +558,25 @@ is not on the site yet and it registers the work first with
 with `linetta_publish_episode`. It can also change the blurb or mark the work
 complete. Only you can connect an account.
 
+**Sheets and cover.** Once a work is on the site, the publish dialog's
+**World, characters and cover** section can put character and world sheets and a
+cover up too. A sheet goes only if you turn on **Show on Linetta Works** in its
+panel — off by default, and shown only when this device is connected — so
+check it for spoilers first. The sheet's name, aliases, role, summary,
+attributes and the names of its relationships go, with its first reference
+image as the sheet's picture; relationship notes, visual notes and sheets you
+have not made public are not sent. Pick a cover from the work's gallery, then
+press **Upload sheets and cover**. They go up separately from episodes, so a
+rejected picture or a limit on sheets never holds back an episode.
+
 **What is sent, and where.** The published episode's title and text, the
 illustrations placed in it, its place in the order, and the work's title,
 genres, blurb, serial status and address go to the Linetta Works server,
-which is run by Linetta's developer, and are public for anyone to read. The
-site sends published text and illustrations to the Anthropic API for content
-review. Unpublished episodes, notes, fact cards and agent memories are never
-sent. See the
+which is run by Linetta's developer, and are public for anyone to read; so do
+the sheets and cover you chose above. The site sends published text and
+illustrations to the Anthropic API for content review. Unpublished episodes,
+notes, fact cards, agent memories and sheets you have not made public are
+never sent. See the
 [privacy policy](docs/privacy-policy.md), section 3.5.
 
 **Where the connection is kept.** The publish token is kept in the macOS
@@ -601,7 +637,7 @@ Yes. Linetta supports Markdown import and export so your writing is not locked i
 
 ### Is my work uploaded to a Linetta cloud?
 
-No. Linetta has no cloud that keeps your manuscript. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure. The one exception is a choice you make episode by episode: when you publish an episode to Linetta Works, that episode goes to the site so readers can read it.
+No. Linetta has no cloud that keeps your manuscript. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure. The one exception is a choice you make episode by episode: when you publish an episode to Linetta Works, that episode goes to the site so readers can read it — as do any Story World sheets and cover you choose to make public.
 
 ## For contributors
 
