@@ -1,0 +1,103 @@
+name: Release Cache
+
+# Keeps the Rust release build cached on main, the only ref every tag can
+# read from. No secrets and nothing signed or published: Build Desktop remains
+# the only workflow that makes a release.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - apps/desktop/src-tauri/Cargo.lock
+      - .github/workflows/release-cache.yml
+  schedule:
+    # GitHub drops a cache nothing has read for seven days, and a new stable
+    # Rust changes the key.
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  warm:
+    name: ${{ matrix.name }}
+    # Every release bumps Cargo.lock's own version, which leaves the cache key
+    # alone: the key hashes third-party crates only.
+    if: "!startsWith(github.event.head_commit.message, 'chore: release')"
+    runs-on: ${{ matrix.os }}
+    # On the job, not the workflow: a release commit skips this job and must
+    # not cancel a build that is still saving the cache.
+    concurrency:
+      group: release-cache-${{ matrix.os }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            tauri_config: ""
+          - name: Linux
+            os: ubuntu-latest
+            tauri_config: ""
+          - name: Windows
+            os: windows-latest
+            tauri_config: "--config src-tauri/tauri.windows.conf.json"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Tauri Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            patchelf \
+            rpm
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: engine/go.mod
+          cache-dependency-path: engine/go.sum
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.3.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 25
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # The same inputs as Build Desktop's step, which only reads this cache.
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          shared-key: desktop-release
+
+      - name: Build MCP bridge
+        shell: bash
+        run: bash scripts/build-mcp-bridge.sh
+
+      - name: Build Tauri app
+        shell: bash
+        working-directory: apps/desktop
+        run: pnpm tauri build --no-bundle ${{ matrix.tauri_config }}

@@ -266,7 +266,9 @@ This updates the desktop `package.json`, Tauri configuration, Cargo metadata, th
 GitHub Actions workflows:
 
 - `.github/workflows/ci.yml`: runs `make test` on pull requests and pushes to `main`;
-- `.github/workflows/build.yml`: builds desktop artifacts on manual dispatch and `v*` tags;
+- `.github/workflows/build.yml`: builds desktop artifacts on manual dispatch and `v*` tags, and publishes the release from a tag;
+- `.github/workflows/release-tag.yml`: when a `chore: release vX.Y.Z` commit lands on `main`, tags it and starts `build.yml` on that tag, so merging the release PR is the whole release step;
+- `.github/workflows/release-cache.yml`: keeps the Rust release build cached on `main`, the only ref every tag can read from, when third-party crates change and weekly;
 - `.github/workflows/mobile-engine.yml`: verifies the mobile-tagged engine and uploads iOS and Android engine artifacts;
 - `.github/workflows/mobile-release.yml`: builds signed Tauri mobile artifacts and can upload them to an existing GitHub release.
 
