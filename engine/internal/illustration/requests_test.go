@@ -166,6 +166,43 @@ func TestRequest_galleryPurposeLeavesTheSceneAlone(t *testing.T) {
 	}
 }
 
+func TestRequest_approvePassesTheCardsEarlierPictures(t *testing.T) {
+	f := newRequestFixture(t)
+	r := f.submit(t, SubmitInput{Purpose: PurposeGallery})
+	if _, err := f.svc.Approve(f.ctx, r.ID, ApproveEdits{PriorIllustrationIDs: []string{"a", "b"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.gen.got[0].PriorIllustrationIDs; strings.Join(got, ",") != "a,b" {
+		t.Fatalf("prior = %v", got)
+	}
+}
+
+func TestRequest_earlierPicturesAreSuggestedKeptAndSentByDefault(t *testing.T) {
+	f := newRequestFixture(t)
+	kept, err := f.repo.Add(f.ctx, 1, NewInput{ProjectID: f.project, Prompt: "p", Provider: "x", Model: "m", Data: encodeJPEG(t, 4, 4)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := f.submit(t, SubmitInput{Purpose: PurposeGallery})
+	if len(r.PriorIllustrationIDs) != 1 || r.PriorIllustrationIDs[0] != kept.ID {
+		t.Fatalf("suggested = %v", r.PriorIllustrationIDs)
+	}
+	none := f.submit(t, SubmitInput{Purpose: PurposeGallery, PriorIllustrationIDs: []string{}})
+	if len(none.PriorIllustrationIDs) != 0 {
+		t.Fatalf("explicit none = %v", none.PriorIllustrationIDs)
+	}
+	if _, err := f.svc.Approve(f.ctx, r.ID, ApproveEdits{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.gen.got[0].PriorIllustrationIDs; len(got) != 1 || got[0] != kept.ID {
+		t.Fatalf("sent = %v, want the request's own", got)
+	}
+	if _, err := f.svc.Submit(f.ctx, SubmitInput{ProjectID: f.project, Purpose: PurposeGallery, Prompt: "p", Source: SourceAgent,
+		PriorIllustrationIDs: []string{"elsewhere"}}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unknown picture = %v", err)
+	}
+}
+
 func TestRequest_approvingTwiceDrawsOnce(t *testing.T) {
 	f := newRequestFixture(t)
 	r := f.submit(t, SubmitInput{TargetNodeID: f.scene, Purpose: PurposeInsert})

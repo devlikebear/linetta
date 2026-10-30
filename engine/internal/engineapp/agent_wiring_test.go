@@ -160,6 +160,9 @@ func TestProductionToolDepsCarryEveryCollaborator(t *testing.T) {
 	}
 	assertToolDepsWired(t, "external host", app.mcpTools)
 	assertToolDepsWired(t, "built-in agent", app.agentCtrl.tools)
+	if app.agentCtrl.tools.Attachment == nil {
+		t.Error("built-in agent tool deps: ToolDeps.Attachment is nil — linetta_add_reference_image cannot keep an image the writer attached")
+	}
 
 	// Memory in particular must be the SAME repo on both, not two instances.
 	// The two documents are one row each and the settings pane edits those
@@ -179,6 +182,12 @@ func skipToolDep(name string) string {
 		// TestAgentToolDepsDifferFromTheExternalHosts asserts both sides of
 		// it directly. It is a string besides, so it is never nil.
 		return "empty means the external host"
+	}
+	if name == "Attachment" {
+		// Pictures attached to a panel message exist only on the built-in
+		// agent's server; an external client has none to read. The agent's
+		// side is asserted in TestProductionToolDepsCarryEveryCollaborator.
+		return "only the built-in agent has attachments"
 	}
 	return ""
 }

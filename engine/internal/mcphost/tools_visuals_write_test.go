@@ -228,3 +228,63 @@ func TestVisualWritesTransport(t *testing.T) {
 		}
 	}
 }
+
+func TestAddReferenceImage_fromTheAgentsAttachment(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	d := ToolDeps{Projects: project.NewRepo(st), Entities: entity.NewRepo(st), Nodes: node.NewRepo(st), Visuals: visual.NewRepo(st)}
+	d.Story = storyops.New(d.Projects, d.Nodes, nil, nil, d.Entities, nil)
+	p, err := d.Projects.Create(ctx, 1, project.NewInput{Title: "T", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := d.Entities.Create(ctx, 1, entity.NewInput{ProjectID: p.ID, Name: "도윤"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	face := []byte("\x89PNG\r\n\x1a\nface")
+	d.Attachment = func(runID string, n int) (string, []byte, bool) {
+		if runID == "run-1" && n == 1 {
+			return "image/png", face, true
+		}
+		return "", nil, false
+	}
+	call := func(cs *mcp.ClientSession, runID string, args map[string]any) (string, bool) {
+		t.Helper()
+		params := &mcp.CallToolParams{Name: "linetta_add_reference_image", Arguments: args}
+		if runID != "" {
+			params.SetMeta(map[string]any{MetaRunID: runID})
+		}
+		res, err := cs.CallTool(ctx, params)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.Content[0].(*mcp.TextContent).Text, res.IsError
+	}
+
+	agentDeps := d
+	agentDeps.Source = SourceAgent
+	agent := connectedServer(t, agentDeps, settings.MCPModeFull, AllToolGroups())
+	if body, isErr := call(agent, "run-1", map[string]any{"entity_id": e.ID, "attachment": 1, "caption": "1화"}); isErr {
+		t.Fatalf("attachment 1: %s", body)
+	}
+	images, _ := d.Visuals.ListImages(ctx, e.ID)
+	if len(images) != 1 || images[0].MIME != "image/png" || images[0].Caption != "1화" {
+		t.Fatalf("images = %+v", images)
+	}
+	if body, _ := call(agent, "run-1", map[string]any{"entity_id": e.ID, "attachment": 2}); !strings.Contains(body, "no attached image 2") {
+		t.Fatalf("missing attachment: %s", body)
+	}
+	if body, _ := call(agent, "run-1", map[string]any{"entity_id": e.ID, "attachment": 1, "data_base64": "aGk="}); !strings.Contains(body, "exactly one of data_base64, attachment or illustration_id") {
+		t.Fatalf("both: %s", body)
+	}
+	// An external client controls its own _meta, so it gets no attachments.
+	external := connectedServer(t, d, settings.MCPModeFull, AllToolGroups())
+	if body, _ := call(external, "run-1", map[string]any{"entity_id": e.ID, "attachment": 1}); !strings.Contains(body, "only available to the built-in agent") {
+		t.Fatalf("external: %s", body)
+	}
+}

@@ -15,6 +15,7 @@ import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateI
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
+  AgentImage,
   AgentRunResult,
   AgentRunStatus,
   ApplyContextResult,
@@ -458,6 +459,10 @@ export const illustrations = {
   /** An empty illustrationId clears the node's picture. */
   setRepresentative: (nodeId: string, illustrationId: string) =>
     rpcCall<{ previous: string }>("illustrations.set_representative", { node_id: nodeId, illustration_id: illustrationId }),
+  /** Earlier pictures of the work a new one of these characters is drawn
+   *  from, best first (at most two). */
+  suggestPrior: (projectId: string, characterIds: string[]) =>
+    rpcCall<IllustrationMeta[]>("illustrations.suggest_prior", { project_id: projectId, character_ids: characterIds }),
 };
 
 /** Pictures agents asked for. Only approve draws, and it runs as long as
@@ -514,9 +519,16 @@ export const publishApi = {
  *  only way the renderer can reach agent.* today — a manual JSON-RPC call is
  *  the alternative until the panel calls them. */
 export const agent = {
-  /** selection: a passage the writer highlighted in the open scene. */
-  run: (projectId: string, prompt: string, nodeId?: string, selection?: string) =>
-    rpcCall<AgentRunResult>("agent.run", { project_id: projectId, node_id: nodeId, prompt, selection }),
+  /** selection: a passage the writer highlighted in the open scene;
+   *  images: pictures attached to the message. */
+  run: (projectId: string, prompt: string, nodeId?: string, selection?: string, images?: AgentImage[]) =>
+    rpcCall<AgentRunResult>("agent.run", {
+      project_id: projectId,
+      node_id: nodeId,
+      prompt,
+      selection,
+      images: images && images.length > 0 ? images : undefined,
+    }),
   cancel: (runId: string) => rpcCall<{ ok: true }>("agent.cancel", { run_id: runId }),
   history: (projectId: string, limit?: number) =>
     rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),

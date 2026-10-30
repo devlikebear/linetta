@@ -19,6 +19,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
@@ -184,6 +185,15 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 	tools.Source = mcphost.SourceAgent
 	tools.Limiter = mcphost.NewLimiter()
 	tools.Story = deps.story
+	// The service is built below, from deps that hold these tools; the
+	// tools reach its attachments through this variable once it is.
+	var svc *agent.Service
+	tools.Attachment = func(runID string, n int) (string, []byte, bool) {
+		if svc == nil {
+			return "", nil, false
+		}
+		return svc.Attachment(runID, n)
+	}
 
 	// A nil deps.skills must leave Deps.Skills NIL, not an agentSkillSource
 	// wrapping a nil store. Both answer "no skills" at runtime, but only one
@@ -245,12 +255,16 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		Clock:   deps.clock,
 		LogPath: deps.logPath,
 	}
-	svc := agent.New(built)
+	svc = agent.New(built)
 	return &agentController{svc: svc, tools: tools, deps: built, notify: deps.notify}, svc.Close
 }
 
-func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt, selection string) (string, error) {
-	return c.svc.Run(ctx, agent.RunRequest{ProjectID: projectID, NodeID: nodeID, Prompt: prompt, Selection: selection})
+func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt, selection string, images []handlers.AgentImage) (string, error) {
+	req := agent.RunRequest{ProjectID: projectID, NodeID: nodeID, Prompt: prompt, Selection: selection}
+	for _, img := range images {
+		req.Images = append(req.Images, agent.Image{MIME: img.MIME, Data: img.Data})
+	}
+	return c.svc.Run(ctx, req)
 }
 
 func (c *agentController) Cancel(_ context.Context, runID string) error {

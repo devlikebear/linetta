@@ -40,9 +40,16 @@ func (in setArtStyleInput) scope() (string, string) { return in.ProjectID, "" }
 
 type addReferenceImageInput struct {
 	visualTarget
-	DataBase64 string `json:"data_base64"`
-	MIME       string `json:"mime"`
-	Caption    string `json:"caption,omitempty"`
+	DataBase64 string `json:"data_base64,omitempty" jsonschema:"base64 image; use this or attachment"`
+	MIME       string `json:"mime,omitempty"`
+	// Attachment is an image the writer attached to the panel message being
+	// answered, by its 1-based number: the agent sees the picture but cannot
+	// spell its bytes back out as base64.
+	Attachment int `json:"attachment,omitempty" jsonschema:"number (1-based) of an image the writer attached to this message; built-in agent only"`
+	// IllustrationID copies a picture from the work's gallery: the face an
+	// earlier illustration got right, kept for every later one.
+	IllustrationID string `json:"illustration_id,omitempty" jsonschema:"a gallery picture of the same work to keep as this reference"`
+	Caption        string `json:"caption,omitempty"`
 }
 type deleteReferenceImageInput struct {
 	ImageID string `json:"image_id"`
@@ -66,7 +73,7 @@ type imageWriteOutput struct {
 func (d ToolDeps) registerVisualWriteTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{Name: "linetta_set_character_visuals", Description: "Patch a character's visual sheet. Omitted fields stay unchanged; empty strings clear them. Returns the sheet and undo_batch_id."}, record(d, "linetta_set_character_visuals", d.setCharacterVisuals))
 	mcp.AddTool(s, &mcp.Tool{Name: "linetta_set_art_style", Description: "Patch the work's art style and negative prompt. Omitted fields stay unchanged; empty strings clear them. Returns the style and undo_batch_id."}, record(d, "linetta_set_art_style", d.setArtStyle))
-	mcp.AddTool(s, &mcp.Tool{Name: "linetta_add_reference_image", Description: "Attach a base64 PNG, JPEG, WebP or GIF reference to a character (5 MiB, 8 images maximum). Returns metadata and undo_batch_id."}, record(d, "linetta_add_reference_image", d.addReferenceImage))
+	mcp.AddTool(s, &mcp.Tool{Name: "linetta_add_reference_image", Description: "Attach a PNG, JPEG, WebP or GIF reference to a character (5 MiB, 8 images maximum), from base64, an image the writer attached to this message, or a gallery illustration. Returns metadata and undo_batch_id."}, record(d, "linetta_add_reference_image", d.addReferenceImage))
 	mcp.AddTool(s, &mcp.Tool{Name: "linetta_delete_reference_image", Description: "Delete a reference image by image_id. Returns deleted metadata and undo_batch_id; undo restores the original bytes."}, record(d, "linetta_delete_reference_image", d.deleteReferenceImage))
 }
 func (d ToolDeps) requireVisualWrite() *mcp.CallToolResult {
@@ -179,7 +186,7 @@ func (d ToolDeps) setArtStyle(ctx context.Context, _ *mcp.CallToolRequest, in se
 	})
 	return nil, out, nil
 }
-func (d ToolDeps) addReferenceImage(ctx context.Context, _ *mcp.CallToolRequest, in addReferenceImageInput) (*mcp.CallToolResult, imageWriteOutput, error) {
+func (d ToolDeps) addReferenceImage(ctx context.Context, req *mcp.CallToolRequest, in addReferenceImageInput) (*mcp.CallToolResult, imageWriteOutput, error) {
 	out := imageWriteOutput{}
 	if ref := d.requireVisualWrite(); ref != nil {
 		return ref, out, nil
@@ -188,14 +195,12 @@ func (d ToolDeps) addReferenceImage(ctx context.Context, _ *mcp.CallToolRequest,
 	if ref != nil {
 		return ref, out, nil
 	}
-	if len(in.DataBase64) > base64.StdEncoding.EncodedLen(visual.MaxImageBytes) {
-		return toolErr("%v", visual.ErrImageTooLarge), out, nil
+	mime, data, ref := d.referenceImageBytes(ctx, req, e.ProjectID, &in)
+	if ref != nil {
+		return ref, out, nil
 	}
-	data, err := base64.StdEncoding.DecodeString(in.DataBase64)
-	if err != nil {
-		return toolErr("invalid data_base64: %v", err), out, nil
-	}
-	out.ImageMeta, err = d.Visuals.AddImage(ctx, d.now(), e.ID, in.MIME, in.Caption, data)
+	var err error
+	out.ImageMeta, err = d.Visuals.AddImage(ctx, d.now(), e.ID, mime, in.Caption, data)
 	if err != nil {
 		return toolErr("%v", err), out, nil
 	}
@@ -203,6 +208,55 @@ func (d ToolDeps) addReferenceImage(ctx context.Context, _ *mcp.CallToolRequest,
 	out.UndoBatchID = d.visualChanged(e.ProjectID, "linetta_add_reference_image", func(ctx context.Context) error { return d.Visuals.DeleteImage(ctx, id) })
 	return nil, out, nil
 }
+
+// referenceImageBytes is the image add_reference_image stores: the base64
+// it was given, one the writer attached to the agent's current message, or a
+// gallery picture of the character's own work (whose caption it keeps when
+// none is given).
+func (d ToolDeps) referenceImageBytes(ctx context.Context, req *mcp.CallToolRequest, projectID string, in *addReferenceImageInput) (string, []byte, *mcp.CallToolResult) {
+	sources := 0
+	for _, given := range []bool{in.DataBase64 != "", in.Attachment != 0, strings.TrimSpace(in.IllustrationID) != ""} {
+		if given {
+			sources++
+		}
+	}
+	if sources != 1 {
+		return "", nil, toolErr("pass exactly one of data_base64, attachment or illustration_id")
+	}
+	if id := strings.TrimSpace(in.IllustrationID); id != "" {
+		if d.Gallery == nil {
+			return "", nil, toolErr("the gallery is unavailable in this build")
+		}
+		img, err := d.Gallery.Get(ctx, id)
+		if err != nil || img.ProjectID != projectID {
+			return "", nil, toolErr("illustration %q is not in this work's gallery", id)
+		}
+		if strings.TrimSpace(in.Caption) == "" {
+			in.Caption = img.Caption
+		}
+		return img.MIME, img.Data, nil
+	}
+	if in.Attachment != 0 {
+		runID := d.runIDOf(req)
+		if d.Attachment == nil || runID == "" {
+			return "", nil, toolErr("attachment is only available to the built-in agent while it answers the message the image came with")
+		}
+		mime, data, ok := d.Attachment(runID, in.Attachment)
+		if !ok {
+			return "", nil, toolErr("no attached image %d on this message", in.Attachment)
+		}
+		return mime, data, nil
+	}
+	if len(in.DataBase64) > base64.StdEncoding.EncodedLen(visual.MaxImageBytes) {
+		return "", nil, toolErr("%v", visual.ErrImageTooLarge)
+	}
+	data, err := base64.StdEncoding.DecodeString(in.DataBase64)
+	if err != nil {
+		return "", nil, toolErr("invalid data_base64: %v", err)
+	}
+	return in.MIME, data, nil
+}
+
 func (d ToolDeps) deleteReferenceImage(ctx context.Context, _ *mcp.CallToolRequest, in deleteReferenceImageInput) (*mcp.CallToolResult, imageWriteOutput, error) {
 	out := imageWriteOutput{}
 	if ref := d.requireVisualWrite(); ref != nil {

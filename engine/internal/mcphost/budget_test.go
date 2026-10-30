@@ -261,13 +261,15 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		t.Errorf("visual tools cost %dB, want <= 3500B", visuals)
 	}
 	// Illustration Phase 4 measured 3,205B for its three tools (list 1,129B,
-	// request 1,369B, set representative 707B).
+	// request 1,369B, set representative 707B). The request's
+	// prior_illustration_ids (earlier pictures sent along, in and out)
+	// brought it to 3,468B.
 	illustrations := sizes["linetta_list_illustrations"]
 	for _, name := range IllustrationWriteToolNames {
 		illustrations += sizes[name]
 	}
-	if illustrations > 3400 {
-		t.Errorf("illustration tools cost %dB, want <= 3400B", illustrations)
+	if illustrations > 3550 {
+		t.Errorf("illustration tools cost %dB, want <= 3550B", illustrations)
 	}
 	// #132 measured 26,525B for the full 19-tool set (down from 27,687B).
 	// story-assist Phase 1 added linetta_get_story_context's IncludeDirection

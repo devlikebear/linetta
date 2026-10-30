@@ -97,6 +97,10 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // agent.done and draw nothing at all.
   agent_output_truncated: "errors.agentOutputTruncated",
   agent_empty_reply: "errors.agentEmptyReply",
+  // Images attached to a panel message: too many, too large, not a picture,
+  // or a provider (the Claude Code CLI) that takes text only.
+  agent_attachment_invalid: "errors.agentAttachmentInvalid",
+  agent_attachment_unsupported: "errors.agentAttachmentUnsupported",
   // The built-in agent's undo (#93 fix round 1). storyops keeps only the last
   // few batches in memory, so this is the ordinary result of a restart or a
   // few more turns — not a mistake the writer made.

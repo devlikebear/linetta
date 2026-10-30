@@ -272,3 +272,72 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Pictures waiting to go with the next message, above the composer. */
+.agent-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.agent-image {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: var(--surface-3);
+}
+.agent-image img { width: 100%; height: 100%; object-fit: cover; }
+.agent-image-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+.cmp-attach {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-soft);
+}
+.cmp-attach:hover:not(:disabled) { background: var(--surface-3); color: var(--ink); }
+.cmp-attach:disabled { color: var(--muted-2); }
+
+/* The same pictures, after they were sent: above the writer's bubble. A
+   restored message has only their count. */
+.agent-user-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 84%;
+  margin-bottom: 4px;
+}
+.agent-user-images img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-soft);
+}
+.agent-user-image-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}

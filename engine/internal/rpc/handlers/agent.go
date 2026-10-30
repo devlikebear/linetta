@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -13,8 +15,9 @@ import (
 // build tag (the agent itself is //go:build !mobile), and handlers must never
 // link tars/pkg/llm.
 type AgentController interface {
-	// selection is a passage the writer highlighted in the open scene, or "".
-	Run(ctx context.Context, projectID, nodeID, prompt, selection string) (string, error)
+	// selection is a passage the writer highlighted in the open scene, or "";
+	// images are pictures attached to the message.
+	Run(ctx context.Context, projectID, nodeID, prompt, selection string, images []AgentImage) (string, error)
 	Cancel(ctx context.Context, runID string) error
 	History(ctx context.Context, projectID string, limit int) (json.RawMessage, error)
 	// Status reports the turn running for a work, if any — what a panel that
@@ -27,11 +30,22 @@ type AgentController interface {
 	Undo(ctx context.Context, batchID, snapshotID string) error
 }
 
+// AgentImage is one picture attached to a panel message. The agent checks
+// the bytes; MIME is only what the panel says it sent.
+type AgentImage struct {
+	MIME string
+	Data []byte
+}
+
 type agentRunParams struct {
 	ProjectID string `json:"project_id"`
 	NodeID    string `json:"node_id,omitempty"`
 	Prompt    string `json:"prompt"`
 	Selection string `json:"selection,omitempty"`
+	Images    []struct {
+		MIME       string `json:"mime"`
+		DataBase64 string `json:"data_base64"`
+	} `json:"images,omitempty"`
 }
 
 type agentRunResult struct {
@@ -49,7 +63,15 @@ func AgentRun(ctrl AgentController) rpc.Handler {
 		if strings.TrimSpace(p.Prompt) == "" {
 			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "prompt is required"}
 		}
-		runID, err := ctrl.Run(ctx, p.ProjectID, p.NodeID, p.Prompt, p.Selection)
+		images := make([]AgentImage, 0, len(p.Images))
+		for i, img := range p.Images {
+			data, err := base64.StdEncoding.DecodeString(img.DataBase64)
+			if err != nil {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: fmt.Sprintf("images[%d]: invalid data_base64", i)}
+			}
+			images = append(images, AgentImage{MIME: img.MIME, Data: data})
+		}
+		runID, err := ctrl.Run(ctx, p.ProjectID, p.NodeID, p.Prompt, p.Selection, images)
 		if err != nil {
 			return nil, rpc.MethodErrorFrom(err)
 		}

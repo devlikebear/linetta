@@ -64,9 +64,11 @@ type requestIllustrationInput struct {
 	Prompt    string   `json:"prompt,omitempty" jsonschema:"a finished prompt instead of scene"`
 	EntityIDs []string `json:"entity_ids,omitempty" jsonschema:"characters in the picture"`
 	Names     []string `json:"names,omitempty" jsonschema:"or their names/aliases"`
-	Aspect    string   `json:"aspect,omitempty" jsonschema:"square (default), portrait or landscape"`
-	Caption   string   `json:"caption,omitempty"`
-	Note      string   `json:"note,omitempty" jsonschema:"one line to the writer on the card"`
+	// PriorIllustrationIDs: nil (omitted) lets the engine pick; [] sends none.
+	PriorIllustrationIDs []string `json:"prior_illustration_ids,omitempty" jsonschema:"earlier gallery pictures sent along (max 2); omit = auto, [] = none"`
+	Aspect               string   `json:"aspect,omitempty" jsonschema:"square (default), portrait or landscape"`
+	Caption              string   `json:"caption,omitempty"`
+	Note                 string   `json:"note,omitempty" jsonschema:"one line to the writer on the card"`
 }
 
 func (in requestIllustrationInput) scope() (string, string) { return in.ProjectID, in.NodeID }
@@ -76,6 +78,8 @@ type requestIllustrationOutput struct {
 	// Status is waiting_for_writer: nothing is drawn until they approve.
 	Status string `json:"status"`
 	Prompt string `json:"prompt"`
+	// PriorIllustrationIDs are the earlier pictures the card will send along.
+	PriorIllustrationIDs []string `json:"prior_illustration_ids"`
 }
 
 type setRepresentativeInput struct {
@@ -202,12 +206,13 @@ func (d ToolDeps) requestIllustration(ctx context.Context, _ *mcp.CallToolReques
 	r, err := d.IllustrationRequests.Submit(ctx, illustration.SubmitInput{
 		ProjectID: p.ID, TargetNodeID: in.NodeID, Purpose: in.Purpose, Prompt: prompt,
 		CharacterIDs: characterIDs, IncludeReferences: len(characterIDs) > 0,
-		Aspect: in.Aspect, Caption: in.Caption, Note: in.Note, Source: d.sourceOrExternal(),
+		PriorIllustrationIDs: in.PriorIllustrationIDs,
+		Aspect:               in.Aspect, Caption: in.Caption, Note: in.Note, Source: d.sourceOrExternal(),
 	})
 	if err != nil {
 		return illustrationToolErr(err), out, nil
 	}
-	return nil, requestIllustrationOutput{RequestID: r.ID, Status: requestWaiting, Prompt: r.Prompt}, nil
+	return nil, requestIllustrationOutput{RequestID: r.ID, Status: requestWaiting, Prompt: r.Prompt, PriorIllustrationIDs: r.PriorIllustrationIDs}, nil
 }
 
 func (d ToolDeps) setRepresentativeIllustration(ctx context.Context, _ *mcp.CallToolRequest, in setRepresentativeInput) (*mcp.CallToolResult, setRepresentativeOutput, error) {

@@ -605,6 +605,9 @@ export interface IllustrationRequest {
   prompt: string;
   character_ids: string[];
   include_references: boolean;
+  /** Earlier gallery pictures sent along, as the agent chose them or as the
+   *  engine suggested when the request was left. Absent on older rows. */
+  prior_illustration_ids?: string[];
   aspect: IllustrationAspect;
   caption: string;
   /** The agent's one line to the writer. */
@@ -628,6 +631,8 @@ export interface IllustrationRequestEdits {
   aspect?: IllustrationAspect;
   caption?: string;
   include_references?: boolean;
+  /** Earlier gallery pictures sent along (illustrations.suggest_prior). */
+  prior_illustration_ids?: string[];
 }
 
 /** illustrations-changed's payload: a request was left, decided, drawn or
@@ -655,6 +660,9 @@ export interface IllustrationGenerateInput {
   prompt: string;
   character_ids?: string[];
   include_references?: boolean;
+  /** Earlier gallery pictures sent after the characters' references, so a
+   *  face drawn once is drawn the same way again. At most two. */
+  prior_illustration_ids?: string[];
   aspect?: IllustrationAspect;
   caption?: string;
 }
@@ -798,6 +806,13 @@ export interface CodexStatus {
 /** agent.run — the turn id; progress arrives as agent.* notifications (#93). */
 export interface AgentRunResult {
   run_id: string;
+}
+
+/** A picture attached to an agent message. The engine checks the bytes and
+ *  takes at most four, 5 MB each. */
+export interface AgentImage {
+  mime: string;
+  data_base64: string;
 }
 
 /** agent.status — the turn running for a work, if any. What a panel that

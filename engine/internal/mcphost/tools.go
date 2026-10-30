@@ -114,6 +114,11 @@ type ToolDeps struct {
 	// wires none; the publish tools refuse rather than panicking.
 	Publish Publisher
 
+	// Attachment returns image n (1-based) the writer attached to the
+	// built-in agent's message for run runID, so add_reference_image can
+	// keep it. Nil outside the agent's own server.
+	Attachment func(runID string, n int) (mime string, data []byte, ok bool)
+
 	Snapshots      *snapshot.Repo
 	Story          *storyops.Service
 	ManuscriptEdit *manuscriptedit.Service

@@ -67,14 +67,19 @@ type GenerateInput struct {
 	ProjectID    string `json:"project_id"`
 	SourceNodeID string `json:"source_node_id,omitempty"`
 	// Prompt is the final text the writer saw and approved. Nothing is added
-	// to it: what they read is what is sent.
+	// to it but priorNote, when earlier illustrations go along; the dialog
+	// says so beside the pictures it sends.
 	Prompt string `json:"prompt"`
 	// CharacterIDs are the characters in the picture, whose reference images
 	// go along when IncludeReferences is set.
 	CharacterIDs      []string `json:"character_ids,omitempty"`
 	IncludeReferences bool     `json:"include_references,omitempty"`
-	Aspect            string   `json:"aspect,omitempty"` // AspectSquare when empty
-	Caption           string   `json:"caption,omitempty"`
+	// PriorIllustrationIDs are earlier pictures of the same work sent after
+	// the characters' references (SuggestPrior offers them), so a face drawn
+	// once is drawn the same way again. At most MaxPriorReferences.
+	PriorIllustrationIDs []string `json:"prior_illustration_ids,omitempty"`
+	Aspect               string   `json:"aspect,omitempty"` // AspectSquare when empty
+	Caption              string   `json:"caption,omitempty"`
 }
 
 // Service draws illustrations and keeps them in the gallery.
@@ -106,14 +111,23 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (Meta, error) 
 	if err := s.repo.checkPlace(ctx, in.ProjectID, in.SourceNodeID, in.CharacterIDs); err != nil {
 		return Meta{}, err
 	}
-	refs, err := s.references(ctx, in)
+	refs, total, err := s.references(ctx, in)
 	if err != nil {
 		return Meta{}, err
+	}
+	prior, err := s.priorReferences(ctx, in, total)
+	if err != nil {
+		return Meta{}, err
+	}
+	prompt := in.Prompt
+	if len(prior) > 0 {
+		refs = append(refs, prior...)
+		prompt = WithPriorNote(prompt)
 	}
 
 	drawCtx, cancel := context.WithTimeout(ctx, drawTimeout)
 	defer cancel()
-	res, err := s.painter.Paint(drawCtx, PaintRequest{Prompt: in.Prompt, References: refs, Aspect: in.Aspect})
+	res, err := s.painter.Paint(drawCtx, PaintRequest{Prompt: prompt, References: refs, Aspect: in.Aspect})
 	if err != nil {
 		return Meta{}, err
 	}
@@ -123,38 +137,69 @@ func (s *Service) Generate(ctx context.Context, in GenerateInput) (Meta, error) 
 		ProjectID:    in.ProjectID,
 		SourceNodeID: in.SourceNodeID,
 		Caption:      in.Caption,
-		Prompt:       in.Prompt,
+		Prompt:       prompt,
 		Provider:     res.Provider,
 		Model:        res.Model,
 		Data:         res.Data,
 	})
 }
 
-func (s *Service) references(ctx context.Context, in GenerateInput) ([]Reference, error) {
+// references are the characters' reference images and the bytes they take.
+func (s *Service) references(ctx context.Context, in GenerateInput) ([]Reference, int, error) {
 	refs := []Reference{}
-	if !in.IncludeReferences {
-		return refs, nil
-	}
 	total := 0
+	if !in.IncludeReferences {
+		return refs, total, nil
+	}
 	for _, id := range in.CharacterIDs {
 		images, err := s.visuals.ListImages(ctx, id)
 		if err != nil {
-			return nil, fmt.Errorf("read reference images: %w", err)
+			return nil, 0, fmt.Errorf("read reference images: %w", err)
 		}
 		for _, meta := range images {
 			if len(refs) == MaxReferences {
-				return refs, nil
+				return refs, total, nil
 			}
 			if total+meta.ByteSize > maxReferenceBytes {
 				continue
 			}
 			img, err := s.visuals.GetImage(ctx, meta.ID)
 			if err != nil {
-				return nil, fmt.Errorf("read reference image: %w", err)
+				return nil, 0, fmt.Errorf("read reference image: %w", err)
 			}
 			refs = append(refs, Reference{MIME: img.MIME, Data: img.Data})
 			total += len(img.Data)
 		}
+	}
+	return refs, total, nil
+}
+
+// priorReferences reads the earlier illustrations the writer chose, within
+// what the characters' references left of the byte budget. A picture from
+// another work, or one that is gone, is refused before anything is drawn.
+func (s *Service) priorReferences(ctx context.Context, in GenerateInput, total int) ([]Reference, error) {
+	if len(in.PriorIllustrationIDs) > MaxPriorReferences {
+		return nil, fmt.Errorf("%w: at most %d earlier illustrations go along", ErrInvalidInput, MaxPriorReferences)
+	}
+	refs := []Reference{}
+	seen := map[string]bool{}
+	for _, id := range in.PriorIllustrationIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		img, err := s.repo.Get(ctx, id)
+		if errors.Is(err, ErrNotFound) || (err == nil && img.ProjectID != in.ProjectID) {
+			return nil, fmt.Errorf("%w: illustration %q is not in this work's gallery", ErrInvalidInput, id)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read earlier illustration: %w", err)
+		}
+		if total+len(img.Data) > maxReferenceBytes {
+			continue
+		}
+		refs = append(refs, Reference{MIME: img.MIME, Data: img.Data})
+		total += len(img.Data)
 	}
 	return refs, nil
 }

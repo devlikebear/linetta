@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Bot, Quote, Send, Square, X } from "lucide-react";
+import { Bot, ImagePlus, Quote, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import type { AgentHistoryRow, AgentRunStatus, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
+import { IMAGE_ACCEPT, ImageFileProblem, imageFiles, readImageFile } from "../../lib/imageFile";
+import type { ReadImage } from "../../lib/imageFile";
 import { useEngineEvent } from "../../hooks/useEngineEvent";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { isProviderReady } from "../../lib/providers";
@@ -49,7 +51,9 @@ import "./AgentPanel.css";
 type Line =
   /** `selection` is the passage the writer sent along from the editor,
    *  drawn as a quote above what they asked about it. */
-  | { kind: "user"; id: string; text: string; selection?: string }
+  /** `images` are the pictures sent with it, as preview URLs; a restored
+   *  line has only `imageCount` (the transcript keeps no pictures). */
+  | { kind: "user"; id: string; text: string; selection?: string; images?: string[]; imageCount?: number }
   | {
       kind: "assistant";
       id: string;
@@ -258,12 +262,25 @@ export function splitSelection(content: string): { text: string; selection?: str
   return { text: content.slice(m[0].length), selection: m[1] };
 }
 
+/** Pictures attached to a message stay out of the transcript; the engine
+ *  marks the message instead (agent/attachments.go withImages). Exported for
+ *  the tests. */
+export function splitImages(content: string): { text: string; imageCount?: number } {
+  const m = /\n\n<images count="(\d+)"\/>$/.exec(content);
+  if (!m) return { text: content };
+  return { text: content.slice(0, m.index), imageCount: Number(m[1]) };
+}
+
+/** At most this many pictures go with one message (agent.MaxImages). */
+const MAX_AGENT_IMAGES = 4;
+
 function linesFromHistory(rows: AgentHistoryRow[], liveRunId?: string): Line[] {
   const lines: Line[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (row.role === "user") {
-      lines.push({ kind: "user", id: `history:${row.id}`, ...splitSelection(row.content) });
+      const quoted = splitSelection(row.content);
+      lines.push({ kind: "user", id: `history:${row.id}`, ...quoted, ...splitImages(quoted.text) });
     } else if (row.role === "assistant") {
       lines.push({ kind: "assistant", id: `history:${row.id}`, text: row.content, runId: row.run_id });
     } else if (row.role === "tool") {
@@ -480,6 +497,9 @@ export function AgentPanel({
   const [turnStartedAt, setTurnStartedAt] = useState<number | null>(null);
   const [canceling, setCanceling] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  // Pictures waiting to go with the next message, picked, pasted or dropped.
+  const [images, setImages] = useState<ReadImage[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   // The same value as `turnRunId`, readable from an async callback that
   // closed over an older render — handleStop's rejection has to know whether
   // the turn is *still* running, and its `turnRunId` closure was captured
@@ -1008,6 +1028,31 @@ export function AgentPanel({
       });
   }
 
+  // Reads picked, pasted or dropped pictures into the composer, up to
+  // MAX_AGENT_IMAGES. The first file that cannot go says why; the rest of
+  // what fits is still kept.
+  async function addImages(files: File[]) {
+    if (files.length === 0) return;
+    setSendError(null);
+    const room = MAX_AGENT_IMAGES - images.length;
+    if (room <= 0 || files.length > room) setSendError(t("agentPanel.images.tooMany", { max: MAX_AGENT_IMAGES }));
+    const read: ReadImage[] = [];
+    for (const file of files.slice(0, Math.max(0, room))) {
+      try {
+        read.push(await readImageFile(file));
+      } catch (e) {
+        setSendError(
+          e instanceof ImageFileProblem && e.reason === "tooLarge"
+            ? t("agentPanel.images.tooLarge")
+            : t("agentPanel.images.unsupported"),
+        );
+      }
+    }
+    if (read.length > 0 && mountedRef.current) {
+      setImages((cur) => [...cur, ...read].slice(0, MAX_AGENT_IMAGES));
+    }
+  }
+
   // Sends the composer's text as a new turn. A no-op while a turn is already
   // in flight (busy below already hides the send control in that state, but
   // Enter can still reach here) or while the draft is empty.
@@ -1027,6 +1072,8 @@ export function AgentPanel({
     const token = {};
     sendTokenRef.current = token;
     const sentAttachment = attachment;
+    const sentImages = images;
+    setImages([]);
     setDraft("");
     setAttached(null);
     setSendError(null);
@@ -1037,7 +1084,14 @@ export function AgentPanel({
     // it can reach the listener before the response reaches us.
     pendingSendRef.current = true;
     agentApi
-      .run(projectId, prompt, nodeId, sentAttachment?.text)
+      .run(
+        projectId,
+        prompt,
+        nodeId,
+        sentAttachment?.text,
+        // Only a message with pictures carries the argument at all.
+        ...(sentImages.length > 0 ? [sentImages.map(({ mime, data_base64 }) => ({ mime, data_base64 }))] : []),
+      )
       .then((result) => {
         if (sendTokenRef.current !== token) {
           // The writer jumped to another work while this send was in flight
@@ -1069,7 +1123,13 @@ export function AgentPanel({
         currentRunIdRef.current = result.run_id;
         setLines((prev) => [
           ...prev,
-          { kind: "user", id: `user:${result.run_id}`, text: prompt, selection: sentAttachment?.text },
+          {
+            kind: "user",
+            id: `user:${result.run_id}`,
+            text: prompt,
+            selection: sentAttachment?.text,
+            images: sentImages.length > 0 ? sentImages.map((img) => img.url) : undefined,
+          },
         ]);
         setTurn(result.run_id);
         setSending(false);
@@ -1102,6 +1162,7 @@ export function AgentPanel({
         // A passage attached since takes precedence over the one this send
         // carried, the same as a new selection replaces an old one.
         if (sentAttachment) setAttached((cur) => cur ?? sentAttachment);
+        if (sentImages.length > 0) setImages((cur) => (cur.length > 0 ? cur : sentImages));
         flushSendWindow();
       });
   }
@@ -1365,6 +1426,17 @@ export function AgentPanel({
                       {line.selection}
                     </blockquote>
                   ) : null}
+                  {line.images ? (
+                    <div className="agent-user-images" data-testid="agent-user-images">
+                      {line.images.map((url, i) => (
+                        <img key={i} src={url} alt="" />
+                      ))}
+                    </div>
+                  ) : line.imageCount ? (
+                    <span className="agent-user-image-count" data-testid="agent-user-image-count">
+                      <ImagePlus size={12} aria-hidden="true" /> {t("agentPanel.images.sent", { count: line.imageCount })}
+                    </span>
+                  ) : null}
                   <div className="msg-bubble">{line.text}</div>
                 </div>
               );
@@ -1559,7 +1631,36 @@ export function AgentPanel({
             ) : null}
           </div>
         ) : null}
-        <div className="cmp-input-wrap">
+        <div
+          className="cmp-input-wrap"
+          onDragOver={(e) => {
+            if (!busy && e.dataTransfer.types.includes("Files")) e.preventDefault();
+          }}
+          onDrop={(e) => {
+            const files = imageFiles(e.dataTransfer.files);
+            if (busy || files.length === 0) return;
+            e.preventDefault();
+            void addImages(files);
+          }}
+        >
+          {images.length > 0 ? (
+            <div className="agent-images" data-testid="agent-images">
+              {images.map((img, i) => (
+                <div key={i} className="agent-image">
+                  <img src={img.url} alt="" />
+                  <button
+                    type="button"
+                    className="agent-image-remove"
+                    data-testid={`agent-image-remove-${i}`}
+                    onClick={() => setImages((cur) => cur.filter((_, j) => j !== i))}
+                    aria-label={t("agentPanel.images.remove")}
+                  >
+                    <X size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {attachment ? (
             <div className="agent-attachment" data-testid="agent-attachment">
               <Quote size={12} aria-hidden="true" />
@@ -1578,12 +1679,44 @@ export function AgentPanel({
             </div>
           ) : null}
           <div className="cmp-input">
+            <input
+              ref={imageInputRef}
+              type="file"
+              hidden
+              multiple
+              accept={IMAGE_ACCEPT}
+              data-testid="agent-image-input"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                e.target.value = "";
+                void addImages(files);
+              }}
+            />
+            <button
+              type="button"
+              className="cmp-attach"
+              data-testid="agent-attach-image"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={busy || images.length >= MAX_AGENT_IMAGES}
+              aria-label={t("agentPanel.images.attach")}
+              title={t("agentPanel.images.attach")}
+            >
+              <ImagePlus size={15} />
+            </button>
             <textarea
               data-testid="agent-composer"
               ref={composerRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleComposerKeyDown}
+              onPaste={(e) => {
+                const files = imageFiles(e.clipboardData.files);
+                if (files.length === 0) return;
+                // A copy from a document can carry its text and a picture of
+                // it; the text still goes in the box.
+                if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+                void addImages(files);
+              }}
               // A placeholder is not an accessible name — it is announced as
               // a hint at best and disappears the moment anything is typed.
               // Both buttons beside this box carry one; the box the panel

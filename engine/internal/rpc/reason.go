@@ -142,6 +142,12 @@ const (
 	ReasonAgentOutputTruncated = "agent_output_truncated"
 	ReasonAgentEmptyReply      = "agent_empty_reply"
 
+	// Images attached to a panel message. Invalid: too many, too large, or
+	// not a picture. Unsupported: the selected provider (the Claude Code
+	// CLI) takes the message as text only.
+	ReasonAgentAttachmentInvalid     = "agent_attachment_invalid"
+	ReasonAgentAttachmentUnsupported = "agent_attachment_unsupported"
+
 	// agent.undo asking to revert a batch that has fallen out of the
 	// in-memory undo window (#93 fix round 1). This is not "not found" in the
 	// writer-did-something-wrong sense — storyops keeps only the last few

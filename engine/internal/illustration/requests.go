@@ -63,12 +63,15 @@ type Request struct {
 	Prompt            string   `json:"prompt"`
 	CharacterIDs      []string `json:"character_ids"`
 	IncludeReferences bool     `json:"include_references"`
-	Aspect            string   `json:"aspect"`
-	Caption           string   `json:"caption"`
-	Note              string   `json:"note"`
-	Source            string   `json:"source"`
-	Status            string   `json:"status"`
-	IllustrationID    string   `json:"illustration_id,omitempty"`
+	// PriorIllustrationIDs are the earlier gallery pictures the drawing is
+	// sent with (GenerateInput.PriorIllustrationIDs).
+	PriorIllustrationIDs []string `json:"prior_illustration_ids"`
+	Aspect               string   `json:"aspect"`
+	Caption              string   `json:"caption"`
+	Note                 string   `json:"note"`
+	Source               string   `json:"source"`
+	Status               string   `json:"status"`
+	IllustrationID       string   `json:"illustration_id,omitempty"`
 	// PlacedAt is set once the drawing went where Purpose said. A done
 	// request without it was drawn but could not be placed (the scene
 	// changed under it, say); Error says why.
@@ -87,10 +90,13 @@ type SubmitInput struct {
 	Prompt            string
 	CharacterIDs      []string
 	IncludeReferences bool
-	Aspect            string
-	Caption           string
-	Note              string
-	Source            string
+	// PriorIllustrationIDs are earlier gallery pictures to send along. Nil
+	// asks for SuggestPrior's choice for these characters; empty sends none.
+	PriorIllustrationIDs []string
+	Aspect               string
+	Caption              string
+	Note                 string
+	Source               string
 }
 
 // ApproveEdits are what the writer changed on the card before drawing. Nil
@@ -100,6 +106,9 @@ type ApproveEdits struct {
 	Aspect            *string `json:"aspect,omitempty"`
 	Caption           *string `json:"caption,omitempty"`
 	IncludeReferences *bool   `json:"include_references,omitempty"`
+	// PriorIllustrationIDs replaces the request's earlier pictures; nil
+	// keeps them, empty sends none.
+	PriorIllustrationIDs []string `json:"prior_illustration_ids,omitempty"`
 }
 
 // Generator draws a picture into the gallery; *Service is one.
@@ -155,16 +164,21 @@ func (s *RequestService) Submit(ctx context.Context, in SubmitInput) (Request, e
 	if err != nil {
 		return Request{}, err
 	}
+	prior, err := json.Marshal(nonNil(in.PriorIllustrationIDs))
+	if err != nil {
+		return Request{}, err
+	}
 	r := Request{
 		ID: uuid.NewString(), ProjectID: in.ProjectID, TargetNodeID: in.TargetNodeID, Purpose: in.Purpose,
 		Prompt: in.Prompt, CharacterIDs: nonNil(in.CharacterIDs), IncludeReferences: in.IncludeReferences,
-		Aspect: in.Aspect, Caption: in.Caption, Note: in.Note, Source: in.Source,
+		PriorIllustrationIDs: nonNil(in.PriorIllustrationIDs),
+		Aspect:               in.Aspect, Caption: in.Caption, Note: in.Note, Source: in.Source,
 		Status: RequestPending, CreatedAt: s.now(),
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO illustration_requests
-		(id, project_id, target_node_id, purpose, prompt, character_ids_json, include_references, aspect, caption, note, source, status, created_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.ID, r.ProjectID, nullString(r.TargetNodeID), r.Purpose, r.Prompt, string(ids), r.IncludeReferences,
+		(id, project_id, target_node_id, purpose, prompt, character_ids_json, include_references, prior_illustration_ids_json, aspect, caption, note, source, status, created_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ID, r.ProjectID, nullString(r.TargetNodeID), r.Purpose, r.Prompt, string(ids), r.IncludeReferences, string(prior),
 		r.Aspect, r.Caption, r.Note, r.Source, r.Status, r.CreatedAt); err != nil {
 		return Request{}, err
 	}
@@ -201,6 +215,18 @@ func (s *RequestService) checkSubmit(ctx context.Context, in *SubmitInput) error
 		return fmt.Errorf("%w: a representative picture needs the scene's or episode's node_id", ErrInvalidInput)
 	}
 	if err := s.repo.checkPlace(ctx, in.ProjectID, in.TargetNodeID, in.CharacterIDs); err != nil {
+		return err
+	}
+	if in.PriorIllustrationIDs == nil {
+		suggested, err := s.repo.SuggestPrior(ctx, in.ProjectID, in.CharacterIDs, MaxPriorReferences)
+		if err != nil {
+			return err
+		}
+		in.PriorIllustrationIDs = []string{}
+		for _, m := range suggested {
+			in.PriorIllustrationIDs = append(in.PriorIllustrationIDs, m.ID)
+		}
+	} else if err := s.repo.checkPrior(ctx, in.ProjectID, in.PriorIllustrationIDs); err != nil {
 		return err
 	}
 	if in.Purpose == PurposeInsert {
@@ -317,6 +343,13 @@ func (s *RequestService) Approve(ctx context.Context, id string, edits ApproveEd
 	if edits.IncludeReferences != nil {
 		r.IncludeReferences = *edits.IncludeReferences
 	}
+	if edits.PriorIllustrationIDs != nil {
+		r.PriorIllustrationIDs = edits.PriorIllustrationIDs
+	}
+	prior, err := json.Marshal(nonNil(r.PriorIllustrationIDs))
+	if err != nil {
+		return Request{}, err
+	}
 	if edits.Aspect != nil {
 		if r.Aspect, err = normalAspect(*edits.Aspect); err != nil {
 			return Request{}, err
@@ -328,9 +361,9 @@ func (s *RequestService) Approve(ctx context.Context, id string, edits ApproveEd
 
 	db := s.repo.s.DB()
 	res, err := db.ExecContext(ctx, `UPDATE illustration_requests
-		SET status = ?, prompt = ?, aspect = ?, caption = ?, include_references = ?, error = '', decided_at = ?
+		SET status = ?, prompt = ?, aspect = ?, caption = ?, include_references = ?, prior_illustration_ids_json = ?, error = '', decided_at = ?
 		WHERE id = ? AND status IN (?, ?)`,
-		RequestGenerating, r.Prompt, r.Aspect, r.Caption, r.IncludeReferences, s.now(), id, RequestPending, RequestFailed)
+		RequestGenerating, r.Prompt, r.Aspect, r.Caption, r.IncludeReferences, string(prior), s.now(), id, RequestPending, RequestFailed)
 	if err != nil {
 		return Request{}, err
 	}
@@ -344,6 +377,7 @@ func (s *RequestService) Approve(ctx context.Context, id string, edits ApproveEd
 	meta, genErr := s.gen.Generate(ctx, GenerateInput{
 		ProjectID: r.ProjectID, SourceNodeID: r.TargetNodeID, Prompt: r.Prompt,
 		CharacterIDs: r.CharacterIDs, IncludeReferences: r.IncludeReferences, Aspect: r.Aspect, Caption: r.Caption,
+		PriorIllustrationIDs: r.PriorIllustrationIDs,
 	})
 	if genErr != nil {
 		// The drawing may have been cancelled with ctx; the record must
@@ -441,16 +475,17 @@ func (s *RequestService) RecoverInterrupted(ctx context.Context) error {
 }
 
 const requestColumns = `id, project_id, COALESCE(target_node_id, ''), purpose, prompt, character_ids_json,
-	include_references, aspect, caption, note, source, status, COALESCE(illustration_id, ''), placed_at, error, created_at, decided_at`
+	include_references, prior_illustration_ids_json, aspect, caption, note, source, status, COALESCE(illustration_id, ''), placed_at, error, created_at, decided_at`
 
 func scanRequest(row scanner) (Request, error) {
 	var (
 		r       Request
 		ids     string
+		prior   string
 		placed  sql.NullInt64
 		decided sql.NullInt64
 	)
-	if err := row.Scan(&r.ID, &r.ProjectID, &r.TargetNodeID, &r.Purpose, &r.Prompt, &ids, &r.IncludeReferences,
+	if err := row.Scan(&r.ID, &r.ProjectID, &r.TargetNodeID, &r.Purpose, &r.Prompt, &ids, &r.IncludeReferences, &prior,
 		&r.Aspect, &r.Caption, &r.Note, &r.Source, &r.Status, &r.IllustrationID, &placed, &r.Error, &r.CreatedAt, &decided); err != nil {
 		return Request{}, err
 	}
@@ -458,6 +493,10 @@ func scanRequest(row scanner) (Request, error) {
 		return Request{}, fmt.Errorf("illustration: request %s characters: %w", r.ID, err)
 	}
 	r.CharacterIDs = nonNil(r.CharacterIDs)
+	if err := json.Unmarshal([]byte(prior), &r.PriorIllustrationIDs); err != nil {
+		return Request{}, fmt.Errorf("illustration: request %s earlier pictures: %w", r.ID, err)
+	}
+	r.PriorIllustrationIDs = nonNil(r.PriorIllustrationIDs)
 	if placed.Valid {
 		r.PlacedAt = &placed.Int64
 	}
