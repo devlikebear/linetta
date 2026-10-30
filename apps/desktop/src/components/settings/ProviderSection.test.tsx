@@ -1137,13 +1137,15 @@ describe("ProviderSection", () => {
       // nowhere else. The shipped sentence named scene text alone, which
       // understates the consent it records: all of that context travels with
       // every agent turn. The section description above the checkbox is
-      // broader, but a description is not a consent record.
+      // broader, but a description is not a consent record. Images count too:
+      // an attached picture and a character's reference images reach the
+      // provider the same way text does.
       const { translate } = await vi.importActual<typeof import("../../lib/i18n")>("../../lib/i18n");
 
       const expected = {
-        ko: ["요약", "카드", "그 밖의 어떤 곳에도"],
-        en: ["summaries", "cards", "nowhere else"],
-        ja: ["要約", "カード", "それ以外のどこにも"],
+        ko: ["요약", "카드", "참조 이미지", "첨부한 이미지", "그 밖의 어떤 곳에도"],
+        en: ["summaries", "cards", "reference images", "images I attach", "nowhere else"],
+        ja: ["要約", "カード", "参照画像", "添付した画像", "それ以外のどこにも"],
       } as const;
 
       for (const [language, phrases] of Object.entries(expected)) {

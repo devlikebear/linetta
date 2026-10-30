@@ -98,4 +98,23 @@ describe("ImageGenSection", () => {
     expect(await screen.findByTestId("image-model-error")).toHaveTextContent("settings.images.model.listFailed");
     expect(screen.getByTestId("image-model-input")).not.toBeDisabled();
   });
+
+  it("names everything a drawing sends, in every language", async () => {
+    // Earlier illustrations go along by default, so the consent record has to
+    // name them as well as the prompt and the reference images.
+    const { translate } = await vi.importActual<typeof import("../../lib/i18n")>("../../lib/i18n");
+
+    const expected = {
+      ko: ["프롬프트", "참조 이미지", "이전 삽화", "그 밖의 어떤 곳에도"],
+      en: ["prompt", "reference images", "earlier illustrations", "nowhere else"],
+      ja: ["プロンプト", "参考画像", "以前の挿絵", "それ以外のどこにも"],
+    } as const;
+
+    for (const [language, phrases] of Object.entries(expected)) {
+      const sentence = translate(language as keyof typeof expected, "settings.images.consent", {
+        provider: "Acme Images",
+      });
+      for (const phrase of phrases) expect(sentence, `${language}: ${phrase}`).toContain(phrase);
+    }
+  });
 });
