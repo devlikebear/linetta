@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.15.0 - 2026-10-30
+
+- **Illustrations keep the same faces.** A new illustration is sent with up
+  to two earlier pictures from the work's gallery, after the characters'
+  reference images: pictures of the same characters first, then ones you put
+  in a scene or chose to represent one, then the newest. The illustration
+  dialog and the agent's request card show them as thumbnails; click one to
+  leave it out. When they go along, one paragraph asking the image model to
+  match faces and style without copying the composition is added to the end
+  of the prompt.
+- **Attach images to an agent message.** Attach up to four images (5 MB
+  each) with the button beside the message box, by pasting, or by dropping
+  them on it. Large photos are scaled down before sending. The images go to
+  the model with that message only; the conversation history notes how many
+  there were. The Claude Code provider takes text only and says so.
+- **Reference images on character sheets.** The character visual sheet has
+  its own reference image area: pick several images at once, drop them in,
+  or take one from the work's gallery, such as the face an episode 1
+  illustration got right.
+- **The agent can do the same.** It can choose which earlier pictures an
+  illustration request sends (or leave the choice to the app), and save an
+  image you attached, or a gallery picture, as a character's reference image.
+
 ## v1.14.0 - 2026-10-30
 
 - **Share a published episode.** Once an episode is public on Linetta Works,
