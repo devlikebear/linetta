@@ -161,6 +161,13 @@
     color: var(--color-accent);
     font-style: italic;
   }
+  /* keep-all suits Korean, which breaks at spaces. Japanese has none, so a
+     headline under it cannot wrap and pushes the page wider than a phone. */
+  html:lang(ja) :is(h1, h2, h3, h4) {
+    word-break: normal;
+    line-break: strict;
+  }
+
   html:lang(ko) .em-accent,
   html:lang(ja) .em-accent {
     font-style: normal;

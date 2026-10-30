@@ -6,6 +6,9 @@
 
   const items = $derived([
     { label: t.nav.workspace, href: '#workspace' },
+    { label: t.nav.assist, href: '#assist', wide: true },
+    { label: t.nav.illustrations, href: '#illustrations', wide: true },
+    { label: t.nav.publish, href: '#publish', wide: true },
     { label: t.nav.agent, href: '#agents' },
     { label: t.nav.data, href: '#data' },
     { label: t.nav.download, href: '#download' }
@@ -25,21 +28,22 @@
       {#each items as item}
         <a
           href={item.href}
-          class="font-mono text-[0.7rem] uppercase tracking-[0.14em] text-muted transition-colors hover:text-ink"
+          class="whitespace-nowrap font-mono text-[0.7rem] uppercase tracking-[0.14em] text-muted transition-colors hover:text-ink
+            {item.wide ? 'hidden xl:inline' : ''}"
           >{item.label}</a
         >
       {/each}
     </nav>
 
     <div class="flex items-center gap-3">
-      <div class="hidden items-center gap-2 font-mono text-[0.7rem] text-muted-2 sm:flex">
+      <div class="hidden items-center gap-2 whitespace-nowrap font-mono text-[0.7rem] text-muted-2 sm:flex">
         {#each t.alts as alt}
           <a href={alt.path} hreflang={alt.locale} class="transition-colors hover:text-ink"
             >{alt.label}</a
           >
         {/each}
       </div>
-      <a href="#download" class="btn btn-primary">{t.nav.cta}</a>
+      <a href="#download" class="btn btn-primary whitespace-nowrap">{t.nav.cta}</a>
     </div>
   </div>
 </header>
