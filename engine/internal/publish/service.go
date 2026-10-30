@@ -2,6 +2,8 @@ package publish
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -34,7 +36,8 @@ const (
 // writer's long blurb or a project's eleventh genre is refused or trimmed
 // before anything is sent, instead of bouncing as invalid_request.
 const (
-	maxBlurbRunes = 2000
+	// MaxBlurbRunes is exported so the agent's tool can say why it refused.
+	MaxBlurbRunes = 2000
 	maxGenres     = 10
 	maxGenreRunes = 20
 )
@@ -53,7 +56,9 @@ type EpisodeView struct {
 	LeafIDs   []string `json:"leaf_ids,omitempty"`
 	CharCount int      `json:"char_count"`
 	Empty     bool     `json:"empty,omitempty"`
-	State     string   `json:"state"`
+	// Illustrations is how many pictures go up with the episode.
+	Illustrations int    `json:"illustrations,omitempty"`
+	State         string `json:"state"`
 	// Modified is true when the local text differs from the site's,
 	// whatever the state. "modified" is only the state of a public episode;
 	// a private one with new text is still private.
@@ -87,6 +92,9 @@ type WorkStatus struct {
 	Work         *WorkView     `json:"work,omitempty"`
 	Episodes     []EpisodeView `json:"episodes"`
 	SiteOnly     []EpisodeView `json:"site_only"`
+	// Sheets is the sheets and cover: the writer's choices always, the
+	// site's copy when it answered.
+	Sheets SheetsStatus `json:"sheets"`
 }
 
 // PublishResult is the outcome of publishing one episode.
@@ -105,6 +113,14 @@ type UpsertInput struct {
 	Slug string `json:"slug,omitempty"`
 }
 
+// Illustrations is the work's gallery as publishing needs it: which pictures
+// a project has (published text shows only those) and their bytes (uploaded
+// before the episode that shows them).
+type Illustrations interface {
+	IDsInProject(ctx context.Context, projectID string) (map[string]bool, error)
+	IllustrationImage(ctx context.Context, id string) (mime string, data []byte, err error)
+}
+
 // Service publishes a library's works. Every call that reaches the site
 // first checks for a stored connection, so a writer who never connected sends
 // nothing anywhere.
@@ -117,6 +133,11 @@ type Service struct {
 	nodes     *node.Repo
 	language  func(context.Context) string
 	clock     func() int64
+	// illustrations is nil until WithIllustrations: published text then
+	// shows no pictures.
+	illustrations Illustrations
+	// sheets is nil until WithSheets: the work then publishes no sheets.
+	sheets SheetSource
 
 	// mu serialises calls that change the site. Two publishes of one work
 	// racing would each compute an episode order from a list the other is
@@ -132,6 +153,13 @@ func NewService(client *Client, creds Credentials, connector *Connector, state *
 		client: client, creds: creds, connector: connector, state: state,
 		projects: projects, nodes: nodes, language: language, clock: clock,
 	}
+}
+
+// WithIllustrations lets published episodes carry the pictures in their
+// scenes.
+func (s *Service) WithIllustrations(src Illustrations) *Service {
+	s.illustrations = src
+	return s
 }
 
 // token returns the stored token, or the reason there is none.
@@ -165,9 +193,15 @@ func (s *Service) localEpisodes(ctx context.Context, p project.Project) ([]local
 	if err != nil {
 		return nil, err
 	}
+	var known map[string]bool
+	if s.illustrations != nil {
+		if known, err = s.illustrations.IDsInProject(ctx, p.ID); err != nil {
+			return nil, err
+		}
+	}
 	out := make([]localEpisode, 0, len(list))
 	for _, ep := range list {
-		payload, err := export.ExportEpisodeMarkdown(ctx, s.nodes, ep, p.Title)
+		payload, err := export.ExportEpisodeMarkdown(ctx, s.nodes, ep, p.Title, known)
 		if err != nil {
 			return nil, err
 		}
@@ -197,6 +231,9 @@ func (s *Service) WorkStatus(ctx context.Context, projectID string) (WorkStatus,
 		return WorkStatus{}, err
 	}
 	out := WorkStatus{ProjectID: projectID, Episodes: []EpisodeView{}, SiteOnly: []EpisodeView{}}
+	if out.Sheets, err = s.localSheetsStatus(ctx, projectID); err != nil {
+		return WorkStatus{}, err
+	}
 	tok, err := s.token()
 	if err != nil {
 		for _, ep := range local {
@@ -215,6 +252,11 @@ func (s *Service) WorkStatus(ctx context.Context, projectID string) (WorkStatus,
 		}
 		out.Registered, out.LastSyncedAt = true, w.LastSyncedAt
 		out.Work = workView(w, work.Visibility)
+		// The sheets are a second request; without them the episodes are
+		// still worth showing.
+		if err := s.remoteSheetsStatus(ctx, tok, projectID, work, &out.Sheets); err != nil {
+			log.Printf("publish: read sheets: %v", err)
+		}
 	case isNotFound(err):
 		// Not on the site (or deleted there): nothing saved about it is true.
 		if err := s.state.Forget(ctx, projectID); err != nil {
@@ -300,6 +342,7 @@ func merge(ep localEpisode, r *RemoteEpisode) EpisodeView {
 	v := EpisodeView{
 		NodeID: ep.NodeID, Label: ep.Label, Title: ep.payload.Title, Ordinal: ep.Ordinal, LeafIDs: ep.LeafIDs,
 		CharCount: ep.payload.CharCount, Empty: ep.payload.Markdown == "", State: EpisodeUnpublished,
+		Illustrations: len(ep.payload.Illustrations),
 	}
 	if r == nil {
 		return v
@@ -355,8 +398,8 @@ func (s *Service) UpsertWork(ctx context.Context, in UpsertInput) (WorkView, err
 	if blurb == "" {
 		return WorkView{}, reason(rpc.ReasonPublishBlurbRequired, errors.New("publish: a blurb is required"))
 	}
-	if utf8.RuneCountInString(blurb) > maxBlurbRunes {
-		return WorkView{}, reason(rpc.ReasonPublishRejected, fmt.Errorf("publish: blurb is over %d characters", maxBlurbRunes))
+	if utf8.RuneCountInString(blurb) > MaxBlurbRunes {
+		return WorkView{}, reason(rpc.ReasonPublishRejected, fmt.Errorf("publish: blurb is over %d characters", MaxBlurbRunes))
 	}
 	serial := in.SerialStatus
 	if serial == "" {
@@ -465,6 +508,10 @@ func (s *Service) PublishEpisode(ctx context.Context, nodeID string) (PublishRes
 	if mine.payload.Markdown == "" {
 		return PublishResult{}, reason(rpc.ReasonPublishEmptyEpisode, fmt.Errorf("publish: episode %s has no text", target.NodeID))
 	}
+	if n := len(mine.payload.Illustrations); n > MaxImagesPerEpisode {
+		return PublishResult{}, reason(rpc.ReasonPublishTooManyImages,
+			fmt.Errorf("publish: episode %s shows %d pictures; the site takes %d", target.NodeID, n, MaxImagesPerEpisode))
+	}
 
 	created, published, err := s.sendEpisode(ctx, tok, p.ID, local, *mine)
 	if errors.Is(err, errNumberTaken) {
@@ -517,6 +564,13 @@ func (s *Service) sendEpisode(ctx context.Context, tok, projectID string, local 
 		localOrder = append(localOrder, ep.NodeID)
 	}
 	desired := desiredOrder(current, localOrder, mine.NodeID)
+	var held []RemoteImage
+	if r, ok := find(remote, mine.NodeID); ok {
+		held = r.Images
+	}
+	if err := s.uploadImages(ctx, tok, projectID, mine, held); err != nil {
+		return false, RemoteEpisode{}, err
+	}
 	in := EpisodeInput{Title: mine.payload.Title, BodyMD: mine.payload.Markdown, ContentHash: mine.payload.ContentHash}
 
 	if !exists {
@@ -551,6 +605,48 @@ func (s *Service) sendEpisode(ctx context.Context, tok, projectID string, local 
 		return false, RemoteEpisode{}, s.episodeError(err)
 	}
 	return created, ep, nil
+}
+
+// uploadImages sends the pictures the episode's text shows that the site
+// does not hold yet. The site takes the episode only once every one is
+// there, so a failure here stops the publish with nothing changed.
+func (s *Service) uploadImages(ctx context.Context, tok, projectID string, mine localEpisode, held []RemoteImage) error {
+	if len(mine.payload.Illustrations) == 0 {
+		return nil
+	}
+	if s.illustrations == nil {
+		return fmt.Errorf("publish: episode %s shows pictures but no gallery is wired", mine.NodeID)
+	}
+	have := map[string]string{}
+	for _, img := range held {
+		have[img.IllustrationID] = img.SHA256
+	}
+	for _, id := range mine.payload.Illustrations {
+		mime, data, err := s.illustrations.IllustrationImage(ctx, id)
+		if err != nil {
+			return fmt.Errorf("publish: read picture %s: %w", id, err)
+		}
+		sum := sha256.Sum256(data)
+		if have[id] == hex.EncodeToString(sum[:]) {
+			continue
+		}
+		if _, _, err := s.client.PutEpisodeImage(ctx, tok, projectID, mine.NodeID, id, mime, data); err != nil {
+			return s.imageError(err)
+		}
+	}
+	return nil
+}
+
+// imageError classifies a failed picture upload. Too large and over quota
+// are about the pictures, not the text, and say so.
+func (s *Service) imageError(err error) error {
+	switch {
+	case IsCode(err, CodeTooLarge):
+		return reason(rpc.ReasonPublishImageTooLarge, err)
+	case IsCode(err, CodeQuotaExceeded):
+		return reason(rpc.ReasonPublishTooManyImages, err)
+	}
+	return s.siteError(err)
 }
 
 func (s *Service) episodeError(err error) error {

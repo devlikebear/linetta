@@ -43,10 +43,27 @@ const (
 // data-sharing terms materially change and renewed consent is required.
 const AIDataSharingConsentVersion = 1
 
-// DefaultOpenAICodexModel is the ChatGPT-account compatible Codex default.
-// Leaving the model empty lets tars fall back to gpt-5.3-codex, which is only
-// supported for API-backed Codex and returns 400 for ChatGPT account auth.
-const DefaultOpenAICodexModel = "gpt-5.3-codex-spark"
+// legacyOpenAICodexDefaultModel is the Codex model 1.x wrote into every
+// settings.json as its default, whether or not the writer ever chose it. The
+// ChatGPT backend has since stopped serving it to Plus accounts (400 "not
+// supported when using Codex with a ChatGPT account", 2026-10-23), though a
+// plan that still lists it may use it. A stored copy cannot say whether the
+// writer picked it, so it is left on disk and treated as "no choice made":
+// see UsesOpenAICodexDefaultModel.
+const legacyOpenAICodexDefaultModel = "gpt-5.3-codex-spark"
+
+// retiredOpenAICodexModel is the default before that one. No account is
+// served it any more, so it is dropped wherever it is read.
+const retiredOpenAICodexModel = "gpt-5.3-codex"
+
+// UsesOpenAICodexDefaultModel reports whether a stored Codex model means "the
+// writer has not chosen one": empty, or the legacy default above. For those
+// the provider layer picks the account's own first listed model at call time
+// instead of naming a slug that ages the day the backend retires it.
+func UsesOpenAICodexDefaultModel(model string) bool {
+	model = strings.TrimSpace(model)
+	return model == "" || model == legacyOpenAICodexDefaultModel
+}
 
 func validLanguages() []string { return []string{"ko", "en", "ja"} }
 
@@ -121,6 +138,11 @@ type Config struct {
 	// to, nil when it is not. Written only by the publish connect flow (see
 	// publish.go); settings.set has no patch field for it.
 	PublishAccount *PublishAccount `json:"publish_account,omitempty"`
+	// ImageProvider draws illustrations (see image.go). It is "" until the
+	// writer turns drawing on; credentials come from Providers, and
+	// ImageProviders holds each image provider's model and consent.
+	ImageProvider  string                         `json:"image_provider,omitempty"`
+	ImageProviders map[string]ImageProviderConfig `json:"image_providers,omitempty"`
 	// AgentSelfReviewEnabled governs the built-in agent's self-improvement
 	// pass (#98 Task 10): after a turn that actually did work, the agent is
 	// asked separately whether anything is worth recording as a skill. It
@@ -155,6 +177,13 @@ type Config struct {
 	VisualWriteToolsDisabled bool `json:"visual_write_tools_disabled"`
 	MemoryToolsEnabled       bool `json:"memory_tools_enabled"`
 	SkillToolsEnabled        bool `json:"skill_tools_enabled"`
+	// ReviewToolsEnabled is story-assist's "check and record a judgement"
+	// group (#99-shaped, same switch pattern as the two above):
+	// linetta_report_continuity in Phase 2, and whatever Phase 3/4 add to
+	// mcphost.ReviewToolNames. Defaults to ON for the same reason Memory and
+	// Skills do — a writer who never opens this pane keeps the tool set the
+	// release that shipped it had.
+	ReviewToolsEnabled bool `json:"review_tools_enabled"`
 	// ToolBudget is what those two switches actually cost, measured from the
 	// tool set the engine would register right now — never a table written
 	// down here. Derived at settings.get time and never persisted, for the
@@ -322,6 +351,10 @@ type Patch struct {
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
 	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
+	ReviewToolsEnabled        *bool                    `json:"review_tools_enabled,omitempty"`
+	// ImageProvider "" turns illustration drawing off.
+	ImageProvider  *string                       `json:"image_provider,omitempty"`
+	ImageProviders map[string]ImageProviderPatch `json:"image_providers,omitempty"`
 	// ClearLegacyPlaintextKeys, when true, deletes the plaintext keys load()
 	// could not migrate from settings.json (#113). One-way and destructive:
 	// on a platform with no secret store the file is the only place those
@@ -391,7 +424,7 @@ func defaults(home string) Config {
 	return Config{
 		Language:              "ko",
 		Provider:              ProviderOpenAICodex,
-		Providers:             map[string]ProviderConfig{ProviderOpenAICodex: {Model: DefaultOpenAICodexModel}},
+		Providers:             map[string]ProviderConfig{ProviderOpenAICodex: {}},
 		TypewriterDefault:     false,
 		Theme:                 "system",
 		Palette:               defaultPalette,
@@ -411,6 +444,7 @@ func defaults(home string) Config {
 		// exactly the tool set 1.2 shipped. See Config.MemoryToolsEnabled.
 		MemoryToolsEnabled: true,
 		SkillToolsEnabled:  true,
+		ReviewToolsEnabled: true,
 	}
 }
 
@@ -439,6 +473,7 @@ func (s *Store) load() error {
 	if disk.Provider != "" {
 		s.cfg.Provider = disk.Provider
 	}
+	loadImageSettings(&s.cfg, disk)
 	s.cfg.TypewriterDefault = disk.TypewriterDefault
 	s.cfg.FocusDefault = disk.FocusDefault
 	if disk.Theme != "" && slices.Contains(validThemes(), disk.Theme) {
@@ -507,6 +542,9 @@ func (s *Store) load() error {
 	}
 	if _, ok := raw["skill_tools_enabled"]; ok {
 		s.cfg.SkillToolsEnabled = disk.SkillToolsEnabled
+	}
+	if _, ok := raw["review_tools_enabled"]; ok {
+		s.cfg.ReviewToolsEnabled = disk.ReviewToolsEnabled
 	}
 	// An account with no handle is not a connection; drop it rather than
 	// show "connected" to nobody.
@@ -644,6 +682,15 @@ func (s *Store) SkillToolsEnabled() bool {
 	return s.cfg.SkillToolsEnabled
 }
 
+// ReviewToolsEnabled reports whether the Review tool group (story-assist
+// Phase 2's linetta_report_continuity, and later phases' additions to it) is
+// offered. Read per server build, like MemoryToolsEnabled.
+func (s *Store) ReviewToolsEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.ReviewToolsEnabled
+}
+
 // Set applies a partial patch, validates, persists atomically, returns the new Config.
 func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	s.writeMu.Lock()
@@ -724,6 +771,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 			merged[id] = normalizeProviderConfig(id, cfg)
 		}
 		next.Providers = merged
+	}
+	if err := applyImagePatch(&next, p); err != nil {
+		return Config{}, err
 	}
 	if p.TypewriterDefault != nil {
 		next.TypewriterDefault = *p.TypewriterDefault
@@ -821,6 +871,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	}
 	if p.SkillToolsEnabled != nil {
 		next.SkillToolsEnabled = *p.SkillToolsEnabled
+	}
+	if p.ReviewToolsEnabled != nil {
+		next.ReviewToolsEnabled = *p.ReviewToolsEnabled
 	}
 	if next.WebSearchProvider == "" {
 		next.WebSearchProvider = "brave"
@@ -963,7 +1016,10 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		VisualWriteToolsDisabled: next.VisualWriteToolsDisabled,
 		MemoryToolsEnabled:       next.MemoryToolsEnabled,
 		SkillToolsEnabled:        next.SkillToolsEnabled,
+		ReviewToolsEnabled:       next.ReviewToolsEnabled,
 		PublishAccount:           next.PublishAccount,
+		ImageProvider:            next.ImageProvider,
+		ImageProviders:           next.ImageProviders,
 	}
 	// sanitizeConfigForDisk has just blanked every api_key, which is right for
 	// every key the SecretStore holds. It is wrong for the pre-1.0 ones it
@@ -1069,8 +1125,8 @@ func (s *Store) runtimeProviderConfig(provider string, cfg ProviderConfig) Provi
 }
 
 func normalizeProviderConfig(provider string, cfg ProviderConfig) ProviderConfig {
-	if provider == ProviderOpenAICodex && (cfg.Model == "" || cfg.Model == "gpt-5.3-codex") {
-		cfg.Model = DefaultOpenAICodexModel
+	if provider == ProviderOpenAICodex && cfg.Model == retiredOpenAICodexModel {
+		cfg.Model = ""
 	}
 	// base_url is not scrubbed here on purpose. Set rejects it for every id but
 	// "openai" (see the merge loop), which is the path the app writes through.
@@ -1136,7 +1192,7 @@ func (s *Store) redactedSettingsView(c Config) Config {
 	// What the tool set the two switches govern actually costs (#99).
 	// Measured here rather than stored, so it can never describe a tool set
 	// the engine no longer serves.
-	c.ToolBudget = s.toolBudgetView(c.MemoryToolsEnabled, c.SkillToolsEnabled)
+	c.ToolBudget = s.toolBudgetView(c.MemoryToolsEnabled, c.SkillToolsEnabled, c.ReviewToolsEnabled)
 	if c.ToolBudget != nil && c.VisualWriteToolsDisabled {
 		c.ToolBudget.Tools -= c.ToolBudget.VisualWrites.Tools
 		c.ToolBudget.Bytes -= c.ToolBudget.VisualWrites.Bytes

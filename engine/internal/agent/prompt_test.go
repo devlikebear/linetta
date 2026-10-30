@@ -44,6 +44,19 @@ func TestSystemPrompt_tellsTheAgentToReadContextFirst(t *testing.T) {
 	}
 }
 
+// Story-assist Phase 1: the agent is told the Writer's Direction brief
+// section is binding, cannot be edited by the agent, and flags staleness
+// rather than silently following or discarding it. Unlike the memory and
+// skills bullets this one is not behind a tool-group switch.
+func TestSystemPrompt_statesTheWritersDirectionIsBinding(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"Writer's Direction", "cannot edit it"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing %q; got:\n%s", want, got)
+		}
+	}
+}
+
 // The standing habit (#98 Task 10). The background self-review is the safety
 // net; this bullet is the agent noticing at the moment it happens, while it
 // still remembers why the procedure worked. Both halves have to be there: a
@@ -57,6 +70,48 @@ func TestSystemPrompt_statesTheRecordAndPatchHabit(t *testing.T) {
 	}
 	if !strings.Contains(got, "patch that skill") {
 		t.Error("the prompt does not tell the agent to correct a skill that turned out wrong")
+	}
+}
+
+// story-assist Phase 3 (3.C.2): the propose-vs-apply split and the
+// extraction-sweep habit are only meaningful instructions when the Review
+// group is on — linetta_propose_story_ops is absent otherwise.
+func TestSystemPrompt_statesProposeVsApplyWhenReviewOn(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"linetta_propose_story_ops", "linetta_apply_story_ops", "import_extraction", "continue"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing %q with review on; got:\n%s", want, got)
+		}
+	}
+}
+
+func TestSystemPrompt_withReviewOffDropsThePropose(t *testing.T) {
+	groups := allToolGroups()
+	groups.review = false
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, groups)
+	if strings.Contains(got, "linetta_propose_story_ops") {
+		t.Error("linetta_propose_story_ops must not be named when review is off")
+	}
+}
+
+// story-assist Phase 4 (4.B.2): the forecast-vs-reflect-in-outline split is
+// only meaningful when the Review group is on — linetta_save_forecast is
+// absent otherwise.
+func TestSystemPrompt_statesForecastHabitWhenReviewOn(t *testing.T) {
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"linetta_save_forecast", "purpose=forecast"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("prompt missing %q with review on; got:\n%s", want, got)
+		}
+	}
+}
+
+func TestSystemPrompt_withReviewOffDropsTheForecastHabit(t *testing.T) {
+	groups := allToolGroups()
+	groups.review = false
+	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, groups)
+	if strings.Contains(got, "linetta_save_forecast") {
+		t.Error("linetta_save_forecast must not be named when review is off")
 	}
 }
 
@@ -726,18 +781,21 @@ func TestSystemPrompt_withBothGroupsOffNamesNoRemovedTool(t *testing.T) {
 }
 
 // The default is the prompt 1.2 shipped, and a nil func means the default: an
-// engineapp that forgets to wire one of the two must degrade to "on", not
-// silently strip the agent's memory.
+// engineapp that forgets to wire one of the three must degrade to "on", not
+// silently strip the agent's memory, skills, or review tools.
 func TestResolveToolGroups_nilFuncsMeanEnabled(t *testing.T) {
-	if g := resolveToolGroups(nil, nil); g != allToolGroups() {
-		t.Errorf("resolveToolGroups(nil, nil) = %+v, want every group on", g)
+	if g := resolveToolGroups(nil, nil, nil); g != allToolGroups() {
+		t.Errorf("resolveToolGroups(nil, nil, nil) = %+v, want every group on", g)
 	}
 	off := func() bool { return false }
-	if g := resolveToolGroups(off, nil); g.memory || !g.skills {
-		t.Errorf("resolveToolGroups(off, nil) = %+v, want memory off and skills on", g)
+	if g := resolveToolGroups(off, nil, nil); g.memory || !g.skills || !g.review {
+		t.Errorf("resolveToolGroups(off, nil, nil) = %+v, want memory off and the rest on", g)
 	}
-	if g := resolveToolGroups(nil, off); !g.memory || g.skills {
-		t.Errorf("resolveToolGroups(nil, off) = %+v, want memory on and skills off", g)
+	if g := resolveToolGroups(nil, off, nil); !g.memory || g.skills || !g.review {
+		t.Errorf("resolveToolGroups(nil, off, nil) = %+v, want skills off and the rest on", g)
+	}
+	if g := resolveToolGroups(nil, nil, off); !g.memory || !g.skills || g.review {
+		t.Errorf("resolveToolGroups(nil, nil, off) = %+v, want review off and the rest on", g)
 	}
 }
 
@@ -753,5 +811,22 @@ func TestVisualWritePromptFollowsGroup(t *testing.T) {
 	}
 	if !strings.Contains(off, "linetta_get_character_visuals") {
 		t.Fatal("disabling writes removed visual reads")
+	}
+}
+
+// No selection leaves the prompt exactly as typed: a bare <selection> block
+// would read to the model as a passage the writer meant and forgot to paste.
+func TestWithSelection_leavesAPlainPromptAlone(t *testing.T) {
+	if got := withSelection("  \n", "안녕"); got != "안녕" {
+		t.Errorf("withSelection = %q, want the prompt unchanged", got)
+	}
+}
+
+func TestSystemPrompt_explainsTheSelectionBlock(t *testing.T) {
+	got := systemPrompt("ko", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
+	for _, want := range []string{"<selection>", "linetta_revise_scene"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("system prompt is missing %q", want)
+		}
 	}
 }

@@ -26,7 +26,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 - **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
 - **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a recent structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
-- **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish leave your device.
+- **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish — and the Story World sheets and cover you choose to make public — leave your device.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
 ## See Linetta in action
@@ -111,6 +111,35 @@ line (the panel offers undo whenever a line carries a `batch_id` or a
 keeps that version indefinitely, so you can put the old text back from the
 scene's **Previous versions** sheet.
 
+To ask about a passage, select it in the editor and choose **Ask the agent**
+from the selection menu. The agent panel opens with the selected paragraphs
+quoted above the input box; remove them with ✕, or send a different selection
+to replace them. With a quote attached and the input empty, quick chips fill
+in a request to polish, comment on or expand it, and you press send yourself.
+The quote goes with your message and stays in the conversation, so a follow-up
+such as "make it shorter" still knows which paragraph you meant. Asked only a
+question, the agent changes nothing.
+
+### Your direction
+
+A work has a **current focus** — what to concentrate on for the next few
+episodes — and any scene can have its own **intent**: a one-line goal, what
+to keep, what to avoid. Both are yours to write; no agent tool can set
+either. They sit at the very top of the story brief, ahead of everything
+else, under a "Writer's Direction" heading the built-in agent treats as
+binding — and the same brief is what a connected MCP client reads too, read-only
+mode included. Set the focus and it is three episodes' worth of actually-
+written scenes later, the app and the brief both flag it as possibly stale
+and ask you to confirm it still holds.
+
+If you have picked a branch in **Where the story could go** (below), it
+appears right after the scene intent, labelled a plan — never canon — with
+its title, premise, and beats. If the outline, manuscript, Story World, or
+your own direction changed since the branch was drawn, the brief says so
+and asks the agent to check with you before following it. Turning the
+Writer's Direction switch off in the AI context checklist removes the plan
+along with the rest of the section.
+
 ### What the agent remembers
 
 Linetta keeps two short documents an agent reads: a **writer profile** — how
@@ -184,26 +213,30 @@ Skills → Learning from its own work** (`agent_self_review_enabled` in
 provider never runs it, since that second turn would spend your plan's usage
 without you asking for it.
 
-**You can switch the memory, skills, and visual editing tools off entirely.** Every tool's full
-description travels in every request, so Linetta's twenty-seven tools are a
-standing cost on every turn — and the memory tool and the two skills tools are
-about a fifth of it. **Settings → Tool budget** says how many tools the agent
-currently gets and what each group costs, and turns each group off for both
-the built-in agent and any MCP client (`memory_tools_enabled` and
-`skill_tools_enabled` in `settings.json`; both on by default, and
-`visual_write_tools_disabled`, false by default). Switching a
+**You can switch the memory, skills, review, and visual editing tools off
+entirely.** Every tool's full description travels in every request, so
+Linetta's thirty tools are a standing cost on every turn — and the memory
+tool, the two skills tools, and the continuity-check tool together are a
+meaningful share of it. **Settings → Tool budget** says how many tools the
+agent currently gets and what each group costs, and turns each group off for
+both the built-in agent and any MCP client (`memory_tools_enabled`,
+`skill_tools_enabled`, and `review_tools_enabled` in `settings.json`; all on
+by default, and `visual_write_tools_disabled`, false by default). Switching a
 group off also removes the instructions that name its tools — a prompt telling
 an agent to use a tool it has not been given is worse than the tool's cost.
 Each switch takes effect on your very next message; there is nothing to
 restart. With the skills tools off the self-improvement pass cannot run at
 all, and the Skills pane says so.
 
-The memory and skills groups lose different things. With the memory
+The memory, skills, and review groups lose different things. With the memory
 tool off, what is already recorded is still read back to the agent — it just
 cannot add to it, and you can still edit it yourself under Settings → Memory.
 With the skills tools off, the skill **list** goes too: a list with no
-`linetta_read_skill` to open a body is only names. Nothing is deleted either
-way, and switching a group back on restores it exactly.
+`linetta_read_skill` to open a body is only names. With the review tools off,
+`linetta_report_continuity` and the agent panel's continuity starter chip
+both go — observations already recorded stay exactly where they are in Story
+World. Nothing is deleted either way, and switching a group back on restores
+it exactly.
 
 **A turn stops after a set number of tool calls.** The built-in agent makes at
 most 48 tool calls in one turn by default. Change it under **Settings → Tool
@@ -263,6 +296,189 @@ Each returns `undo_batch_id` for the agent undo button or `linetta_undo_last_cha
 in-memory undo window (8 changes; cleared on restart). Set
 `visual_write_tools_disabled` in settings to omit this optional group.
 
+### Continuity checks
+
+Ask the agent to check a scene's continuity — the "연속성 점검" starter chip
+does this in one click — and it reads the scene with paragraph numbers, holds
+it against Story World, your fact cards, earlier scenes, and your own
+direction, and records what it finds with `linetta_report_continuity`. The
+engine checks every quote and every reference before anything is stored: a
+quote has to be an exact substring of the numbered paragraphs it cites, and
+a reference has to name an entity, fact card, beat, or scene this work
+actually has. A call that fails either check is refused with a sentence the
+agent can act on, not silently accepted. An empty result — nothing wrong —
+is recorded too, so "I checked and it's fine" is on the record the same way
+a finding is.
+
+**Nothing in the manuscript changes.** What you get is a list, under Story
+World → Continuity checks: each finding's severity, category, summary, the
+exact quote and paragraph it is about, a reference chip you can click to
+open the entity, fact, or earlier scene it points at, and an optional
+suggestion. You open the scene, mark it dismissed or resolved, or leave it.
+If the scene's text has changed since the check, the group is flagged "본문이
+바뀜 · 다시 점검" so you know the finding may be stale. A badge in the
+right-hand scene panel shows how many open observations the current scene
+carries, with a click to Story World's continuity section.
+
+Continuity checks are a judgement call the agent makes when asked, not a
+background pass. They are a different thing from the automatic consistency
+re-check after a name or setting change (contextual edit): that one is
+deterministic (it catches a name it just renamed and missed) and shows a
+report immediately; continuity checks are the agent's own reading, held
+until you act on it, and they do not replace each other.
+
+Observations live in `library.db`, so they are in daily backups and travel
+with a work restored from one — including the writer's own dismissed and
+resolved judgements, which are work too valuable to lose on a restore.
+References inside an observation are remapped to the restored work's own
+ids; one that no longer resolves is dropped rather than left dangling. Turn
+the group off under **Settings → Tool budget → Check & propose**
+(`review_tools_enabled` in `settings.json`, on by default) to remove
+`linetta_report_continuity` and the starter chip for both the built-in agent
+and any MCP client; observations already recorded stay exactly where they
+are.
+
+### Suggestions inbox
+
+Ask the agent to create one character, place, or relationship directly and
+it applies right away with `linetta_apply_story_ops` — the small-change
+path, same as before. Anything pulled from the manuscript, or more than a
+few world elements at once, goes through a different tool,
+`linetta_propose_story_ops`: nothing is applied. Each candidate — a
+character, place, item, concept, relationship, fact card, storyline, or
+beat — lands in the **suggestions inbox** instead, grouped by kind, for you
+to accept, edit, or reject one at a time. A badge on Story World's header
+("제안함 N") shows how many are waiting; opening it, or running "제안함 열기"
+from the command palette, shows the inbox as a sheet beside the editor.
+
+Each candidate shows why the agent proposed it: the quote it cited from the
+manuscript, with a link to open that scene, and any citations it offered
+when asked for more than one. A new character or place whose name or alias
+normalizes to the same text as one you already have — ignoring spacing,
+case, and the middle dot — is flagged "같은 대상일 수 있음"; you can turn it
+into an alias of the existing record with one click instead of creating a
+duplicate. The engine only flags the match — it never merges on its own. A
+relationship that depends on a character candidate you have not accepted
+yet is marked "생성이 먼저 필요"; selecting it selects that character too, so
+accepting never leaves a dangling reference. Rejecting an item never
+cascades to whatever depended on it — that item just stays in the inbox,
+marked as blocked, until you decide.
+
+Right after importing a Markdown manuscript, if a provider is connected,
+Linetta offers to fill Story World from it: a dialog shows the episode
+count, character count, and a rough input-token estimate (an estimate, not
+a billed cost) before anything runs. Starting it opens the agent panel with
+the extraction request already typed — you still press send, the same as a
+starter chip. The agent works through the manuscript episode by episode,
+checks what already exists first, and proposes with citations as it goes;
+if it runs into its tool-call budget partway through, tell it to continue
+and it picks up from the first episode it has not covered yet, using the
+engine's own progress count rather than guessing.
+
+Suggestions live in `library.db` alongside everything else, but they are
+deliberately **not** carried over when you restore a single work from a
+backup: a pending item's reference still names ids from the library it came
+from, and a suggestion costs nothing to make again by asking the agent.
+Turn the group off under **Settings → Tool budget → Check & propose**
+(`review_tools_enabled` in `settings.json`, on by default) to remove
+`linetta_propose_story_ops` and the "Story World 채우기" starter chip for
+both the built-in agent and any MCP client — items already in the inbox
+stay exactly where they are.
+
+### Where the story could go
+
+Ask the agent "다음 회차 전개 갈래 3개를 만들어 줘" — or press the starter chip — and
+it drafts 2–5 possible continuations from your last written episode and
+saves them with `linetta_save_forecast`. **Nothing is canon.** The outline,
+the manuscript, and Story World do not change; what you get is a sheet,
+opened from the command palette ("갈래 예측 열기") or a button on the outline
+panel's header, where every branch sits side by side: a title and premise,
+an episode-by-episode beat timeline, risk badges you can click through to
+the character, fact, or scene they are about, and — folded by default —
+the character decisions, projected changes, open questions, and how the
+branch fits your own direction.
+
+**Picking a branch is a direct click, not a chat turn.** [이 갈래 고르기] and
+[선택 해제] call the engine straight away; no agent runs, and your activity
+log gains no new entry. The branch you pick appears in the next brief's
+Writer's Direction section as a **plan** — see "Your direction" above — so
+every later turn, built-in agent or MCP client, sees it without being told
+again. If you want it in the outline, press [개요 반영 제안 요청]: it fills the
+agent panel with a ready-to-send request, the agent proposes scenes and
+beats to the suggestions inbox (never writes directly), and you apply them
+there like any other suggestion. Accepting a forecast's structural
+proposal gets its own one-click undo in the inbox, reverting the outline
+change and anything hung on it together.
+
+A forecast goes stale the moment canon it was drawn from changes —
+anything in the outline, the manuscript (any episode's text, not only the
+one you diverged from), Story World, or your own direction — and the sheet
+says what moved, e.g. "정사가 바뀜: 인물 2개, 3화 본문". The check runs fresh
+every time you open the sheet, so undoing the change that made a forecast
+stale makes it fresh again; nothing here is a one-way flag. A stale
+forecast can still be picked — the warning follows the choice into the
+toast, not a refusal.
+
+Forecasts live in `library.db` but are **not** carried over when you
+restore a single work from a backup, for the same reason the suggestions
+inbox is not: a branch's own references, and the episode it diverged from,
+still name ids from the library it came from, and a forecast costs nothing
+to draft again by asking the agent. Turn the group off under
+**Settings → Tool budget → Check & propose** (`review_tools_enabled` in
+`settings.json`, shared with continuity checks and the suggestions inbox,
+on by default) to remove `linetta_save_forecast` and its starter chip for
+both the built-in agent and any MCP client — forecasts already saved stay
+exactly where they are, and you can still open the sheet and pick among
+them.
+
+## Illustrations
+
+Linetta can draw illustrations for a scene with an image provider you choose.
+It is off until you pick one in **Settings → Image generation**: ChatGPT or
+Gemini, using the sign-in or key from the AI provider settings, with its own
+consent box separate from the agent's. ChatGPT counts against your plan's
+usage; Gemini is billed per image by Google AI.
+
+Select a passage and choose **Draw this scene**, or use the command palette
+or the gallery. Describe the scene, pick the characters (those mentioned in
+the scene are preselected), choose a single picture or four panels, the
+aspect, and whether to send up to four reference images from the character
+visual sheets. Linetta builds the prompt from the scene, the characters'
+looks and the work's art style; you can edit it, and it is sent exactly as
+written. Nothing is drawn until you press **Generate**.
+
+Pictures are kept in the work's gallery (toolbar **Illustrations**), up to
+200 per work and 5 MiB each, with the prompt, provider and model they came
+from. **Insert into scene** places one in the text at the cursor; a picture
+used in a scene shows **In use** and cannot be deleted until you take it out.
+Illustrations are included in library backups, carried by Markdown export and
+import (embedded in the single `.md` file) and by folder and Git sync (as
+files in a `<work>.images/` folder beside the manuscript), and go up with an
+episode you publish to Linetta Works.
+
+A picture can also stand for a scene, an episode or a part. In the gallery,
+open a picture and make it the representative of its scene or episode; it then
+shows as a small image on that row of the outline and at the top of the scene,
+and the gallery marks it **Representative**. A representative picture, like one
+used as the Works cover, cannot be deleted until you unset it.
+
+**Agents ask; you approve.** An agent — the built-in one or one connected over
+MCP — cannot draw. It can leave a request with `linetta_request_illustration`:
+the scene, what the picture is for (insert at the end of a scene, represent a
+scene, episode or part, or just keep in the gallery), and a prompt, or a scene
+description Linetta turns into one from the visual sheets and art style. Each
+request appears as a card under the agent's tool line and in the gallery's
+**Agent requests** section, and the toolbar **Illustrations** button counts
+the ones waiting. On the card you can edit the prompt, aspect, caption and
+reference images, then **Generate** or reject it; nothing is drawn or sent to
+the image provider before you press it. Requests from an MCP client are marked
+as external, and a work holds at most 20 waiting requests.
+`linetta_list_illustrations` lets the agent see the gallery and how its recent
+requests were decided, and `linetta_set_representative_illustration` sets or
+clears a representative from pictures already in the gallery, with an undo.
+The two write tools are hidden by the same switch as the other visual write
+tools, and `read_only` mode keeps only the list.
+
 ## Writing with your own agent (MCP)
 
 Connecting an outside agent over MCP is a different thing from connecting a
@@ -283,6 +499,7 @@ Once connected, an agent can:
 
 - read the outline, a scene, characters, fact cards, and a story brief;
 - draft and revise scenes, write summaries, and restructure the outline;
+- ask for an illustration, which waits for your approval before anything is drawn (`full` mode only);
 - publish an episode to Linetta Works, once you have connected an account and published the work yourself (`full` mode only);
 - record what it changed, so you can see it in the activity log.
 
@@ -334,16 +551,32 @@ open button. Edit the episode later and the outline marks it **Edited**;
 publish again and the same address shows the new text. Episode numbers follow
 your outline, and an episode you move or insert renumbers the ones after it —
 their old addresses redirect. You can make an episode private from the same
-dialog. An agent you connected (built-in or over MCP) can publish too, with
-`linetta_publish_episode`, but only after you have connected and published the
-work once yourself; it cannot connect an account or register a work.
+dialog. An agent you connected (built-in or over MCP) can publish too, once
+you have connected your account. Ask it to publish an episode of a work that
+is not on the site yet and it registers the work first with
+`linetta_register_work`, using a blurb you wrote or approved, then publishes
+with `linetta_publish_episode`. It can also change the blurb or mark the work
+complete. Only you can connect an account.
 
-**What is sent, and where.** The published episode's title and text, its
-place in the order, and the work's title, genres, blurb, serial status and
-address go to the Linetta Works server, which is run by Linetta's developer,
-and are public for anyone to read. The site sends published text to the
-Anthropic API for content review. Unpublished episodes, notes, character
-sheets, fact cards and agent memories are never sent. See the
+**Sheets and cover.** Once a work is on the site, the publish dialog's
+**World, characters and cover** section can put character and world sheets and a
+cover up too. A sheet goes only if you turn on **Show on Linetta Works** in its
+panel — off by default, and shown only when this device is connected — so
+check it for spoilers first. The sheet's name, aliases, role, summary,
+attributes and the names of its relationships go, with its first reference
+image as the sheet's picture; relationship notes, visual notes and sheets you
+have not made public are not sent. Pick a cover from the work's gallery, then
+press **Upload sheets and cover**. They go up separately from episodes, so a
+rejected picture or a limit on sheets never holds back an episode.
+
+**What is sent, and where.** The published episode's title and text, the
+illustrations placed in it, its place in the order, and the work's title,
+genres, blurb, serial status and address go to the Linetta Works server,
+which is run by Linetta's developer, and are public for anyone to read; so do
+the sheets and cover you chose above. The site sends published text and
+illustrations to the Anthropic API for content review. Unpublished episodes,
+notes, fact cards, agent memories and sheets you have not made public are
+never sent. See the
 [privacy policy](docs/privacy-policy.md), section 3.5.
 
 **Where the connection is kept.** The publish token is kept in the macOS
@@ -404,7 +637,7 @@ Yes. Linetta supports Markdown import and export so your writing is not locked i
 
 ### Is my work uploaded to a Linetta cloud?
 
-No. Linetta has no cloud that keeps your manuscript. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure. The one exception is a choice you make episode by episode: when you publish an episode to Linetta Works, that episode goes to the site so readers can read it.
+No. Linetta has no cloud that keeps your manuscript. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure. The one exception is a choice you make episode by episode: when you publish an episode to Linetta Works, that episode goes to the site so readers can read it — as do any Story World sheets and cover you choose to make public.
 
 ## For contributors
 

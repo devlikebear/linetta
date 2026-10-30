@@ -928,3 +928,126 @@ func TestBuildFullSurvivesNoCuratedMemorySource(t *testing.T) {
 		t.Errorf("got %q / %q", c.WriterProfile, c.WorkNotes)
 	}
 }
+
+// A scene revised after its summary was written keeps that summary in the
+// next scene's brief, marked stale — not the revised scene's opening lines,
+// which say nothing about how it ends. A derived summary gone stale is still
+// dropped for the trim, as before.
+func TestBuildContext_nearby_keepsAStaleWrittenSummaryAndMarksIt(t *testing.T) {
+	f := newCtxFixture(t)
+	ctx := context.Background()
+	p := f.project(t, project.NewInput{Genres: []string{"SF"}, LengthTarget: "series", DefaultPOV: "first"})
+	nodes := f.nodes
+	docOf := func(text string) string {
+		return `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + text + `"}]}]}`
+	}
+	ep3, _ := nodes.CreateSibling(ctx, *p.LastOpenedNodeID, "leaf", "3화", "", 1100)
+	ep4, _ := nodes.CreateSibling(ctx, ep3.ID, "leaf", "4화", "", 1110)
+	ep2 := *p.LastOpenedNodeID
+
+	_ = nodes.UpdateContent(ctx, ep3.ID, docOf("서명 칸이 떴다."), 1200)
+	got3, _ := nodes.Get(ctx, ep3.ID)
+	_ = nodes.SetWrittenSummary(ctx, ep3.ID, "확인된 서명은 입사 서류의 것이었다.", got3.ContentVersion)
+	_ = nodes.UpdateContent(ctx, ep3.ID, docOf("서명 칸이 떴다. 숫자 하나만 고쳤다."), 1300)
+
+	built, err := f.builder().Build(ctx, ep4.ID, "이어 써줘", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	var found bool
+	for _, ss := range built.Hierarchical.NearbyLeafSummaries {
+		if ss.NodeID != ep3.ID {
+			continue
+		}
+		found = true
+		if ss.Body != "확인된 서명은 입사 서류의 것이었다." || !ss.Stale {
+			t.Errorf("3화 nearby = %+v, want the written summary marked stale", ss)
+		}
+	}
+	if !found {
+		t.Fatalf("3화 missing from nearby: %+v", built.Hierarchical.NearbyLeafSummaries)
+	}
+	if user := buildUser(built); !strings.Contains(user, "(고치기 전 원고의 요약) 확인된 서명은") {
+		t.Errorf("brief does not mark the stale summary:\n%s", user)
+	}
+
+	// The derived case, for contrast: a stale opening cut is not worth keeping.
+	_ = nodes.UpdateContent(ctx, ep2, docOf("2화 본문"), 1400)
+	got2, _ := nodes.Get(ctx, ep2)
+	_ = nodes.SetSummary(ctx, ep2, "2화 옛 첫머리", got2.ContentVersion)
+	_ = nodes.UpdateContent(ctx, ep2, docOf("2화 새 본문"), 1500)
+	built, err = f.builder().Build(ctx, ep3.ID, "이어 써줘", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, ss := range built.Hierarchical.NearbyLeafSummaries {
+		if ss.NodeID == ep2 && (strings.TrimSpace(ss.Body) != "2화 새 본문" || ss.Stale) {
+			t.Errorf("2화 nearby = %+v, want the trim of the current text", ss)
+		}
+	}
+}
+
+// fakeDirectionSource is a minimal DirectionSource for testing the
+// builder's own wiring (story-assist Phase 4's PlannedBranchFor call),
+// without going through direction.Repo/forecast.Service.
+type fakeDirectionSource struct {
+	plan        DirectionPlannedBranch
+	planPresent bool
+}
+
+func (f fakeDirectionSource) FocusFor(ctx context.Context, projectID string) (DirectionFocus, bool, error) {
+	return DirectionFocus{}, false, nil
+}
+
+func (f fakeDirectionSource) SceneIntentFor(ctx context.Context, nodeID string) (DirectionSceneIntent, bool, error) {
+	return DirectionSceneIntent{}, false, nil
+}
+
+func (f fakeDirectionSource) PlannedBranchFor(ctx context.Context, projectID string) (DirectionPlannedBranch, bool, error) {
+	return f.plan, f.planPresent, nil
+}
+
+func TestBuildFull_plannedBranchFlowsIntoDirectionBrief(t *testing.T) {
+	f := newCtxFixture(t)
+	p := f.project(t, project.NewInput{LengthTarget: "novel", DefaultPOV: "first"})
+
+	builder := f.builder().WithDirectionSource(fakeDirectionSource{
+		planPresent: true,
+		plan: DirectionPlannedBranch{
+			Title: "맞선다", Premise: "주인공이 물러서지 않는다.",
+			Beats: []DirectionPlannedBeat{{EpisodeOffset: 1, Summary: "첫 비트"}},
+			Stale: true, StaleReasons: []DirectionStaleReason{{Group: "entities", Count: 2}},
+		},
+	})
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "이어 써줘", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got.Direction.PlannedBranch == nil {
+		t.Fatal("PlannedBranch not populated from DirectionSource.PlannedBranchFor")
+	}
+	pb := got.Direction.PlannedBranch
+	if pb.Title != "맞선다" || pb.Premise != "주인공이 물러서지 않는다." {
+		t.Errorf("PlannedBranch = %+v", pb)
+	}
+	if len(pb.Beats) != 1 || pb.Beats[0].EpisodeOffset != 1 || pb.Beats[0].Summary != "첫 비트" {
+		t.Errorf("PlannedBranch.Beats = %+v", pb.Beats)
+	}
+	if !pb.Stale || len(pb.StaleReasons) != 1 || pb.StaleReasons[0].Group != "entities" {
+		t.Errorf("PlannedBranch stale/reasons = %+v", pb)
+	}
+}
+
+func TestBuildFull_noPlannedBranchWhenNoneSelected(t *testing.T) {
+	f := newCtxFixture(t)
+	p := f.project(t, project.NewInput{LengthTarget: "novel", DefaultPOV: "first"})
+
+	builder := f.builder().WithDirectionSource(fakeDirectionSource{planPresent: false})
+	got, err := builder.Build(context.Background(), *p.LastOpenedNodeID, "이어 써줘", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got.Direction.PlannedBranch != nil {
+		t.Errorf("PlannedBranch = %+v, want nil when nothing is selected", got.Direction.PlannedBranch)
+	}
+}

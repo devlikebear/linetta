@@ -1,12 +1,15 @@
 module github.com/devlikebear/linetta/engine
 
-go 1.26.9
+go 1.26.10
+
+toolchain go1.27.3
 
 require (
-	github.com/devlikebear/tars v0.63.1-0.20261017092114-9907a083ef2c
+	github.com/devlikebear/tars v0.65.1-0.20261024014548-378e7479d33c
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	golang.org/x/sys v0.45.0
+	golang.org/x/text v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.50.1
 )
@@ -23,7 +26,7 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

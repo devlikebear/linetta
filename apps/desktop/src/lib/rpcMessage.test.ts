@@ -104,6 +104,7 @@ describe("rpcErrorMessage", () => {
       "provider_timeout",
       "provider_rejected",
       "provider_unavailable",
+      "provider_model_unsupported",
     ]) {
       const err = new RpcError("providers.test", `anthropic: ${body}`, -32602, { reason });
       for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
@@ -139,6 +140,24 @@ describe("rpcErrorMessage", () => {
   // earlier fix round but had no direct test; covered here alongside its
   // siblings so all four of the loop's reason codes stay in step with
   // engine/internal/rpc/reason.go.
+  // story-assist Phase 4: forecast.select naming a forecast another window
+  // deleted, and proposals.undo asking to revert a structural batch that
+  // aged out of storyops' in-memory undo window. Both reason codes were
+  // added to engine/internal/rpc/reason.go without a matching entry here,
+  // which left the engine's raw English sentence on screen for a ko/ja
+  // reader — covered directly so the two stay in step.
+  it("translates the story-assist Phase 4 reason codes in every language", () => {
+    for (const reason of ["forecast_not_found", "proposals_undo_unavailable"]) {
+      const error = new RpcError("forecast.select", "raw engine sentence", -32602, { reason });
+      for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
+        const shown = rpcErrorMessage(error, t);
+        expect(shown, `${reason} in ${name}`).not.toContain("raw engine sentence");
+        expect(shown, `${reason} in ${name}`).not.toContain(reason);
+        expect(shown.length, `${reason} in ${name}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
   it("never shows the raw panic value for an internal agent error, and covers undo too", () => {
     const panicBody = "runtime error: index out of range [3] with length 3";
     for (const reason of ["agent_internal_error", "agent_undo_unavailable"]) {

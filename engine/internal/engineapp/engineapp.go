@@ -17,9 +17,13 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/codexauth"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/contextualedit"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
+	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/importmd"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
@@ -30,6 +34,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/paths"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -129,6 +134,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	writingStats := stats.NewRepo(st)
 	entities := entity.NewRepo(st)
 	visuals := visual.NewRepo(st)
+	illustrations := illustration.NewRepo(st)
 	styles := style.NewRepo(st)
 	mentions := mention.NewRepo(st)
 	threads := thread.NewRepo(st)
@@ -136,6 +142,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	notes := note.NewRepo(st)
 	relationships := relationship.NewRepo(st)
 	facts := fact.NewRepo(st)
+	continuityRepo := continuity.NewRepo(st)
 	manuscriptIndexer := manuscript.NewIndexer(st.DB())
 	manuscriptSearcher := manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer)
 	manuscriptEditor := manuscriptedit.NewService(nodes, snaps)
@@ -187,6 +194,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		entities:      entities,
 		relationships: relationships,
 		extras:        export.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts},
+		images:        exportImages{illustrations},
 		ops:           ops,
 	}
 	gitSyncer := setupGitSync(syncDeps)
@@ -237,7 +245,50 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	mcpStory := storyops.New(projects, nodes, threads, beats, entities, relationships).
 		WithFacts(facts).
 		WithSnapshots(snaps).
-		WithMemory(companionSvc)
+		WithMemory(companionSvc).
+		WithIllustrations(illustrations)
+
+	// The writer's own direction (story-assist Phase 1): the work's current
+	// focus and a scene's intent. Shared between the RPC handlers below
+	// (direction.get_focus etc., the app's only way to write it) and the
+	// story brief's Direction section just below — one table, one repo.
+	directionRepo := direction.NewRepo(st, nodes, projects)
+
+	// Possible continuations an agent drafted for the writer to compare
+	// (story-assist Phase 4). Shared between linetta_save_forecast
+	// (below), the forecast.* RPC handlers (below), the proposals Service
+	// just below (purpose=forecast's own ForecastID check) and the story
+	// brief's Direction section just below's planned-branch note — one
+	// table, one Service, the same discipline directionRepo follows.
+	forecastSvc := forecast.New(st, forecast.Deps{
+		Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships,
+		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
+	})
+
+	// Story-structure proposals (story-assist Phase 3): an agent's
+	// linetta_propose_story_ops candidates, and the writer's accept/reject
+	// of them through the proposals.* RPCs below, share this one Service —
+	// Submit and Accept must agree on what a ref or an id resolves to. Its
+	// own storyops instance needs neither snapshots nor memory: the
+	// allowed proposal ops never touch scene text or the keyword memory.
+	proposalsStory := storyops.New(projects, nodes, threads, beats, entities, relationships).WithFacts(facts)
+	proposalsSvc := proposals.New(st, proposalsStory, entities, threads, beats, facts, nodes, projects,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }).
+		WithForecasts(forecastSvc)
+
+	// Resolve any proposal item a crash left stuck at StatusReverting
+	// before the RPC server takes a single request: storyops' own
+	// in-memory undo window (storyops.maxUndoBatches, at most 8 batches)
+	// is gone on restart, so proposals.Undo's own retry path can never
+	// reach these on its own — see proposals.ReconcileReverting's doc
+	// comment. Best-effort, same discipline as the companion memory
+	// migration above: a writer whose app will not start because this
+	// failed is worse off than one whose reverting item is still
+	// reverting (Accept already refuses it either way, so nothing
+	// destructive happens if this is skipped).
+	if err := proposalsSvc.ReconcileReverting(ctx, clock()); err != nil {
+		fmt.Fprintf(os.Stderr, "proposals reconcile at startup: %v\n", err)
+	}
 
 	// One Store for the skills the agent writes for itself, shared between
 	// the MCP tool layer (linetta_read_skill / linetta_edit_skill, below),
@@ -263,7 +314,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		// (#98 Task 7). Without it linetta_read_skill is undiscoverable and
 		// nothing anywhere goes red — which is what
 		// TestProductionStoryContextBuilderCarriesEverySource guards.
-		WithSkillSource(skillBriefSource{store: skillsStore})
+		WithSkillSource(skillBriefSource{store: skillsStore}).
+		WithDirectionSource(directionBriefSource{repo: directionRepo, forecast: forecastSvc})
 
 	// Linetta Works publishing (Phase 3). Registered here, before the MCP
 	// host, because the publish tools publish through the same service.
@@ -275,47 +327,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		db:            st.DB(),
 		language:      settingsLanguage,
 		clock:         clock,
+		images:        exportImages{illustrations},
+		sheets:        publishSheets{entities: entities, relationships: relationships, visuals: visuals},
 	})
 	a.closers = append(a.closers, stopPublish)
-
-	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
-		settingsStore: settingsStore,
-		home:          home,
-		repos: mcpToolRepos{
-			visuals:    visuals,
-			style:      styles,
-			projects:   projects,
-			nodes:      nodes,
-			entities:   entities,
-			mentions:   mentions,
-			facts:      facts,
-			plot:       plotBuilder,
-			manuscript: manuscriptSearcher,
-			context:    mcpContextBuilder,
-			snapshots:  snaps,
-			story:      mcpStory,
-			msEdit:     manuscriptEditor,
-			memory:     memRepo,
-			// The skills the agent writes for itself live as SKILL.md files
-			// under the same home the rest of Linetta's own material does,
-			// with their versions in the database beside the manuscript's.
-			// skillsStore is the same *Store the built-in agent's own
-			// SkillSource reads below — one directory, one set of skills,
-			// whether a skill is read through the MCP tools or listed into
-			// the agent's own system prompt.
-			skills:       skillsStore,
-			skillHistory: skillHistory,
-			// linetta_publish_status / linetta_publish_episode publish
-			// through the same service the publish dialog does, so an
-			// agent and the writer share one connection and one state.
-			publish: publishSvc,
-			enqueue: summ.Enqueue,
-			notify:  func(method string, params any) { _ = s.Notifier().Notify(method, params) },
-			clock:   clock,
-			db:      st.DB(),
-		},
-	})
-	a.closers = append(a.closers, stopMCP)
 
 	// The built-in agent's provider layer (#90). Resolves the writer's
 	// provider settings into a client on demand; nothing here dials until an
@@ -329,6 +344,66 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	a.closers = append(a.closers, codexSvc.Close)
 
 	providerSrc := provider.NewSource(settingsStore, codexHome).WithCLIWorkDir(filepath.Join(home, "agent-cli"))
+
+	// Illustration drawing. The painter is the provider's Draw, gated on the
+	// image consent; the gallery and the prompt preview never reach a
+	// provider. Built before the MCP host because its illustration tools
+	// leave requests here (illustration Phase 4): only the writer's approve
+	// draws one.
+	illustrationSvc := illustration.NewService(illustrations, visuals, illustrationPainter{src: providerSrc}, clock)
+	illustrationRequests := illustration.NewRequestService(illustrations, illustrationSvc, nodes, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) })
+	if err := illustrationRequests.RecoverInterrupted(ctx); err != nil {
+		return err
+	}
+
+	mcpCtrl, mcpTools, stopMCP := setupMCP(mcpDeps{
+		settingsStore: settingsStore,
+		home:          home,
+		repos: mcpToolRepos{
+			visuals:       visuals,
+			illustrations: illustrations,
+			requests:      illustrationRequests,
+			style:         styles,
+			projects:      projects,
+			nodes:         nodes,
+			entities:      entities,
+			mentions:      mentions,
+			facts:         facts,
+			beats:         beats,
+			threads:       threads,
+			continuity:    continuityRepo,
+			proposals:     proposalsSvc,
+			forecasts:     forecastSvc,
+			plot:          plotBuilder,
+			manuscript:    manuscriptSearcher,
+			context:       mcpContextBuilder,
+			snapshots:     snaps,
+			story:         mcpStory,
+			msEdit:        manuscriptEditor,
+			memory:        memRepo,
+			// The skills the agent writes for itself live as SKILL.md files
+			// under the same home the rest of Linetta's own material does,
+			// with their versions in the database beside the manuscript's.
+			// skillsStore is the same *Store the built-in agent's own
+			// SkillSource reads below — one directory, one set of skills,
+			// whether a skill is read through the MCP tools or listed into
+			// the agent's own system prompt.
+			skills:       skillsStore,
+			skillHistory: skillHistory,
+			// linetta_publish_status / linetta_register_work /
+			// linetta_publish_episode publish through the same service the
+			// publish dialog does, so an agent and the writer share one
+			// connection and one state.
+			publish: publishSvc,
+			enqueue: summ.Enqueue,
+			notify:  func(method string, params any) { _ = s.Notifier().Notify(method, params) },
+			clock:   clock,
+			db:      st.DB(),
+		},
+	})
+	a.closers = append(a.closers, stopMCP)
+
 	providers := providerService{src: providerSrc}
 	a.providerSrc = providerSrc
 
@@ -338,7 +413,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	agentStory := storyops.New(projects, nodes, threads, beats, entities, relationships).
 		WithFacts(facts).
 		WithSnapshots(snaps).
-		WithMemory(companionSvc)
+		WithMemory(companionSvc).
+		WithIllustrations(illustrations)
 
 	agentCtrl, stopAgent := setupAgent(agentDeps{
 		tools:    mcpTools,
@@ -428,6 +504,30 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("style.get_draft", handlers.GetStyleDraft(styles))
 	s.Handle("style.approve_draft", handlers.ApproveStyleDraft(styles, clock))
 	s.Handle("style.discard_draft", handlers.DiscardStyleDraft(styles))
+	s.Handle("direction.get_focus", handlers.GetFocus(directionRepo))
+	s.Handle("direction.set_focus", handlers.SetFocus(directionRepo, clock))
+	s.Handle("direction.get_scene_intent", handlers.GetSceneIntent(directionRepo))
+	s.Handle("direction.set_scene_intent", handlers.SetSceneIntent(directionRepo, clock))
+	s.Handle("continuity.list", handlers.ListContinuity(continuityRepo, nodes, entities, facts, beats))
+	// continuity.set_status fires continuity.changed, so a ContextPanel
+	// showing the open-observation badge for the scene the writer just
+	// resolved or dismissed does not have to wait for an unrelated remount
+	// to notice (story-assist Phase 2).
+	s.Handle("continuity.set_status", handlers.SetContinuityStatus(continuityRepo, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
+	s.Handle("continuity.open_counts", handlers.ContinuityOpenCounts(continuityRepo))
+	s.Handle("proposals.list", handlers.ListProposals(proposalsSvc, nodes, entities, threads))
+	s.Handle("proposals.accept", handlers.AcceptProposals(proposalsSvc, clock))
+	s.Handle("proposals.reject", handlers.RejectProposals(proposalsSvc, clock))
+	s.Handle("proposals.pending_count", handlers.ProposalsPendingCount(proposalsSvc))
+	s.Handle("proposals.extraction_estimate", handlers.ExtractionEstimate(proposalsSvc))
+	s.Handle("proposals.extraction_progress", handlers.ExtractionProgress(proposalsSvc))
+	s.Handle("proposals.undo", handlers.UndoProposals(proposalsSvc, clock))
+
+	s.Handle("forecast.list", handlers.ListForecasts(forecastSvc, projects, nodes, entities, facts))
+	s.Handle("forecast.select", handlers.SelectForecast(forecastSvc, clock))
+	s.Handle("forecast.clear_selection", handlers.ClearForecastSelection(forecastSvc))
+	s.Handle("forecast.delete", handlers.DeleteForecast(forecastSvc))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))
@@ -490,6 +590,23 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("providers.list", handlers.ProvidersList(providers))
 	s.Handle("providers.list_models", handlers.ProvidersListModels(providers))
 	s.Handle("providers.test", handlers.ProvidersTest(providers))
+	// Illustration drawing. The painter is the provider's Draw, gated on the
+	// image consent; the gallery and the prompt preview never reach a provider.
+	imageProviders := imageProviderService{src: providerSrc}
+	s.Handle("image_providers.list", handlers.ImageProvidersList(imageProviders))
+	s.Handle("image_providers.list_models", handlers.ImageProvidersListModels(imageProviders))
+	s.Handle("illustrations.compose", handlers.IllustrationsCompose(visuals, entities))
+	s.Handle("illustrations.generate", handlers.IllustrationsGenerate(illustrationSvc))
+	s.Handle("illustrations.list", handlers.IllustrationsList(illustrations))
+	s.Handle("illustrations.get", handlers.IllustrationsGet(illustrations))
+	s.Handle("illustrations.update", handlers.IllustrationsUpdate(illustrations))
+	s.Handle("illustrations.delete", handlers.IllustrationsDelete(illustrations))
+	s.Handle("illustrations.representatives", handlers.IllustrationsRepresentatives(illustrations))
+	s.Handle("illustrations.set_representative", handlers.IllustrationsSetRepresentative(illustrations, clock))
+	s.Handle("illustration_requests.list", handlers.IllustrationRequestsList(illustrationRequests))
+	s.Handle("illustration_requests.get", handlers.IllustrationRequestsGet(illustrationRequests))
+	s.Handle("illustration_requests.approve", handlers.IllustrationRequestsApprove(illustrationRequests))
+	s.Handle("illustration_requests.reject", handlers.IllustrationRequestsReject(illustrationRequests))
 	codex := codexService{svc: codexSvc}
 	s.Handle("codex.login_start", handlers.CodexLoginStart(codex))
 	s.Handle("codex.login_status", handlers.CodexLoginStatus(codex))
@@ -509,12 +626,13 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		Entities:      entities,
 		Relationships: relationships,
 		Extras:        export.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts},
+		Illustrations: exportImages{illustrations},
 	}, settingsLanguage))
-	s.Handle("export.node", handlers.ExportNode(nodes))
+	s.Handle("export.node", handlers.ExportNode(nodes, exportImages{illustrations}))
 	s.Handle("export.nodeText", handlers.ExportNodeText(nodes))
 	s.Handle("export.companion_history", handlers.ExportCompanionHistory(projects, companionHistory, companionSvc, settingsLanguage))
 	s.Handle("imports.markdown", handlers.ImportMarkdown(projects, nodes, entities, relationships,
-		importmd.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts}, clock))
+		importmd.Extras{Threads: threads, Beats: beats, Notes: notes, Facts: facts}, illustrations, clock))
 	s.Handle("imports.preview", handlers.ImportPreview())
 	return nil
 }

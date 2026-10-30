@@ -241,4 +241,17 @@ describe("PublishDialog", () => {
     expect(await screen.findByTestId("publish-url")).toBeInTheDocument();
     expect(screen.queryByTestId("publish-share")).not.toBeInTheDocument();
   });
+
+  it("says the episode's pictures go up with it", async () => {
+    rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ illustrations: 2 })] }));
+    renderDialog();
+    expect(await screen.findByTestId("publish-illustrations")).toHaveTextContent("publish.illustrations");
+  });
+
+  it("says nothing about pictures for an episode without any", async () => {
+    rpc.workStatus.mockResolvedValue(status({ episodes: [episode()] }));
+    renderDialog();
+    await screen.findByTestId("publish-episode");
+    expect(screen.queryByTestId("publish-illustrations")).toBeNull();
+  });
 });

@@ -12,14 +12,19 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/backup"
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
+	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/store"
+	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
@@ -384,5 +389,386 @@ func TestMergeProjectCopiesStyleRules(t *testing.T) {
 				t.Fatalf("merged rules = %+v", got)
 			}
 		})
+	}
+}
+
+// Story-assist Phase 1: project_focus and scene_intents must follow a work
+// through a backup and restore, with anchor_node_id and node_id remapped to
+// the copy's own node ids.
+func TestMergeProjectCopiesDirection(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "Directed", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstLeaf := *p.LastOpenedNodeID
+	if err := nodes.UpdateContent(ctx, firstLeaf,
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"글"}]}]}`, 1000); err != nil {
+		t.Fatal(err)
+	}
+
+	dirRepo := direction.NewRepo(st, nodes, projects)
+	if _, err := dirRepo.SetFocus(ctx, 1000, p.ID, "둘의 오해를 아직 풀지 않는다"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dirRepo.SetSceneIntent(ctx, 1000, direction.SceneIntent{
+		NodeID: firstLeaf, Goal: "거리를 좁힌다", Keep: []string{"침묵"}, Avoid: []string{"고백"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if merged.ProjectID == p.ID {
+		t.Fatal("merge must create a new project id")
+	}
+
+	mergedProjects := project.NewRepo(live)
+	mergedNodes := node.NewRepo(live)
+	mergedRepo := direction.NewRepo(live, mergedNodes, mergedProjects)
+
+	focus, err := mergedRepo.GetFocus(ctx, merged.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !focus.Present || focus.Body != "둘의 오해를 아직 풀지 않는다" {
+		t.Fatalf("merged focus = %+v", focus)
+	}
+	if focus.AnchorNodeID == "" || focus.AnchorNodeID == firstLeaf {
+		t.Fatalf("anchor must be remapped to the copy's own node id, got %q (original %q)", focus.AnchorNodeID, firstLeaf)
+	}
+
+	mergedP, err := mergedProjects.Get(ctx, merged.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergedLeaf := *mergedP.LastOpenedNodeID
+	if focus.AnchorNodeID != mergedLeaf {
+		t.Fatalf("anchor = %q, want the copy's first leaf %q", focus.AnchorNodeID, mergedLeaf)
+	}
+
+	intent, present, err := mergedRepo.GetSceneIntent(ctx, mergedLeaf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !present || intent.Goal != "거리를 좁힌다" || len(intent.Keep) != 1 || intent.Keep[0] != "침묵" ||
+		len(intent.Avoid) != 1 || intent.Avoid[0] != "고백" {
+		t.Fatalf("merged scene intent = %+v, present=%v", intent, present)
+	}
+}
+
+// Story-assist Phase 2, 2.C.2: continuity checks and observations follow a
+// work through a backup and restore. The policy is deliberate and
+// user-confirmed (2026-10-24): an observation's writer judgement (dismissed,
+// resolved) is work that must not vanish on restore, unlike Phase 3/4's
+// evidence packages and forecasts.
+func TestMergeProjectCopiesContinuity(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "연속성", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := *p.LastOpenedNodeID
+	if err := nodes.UpdateContent(ctx, leaf,
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"하린은 왼손으로 검을 뽑았다."}]}]}`, 1000); err != nil {
+		t.Fatal(err)
+	}
+	n, err := nodes.Get(ctx, leaf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entities := entity.NewRepo(st)
+	harin, err := entities.Create(ctx, 1000, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "하린"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	threads := thread.NewRepo(st)
+	th, err := threads.Create(ctx, thread.NewInput{ProjectID: p.ID, Name: "줄기"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	beats := beat.NewRepo(st)
+	bt, err := beats.Create(ctx, beat.NewInput{ThreadID: th.ID, Label: "첫 전투"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	contRepo := continuity.NewRepo(st)
+	check, err := contRepo.Record(ctx, 1500, continuity.ReportInput{
+		ProjectID: p.ID, NodeID: leaf, SceneVersion: n.ContentVersion,
+		Note: "한 번 확인함",
+		Observations: []continuity.ObservationInput{
+			{
+				Category: continuity.CategoryCharacter, Kind: continuity.KindContradiction,
+				Severity: continuity.SeverityMedium, Summary: "왼손/오른손 불일치",
+				ParagraphFrom: 1, ParagraphTo: 1, Quote: "하린은 왼손으로 검을 뽑았다.",
+				Refs: []continuity.Ref{
+					{Type: continuity.RefTypeEntity, ID: harin.ID},
+					{Type: continuity.RefTypeBeat, ID: bt.ID},
+					// A ref to an id that is not actually in this work —
+					// remapContinuityRefs must drop it rather than leave a
+					// dangling pointer across the restore.
+					{Type: continuity.RefTypeEntity, ID: "no-such-entity"},
+				},
+			},
+			{
+				Category: continuity.CategoryOther, Kind: continuity.KindQuestion,
+				Severity: continuity.SeverityLow, Summary: "확인이 필요한 대목",
+				ParagraphFrom: 1, ParagraphTo: 1, Quote: "하린은 왼손으로 검을 뽑았다.",
+			},
+		},
+	}, continuity.SourceAgent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checks, err := contRepo.List(ctx, continuity.ListFilter{ProjectID: p.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(checks) != 1 || len(checks[0].Observations) != 2 {
+		t.Fatalf("test setup: checks = %+v", checks)
+	}
+	dismissedID := checks[0].Observations[1].ID
+	if _, err := contRepo.SetStatus(ctx, 1600, dismissedID, continuity.StatusDismissed); err != nil {
+		t.Fatal(err)
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mergedRepo := continuity.NewRepo(live)
+	mergedChecks, err := mergedRepo.List(ctx, continuity.ListFilter{ProjectID: merged.ProjectID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mergedChecks) != 1 {
+		t.Fatalf("merged checks = %+v, want 1", mergedChecks)
+	}
+	mc := mergedChecks[0]
+	if mc.ID == check.ID {
+		t.Fatal("the merged check must get a fresh id")
+	}
+	if mc.Note != "한 번 확인함" || mc.ContentVersion != n.ContentVersion || mc.Source != continuity.SourceAgent {
+		t.Fatalf("merged check = %+v", mc)
+	}
+	if mc.Stale {
+		t.Fatal("a scene restored at the same content_version must not read as stale")
+	}
+	if len(mc.Observations) != 2 {
+		t.Fatalf("merged observations = %d, want 2", len(mc.Observations))
+	}
+
+	var contradiction, question continuity.Observation
+	for _, o := range mc.Observations {
+		switch o.Kind {
+		case continuity.KindContradiction:
+			contradiction = o
+		case continuity.KindQuestion:
+			question = o
+		}
+	}
+	if question.Status != continuity.StatusDismissed {
+		t.Errorf("the writer's dismiss must survive the restore: status = %q", question.Status)
+	}
+	if len(contradiction.Refs) != 2 {
+		t.Fatalf("contradiction refs = %+v, want 2 (the dangling entity ref must be dropped)", contradiction.Refs)
+	}
+	var sawEntity, sawBeat bool
+	for _, ref := range contradiction.Refs {
+		switch ref.Type {
+		case continuity.RefTypeEntity:
+			sawEntity = true
+			if ref.ID == harin.ID {
+				t.Error("entity ref must be remapped to the copy's own entity id")
+			}
+		case continuity.RefTypeBeat:
+			sawBeat = true
+			if ref.ID == bt.ID {
+				t.Error("beat ref must be remapped to the copy's own beat id")
+			}
+		}
+	}
+	if !sawEntity || !sawBeat {
+		t.Fatalf("expected one entity ref and one beat ref, got %+v", contradiction.Refs)
+	}
+}
+
+// TestMergeProjectExcludesStoryProposals is story-assist 3.D.4: a pending
+// proposal's op_json/ref_bindings_json still name the ORIGINAL library's
+// ids, so restore.MergeProject must not try to remap and copy it the way it
+// does continuity's checks and observations — see the comment beside
+// story_proposals' exclusion in restore.go.
+func TestMergeProjectExcludesStoryProposals(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	entities := entity.NewRepo(st)
+	threads := thread.NewRepo(st)
+	beats := beat.NewRepo(st)
+	facts := fact.NewRepo(st)
+	relationships := relationship.NewRepo(st)
+
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "제안함 제외", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	so := storyops.New(projects, nodes, threads, beats, entities, relationships).WithFacts(facts)
+	propSvc := proposals.New(st, so, entities, threads, beats, facts, nodes, projects, nil)
+	sub, problems, err := propSvc.Submit(ctx, 1000, proposals.SubmitInput{
+		ProjectID: p.ID,
+		Items:     []proposals.ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "하린"}}},
+	}, proposals.SourceAgent)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("Submit() problems=%+v err=%v", problems, err)
+	}
+	if sub.ProposalID == "" {
+		t.Fatal("test setup: no proposal stored")
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	if err := live.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM story_proposal_items WHERE project_id = ?`, merged.ProjectID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf("merged project carries %d story_proposal_items, want 0 (excluded by design)", count)
+	}
+	var proposalCount int
+	if err := live.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM story_proposals WHERE project_id = ?`, merged.ProjectID).Scan(&proposalCount); err != nil {
+		t.Fatal(err)
+	}
+	if proposalCount != 0 {
+		t.Errorf("merged project carries %d story_proposals, want 0 (excluded by design)", proposalCount)
+	}
+}
+
+// TestMergeProjectExcludesForecasts is story-assist Phase 4's own version
+// of the exclusion test above: a forecast's base_node_id, input_hashes_json
+// and branches_json (decisions[]/risks[] refs) all still name the ORIGINAL
+// library's ids, so restore.MergeProject must not try to remap and copy it
+// — see the comment beside forecasts' exclusion in restore.go.
+func TestMergeProjectExcludesForecasts(t *testing.T) {
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	projects := project.NewRepo(st)
+	nodes := node.NewRepo(st)
+	entities := entity.NewRepo(st)
+	threads := thread.NewRepo(st)
+	beats := beat.NewRepo(st)
+	facts := fact.NewRepo(st)
+	relationships := relationship.NewRepo(st)
+	directionRepo := direction.NewRepo(st, nodes, projects)
+
+	p, err := projects.Create(ctx, 1, project.NewInput{Title: "예측 제외", LengthTarget: "short", DefaultPOV: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	forecastSvc := forecast.New(st, forecast.Deps{
+		Projects: projects, Nodes: nodes, Entities: entities, Relationships: relationships,
+		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
+	})
+	_, problems, err := forecastSvc.Save(ctx, 1000, forecast.SaveInput{
+		ProjectID: p.ID, Divergence: "다음 회차 갈래?", Horizon: 3,
+		Branches: []forecast.BranchInput{
+			{Title: "갈래 1", Premise: "전제1", Beats: []forecast.BranchBeat{{EpisodeOffset: 1, Summary: "비트"}}},
+			{Title: "갈래 2", Premise: "전제2", Beats: []forecast.BranchBeat{{EpisodeOffset: 1, Summary: "비트"}}},
+		},
+	}, forecast.SourceAgent)
+	if err != nil || len(problems) != 0 {
+		t.Fatalf("Save() problems=%+v err=%v", problems, err)
+	}
+
+	backupPath := filepath.Join(home, "backup.db")
+	if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", backupPath); err != nil {
+		t.Fatal(err)
+	}
+	live, err := store.Open(ctx, filepath.Join(home, "live.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	merged, err := MergeProject(ctx, live, backupPath, home, p.ID, " copy", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	if err := live.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM forecasts WHERE project_id = ?`, merged.ProjectID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Errorf("merged project carries %d forecasts, want 0 (excluded by design)", count)
 	}
 }

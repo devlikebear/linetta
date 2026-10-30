@@ -35,6 +35,7 @@ export const READ_TOOL_NAMES = [
   "linetta_get_fact_cards",
  "linetta_get_character_visuals",
  "linetta_build_illustration_prompt",
+  "linetta_list_illustrations",
   "linetta_analyze_style",
   "linetta_read_skill",
   "linetta_publish_status",
@@ -45,6 +46,8 @@ export const WRITE_TOOL_NAMES = [
   "linetta_set_art_style",
   "linetta_add_reference_image",
   "linetta_delete_reference_image",
+  "linetta_request_illustration",
+  "linetta_set_representative_illustration",
   "linetta_create_work",
   "linetta_write_scene",
   "linetta_write_summary",
@@ -55,7 +58,11 @@ export const WRITE_TOOL_NAMES = [
   "linetta_edit_memory",
   "linetta_edit_skill",
   "linetta_propose_style_profile",
+  "linetta_register_work",
   "linetta_publish_episode",
+  "linetta_report_continuity",
+  "linetta_propose_story_ops",
+  "linetta_save_forecast",
 ] as const;
 
 const READS: ReadonlySet<string> = new Set(READ_TOOL_NAMES);

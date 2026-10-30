@@ -55,6 +55,9 @@ type RunRequest struct {
 	ProjectID string
 	NodeID    string
 	Prompt    string
+	// Selection is a passage the writer highlighted in the open scene and
+	// sent along with the prompt, or "". See withSelection.
+	Selection string
 }
 
 // Run starts a turn and returns its id immediately; progress arrives as
@@ -70,7 +73,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 			Err:    errors.New("agent: project_id is required"),
 		}
 	}
-	client, resolved, err := s.deps.Providers.Client("")
+	client, resolved, err := s.deps.Providers.Client(ctx, "")
 	if err != nil {
 		return "", err
 	}
@@ -84,7 +87,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	// readings produces a turn whose prompt names a tool its own server never
 	// registered, and because the label is the cache key, that turn's mistake
 	// is cached for every turn after it.
-	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled)
+	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled)
 	if s.deps.VisualWriteToolsDisabled != nil {
 		groups.disableVisualWrites = s.deps.VisualWriteToolsDisabled()
 	}
@@ -144,6 +147,10 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		return "", err
 	}
 
+	// The passage is folded into the prompt before anything sees it, so the
+	// transcript row, the replay of later turns and this turn's message all
+	// carry the same text: a follow-up "now shorten it" still knows what "it" is.
+	req.Prompt = withSelection(req.Selection, req.Prompt)
 	if err := s.tr.appendUser(runCtx, projectID, req.NodeID, runID, req.Prompt); err != nil {
 		s.runs.finish(projectID, runID)
 		s.leave()
@@ -167,6 +174,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		groups:       groups,
 		language:     s.language(),
 		maxToolCalls: s.maxToolCalls(),
+		brief:        newBriefGate(schemas),
 	}
 
 	handedOff = true
@@ -236,6 +244,9 @@ type loopState struct {
 	// settings change mid-turn cannot move a wall the turn is already
 	// counting towards.
 	maxToolCalls int
+	// brief holds a prose write back until the turn has read the story
+	// brief (briefgate.go).
+	brief *briefGate
 }
 
 // releaseSession drops one reference and logs a close that failed. A helper
@@ -278,6 +289,9 @@ type toolPayload struct {
 	// never both set for one call (#112).
 	SnapshotID string   `json:"snapshot_id,omitempty"`
 	NodeIDs    []string `json:"node_ids,omitempty"`
+	// RequestID is the illustration request the call left (illustration
+	// Phase 4); the panel shows its approval card under the line.
+	RequestID string `json:"request_id,omitempty"`
 }
 
 type usagePayload struct {
@@ -566,7 +580,13 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 		Summary: summarize(call.Arguments),
 	})
 
-	result := st.session.call(ctx, st.runID, call.Name, call.Arguments)
+	var result toolResult
+	if refusal := st.brief.refusal(call.Name); refusal != "" {
+		result = toolResult{IsError: true, Text: refusal}
+	} else {
+		result = st.session.call(ctx, st.runID, call.Name, call.Arguments)
+		st.brief.ran(call.Name, !result.IsError)
+	}
 
 	state := "done"
 	if result.IsError {
@@ -575,7 +595,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	s.notify("agent.tool", toolPayload{
 		RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.inTool(st.runID, ""), Name: call.Name, State: state,
 		Summary: summarize(result.Text), BatchID: result.BatchID, SnapshotID: result.SnapshotID,
-		NodeIDs: result.NodeIDs,
+		NodeIDs: result.NodeIDs, RequestID: result.RequestID,
 	})
 	// Recorded with a context that survives the turn's own cancellation,
 	// unlike the tool call above: the call already ran — and may already
@@ -585,7 +605,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	// markRun (transcript.go).
 	if err := s.tr.appendToolEvent(context.WithoutCancel(ctx), st.req.ProjectID, st.req.NodeID, st.runID, toolEvent{
 		Name: call.Name, Summary: summarize(result.Text), OK: !result.IsError,
-		BatchID: result.BatchID, SnapshotID: result.SnapshotID, NodeIDs: result.NodeIDs,
+		BatchID: result.BatchID, SnapshotID: result.SnapshotID, NodeIDs: result.NodeIDs, RequestID: result.RequestID,
 	}); err != nil {
 		logf("transcript: %v", err)
 	}

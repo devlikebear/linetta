@@ -27,6 +27,14 @@ type fakePublisher struct {
 	result    publish.PublishResult
 	err       error
 	published []string
+	upserts   []publish.UpsertInput
+	work      publish.WorkView
+	upsertErr error
+}
+
+func (f *fakePublisher) UpsertWork(_ context.Context, in publish.UpsertInput) (publish.WorkView, error) {
+	f.upserts = append(f.upserts, in)
+	return f.work, f.upsertErr
 }
 
 func (f *fakePublisher) WorkStatus(context.Context, string) (publish.WorkStatus, error) {
@@ -43,6 +51,7 @@ type publishFixture struct {
 	pub       *fakePublisher
 	projectID string
 	nodeID    string
+	otherID   string
 	otherNode string
 	changed   []ChangedPayload
 }
@@ -64,7 +73,7 @@ func newPublishFixture(t *testing.T) *publishFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &publishFixture{pub: &fakePublisher{}, projectID: p.ID, nodeID: *p.LastOpenedNodeID, otherNode: *other.LastOpenedNodeID}
+	f := &publishFixture{pub: &fakePublisher{}, projectID: p.ID, nodeID: *p.LastOpenedNodeID, otherID: other.ID, otherNode: *other.LastOpenedNodeID}
 	f.deps = ToolDeps{
 		Projects: projects,
 		Nodes:    node.NewRepo(st),
@@ -116,7 +125,7 @@ func TestPublishEpisode_refusesAnUnregisteredWork(t *testing.T) {
 	f.pub.err = &rpc.ReasonError{Reason: rpc.ReasonPublishWorkNotRegistered, Err: errors.New("404")}
 	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
 	res := callPublishTool(t, cs, "linetta_publish_episode", map[string]any{"node_id": f.nodeID})
-	if !res.IsError || !strings.Contains(toolText(res), "registers it") {
+	if !res.IsError || !strings.Contains(toolText(res), "linetta_register_work") {
 		t.Fatalf("result = %q", toolText(res))
 	}
 }
@@ -209,9 +218,109 @@ func TestPublishTools_refuseWhenNoPublisherIsWired(t *testing.T) {
 	}{
 		{"linetta_publish_status", map[string]any{"project_id": f.projectID}},
 		{"linetta_publish_episode", map[string]any{"node_id": f.nodeID}},
+		{"linetta_register_work", map[string]any{"project_id": f.projectID, "blurb": "소개"}},
 	} {
 		if res := callPublishTool(t, cs, call.name, call.args); !res.IsError {
 			t.Errorf("%s without a publisher did not refuse", call.name)
 		}
+	}
+}
+
+func TestRegisterWork_registersWithTheBlurbAnnouncesAndIsLogged(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.work = publish.WorkView{URL: "https://works.marvin-42.com/@a/w", SerialStatus: publish.SerialOngoing}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_register_work", map[string]any{"project_id": f.projectID, "blurb": "  회귀한 검사의 이야기  "})
+	if res.IsError {
+		t.Fatalf("register failed: %q", toolText(res))
+	}
+	if len(f.pub.upserts) != 1 || f.pub.upserts[0].ProjectID != f.projectID || f.pub.upserts[0].Blurb != "회귀한 검사의 이야기" {
+		t.Fatalf("upserts = %+v", f.pub.upserts)
+	}
+	var out registerWorkOutput
+	raw, _ := json.Marshal(res.StructuredContent)
+	if err := json.Unmarshal(raw, &out); err != nil || out.WorkURL == "" || out.SerialStatus != "ongoing" {
+		t.Fatalf("output = %s", raw)
+	}
+	if len(f.changed) != 1 || f.changed[0].Tool != "linetta_register_work" || f.changed[0].ProjectID != f.projectID {
+		t.Fatalf("changed = %+v", f.changed)
+	}
+	entries, err := f.deps.Activity.List(context.Background(), 10)
+	if err != nil || len(entries) != 1 || entries[0].Tool != "linetta_register_work" || !entries[0].OK {
+		t.Fatalf("activity = %+v, %v", entries, err)
+	}
+}
+
+func TestRegisterWork_keepsTheCurrentBlurbWhenOnlyTheSerialStatusChanges(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.status = publish.WorkStatus{Connected: true, Registered: true,
+		Work: &publish.WorkView{Blurb: "원래 소개", SerialStatus: publish.SerialOngoing}}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_register_work", map[string]any{"project_id": f.projectID, "serial_status": "completed"})
+	if res.IsError {
+		t.Fatalf("update failed: %q", toolText(res))
+	}
+	if len(f.pub.upserts) != 1 || f.pub.upserts[0].Blurb != "원래 소개" || f.pub.upserts[0].SerialStatus != "completed" {
+		t.Fatalf("upserts = %+v", f.pub.upserts)
+	}
+}
+
+func TestRegisterWork_asksForABlurbTheFirstTime(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.upsertErr = &rpc.ReasonError{Reason: rpc.ReasonPublishBlurbRequired, Err: errors.New("no blurb")}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_register_work", map[string]any{"project_id": f.projectID})
+	if !res.IsError || !strings.Contains(toolText(res), "blurb is required") {
+		t.Fatalf("result = %q", toolText(res))
+	}
+	if len(f.changed) != 0 {
+		t.Fatal("a refused registration announced a change")
+	}
+}
+
+func TestRegisterWork_refusesAnOverlongBlurbBeforeSendingIt(t *testing.T) {
+	f := newPublishFixture(t)
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_register_work", map[string]any{
+		"project_id": f.projectID, "blurb": strings.Repeat("가", publish.MaxBlurbRunes+1)})
+	if !res.IsError || len(f.pub.upserts) != 0 {
+		t.Fatalf("an overlong blurb was sent: %q", toolText(res))
+	}
+}
+
+func TestRegisterWork_stillNeedsTheWriterToConnect(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.upsertErr = &rpc.ReasonError{Reason: rpc.ReasonPublishNotConnected, Err: errors.New("no token")}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_register_work", map[string]any{"project_id": f.projectID, "blurb": "소개"})
+	if !res.IsError || !strings.Contains(toolText(res), "Settings → Publishing") {
+		t.Fatalf("result = %q", toolText(res))
+	}
+}
+
+func TestRegisterWork_respectsTheSingleWorkRestrictionAndIsAWriteTool(t *testing.T) {
+	f := newPublishFixture(t)
+	ro := connectedServer(t, f.deps, settings.MCPModeReadOnly, AllToolGroups())
+	list, err := ro.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range list.Tools {
+		if tool.Name == "linetta_register_work" {
+			t.Fatal("read_only lists linetta_register_work")
+		}
+	}
+	st, err := settings.NewForHomeWithSecretStore(t.TempDir(), settings.NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Set(context.Background(), settings.Patch{MCPProjectID: &f.projectID}); err != nil {
+		t.Fatal(err)
+	}
+	f.deps.Settings = st
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_register_work", map[string]any{"project_id": f.otherID, "blurb": "소개"})
+	if !res.IsError || len(f.pub.upserts) != 0 {
+		t.Fatalf("registered a work outside the allowed one: %q", toolText(res))
 	}
 }

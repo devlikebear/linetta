@@ -82,6 +82,14 @@
   gap: 8px;
 }
 
+/* A continuity observation's fact ref (story-assist Phase 2): marks the
+   card that ref actually points at, so scrolling to it is not the only
+   signal that it is the right one. */
+.fact-card.is-highlighted {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 .fact-card-head {
   display: flex;
   align-items: center;

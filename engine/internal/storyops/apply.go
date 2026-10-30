@@ -10,6 +10,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/ptrutil"
@@ -39,6 +40,7 @@ type Service struct {
 	facts         *fact.Repo
 	snaps         *snapshot.Repo
 	memory        MemoryRecorder
+	illustrations illustref.Index
 
 	undo undoState
 }
@@ -64,6 +66,13 @@ func (s *Service) WithFacts(repo *fact.Repo) *Service {
 // WithSnapshots enables the companion-before snapshot on set_scene_text.
 func (s *Service) WithSnapshots(snaps *snapshot.Repo) *Service {
 	s.snaps = snaps
+	return s
+}
+
+// WithIllustrations lets set_scene_text keep only placeholders that name a
+// picture in the work's own gallery.
+func (s *Service) WithIllustrations(idx illustref.Index) *Service {
+	s.illustrations = idx
 	return s
 }
 
@@ -108,14 +117,57 @@ func (r ApplyOpsResult) IsError() bool {
 }
 
 // ApplyOps applies a validated proposal op list directly to project state.
+// Refs is a batch's thread/entity/node ref resolution, seeded before the
+// batch runs and returned after it: story-assist Phase 3's proposals
+// package accepts items one batch at a time but across separate calls to
+// Accept, and an op in a later item can reference a ref an earlier item's
+// create_entity declared. Seeding the earlier item's resulting Refs into
+// the later item's ApplyOpsWithRefs call is what lets that resolve without
+// re-running the earlier item or asking the model for a real id it was
+// never given.
+type Refs struct {
+	Threads, Entities, Nodes map[string]string
+}
+
+// clone returns a copy of r safe to mutate — ApplyOpsWithRefs must not
+// write into maps its caller still holds a reference to.
+func (r Refs) clone() Refs {
+	out := Refs{Threads: map[string]string{}, Entities: map[string]string{}, Nodes: map[string]string{}}
+	for k, v := range r.Threads {
+		out.Threads[k] = v
+	}
+	for k, v := range r.Entities {
+		out.Entities[k] = v
+	}
+	for k, v := range r.Nodes {
+		out.Nodes[k] = v
+	}
+	return out
+}
+
+// ApplyOps applies a validated proposal op list directly to project state.
+// It is ApplyOpsWithRefs with no seed and the resulting Refs discarded —
+// the ordinary path for every caller that is not resuming a ref resolution
+// across separate calls.
 func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Proposal, now func() int64) ApplyOpsResult {
+	result, _ := s.ApplyOpsWithRefs(ctx, projectID, nodeID, p, Refs{}, now)
+	return result
+}
+
+// ApplyOpsWithRefs applies a validated proposal op list, with seed already
+// resolved into the batch's thread/entity/node ref maps before the first op
+// runs, and returns the maps as they stand after the last one — including
+// every ref seed declared that no op in this batch touched, so a caller
+// seeding the result into a later call does not have to re-merge it with
+// what it already had.
+func (s *Service) ApplyOpsWithRefs(ctx context.Context, projectID, nodeID string, p Proposal, seed Refs, now func() int64) (ApplyOpsResult, Refs) {
 	result := ApplyOpsResult{
 		Summary: strings.TrimSpace(p.Summary),
 		Created: map[string]string{},
 	}
 	if err := ValidateProposal(p); err != nil {
 		result.Failures = append(result.Failures, ApplyOpsFailure{Index: -1, Error: err.Error()})
-		return result
+		return result, seed
 	}
 
 	// Structural batches are all-or-nothing: the outline is captured first so a
@@ -127,9 +179,10 @@ func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Prop
 		before = s.snapshotOutline(ctx, projectID)
 	}
 
-	threadRefs := map[string]string{}
-	entityRefs := map[string]string{}
-	nodeRefs := map[string]string{}
+	refs := seed.clone()
+	threadRefs := refs.Threads
+	entityRefs := refs.Entities
+	nodeRefs := refs.Nodes
 	nodeInsertCursor := ""
 
 	for i, op := range p.Ops {
@@ -159,7 +212,7 @@ func (s *Service) ApplyOps(ctx context.Context, projectID, nodeID string, p Prop
 			result.UndoBatchID = s.rememberUndoBatch(projectID, before)
 		}
 	}
-	return result
+	return result, refs
 }
 
 func (s *Service) applyOneOp(
@@ -203,6 +256,9 @@ func (s *Service) applyOneOp(
 		}
 		doc, err := PlainTextToTiptapDoc(op.Text)
 		if err != nil {
+			return err
+		}
+		if doc, err = illustref.KeepProjects(ctx, s.illustrations, projectID, doc); err != nil {
 			return err
 		}
 		if err := s.nodes.UpdateContent(ctx, *targetNodeID, doc, now()); err != nil {
@@ -267,14 +323,25 @@ func (s *Service) applyOneOp(
 		if err != nil {
 			return err
 		}
-		_, err = s.beats.Create(ctx, beat.NewInput{
+		b, err := s.beats.Create(ctx, beat.NewInput{
 			ThreadID:    threadID,
 			NodeID:      beatNodeID,
 			Label:       op.Label,
 			Description: op.Description,
 			Intensity:   op.Intensity,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		// op.Ref has no other use for add_beat (nothing in this op
+		// catalogue references a beat by ref), but proposals.Accept sets
+		// one anyway purely to read the created id back the same way it
+		// does for create_entity/create_scene — see createdIDFor's
+		// add_beat case.
+		if op.Ref != "" {
+			created["beat:"+op.Ref] = b.ID
+		}
+		return nil
 	case "update_beat":
 		in := beat.UpdateInput{ID: op.BeatID, Label: op.Label, Intensity: op.Intensity}
 		if strings.TrimSpace(op.Description) != "" {
@@ -323,10 +390,14 @@ func (s *Service) applyOneOp(
 			return err
 		}
 		attrs := cleanEntityAttributes(op.Attributes)
-		if strings.TrimSpace(op.Summary) != "" || len(attrs) > 0 {
+		aliases := cleanAliases(op.Aliases)
+		if strings.TrimSpace(op.Summary) != "" || len(attrs) > 0 || len(aliases) > 0 {
 			in := entity.UpdateInput{ID: ent.ID, Attributes: optionalEntityAttributes(attrs)}
 			if strings.TrimSpace(op.Summary) != "" {
 				in.Summary = ptrutil.To(op.Summary)
+			}
+			if len(aliases) > 0 {
+				in.Aliases = &aliases
 			}
 			if err := s.entities.Update(ctx, now(), in); err != nil {
 				return err
@@ -362,6 +433,10 @@ func (s *Service) applyOneOp(
 		if attrs := cleanEntityAttributes(op.Attributes); len(attrs) > 0 {
 			merged := mergeEntityAttributes(cur.Attributes, attrs)
 			in.Attributes = &merged
+		}
+		if aliases := cleanAliases(op.Aliases); len(aliases) > 0 {
+			merged := mergeAliases(cur.Aliases, aliases)
+			in.Aliases = &merged
 		}
 		return s.entities.Update(ctx, now(), in)
 	case "create_relationship":
@@ -718,6 +793,45 @@ func mergeEntityAttributes(base, next map[string]string) map[string]string {
 	return merged
 }
 
+// cleanAliases trims and drops empty aliases a model sent, the same shape
+// cleanEntityAttributes gives attribute maps.
+func cleanAliases(aliases []string) []string {
+	out := make([]string, 0, len(aliases))
+	for _, a := range aliases {
+		a = strings.TrimSpace(a)
+		if a == "" {
+			continue
+		}
+		out = append(out, a)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// mergeAliases adds add's aliases to base, case-insensitively deduplicated
+// against base and each other, and never drops an existing alias:
+// update_entity's aliases only ever grow (story-assist Phase 3, 3.A.2) — the
+// same "aliases are not auto-deleted" rule internal/contextualedit follows
+// for its own alias field.
+func mergeAliases(base, add []string) []string {
+	merged := append([]string{}, base...)
+	seen := make(map[string]bool, len(base))
+	for _, a := range base {
+		seen[strings.ToLower(a)] = true
+	}
+	for _, a := range add {
+		key := strings.ToLower(a)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		merged = append(merged, a)
+	}
+	return merged
+}
+
 type tiptapDoc struct {
 	Type    string        `json:"type"`
 	Content []tiptapBlock `json:"content"`
@@ -725,6 +839,7 @@ type tiptapDoc struct {
 
 type tiptapBlock struct {
 	Type    string         `json:"type"`
+	Attrs   map[string]any `json:"attrs,omitempty"`
 	Content []tiptapInline `json:"content,omitempty"`
 }
 
@@ -738,6 +853,15 @@ var paragraphBreakRE = regexp.MustCompile(`\n{2,}`)
 func normalizeSceneTextForVerify(text string) string {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	// A placeholder line is its own block once written, however it was
+	// separated from the prose around it.
+	placed := strings.Split(normalized, "\n")
+	for i, line := range placed {
+		if _, _, ok := illustref.Parse(line); ok {
+			placed[i] = "\n" + strings.TrimSpace(line) + "\n"
+		}
+	}
+	normalized = strings.Join(placed, "\n")
 	normalized = paragraphBreakRE.ReplaceAllString(normalized, "\n\n")
 	lines := strings.Split(normalized, "\n")
 	for i, line := range lines {
@@ -748,28 +872,43 @@ func normalizeSceneTextForVerify(text string) string {
 
 // PlainTextToTiptapDoc converts plain scene text (paragraphs separated by
 // blank lines, hard breaks inside paragraphs) into the Tiptap document JSON
-// the editor stores.
+// the editor stores. A line that is an illustration placeholder becomes the
+// illustration node, between the paragraphs around it.
 func PlainTextToTiptapDoc(text string) (string, error) {
 	normalized := strings.ReplaceAll(text, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
 	blocks := paragraphBreakRE.Split(normalized, -1)
 	paragraphs := make([]tiptapBlock, 0, len(blocks))
 	for _, block := range blocks {
-		lines := strings.Split(block, "\n")
-		content := make([]tiptapInline, 0, len(lines)*2)
-		for i, line := range lines {
-			if i > 0 {
+		var content []tiptapInline
+		started := false
+		flush := func() {
+			paragraph := tiptapBlock{Type: "paragraph"}
+			if len(content) > 0 {
+				paragraph.Content = content
+			}
+			paragraphs = append(paragraphs, paragraph)
+			content, started = nil, false
+		}
+		for _, line := range strings.Split(block, "\n") {
+			if id, caption, ok := illustref.Parse(line); ok {
+				if started {
+					flush()
+				}
+				paragraphs = append(paragraphs, tiptapBlock{Type: illustref.NodeType, Attrs: map[string]any{"id": id, "caption": caption}})
+				continue
+			}
+			if started {
 				content = append(content, tiptapInline{Type: "hardBreak"})
 			}
+			started = true
 			if line != "" {
 				content = append(content, tiptapInline{Type: "text", Text: line})
 			}
 		}
-		paragraph := tiptapBlock{Type: "paragraph"}
-		if len(content) > 0 {
-			paragraph.Content = content
+		if started {
+			flush()
 		}
-		paragraphs = append(paragraphs, paragraph)
 	}
 	if len(paragraphs) == 0 {
 		paragraphs = append(paragraphs, tiptapBlock{Type: "paragraph"})
@@ -814,6 +953,11 @@ func plainTextFromDoc(raw *string) string {
 				if s, ok := t["text"].(string); ok {
 					sb.WriteString(s)
 				}
+			}
+			if id, caption, ok := illustref.Attrs(t); ok {
+				sb.WriteString(illustref.Placeholder(id, caption))
+				sb.WriteString("\n\n")
+				return
 			}
 			if t["type"] == "hardBreak" {
 				sb.WriteString("\n")

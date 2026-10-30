@@ -21,7 +21,7 @@ import (
 // never cached: changing the model in settings applies to the next message
 // without restarting the engine. *provider.Source satisfies this.
 type ProviderSource interface {
-	Client(id string) (llm.Client, provider.Resolved, error)
+	Client(ctx context.Context, id string) (llm.Client, provider.Resolved, error)
 }
 
 // MemorySource reads the curated memories for one turn. An interface rather
@@ -110,6 +110,12 @@ type Deps struct {
 	VisualWriteToolsDisabled func() bool
 	MemoryToolsEnabled       func() bool
 	SkillToolsEnabled        func() bool
+	// ReviewToolsEnabled reports the writer's Review tool-budget switch
+	// (story-assist Phase 2, settings.review_tools_enabled, default on):
+	// linetta_report_continuity and whatever later phases add beside it.
+	// Read the same way and for the same reason as MemoryToolsEnabled and
+	// SkillToolsEnabled above — a nil func means enabled.
+	ReviewToolsEnabled func() bool
 	// Undo reverts what the agent last did. Exactly one of batchID, snapshotID
 	// is expected to be non-empty — the caller (agent.undo's RPC handler)
 	// validates that before this is reached. A batch id must be bound to the

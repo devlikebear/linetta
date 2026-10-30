@@ -20,6 +20,8 @@ const WARNING_KEYS: Record<string, MessageKey> = {
   "import.node_links_dropped": "importWarning.nodeLinksDropped",
   "import.notes_skipped": "importWarning.notesSkipped",
   "import.fact_cards_skipped": "importWarning.factCardsSkipped",
+  "import.illustrations_missing": "importWarning.illustrationsMissing",
+  "import.illustrations_rejected": "importWarning.illustrationsRejected",
 };
 
 /** Human-readable text for one engine warning.

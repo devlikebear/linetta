@@ -101,3 +101,14 @@
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* "Show on Linetta Works" (SheetPublishToggle). */
+.es-publish-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.es-publish .sd { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.es-publish .es-error { padding: 0; }

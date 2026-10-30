@@ -43,6 +43,25 @@ const (
 	ReasonStyleProfileEmpty = "style_profile_empty"
 	ReasonStyleNotesTooLong = "style_notes_too_long"
 
+	// The writer's own direction (story-assist Phase 1): limits are refused
+	// rather than trimmed, the same reason style's are above.
+	ReasonDirectionFocusTooLong = "direction_focus_too_long"
+	ReasonDirectionGoalTooLong  = "direction_goal_too_long"
+	ReasonDirectionTooManyItems = "direction_too_many_items"
+	ReasonDirectionItemTooLong  = "direction_item_too_long"
+	ReasonDirectionNotScene     = "direction_not_scene"
+
+	// Continuity checks (story-assist Phase 2). An observation's status can
+	// go stale under the writer's own hands — another window resolved it,
+	// or a fresh check replaced it — while this one still shows the open
+	// action buttons, so this is a failure a writer actually meets.
+	ReasonContinuityObservationNotFound = "continuity_observation_not_found"
+	ReasonContinuityObservationReplaced = "continuity_observation_replaced"
+
+	// forecast.select naming a forecast id that does not exist (story-assist
+	// Phase 4) — deleted, or from another work.
+	ReasonForecastNotFound = "forecast_not_found"
+
 	ReasonThreadNotFound       = "thread_not_found"
 	ReasonBeatNotFound         = "beat_not_found"
 	ReasonRelationshipNotFound = "relationship_not_found"
@@ -67,6 +86,36 @@ const (
 	ReasonProviderTimeout         = "provider_timeout"
 	ReasonProviderRejected        = "provider_rejected"
 	ReasonProviderUnavailable     = "provider_unavailable"
+	// A rejection that names the model: this account or plan is not served
+	// the one asked for. Its own code because the fix is a different model,
+	// not a retry.
+	ReasonProviderModelUnsupported = "provider_model_unsupported"
+
+	// Illustration drawing. The provider's credential and the failures above
+	// are shared with the agent; these are what only drawing has. Off: no
+	// image provider chosen. Model required: Gemini has no default image
+	// model. Refused: a policy block, where the same prompt will not pass on
+	// retry. Billing required: a Gemini key from a free-tier project, which
+	// has no image quota at all — a rate limit it is not.
+	ReasonImageGenerationOff     = "image_generation_off"
+	ReasonImageConsentRequired   = "image_consent_required"
+	ReasonImageModelRequired     = "image_model_required"
+	ReasonImageRefused           = "image_refused"
+	ReasonImageBillingRequired   = "image_billing_required"
+	ReasonIllustrationNotFound   = "illustration_not_found"
+	ReasonIllustrationTooLarge   = "illustration_too_large"
+	ReasonTooManyIllustrations   = "too_many_illustrations"
+	ReasonIllustrationBadContent = "illustration_bad_content"
+	ReasonIllustrationInUse      = "illustration_in_use"
+	// The picture is the work's cover on Linetta Works.
+	ReasonIllustrationIsCover = "illustration_is_cover"
+	// The picture stands for a scene or an episode (illustration Phase 4.3).
+	ReasonIllustrationIsRepresentative = "illustration_is_representative"
+	// Pictures an agent asked for (illustration Phase 4).
+	ReasonIllustrationRequestNotFound = "illustration_request_not_found"
+	// Already approved, rejected or cancelled (another window, say).
+	ReasonIllustrationRequestDecided  = "illustration_request_decided"
+	ReasonTooManyIllustrationRequests = "too_many_illustration_requests"
 
 	// The Codex login (#92). The message has to name the two ports, because
 	// the fix is closing whatever holds them — usually a Codex CLI login. A
@@ -101,6 +150,15 @@ const (
 	// snapshot history.
 	ReasonAgentUndoUnavailable = "agent_undo_unavailable"
 
+	// proposals.undo asking to revert a structural batch (story-assist
+	// Phase 4's purpose=forecast outline-reflection) that has aged out of
+	// storyops' in-memory undo window, or was already undone. Unlike
+	// ReasonAgentUndoUnavailable there is no snapshot fallback — a
+	// structural batch has no per-scene snapshot — so this gets its own
+	// message rather than reusing that one's "restore from snapshot
+	// history" wording.
+	ReasonProposalsUndoUnavailable = "proposals_undo_unavailable"
+
 	// Publishing to Linetta Works (Phase 3). Most are the site's own error
 	// codes (docs/api.md in linetta-artworks) carried through; the site's
 	// Korean message stays in the English Message for logs. The rest are
@@ -128,6 +186,13 @@ const (
 	ReasonPublishNotEpisode        = "publish_not_episode"
 	ReasonPublishEmptyEpisode      = "publish_empty_episode"
 	ReasonPublishBlurbRequired     = "publish_blurb_required"
+	// A picture in the episode is bigger than the site takes.
+	ReasonPublishImageTooLarge = "publish_image_too_large"
+	// The episode shows more pictures than the site takes (per episode or
+	// per work).
+	ReasonPublishTooManyImages = "publish_too_many_images"
+	// More sheets are turned on than the site takes for one work.
+	ReasonPublishTooManySheets = "publish_too_many_sheets"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine

@@ -79,7 +79,7 @@ type fakeProviders struct {
 	err    error
 }
 
-func (f fakeProviders) Client(string) (llm.Client, provider.Resolved, error) {
+func (f fakeProviders) Client(context.Context, string) (llm.Client, provider.Resolved, error) {
 	return f.client, provider.Resolved{ID: "anthropic", Model: "test-model"}, f.err
 }
 
@@ -908,5 +908,41 @@ func TestRun_theToolCallCapFollowsTheSetting(t *testing.T) {
 	}
 	if p := rec.errorFor(runID); p == nil || !strings.Contains(p.Message, fmt.Sprintf("%d", limit)) {
 		t.Errorf("the wall's message does not name the configured cap: %+v", p)
+	}
+}
+
+// A passage sent with the prompt reaches the model and the transcript alike:
+// the transcript row is what the next turn replays, so a follow-up "now
+// shorten it" only knows what "it" is if the passage was stored with it.
+func TestRun_carriesTheSelectionIntoMessageAndTranscript(t *testing.T) {
+	rec := &recorder{}
+	c := &scriptedClient{responses: []llm.ChatResponse{textReply("좋아요")}}
+	svc := newService(t, c, rec)
+
+	runID, err := svc.Run(context.Background(), RunRequest{
+		ProjectID: "p1", NodeID: "n1", Prompt: "이 부분 다듬어 줘", Selection: "  소매 끝에 볼펜 자국이 있었다.\n",
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "the turn to end", func() bool { return rec.hasTerminalFor(runID) })
+
+	want := "<selection>\n소매 끝에 볼펜 자국이 있었다.\n</selection>\n\n이 부분 다듬어 줘"
+	msgs := c.messages()
+	if last := msgs[len(msgs)-1]; !strings.HasSuffix(last.Content, want) {
+		t.Errorf("the model's message = %q, want it to end with %q", last.Content, want)
+	}
+	history, err := svc.History(context.Background(), "p1", 10)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	found := false
+	for _, m := range history {
+		if m.RunID == runID && m.Role == "user" {
+			found = m.Content == want
+		}
+	}
+	if !found {
+		t.Errorf("the transcript's user row does not hold the selection: %+v", history)
 	}
 }

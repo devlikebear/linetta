@@ -18,18 +18,26 @@ import (
 // not there — both silent.
 func TestToolGroupNamesAreAllRealTools(t *testing.T) {
 	all := append(append([]string{}, ReadToolNames...), WriteToolNames...)
-	for _, group := range [][]string{MemoryToolNames, SkillToolNames} {
+	groups := [][]string{MemoryToolNames, SkillToolNames, ReviewToolNames}
+	for _, group := range groups {
 		for _, n := range group {
 			if !slices.Contains(all, n) {
 				t.Errorf("group names %q, which is in neither ReadToolNames nor WriteToolNames", n)
 			}
 		}
 	}
-	// And the two groups must not overlap: a tool counted twice would make
-	// the pane's arithmetic wrong in a way nothing else notices.
-	for _, n := range MemoryToolNames {
-		if slices.Contains(SkillToolNames, n) {
-			t.Errorf("%q is in both the memory and the skills group", n)
+	// And no two groups may overlap: a tool counted twice would make the
+	// pane's arithmetic wrong in a way nothing else notices.
+	for i, a := range groups {
+		for j, b := range groups {
+			if i >= j {
+				continue
+			}
+			for _, n := range a {
+				if slices.Contains(b, n) {
+					t.Errorf("%q is in two tool-budget groups at once", n)
+				}
+			}
 		}
 	}
 }
@@ -41,10 +49,11 @@ func TestToolGroupNamesAreAllRealTools(t *testing.T) {
 func TestToolNamesMatchesWhatTheServerActuallyServes(t *testing.T) {
 	for _, mode := range []string{settings.MCPModeReadOnly, settings.MCPModeFull} {
 		for _, groups := range []ToolGroups{
-			{Memory: true, Skills: true},
-			{Memory: false, Skills: true},
-			{Memory: true, Skills: false},
-			{Memory: false, Skills: false},
+			{Memory: true, Skills: true, Review: true},
+			{Memory: false, Skills: true, Review: true},
+			{Memory: true, Skills: false, Review: true},
+			{Memory: true, Skills: true, Review: false},
+			{Memory: false, Skills: false, Review: false},
 		} {
 			t.Run(nameFor(mode, groups), func(t *testing.T) {
 				// Sorted on both sides: tools/list returns names in the
@@ -70,7 +79,8 @@ func TestAGroupThatIsOffIsAbsentFromToolsListInBothModes(t *testing.T) {
 	for _, mode := range []string{settings.MCPModeReadOnly, settings.MCPModeFull} {
 		t.Run(mode, func(t *testing.T) {
 			off := registeredToolNamesWithGroups(t, mode, ToolGroups{})
-			for _, n := range append(append([]string{}, MemoryToolNames...), SkillToolNames...) {
+			optional := append(append(append([]string{}, MemoryToolNames...), SkillToolNames...), ReviewToolNames...)
+			for _, n := range optional {
 				if slices.Contains(off, n) {
 					t.Errorf("%s: %q is still served with its group switched off", mode, n)
 				}
@@ -79,7 +89,7 @@ func TestAGroupThatIsOffIsAbsentFromToolsListInBothModes(t *testing.T) {
 			// the writer a manuscript tool.
 			on := registeredToolNamesWithGroups(t, mode, AllToolGroups())
 			for _, n := range on {
-				if slices.Contains(MemoryToolNames, n) || slices.Contains(SkillToolNames, n) {
+				if slices.Contains(optional, n) {
 					continue
 				}
 				if !slices.Contains(off, n) {
@@ -111,7 +121,7 @@ func TestDefaultsServeTheWholeToolSet(t *testing.T) {
 // stays reported whether or not it is currently on, because that is the price
 // the writer is deciding about.
 func TestMeasureToolBudgetTracksTheSwitches(t *testing.T) {
-	full, ok := MeasureToolBudget(true, true)
+	full, ok := MeasureToolBudget(true, true, true)
 	if !ok {
 		t.Fatal("the tool set could not be measured at all")
 	}
@@ -119,24 +129,27 @@ func TestMeasureToolBudgetTracksTheSwitches(t *testing.T) {
 		t.Fatalf("default budget = %d tools, want %d (measurement failed?)",
 			full.Tools, len(ReadToolNames)+len(WriteToolNames))
 	}
-	if full.Bytes <= 0 || full.Memory.Bytes <= 0 || full.Skills.Bytes <= 0 {
+	if full.Bytes <= 0 || full.Memory.Bytes <= 0 || full.Skills.Bytes <= 0 || full.Review.Bytes <= 0 {
 		t.Fatalf("budget carries no bytes: %+v", full)
 	}
-	if full.Memory.Tools != len(MemoryToolNames) || full.Skills.Tools != len(SkillToolNames) {
-		t.Errorf("group tool counts = memory %d skills %d, want %d and %d",
-			full.Memory.Tools, full.Skills.Tools, len(MemoryToolNames), len(SkillToolNames))
+	if full.Memory.Tools != len(MemoryToolNames) || full.Skills.Tools != len(SkillToolNames) || full.Review.Tools != len(ReviewToolNames) {
+		t.Errorf("group tool counts = memory %d skills %d review %d, want %d, %d and %d",
+			full.Memory.Tools, full.Skills.Tools, full.Review.Tools,
+			len(MemoryToolNames), len(SkillToolNames), len(ReviewToolNames))
 	}
 
-	none, _ := MeasureToolBudget(false, false)
-	if none.Tools != full.Tools-full.Memory.Tools-full.Skills.Tools {
-		t.Errorf("with both groups off the budget is %d tools; %d minus the two groups is %d",
-			none.Tools, full.Tools, full.Tools-full.Memory.Tools-full.Skills.Tools)
+	none, _ := MeasureToolBudget(false, false, false)
+	groupTools := full.Memory.Tools + full.Skills.Tools + full.Review.Tools
+	groupBytes := full.Memory.Bytes + full.Skills.Bytes + full.Review.Bytes
+	if none.Tools != full.Tools-groupTools {
+		t.Errorf("with every group off the budget is %d tools; %d minus the groups is %d",
+			none.Tools, full.Tools, full.Tools-groupTools)
 	}
-	if none.Bytes != full.Bytes-full.Memory.Bytes-full.Skills.Bytes {
-		t.Errorf("with both groups off the budget is %d bytes; %d minus the two groups is %d",
-			none.Bytes, full.Bytes, full.Bytes-full.Memory.Bytes-full.Skills.Bytes)
+	if none.Bytes != full.Bytes-groupBytes {
+		t.Errorf("with every group off the budget is %d bytes; %d minus the groups is %d",
+			none.Bytes, full.Bytes, full.Bytes-groupBytes)
 	}
-	if none.Memory.Bytes != full.Memory.Bytes || none.Skills.Bytes != full.Skills.Bytes {
+	if none.Memory.Bytes != full.Memory.Bytes || none.Skills.Bytes != full.Skills.Bytes || none.Review.Bytes != full.Review.Bytes {
 		t.Error("a switched-off group stopped reporting what it costs, so the pane can no longer " +
 			"tell the writer what switching it back on would buy")
 	}
@@ -180,12 +193,21 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		if slices.Contains(VisualWriteToolNames, name) {
 			continue
 		}
+		// Illustration Phase 4's three tools carry their own allowance below.
+		if name == "linetta_list_illustrations" || slices.Contains(IllustrationWriteToolNames, name) {
+			continue
+		}
 		// #162's style check and #163's proposal carry their own allowances below.
 		if name == "linetta_analyze_style" || name == "linetta_propose_style_profile" {
 			continue
 		}
-		// Phase 3's publish pair carries its own allowance below.
-		if name == "linetta_publish_status" || name == "linetta_publish_episode" {
+		// Phase 3's publish tools carry their own allowance below.
+		if name == "linetta_publish_status" || name == "linetta_publish_episode" || name == "linetta_register_work" {
+			continue
+		}
+		// story-assist Phase 2's report tool, Phase 3's propose tool, and
+		// Phase 4's save-forecast tool carry their own allowances below.
+		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" || name == "linetta_save_forecast" {
 			continue
 		}
 		total += b
@@ -202,8 +224,29 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	}
 	// Phase 3 measured 1,958B for the publish pair (1,231B status, 727B
 	// publish), after cutting the output schema to what an agent needs.
-	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"]; pub > 2050 {
-		t.Errorf("publish tools cost %dB, want <= 2050B", pub)
+	// linetta_register_work joined them at 690B (publish now 694B): 2,615B.
+	if pub := sizes["linetta_publish_status"] + sizes["linetta_publish_episode"] + sizes["linetta_register_work"]; pub > 2700 {
+		t.Errorf("publish tools cost %dB, want <= 2700B", pub)
+	}
+	// story-assist Phase 2 measured 3,436B for linetta_report_continuity —
+	// the nested observations[].refs[] schema is most of it, and that
+	// structure is the whole point of engine-side validation.
+	if report := sizes["linetta_report_continuity"]; report > 3600 {
+		t.Errorf("linetta_report_continuity costs %dB, want <= 3600B", report)
+	}
+	// story-assist Phase 3 measured 7,849B for linetta_propose_story_ops —
+	// the items[].op schema is the whole storyops.Op struct (every op's
+	// fields, shared with linetta_apply_story_ops), which is the cost of
+	// one schema describing every allowed op rather than eight narrower
+	// ones.
+	if propose := sizes["linetta_propose_story_ops"]; propose > 8100 {
+		t.Errorf("linetta_propose_story_ops costs %dB, want <= 8100B", propose)
+	}
+	// story-assist Phase 4's save-forecast tool measured 3,701B: branches[]
+	// nests beats[], decisions[], changes{} and risks[] — one schema
+	// describing a whole branch, repeated up to 5 times per call.
+	if save := sizes["linetta_save_forecast"]; save > 3900 {
+		t.Errorf("linetta_save_forecast costs %dB, want <= 3900B", save)
 	}
 	writes := 0
 	for _, name := range VisualWriteToolNames {
@@ -217,9 +260,27 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	if visuals > 3500 {
 		t.Errorf("visual tools cost %dB, want <= 3500B", visuals)
 	}
+	// Illustration Phase 4 measured 3,205B for its three tools (list 1,129B,
+	// request 1,369B, set representative 707B).
+	illustrations := sizes["linetta_list_illustrations"]
+	for _, name := range IllustrationWriteToolNames {
+		illustrations += sizes[name]
+	}
+	if illustrations > 3400 {
+		t.Errorf("illustration tools cost %dB, want <= 3400B", illustrations)
+	}
 	// #132 measured 26,525B for the full 19-tool set (down from 27,687B).
-	if total > 26900 {
-		t.Errorf("the original 19-tool budget is %dB, want <= 26900B (#132 trimmed it from 27687B to 26525B)", total)
+	// story-assist Phase 1 added linetta_get_story_context's IncludeDirection
+	// field (the switch behind storycontext.ContextKeyDirection, matching
+	// IncludeSkills), measured at 26,976B. story-assist Phase 2 added
+	// linetta_read_scene's numbered field, measured at 27,279B. story-assist
+	// Phase 3 (3.A.2) added storyops.Op.Aliases, which linetta_apply_story_ops
+	// shares, measured at 27,446B — the ceiling moves up with it;
+	// linetta_report_continuity carries its own allowance above and is
+	// excluded from this total.
+	if total > 27500 {
+		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 27500B "+
+			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}
 }
 
@@ -278,6 +339,9 @@ func nameFor(mode string, g ToolGroups) string {
 	}
 	if g.Skills {
 		s += "+skills"
+	}
+	if g.Review {
+		s += "+review"
 	}
 	return s
 }

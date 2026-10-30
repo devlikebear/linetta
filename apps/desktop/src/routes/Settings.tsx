@@ -18,6 +18,7 @@ import { BackgroundSection } from "../components/settings/BackgroundSection";
 import { McpSection } from "../components/settings/McpSection";
 import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
+import { ImageGenSection } from "../components/settings/ImageGenSection";
 import { PublishSection } from "../components/settings/PublishSection";
 import { RestoreSection } from "../components/settings/RestoreSection";
 import { SkillsSection } from "../components/settings/SkillsSection";
@@ -59,6 +60,7 @@ const SETTINGS_CATEGORIES = [
   "editor",
   "writing",
   "providers",
+  "images",
   "mcp",
   "tools",
   "memory",
@@ -310,6 +312,9 @@ export function Settings() {
             label: t("settings.nav.groupConnect"),
             items: [
               ...(agentAvailable ? [{ id: "providers" as const, label: t("settings.nav.providers") }] : []),
+              // Drawing borrows the agent providers' credentials, so it sits
+              // right under them and rides the same condition.
+              ...(agentAvailable ? [{ id: "images" as const, label: t("settings.nav.images") }] : []),
               ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.nav.mcp") }] : []),
               // The tool budget (#99) governs what the built-in agent AND an
               // external client are offered, so it sits between the two panes
@@ -590,6 +595,10 @@ export function Settings() {
 
             {category === "providers" && agentAvailable && <ProviderSection />}
 
+            {category === "images" && agentAvailable && (
+              <ImageGenSection onOpenProviders={() => setCategory("providers")} />
+            )}
+
             {category === "mcp" && mcpAvailable && <McpSection />}
 
             {category === "publish" && <PublishSection available={publishAvailable} />}
@@ -670,6 +679,31 @@ export function Settings() {
                   )}
                 </span>
                 <span className={`switch${current.skill_tools_enabled !== false ? " on" : ""}`} />
+              </button>
+              {/* story-assist Phase 2: linetta_report_continuity, and
+                  whatever later phases add beside it. Same default-on,
+                  `!== false` read as the two switches above. */}
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving && apply({ review_tools_enabled: current.review_tools_enabled === false })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.tools.review.title")}</span>
+                  <span className="sd">{t("settings.tools.review.description")}</span>
+                  {toolBudget?.review && (
+                    <span className="sd" data-testid="tool-budget-review">
+                      {t("settings.tools.groupCost", {
+                        tools: String(toolBudget.review.tools),
+                        size: formatToolBytes(toolBudget.review.bytes),
+                      })}
+                    </span>
+                  )}
+                </span>
+                <span className={`switch${current.review_tools_enabled !== false ? " on" : ""}`} />
               </button>
               {/* The built-in agent's cap only: an external MCP client runs
                   its own loop and never reads it. Saved on blur or Enter, not

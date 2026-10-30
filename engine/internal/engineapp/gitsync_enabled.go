@@ -14,6 +14,7 @@ const gitSyncAvailable = true
 func setupGitSync(deps syncDeps) dailySyncer {
 	syncer := gitsync.New(deps.settingsStore, deps.projects, deps.nodes, deps.entities, deps.relationships)
 	syncer.Extras = deps.extras
+	syncer.Illustrations = deps.images
 	syncer.Ops = deps.ops
 	deps.server.Handle("git_sync.run", handlers.RunGitSync(syncer))
 	deps.server.Handle("git_sync.init", handlers.InitGitSync(syncer))

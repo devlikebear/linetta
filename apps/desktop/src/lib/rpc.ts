@@ -1,4 +1,17 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
+import type { FocusState, SceneIntent, SceneIntentState } from "./types";
+import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
+import type {
+  AcceptSuggestionsResult,
+  ExtractionEstimate,
+  ExtractionProgress,
+  Forecast,
+  ProposalOp,
+  SelectForecastResult,
+  SuggestionBatch,
+  SuggestionItemStatus,
+} from "./types";
+import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, IllustrationRepresentatives, IllustrationRequest, IllustrationRequestEdits, IllustrationRequestStatus, ImageProviderStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -13,6 +26,7 @@ import type {
   PublishEpisodeView,
   PublishResult,
   PublishSerialStatus,
+  PublishSheetsStatus,
   PublishWorkStatus,
   PublishWorkView,
   ConsistencyInput,
@@ -422,6 +436,41 @@ export const providers = {
   test: (provider: string) => rpcCall<{ ok: true }>("providers.test", { provider }),
 };
 
+export const imageProviders = {
+  list: () => rpcCall<ImageProviderStatus[]>("image_providers.list"),
+  listModels: (provider: string) =>
+    rpcCall<{ models: string[] }>("image_providers.list_models", { provider }),
+};
+
+export const illustrations = {
+  compose: (input: { project_id: string; entity_ids?: string[]; names?: string[]; scene: string; format?: IllustrationFormat }) =>
+    rpcCall<IllustrationComposition>("illustrations.compose", input),
+  /** Runs as long as the provider draws — about 30 s for Codex. */
+  generate: (input: IllustrationGenerateInput) => rpcCall<IllustrationMeta>("illustrations.generate", input),
+  list: (projectId: string) =>
+    rpcCall<{ items: IllustrationMeta[]; count: number; bytes: number }>("illustrations.list", { project_id: projectId }),
+  get: (id: string) => rpcCall<IllustrationMeta & { data_base64: string }>("illustrations.get", { id }),
+  update: (id: string, caption: string) => rpcCall<IllustrationMeta>("illustrations.update", { id, caption }),
+  delete: (id: string) => rpcCall<{ ok: boolean }>("illustrations.delete", { id }),
+  /** node id → the picture that stands for that scene, episode or part. */
+  representatives: (projectId: string) =>
+    rpcCall<IllustrationRepresentatives>("illustrations.representatives", { project_id: projectId }),
+  /** An empty illustrationId clears the node's picture. */
+  setRepresentative: (nodeId: string, illustrationId: string) =>
+    rpcCall<{ previous: string }>("illustrations.set_representative", { node_id: nodeId, illustration_id: illustrationId }),
+};
+
+/** Pictures agents asked for. Only approve draws, and it runs as long as
+ *  the provider draws (like illustrations.generate). */
+export const illustrationRequests = {
+  list: (projectId: string, statuses?: IllustrationRequestStatus[]) =>
+    rpcCall<IllustrationRequest[]>("illustration_requests.list", { project_id: projectId, statuses }),
+  get: (id: string) => rpcCall<IllustrationRequest>("illustration_requests.get", { id }),
+  approve: (id: string, edits: IllustrationRequestEdits) =>
+    rpcCall<IllustrationRequest>("illustration_requests.approve", { id, ...edits }),
+  reject: (id: string) => rpcCall<IllustrationRequest>("illustration_requests.reject", { id }),
+};
+
 export const codex = {
   loginStart: () => rpcCall<CodexLoginStart>("codex.login_start"),
   loginStatus: () => rpcCall<CodexStatus>("codex.login_status"),
@@ -449,14 +498,25 @@ export const publishApi = {
       node_id: nodeId,
       visibility,
     }),
+  /** Whether the writer turned on publishing for a sheet (Works Phase 8). */
+  sheetGet: (entityId: string) => rpcCall<{ published: boolean }>("publish.sheet_get", { entity_id: entityId }),
+  /** Changes the choice only; sheetsSync sends it. */
+  sheetSet: (entityId: string, published: boolean) =>
+    rpcCall<{ published: boolean }>("publish.sheet_set", { entity_id: entityId, published }),
+  /** An empty id clears the cover. */
+  setCover: (projectId: string, illustrationId: string) =>
+    rpcCall<{ cover_id: string }>("publish.cover_set", { project_id: projectId, illustration_id: illustrationId }),
+  /** Sends the chosen sheets and cover to the site. */
+  sheetsSync: (projectId: string) => rpcCall<PublishSheetsStatus>("publish.sheets_sync", { project_id: projectId }),
 };
 
 /** The built-in agent's loop (#93). Its panel is #95; these wrappers are the
  *  only way the renderer can reach agent.* today — a manual JSON-RPC call is
  *  the alternative until the panel calls them. */
 export const agent = {
-  run: (projectId: string, prompt: string, nodeId?: string) =>
-    rpcCall<AgentRunResult>("agent.run", { project_id: projectId, node_id: nodeId, prompt }),
+  /** selection: a passage the writer highlighted in the open scene. */
+  run: (projectId: string, prompt: string, nodeId?: string, selection?: string) =>
+    rpcCall<AgentRunResult>("agent.run", { project_id: projectId, node_id: nodeId, prompt, selection }),
   cancel: (runId: string) => rpcCall<{ ok: true }>("agent.cancel", { run_id: runId }),
   history: (projectId: string, limit?: number) =>
     rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),
@@ -613,4 +673,75 @@ export const style = {
   approveDraft: (projectId: string, body: string, mode: StyleApproveMode) =>
     rpcCall<{ style_notes: string }>("style.approve_draft", { project_id: projectId, body, mode }),
   discardDraft: (projectId: string) => rpcCall<{ ok: boolean }>("style.discard_draft", { project_id: projectId }),
+};
+
+/** The writer's own direction (story-assist Phase 1): no MCP tool can write either. */
+export const direction = {
+  getFocus: (projectId: string) => rpcCall<FocusState>("direction.get_focus", { project_id: projectId }),
+  /** Empty body clears the focus. The engine, not the caller, picks the anchor episode. */
+  setFocus: (projectId: string, body: string) =>
+    rpcCall<FocusState>("direction.set_focus", { project_id: projectId, body }),
+  getSceneIntent: (nodeId: string) => rpcCall<SceneIntentState>("direction.get_scene_intent", { node_id: nodeId }),
+  /** goal, keep and avoid all empty clears the scene's intent. */
+  setSceneIntent: (nodeId: string, goal: string, keep: string[], avoid: string[]) =>
+    rpcCall<SceneIntent>("direction.set_scene_intent", { node_id: nodeId, goal, keep, avoid }),
+};
+
+/** Continuity checks (story-assist Phase 2): engine-verified observations an agent recorded. */
+export const continuity = {
+  list: (projectId: string, nodeId?: string, statuses?: ContinuityStatus[]) =>
+    rpcCall<{ checks: ContinuityCheck[] }>("continuity.list", {
+      project_id: projectId,
+      node_id: nodeId,
+      statuses,
+    }),
+  setStatus: (observationId: string, status: ContinuityStatus) =>
+    rpcCall<ContinuityObservation>("continuity.set_status", { observation_id: observationId, status }),
+  openCounts: (projectId: string) =>
+    rpcCall<ContinuityOpenCounts>("continuity.open_counts", { project_id: projectId }),
+};
+
+/** The suggestions inbox (story-assist Phase 3): an agent's
+ *  linetta_propose_story_ops candidates, and the writer's item-by-item
+ *  accept/reject of them. Nothing here applies anything on its own except
+ *  accept, which runs the chosen items through storyops. */
+export const proposals = {
+  list: (projectId: string, statuses?: SuggestionItemStatus[]) =>
+    rpcCall<{ proposals: SuggestionBatch[] }>("proposals.list", { project_id: projectId, statuses }),
+  accept: (projectId: string, itemIds: string[], edits?: Record<string, ProposalOp>) =>
+    rpcCall<AcceptSuggestionsResult>("proposals.accept", { project_id: projectId, item_ids: itemIds, edits }),
+  reject: (projectId: string, itemIds: string[]) =>
+    rpcCall<{ ok: boolean }>("proposals.reject", { project_id: projectId, item_ids: itemIds }),
+  pendingCount: (projectId: string) =>
+    rpcCall<{ count: number }>("proposals.pending_count", { project_id: projectId }),
+  extractionEstimate: (projectId: string) =>
+    rpcCall<ExtractionEstimate>("proposals.extraction_estimate", { project_id: projectId }),
+  extractionProgress: (projectId: string) =>
+    rpcCall<ExtractionProgress>("proposals.extraction_progress", { project_id: projectId }),
+  /** Reverts one purpose=forecast structural batch (AcceptSuggestionsResult's
+   *  undo_batch_ids / SuggestionItem.undo_batch_id) — the outline, and any
+   *  beat an add_beat item added onto a scene the batch created. */
+  undo: (projectId: string, batchId: string) =>
+    rpcCall<{ ok: boolean }>("proposals.undo", { project_id: projectId, batch_id: batchId }),
+};
+
+/** "Where the story could go" (story-assist Phase 4): possible
+ *  continuations an agent drafted with linetta_save_forecast, for the
+ *  writer to compare. Select/clearSelection/delete are direct RPCs — no
+ *  LLM turn. Never canon: see the Forecast type's own doc comment. */
+export const forecast = {
+  list: (projectId: string) =>
+    rpcCall<{ forecasts: Forecast[] }>("forecast.list", { project_id: projectId }),
+  // project_id scopes select/delete to the caller's own project (review
+  // finding f2) — without it, a stale forecast_id left over from a project
+  // the writer has since navigated away from could change or delete a
+  // DIFFERENT project's forecast with no error at all.
+  select: (projectId: string, forecastId: string, branchId: string) =>
+    rpcCall<SelectForecastResult>("forecast.select", {
+      project_id: projectId, forecast_id: forecastId, branch_id: branchId,
+    }),
+  clearSelection: (projectId: string) =>
+    rpcCall<{ ok: boolean }>("forecast.clear_selection", { project_id: projectId }),
+  delete: (projectId: string, forecastId: string) =>
+    rpcCall<{ ok: boolean }>("forecast.delete", { project_id: projectId, forecast_id: forecastId }),
 };

@@ -7,11 +7,23 @@ import { I18nProvider } from "../lib/i18n";
 import { projects } from "../lib/rpc";
 import { ContextPanel } from "./ContextPanel";
 
+// The continuity badge (story-assist Phase 2) mounts useEngineEvent for its
+// mcp-changed refresh, same as CanonPanel/StyleSection — this stands in for
+// Tauri's event bus the same way their test files do.
+const events = vi.hoisted(() => ({ listeners: new Map<string, (event: { payload: unknown }) => void>() }));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: (name: string, listener: (event: { payload: unknown }) => void) => {
+    events.listeners.set(name, listener);
+    return Promise.resolve(() => events.listeners.delete(name));
+  },
+}));
+
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   projectsUpdate: vi.fn(),
   projectsRewriteSynopsis: vi.fn(),
   projectsClearSynopsis: vi.fn(),
+  continuityOpenCounts: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -23,6 +35,10 @@ vi.mock("../lib/rpc", () => ({
     rewriteSynopsis: mocks.projectsRewriteSynopsis,
     clearSynopsis: mocks.projectsClearSynopsis,
   },
+  // story-assist Phase 2: the open-observation badge's one RPC call.
+  continuity: {
+    openCounts: mocks.continuityOpenCounts,
+  },
 }));
 
 vi.mock("./PlotPanel", () => ({
@@ -33,6 +49,16 @@ vi.mock("./StatsSection", () => ({
   StatsSection: () => <div data-testid="stats-section" />,
 }));
 
+vi.mock("./DirectionSection", () => ({
+  DirectionSection: ({
+    projectId, nodeId, collapsed, onToggleCollapsed,
+  }: { projectId: string; nodeId?: string; collapsed?: boolean; onToggleCollapsed?: (c: boolean) => void }) => (
+    <div data-testid="direction-section" data-project-id={projectId} data-node-id={nodeId} data-collapsed={String(collapsed)}>
+      <button type="button" onClick={() => onToggleCollapsed?.(!collapsed)}>toggle-direction</button>
+    </div>
+  ),
+}));
+
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
@@ -40,6 +66,7 @@ afterEach(() => {
 
 beforeEach(() => {
   mocks.settingsGet.mockResolvedValue({ language: "ko" });
+  mocks.continuityOpenCounts.mockResolvedValue({ counts: {} });
 });
 
 const project: Project = {
@@ -92,6 +119,31 @@ function renderContextPanel(props: Partial<ComponentProps<typeof ContextPanel>> 
 }
 
 describe("ContextPanel", () => {
+  it("places the writer's direction section at the top of the panel, wired to the open project and scene", async () => {
+    renderContextPanel();
+    const section = await screen.findByTestId("direction-section");
+    expect(section).toHaveAttribute("data-project-id", "project-1");
+    expect(section).toHaveAttribute("data-node-id", "scene-1");
+
+    const scroll = document.querySelector(".panel-scroll");
+    expect(scroll?.firstElementChild).toBe(section);
+  });
+
+  it("persists the direction section's collapse state to localStorage and restores it on remount", async () => {
+    window.localStorage.removeItem("linetta:direction:collapsed");
+    const { unmount } = renderContextPanel();
+    const section = await screen.findByTestId("direction-section");
+    expect(section).toHaveAttribute("data-collapsed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "toggle-direction" }));
+    await waitFor(() => expect(window.localStorage.getItem("linetta:direction:collapsed")).toBe("1"));
+    unmount();
+
+    renderContextPanel();
+    expect(await screen.findByTestId("direction-section")).toHaveAttribute("data-collapsed", "true");
+    window.localStorage.removeItem("linetta:direction:collapsed");
+  });
+
   it("shows and saves project overview and synopsis as separate fields", async () => {
     vi.useFakeTimers();
     const onProjectChanged = vi.fn();
@@ -216,5 +268,69 @@ describe("ContextPanel", () => {
     expect(screen.getByLabelText("Project overview")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Logline, theme, main flow")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Scan scene/ })).toBeInTheDocument();
+  });
+
+  // story-assist Phase 2, 2.D.2: the badge is this scene's own share of a
+  // work-wide map, and it is a button only when the caller wired somewhere
+  // for it to open.
+  it("shows the open-observation badge for this scene and opens continuity on click", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 2, other: 5 } });
+    const onOpenContinuity = vi.fn();
+    renderContextPanel({ onOpenContinuity });
+
+    const badge = await screen.findByTestId("continuity-open-badge");
+    expect(badge).toHaveTextContent("2");
+    await userEvent.click(badge);
+    expect(onOpenContinuity).toHaveBeenCalledTimes(1);
+  });
+
+  // continuity.set_status (a writer resolving an observation from Story
+  // World) does not fire mcp-changed — only an agent's own tool calls do —
+  // so the badge has to hear continuity-changed instead, or it would keep
+  // showing a count the writer already acted on.
+  it("refreshes the badge on a continuity-changed event rather than mcp-changed alone", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 2 } });
+    renderContextPanel({ onOpenContinuity: vi.fn() });
+
+    const badge = await screen.findByTestId("continuity-open-badge");
+    expect(badge).toHaveTextContent("2");
+
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 0 } });
+    act(() => {
+      events.listeners.get("continuity-changed")?.({ payload: { project_id: project.id, node_id: node.id } });
+    });
+
+    await waitFor(() => expect(screen.queryByTestId("continuity-open-badge")).not.toBeInTheDocument());
+  });
+
+  it("ignores a continuity-changed event for a different work", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 2 } });
+    renderContextPanel({ onOpenContinuity: vi.fn() });
+    await screen.findByTestId("continuity-open-badge");
+    const callsBefore = mocks.continuityOpenCounts.mock.calls.length;
+
+    act(() => {
+      events.listeners.get("continuity-changed")?.({ payload: { project_id: "other-project", node_id: node.id } });
+    });
+
+    // Give any stray refetch a turn to happen before asserting it did not.
+    await Promise.resolve();
+    expect(mocks.continuityOpenCounts.mock.calls.length).toBe(callsBefore);
+  });
+
+  it("shows no badge when this scene has no open observations", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { other: 5 } });
+    renderContextPanel({ onOpenContinuity: vi.fn() });
+
+    await screen.findByText("이 씬");
+    expect(screen.queryByTestId("continuity-open-badge")).not.toBeInTheDocument();
+  });
+
+  it("shows no badge when the caller has not wired onOpenContinuity", async () => {
+    mocks.continuityOpenCounts.mockResolvedValue({ counts: { [node.id]: 3 } });
+    renderContextPanel();
+
+    await waitFor(() => expect(mocks.continuityOpenCounts).toHaveBeenCalled());
+    expect(screen.queryByTestId("continuity-open-badge")).not.toBeInTheDocument();
   });
 });

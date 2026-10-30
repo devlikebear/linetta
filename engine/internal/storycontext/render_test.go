@@ -682,3 +682,218 @@ func TestTurningMemoriesOffAlsoTurnsOffTheCuratedOnes(t *testing.T) {
 		}
 	}
 }
+
+// Story-assist Phase 1: the Writer's Direction section.
+
+func TestBuildUser_direction_emptyOmitsSection(t *testing.T) {
+	c := Context{SceneLabel: "씬 1", SceneText: "본문"}
+	got := buildUser(c)
+	if strings.Contains(got, "작가 방향") {
+		t.Fatalf("empty direction must omit the section entirely. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_direction_comesBeforeEverySectionElse(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		SceneText:  "본문",
+		Project:    ProjectMeta{Genres: []string{"SF"}},
+		Direction:  DirectionBrief{Focus: "둘의 오해를 아직 풀지 않는다"},
+	}
+	got := buildUser(c)
+	dirIdx := strings.Index(got, "## 작가 방향")
+	metaIdx := strings.Index(got, "## 작품 설정")
+	sceneIdx := strings.Index(got, "## 현재 씬")
+	if dirIdx == -1 || metaIdx == -1 || sceneIdx == -1 {
+		t.Fatalf("missing section. got:\n%s", got)
+	}
+	if dirIdx != 0 {
+		t.Fatalf("direction must be the very first thing written, got index %d. got:\n%s", dirIdx, got)
+	}
+	if !(dirIdx < metaIdx && dirIdx < sceneIdx) {
+		t.Fatalf("direction must come before every other section. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_direction_staleFocusAppendsNote(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction:  DirectionBrief{Focus: "초점", FocusStale: true, FocusEpisodesSince: 3},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "지금의 초점: 초점") {
+		t.Fatalf("missing focus line. got:\n%s", got)
+	}
+	if !strings.Contains(got, "3회차 전에 정한 초점") {
+		t.Fatalf("missing staleness note. got:\n%s", got)
+	}
+}
+
+// Review finding f1: direction.Repo.GetFocus reports EpisodesSince=-1 when
+// the anchor episode's node was deleted. That must not flow into the
+// "%d episodes ago" template verbatim — "-1 episodes ago" is nonsense in a
+// section the agent is told is binding.
+func TestBuildUser_direction_staleFocusWithMissingAnchorNamesItInsteadOfACount(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction:  DirectionBrief{Focus: "초점", FocusStale: true, FocusEpisodesSince: -1},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "기준 회차를 찾을 수 없음") {
+		t.Fatalf("missing anchor-missing note. got:\n%s", got)
+	}
+	if strings.Contains(got, "-1회차") {
+		t.Fatalf("must not render the raw -1 count. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_direction_freshFocusHasNoStalenessNote(t *testing.T) {
+	c := Context{SceneLabel: "씬 1", Direction: DirectionBrief{Focus: "초점", FocusStale: false}}
+	got := buildUser(c)
+	if strings.Contains(got, "전에 정한 초점") {
+		t.Fatalf("a fresh focus must not carry the staleness note. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_direction_sceneIntentRendersGoalKeepAvoid(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction: DirectionBrief{
+			SceneGoal: "둘의 거리를 좁힌다",
+			Keep:      []string{"침묵"},
+			Avoid:     []string{"고백"},
+		},
+	}
+	got := buildUser(c)
+	for _, want := range []string{"이 씬의 목표: 둘의 거리를 좁힌다", "지킬 것:", "- 침묵", "피할 것:", "- 고백"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q. got:\n%s", want, got)
+		}
+	}
+}
+
+func TestBuildUser_direction_titlesPerLanguage(t *testing.T) {
+	cases := []struct {
+		lang, want string
+	}{
+		{"ko", "## 작가 방향 (반드시 따름)"},
+		{"en", "## Writer's Direction (binding)"},
+		{"ja", "## 作家の方向性（必ず従う）"},
+	}
+	for _, tc := range cases {
+		c := Context{SceneLabel: "씬 1", Direction: DirectionBrief{Focus: "초점"}, Options: Options{Language: tc.lang}}
+		got := buildUser(c)
+		if !strings.Contains(got, tc.want) {
+			t.Errorf("lang=%s: missing %q. got:\n%s", tc.lang, tc.want, got)
+		}
+	}
+}
+
+func TestApplyContextSelection_directionFalseRemovesIt(t *testing.T) {
+	off := false
+	c := Context{
+		ProjectID: "p1",
+		Direction: DirectionBrief{Focus: "초점", SceneGoal: "목표"},
+		Options:   Options{Context: ContextSelection{Direction: &off}},
+	}
+	got := ApplyContextSelection(c)
+	if !got.Direction.Empty() {
+		t.Fatalf("Direction=false must clear the brief's direction, got %+v", got.Direction)
+	}
+}
+
+// Story-assist Phase 4: the selected forecast branch, rendered right after
+// the scene intent inside the Writer's Direction section.
+
+func TestBuildUser_plannedBranch_absentOmitsIt(t *testing.T) {
+	c := Context{SceneLabel: "씬 1", Direction: DirectionBrief{Focus: "초점"}}
+	got := buildUser(c)
+	if strings.Contains(got, "고른 다음 전개") {
+		t.Fatalf("no planned branch was set, but the section rendered. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_plannedBranch_rendersTitlePremiseAndBeats(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction: DirectionBrief{
+			Focus: "초점",
+			PlannedBranch: &PlannedBranchBrief{
+				Title:   "맞선다",
+				Premise: "주인공이 물러서지 않는다.",
+				Beats:   []PlannedBranchBeat{{EpisodeOffset: 1, Summary: "첫 비트"}},
+			},
+		},
+	}
+	got := buildUser(c)
+	for _, want := range []string{
+		"고른 다음 전개 (계획 — 정사 아님",
+		"제목: 맞선다",
+		"전제: 주인공이 물러서지 않는다.",
+		"1화 이후: 첫 비트",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q. got:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "정사가 바뀐 뒤의 계획") {
+		t.Fatalf("a fresh plan must not carry the staleness note. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_plannedBranch_staleAppendsReasons(t *testing.T) {
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction: DirectionBrief{
+			Focus: "초점",
+			PlannedBranch: &PlannedBranchBrief{
+				Title: "맞선다", Premise: "전제",
+				Stale: true,
+				StaleReasons: []DirectionStaleReason{
+					{Group: "entities", Count: 2},
+					{Group: "episodes", EpisodeLabels: []string{"3화"}},
+				},
+			},
+		},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "정사가 바뀐 뒤의 계획") {
+		t.Fatalf("missing staleness note. got:\n%s", got)
+	}
+	if !strings.Contains(got, "인물 2개") {
+		t.Fatalf("missing entities reason. got:\n%s", got)
+	}
+	if !strings.Contains(got, "3화 본문") {
+		t.Fatalf("missing episodes reason. got:\n%s", got)
+	}
+}
+
+func TestBuildUser_plannedBranch_presentEvenWithNoFocusOrSceneGoal(t *testing.T) {
+	// A planned branch alone must not be swallowed by DirectionBrief.Empty()
+	// just because focus/scene-goal/keep/avoid are all unset.
+	c := Context{
+		SceneLabel: "씬 1",
+		Direction: DirectionBrief{
+			PlannedBranch: &PlannedBranchBrief{Title: "맞선다", Premise: "전제"},
+		},
+	}
+	got := buildUser(c)
+	if !strings.Contains(got, "작가 방향") || !strings.Contains(got, "제목: 맞선다") {
+		t.Fatalf("direction section with only a planned branch did not render. got:\n%s", got)
+	}
+}
+
+func TestApplyContextSelection_directionFalseAlsoRemovesPlannedBranch(t *testing.T) {
+	off := false
+	c := Context{
+		ProjectID: "p1",
+		Direction: DirectionBrief{
+			PlannedBranch: &PlannedBranchBrief{Title: "맞선다", Premise: "전제"},
+		},
+		Options: Options{Context: ContextSelection{Direction: &off}},
+	}
+	got := ApplyContextSelection(c)
+	if got.Direction.PlannedBranch != nil {
+		t.Errorf("PlannedBranch = %+v, want nil once the direction switch is off", got.Direction.PlannedBranch)
+	}
+}

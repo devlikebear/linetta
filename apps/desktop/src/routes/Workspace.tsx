@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot } from "lucide-react";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi } from "../lib/rpc";
+import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot, Image as ImageIcon } from "lucide-react";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi, illustrations as illustrationsApi, illustrationRequests as illustrationRequestsApi } from "../lib/rpc";
 import { saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
-import { NoteMarkerExtension } from "../components/editor/NoteMarkerExtension";
+import { sceneEditorExtensions } from "../components/editor/sceneExtensions";
 import { NotePopover } from "../components/NotePopover";
-import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus } from "../lib/types";
+import type { NodeRow, Project, Entity, SearchResult, Settings as SettingsRow, NodeStatus, PublishWorkStatus, IllustrationMeta, IllustrationsChangedPayload } from "../lib/types";
 import { buildMentionExtension, type MentionPickerState } from "../components/editor/MentionExtension";
 import { MentionPicker } from "../components/editor/MentionPicker";
 import { EntitySheet } from "../components/EntitySheet";
@@ -19,9 +19,12 @@ import { autoMentionDoc, countAutoMentionCandidates } from "../lib/editor/autoMe
 import { ZenMode } from "../components/ZenMode";
 import { ContextPanel, type SaveStatus } from "../components/ContextPanel";
 import { CanonPanel } from "../components/CanonPanel";
+import { ProposalInbox } from "../components/ProposalInbox";
+import { ForecastSheet } from "../components/ForecastSheet";
 import { FactBookPanel } from "../components/FactBookPanel";
 import { AgentPanel } from "../components/agent/AgentPanel";
 import { useAgentRunning } from "../hooks/useAgentRunning";
+import type { McpChangedPayload } from "../hooks/useMcpChanges";
 import { ContextualEditPanel } from "../components/contextual/ContextualEditPanel";
 import { OutlinePanel } from "../components/OutlinePanel";
 import { InlineEditableText } from "../components/InlineEditableText";
@@ -29,6 +32,9 @@ import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
 import { PublishDialog } from "../components/PublishDialog";
 import { rememberSettingsCategory } from "./Settings";
+import { IllustrationDialog } from "../components/illustration/IllustrationDialog";
+import { IllustrationGallery, type RepresentativeTarget } from "../components/illustration/IllustrationGallery";
+import { RepresentativeThumb } from "../components/illustration/RepresentativeThumb";
 import { SearchModal } from "../components/SearchModal";
 import { OnboardingTour, type OnboardingTourStep } from "../components/onboarding/OnboardingTour";
 import {
@@ -54,6 +60,8 @@ import { planChapterCreation, type CreateNodeStep } from "../lib/outlineCreate";
 import { normalizePlatformProfile, transformPlatformText } from "../lib/platformProfiles";
 import { SceneSaveQueue } from "../lib/sceneSaveQueue";
 import { useMcpChanges } from "../hooks/useMcpChanges";
+import { useEngineEvent } from "../hooks/useEngineEvent";
+import type { ProposalsChangedPayload } from "../lib/types";
 import {
   buildTree,
   countEpisodeStatus,
@@ -138,15 +146,50 @@ export function Workspace() {
   const [factBookOpen, setFactBookOpen] = useState(false);
   const [contextualEditOpen, setContextualEditOpen] = useState(false);
   const [canonOpen, setCanonOpen] = useState(false);
-  const [agentOpen, setAgentOpen] = useState(false);
+  // Bumped by openContinuityForScene (ContextPanel's open-observations
+  // badge) so CanonPanel/ContinuitySection pull the continuity section
+  // open and scope it to the current scene instead of landing collapsed
+  // and scoped to the whole work. Reset to null by every other toggle
+  // below, the same way factBookHighlightId already is, so a later plain
+  // open of Story World does not replay a stale request.
+  const [continuityFocusRequest, setContinuityFocusRequest] = useState<number | null>(null);
+  const [agentOpen, setAgentOpen] = useState(() => Boolean((location.state as { fillStoryWorldPrompt?: string } | null)?.fillStoryWorldPrompt));
+  // The Library import dialog's "시작" button lands here with the
+  // extraction prompt already typed into the agent panel's composer — the
+  // writer still presses send (story-assist 3.D.3). Read once, lazily, so
+  // navigating away and the state clearing afterward does not lose it.
+  const [agentInitialDraft] = useState(() => (location.state as { fillStoryWorldPrompt?: string } | null)?.fillStoryWorldPrompt ?? "");
+  const [proposalInboxOpen, setProposalInboxOpen] = useState(false);
+  // "Where the story could go" (story-assist Phase 4).
+  const [forecastSheetOpen, setForecastSheetOpen] = useState(false);
+  // Fills the agent panel's composer from outside it — the forecast
+  // sheet's [개요 반영 제안 요청] button. The nonce is the dependency
+  // AgentPanel's own effect keys off, so the identical sentence sent twice
+  // still lands the second time.
+  const [agentDraftRequest, setAgentDraftRequest] = useState<{ text: string; nonce: number } | null>(null);
+  const requestAgentDraft = useCallback((text: string) => {
+    setAgentDraftRequest((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }));
+    setForecastSheetOpen(false);
+    setAgentOpen(true);
+  }, []);
+  // AgentPanel unmounts on close, so it cannot remember which nonce it
+  // already applied. Without clearing this, reopening the panel later reruns
+  // the same external-draft effect on mount and overwrites whatever the
+  // writer had typed (or a fresh initialDraft) with the stale request.
+  const clearAgentDraftRequest = useCallback(() => setAgentDraftRequest(null), []);
   // Bumped when an external agent changes the work, so the story world list
-  // reflects the three characters it just said it created (#28).
+  // reflects the three characters it just said it created (#28). Also
+  // bumped on proposals-changed (story-assist Phase 3): accepting a
+  // proposal changes entities/facts/threads/beats the same way, and no
+  // dedicated per-kind event exists to tell this panel to refetch.
   const [canonRefreshKey, setCanonRefreshKey] = useState(0);
   const prevInspectorRef = useRef<InspectorState>({
     factBook: false,
     contextual: false,
     canon: false,
     agent: false,
+    proposalInbox: false,
+    forecast: false,
   });
   useEffect(() => {
     const next: InspectorState = {
@@ -154,20 +197,29 @@ export function Workspace() {
       contextual: contextualEditOpen,
       canon: canonOpen,
       agent: agentOpen,
+      proposalInbox: proposalInboxOpen,
+      forecast: forecastSheetOpen,
     };
     const corrected = reconcileInspector(prevInspectorRef.current, next, sizeClass);
     if (corrected.factBook !== next.factBook) setFactBookOpen(corrected.factBook);
     if (corrected.contextual !== next.contextual) setContextualEditOpen(corrected.contextual);
     if (corrected.canon !== next.canon) setCanonOpen(corrected.canon);
     if (corrected.agent !== next.agent) setAgentOpen(corrected.agent);
+    if (corrected.proposalInbox !== next.proposalInbox) setProposalInboxOpen(corrected.proposalInbox);
+    if (corrected.forecast !== next.forecast) setForecastSheetOpen(corrected.forecast);
     prevInspectorRef.current = corrected;
-  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen, agentOpen]);
+  }, [sizeClass, factBookOpen, contextualEditOpen, canonOpen, agentOpen, proposalInboxOpen, forecastSheetOpen]);
   const [contextualSeed, setContextualSeed] = useState<{ entityId?: string; text?: string; autoCheck?: boolean } | null>(null);
   const [outlineUndoSnapshot, setOutlineUndoSnapshot] = useState<NodeRow[] | null>(null);
   const [outlineRenameRequest, setOutlineRenameRequest] = useState<{ id: string; nonce: number } | null>(null);
   const outlinePreset = useMemo(() => outlinePresetById(load?.project.outline_preset), [load?.project.outline_preset]);
   const outlinePresetId = outlinePreset.id;
   const [factBookSelectedClaimRequest, setFactBookSelectedClaimRequest] = useState<{ id: string; claim: string } | null>(null);
+  // A continuity observation's fact ref (story-assist Phase 2): which
+  // existing card to scroll to and highlight — distinct from
+  // factBookSelectedClaimRequest above, which fills the new-card form for a
+  // claim that has no card yet.
+  const [factBookHighlightId, setFactBookHighlightId] = useState<string | null>(null);
   const [selectionMenu, setSelectionMenu] = useState<SelectionMenuState | null>(null);
   const [settingsRow, setSettingsRow] = useState<SettingsRow | null>(null);
   const [gitSyncAvailable, setGitSyncAvailable] = useState(true);
@@ -177,8 +229,20 @@ export function Workspace() {
   // writer must never be told to go configure something Settings won't show
   // them (#95).
   const [agentAvailable, setAgentAvailable] = useState(false);
+  // Illustrations: the drawing dialog (with what it was opened from) and the
+  // work's gallery. Both are modals over the editor rather than right-hand
+  // panels, so they never compete with the four panels for that slot.
+  const [illustrationDialog, setIllustrationDialog] = useState<{ scene?: string; sourceNodeId?: string } | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryRefresh, setGalleryRefresh] = useState(0);
+  // Illustration Phase 4: which picture stands for which node (outline and
+  // scene header), and how many agent requests wait for the writer (the
+  // gallery button's badge).
+  const [representatives, setRepresentatives] = useState<ReadonlyMap<string, string>>(new Map());
+  const [openIllustrationRequests, setOpenIllustrationRequests] = useState(0);
   // Linetta Works publishing (Phase 3). Off on builds that cannot publish.
-  // The work's status is fetched when the work opens and after a publish —
+  // The work's status is fetched when the work opens and after a publish
+  // (the writer's or an agent's) —
   // never on a timer — and only that, so a writer who is not connected
   // costs the site nothing (the engine answers locally until they connect).
   const [publishAvailable, setPublishAvailable] = useState(false);
@@ -195,6 +259,16 @@ export function Workspace() {
   const [autoMentionFound, setAutoMentionFound] = useState(0);
   const [autoMentionScanKey, setAutoMentionScanKey] = useState(0);
   const factBookSelectionSeqRef = useRef(0);
+  // A passage the selection menu sent to the agent panel. The id makes a
+  // second send of the same text still a new request; the node id ties the
+  // passage to the scene it was cut from (see AgentPanel's selectionRequest).
+  const [agentSelection, setAgentSelection] = useState<{ id: number; text: string; nodeId: string } | null>(null);
+  const agentSelectionSeqRef = useRef(0);
+  // Spent once the panel closes: reopening it later must not attach a
+  // passage the writer already dealt with (or dismissed) again.
+  useEffect(() => {
+    if (!agentOpen) setAgentSelection(null);
+  }, [agentOpen]);
   const loadRef = useRef<LoadState | null>(null);
   // The keydown effect below registers once with an intentionally empty dep
   // array (toggleAgent is a stable useCallback), so it cannot see later
@@ -275,6 +349,17 @@ export function Workspace() {
     void refreshTodayChars(load.project.id);
   }, [saveCompletedAt, load?.project.id, refreshTodayChars]);
   useEffect(() => { setOutlineUndoSnapshot(null); }, [projectId]);
+  // ForecastSheet's own projectId prop is load.project.id, which still
+  // names the OLD project until the "Initial load" effect's async fetch
+  // for the new one resolves (load is never reset to null in between) —
+  // unlike this effect, which fires the instant the URL param changes.
+  // Without this, a jump to another project (global search, LibraryAll.tsx)
+  // while the sheet is open leaves it showing the old project's forecast
+  // cards, each wired to the old project's forecast_id, for as long as that
+  // fetch takes — long enough for a click on [이 갈래 고르기]/[삭제] to land
+  // forecast.select/forecast.delete against a project the writer no longer
+  // believes they are looking at (review finding f2, 2026-10-25).
+  useEffect(() => { setForecastSheetOpen(false); }, [projectId]);
   const editorRef = useRef<TiptapHandle>(null);
   const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
   const zenEditorRef = useRef<TiptapHandle | null>(null);
@@ -436,22 +521,33 @@ export function Workspace() {
     return () => { cancelled = true; };
   }, [publishAvailable, publishProjectId]);
 
+  // An agent registering the work or publishing an episode changes what the
+  // badges should say, so those two tools refetch the status the same way.
+  useEngineEvent<McpChangedPayload>("mcp-changed", (payload) => {
+    if (!publishAvailable || !publishProjectId || payload.project_id !== publishProjectId) return;
+    if (payload.tool !== "linetta_register_work" && payload.tool !== "linetta_publish_episode") return;
+    publishApi
+      .workStatus(publishProjectId)
+      .then((st) => { if (loadRef.current?.project.id === st.project_id) setPublishStatus(st); })
+      .catch(() => {});
+  });
+
   // Badges only for a connected work the site knows; otherwise none at all.
   const publishStates = useMemo(() => {
     if (!publishStatus?.connected || !publishStatus.registered) return undefined;
     return new Map(publishStatus.episodes.map((ep) => [ep.node_id, ep.state] as const));
   }, [publishStatus]);
 
-  const mentionExtension = useMemo(() => {
-    if (!projectId) return null;
-    return buildMentionExtension({
-      search: async (query) => {
-        const results = await entitiesApi.search(projectId, query);
-        return results.map((e) => ({ id: e.id, name: e.name, role: e.role }));
-      },
-      onStateChange: setMentionState,
-    });
-  }, [projectId]);
+  // One list for the workspace editor and Zen: both must read every node a
+  // scene can hold, or the one missing a node opens the scene empty.
+  const sceneExtensions = useMemo(() => sceneEditorExtensions(buildMentionExtension({
+    search: async (query) => {
+      if (!projectId) return [];
+      const results = await entitiesApi.search(projectId, query);
+      return results.map((e) => ({ id: e.id, name: e.name, role: e.role }));
+    },
+    onStateChange: setMentionState,
+  })), [projectId]);
 
   const refreshMentioned = useCallback(async (nodeId: string) => {
     try { setMentioned(await mentionsApi.listForNode(nodeId)); }
@@ -534,6 +630,25 @@ export function Workspace() {
       setCanonRefreshKey((k) => k + 1);
     },
     onSceneChanged: (nodeId) => { void reloadSceneFromEngine(nodeId); },
+  });
+
+  // story-assist Phase 3: accepting a proposal changes entities/facts/
+  // threads/beats the same way linetta_apply_story_ops does, but through
+  // the writer's own click rather than an MCP client — proposals.changed,
+  // not mcp.changed. CanonPanel's "제안함 N" badge and entity list both
+  // read off this same bump.
+  useEngineEvent<ProposalsChangedPayload>("proposals-changed", (event) => {
+    if (event.project_id && projectId && event.project_id !== projectId) return;
+    setCanonRefreshKey((k) => k + 1);
+    // story-assist Phase 4 (4.A.5): accepting a purpose=forecast batch can
+    // create outline structure (create_outline_node/create_scene) — the
+    // one way proposals.accept ever changes the tree itself, not just
+    // Story World. Nothing else refetches it, so this panel would
+    // otherwise keep showing the outline from before the writer's own
+    // accept click.
+    if (event.kinds?.includes("outline") && loadRef.current) {
+      void refreshTreeKeepNode(loadRef.current.node.id);
+    }
   });
 
   const refreshTreeKeepNode = useCallback(
@@ -785,14 +900,15 @@ export function Workspace() {
     (async () => {
       try {
         const p = await projects.get(projectId);
-        const jumpTo = (location.state as { jumpToNodeId?: string } | null)?.jumpToNodeId;
+        const state = location.state as { jumpToNodeId?: string; fillStoryWorldPrompt?: string } | null;
+        const jumpTo = state?.jumpToNodeId;
         const target = jumpTo ?? p.last_opened_node_id;
         if (!target) throw new Error("project has no opened node");
         const next = await fetchTree(projectId, target);
         if (!cancelled) {
           setLoad(next);
           setCharCount(next.node.word_count);
-          if (jumpTo) navigate(location.pathname, { replace: true, state: null });
+          if (jumpTo || state?.fillStoryWorldPrompt) navigate(location.pathname, { replace: true, state: null });
         }
       } catch (e) {
         if (!cancelled) setError(String(e));
@@ -1090,6 +1206,14 @@ export function Workspace() {
 
   const toggleFactBook = useCallback(() => {
     setFactBookSelectedClaimRequest(null);
+    // A continuity fact ref's target (story-assist Phase 2 review): without
+    // this, closing the panel and reopening it plainly from this same
+    // button would still carry a stale highlight target from whatever
+    // observation was last opened, scoping the list to the whole work
+    // instead of this scene and highlighting a card the writer has nothing
+    // to do with right now.
+    setFactBookHighlightId(null);
+    setContinuityFocusRequest(null);
     setFactBookOpen((v) => {
       const next = !v;
       if (next) {
@@ -1109,6 +1233,8 @@ export function Workspace() {
       if (next) {
         setContextualSeed(null);
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
+        setContinuityFocusRequest(null);
         setFactBookOpen(false);
         setCanonOpen(false);
         setAgentOpen(false);
@@ -1124,6 +1250,8 @@ export function Workspace() {
       const next = !v;
       if (next) {
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
+        setContinuityFocusRequest(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
         setAgentOpen(false);
@@ -1139,6 +1267,8 @@ export function Workspace() {
       const next = !v;
       if (next) {
         setFactBookSelectedClaimRequest(null);
+        setFactBookHighlightId(null);
+        setContinuityFocusRequest(null);
         setFactBookOpen(false);
         setContextualEditOpen(false);
         setCanonOpen(false);
@@ -1147,6 +1277,25 @@ export function Workspace() {
       }
       return next;
     });
+  }, []);
+
+  // story-assist followups: the open-observations badge (ContextPanel) must
+  // not just open Story World — it must land on the open tab of the
+  // current scene's continuity section, already expanded. Reuses the same
+  // "close every other inspector-slot panel, clear stale highlight state"
+  // shape every toggle above follows, then bumps continuityFocusRequest so
+  // ContinuitySection (via CanonPanel) reacts even when canonOpen was
+  // already true and a plain setCanonOpen(true) would be a no-op render.
+  const openContinuityForScene = useCallback(() => {
+    setFactBookSelectedClaimRequest(null);
+    setFactBookHighlightId(null);
+    setFactBookOpen(false);
+    setContextualEditOpen(false);
+    setAgentOpen(false);
+    setEntitySheetId(null);
+    setThreadSheetId(null);
+    setCanonOpen(true);
+    setContinuityFocusRequest((n) => (n ?? 0) + 1);
   }, []);
 
   const runSelectionFactCheck = useCallback(() => {
@@ -1163,6 +1312,115 @@ export function Workspace() {
     });
   }, [selectionMenu]);
 
+  // story-assist Phase 2: a continuity observation's fact ref opens the Fact
+  // Book scrolled to and highlighting the card it already points at —
+  // factBookHighlightId, not factBookSelectedClaimRequest, which would
+  // instead fill the new-card form with that card's own claim text and
+  // read as "make a new one" (code review caught this: it risked a
+  // duplicate card for something that already existed). factBookOpen's
+  // branch outranks canonOpen's in the render chain below, so closing it
+  // (onClose there) falls straight back to the ContinuitySection the
+  // writer came from, the same way EntitySheet already does for entity
+  // refs (see CanonPanel's own comment on that).
+  const openFactFromContinuity = useCallback((factId: string) => {
+    setFactBookOpen(true);
+    setFactBookHighlightId(factId);
+  }, []);
+
+
+  const runSelectionAskAgent = useCallback(() => {
+    if (!selectionMenu || selectionMenu.kind !== "selection" || !load) return;
+    setSelectionMenu(null);
+    setFactBookSelectedClaimRequest(null);
+    setFactBookHighlightId(null);
+    setFactBookOpen(false);
+    setContextualEditOpen(false);
+    setCanonOpen(false);
+    setProposalInboxOpen(false);
+    setEntitySheetId(null);
+    setThreadSheetId(null);
+    setAgentOpen(true);
+    setAgentSelection({ id: ++agentSelectionSeqRef.current, text: selectionMenu.text, nodeId: load.node.id });
+  }, [selectionMenu, load]);
+
+  const runSelectionIllustrate = useCallback(() => {
+    if (!selectionMenu || selectionMenu.kind !== "selection") return;
+    setSelectionMenu(null);
+    setIllustrationDialog({ scene: selectionMenu.text, sourceNodeId: load?.node.id });
+  }, [selectionMenu, load]);
+
+  // A picture goes in at the editor's selection, which the modal leaves
+  // where the writer had it.
+  const insertIllustration = useCallback((meta: IllustrationMeta) => {
+    editorRef.current?.insertIllustration(meta.id, meta.caption);
+    setGalleryOpen(false);
+    setIllustrationDialog(null);
+    showToast(t("illustration.inserted"));
+  }, [showToast, t]);
+
+  const openImageSettings = useCallback(() => {
+    setIllustrationDialog(null);
+    setGalleryOpen(false);
+    rememberSettingsCategory("images");
+    void flushPendingSave().then(() => navigate("/settings"));
+  }, [flushPendingSave, navigate]);
+
+  // The work whose pictures the state below describes; an answer for a work
+  // the writer has since left is dropped.
+  const illustrationProjectRef = useRef(projectId);
+  illustrationProjectRef.current = projectId;
+  const refreshIllustrationState = useCallback(async (pId: string) => {
+    try {
+      const [reps, waiting] = await Promise.all([
+        illustrationsApi.representatives(pId),
+        illustrationRequestsApi.list(pId, ["pending", "failed"]),
+      ]);
+      if (illustrationProjectRef.current !== pId) return;
+      setRepresentatives(new Map(Object.entries(reps)));
+      setOpenIllustrationRequests(waiting.length);
+    } catch {
+      /* benign: the outline and the badge just show nothing new */
+    }
+  }, []);
+
+  useEffect(() => {
+    setRepresentatives(new Map());
+    setOpenIllustrationRequests(0);
+    if (projectId && agentAvailable) void refreshIllustrationState(projectId);
+  }, [projectId, agentAvailable, refreshIllustrationState]);
+
+  // A request left, drawn or decided — by the panel's card, the gallery, or
+  // an external agent. A drawing put into the open scene reloads it, the
+  // same way an agent's prose does, unless the writer has unsaved typing
+  // (their next save then meets the version check instead).
+  useEngineEvent<IllustrationsChangedPayload>("illustrations-changed", (payload) => {
+    if (!projectId || payload.project_id !== projectId) return;
+    void refreshIllustrationState(projectId);
+    const open = loadRef.current?.node.id;
+    if (open && payload.node_ids?.includes(open) && !editorDirty) void reloadSceneFromEngine(open);
+  });
+
+  // What the gallery can make a picture stand for: the open scene and the
+  // episode (or chapter) it sits in.
+  const nodeLabels = useMemo(() => {
+    const out = new Map<string, string>();
+    const walk = (list: TreeNode[]) => {
+      for (const n of list) {
+        out.set(n.id, [displayNodeLabel(language, n.label), n.title].filter(Boolean).join(" · "));
+        walk(n.children);
+      }
+    };
+    walk(load?.tree ?? []);
+    return out;
+  }, [load?.tree, language]);
+  const representativeTargets = useMemo<RepresentativeTarget[]>(() => {
+    if (!load) return [];
+    const targets: RepresentativeTarget[] = [];
+    if (load.node.kind === "leaf") targets.push({ id: load.node.id, label: nodeLabels.get(load.node.id) ?? load.node.label });
+    const parent = load.node.parent_id;
+    if (parent && nodeLabels.has(parent)) targets.push({ id: parent, label: nodeLabels.get(parent) ?? "" });
+    return targets;
+  }, [load, nodeLabels]);
 
   const copyNodeText = useCallback(async (node: Pick<TreeNode, "id">) => {
     try {
@@ -1357,6 +1615,27 @@ export function Workspace() {
       run: () => setVersionSheetNodeId(load.node.id),
     });
     cmds.push({
+      id: "proposals-open",
+      section: sectionProject,
+      label: t("proposals.openInbox"),
+      keywords: ["suggestions", "inbox", "propose", "제안함", "제안", "수락"],
+      run: () => {
+        setCanonOpen(false);
+        setProposalInboxOpen(true);
+      },
+    });
+    cmds.push({
+      id: "forecast-open",
+      section: sectionProject,
+      label: t("workspace.command.openForecasts"),
+      keywords: ["forecast", "branch", "갈래", "예측", "전개"],
+      run: () => {
+        setCanonOpen(false);
+        setProposalInboxOpen(false);
+        setForecastSheetOpen(true);
+      },
+    });
+    cmds.push({
       id: "export-project",
       section: sectionExport,
       label: t("workspace.command.exportProject"),
@@ -1485,6 +1764,22 @@ export function Workspace() {
         label: t("workspace.command.agentPanel"),
         hint: "Cmd+J",
         run: toggleAgent,
+      });
+    }
+    if (agentAvailable) {
+      cmds.push({
+        id: "illustration-new",
+        section: sectionProject,
+        label: t("workspace.command.illustrate"),
+        keywords: ["illustration", "image", "draw", "삽화", "그림", "이미지", "挿絵"],
+        run: () => setIllustrationDialog({ sourceNodeId: load.node.id }),
+      });
+      cmds.push({
+        id: "illustration-gallery",
+        section: sectionProject,
+        label: t("workspace.command.illustrations"),
+        keywords: ["illustration", "gallery", "삽화", "갤러리", "挿絵"],
+        run: () => setGalleryOpen(true),
       });
     }
     cmds.push({
@@ -1745,6 +2040,22 @@ export function Workspace() {
               ) : null}
             </button>
           )}
+          {agentAvailable && (
+            <button
+              type="button"
+              className={`ws-tool${galleryOpen ? " is-active" : ""}`}
+              onClick={() => setGalleryOpen(true)}
+              title={t("workspace.command.illustrations")}
+              data-testid="ws-tool-illustrations"
+            >
+              <ImageIcon size={15} /> {t("illustration.gallery")}
+              {openIllustrationRequests > 0 ? (
+                <span className="ws-tool-badge" data-testid="ws-illustration-requests-badge">
+                  {t("illustrationRequest.pendingBadge", { count: openIllustrationRequests })}
+                </span>
+              ) : null}
+            </button>
+          )}
           <div className="ws-sep" />
           <button type="button" className="ws-tool" onClick={enterZen} data-tour="workspace-zen">
             <Maximize2 size={15} /> ZEN
@@ -1782,6 +2093,7 @@ export function Workspace() {
           onSetStatus={handleSetNodeStatus}
           onPublish={publishAvailable ? (node) => { void openPublish(node.id); } : undefined}
           publishStates={publishStates}
+          representatives={representatives}
           onRepairOutline={handleRepairOutline}
           onUndoRepairOutline={handleUndoRepairOutline}
           canUndoRepair={Boolean(outlineUndoSnapshot)}
@@ -1789,6 +2101,11 @@ export function Workspace() {
           episodeCharTarget={episodeCharTarget}
           onOutlinePresetChange={handleOutlinePresetChange}
           tourTarget="workspace-outline"
+          onOpenForecasts={() => {
+            setCanonOpen(false);
+            setProposalInboxOpen(false);
+            setForecastSheetOpen(true);
+          }}
         />
         <section className={`ws-editor${focus ? " focus-mode" : ""}`} data-tour="workspace-editor">
           <div className="editor-col">
@@ -1826,6 +2143,9 @@ export function Workspace() {
             )}
             <div className="scene-marker">
               <span>{sceneMarker}</span>
+              {representatives.get(load.node.id) ? (
+                <RepresentativeThumb illustrationId={representatives.get(load.node.id) ?? ""} className="is-scene" />
+              ) : null}
               <span className="rule" />
             </div>
             <h1 className="scene-title">
@@ -1854,10 +2174,8 @@ export function Workspace() {
               typewriter={typewriter}
               focus={focus}
               onManualSave={handleManualSave}
-              extensions={[
-                ...(mentionExtension ? [mentionExtension] : []),
-                NoteMarkerExtension,
-              ]}
+              extensions={sceneExtensions}
+              contentErrorNotice={t("editor.contentUnreadable")}
               onMentionDoubleClick={(id) => {
                 setContextualEditOpen(false);
                 setEntitySheetId(id);
@@ -1876,6 +2194,16 @@ export function Workspace() {
                 <button type="button" role="menuitem" onClick={runSelectionFactCheck}>
                   <Search size={13} /> {t("workspace.selectionMenu.factCheck")}
                 </button>
+                {agentAvailable && selectionMenu.kind === "selection" ? (
+                  <>
+                    <button type="button" role="menuitem" onClick={runSelectionAskAgent}>
+                      <Bot size={13} /> {t("workspace.selectionMenu.askAgent")}
+                    </button>
+                    <button type="button" role="menuitem" onClick={runSelectionIllustrate}>
+                      <ImageIcon size={13} /> {t("workspace.selectionMenu.illustrate")}
+                    </button>
+                  </>
+                ) : null}
               </div>
             )}
           </div>
@@ -1919,6 +2247,7 @@ export function Workspace() {
             projectId={load.project.id}
             nodeId={load.node.id}
             selectedClaimRequest={factBookSelectedClaimRequest}
+            highlightFactId={factBookHighlightId}
             onImpactCheck={(text) => {
               setContextualSeed({ text, autoCheck: true });
               setFactBookOpen(false);
@@ -1929,6 +2258,7 @@ export function Workspace() {
             onClose={() => {
               setFactBookOpen(false);
               setFactBookSelectedClaimRequest(null);
+              setFactBookHighlightId(null);
               focusEditor();
             }}
             onChanged={() => {
@@ -2002,8 +2332,35 @@ export function Workspace() {
             onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
             onBeforeStyleCheck={flushPendingSave}
             onOpenEntity={(entityId) => setEntitySheetId(entityId)}
+            onOpenFact={openFactFromContinuity}
+            continuityFocusRequest={continuityFocusRequest}
+            onOpenProposals={() => {
+              setCanonOpen(false);
+              setProposalInboxOpen(true);
+            }}
             onClose={() => {
               setCanonOpen(false);
+              focusEditor();
+            }}
+          />
+        ) : proposalInboxOpen && load ? (
+          <ProposalInbox
+            projectId={load.project.id}
+            onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
+            onClose={() => {
+              setProposalInboxOpen(false);
+              focusEditor();
+            }}
+          />
+        ) : forecastSheetOpen && load ? (
+          <ForecastSheet
+            projectId={load.project.id}
+            onOpenEntity={(entityId) => setEntitySheetId(entityId)}
+            onOpenFact={openFactFromContinuity}
+            onOpenNode={(nodeId) => { void navigateToNode({ id: nodeId } as NodeRow); }}
+            onRequestOutlineReflection={requestAgentDraft}
+            onClose={() => {
+              setForecastSheetOpen(false);
               focusEditor();
             }}
           />
@@ -2011,6 +2368,12 @@ export function Workspace() {
           <AgentPanel
             projectId={load.project.id}
             nodeId={load.node.id}
+            initialDraft={agentInitialDraft}
+            selectionRequest={agentSelection}
+            externalDraft={agentDraftRequest?.text}
+            externalDraftNonce={agentDraftRequest?.nonce}
+            onExternalDraftApplied={clearAgentDraftRequest}
+            onOpenImageSettings={openImageSettings}
             onClose={() => {
               setAgentOpen(false);
               focusEditor();
@@ -2038,6 +2401,7 @@ export function Workspace() {
               setLoad((prev) => (prev ? { ...prev, project: p } : prev))
             }
             tourTarget="workspace-context"
+            onOpenContinuity={openContinuityForScene}
           />
         ) : null}
       </div>
@@ -2074,6 +2438,7 @@ export function Workspace() {
           episodeCharCount={currentEpisodeCharCount}
           sceneLabel={currentNodeLabel}
           target={isWebnovelProject ? episodeCharTarget : 0}
+          extensions={sceneExtensions}
           onChange={(doc) => {
             editRevisionRef.current += 1;
             debouncedSave(load.node.id, doc);
@@ -2102,6 +2467,30 @@ export function Workspace() {
       )}
 
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} agentAvailable={agentAvailable} />
+      {load && galleryOpen && (
+        <IllustrationGallery
+          projectId={load.project.id}
+          refreshKey={galleryRefresh}
+          onClose={() => setGalleryOpen(false)}
+          onNew={() => setIllustrationDialog({ sourceNodeId: load.node.id })}
+          onInsert={load.node.kind === "leaf" ? insertIllustration : undefined}
+          targets={representativeTargets}
+          nodeLabel={(id) => nodeLabels.get(id) ?? ""}
+          onRepresentativesChanged={() => void refreshIllustrationState(load.project.id)}
+          onOpenSettings={openImageSettings}
+        />
+      )}
+      {load && illustrationDialog && (
+        <IllustrationDialog
+          projectId={load.project.id}
+          sourceNodeId={illustrationDialog.sourceNodeId}
+          initialScene={illustrationDialog.scene}
+          onClose={() => setIllustrationDialog(null)}
+          onSaved={() => setGalleryRefresh((n) => n + 1)}
+          onInsert={load.node.kind === "leaf" ? insertIllustration : undefined}
+          onOpenSettings={openImageSettings}
+        />
+      )}
       {load && publishTarget && (
         <PublishDialog
           open

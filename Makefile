@@ -62,7 +62,15 @@ test-desktop: ## Run desktop frontend tests and production build
 	cd apps/desktop && pnpm lint && pnpm test && pnpm build
 
 test-tauri: ## Type-check the Tauri shell and run its unit tests
-	cd apps/desktop/src-tauri && cargo check && cargo test
+	@# CI puts cargo on PATH itself (dtolnay/rust-toolchain, via $$GITHUB_PATH),
+	@# so this is a no-op there. A plain non-login shell on a machine where
+	@# only `rustup`'s installer ran — it edits the login shell's rc file, not
+	@# every shell's PATH — never sees ~/.cargo/bin otherwise, and "cargo:
+	@# command not found" is a toolchain-setup failure a diff review cannot
+	@# fix. rustup's own docs call ~/.cargo/bin out as its one install
+	@# location on every platform, so this is safe to hard-code rather than
+	@# discover.
+	export PATH="$$HOME/.cargo/bin:$$PATH"; cd apps/desktop/src-tauri && cargo check && cargo test
 
 test-mobile-engine: ## Run the Go engine suite under the mobile build tag
 	cd engine && go test -tags mobile ./...

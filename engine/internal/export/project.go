@@ -20,6 +20,9 @@ import (
 type Payload struct {
 	Markdown          string `json:"markdown"`
 	SuggestedFilename string `json:"suggested_filename"`
+	// Images are the pictures a sync export writes into Sources.ImageDir.
+	// Empty for an embedded export, whose pictures are inside Markdown.
+	Images []ImageFile `json:"-"`
 }
 
 // Sources is everything ExportProject reads. Relationships and Extras tolerate
@@ -31,6 +34,13 @@ type Sources struct {
 	Entities      *entity.Repo
 	Relationships *relationship.Repo
 	Extras        Extras
+	// Illustrations supplies the pictures the scenes show. Nil leaves them
+	// out of the export, as before pictures could be exported.
+	Illustrations IllustrationSource
+	// ImageDir, for a sync export, is the folder (relative to the Markdown
+	// file) the pictures are linked from and written to. Empty embeds them
+	// in the file itself.
+	ImageDir string
 }
 
 // Extras are the metadata stores added by the completeness pass (#83):
@@ -121,6 +131,21 @@ func ExportProject(ctx context.Context, src Sources, projectID, language string)
 		return Payload{}, err
 	}
 
+	opts := MarkdownOptions{}
+	var images *imageRenderer
+	if src.Illustrations != nil {
+		docs := make([]string, 0, len(orderedNodes))
+		for _, n := range orderedNodes {
+			if n.Kind == "leaf" && n.ContentDoc != nil {
+				docs = append(docs, *n.ContentDoc)
+			}
+		}
+		if images, err = newImageRenderer(ctx, src.Illustrations, src.ImageDir, docs); err != nil {
+			return Payload{}, err
+		}
+		opts = images.options()
+	}
+
 	var sb strings.Builder
 	sb.WriteString(frontmatter)
 	sb.WriteString("# ")
@@ -141,7 +166,7 @@ func ExportProject(ctx context.Context, src Sources, projectID, language string)
 			sb.WriteString(heading)
 			sb.WriteString("\n\n")
 			if n.Kind == "leaf" && n.ContentDoc != nil {
-				body, err := DocToMarkdown([]byte(*n.ContentDoc))
+				body, err := DocToMarkdownWith([]byte(*n.ContentDoc), opts)
 				if err != nil {
 					return fmt.Errorf("export node %s: %w", n.ID, err)
 				}
@@ -189,10 +214,18 @@ func ExportProject(ctx context.Context, src Sources, projectID, language string)
 		sb.WriteString("\n")
 	}
 
-	return Payload{
-		Markdown:          collapseBlankLines(sb.String()),
-		SuggestedFilename: slugify(p.Title) + ".md",
-	}, nil
+	out := Payload{SuggestedFilename: slugify(p.Title) + ".md"}
+	if images != nil {
+		// After the appendices, so the readable part of the file ends where
+		// the manuscript does and the long data lines trail it.
+		if defs := images.definitions(); defs != "" {
+			sb.WriteString(defs)
+			sb.WriteString("\n")
+		}
+		out.Images = images.files()
+	}
+	out.Markdown = collapseBlankLines(sb.String())
+	return out, nil
 }
 
 // collectNodes flattens the tree in the same pre-order the markdown walk uses.
@@ -322,8 +355,9 @@ func buildMetadata(p project.Project, ents []entity.Entity, rels []relationship.
 	return mdmeta.Normalize(meta), entityNames
 }
 
-// ExportNode renders a single leaf's body (no heading).
-func ExportNode(ctx context.Context, nr *node.Repo, nodeID string) (Payload, error) {
+// ExportNode renders a single leaf's body (no heading). With pictures from
+// illustrations, they are embedded in the file; nil leaves them out.
+func ExportNode(ctx context.Context, nr *node.Repo, nodeID string, illustrations IllustrationSource) (Payload, error) {
 	n, err := nr.Get(ctx, nodeID)
 	if err != nil {
 		return Payload{}, err
@@ -331,9 +365,22 @@ func ExportNode(ctx context.Context, nr *node.Repo, nodeID string) (Payload, err
 	if n.Kind != "leaf" || n.ContentDoc == nil {
 		return Payload{}, fmt.Errorf("export: node %s has no content_doc", nodeID)
 	}
-	md, err := DocToMarkdown([]byte(*n.ContentDoc))
+	opts := MarkdownOptions{}
+	var images *imageRenderer
+	if illustrations != nil {
+		if images, err = newImageRenderer(ctx, illustrations, "", []string{*n.ContentDoc}); err != nil {
+			return Payload{}, err
+		}
+		opts = images.options()
+	}
+	md, err := DocToMarkdownWith([]byte(*n.ContentDoc), opts)
 	if err != nil {
 		return Payload{}, err
+	}
+	if images != nil {
+		if defs := images.definitions(); defs != "" {
+			md += defs + "\n"
+		}
 	}
 	name := n.Label
 	if name == "" {

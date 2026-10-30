@@ -62,19 +62,21 @@ func budgetService(t *testing.T, c llm.Client, rec *recorder) (*Service, *settin
 		}},
 		MemoryToolsEnabled: cfg.MemoryToolsEnabled,
 		SkillToolsEnabled:  cfg.SkillToolsEnabled,
+		ReviewToolsEnabled: cfg.ReviewToolsEnabled,
 		Clock:              func() int64 { return 1700000000000 },
 	})
 	t.Cleanup(func() { _ = svc.Close() })
 	return svc, cfg, &registrations
 }
 
-func setToolSwitches(t *testing.T, cfg *settings.Store, memory, skills bool) {
+func setToolSwitches(t *testing.T, cfg *settings.Store, memory, skills, review bool) {
 	t.Helper()
 	if _, err := cfg.Set(context.Background(), settings.Patch{
 		MemoryToolsEnabled: &memory,
 		SkillToolsEnabled:  &skills,
+		ReviewToolsEnabled: &review,
 	}); err != nil {
-		t.Fatalf("settings.Set(memory=%v, skills=%v): %v", memory, skills, err)
+		t.Fatalf("settings.Set(memory=%v, skills=%v, review=%v): %v", memory, skills, review, err)
 	}
 }
 
@@ -113,21 +115,22 @@ func TestRun_thePromptAndTheOfferedToolsDescribeTheSameTurn(t *testing.T) {
 	svc, cfg, _ := budgetService(t, c, rec)
 
 	cases := []struct {
-		name           string
-		memory, skills bool
+		name                   string
+		memory, skills, review bool
 	}{
 		// Deliberately one session, in this order: every case after the
 		// first is a flip against a tool session the previous case already
 		// built and cached, which is the state the shipped code got wrong.
-		{"both on, as they ship", true, true},
-		{"both off", false, false},
-		{"skills switched back on mid-session", false, true},
-		{"memory switched back on mid-session", true, true},
-		{"skills off again mid-session", true, false},
+		{"all on, as they ship", true, true, true},
+		{"all off", false, false, false},
+		{"skills switched back on mid-session", false, true, false},
+		{"memory switched back on mid-session", true, true, false},
+		{"review switched on mid-session", true, true, true},
+		{"skills off again mid-session", true, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			setToolSwitches(t, cfg, tc.memory, tc.skills)
+			setToolSwitches(t, cfg, tc.memory, tc.skills, tc.review)
 			oneTurn(t, svc, rec)
 
 			msgs := c.messages()
@@ -139,9 +142,10 @@ func TestRun_thePromptAndTheOfferedToolsDescribeTheSameTurn(t *testing.T) {
 
 			// Every group's tools are present exactly when its switch is on.
 			for name, want := range map[string]bool{
-				"linetta_edit_memory": tc.memory,
-				"linetta_read_skill":  tc.skills,
-				"linetta_edit_skill":  tc.skills,
+				"linetta_edit_memory":       tc.memory,
+				"linetta_read_skill":        tc.skills,
+				"linetta_edit_skill":        tc.skills,
+				"linetta_report_continuity": tc.review,
 			} {
 				if offered[name] != want {
 					t.Errorf("the turn offered %s = %v, want %v — the tool list does not "+
@@ -222,7 +226,7 @@ func TestRun_theToolSessionIsRebuiltOnlyWhenTheBudgetChanges(t *testing.T) {
 	}
 
 	first := svc.tools
-	setToolSwitches(t, cfg, false, false)
+	setToolSwitches(t, cfg, false, false, false)
 	oneTurn(t, svc, rec)
 	if *registrations != 2 {
 		t.Errorf("the turn after the flip built %d tool servers in total, want 2", *registrations)
@@ -242,6 +246,51 @@ func TestRun_theToolSessionIsRebuiltOnlyWhenTheBudgetChanges(t *testing.T) {
 	if *registrations != 2 {
 		t.Errorf("a turn after the rebuild built another server (%d total), want 2 — "+
 			"the new session is not being cached", *registrations)
+	}
+}
+
+// story-assist Phase 2, 2.B.3: the Review switch has to rebuild the cached
+// session exactly the way Memory and Skills already do — the session's
+// cache key (toolSession.groups) and the server mcphost.Register actually
+// builds must be the SAME toolGroups value, or a flip could be believed by
+// the cache label without the server itself gaining or losing
+// linetta_report_continuity.
+func TestRun_theToolSessionIsRebuiltWhenOnlyReviewChanges(t *testing.T) {
+	rec := &recorder{}
+	c := &scriptedClient{responses: []llm.ChatResponse{textReply("ok")}}
+	svc, cfg, registrations := budgetService(t, c, rec)
+
+	setToolSwitches(t, cfg, true, true, true)
+	oneTurn(t, svc, rec)
+	oneTurn(t, svc, rec)
+	built := *registrations
+	if offered := offeredTools(c.options().Tools); !offered["linetta_report_continuity"] {
+		t.Fatal("test setup: linetta_report_continuity was not offered with review on")
+	}
+
+	first := svc.tools
+	setToolSwitches(t, cfg, true, true, false) // flip ONLY review
+	oneTurn(t, svc, rec)
+	if *registrations != built+1 {
+		t.Errorf("flipping only review built %d tool servers in total, want %d", *registrations, built+1)
+	}
+	if offered := offeredTools(c.options().Tools); offered["linetta_report_continuity"] {
+		t.Error("linetta_report_continuity is still offered after review was switched off")
+	}
+
+	first.mu.Lock()
+	closed := first.closed
+	first.mu.Unlock()
+	if !closed {
+		t.Error("the superseded tool session was never closed")
+	}
+
+	// Cached again: a second turn with review still off must not rebuild.
+	after := *registrations
+	oneTurn(t, svc, rec)
+	if *registrations != after {
+		t.Errorf("a turn with no switch flipped built another server (%d total, was %d) — "+
+			"the review-off session is not being cached", *registrations, after)
 	}
 }
 
@@ -266,7 +315,7 @@ func TestRun_aFlipBetweenTheTwoReadingsIsNotCachedForever(t *testing.T) {
 	rec := &recorder{}
 	c := &scriptedClient{responses: []llm.ChatResponse{textReply("ok")}}
 	svc, cfg, _ := budgetService(t, c, rec)
-	setToolSwitches(t, cfg, true, true)
+	setToolSwitches(t, cfg, true, true, true)
 
 	// The window. resolveToolGroups reads memory first and skills second, so
 	// hanging the flip off the skills accessor puts it after the whole
@@ -278,7 +327,7 @@ func TestRun_aFlipBetweenTheTwoReadingsIsNotCachedForever(t *testing.T) {
 		answer := cfg.SkillToolsEnabled()
 		if !flipped {
 			flipped = true
-			setToolSwitches(t, cfg, false, false)
+			setToolSwitches(t, cfg, false, false, false)
 		}
 		return answer
 	}
@@ -293,7 +342,7 @@ func TestRun_aFlipBetweenTheTwoReadingsIsNotCachedForever(t *testing.T) {
 			// here on every turn resolves both-on — and a turn that is handed
 			// the cached session from the window gets 16 tools with a 19-tool
 			// prompt.
-			setToolSwitches(t, cfg, true, true)
+			setToolSwitches(t, cfg, true, true, true)
 		}
 
 		system := c.messages()[0].Content

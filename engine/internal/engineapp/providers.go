@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/provider"
 )
 
@@ -23,4 +24,34 @@ func (p providerService) ListModels(ctx context.Context, id string) ([]string, e
 
 func (p providerService) Test(ctx context.Context, id string) error {
 	return p.src.Test(ctx, id)
+}
+
+type imageProviderService struct {
+	src *provider.Source
+}
+
+func (p imageProviderService) List(context.Context) (json.RawMessage, error) {
+	return json.Marshal(p.src.ImageList())
+}
+
+func (p imageProviderService) ListModels(ctx context.Context, id string) ([]string, error) {
+	return p.src.ListImageModels(ctx, id)
+}
+
+// illustrationPainter hands the illustration service the provider's Draw.
+// The two packages share no types so that illustration never links tars.
+type illustrationPainter struct {
+	src *provider.Source
+}
+
+func (p illustrationPainter) Paint(ctx context.Context, req illustration.PaintRequest) (illustration.PaintResult, error) {
+	refs := make([]provider.DrawReference, 0, len(req.References))
+	for _, ref := range req.References {
+		refs = append(refs, provider.DrawReference{MIME: ref.MIME, Data: ref.Data})
+	}
+	res, err := p.src.Draw(ctx, provider.DrawRequest{Prompt: req.Prompt, References: refs, Aspect: req.Aspect})
+	if err != nil {
+		return illustration.PaintResult{}, err
+	}
+	return illustration.PaintResult{Data: res.Data, MIME: res.MIME, RevisedPrompt: res.RevisedPrompt, Provider: res.Provider, Model: res.Model}, nil
 }

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { Bot, Send, Square, X } from "lucide-react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Bot, Quote, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
-import { agent as agentApi, providers as providersApi } from "../../lib/rpc";
+import { agent as agentApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
 import type { AgentHistoryRow, AgentRunStatus, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
@@ -11,6 +11,7 @@ import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { isProviderReady } from "../../lib/providers";
 import { Markdown } from "./Markdown";
 import { ProviderPicker } from "./ProviderPicker";
+import { IllustrationRequestCard } from "../illustration/IllustrationRequestCard";
 import "./AgentPanel.css";
 
 /** The built-in agent's panel (#95).
@@ -46,7 +47,9 @@ import "./AgentPanel.css";
  *  copy must be actively discarded rather than merely hidden; see the
  *  handler below. */
 type Line =
-  | { kind: "user"; id: string; text: string }
+  /** `selection` is the passage the writer sent along from the editor,
+   *  drawn as a quote above what they asked about it. */
+  | { kind: "user"; id: string; text: string; selection?: string }
   | {
       kind: "assistant";
       id: string;
@@ -68,6 +71,9 @@ type Line =
        *  same "something to undo" as batchId, just for prose instead of an
        *  outline batch (#112). A line carries at most one of the two. */
       snapshotId?: string;
+      /** The illustration request linetta_request_illustration left; its
+       *  approval card is drawn under the line (illustration Phase 4). */
+      requestId?: string;
       undoing?: boolean;
       undone?: boolean;
       undoError?: string;
@@ -139,6 +145,8 @@ interface AgentToolPayload extends AgentEventBase {
    *  itself would be worse than rendering nothing, so the line carries the
    *  tool's label alone until a later task hands the panel the outline. */
   node_ids?: string[];
+  /** linetta_request_illustration's request, for the approval card. */
+  request_id?: string;
 }
 
 interface AgentDonePayload extends AgentEventBase {
@@ -184,6 +192,7 @@ interface RestoredToolEvent {
   ok: boolean;
   batch_id?: string;
   snapshot_id?: string;
+  request_id?: string;
 }
 
 /** Parses one tool row's `content`. Null for anything that is not a usable
@@ -199,13 +208,14 @@ export function parseToolEvent(content: string): RestoredToolEvent | null {
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const { name, ok, batch_id: batchId, snapshot_id: snapshotId } = parsed as Record<string, unknown>;
+  const { name, ok, batch_id: batchId, snapshot_id: snapshotId, request_id: requestId } = parsed as Record<string, unknown>;
   if (typeof name !== "string" || typeof ok !== "boolean") return null;
   return {
     name,
     ok,
     batch_id: typeof batchId === "string" ? batchId : undefined,
     snapshot_id: typeof snapshotId === "string" ? snapshotId : undefined,
+    request_id: typeof requestId === "string" ? requestId : undefined,
   };
 }
 
@@ -238,12 +248,22 @@ function endNoticeVariant(status: string): "failed" | "cancelled" | null {
  *  died mid-reply does not restore looking exactly like one that finished.
  *  Live, that is what agent.error and agent.cancelled draw; restored, `status`
  *  is the only trace either of them leaves. */
+/** The engine stores a passage sent with a prompt inside the prompt itself
+ *  (agent/prompt.go withSelection), so later turns replay it too. Split it
+ *  back out of a restored row so it reads as a quote, not as the writer's
+ *  own sentence. Exported for the tests. */
+export function splitSelection(content: string): { text: string; selection?: string } {
+  const m = /^<selection>\n([\s\S]*?)\n<\/selection>\n\n/.exec(content);
+  if (!m) return { text: content };
+  return { text: content.slice(m[0].length), selection: m[1] };
+}
+
 function linesFromHistory(rows: AgentHistoryRow[], liveRunId?: string): Line[] {
   const lines: Line[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (row.role === "user") {
-      lines.push({ kind: "user", id: `history:${row.id}`, text: row.content });
+      lines.push({ kind: "user", id: `history:${row.id}`, ...splitSelection(row.content) });
     } else if (row.role === "assistant") {
       lines.push({ kind: "assistant", id: `history:${row.id}`, text: row.content, runId: row.run_id });
     } else if (row.role === "tool") {
@@ -260,6 +280,7 @@ function linesFromHistory(rows: AgentHistoryRow[], liveRunId?: string): Line[] {
           state: ev.ok ? "ok" : "error",
           batchId: ev.batch_id,
           snapshotId: ev.snapshot_id,
+          requestId: ev.request_id,
         });
       }
       // An unparseable tool row still counts as a row of its run for the
@@ -357,9 +378,49 @@ interface Props {
   /** The currently open editor's node id — agent.run's scope argument and
    *  the only material the engine gets for "which scene do you mean". */
   nodeId: string;
+  /** Pre-fills the composer on mount without sending it — the Library
+   *  import dialog's "시작" button lands here with the extraction prompt
+   *  already typed, same as a starter chip. The writer still presses send. */
+  initialDraft?: string;
+  /** A passage the writer sent from the editor's selection menu. Each new
+   *  id attaches it above the composer, replacing any passage already
+   *  there; it goes out with the next send as agent.run's `selection`. It is
+   *  shown and sent only while `nodeId` is still the scene it came from —
+   *  the engine tells the agent the passage is in the open scene. */
+  selectionRequest?: { id: number; text: string; nodeId: string } | null;
+  /** Replaces the composer's text on an already-mounted panel — the
+   *  forecast sheet's [개요 반영 제안 요청] button (story-assist Phase 4),
+   *  which fills the same sentence a starter chip would but from a panel
+   *  that does not own AgentPanel's draft state. Paired with
+   *  externalDraftNonce: this only re-applies when the nonce changes, so
+   *  typing over it is never silently reverted on an unrelated re-render. */
+  externalDraft?: string;
+  externalDraftNonce?: number;
+  /** Called once the panel has applied externalDraft/externalDraftNonce to
+   *  the composer. The caller's job is to clear whatever it fed in (set its
+   *  own request state back to null) — this panel unmounts on close, so the
+   *  nonce it applied is forgotten the moment the writer reopens it, and the
+   *  same stale request would overwrite a fresh initialDraft (or whatever
+   *  the writer had started typing) all over again. Without this callback
+   *  the caller has no event to clear on, since nothing else tells it the
+   *  request was consumed. */
+  onExternalDraftApplied?: () => void;
+  /** Opens Settings → image generation, for an illustration request card
+   *  whose provider is not set up yet. */
+  onOpenImageSettings?: () => void;
 }
 
-export function AgentPanel({ onClose, projectId, nodeId }: Props) {
+export function AgentPanel({
+  onClose,
+  projectId,
+  nodeId,
+  initialDraft,
+  selectionRequest,
+  externalDraft,
+  externalDraftNonce,
+  onExternalDraftApplied,
+  onOpenImageSettings,
+}: Props) {
   const { t } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
   // credential without consent is refused server-side — Source.Client()
@@ -372,6 +433,12 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // writer who is fully set up — a false claim about their own setup, not
   // just an ugly flash.
   const [ready, setReady] = useState<boolean | null>(null);
+  // story-assist Phase 2 (2.C.3): the continuity starter chip calls
+  // linetta_report_continuity, which is absent when the writer has switched
+  // the Review tool group off in Settings. Defaults to true — the on-by-
+  // default switch — so the chip does not flash hidden on every open while
+  // settings.get is still in flight.
+  const [reviewToolsEnabled, setReviewToolsEnabled] = useState(true);
   // The rows `ready` was read from, kept for the provider picker under the
   // composer. Only ever replaced by a whole providers.list response.
   const [providerRows, setProviderRows] = useState<ProviderStatus[]>([]);
@@ -391,7 +458,20 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // `canceling` guards agent.cancel the same way handleUndo guards
   // agent.undo — one click, one call, even if the writer clicks again before
   // the round trip returns.
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft ?? "");
+  const [attached, setAttached] = useState<{ text: string; nodeId: string } | null>(
+    selectionRequest ? { text: selectionRequest.text, nodeId: selectionRequest.nodeId } : null,
+  );
+  const attachment = attached && attached.nodeId === nodeId ? attached : null;
+  // See externalDraft's own doc comment above. The nonce, not the text, is
+  // the dependency: a caller sending the identical sentence twice (two
+  // clicks on the same forecast branch) must still land it the second time,
+  // which a text-only dependency would skip as "unchanged".
+  useEffect(() => {
+    if (externalDraftNonce === undefined || externalDraft === undefined) return;
+    setDraft(externalDraft);
+    onExternalDraftApplied?.();
+  }, [externalDraftNonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sending, setSending] = useState(false);
   const [turnRunId, setTurnRunId] = useState<string | null>(null);
   // When the turn in progress started — the working line's clock. From the
@@ -823,6 +903,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
               summary: payload.summary ?? l.summary,
               batchId: payload.batch_id ?? l.batchId,
               snapshotId: payload.snapshot_id ?? l.snapshotId,
+              requestId: payload.request_id ?? l.requestId,
             }
           : l,
       ),
@@ -945,7 +1026,9 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     // way comparing project ids could.
     const token = {};
     sendTokenRef.current = token;
+    const sentAttachment = attachment;
     setDraft("");
+    setAttached(null);
     setSendError(null);
     setSending(true);
     followRef.current = true;
@@ -954,7 +1037,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
     // it can reach the listener before the response reaches us.
     pendingSendRef.current = true;
     agentApi
-      .run(projectId, prompt, nodeId)
+      .run(projectId, prompt, nodeId, sentAttachment?.text)
       .then((result) => {
         if (sendTokenRef.current !== token) {
           // The writer jumped to another work while this send was in flight
@@ -984,7 +1067,10 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
         // been judged, closes the window a stale straggler from the previous
         // run could otherwise be adopted through simply by arriving first.
         currentRunIdRef.current = result.run_id;
-        setLines((prev) => [...prev, { kind: "user", id: `user:${result.run_id}`, text: prompt }]);
+        setLines((prev) => [
+          ...prev,
+          { kind: "user", id: `user:${result.run_id}`, text: prompt, selection: sentAttachment?.text },
+        ]);
         setTurn(result.run_id);
         setSending(false);
         // Last, so a terminal event that raced the response gets to clear the
@@ -1013,6 +1099,9 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
         setSending(false);
         setSendError(rpcErrorMessage(err, t));
         setDraft(prompt);
+        // A passage attached since takes precedence over the one this send
+        // carried, the same as a new selection replaces an old one.
+        if (sentAttachment) setAttached((cur) => cur ?? sentAttachment);
         flushSendWindow();
       });
   }
@@ -1072,6 +1161,24 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
         // An unreachable engine is not "ready" either — fail closed to the
         // notice rather than to a blank panel.
         if (!cancelled) setReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    settingsApi
+      .get()
+      .then((s) => {
+        if (cancelled) return;
+        setReviewToolsEnabled(s.review_tools_enabled !== false);
+      })
+      .catch(() => {
+        // Fail open: the chip's own tool call would refuse if the group
+        // really is off, which is a clearer failure than hiding a chip the
+        // writer expects to see over a transient settings.get error.
       });
     return () => {
       cancelled = true;
@@ -1181,6 +1288,21 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
   // scrollHeight as 0, and the guard leaves the box at its CSS min-height
   // there rather than collapsing it to nothing.
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // A passage sent while the panel is already open. The one the panel
+  // mounted with is already in `attached`; the ref is what tells the two
+  // apart, since the request object is the same on every later render.
+  const seenSelectionIdRef = useRef(selectionRequest?.id);
+  useEffect(() => {
+    if (!selectionRequest || selectionRequest.id === seenSelectionIdRef.current) return;
+    seenSelectionIdRef.current = selectionRequest.id;
+    setAttached({ text: selectionRequest.text, nodeId: selectionRequest.nodeId });
+  }, [selectionRequest]);
+  // The writer came here to type a question about the passage. `ready`
+  // because the composer does not exist until the provider check lands.
+  useEffect(() => {
+    if (selectionRequest && ready) composerRef.current?.focus();
+  }, [selectionRequest, ready]);
   useEffect(() => {
     const el = composerRef.current;
     if (!el) return;
@@ -1238,6 +1360,11 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
             if (line.kind === "user") {
               return (
                 <div key={line.id} className="msg user">
+                  {line.selection ? (
+                    <blockquote className="agent-selection-quote" data-testid="agent-user-selection">
+                      {line.selection}
+                    </blockquote>
+                  ) : null}
                   <div className="msg-bubble">{line.text}</div>
                 </div>
               );
@@ -1309,27 +1436,32 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
             // agent.undo; the writer sees the same button either way.
             const showUndo = Boolean(line.batchId || line.snapshotId) && !line.undone && !line.undoError;
             return (
-              <div key={line.id} className={`tool-line tool-${line.state}`} data-testid="tool-line">
-                <span className="tool-label">{t(toolVerbKey(kind, line.state))}</span>
-                {labelKey ? <span className="tool-name"> · {t(labelKey)}</span> : null}
-                {showUndo ? (
-                  <button
-                    type="button"
-                    className="tool-undo"
-                    disabled={line.undoing}
-                    onClick={() => handleUndo(line.id, line.batchId, line.snapshotId)}
-                  >
-                    {t("agentPanel.tool.undo")}
-                  </button>
+              <Fragment key={line.id}>
+                <div className={`tool-line tool-${line.state}`} data-testid="tool-line">
+                  <span className="tool-label">{t(toolVerbKey(kind, line.state))}</span>
+                  {labelKey ? <span className="tool-name"> · {t(labelKey)}</span> : null}
+                  {showUndo ? (
+                    <button
+                      type="button"
+                      className="tool-undo"
+                      disabled={line.undoing}
+                      onClick={() => handleUndo(line.id, line.batchId, line.snapshotId)}
+                    >
+                      {t("agentPanel.tool.undo")}
+                    </button>
+                  ) : null}
+                  {line.undone ? <span className="tool-undone">{t("agentPanel.tool.undone")}</span> : null}
+                  {line.undoError ? (
+                    <span className="tool-undo-error" role="alert">
+                      {" "}
+                      {line.undoError}
+                    </span>
+                  ) : null}
+                </div>
+                {line.requestId ? (
+                  <IllustrationRequestCard requestId={line.requestId} onOpenSettings={onOpenImageSettings} />
                 ) : null}
-                {line.undone ? <span className="tool-undone">{t("agentPanel.tool.undone")}</span> : null}
-                {line.undoError ? (
-                  <span className="tool-undo-error" role="alert">
-                    {" "}
-                    {line.undoError}
-                  </span>
-                ) : null}
-              </div>
+              </Fragment>
             );
           })}
           {busy ? (
@@ -1352,7 +1484,27 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
             {sendError}
           </p>
         ) : null}
-        {lines.length === 0 && !busy ? (
+        {attachment && !busy && !draft.trim() ? (
+          // With a passage attached, the useful starts are about that
+          // passage. Same contract as the chips below: they fill the
+          // composer, and the writer still presses send.
+          <div className="ai-chiprow agent-starters" data-testid="agent-selection-starters">
+            {(["polish", "feedback", "expand"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                className="chip"
+                data-testid={`agent-selection-starter-${key}`}
+                onClick={() => {
+                  setDraft(t(`agentPanel.selectionStarters.${key}.prompt`));
+                  composerRef.current?.focus();
+                }}
+              >
+                {t(`agentPanel.selectionStarters.${key}.label`)}
+              </button>
+            ))}
+          </div>
+        ) : lines.length === 0 && !busy ? (
           // Starting chips: three fixed prompts that fill the composer and
           // stop there — the writer gets to edit the sentence before it goes
           // anywhere. They only make sense before the first turn; once the
@@ -1367,14 +1519,26 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
             >
               {t("agentPanel.starters.draftScene.label")}
             </button>
-            <button
-              type="button"
-              className="chip"
-              data-testid="agent-starter-continuity"
-              onClick={() => setDraft(t("agentPanel.starters.continuity.prompt"))}
-            >
-              {t("agentPanel.starters.continuity.label")}
-            </button>
+            {reviewToolsEnabled ? (
+              <button
+                type="button"
+                className="chip"
+                data-testid="agent-starter-checkContinuity"
+                onClick={() => setDraft(t("agentPanel.starters.checkContinuity.prompt"))}
+              >
+                {t("agentPanel.starters.checkContinuity.label")}
+              </button>
+            ) : null}
+            {reviewToolsEnabled ? (
+              <button
+                type="button"
+                className="chip"
+                data-testid="agent-starter-fillStoryWorld"
+                onClick={() => setDraft(t("agentPanel.starters.fillStoryWorld.prompt"))}
+              >
+                {t("agentPanel.starters.fillStoryWorld.label")}
+              </button>
+            ) : null}
             <button
               type="button"
               className="chip"
@@ -1383,9 +1547,36 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
             >
               {t("agentPanel.starters.nextScene.label")}
             </button>
+            {reviewToolsEnabled ? (
+              <button
+                type="button"
+                className="chip"
+                data-testid="agent-starter-forecastNext"
+                onClick={() => setDraft(t("agentPanel.starters.forecastNext.prompt"))}
+              >
+                {t("agentPanel.starters.forecastNext.label")}
+              </button>
+            ) : null}
           </div>
         ) : null}
         <div className="cmp-input-wrap">
+          {attachment ? (
+            <div className="agent-attachment" data-testid="agent-attachment">
+              <Quote size={12} aria-hidden="true" />
+              <span className="agent-attachment-text" title={attachment.text}>
+                {attachment.text}
+              </span>
+              <button
+                type="button"
+                className="agent-attachment-remove"
+                data-testid="agent-attachment-remove"
+                onClick={() => setAttached(null)}
+                aria-label={t("agentPanel.attachment.remove")}
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : null}
           <div className="cmp-input">
             <textarea
               data-testid="agent-composer"
@@ -1398,7 +1589,7 @@ export function AgentPanel({ onClose, projectId, nodeId }: Props) {
               // Both buttons beside this box carry one; the box the panel
               // exists for should too.
               aria-label={t("agentPanel.composer.label")}
-              placeholder={t("agentPanel.composer.placeholder")}
+              placeholder={t(attachment ? "agentPanel.composer.placeholderSelection" : "agentPanel.composer.placeholder")}
               rows={2}
             />
             {busy ? (

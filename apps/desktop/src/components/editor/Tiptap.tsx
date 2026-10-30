@@ -1,5 +1,7 @@
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import type { Schema } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
+import { IllustrationExtension } from "./IllustrationExtension";
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FocusExtension, focusKey } from "./FocusExtension";
 import { SearchHighlightExtension, SearchHighlightPluginKey } from "./SearchHighlightExtension";
@@ -28,6 +30,8 @@ export interface TiptapHandle {
   addNoteMarker: (noteId: string) => void;
   /** Remove the first note-marker atom with the given noteId. */
   removeNoteMarker: (noteId: string) => void;
+  /** Insert a gallery illustration as a block at the selection. */
+  insertIllustration: (id: string, caption: string) => void;
   /** Underlying Tiptap Editor instance (null until first mount). Used by
    *  ghost-text + Cmd+I AI prompt bar to read selection and dispatch commands. */
   editor: Editor | null;
@@ -71,10 +75,13 @@ interface Props {
   focus?: boolean;
   /** Fired when the writer right-clicks the editor selection or cursor. */
   onSelectionContextMenu?: (event: React.MouseEvent, payload: TiptapSelectionMenuPayload) => void;
+  /** Shown above the editor when `initialDoc` holds nodes this editor's
+   *  extensions don't define, and the editor is held read-only. */
+  contentErrorNotice?: string;
 }
 
 export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEditor(
-  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu },
+  { initialDoc, onChange, onCharCount, typewriter, onManualSave, extensions, onMentionDoubleClick, focus, onSelectionContextMenu, contentErrorNotice },
   ref,
 ) {
   // Stable reference for the initial doc to avoid resetting on every render.
@@ -83,12 +90,21 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
   const matchesRef = useRef<TextMatch[]>([]);
   const activeMatchRef = useRef(-1);
   const lastFindQueryRef = useRef("");
+  // Tiptap opens a doc with a node type its schema lacks as an empty
+  // paragraph and only logs a warning. Saving that would erase the scene, so
+  // such an editor is held read-only and keeps reporting the doc it was given.
+  // `enableContentCheck` would catch this too, but it also runs ProseMirror's
+  // stricter `check()`, which rejects docs Tiptap reads fine today.
+  const unreadDocRef = useRef<object | null>(null);
 
   const editor = useEditor(
     {
       extensions: [
         StarterKit.configure({}),
         SearchHighlightExtension,
+        // In the base set rather than `sceneEditorExtensions`: it needs no
+        // per-project setup, so every editor gets it whatever it is passed.
+        IllustrationExtension,
         ...(extensions ?? []),
         // Always present — toggling `focus` flips its `enabled` plugin state
         // via a transaction meta below instead of adding/removing the
@@ -96,6 +112,11 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         FocusExtension.configure({ enabled: !!focus }),
       ],
       content: initialDoc,
+      onBeforeCreate: ({ editor }) => {
+        const unread = !readsWithSchema(editor.schema, initialDoc);
+        unreadDocRef.current = unread ? initialDoc : null;
+        if (unread) editor.setOptions({ editable: false });
+      },
       // On touch, focusing raises the on-screen keyboard over a scene the
       // writer has only just opened; let them tap in when they want to type.
       autofocus: isTouchPrimary() ? false : "end",
@@ -105,6 +126,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         attributes: { class: "prose" },
       },
       onUpdate: ({ editor }) => {
+        if (unreadDocRef.current) return;
         const doc = editor.getJSON();
         onChange(doc);
         if (onCharCount) onCharCount(countChars(doc));
@@ -128,7 +150,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
 
   useEffect(() => {
     if (!editor) return;
-    if (onCharCount) onCharCount(countChars(editor.getJSON()));
+    if (onCharCount) onCharCount(countChars(unreadDocRef.current ?? editor.getJSON()));
   }, [editor, onCharCount]);
 
   useEffect(() => {
@@ -160,6 +182,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
       const isSave = (isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === "s";
       if (!isSave) return;
       e.preventDefault();
+      if (unreadDocRef.current) return;
       if (onManualSave) onManualSave(editor.getJSON());
     };
     window.addEventListener("keydown", handler);
@@ -172,7 +195,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
     ref,
     () => ({
       focus: () => editor?.commands.focus("end"),
-      getDoc: () => editor?.getJSON() ?? {},
+      getDoc: () => unreadDocRef.current ?? editor?.getJSON() ?? {},
       getSelection: () => {
         if (!editor) return null;
         const { from, to } = editor.state.selection;
@@ -209,7 +232,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         selectMatch(editor, matchesRef.current, activeMatchRef.current);
       },
       replaceActiveMatch: (replacement) => {
-        if (!editor) return null;
+        if (!editor || unreadDocRef.current) return null;
         const match = matchesRef.current[activeMatchRef.current];
         if (!match) return null;
 
@@ -224,7 +247,7 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         return editor.getJSON();
       },
       replaceAllMatches: (query, replacement) => {
-        if (!editor) return null;
+        if (!editor || unreadDocRef.current) return null;
         const matches = findTextMatches(editor, query);
         if (matches.length === 0) return null;
 
@@ -243,6 +266,9 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
       },
       addNoteMarker: (noteId: string) => {
         (editor?.commands as any)?.addNoteMarker?.(noteId);
+      },
+      insertIllustration: (id: string, caption: string) => {
+        editor?.chain().focus().insertIllustration(id, caption).run();
       },
       removeNoteMarker: (noteId: string) => {
         (editor?.commands as any)?.removeNoteMarker?.(noteId);
@@ -292,11 +318,23 @@ export const TiptapEditor = forwardRef<TiptapHandle, Props>(function TiptapEdito
         }
       }}
     >
+      {editor && unreadDocRef.current && contentErrorNotice && (
+        <div role="alert" className="tiptap-content-error">{contentErrorNotice}</div>
+      )}
       <EditorContent editor={editor} className="tiptap-editor" />
       <TypewriterScroll editor={editor} enabled={!!typewriter} />
     </div>
   );
 });
+
+function readsWithSchema(schema: Schema, doc: object): boolean {
+  try {
+    schema.nodeFromJSON(doc);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // True when the primary input cannot hover — phones and tablets used by touch.
 function isTouchPrimary(): boolean {

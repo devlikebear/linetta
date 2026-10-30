@@ -52,4 +52,4 @@ codesign -d --entitlements - "${APP}" 2>&1 | grep -E 'application-identifier|app
 pkgutil --check-signature "${PKG}"
 echo ""
 echo "Built: ${PKG}"
-echo "Upload: see docs/superpowers/plans/2026-06-18-mac-app-store-submission.md Task 8."
+echo "Upload: see \"Mac App Store release\" in docs/DEVELOPMENT.md."

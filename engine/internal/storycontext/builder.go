@@ -8,6 +8,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/note"
@@ -39,6 +40,7 @@ type ContextBuilder struct {
 	curatedMemorySource CuratedMemorySource
 	skillSource         SkillSource
 	referenceSource     ReferenceSource
+	directionSource     DirectionSource
 	projects            *project.Repo
 	nodes               *node.Repo
 	mentions            *mention.Repo
@@ -125,6 +127,51 @@ type ReferenceSource interface {
 	ContextReferences(ctx context.Context, projectID, nodeID string) ([]ReferenceBrief, error)
 }
 
+// DirectionFocus is the work's current focus, as DirectionSource reports it.
+type DirectionFocus struct {
+	Body          string
+	Stale         bool
+	EpisodesSince int
+}
+
+// DirectionSceneIntent is one scene's intent, as DirectionSource reports it.
+type DirectionSceneIntent struct {
+	Goal  string
+	Keep  []string
+	Avoid []string
+}
+
+// DirectionPlannedBranch is the writer's selected forecast branch, as
+// DirectionSource reports it (story-assist Phase 4).
+type DirectionPlannedBranch struct {
+	Title        string
+	Premise      string
+	Beats        []DirectionPlannedBeat
+	Stale        bool
+	StaleReasons []DirectionStaleReason
+}
+
+// DirectionPlannedBeat is one beat of DirectionPlannedBranch.
+type DirectionPlannedBeat struct {
+	EpisodeOffset int
+	Summary       string
+}
+
+// DirectionSource supplies the writer's own direction for the brief: the
+// work's current focus, this scene's intent, and the branch (if any) the
+// writer picked out of a forecast. Optional — without it the Direction
+// section stays empty. Declared as an interface, not a dependency on
+// internal/direction's (or internal/forecast's) concrete types, so this
+// package does not import either (matching FactSource/SkillSource's shape).
+type DirectionSource interface {
+	FocusFor(ctx context.Context, projectID string) (DirectionFocus, bool, error)
+	SceneIntentFor(ctx context.Context, nodeID string) (DirectionSceneIntent, bool, error)
+	// PlannedBranchFor returns the project's currently selected forecast
+	// branch, if any. present is false when nothing is selected — never
+	// treated as an error, the same convention FocusFor/SceneIntentFor use.
+	PlannedBranchFor(ctx context.Context, projectID string) (DirectionPlannedBranch, bool, error)
+}
+
 // WithFactSource wires the optional Fact Book section.
 func (b *ContextBuilder) WithFactSource(s FactSource) *ContextBuilder {
 	b.factSource = s
@@ -156,6 +203,13 @@ func (b *ContextBuilder) WithReferenceSource(s ReferenceSource) *ContextBuilder 
 	return b
 }
 
+// WithDirectionSource wires the optional writer-direction section (the
+// work's current focus and this scene's intent).
+func (b *ContextBuilder) WithDirectionSource(s DirectionSource) *ContextBuilder {
+	b.directionSource = s
+	return b
+}
+
 func (b *ContextBuilder) Build(ctx context.Context, nodeID, prompt, selectionText string, opts Options) (Context, error) {
 	c, err := b.BuildFull(ctx, nodeID, prompt, selectionText, opts)
 	if err != nil {
@@ -182,11 +236,12 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	if err != nil {
 		return Context{}, err
 	}
-	// Prefer the LLM-cached summary when fresh; fall back to the 300-rune trim.
+	// Prefer the cached summary when there is one worth reading (see
+	// node.SummaryUsable); fall back to the 300-rune trim.
 	prevSummary := ""
 	if prev != nil {
-		if prev.Summary != "" && prev.SummaryForVersion == prev.ContentVersion {
-			prevSummary = prev.Summary
+		if s, _ := prev.SummaryUsable(); s != "" {
+			prevSummary = s
 		} else {
 			prevSummary = trimRunes(docToPlainText(prev.ContentDoc), prevSummaryMaxRunes)
 		}
@@ -271,6 +326,29 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			references = got
 		}
 	}
+	var direction DirectionBrief
+	if b.directionSource != nil {
+		if focus, present, err := b.directionSource.FocusFor(ctx, n.ProjectID); err == nil && present {
+			direction.Focus = focus.Body
+			direction.FocusStale = focus.Stale
+			direction.FocusEpisodesSince = focus.EpisodesSince
+		}
+		if intent, present, err := b.directionSource.SceneIntentFor(ctx, nodeID); err == nil && present {
+			direction.SceneGoal = intent.Goal
+			direction.Keep = intent.Keep
+			direction.Avoid = intent.Avoid
+		}
+		if plan, present, err := b.directionSource.PlannedBranchFor(ctx, n.ProjectID); err == nil && present {
+			beats := make([]PlannedBranchBeat, 0, len(plan.Beats))
+			for _, bt := range plan.Beats {
+				beats = append(beats, PlannedBranchBeat{EpisodeOffset: bt.EpisodeOffset, Summary: bt.Summary})
+			}
+			direction.PlannedBranch = &PlannedBranchBrief{
+				Title: plan.Title, Premise: plan.Premise, Beats: beats,
+				Stale: plan.Stale, StaleReasons: plan.StaleReasons,
+			}
+		}
+	}
 
 	return Context{
 		ProjectID:   proj.ID,
@@ -297,6 +375,7 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		WorkNotes:     workNotes,
 		Skills:        skills,
 		References:    references,
+		Direction:     direction,
 		StyleNotes:    proj.StyleNotes,
 		SelectionText: selectionText,
 		UserPrompt:    prompt,
@@ -382,6 +461,11 @@ func ApplyContextSelection(c Context) Context {
 	if !s.Enabled(ContextKeySkills) {
 		c.Skills = nil
 	}
+	// Its own key too, for the same reason: see ContextKeyDirection's
+	// comment in types.go.
+	if !s.Enabled(ContextKeyDirection) {
+		c.Direction = DirectionBrief{}
+	}
 	return c
 }
 
@@ -436,12 +520,12 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 				continue
 			}
 			lf := leaves[j]
-			body := freshLeafSummary(lf)
+			body, stale := freshLeafSummary(lf)
 			if body == "" {
 				continue
 			}
 			out.NearbyLeafSummaries = append(out.NearbyLeafSummaries, SceneSummary{
-				NodeID: lf.ID, Label: node.BreadcrumbLabel(byID, lf), Body: body,
+				NodeID: lf.ID, Label: node.BreadcrumbLabel(byID, lf), Body: body, Stale: stale,
 			})
 			nearbyIDs = append(nearbyIDs, lf.ID)
 		}
@@ -554,7 +638,7 @@ func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, e
 			continue
 		}
 		out = append(out, SceneSummary{
-			NodeID: n.ID, Label: node.BreadcrumbLabel(byID, n), Body: n.Summary,
+			NodeID: n.ID, Label: node.BreadcrumbLabel(byID, n), Body: n.Summary, Stale: !n.SummaryFresh(),
 		})
 		if len(out) >= 2 {
 			break
@@ -563,28 +647,30 @@ func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, e
 	return out, nil
 }
 
-// freshLeafSummary returns the cached summary if the version matches; otherwise
+// freshLeafSummary returns the cached summary when it is worth reading — fresh,
+// or written and stale, which it reports (see node.SummaryUsable); otherwise
 // it falls back to a 300-rune trim of the plaintext body. Empty string if no
 // content at all (e.g. the leaf was just created and has no doc yet).
-func freshLeafSummary(n node.Node) string {
-	if n.Summary != "" && n.SummaryForVersion == n.ContentVersion {
-		return n.Summary
+func freshLeafSummary(n node.Node) (string, bool) {
+	if s, stale := n.SummaryUsable(); s != "" {
+		return s, stale
 	}
 	if n.ContentDoc != nil {
 		plain := docToPlainText(n.ContentDoc)
 		if plain == "" {
-			return ""
+			return "", false
 		}
-		return trimRunes(plain, prevSummaryMaxRunes)
+		return trimRunes(plain, prevSummaryMaxRunes), false
 	}
-	return ""
+	return "", false
 }
 
 // refreshAndRead returns n.Summary if fresh; otherwise it calls the refresher
 // synchronously and re-reads the row. Empty string is returned if the refresh
-// failed to land (better than a stale string).
+// failed to land (better than a stale derived string). A written summary the
+// refresher left alone is returned as it stands.
 func (b *ContextBuilder) refreshAndRead(ctx context.Context, n node.Node) string {
-	if n.Summary != "" && n.SummaryForVersion == n.ContentVersion {
+	if n.SummaryFresh() {
 		return n.Summary
 	}
 	if b.refresher != nil {
@@ -594,10 +680,8 @@ func (b *ContextBuilder) refreshAndRead(ctx context.Context, n node.Node) string
 	if err != nil {
 		return ""
 	}
-	if got.Summary != "" && got.SummaryForVersion == got.ContentVersion {
-		return got.Summary
-	}
-	return ""
+	s, _ := got.SummaryUsable()
+	return s
 }
 
 // loadRelationships returns relationships whose both endpoints appear in the
@@ -732,6 +816,13 @@ func walkDoc(v interface{}, sb *stringBuilder) {
 			}
 			return
 		}
+		// An illustration travels as its placeholder line, so an agent that
+		// rewrites the scene can keep the picture where it is.
+		if id, caption, ok := illustref.Attrs(t); ok {
+			sb.WriteString(illustref.Placeholder(id, caption))
+			sb.WriteString("\n")
+			return
+		}
 		// Block-level node: recurse children, then add a newline.
 		if content, ok := t["content"].([]interface{}); ok {
 			for _, c := range content {
@@ -819,8 +910,8 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 	synopsis := strings.TrimSpace(c.Project.Synopsis)
 	add(ContextKeySynopsis, "작품 시놉시스", boolCount(synopsis != ""), synopsis, false)
 
-	add(ContextKeyNearbyScenes, "직전·직후 씬 발췌", len(c.Hierarchical.NearbyLeafSummaries), renderSceneSummariesPreview(c.Hierarchical.NearbyLeafSummaries), false)
-	add(ContextKeyRelatedScenes, "관련 과거 씬 (멘션 RAG)", len(c.RelatedScenes), renderSceneSummariesPreview(c.RelatedScenes), false)
+	add(ContextKeyNearbyScenes, "직전·직후 씬 발췌", len(c.Hierarchical.NearbyLeafSummaries), renderSceneSummariesPreview(c.Hierarchical.NearbyLeafSummaries, c.Options.Language), false)
+	add(ContextKeyRelatedScenes, "관련 과거 씬 (멘션 RAG)", len(c.RelatedScenes), renderSceneSummariesPreview(c.RelatedScenes, c.Options.Language), false)
 	add(ContextKeyPlot, "플롯 (스토리라인&비트)", countPlotBeats(c.Plot), renderPlotPreview(c.Plot), false)
 	add(ContextKeyEntities, "세계관 요소", len(c.Entities), renderEntitiesPreview(c.Entities), false)
 	add(ContextKeyRelationships, "관계", len(c.Relationships), renderRelationshipsPreview(c.Relationships), false)
@@ -894,10 +985,10 @@ func countPlotBeats(spine plot.Spine) int {
 	return n
 }
 
-func renderSceneSummariesPreview(scenes []SceneSummary) string {
+func renderSceneSummariesPreview(scenes []SceneSummary, lang string) string {
 	var b strings.Builder
 	for _, s := range scenes {
-		b.WriteString(fmt.Sprintf("- [%s] %s\n", s.Label, s.Body))
+		b.WriteString(fmt.Sprintf("- [%s] %s%s\n", s.Label, staleMark(s.Stale, lang), s.Body))
 	}
 	return b.String()
 }

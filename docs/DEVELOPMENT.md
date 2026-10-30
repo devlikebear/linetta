@@ -177,10 +177,57 @@ Write (`full` mode only):
   so into the story brief; there is no MCP tool that approves;
 - `linetta_set_character_visuals`, `linetta_set_art_style`;
 - `linetta_add_reference_image`, `linetta_delete_reference_image`;
+- `linetta_register_work`: registers the work on the site with a blurb, or
+  changes its blurb or serial status, through `publish.Service.UpsertWork`.
+  An empty field keeps the site's current value;
 - `linetta_publish_episode`: publishes one episode, or updates its text on the
   site, through the same `publish.Service` the app's publish dialog uses.
-  Refused until the writer has connected an account and registered the work
-  in the app — there is deliberately no tool for either.
+  Refused until the work is registered. Both are refused until the writer
+  has connected an account in the app — there is deliberately no tool for
+  that, since pairing is approved in the writer's browser;
+- `linetta_report_continuity`, `linetta_propose_story_ops`,
+  `linetta_save_forecast`: the story-assist Review group — see below.
+
+### The Review group: check-and-record tools
+
+Three tools share one on-by-default switch, `review_tools_enabled` in
+`settings.json` (**Settings → Tool budget → Check & propose**), and
+`mcphost.ReviewToolNames`:
+
+- `linetta_report_continuity` (Phase 2) records an agent's reading of one
+  scene against Story World, fact cards, earlier scenes and the writer's
+  direction — contradictions, gaps, questions. Written straight to
+  `continuity_observations`: an observation already IS the review, so
+  there is no separate approve step, only the writer's own dismiss/resolve.
+- `linetta_propose_story_ops` (Phase 3) and `linetta_save_forecast`
+  (Phase 4) are drafts instead: nothing they write ever reaches Story
+  World, the outline or the manuscript on its own. A proposal sits in
+  `story_proposals`/`story_proposal_items` until the writer's own
+  `proposals.accept` click runs it through `storyops.ApplyOpsWithRefs` —
+  no MCP tool accepts one. A forecast's branch becomes a plan only
+  through the writer's own `forecast.select` click, and reaching the
+  outline from there is a SECOND draft: `linetta_propose_story_ops
+  purpose=forecast`, through the same inbox.
+
+All three verify citations mechanically rather than trusting the model:
+`linetta_report_continuity`'s quotes and `linetta_propose_story_ops`'s
+evidence are checked against the cited scene's actual numbered paragraphs
+(`evidence.VerifyQuote`), and every `*_ref`/`*_id` a call names is checked
+against this project's own rows. A ref that is not declared by something
+else in the same call and does not resolve to a real id is refused, never
+guessed at by name — the one exception by design is `storyops`'s own
+apply path (`linetta_apply_story_ops`, and the inside of an already-
+accepted batch), which still falls back to a name search.
+
+A successful write fires `mcp.changed` like every other tool (so the
+writer's screen refetches), plus its own inbox event when something a
+writer clicks, not an agent, changes state: `continuity.changed` when a
+status changes, `proposals.changed` when an item is accepted or rejected
+(carrying which Story World `kinds` moved, `"outline"` included since
+Phase 4's structural accepts). There is no `forecast.changed`: picking,
+clearing or deleting a forecast is a direct RPC in the same window that
+asked for it, and the brief that shows a chosen branch is rebuilt fresh
+every turn anyway.
 
 Visual editing: `linetta_set_character_visuals`, `linetta_set_art_style`,
 `linetta_add_reference_image`, `linetta_delete_reference_image` (full mode only).
@@ -223,6 +270,61 @@ GitHub Actions workflows:
 - `.github/workflows/mobile-engine.yml`: verifies the mobile-tagged engine and uploads iOS and Android engine artifacts;
 - `.github/workflows/mobile-release.yml`: builds signed Tauri mobile artifacts and can upload them to an existing GitHub release.
 
+## Mac App Store release
+
+The Mac App Store build is sandboxed and built, signed and uploaded from a
+maintainer's Mac; no workflow does it. Credentials, certificates and the
+provisioning profile live in `~/.linetta/apple/` and are never committed.
+
+### One-time setup
+
+1. `~/.linetta/apple/config.env` defines the App Store Connect API key:
+   `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APPLE_TEAM_ID`
+   and `AUTH_KEY_PATH` (the `.p8` file beside it).
+2. `bash scripts/setup-mas-apple.sh` registers the bundle id, creates the Mac
+   App Distribution and Mac Installer Distribution certificates, and writes
+   `linetta-mas.provisionprofile`. It creates real Apple resources and Apple
+   caps distribution certificates per account, so run it once; the script's
+   header describes the manual fallback when the API refuses a certificate.
+3. Append the identities `security find-identity -v -p codesigning` reports,
+   and the profile path, to `config.env`:
+   ```sh
+   MAS_APP_IDENTITY="Apple Distribution: <name> (<team id>)"
+   MAS_INSTALLER_IDENTITY="Mac Installer Distribution: <name> (<team id>)"
+   MAS_PROFILE_PATH="$HOME/.linetta/apple/linetta-mas.provisionprofile"
+   ```
+4. In App Store Connect, create the macOS app record for bundle id
+   `com.devlikebear.linetta`. An upload is matched to it by bundle id.
+
+### Each release
+
+Build, sign and package the installer:
+
+```sh
+make release-mas-local
+```
+
+The package lands at
+`apps/desktop/src-tauri/target/release/bundle/macos/Linetta.pkg`. Then upload it:
+
+```sh
+mkdir -p "$HOME/.appstoreconnect/private_keys"
+cp "$HOME/.linetta/apple/AuthKey_<key id>.p8" "$HOME/.appstoreconnect/private_keys/"   # once: altool looks here
+set -a; . "$HOME/.linetta/apple/config.env"; set +a
+PKG="apps/desktop/src-tauri/target/release/bundle/macos/Linetta.pkg"
+xcrun altool --validate-app -f "${PKG}" -t macos \
+  --apiKey "${APP_STORE_CONNECT_KEY_ID}" --apiIssuer "${APP_STORE_CONNECT_ISSUER_ID}"
+xcrun altool --upload-app -f "${PKG}" -t macos \
+  --apiKey "${APP_STORE_CONNECT_KEY_ID}" --apiIssuer "${APP_STORE_CONNECT_ISSUER_ID}"
+```
+
+- Fix any asset or entitlement error validation reports and rebuild before
+  uploading.
+- If altool is unavailable, upload the same `.pkg` with Transporter.app using
+  the same API key.
+- The upload is done when the build appears in App Store Connect under
+  TestFlight → Builds, first as "Processing".
+
 ## Troubleshooting
 
 - **Engine startup failure:** use the desktop diagnostic screen to retry and copy diagnostics.
@@ -232,9 +334,7 @@ GitHub Actions workflows:
 
 ## Publishing to Linetta Works
 
-The desktop app can publish episodes to [Linetta Works](https://works.marvin-42.com)
-(Phase 3 of the Linetta Works roadmap; the work order is
-[`docs/plans/publish/phase-3-linetta-publish.md`](plans/publish/phase-3-linetta-publish.md)).
+The desktop app can publish episodes to [Linetta Works](https://works.marvin-42.com).
 The wire contract is the site's: `docs/api.md` in the linetta-artworks
 repository, `api_version` 1. Follow it rather than adjusting the client to
 whatever the server happens to do; a contract change is made there first.
@@ -268,3 +368,11 @@ The shell only opens `https://works.marvin-42.com` in the browser
 (`EXTERNAL_URL_HOSTS`), so against a local server open the connect URL the
 Settings pane shows by hand.
 
+## Plan documents
+
+`docs/plans/<feature>/` holds work orders for work that is still in progress:
+a `roadmap.md` and one document per phase. When the work has shipped, delete
+its folder in the same pull request that finishes it, or the next one. Git
+history keeps every plan, and what is still worth knowing afterwards belongs in
+this guide or the README, where it stays current. Logs, audit output and
+one-off reports do not go in the repository.

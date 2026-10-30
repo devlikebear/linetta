@@ -6,6 +6,7 @@ import { openExternalUrl, publishApi } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { PUBLISH_STATE_KEYS, findPublishEpisode } from "../lib/publish";
 import { SHARE_TARGETS, shareAction, type ShareTarget } from "../lib/share";
+import { PublishSheetsSection } from "./PublishSheetsSection";
 import type {
   PublishConnectStatus,
   PublishEpisodeView,
@@ -280,6 +281,11 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
                   {shown?.number ? ` · ${t("publish.number", { number: String(shown.number) })}` : ""}
                 </p>
                 {episode.empty && <p className="sd" role="alert">{t("errors.publishEmptyEpisode")}</p>}
+                {episode.illustrations ? (
+                  <p className="sd" data-testid="publish-illustrations">
+                    {t("publish.illustrations", { count: episode.illustrations })}
+                  </p>
+                ) : null}
                 {episode.modified && episode.state !== "modified" && onSite && (
                   <p className="sd">{t("publish.differsFromSite")}</p>
                 )}
@@ -372,6 +378,16 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
                   </button>
                 </div>
               </details>
+            )}
+
+            {registered && status?.sheets && (
+              <PublishSheetsSection
+                projectId={projectId}
+                sheets={status.sheets}
+                busy={busy}
+                run={guard}
+                onSynced={refresh}
+              />
             )}
 
             {status && status.site_only.length > 0 && (

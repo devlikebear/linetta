@@ -1,5 +1,155 @@
 # Changelog
 
+## v1.13.1 - 2026-10-30
+
+- Fixed: in the installed app, illustrations showed only their caption, both
+  in the gallery and in the manuscript. They now show the picture again. The
+  pictures themselves were never lost.
+
+## v1.13.0 - 2026-10-26
+
+- **Publish character sheets and a cover to Linetta Works.** Each sheet in
+  Story World has a **Publish on Linetta Works** checkbox, shown once this
+  device is connected to the site. It is off by default, and turning it on
+  first reminds you to check for spoilers. A published sheet sends its name,
+  aliases, role, summary, attributes, relationship names and its first
+  reference image. Notes are never sent. Pick a cover from your gallery in
+  the publish dialog's **World, characters and cover** section.
+- Fixed: the text boxes in Story World and the character and storyline
+  sheets could not be resized and used the manuscript's serif font. They now
+  grow with their content, can be dragged taller, and use the UI font.
+- Fixed: if undoing accepted outline suggestions failed twice in a row, the
+  suggestions could be accepted again and create a duplicate scene. They now
+  wait as "reverting · needs a check" until the app sorts them out from the
+  outline itself, which it also does when it starts.
+
+## v1.12.1 - 2026-10-25
+
+- Fixed: the open-observations badge in the scene panel opened Story World
+  with the continuity section collapsed, or not at all while the Fact Book
+  was open. It now opens the continuity section on this scene's open
+  observations.
+- Fixed: the button that reopens a dismissed or resolved observation read
+  like a status label. It now says **Reopen**.
+- Fixed: undoing accepted outline suggestions could leave some of them stuck
+  if a write failed partway. The undo now keeps them retryable.
+
+## v1.12.0 - 2026-10-25
+
+- **Where the story could go.** Ask the agent for possible branches of the
+  next episode (the **Next development branches** chip does it in one
+  click). It saves 2–5 continuations side by side: a premise, an
+  episode-by-episode beat timeline and risk badges. Nothing is canon: the
+  outline, the manuscript and Story World do not change. Open them from the
+  command palette (**Open forecasts**) or the outline panel's header. Pick
+  one and it goes into the agent's brief as a plan. To put it in the
+  outline, ask the agent to propose it, then accept the scenes and beats in
+  the suggestions inbox, where one click undoes them together. When the
+  outline, the manuscript, Story World or your direction changes, a branch
+  is marked stale and the sheet says what changed.
+- **The agent can register a work on Linetta Works.** Ask it to publish an
+  episode of a work that is not on the site yet. It writes or takes a blurb
+  you approve, registers the work, then publishes the episode. It can also
+  change the blurb or mark the work complete. Connecting your account is
+  still yours to do in **Settings → Publishing**.
+- Fixed: after the agent published an episode, the outline's publishing
+  badges did not update until you reopened the work.
+
+## v1.11.0 - 2026-10-25
+
+- **Ask the agent about a passage.** Select text in a scene, right-click,
+  and choose **Ask the agent**. The agent panel opens with the passage
+  quoted above the message box. Ask about it, or say what to change. A
+  change goes into that scene only. **Polish**, **Get feedback** and
+  **Expand** fill in a request for you, and you still press send. The passage
+  stays in the conversation as a quote, so a follow-up like "now make it
+  shorter" knows what "it" is.
+- **Writer's Direction.** The scene panel now starts with a **Current
+  focus** for the work (what to concentrate on for the next few episodes)
+  and **This scene's intent** (a one-line goal, what to keep, what to
+  avoid). Only you write them. The built-in agent and connected MCP clients
+  read them first and treat them as binding. Three written episodes after
+  you set the focus, the app asks whether it still holds.
+- **Continuity checks.** Ask the agent to check a scene's continuity (the
+  **Check continuity** chip does it in one click). It holds the scene
+  against Story World, your fact cards, earlier scenes and your direction,
+  and records what it finds. Every finding quotes the scene exactly and
+  points at something the work really has. The manuscript is not changed.
+  Findings wait under **Story World → Continuity checks**, where you can
+  dismiss or resolve them, and the scene panel shows how many are open.
+- **Suggestions inbox.** Characters, places, relationships, fact cards and
+  other world elements the agent draws from the manuscript now go to a
+  suggestions inbox rather than straight into Story World. You accept,
+  edit or reject them one at a time. A candidate that looks like someone
+  you already have is flagged, and you can make it an alias instead of a
+  duplicate. Small changes you ask for directly still apply right away.
+- **Fill Story World after an import.** After you import a Markdown
+  manuscript, Linetta offers to fill Story World from it. It shows the
+  episode count and a rough token estimate before anything runs. The agent
+  works episode by episode and sends what it finds to the suggestions inbox.
+- **Settings → Tool budget** has a new **Check & propose** group. Turning it
+  off removes the continuity and suggestion tools and their chips. Nothing
+  already recorded is deleted.
+- Publishing an episode to Linetta Works now uploads its illustrations as
+  well. Readers see them in the same place as in the manuscript, and they
+  are reviewed along with the text. An episode can carry up to 30 pictures.
+  Pictures already on the site are not sent again.
+- Fixed: opening a scene with @mentions or notes in Zen mode could save it
+  as an empty scene. The editor now refuses to edit or save a scene it
+  cannot fully read, and says so, instead of treating it as empty.
+- Fixed: with **Codex** as the AI provider and no model chosen, requests
+  failed on a ChatGPT account because the old default model is no longer
+  offered. Linetta now uses the first model your account offers.
+- Security: the engine is built with Go 1.27.3, which includes the October
+  2026 standard-library security fixes.
+
+## v1.10.0 - 2026-10-24
+
+- **Illustrations.** Choose ChatGPT or Gemini under **Settings → Image
+  generation** to draw pictures for your scenes. It is off until you choose
+  one, and it uses the sign-in or key you already set up for that AI
+  provider, with its own consent. A picture is drawn only when you press
+  generate.
+- **Draw this scene** in the editor's selection menu, **Draw an
+  illustration** in the command palette, or the gallery opens the drawing
+  dialog. Describe the scene and pick the characters (the ones mentioned in
+  the scene are already picked). Then choose a single picture or four panels,
+  the aspect, and whether to send reference images. **Build prompt** shows
+  exactly what will be sent; you can edit it, and what you edited is what
+  goes.
+- Each work keeps its pictures in a gallery (the **Illustrations** button,
+  or **Open illustration gallery**), up to 200 per work. The gallery shows
+  the prompt each picture was drawn from and which model drew it. You can
+  edit captions and delete pictures there.
+- **Insert into scene** puts a picture into the manuscript at the cursor,
+  where you can edit its caption. The gallery marks pictures **In use** and
+  names the scene, and will not delete a picture a scene still uses.
+  Character counts, search and replace ignore pictures.
+- Markdown export carries the pictures inside the one `.md` file, and
+  importing that file brings them back into the new work's gallery. Folder
+  and Git sync write them as image files in a `<work>.images` folder beside
+  the manuscript. Plain-text export and publishing to Linetta Works leave
+  pictures out for now; the publish dialog says how many.
+- An agent reading a scene sees each picture as an `[[illustration:…]]`
+  line. Writing the line back keeps the picture where it was; dropping the
+  line takes it out of the scene but leaves it in the gallery.
+- A scene summary the built-in agent wrote is no longer replaced by the
+  scene's first few sentences after the scene is edited. The next episode's
+  context still gets that summary, marked as describing the earlier draft,
+  until the agent writes a new one.
+- The built-in agent now reads the work's context — your style notes
+  included — before it writes or revises a scene in a turn, so a one-line
+  fix follows your style notes too.
+- With **Claude Code** as the AI provider, the model list now offers full
+  model ids such as `claude-opus-5-5` after the `opus`, `sonnet` and `haiku`
+  aliases, so you can pin an exact model. The list comes from the models your
+  Claude Code has cached, a built-in list, and — if you also set up an
+  Anthropic API key — Anthropic's own current list. The aliases still come
+  first and still follow the newest model of each tier.
+- Security: built with Go 1.26.10 and updated `rustls-webpki` and
+  `webpki-root-certs`, for the advisories about a compromised intermediate
+  certificate.
+
 ## v1.9.1 - 2026-10-19
 
 - **Settings → Publishing** has a **Browse Linetta Works** button that opens

@@ -231,6 +231,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		VisualWriteToolsDisabled: deps.settings.VisualWriteToolsDisabled,
 		MemoryToolsEnabled:       deps.settings.MemoryToolsEnabled,
 		SkillToolsEnabled:        deps.settings.SkillToolsEnabled,
+		ReviewToolsEnabled:       deps.settings.ReviewToolsEnabled,
 		Undo: func(ctx context.Context, batchID, snapshotID string) (string, string, error) {
 			if batchID != "" {
 				return "", "", deps.story.UndoApply(ctx, batchID, deps.clock)
@@ -248,8 +249,8 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 	return &agentController{svc: svc, tools: tools, deps: built, notify: deps.notify}, svc.Close
 }
 
-func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt string) (string, error) {
-	return c.svc.Run(ctx, agent.RunRequest{ProjectID: projectID, NodeID: nodeID, Prompt: prompt})
+func (c *agentController) Run(ctx context.Context, projectID, nodeID, prompt, selection string) (string, error) {
+	return c.svc.Run(ctx, agent.RunRequest{ProjectID: projectID, NodeID: nodeID, Prompt: prompt, Selection: selection})
 }
 
 func (c *agentController) Cancel(_ context.Context, runID string) error {

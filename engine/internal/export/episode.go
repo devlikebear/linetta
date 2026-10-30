@@ -28,6 +28,10 @@ type EpisodePayload struct {
 	// ContentHash is the lowercase hex SHA-256 of Markdown's UTF-8 bytes,
 	// which the site recomputes and compares (docs/api.md in linetta-artworks).
 	ContentHash string `json:"content_hash"`
+	// Illustrations are the gallery pictures the text shows, in first-use
+	// order, each once. Publishing uploads them before the episode, since the
+	// site takes an episode only when every picture it shows is there.
+	Illustrations []string `json:"illustrations,omitempty"`
 }
 
 // ExportEpisodeMarkdown renders an episode's scenes for publishing: each
@@ -37,8 +41,25 @@ type EpisodePayload struct {
 // editing marks the export for the writer's own files keeps: a mention is
 // its plain name, not "@name", and margin-note anchors are dropped.
 // workTitle titles an episode that is the whole work.
-func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episode, workTitle string) (EpisodePayload, error) {
+//
+// A picture is `![caption](illustration:<id>)` on its own line, which the
+// site draws from the picture uploaded under that id. Only pictures in
+// known (the work's gallery) are written; one deleted from the gallery is
+// left out, as in every other export.
+func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episode, workTitle string, known map[string]bool) (EpisodePayload, error) {
 	var parts []string
+	var pictures []string
+	seen := map[string]bool{}
+	opts := MarkdownOptions{Illustration: func(id, caption string) string {
+		if !known[id] {
+			return ""
+		}
+		if !seen[id] {
+			seen[id] = true
+			pictures = append(pictures, id)
+		}
+		return "![" + escapeAlt(caption) + "](" + PublishedIllustrationScheme + id + ")"
+	}}
 	for _, id := range ep.LeafIDs {
 		n, err := nr.Get(ctx, id)
 		if err != nil {
@@ -47,7 +68,7 @@ func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episod
 		if n.ContentDoc == nil {
 			continue
 		}
-		md, err := PublishDocToMarkdown([]byte(*n.ContentDoc))
+		md, err := PublishDocToMarkdownWith([]byte(*n.ContentDoc), opts)
 		if err != nil {
 			return EpisodePayload{}, fmt.Errorf("export episode %s: %w", ep.NodeID, err)
 		}
@@ -61,8 +82,14 @@ func ExportEpisodeMarkdown(ctx context.Context, nr *node.Repo, ep episode.Episod
 		Title:       EpisodeTitle(ep, workTitle),
 		CharCount:   CharCount(md),
 		ContentHash: ContentHash(md),
+
+		Illustrations: pictures,
 	}, nil
 }
+
+// PublishedIllustrationScheme starts the link of a picture in published text:
+// `![caption](illustration:<id>)` (linetta-artworks docs/api.md).
+const PublishedIllustrationScheme = "illustration:"
 
 // EpisodeTitle is the title a reader sees next to the episode number. The
 // node's title when it has one; otherwise its label, unless the label is only
@@ -104,6 +131,12 @@ func CharCount(s string) int {
 // rest of the rendering — and the export the writer already relies on — is
 // exactly the same.
 func PublishDocToMarkdown(raw []byte) (string, error) {
+	return PublishDocToMarkdownWith(raw, MarkdownOptions{})
+}
+
+// PublishDocToMarkdownWith is PublishDocToMarkdown with options for the nodes
+// DocToMarkdownWith leaves to its caller (pictures).
+func PublishDocToMarkdownWith(raw []byte, opts MarkdownOptions) (string, error) {
 	if len(raw) == 0 {
 		return "", nil
 	}
@@ -115,7 +148,7 @@ func PublishDocToMarkdown(raw []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return DocToMarkdown(clean)
+	return DocToMarkdownWith(clean, opts)
 }
 
 func stripEditingMarks(v any) any {

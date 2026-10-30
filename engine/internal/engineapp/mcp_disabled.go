@@ -10,20 +10,26 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -40,13 +46,21 @@ type mcpDeps struct {
 // mcpToolRepos mirrors the enabled build's shape so register() compiles
 // unchanged; mobile never reads these.
 type mcpToolRepos struct {
-	visuals      *visual.Repo
+	visuals       *visual.Repo
+	illustrations *illustration.Repo
+	// requests are the pictures agents asked for (illustration Phase 4).
+	requests     *illustration.RequestService
 	style        *style.Repo
 	projects     *project.Repo
 	nodes        *node.Repo
 	entities     *entity.Repo
 	mentions     *mention.Repo
 	facts        *fact.Repo
+	beats        *beat.Repo
+	threads      *thread.Repo
+	continuity   *continuity.Repo
+	proposals    *proposals.Service
+	forecasts    *forecast.Service
 	plot         *plot.Builder
 	manuscript   *manuscript.Searcher
 	context      *storycontext.ContextBuilder

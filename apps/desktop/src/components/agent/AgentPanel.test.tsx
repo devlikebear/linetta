@@ -11,6 +11,7 @@ const rpc = vi.hoisted(() => ({
   agentRun: vi.fn(),
   agentCancel: vi.fn(),
   agentHistory: vi.fn(),
+  settingsGet: vi.fn(),
 }));
 
 // Same approach as useMcpChanges.test.tsx: a hoisted listener map standing in
@@ -31,6 +32,13 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../../lib/rpc", () => ({
   providers: { list: rpc.providersList },
   agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory },
+  settings: { get: rpc.settingsGet },
+}));
+
+// The approval card has its own tests (IllustrationRequestCard.test.tsx);
+// here only where the panel puts it matters.
+vi.mock("../illustration/IllustrationRequestCard", () => ({
+  IllustrationRequestCard: ({ requestId }: { requestId: string }) => <div data-testid="request-card">{requestId}</div>,
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -45,7 +53,7 @@ vi.mock("../../lib/i18n", () => ({
   }),
 }));
 
-import { AgentPanel } from "./AgentPanel";
+import { AgentPanel, splitSelection } from "./AgentPanel";
 
 function row(overrides: Partial<ProviderStatus> = {}): ProviderStatus {
   return {
@@ -82,10 +90,10 @@ function functionBody(src: string, signature: string): string {
 const PROJECT_ID = "project-1";
 const NODE_ID = "node-1";
 
-function renderPanel(onClose = vi.fn()) {
+function renderPanel(onClose = vi.fn(), initialDraft?: string) {
   return render(
     <MemoryRouter>
-      <AgentPanel onClose={onClose} projectId={PROJECT_ID} nodeId={NODE_ID} />
+      <AgentPanel onClose={onClose} projectId={PROJECT_ID} nodeId={NODE_ID} initialDraft={initialDraft} />
     </MemoryRouter>,
   );
 }
@@ -112,11 +120,11 @@ async function pressEnter(shiftKey = false) {
 /** Renders with a ready (configured + consented) provider and waits for the
  *  log to mount, so message tests can start emitting engine events right
  *  away. */
-async function renderReady(onClose = vi.fn()) {
+async function renderReady(onClose = vi.fn(), initialDraft?: string) {
   rpc.providersList.mockImplementation(() =>
     Promise.resolve([row({ configured: true, consented: true })]),
   );
-  const view = renderPanel(onClose);
+  const view = renderPanel(onClose, initialDraft);
   await screen.findByTestId("agent-log");
   return view;
 }
@@ -251,6 +259,10 @@ describe("AgentPanel", () => {
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
 
   it("renders the unconfigured notice when no provider is active at all", async () => {
@@ -392,6 +404,10 @@ describe("AgentPanel messages and streaming (#95 Task 4)", () => {
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -488,6 +504,10 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
 
   function toolLines(): HTMLElement[] {
@@ -523,6 +543,21 @@ describe("AgentPanel tool lines and undo (#95 Task 5)", () => {
     const lines = toolLines();
     expect(lines).toHaveLength(1);
     expect(lines[0].textContent).toBe("agentPanel.tool.read · agentPanel.toolName.linetta_search_manuscript");
+  });
+
+  it("puts an illustration request's approval card under its line", async () => {
+    await renderReady();
+    await emit("agent-tool", { run_id: "r1", name: "linetta_request_illustration", state: "started" });
+    expect(screen.queryByTestId("request-card")).toBeNull();
+    await emit("agent-tool", {
+      run_id: "r1",
+      name: "linetta_request_illustration",
+      state: "done",
+      request_id: "req-1",
+    });
+    const card = await screen.findByTestId("request-card");
+    expect(card).toHaveTextContent("req-1");
+    expect(toolLines()[0].nextElementSibling).toBe(card);
   });
 
   it("names the tool in the writer's language and never shows the engine's summary", async () => {
@@ -891,6 +926,10 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
 
   function botBubbles(): HTMLElement[] {
@@ -904,7 +943,7 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     await type("다음 문단을 이어서 써줘");
     await pressEnter();
 
-    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "다음 문단을 이어서 써줘", NODE_ID);
+    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "다음 문단을 이어서 써줘", NODE_ID, undefined);
     // The composer clears and the writer's own line lands in the log.
     expect(composer().value).toBe("");
     expect(screen.getByTestId("agent-log").querySelector(".msg.user .msg-bubble")?.textContent).toBe(
@@ -1011,6 +1050,15 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     expect(screen.queryByTestId("agent-log")?.querySelector(".msg.user")).toBeNull();
   });
 
+  // story-assist 3.D.3: the Library import dialog's "시작" button lands
+  // here with the extraction prompt already typed, the same contract a
+  // starter chip has — filled, never sent.
+  it("pre-fills the composer from initialDraft without sending", async () => {
+    await renderReady(vi.fn(), "회차 순서대로 Story World를 채워줘");
+    expect(composer().value).toBe("회차 순서대로 Story World를 채워줘");
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+  });
+
   it("fills the composer from each starting chip without sending", async () => {
     await renderReady();
 
@@ -1023,14 +1071,35 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     expect(composer().value).toBe("agentPanel.starters.draftScene.prompt");
 
     await act(async () => {
-      screen.getByTestId("agent-starter-continuity").click();
+      screen.getByTestId("agent-starter-checkContinuity").click();
     });
-    expect(composer().value).toBe("agentPanel.starters.continuity.prompt");
+    expect(composer().value).toBe("agentPanel.starters.checkContinuity.prompt");
+
+    await act(async () => {
+      screen.getByTestId("agent-starter-fillStoryWorld").click();
+    });
+    expect(composer().value).toBe("agentPanel.starters.fillStoryWorld.prompt");
 
     await act(async () => {
       screen.getByTestId("agent-starter-nextScene").click();
     });
     expect(composer().value).toBe("agentPanel.starters.nextScene.prompt");
+  });
+
+  // story-assist Phase 2, 2.C.3: the chip calls linetta_report_continuity,
+  // which is absent from the agent's tool set when the writer has switched
+  // the Review group off — showing the chip then would promise a turn the
+  // tool call itself refuses. story-assist Phase 3 (3.D.3): the
+  // fillStoryWorld chip calls linetta_propose_story_ops, which lives in the
+  // same Review group, and hides for the same reason.
+  it("hides the checkContinuity and fillStoryWorld chips when the Review tool group is off", async () => {
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: false }));
+    await renderReady();
+
+    expect(screen.queryByTestId("agent-starter-checkContinuity")).toBeNull();
+    expect(screen.queryByTestId("agent-starter-fillStoryWorld")).toBeNull();
+    expect(screen.getByTestId("agent-starter-draftScene")).toBeTruthy();
+    expect(screen.getByTestId("agent-starter-nextScene")).toBeTruthy();
   });
 
   it("hides the starting chips once the conversation has a turn in it", async () => {
@@ -1111,6 +1180,10 @@ describe("AgentPanel send window and IME composition (#95 Task 6 review)", () =>
     // history, so it gets an empty conversation by default; tests that do
     // care override this before rendering.
     rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    // story-assist Phase 2 (2.C.3): the checkContinuity chip's visibility
+    // follows this switch. Every existing test gets it on (the default),
+    // same as the engine; the one test that cares overrides it.
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
   });
 
   function botBubbles(): HTMLElement[] {
@@ -2223,8 +2296,180 @@ describe("AgentPanel ownership ordering (#95 Task 7 final review)", () => {
     // And the affordance has to be telling the truth: the press goes out.
     await pressEnter();
     expect(rpc.agentRun).toHaveBeenCalledTimes(2);
-    expect(rpc.agentRun).toHaveBeenLastCalledWith(OTHER_PROJECT_ID, "B작품 요청", NODE_ID);
+    expect(rpc.agentRun).toHaveBeenLastCalledWith(OTHER_PROJECT_ID, "B작품 요청", NODE_ID, undefined);
     // The refused send for the work the writer left is still not news here.
     expect(screen.getByTestId("agent-log").textContent).not.toContain("A작품 요청");
+  });
+});
+
+// A passage the writer highlighted and sent from the editor's selection menu
+// rides along with their next message as agent.run's `selection`.
+describe("AgentPanel selected passage", () => {
+  type Request = { id: number; text: string; nodeId: string };
+
+  function panelWith(request: Request | null, nodeId = NODE_ID) {
+    return (
+      <MemoryRouter>
+        <AgentPanel onClose={vi.fn()} projectId={PROJECT_ID} nodeId={nodeId} selectionRequest={request} />
+      </MemoryRouter>
+    );
+  }
+
+  async function renderWith(request: Request | null) {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ configured: true, consented: true })]),
+    );
+    const view = render(panelWith(request));
+    await screen.findByTestId("agent-log");
+    return view;
+  }
+
+  const passage = { id: 1, text: "소매 끝에는 볼펜 자국이 잔뜩 묻어 있었다.", nodeId: NODE_ID };
+
+  it("attaches the passage above the composer and sends it with the next message", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderWith(passage);
+
+    expect(screen.getByTestId("agent-attachment").textContent).toContain(passage.text);
+    await type("이 문장 자연스러워?");
+    await pressEnter();
+
+    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "이 문장 자연스러워?", NODE_ID, passage.text);
+    expect(screen.queryByTestId("agent-attachment")).toBeNull();
+    expect(screen.getByTestId("agent-user-selection").textContent).toBe(passage.text);
+  });
+
+  it("sends nothing extra once the writer removes the passage", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderWith(passage);
+
+    await act(async () => {
+      screen.getByTestId("agent-attachment-remove").click();
+    });
+    await type("안녕");
+    await pressEnter();
+
+    expect(rpc.agentRun.mock.calls[0][3]).toBeUndefined();
+  });
+
+  it("replaces the passage when a new one arrives while the panel is open", async () => {
+    const view = await renderWith(passage);
+    await act(async () => {
+      view.rerender(panelWith({ id: 2, text: "새로 고른 문단", nodeId: NODE_ID }));
+    });
+    expect(screen.getByTestId("agent-attachment").textContent).toContain("새로 고른 문단");
+  });
+
+  // The engine tells the agent the passage is in the open scene; once the
+  // writer has moved to another scene that would be a lie.
+  it("drops the passage when the open scene is no longer the one it came from", async () => {
+    const view = await renderWith(passage);
+    await act(async () => {
+      view.rerender(panelWith(passage, "node-2"));
+    });
+    expect(screen.queryByTestId("agent-attachment")).toBeNull();
+  });
+
+  it("hands the passage back when the send is refused", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.reject(new Error("busy")));
+    await renderWith(passage);
+    await type("다듬어 줘");
+    await pressEnter();
+    expect(screen.getByTestId("agent-attachment").textContent).toContain(passage.text);
+  });
+
+  it("offers passage starters that fill the composer without sending", async () => {
+    await renderWith(passage);
+    await act(async () => {
+      screen.getByTestId("agent-selection-starter-polish").click();
+    });
+    expect(composer().value).toBe("agentPanel.selectionStarters.polish.prompt");
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+  });
+
+  it("restores a sent passage as a quote, apart from the writer's words", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([historyRow({ content: "<selection>\n첫 줄\n둘째 줄\n</selection>\n\n줄여 줘" })]),
+    );
+    await renderWith(null);
+    expect(screen.getByTestId("agent-user-selection").textContent).toBe("첫 줄\n둘째 줄");
+    expect(screen.getByTestId("agent-log").querySelector(".msg.user .msg-bubble")?.textContent).toBe("줄여 줘");
+  });
+
+  it("leaves a message that merely mentions the tag alone", () => {
+    expect(splitSelection("<selection> 태그가 뭐야?")).toEqual({ text: "<selection> 태그가 뭐야?" });
+  });
+});
+
+// story-assist Phase 4: the forecast sheet's [개요 반영 제안 요청] button fills
+// the composer from outside through externalDraft/externalDraftNonce. The
+// panel unmounts on close, so it cannot remember which nonce it already
+// applied — onExternalDraftApplied is how the caller (Workspace.tsx) learns
+// to clear its own request, or the same stale request would come back and
+// overwrite a fresh draft the next time the writer opens the panel.
+describe("AgentPanel external draft (story-assist Phase 4)", () => {
+  function panelWith(
+    externalDraft: string | undefined,
+    externalDraftNonce: number | undefined,
+    onExternalDraftApplied: (() => void) | undefined,
+    initialDraft?: string,
+  ) {
+    return (
+      <MemoryRouter>
+        <AgentPanel
+          onClose={vi.fn()}
+          projectId={PROJECT_ID}
+          nodeId={NODE_ID}
+          initialDraft={initialDraft}
+          externalDraft={externalDraft}
+          externalDraftNonce={externalDraftNonce}
+          onExternalDraftApplied={onExternalDraftApplied}
+        />
+      </MemoryRouter>
+    );
+  }
+
+  async function renderWith(
+    externalDraft: string | undefined,
+    externalDraftNonce: number | undefined,
+    onExternalDraftApplied: (() => void) | undefined,
+    initialDraft?: string,
+  ) {
+    rpc.providersList.mockImplementation(() =>
+      Promise.resolve([row({ configured: true, consented: true })]),
+    );
+    const view = render(panelWith(externalDraft, externalDraftNonce, onExternalDraftApplied, initialDraft));
+    await screen.findByTestId("agent-log");
+    return view;
+  }
+
+  it("fills the composer from the external draft and tells the caller it was applied", async () => {
+    const applied = vi.fn();
+    await renderWith("개요 반영 제안 요청 문구", 1, applied);
+    expect(composer().value).toBe("개요 반영 제안 요청 문구");
+    expect(applied).toHaveBeenCalledTimes(1);
+  });
+
+  // The regression itself (#231 fix round): closing the panel unmounts it,
+  // and reopening it used to rerun the external-draft effect on mount with
+  // the same old nonce, stomping whatever initialDraft (or draft the writer
+  // had started typing) the fresh mount should have shown instead. The fix
+  // is Workspace.tsx clearing its request once onExternalDraftApplied fires
+  // above — modelled here by the second mount simply not receiving the
+  // external draft props anymore, the way a cleared caller would render it.
+  it("does not reapply a stale external draft after the caller clears it and the panel reopens", async () => {
+    const applied = vi.fn();
+    const view = await renderWith("개요 반영 제안 요청 문구", 1, applied);
+    expect(composer().value).toBe("개요 반영 제안 요청 문구");
+
+    // Close (unmount) the panel — AgentPanel carries no state across this.
+    view.unmount();
+
+    // Reopen: the caller honoured onExternalDraftApplied and cleared its
+    // request, so this mount gets no external draft at all — only whatever
+    // fresh initialDraft applies to a new open (here, the writer's own
+    // in-progress draft from the Library import flow).
+    await renderWith(undefined, undefined, undefined, "작가가 쓰던 초안");
+    expect(composer().value).toBe("작가가 쓰던 초안");
   });
 });

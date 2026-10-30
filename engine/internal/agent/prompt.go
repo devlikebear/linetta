@@ -57,20 +57,26 @@ type toolGroups struct {
 	disableVisualWrites bool
 	memory              bool
 	skills              bool
+	// review is story-assist's "check and record a judgement" group
+	// (linetta_report_continuity in Phase 2; more from later phases).
+	review bool
 }
 
-func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true} }
+func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true, review: true} }
 
-// resolveToolGroups reads the two Deps funcs, treating a nil func as enabled
-// — the same "unwired collaborator degrades to the documented default" rule
-// Deps.SelfReviewEnabled follows.
-func resolveToolGroups(memory, skills func() bool) toolGroups {
+// resolveToolGroups reads the three Deps funcs, treating a nil func as
+// enabled — the same "unwired collaborator degrades to the documented
+// default" rule Deps.SelfReviewEnabled follows.
+func resolveToolGroups(memory, skills, review func() bool) toolGroups {
 	g := allToolGroups()
 	if memory != nil {
 		g.memory = memory()
 	}
 	if skills != nil {
 		g.skills = skills()
+	}
+	if review != nil {
+		g.review = review()
 	}
 	return g
 }
@@ -104,14 +110,17 @@ func systemPrompt(lang string, profile, notes agentmemory.Document, skills []age
 Reply to the writer in %q (their app language). Write manuscript prose in the language the existing manuscript is written in — read a scene first if you are unsure.
 
 How you work:
-- Call linetta_get_story_context before drafting anything, so you write from the work's actual state rather than a guess.
-- For illustrations, read designs with linetta_get_character_visuals and compose the prompt with linetta_build_illustration_prompt.
+- Call linetta_get_story_context before you write or revise any prose in a turn — a one-line fix included — so you write from the work's actual state and the writer's style notes rather than a guess. A scene write is refused until the turn has read it.
+- For illustrations, read designs with linetta_get_character_visuals and compose the prompt with linetta_build_illustration_prompt. linetta_list_illustrations shows the gallery and what became of your picture requests.
 - After writing or revising a scene, refresh its summary so the rest of the work stays accurate.
 - To check prose against the writer's style, call linetta_analyze_style for the phrases and sentence limit they listed, then judge tone yourself against the style notes. Report what you find; the writer decides what changes.
 - When asked to describe the writer's style from their manuscript, measure scenes with linetta_analyze_style, read a few, and save your description with linetta_propose_style_profile. It is a draft: say it is waiting for their approval in Story World, and never present it as their own stated preference.
-- Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.`, lang)
+- A message that opens with a <selection> block quotes a passage the writer highlighted in the open scene, exactly as it reads there; "this", "this part" and the like mean that passage. To change it, call linetta_revise_scene with node_ids set to the open scene and find copied exactly from the selection (a shorter exact span is fine), and change only what they asked for. If they only asked a question, answer it without editing.
+- Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.
+- The story brief's Writer's Direction section is the writer's own instruction. Follow it over your own judgment; if a request conflicts with it, say so before acting. You cannot edit it — if it looks out of date, tell the writer.`, lang)
 	if !groups.disableVisualWrites {
 		b.WriteString("\n- Save designs with linetta_set_character_visuals / linetta_set_art_style, and manage references with linetta_add_reference_image / linetta_delete_reference_image. Omitted patch fields stay unchanged; empty strings clear them.")
+		b.WriteString("\n- You cannot draw. To get a picture drawn, call linetta_request_illustration; it only leaves a request on a card in the app. Tell the writer to approve it there, and never say a picture was drawn until linetta_list_illustrations shows it done. To put a gallery picture in a scene, write its [[illustration:id|caption]] line with linetta_write_scene; to make one stand for a scene or episode, call linetta_set_representative_illustration.")
 	}
 	if groups.memory {
 		b.WriteString("\n- Record something durable with linetta_edit_memory: how this writer works goes in writer_profile, what you learn about this work goes in work_notes. Both are read back to you at the start of every session, so replace a line that changed rather than adding a second one.\n")
@@ -132,6 +141,12 @@ How you work:
 	// it, and the agent following it is the only one who can see that it did.
 	if groups.skills {
 		b.WriteString("- Record a technique with linetta_edit_skill once a complex task shows you a procedure worth repeating — the order of steps, not the facts. And the moment following a skill shows it is wrong, patch that skill before you move on; a stale procedure is followed every session until someone fixes it.\n")
+	}
+	if groups.review {
+		b.WriteString("- To check a scene's continuity, read it with linetta_read_scene numbered=true, get the brief, look earlier scenes up with linetta_where_does_appear / linetta_search_manuscript, and record what you find with linetta_report_continuity. Report contradictions with the work's own record, not taste; an empty result is fine. Do not fix the prose unless the writer asks.\n")
+		b.WriteString("- Changes you are asked for directly and that are small go through linetta_apply_story_ops. Anything drawn from the manuscript, or more than a few world elements at once, goes through linetta_propose_story_ops: the writer accepts it item by item.\n")
+		b.WriteString("- When asked to fill Story World from the manuscript, work episode by episode in outline order, starting where the tool's progress says. Check what already exists first, propose with purpose=import_extraction and from_node_ids, and stop before your tool budget runs out to tell the writer how far you got and to say \"continue\".\n")
+		b.WriteString("- Asked where the story could go next, read the brief and save the options with linetta_save_forecast instead of only describing them; the writer compares and picks in the app. A chosen branch appears in the brief's direction section as a plan, not canon. Asked to put a chosen branch into the outline, propose it with linetta_propose_story_ops purpose=forecast.\n")
 	}
 	b.WriteString(memoryBlock(profile, notes, groups.memory))
 	if groups.skills {
@@ -342,6 +357,18 @@ func skillScopeLabel(s agentskills.Scope) string {
 		return "this work"
 	}
 	return "writer"
+}
+
+// withSelection puts the passage the writer highlighted ahead of what they
+// asked about it. The tags are the contract: the system prompt tells the agent
+// what the block means, and the panel splits it back out of a restored row to
+// draw it as a quote rather than as part of the writer's sentence.
+func withSelection(selection, prompt string) string {
+	selection = strings.TrimSpace(selection)
+	if selection == "" {
+		return prompt
+	}
+	return "<selection>\n" + selection + "\n</selection>\n\n" + prompt
 }
 
 // scopeLine prefixes the writer's message with the work and the scene the

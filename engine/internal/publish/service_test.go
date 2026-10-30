@@ -22,6 +22,7 @@ type serviceFixture struct {
 	state    *StateRepo
 	nodes    *node.Repo
 	project  project.Project
+	store    *store.Store
 	arcID    string
 	// episodes are the leaf episodes 1화, 2화 … under 1권, in order.
 	episodes []string
@@ -53,7 +54,7 @@ func newServiceFixture(t *testing.T, n int) *serviceFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &serviceFixture{site: newFakeSite(t), nodes: nodes, project: p, arcID: *first.ParentID}
+	f := &serviceFixture{site: newFakeSite(t), nodes: nodes, project: p, store: st, arcID: *first.ParentID}
 	f.episodes = []string{first.ID}
 	for i := 1; i < n; i++ {
 		prev := f.episodes[len(f.episodes)-1]
@@ -186,6 +187,7 @@ func TestService_firstPublishThenModifiedThenRepublishKeepsTheAddress(t *testing
 		t.Fatalf("status = %+v", ws.Episodes)
 	}
 
+	oldHash := f.site.episodes(f.project.ID)[0].ContentHash
 	if err := f.nodes.UpdateContent(ctx, f.episodes[0], doc("고친 본문"), 500); err != nil {
 		t.Fatal(err)
 	}
@@ -198,8 +200,16 @@ func TestService_firstPublishThenModifiedThenRepublishKeepsTheAddress(t *testing
 	if again.Created || again.Episode.URL != first.Episode.URL || again.Episode.State != EpisodePublic {
 		t.Fatalf("republish = %+v (first %s)", again, first.Episode.URL)
 	}
-	if got := f.site.episodes(f.project.ID); len(got) != 1 {
+	got := f.site.episodes(f.project.ID)
+	if len(got) != 1 {
 		t.Fatalf("site has %d episodes, want 1", len(got))
+	}
+	if got[0].ContentHash == oldHash {
+		t.Fatal("the site still holds the text from before the edit")
+	}
+	ws, _ = f.svc.WorkStatus(ctx, f.project.ID)
+	if ws.Episodes[0].State != EpisodePublic || ws.Episodes[0].Modified {
+		t.Fatalf("after republish: %+v", ws.Episodes[0])
 	}
 }
 

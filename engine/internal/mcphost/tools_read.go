@@ -5,6 +5,7 @@ package mcphost
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -13,10 +14,12 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/style"
 )
 
 // ReadToolNames lists the read tools, in registration order. Tests assert
@@ -33,6 +36,7 @@ var ReadToolNames = []string{
 	"linetta_get_fact_cards",
 	"linetta_get_character_visuals",
 	"linetta_build_illustration_prompt",
+	"linetta_list_illustrations",
 	"linetta_analyze_style",
 	"linetta_read_skill",
 	"linetta_publish_status",
@@ -103,6 +107,9 @@ type getStoryContextInput struct {
 	// against reporting a section whose control does not exist, so a skills
 	// key with no way to set it would be the same defect one level up.
 	IncludeSkills *bool `json:"include_skills,omitempty" jsonschema:"set false to leave the skills list out; it is on by default and is the only place this brief says which skills exist"`
+	// IncludeDirection is the switch behind storycontext.ContextKeyDirection,
+	// for the same reason IncludeSkills exists beside ContextKeySkills.
+	IncludeDirection *bool `json:"include_direction,omitempty" jsonschema:"set false to leave out the writer's direction (current focus and this scene's intent); on by default"`
 }
 
 func (in getStoryContextInput) scope() (string, string) { return in.ProjectID, in.NodeID }
@@ -136,6 +143,11 @@ type readSceneInput struct {
 	NodeID    string `json:"node_id" jsonschema:"id of the scene to read"`
 	ProjectID string `json:"project_id,omitempty" jsonschema:"optional; checked against the scene's work when given"`
 	Format    string `json:"format,omitempty" jsonschema:"plain (default) or markdown, which keeps lists, emphasis, links and code; read-only, write tools take plain text"`
+	// Numbered is story-assist Phase 2's paragraph-citing contract: a
+	// continuity report cites paragraphs, and the numbers it cites must be
+	// the ones a scene read actually showed — never a count the model
+	// reconstructs on its own from an unnumbered read.
+	Numbered bool `json:"numbered,omitempty" jsonschema:"plain text with each paragraph prefixed [n], counted the way linetta_analyze_style and linetta_report_continuity count them"`
 }
 
 func (in readSceneInput) scope() (string, string) { return in.ProjectID, in.NodeID }
@@ -301,7 +313,9 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 		Name: "linetta_read_scene",
 		Description: "Read one scene's text as plain prose, with its content_version. Any later write to " +
 			"this scene must pass the content_version you got here, so the writer's own edits are never " +
-			"silently overwritten.",
+			"silently overwritten. [[illustration:...]] lines are pictures. Pass numbered=true to get " +
+			"[n]-prefixed paragraphs for linetta_report_continuity's citations — not combinable with " +
+			"format=markdown.",
 	}, record(d, "linetta_read_scene", d.readScene))
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -332,6 +346,7 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	}, record(d, "linetta_get_fact_cards", d.getFactCards))
 
 	registerVisualTools(s, d)
+	d.registerIllustrationReadTools(s)
 	registerStyleTools(s, d)
 
 	// A block rather than an early return: an early return is correct only
@@ -571,6 +586,7 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 			References: in.IncludeReferences,
 			Plot:       in.IncludePlot,
 			Skills:     includeSkills,
+			Direction:  in.IncludeDirection,
 		},
 	}
 	c, err := d.Context.BuildFull(ctx, n.ID, "", "", opts)
@@ -658,6 +674,9 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		// that ordering.
 		{"skills", len(c.Skills) > 0},
 		{"references", len(c.References) > 0},
+		// "direction" has its own switch too (IncludeDirection →
+		// ContextKeyDirection), unlike the curated memory pair.
+		{"direction", !c.Direction.Empty()},
 		{"style_notes", strings.TrimSpace(c.StyleNotes) != ""},
 	}
 	included, empty = []string{}, []string{}
@@ -680,6 +699,10 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 		return toolErr("node %q is a container (%s), not a scene; only scenes have body text", n.ID, n.Label),
 			readSceneOutput{}, nil
 	}
+	if in.Numbered && in.Format == sceneFormatMarkdown {
+		return toolErr("numbered and format=%q cannot be combined; a numbered read is plain text only",
+			sceneFormatMarkdown), readSceneOutput{}, nil
+	}
 	// Trimmed at the tool boundary, not in PlainText: the brief's renderer
 	// depends on that function's exact output. An untouched empty scene
 	// otherwise arrives as "\n", which an agent can misread as content.
@@ -692,7 +715,7 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 		md := ""
 		if n.ContentDoc != nil {
 			var err error
-			if md, err = export.DocToMarkdown([]byte(*n.ContentDoc)); err != nil {
+			if md, err = export.DocToMarkdownWith([]byte(*n.ContentDoc), export.MarkdownOptions{Illustration: illustref.Placeholder}); err != nil {
 				return toolErr("scene %q could not be rendered as markdown: %v", n.ID, err), readSceneOutput{}, nil
 			}
 		}
@@ -700,6 +723,15 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 	default:
 		return toolErr("format %q is not supported; use %q or %q", in.Format, sceneFormatPlain, sceneFormatMarkdown),
 			readSceneOutput{}, nil
+	}
+	if in.Numbered {
+		// style.Paragraphs, not storycontext.PlainText above: it is the ONE
+		// split linetta_analyze_style and linetta_report_continuity both
+		// number from (story-assist Phase 2, 2.A.1). Reusing the plain-text
+		// rendering here would hand out paragraph numbers that disagree
+		// with the numbers a continuity report's paragraph_from/
+		// paragraph_to is checked against.
+		text = numberedParagraphs(n.ContentDoc)
 	}
 	return nil, readSceneOutput{
 		NodeID:         n.ID,
@@ -714,6 +746,23 @@ func (d ToolDeps) readScene(ctx context.Context, _ *mcp.CallToolRequest, in read
 		Summary:        n.Summary,
 		SummaryIsStale: n.Summary == "" || n.SummaryForVersion != n.ContentVersion,
 	}, nil
+}
+
+// numberedParagraphs renders a scene's paragraphs as "[1] …\n\n[2] …", a
+// doc may be nil (an empty scene renders as "").
+func numberedParagraphs(doc *string) string {
+	if doc == nil {
+		return ""
+	}
+	paragraphs := style.Paragraphs(*doc)
+	var b strings.Builder
+	for i, p := range paragraphs {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		fmt.Fprintf(&b, "[%d] %s", i+1, p)
+	}
+	return b.String()
 }
 
 func (d ToolDeps) searchManuscript(ctx context.Context, _ *mcp.CallToolRequest, in searchManuscriptInput) (*mcp.CallToolResult, searchManuscriptOutput, error) {

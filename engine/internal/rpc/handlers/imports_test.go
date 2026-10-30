@@ -39,7 +39,7 @@ func setupImportFixtureFull(t *testing.T) (*project.Repo, *node.Repo, *entity.Re
 
 func TestImportMarkdownHandler_createsProjectFromContent(t *testing.T) {
 	pr, nr := setupImportFixture(t)
-	h := ImportMarkdown(pr, nr, nil, nil, importmd.Extras{}, func() int64 { return 5000 })
+	h := ImportMarkdown(pr, nr, nil, nil, importmd.Extras{}, nil, func() int64 { return 5000 })
 
 	params := json.RawMessage(`{"file_name":"my-work.md","content":"# Imported Work\n## Part A\n### Chapter 1\n#### Scene 1\nhello\n"}`)
 	res, err := h(context.Background(), params)
@@ -75,7 +75,7 @@ func TestImportMarkdownHandler_createsProjectFromContent(t *testing.T) {
 
 func TestImportMarkdownHandler_removesPartialProjectWhenMetadataRestoreFails(t *testing.T) {
 	pr, nr, er, rr := setupImportFixtureFull(t)
-	h := ImportMarkdown(pr, nr, er, rr, importmd.Extras{}, func() int64 { return 5000 })
+	h := ImportMarkdown(pr, nr, er, rr, importmd.Extras{}, nil, func() int64 { return 5000 })
 	ctx := context.Background()
 	md := "---\n" +
 		"linetta:\n" +
@@ -103,7 +103,7 @@ func TestImportMarkdownHandler_removesPartialProjectWhenMetadataRestoreFails(t *
 
 func TestImportMarkdownHandler_restoresLinettaMetadataWithoutAppendixNodes(t *testing.T) {
 	pr, nr, er, rr := setupImportFixtureFull(t)
-	h := ImportMarkdown(pr, nr, er, rr, importmd.Extras{}, func() int64 { return 5000 })
+	h := ImportMarkdown(pr, nr, er, rr, importmd.Extras{}, nil, func() int64 { return 5000 })
 	ctx := context.Background()
 
 	md := "---\n" +
@@ -183,7 +183,7 @@ func TestImportMarkdownHandler_restoresLinettaMetadataWithoutAppendixNodes(t *te
 
 func TestImportMarkdownHandler_restoresRelationshipPairs(t *testing.T) {
 	pr, nr, er, rr := setupImportFixtureFull(t)
-	h := ImportMarkdown(pr, nr, er, rr, importmd.Extras{}, func() int64 { return 5000 })
+	h := ImportMarkdown(pr, nr, er, rr, importmd.Extras{}, nil, func() int64 { return 5000 })
 	ctx := context.Background()
 
 	md := "---\n" +
@@ -257,7 +257,7 @@ func TestImportMarkdownHandler_restoresRelationshipPairs(t *testing.T) {
 
 func TestImportMarkdownHandler_restoresOutlinePreset(t *testing.T) {
 	pr, nr := setupImportFixture(t)
-	h := ImportMarkdown(pr, nr, nil, nil, importmd.Extras{}, func() int64 { return 5000 })
+	h := ImportMarkdown(pr, nr, nil, nil, importmd.Extras{}, nil, func() int64 { return 5000 })
 	ctx := context.Background()
 
 	md := "---\n" +
@@ -294,7 +294,7 @@ func TestImportMarkdownHandler_restoresOutlinePreset(t *testing.T) {
 
 func TestImportMarkdown_resultIncludesCountsAndWarnings(t *testing.T) {
 	pr, nr := setupImportFixture(t)
-	h := ImportMarkdown(pr, nr, nil, nil, importmd.Extras{}, func() int64 { return 7000 })
+	h := ImportMarkdown(pr, nr, nil, nil, importmd.Extras{}, nil, func() int64 { return 7000 })
 	ctx := context.Background()
 
 	md := "# 작품\n## 1부\n### 1장\n#### 씬 1\n본문\n"
@@ -334,7 +334,7 @@ func TestImportMarkdown_resultIncludesCountsAndWarnings(t *testing.T) {
 
 func TestImportMarkdownHandler_fallbackTitleFromFileName(t *testing.T) {
 	pr, nr := setupImportFixture(t)
-	h := ImportMarkdown(pr, nr, nil, nil, importmd.Extras{}, func() int64 { return 6000 })
+	h := ImportMarkdown(pr, nr, nil, nil, importmd.Extras{}, nil, func() int64 { return 6000 })
 
 	// No H1 in content → title should come from file_name (stripped of .md).
 	params := json.RawMessage(`{"file_name":"my-novel.md","content":"## Part A\n### Chapter\n#### Scene\nbody\n"}`)

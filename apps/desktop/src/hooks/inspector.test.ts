@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { reconcileInspector, type InspectorState } from "./inspector";
 
-const S = (f: boolean, x: boolean, c = false, a = false): InspectorState => ({
+const S = (f: boolean, x: boolean, c = false, a = false, p = false, fc = false): InspectorState => ({
   factBook: f,
   contextual: x,
   canon: c,
   agent: a,
+  proposalInbox: p,
+  forecast: fc,
 });
 
 describe("reconcileInspector", () => {
@@ -56,8 +58,25 @@ describe("reconcileInspector", () => {
     expect(out).toEqual(S(false, false, false, true));
   });
 
+  it("treats the forecast sheet as one of the exclusive panels (story-assist Phase 4)", () => {
+    const out = reconcileInspector(S(true, false, false, false, false, false), S(true, false, false, false, false, true), "ipad");
+    expect(out).toEqual(S(false, false, false, false, false, true));
+  });
+
   it("closes the agent panel when another panel takes the slot", () => {
     const out = reconcileInspector(S(false, false, false, true), S(false, true, false, true), "ipad");
     expect(out).toEqual(S(false, true, false, false));
+  });
+
+  it("treats the suggestions inbox as one of the exclusive panels", () => {
+    // A fifth panel now shares the slot (story-assist Phase 3): opening it
+    // must close the others on the narrow tier rather than stacking.
+    const out = reconcileInspector(S(true, false, false, false, false), S(true, false, false, false, true), "ipad");
+    expect(out).toEqual(S(false, false, false, false, true));
+  });
+
+  it("closes the suggestions inbox when another panel takes the slot", () => {
+    const out = reconcileInspector(S(false, false, false, false, true), S(false, true, false, false, true), "ipad");
+    expect(out).toEqual(S(false, true, false, false, false));
   });
 });

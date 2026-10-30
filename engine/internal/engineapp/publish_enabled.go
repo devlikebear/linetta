@@ -27,6 +27,10 @@ type publishDeps struct {
 	db            *sql.DB
 	language      func(context.Context) string
 	clock         func() int64
+	// images is the gallery: published episodes carry their pictures.
+	images publish.Illustrations
+	// sheets are the writer's sheets the work can show on the site.
+	sheets publish.SheetSource
 }
 
 // setupPublish registers the publish.* handlers and returns the service the
@@ -36,7 +40,9 @@ func setupPublish(deps publishDeps) (*publish.Service, func() error) {
 	creds := publish.NewCredentials(deps.settingsStore)
 	state := publish.NewStateRepo(deps.db)
 	connector := publish.NewConnector(client, creds, state.Clear)
-	svc := publish.NewService(client, creds, connector, state, deps.projects, deps.nodes, deps.language, deps.clock)
+	svc := publish.NewService(client, creds, connector, state, deps.projects, deps.nodes, deps.language, deps.clock).
+		WithIllustrations(deps.images).
+		WithSheets(deps.sheets)
 
 	s := deps.server
 	s.Handle("publish.connect_start", handlers.PublishConnectStart(connector))
@@ -46,5 +52,9 @@ func setupPublish(deps publishDeps) (*publish.Service, func() error) {
 	s.Handle("publish.work_upsert", handlers.PublishWorkUpsert(svc))
 	s.Handle("publish.episode_publish", handlers.PublishEpisode(svc))
 	s.Handle("publish.episode_set_visibility", handlers.PublishEpisodeSetVisibility(svc))
+	s.Handle("publish.sheet_get", handlers.PublishSheetGet(svc))
+	s.Handle("publish.sheet_set", handlers.PublishSheetSet(svc))
+	s.Handle("publish.cover_set", handlers.PublishCoverSet(svc))
+	s.Handle("publish.sheets_sync", handlers.PublishSheetsSync(svc))
 	return svc, connector.Close
 }

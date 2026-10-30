@@ -18,19 +18,53 @@ impl std::fmt::Display for CopyError {
     }
 }
 
+/// A work's picture folder, as the engine names it: one path component
+/// ending in `.images`.
+fn is_image_dir(name: &str) -> bool {
+    name.ends_with(".images") && Path::new(name).file_name().and_then(|n| n.to_str()) == Some(name)
+}
+
+/// The only staged names accepted: a plain file name, or `<work>.images/<file>`
+/// for a picture. Anything else (`..`, an absolute path, deeper nesting) is
+/// refused before it can reach outside the target folder.
+fn valid_staged_name(f: &str) -> bool {
+    let plain = |s: &str| Path::new(s).file_name().and_then(|n| n.to_str()) == Some(s);
+    match f.split_once('/') {
+        None => plain(f),
+        Some((dir, name)) => is_image_dir(dir) && plain(name),
+    }
+}
+
 /// Copy each named file from `staging` into `target`. Returns the count copied.
+/// A picture already in the target under the same name and size is not
+/// copied again: its bytes never change under its id, and rewriting it on
+/// every sync would only churn the writer's folder.
 /// Used by the MAS orchestration path and by tests; unused in plain non-MAS builds.
 #[allow(dead_code)]
 fn copy_files(staging: &Path, target: &Path, files: &[String]) -> Result<usize, CopyError> {
     let mut n = 0usize;
     for f in files {
-        let src = staging.join(f);
-        let dst = target.join(f);
-        if Path::new(f).file_name().and_then(|name| name.to_str()) != Some(f.as_str()) {
+        if !valid_staged_name(f) {
             return Err(CopyError {
                 copied: n,
                 message: format!("invalid staged filename: {f}"),
             });
+        }
+        let src = staging.join(f);
+        let dst = target.join(f);
+        if let Some((dir, _)) = f.split_once('/') {
+            std::fs::create_dir_all(target.join(dir)).map_err(|e| CopyError {
+                copied: n,
+                message: format!("create {dir}: {e}"),
+            })?;
+            let same = match (std::fs::metadata(&src), std::fs::metadata(&dst)) {
+                (Ok(a), Ok(b)) => b.is_file() && a.len() == b.len(),
+                _ => false,
+            };
+            if same {
+                n += 1;
+                continue;
+            }
         }
         copy_file_atomic(&src, &dst).map_err(|e| CopyError {
             copied: n,
@@ -39,6 +73,39 @@ fn copy_files(staging: &Path, target: &Path, files: &[String]) -> Result<usize, 
         n += 1;
     }
     Ok(n)
+}
+
+/// Remove, from each work's picture folder in `target`, the pictures `files`
+/// no longer lists, and the folder itself once it is empty. Only names in
+/// `image_dirs` are touched, and only files directly inside them.
+#[allow(dead_code)]
+fn prune_image_dirs(target: &Path, image_dirs: &[String], files: &[String]) -> Result<(), String> {
+    for dir in image_dirs {
+        if !is_image_dir(dir) {
+            return Err(format!("invalid image folder: {dir}"));
+        }
+        let path = target.join(dir);
+        let entries = match std::fs::read_dir(&path) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("read {dir}: {e}")),
+        };
+        let mut remaining = 0usize;
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let is_file = entry.file_type().map(|t| t.is_file()).unwrap_or(false);
+            if !is_file || files.iter().any(|f| f == &format!("{dir}/{name}")) {
+                remaining += 1;
+                continue;
+            }
+            std::fs::remove_file(entry.path()).map_err(|e| format!("remove {dir}/{name}: {e}"))?;
+        }
+        if remaining == 0 {
+            std::fs::remove_dir(&path).map_err(|e| format!("remove {dir}: {e}"))?;
+        }
+    }
+    Ok(())
 }
 
 /// Flush a file's contents to disk.
@@ -211,6 +278,16 @@ pub(crate) async fn run_folder_sync_mas(
         })
         .unwrap_or_default();
 
+    let image_dirs: Vec<String> = stage
+        .get("image_dirs")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
     let store = bookmark_store_path(app)?;
     let bookmark = std::fs::read(&store)
         .map_err(|_| "폴더 접근 권한을 잃었습니다. 다시 선택하세요".to_string())?;
@@ -218,10 +295,15 @@ pub(crate) async fn run_folder_sync_mas(
 
     let partial_copied = std::cell::Cell::new(0usize);
     let outcome = crate::macos_bookmarks::with_scoped_access(&bookmark, |target| {
-        copy_files(&staging_pb, target, &files).map_err(|e| {
+        let copied = copy_files(&staging_pb, target, &files).map_err(|e| {
             partial_copied.set(e.copied);
             e.to_string()
-        })
+        })?;
+        prune_image_dirs(target, &image_dirs, &files).map_err(|e| {
+            partial_copied.set(copied);
+            e
+        })?;
+        Ok(copied)
     });
     let (ok, copied, errmsg) = match outcome {
         Ok(Ok(n)) => (true, n, String::new()),
@@ -249,7 +331,7 @@ pub(crate) async fn run_folder_sync_mas(
 
 #[cfg(test)]
 mod tests {
-    use super::{copy_files, sync_file};
+    use super::{copy_files, prune_image_dirs, sync_file};
 
     // `File::open` hands back a read-only handle, and on Windows sync_all maps
     // to FlushFileBuffers, which needs write access. Every atomic write in this
@@ -306,6 +388,58 @@ mod tests {
             std::fs::read_to_string(target.join("a.md")).unwrap(),
             "hello"
         );
+    }
+
+    #[test]
+    fn copies_pictures_into_their_folder_once() {
+        let staging = tempdir();
+        let target = tempdir();
+        std::fs::create_dir(staging.join("work.images")).unwrap();
+        std::fs::write(staging.join("work.md"), b"md").unwrap();
+        std::fs::write(staging.join("work.images/a.jpg"), b"AAAA").unwrap();
+        let files = vec!["work.md".to_string(), "work.images/a.jpg".to_string()];
+
+        assert_eq!(copy_files(&staging, &target, &files).unwrap(), 2);
+        assert_eq!(std::fs::read(target.join("work.images/a.jpg")).unwrap(), b"AAAA");
+
+        // A second sync leaves the picture as it is.
+        std::fs::write(target.join("work.images/a.jpg"), b"KEEP").unwrap();
+        assert_eq!(copy_files(&staging, &target, &files).unwrap(), 2);
+        assert_eq!(std::fs::read(target.join("work.images/a.jpg")).unwrap(), b"KEEP");
+    }
+
+    #[test]
+    fn refuses_names_outside_the_target() {
+        let staging = tempdir();
+        let target = tempdir();
+        for bad in ["../x.md", "/etc/x", "work.images/../x", "other/a.jpg", "a.images/b/c.jpg"] {
+            let err = copy_files(&staging, &target, &[bad.to_string()]).unwrap_err();
+            assert!(err.message.contains("invalid staged filename"), "{bad}: {}", err.message);
+        }
+        assert!(prune_image_dirs(&target, &["../work.images".to_string()], &[]).is_err());
+    }
+
+    #[test]
+    fn prunes_pictures_no_scene_uses() {
+        let target = tempdir();
+        std::fs::create_dir(target.join("work.images")).unwrap();
+        std::fs::create_dir(target.join("gone.images")).unwrap();
+        std::fs::write(target.join("work.images/a.jpg"), b"A").unwrap();
+        std::fs::write(target.join("work.images/b.jpg"), b"B").unwrap();
+        std::fs::write(target.join("gone.images/c.jpg"), b"C").unwrap();
+        std::fs::write(target.join("writer-notes.txt"), b"theirs").unwrap();
+
+        prune_image_dirs(
+            &target,
+            &["work.images".to_string(), "gone.images".to_string()],
+            &["work.images/a.jpg".to_string()],
+        )
+        .unwrap();
+
+        assert!(target.join("work.images/a.jpg").exists());
+        assert!(!target.join("work.images/b.jpg").exists());
+        assert!(!target.join("gone.images").exists());
+        assert!(target.join("writer-notes.txt").exists());
     }
 
     fn tempdir() -> std::path::PathBuf {

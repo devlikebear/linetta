@@ -11,6 +11,7 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -26,6 +27,8 @@ var WriteToolNames = []string{
 	"linetta_set_art_style",
 	"linetta_add_reference_image",
 	"linetta_delete_reference_image",
+	"linetta_request_illustration",
+	"linetta_set_representative_illustration",
 	"linetta_create_work",
 	"linetta_write_scene",
 	"linetta_write_summary",
@@ -36,7 +39,11 @@ var WriteToolNames = []string{
 	"linetta_edit_memory",
 	"linetta_edit_skill",
 	"linetta_propose_style_profile",
+	"linetta_register_work",
 	"linetta_publish_episode",
+	"linetta_report_continuity",
+	"linetta_propose_story_ops",
+	"linetta_save_forecast",
 }
 
 // ---------- linetta_create_work ----------
@@ -89,10 +96,11 @@ type writeSceneOutput struct {
 	// LinkedElements reports the registered story elements this write linked
 	// automatically (#72), so the agent can spot a homonym gone wrong.
 	LinkedElements []mention.Linked `json:"linked_elements,omitempty" jsonschema:"story elements named in the text, linked automatically"`
-	// SummaryIsPlaceholder is always true after a write: Linetta fills the
-	// scene summary with the opening lines cut to length, which is a
-	// placeholder rather than a summary. Story briefs are built from these, so
-	// leaving it costs the next brief its accuracy.
+	// SummaryIsPlaceholder is always true after a write: the scene's summary
+	// no longer describes it. A summary someone wrote stays and briefs show it
+	// marked as an earlier draft's; otherwise Linetta fills in the opening
+	// lines cut to length. Story briefs are built from these, so leaving it
+	// costs the next brief its accuracy.
 	SummaryIsPlaceholder bool `json:"summary_is_placeholder"`
 }
 
@@ -126,6 +134,7 @@ type writeSummaryOutput struct {
 func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 	if !groups.DisableVisualWrites {
 		d.registerVisualWriteTools(s)
+		d.registerIllustrationWriteTools(s)
 	}
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_create_work",
@@ -140,7 +149,8 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 		Description: "Replace a scene's body with new prose. Call linetta_read_scene first and pass the " +
 			"content_version it returned: if the writer edited the scene since then the write is refused, " +
 			"so their work is never silently overwritten. The previous text is snapshotted first and the " +
-			"returned snapshot_id restores it. Registered story elements named in the text are linked " +
+			"returned snapshot_id restores it. Keep [[illustration:...]] lines to keep their pictures. " +
+			"Registered story elements named in the text are linked " +
 			"automatically and reported in linked_elements. Linetta then files the scene's opening lines " +
 			"as a placeholder summary; call linetta_write_summary afterwards so the story brief carries a " +
 			"real one.",
@@ -163,11 +173,16 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 	if groups.Skills {
 		d.registerEditSkillTool(s)
 	}
+	if groups.Review {
+		d.registerContinuityWriteTools(s)
+		d.registerProposalWriteTools(s)
+		d.registerForecastWriteTools(s)
+	}
 
 	d.registerReviseTool(s)
 	d.registerBatchTools(s)
 	d.registerStyleWriteTools(s)
-	d.registerPublishWriteTool(s)
+	d.registerPublishWriteTools(s)
 }
 
 func (d ToolDeps) registerMemoryTool(s *mcp.Server) {
@@ -291,6 +306,11 @@ func (d ToolDeps) writeScene(ctx context.Context, _ *mcp.CallToolRequest, in wri
 	if err != nil {
 		return toolErr("could not convert the text: %v", err), writeSceneOutput{}, nil
 	}
+	if d.Illustrations != nil {
+		if doc, err = illustref.KeepProjects(ctx, d.Illustrations, n.ProjectID, doc); err != nil {
+			return toolErr("could not check the scene's illustrations: %v", err), writeSceneOutput{}, nil
+		}
+	}
 	// Agent prose gets its registered names linked on the way in (#72):
 	// without this, a scene written over MCP never reaches
 	// linetta_where_does_appear or the story brief's mentioned-entities
@@ -388,7 +408,7 @@ func (d ToolDeps) writeSummary(ctx context.Context, _ *mcp.CallToolRequest, in w
 		forVersion = *in.ExpectedContentVersion
 	}
 
-	if err := d.Nodes.SetSummary(ctx, n.ID, summary, forVersion); err != nil {
+	if err := d.Nodes.SetWrittenSummary(ctx, n.ID, summary, forVersion); err != nil {
 		return toolErr("could not write the summary: %v", err), writeSummaryOutput{}, nil
 	}
 	d.notifyChanged(n.ProjectID, "linetta_write_summary", []string{n.ID}, "")

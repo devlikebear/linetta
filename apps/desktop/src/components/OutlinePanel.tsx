@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
-import { AlertTriangle, ChevronLeft, Copy, FilePlus2, FolderPlus, Globe, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Compass, Copy, FilePlus2, FolderPlus, Globe, Layers, MoreHorizontal, Pencil, Stethoscope, Trash2, ArrowUp, ArrowDown } from "lucide-react";
 import type { TreeNode } from "../hooks/useFirstLeaf";
 import { flatten, sumLeafChars } from "../hooks/useFirstLeaf";
 import type { NodeStatus, PublishEpisodeState } from "../lib/types";
@@ -18,6 +18,7 @@ import {
   type OutlineStructurePreset,
 } from "../lib/outlineRepair";
 import "./OutlinePanel.css";
+import { RepresentativeThumb } from "./illustration/RepresentativeThumb";
 import "./PublishBadge.css";
 
 interface Props {
@@ -46,6 +47,8 @@ interface Props {
   /** Linetta Works state per episode node, shown on the episode's row. Only
    *  passed while connected; absent means no badges at all. */
   publishStates?: ReadonlyMap<string, PublishEpisodeState>;
+  /** node id → the picture that stands for it (illustration Phase 4). */
+  representatives?: ReadonlyMap<string, string>;
   onRepairOutline?: () => void;
   onUndoRepairOutline?: () => void;
   canUndoRepair?: boolean;
@@ -53,6 +56,10 @@ interface Props {
   episodeCharTarget?: number;
   onOutlinePresetChange?: (presetId: OutlinePresetId) => void;
   tourTarget?: string;
+  /** Opens "Where the story could go" (story-assist Phase 4). Omitted
+   *  entirely hides the button — a caller with nowhere to send the click
+   *  should not show one. */
+  onOpenForecasts?: () => void;
 }
 
 type MenuState = {
@@ -85,6 +92,7 @@ export function OutlinePanel({
   onSetStatus,
   onPublish,
   publishStates,
+  representatives,
   onRepairOutline,
   onUndoRepairOutline,
   canUndoRepair,
@@ -92,6 +100,7 @@ export function OutlinePanel({
   episodeCharTarget = 5000,
   onOutlinePresetChange,
   tourTarget,
+  onOpenForecasts,
 }: Props) {
   const { language, t } = useI18n();
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -253,6 +262,18 @@ export function OutlinePanel({
       <div className="rail-head">
         <span className="lbl">{t("workspace.outline")}</span>
         <div className="rail-actions">
+          {onOpenForecasts ? (
+            <button
+              type="button"
+              className="rail-forecast"
+              onClick={onOpenForecasts}
+              aria-label={t("workspace.command.openForecasts")}
+              title={t("workspace.command.openForecasts")}
+              data-testid="outline-open-forecasts"
+            >
+              <Compass size={14} />
+            </button>
+          ) : null}
           <button
             type="button"
             className={`rail-doctor${doctorOpen ? " is-active" : ""}`}
@@ -322,6 +343,7 @@ export function OutlinePanel({
             episodeCharTarget={episodeCharTarget}
             outlinePreset={outlinePreset}
             publishStates={publishStates}
+            representatives={representatives}
             editingNodeId={editingNodeId}
             onCommitRename={onRename ? commitRename : undefined}
             onCancelRename={() => setEditingNodeId(null)}
@@ -529,6 +551,7 @@ function RailNode({
   episodeCharTarget,
   outlinePreset,
   publishStates,
+  representatives,
   editingNodeId,
   onCommitRename,
   onCancelRename,
@@ -549,6 +572,8 @@ function RailNode({
   episodeCharTarget: number;
   outlinePreset: OutlineStructurePreset;
   publishStates?: ReadonlyMap<string, PublishEpisodeState>;
+  /** node id → the picture that stands for it (illustration Phase 4). */
+  representatives?: ReadonlyMap<string, string>;
   editingNodeId: string | null;
   onCommitRename?: (node: TreeNode, title: string) => Promise<void>;
   onCancelRename: () => void;
@@ -615,6 +640,9 @@ function RailNode({
       </span>
     ) : null;
 
+  const representative = representatives?.get(node.id);
+  const representativeThumb = representative ? <RepresentativeThumb illustrationId={representative} /> : null;
+
   if (node.kind === "leaf") {
     const active = node.id === currentId;
     const trailing = episodeProgress ?? <span className="sc-words">{node.word_count}</span>;
@@ -644,6 +672,7 @@ function RailNode({
             <StatusDot status={node.status} />
             <span className="sc-label">{label}</span>
             <span className="sc-title">{node.title}</span>
+            {representativeThumb}
             {publishBadge}
             {trailing}
           </button>
@@ -683,6 +712,7 @@ function RailNode({
               {titleEditor}
             </>
           ) : node.title ? ` · ${node.title}` : ""}
+          {representativeThumb}
           {publishBadge}
         </div>
         {hasMenu && (
@@ -711,6 +741,7 @@ function RailNode({
           {depth > 0 && <StatusDot status={node.status} />}
           <span className="ch-label">{label}</span>
           {editing ? titleEditor : node.title && <span className="ch-title">{node.title}</span>}
+          {representativeThumb}
           {publishBadge}
           {episodeProgress}
         </div>
@@ -744,6 +775,7 @@ function RailNode({
           episodeCharTarget={episodeCharTarget}
           outlinePreset={outlinePreset}
           publishStates={publishStates}
+          representatives={representatives}
           editingNodeId={editingNodeId}
           onCommitRename={onCommitRename}
           onCancelRename={onCancelRename}

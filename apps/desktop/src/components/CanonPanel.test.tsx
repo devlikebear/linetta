@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   entitiesList: vi.fn(),
   relationshipsList: vi.fn(),
+  proposalsPendingCount: vi.fn().mockResolvedValue({ count: 0 }),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -41,6 +42,17 @@ vi.mock("../lib/rpc", () => ({
     getDraft: vi.fn().mockResolvedValue({ pending: false, draft: { project_id: "p1", body: "", author: "", created_at: 0 }, limit: 2200 }),
   },
   projects: { get: vi.fn().mockResolvedValue({ id: "p1", style_notes: "" }) },
+  // The continuity section mounts inside the panel and loads its checks on
+  // mount (story-assist Phase 2).
+  continuity: {
+    list: vi.fn().mockResolvedValue({ checks: [] }),
+    setStatus: vi.fn(),
+    openCounts: vi.fn().mockResolvedValue({ counts: {} }),
+  },
+  // story-assist Phase 3: the "제안함 N" badge is its own fetch.
+  proposals: {
+    pendingCount: mocks.proposalsPendingCount,
+  },
 }));
 
 function entity(
@@ -107,6 +119,7 @@ describe("CanonPanel", () => {
     mocks.settingsGet.mockResolvedValue({ language: "ko" });
     mocks.entitiesList.mockResolvedValue(cast);
     mocks.relationshipsList.mockResolvedValue([rel("r1", "e1", "e2"), rel("r2", "e2", "e1")]);
+    mocks.proposalsPendingCount.mockResolvedValue({ count: 0 });
   });
 
   it("saves the work art style", async () => {
@@ -192,5 +205,50 @@ describe("CanonPanel", () => {
     mocks.entitiesList.mockResolvedValue([...cast, entity("e5", "도경")]);
     rerender(panel({ refreshKey: 1 }));
     await waitFor(() => expect(screen.getByText("도경")).toBeTruthy());
+  });
+
+  // story-assist Phase 2, 2.D.2: the continuity section lives below the
+  // style section inside Story World, not as a separate panel.
+  it("carries the continuity section below the style section", async () => {
+    renderPanel();
+    await screen.findByText("해윤");
+    expect(screen.getByText("연속성 점검")).toBeTruthy();
+  });
+
+  // story-assist followups: the open-observations badge (ContextPanel ->
+  // Workspace.openContinuityForScene) bumps continuityFocusRequest, which
+  // CanonPanel must forward to ContinuitySection's own focusRequest prop
+  // so the section opens, scopes to the current scene and shows the open
+  // tab — not just land on Story World collapsed and work-scoped.
+  it("forwards continuityFocusRequest to ContinuitySection so it opens scoped to the current scene", async () => {
+    const { container } = renderPanel({ nodeId: "n1", continuityFocusRequest: 1 });
+    await screen.findByText("해윤");
+
+    await waitFor(() => {
+      const details = Array.from(container.querySelectorAll("details")).find(
+        (d) => d.querySelector("summary")?.textContent === "연속성 점검",
+      );
+      expect(details?.open).toBe(true);
+    });
+    expect(screen.getByTestId("continuity-scope-scene")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("continuity-status-open")).toHaveAttribute("aria-selected", "true");
+  });
+
+  // story-assist Phase 3 (3.D.3): the badge is the only entry point into the
+  // suggestions inbox from Story World, and it must not exist when there is
+  // nothing pending — a badge that always shows "0" is not a notification.
+  it("hides the suggestions badge when nothing is pending", async () => {
+    renderPanel();
+    await screen.findByText("해윤");
+    expect(screen.queryByText(/제안함/)).toBeNull();
+  });
+
+  it("shows the suggestions badge and opens the inbox on click", async () => {
+    mocks.proposalsPendingCount.mockResolvedValue({ count: 3 });
+    const onOpenProposals = vi.fn();
+    renderPanel({ onOpenProposals });
+    const badge = await screen.findByText("제안함 3");
+    await userEvent.click(badge);
+    expect(onOpenProposals).toHaveBeenCalledTimes(1);
   });
 });

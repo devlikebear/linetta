@@ -35,7 +35,14 @@ func TestClassify_tellsTheNetworkApartFromTheProvider(t *testing.T) {
 		{"402", status(402, "pay"), rpc.ReasonProviderRateLimited},
 		{"429", status(429, "slow"), rpc.ReasonProviderRateLimited},
 		{"400 bad request", status(400, "Function call is missing a thought_signature"), rpc.ReasonProviderRejected},
-		{"404 unknown model", status(404, "models/x is not found"), rpc.ReasonProviderRejected},
+		{"404 unknown model", status(404, "models/x is not found"), rpc.ReasonProviderModelUnsupported},
+		// What Codex answers a ChatGPT login naming a model its plan lacks.
+		{"400 codex plan model", status(400, `{"detail":"The 'gpt-5.3-codex-spark' model is not supported when using Codex with a ChatGPT account."}`), rpc.ReasonProviderModelUnsupported},
+		{"400 anthropic model", status(404, `{"type":"error","error":{"type":"not_found_error","message":"model: claude-x"}}`), rpc.ReasonProviderModelUnsupported},
+		// Naming the model is not enough; the complaint has to be about it.
+		{"400 limit for a model", status(400, "max_tokens: 64000 > 32000, the maximum for this model"), rpc.ReasonProviderRejected},
+		// A transport failure is never a model verdict, whatever it says.
+		{"model words without a status", errors.New("model not found in cache"), rpc.ReasonProviderUnreachable},
 		{"413 too large", status(413, "too large"), rpc.ReasonProviderRejected},
 		// Gemini answers a bad key with 400, not 401.
 		{"400 bad key", status(400, "API key not valid. Please pass a valid API key."), rpc.ReasonProviderAuthFailed},

@@ -316,7 +316,8 @@ export type AIContextKey =
   | "style_notes"
   | "facts"
   | "memories"
-  | "references";
+  | "references"
+  | "direction";
 
 export type AIContextSelection = Record<AIContextKey, boolean>;
 
@@ -542,6 +543,122 @@ export interface ProviderStatus {
   cli_path?: string;
 }
 
+/** The providers that can draw illustrations. Their key or login is the
+ *  agent provider's; their consent and model are their own. */
+export type ImageProviderID = "openai-codex" | "gemini-native";
+
+/** One image provider's stored entry. Never holds a credential. */
+export interface ImageProviderConfig {
+  model?: string;
+  /** Image consent, epoch ms; absent or 0 means none. Not the agent's. */
+  consented_at?: number;
+}
+
+export interface ImageProviderPatch {
+  model?: string;
+  consented_at?: number;
+}
+
+/** image_providers.list — where each image provider stands. */
+export interface ImageProviderStatus {
+  id: ImageProviderID;
+  active: boolean;
+  /** The agent provider's key or login exists. */
+  configured: boolean;
+  consented: boolean;
+  model?: string;
+}
+
+export type IllustrationAspect = "square" | "portrait" | "landscape";
+export type IllustrationFormat = "single" | "four_panel";
+
+/** One stored illustration, without its bytes. */
+export interface IllustrationMeta {
+  id: string;
+  project_id: string;
+  source_node_id?: string;
+  caption: string;
+  /** Exactly what was sent to the provider. */
+  prompt: string;
+  provider: string;
+  model: string;
+  mime: string;
+  width: number;
+  height: number;
+  byte_size: number;
+  created_at: number;
+  /** The scenes that show the picture, from illustrations.list. */
+  used_in?: Array<{ node_id: string; label: string; title?: string }>;
+}
+
+/** What an agent asked to have drawn (illustration Phase 4). Nothing is
+ *  drawn until the writer approves it on a card. */
+export type IllustrationRequestPurpose = "insert" | "representative" | "gallery";
+export type IllustrationRequestStatus = "pending" | "generating" | "done" | "rejected" | "failed" | "cancelled";
+
+export interface IllustrationRequest {
+  id: string;
+  project_id: string;
+  /** The scene (insert) or the scene/episode (representative). */
+  target_node_id?: string;
+  purpose: IllustrationRequestPurpose;
+  prompt: string;
+  character_ids: string[];
+  include_references: boolean;
+  aspect: IllustrationAspect;
+  caption: string;
+  /** The agent's one line to the writer. */
+  note: string;
+  source: "agent" | "external";
+  status: IllustrationRequestStatus;
+  illustration_id?: string;
+  /** Set once the drawing went where the purpose said. */
+  placed_at?: number;
+  error?: string;
+  created_at: number;
+  decided_at?: number;
+}
+
+/** illustrations.representatives: node id → the picture that stands for it. */
+export type IllustrationRepresentatives = Record<string, string>;
+
+/** What the writer changed on the card before drawing. */
+export interface IllustrationRequestEdits {
+  prompt?: string;
+  aspect?: IllustrationAspect;
+  caption?: string;
+  include_references?: boolean;
+}
+
+/** illustrations-changed's payload: a request was left, decided, drawn or
+ *  failed. node_ids are scenes a drawing was put into. */
+export interface IllustrationsChangedPayload {
+  project_id: string;
+  request_id: string;
+  status: IllustrationRequestStatus;
+  node_ids?: string[];
+}
+
+/** illustrations.compose — the prompt for the writer to read before drawing. */
+export interface IllustrationComposition {
+  prompt: string;
+  negative_prompt: string;
+  format: IllustrationFormat;
+  characters: Array<{ entity_id: string; name: string }>;
+  reference_image_ids: string[];
+  missing_sheets: string[];
+}
+
+export interface IllustrationGenerateInput {
+  project_id: string;
+  source_node_id?: string;
+  prompt: string;
+  character_ids?: string[];
+  include_references?: boolean;
+  aspect?: IllustrationAspect;
+  caption?: string;
+}
+
 /** publish.connect_status — Linetta Works connection. Never carries the
  *  token or the pairing secret. */
 export type PublishConnectState = "disconnected" | "waiting" | "connected" | "failed";
@@ -593,6 +710,8 @@ export interface PublishEpisodeView {
   leaf_ids?: string[];
   char_count: number;
   empty?: boolean;
+  /** Pictures that go up with the episode. */
+  illustrations?: number;
   state: PublishEpisodeState;
   /** The local text differs from the site's, whatever the state. */
   modified?: boolean;
@@ -622,6 +741,33 @@ export interface PublishWorkStatus {
   work?: PublishWorkView;
   episodes: PublishEpisodeView[];
   site_only: PublishEpisodeView[];
+  sheets: PublishSheetsStatus;
+}
+
+/** A sheet or the cover as the site has it. The state uses the episode
+ *  states that apply: public, pending, rejected, needs_review. */
+export interface PublishSheetView {
+  entity_id: string;
+  kind: EntityKind;
+  name: string;
+  state: PublishEpisodeState;
+  moderation_reason?: string;
+}
+
+export interface PublishCoverView {
+  illustration_id: string;
+  state: PublishEpisodeState;
+  moderation_reason?: string;
+}
+
+/** Sheets and the cover (Works Phase 8): the writer's choices always, the
+ *  site's half only when remote is true. */
+export interface PublishSheetsStatus {
+  chosen: number;
+  cover_id?: string;
+  remote: boolean;
+  sheets: PublishSheetView[];
+  cover?: PublishCoverView;
 }
 
 /** publish.episode_publish */
@@ -708,6 +854,8 @@ export interface ToolBudget {
   bytes: number;
   memory: ToolBudgetGroup;
   skills: ToolBudgetGroup;
+  /** story-assist Phase 2: linetta_report_continuity's group. */
+  review: ToolBudgetGroup;
 }
 
 export interface Settings {
@@ -720,6 +868,9 @@ export interface Settings {
    *  `providers.list` for the ids this build can actually drive. */
   provider: ProviderID | (string & {});
   providers?: Record<string, ProviderConfig>;
+  /** Absent or "" while illustration drawing is off. */
+  image_provider?: ImageProviderID | "";
+  image_providers?: Record<string, ImageProviderConfig>;
   typewriter_default: boolean;
   focus_default: boolean;
   theme: ThemePreference;
@@ -762,6 +913,9 @@ export interface Settings {
   visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;
+  /** story-assist Phase 2: linetta_report_continuity and later phases'
+   *  additions to it. Optional, default ON, same read rule as the two above. */
+  review_tools_enabled?: boolean;
   /** What that tool set costs, measured by the engine from the tools it would
    *  actually register — never a table maintained here, which is how the site's
    *  tool counts drifted. Absent on a build that cannot measure it (mobile),
@@ -787,6 +941,9 @@ export interface SettingsPatch {
   language?: AppLanguage;
   provider?: ProviderID;
   providers?: Record<string, ProviderPatch>;
+  /** "" turns illustration drawing off. */
+  image_provider?: ImageProviderID | "";
+  image_providers?: Record<string, ImageProviderPatch>;
   typewriter_default?: boolean;
   focus_default?: boolean;
   theme?: ThemePreference;
@@ -815,6 +972,7 @@ export interface SettingsPatch {
   visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;
+  review_tools_enabled?: boolean;
   /** Deletes the plaintext keys the engine could not migrate out of
    *  settings.json (#113). Destructive and one-way — where there is no secret
    *  store the file is the only place those keys exist — so it is only ever
@@ -1085,6 +1243,9 @@ export interface ProposalOp {
   kind?: string;
   role?: string;
   attributes?: Record<string, string>;
+  /** create_entity sets aliases; update_entity only adds to the existing
+   *  list and never removes one (story-assist Phase 3, 3.A.2). */
+  aliases?: string[];
   entity_id?: string;
   from?: string;
   from_ref?: string;
@@ -1351,6 +1512,321 @@ export interface StyleDraftState {
 }
 /** Whether an approved draft replaces the style notes or is added after them. */
 export type StyleApproveMode = "replace" | "append";
+
+/**
+ * The writer's current focus for a work (story-assist Phase 1), and what
+ * direction.get_focus can tell about it right now. Present is false when no
+ * focus is set — a valid state, not an error.
+ */
+export interface FocusState {
+  project_id: string;
+  body: string;
+  anchor_node_id?: string;
+  set_at: number;
+  present: boolean;
+  /** -1 when the anchor episode was recorded but no longer exists. */
+  episodes_since: number;
+  stale: boolean;
+}
+
+/** One scene's intent (story-assist Phase 1): its goal, and what to keep or avoid. */
+export interface SceneIntent {
+  node_id: string;
+  project_id: string;
+  goal: string;
+  keep: string[];
+  avoid: string[];
+  updated_at: number;
+}
+
+/** direction.get_scene_intent's reply. */
+export interface SceneIntentState {
+  present: boolean;
+  intent: SceneIntent;
+}
+
+/** story-assist Phase 2: categories, kinds, severities and statuses an observation carries. */
+export type ContinuityCategory =
+  | "character"
+  | "place"
+  | "item"
+  | "relationship"
+  | "timeline"
+  | "fact"
+  | "plot"
+  | "direction"
+  | "other";
+export type ContinuityKind = "contradiction" | "gap" | "question";
+export type ContinuitySeverity = "high" | "medium" | "low";
+export type ContinuityStatus = "open" | "dismissed" | "resolved" | "replaced";
+export type ContinuityRefType = "entity" | "fact" | "beat" | "scene";
+
+/** One ref an observation cites, with the display name continuity.list resolved. */
+export interface ContinuityRef {
+  type: ContinuityRefType;
+  id: string;
+  paragraph?: number;
+  quote?: string;
+  /** Empty when the ref no longer resolves (its target was deleted since). */
+  label?: string;
+}
+
+/** One stored continuity observation. */
+export interface ContinuityObservation {
+  id: string;
+  check_id: string;
+  project_id: string;
+  node_id: string;
+  category: ContinuityCategory;
+  kind: ContinuityKind;
+  severity: ContinuitySeverity;
+  summary: string;
+  suggestion: string;
+  paragraph_from: number;
+  paragraph_to: number;
+  quote: string;
+  refs: ContinuityRef[];
+  status: ContinuityStatus;
+  status_at: number;
+  created_at: number;
+}
+
+/** One continuity check (a scene's reading) plus its observations, from continuity.list. */
+export interface ContinuityCheck {
+  id: string;
+  project_id: string;
+  node_id: string;
+  /** The checked scene's outline path, e.g. "1부 / 1장 / 씬 3". */
+  breadcrumb: string;
+  content_version: number;
+  source: "agent" | "external";
+  note: string;
+  checked_at: number;
+  /** True once the scene's current content_version no longer matches this check's. */
+  stale: boolean;
+  observations: ContinuityObservation[];
+}
+
+/** continuity.open_counts's reply: node_id -> open observation count. */
+export interface ContinuityOpenCounts {
+  counts: Record<string, number>;
+}
+
+/** continuity-changed's payload: an observation's status changed from Story
+ *  World (continuity.set_status). ContextPanel's open-observation badge
+ *  listens for this rather than relying on an unrelated remount to notice. */
+export interface ContinuityChangedPayload {
+  project_id: string;
+  node_id?: string;
+}
+
+// ---------- Suggestions inbox (story-assist Phase 3) ----------
+//
+// An agent's linetta_propose_story_ops candidates, and the writer's
+// item-by-item accept/reject of them. Op reuses ProposalOp (the same
+// storyops.Op mirror linetta_apply_story_ops' own pending-approval preview
+// uses) rather than a second copy of the same 30-odd fields.
+
+export type SuggestionPurpose = "general" | "import_extraction" | "forecast";
+export type SuggestionSource = "agent" | "external";
+/** "reverting" means proposals.Undo has committed to revert this item but
+ *  has not yet confirmed the outcome — the engine's own StatusReverting.
+ *  ProposalInbox shows it as "되돌리는 중 · 확인 필요" and disables its
+ *  accept checkbox; proposals.accept refuses it outright either way. */
+export type SuggestionItemStatus = "pending" | "accepted" | "rejected" | "failed" | "reverting";
+
+/** One quote an agent cited, with the scene's breadcrumb proposals.list resolved. */
+export interface SuggestionEvidence {
+  node_id: string;
+  paragraph: number;
+  quote: string;
+  breadcrumb?: string;
+}
+
+/** A possible match against an existing entity (entity_id set) or another
+ *  pending item's create_entity (item_id set) — informational only; the
+ *  engine never merges on its own. */
+export interface SuggestionDuplicate {
+  entity_id?: string;
+  item_id?: string;
+  name: string;
+  kind: string;
+  matched: "exact" | "exact_kind_mismatch";
+}
+
+export interface SuggestionItemResult {
+  created_id?: string;
+  error?: string;
+}
+
+/** One stored proposal item, from proposals.list. */
+export interface SuggestionItem {
+  id: string;
+  proposal_id: string;
+  ordinal: number;
+  op_type: ProposalOpType;
+  op: ProposalOp;
+  /** Human-readable headline, e.g. "새 인물: 하린 — 검술 사범". */
+  summary: string;
+  depends_on: string[];
+  /** True when a dependency's item was rejected — "의존 항목이 거절됨". */
+  blocked_by_rejected: boolean;
+  evidence: SuggestionEvidence[];
+  from_node_ids: string[];
+  duplicates: SuggestionDuplicate[];
+  status: SuggestionItemStatus;
+  result: SuggestionItemResult;
+  status_at: number;
+  /** Set once this item is accepted as part of a purpose=forecast
+   *  structural batch (or an add_beat that depended on one) — pass it to
+   *  proposals.undo to revert the whole batch together. */
+  undo_batch_id?: string;
+}
+
+/** One submitted batch plus its items, from proposals.list. */
+export interface SuggestionBatch {
+  id: string;
+  project_id: string;
+  purpose: SuggestionPurpose;
+  /** Set when purpose is "forecast": the forecast this batch reflects
+   *  into the outline. */
+  forecast_id?: string;
+  source: SuggestionSource;
+  summary: string;
+  created_at: number;
+  items: SuggestionItem[];
+}
+
+/** proposals.accept's reply: each requested item's outcome. */
+export interface AcceptSuggestionsResult {
+  items: SuggestionItem[];
+  /** Every storyops undo batch this call created — usually at most one.
+   *  Show a "되돌리기" button keyed to the first entry when non-empty. */
+  undo_batch_ids?: string[];
+}
+
+/** proposals.extraction_progress's reply: how far a purpose=import_extraction
+ *  sweep has gotten, and which episode to continue from. */
+export interface ExtractionProgress {
+  total_episodes: number;
+  covered_episodes: number;
+  next_episode?: {
+    node_id: string;
+    label: string;
+    title: string;
+    ordinal: number;
+    whole?: boolean;
+  };
+  pending_items: number;
+}
+
+/** proposals.extraction_estimate's reply: the whole manuscript's size and a
+ *  rough input-token budget, shown before a sweep starts. An estimate, not
+ *  a billed cost. */
+export interface ExtractionEstimate {
+  episodes: number;
+  chars: number;
+  input_tokens: number;
+}
+
+/** proposals-changed's payload: the inbox itself changed — an agent
+ *  submitted a batch, or the writer accepted/rejected an item. Separate
+ *  from mcp-changed, which means an MCP client wrote the manuscript. */
+export interface ProposalsChangedPayload {
+  project_id: string;
+  kinds: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Forecasts (story-assist Phase 4): possible continuations an agent drafted
+// for the writer to compare. Never canon — see forecast.list's own doc
+// comment. Named Forecast* throughout, distinct from the Suggestion* names
+// the inbox uses (Phase 3's own convention).
+
+export type ForecastSource = "agent" | "external";
+export type ForecastRiskKind = "continuity" | "causality" | "character" | "direction" | "pacing" | "other";
+
+export interface ForecastBranchBeat {
+  episode_offset: number;
+  summary: string;
+}
+
+/** One character's choice at the branch point, with the entity's current
+ *  name resolved by forecast.list — empty if the entity was since deleted. */
+export interface ForecastDecision {
+  entity_id: string;
+  decision: string;
+  entity_name?: string;
+}
+
+export interface ForecastProjectedChanges {
+  characters?: string[];
+  relationships?: string[];
+  world?: string[];
+  threads?: string[];
+}
+
+/** One way a branch could go wrong, with whichever ref it names resolved
+ *  to display text by forecast.list. */
+export interface ForecastRisk {
+  kind: ForecastRiskKind;
+  description: string;
+  entity_id?: string;
+  fact_id?: string;
+  node_id?: string;
+  entity_name?: string;
+  fact_claim?: string;
+  node_breadcrumb?: string;
+}
+
+/** One stored continuation. */
+export interface ForecastBranch {
+  id: string;
+  title: string;
+  premise: string;
+  beats: ForecastBranchBeat[];
+  decisions?: ForecastDecision[];
+  changes?: ForecastProjectedChanges;
+  risks?: ForecastRisk[];
+  unknowns?: string[];
+  direction_fit?: string;
+}
+
+/** What changed since a forecast's input fingerprint was taken —
+ *  "characters" with count 2, or "episodes" with the changed episodes'
+ *  own labels. */
+export interface ForecastStaleReason {
+  group: string;
+  count?: number;
+  episode_labels?: string[];
+}
+
+/** One row of forecast.list: a saved comparison plus its staleness,
+ *  recomputed fresh on every call — never a cached flag. */
+export interface Forecast {
+  id: string;
+  project_id: string;
+  divergence: string;
+  base_node_id?: string;
+  horizon: number;
+  branches: ForecastBranch[];
+  source: ForecastSource;
+  selected_branch?: string;
+  selected_at?: number;
+  created_at: number;
+  stale: boolean;
+  reasons?: ForecastStaleReason[];
+  /** The episode these branches were drawn from, e.g. "3화". */
+  base_episode_label?: string;
+}
+
+/** forecast.select's reply: confirmation plus the staleness warning — a
+ *  stale forecast may still be selected (the engine does not refuse it). */
+export interface SelectForecastResult {
+  ok: boolean;
+  stale: boolean;
+  reasons?: ForecastStaleReason[];
+}
 export interface ArtStyle {
  project_id: string;
  style: string;

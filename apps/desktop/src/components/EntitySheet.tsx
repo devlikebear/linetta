@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CharacterVisualSheet, Entity, EntityKind, Relationship, SceneMention, UpdateEntityInput } from "../lib/types";
 import { entities, relationships, visuals } from "../lib/rpc";
 import { RelationshipPicker } from "./RelationshipPicker";
+import { SheetPublishToggle } from "./SheetPublishToggle";
 import { X, Plus, User, MapPin, Box, Lightbulb, Search } from "../lib/icons";
 import { displayNodeLabel, entityAttributePresets, entityKindLabel, entityRolePresets, useI18n } from "../lib/i18n";
 import "./EntitySheet.css";
@@ -352,6 +353,8 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
                 />
               )}
             </div>
+
+            <SheetPublishToggle entityId={entity.id} />
 
             <div className="sec">
               <h4>{t("entity.mentions")} <span style={{ color: "var(--muted-2)" }}>{scenes.length}</span></h4>

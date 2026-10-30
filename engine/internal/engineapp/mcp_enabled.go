@@ -11,8 +11,12 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
@@ -20,6 +24,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
@@ -27,6 +32,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -47,13 +53,31 @@ type mcpDeps struct {
 // a second instance wired with fact/memory/reference sources — the builder the
 // AI runner uses stays untouched so its prompts do not change.
 type mcpToolRepos struct {
-	visuals    *visual.Repo
-	style      *style.Repo
-	projects   *project.Repo
-	nodes      *node.Repo
-	entities   *entity.Repo
-	mentions   *mention.Repo
-	facts      *fact.Repo
+	visuals       *visual.Repo
+	illustrations *illustration.Repo
+	// requests are the pictures agents asked for (illustration Phase 4).
+	requests *illustration.RequestService
+	style    *style.Repo
+	projects *project.Repo
+	nodes    *node.Repo
+	entities *entity.Repo
+	mentions *mention.Repo
+	facts    *fact.Repo
+	// beats and threads back linetta_report_continuity's beat refs: a beat
+	// carries only a thread_id, so checking one belongs to this work means
+	// resolving its thread (story-assist Phase 2).
+	beats      *beat.Repo
+	threads    *thread.Repo
+	continuity *continuity.Repo
+	// proposals holds story-structure change candidates waiting for the
+	// writer to accept them one by one (story-assist Phase 3). Shared with
+	// the proposals.* RPC handlers — one Service, one undo-free apply path.
+	proposals *proposals.Service
+	// forecasts holds possible continuations an agent drafted for the
+	// writer to compare (story-assist Phase 4). Shared with the
+	// forecast.* RPC handlers and with proposals (purpose=forecast's own
+	// ForecastID check) — one Service, one fingerprint.
+	forecasts  *forecast.Service
 	plot       *plot.Builder
 	manuscript *manuscript.Searcher
 	context    *storycontext.ContextBuilder
@@ -99,19 +123,27 @@ type agentToolDeps = mcphost.ToolDeps
 func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 	activity := mcphost.NewActivityRepo(deps.repos.db)
 	tools := mcphost.ToolDeps{
-		Visuals:    deps.repos.visuals,
-		Style:      deps.repos.style,
-		Projects:   deps.repos.projects,
-		Nodes:      deps.repos.nodes,
-		Entities:   deps.repos.entities,
-		Mentions:   deps.repos.mentions,
-		Facts:      deps.repos.facts,
-		Plot:       deps.repos.plot,
-		Manuscript: deps.repos.manuscript,
-		Context:    deps.repos.context,
-		Settings:   deps.settingsStore,
-		Activity:   activity,
-		Memory:     deps.repos.memory,
+		Visuals:              deps.repos.visuals,
+		Illustrations:        deps.repos.illustrations,
+		Gallery:              deps.repos.illustrations,
+		IllustrationRequests: deps.repos.requests,
+		Style:                deps.repos.style,
+		Projects:             deps.repos.projects,
+		Nodes:                deps.repos.nodes,
+		Entities:             deps.repos.entities,
+		Mentions:             deps.repos.mentions,
+		Facts:                deps.repos.facts,
+		Beats:                deps.repos.beats,
+		Threads:              deps.repos.threads,
+		Continuity:           deps.repos.continuity,
+		Proposals:            deps.repos.proposals,
+		Forecasts:            deps.repos.forecasts,
+		Plot:                 deps.repos.plot,
+		Manuscript:           deps.repos.manuscript,
+		Context:              deps.repos.context,
+		Settings:             deps.settingsStore,
+		Activity:             activity,
+		Memory:               deps.repos.memory,
 
 		Skills:       deps.repos.skills,
 		SkillHistory: deps.repos.skillHistory,

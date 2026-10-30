@@ -255,6 +255,75 @@ func TestGetStoryContextForAnExternalClientCarriesEverything(t *testing.T) {
 	}
 }
 
+// fakeDirection stands in for direction.Repo, which mcphost must not import
+// (storycontext.DirectionSource is the seam).
+type fakeDirection struct {
+	focus         string
+	focusPresent  bool
+	stale         bool
+	episodesSince int
+	goal          string
+	keep, avoid   []string
+	intentPresent bool
+}
+
+func (f fakeDirection) FocusFor(context.Context, string) (storycontext.DirectionFocus, bool, error) {
+	return storycontext.DirectionFocus{Body: f.focus, Stale: f.stale, EpisodesSince: f.episodesSince}, f.focusPresent, nil
+}
+
+func (f fakeDirection) SceneIntentFor(context.Context, string) (storycontext.DirectionSceneIntent, bool, error) {
+	return storycontext.DirectionSceneIntent{Goal: f.goal, Keep: f.keep, Avoid: f.avoid}, f.intentPresent, nil
+}
+
+// PlannedBranchFor: this package has no forecast fixture to wire up here
+// (story-assist Phase 4), so fakeDirection always reports "nothing
+// selected" — the same as a real work with no forecast picked.
+func (f fakeDirection) PlannedBranchFor(context.Context, string) (storycontext.DirectionPlannedBranch, bool, error) {
+	return storycontext.DirectionPlannedBranch{}, false, nil
+}
+
+// The writer's direction is read-only content with no MCP write tool behind
+// it (story-assist Phase 1), so it must reach the brief through the read
+// tool's path regardless of which write-tool groups are enabled — including
+// the read_only mode where none are.
+func TestGetStoryContextCarriesTheWritersDirectionEvenInReadOnlyMode(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	d.Context = d.Context.WithDirectionSource(fakeDirection{
+		focus: "둘의 오해를 아직 풀지 않는다", focusPresent: true,
+		goal: "거리를 좁힌다", keep: []string{"침묵"}, avoid: []string{"고백"}, intentPresent: true,
+	})
+
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, ToolGroups{})
+	if err != nil {
+		t.Fatalf("getStoryContext: %v", err)
+	}
+	for _, want := range []string{"작가 방향", "둘의 오해를 아직 풀지 않는다", "거리를 좁힌다", "침묵", "고백"} {
+		if !strings.Contains(out.Brief, want) {
+			t.Errorf("read_only brief missing %q; got:\n%s", want, out.Brief)
+		}
+	}
+	if !slices.Contains(out.IncludedSections, "direction") {
+		t.Errorf("sectionReport should list direction as included; got %+v", out.IncludedSections)
+	}
+}
+
+func TestGetStoryContextIncludeDirectionFalseOmitsIt(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	d.Context = d.Context.WithDirectionSource(fakeDirection{focus: "초점", focusPresent: true})
+
+	off := false
+	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID, IncludeDirection: &off}, AllToolGroups())
+	if err != nil {
+		t.Fatalf("getStoryContext: %v", err)
+	}
+	if strings.Contains(out.Brief, "작가 방향") || strings.Contains(out.Brief, "초점") {
+		t.Errorf("IncludeDirection=false must omit the section; got:\n%s", out.Brief)
+	}
+	if !slices.Contains(out.EmptySections, "direction") {
+		t.Errorf("sectionReport should list direction as empty; got %+v", out.EmptySections)
+	}
+}
+
 // sectionReport must describe the brief the caller actually receives, not the
 // context that was built before suppression. For the agent, with no recall
 // log wired, suppressing the curated documents must flip "memories" from
@@ -294,5 +363,82 @@ func TestSectionReportMatchesTheBriefForBothSources(t *testing.T) {
 	}
 	if slices.Contains(extOut.EmptySections, "memories") {
 		t.Errorf("external report should not list memories as empty: empty=%v", extOut.EmptySections)
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * story-assist Phase 2, 2.B.1: linetta_read_scene's numbered option. The
+ * contract is paragraph numbers a continuity report can cite — and those
+ * numbers must be the ones style.Paragraphs (and so linetta_analyze_style
+ * and linetta_report_continuity) would also produce for the same scene.
+ * ------------------------------------------------------------------------ */
+
+func TestReadScene_numberedPrefixesEachParagraph(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	doc := `{"type":"doc","content":[
+		{"type":"paragraph","content":[{"type":"text","text":"첫 문단."}]},
+		{"type":"paragraph","content":[{"type":"text","text":"둘째 문단."}]}
+	]}`
+	if err := d.Nodes.UpdateContent(ctx, nodeID, doc, 10); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+
+	_, out, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID, Numbered: true})
+	if err != nil {
+		t.Fatalf("readScene: %v", err)
+	}
+	want := "[1] 첫 문단.\n\n[2] 둘째 문단."
+	if out.Text != want {
+		t.Errorf("readScene numbered text = %q, want %q", out.Text, want)
+	}
+}
+
+// The numbers a numbered read hands out must be the exact numbers
+// linetta_analyze_style (and so linetta_report_continuity's validation)
+// would assign the same scene — see style.Paragraphs' doc comment.
+func TestReadScene_numberedMatchesStyleParagraphs(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	doc := `{"type":"doc","content":[
+		{"type":"paragraph","content":[{"type":"text","text":"하나."}]},
+		{"type":"paragraph"},
+		{"type":"paragraph","content":[{"type":"text","text":"둘."}]}
+	]}`
+	if err := d.Nodes.UpdateContent(ctx, nodeID, doc, 10); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+
+	_, out, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID, Numbered: true})
+	if err != nil {
+		t.Fatalf("readScene: %v", err)
+	}
+	want := "[1] 하나.\n\n[2] 둘."
+	if out.Text != want {
+		t.Errorf("readScene numbered text = %q, want %q (an empty paragraph must not get its own number)", out.Text, want)
+	}
+}
+
+func TestReadScene_numberedWithMarkdownIsRefused(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	res, _, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID, Numbered: true, Format: sceneFormatMarkdown})
+	if err != nil {
+		t.Fatalf("readScene: %v", err)
+	}
+	if res == nil || !res.IsError {
+		t.Fatal("readScene(numbered=true, format=markdown) should be a tool error")
+	}
+}
+
+func TestReadScene_withoutNumberedIsUnchanged(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"평범한 문단."}]}]}`
+	if err := d.Nodes.UpdateContent(ctx, nodeID, doc, 10); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	_, out, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID})
+	if err != nil {
+		t.Fatalf("readScene: %v", err)
+	}
+	if strings.Contains(out.Text, "[1]") {
+		t.Errorf("a plain read without numbered=true must not be prefixed; got %q", out.Text)
 	}
 }

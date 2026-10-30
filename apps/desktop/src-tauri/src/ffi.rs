@@ -234,6 +234,26 @@ fn notification_event(method: &str) -> Option<&'static str> {
         // saved. Settings lists skills and holds an editor open on one, so
         // without this the next save silently overwrites what just landed.
         "skills.changed" => Some("skills-changed"),
+        // A continuity observation's status changed from Story World
+        // (story-assist Phase 2). The scene panel's open-observation badge
+        // reads a count fetched once; without this event it would keep
+        // showing an observation the writer just resolved or dismissed
+        // until something unrelated happened to remount the panel.
+        "continuity.changed" => Some("continuity-changed"),
+        // The proposals inbox changed — an agent submitted a batch
+        // (linetta_propose_story_ops), or the writer accepted/rejected an
+        // item (story-assist Phase 3). This is NOT mcp.changed: that name
+        // means an MCP client wrote the manuscript, and an accept/reject
+        // click is the writer's own action, applied through storyops just
+        // like any other change. CanonPanel's "제안함 N" badge and the
+        // inbox itself read a count fetched once; without this event they
+        // would stay stale until something unrelated remounted them.
+        "proposals.changed" => Some("proposals-changed"),
+        // An illustration request was left, approved, drawn, failed or
+        // rejected (illustration Phase 4). The agent panel's approval card
+        // and the gallery's requests section read it; when a drawing was
+        // put into a scene, node_ids names it so an open editor reloads.
+        "illustrations.changed" => Some("illustrations-changed"),
         _ => None,
     }
 }
@@ -438,6 +458,28 @@ mod tests {
         // overwrites it.
         assert_eq!(notification_event("skills.changed"), Some("skills-changed"));
         assert_eq!(notification_event("skills.unmapped"), None);
+    }
+
+    #[test]
+    fn continuity_changed_is_forwarded_to_the_renderer() {
+        // The scene panel's open-observation badge is fetched once and
+        // cached. Without this event, resolving or dismissing an
+        // observation from Story World would leave the badge showing a
+        // stale count until an unrelated remount refreshed it.
+        assert_eq!(notification_event("continuity.changed"), Some("continuity-changed"));
+        assert_eq!(notification_event("continuity.unmapped"), None);
+    }
+
+    #[test]
+    fn proposals_changed_is_forwarded_to_the_renderer() {
+        // CanonPanel's "제안함 N" badge and the inbox itself are fetched
+        // once and cached. Without this event, an agent submitting a
+        // batch or the writer accepting/rejecting an item would leave
+        // both showing a stale count until an unrelated remount refreshed
+        // them (story-assist Phase 3).
+        assert_eq!(notification_event("proposals.changed"), Some("proposals-changed"));
+        assert_eq!(notification_event("illustrations.changed"), Some("illustrations-changed"));
+        assert_eq!(notification_event("proposals.unmapped"), None);
     }
 
     #[cfg(target_os = "windows")]

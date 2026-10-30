@@ -20,7 +20,7 @@ import (
 // cliProviders resolves to the Claude Code CLI, so Run takes loopCLI.
 type cliProviders struct{ client llm.Client }
 
-func (f cliProviders) Client(string) (llm.Client, provider.Resolved, error) {
+func (f cliProviders) Client(context.Context, string) (llm.Client, provider.Resolved, error) {
 	return f.client, provider.Resolved{ID: settings.ProviderClaudeCode, Model: "sonnet"}, nil
 }
 

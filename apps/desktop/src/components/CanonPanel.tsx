@@ -1,8 +1,9 @@
 import { ArtStyleSection } from "./ArtStyleSection";
 import { StyleSection } from "./StyleSection";
+import { ContinuitySection } from "./ContinuitySection";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Library, Search, X } from "lucide-react";
-import { entities as entitiesApi, relationships as relationshipsApi } from "../lib/rpc";
+import { entities as entitiesApi, proposals as proposalsApi, relationships as relationshipsApi } from "../lib/rpc";
 import type { Entity, EntityKind, Relationship } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
@@ -30,13 +31,26 @@ interface Props {
   refreshKey?: number;
   /** The scene open in the editor; the style check can be scoped to it. */
   nodeId?: string;
-  /** Opens a scene named by a style-check result. */
+  /** Opens a scene named by a style-check result or a continuity observation. */
   onOpenNode?: (nodeId: string) => void;
   /** Flushes the editor's pending save before a style check reads the manuscript. */
   onBeforeStyleCheck?: () => Promise<void>;
+  /** Opens the Fact Book at a continuity observation's fact ref. */
+  onOpenFact?: (factId: string) => void;
+  /** Opens the suggestions inbox (story-assist Phase 3). Omitted entirely
+   *  hides the badge — a caller that has nowhere to send the click should
+   *  not show one. */
+  onOpenProposals?: () => void;
+  /** Bumped by the caller (ContextPanel's open-observations badge) to pull
+   *  ContinuitySection open, scoped to the current scene. Forwarded
+   *  verbatim — see ContinuitySection's own doc comment on focusRequest. */
+  continuityFocusRequest?: number | null;
 }
 
-export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck }: Readonly<Props>) {
+export function CanonPanel({
+  projectId, onOpenEntity, onClose, refreshKey = 0, nodeId, onOpenNode, onBeforeStyleCheck, onOpenFact, onOpenProposals,
+  continuityFocusRequest,
+}: Readonly<Props>) {
   const { t } = useI18n();
   const [all, setAll] = useState<Entity[]>([]);
   const [rels, setRels] = useState<Relationship[]>([]);
@@ -44,6 +58,9 @@ export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0, n
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  // story-assist Phase 3: the badge is its own fetch, not derived from
+  // `all`/`rels` above — a pending proposal is not yet part of either list.
+  const [pendingProposals, setPendingProposals] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +80,19 @@ export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0, n
   }, [projectId]);
 
   useEffect(() => { void load(); }, [load, refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    proposalsApi
+      .pendingCount(projectId)
+      .then((res) => {
+        if (!cancelled) setPendingProposals(res.count);
+      })
+      .catch(() => {
+        /* the badge is a nicety; a failed fetch just hides it */
+      });
+    return () => { cancelled = true; };
+  }, [projectId, refreshKey]);
 
   const relCount = useMemo(() => {
     const counts = new Map<string, number>();
@@ -96,6 +126,11 @@ export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0, n
         <span className="ttl">
           <span className="ic"><Library size={16} /></span> {t("canon.title")}
         </span>
+        {pendingProposals > 0 && onOpenProposals && (
+          <button type="button" className="canon-proposals-badge" onClick={onOpenProposals}>
+            {t("proposals.badge", { count: pendingProposals })}
+          </button>
+        )}
         <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}>
           <X size={16} />
         </button>
@@ -112,6 +147,15 @@ export function CanonPanel({ projectId, onOpenEntity, onClose, refreshKey = 0, n
           nodeId={nodeId}
           onOpenNode={onOpenNode}
           onBeforeCheck={onBeforeStyleCheck}
+        />
+        <ContinuitySection
+          key={`continuity-${projectId}`}
+          projectId={projectId}
+          nodeId={nodeId}
+          onOpenNode={onOpenNode}
+          onOpenEntity={onOpenEntity}
+          onOpenFact={onOpenFact}
+          focusRequest={continuityFocusRequest}
         />
 
         <div className="canon-controls">

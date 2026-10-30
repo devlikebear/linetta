@@ -13,19 +13,26 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/illustration"
+	"github.com/devlikebear/linetta/engine/internal/illustref"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 	"github.com/devlikebear/linetta/engine/internal/style"
+	"github.com/devlikebear/linetta/engine/internal/thread"
 	"github.com/devlikebear/linetta/engine/internal/visual"
 )
 
@@ -39,19 +46,48 @@ const MetaRunID = "linetta/run_id"
 // the UI already uses, so an agent sees exactly what the writer sees.
 type ToolDeps struct {
 	Visuals *visual.Repo
+	// Gallery and IllustrationRequests back the illustration tools
+	// (illustration Phase 4): reading the gallery, choosing a picture to
+	// stand for a node, and leaving a request the writer approves. Nil in a
+	// build or a test that wires none; the tools refuse rather than
+	// panicking.
+	Gallery              *illustration.Repo
+	IllustrationRequests *illustration.RequestService
+	// Illustrations is the galleries' index: linetta_write_scene keeps a
+	// placeholder as a picture only when it names one of the work's own.
+	Illustrations illustref.Index
 	// Style holds each work's checkable style rules (#162). Nil in a build
 	// with no database open; the tool refuses rather than panicking.
-	Style      *style.Repo
-	Projects   *project.Repo
-	Nodes      *node.Repo
-	Entities   *entity.Repo
-	Mentions   *mention.Repo
-	Facts      *fact.Repo
+	Style    *style.Repo
+	Projects *project.Repo
+	Nodes    *node.Repo
+	Entities *entity.Repo
+	Mentions *mention.Repo
+	Facts    *fact.Repo
+	// Beats and Threads back linetta_report_continuity's beat refs: a beat
+	// carries no project_id of its own, only a thread_id, so checking a beat
+	// ref belongs to this work means resolving its thread (story-assist
+	// Phase 2). Nil in a build with no database open; the tool refuses
+	// rather than panicking.
+	Beats      *beat.Repo
+	Threads    *thread.Repo
 	Plot       *plot.Builder
 	Manuscript *manuscript.Searcher
 	Context    *storycontext.ContextBuilder
 	Settings   *settings.Store
 	Activity   *ActivityRepo
+	// Continuity stores each scene's continuity checks and observations
+	// (story-assist Phase 2). Nil in a build with no database open; the
+	// tool refuses rather than panicking.
+	Continuity *continuity.Repo
+	// Proposals holds story-structure change candidates waiting for the
+	// writer to accept them one by one (story-assist Phase 3). Nil in a
+	// build with no database open; the tool refuses rather than panicking.
+	Proposals *proposals.Service
+	// Forecasts holds possible continuations an agent drafted for the
+	// writer to compare (story-assist Phase 4). Nil in a build with no
+	// database open; the tool refuses rather than panicking.
+	Forecasts *forecast.Service
 
 	// Memory is the two curated documents every agent reads. Nil in a build
 	// with no database open; the tool refuses rather than panicking.

@@ -33,6 +33,13 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   style_no_draft: "style.noDraft",
   style_profile_empty: "style.profileEmpty",
   style_notes_too_long: "style.notesTooLong",
+  // The writer's own direction (story-assist Phase 1): refused rather than
+  // trimmed, the same reason the style codes above are.
+  direction_focus_too_long: "direction.limit.focus",
+  direction_goal_too_long: "direction.limit.goal",
+  direction_too_many_items: "direction.limit.items",
+  direction_item_too_long: "direction.limit.item",
+  direction_not_scene: "direction.notScene",
   entity_not_found: "errors.entityNotFound",
   thread_not_found: "errors.threadNotFound",
   beat_not_found: "errors.beatNotFound",
@@ -51,6 +58,25 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   provider_timeout: "errors.providerTimeout",
   provider_rejected: "errors.providerRejected",
   provider_unavailable: "errors.providerUnavailable",
+  provider_model_unsupported: "errors.providerModelUnsupported",
+  // Illustration drawing: what only drawing has. The provider failures above
+  // apply to it too.
+  image_generation_off: "errors.imageGenerationOff",
+  image_consent_required: "errors.imageConsentRequired",
+  image_model_required: "errors.imageModelRequired",
+  image_refused: "errors.imageRefused",
+  image_billing_required: "errors.imageBillingRequired",
+  illustration_not_found: "errors.illustrationNotFound",
+  illustration_too_large: "errors.illustrationTooLarge",
+  too_many_illustrations: "errors.tooManyIllustrations",
+  illustration_bad_content: "errors.illustrationBadContent",
+  illustration_in_use: "errors.illustrationInUse",
+  illustration_is_cover: "errors.illustrationIsCover",
+  illustration_is_representative: "errors.illustrationIsRepresentative",
+  // Pictures an agent asked for (illustration Phase 4).
+  illustration_request_not_found: "errors.illustrationRequestNotFound",
+  illustration_request_decided: "errors.illustrationRequestDecided",
+  too_many_illustration_requests: "errors.tooManyIllustrationRequests",
   // The Codex login (#92). Its message names the two ports, since the fix is
   // closing whatever holds them. A failed login is not an RPC error at all —
   // codex.login_status reports it via CodexStatus.login_failed instead — so
@@ -75,6 +101,13 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   // few batches in memory, so this is the ordinary result of a restart or a
   // few more turns — not a mistake the writer made.
   agent_undo_unavailable: "errors.agentUndoUnavailable",
+  // story-assist Phase 4: forecast.select naming a forecast id that is
+  // gone (deleted in another window), and proposals.undo asking to
+  // revert a structural batch that has aged out of storyops' in-memory
+  // undo window — no snapshot fallback for either, unlike
+  // agent_undo_unavailable above.
+  forecast_not_found: "errors.forecastNotFound",
+  proposals_undo_unavailable: "errors.proposalsUndoUnavailable",
   // Linetta Works publishing (Phase 3). Most are the site's own error codes
   // carried through; its Korean message stays in the engine's English one
   // and must not reach an English or Japanese reader.
@@ -96,6 +129,9 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   publish_not_episode: "errors.publishNotEpisode",
   publish_empty_episode: "errors.publishEmptyEpisode",
   publish_blurb_required: "errors.publishBlurbRequired",
+  publish_image_too_large: "errors.publishImageTooLarge",
+  publish_too_many_images: "errors.publishTooManyImages",
+  publish_too_many_sheets: "errors.publishTooManySheets",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc
