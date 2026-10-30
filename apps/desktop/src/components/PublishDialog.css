@@ -36,6 +36,19 @@
   word-break: break-all;
 }
 
+.publish-share {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.publish-share p {
+  flex: 1 1 100%;
+  margin: 2px 0 0;
+}
+
 .publish-review {
   margin-top: 8px;
   padding-left: 10px;
