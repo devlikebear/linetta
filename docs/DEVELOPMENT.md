@@ -184,7 +184,8 @@ Write (`full` mode only):
   site, through the same `publish.Service` the app's publish dialog uses.
   Refused until the work is registered;
 - `linetta_publish_cover`: makes a gallery picture the work's cover and uploads
-  it through `publish.Service.PublishCover`. Unlike the dialog's
+  it through `publish.Service.PublishCover`, the same call the gallery's
+  `publish.cover_publish` RPC makes. Unlike the dialog's
   `publish.sheets_sync`, it sends no sheets. A refused picture or a failed
   upload leaves the site's cover and the writer's choice as they were. All
   three are refused until the writer has connected an account in the app —

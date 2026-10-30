@@ -483,6 +483,10 @@ shows as a small image on that row of the outline and at the top of the scene,
 and the gallery marks it **Representative**. A representative picture, like one
 used as the Works cover, cannot be deleted until you unset it.
 
+Once this device is connected to Linetta Works and the work is on the site, an
+open picture also offers **Upload as Linetta Works cover**, which makes it the
+work's cover right away. The gallery marks the chosen picture **Cover**.
+
 **Agents ask; you approve.** An agent — the built-in one or one connected over
 MCP — cannot draw. It can leave a request with `linetta_request_illustration`:
 the scene, what the picture is for (insert at the end of a scene, represent a
@@ -583,11 +587,17 @@ with `linetta_publish_episode`. It can also change the blurb, mark the work
 complete, or put a gallery picture up as the cover with
 `linetta_publish_cover`. Only you can connect an account.
 
-**Sheets and cover.** Once a work is on the site, the publish dialog's
-**World, characters and cover** section, at the bottom of the dialog you open
-with **Publish this episode…** in an episode's outline menu, can put character
-and world sheets and a cover up too. A sheet goes only if you turn on **Show on Linetta Works** in its
-panel — off by default, and shown only when this device is connected — so
+**Sheets and cover.** The quickest way to set the cover is from the gallery:
+open a picture and press **Upload as Linetta Works cover**. It shows only when
+this device is connected and the work is on the site, it replaces the cover on
+the site, and it sends no sheets. You can follow its review on the same
+picture.
+
+The publish dialog's **World, characters and cover** section, at the bottom of
+the dialog you open with **Publish this episode…** in an episode's outline
+menu, can put character and world sheets and a cover up together. A sheet goes
+only if you turn on **Show on Linetta Works** in its panel — off by default,
+and shown only when this device is connected — so
 check it for spoilers first. The sheet's name, aliases, role, summary,
 attributes and the names of its relationships go, with its first reference
 image as the sheet's picture; relationship notes, visual notes and sheets you

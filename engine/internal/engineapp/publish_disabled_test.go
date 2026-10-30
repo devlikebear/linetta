@@ -16,7 +16,7 @@ func TestPublishIsUnavailableOnMobile(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), `"publish_available":false`) {
 		t.Fatalf("diagnostics.version: %s %v", raw, err)
 	}
-	for _, method := range []string{"publish.connect_start", "publish.work_status", "publish.episode_publish"} {
+	for _, method := range []string{"publish.connect_start", "publish.work_status", "publish.episode_publish", "publish.cover_publish"} {
 		raw, err := app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"`+method+`","params":{}}`))
 		if err != nil || !strings.Contains(string(raw), "not available in this build") {
 			t.Fatalf("%s: %s %v", method, raw, err)

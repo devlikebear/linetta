@@ -143,6 +143,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "providers.test",
     "publish.connect_start",
     "publish.connect_status",
+    "publish.cover_publish",
     "publish.cover_set",
     "publish.disconnect",
     "publish.episode_publish",

@@ -70,6 +70,14 @@ func TestPublishMethodsAreRegisteredAndSendNothingUntilConnected(t *testing.T) {
 	if rpcErr == nil || !strings.Contains(string(rpcErr.Data), "publish_not_connected") {
 		t.Fatalf("episode_set_visibility: %+v", rpcErr)
 	}
+	_, rpcErr = call(t, app, "publish.cover_publish", `{"project_id":"`+p.ID+`","illustration_id":"i"}`)
+	if rpcErr == nil || !strings.Contains(string(rpcErr.Data), "publish_not_connected") {
+		t.Fatalf("cover_publish: %+v", rpcErr)
+	}
+	_, rpcErr = call(t, app, "publish.cover_publish", `{"project_id":"`+p.ID+`"}`)
+	if rpcErr == nil || !strings.Contains(rpcErr.Message, "illustration_id required") {
+		t.Fatalf("cover_publish with no picture: %+v", rpcErr)
+	}
 	// Without the writer's consent the connect flow does not even start.
 	_, rpcErr = call(t, app, "publish.connect_start", `{}`)
 	if rpcErr == nil || !strings.Contains(string(rpcErr.Data), "publish_consent_required") {

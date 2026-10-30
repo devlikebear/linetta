@@ -55,6 +55,7 @@ func setupPublish(deps publishDeps) (*publish.Service, func() error) {
 	s.Handle("publish.sheet_get", handlers.PublishSheetGet(svc))
 	s.Handle("publish.sheet_set", handlers.PublishSheetSet(svc))
 	s.Handle("publish.cover_set", handlers.PublishCoverSet(svc))
+	s.Handle("publish.cover_publish", handlers.PublishCoverPublish(svc))
 	s.Handle("publish.sheets_sync", handlers.PublishSheetsSync(svc))
 	return svc, connector.Close
 }

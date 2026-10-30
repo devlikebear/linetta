@@ -187,9 +187,10 @@ func (s *Service) SetCover(ctx context.Context, projectID, illustrationID string
 }
 
 // PublishCover makes a gallery picture the work's cover on the site and the
-// writer's choice here, without touching the sheets; that is the agent's way
-// in, where SyncSheets is the dialog's. A refused picture or a failed upload
-// leaves the site's cover and the choice as they were.
+// writer's choice here, without touching the sheets; that is the way in for
+// the agent and the gallery, where SyncSheets is the dialog's. A refused
+// picture or a failed upload leaves the site's cover and the choice as they
+// were.
 func (s *Service) PublishCover(ctx context.Context, projectID, illustrationID string) (CoverView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

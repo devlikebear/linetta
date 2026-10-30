@@ -24,6 +24,7 @@ import type {
   CodexLoginStart,
   CodexStatus,
   PublishConnectStatus,
+  PublishCoverView,
   PublishEpisodeView,
   PublishResult,
   PublishSerialStatus,
@@ -511,6 +512,9 @@ export const publishApi = {
   /** An empty id clears the cover. */
   setCover: (projectId: string, illustrationId: string) =>
     rpcCall<{ cover_id: string }>("publish.cover_set", { project_id: projectId, illustration_id: illustrationId }),
+  /** Chooses the picture as the cover and uploads it now, without the sheets. */
+  publishCover: (projectId: string, illustrationId: string) =>
+    rpcCall<PublishCoverView>("publish.cover_publish", { project_id: projectId, illustration_id: illustrationId }),
   /** Sends the chosen sheets and cover to the site. */
   sheetsSync: (projectId: string) => rpcCall<PublishSheetsStatus>("publish.sheets_sync", { project_id: projectId }),
 };
