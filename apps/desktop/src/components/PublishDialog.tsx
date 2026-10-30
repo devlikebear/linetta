@@ -5,6 +5,7 @@ import { useI18n } from "../lib/i18n";
 import { openExternalUrl, publishApi } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { PUBLISH_STATE_KEYS, findPublishEpisode } from "../lib/publish";
+import { SHARE_TARGETS, shareAction, type ShareTarget } from "../lib/share";
 import { PublishSheetsSection } from "./PublishSheetsSection";
 import type {
   PublishConnectStatus,
@@ -52,6 +53,7 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
   const [error, setError] = useState<unknown>(null);
   const [published, setPublished] = useState<PublishEpisodeView | null>(null);
   const [copied, setCopied] = useState(false);
+  const [sharedCopy, setSharedCopy] = useState<ShareTarget | null>(null);
   const [blurb, setBlurb] = useState("");
   const [serial, setSerial] = useState<PublishSerialStatus>("ongoing");
   const [slug, setSlug] = useState("");
@@ -84,6 +86,7 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
     if (!open) return;
     setPublished(null);
     setCopied(false);
+    setSharedCopy(null);
     setSlug("");
     setWorkSaved(false);
     void load();
@@ -168,9 +171,24 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
       setCopied(true);
     });
 
+  const share = (target: ShareTarget, url: string, text: string) =>
+    guard(async () => {
+      const action = shareAction(target, url, text);
+      if (action.kind === "open") {
+        await openExternalUrl(action.url);
+        return;
+      }
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(action.text);
+      setSharedCopy(target);
+      if (action.url) await openExternalUrl(action.url);
+    });
+
   const blurbMissing = !blurb.trim();
   const canPublish = Boolean(episode) && !episode?.empty && (registered || !blurbMissing);
   const onSite = Boolean(shown?.url);
+  // Only an episode readers can open is worth a share link.
+  const shareable = onSite && (shown?.state === "public" || shown?.state === "modified");
   const errorReason = reasonOf(error);
 
   const workFields = (
@@ -300,6 +318,34 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
                         {t("publish.makePrivate")}
                       </button>
                     ) : null}
+                  </div>
+                )}
+                {shareable && shown?.url && (
+                  <div className="publish-share" data-testid="publish-share">
+                    <span className="sd">{t("publish.share.label")}</span>
+                    {SHARE_TARGETS.map((target) => (
+                      <button
+                        key={target}
+                        type="button"
+                        className="btn ghost sm"
+                        disabled={busy}
+                        onClick={() =>
+                          void share(
+                            target,
+                            shown.url ?? "",
+                            [episode.label, episode.title].filter(Boolean).join(" · ") || t("publish.untitled"),
+                          )
+                        }
+                        data-testid={`publish-share-${target}`}
+                      >
+                        {t(`publish.share.${target}`)}
+                      </button>
+                    ))}
+                    {sharedCopy && (
+                      <p className="sd" role="status" data-testid="publish-share-copied">
+                        {t(`publish.share.copied.${sharedCopy === "kakao" ? "kakao" : "instagram"}`)}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

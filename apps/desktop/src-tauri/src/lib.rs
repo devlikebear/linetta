@@ -546,11 +546,20 @@ async fn open_path(
 /// settings open, and the published episode and work pages the publish dialog
 /// opens.
 ///
+/// x.com, www.threads.com and share.naver.com are the share pages the publish
+/// dialog opens for a public episode (each takes the episode's address as a
+/// query parameter), and www.instagram.com is where the writer pastes the
+/// copied link, since Instagram has no share page that takes one.
+///
 /// Each is an exact match: the endpoint is that host and nothing under it,
 /// and every subdomain admitted is another name a mistake could hide behind.
-const EXTERNAL_URL_HOSTS: [(&str, bool); 2] = [
+const EXTERNAL_URL_HOSTS: [(&str, bool); 6] = [
     ("auth.openai.com", false),
     ("works.marvin-42.com", false),
+    ("x.com", false),
+    ("www.threads.com", false),
+    ("share.naver.com", false),
+    ("www.instagram.com", false),
 ];
 
 fn validate_external_url(raw: &str) -> Result<String, String> {
@@ -876,6 +885,17 @@ mod security_boundary_tests {
         assert!(validate_external_url("javascript:alert(1)").is_err());
         assert!(validate_external_url("not a url").is_err());
         assert!(validate_external_url("").is_err());
+    }
+
+    #[test]
+    fn external_url_allows_the_share_pages() {
+        assert!(validate_external_url("https://x.com/intent/post?text=a&url=b").is_ok());
+        assert!(validate_external_url("https://www.threads.com/intent/post?text=a").is_ok());
+        assert!(validate_external_url("https://share.naver.com/web/shareView?url=a").is_ok());
+        assert!(validate_external_url("https://www.instagram.com/").is_ok());
+        assert!(validate_external_url("https://evil.x.com/").is_err());
+        assert!(validate_external_url("https://threads.com.evil.test/").is_err());
+        assert!(validate_external_url("http://x.com/intent/post").is_err());
     }
 
     #[test]

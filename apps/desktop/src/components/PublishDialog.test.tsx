@@ -218,6 +218,30 @@ describe("PublishDialog", () => {
     expect(screen.getByTestId("publish-submit")).toBeDisabled();
   });
 
+  it("shares a public episode: opens X's post page, copies for KakaoTalk", async () => {
+    rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ state: "public", number: 3, url: URL3 })] }));
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    renderDialog();
+
+    await userEvent.click(await screen.findByTestId("publish-share-x"));
+    const opened = new URL(rpc.openExternalUrl.mock.lastCall?.[0] as string);
+    expect(opened.host).toBe("x.com");
+    expect(opened.searchParams.get("url")).toBe(URL3);
+    expect(opened.searchParams.get("text")).toBe("3화 · 첫 출근");
+
+    await userEvent.click(screen.getByTestId("publish-share-kakao"));
+    expect(writeText).toHaveBeenCalledWith(`3화 · 첫 출근\n${URL3}`);
+    expect(screen.getByTestId("publish-share-copied")).toHaveTextContent("publish.share.copied.kakao");
+  });
+
+  it("offers no share for an episode readers cannot open", async () => {
+    rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ state: "private", number: 3, url: URL3 })] }));
+    renderDialog();
+    expect(await screen.findByTestId("publish-url")).toBeInTheDocument();
+    expect(screen.queryByTestId("publish-share")).not.toBeInTheDocument();
+  });
+
   it("says the episode's pictures go up with it", async () => {
     rpc.workStatus.mockResolvedValue(status({ episodes: [episode({ illustrations: 2 })] }));
     renderDialog();
