@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.14.0 - 2026-10-30
+
+- **Share a published episode.** Once an episode is public on Linetta Works,
+  the publish dialog shows Share buttons under its address. X, Threads and
+  Naver Blog open their share page in your browser with the episode's title
+  and link filled in. KakaoTalk and Instagram have no share page a desktop
+  app can open, so those buttons copy the title and link for you to paste.
+  Private, rejected and in-review episodes show no Share buttons.
+
 ## v1.13.1 - 2026-10-30
 
 - Fixed: in the installed app, illustrations showed only their caption, both
