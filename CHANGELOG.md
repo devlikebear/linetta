@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.16.0 - 2026-10-30
+
+- **Put a cover up from the gallery.** Open a picture in the gallery and use
+  it as the Linetta Works cover straight away, once this device is connected
+  and the work is on the site. The picture chosen as the cover wears a badge,
+  and the site's cover shows its review state there. Unlike **Upload sheets
+  and cover** in the publish dialog, this sends no sheets.
+- **Agents can publish the cover.** Ask an agent and it makes a gallery
+  picture the cover with `linetta_publish_cover`, without sending any sheets.
+  If the picture is refused or the upload fails, the site's cover and your
+  choice stay as they were. `linetta_publish_status` now shows the site's
+  cover and its review state.
+- Fixed: the consent text in Settings now says that earlier illustrations,
+  attached images and character reference images are sent too.
+
 ## v1.15.0 - 2026-10-30
 
 - **Illustrations keep the same faces.** A new illustration is sent with up
