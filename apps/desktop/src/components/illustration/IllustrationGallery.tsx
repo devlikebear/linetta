@@ -3,11 +3,20 @@ import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
 import { useEngineEvent } from "../../hooks/useEngineEvent";
-import { illustrationRequests as requestsApi, illustrations as illustrationsApi } from "../../lib/rpc";
+import type { McpChangedPayload } from "../../hooks/useMcpChanges";
+import { PUBLISH_STATE_KEYS } from "../../lib/publish";
+import { illustrationRequests as requestsApi, illustrations as illustrationsApi, publishApi } from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
-import type { IllustrationMeta, IllustrationRequest, IllustrationsChangedPayload } from "../../lib/types";
+import type {
+  IllustrationMeta,
+  IllustrationRequest,
+  IllustrationsChangedPayload,
+  PublishCoverView,
+  PublishWorkStatus,
+} from "../../lib/types";
 import { IllustrationRequestCard } from "./IllustrationRequestCard";
 import { useIllustrationImage } from "./useIllustrationImage";
+import "../PublishBadge.css";
 import "./Illustration.css";
 
 interface Props {
@@ -42,7 +51,17 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function Thumb({ meta, representative, onOpen }: { meta: IllustrationMeta; representative: boolean; onOpen: () => void }) {
+function Thumb({
+  meta,
+  representative,
+  cover,
+  onOpen,
+}: {
+  meta: IllustrationMeta;
+  representative: boolean;
+  cover: boolean;
+  onOpen: () => void;
+}) {
   const { t } = useI18n();
   const url = useIllustrationImage(meta.id);
   return (
@@ -53,6 +72,7 @@ function Thumb({ meta, representative, onOpen }: { meta: IllustrationMeta; repre
       {representative ? (
         <span className="illustration-thumb-badge is-representative">{t("illustration.representative")}</span>
       ) : null}
+      {cover ? <span className="illustration-thumb-badge is-cover">{t("illustration.cover")}</span> : null}
     </button>
   );
 }
@@ -84,6 +104,7 @@ export function IllustrationGallery({
   const [usage, setUsage] = useState({ count: 0, bytes: 0 });
   const [openId, setOpenId] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [publishStatus, setPublishStatus] = useState<PublishWorkStatus | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -105,6 +126,27 @@ export function IllustrationGallery({
   useEffect(() => {
     void load();
   }, [load, refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPublishStatus(null);
+    publishApi
+      .workStatus(projectId)
+      .then((status) => {
+        if (!cancelled) setPublishStatus(status);
+      })
+      .catch(() => {
+        // Not available in this build, or not reachable: show nothing.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  useEngineEvent<McpChangedPayload>("mcp-changed", (payload) => {
+    if (payload.project_id !== projectId || payload.tool !== "linetta_publish_cover") return;
+    void publishApi.workStatus(projectId).then(setPublishStatus).catch(() => {});
+  });
 
   // A request drawn, rejected or left (by the panel's card, an external
   // client, or this list) changes the list and maybe the gallery. A card
@@ -139,7 +181,15 @@ export function IllustrationGallery({
     }
   };
 
+  const publishCover = async (illustrationId: string) => {
+    const cover = await publishApi.publishCover(projectId, illustrationId);
+    setPublishStatus(
+      (cur) => cur && { ...cur, sheets: { ...cur.sheets, cover_id: illustrationId, cover } },
+    );
+  };
+
   const open = items?.find((m) => m.id === openId) ?? null;
+  const siteCover = publishStatus?.sheets.cover;
 
   return (
     <div className="backdrop center" onMouseDown={onClose}>
@@ -182,6 +232,9 @@ export function IllustrationGallery({
             representatives={representatives}
             nodeLabel={nodeLabel}
             onSetRepresentative={(nodeId, id) => void setRepresentative(nodeId, id)}
+            siteCover={siteCover?.illustration_id === open.id ? siteCover : undefined}
+            canPublishCover={Boolean(publishStatus?.connected && publishStatus.registered)}
+            onPublishCover={() => publishCover(open.id)}
             onBack={() => setOpenId(null)}
             onChanged={(next) => setItems((cur) => cur?.map((m) => (m.id === next.id ? next : m)) ?? cur)}
             onDeleted={() => {
@@ -196,7 +249,13 @@ export function IllustrationGallery({
         ) : (
           <div className="illustration-grid">
             {(items ?? []).map((m) => (
-              <Thumb key={m.id} meta={m} representative={representing(m.id).length > 0} onOpen={() => setOpenId(m.id)} />
+              <Thumb
+                key={m.id}
+                meta={m}
+                representative={representing(m.id).length > 0}
+                cover={publishStatus?.sheets.cover_id === m.id}
+                onOpen={() => setOpenId(m.id)}
+              />
             ))}
           </div>
         )}
@@ -223,6 +282,9 @@ function Detail({
   representatives,
   nodeLabel,
   onSetRepresentative,
+  siteCover,
+  canPublishCover,
+  onPublishCover,
   onBack,
   onChanged,
   onDeleted,
@@ -236,6 +298,11 @@ function Detail({
   representatives: Record<string, string>;
   nodeLabel?: (nodeId: string) => string;
   onSetRepresentative: (nodeId: string, illustrationId: string) => void;
+  /** This picture as the site's cover, when it is. */
+  siteCover?: PublishCoverView;
+  /** This device is connected and the work is on the site. */
+  canPublishCover: boolean;
+  onPublishCover: () => Promise<void>;
   onBack: () => void;
   onChanged: (meta: IllustrationMeta) => void;
   onDeleted: () => void;
@@ -244,6 +311,7 @@ function Detail({
   const url = useIllustrationImage(meta.id);
   const [caption, setCaption] = useState(meta.caption);
   const [armed, setArmed] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
   const saveCaption = async () => {
@@ -266,6 +334,18 @@ function Detail({
     } catch (e) {
       setArmed(false);
       setError(e);
+    }
+  };
+
+  const publishCover = async () => {
+    setPublishing(true);
+    setError(null);
+    try {
+      await onPublishCover();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -311,6 +391,13 @@ function Detail({
               <p className="sd">{representing.map((id) => nodeLabel?.(id) || id).join(", ")}</p>
             </div>
           ) : null}
+          {siteCover ? (
+            <p className="sd" data-testid="illustration-site-cover">
+              {t("publish.sheets.coverOnSite")}{" "}
+              <span className={`publish-badge is-${siteCover.state}`}>{t(PUBLISH_STATE_KEYS[siteCover.state])}</span>
+              {siteCover.moderation_reason && ` ${t("publish.review.reason", { reason: siteCover.moderation_reason })}`}
+            </p>
+          ) : null}
           {error ? (
             <p className="sd" role="alert">
               {rpcErrorMessage(error, t)}
@@ -341,6 +428,20 @@ function Detail({
                   </button>
                 ),
               )}
+            </div>
+          ) : null}
+          {canPublishCover && !siteCover ? (
+            <div className="illustration-detail-cover" data-testid="illustration-cover-actions">
+              <button
+                type="button"
+                className="btn ghost sm"
+                disabled={publishing}
+                onClick={() => void publishCover()}
+                data-testid="illustration-publish-cover"
+              >
+                {publishing ? t("illustration.publishingCover") : t("illustration.publishCover")}
+              </button>
+              <p className="sd">{t("illustration.publishCoverHint")}</p>
             </div>
           ) : null}
           <div className="illustration-detail-actions">

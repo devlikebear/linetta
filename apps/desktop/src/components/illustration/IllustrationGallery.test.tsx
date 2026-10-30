@@ -12,6 +12,8 @@ const rpc = vi.hoisted(() => ({
   requestGet: vi.fn(),
   providers: vi.fn(),
   node: vi.fn(),
+  workStatus: vi.fn(),
+  publishCover: vi.fn(),
 }));
 
 // The gallery and its request cards listen for illustrations-changed; this
@@ -37,6 +39,7 @@ vi.mock("../../lib/rpc", () => ({
   illustrationRequests: { list: rpc.requests, get: rpc.requestGet, approve: vi.fn(), reject: vi.fn() },
   imageProviders: { list: rpc.providers },
   nodes: { get: rpc.node },
+  publishApi: { workStatus: rpc.workStatus, publishCover: rpc.publishCover },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -80,6 +83,7 @@ describe("IllustrationGallery", () => {
     rpc.requests.mockResolvedValue([]);
     rpc.providers.mockResolvedValue([]);
     rpc.node.mockResolvedValue({ id: "s1", label: "씬 1", title: "" });
+    rpc.workStatus.mockRejectedValue(new Error("not available in this build"));
   });
 
   it("shows the gallery with what it costs, and says so when empty", async () => {
@@ -135,6 +139,7 @@ describe("IllustrationGallery and scenes", () => {
     rpc.requests.mockResolvedValue([]);
     rpc.providers.mockResolvedValue([]);
     rpc.node.mockResolvedValue({ id: "s1", label: "씬 1", title: "" });
+    rpc.workStatus.mockRejectedValue(new Error("not available in this build"));
   });
 
   it("marks a picture in use, names its scenes, and inserts it with the edited caption", async () => {
@@ -180,6 +185,7 @@ describe("IllustrationGallery, agents and representatives", () => {
     rpc.requests.mockResolvedValue([]);
     rpc.providers.mockResolvedValue([{ id: "gemini-native", active: true, configured: true, consented: true }]);
     rpc.node.mockResolvedValue({ id: "s1", label: "씬 1", title: "" });
+    rpc.workStatus.mockRejectedValue(new Error("not available in this build"));
     rpc.setRepresentative.mockResolvedValue({ previous: "" });
   });
 
@@ -239,5 +245,94 @@ describe("IllustrationGallery, agents and representatives", () => {
     await waitFor(() =>
       expect(screen.getByTestId("illustration-thumb-a")).toHaveTextContent("illustration.representative"),
     );
+  });
+});
+
+describe("IllustrationGallery and the Works cover", () => {
+  URL.createObjectURL = vi.fn(() => "blob:img");
+  URL.revokeObjectURL = vi.fn();
+  const status = (extra: Record<string, unknown> = {}, sheets: Record<string, unknown> = {}) => ({
+    project_id: "p",
+    connected: true,
+    registered: true,
+    episodes: [],
+    site_only: [],
+    sheets: { chosen: 0, remote: true, sheets: [], ...sheets },
+    ...extra,
+  });
+  beforeEach(() => {
+    Object.values(rpc).forEach((f) => f.mockReset());
+    rpc.get.mockImplementation((id: string) => Promise.resolve({ ...meta(id), data_base64: btoa("jpg") }));
+    rpc.list.mockResolvedValue({ items: [meta("a"), meta("b")], count: 2, bytes: 1_800_000 });
+    rpc.representatives.mockResolvedValue({});
+    rpc.requests.mockResolvedValue([]);
+    rpc.providers.mockResolvedValue([]);
+    rpc.node.mockResolvedValue({ id: "s1", label: "씬 1", title: "" });
+    rpc.workStatus.mockResolvedValue(status());
+  });
+
+  const openPicture = async (id: string) => {
+    render(<IllustrationGallery projectId="p" onClose={() => {}} onNew={() => {}} />);
+    fireEvent.click(await screen.findByTestId(`illustration-thumb-${id}`));
+  };
+
+  it("uploads the open picture as the cover, then badges it and reports the review", async () => {
+    rpc.publishCover.mockResolvedValue({ illustration_id: "a", state: "pending" });
+    await openPicture("a");
+    fireEvent.click(await screen.findByTestId("illustration-publish-cover"));
+    await waitFor(() => expect(rpc.publishCover).toHaveBeenCalledWith("p", "a"));
+    expect(await screen.findByTestId("illustration-site-cover")).toHaveTextContent("publish.state.pending");
+    expect(screen.queryByTestId("illustration-publish-cover")).toBeNull();
+
+    fireEvent.click(screen.getByText("illustration.back"));
+    expect(screen.getByTestId("illustration-thumb-a")).toHaveTextContent("illustration.cover");
+    expect(screen.getByTestId("illustration-thumb-b")).not.toHaveTextContent("illustration.cover");
+  });
+
+  it("offers another picture while the site holds a different cover", async () => {
+    rpc.workStatus.mockResolvedValue(status({}, { cover_id: "a", cover: { illustration_id: "a", state: "public" } }));
+    await openPicture("b");
+    expect(await screen.findByTestId("illustration-publish-cover")).toBeInTheDocument();
+    expect(screen.queryByTestId("illustration-site-cover")).toBeNull();
+  });
+
+  it("badges a chosen cover without an upload offer on a device that is not connected", async () => {
+    rpc.workStatus.mockResolvedValue(status({ connected: false, registered: false }, { cover_id: "a", remote: false }));
+    render(<IllustrationGallery projectId="p" onClose={() => {}} onNew={() => {}} />);
+    await waitFor(() => expect(screen.getByTestId("illustration-thumb-a")).toHaveTextContent("illustration.cover"));
+    fireEvent.click(screen.getByTestId("illustration-thumb-a"));
+    expect(screen.queryByTestId("illustration-publish-cover")).toBeNull();
+  });
+
+  it("does not offer the upload for a work that is not on the site", async () => {
+    rpc.workStatus.mockResolvedValue(status({ registered: false }, { remote: false }));
+    await openPicture("a");
+    await waitFor(() => expect(rpc.workStatus).toHaveBeenCalled());
+    expect(screen.queryByTestId("illustration-publish-cover")).toBeNull();
+  });
+
+  it("hides the cover where publishing is not available", async () => {
+    rpc.workStatus.mockRejectedValue(new Error("not available in this build"));
+    await openPicture("a");
+    await waitFor(() => expect(rpc.workStatus).toHaveBeenCalled());
+    expect(screen.queryByTestId("illustration-cover-actions")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("says why an upload failed and leaves the button to try again", async () => {
+    rpc.publishCover.mockRejectedValue({ code: -32000, message: "too big", data: { reason: "publish_image_too_large" } });
+    await openPicture("a");
+    fireEvent.click(await screen.findByTestId("illustration-publish-cover"));
+    expect(await screen.findByText("errors.publishImageTooLarge")).toBeInTheDocument();
+    expect(screen.getByTestId("illustration-publish-cover")).toBeEnabled();
+  });
+
+  it("follows an agent uploading the cover", async () => {
+    render(<IllustrationGallery projectId="p" onClose={() => {}} onNew={() => {}} />);
+    await screen.findByTestId("illustration-thumb-a");
+    rpc.workStatus.mockResolvedValue(status({}, { cover_id: "b", cover: { illustration_id: "b", state: "public" } }));
+    await waitFor(() => expect(events.listeners.has("mcp-changed")).toBe(true));
+    events.listeners.get("mcp-changed")?.({ payload: { tool: "linetta_publish_cover", project_id: "p" } });
+    await waitFor(() => expect(screen.getByTestId("illustration-thumb-b")).toHaveTextContent("illustration.cover"));
   });
 });

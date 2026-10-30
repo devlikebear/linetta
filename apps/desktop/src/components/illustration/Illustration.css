@@ -278,6 +278,18 @@
   bottom: 6px;
 }
 
+.illustration-thumb-badge.is-cover {
+  right: auto;
+  left: 6px;
+}
+
+.illustration-detail-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 /* Earlier pictures sent with a new drawing (PriorIllustrationPicker). */
 .illustration-prior-row {
   display: flex;
