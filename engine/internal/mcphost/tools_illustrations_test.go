@@ -255,3 +255,45 @@ func TestIllustrationWriteToolsFollowTheVisualWritesSwitch(t *testing.T) {
 	}
 	_ = f
 }
+
+func TestRequestIllustration_earlierPicturesGoAlong(t *testing.T) {
+	f := newIllustrationToolsFixture(t, SourceAgent)
+	base := func(extra map[string]any) map[string]any {
+		args := map[string]any{"project_id": f.project, "purpose": "gallery", "prompt": "p", "names": []string{"하린"}}
+		for k, v := range extra {
+			args[k] = v
+		}
+		return args
+	}
+	// Omitted: the engine picks, here the gallery's only picture.
+	out := f.call(t, "request_illustration", base(nil), "")
+	if ids, _ := out["prior_illustration_ids"].([]any); len(ids) != 1 || ids[0] != f.picture {
+		t.Fatalf("auto = %v", out["prior_illustration_ids"])
+	}
+	// An empty list sends none.
+	out = f.call(t, "request_illustration", base(map[string]any{"prior_illustration_ids": []string{}}), "")
+	if ids, _ := out["prior_illustration_ids"].([]any); len(ids) != 0 {
+		t.Fatalf("none = %v", out["prior_illustration_ids"])
+	}
+	f.call(t, "request_illustration", base(map[string]any{"prior_illustration_ids": []string{"missing"}}), "not in this work's gallery")
+
+	list, _ := f.d.IllustrationRequests.List(f.ctx, f.project, nil)
+	// Both were left at the same instant, so their order is the ids'.
+	if len(list) != 2 || len(list[0].PriorIllustrationIDs)+len(list[1].PriorIllustrationIDs) != 1 {
+		t.Fatalf("stored = %+v", list)
+	}
+}
+
+func TestAddReferenceImage_fromTheGallery(t *testing.T) {
+	f := newIllustrationToolsFixture(t, SourceAgent)
+	out := f.call(t, "add_reference_image", map[string]any{"entity_id": f.heroID, "illustration_id": f.picture}, "")
+	if out["caption"] != "우산" || out["mime"] != "image/jpeg" {
+		t.Fatalf("out = %v", out)
+	}
+	images, _ := f.d.Visuals.ListImages(f.ctx, f.heroID)
+	if len(images) != 1 {
+		t.Fatalf("images = %v", images)
+	}
+	f.call(t, "add_reference_image", map[string]any{"entity_id": f.heroID, "illustration_id": "missing"}, "not in this work's gallery")
+	f.call(t, "add_reference_image", map[string]any{"entity_id": f.heroID, "illustration_id": f.picture, "data_base64": "aGk="}, "exactly one")
+}

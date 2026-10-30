@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/provider"
+	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
@@ -49,7 +50,7 @@ func setupAgent(agentDeps) (*agentController, func() error) {
 	return &agentController{}, func() error { return nil }
 }
 
-func (c *agentController) Run(context.Context, string, string, string, string) (string, error) {
+func (c *agentController) Run(context.Context, string, string, string, string, []handlers.AgentImage) (string, error) {
 	return "", errAgentUnavailable
 }
 func (c *agentController) Cancel(context.Context, string) error { return nil }

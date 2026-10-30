@@ -36,6 +36,9 @@ type liveRun struct {
 	seq       int64
 	text      strings.Builder
 	tool      string
+	// images are the pictures attached to the message the turn answers,
+	// which linetta_add_reference_image can keep (Service.Attachment).
+	images []Image
 }
 
 // RunStatus is one work's turn as agent.status reports it. Running false means
@@ -76,6 +79,26 @@ func (r *runRegistry) start(projectID, runID string, cancel context.CancelFunc) 
 	r.cancels[runID] = cancel
 	r.live[runID] = &liveRun{startedAt: time.Now().UnixMilli()}
 	return nil
+}
+
+// attach keeps the images of the message runID answers for its tools.
+func (r *runRegistry) attach(runID string, images []Image) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if run := r.live[runID]; run != nil {
+		run.images = images
+	}
+}
+
+// image is attachment n (1-based) of runID's message.
+func (r *runRegistry) image(runID string, n int) (Image, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	run := r.live[runID]
+	if run == nil || n < 1 || n > len(run.images) {
+		return Image{}, false
+	}
+	return run.images[n-1], true
 }
 
 // status reports the turn holding projectID, if one does.

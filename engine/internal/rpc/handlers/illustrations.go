@@ -335,3 +335,23 @@ func IllustrationsDelete(repo *illustration.Repo) rpc.Handler {
 		return json.RawMessage(`{"ok":true}`), nil
 	}
 }
+
+// IllustrationsSuggestPrior serves illustrations.suggest_prior: the earlier
+// pictures of the work a new picture of these characters would be drawn
+// from, best first (illustration.Repo.SuggestPrior).
+func IllustrationsSuggestPrior(repo *illustration.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p struct {
+			ProjectID    string   `json:"project_id"`
+			CharacterIDs []string `json:"character_ids"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil || strings.TrimSpace(p.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		out, err := repo.SuggestPrior(ctx, p.ProjectID, p.CharacterIDs, illustration.MaxPriorReferences)
+		if err != nil {
+			return nil, illustrationError(err)
+		}
+		return json.Marshal(out)
+	}
+}

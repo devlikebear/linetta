@@ -603,6 +603,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("illustrations.delete", handlers.IllustrationsDelete(illustrations))
 	s.Handle("illustrations.representatives", handlers.IllustrationsRepresentatives(illustrations))
 	s.Handle("illustrations.set_representative", handlers.IllustrationsSetRepresentative(illustrations, clock))
+	s.Handle("illustrations.suggest_prior", handlers.IllustrationsSuggestPrior(illustrations))
 	s.Handle("illustration_requests.list", handlers.IllustrationRequestsList(illustrationRequests))
 	s.Handle("illustration_requests.get", handlers.IllustrationRequestsGet(illustrationRequests))
 	s.Handle("illustration_requests.approve", handlers.IllustrationRequestsApprove(illustrationRequests))

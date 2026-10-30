@@ -16,6 +16,7 @@ type fakeAgent struct {
 	sawPrompt  string
 	sawNode    string
 	sawSel     string
+	sawImages  []AgentImage
 
 	cancelErr error
 	cancelled string
@@ -32,8 +33,8 @@ type fakeAgent struct {
 	undoneSnap string
 }
 
-func (f *fakeAgent) Run(_ context.Context, projectID, nodeID, prompt, selection string) (string, error) {
-	f.sawProject, f.sawPrompt, f.sawNode, f.sawSel = projectID, prompt, nodeID, selection
+func (f *fakeAgent) Run(_ context.Context, projectID, nodeID, prompt, selection string, images []AgentImage) (string, error) {
+	f.sawProject, f.sawPrompt, f.sawNode, f.sawSel, f.sawImages = projectID, prompt, nodeID, selection, images
 	return f.runID, f.runErr
 }
 func (f *fakeAgent) Cancel(_ context.Context, runID string) error {
@@ -58,6 +59,23 @@ func (f *fakeAgent) Clear(_ context.Context, projectID string) error {
 func (f *fakeAgent) Undo(_ context.Context, batchID, snapshotID string) error {
 	f.undone, f.undoneSnap = batchID, snapshotID
 	return f.undoErr
+}
+
+func TestAgentRun_decodesAttachedImages(t *testing.T) {
+	f := &fakeAgent{runID: "run-1"}
+	if _, err := AgentRun(f)(context.Background(),
+		json.RawMessage(`{"project_id":"p1","prompt":"이 얼굴로","images":[{"mime":"image/png","data_base64":"aGk="}]}`)); err != nil {
+		t.Fatalf("AgentRun: %v", err)
+	}
+	if len(f.sawImages) != 1 || f.sawImages[0].MIME != "image/png" || string(f.sawImages[0].Data) != "hi" {
+		t.Fatalf("images = %+v", f.sawImages)
+	}
+	_, err := AgentRun(f)(context.Background(),
+		json.RawMessage(`{"project_id":"p1","prompt":"x","images":[{"mime":"image/png","data_base64":"%%%"}]}`))
+	var me *rpc.MethodError
+	if !errors.As(err, &me) || me.Code != rpc.CodeInvalidParams {
+		t.Fatalf("bad base64 = %v", err)
+	}
 }
 
 func TestAgentRun_returnsTheRunID(t *testing.T) {

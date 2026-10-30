@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"runtime/debug"
@@ -58,6 +59,9 @@ type RunRequest struct {
 	// Selection is a passage the writer highlighted in the open scene and
 	// sent along with the prompt, or "". See withSelection.
 	Selection string
+	// Images are pictures attached to the message. They go to the model
+	// with this message only; the transcript keeps a marker (withImages).
+	Images []Image
 }
 
 // Run starts a turn and returns its id immediately; progress arrives as
@@ -73,9 +77,17 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 			Err:    errors.New("agent: project_id is required"),
 		}
 	}
+	images, err := checkImages(req.Images)
+	if err != nil {
+		return "", err
+	}
+	req.Images = images
 	client, resolved, err := s.deps.Providers.Client(ctx, "")
 	if err != nil {
 		return "", err
+	}
+	if len(images) > 0 && provider.IsSelfExecuting(resolved.ID) {
+		return "", errImagesUnsupported
 	}
 	// The two tool-budget switches (#99) are read ONCE, here, and the same
 	// value then decides every part of the turn that has an opinion about
@@ -150,7 +162,8 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	// The passage is folded into the prompt before anything sees it, so the
 	// transcript row, the replay of later turns and this turn's message all
 	// carry the same text: a follow-up "now shorten it" still knows what "it" is.
-	req.Prompt = withSelection(req.Selection, req.Prompt)
+	req.Prompt = withImages(len(req.Images), withSelection(req.Selection, req.Prompt))
+	s.runs.attach(runID, req.Images)
 	if err := s.tr.appendUser(runCtx, projectID, req.NodeID, runID, req.Prompt); err != nil {
 		s.runs.finish(projectID, runID)
 		s.leave()
@@ -565,10 +578,16 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	msgs = append(msgs, s.replayHistory(st.projectID, filtered)...)
 
 	scope := scopeLine(ctx, s.deps.Scope, st.req.ProjectID, st.req.NodeID)
-	return append(msgs, llm.ChatMessage{
-		Role:    "user",
-		Content: scope + "\n\n" + st.req.Prompt,
-	})
+	msg := llm.ChatMessage{Role: "user", Content: scope + "\n\n" + st.req.Prompt}
+	if len(st.req.Images) > 0 {
+		msg.ContentBlocks = append(msg.ContentBlocks, llm.ContentBlock{Type: "text", Text: msg.Content})
+		for _, img := range st.req.Images {
+			msg.ContentBlocks = append(msg.ContentBlocks, llm.ContentBlock{
+				Type: "image", MediaType: img.MIME, Data: base64.StdEncoding.EncodeToString(img.Data),
+			})
+		}
+	}
+	return append(msgs, msg)
 }
 
 // runTool executes one call, telling the panel before and after. The activity
