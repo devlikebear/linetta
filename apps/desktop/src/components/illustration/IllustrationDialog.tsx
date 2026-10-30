@@ -17,6 +17,7 @@ import type {
   IllustrationMeta,
   ImageProviderStatus,
 } from "../../lib/types";
+import { PriorIllustrationPicker } from "./PriorIllustrationPicker";
 import { useIllustrationImage } from "./useIllustrationImage";
 import "./Illustration.css";
 
@@ -48,6 +49,7 @@ export function IllustrationDialog({ projectId, sourceNodeId, initialScene, onCl
   const [format, setFormat] = useState<IllustrationFormat>("single");
   const [aspect, setAspect] = useState<IllustrationAspect>("portrait");
   const [includeReferences, setIncludeReferences] = useState(true);
+  const [priorIds, setPriorIds] = useState<string[]>([]);
   const [composition, setComposition] = useState<IllustrationComposition | null>(null);
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState<"compose" | "generate" | null>(null);
@@ -120,6 +122,7 @@ export function IllustrationDialog({ projectId, sourceNodeId, initialScene, onCl
         prompt,
         character_ids: composition?.characters.map((c) => c.entity_id) ?? selected,
         include_references: includeReferences,
+        prior_illustration_ids: priorIds,
         aspect,
       });
       setResult(meta);
@@ -224,6 +227,14 @@ export function IllustrationDialog({ projectId, sourceNodeId, initialScene, onCl
           />
           {t("illustration.includeReferences")}
         </label>
+
+        <PriorIllustrationPicker
+          projectId={projectId}
+          characterIds={selected}
+          value={priorIds}
+          onChange={setPriorIds}
+          disabled={busy === "generate"}
+        />
 
         <button
           type="button"

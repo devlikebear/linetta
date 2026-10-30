@@ -82,6 +82,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "illustrations.list",
     "illustrations.representatives",
     "illustrations.set_representative",
+    "illustrations.suggest_prior",
     "illustrations.update",
     "image_providers.list",
     "image_providers.list_models",

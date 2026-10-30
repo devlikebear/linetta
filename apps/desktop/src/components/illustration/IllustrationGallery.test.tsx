@@ -32,6 +32,7 @@ vi.mock("../../lib/rpc", () => ({
     delete: rpc.remove,
     representatives: rpc.representatives,
     setRepresentative: rpc.setRepresentative,
+    suggestPrior: vi.fn().mockResolvedValue([]),
   },
   illustrationRequests: { list: rpc.requests, get: rpc.requestGet, approve: vi.fn(), reject: vi.fn() },
   imageProviders: { list: rpc.providers },

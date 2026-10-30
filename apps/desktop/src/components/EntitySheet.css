@@ -112,3 +112,28 @@
 }
 .es-publish .sd { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .es-publish .es-error { padding: 0; }
+
+/* Character visual sheet: reference images (CharacterVisualSection). The
+   whole block takes dropped files. */
+.visual-refs {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+}
+.visual-refs.is-dragging { border-color: var(--accent); background: var(--accent-tint2); }
+.visual-refs-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--ink-soft); }
+.visual-refs > p.sd { margin: 4px 0 8px; font-size: 11.5px; }
+.visual-refs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.visual-ref { position: relative; aspect-ratio: 1; border: 1px solid var(--line-soft); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-3); }
+.visual-ref img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.visual-ref-remove {
+  position: absolute; top: 3px; right: 3px; display: inline-flex; padding: 2px;
+  border: 0; border-radius: 999px; background: rgba(0, 0, 0, 0.55); color: #fff; cursor: pointer;
+}
+.visual-refs-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.visual-refs-actions .btn { display: inline-flex; align-items: center; gap: 4px; }
+.visual-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin-top: 8px; max-height: 220px; overflow-y: auto; }
+.visual-gallery-pick { aspect-ratio: 1; padding: 0; border: 1px solid var(--line-soft); border-radius: var(--r-sm); overflow: hidden; background: var(--surface-3); }
+.visual-gallery-pick:hover:not(:disabled) { border-color: var(--accent); }
+.visual-gallery-pick img { width: 100%; height: 100%; object-fit: cover; display: block; }

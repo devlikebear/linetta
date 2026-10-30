@@ -1,12 +1,24 @@
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
 import { useEffect, useRef, useState } from "react";
-import { visuals } from "../lib/rpc";
-import type { CharacterVisualSheet, ReferenceImageMeta } from "../lib/types";
+import { ImagePlus, Images, X } from "lucide-react";
+import { illustrations, visuals } from "../lib/rpc";
+import type { CharacterVisualSheet, IllustrationMeta, ReferenceImageMeta } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
+import { IMAGE_ACCEPT, ImageFileProblem, imageFiles, readImageFile } from "../lib/imageFile";
+import { useIllustrationImage } from "./illustration/useIllustrationImage";
 
 const fields = ["age_range", "build", "hair", "outfit", "signature", "palette", "notes"] as const;
+/** visual.MaxImagesPerEntity */
+const MAX_IMAGES = 8;
+
+function GalleryPick({ meta, disabled, onPick }: Readonly<{ meta: IllustrationMeta; disabled: boolean; onPick: () => void }>) {
+  const url = useIllustrationImage(meta.id);
+  return <button type="button" className="visual-gallery-pick" disabled={disabled} onClick={onPick} aria-label={meta.caption || meta.id} title={meta.caption || undefined} data-testid={`visual-gallery-${meta.id}`}>
+    {url ? <img src={url} alt="" /> : null}
+  </button>;
+}
 
 function ReferenceImage({ image }: Readonly<{ image: ReferenceImageMeta }>) {
   const [src, setSrc] = useState("");
@@ -29,7 +41,7 @@ function ReferenceImage({ image }: Readonly<{ image: ReferenceImageMeta }>) {
     if (observer && ref.current) observer.observe(ref.current); else load();
     return () => { cancelled = true; observer?.disconnect(); };
   }, [image.id]);
-  return <>{error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}<img ref={ref} src={src || undefined} alt={image.caption} width={96} height={96} style={{ objectFit: "contain" }} /></>;
+  return <>{error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}<img ref={ref} src={src || undefined} alt={image.caption} /></>;
 }
 
 export function CharacterVisualSection({ value, projectId, onChange, onRefresh }: Readonly<{
@@ -60,22 +72,49 @@ export function CharacterVisualSection({ value, projectId, onChange, onRefresh }
     return () => { cancelled = true; };
   }, [value.entity_id, revision]);
 
-  const addImage = async (file: File) => {
+  const [gallery, setGallery] = useState<IllustrationMeta[] | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const room = MAX_IMAGES - images.length;
+
+  // Several files at once: picked, or dropped on the section. Each goes up on
+  // its own, so one refused file does not lose the others.
+  const addFiles = async (files: File[]) => {
     setError(null);
-    if (file.size > 5 * 1024 * 1024) { setError(t("visual.tooLarge")); return; }
-    if (!["image/png", "image/jpeg", "image/webp", "image/gif"].includes(file.type)) { setError(t("visual.unsupported")); return; }
+    if (files.length === 0) return;
+    if (files.length > room) setError(t("visual.tooMany"));
     setBusy(true);
     try {
-      const data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(typeof reader.result === "string" ? reader.result.split(",")[1] : "");
-        reader.onerror = () => reject(reader.error ?? new Error("file read failed"));
-        reader.readAsDataURL(file);
-      });
-      const image = await visuals.addImage({ entity_id: value.entity_id, mime: file.type, caption: "", data_base64: data });
+      for (const file of files.slice(0, Math.max(0, room))) {
+        try {
+          const read = await readImageFile(file);
+          const image = await visuals.addImage({ entity_id: value.entity_id, mime: read.mime, caption: "", data_base64: read.data_base64 });
+          setImages((list) => [...list, image]);
+        } catch (e) {
+          setError(e instanceof ImageFileProblem ? t(e.reason === "tooLarge" ? "visual.tooLarge" : "visual.unsupported") : e);
+        }
+      }
+    } finally { setBusy(false); }
+  };
+
+  // A picture already drawn for the work — the face the writer liked in
+  // episode 1 — kept as this character's reference.
+  const addFromGallery = async (meta: IllustrationMeta) => {
+    setError(null);
+    setBusy(true);
+    try {
+      const img = await illustrations.get(meta.id);
+      const image = await visuals.addImage({ entity_id: value.entity_id, mime: img.mime, caption: meta.caption, data_base64: img.data_base64 });
       setImages((list) => [...list, image]);
+      setGallery(null);
     } catch (e) { setError(e); } finally { setBusy(false); }
   };
+
+  const openGallery = async () => {
+    if (gallery) { setGallery(null); return; }
+    setError(null);
+    try { setGallery((await illustrations.list(projectId)).items); } catch (e) { setError(e); }
+  };
+
   return <section className="sec es-field" aria-label={t("visual.title")}>
     <h4>{t("visual.title")}</h4>
     <div className="attr-grid">
@@ -83,20 +122,46 @@ export function CharacterVisualSection({ value, projectId, onChange, onRefresh }
         <textarea value={value[field]} rows={field === "notes" ? 3 : 1} onChange={(e) => onChange({ ...value, [field]: e.target.value })} />
       </label>)}
     </div>
-    {error != null && <p className="es-error" role="alert">{rpcErrorMessage(error, t)}</p>}
-    <p>{images.length}/8</p>
-    <div>{images.map((image) => <div key={image.id}>
-      <ReferenceImage image={image} />
-      <button type="button" className="btn ghost sm" disabled={busy} aria-label={t("workspace.delete")} onClick={async () => {
-        setBusy(true); setError(null);
-        try { await visuals.deleteImage(image.id); setImages((list) => list.filter((item) => item.id !== image.id)); }
-        catch (e) { setError(e); } finally { setBusy(false); }
-      }}>{t("workspace.delete")}</button>
-    </div>)}</div>
-    <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif" aria-label={t("visual.addImage")} onChange={(e) => {
-      const file = e.target.files?.[0]; e.target.value = "";
-      if (file) void addImage(file);
-    }} />
-    <button type="button" className="btn ghost sm" disabled={!loaded || busy || images.length >= 8} onClick={() => input.current?.click()}>{t("visual.addImage")}</button>
+    <div
+      className={`visual-refs${dragging ? " is-dragging" : ""}`}
+      data-testid="visual-refs"
+      onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDragging(true); } }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        setDragging(false);
+        const files = imageFiles(e.dataTransfer.files);
+        if (files.length === 0 || !loaded || busy) return;
+        e.preventDefault();
+        void addFiles(files);
+      }}
+    >
+      <div className="visual-refs-head">
+        <span>{t("visual.images")}</span>
+        <span className="sd">{images.length}/{MAX_IMAGES}</span>
+      </div>
+      <p className="sd">{t("visual.images.hint")}</p>
+      {images.length > 0 && <div className="visual-refs-grid">{images.map((image) => <div key={image.id} className="visual-ref">
+        <ReferenceImage image={image} />
+        <button type="button" className="visual-ref-remove" disabled={busy} aria-label={t("workspace.delete")} onClick={async () => {
+          setBusy(true); setError(null);
+          try { await visuals.deleteImage(image.id); setImages((list) => list.filter((item) => item.id !== image.id)); }
+          catch (e) { setError(e); } finally { setBusy(false); }
+        }}><X size={12} /></button>
+      </div>)}</div>}
+      {error != null && <p className="es-error" role="alert">{rpcErrorMessage(error, t)}</p>}
+      <input ref={input} type="file" hidden multiple accept={IMAGE_ACCEPT} aria-label={t("visual.addImage")} onChange={(e) => {
+        const files = Array.from(e.target.files ?? []); e.target.value = "";
+        void addFiles(files);
+      }} />
+      <div className="visual-refs-actions">
+        <button type="button" className="btn ghost sm" disabled={!loaded || busy || room <= 0} onClick={() => input.current?.click()}><ImagePlus size={13} /> {t("visual.addImage")}</button>
+        <button type="button" className="btn ghost sm" disabled={!loaded || busy || room <= 0} aria-expanded={gallery !== null} onClick={() => void openGallery()} data-testid="visual-from-gallery"><Images size={13} /> {t("visual.fromGallery")}</button>
+      </div>
+      {gallery && (gallery.length === 0
+        ? <p className="sd">{t("visual.fromGallery.empty")}</p>
+        : <div className="visual-gallery" role="group" aria-label={t("visual.fromGallery")}>
+          {gallery.map((meta) => <GalleryPick key={meta.id} meta={meta} disabled={busy || room <= 0} onPick={() => void addFromGallery(meta)} />)}
+        </div>)}
+    </div>
   </section>;
 }

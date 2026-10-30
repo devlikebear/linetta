@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
     delete: vi.fn(),
   },
   settingsGet: vi.fn(),
+  illustrations: { list: vi.fn(), get: vi.fn() },
   publishApi: {
     connectStatus: vi.fn().mockResolvedValue({ state: "disconnected", site_url: "https://works.marvin-42.com" }),
     sheetGet: vi.fn().mockResolvedValue({ published: false }),
@@ -47,6 +48,7 @@ vi.mock("../lib/rpc", () => ({
     get: mocks.settingsGet,
   },
   publishApi: mocks.publishApi,
+  illustrations: mocks.illustrations,
 }));
 
 const emptySheet = { entity_id: "entity-1", age_range: "", build: "", hair: "", outfit: "", signature: "", palette: "", notes: "", updated_at: 0 };
@@ -140,6 +142,37 @@ describe("EntitySheet", () => {
     const input = await screen.findByLabelText("참조 이미지 추가");
     await user.upload(input, new File(["abc"], "ref.png", { type: "image/png" }));
     await waitFor(() => expect(mocks.visuals.addImage).toHaveBeenCalledWith({ entity_id: "entity-1", mime: "image/png", caption: "", data_base64: "YWJj" }));
+  });
+
+  it("uploads several references at once", async () => {
+    const user = userEvent.setup();
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    mocks.visuals.addImage.mockReset()
+      .mockResolvedValueOnce({ id: "i1", mime: "image/png", caption: "", byte_size: 3 })
+      .mockResolvedValueOnce({ id: "i2", mime: "image/png", caption: "", byte_size: 3 });
+    mocks.visuals.getImage.mockResolvedValue({ mime: "image/png", data_base64: "YWJj" });
+    renderSheet();
+    await user.upload(await screen.findByLabelText("참조 이미지 추가"), [
+      new File(["abc"], "front.png", { type: "image/png" }),
+      new File(["abc"], "side.png", { type: "image/png" }),
+    ]);
+    await waitFor(() => expect(mocks.visuals.addImage).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("2/8")).toBeInTheDocument();
+  });
+
+  it("keeps a gallery illustration as a reference", async () => {
+    const user = userEvent.setup();
+    mocks.entities.get.mockResolvedValue(baseEntity);
+    mocks.illustrations.list.mockResolvedValue({ items: [{ id: "pic-1", caption: "1화 아침" }], count: 1, bytes: 3 });
+    mocks.illustrations.get.mockResolvedValue({ id: "pic-1", mime: "image/jpeg", data_base64: "anBn", caption: "1화 아침" });
+    mocks.visuals.addImage.mockReset().mockResolvedValue({ id: "i3", mime: "image/jpeg", caption: "1화 아침", byte_size: 3 });
+    mocks.visuals.getImage.mockResolvedValue({ mime: "image/jpeg", data_base64: "anBn" });
+    renderSheet();
+    await user.click(await screen.findByRole("button", { name: /갤러리에서 가져오기/ }));
+    await user.click(await screen.findByTestId("visual-gallery-pic-1"));
+    await waitFor(() => expect(mocks.visuals.addImage).toHaveBeenCalledWith({ entity_id: "entity-1", mime: "image/jpeg", caption: "1화 아침", data_base64: "anBn" }));
+    expect(mocks.illustrations.list).toHaveBeenCalledWith("project-1");
+    expect(screen.queryByTestId("visual-gallery-pic-1")).toBeNull();
   });
 
   it("saves a character role selected from core-role presets", async () => {

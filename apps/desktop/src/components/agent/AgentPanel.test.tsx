@@ -53,7 +53,7 @@ vi.mock("../../lib/i18n", () => ({
   }),
 }));
 
-import { AgentPanel, splitSelection } from "./AgentPanel";
+import { AgentPanel, splitImages, splitSelection } from "./AgentPanel";
 
 function row(overrides: Partial<ProviderStatus> = {}): ProviderStatus {
   return {
@@ -2471,5 +2471,69 @@ describe("AgentPanel external draft (story-assist Phase 4)", () => {
     // in-progress draft from the Library import flow).
     await renderWith(undefined, undefined, undefined, "작가가 쓰던 초안");
     expect(composer().value).toBe("작가가 쓰던 초안");
+  });
+});
+
+describe("AgentPanel attached images", () => {
+  beforeEach(() => {
+    rpc.agentHistory.mockImplementation(() => Promise.resolve([]));
+    rpc.settingsGet.mockImplementation(() => Promise.resolve({ review_tools_enabled: true }));
+  });
+
+  async function pick(...files: File[]) {
+    await act(async () => {
+      fireEvent.change(screen.getByTestId("agent-image-input"), { target: { files } });
+    });
+  }
+
+  const png = (name: string) => new File(["abc"], name, { type: "image/png" });
+
+  it("sends picked pictures with the message and shows them above it", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+
+    await pick(png("a.png"), png("b.png"));
+    expect(await screen.findByTestId("agent-images")).toBeTruthy();
+    expect(screen.getByTestId("agent-images").querySelectorAll("img")).toHaveLength(2);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("agent-image-remove-1"));
+    });
+    await type("이 얼굴로 인물 시트 채워줘");
+    await pressEnter();
+
+    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "이 얼굴로 인물 시트 채워줘", NODE_ID, undefined, [
+      { mime: "image/png", data_base64: "YWJj" },
+    ]);
+    expect(screen.queryByTestId("agent-images")).toBeNull();
+    expect(screen.getByTestId("agent-user-images").querySelectorAll("img")).toHaveLength(1);
+  });
+
+  it("refuses what the engine would refuse, before sending", async () => {
+    await renderReady();
+    await pick(new File(["x"], "a.svg", { type: "image/svg+xml" }));
+    expect(screen.queryByTestId("agent-images")).toBeNull();
+    await pick(png("1.png"), png("2.png"), png("3.png"), png("4.png"), png("5.png"));
+    expect((await screen.findByTestId("agent-images")).querySelectorAll("img")).toHaveLength(4);
+    expect(screen.getByTestId("agent-attach-image")).toBeDisabled();
+  });
+
+  it("gives the pictures back when the send is refused", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.reject({ code: -32000, message: "x", data: { reason: "agent_attachment_unsupported" } }));
+    await renderReady();
+    await pick(png("a.png"));
+    await screen.findByTestId("agent-images");
+    await type("봐 줘");
+    await pressEnter();
+    expect(screen.getByTestId("agent-images").querySelectorAll("img")).toHaveLength(1);
+  });
+
+  it("restores a message that had pictures with their count", async () => {
+    rpc.agentHistory.mockImplementation(() =>
+      Promise.resolve([historyRow({ content: '얼굴 참고해 줘\n\n<images count="2"/>' })]),
+    );
+    await renderReady();
+    expect(await screen.findByTestId("agent-user-image-count")).toBeTruthy();
+    expect(screen.getByTestId("agent-log").querySelector(".msg.user .msg-bubble")?.textContent).toBe("얼굴 참고해 줘");
+    expect(splitImages("<images count=\"2\"/> 이게 뭐야?")).toEqual({ text: "<images count=\"2\"/> 이게 뭐야?" });
   });
 });

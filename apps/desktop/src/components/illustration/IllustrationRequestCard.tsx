@@ -15,6 +15,7 @@ import type {
   IllustrationsChangedPayload,
   ImageProviderStatus,
 } from "../../lib/types";
+import { PriorIllustrationPicker } from "./PriorIllustrationPicker";
 import { useIllustrationImage } from "./useIllustrationImage";
 import "./Illustration.css";
 
@@ -40,6 +41,7 @@ export function IllustrationRequestCard({ requestId, initial, onOpenSettings }: 
   const [aspect, setAspect] = useState<IllustrationAspect>(initial?.aspect ?? "portrait");
   const [caption, setCaption] = useState(initial?.caption ?? "");
   const [includeReferences, setIncludeReferences] = useState(initial?.include_references ?? false);
+  const [priorIds, setPriorIds] = useState<string[]>([]);
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<unknown>(null);
   const pictureUrl = useIllustrationImage(request?.status === "done" ? request.illustration_id ?? null : null);
@@ -117,6 +119,7 @@ export function IllustrationRequestCard({ requestId, initial, onOpenSettings }: 
           aspect,
           caption: caption.trim(),
           include_references: includeReferences,
+          prior_illustration_ids: priorIds,
         }),
       );
     } catch (e) {
@@ -193,6 +196,14 @@ export function IllustrationRequestCard({ requestId, initial, onOpenSettings }: 
               </label>
             ) : null}
           </div>
+          <PriorIllustrationPicker
+            projectId={request.project_id}
+            characterIds={request.character_ids}
+            initialIds={request.prior_illustration_ids}
+            value={priorIds}
+            onChange={setPriorIds}
+            disabled={busy !== null}
+          />
           <div className="modal-field">
             <label htmlFor={`request-caption-${request.id}`}>{t("illustration.caption")}</label>
             <input

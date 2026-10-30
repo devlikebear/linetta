@@ -8,13 +8,14 @@ const rpc = vi.hoisted(() => ({
   compose: vi.fn(),
   generate: vi.fn(),
   get: vi.fn(),
+  suggestPrior: vi.fn(),
 }));
 
 vi.mock("../../lib/rpc", () => ({
   imageProviders: { list: rpc.providers },
   entities: { list: rpc.entities },
   mentions: { listForNode: rpc.mentions },
-  illustrations: { compose: rpc.compose, generate: rpc.generate, get: rpc.get },
+  illustrations: { compose: rpc.compose, generate: rpc.generate, get: rpc.get, suggestPrior: rpc.suggestPrior },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -46,6 +47,7 @@ function renderDialog(extra: Partial<Parameters<typeof IllustrationDialog>[0]> =
 describe("IllustrationDialog", () => {
   beforeEach(() => {
     Object.values(rpc).forEach((f) => f.mockReset());
+    rpc.suggestPrior.mockResolvedValue([]);
     rpc.providers.mockResolvedValue(ready);
     rpc.entities.mockResolvedValue(cast);
     rpc.mentions.mockResolvedValue([]);
@@ -95,6 +97,7 @@ describe("IllustrationDialog", () => {
         prompt: "Art style:\nwatercolor",
         character_ids: ["e2"],
         include_references: true,
+        prior_illustration_ids: [],
         aspect: "landscape",
       }),
     );
@@ -102,6 +105,29 @@ describe("IllustrationDialog", () => {
     expect(screen.getByTestId("illustration-result")).toHaveTextContent("illustration.saved");
     fireEvent.click(screen.getByTestId("illustration-result-insert"));
     expect(props.onInsert).toHaveBeenCalledWith({ id: "i1" });
+  });
+
+  it("offers earlier pictures of the chosen characters and sends the ones left selected", async () => {
+    rpc.suggestPrior.mockImplementation((_project: string, ids: string[]) =>
+      Promise.resolve(ids.includes("e2") ? [{ id: "old1", caption: "1화" }, { id: "old2", caption: "" }] : []),
+    );
+    rpc.compose.mockResolvedValue({ prompt: "p", negative_prompt: "", format: "single", characters: [{ entity_id: "e2", name: "민호" }], reference_image_ids: [], missing_sheets: [] });
+    rpc.generate.mockResolvedValue({ id: "i1" });
+    renderDialog({ initialScene: "s" });
+
+    expect(screen.queryByTestId("illustration-prior")).toBeNull();
+    fireEvent.click(await screen.findByTestId("illustration-cast-e2"));
+    await waitFor(() => expect(screen.getByTestId("illustration-prior-old1")).toHaveAttribute("aria-pressed", "true"));
+    expect(rpc.suggestPrior).toHaveBeenLastCalledWith("p", ["e2"]);
+    fireEvent.click(screen.getByTestId("illustration-prior-old2"));
+    expect(screen.getByTestId("illustration-prior-old2")).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByTestId("illustration-compose"));
+    await screen.findByTestId("illustration-prompt");
+    fireEvent.click(screen.getByTestId("illustration-generate"));
+    await waitFor(() =>
+      expect(rpc.generate).toHaveBeenCalledWith(expect.objectContaining({ prior_illustration_ids: ["old1"] })),
+    );
   });
 
   it("says why it cannot draw and links to the settings", async () => {

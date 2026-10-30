@@ -16,13 +16,15 @@ const rpc = vi.hoisted(() => ({
   providers: vi.fn(),
   node: vi.fn(),
   image: vi.fn(),
+  list: vi.fn(),
+  suggestPrior: vi.fn(),
 }));
 
 vi.mock("../../lib/rpc", () => ({
   illustrationRequests: { get: rpc.get, approve: rpc.approve, reject: rpc.reject, list: vi.fn() },
   imageProviders: { list: rpc.providers },
   nodes: { get: rpc.node },
-  illustrations: { get: rpc.image },
+  illustrations: { get: rpc.image, list: rpc.list, suggestPrior: rpc.suggestPrior },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -63,6 +65,7 @@ describe("IllustrationRequestCard", () => {
   URL.revokeObjectURL = vi.fn();
   beforeEach(() => {
     Object.values(rpc).forEach((f) => f.mockReset());
+    rpc.suggestPrior.mockResolvedValue([]);
     events.listeners.clear();
     rpc.get.mockResolvedValue(request());
     rpc.providers.mockResolvedValue(ready);
@@ -87,9 +90,28 @@ describe("IllustrationRequestCard", () => {
         aspect: "landscape",
         caption: "우산",
         include_references: true,
+        prior_illustration_ids: [],
       }),
     );
     expect(await screen.findByTestId("illustration-request-done")).toHaveTextContent("illustrationRequest.placed.insert");
+  });
+
+  it("shows the earlier pictures the agent chose, selected, beside the suggestion", async () => {
+    rpc.get.mockResolvedValue(request({ prior_illustration_ids: ["chosen"] }));
+    rpc.suggestPrior.mockResolvedValue([{ id: "suggested", caption: "" }]);
+    rpc.list.mockResolvedValue({ items: [{ id: "chosen", caption: "1화" }, { id: "other", caption: "" }], count: 2, bytes: 0 });
+    rpc.approve.mockResolvedValue(request({ status: "done", illustration_id: "pic", placed_at: 5 }));
+    render(<IllustrationRequestCard requestId="r1" />);
+
+    await waitFor(() => expect(screen.getByTestId("illustration-prior-chosen")).toHaveAttribute("aria-pressed", "true"));
+    expect(screen.getByTestId("illustration-prior-suggested")).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByTestId("illustration-prior-other")).toBeNull();
+    fireEvent.click(screen.getByTestId("illustration-prior-suggested"));
+    await waitFor(() => expect(screen.getByTestId("illustration-request-approve")).not.toBeDisabled());
+    fireEvent.click(screen.getByTestId("illustration-request-approve"));
+    await waitFor(() =>
+      expect(rpc.approve).toHaveBeenCalledWith("r1", expect.objectContaining({ prior_illustration_ids: ["chosen", "suggested"] })),
+    );
   });
 
   it("sends the writer to image settings instead of drawing when no provider is ready", async () => {
