@@ -15,13 +15,14 @@ import (
 )
 
 // Publisher is the slice of internal/publish the publish tools use. An agent
-// can look at what is on Linetta Works, register a work and publish its
-// episodes. Connecting the account is the writer's alone — it is approved in
+// can look at what is on Linetta Works, register a work, publish its episodes
+// and put up its cover. Connecting the account is the writer's alone — it is approved in
 // their browser — so there is no tool for it.
 type Publisher interface {
 	WorkStatus(ctx context.Context, projectID string) (publish.WorkStatus, error)
 	UpsertWork(ctx context.Context, in publish.UpsertInput) (publish.WorkView, error)
 	PublishEpisode(ctx context.Context, nodeID string) (publish.PublishResult, error)
+	PublishCover(ctx context.Context, projectID, illustrationID string) (publish.CoverView, error)
 }
 
 // ---------- linetta_publish_status ----------
@@ -45,6 +46,14 @@ type publishedEpisode struct {
 	Reason string `json:"moderation_reason,omitempty"`
 }
 
+// publishedCover is the cover the site holds. State is pending, public,
+// rejected or needs_review.
+type publishedCover struct {
+	IllustrationID string `json:"illustration_id"`
+	State          string `json:"state"`
+	Reason         string `json:"moderation_reason,omitempty"`
+}
+
 type publishStatusOutput struct {
 	// Connected false: the writer has not connected an account. Registered
 	// false: the work is not on the site yet. Offline: the site could not be
@@ -53,6 +62,8 @@ type publishStatusOutput struct {
 	Registered bool   `json:"registered"`
 	Offline    bool   `json:"offline,omitempty"`
 	WorkURL    string `json:"work_url,omitempty"`
+	// Cover is absent while the site has none.
+	Cover *publishedCover `json:"cover,omitempty"`
 	// Episodes are the work's episodes in outline order.
 	Episodes []publishedEpisode `json:"episodes"`
 	// SiteOnly are episodes still on the site whose node was deleted here.
@@ -94,6 +105,15 @@ type publishEpisodeOutput struct {
 	State   string `json:"state"`
 }
 
+// ---------- linetta_publish_cover ----------
+
+type publishCoverInput struct {
+	ProjectID      string `json:"project_id,omitempty"`
+	IllustrationID string `json:"illustration_id" jsonschema:"a picture in the gallery, from linetta_list_illustrations"`
+}
+
+func (in publishCoverInput) scope() (string, string) { return in.ProjectID, "" }
+
 func (d ToolDeps) registerPublishReadTool(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_publish_status",
@@ -114,6 +134,11 @@ func (d ToolDeps) registerPublishWriteTools(s *mcp.Server) {
 		Description: "Publish one episode to Linetta Works for anyone to read, or update its text there. Only " +
 			"when the writer asks. The work must be registered first (linetta_register_work).",
 	}, record(d, "linetta_publish_episode", d.publishEpisode))
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_publish_cover",
+		Description: "Make a gallery picture the work's cover on Linetta Works and upload it, replacing any cover " +
+			"there. Only when the writer asks. The work must be registered first. Sheets are not sent.",
+	}, record(d, "linetta_publish_cover", d.publishCover))
 }
 
 func (d ToolDeps) publishStatus(ctx context.Context, _ *mcp.CallToolRequest, in publishStatusInput) (*mcp.CallToolResult, publishStatusOutput, error) {
@@ -135,6 +160,10 @@ func (d ToolDeps) publishStatus(ctx context.Context, _ *mcp.CallToolRequest, in 
 	if ws.Work != nil {
 		out.WorkURL = ws.Work.URL
 	}
+	if c := ws.Sheets.Cover; c != nil {
+		cover := toPublishedCover(*c)
+		out.Cover = &cover
+	}
 	for _, ep := range ws.Episodes {
 		out.Episodes = append(out.Episodes, toPublishedEpisode(ep))
 	}
@@ -149,6 +178,10 @@ func toPublishedEpisode(ep publish.EpisodeView) publishedEpisode {
 		NodeID: ep.NodeID, Title: ep.Title, State: ep.State, Number: ep.Number,
 		URL: ep.URL, Reason: ep.ModerationReason,
 	}
+}
+
+func toPublishedCover(c publish.CoverView) publishedCover {
+	return publishedCover{IllustrationID: c.IllustrationID, State: c.State, Reason: c.Reason}
 }
 
 func (d ToolDeps) registerWork(ctx context.Context, _ *mcp.CallToolRequest, in registerWorkInput) (*mcp.CallToolResult, registerWorkOutput, error) {
@@ -209,6 +242,26 @@ func (d ToolDeps) publishEpisode(ctx context.Context, _ *mcp.CallToolRequest, in
 	}, nil
 }
 
+func (d ToolDeps) publishCover(ctx context.Context, _ *mcp.CallToolRequest, in publishCoverInput) (*mcp.CallToolResult, publishedCover, error) {
+	if d.Publish == nil {
+		return toolErr("publishing is not available in this build"), publishedCover{}, nil
+	}
+	p, errResult := d.requireProject(ctx, in.ProjectID)
+	if errResult != nil {
+		return errResult, publishedCover{}, nil
+	}
+	id := strings.TrimSpace(in.IllustrationID)
+	if id == "" {
+		return toolErr("illustration_id is required; choose a picture from linetta_list_illustrations"), publishedCover{}, nil
+	}
+	cover, err := d.Publish.PublishCover(ctx, p.ID, id)
+	if err != nil {
+		return toolErr("%s", publishFailure(err)), publishedCover{}, nil
+	}
+	d.notifyChanged(p.ID, "linetta_publish_cover", nil, "")
+	return nil, toPublishedCover(cover), nil
+}
+
 // publishFailure says what went wrong in words an agent can relay. The
 // refusals an agent must not try to work around say so.
 func publishFailure(err error) string {
@@ -238,6 +291,8 @@ func publishFailure(err error) string {
 		return "that node is not inside one episode; pass an episode or a scene within one"
 	case rpc.ReasonPublishTooLarge:
 		return "the episode is longer than the site accepts; the manuscript is unchanged"
+	case rpc.ReasonPublishImageTooLarge:
+		return "the picture is larger than the site accepts; choose another one"
 	case rpc.ReasonPublishQuotaExceeded:
 		return "the writer's account has reached its limit of works or this work's limit of episodes"
 	case rpc.ReasonPublishRateLimited:

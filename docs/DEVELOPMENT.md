@@ -182,9 +182,14 @@ Write (`full` mode only):
   An empty field keeps the site's current value;
 - `linetta_publish_episode`: publishes one episode, or updates its text on the
   site, through the same `publish.Service` the app's publish dialog uses.
-  Refused until the work is registered. Both are refused until the writer
-  has connected an account in the app — there is deliberately no tool for
-  that, since pairing is approved in the writer's browser;
+  Refused until the work is registered;
+- `linetta_publish_cover`: makes a gallery picture the work's cover and uploads
+  it through `publish.Service.PublishCover`. Unlike the dialog's
+  `publish.sheets_sync`, it sends no sheets. A refused picture or a failed
+  upload leaves the site's cover and the writer's choice as they were. All
+  three are refused until the writer has connected an account in the app —
+  there is deliberately no tool for that, since pairing is approved in the
+  writer's browser;
 - `linetta_report_continuity`, `linetta_propose_story_ops`,
   `linetta_save_forecast`: the story-assist Review group — see below.
 

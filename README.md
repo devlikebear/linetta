@@ -555,12 +555,14 @@ dialog. An agent you connected (built-in or over MCP) can publish too, once
 you have connected your account. Ask it to publish an episode of a work that
 is not on the site yet and it registers the work first with
 `linetta_register_work`, using a blurb you wrote or approved, then publishes
-with `linetta_publish_episode`. It can also change the blurb or mark the work
-complete. Only you can connect an account.
+with `linetta_publish_episode`. It can also change the blurb, mark the work
+complete, or put a gallery picture up as the cover with
+`linetta_publish_cover`. Only you can connect an account.
 
 **Sheets and cover.** Once a work is on the site, the publish dialog's
-**World, characters and cover** section can put character and world sheets and a
-cover up too. A sheet goes only if you turn on **Show on Linetta Works** in its
+**World, characters and cover** section, at the bottom of the dialog you open
+with **Publish this episode…** in an episode's outline menu, can put character
+and world sheets and a cover up too. A sheet goes only if you turn on **Show on Linetta Works** in its
 panel — off by default, and shown only when this device is connected — so
 check it for spoilers first. The sheet's name, aliases, role, summary,
 attributes and the names of its relationships go, with its first reference

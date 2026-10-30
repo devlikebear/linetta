@@ -186,6 +186,57 @@ func (s *Service) SetCover(ctx context.Context, projectID, illustrationID string
 	return s.state.SetCover(ctx, projectID, illustrationID, s.clock())
 }
 
+// PublishCover makes a gallery picture the work's cover on the site and the
+// writer's choice here, without touching the sheets; that is the agent's way
+// in, where SyncSheets is the dialog's. A refused picture or a failed upload
+// leaves the site's cover and the choice as they were.
+func (s *Service) PublishCover(ctx context.Context, projectID, illustrationID string) (CoverView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tok, err := s.token()
+	if err != nil {
+		return CoverView{}, err
+	}
+	if _, err := s.project(ctx, projectID); err != nil {
+		return CoverView{}, err
+	}
+	if s.illustrations == nil {
+		return CoverView{}, errors.New("publish: no gallery is wired")
+	}
+	known, err := s.illustrations.IDsInProject(ctx, projectID)
+	if err != nil {
+		return CoverView{}, err
+	}
+	if !known[illustrationID] {
+		return CoverView{}, rpc.NotFound(rpc.ReasonIllustrationNotFound, "illustration not found")
+	}
+	work, _, err := s.client.GetWork(ctx, tok, projectID)
+	if isNotFound(err) {
+		return CoverView{}, reason(rpc.ReasonPublishWorkNotRegistered, err)
+	}
+	if err != nil {
+		return CoverView{}, s.siteError(err)
+	}
+	mime, data, err := s.illustrations.IllustrationImage(ctx, illustrationID)
+	if err != nil {
+		return CoverView{}, fmt.Errorf("publish: read picture %s: %w", illustrationID, err)
+	}
+	if !sitePicture(mime, data) {
+		if len(data) > maxPictureBytes {
+			return CoverView{}, reason(rpc.ReasonPublishImageTooLarge, fmt.Errorf("publish: picture %s is %d bytes", illustrationID, len(data)))
+		}
+		return CoverView{}, fmt.Errorf("publish: the site takes JPEG, PNG or WebP pictures, not %q", mime)
+	}
+	cover, err := s.putCover(ctx, tok, projectID, illustrationID, mime, data, work.Cover)
+	if err != nil {
+		return CoverView{}, err
+	}
+	if err := s.state.SetCover(ctx, projectID, illustrationID, s.clock()); err != nil {
+		return CoverView{}, err
+	}
+	return *coverView(cover), nil
+}
+
 // remoteSheetsStatus fills the site's half for a registered work.
 func (s *Service) remoteSheetsStatus(ctx context.Context, tok, projectID string, work Work, out *SheetsStatus) error {
 	remote, _, err := s.client.GetSheets(ctx, tok, projectID)
@@ -348,15 +399,7 @@ func (s *Service) syncCover(ctx context.Context, tok, projectID, chosen string, 
 	if chosen != "" && s.illustrations != nil {
 		mime, data, err := s.illustrations.IllustrationImage(ctx, chosen)
 		if err == nil && sitePicture(mime, data) {
-			sum := sha256.Sum256(data)
-			if held != nil && held.SHA256 == hex.EncodeToString(sum[:]) && held.IllustrationID == chosen {
-				return held, nil
-			}
-			cover, err := s.client.PutCover(ctx, tok, projectID, chosen, mime, data)
-			if err != nil {
-				return nil, s.imageError(err)
-			}
-			return &cover, nil
+			return s.putCover(ctx, tok, projectID, chosen, mime, data, held)
 		}
 	}
 	if held == nil {
@@ -366,6 +409,20 @@ func (s *Service) syncCover(ctx context.Context, tok, projectID, chosen string, 
 		return nil, s.siteError(err)
 	}
 	return nil, nil
+}
+
+// putCover uploads the picture unless the site already holds these bytes as
+// this cover.
+func (s *Service) putCover(ctx context.Context, tok, projectID, id, mime string, data []byte, held *RemoteCover) (*RemoteCover, error) {
+	sum := sha256.Sum256(data)
+	if held != nil && held.SHA256 == hex.EncodeToString(sum[:]) && held.IllustrationID == id {
+		return held, nil
+	}
+	cover, err := s.client.PutCover(ctx, tok, projectID, id, mime, data)
+	if err != nil {
+		return nil, s.imageError(err)
+	}
+	return &cover, nil
 }
 
 // sitePicture reports whether the site takes the picture as it is.

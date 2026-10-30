@@ -60,6 +60,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_propose_style_profile",
   "linetta_register_work",
   "linetta_publish_episode",
+  "linetta_publish_cover",
   "linetta_report_continuity",
   "linetta_propose_story_ops",
   "linetta_save_forecast",

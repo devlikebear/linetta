@@ -30,6 +30,9 @@ type fakePublisher struct {
 	upserts   []publish.UpsertInput
 	work      publish.WorkView
 	upsertErr error
+	covers    []string
+	cover     publish.CoverView
+	coverErr  error
 }
 
 func (f *fakePublisher) UpsertWork(_ context.Context, in publish.UpsertInput) (publish.WorkView, error) {
@@ -44,6 +47,11 @@ func (f *fakePublisher) WorkStatus(context.Context, string) (publish.WorkStatus,
 func (f *fakePublisher) PublishEpisode(_ context.Context, nodeID string) (publish.PublishResult, error) {
 	f.published = append(f.published, nodeID)
 	return f.result, f.err
+}
+
+func (f *fakePublisher) PublishCover(_ context.Context, _, illustrationID string) (publish.CoverView, error) {
+	f.covers = append(f.covers, illustrationID)
+	return f.cover, f.coverErr
 }
 
 type publishFixture struct {
@@ -219,6 +227,7 @@ func TestPublishTools_refuseWhenNoPublisherIsWired(t *testing.T) {
 		{"linetta_publish_status", map[string]any{"project_id": f.projectID}},
 		{"linetta_publish_episode", map[string]any{"node_id": f.nodeID}},
 		{"linetta_register_work", map[string]any{"project_id": f.projectID, "blurb": "소개"}},
+		{"linetta_publish_cover", map[string]any{"project_id": f.projectID, "illustration_id": "ill"}},
 	} {
 		if res := callPublishTool(t, cs, call.name, call.args); !res.IsError {
 			t.Errorf("%s without a publisher did not refuse", call.name)
@@ -322,5 +331,83 @@ func TestRegisterWork_respectsTheSingleWorkRestrictionAndIsAWriteTool(t *testing
 	res := callPublishTool(t, cs, "linetta_register_work", map[string]any{"project_id": f.otherID, "blurb": "소개"})
 	if !res.IsError || len(f.pub.upserts) != 0 {
 		t.Fatalf("registered a work outside the allowed one: %q", toolText(res))
+	}
+}
+
+func TestPublishCover_uploadsThePictureAndReportsReview(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.cover = publish.CoverView{IllustrationID: "ill", State: publish.EpisodePending}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_publish_cover", map[string]any{"project_id": f.projectID, "illustration_id": " ill "})
+	if res.IsError {
+		t.Fatalf("tool error: %s", toolText(res))
+	}
+	if !slices.Equal(f.pub.covers, []string{"ill"}) {
+		t.Fatalf("covers = %v", f.pub.covers)
+	}
+	var out publishedCover
+	if err := json.Unmarshal([]byte(toolText(res)), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.IllustrationID != "ill" || out.State != publish.EpisodePending {
+		t.Fatalf("out = %+v", out)
+	}
+	if len(f.changed) != 1 || f.changed[0].Tool != "linetta_publish_cover" || f.changed[0].ProjectID != f.projectID {
+		t.Fatalf("changed = %+v", f.changed)
+	}
+}
+
+func TestPublishCover_needsAPicture(t *testing.T) {
+	f := newPublishFixture(t)
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_publish_cover", map[string]any{"project_id": f.projectID, "illustration_id": "  "})
+	if !res.IsError || len(f.pub.covers) != 0 {
+		t.Fatalf("res = %s, covers = %v", toolText(res), f.pub.covers)
+	}
+}
+
+func TestPublishCover_passesOnRefusalsInWordsAnAgentCanRelay(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.coverErr = &rpc.ReasonError{Reason: rpc.ReasonPublishImageTooLarge, Err: errors.New("site said no")}
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_publish_cover", map[string]any{"project_id": f.projectID, "illustration_id": "ill"})
+	if !res.IsError || !strings.Contains(toolText(res), "choose another") {
+		t.Fatalf("res = %s", toolText(res))
+	}
+	if len(f.changed) != 0 {
+		t.Fatalf("a refused cover notified: %+v", f.changed)
+	}
+}
+
+func TestPublishCover_respectsTheSingleWorkRestriction(t *testing.T) {
+	f := newPublishFixture(t)
+	st, err := settings.NewForHomeWithSecretStore(t.TempDir(), settings.NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.Set(context.Background(), settings.Patch{MCPProjectID: &f.projectID}); err != nil {
+		t.Fatal(err)
+	}
+	f.deps.Settings = st
+	cs := connectedServer(t, f.deps, settings.MCPModeFull, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_publish_cover", map[string]any{"project_id": f.otherID, "illustration_id": "ill"})
+	if !res.IsError || len(f.pub.covers) != 0 {
+		t.Fatalf("res = %s, covers = %v", toolText(res), f.pub.covers)
+	}
+}
+
+func TestPublishStatus_showsTheSitesCover(t *testing.T) {
+	f := newPublishFixture(t)
+	f.pub.status = publish.WorkStatus{Connected: true, Registered: true, Sheets: publish.SheetsStatus{
+		Cover: &publish.CoverView{IllustrationID: "ill", State: publish.EpisodeRejected, Reason: "수위"},
+	}}
+	cs := connectedServer(t, f.deps, settings.MCPModeReadOnly, AllToolGroups())
+	res := callPublishTool(t, cs, "linetta_publish_status", map[string]any{"project_id": f.projectID})
+	var out publishStatusOutput
+	if err := json.Unmarshal([]byte(toolText(res)), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Cover == nil || out.Cover.IllustrationID != "ill" || out.Cover.State != publish.EpisodeRejected || out.Cover.Reason != "수위" {
+		t.Fatalf("cover = %+v", out.Cover)
 	}
 }
