@@ -433,7 +433,7 @@ export const en: Translation = {
         body: 'All thirty-six. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
       }
     ],
-    toolsLabel: 'Thirty-six tools, not a hundred RPCs',
+    toolsLabel: 'Thirty-seven tools, not a hundred RPCs',
     toolsNote:
       'A client’s tool budget is finite and selection accuracy falls as the list grows, so the engine’s RPC surface is not exposed one-to-one. Access can also be pinned to a single work, and Settings → Tool budget shows what each optional group costs and turns it off.',
     readLabel: 'Read',
@@ -900,7 +900,7 @@ export const ko: Translation = {
         body: '36개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
       }
     ],
-    toolsLabel: 'RPC 100개가 아니라, 툴 36개',
+    toolsLabel: 'RPC 100개가 아니라, 툴 37개',
     toolsNote:
       '클라이언트의 툴 예산은 유한하고 목록이 길어질수록 선택 정확도가 떨어집니다. 그래서 엔진 RPC를 1:1로 노출하지 않습니다. 접근을 한 작품으로 제한할 수도 있고, 설정 → 툴 예산에서 선택 그룹별 비용을 보고 끌 수 있습니다.',
     readLabel: '읽기',
@@ -1365,7 +1365,7 @@ export const ja: Translation = {
         body: '36個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
       }
     ],
-    toolsLabel: 'RPC 百個ではなく、ツール36個',
+    toolsLabel: 'RPC 百個ではなく、ツール37個',
     toolsNote:
       'クライアントのツール予算は有限で、一覧が伸びるほど選択の精度は落ちます。だからエンジンの RPC を1対1では公開しません。アクセスを一つの作品に限定することもでき、設定 → ツール予算で任意グループごとのコストを見てオフにできます。',
     readLabel: '読み取り',
