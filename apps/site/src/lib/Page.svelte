@@ -3,6 +3,7 @@
   import Hero from '$lib/sections/Hero.svelte';
   import Intro from '$lib/sections/Intro.svelte';
   import Workspace from '$lib/sections/Workspace.svelte';
+  import Feature from '$lib/sections/Feature.svelte';
   import Agent from '$lib/sections/Agent.svelte';
   import DataSection from '$lib/sections/DataSection.svelte';
   import Download from '$lib/sections/Download.svelte';
@@ -64,6 +65,9 @@
   <Hero {t} />
   <Intro {t} />
   <Workspace {t} />
+  <Feature id="assist" s={t.assist} layout="wide" />
+  <Feature id="illustrations" s={t.illustrations} />
+  <Feature id="publish" s={t.publish} flip />
   <Agent {t} />
   <DataSection {t} />
   <Download {t} />

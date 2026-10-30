@@ -115,13 +115,19 @@ site says both, because a writer paying per token should not learn the second
 one from a bill.
 
 Claims in `content.ts` are taken from the engine rather than from the docs — the
-nineteen `linetta_*` tool names, the ten/nine read-write split, the access
-modes, the 7391 default port, the per-minute call limit. When one of them
+thirty-six `linetta_*` tool names, the fifteen/twenty-one read-write split, the
+access modes, the 7391 default port, the per-minute call limit. When one of them
 changes, the engine is the thing to check. The two counts live in
 `engine/internal/mcphost/tools_read.go` (`ReadToolNames`) and
-`tools_write.go` (`WriteToolNames`), and they appear in this file as well as in
-all three locales of `content.ts` — a count updated in one place and not the
-other is exactly the drift #96's review caught.
+`tools_write.go` (`WriteToolNames`), and they appear in all three locales of
+`content.ts` as prose as well as in the tool lists — a count updated in one place
+and not the other is exactly the drift #96's review caught.
+
+The Assist, Illustrations and Publish sections are `FeatureSection`s in
+`content.ts`, rendered by `src/lib/sections/Feature.svelte`. The Publish section
+says that published work is public and goes through content review, and the FAQ
+lists every way writing leaves the device. Keep both in step with
+`docs/privacy-policy.md`.
 
 The release number is imported from `apps/desktop/package.json`, so the site and
 desktop package move together when `scripts/bump-version.sh` prepares a release.

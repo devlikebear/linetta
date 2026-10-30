@@ -429,7 +429,7 @@ const messages = {
     "settings.images.model.pick": "이미지 모델을 고르세요",
     "settings.images.model.refresh": "목록 새로고침",
     "settings.images.model.listFailed": "모델 목록을 불러오지 못했습니다. 모델 이름을 직접 입력할 수 있습니다.",
-    "settings.images.consent": "삽화를 만들 때 내가 확인한 프롬프트(장면 설명, 인물 외형, 화풍)와 고른 참조 이미지가 {provider}로 전송되고, Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
+    "settings.images.consent": "삽화를 만들 때 내가 확인한 프롬프트(장면 설명, 인물 외형, 화풍), 고른 참조 이미지, 그리고 내가 빼지 않은 이전 삽화가 {provider}로 전송되고, Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
     "settings.images.note.openai-codex": "ChatGPT 요금제 사용량에서 차감됩니다. 한 장에 30초 안팎 걸립니다.",
     "settings.images.note.gemini-native": "Google AI 요금이 이미지마다 청구됩니다. 결제가 설정된 프로젝트의 키가 필요합니다.",
     "settings.images.state.ready": "삽화를 만들 수 있습니다",
@@ -1475,7 +1475,7 @@ const messages = {
     // lands there ("Google Gemini으로" is ungrammatical). `에` has no such
     // allomorph, so the sentence stays correct for every destination.
     "settings.providers.consent":
-      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록을 읽을 수 있고, 여기에 더해 작가 프로필과 작품 노트와 스킬의 이름·설명이 매 요청과 함께 실리고, 그중 작가 프로필과 적용 범위가 \"모든 작품\"인 스킬은 열려 있는 작품에 한정되지 않으며, 손이 많이 간 턴 뒤에는 무엇을 배웠는지 묻는 호출이 한 번 더 갈 수 있고(설정 → 스킬에서 끌 수 있습니다), 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
+      "에이전트가 툴로 열려 있는 작품만이 아니라 내 모든 작품의 어느 씬이든 그 원문과 요약, 아웃라인, 원고 전체 검색 결과, 등장인물·플롯·팩트 카드, 기억해 두라고 한 내용, 작품 목록, 인물 참조 이미지를 읽을 수 있고, 메시지에 첨부한 이미지가 그 메시지에 답하는 요청과 함께 가고, 여기에 더해 작가 프로필과 작품 노트와 스킬의 이름·설명이 매 요청과 함께 실리고, 그중 작가 프로필과 적용 범위가 \"모든 작품\"인 스킬은 열려 있는 작품에 한정되지 않으며, 손이 많이 간 턴 뒤에는 무엇을 배웠는지 묻는 호출이 한 번 더 갈 수 있고(설정 → 스킬에서 끌 수 있습니다), 이 모두가 {provider}에 전송되고 Linetta는 그 밖의 어떤 곳에도 보내지 않는다는 데 동의합니다",
     "settings.providers.consent.customEndpoint": "직접 설정한 OpenAI 호환 엔드포인트",
     "settings.providers.test": "연결 테스트",
     "settings.providers.test.ok": "연결됨",
@@ -1898,7 +1898,7 @@ const messages = {
     "settings.images.model.pick": "Choose an image model",
     "settings.images.model.refresh": "Refresh list",
     "settings.images.model.listFailed": "Could not load the model list. You can type a model name.",
-    "settings.images.consent": "I agree that when I draw an illustration, the prompt I reviewed (scene, character looks, art style) and the reference images I chose are sent to {provider}, and Linetta sends them nowhere else",
+    "settings.images.consent": "I agree that when I draw an illustration, the prompt I reviewed (scene, character looks, art style), the reference images I chose and the earlier illustrations I did not leave out are sent to {provider}, and Linetta sends them nowhere else",
     "settings.images.note.openai-codex": "Counts against your ChatGPT plan's usage. Each picture takes about 30 seconds.",
     "settings.images.note.gemini-native": "Google AI bills each image. The key must come from a project with billing set up.",
     "settings.images.state.ready": "Ready to draw",
@@ -2909,7 +2909,7 @@ const messages = {
     "settings.providers.model.refresh": "Refresh",
     "settings.providers.model.listFailed": "Could not load the model list. Type a model name you know, or leave it empty to use the provider default.",
     "settings.providers.consent":
-      "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, and the list of my works; that the writer profile, the work notes and my skills' names and descriptions ride along with every request, the writer profile and any skill whose scope is every work being global rather than scoped to the work I have open; that after a tool-heavy turn one further call may go out asking what it learned, which I can switch off under Settings → Skills; and that all of it is sent to {provider} and nowhere else",
+      "I agree that the agent's tools can read any scene in any of my works and not only the one I have open, along with its summaries, the outline, search results from across the manuscript, the character, plot and fact cards, the facts I have told it to remember, the list of my works and my characters' reference images; that images I attach to a message go with the requests that answer it; that the writer profile, the work notes and my skills' names and descriptions ride along with every request, the writer profile and any skill whose scope is every work being global rather than scoped to the work I have open; that after a tool-heavy turn one further call may go out asking what it learned, which I can switch off under Settings → Skills; and that all of it is sent to {provider} and nowhere else",
     "settings.providers.consent.customEndpoint": "the OpenAI-compatible endpoint set above",
     "settings.providers.test": "Test connection",
     "settings.providers.test.ok": "Connected",
@@ -3332,7 +3332,7 @@ const messages = {
     "settings.images.model.pick": "画像モデルを選んでください",
     "settings.images.model.refresh": "一覧を更新",
     "settings.images.model.listFailed": "モデル一覧を読み込めませんでした。モデル名を直接入力できます。",
-    "settings.images.consent": "挿絵を作るとき、確認したプロンプト(場面説明、人物の外見、画風)と選んだ参考画像が{provider}に送信され、Linettaはそれ以外のどこにも送らないことに同意します",
+    "settings.images.consent": "挿絵を作るとき、確認したプロンプト(場面説明、人物の外見、画風)、選んだ参考画像、外さなかった以前の挿絵が{provider}に送信され、Linettaはそれ以外のどこにも送らないことに同意します",
     "settings.images.note.openai-codex": "ChatGPTプランの利用量から差し引かれます。1枚に30秒ほどかかります。",
     "settings.images.note.gemini-native": "Google AIの料金が画像ごとに請求されます。課金を設定したプロジェクトのキーが必要です。",
     "settings.images.state.ready": "挿絵を作れます",
@@ -4339,7 +4339,7 @@ const messages = {
     "settings.providers.model.refresh": "更新",
     "settings.providers.model.listFailed": "モデル一覧を取得できませんでした。知っているモデル名を直接入力するか、空のままにするとプロバイダーの既定値を使います。",
     "settings.providers.consent":
-      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧を読み取ることができ、さらに作家プロフィールと作品ノートとスキルの名前・説明が毎回のリクエストとともに送られ、そのうち作家プロフィールと適用範囲が「すべての作品」のスキルは開いている作品に限定されず、手のかかったターンのあとには何を学んだかを尋ねる呼び出しがもう一度送られることがあり（設定 → スキルでオフにできます）、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
+      "エージェントがツールで、開いている作品だけでなく私のすべての作品のどのシーンの原文と要約でも、アウトライン、原稿全体の検索結果、登場人物・プロット・ファクトカード、記憶させた内容、作品一覧、人物の参照画像を読み取ることができ、メッセージに添付した画像はそのメッセージに応答するリクエストとともに送られ、さらに作家プロフィールと作品ノートとスキルの名前・説明が毎回のリクエストとともに送られ、そのうち作家プロフィールと適用範囲が「すべての作品」のスキルは開いている作品に限定されず、手のかかったターンのあとには何を学んだかを尋ねる呼び出しがもう一度送られることがあり（設定 → スキルでオフにできます）、これらすべてが{provider}に送信され、Linetta はそれ以外のどこにも送信しないことに同意します",
     "settings.providers.consent.customEndpoint": "上で設定した OpenAI 互換エンドポイント",
     "settings.providers.test": "接続テスト",
     "settings.providers.test.ok": "接続済み",

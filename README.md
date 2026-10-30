@@ -23,10 +23,11 @@ English · 한국어 · 日本語
 Linetta is made for novelists and web-fiction writers who want their manuscript, outline, characters, places, relationships, and research close at hand — without turning writing into project management.
 
 - **Write with focus.** Work scene by scene in a quiet editor with your outline always within reach.
-- **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript.
+- **Keep the story consistent.** Organize characters, places, relationships, storylines, beats, summaries, and memories beside the manuscript. Agents can check a scene against all of it, and what they find or propose waits for your decision.
 - **Stay in control of AI.** Linetta calls a model only if you connect a provider — for the built-in agent, or your own agent over MCP. The activity log shows what changed and whether the built-in agent or an external client made the call, a recent structural change can be undone in one click while the app stays open, and the text an agent replaces is kept as a restorable version of the scene.
+- **See your story.** Optionally draw illustrations with ChatGPT or Gemini from your scenes and character sheets. Earlier pictures go along so faces stay the same, and nothing is drawn until you press Generate.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
-- **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish — and the Story World sheets and cover you choose to make public — leave your device.
+- **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish — and the Story World sheets and cover you choose to make public — leave your device. Share a published episode to X, Threads, Naver Blog, KakaoTalk, or Instagram from the publish dialog.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
 ## See Linetta in action
@@ -92,9 +93,10 @@ An API key goes into your OS's secure credential store, never into
 own data directory, in a file only your account can read.
 
 Linux has no secure credential store backend, so Anthropic, Google Gemini,
-and the OpenAI-compatible endpoint cannot be configured there; signing in
+and the OpenAI-compatible endpoint cannot be configured there. Signing in
 with a ChatGPT account still works, since that path stores tokens in
-Linetta's data directory instead.
+Linetta's data directory instead, and so does the Claude Code provider, which
+needs no credential from Linetta at all.
 
 Open the agent with the toolbar **Agent** button or `Cmd/Ctrl+J`; connect a
 provider first, or the panel prompts you to set one up. Two chips under the
@@ -119,6 +121,14 @@ in a request to polish, comment on or expand it, and you press send yourself.
 The quote goes with your message and stays in the conversation, so a follow-up
 such as "make it shorter" still knows which paragraph you meant. Asked only a
 question, the agent changes nothing.
+
+To show the agent a picture, attach up to four PNG, JPEG, WebP, or GIF images
+to a message with the button beside the input box, by pasting, or by dropping
+them on it. Each can be up to 5 MB, and large photos are scaled down before
+sending. The images go to the model with that message only; the conversation
+history keeps a note of how many there were, not the pictures. The Claude Code
+provider takes text only and says so. Ask the agent to keep an attached image
+as a character's reference and it saves it to that character's visual sheet.
 
 ### Your direction
 
@@ -215,9 +225,9 @@ without you asking for it.
 
 **You can switch the memory, skills, review, and visual editing tools off
 entirely.** Every tool's full description travels in every request, so
-Linetta's thirty tools are a standing cost on every turn — and the memory
-tool, the two skills tools, and the continuity-check tool together are a
-meaningful share of it. **Settings → Tool budget** says how many tools the
+Linetta's thirty-six tools are a standing cost on every turn — and the memory
+tool, the two skills tools, and the three check-and-propose tools together are
+a meaningful share of it. **Settings → Tool budget** says how many tools the
 agent currently gets and what each group costs, and turns each group off for
 both the built-in agent and any MCP client (`memory_tools_enabled`,
 `skill_tools_enabled`, and `review_tools_enabled` in `settings.json`; all on
@@ -233,9 +243,9 @@ tool off, what is already recorded is still read back to the agent — it just
 cannot add to it, and you can still edit it yourself under Settings → Memory.
 With the skills tools off, the skill **list** goes too: a list with no
 `linetta_read_skill` to open a body is only names. With the review tools off,
-`linetta_report_continuity` and the agent panel's continuity starter chip
-both go — observations already recorded stay exactly where they are in Story
-World. Nothing is deleted either way, and switching a group back on restores
+`linetta_report_continuity`, `linetta_propose_story_ops`,
+`linetta_save_forecast` and their starter chips all go — what is already
+recorded stays exactly where it is. Nothing is deleted either way, and switching a group back on restores
 it exactly.
 
 **A turn stops after a set number of tool calls.** The built-in agent makes at
@@ -260,8 +270,11 @@ into the folder and never saved from Settings — has no row anywhere. If the
 skills folder matters to you, copy it yourself, or keep it in git.
 
 Character visual sheets hold appearance notes and up to eight reference images
-per character. Set the illustration style in Story World; sheets, images and
-style guides are included in library backups and restored works.
+per character. Add images in the sheet's own reference area: pick several at
+once, drop them in, or take one from the work's gallery, such as the face an
+episode 1 illustration got right. Set the illustration style in Story World;
+sheets, images and style guides are included in library backups and restored
+works.
 `linetta_get_character_visuals` reads these designs and optional reference images;
 `linetta_build_illustration_prompt` builds a single illustration or four-panel
 prompt from them and your scene description.
@@ -288,7 +301,7 @@ you do.
 Visual write tools (full mode): `linetta_set_character_visuals` (`project_id`, `name` or
 `entity_id`, optional `age_range`, `build`, `hair`, `outfit`, `signature`, `palette`, `notes`),
 `linetta_set_art_style` (`project_id`, optional `style`, `negative_prompt`),
-`linetta_add_reference_image` (`project_id`, `name` or `entity_id`, `data_base64`, `mime`, optional `caption`),
+`linetta_add_reference_image` (`project_id`, `name` or `entity_id`, then one of `data_base64` with `mime`, `attachment` for an image attached to the message being answered (built-in agent only), or `illustration_id` for a gallery picture; optional `caption`),
 and `linetta_delete_reference_image` (`image_id`). Omitted patch fields are unchanged;
 empty strings clear them. Images use PNG/JPEG/WebP/GIF, at most 5 MiB and 8 per character.
 Each returns `undo_batch_id` for the agent undo button or `linetta_undo_last_change`
@@ -447,6 +460,14 @@ visual sheets. Linetta builds the prompt from the scene, the characters'
 looks and the work's art style; you can edit it, and it is sent exactly as
 written. Nothing is drawn until you press **Generate**.
 
+**Earlier pictures keep the faces the same.** A new illustration also goes out
+with up to two earlier pictures from the work's gallery, after the characters'
+reference images. Pictures of the same characters come first, then ones you
+placed in a scene or chose to represent one, then the newest. The dialog and
+the agent's request card show them as thumbnails; click one to leave it out.
+When any go along, one paragraph asking the image model to match faces and
+style without copying the composition is added to the end of the prompt.
+
 Pictures are kept in the work's gallery (toolbar **Illustrations**), up to
 200 per work and 5 MiB each, with the prompt, provider and model they came
 from. **Insert into scene** places one in the text at the cursor; a picture
@@ -480,6 +501,9 @@ as external, and a work holds at most 20 waiting requests.
 `linetta_list_illustrations` lets the agent see the gallery and how its recent
 requests were decided, and `linetta_set_representative_illustration` sets or
 clears a representative from pictures already in the gallery, with an undo.
+A request can name which earlier pictures go along
+(`prior_illustration_ids`: up to two, or an empty list for none) or leave the
+choice to the app.
 The two write tools are hidden by the same switch as the other visual write
 tools, and `read_only` mode keeps only the list.
 
@@ -572,13 +596,21 @@ picture.
 The publish dialog's **World, characters and cover** section, at the bottom of
 the dialog you open with **Publish this episode…** in an episode's outline
 menu, can put character and world sheets and a cover up together. A sheet goes
-only if you turn on **Show on Linetta Works** in its panel — off by default, and shown only when this device is connected — so
+only if you turn on **Show on Linetta Works** in its panel — off by default,
+and shown only when this device is connected — so
 check it for spoilers first. The sheet's name, aliases, role, summary,
 attributes and the names of its relationships go, with its first reference
 image as the sheet's picture; relationship notes, visual notes and sheets you
 have not made public are not sent. Pick a cover from the work's gallery, then
 press **Upload sheets and cover**. They go up separately from episodes, so a
 rejected picture or a limit on sheets never holds back an episode.
+
+**Share.** Once an episode is public, the publish dialog shows **Share**
+buttons under its address. X, Threads and Naver Blog open their share page in
+your browser with the episode's title and link filled in. KakaoTalk and
+Instagram have no share page a desktop app can open, so those buttons copy the
+title and link for you to paste. Private, rejected and in-review episodes show
+no Share buttons.
 
 **What is sent, and where.** The published episode's title and text, the
 illustrations placed in it, its place in the order, and the work's title,
