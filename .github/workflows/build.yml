@@ -75,10 +75,15 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # A tag's run can read only its own ref's caches and main's, so a cache
+      # saved here would never be seen by the next tag. Release Cache saves
+      # this key on main; a miss just builds from scratch.
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
+          shared-key: desktop-release
+          save-if: false
 
       - name: Check Apple signing configuration
         id: apple_signing

@@ -1,0 +1,50 @@
+name: Release Tag
+
+# Merging a release PR is the go-ahead for that release: this tags the merge
+# commit and starts Build Desktop. A tag pushed with GITHUB_TOKEN starts no
+# workflow, so the build is dispatched on the tag instead, which publishes the
+# same way as a tag pushed by hand.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    name: Tag release
+    if: "startsWith(github.event.head_commit.message, 'chore: release v')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Tag and start the build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^const Version = "\(.*\)"$/\1/p' engine/internal/appversion/version.go)"
+          tag="v${version}"
+          # "chore: release v1.15.0" must not pass for v1.15.01, and a commit
+          # that names another version than the one it ships stops here.
+          first_line="${HEAD_MESSAGE%%$'\n'*}"
+          if [[ ! "${first_line}" =~ ^chore:\ release\ ${tag//./\\.}($|[[:space:]]) ]]; then
+            echo "::error::Commit says '${first_line}' but the source is ${tag}."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "${tag} already exists; its push started the build."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${tag}" "${GITHUB_SHA}" -m "${tag}"
+          git push origin "refs/tags/${tag}"
+          gh workflow run build.yml --ref "${tag}"
+          echo "Tagged ${tag} and started Build Desktop."
