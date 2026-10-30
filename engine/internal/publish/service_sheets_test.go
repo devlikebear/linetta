@@ -203,6 +203,83 @@ func TestSheets_coverIsSentReplacedAndTakenDown(t *testing.T) {
 	}
 }
 
+func TestPublishCover_uploadsAndChoosesTheCoverAndLeavesSheetsAlone(t *testing.T) {
+	f := newSheetsFixture(t)
+	f.register(t)
+	f.choose(t, f.hero)
+	ctx := context.Background()
+
+	cover, err := f.svc.PublishCover(ctx, f.project.ID, "cover-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cover.IllustrationID != "cover-a" || cover.State != EpisodePending {
+		t.Fatalf("cover = %+v", cover)
+	}
+	if got, _, err := f.svc.state.Cover(ctx, f.project.ID); err != nil || got != "cover-a" {
+		t.Fatalf("saved choice = %q, %v", got, err)
+	}
+	work := f.site.work(f.project.ID)
+	if work.work.Cover == nil || work.work.Cover.IllustrationID != "cover-a" {
+		t.Fatalf("site cover = %+v", work.work.Cover)
+	}
+	if len(work.sheets) != 0 || countPrefix(f.site.seen(), "PUT /api/artworks/works/"+f.project.ID+"/sheets") != 0 {
+		t.Fatalf("a cover upload sent sheets: %+v", work.sheets)
+	}
+
+	before := len(f.site.seen())
+	if _, err := f.svc.PublishCover(ctx, f.project.ID, "cover-a"); err != nil {
+		t.Fatal(err)
+	}
+	if n := countPrefix(f.site.seen()[before:], "PUT /api/artworks/works/"+f.project.ID+"/cover"); n != 0 {
+		t.Fatalf("same cover re-uploaded %d times", n)
+	}
+
+	if cover, err = f.svc.PublishCover(ctx, f.project.ID, "cover-b"); err != nil || cover.IllustrationID != "cover-b" {
+		t.Fatalf("replaced cover = %+v, %v", cover, err)
+	}
+}
+
+func TestPublishCover_refusalsKeepTheSiteAndTheChoice(t *testing.T) {
+	f := newSheetsFixture(t)
+	f.register(t)
+	ctx := context.Background()
+	if _, err := f.svc.PublishCover(ctx, f.project.ID, "cover-a"); err != nil {
+		t.Fatal(err)
+	}
+	f.gallery["too-big"] = make([]byte, maxPictureBytes+1)
+
+	for _, id := range []string{"not-in-gallery", "too-big"} {
+		if _, err := f.svc.PublishCover(ctx, f.project.ID, id); err == nil {
+			t.Fatalf("%s: want a refusal", id)
+		}
+		if held := f.site.work(f.project.ID).work.Cover; held == nil || held.IllustrationID != "cover-a" {
+			t.Fatalf("%s: site cover = %+v", id, held)
+		}
+		if got, _, err := f.svc.state.Cover(ctx, f.project.ID); err != nil || got != "cover-a" {
+			t.Fatalf("%s: saved choice = %q, %v", id, got, err)
+		}
+	}
+
+	f.site.failNext("PUT /api/artworks/works/"+f.project.ID+"/cover", 413, CodeTooLarge)
+	if _, err := f.svc.PublishCover(ctx, f.project.ID, "cover-b"); err == nil {
+		t.Fatal("want the site's failure")
+	}
+	if got, _, err := f.svc.state.Cover(ctx, f.project.ID); err != nil || got != "cover-a" {
+		t.Fatalf("failed upload changed the choice to %q, %v", got, err)
+	}
+}
+
+func TestPublishCover_refusesAWorkNotOnTheSite(t *testing.T) {
+	f := newSheetsFixture(t)
+	f.connect(t)
+	_, err := f.svc.PublishCover(context.Background(), f.project.ID, "cover-a")
+	var re *rpc.ReasonError
+	if !errors.As(err, &re) || re.Reason != rpc.ReasonPublishWorkNotRegistered {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestSheets_workStatusShowsChoicesAndTheSite(t *testing.T) {
 	f := newSheetsFixture(t)
 	ctx := context.Background()

@@ -392,9 +392,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			skills:       skillsStore,
 			skillHistory: skillHistory,
 			// linetta_publish_status / linetta_register_work /
-			// linetta_publish_episode publish through the same service the
-			// publish dialog does, so an agent and the writer share one
-			// connection and one state.
+			// linetta_publish_episode / linetta_publish_cover publish through
+			// the same service the publish dialog does, so an agent and the
+			// writer share one connection and one state.
 			publish: publishSvc,
 			enqueue: summ.Enqueue,
 			notify:  func(method string, params any) { _ = s.Notifier().Notify(method, params) },
