@@ -65,6 +65,8 @@ func seedWork(t *testing.T, db *sql.DB, id string) {
 		`INSERT INTO project_art_style (project_id, style, updated_at) VALUES ('P', '수채화', 1)`,
 		`INSERT INTO project_style_rules (project_id, avoid_phrases, max_sentence_chars, updated_at) VALUES ('P', '["그러나"]', 80, 1)`,
 		`INSERT INTO project_style_drafts (project_id, body, created_at) VALUES ('P', '초안', 1)`,
+		`INSERT INTO story_ledger (id, project_id, kind, body, status, source, created_at, updated_at) VALUES ('P-l1', 'P', 'promise', '복선', 'open', 'writer', 1, 1)`,
+		`INSERT INTO part_arcs (node_id, project_id, role, goal, tension, updated_at) VALUES ('P-n2', 'P', '승', '목표', 5, 1)`,
 		`INSERT INTO project_focus (project_id, body, anchor_node_id, set_at) VALUES ('P', '집중', 'P-n2', 1)`,
 		`INSERT INTO illustrations (id, project_id, source_node_id, prompt, provider, model, mime, byte_size, data, created_at)
 		 VALUES ('P-i1', 'P', 'P-n2', '그림', 'p', 'm', 'image/png', 4, x'89504e47', 1)`,

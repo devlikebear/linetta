@@ -40,8 +40,10 @@ type Rules struct {
 	AvoidPhrases []string `json:"avoid_phrases"`
 	// MaxSentenceChars is the longest a sentence may be, in characters.
 	// 0 means no limit.
-	MaxSentenceChars int   `json:"max_sentence_chars"`
-	UpdatedAt        int64 `json:"updated_at"`
+	MaxSentenceChars int `json:"max_sentence_chars"`
+	// AnchorNodeID is the scene whose prose the writer set as the one to match.
+	AnchorNodeID string `json:"anchor_node_id"`
+	UpdatedAt    int64  `json:"updated_at"`
 }
 
 // Empty reports whether there is nothing to check against.
@@ -59,8 +61,8 @@ func (r *Repo) GetRules(ctx context.Context, projectID string) (Rules, error) {
 	out := Rules{ProjectID: projectID, AvoidPhrases: []string{}}
 	var phrases string
 	err := r.s.DB().QueryRowContext(ctx,
-		"SELECT avoid_phrases, max_sentence_chars, updated_at FROM project_style_rules WHERE project_id = ?", projectID).
-		Scan(&phrases, &out.MaxSentenceChars, &out.UpdatedAt)
+		"SELECT avoid_phrases, max_sentence_chars, anchor_node_id, updated_at FROM project_style_rules WHERE project_id = ?", projectID).
+		Scan(&phrases, &out.MaxSentenceChars, &out.AnchorNodeID, &out.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, nil
 	}
@@ -95,10 +97,10 @@ func (r *Repo) SetRules(ctx context.Context, now int64, in Rules) (Rules, error)
 	if err != nil {
 		return Rules{}, err
 	}
-	out := Rules{ProjectID: in.ProjectID, AvoidPhrases: phrases, MaxSentenceChars: in.MaxSentenceChars, UpdatedAt: now}
-	_, err = r.s.DB().ExecContext(ctx, `INSERT INTO project_style_rules (project_id, avoid_phrases, max_sentence_chars, updated_at) VALUES (?,?,?,?)
-ON CONFLICT(project_id) DO UPDATE SET avoid_phrases=excluded.avoid_phrases, max_sentence_chars=excluded.max_sentence_chars, updated_at=excluded.updated_at`,
-		out.ProjectID, string(raw), out.MaxSentenceChars, out.UpdatedAt)
+	out := Rules{ProjectID: in.ProjectID, AvoidPhrases: phrases, MaxSentenceChars: in.MaxSentenceChars, AnchorNodeID: in.AnchorNodeID, UpdatedAt: now}
+	_, err = r.s.DB().ExecContext(ctx, `INSERT INTO project_style_rules (project_id, avoid_phrases, max_sentence_chars, anchor_node_id, updated_at) VALUES (?,?,?,?,?)
+ON CONFLICT(project_id) DO UPDATE SET avoid_phrases=excluded.avoid_phrases, max_sentence_chars=excluded.max_sentence_chars, anchor_node_id=excluded.anchor_node_id, updated_at=excluded.updated_at`,
+		out.ProjectID, string(raw), out.MaxSentenceChars, out.AnchorNodeID, out.UpdatedAt)
 	return out, err
 }
 

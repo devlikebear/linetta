@@ -30,6 +30,7 @@ type Op struct {
 	Name    string `json:"name,omitempty"`
 	Color   string `json:"color,omitempty"`
 	Summary string `json:"summary,omitempty"`
+	Plan    string `json:"plan,omitempty"`
 
 	// update_thread / add_beat target
 	ThreadID  string `json:"thread_id,omitempty"`

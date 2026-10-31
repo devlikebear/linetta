@@ -244,7 +244,7 @@ func (r *Repo) SetLastOpened(ctx context.Context, projectID, nodeID string, now 
 const baseSelect = `
 SELECT id, project_id, parent_id, ordinal, kind, label, title,
        content_doc, status, word_count, summary, content_version,
-       summary_for_version, summary_written, created_at, updated_at
+       summary_for_version, summary_written, plan, created_at, updated_at
 FROM nodes`
 
 type scanner interface{ Scan(...any) error }
@@ -257,7 +257,7 @@ func scan(row scanner) (Node, error) {
 	)
 	if err := row.Scan(&n.ID, &n.ProjectID, &parentID, &n.Ordinal, &n.Kind, &n.Label, &n.Title,
 		&contentDoc, &n.Status, &n.WordCount, &n.Summary, &n.ContentVersion,
-		&n.SummaryForVersion, &n.SummaryWritten, &n.CreatedAt, &n.UpdatedAt); err != nil {
+		&n.SummaryForVersion, &n.SummaryWritten, &n.Plan, &n.CreatedAt, &n.UpdatedAt); err != nil {
 		return Node{}, err
 	}
 	if parentID.Valid {
@@ -485,6 +485,21 @@ func (r *Repo) Rename(ctx context.Context, id, label, title string, now int64) e
 	res, err := r.s.DB().ExecContext(ctx, `
 UPDATE nodes SET label = ?, title = ?, updated_at = ?
  WHERE id = ?`, label, title, now, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetPlan replaces what a scene or part is meant to do. It leaves the summary,
+// version and updated_at alone: a plan describes intent, so changing one does
+// not make the prose stale.
+func (r *Repo) SetPlan(ctx context.Context, id, plan string) error {
+	res, err := r.s.DB().ExecContext(ctx, `UPDATE nodes SET plan = ? WHERE id = ?`, plan, id)
 	if err != nil {
 		return err
 	}
@@ -969,11 +984,11 @@ func (r *Repo) RestoreOutline(ctx context.Context, projectID string, snapshot []
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, title,
                    content_doc, status, word_count, summary, content_version,
-                   summary_for_version, summary_written, created_at, updated_at)
-VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   summary_for_version, summary_written, plan, created_at, updated_at)
+VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ID, n.ProjectID, n.Ordinal, n.Kind, n.Label, n.Title, contentDoc,
 			n.Status, n.WordCount, n.Summary, n.ContentVersion, n.SummaryForVersion,
-			n.SummaryWritten, n.CreatedAt, now); err != nil {
+			n.SummaryWritten, n.Plan, n.CreatedAt, now); err != nil {
 			return err
 		}
 	}

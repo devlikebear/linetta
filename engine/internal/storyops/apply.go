@@ -41,8 +41,21 @@ type Service struct {
 	snaps         *snapshot.Repo
 	memory        MemoryRecorder
 	illustrations illustref.Index
+	cutPlans      CutPlanRecorder
 
 	undo undoState
+}
+
+// CutPlanRecorder keeps what deleted nodes were planned to do. ledger.Repo
+// satisfies it; an interface keeps the ledger's brief types out of this package.
+type CutPlanRecorder interface {
+	RecordCutPlans(ctx context.Context, now int64, cut []node.Node) (labels []string, err error)
+}
+
+// WithCutPlans wires the record a structural delete leaves.
+func (s *Service) WithCutPlans(r CutPlanRecorder) *Service {
+	s.cutPlans = r
+	return s
 }
 
 // New wires the applier over the required repos. Facts, snapshots, and memory
@@ -88,6 +101,9 @@ type ApplyOpsResult struct {
 	Created      map[string]string   `json:"created,omitempty"`
 	ChangedNodes []AppliedNodeChange `json:"changed_nodes,omitempty"`
 	Failures     []ApplyOpsFailure   `json:"failures,omitempty"`
+	// CutPlans names deleted episodes whose plans went to the ledger, so the
+	// agent reports them rather than the writer finding out later.
+	CutPlans []string `json:"cut_plans,omitempty"`
 	// PendingApproval means the batch was large enough to show the writer first,
 	// so nothing was applied and the ops are waiting in a preview.
 	PendingApproval bool `json:"pending_approval,omitempty"`
@@ -210,6 +226,7 @@ func (s *Service) ApplyOpsWithRefs(ctx context.Context, projectID, nodeID string
 			}
 		} else if result.Applied > 0 {
 			result.UndoBatchID = s.rememberUndoBatch(projectID, before)
+			result.CutPlans = s.recordCutPlans(ctx, projectID, before, now)
 		}
 	}
 	return result, refs
@@ -494,7 +511,7 @@ func (s *Service) applyOneOp(
 			}
 			*nodeInsertCursor = n.ID
 		}
-		if err := s.setCreatedSummary(ctx, n, op.Summary); err != nil {
+		if err := s.setCreatedSummary(ctx, n, op); err != nil {
 			return err
 		}
 		if op.Ref != "" {
@@ -551,6 +568,36 @@ func (s *Service) applyOneOp(
 	default:
 		return fmt.Errorf("unknown op %q; valid ops: %s", op.Type, strings.Join(ValidOpTypes(), ", "))
 	}
+}
+
+// recordCutPlans sends the plans of nodes this batch removed to the ledger. A
+// failure costs the record, not the batch, which has already been applied.
+func (s *Service) recordCutPlans(ctx context.Context, projectID string, before []node.Node, now func() int64) []string {
+	if s.cutPlans == nil {
+		return nil
+	}
+	after, err := s.nodes.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil
+	}
+	kept := make(map[string]bool, len(after))
+	for _, n := range after {
+		kept[n.ID] = true
+	}
+	var cut []node.Node
+	for _, n := range before {
+		if !kept[n.ID] {
+			cut = append(cut, n)
+		}
+	}
+	if len(cut) == 0 {
+		return nil
+	}
+	labels, err := s.cutPlans.RecordCutPlans(ctx, now(), cut)
+	if err != nil {
+		return nil
+	}
+	return labels
 }
 
 func (s *Service) applyCreateOutlineNode(
@@ -636,7 +683,7 @@ func (s *Service) applyCreateOutlineNode(
 			return err
 		}
 	}
-	if err := s.setCreatedSummary(ctx, n, op.Summary); err != nil {
+	if err := s.setCreatedSummary(ctx, n, op); err != nil {
 		return err
 	}
 	if op.Ref != "" {
@@ -649,11 +696,16 @@ func (s *Service) applyCreateOutlineNode(
 	return nil
 }
 
-// setCreatedSummary keeps the summary given with a create op. create_outline_node
-// can land on a node that already exists, whose summary is not this op's to
-// replace.
-func (s *Service) setCreatedSummary(ctx context.Context, n node.Node, summary string) error {
-	summary = strings.TrimSpace(summary)
+// setCreatedSummary keeps the summary and plan given with a create op.
+// create_outline_node can land on a node that already exists, whose summary and
+// plan are not this op's to replace.
+func (s *Service) setCreatedSummary(ctx context.Context, n node.Node, op Op) error {
+	if plan := strings.TrimSpace(op.Plan); plan != "" && strings.TrimSpace(n.Plan) == "" {
+		if err := s.nodes.SetPlan(ctx, n.ID, plan); err != nil {
+			return err
+		}
+	}
+	summary := strings.TrimSpace(op.Summary)
 	if summary == "" || strings.TrimSpace(n.Summary) != "" {
 		return nil
 	}

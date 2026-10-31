@@ -39,6 +39,7 @@ var ReadToolNames = []string{
 	"linetta_list_illustrations",
 	"linetta_analyze_style",
 	"linetta_read_skill",
+	"linetta_list_ledger",
 	"linetta_publish_status",
 }
 
@@ -355,6 +356,9 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	// the skills group off — a missing tool nobody would think to look for.
 	if groups.Skills {
 		registerReadSkillTool(s, d)
+	}
+	if groups.Review {
+		d.registerLedgerReadTool(s)
 	}
 	d.registerPublishReadTool(s)
 }
