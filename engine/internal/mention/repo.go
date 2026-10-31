@@ -163,28 +163,42 @@ func (r *Repo) MentionedNodeIDs(ctx context.Context, entityID string) (ids []str
 // CoMentionResult is one row of the topology-RAG result set.
 type CoMentionResult struct {
 	NodeID   string
-	K        int   // distinct entities from the current node that appear here
-	LastSeen int64 // nodes.updated_at
+	K        int     // distinct entities from the current node that appear here
+	Rarity   float64 // sum of 1/(scenes the entity appears in) over those entities
+	LastSeen int64   // nodes.updated_at
 }
 
 // CoMentionLeaves returns up to `limit` nodes that share at least 2 entities
-// with currentNodeID, ranked by (shared-count desc, updated_at desc). Excludes
+// with currentNodeID, ranked by (rarity desc, updated_at desc). Excludes
 // currentNodeID itself. Callers post-filter for additional exclusions
 // (e.g. ids already shown in the nearby set).
+//
+// Rarity rather than the shared count: leads appear in nearly every scene of a
+// long work, so the count saturates and stops telling scenes apart. Sharing a
+// minor character or a prop says far more.
 func (r *Repo) CoMentionLeaves(ctx context.Context, currentNodeID string, limit int) ([]CoMentionResult, error) {
 	rows, err := r.s.DB().QueryContext(ctx, `
 WITH cur_ents AS (
-  SELECT entity_id FROM mentions WHERE node_id = ?
+  SELECT DISTINCT entity_id FROM mentions WHERE node_id = ?
+), ent_df AS (
+  SELECT entity_id, COUNT(DISTINCT node_id) AS df
+    FROM mentions
+   WHERE entity_id IN (SELECT entity_id FROM cur_ents)
+   GROUP BY entity_id
+), shared AS (
+  SELECT DISTINCT node_id, entity_id
+    FROM mentions
+   WHERE entity_id IN (SELECT entity_id FROM cur_ents)
+     AND node_id != ?
 )
-SELECT m.node_id, COUNT(DISTINCT m.entity_id) AS k, MAX(n.updated_at) AS last_seen
-  FROM mentions m
-  JOIN nodes n ON n.id = m.node_id
- WHERE m.entity_id IN (SELECT entity_id FROM cur_ents)
-   AND m.node_id != ?
-   AND n.summary != ''
- GROUP BY m.node_id
+SELECT s.node_id, COUNT(*) AS k, SUM(1.0 / d.df) AS rarity, n.updated_at AS last_seen
+  FROM shared s
+  JOIN ent_df d ON d.entity_id = s.entity_id
+  JOIN nodes n ON n.id = s.node_id
+ WHERE n.summary != ''
+ GROUP BY s.node_id
 HAVING k >= 2
- ORDER BY k DESC, last_seen DESC
+ ORDER BY rarity DESC, last_seen DESC
  LIMIT ?`, currentNodeID, currentNodeID, limit)
 	if err != nil {
 		return nil, err
@@ -193,7 +207,7 @@ HAVING k >= 2
 	var out []CoMentionResult
 	for rows.Next() {
 		var rec CoMentionResult
-		if err := rows.Scan(&rec.NodeID, &rec.K, &rec.LastSeen); err != nil {
+		if err := rows.Scan(&rec.NodeID, &rec.K, &rec.Rarity, &rec.LastSeen); err != nil {
 			return nil, err
 		}
 		out = append(out, rec)

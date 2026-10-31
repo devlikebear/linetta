@@ -525,6 +525,56 @@ func TestBuildContext_relatedScenes_returnsTopCoMentionScenes(t *testing.T) {
 	}
 }
 
+func TestBuildContext_relatedScenes_ignoresLaterScenes(t *testing.T) {
+	f := newCtxFixture(t)
+	ctx := context.Background()
+	p := f.project(t, project.NewInput{Title: "T", Genres: []string{"SF"}, LengthTarget: "novel", DefaultPOV: "first"})
+	er := entity.NewRepo(f.store)
+	nodes := f.nodes
+
+	e1, _ := er.Create(ctx, 1050, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "해진"})
+	e2, _ := er.Create(ctx, 1060, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: "민호"})
+	withBoth := `{"type":"doc","content":[{"type":"paragraph","content":[
+		{"type":"mention","attrs":{"id":"` + e1.ID + `","label":"해진"}},
+		{"type":"mention","attrs":{"id":"` + e2.ID + `","label":"민호"}}
+	]}]}`
+	plain := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"f"}]}]}`
+	summarize := func(id string) {
+		got, _ := nodes.Get(ctx, id)
+		_ = nodes.SetSummary(ctx, id, "요약", got.ContentVersion)
+	}
+
+	earlier := *p.LastOpenedNodeID
+	_ = nodes.UpdateContent(ctx, earlier, withBoth, 1100)
+	summarize(earlier)
+
+	before, _ := nodes.CreateSibling(ctx, earlier, "leaf", "앞 필러", "", 1200)
+	_ = nodes.UpdateContent(ctx, before.ID, plain, 1210)
+	curN, _ := nodes.CreateSibling(ctx, before.ID, "leaf", "현재", "", 1300)
+	_ = nodes.UpdateContent(ctx, curN.ID, withBoth, 1310)
+	after, _ := nodes.CreateSibling(ctx, curN.ID, "leaf", "뒤 필러", "", 1400)
+	_ = nodes.UpdateContent(ctx, after.ID, plain, 1410)
+
+	// Later scenes tie with `earlier` on rarity and were edited more recently,
+	// and there are enough of them to fill any small query limit.
+	last := after.ID
+	for i := 0; i < 6; i++ {
+		at := int64(1500 + i*10)
+		later, _ := nodes.CreateSibling(ctx, last, "leaf", "뒤 회차", "", at)
+		_ = nodes.UpdateContent(ctx, later.ID, withBoth, at)
+		summarize(later.ID)
+		last = later.ID
+	}
+
+	got, err := f.builder().Build(ctx, curN.ID, "확장", "", Options{})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(got.RelatedScenes) != 1 || got.RelatedScenes[0].NodeID != earlier {
+		t.Errorf("related = %+v, want only the earlier scene %s", got.RelatedScenes, earlier)
+	}
+}
+
 func TestBuildContext_includesNotesForNode(t *testing.T) {
 	f := newCtxFixture(t)
 	s := f.store

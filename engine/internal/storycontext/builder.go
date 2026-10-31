@@ -480,27 +480,11 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 		return HierarchicalContext{}, nil, err
 	}
 	byID := make(map[string]node.Node, len(all))
-	children := map[string][]node.Node{}
 	for _, n := range all {
 		byID[n.ID] = n
-		key := ""
-		if n.ParentID != nil {
-			key = *n.ParentID
-		}
-		children[key] = append(children[key], n)
 	}
-	// DFS leaves in document order.
-	var leaves []node.Node
-	var walk func(parent string)
-	walk = func(parent string) {
-		for _, c := range children[parent] {
-			if c.Kind == "leaf" {
-				leaves = append(leaves, c)
-			}
-			walk(c.ID)
-		}
-	}
-	walk("")
+	children := childrenByParent(all)
+	leaves := leavesInOrder(children)
 
 	curIdx := -1
 	for i, l := range leaves {
@@ -601,11 +585,18 @@ func (b *ContextBuilder) DeriveProjectSynopsis(ctx context.Context, projectID st
 }
 
 // loadRelatedScenes runs the co-mention topology-RAG query and post-filters
-// the result set against excludeIDs (typically Nearby IDs + cur.ID). Returns
-// up to 3 SceneSummary entries with breadcrumb labels.
+// the result set against excludeIDs (typically Nearby IDs + cur.ID) and against
+// every leaf after cur, so a revision never reads what the story has not reached
+// yet. A cur that is not a leaf has no such limit. Returns up to 2 SceneSummary
+// entries with breadcrumb labels.
 func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, excludeIDs []string) ([]SceneSummary, error) {
-	// Fetch top-K + small buffer so the post-filter can still yield 3.
-	results, err := b.mentions.CoMentionLeaves(ctx, cur.ID, 2+len(excludeIDs))
+	all, err := b.nodes.ListByProject(ctx, cur.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	// Ask for every match: the filters below run in Go, and a limit here would
+	// let scenes they reject push out the ones they keep.
+	results, err := b.mentions.CoMentionLeaves(ctx, cur.ID, len(all))
 	if err != nil {
 		return nil, err
 	}
@@ -617,9 +608,12 @@ func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, e
 	for _, id := range excludeIDs {
 		excl[id] = true
 	}
-	all, err := b.nodes.ListByProject(ctx, cur.ProjectID)
-	if err != nil {
-		return nil, err
+	reachedCur := false
+	for _, l := range leavesInOrder(childrenByParent(all)) {
+		if reachedCur {
+			excl[l.ID] = true
+		}
+		reachedCur = reachedCur || l.ID == cur.ID
 	}
 	byID := make(map[string]node.Node, len(all))
 	for _, n := range all {
@@ -744,7 +738,17 @@ func (b *ContextBuilder) findPreviousLeaf(ctx context.Context, cur node.Node) (*
 	if err != nil {
 		return nil, err
 	}
-	// Build a parent_id → []children index, then DFS roots in ordinal order.
+	leaves := leavesInOrder(childrenByParent(all))
+	for i, l := range leaves {
+		if l.ID == cur.ID && i > 0 {
+			return &leaves[i-1], nil
+		}
+	}
+	return nil, nil
+}
+
+// childrenByParent builds a parent_id → []children index; roots sit under "".
+func childrenByParent(all []node.Node) map[string][]node.Node {
 	children := map[string][]node.Node{}
 	for _, n := range all {
 		key := ""
@@ -753,6 +757,12 @@ func (b *ContextBuilder) findPreviousLeaf(ctx context.Context, cur node.Node) (*
 		}
 		children[key] = append(children[key], n)
 	}
+	return children
+}
+
+// leavesInOrder walks the tree depth first and returns the leaves in document
+// order.
+func leavesInOrder(children map[string][]node.Node) []node.Node {
 	var leaves []node.Node
 	var walk func(parent string)
 	walk = func(parent string) {
@@ -764,12 +774,7 @@ func (b *ContextBuilder) findPreviousLeaf(ctx context.Context, cur node.Node) (*
 		}
 	}
 	walk("")
-	for i, l := range leaves {
-		if l.ID == cur.ID && i > 0 {
-			return &leaves[i-1], nil
-		}
-	}
-	return nil, nil
+	return leaves
 }
 
 // docToPlainText walks a Tiptap doc and concatenates text content. Mentions are

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -130,7 +131,7 @@ func TestIndexerRebuildAllRestoresLeavesAndRemovesOrphans(t *testing.T) {
 }
 
 func TestBuildTrigramMatch(t *testing.T) {
-	got, ok := buildTrigramMatch("진홍빛 눈동자")
+	got, ok := buildTrigramMatch(searchTerms("진홍빛 눈동자"))
 	if !ok {
 		t.Fatal("buildTrigramMatch returned false for long Korean terms")
 	}
@@ -138,17 +139,136 @@ func TestBuildTrigramMatch(t *testing.T) {
 		t.Fatalf("query = %q", got)
 	}
 
-	got, ok = buildTrigramMatch(`진홍빛 OR "민호"`)
+	got, ok = buildTrigramMatch(searchTerms(`진홍빛 OR "눈동자"`))
 	if !ok {
 		t.Fatal("buildTrigramMatch returned false for quoted/operator input")
 	}
-	if strings.Contains(got, " OR ") || strings.Contains(got, `"민호""`) {
+	if strings.Contains(got, " OR ") || strings.Contains(got, `"눈동자""`) {
 		t.Fatalf("query did not neutralize operators/quotes: %q", got)
 	}
 
-	if _, ok := buildTrigramMatch("수아 민"); ok {
+	if _, ok := buildTrigramMatch(searchTerms("수아 민")); ok {
 		t.Fatal("short-only terms should use LIKE fallback")
 	}
+	if _, ok := buildTrigramMatch(searchTerms("진홍빛 민호")); ok {
+		t.Fatal("a short term must not be dropped from a mixed query")
+	}
+}
+
+func TestSearchTermsKeepsPunctuationOnlyQuery(t *testing.T) {
+	if got := searchTerms(`"()"`); len(got) != 1 || got[0] != `"()"` {
+		t.Fatalf("terms = %q, want the raw query", got)
+	}
+}
+
+func TestSearcherShortTermRanksByOccurrences(t *testing.T) {
+	st, p, nr := manuscriptFixture(t)
+	ctx := context.Background()
+	indexer := NewIndexer(st.DB())
+	searcher := NewSearcher(st.DB(), nr, indexer)
+
+	once := *p.LastOpenedNodeID
+	often := sceneAfter(t, nr, once, "씬 2", "하린이 웃었다. 하린은 문을 열었고 하린의 손이 떨렸다.")
+	if err := nr.UpdateContent(ctx, once, tiptapDoc("하린이 복도를 지나갔다."), 2000); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	if err := indexer.Rebuild(ctx, p.ID); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+
+	hits, err := searcher.Query(ctx, p.ID, "하린", 5)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(hits) != 2 || hits[0].NodeID != often || hits[1].NodeID != once {
+		t.Fatalf("hits = %+v, want %s then %s", hits, often, once)
+	}
+}
+
+func TestSearcherMixedQueryRequiresEveryWord(t *testing.T) {
+	st, p, nr := manuscriptFixture(t)
+	ctx := context.Background()
+	indexer := NewIndexer(st.DB())
+	searcher := NewSearcher(st.DB(), nr, indexer)
+
+	apart := *p.LastOpenedNodeID
+	if err := nr.UpdateContent(ctx, apart, tiptapDoc("복수는 잊혔고 하린은 떠났다. 복수의 시간이었다."), 2000); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	together := sceneAfter(t, nr, apart, "씬 2", "그날 밤 하린 복수를 다짐했다.")
+	only := sceneAfter(t, nr, together, "씬 3", "하린이 차를 마셨다.")
+	if err := indexer.Rebuild(ctx, p.ID); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+
+	hits, err := searcher.Query(ctx, p.ID, "하린 복수", 5)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(hits) != 2 || hits[0].NodeID != together || hits[1].NodeID != apart {
+		t.Fatalf("hits = %+v, want phrase %s then %s, not %s", hits, together, apart, only)
+	}
+
+	hits, err = searcher.Query(ctx, p.ID, "다짐했다 하린", 5)
+	if err != nil {
+		t.Fatalf("Query mixed: %v", err)
+	}
+	if len(hits) != 1 || hits[0].NodeID != together {
+		t.Fatalf("mixed hits = %+v, want only %s", hits, together)
+	}
+}
+
+func TestSearcherShortTermSnippetIsWindowed(t *testing.T) {
+	st, p, nr := manuscriptFixture(t)
+	ctx := context.Background()
+	indexer := NewIndexer(st.DB())
+	searcher := NewSearcher(st.DB(), nr, indexer)
+
+	padding := strings.Repeat("긴 문장이 이어진다. ", 200)
+	sceneID := *p.LastOpenedNodeID
+	if err := nr.UpdateContent(ctx, sceneID, tiptapDoc(padding+"수아가 나타났다. "+padding), 2000); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	if err := indexer.Rebuild(ctx, p.ID); err != nil {
+		t.Fatalf("Rebuild: %v", err)
+	}
+
+	hits, err := searcher.Query(ctx, p.ID, "수아", 5)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(hits) != 1 {
+		t.Fatalf("hits = %+v, want 1", hits)
+	}
+	snippet := hits[0].Snippet
+	if !strings.Contains(snippet, "수아") || !strings.HasPrefix(snippet, "...") || !strings.HasSuffix(snippet, "...") {
+		t.Fatalf("snippet = %q", snippet)
+	}
+	if got, limit := utf8.RuneCountInString(snippet), 2*likeSnippetRadius+len([]rune("수아"))+6; got > limit {
+		t.Fatalf("snippet is %d runes, want at most %d", got, limit)
+	}
+	if !utf8.ValidString(snippet) {
+		t.Fatalf("snippet cut through a rune: %q", snippet)
+	}
+}
+
+func TestLikeSnippetKeepsShortTextWhole(t *testing.T) {
+	if got := likeSnippet("Sua met 수아", []string{"SUA"}); got != "Sua met 수아" {
+		t.Fatalf("snippet = %q", got)
+	}
+}
+
+func sceneAfter(t *testing.T, nr *node.Repo, afterID, label, text string) string {
+	t.Helper()
+	ctx := context.Background()
+	scene, err := nr.CreateSibling(ctx, afterID, node.KindLeaf, label, "", 3000)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+	if err := nr.UpdateContent(ctx, scene.ID, tiptapDoc(text), 4000); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	return scene.ID
 }
 
 func manuscriptFixture(t *testing.T) (*store.Store, project.Project, *node.Repo) {
