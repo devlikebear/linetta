@@ -15,6 +15,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
@@ -66,6 +67,8 @@ func newForecastFixture(t *testing.T) (context.Context, *forecastFixture) {
 		Facts: facts, Threads: threads, Beats: beats, Direction: directionRepo,
 	})
 
+	so := storyops.New(projects, nodes, threads, beats, entities, relationships).WithFacts(facts)
+
 	f := &forecastFixture{p: p, sceneID: sceneID}
 	f.d = ToolDeps{
 		Projects:  projects,
@@ -74,6 +77,8 @@ func newForecastFixture(t *testing.T) (context.Context, *forecastFixture) {
 		Beats:     beats,
 		Threads:   threads,
 		Forecasts: svc,
+		Story:     so,
+		Proposals: proposals.New(st, so, entities, threads, beats, facts, nodes, projects, nil).WithForecasts(svc),
 		Clock:     func() int64 { return 1000 },
 		Notify: func(method string, _ any) {
 			if method == "mcp.changed" {
@@ -169,5 +174,48 @@ func TestSaveForecast_isRegisteredOnlyWhenReviewGroupOn(t *testing.T) {
 func TestSaveForecast_isInReviewToolNames(t *testing.T) {
 	if !strings.Contains(strings.Join(ReviewToolNames, ","), "linetta_save_forecast") {
 		t.Errorf("ReviewToolNames = %v, want linetta_save_forecast", ReviewToolNames)
+	}
+}
+
+// An outline change an agent accepted is undone through
+// linetta_undo_last_change, and its inbox items have to go back to pending
+// with it: reverting only the outline would leave them reading as accepted,
+// pointing at nodes that no longer exist.
+func TestUndoLastChange_returnsAcceptedProposalItemsToPending(t *testing.T) {
+	ctx, f := newForecastFixture(t)
+	_, saved, err := f.d.saveForecast(ctx, nil, saveForecastInput{
+		ProjectID: f.p.ID, Divergence: "다음 회차 갈래?", Horizon: 3, Branches: twoForecastBranches(),
+	})
+	if err != nil {
+		t.Fatalf("saveForecast: %v", err)
+	}
+	if _, err := f.d.Forecasts.Select(ctx, 2, f.p.ID, saved.ForecastID, "b1"); err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	res, sub, err := f.d.proposeStoryOps(ctx, nil, proposeStoryOpsInput{
+		ProjectID: f.p.ID, Purpose: proposals.PurposeForecast, ForecastID: saved.ForecastID,
+		Items: []proposals.ItemInput{{Op: storyops.Op{Type: "create_scene", Label: "맞선 장면", AfterNodeID: f.sceneID}}},
+	})
+	if err != nil || res != nil {
+		t.Fatalf("propose: %v %+v", err, res)
+	}
+	_, accepted, err := f.d.acceptProposals(ctx, nil, decideProposalsInput{
+		ProjectID: f.p.ID, ProposalIDs: []string{sub.ProposalID},
+	})
+	if err != nil || accepted.Accepted != 1 || len(accepted.UndoBatchIDs) != 1 {
+		t.Fatalf("accepted = %+v, err = %v", accepted, err)
+	}
+	created := accepted.Items[0].CreatedID
+
+	res, undone, err := f.d.undoLastChange(ctx, nil, undoInput{BatchID: accepted.UndoBatchIDs[0]})
+	if err != nil || res != nil || undone.Reverted != "change" {
+		t.Fatalf("undo: %v %+v %+v", err, res, undone)
+	}
+	if _, err := f.d.Nodes.Get(ctx, created); err == nil {
+		t.Fatal("the scene outlived the undo")
+	}
+	_, open, err := f.d.listProposals(ctx, nil, listProposalsInput{ProjectID: f.p.ID})
+	if err != nil || open.Total != 1 || open.Items[0].Status != proposals.StatusPending {
+		t.Fatalf("open = %+v, err = %v", open, err)
 	}
 }

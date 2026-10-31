@@ -103,6 +103,34 @@ func (s *Service) attachDuplicates(ctx context.Context, projectID string, items 
 	return nil
 }
 
+// refreshDuplicates re-reads every undecided create_entity item's matches
+// against the work as it stands now. What Submit stored was true at
+// submission, but a name can reach Story World afterwards, from another batch
+// or a direct apply, and a match against an entity since deleted is no use.
+// Matches against other pending items are left as Submit recorded them.
+func (s *Service) refreshDuplicates(ctx context.Context, projectID string, list []ProposalWithItems) error {
+	existing, err := s.existingEntityCandidates(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, p := range list {
+		for i := range p.Items {
+			it := &p.Items[i]
+			if it.Op.Type != "create_entity" || !IsOpen(*it) {
+				continue
+			}
+			fresh := findDuplicates(it.Op.Name, it.Op.Kind, existing)
+			for _, dup := range it.Duplicates {
+				if dup.ItemID != "" {
+					fresh = append(fresh, dup)
+				}
+			}
+			it.Duplicates = nonNilDuplicates(fresh)
+		}
+	}
+	return nil
+}
+
 func (s *Service) existingEntityCandidates(ctx context.Context, projectID string) ([]dedupeCandidate, error) {
 	if s.entities == nil {
 		return nil, nil

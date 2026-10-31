@@ -539,7 +539,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("continuity.set_status", handlers.SetContinuityStatus(continuityRepo, clock,
 		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
 	s.Handle("continuity.open_counts", handlers.ContinuityOpenCounts(continuityRepo))
-	s.Handle("proposals.list", handlers.ListProposals(proposalsSvc, nodes, entities, threads))
+	s.Handle("proposals.list", handlers.ListProposals(proposalsSvc, nodes))
 	s.Handle("proposals.accept", handlers.AcceptProposals(proposalsSvc, clock))
 	s.Handle("proposals.reject", handlers.RejectProposals(proposalsSvc, clock))
 	s.Handle("proposals.pending_count", handlers.ProposalsPendingCount(proposalsSvc))

@@ -1720,7 +1720,11 @@ export interface SuggestionDuplicate {
 
 export interface SuggestionItemResult {
   created_id?: string;
+  /** created_id was already in the work: the item's name and kind matched it. */
+  linked_existing?: boolean;
   error?: string;
+  /** Set on a failure the inbox words itself. */
+  code?: "dependency_missing" | "name_taken";
 }
 
 /** One stored proposal item, from proposals.list. */

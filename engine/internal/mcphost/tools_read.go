@@ -40,6 +40,7 @@ var ReadToolNames = []string{
 	"linetta_analyze_style",
 	"linetta_read_skill",
 	"linetta_list_ledger",
+	"linetta_list_proposals",
 	"linetta_publish_status",
 }
 
@@ -359,6 +360,7 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	}
 	if groups.Review {
 		d.registerLedgerReadTool(s)
+		d.registerProposalReadTool(s)
 	}
 	d.registerPublishReadTool(s)
 }

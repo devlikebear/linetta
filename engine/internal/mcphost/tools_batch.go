@@ -207,6 +207,25 @@ func (d ToolDeps) undoLastChange(ctx context.Context, _ *mcp.CallToolRequest, in
 		if d.Story == nil {
 			return toolErr("story operations are unavailable in this build"), undoOutput{}, nil
 		}
+		// A batch linetta_accept_proposals made has inbox items riding on it,
+		// which must go back to pending with the outline.
+		if d.Proposals != nil {
+			projectID, ok, err := d.Proposals.ProjectOfUndoBatch(ctx, batchID)
+			if err != nil {
+				return nil, undoOutput{}, err
+			}
+			if ok {
+				p, errResult := d.requireProject(ctx, projectID)
+				if errResult != nil {
+					return errResult, undoOutput{}, nil
+				}
+				if err := d.Proposals.Undo(ctx, d.now(), p.ID, batchID); err != nil {
+					return toolErr("could not undo the change: %v", err), undoOutput{}, nil
+				}
+				d.notifyChanged(p.ID, "linetta_undo_last_change", nil, batchID)
+				return nil, undoOutput{Reverted: "change"}, nil
+			}
+		}
 		if err := d.Story.UndoApply(ctx, batchID, d.now); err != nil {
 			if errors.Is(err, storyops.ErrUndoBatchNotFound) {
 				return toolErr("undo is no longer available for that change"), undoOutput{}, nil

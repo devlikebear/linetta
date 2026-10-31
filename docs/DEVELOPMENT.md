@@ -138,7 +138,7 @@ Claude Code, Claude Desktop — can work on the manuscript. It is off until the
 writer consents and enables it under **Settings → Connect an external agent**,
 binds `127.0.0.1` only, and requires a locally generated bearer token.
 
-The default tool set has 37 tools (15 read, 22 write). Optional memory, skills,
+The default tool set has 43 tools (17 read, 26 write). Optional memory, skills,
 and visual-write groups can be switched off in Settings → Tool budget. Write tools appear
 only in `full` mode, so `read_only` omits them from `tools/list` entirely
 rather than refusing them at call time.
@@ -154,6 +154,8 @@ Read:
   returns `stats` — counted measurements of the scenes read (`style.Measure`)
 - `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
 - `linetta_read_skill`
+- `linetta_list_proposals`: the suggestions inbox's undecided items and their
+  ids, for `linetta_accept_proposals` and `linetta_reject_proposals`
 - `linetta_publish_status`: each episode's state on Linetta Works (see
   [Publishing](#publishing-to-linetta-works) below). Answers locally, without
   contacting the site, when no account is connected
@@ -192,11 +194,12 @@ Write (`full` mode only):
   there is deliberately no tool for that, since pairing is approved in the
   writer's browser;
 - `linetta_report_continuity`, `linetta_propose_story_ops`,
+  `linetta_accept_proposals`, `linetta_reject_proposals`,
   `linetta_save_forecast`: the story-assist Review group — see below.
 
 ### The Review group: check-and-record tools
 
-Three tools share one on-by-default switch, `review_tools_enabled` in
+These tools share one on-by-default switch, `review_tools_enabled` in
 `settings.json` (**Settings → Tool budget → Check & propose**), and
 `mcphost.ReviewToolNames`:
 
@@ -208,9 +211,15 @@ Three tools share one on-by-default switch, `review_tools_enabled` in
 - `linetta_propose_story_ops` (Phase 3) and `linetta_save_forecast`
   (Phase 4) are drafts instead: nothing they write ever reaches Story
   World, the outline or the manuscript on its own. A proposal sits in
-  `story_proposals`/`story_proposal_items` until the writer's own
-  `proposals.accept` click runs it through `storyops.ApplyOpsWithRefs` —
-  no MCP tool accepts one. A forecast's branch becomes a plan only
+  `story_proposals`/`story_proposal_items` until it is accepted, which runs
+  it through `storyops.ApplyOpsWithRefs`: by the writer's own
+  `proposals.accept` click, or by an agent the writer told to, through
+  `linetta_accept_proposals`. That tool and `linetta_reject_proposals` are
+  the writer's decision handed over, not the agent's own: their descriptions
+  and the system prompt require the writer's word for it in the conversation,
+  and they reach nothing `linetta_apply_story_ops` does not already reach.
+  `linetta_list_proposals` gives them their ids. All three are absent from
+  the bounded background passes. A forecast's branch becomes a plan only
   through the writer's own `forecast.select` click, and reaching the
   outline from there is a SECOND draft: `linetta_propose_story_ops
   purpose=forecast`, through the same inbox.

@@ -80,7 +80,7 @@ func TestSystemPrompt_statesTheRecordAndPatchHabit(t *testing.T) {
 // group is on — linetta_propose_story_ops is absent otherwise.
 func TestSystemPrompt_statesProposeVsApplyWhenReviewOn(t *testing.T) {
 	got := systemPrompt("en", emptyDoc(agentmemory.ScopeWriterProfile), emptyDoc(agentmemory.ScopeWorkNotes), nil, allToolGroups())
-	for _, want := range []string{"linetta_propose_story_ops", "linetta_apply_story_ops", "import_extraction", "continue"} {
+	for _, want := range []string{"linetta_propose_story_ops", "linetta_apply_story_ops", "linetta_accept_proposals", "import_extraction", "continue"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("prompt missing %q with review on; got:\n%s", want, got)
 		}

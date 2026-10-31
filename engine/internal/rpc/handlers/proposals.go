@@ -3,20 +3,17 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
-	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
-	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
 // proposals.* serve story-assist Phase 3's suggestions inbox: an agent's
 // linetta_propose_story_ops candidates, and the writer's item-by-item
-// accept/reject of them. Nothing here applies anything on its own —
+// accept/reject of them, by hand here or through linetta_accept_proposals. Nothing here applies anything on its own —
 // proposals.accept is the one path that does, by running the chosen items
 // through the same storyops applier every other write goes through.
 
@@ -60,7 +57,7 @@ type proposalOut struct {
 }
 
 // ListProposals returns a handler for proposals.list.
-func ListProposals(svc *proposals.Service, nodes *node.Repo, entities *entity.Repo, threads *thread.Repo) rpc.Handler {
+func ListProposals(svc *proposals.Service, nodes *node.Repo) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {
 			ProjectID string   `json:"project_id"`
@@ -91,18 +88,8 @@ func ListProposals(svc *proposals.Service, nodes *node.Repo, entities *entity.Re
 
 		out := make([]proposalOut, 0, len(list))
 		for _, p := range list {
-			statusByID := map[string]string{}
-			for _, it := range p.Items {
-				statusByID[it.ID] = it.Status
-			}
 			items := make([]proposalItemOut, 0, len(p.Items))
 			for _, it := range p.Items {
-				blocked := false
-				for _, dep := range it.DependsOn {
-					if statusByID[dep] == proposals.StatusRejected {
-						blocked = true
-					}
-				}
 				evidence := make([]proposalEvidenceOut, 0, len(it.Evidence))
 				for _, ev := range it.Evidence {
 					breadcrumb := ""
@@ -114,9 +101,9 @@ func ListProposals(svc *proposals.Service, nodes *node.Repo, entities *entity.Re
 				items = append(items, proposalItemOut{
 					ID: it.ID, ProposalID: it.ProposalID, Ordinal: it.Ordinal,
 					OpType: it.Op.Type, Op: it.Op,
-					Summary:           summarizeProposalOp(ctx, it.Op, p.Items, entities, threads),
+					Summary:           svc.Summarize(ctx, it.Op, p.Items),
 					DependsOn:         it.DependsOn,
-					BlockedByRejected: blocked,
+					BlockedByRejected: proposals.DependencyRejected(it, p.Items),
 					Evidence:          evidence,
 					FromNodeIDs:       it.FromNodeIDs,
 					Duplicates:        it.Duplicates,
@@ -171,7 +158,7 @@ func RejectProposals(svc *proposals.Service, now Clock) rpc.Handler {
 		if svc == nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: "proposals are not available"}
 		}
-		if err := svc.Reject(ctx, now(), in.ProjectID, in.ItemIDs); err != nil {
+		if _, err := svc.Reject(ctx, now(), in.ProjectID, in.ItemIDs); err != nil {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(struct {
@@ -245,98 +232,5 @@ func ExtractionProgress(svc *proposals.Service) rpc.Handler {
 			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
 		}
 		return json.Marshal(progress)
-	}
-}
-
-// summarizeProposalOp renders one op the way the inbox row's headline
-// reads it ("새 인물: 하린 — 검술 사범"), resolving a referenced entity/
-// thread's name either from the work (an update op's real id) or from a
-// sibling create_entity/create_thread item in the SAME proposal (a ref that
-// has not been accepted yet, so it has no real id to look up).
-func summarizeProposalOp(ctx context.Context, op storyops.Op, siblings []proposals.Item, entities *entity.Repo, threads *thread.Repo) string {
-	resolveEntity := func(idOrRef string) string {
-		if idOrRef == "" {
-			return ""
-		}
-		if entities != nil {
-			if e, err := entities.Get(ctx, idOrRef); err == nil {
-				return e.Name
-			}
-		}
-		for _, sib := range siblings {
-			if sib.Op.Type == "create_entity" && sib.Op.Ref == idOrRef {
-				return sib.Op.Name
-			}
-		}
-		return idOrRef
-	}
-	resolveThread := func(idOrRef string) string {
-		if idOrRef == "" {
-			return ""
-		}
-		if threads != nil {
-			if th, err := threads.Get(ctx, idOrRef); err == nil {
-				return th.Name
-			}
-		}
-		for _, sib := range siblings {
-			if sib.Op.Type == "create_thread" && sib.Op.Ref == idOrRef {
-				return sib.Op.Name
-			}
-		}
-		return idOrRef
-	}
-
-	switch op.Type {
-	case "create_entity":
-		if op.Role != "" {
-			return fmt.Sprintf("새 %s: %s — %s", entityKindLabelKo(op.Kind), op.Name, op.Role)
-		}
-		return fmt.Sprintf("새 %s: %s", entityKindLabelKo(op.Kind), op.Name)
-	case "update_entity":
-		name := op.Name
-		if name == "" {
-			name = resolveEntity(op.EntityID)
-		}
-		return fmt.Sprintf("%s 정보 수정", name)
-	case "create_relationship":
-		from := op.From
-		if from == "" {
-			from = op.FromRef
-		}
-		to := op.To
-		if to == "" {
-			to = op.ToRef
-		}
-		return fmt.Sprintf("관계: %s → %s (%s)", resolveEntity(from), resolveEntity(to), op.Label)
-	case "create_fact_card":
-		return fmt.Sprintf("팩트: %s", op.Claim)
-	case "create_thread":
-		return fmt.Sprintf("새 스토리라인: %s", op.Name)
-	case "update_thread":
-		name := op.Name
-		if name == "" {
-			name = resolveThread(op.ThreadID)
-		}
-		return fmt.Sprintf("스토리라인 수정: %s", name)
-	case "add_beat":
-		return fmt.Sprintf("비트 추가: %s", op.Label)
-	case "update_beat":
-		return fmt.Sprintf("비트 수정: %s", op.Label)
-	default:
-		return op.Type
-	}
-}
-
-func entityKindLabelKo(kind string) string {
-	switch kind {
-	case "place":
-		return "장소"
-	case "item":
-		return "사물"
-	case "concept":
-		return "개념"
-	default:
-		return "인물"
 	}
 }

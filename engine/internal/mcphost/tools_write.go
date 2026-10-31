@@ -44,6 +44,8 @@ var WriteToolNames = []string{
 	"linetta_publish_cover",
 	"linetta_report_continuity",
 	"linetta_propose_story_ops",
+	"linetta_accept_proposals",
+	"linetta_reject_proposals",
 	"linetta_save_forecast",
 	"linetta_edit_ledger",
 	"linetta_set_part_arc",

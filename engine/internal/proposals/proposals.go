@@ -3,7 +3,8 @@
 // batch of ops here instead of handing them straight to storyops; nothing
 // in the batch touches Story World until the writer accepts an item, one at
 // a time, through Accept — which runs it through the same storyops applier
-// every other write goes through.
+// every other write goes through. An agent may ask Accept or Reject too, but
+// only as the writer's delegate: see linetta_accept_proposals.
 //
 // linetta_apply_story_ops is unchanged and still exists for a small, directly
 // requested change. This package exists for everything pulled from the
@@ -247,11 +248,28 @@ type Duplicate struct {
 	Matched string `json:"matched"`
 }
 
+// Error codes an ItemResult carries when the app words a failure itself.
+const (
+	// ErrorCodeDependencyMissing: a sibling this item refers to has not been
+	// accepted yet.
+	ErrorCodeDependencyMissing = "dependency_missing"
+	// ErrorCodeNameTaken: another kind of story element already holds this
+	// name, and a work cannot have the same name twice.
+	ErrorCodeNameTaken = "name_taken"
+)
+
 // ItemResult is what Accept recorded for one item: a created id, or why it
 // failed.
 type ItemResult struct {
 	CreatedID string `json:"created_id,omitempty"`
-	Error     string `json:"error,omitempty"`
+	// LinkedExisting means CreatedID is an entity that was already in the
+	// work: a create_entity item whose exact name and kind were taken became
+	// that record, rather than failing or making a second one.
+	LinkedExisting bool   `json:"linked_existing,omitempty"`
+	Error          string `json:"error,omitempty"`
+	// Code names a failure the app words itself, in the writer's language;
+	// Error stays the sentence an agent reads.
+	Code string `json:"code,omitempty"`
 }
 
 // Item is one stored proposal item.
