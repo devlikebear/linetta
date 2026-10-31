@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -1025,6 +1026,9 @@ func TestPullFromAnOlderSchemaDoesNotLookLikeALocalChange(t *testing.T) {
 // The text is in by the time the files are written, so failing there reports and
 // does not pretend the pull failed.
 func TestFilesThatCannotLandDoNotFailThePull(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("a read-only directory stops neither Windows nor root")
+	}
 	ctx := context.Background()
 	_, a, b := devices(t)
 	a.edit(t, workID, "새 문장")
