@@ -70,6 +70,15 @@ func RunPreMigration(ctx context.Context, db *sql.DB, home string, targetVersion
 	return createPublishedBackup(ctx, db, dir, filename)
 }
 
+// RunBeforeVaultPull snapshots the library before a vault pull replaces a work
+// in it. It goes in the dated directory, so Prune retires it with the daily
+// backups and repeated pulls do not pile up full copies of the library.
+func RunBeforeVaultPull(ctx context.Context, db *sql.DB, home string, now time.Time) (string, error) {
+	dir := filepath.Join(home, "backups", now.Format("2006-01-02"))
+	filename := fmt.Sprintf("library-pre-vault-%s.db", now.Format("150405.000"))
+	return createPublishedBackup(ctx, db, dir, filename)
+}
+
 // RunManualRecovery creates a complete, versioned SQLite library snapshot.
 // Unlike the project Markdown export, this archive preserves every table and
 // can be restored by the startup recovery screen.

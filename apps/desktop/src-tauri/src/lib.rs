@@ -189,6 +189,12 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "threads.list",
     "threads.reopen",
     "threads.update",
+    "vault.pull",
+    "vault.push",
+    "vault.resolve_conflict",
+    "vault.setup",
+    "vault.status",
+    "vault.work_status",
     "visuals.add_image",
     "visuals.delete_image",
     "visuals.get_art_style",
@@ -917,6 +923,16 @@ mod security_boundary_tests {
     fn renderer_rpc_allowlist_rejects_internal_and_unknown_methods() {
         assert!(is_renderer_engine_method("projects.list"));
         assert!(is_renderer_engine_method("export.companion_history"));
+        for method in [
+            "vault.pull",
+            "vault.push",
+            "vault.resolve_conflict",
+            "vault.setup",
+            "vault.status",
+            "vault.work_status",
+        ] {
+            assert!(is_renderer_engine_method(method), "{method}");
+        }
         // The companion's own methods are gone; the allowlist must not still
         // be handing them to the renderer.
         assert!(!is_renderer_engine_method("companion.send"));
