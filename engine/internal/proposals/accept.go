@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/storyops"
 )
 
@@ -71,10 +72,19 @@ func kindForOp(opType string) string {
 // and rejected are terminal.
 //
 // Items are applied in the proposal's own ordinal order — not the order
-// itemIDs was given in — because a later item's ref may depend on an
-// earlier one created earlier in the SAME call. Items from different
+// itemIDs was given in — with ref-declaring items first (declarationsFirst):
+// a relationship may name an entity created in the SAME call, and Submit
+// never required the entity to be listed first. Items from different
 // proposals are independent and do not affect each other's dependency
 // resolution.
+//
+// A create_entity whose exact name is already in the work cannot become a
+// second row: entities is UNIQUE(project_id, name), and an import sweep
+// proposes the same cast in batch after batch. With the same kind it is the
+// same record, so the item links to it, adding only what that record lacks
+// (intoExistingEntity), and whatever depends on the item resolves to it. A
+// different kind is refused with ErrorCodeNameTaken. Spelling variants and
+// aliases are never linked here: those stay dedupe.go's flag for the writer.
 //
 // Unlike Submit (one all-or-nothing transaction) and storyops' own
 // structural batches, Accept commits one item at a time with no enclosing
@@ -276,7 +286,7 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 			}
 		}
 
-		for _, it := range all { // ordinal order — listItemsByProposal already sorts by ordinal
+		for _, it := range declarationsFirst(all) {
 			if handled[it.ID] {
 				continue // already given an outcome by the structural pre-pass above
 			}
@@ -319,10 +329,40 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 				op = validated
 			}
 
+			linked := false
+			if op.Type == "create_entity" {
+				existing, taken, err := s.entityNamed(ctx, projectID, op.Name)
+				if err != nil {
+					return AcceptResult{}, err
+				}
+				switch {
+				case !taken:
+				case existing.Kind == op.Kind:
+					op, linked = intoExistingEntity(op, existing), true
+				default:
+					it.Status = StatusFailed
+					it.Result = ItemResult{
+						Code: ErrorCodeNameTaken,
+						Error: fmt.Sprintf("%q is already a %s in this work and a name can only be used once; "+
+							"edit this item's name or reject it", op.Name, existing.Kind),
+					}
+					it.StatusAt = now
+					if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
+						return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
+					}
+					outcomes[it.ID] = it
+					changed = true
+					continue
+				}
+			}
+
 			if missing := effectiveMissingDependency(op, it.ID, refOwner, committed); missing != "" {
 				label := dependencyLabel(itemByID, missing)
 				it.Status = StatusFailed
-				it.Result = ItemResult{Error: fmt.Sprintf("depends on %q, which has not been accepted", label)}
+				it.Result = ItemResult{
+					Code:  ErrorCodeDependencyMissing,
+					Error: fmt.Sprintf("depends on %q, which has not been accepted", label),
+				}
 				it.StatusAt = now
 				if werr := s.updateItemStatus(ctx, s.store.DB(), it.ID, it.Status, it.Result, now); werr != nil {
 					return AcceptResult{}, fmt.Errorf("persist item %s status: %w", it.ID, werr)
@@ -344,7 +384,7 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 			} else {
 				it.Status = StatusAccepted
 				resultID := resultIDFor(it, op, applied, newRefs)
-				it.Result = ItemResult{CreatedID: resultID}
+				it.Result = ItemResult{CreatedID: resultID, LinkedExisting: linked}
 				committed[it.ID] = true
 				seeded = newRefs
 				// Fold this item's own ref (declared under its ORIGINAL
@@ -428,40 +468,101 @@ func (s *Service) Accept(ctx context.Context, now int64, projectID string, itemI
 	return result, nil
 }
 
-// Reject marks the named pending items rejected. It never cascades: a
-// pending item that depends on a rejected one is left exactly as it is —
-// the writer sees "depends on a rejected item" the next time they list the
-// inbox (proposals.list, 3.D.1), rather than losing the item to an
-// automatic chain reaction they did not ask for.
-func (s *Service) Reject(ctx context.Context, now int64, projectID string, itemIDs []string) error {
+// Reject marks the named undecided items rejected — failed ones included,
+// or a row Accept could not apply would stay in the inbox for good — and
+// returns how many it rejected. It never cascades: a pending item that
+// depends on a rejected one is left exactly as it is — the writer sees
+// "depends on a rejected item" the next time they list the inbox
+// (proposals.list, 3.D.1), rather than losing the item to an automatic chain
+// reaction they did not ask for.
+func (s *Service) Reject(ctx context.Context, now int64, projectID string, itemIDs []string) (int, error) {
 	projectID = strings.TrimSpace(projectID)
 	items, err := s.getItemsByIDs(ctx, projectID, itemIDs)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	tx, err := s.store.DB().BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer tx.Rollback()
-	any := false
+	rejected := 0
 	for _, id := range itemIDs {
 		it, ok := items[id]
-		if !ok || it.Status != StatusPending {
+		if !ok || !IsOpen(it) {
 			continue
 		}
 		if err := s.updateItemStatus(ctx, tx, id, StatusRejected, ItemResult{}, now); err != nil {
-			return err
+			return 0, err
 		}
-		any = true
+		items[id] = Item{Status: StatusRejected}
+		rejected++
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return 0, err
 	}
-	if any {
+	if rejected > 0 {
 		s.fireNotify("proposals.changed", proposalsChangedPayload{ProjectID: projectID, Kinds: []string{"proposals"}})
 	}
-	return nil
+	return rejected, nil
+}
+
+// IsOpen reports whether an item still waits on a decision: pending, or
+// failed and so retryable. accepted and rejected are terminal, and reverting
+// belongs to Undo.
+func IsOpen(it Item) bool {
+	return it.Status == StatusPending || it.Status == StatusFailed
+}
+
+// declarationsFirst orders a proposal's items for applying: everything that
+// declares a ref, then everything else, each in ordinal order
+// (listItemsByProposal already sorts by it).
+func declarationsFirst(items []Item) []Item {
+	out := make([]Item, 0, len(items))
+	for _, it := range items {
+		if isRefDeclaringOp(it.Op.Type) {
+			out = append(out, it)
+		}
+	}
+	for _, it := range items {
+		if !isRefDeclaringOp(it.Op.Type) {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+func (s *Service) entityNamed(ctx context.Context, projectID, name string) (entity.Entity, bool, error) {
+	if s.entities == nil {
+		return entity.Entity{}, false, nil
+	}
+	return s.entities.FindByName(ctx, projectID, strings.TrimSpace(name))
+}
+
+// intoExistingEntity turns a create_entity into an update of the record that
+// already holds its name, carrying only what adds to it: the writer's own
+// role, summary and attributes are never overwritten by a candidate, and
+// aliases only ever grow. The result declares no ref of its own — resultIDFor
+// reads the target back from EntityID, the same path an alias conversion
+// takes, so a sibling naming this item resolves to the existing record.
+func intoExistingEntity(op storyops.Op, existing entity.Entity) storyops.Op {
+	merged := storyops.Op{Type: "update_entity", EntityID: existing.ID, Aliases: op.Aliases}
+	if strings.TrimSpace(existing.Role) == "" {
+		merged.Role = op.Role
+	}
+	if strings.TrimSpace(existing.Summary) == "" {
+		merged.Summary = op.Summary
+	}
+	for key, value := range op.Attributes {
+		if _, set := existing.Attributes[key]; set {
+			continue
+		}
+		if merged.Attributes == nil {
+			merged.Attributes = map[string]string{}
+		}
+		merged.Attributes[key] = value
+	}
+	return merged
 }
 
 // proposalsChangedPayload is what fireNotify sends for "proposals.changed" —

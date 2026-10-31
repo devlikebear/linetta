@@ -115,7 +115,7 @@ site says both, because a writer paying per token should not learn the second
 one from a bill.
 
 Claims in `content.ts` are taken from the engine rather than from the docs — the
-thirty-six `linetta_*` tool names, the fifteen/twenty-one read-write split, the
+forty-three `linetta_*` tool names, the seventeen/twenty-six read-write split, the
 access modes, the 7391 default port, the per-minute call limit. When one of them
 changes, the engine is the thing to check. The two counts live in
 `engine/internal/mcphost/tools_read.go` (`ReadToolNames`) and

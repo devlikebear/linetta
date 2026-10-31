@@ -184,7 +184,7 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 			"(#132 trimmed them from 8282B to 7120B)", sum)
 	}
 
-	total, ledgerTools := 0, 0
+	total, ledgerTools, inboxTools := 0, 0, 0
 	for name, b := range sizes {
 		// Keep the original ceiling intact; #154's two new tools have their own allowance.
 		if name == "linetta_get_character_visuals" || name == "linetta_build_illustration_prompt" {
@@ -208,6 +208,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		// story-assist Phase 2's report tool, Phase 3's propose tool, and
 		// Phase 4's save-forecast tool carry their own allowances below.
 		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" || name == "linetta_save_forecast" {
+			continue
+		}
+		if name == "linetta_list_proposals" || name == "linetta_accept_proposals" || name == "linetta_reject_proposals" {
+			inboxTools += b
 			continue
 		}
 		if name == "linetta_list_ledger" || name == "linetta_edit_ledger" || name == "linetta_set_part_arc" {
@@ -244,9 +248,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// the items[].op schema is the whole storyops.Op struct (every op's
 	// fields, shared with linetta_apply_story_ops), which is the cost of
 	// one schema describing every allowed op rather than eight narrower
-	// ones.
-	if propose := sizes["linetta_propose_story_ops"]; propose > 8100 {
-		t.Errorf("linetta_propose_story_ops costs %dB, want <= 8100B", propose)
+	// ones. An item's result gaining linked_existing and code brought it to
+	// 8,156B.
+	if propose := sizes["linetta_propose_story_ops"]; propose > 8200 {
+		t.Errorf("linetta_propose_story_ops costs %dB, want <= 8200B", propose)
 	}
 	// story-assist Phase 4's save-forecast tool measured 3,701B: branches[]
 	// nests beats[], decisions[], changes{} and risks[] — one schema
@@ -290,6 +295,11 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// 27,618B; the ledger tools carry their own allowance, 4,500B.
 	if ledgerTools > 4500 {
 		t.Errorf("the ledger tools cost %dB, want <= 4500B", ledgerTools)
+	}
+	// The three inbox tools measured 3,790B: list 1,621B, accept 1,331B,
+	// reject 838B.
+	if inboxTools > 3900 {
+		t.Errorf("the inbox tools cost %dB, want <= 3900B", inboxTools)
 	}
 	if total > 27650 {
 		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 27650B "+

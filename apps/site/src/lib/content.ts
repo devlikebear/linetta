@@ -426,14 +426,14 @@ export const en: Translation = {
       { name: 'Off', body: 'The default. Nothing listens, and nothing is exposed.' },
       {
         name: 'Read only',
-        body: 'Fifteen read tools. The write tools are never registered, so they do not appear in tools/list and cannot be called.'
+        body: 'Seventeen read tools. The write tools are never registered, so they do not appear in tools/list and cannot be called.'
       },
       {
         name: 'Full',
-        body: 'All thirty-six. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
+        body: 'All forty-three. A scene write is snapshotted first, and an outline restructuring can be undone in one call.'
       }
     ],
-    toolsLabel: 'Thirty-seven tools, not a hundred RPCs',
+    toolsLabel: 'Forty-three tools, not a hundred RPCs',
     toolsNote:
       'A client’s tool budget is finite and selection accuracy falls as the list grows, so the engine’s RPC surface is not exposed one-to-one. Access can also be pinned to a single work, and Settings → Tool budget shows what each optional group costs and turns it off.',
     readLabel: 'Read',
@@ -446,6 +446,7 @@ export const en: Translation = {
       { name: 'linetta_list_works', note: 'Works, titles, status, scene counts' },
       { name: 'linetta_list_characters', note: 'Characters, places, objects, concepts' },
       { name: 'linetta_where_does_appear', note: 'Every scene an entity appears in' },
+      { name: 'linetta_list_proposals', note: 'What is waiting in the suggestions inbox' },
       { name: 'linetta_get_plot', note: 'Storylines and beats' },
       { name: 'linetta_get_fact_cards', note: 'Research notes with their sources' },
       { name: 'linetta_get_character_visuals', note: 'Character designs and reference images' },
@@ -466,6 +467,8 @@ export const en: Translation = {
       { name: 'linetta_edit_memory', note: 'Record what it has learned — the writer profile, which applies to every work, or this work’s notes' },
       { name: 'linetta_edit_skill', note: 'Write a how-to as a SKILL.md file — global, or tied to one work. No approval step; the writer gets attribution, history and an off switch' },
       { name: 'linetta_propose_story_ops', note: 'Send candidates to the suggestions inbox; nothing is applied' },
+      { name: 'linetta_accept_proposals', note: 'Accept inbox items when you tell it to' },
+      { name: 'linetta_reject_proposals', note: 'Reject inbox items when you tell it to' },
       { name: 'linetta_report_continuity', note: 'Record continuity findings, each with an exact quote' },
       { name: 'linetta_save_forecast', note: 'Save possible branches; none of it is canon' },
       { name: 'linetta_propose_style_profile', note: 'Drafts a style profile for you to approve' },
@@ -893,14 +896,14 @@ export const ko: Translation = {
       { name: '꺼짐', body: '기본값입니다. 아무것도 열리지 않고, 아무것도 노출되지 않습니다.' },
       {
         name: '읽기 전용',
-        body: '읽기 툴 15개. 쓰기 툴은 아예 등록되지 않아 tools/list에 나타나지도, 호출되지도 않습니다.'
+        body: '읽기 툴 17개. 쓰기 툴은 아예 등록되지 않아 tools/list에 나타나지도, 호출되지도 않습니다.'
       },
       {
         name: '전체',
-        body: '36개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
+        body: '43개 전부. 씬 쓰기는 먼저 스냅샷되고, 아웃라인 구조 변경은 한 번의 호출로 되돌릴 수 있습니다.'
       }
     ],
-    toolsLabel: 'RPC 100개가 아니라, 툴 37개',
+    toolsLabel: 'RPC 100개가 아니라, 툴 43개',
     toolsNote:
       '클라이언트의 툴 예산은 유한하고 목록이 길어질수록 선택 정확도가 떨어집니다. 그래서 엔진 RPC를 1:1로 노출하지 않습니다. 접근을 한 작품으로 제한할 수도 있고, 설정 → 툴 예산에서 선택 그룹별 비용을 보고 끌 수 있습니다.',
     readLabel: '읽기',
@@ -913,6 +916,7 @@ export const ko: Translation = {
       { name: 'linetta_list_works', note: '작품, 제목, 상태, 씬 수' },
       { name: 'linetta_list_characters', note: '인물, 장소, 사물, 개념' },
       { name: 'linetta_where_does_appear', note: '특정 엔티티가 등장하는 모든 씬' },
+      { name: 'linetta_list_proposals', note: '제안함에서 대기 중인 항목' },
       { name: 'linetta_get_plot', note: '스토리라인과 비트' },
       { name: 'linetta_get_fact_cards', note: '출처가 붙은 조사 노트' },
       { name: 'linetta_get_character_visuals', note: '인물 디자인과 참조 이미지' },
@@ -933,6 +937,8 @@ export const ko: Translation = {
       { name: 'linetta_edit_memory', note: '알아낸 것을 기록 — 모든 작품에 적용되는 작가 프로필, 또는 이 작품의 노트' },
       { name: 'linetta_edit_skill', note: '기법을 SKILL.md 파일로 기록 — 전역이거나 한 작품에 묶이거나. 승인 절차는 없고, 작가는 대신 작성자 표시와 버전 기록과 끄는 스위치를 받습니다' },
       { name: 'linetta_propose_story_ops', note: '후보를 제안함으로 보냄 — 아무것도 적용되지 않습니다' },
+      { name: 'linetta_accept_proposals', note: '작가가 시킬 때 제안함 항목을 수락' },
+      { name: 'linetta_reject_proposals', note: '작가가 시킬 때 제안함 항목을 거절' },
       { name: 'linetta_report_continuity', note: '연속성 점검 결과를 정확한 인용과 함께 기록' },
       { name: 'linetta_save_forecast', note: '가능한 갈래를 저장 — 어느 것도 정사가 아닙니다' },
       { name: 'linetta_propose_style_profile', note: '작가가 승인할 문체 프로필 초안 제안' },
@@ -1358,14 +1364,14 @@ export const ja: Translation = {
       { name: 'オフ', body: '既定値です。何も待ち受けず、何も公開されません。' },
       {
         name: '読み取り専用',
-        body: '読み取りツール15個。書き込みツールは登録すらされないので、tools/list に現れず、呼び出せません。'
+        body: '読み取りツール17個。書き込みツールは登録すらされないので、tools/list に現れず、呼び出せません。'
       },
       {
         name: 'フル',
-        body: '36個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
+        body: '43個すべて。シーンの書き込みは先にスナップショットされ、アウトラインの構造変更は一度の呼び出しで取り消せます。'
       }
     ],
-    toolsLabel: 'RPC 百個ではなく、ツール37個',
+    toolsLabel: 'RPC 百個ではなく、ツール43個',
     toolsNote:
       'クライアントのツール予算は有限で、一覧が伸びるほど選択の精度は落ちます。だからエンジンの RPC を1対1では公開しません。アクセスを一つの作品に限定することもでき、設定 → ツール予算で任意グループごとのコストを見てオフにできます。',
     readLabel: '読み取り',
@@ -1378,6 +1384,7 @@ export const ja: Translation = {
       { name: 'linetta_list_works', note: '作品、題、状態、シーン数' },
       { name: 'linetta_list_characters', note: '人物、場所、もの、概念' },
       { name: 'linetta_where_does_appear', note: '特定のエンティティが登場する全シーン' },
+      { name: 'linetta_list_proposals', note: '提案箱で待機中の項目' },
       { name: 'linetta_get_plot', note: 'ストーリーラインとビート' },
       { name: 'linetta_get_fact_cards', note: '出典付きの調査ノート' },
       { name: 'linetta_get_character_visuals', note: 'キャラクターデザインと参照画像' },
@@ -1398,6 +1405,8 @@ export const ja: Translation = {
       { name: 'linetta_edit_memory', note: '学んだことを記録 — すべての作品に適用される作家プロフィール、またはこの作品のノート' },
       { name: 'linetta_edit_skill', note: '手法を SKILL.md ファイルとして書く — グローバルにも、一つの作品に紐づけることも。承認の手順はなく、作家は代わりに作成者の表示とバージョン履歴とオフのスイッチを得ます' },
       { name: 'linetta_propose_story_ops', note: '候補を提案箱へ送る — 何も適用されません' },
+      { name: 'linetta_accept_proposals', note: '作家の指示で提案箱の項目を承認' },
+      { name: 'linetta_reject_proposals', note: '作家の指示で提案箱の項目を却下' },
       { name: 'linetta_report_continuity', note: '連続性の指摘を正確な引用とともに記録' },
       { name: 'linetta_save_forecast', note: 'ありうる分岐を保存 — どれも正史ではありません' },
       { name: 'linetta_propose_style_profile', note: '作者が承認する文体プロフィールの下書きを提案' },

@@ -72,7 +72,7 @@ func TestListProposals_summaryAndStructure(t *testing.T) {
 		},
 	})
 
-	h := ListProposals(f.svc, nil, nil, nil)
+	h := ListProposals(f.svc, nil)
 	params, _ := json.Marshal(map[string]any{"project_id": f.pID})
 	raw, err := h(context.Background(), params)
 	if err != nil {
@@ -102,11 +102,11 @@ func TestListProposals_flagsBlockedByRejected(t *testing.T) {
 			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e1", Label: "자기자신"}},
 		},
 	})
-	if err := f.svc.Reject(context.Background(), f.now(), f.pID, []string{sub.Items[0].ID}); err != nil {
+	if _, err := f.svc.Reject(context.Background(), f.now(), f.pID, []string{sub.Items[0].ID}); err != nil {
 		t.Fatalf("Reject: %v", err)
 	}
 
-	h := ListProposals(f.svc, nil, nil, nil)
+	h := ListProposals(f.svc, nil)
 	params, _ := json.Marshal(map[string]any{"project_id": f.pID})
 	raw, err := h(context.Background(), params)
 	if err != nil {
@@ -231,7 +231,7 @@ func TestProposalsHandlers_requireProjectID(t *testing.T) {
 		name string
 		h    func(context.Context, json.RawMessage) (json.RawMessage, error)
 	}{
-		{"list", ListProposals(f.svc, nil, nil, nil)},
+		{"list", ListProposals(f.svc, nil)},
 		{"accept", AcceptProposals(f.svc, f.now)},
 		{"reject", RejectProposals(f.svc, f.now)},
 		{"pending_count", ProposalsPendingCount(f.svc)},

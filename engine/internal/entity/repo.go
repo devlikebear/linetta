@@ -54,6 +54,20 @@ func (r *Repo) Get(ctx context.Context, id string) (Entity, error) {
 	return e, err
 }
 
+// FindByName returns the entity holding name in a work, if any. A name is
+// unique within a work, so at most one row can match.
+func (r *Repo) FindByName(ctx context.Context, projectID, name string) (Entity, bool, error) {
+	row := r.s.DB().QueryRowContext(ctx, baseSelect+` WHERE project_id = ? AND name = ?`, projectID, name)
+	e, err := scan(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Entity{}, false, nil
+	}
+	if err != nil {
+		return Entity{}, false, err
+	}
+	return e, true, nil
+}
+
 // Update applies a partial input. Non-nil pointers overwrite fields, including
 // clearing optional strings with an explicit empty value.
 func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) error {

@@ -39,6 +39,7 @@ export const READ_TOOL_NAMES = [
   "linetta_analyze_style",
   "linetta_read_skill",
   "linetta_list_ledger",
+  "linetta_list_proposals",
   "linetta_publish_status",
 ] as const;
 
@@ -64,6 +65,8 @@ export const WRITE_TOOL_NAMES = [
   "linetta_publish_cover",
   "linetta_report_continuity",
   "linetta_propose_story_ops",
+  "linetta_accept_proposals",
+  "linetta_reject_proposals",
   "linetta_save_forecast",
   "linetta_edit_ledger",
   "linetta_set_part_arc",

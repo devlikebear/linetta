@@ -15,7 +15,30 @@ var ErrNotFound = errors.New("proposal not found")
 // List returns every batch for projectID whose items match statuses (an
 // empty list means every status), newest first — proposals.list's data.
 func (s *Service) List(ctx context.Context, projectID string, statuses []string) ([]ProposalWithItems, error) {
-	return s.listProposals(ctx, projectID, statuses)
+	list, err := s.listProposals(ctx, projectID, statuses)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.refreshDuplicates(ctx, projectID, list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// ProjectOfUndoBatch names the work a structural batch from Accept belongs
+// to. ok is false for any batch Accept did not make, which is how
+// linetta_undo_last_change tells a proposal's outline change, whose items have
+// to go back to pending with it, from a plain storyops batch.
+func (s *Service) ProjectOfUndoBatch(ctx context.Context, batchID string) (projectID string, ok bool, err error) {
+	err = s.store.DB().QueryRowContext(ctx,
+		`SELECT project_id FROM story_proposal_items WHERE undo_batch_id = ? LIMIT 1`, batchID).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return projectID, true, nil
 }
 
 // PendingCount returns how many pending items projectID has —

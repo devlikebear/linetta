@@ -222,7 +222,7 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
         // fail at apply time — the writer sees both checked together.
         for (const depId of item.depends_on) {
           const dep = itemsById.get(depId);
-          if (dep && dep.status === "pending") next.add(depId);
+          if (dep && (dep.status === "pending" || dep.status === "failed")) next.add(depId);
         }
         return next;
       });
@@ -460,7 +460,15 @@ export function ProposalInbox({ projectId, onClose, onOpenNode }: Readonly<Props
                         </div>
                       )}
 
-                      {item.result.error && <p className="pi-note pi-note-error">{item.result.error}</p>}
+                      {item.result.code === "name_taken" ? (
+                        <p className="pi-note pi-note-error">{t("proposals.item.nameTaken", { name: item.op.name ?? "" })}</p>
+                      ) : (
+                        // dependency_missing is the unmet-dependency note above, in the writer's language.
+                        item.result.error &&
+                        item.result.code !== "dependency_missing" && (
+                          <p className="pi-note pi-note-error">{item.result.error}</p>
+                        )
+                      )}
 
                       <div className="pi-row-actions">
                         <button

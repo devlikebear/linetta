@@ -258,7 +258,7 @@ without you asking for it.
 
 **You can switch the memory, skills, review, and visual editing tools off
 entirely.** Every tool's full description travels in every request, so
-Linetta's thirty-nine tools are a standing cost on every turn — and the memory
+Linetta's forty-three tools are a standing cost on every turn — and the memory
 tool, the two skills tools, and the three check-and-propose tools together are
 a meaningful share of it. **Settings → Tool budget** says how many tools the
 agent currently gets and what each group costs, and turns each group off for
@@ -276,7 +276,7 @@ tool off, what is already recorded is still read back to the agent — it just
 cannot add to it, and you can still edit it yourself under Settings → Memory.
 With the skills tools off, the skill **list** goes too: a list with no
 `linetta_read_skill` to open a body is only names. With the review tools off,
-`linetta_report_continuity`, `linetta_propose_story_ops`,
+`linetta_report_continuity`, `linetta_propose_story_ops`, the inbox tools,
 `linetta_save_forecast` and their starter chips all go — what is already
 recorded stays exactly where it is. Nothing is deleted either way, and switching a group back on restores
 it exactly.
@@ -403,12 +403,24 @@ when asked for more than one. A new character or place whose name or alias
 normalizes to the same text as one you already have — ignoring spacing,
 case, and the middle dot — is flagged "같은 대상일 수 있음"; you can turn it
 into an alias of the existing record with one click instead of creating a
-duplicate. The engine only flags the match — it never merges on its own. A
-relationship that depends on a character candidate you have not accepted
-yet is marked "생성이 먼저 필요"; selecting it selects that character too, so
-accepting never leaves a dangling reference. Rejecting an item never
-cascades to whatever depended on it — that item just stays in the inbox,
-marked as blocked, until you decide.
+duplicate. The one match the engine settles itself is the exact one: a work
+cannot hold the same name twice, so accepting a candidate whose name and kind
+are already there links it to that record, adding only what the record lacks
+and never changing what it says, and anything depending on the candidate
+follows. The same name on a different kind of element is refused until you
+rename it. Anything looser stays a flag — the engine never merges those on
+its own. A relationship that depends on a character candidate you have not
+accepted yet is marked "생성이 먼저 필요"; selecting it selects that character
+too, so accepting never leaves a dangling reference. An item that failed stays
+in the inbox with the reason, ready to retry or reject. Rejecting an item
+never cascades to whatever depended on it — that item just stays in the
+inbox, marked as blocked, until you decide.
+
+You can also hand the decision to the agent: say "accept these" or "reject
+the rest" and it lists what is waiting with `linetta_list_proposals`, then
+acts with `linetta_accept_proposals` or `linetta_reject_proposals`, and
+reports what was applied, linked and failed. It does this only when you tell
+it to.
 
 Right after importing a Markdown manuscript, if a provider is connected,
 Linetta offers to fill Story World from it: a dialog shows the episode
@@ -427,8 +439,8 @@ backup: a pending item's reference still names ids from the library it came
 from, and a suggestion costs nothing to make again by asking the agent.
 Turn the group off under **Settings → Tool budget → Check & propose**
 (`review_tools_enabled` in `settings.json`, on by default) to remove
-`linetta_propose_story_ops` and the "Story World 채우기" starter chip for
-both the built-in agent and any MCP client — items already in the inbox
+`linetta_propose_story_ops`, the inbox tools and the "Story World 채우기"
+starter chip for both the built-in agent and any MCP client — items already in the inbox
 stay exactly where they are.
 
 ### Where the story could go

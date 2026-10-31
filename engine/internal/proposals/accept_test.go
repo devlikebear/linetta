@@ -206,7 +206,7 @@ func TestReject_marksPendingItemsRejected(t *testing.T) {
 		ProjectID: env.project.ID,
 		Items:     []ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "하린"}}},
 	})
-	if err := env.svc.Reject(context.Background(), now(), env.project.ID, []string{sub.Items[0].ID}); err != nil {
+	if _, err := env.svc.Reject(context.Background(), now(), env.project.ID, []string{sub.Items[0].ID}); err != nil {
 		t.Fatalf("Reject error: %v", err)
 	}
 	all, err := env.svc.listProposals(context.Background(), env.project.ID, []string{StatusRejected})
@@ -224,7 +224,7 @@ func TestReject_doesNotCascadeToDependents(t *testing.T) {
 			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e1", Label: "자기자신"}},
 		},
 	})
-	if err := env.svc.Reject(context.Background(), now(), env.project.ID, []string{sub.Items[0].ID}); err != nil {
+	if _, err := env.svc.Reject(context.Background(), now(), env.project.ID, []string{sub.Items[0].ID}); err != nil {
 		t.Fatalf("Reject error: %v", err)
 	}
 	all, err := env.svc.listProposals(context.Background(), env.project.ID, nil)
@@ -403,5 +403,207 @@ func TestAccept_aliasConvertedRefSurvivesAcrossSeparateAcceptCalls(t *testing.T)
 	}
 	if second.Items[0].Status != StatusAccepted {
 		t.Fatalf("relationship item (later call) = %+v, want accepted", second.Items[0])
+	}
+}
+
+// An import sweep proposes the same cast episode after episode, so a name
+// can already be in Story World by the time its item is accepted. entities
+// has UNIQUE(project_id, name): this used to fail with the raw constraint
+// text, and every relationship hanging off the item failed with it.
+func TestAccept_linksExistingEntityAndItsDependentsResolve(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	existing, err := env.entities.Create(ctx, now(), entity.NewInput{
+		ProjectID: env.project.ID, Kind: "character", Name: "백설화", Role: "주인공",
+	})
+	if err != nil {
+		t.Fatalf("create entity: %v", err)
+	}
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_entity", Ref: "e1", Name: "백설화", Kind: "character", Role: "공동 주인공",
+				Summary: "검객", Aliases: []string{"설화"}}},
+			{Op: storyops.Op{Type: "create_entity", Ref: "e2", Name: "한서린", Kind: "character"}},
+			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e2", Label: "동료"}},
+		},
+	})
+	ids := []string{sub.Items[0].ID, sub.Items[1].ID, sub.Items[2].ID}
+	res, err := env.svc.Accept(ctx, now(), env.project.ID, ids, nil)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	for _, it := range res.Items {
+		if it.Status != StatusAccepted {
+			t.Fatalf("item %+v not accepted", it)
+		}
+	}
+	if !res.Items[0].Result.LinkedExisting || res.Items[0].Result.CreatedID != existing.ID {
+		t.Fatalf("result = %+v, want linked to %s", res.Items[0].Result, existing.ID)
+	}
+	if res.Items[1].Result.LinkedExisting {
+		t.Fatalf("a new entity must not read as linked: %+v", res.Items[1].Result)
+	}
+	got, err := env.entities.Get(ctx, existing.ID)
+	if err != nil {
+		t.Fatalf("get entity: %v", err)
+	}
+	if got.Role != "주인공" {
+		t.Errorf("role = %q; a candidate must not overwrite what the record already says", got.Role)
+	}
+	if got.Summary != "검객" {
+		t.Errorf("summary = %q, want the blank field filled", got.Summary)
+	}
+	if len(got.Aliases) != 1 || got.Aliases[0] != "설화" {
+		t.Errorf("aliases = %v, want the candidate's added", got.Aliases)
+	}
+}
+
+// The inbox rows already stuck on the constraint error have to clear on a
+// retry, along with the relationships that failed because of them.
+func TestAccept_retriesAnItemThatFailedOnTheNameConstraint(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_entity", Ref: "e1", Name: "곰배", Kind: "character"}},
+			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e1", Label: "자기자신"}},
+		},
+	})
+	failed := ItemResult{Error: "constraint failed: UNIQUE constraint failed: entities.project_id, entities.name (2067)"}
+	if err := env.svc.updateItemStatus(ctx, env.svc.store.DB(), sub.Items[0].ID, StatusFailed, failed, now()); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+	if _, err := env.entities.Create(ctx, now(), entity.NewInput{
+		ProjectID: env.project.ID, Kind: "character", Name: "곰배",
+	}); err != nil {
+		t.Fatalf("create entity: %v", err)
+	}
+	res, err := env.svc.Accept(ctx, now(), env.project.ID, []string{sub.Items[0].ID, sub.Items[1].ID}, nil)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	for _, it := range res.Items {
+		if it.Status != StatusAccepted || it.Result.Error != "" {
+			t.Fatalf("item %+v not accepted", it)
+		}
+	}
+}
+
+// Two batches of one sweep both propose a name: whichever is accepted second
+// meets the first's row, not an error.
+func TestAccept_samePendingNameAcrossBatchesLinksTheSecond(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	in := SubmitInput{
+		ProjectID: env.project.ID,
+		Items:     []ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "구양철", Kind: "character"}}},
+	}
+	first, second := mustSubmit(t, env, in), mustSubmit(t, env, in)
+	res, err := env.svc.Accept(ctx, now(), env.project.ID, []string{first.Items[0].ID, second.Items[0].ID}, nil)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	if res.Items[0].Status != StatusAccepted || res.Items[1].Status != StatusAccepted {
+		t.Fatalf("items = %+v", res.Items)
+	}
+	if res.Items[0].Result.CreatedID != res.Items[1].Result.CreatedID {
+		t.Fatalf("items resolved to different entities: %+v", res.Items)
+	}
+}
+
+// A name taken by a different kind of thing is not the same record, so it is
+// refused in the writer's terms rather than merged.
+func TestAccept_refusesANameTakenByAnotherKind(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	if _, err := env.entities.Create(ctx, now(), entity.NewInput{
+		ProjectID: env.project.ID, Kind: "place", Name: "청운",
+	}); err != nil {
+		t.Fatalf("create entity: %v", err)
+	}
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items:     []ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "청운", Kind: "character"}}},
+	})
+	res, err := env.svc.Accept(ctx, now(), env.project.ID, []string{sub.Items[0].ID}, nil)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	it := res.Items[0]
+	if it.Status != StatusFailed || it.Result.Code != ErrorCodeNameTaken || strings.Contains(it.Result.Error, "constraint") {
+		t.Fatalf("item = %+v, want a readable refusal", it)
+	}
+}
+
+// Submit never required an entity to come before the relationship that names
+// it, so the applying order must not depend on the order a model listed them.
+func TestAccept_relationshipListedBeforeItsEntity(t *testing.T) {
+	env := newTestEnv(t)
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items: []ItemInput{
+			{Op: storyops.Op{Type: "create_relationship", FromRef: "e1", ToRef: "e2", Label: "스승"}},
+			{Op: storyops.Op{Type: "create_entity", Ref: "e1", Name: "하린"}},
+			{Op: storyops.Op{Type: "create_entity", Ref: "e2", Name: "유나"}},
+		},
+	})
+	ids := []string{sub.Items[0].ID, sub.Items[1].ID, sub.Items[2].ID}
+	res, err := env.svc.Accept(context.Background(), now(), env.project.ID, ids, nil)
+	if err != nil {
+		t.Fatalf("Accept error: %v", err)
+	}
+	for _, it := range res.Items {
+		if it.Status != StatusAccepted {
+			t.Fatalf("item %+v not accepted", it)
+		}
+	}
+}
+
+// A failed row has to be dismissible: Reject skipped everything but pending,
+// which left failed items in the inbox for good.
+func TestReject_clearsAFailedItem(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	sub := mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items:     []ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "하린"}}},
+	})
+	if err := env.svc.updateItemStatus(ctx, env.svc.store.DB(), sub.Items[0].ID, StatusFailed, ItemResult{Error: "x"}, now()); err != nil {
+		t.Fatalf("mark failed: %v", err)
+	}
+	n, err := env.svc.Reject(ctx, now(), env.project.ID, []string{sub.Items[0].ID})
+	if err != nil {
+		t.Fatalf("Reject error: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("rejected = %d, want 1", n)
+	}
+}
+
+// The flag on a stored row is what Submit saw. A name that reached Story
+// World afterwards has to show on the row too, or the writer learns about it
+// only from a failed accept.
+func TestList_flagsAnEntityCreatedAfterSubmission(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	mustSubmit(t, env, SubmitInput{
+		ProjectID: env.project.ID,
+		Items:     []ItemInput{{Op: storyops.Op{Type: "create_entity", Name: "곰배", Kind: "character"}}},
+	})
+	ent, err := env.entities.Create(ctx, now(), entity.NewInput{
+		ProjectID: env.project.ID, Kind: "character", Name: "곰배",
+	})
+	if err != nil {
+		t.Fatalf("create entity: %v", err)
+	}
+	list, err := env.svc.List(ctx, env.project.ID, nil)
+	if err != nil {
+		t.Fatalf("List error: %v", err)
+	}
+	dups := list[0].Items[0].Duplicates
+	if len(dups) != 1 || dups[0].EntityID != ent.ID {
+		t.Fatalf("duplicates = %+v, want the entity created after submission", dups)
 	}
 }

@@ -219,6 +219,53 @@ describe("ProposalInbox", () => {
     expect(entityCheckbox.checked).toBe(true);
   });
 
+  // A failed entity is exactly what a relationship's retry needs back in the
+  // same call, or the retry fails on the dependency again.
+  it("auto-selects a failed dependency too", async () => {
+    const entityItem = item({
+      id: "e-item",
+      summary: "새 인물: 하린",
+      status: "failed",
+      result: { error: "constraint failed" },
+    });
+    const relItem = item({
+      id: "rel-item",
+      op_type: "create_relationship",
+      op: { op: "create_relationship", from_ref: "e1", to_ref: "e1", label: "스승" },
+      summary: "관계: 하린 → 하린 (스승)",
+      depends_on: ["e-item"],
+      status: "failed",
+      result: { error: 'depends on "하린", which has not been accepted', code: "dependency_missing" },
+    });
+    mocks.list.mockResolvedValue({ proposals: [batch([entityItem, relItem])] });
+    const user = userEvent.setup();
+    renderInbox();
+    await screen.findByText("관계: 하린 → 하린 (스승)");
+    expect(screen.queryByText(/has not been accepted/)).toBeNull();
+
+    const relRow = screen.getByText("관계: 하린 → 하린 (스승)").closest(".pi-row") as HTMLElement;
+    await user.click(relRow.querySelector("input[type=checkbox]") as HTMLInputElement);
+
+    const entityRow = screen.getByText("새 인물: 하린").closest(".pi-row") as HTMLElement;
+    expect((entityRow.querySelector("input[type=checkbox]") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("words a name taken by another kind in the writer's language", async () => {
+    mocks.list.mockResolvedValue({
+      proposals: [
+        batch([
+          item({
+            status: "failed",
+            result: { error: '"하린" is already a place in this work', code: "name_taken" },
+          }),
+        ]),
+      ],
+    });
+    renderInbox();
+    expect(await screen.findByText(/이미 다른 종류로 쓰이는 이름입니다/)).toBeTruthy();
+    expect(screen.queryByText(/is already a place/)).toBeNull();
+  });
+
   it("converts a duplicate candidate into an alias of the existing entity", async () => {
     mocks.list.mockResolvedValue({
       proposals: [
