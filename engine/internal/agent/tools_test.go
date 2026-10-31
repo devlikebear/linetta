@@ -4,12 +4,15 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
+	"github.com/devlikebear/tars/pkg/llm"
 )
 
 type echoIn struct {
@@ -188,5 +191,94 @@ func TestWriteMetadata_readsAnIllustrationRequest(t *testing.T) {
 	}
 	if _, _, _, request := writeMetadata(&mcp.CallToolResult{}); request != "" {
 		t.Fatalf("no structured content gave request %q", request)
+	}
+}
+
+func toolTurn(sizes ...int) []llm.ChatMessage {
+	msgs := []llm.ChatMessage{{Role: "system", Content: "s"}, {Role: "user", Content: "u"}}
+	for i, size := range sizes {
+		msgs = append(msgs,
+			llm.ChatMessage{Role: "assistant", ToolCalls: []llm.ToolCall{{ID: fmt.Sprint(i), Name: "echo"}}},
+			llm.ChatMessage{Role: "tool", ToolCallID: fmt.Sprint(i), Content: strings.Repeat("가", size)},
+		)
+	}
+	return msgs
+}
+
+func TestClearOldToolResults_leavesATurnWithinTheHeadroomAlone(t *testing.T) {
+	msgs := toolTurn(toolResultBudget, toolResultHeadroom)
+	clearOldToolResults(msgs)
+	for _, m := range msgs {
+		if m.Content == clearedToolResult {
+			t.Fatal("a result was cleared inside the headroom")
+		}
+	}
+}
+
+func TestClearOldToolResults_keepsTheNewestWithinBudget(t *testing.T) {
+	msgs := toolTurn(30000, 30000, 30000, 30000, 30000)
+	clearOldToolResults(msgs)
+
+	kept := []string{}
+	for _, m := range msgs {
+		if m.Role != "tool" {
+			continue
+		}
+		if m.Content == clearedToolResult {
+			kept = append(kept, "cleared")
+		} else {
+			kept = append(kept, "kept")
+		}
+	}
+	want := []string{"cleared", "cleared", "cleared", "kept", "kept"}
+	if !slices.Equal(kept, want) {
+		t.Fatalf("results = %v, want %v", kept, want)
+	}
+	if msgs[2].ToolCalls == nil || msgs[3].ToolCallID != "0" {
+		t.Fatal("clearing a result must leave the call and its result paired")
+	}
+}
+
+// One response can ask for many calls at once. The model has read none of
+// their results yet, so none of them may be cleared, whatever they add up to.
+func TestClearOldToolResults_keepsResultsTheModelHasNotRead(t *testing.T) {
+	msgs := toolTurn(1000, 1)
+	for i := range 6 {
+		msgs = append(msgs, llm.ChatMessage{Role: "tool", ToolCallID: fmt.Sprint(i), Content: strings.Repeat("가", 24000)})
+	}
+	clearOldToolResults(msgs)
+
+	if msgs[3].Content != clearedToolResult {
+		t.Error("the older result the model already read was not cleared")
+	}
+	for _, m := range msgs[5:] {
+		if m.Content == clearedToolResult {
+			t.Fatal("a result the model has not read was cleared")
+		}
+	}
+}
+
+func TestRun_clearsOldToolResultsBeforeTheNextRequest(t *testing.T) {
+	rec := &recorder{}
+	responses := make([]llm.ChatResponse, 0, 7)
+	for range 6 {
+		responses = append(responses, toolReply("echo", `{"text":"huge"}`))
+	}
+	c := &scriptedClient{responses: append(responses, textReply("끝"))}
+	svc := newService(t, c, rec)
+
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "다 읽어"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+
+	cleared := 0
+	for _, m := range c.messages() {
+		if m.Role == "tool" && m.Content == clearedToolResult {
+			cleared++
+		}
+	}
+	if cleared == 0 {
+		t.Fatal("six oversized results went to the provider with none cleared")
 	}
 }

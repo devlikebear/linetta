@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/tars/pkg/llm"
 )
 
 type fakeScope struct {
@@ -828,5 +829,74 @@ func TestSystemPrompt_explainsTheSelectionBlock(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("system prompt is missing %q", want)
 		}
+	}
+}
+
+func TestHistoryCut(t *testing.T) {
+	whole := conversation(4, 10)
+	if _, start := priorMessages(whole, ""); historyCut(whole, start) {
+		t.Error("a conversation that fits was reported as cut")
+	}
+	long := conversation(60, 1000)
+	if _, start := priorMessages(long, ""); !historyCut(long, start) {
+		t.Error("a conversation past the budget was not reported as cut")
+	}
+	oversized := conversation(1, historyBudget+1)
+	if _, start := priorMessages(oversized, ""); !historyCut(oversized, start) {
+		t.Error("a message too large to replay was not reported as cut")
+	}
+	if historyCut(nil, "") {
+		t.Error("an empty conversation was reported as cut")
+	}
+}
+
+func seedConversation(t *testing.T, svc *Service, n, size int) {
+	t.Helper()
+	for i := range n {
+		if err := svc.tr.appendUser(context.Background(), "p1", "", fmt.Sprintf("old%d", i), strings.Repeat("가", size)); err != nil {
+			t.Fatalf("appendUser: %v", err)
+		}
+	}
+}
+
+func TestRun_tellsTheModelOnlyWhenTheConversationWasCut(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		n    int
+		want bool
+	}{{"whole", 3, false}, {"cut", 60, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := &recorder{}
+			c := &scriptedClient{responses: []llm.ChatResponse{textReply("네")}}
+			svc := newService(t, c, rec)
+			seedConversation(t, svc, tc.n, 1000)
+
+			if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "이어서"}); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+
+			if got := strings.Contains(c.messages()[0].Content, historyCutNotice); got != tc.want {
+				t.Errorf("notice in system prompt = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReplayStart_namesTheWindowWithoutMovingIt(t *testing.T) {
+	ctx := context.Background()
+	svc := newService(t, &scriptedClient{responses: []llm.ChatResponse{textReply("네")}}, &recorder{})
+	seedConversation(t, svc, 3, 1000)
+	if got, err := svc.ReplayStart(ctx, "p1"); err != nil || got != "" {
+		t.Fatalf("ReplayStart on a whole conversation = %q, %v", got, err)
+	}
+
+	seedConversation(t, svc, 60, 1000)
+	got, err := svc.ReplayStart(ctx, "p1")
+	if err != nil || got == "" {
+		t.Fatalf("ReplayStart on a cut conversation = %q, %v", got, err)
+	}
+	if start := svc.historyStarts["p1"]; start != "" {
+		t.Errorf("ReplayStart moved the window to %q", start)
 	}
 }

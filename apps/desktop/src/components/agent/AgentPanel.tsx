@@ -112,6 +112,9 @@ type NoticeLine =
   | { kind: "notice"; id: string; variant: "interrupted" }
   | { kind: "notice"; id: string; variant: "cancelled" }
   | { kind: "notice"; id: string; variant: "failed" }
+  /** Above this line the conversation no longer goes to the model. Drawn from
+   *  agent.history, so it moves when the conversation is next restored. */
+  | { kind: "notice"; id: string; variant: "forgotten" }
   | { kind: "notice"; id: string; variant: "error"; reason: string };
 
 /** What every agent.* payload carries. `seq` numbers a turn's events from 1 in
@@ -278,6 +281,7 @@ function linesFromHistory(rows: AgentHistoryRow[], liveRunId?: string): Line[] {
   const lines: Line[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+    if (row.replay_start) lines.push({ kind: "notice", id: `history:${row.id}:forgotten`, variant: "forgotten" });
     if (row.role === "user") {
       const quoted = splitSelection(row.content);
       lines.push({ kind: "user", id: `history:${row.id}`, ...quoted, ...splitImages(quoted.text) });
@@ -1472,6 +1476,8 @@ export function AgentPanel({
                     ? t("agentPanel.restore.interrupted")
                     : line.variant === "failed"
                     ? t("agentPanel.restore.failed")
+                    : line.variant === "forgotten"
+                    ? t("agentPanel.restore.forgotten")
                     : line.variant === "cancelled"
                       ? t("agentPanel.cancelled")
                       : reasonMessage(line.reason, t);

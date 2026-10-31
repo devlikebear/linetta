@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -28,6 +29,22 @@ import (
 // generous; it exists so a loop cannot paste an entire manuscript into every
 // subsequent request.
 const maxToolResultChars = 24000
+
+// toolResultBudget is how much tool output one turn keeps in front of the
+// model, in runes, and toolResultHeadroom how far past it the turn may grow
+// before older results are cleared. Every call adds to the same request, so
+// maxToolResultChars alone would let a turn at the tool-call cap send over a
+// million runes. Clearing in one step at budget+headroom, rather than a result
+// per call, is historyHeadroom's reasoning: the provider caches a request by
+// its prefix, and each clearing rewrites that prefix.
+const (
+	toolResultBudget   = 80000
+	toolResultHeadroom = 40000
+)
+
+// clearedToolResult takes the place of a result that left the turn's budget.
+const clearedToolResult = "[result cleared: older tool results were removed to keep this turn within the model's context. " +
+	"Call the tool again if you still need it.]"
 
 // RegisterTools installs the tool set on a fresh server. The caller supplies
 // mcphost.ToolDeps.Register bound to full mode — the built-in agent is always
@@ -296,6 +313,42 @@ func capText(s string) (string, bool) {
 	return string(r[:maxToolResultChars]) +
 		"\n\n[truncated: the result was longer than this tool's limit. " +
 		"Narrow the request if you need the rest.]", true
+}
+
+// clearOldToolResults keeps a turn's tool output within toolResultBudget,
+// newest first, once it has passed toolResultBudget+toolResultHeadroom. Only
+// the content goes: the call and its result stay paired, which every provider
+// requires. Results after the last assistant message always stay, however
+// large, because the model has not read them yet.
+func clearOldToolResults(msgs []llm.ChatMessage) {
+	total, unread := 0, 0
+	for i, m := range msgs {
+		if m.Role == "tool" {
+			total += utf8.RuneCountInString(m.Content)
+		}
+		if m.Role == "assistant" {
+			unread = i
+		}
+	}
+	if total <= toolResultBudget+toolResultHeadroom {
+		return
+	}
+	used, full := 0, false
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role != "tool" {
+			continue
+		}
+		cost := utf8.RuneCountInString(msgs[i].Content)
+		if i > unread || (!full && used+cost <= toolResultBudget) {
+			used += cost
+			continue
+		}
+		// Stop at the first result that does not fit rather than hunting for
+		// a smaller older one, as priorMessages does: what is kept is always
+		// the end of the turn.
+		full = true
+		msgs[i].Content = clearedToolResult
+	}
 }
 
 // writeMetadata pulls the undo batch, the pre-write snapshot, and the touched
