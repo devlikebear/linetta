@@ -1563,6 +1563,33 @@ describe("AgentPanel wire errors and cancellation (#95 Task 7)", () => {
     expect(screen.getByTestId("agent-stop")).toBeTruthy();
   });
 
+  it("says so where the turn begins when it leaves more of the conversation out", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    await type("써줘");
+    await pressEnter();
+
+    await emit("agent-history-cut", { run_id: "r1" });
+    await emit("agent-delta", { run_id: "r1", text: "답변" });
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+
+    const notice = screen.getByText("agentPanel.historyCut");
+    expect(notice.classList.contains("agent-notice-historyCut")).toBe(true);
+    const log = screen.getByTestId("agent-log").textContent!;
+    expect(log.indexOf("agentPanel.historyCut")).toBeLessThan(log.indexOf("답변"));
+  });
+
+  it("ignores a cut announced for another run", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    await type("써줘");
+    await pressEnter();
+
+    await emit("agent-history-cut", { run_id: "other" });
+
+    expect(screen.queryByText("agentPanel.historyCut")).toBeNull();
+  });
+
   it("renders a notice when the turn is cancelled, and keeps the partial reply on screen", async () => {
     rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
     rpc.agentCancel.mockImplementation(() => Promise.resolve({ ok: true }));

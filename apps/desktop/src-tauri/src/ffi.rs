@@ -226,6 +226,7 @@ fn notification_event(method: &str) -> Option<&'static str> {
         "agent.done" => Some("agent-done"),
         "agent.error" => Some("agent-error"),
         "agent.cancelled" => Some("agent-cancelled"),
+        "agent.history_cut" => Some("agent-history-cut"),
         // Memory changed under the app: an agent recorded something, or
         // another window saved. Settings holds an unsent textarea draft, so
         // without this the next blur silently overwrites it.
@@ -437,6 +438,7 @@ mod tests {
         assert_eq!(notification_event("agent.done"), Some("agent-done"));
         assert_eq!(notification_event("agent.error"), Some("agent-error"));
         assert_eq!(notification_event("agent.cancelled"), Some("agent-cancelled"));
+        assert_eq!(notification_event("agent.history_cut"), Some("agent-history-cut"));
         // The removed companion's names must never come back.
         assert_eq!(notification_event("ai.delta"), None);
     }

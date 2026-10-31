@@ -334,6 +334,15 @@ type cancelledPayload struct {
 	Seq       int64  `json:"seq"`
 }
 
+// historyCutPayload tells a panel that is already open that this turn's replay
+// left more of the conversation out. A panel opened later gets the same fact
+// from agent.history, where it can draw the boundary at the message itself.
+type historyCutPayload struct {
+	RunID     string `json:"run_id"`
+	ProjectID string `json:"project_id"`
+	Seq       int64  `json:"seq"`
+}
+
 // loop is the turn. It ends when the model stops asking for tools, when it
 // hits the iteration cap, when the same tool fails repeatedly, or when the
 // writer cancels.
@@ -577,9 +586,12 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 		}
 		filtered = append(filtered, m)
 	}
-	replay, cut := s.replayHistory(st.projectID, filtered)
+	replay, cut, moved := s.replayHistory(st.projectID, filtered)
 	if cut {
 		msgs[0].Content += historyCutNotice
+	}
+	if moved {
+		s.notify("agent.history_cut", historyCutPayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID)})
 	}
 	msgs = append(msgs, replay...)
 

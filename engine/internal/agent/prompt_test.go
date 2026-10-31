@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"unicode/utf8"
 
@@ -898,5 +899,65 @@ func TestReplayStart_namesTheWindowWithoutMovingIt(t *testing.T) {
 	}
 	if start := svc.historyStarts["p1"]; start != "" {
 		t.Errorf("ReplayStart moved the window to %q", start)
+	}
+}
+
+// An open panel hears about a cut once, on the turn that made it. The clock
+// ticks because the transcript sorts by time and the window follows that order.
+func TestRun_announcesACutOnlyOnTheTurnThatMovedTheWindow(t *testing.T) {
+	rec := &recorder{}
+	svc := newService(t, &scriptedClient{responses: []llm.ChatResponse{textReply("네")}}, rec)
+	var now atomic.Int64
+	svc.tr.clock = func() int64 { return now.Add(1) }
+
+	count := func(method string) int {
+		n := 0
+		for _, m := range rec.methods() {
+			if m == method {
+				n++
+			}
+		}
+		return n
+	}
+	turn := func(done int) {
+		t.Helper()
+		if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "이어서"}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		waitFor(t, "agent.done", func() bool { return count("agent.done") == done })
+	}
+
+	seedConversation(t, svc, 30, 1000)
+	turn(1)
+	if got := count("agent.history_cut"); got != 0 {
+		t.Fatalf("a conversation that fits announced %d cuts", got)
+	}
+
+	seedConversation(t, svc, 30, 1000)
+	turn(2)
+	if got := count("agent.history_cut"); got != 1 {
+		t.Fatalf("after the window moved: %d cuts announced, want 1", got)
+	}
+
+	turn(3)
+	if got := count("agent.history_cut"); got != 1 {
+		t.Fatalf("a turn that left the window alone announced again: %d", got)
+	}
+}
+
+// After a restart the window has nothing to be compared with, and the panel
+// has already drawn the boundary from agent.history.
+func TestRun_announcesNoCutOnTheFirstTurnAfterARestart(t *testing.T) {
+	rec := &recorder{}
+	svc := newService(t, &scriptedClient{responses: []llm.ChatResponse{textReply("네")}}, rec)
+	seedConversation(t, svc, 60, 1000)
+
+	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "이어서"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
+
+	if rec.has("agent.history_cut") {
+		t.Fatal("the first turn after a restart announced a cut")
 	}
 }
