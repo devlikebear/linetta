@@ -476,6 +476,10 @@ func (b *ContextBuilder) loadEntityBriefs(ctx context.Context, cur node.Node, en
 
 	briefs := make([]EntityBrief, 0, len(ents))
 	budget := entityRecentMaxRunes
+	// A scene's line appears once. The next entity it concerns gets the label
+	// alone: a cast of twelve shares most of its scenes, and repeating the
+	// summary under each of them is the bulk the dossier used to be.
+	told := map[string]bool{}
 	for _, e := range ents {
 		brief := EntityBrief{Name: e.Name, Kind: e.Kind, Role: e.Role, Summary: e.Summary, Attributes: e.Attributes}
 		ids, _, err := b.mentions.MentionedNodeIDs(ctx, e.ID)
@@ -495,7 +499,11 @@ func (b *ContextBuilder) loadEntityBriefs(ctx context.Context, cur node.Node, en
 			if first == "" {
 				continue
 			}
-			line := "[" + lf.Label + "] " + trimRunes(first, entityRecentLineMaxRunes)
+			line := "[" + lf.Label + "]"
+			if !told[lf.ID] {
+				line += " " + trimRunes(first, entityRecentLineMaxRunes)
+				told[lf.ID] = true
+			}
 			budget -= utf8.RuneCountInString(line)
 			if budget < 0 {
 				break

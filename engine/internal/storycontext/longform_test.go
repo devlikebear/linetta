@@ -269,3 +269,27 @@ func TestEntityAttributesRenderInAStableOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestDossierTellsEachSceneOnceAcrossTheCast(t *testing.T) {
+	w := seedLongWork(t, 12)
+	c, _ := w.brief(t, 10)
+	told := map[string]int{}
+	for _, e := range c.Entities {
+		for _, line := range e.Recent {
+			if strings.Contains(line, "요약.") {
+				told[line]++
+			}
+		}
+	}
+	if len(told) == 0 {
+		t.Fatal("no scene was told at all")
+	}
+	for line, n := range told {
+		if n != 1 {
+			t.Errorf("told %d times: %q", n, line)
+		}
+	}
+	if got := c.Entities[1].Recent; len(got) == 0 || strings.Contains(got[0], "요약.") {
+		t.Errorf("a later entity should get the label alone: %q", got)
+	}
+}
