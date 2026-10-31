@@ -17,6 +17,9 @@ const mcpTokenSecretName = "mcp.token"
 // See publish.go.
 const publishTokenSecretName = "publish.token"
 
+// vaultKeySecretName holds the recovery key of the private vault. See vault.go.
+const vaultKeySecretName = "vault.key"
+
 func providerAPIKeySecretName(provider string) string {
 	return "provider." + provider + ".api_key"
 }
