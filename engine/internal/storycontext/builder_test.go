@@ -445,8 +445,10 @@ func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T)
 	gotFirst, _ := nodes.Get(context.Background(), first)
 	_ = nodes.SetSummary(context.Background(), first, "해진은 모래에 처음 도착했다.\n계속 ...", gotFirst.ContentVersion)
 
-	second, _ := nodes.CreateSibling(context.Background(), first, "leaf", "씬 2", "", 1200)
-	_ = nodes.UpdateContent(context.Background(), second.ID, doc("씬 2의 현재"), 1300)
+	// A scene between them, so the first is not already shown as adjacent.
+	between, _ := nodes.CreateSibling(context.Background(), first, "leaf", "씬 2", "", 1150)
+	second, _ := nodes.CreateSibling(context.Background(), between.ID, "leaf", "씬 3", "", 1200)
+	_ = nodes.UpdateContent(context.Background(), second.ID, doc("씬 3의 현재"), 1300)
 
 	builder := f.builder()
 	got, err := builder.Build(context.Background(), second.ID, "확장", "", Options{})
@@ -456,7 +458,7 @@ func TestBuildContext_entityDossier_populatesRecentFromOtherLeaves(t *testing.T)
 	if len(got.Entities) != 1 {
 		t.Fatalf("entities = %d", len(got.Entities))
 	}
-	if len(got.Entities[0].Recent) != 1 || got.Entities[0].Recent[0] != "해진은 모래에 처음 도착했다." {
+	if len(got.Entities[0].Recent) != 1 || got.Entities[0].Recent[0] != "[씬 1] 해진은 모래에 처음 도착했다." {
 		t.Errorf("dossier = %+v, want one line", got.Entities[0].Recent)
 	}
 }
@@ -732,8 +734,7 @@ func TestBuildContext_entityDossier(t *testing.T) {
 		]}]}`
 	}
 
-	// Three past leaves, each mentions 해진. Updated in ascending time order so
-	// the LAST (third) one has the highest updated_at and should top Recent[0].
+	// Three past leaves, each mentions 해진.
 	leaf1 := *p.LastOpenedNodeID
 	_ = nodes.UpdateContent(context.Background(), leaf1, doc("씬 1"), 1100)
 	got1, _ := nodes.Get(context.Background(), leaf1)
@@ -762,12 +763,12 @@ func TestBuildContext_entityDossier(t *testing.T) {
 		t.Fatalf("entities = %+v", got.Entities)
 	}
 	recent := got.Entities[0].Recent
-	if len(recent) != 3 {
-		t.Fatalf("Recent len = %d, want 3: %+v", len(recent), recent)
+	if len(recent) != 2 {
+		t.Fatalf("Recent len = %d, want 2: %+v", len(recent), recent)
 	}
-	// Most recently-updated leaf (leaf3) should be first.
-	if recent[0] != "세 번째 사건." {
-		t.Errorf("Recent[0] = %q, want %q", recent[0], "세 번째 사건.")
+	// leaf3 is shown as the adjacent scene, so the nearest other scene leads.
+	if recent[0] != "[씬 2] 두 번째 만남." {
+		t.Errorf("Recent[0] = %q, want %q", recent[0], "[씬 2] 두 번째 만남.")
 	}
 }
 

@@ -2,6 +2,8 @@ package storycontext
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/node"
@@ -196,6 +198,23 @@ func buildUser(c Context) string {
 		b.WriteString("\n\n")
 	}
 
+	if len(c.Hierarchical.PartSummaries) > 0 {
+		b.WriteString(langPick(lang, "## 부별 흐름\n", "## Arc by Part\n", "## 部ごとの流れ\n"))
+		for _, ss := range c.Hierarchical.PartSummaries {
+			b.WriteString(fmt.Sprintf("- [%s] %s%s\n", node.DisplayBreadcrumb(ss.Label, lang), staleMark(ss.Stale, lang), ss.Body))
+		}
+		b.WriteString("\n")
+	}
+
+	// Ahead of everything that grows with the work: a client that caps a tool
+	// result keeps the front of the brief, and the writer's style is what must
+	// not fall off the end.
+	if c.Options.Tone != TonePresetMy && strings.TrimSpace(c.StyleNotes) != "" {
+		b.WriteString(langPick(lang, "## 작가 메모\n", "## Author Memo\n", "## 作家メモ\n"))
+		b.WriteString(c.StyleNotes)
+		b.WriteString("\n\n")
+	}
+
 	if len(c.Hierarchical.NearbyLeafSummaries) > 0 {
 		b.WriteString(langPick(lang, "## 직전·직후 씬 발췌\n", "## Adjacent Scene Excerpts\n", "## 前後シーンの抜粋\n"))
 		for _, ss := range c.Hierarchical.NearbyLeafSummaries {
@@ -215,6 +234,10 @@ func buildUser(c Context) string {
 	if strings.TrimSpace(c.SceneText) != "" {
 		b.WriteString(fmt.Sprintf(langPick(lang, "## 현재 씬: %s\n", "## Current Scene: %s\n", "## 現在のシーン: %s\n"), node.DisplayBreadcrumb(c.SceneLabel, lang)))
 		b.WriteString(c.SceneText)
+		b.WriteString("\n\n")
+	} else if plan := strings.TrimSpace(c.ScenePlan); plan != "" {
+		b.WriteString(fmt.Sprintf(langPick(lang, "## 현재 씬 계획: %s\n", "## Current Scene Plan: %s\n", "## 現在のシーンの計画: %s\n"), node.DisplayBreadcrumb(c.SceneLabel, lang)))
+		b.WriteString(plan)
 		b.WriteString("\n\n")
 	}
 
@@ -236,13 +259,14 @@ func buildUser(c Context) string {
 			}
 			if len(e.Attributes) > 0 {
 				b.WriteString(" (")
-				first := true
-				for k, v := range e.Attributes {
-					if !first {
+				// Sorted so the same work renders the same brief: a provider
+				// caches a request by its prefix.
+				keys := slices.Sorted(maps.Keys(e.Attributes))
+				for i, k := range keys {
+					if i > 0 {
 						b.WriteString(", ")
 					}
-					first = false
-					b.WriteString(k + ":" + v)
+					b.WriteString(k + ":" + e.Attributes[k])
 				}
 				b.WriteString(")")
 			}
@@ -303,11 +327,6 @@ func buildUser(c Context) string {
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
-	}
-	if c.Options.Tone != TonePresetMy && strings.TrimSpace(c.StyleNotes) != "" {
-		b.WriteString(langPick(lang, "## 작가 메모\n", "## Author Memo\n", "## 作家メモ\n"))
-		b.WriteString(c.StyleNotes)
-		b.WriteString("\n\n")
 	}
 	// Trimmed, not merely non-empty. A body of nothing but spaces is a body
 	// agentmemory.Screen accepts and Save stores verbatim, and rendering it
@@ -604,6 +623,9 @@ func renderProjectMeta(m ProjectMeta, lang string) string {
 	}
 	if m.DefaultPOV != "" {
 		parts = append(parts, langPick(lang, "시점: ", "POV: ", "視点: ")+mapDefaultPOV(m.DefaultPOV, lang))
+	}
+	if m.EpisodeCharTarget > 0 {
+		parts = append(parts, fmt.Sprintf(langPick(lang, "회차 목표 분량: %d자", "Episode length target: %d characters", "各話の目標分量: %d字"), m.EpisodeCharTarget))
 	}
 	return strings.Join(parts, " · ")
 }

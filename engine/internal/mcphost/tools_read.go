@@ -639,9 +639,9 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		name    string
 		present bool
 	}{
-		{"current_scene", strings.TrimSpace(c.SceneText) != ""},
+		{"current_scene", strings.TrimSpace(c.SceneText) != "" || strings.TrimSpace(c.ScenePlan) != ""},
 		{"overview", strings.TrimSpace(c.Outline) != ""},
-		{"synopsis", strings.TrimSpace(c.Hierarchical.ProjectSynopsis) != "" || strings.TrimSpace(c.Project.Synopsis) != ""},
+		{"synopsis", len(c.Hierarchical.PartSummaries) > 0 || strings.TrimSpace(c.Project.Synopsis) != ""},
 		{"nearby_scene_summaries", len(c.Hierarchical.NearbyLeafSummaries) > 0},
 		{"related_scenes", len(c.RelatedScenes) > 0},
 		{"entities", len(c.Entities) > 0},
