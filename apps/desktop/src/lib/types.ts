@@ -356,6 +356,8 @@ export interface DiagnosticsSnapshot {
   agent_available?: boolean;
   /** False on builds that cannot publish to Linetta Works (iOS). */
   publish_available?: boolean;
+  /** False on builds without the private vault (iOS). */
+  vault_available?: boolean;
   /** Whether this library ever held a companion message. Decides whether the
    *  backup section offers the transcript export — a library that never used
    *  the companion has nothing to export. */
@@ -1850,4 +1852,81 @@ export interface ArtStyle {
  style: string;
  negative_prompt: string;
  updated_at: number;
+}
+
+/** The private vault's view of one work (engine/internal/vault). */
+export type VaultWorkState = "not_uploaded" | "synced" | "local_changes" | "remote_changes" | "conflict";
+
+export type VaultAccountMode = "full" | "terms_outdated" | "read_only" | "none";
+
+export interface VaultAccount {
+  mode: VaultAccountMode;
+  status: string;
+  retrieve_until: string;
+  terms_accepted: boolean;
+  usage: { bytes: number; quota_bytes: number };
+  limits: { blob_bytes: number; restore_points: number; items: number; blobs_per_revision: number };
+}
+
+/** Title and project_id stay empty until this device holds a key that opens the item. */
+export interface VaultItemView {
+  item_id: string;
+  project_id: string;
+  title: string;
+  head_revision: number;
+  base_revision: number;
+  updated: string;
+  bytes: number;
+  on_this_device: boolean;
+}
+
+export interface VaultOverview {
+  connected: boolean;
+  key_stored: boolean;
+  key_mismatch: boolean;
+  account: VaultAccount | null;
+  items: VaultItemView[];
+}
+
+export interface VaultRestorePoint {
+  revision: number;
+  created: string;
+  bytes: number;
+}
+
+export interface VaultWorkStatus {
+  project_id: string;
+  state: VaultWorkState;
+  item_id?: string;
+  base_revision: number;
+  head_revision: number;
+  last_synced_at: number;
+  restore_points: VaultRestorePoint[];
+}
+
+/** recovery_key is present only on the call that created it. */
+export interface VaultSetupResult {
+  key_stored: boolean;
+  recovery_key?: string;
+}
+
+export interface VaultPushResult {
+  item_id: string;
+  head_revision: number;
+  unchanged: boolean;
+}
+
+export interface VaultPullResult {
+  project_id: string;
+  item_id: string;
+  revision: number;
+  head_revision: number;
+  snapshot_path?: string;
+  copy_project_id?: string;
+  files_restored: boolean;
+}
+
+export interface VaultResolveResult {
+  push?: VaultPushResult;
+  pull?: VaultPullResult;
 }

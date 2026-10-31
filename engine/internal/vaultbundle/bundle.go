@@ -161,10 +161,10 @@ func Export(ctx context.Context, db *sql.DB, home, projectID string, now time.Ti
 		}
 		bundle.Manifest.Tables[table.Name] = count
 	}
-	if err := exportDir(bundle, skillDir(home, projectID), skillPrefix); err != nil {
+	if err := exportDir(bundle, SkillDir(home, projectID), skillPrefix); err != nil {
 		return nil, err
 	}
-	if err := exportDir(bundle, memoryDir(home, projectID), memoryPrefix); err != nil {
+	if err := exportDir(bundle, MemoryDir(home, projectID), memoryPrefix); err != nil {
 		return nil, err
 	}
 	bundle.seal()
@@ -226,11 +226,13 @@ func exportTable(ctx context.Context, tx *sql.Tx, bundle *Bundle, table Table, p
 	return len(lines), nil
 }
 
-func skillDir(home, projectID string) string {
+// SkillDir is where a work's own skills live.
+func SkillDir(home, projectID string) string {
 	return filepath.Join(home, "skills", "works", projectID)
 }
 
-func memoryDir(home, projectID string) string {
+// MemoryDir is where a work's memory files live.
+func MemoryDir(home, projectID string) string {
 	return filepath.Join(home, projectID, "memory")
 }
 
@@ -612,10 +614,10 @@ func (r *rowReader) upsert(table string, row map[string]any) error {
 // file that failed to land leaves a complete work.
 func ApplyFiles(home string, bundle *Bundle) error {
 	projectID := bundle.Manifest.ProjectID
-	if err := replaceDir(bundle, skillDir(home, projectID), skillPrefix); err != nil {
+	if err := replaceDir(bundle, SkillDir(home, projectID), skillPrefix); err != nil {
 		return err
 	}
-	return replaceDir(bundle, memoryDir(home, projectID), memoryPrefix)
+	return replaceDir(bundle, MemoryDir(home, projectID), memoryPrefix)
 }
 
 // replaceDir builds the new directory beside the old one and swaps them, so a

@@ -70,6 +70,7 @@ var excluded = map[string]string{
 	"companion_history_imports": "device conversation history",
 	"mcp_activity":              "device history of tool calls",
 	"skill_snapshots":           "device history of skill edits",
+	"vault_items":               "this device's bookmark into the vault itself",
 	"publish_works":             "reconciled with the site after a pull",
 	"publish_episodes":          "reconciled with the site after a pull",
 	"publish_entities":          "reconciled with the site after a pull",

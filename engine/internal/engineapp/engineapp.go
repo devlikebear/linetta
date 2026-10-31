@@ -332,6 +332,17 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	})
 	a.closers = append(a.closers, stopPublish)
 
+	// The private vault (Phase 11) shares the publish connection.
+	setupVault(vaultDeps{
+		server:        s,
+		settingsStore: settingsStore,
+		store:         st,
+		home:          home,
+		indexer:       manuscriptIndexer,
+		clock:         clock,
+		publish:       publishSvc,
+	})
+
 	// The built-in agent's provider layer (#90). Resolves the writer's
 	// provider settings into a client on demand; nothing here dials until an
 	// agent run or a connection test asks it to. Codex's auth.json lives under
@@ -439,6 +450,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		MCPAvailable:     mcpAvailable,
 		AgentAvailable:   agentAvailable,
 		PublishAvailable: publishAvailable,
+		VaultAvailable:   vaultAvailable,
 	}
 	s.Handle("ping", handlers.Ping)
 	s.Handle("diagnostics.version", handlers.DiagnosticsVersion(st, home, DefaultVersion, caps))

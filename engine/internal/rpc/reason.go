@@ -201,6 +201,41 @@ const (
 	ReasonPublishTooManySheets = "publish_too_many_sheets"
 )
 
+// The private vault on Linetta Works (Phase 11). As with publishing, most are the
+// site's codes carried through. Conflict means another device pushed first, and
+// LocalChanges that a pull would overwrite work this device has not pushed.
+// NoKey, BadKey, WrongKey, KeyExists and KeyRequired are all about the recovery
+// key, and each asks the writer for something different. KeyUnavailable is a
+// secret store that exists and refused, which is not the same as no key.
+const (
+	ReasonVaultNotConnected    = "vault_not_connected"
+	ReasonVaultConsentRequired = "vault_consent_required"
+	ReasonVaultNoKey           = "vault_no_key"
+	ReasonVaultBadKey          = "vault_bad_key"
+	ReasonVaultWrongKey        = "vault_wrong_key"
+	ReasonVaultKeyExists       = "vault_key_exists"
+	ReasonVaultKeyRequired     = "vault_key_required"
+	ReasonVaultKeyUnavailable  = "vault_key_unavailable"
+	ReasonVaultUnauthorized    = "vault_unauthorized"
+	ReasonVaultNotEnabled      = "vault_not_enabled"
+	ReasonVaultTermsOutdated   = "vault_terms_outdated"
+	ReasonVaultQuotaExceeded   = "vault_quota_exceeded"
+	ReasonVaultTooLarge        = "vault_too_large"
+	ReasonVaultConflict        = "vault_conflict"
+	ReasonVaultLocalChanges    = "vault_local_changes"
+	ReasonVaultDamaged         = "vault_damaged"
+	ReasonVaultNewerVersion    = "vault_newer_version"
+	ReasonVaultWorkNotFound    = "vault_work_not_found"
+	ReasonVaultItemNotFound    = "vault_item_not_found"
+	ReasonVaultRevisionGone    = "vault_revision_gone"
+	ReasonVaultInProgress      = "vault_in_progress"
+	ReasonVaultRateLimited     = "vault_rate_limited"
+	ReasonVaultUnreachable     = "vault_unreachable"
+	ReasonVaultTimeout         = "vault_timeout"
+	ReasonVaultUnavailable     = "vault_unavailable"
+	ReasonVaultRejected        = "vault_rejected"
+)
+
 // NotFound builds the error for a record the caller asked for and the engine
 // could not find. Message stays English for logs; reason is what gets
 // translated (see apps/desktop/src/lib/rpcMessage.ts).
