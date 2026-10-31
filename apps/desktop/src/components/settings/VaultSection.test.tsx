@@ -1,18 +1,26 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const rpc = vi.hoisted(() => ({
   status: vi.fn(),
   setup: vi.fn(),
+  pull: vi.fn(),
   connectStatus: vi.fn(),
   openExternalUrl: vi.fn(),
+  progress: { emit: (_: unknown) => {} },
 }));
 
 vi.mock("../../lib/rpc", () => ({
-  vaultApi: { status: rpc.status, setup: rpc.setup },
+  vaultApi: { status: rpc.status, setup: rpc.setup, pull: rpc.pull },
   publishApi: { connectStatus: rpc.connectStatus },
   openExternalUrl: rpc.openExternalUrl,
+}));
+
+vi.mock("../../hooks/useEngineEvent", () => ({
+  useEngineEvent: (_event: string, handler: (payload: unknown) => void) => {
+    rpc.progress.emit = handler;
+  },
 }));
 
 vi.mock("../../lib/i18n", () => ({
@@ -263,6 +271,53 @@ describe("VaultSection", () => {
     expect(items).toHaveTextContent("settings.vault.lockedItem");
     expect(items).toHaveTextContent("settings.vault.notOnDevice");
     expect(screen.queryByTestId("vault-recovery-key")).not.toBeInTheDocument();
+  });
+
+  // The second device's first step: nothing else can bring a work here.
+  it("takes a work that is not on this device, and shows how far it has got", async () => {
+    const elsewhere = { ...ITEM, project_id: "", on_this_device: false };
+    rpc.status.mockResolvedValue(overview({ items: [elsewhere] }));
+    let finish: (value: unknown) => void = () => {};
+    rpc.pull.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-pull-i1"));
+    expect(rpc.pull).toHaveBeenCalledWith({ item_id: "i1" });
+
+    act(() => rpc.progress.emit({ project_id: "", item_id: "i1", phase: "download", done: 2, total: 8 }));
+    expect(await screen.findByTestId("vault-pull-progress")).toHaveTextContent("vault.progress.download:2,8");
+
+    rpc.status.mockResolvedValue(overview({ items: [ITEM] }));
+    await act(async () => finish({ project_id: "p1", item_id: "i1", revision: 2, head_revision: 2, files_restored: true }));
+    expect(await screen.findByTestId("vault-pull-result")).toHaveTextContent("settings.vault.pulledToLibrary");
+    expect(screen.queryByTestId("vault-pull-progress")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("vault-pull-i1")).not.toBeInTheDocument();
+  });
+
+  it("says so when a pulled work's files could not be written", async () => {
+    rpc.status.mockResolvedValue(overview({ items: [{ ...ITEM, on_this_device: false }] }));
+    rpc.pull.mockResolvedValue({ files_restored: false });
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-pull-i1"));
+    expect(await screen.findByTestId("vault-pull-result")).toHaveTextContent("vault.filesNotRestored");
+  });
+
+  it("offers no download for a work this key cannot open, or one already here", async () => {
+    rpc.status.mockResolvedValue(
+      overview({ items: [ITEM, { ...ITEM, item_id: "i2", title: "", on_this_device: false }] }),
+    );
+    renderSection();
+    await screen.findByTestId("vault-items");
+    expect(screen.queryByTestId("vault-pull-i1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("vault-pull-i2")).not.toBeInTheDocument();
+  });
+
+  it("a failed download says why and keeps the button", async () => {
+    rpc.status.mockResolvedValue(overview({ items: [{ ...ITEM, on_this_device: false }] }));
+    rpc.pull.mockRejectedValue({ data: { reason: "vault_damaged" } });
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-pull-i1"));
+    expect(await screen.findByTestId("vault-error")).toHaveTextContent("errors.vaultDamaged");
+    expect(screen.getByTestId("vault-pull-i1")).toBeEnabled();
   });
 
   it("terms outdated: says uploads wait for a new agreement on the site", async () => {

@@ -1,0 +1,58 @@
+/* Vault dialog. Builds on the global modal (App.css): .backdrop.center, .modal,
+   .modal-actions, .btn. Only what is new lives here. */
+.vault-modal {
+  width: min(520px, 94%);
+  max-height: 88vh;
+  overflow-y: auto;
+  outline: none;
+}
+.vault-state {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.vault-modal .modal-sub code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.vault-choices {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 12px 0;
+}
+.vault-points { margin-top: 16px; }
+.vault-points h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.vault-points ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vault-points li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.vault-progress { margin-top: 12px; }
+.vault-progress [role="progressbar"] {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--line);
+}
+.vault-progress [role="progressbar"] > div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 120ms linear;
+}

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { localeForLanguage, useI18n } from "../../lib/i18n";
+import { useEngineEvent } from "../../hooks/useEngineEvent";
+import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
 import { openExternalUrl, publishApi, vaultApi } from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
-import type { AppLanguage, VaultAccount, VaultOverview } from "../../lib/types";
+import { formatVaultBytes as formatBytes, formatVaultDate as formatDate } from "../../lib/vault";
+import type { VaultAccount, VaultOverview, VaultProgress, VaultPullResult } from "../../lib/types";
 
 /** Settings → Private Vault: everything a device needs before a work can be
  *  uploaded. Which step shows comes from the site and the secret store alone,
@@ -31,18 +33,6 @@ const NO_ACCESS_KEYS: Record<string, MessageKey> = {
   revoked: "settings.vault.revoked",
 };
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1 << 20) return `${(bytes / (1 << 10)).toFixed(0)} KiB`;
-  return `${(bytes / (1 << 20)).toFixed(1)} MiB`;
-}
-
-/** PocketBase writes a space where ISO has a T, which not every parser takes. */
-function formatDate(value: string, language: AppLanguage): string {
-  const date = new Date(value.replace(" ", "T"));
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString(localeForLanguage(language));
-}
-
 function needsKey(overview: VaultOverview, account: VaultAccount): boolean {
   if (overview.key_mismatch) return true;
   if (overview.key_stored) return false;
@@ -62,6 +52,8 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
   const [newKey, setNewKey] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
+  const [pulling, setPulling] = useState<VaultProgress | null>(null);
+  const [pulled, setPulled] = useState<VaultPullResult | null>(null);
   // A slow answer must not paint over the one that came after it.
   const loadRef = useRef(0);
 
@@ -89,6 +81,10 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
       loadRef.current += 1;
     };
   }, [available, load]);
+
+  useEngineEvent<VaultProgress>("vault-progress", (next) => {
+    if (next.item_id && busy) setPulling(next);
+  });
 
   if (!available) return null;
 
@@ -124,6 +120,20 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
       setNewKey(null);
       setSaved(false);
       setCopied(null);
+      await load();
+    });
+
+  // A work that is on the server and not here has no screen of its own yet, so
+  // this is the one place that can bring it to this device.
+  const pullItem = (itemId: string) =>
+    guard(async () => {
+      setPulled(null);
+      setPulling(null);
+      try {
+        setPulled(await vaultApi.pull({ item_id: itemId }));
+      } finally {
+        setPulling(null);
+      }
       await load();
     });
 
@@ -347,9 +357,34 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
                   {formatBytes(item.bytes)} · {formatDate(item.updated, language)}
                   {!item.on_this_device && ` · ${t("settings.vault.notOnDevice")}`}
                 </span>
+                {!item.on_this_device && item.title && (
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    disabled={busy}
+                    onClick={() => void pullItem(item.item_id)}
+                    data-testid={`vault-pull-${item.item_id}`}
+                  >
+                    {t("vault.pull")}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
+        )}
+        {pulling && (
+          <p className="sd" role="status" data-testid="vault-pull-progress">
+            {t(pulling.phase === "apply" ? "vault.progress.apply" : "vault.progress.download", {
+              done: pulling.done,
+              total: pulling.total,
+            })}
+          </p>
+        )}
+        {pulled && (
+          <p className="sd" role="status" data-testid="vault-pull-result">
+            {t("settings.vault.pulledToLibrary")}
+            {!pulled.files_restored && ` ${t("vault.filesNotRestored")}`}
+          </p>
         )}
         <p className="sd">{t("settings.vault.closeNote")}</p>
         <div className="field-actions">

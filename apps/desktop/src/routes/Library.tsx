@@ -26,6 +26,7 @@ import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
 import { ImportFillDialog } from "../components/ImportFillDialog";
 import { SearchModal } from "../components/SearchModal";
+import { VaultNotice } from "../components/VaultNotice";
 import { pickAndReadMarkdown } from "../lib/importLoad";
 import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
 import { Archive, Download, FolderOpen, MoreHorizontal, Settings, Plus, Search, Trash2, Upload } from "../lib/icons";
@@ -480,6 +481,7 @@ export function Library() {
           </div>
         </div>
 
+        <VaultNotice available={diagnostics?.vault_available ?? false} />
         {loading ? (
           <p className="hint">{t("common.loading")}</p>
         ) : error ? (

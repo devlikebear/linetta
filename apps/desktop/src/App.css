@@ -564,6 +564,11 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 }
 
 /* ---- Shelf ---- */
+.lib-vault-notice {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
 .lib-shelf-head {
   display: flex; align-items: baseline; justify-content: space-between;
   margin: 56px 0 18px;
@@ -730,6 +735,16 @@ input, textarea, select { font-family: inherit; color: var(--ink); }
 .ws-tool .kbd { padding: 2px 5px; }
 .ws-tool.is-active { background: var(--accent-tint); color: var(--accent-deep); border-color: transparent; }
 .ws-tool.icon-only { width: 32px; padding: 0; justify-content: center; }
+.ws-vault { position: relative; }
+.ws-vault-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .ws-sep { width: 1px; height: 20px; background: var(--line); margin: 0 5px; }
 
 /* ---- Body grid ---- */
