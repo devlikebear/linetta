@@ -881,7 +881,10 @@ type SetupInput struct {
 }
 
 // SetupResult carries the key text in exactly one case: the call that created
-// it. It is the only response in the engine that ever does.
+// it. It is the only response in the engine that ever does. That key is not
+// stored yet: the text cannot be shown a second time, so it seals nothing until
+// the writer has saved it and hands it back as SetupInput.RecoveryKey. Leaving
+// before then costs a new key, not a key nobody kept.
 type SetupResult struct {
 	KeyStored   bool   `json:"key_stored"`
 	RecoveryKey string `json:"recovery_key,omitempty"`
@@ -949,11 +952,7 @@ func (s *Service) createKey(items []RemoteItem) (SetupResult, error) {
 	if len(items) > 0 {
 		return SetupResult{}, reason(rpc.ReasonVaultKeyRequired, errors.New("vault: the account has items sealed under an existing key"))
 	}
-	text := NewRecoveryKey().Text()
-	if err := s.storeKey(text, false); err != nil {
-		return SetupResult{}, err
-	}
-	return SetupResult{KeyStored: true, RecoveryKey: text}, nil
+	return SetupResult{RecoveryKey: NewRecoveryKey().Text()}, nil
 }
 
 func (s *Service) storeKey(text string, replace bool) error {
