@@ -122,6 +122,13 @@ The quote goes with your message and stays in the conversation, so a follow-up
 such as "make it shorter" still knows which paragraph you meant. Asked only a
 question, the agent changes nothing.
 
+When only you can settle something, the agent asks on a card instead of
+listing options in its reply. Each question shows its choices, with the one
+the agent recommends marked, and room for your own answer; some let you pick
+several. Answer them all and press **Send answers**, and they go out together
+as your next message. The turn ends at the card, so nothing is waiting on you:
+it stays open across restarts until you answer it or type something else.
+
 To show the agent a picture, attach up to four PNG, JPEG, WebP, or GIF images
 to a message with the button beside the input box, by pasting, or by dropping
 them on it. Each can be up to 5 MB, and large photos are scaled down before

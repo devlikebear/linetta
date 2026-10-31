@@ -143,6 +143,13 @@ and visual-write groups can be switched off in Settings → Tool budget. Write t
 only in `full` mode, so `read_only` omits them from `tools/list` entirely
 rather than refusing them at call time.
 
+The built-in agent has one more that is not served here: `linetta_ask_writer`
+(`engine/internal/agent/ask.go`) puts a card of questions in the agent panel,
+which an external client has no way to draw. Asking ends the turn. The card
+lives on the transcript's tool row, and the answers come back as the writer's
+next `agent.run`; it does not block, because the Claude Code CLI is killed
+after 15 quiet minutes and a restart ends any turn in flight.
+
 Read:
 
 - `linetta_list_works`, `linetta_get_outline`, `linetta_get_story_context`

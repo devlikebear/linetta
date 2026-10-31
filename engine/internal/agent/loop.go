@@ -125,6 +125,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	schemas = append(schemas, askWriterSchema())
 
 	runID := newRunID()
 	// Deliberately NOT derived from the caller's ctx: that context belongs to
@@ -308,6 +309,8 @@ type toolPayload struct {
 	// RequestID is the illustration request the call left (illustration
 	// Phase 4); the panel shows its approval card under the line.
 	RequestID string `json:"request_id,omitempty"`
+	// Ask is the card linetta_ask_writer left for the writer to answer.
+	Ask *askCard `json:"ask,omitempty"`
 }
 
 type usagePayload struct {
@@ -400,13 +403,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 				s.maybeEpisodeReview(ctx, st)
 				return
 			}
-			s.notify("agent.done", donePayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Model: st.model, Usage: usage})
-			// After the reply has gone, and only for a turn that did real
-			// work: ask what was learned. It runs on its own goroutine with
-			// its own context, so this returns immediately and the writer's
-			// next message never waits on it.
-			s.maybeSelfReview(ctx, st, toolCalls, usedTools)
-			s.maybeEpisodeReview(ctx, st)
+			s.endDone(ctx, st, usage, toolCalls, usedTools)
 			return
 		}
 
@@ -438,6 +435,13 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 				Content:    result.Text,
 			})
 
+			// The card waits for the writer, so there is nothing to go back to
+			// the model with. Calls that came after it are not run: they were
+			// chosen without the answers.
+			if result.Ask != nil {
+				s.endDone(ctx, st, usage, toolCalls, usedTools)
+				return
+			}
 			if !result.IsError {
 				lastFailedTool, repeats = "", 0
 				continue
@@ -462,6 +466,16 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			return
 		}
 	}
+}
+
+// endDone ends a turn that finished.
+func (s *Service) endDone(ctx context.Context, st loopState, usage usagePayload, toolCalls int, usedTools []string) {
+	s.notify("agent.done", donePayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Model: st.model, Usage: usage})
+	// After the reply has gone, and only for a turn that did real work: ask
+	// what was learned. It runs on its own goroutine with its own context, so
+	// this returns immediately and the writer's next message never waits on it.
+	s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+	s.maybeEpisodeReview(ctx, st)
 }
 
 // streamDelta forwards reply text to the panel as it arrives, keeping a copy
@@ -628,7 +642,9 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	})
 
 	var result toolResult
-	if refusal := st.brief.refusal(call.Name); refusal != "" {
+	if call.Name == askWriterTool {
+		result = askWriter(call.Arguments)
+	} else if refusal := st.brief.refusal(call.Name); refusal != "" {
 		result = toolResult{IsError: true, Text: refusal}
 	} else {
 		result = st.session.call(ctx, st.runID, call.Name, call.Arguments)
@@ -642,7 +658,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	s.notify("agent.tool", toolPayload{
 		RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.inTool(st.runID, ""), Name: call.Name, State: state,
 		Summary: summarize(result.Text), BatchID: result.BatchID, SnapshotID: result.SnapshotID,
-		NodeIDs: result.NodeIDs, RequestID: result.RequestID,
+		NodeIDs: result.NodeIDs, RequestID: result.RequestID, Ask: result.Ask,
 	})
 	// Recorded with a context that survives the turn's own cancellation,
 	// unlike the tool call above: the call already ran — and may already
@@ -653,6 +669,7 @@ func (s *Service) runTool(ctx context.Context, st loopState, call llm.ToolCall) 
 	if err := s.tr.appendToolEvent(context.WithoutCancel(ctx), st.req.ProjectID, st.req.NodeID, st.runID, toolEvent{
 		Name: call.Name, Summary: summarize(result.Text), OK: !result.IsError,
 		BatchID: result.BatchID, SnapshotID: result.SnapshotID, NodeIDs: result.NodeIDs, RequestID: result.RequestID,
+		Ask: result.Ask,
 	}); err != nil {
 		logf("transcript: %v", err)
 	}

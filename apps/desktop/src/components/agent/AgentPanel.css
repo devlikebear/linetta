@@ -124,6 +124,75 @@
 .agent-proposals { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 16px 10px; font-size: 12px; color: var(--ink-soft); }
 .agent-proposals span { flex: 1 1 160px; }
 
+/* The writer's own line breaks: a question card's answers are one a line. */
+.agent-panel .msg.user .msg-bubble { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* The agent's questions (AskCard). Options stay readable at the panel's
+ * narrow width, so a choice is a whole row with its explanation under it. */
+.agent-ask {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.agent-ask.is-open { display: flex; flex-direction: column; gap: 16px; padding: 12px; flex: none; }
+.agent-ask-question { min-width: 0; margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 6px; }
+.agent-ask-question:disabled { opacity: 0.6; }
+.agent-ask-header {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 0 6px;
+  font-weight: 600;
+}
+.agent-ask-mode { flex: none; font-size: 11px; font-weight: 400; color: var(--muted); }
+.agent-ask-text { color: var(--ink-soft); }
+.agent-ask-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.agent-ask-question:disabled .agent-ask-option { cursor: default; }
+.agent-ask-option:hover { border-color: var(--line); }
+.agent-ask-option.is-chosen { border-color: var(--accent); background: var(--accent-tint2); }
+.agent-ask-option input { flex: none; margin: 3px 0 0; accent-color: var(--accent); }
+.agent-ask-option-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.agent-ask-option-label { font-weight: 500; overflow-wrap: anywhere; }
+.agent-ask-option-description { font-size: 12px; color: var(--ink-soft); }
+.agent-ask-recommended {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.agent-ask-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+.agent-ask-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+.agent-ask-foot .btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+.agent-ask-closed { padding: 7px 10px; flex: none; border-color: var(--line-soft); }
+.agent-ask-closed summary { color: var(--muted); font-size: 12px; cursor: pointer; }
+.agent-ask-closed .agent-ask-text { margin-top: 8px; font-size: 12.5px; }
+
 /* Terminal-event notices (#95 Task 7): agent.error, agent.cancelled, and the
  * restore effect's "a turn may still be running" guess. A line of its own in
  * the transcript, not a single banner outside it — see the Line comment on

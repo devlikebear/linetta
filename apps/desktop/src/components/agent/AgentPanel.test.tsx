@@ -2617,3 +2617,83 @@ describe("AgentPanel attached images", () => {
     expect(splitImages("<images count=\"2\"/> 이게 뭐야?")).toEqual({ text: "<images count=\"2\"/> 이게 뭐야?" });
   });
 });
+
+describe("AgentPanel — the agent's question card", () => {
+  const ask = {
+    questions: [
+      { header: "연도", question: "누가 쓰러뜨렸나요?", options: [{ label: "백가 선대" }, { label: "묵로 본인" }] },
+    ],
+  };
+  const historyRow = (id: string, role: string, content: string): AgentHistoryRow => ({
+    id,
+    project_id: PROJECT_ID,
+    run_id: "run-1",
+    role,
+    status: "done",
+    content,
+    created_at: 0,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ev.listeners.clear();
+    rpc.agentHistory.mockResolvedValue([]);
+    rpc.providersList.mockResolvedValue([row({ configured: true, consented: true })]);
+    rpc.settingsGet.mockResolvedValue({});
+    rpc.agentRun.mockResolvedValue({ run_id: "run-2" });
+  });
+
+  async function emitCard() {
+    renderPanel();
+    await screen.findByTestId("agent-composer");
+    await emit("agent-tool", { run_id: "run-1", project_id: PROJECT_ID, name: "linetta_ask_writer", state: "started" });
+    await emit("agent-tool", { run_id: "run-1", project_id: PROJECT_ID, name: "linetta_ask_writer", state: "done", ask });
+    await emit("agent-done", { run_id: "run-1", project_id: PROJECT_ID, usage: { input: 1, output: 1 } });
+  }
+
+  it("draws the card in place of the tool line and sends the answers as a turn", async () => {
+    await emitCard();
+    expect(await screen.findByTestId("agent-ask")).toBeInTheDocument();
+    expect(screen.queryByTestId("tool-line")).toBeNull();
+    // The card is what there is to do next; the follow-up chips would only
+    // take room from it.
+    expect(screen.queryByTestId("agent-followups")).toBeNull();
+
+    fireEvent.change(screen.getByTestId("agent-composer"), { target: { value: "쓰던 문장" } });
+    fireEvent.click(screen.getByLabelText("백가 선대"));
+    fireEvent.click(screen.getByTestId("agent-ask-submit"));
+
+    expect(rpc.agentRun).toHaveBeenCalledWith(PROJECT_ID, "연도: 백가 선대", NODE_ID, undefined);
+    // What the writer was typing is not theirs to lose to a card.
+    expect(screen.getByTestId("agent-composer")).toHaveValue("쓰던 문장");
+    expect(await screen.findByTestId("agent-ask-closed")).toBeInTheDocument();
+  });
+
+  it("keeps the card open when the send is refused", async () => {
+    rpc.agentRun.mockRejectedValueOnce({ data: { reason: "agent_busy" } });
+    await emitCard();
+    fireEvent.click(await screen.findByLabelText("백가 선대"));
+    fireEvent.click(screen.getByTestId("agent-ask-submit"));
+
+    expect(await screen.findByTestId("agent-send-error")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-ask")).toBeInTheDocument();
+    expect(screen.getByTestId("agent-composer")).toHaveValue("");
+  });
+
+  it("restores an unanswered card, and folds one the writer has answered", async () => {
+    const card = JSON.stringify({ name: "linetta_ask_writer", ok: true, ask });
+    rpc.agentHistory.mockResolvedValueOnce([historyRow("1", "user", "고쳐 줘"), historyRow("2", "tool", card)]);
+    const { unmount } = renderPanel();
+    expect(await screen.findByTestId("agent-ask")).toBeInTheDocument();
+    unmount();
+
+    rpc.agentHistory.mockResolvedValueOnce([
+      historyRow("1", "user", "고쳐 줘"),
+      historyRow("2", "tool", card),
+      historyRow("3", "user", "연도: 백가 선대"),
+    ]);
+    renderPanel();
+    expect(await screen.findByTestId("agent-ask-closed")).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-ask")).toBeNull();
+  });
+});

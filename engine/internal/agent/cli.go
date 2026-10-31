@@ -59,15 +59,23 @@ type cliTurn struct {
 	lastFail  string
 	repeats   int
 	wall      string // why the turn ran into a wall; "" while it has not
+	asked     bool   // a card is waiting for the writer
 }
 
 // delta streams reply text and keeps it until it becomes a transcript row.
+//
+// Whatever Claude Code says after a card is dropped. Asked not to, it still
+// announces the card under it, which only pushes the card up the log; the loop
+// ends the turn before a model could.
 func (t *cliTurn) delta(text string) {
-	t.s.streamDelta(t.st, text)
 	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.asked {
+		return
+	}
+	t.s.streamDelta(t.st, text)
 	t.pending.WriteString(text)
 	t.streamed = true
-	t.mu.Unlock()
 }
 
 // flush turns the text streamed since the last tool call into its own
@@ -92,6 +100,11 @@ func (t *cliTurn) call(name string, arguments json.RawMessage) *mcp.CallToolResu
 	defer t.mu.Unlock()
 	t.flush()
 
+	// The loop ends the turn at a card. Claude Code cannot be stopped there
+	// without losing the session, so it is told instead.
+	if t.asked {
+		return toolText(true, "not run: "+askedReply)
+	}
 	if t.wall == "" && t.toolCalls >= t.st.maxToolCalls {
 		t.wall = fmt.Sprintf("stopped after %d tool calls in one turn", t.toolCalls)
 	}
@@ -105,6 +118,7 @@ func (t *cliTurn) call(name string, arguments json.RawMessage) *mcp.CallToolResu
 	args := strings.TrimSpace(string(arguments))
 	result := t.s.runTool(t.ctx, t.st, llm.ToolCall{Name: name, Arguments: args})
 	t.toolCalls++
+	t.asked = result.Ask != nil
 
 	if !result.IsError {
 		t.lastFail, t.repeats = "", 0
@@ -241,7 +255,7 @@ func (s *Service) loopCLI(ctx context.Context, st loopState) {
 	turn.mu.Lock()
 	// Nothing streamed but there is a reply: the CLI said it only in its
 	// final result. Show it, the way a streamed one would have been.
-	if err == nil && !turn.streamed {
+	if err == nil && !turn.streamed && !turn.asked {
 		if text := strings.TrimSpace(resp.Message.Content); text != "" {
 			s.streamDelta(st, text)
 			turn.pending.WriteString(text)
@@ -249,7 +263,8 @@ func (s *Service) loopCLI(ctx context.Context, st loopState) {
 	}
 	turn.flush()
 	wall := turn.wall
-	replied := turn.streamed || strings.TrimSpace(resp.Message.Content) != ""
+	// A card is a reply: nothing need follow it.
+	replied := turn.asked || turn.streamed || strings.TrimSpace(resp.Message.Content) != ""
 	turn.mu.Unlock()
 
 	if err != nil {

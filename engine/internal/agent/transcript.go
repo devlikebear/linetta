@@ -80,6 +80,9 @@ type toolEvent struct {
 	// RequestID mirrors toolPayload.RequestID, so a reloaded history row
 	// still shows the illustration request's card.
 	RequestID string `json:"request_id,omitempty"`
+	// Ask mirrors toolPayload.Ask. This row is where a card waits for the
+	// writer, and what a later turn is told it asked (askedMessage).
+	Ask *askCard `json:"ask,omitempty"`
 }
 
 func (t *transcript) appendToolEvent(ctx context.Context, projectID, nodeID, runID string, ev toolEvent) error {

@@ -127,7 +127,8 @@ How you work:
 - Before a large rewrite you are not certain about, call linetta_create_checkpoint first so the writer can get their version back.
 - When you plan or restructure episodes, keep each episode's plan with linetta_write_summary as_plan=true, and record the storylines and their beats with linetta_apply_story_ops (create_thread, add_beat bound to the scene). The brief's plot section can only show what was recorded, and a plan that lives only in your reply is gone next session.
 - Before you finish writing an episode, read it once as a reader who saw only this episode. Check that each character's motive holds, that a villain's surrender shows resistance, pressure and calculation, that nothing is compressed past understanding, and that the opening hooks, something turns, and the ending makes the next episode wanted. Fix what fails before you hand it over, and say what you changed. When several episodes are asked for at once, do this for each one.
-- The story brief's Writer's Direction section is the writer's own instruction. Follow it over your own judgment; if a request conflicts with it, say so before acting. You cannot edit it — if it looks out of date, tell the writer.`, lang)
+- The story brief's Writer's Direction section is the writer's own instruction. Follow it over your own judgment; if a request conflicts with it, say so before acting. You cannot edit it — if it looks out of date, tell the writer.
+- When only the writer can settle something, call linetta_ask_writer instead of listing options in your reply. Put every open decision in one call, say in your reply what you found and why it needs deciding, and leave the options themselves to the card. Mark what you recommend. The call ends your turn, and their answers arrive as their next message, so finish what does not depend on them first. Decide for yourself what the work's record already settles.`, lang)
 	if !groups.disableVisualWrites {
 		b.WriteString("\n- Save designs with linetta_set_character_visuals / linetta_set_art_style, and manage references with linetta_add_reference_image / linetta_delete_reference_image. To keep an image the writer attached as a character's reference, pass its number as attachment; to keep a gallery picture whose face is right, pass its illustration_id. Omitted patch fields stay unchanged; empty strings clear them.")
 		b.WriteString("\n- You cannot draw. To get a picture drawn, call linetta_request_illustration; it only leaves a request on a card in the app. It also sends up to two earlier gallery pictures (prior_illustration_ids; picked automatically when omitted), so faces stay the same even without reference images. Tell the writer to approve it there, and never say a picture was drawn until linetta_list_illustrations shows it done. To put a gallery picture in a scene, write its [[illustration:id|caption]] line with linetta_write_scene; to make one stand for a scene or episode, call linetta_set_representative_illustration.")
@@ -472,6 +473,9 @@ func priorMessages(msgs []companion.HistoryMessage, start string) ([]llm.ChatMes
 func replayableMessages(msgs []companion.HistoryMessage) []companion.HistoryMessage {
 	out := make([]companion.HistoryMessage, 0, len(msgs))
 	for _, m := range msgs {
+		if m.Role == "tool" {
+			m.Role, m.Content = "assistant", askedMessage(m.Content)
+		}
 		if m.Role != "user" && m.Role != "assistant" {
 			continue
 		}

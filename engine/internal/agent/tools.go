@@ -255,6 +255,8 @@ type toolResult struct {
 	// RequestID is the illustration request linetta_request_illustration
 	// left, so the panel can put the writer's approval card under the line.
 	RequestID string
+	// Ask is the card linetta_ask_writer put in front of the writer.
+	Ask       *askCard
 	Truncated bool
 }
 

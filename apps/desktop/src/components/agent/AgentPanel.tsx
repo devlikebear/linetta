@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Bot, ImagePlus, Quote, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { agent as agentApi, proposals as proposalsApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
-import type { AgentHistoryRow, AgentRunStatus, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
+import type { AgentAsk, AgentHistoryRow, AgentRunStatus, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
@@ -11,6 +11,7 @@ import type { ReadImage } from "../../lib/imageFile";
 import { useEngineEvent } from "../../hooks/useEngineEvent";
 import { useSmoothStream } from "../../hooks/useSmoothStream";
 import { isProviderReady } from "../../lib/providers";
+import { AskCard } from "./AskCard";
 import { Markdown } from "./Markdown";
 import { ProviderPicker } from "./ProviderPicker";
 import { IllustrationRequestCard } from "../illustration/IllustrationRequestCard";
@@ -78,6 +79,9 @@ type Line =
       /** The illustration request linetta_request_illustration left; its
        *  approval card is drawn under the line (illustration Phase 4). */
       requestId?: string;
+      /** The questions linetta_ask_writer put to the writer; the card replaces
+       *  the line. */
+      ask?: AgentAsk;
       undoing?: boolean;
       undone?: boolean;
       undoError?: string;
@@ -158,6 +162,8 @@ interface AgentToolPayload extends AgentEventBase {
   node_ids?: string[];
   /** linetta_request_illustration's request, for the approval card. */
   request_id?: string;
+  /** linetta_ask_writer's questions, for the answer card. */
+  ask?: AgentAsk;
 }
 
 interface AgentDonePayload extends AgentEventBase {
@@ -206,6 +212,7 @@ interface RestoredToolEvent {
   batch_id?: string;
   snapshot_id?: string;
   request_id?: string;
+  ask?: AgentAsk;
 }
 
 /** Parses one tool row's `content`. Null for anything that is not a usable
@@ -221,7 +228,7 @@ export function parseToolEvent(content: string): RestoredToolEvent | null {
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const { name, ok, batch_id: batchId, snapshot_id: snapshotId, request_id: requestId } = parsed as Record<string, unknown>;
+  const { name, ok, batch_id: batchId, snapshot_id: snapshotId, request_id: requestId, ask } = parsed as Record<string, unknown>;
   if (typeof name !== "string" || typeof ok !== "boolean") return null;
   return {
     name,
@@ -229,6 +236,7 @@ export function parseToolEvent(content: string): RestoredToolEvent | null {
     batch_id: typeof batchId === "string" ? batchId : undefined,
     snapshot_id: typeof snapshotId === "string" ? snapshotId : undefined,
     request_id: typeof requestId === "string" ? requestId : undefined,
+    ask: Array.isArray((ask as AgentAsk | undefined)?.questions) ? (ask as AgentAsk) : undefined,
   };
 }
 
@@ -308,6 +316,7 @@ function linesFromHistory(rows: AgentHistoryRow[], liveRunId?: string): Line[] {
           batchId: ev.batch_id,
           snapshotId: ev.snapshot_id,
           requestId: ev.request_id,
+          ask: ev.ask,
         });
       }
       // An unparseable tool row still counts as a row of its run for the
@@ -397,6 +406,9 @@ function Elapsed({ since }: { since: number }) {
 /** How close to the end of the log still counts as "reading the latest" — the
  *  log follows new lines only while the writer is within this of the bottom. */
 const FOLLOW_THRESHOLD = 48;
+
+/** Room left above a question card when the log scrolls to it. */
+const ASK_CARD_MARGIN = 12;
 
 interface Props {
   onClose: () => void;
@@ -961,6 +973,7 @@ export function AgentPanel({
               batchId: payload.batch_id ?? l.batchId,
               snapshotId: payload.snapshot_id ?? l.snapshotId,
               requestId: payload.request_id ?? l.requestId,
+              ask: payload.ask ?? l.ask,
             }
           : l,
       ),
@@ -1101,8 +1114,12 @@ export function AgentPanel({
   // Sends the composer's text as a new turn. A no-op while a turn is already
   // in flight (busy below already hides the send control in that state, but
   // Enter can still reach here) or while the draft is empty.
-  function handleSend() {
-    const prompt = draft.trim();
+  //
+  // `answers` is a question card's reply, sent in the composer's place: whatever
+  // the writer has in the composer stays there, and a refused send leaves the
+  // card open with their picks rather than moving them into the composer.
+  function handleSend(answers?: string) {
+    const prompt = (answers ?? draft).trim();
     // The fence: a send for a work the writer has left is still out, and its
     // response can still overwrite this one's run id, turn and window when it
     // lands. Held, not dropped — the draft stays in the composer, the send
@@ -1116,11 +1133,13 @@ export function AgentPanel({
     // way comparing project ids could.
     const token = {};
     sendTokenRef.current = token;
-    const sentAttachment = attachment;
-    const sentImages = images;
-    setImages([]);
-    setDraft("");
-    setAttached(null);
+    const sentAttachment = answers === undefined ? attachment : null;
+    const sentImages = answers === undefined ? images : [];
+    if (answers === undefined) {
+      setImages([]);
+      setDraft("");
+      setAttached(null);
+    }
     setSendError(null);
     setSending(true);
     followRef.current = true;
@@ -1203,7 +1222,7 @@ export function AgentPanel({
         }
         setSending(false);
         setSendError(rpcErrorMessage(err, t));
-        setDraft(prompt);
+        if (answers === undefined) setDraft(prompt);
         // A passage attached since takes precedence over the one this send
         // carried, the same as a new selection replaces an old one.
         if (sentAttachment) setAttached((cur) => cur ?? sentAttachment);
@@ -1433,6 +1452,9 @@ export function AgentPanel({
     : "";
   const shownActiveText = useSmoothStream(activeAssistantText, running);
   const busy = sending || turnRunId !== null;
+  // A question card waits until the writer says something after it.
+  const lastUserLine = lines.map((l) => l.kind).lastIndexOf("user");
+  const askOpen = lines.some((l, i) => l.kind === "tool" && l.ask && i > lastUserLine);
   // What the turn is doing, for the working line: inside a tool, writing its
   // reply, or neither — which is the model thinking, or composing a tool call
   // that can take minutes for a whole scene and streams nothing meanwhile.
@@ -1445,7 +1467,13 @@ export function AgentPanel({
 
   useEffect(() => {
     const el = logRef.current;
-    if (el && followRef.current) el.scrollTop = el.scrollHeight;
+    if (!el || !followRef.current) return;
+    // A card can be taller than the log, and its first question is the place
+    // to start reading, not its submit button.
+    const card = el.querySelector(".agent-ask.is-open");
+    el.scrollTop = card
+      ? el.scrollTop + card.getBoundingClientRect().top - el.getBoundingClientRect().top - ASK_CARD_MARGIN
+      : el.scrollHeight;
   }, [lines, shownActiveText, busy]);
 
   return (
@@ -1462,7 +1490,7 @@ export function AgentPanel({
           ref={logRef}
           onScroll={handleLogScroll}
         >
-          {lines.map((line) => {
+          {lines.map((line, index) => {
             if (line.kind === "user") {
               return (
                 <div key={line.id} className="msg user">
@@ -1539,6 +1567,17 @@ export function AgentPanel({
                     </>
                   ) : null}
                 </div>
+              );
+            }
+            if (line.ask) {
+              return (
+                <AskCard
+                  key={line.id}
+                  ask={line.ask}
+                  open={index > lastUserLine}
+                  disabled={busy || orphanedSend}
+                  onSubmit={handleSend}
+                />
               );
             }
             // Tool line: one row for the started+done/error pair Task 4
@@ -1690,7 +1729,7 @@ export function AgentPanel({
               </button>
             ) : null}
           </div>
-        ) : lines.length > 0 && !busy && reviewToolsEnabled && draft.trim() === "" ? (
+        ) : lines.length > 0 && !busy && !askOpen && reviewToolsEnabled && draft.trim() === "" ? (
           // The check-and-plan chips matter most once there is writing to
           // check, which is after the first turn, so they stay within reach
           // whenever the composer is free.
@@ -1839,7 +1878,7 @@ export function AgentPanel({
                 type="button"
                 className="cmp-send"
                 data-testid="agent-send"
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 // Also while a send for a work the writer left is still out
                 // (orphanedSendRef): handleSend refuses one anyway, and a
                 // control that silently does nothing is worse than one that
