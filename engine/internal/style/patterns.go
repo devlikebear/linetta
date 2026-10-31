@@ -22,6 +22,7 @@ var (
 const (
 	minRepeatedRunes = 12
 	minFormulaRunes  = 4
+	maxTopicWord     = 3
 )
 
 func sentencePattern(s string) string {
@@ -52,7 +53,7 @@ func isParallelContrast(s string) bool {
 			return false
 		}
 		left, right := s[:at+i], s[at+i+len("고, "):]
-		if endsPast(left) && hasTopic(left) && endsPast(strings.TrimSuffix(right, "다")) && hasTopic(right) {
+		if endsPast(left) && opensOnTopic(left) && endsPast(strings.TrimSuffix(right, "다")) && opensOnTopic(right) && balanced(left, right) {
 			return true
 		}
 		at += i + len("고, ")
@@ -64,13 +65,22 @@ func endsPast(s string) bool {
 	return r >= 0xAC00 && r <= 0xD7A3 && (r-0xAC00)%28 == 20
 }
 
-func hasTopic(s string) bool {
-	for _, word := range strings.Fields(s) {
-		if strings.HasSuffix(word, "은") || strings.HasSuffix(word, "는") {
+// opensOnTopic says a clause starts by naming its topic. Korean strings clauses
+// together all the time; what reads as a set piece is two clauses that each
+// open on a subject and run about as long.
+func opensOnTopic(s string) bool {
+	words := strings.Fields(s)
+	for i := 0; i < len(words) && i < maxTopicWord; i++ {
+		if strings.HasSuffix(words[i], "은") || strings.HasSuffix(words[i], "는") {
 			return true
 		}
 	}
 	return false
+}
+
+func balanced(a, b string) bool {
+	x, y := utf8.RuneCountInString(a), utf8.RuneCountInString(b)
+	return x*2 >= y && y*2 >= x
 }
 
 // isDialogue spares speech: people talk in pairs and conclusions, and a

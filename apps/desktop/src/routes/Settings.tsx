@@ -781,6 +781,38 @@ export function Settings() {
                   className={`switch${current.agent_self_review_enabled !== false ? " on" : ""}`}
                 />
               </button>
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving &&
+                  apply({ agent_episode_review_enabled: current.agent_episode_review_enabled !== true })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.skills.episodeReview.enabled")}</span>
+                  <span className="sd">{t("settings.skills.episodeReview.description")}</span>
+                </span>
+                <span className={`switch${current.agent_episode_review_enabled === true ? " on" : ""}`} />
+              </button>
+              <label className="set-row">
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.style.globalPhrases")}</span>
+                  <span className="sd">{t("settings.style.globalPhrasesDescription")}</span>
+                </span>
+                <textarea
+                  rows={3}
+                  defaultValue={(current.style_avoid_phrases ?? []).join("\n")}
+                  disabled={saving}
+                  onBlur={(e) => {
+                    const phrases = e.target.value.split("\n").map((line) => line.trim()).filter((line) => line !== "");
+                    if (phrases.join("\n") !== (current.style_avoid_phrases ?? []).join("\n")) {
+                      apply({ style_avoid_phrases: phrases });
+                    }
+                  }}
+                />
+              </label>
             </section>
             <SkillsSection />
             </>

@@ -2372,6 +2372,7 @@ export function Workspace() {
             selectionRequest={agentSelection}
             externalDraft={agentDraftRequest?.text}
             externalDraftNonce={agentDraftRequest?.nonce}
+            onOpenProposals={() => setProposalInboxOpen(true)}
             onExternalDraftApplied={clearAgentDraftRequest}
             onOpenImageSettings={openImageSettings}
             onClose={() => {
