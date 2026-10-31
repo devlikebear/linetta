@@ -11,9 +11,7 @@ import (
 // that recur across scenes in any language. They report and change nothing. A
 // writer may mean every one of them.
 var (
-	// "A는 ~했고, B는 ~했다": two topics given matching verbs in one sentence.
-	parallelContrast = regexp.MustCompile(`\S+[은는] [^,]*[었았였겠]고, (?:\S+ ){0,3}\S+[은는] [^,]*[었았였겠]다`)
-	// "A는 생각보다 ~. B는 생각보다 ~" and "~가 아니라 ~였다".
+	// "~가 아니라 ~였다".
 	notButContrast = regexp.MustCompile(`\S+[이가] 아니라 \S+[이였]+다`)
 	// The narrator stopping to say what the scene meant.
 	narratorExplains = regexp.MustCompile(`(였기|었기|았기|했기) 때문이다|인 셈이다|ㄴ 셈이었다|셈이었다|는 뜻이었다|의미했다|말해 주고 있었다`)
@@ -31,12 +29,48 @@ func sentencePattern(s string) string {
 		return ""
 	}
 	switch {
-	case parallelContrast.MatchString(s), notButContrast.MatchString(s):
+	case isParallelContrast(s), notButContrast.MatchString(s):
 		return RuleParallel
 	case narratorExplains.MatchString(s):
 		return RuleExplainer
 	}
 	return ""
+}
+
+// isParallelContrast finds "A는 ~했고, B는 ~했다": two topics given matching
+// past-tense verbs in one sentence. Past tense shows as a final ㅆ on the last
+// syllable before the ending, whatever the verb, which no short pattern of
+// syllables can list.
+func isParallelContrast(s string) bool {
+	s = strings.TrimRight(strings.TrimSpace(s), ".…!?\"”’' ")
+	if !strings.HasSuffix(s, "다") {
+		return false
+	}
+	for at := 0; ; {
+		i := strings.Index(s[at:], "고, ")
+		if i < 0 {
+			return false
+		}
+		left, right := s[:at+i], s[at+i+len("고, "):]
+		if endsPast(left) && hasTopic(left) && endsPast(strings.TrimSuffix(right, "다")) && hasTopic(right) {
+			return true
+		}
+		at += i + len("고, ")
+	}
+}
+
+func endsPast(s string) bool {
+	r, _ := utf8.DecodeLastRuneInString(s)
+	return r >= 0xAC00 && r <= 0xD7A3 && (r-0xAC00)%28 == 20
+}
+
+func hasTopic(s string) bool {
+	for _, word := range strings.Fields(s) {
+		if strings.HasSuffix(word, "은") || strings.HasSuffix(word, "는") {
+			return true
+		}
+	}
+	return false
 }
 
 // isDialogue spares speech: people talk in pairs and conclusions, and a

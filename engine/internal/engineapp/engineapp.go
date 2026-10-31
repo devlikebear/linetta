@@ -506,7 +506,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("visuals.set_art_style", handlers.SetArtStyle(visuals, clock))
 	s.Handle("style.get_rules", handlers.GetStyleRules(styles))
 	s.Handle("style.set_rules", handlers.SetStyleRules(styles, clock))
-	s.Handle("style.check", handlers.CheckStyle(styles, nodes))
+	s.Handle("style.check", handlers.CheckStyle(styles, nodes, settingsStore.StyleAvoidPhrases))
 	s.Handle("style.get_draft", handlers.GetStyleDraft(styles))
 	s.Handle("style.approve_draft", handlers.ApproveStyleDraft(styles, clock))
 	s.Handle("style.discard_draft", handlers.DiscardStyleDraft(styles))

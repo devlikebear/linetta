@@ -83,6 +83,10 @@ type Deps struct {
 	// degrades to the documented default" rule Memory and Skills follow, and
 	// the default here is on.
 	SelfReviewEnabled func() bool
+	// EpisodeReviewEnabled reports whether a turn that wrote a scene is followed
+	// by an independent read of it. Nil means off: this pass sends the
+	// manuscript again, so it runs only when the writer asked for it.
+	EpisodeReviewEnabled func() bool
 	// MaxToolCalls reports how many tool calls one turn may execute
 	// (settings.agent_max_tool_calls). Read once at the top of each turn. A
 	// nil func, or an answer below one, means maxIterations.
