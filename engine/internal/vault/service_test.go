@@ -177,6 +177,21 @@ func wantReason(t *testing.T, err error, want string) {
 	}
 }
 
+// makeKey goes through what the settings pane does: ask for a key, then hand it
+// back once the writer has saved it.
+func (d *device) makeKey(t *testing.T) string {
+	t.Helper()
+	ctx := context.Background()
+	created, err := d.svc.Setup(ctx, SetupInput{Consented: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: created.RecoveryKey}); err != nil {
+		t.Fatal(err)
+	}
+	return created.RecoveryKey
+}
+
 // devices sets up two machines with one key, with the work pushed from the first
 // and pulled to the second.
 func devices(t *testing.T) (*fakeSite, *device, *device) {
@@ -184,15 +199,12 @@ func devices(t *testing.T) (*fakeSite, *device, *device) {
 	ctx := context.Background()
 	site := newFakeSite(t)
 	a, b := newDevice(t, site), newDevice(t, site)
-	created, err := a.svc.Setup(ctx, SetupInput{Consented: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	key := a.makeKey(t)
 	a.seed(t, workID, bytes.Repeat([]byte("그림"), 1<<20))
 	if _, err := a.svc.Push(ctx, workID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: created.RecoveryKey}); err != nil {
+	if _, err := b.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: key}); err != nil {
 		t.Fatal(err)
 	}
 	item, _ := site.onlyItem(t)
@@ -206,10 +218,7 @@ func TestPushAndPullCarryAWorkToAnotherDevice(t *testing.T) {
 	ctx := context.Background()
 	site := newFakeSite(t)
 	a, b := newDevice(t, site), newDevice(t, site)
-	created, err := a.svc.Setup(ctx, SetupInput{Consented: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	key := a.makeKey(t)
 	picture := make([]byte, MaxPlaintext+1234)
 	for i := range picture {
 		picture[i] = byte(i * 7)
@@ -233,7 +242,7 @@ func TestPushAndPullCarryAWorkToAnotherDevice(t *testing.T) {
 	}
 	site.mu.Unlock()
 
-	if _, err := b.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: created.RecoveryKey}); err != nil {
+	if _, err := b.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: key}); err != nil {
 		t.Fatal(err)
 	}
 	overview, err := b.svc.Status(ctx)
@@ -339,9 +348,7 @@ func TestInterruptedPushResumes(t *testing.T) {
 	ctx := context.Background()
 	site := newFakeSite(t)
 	a := newDevice(t, site)
-	if _, err := a.svc.Setup(ctx, SetupInput{Consented: true}); err != nil {
-		t.Fatal(err)
-	}
+	a.makeKey(t)
 	a.seed(t, workID, []byte("작은 그림"))
 	allowed := 5
 	site.failPut = func(string) int {
@@ -386,9 +393,7 @@ func TestCommitLoopFollowsAShortMissingList(t *testing.T) {
 	site := newFakeSite(t)
 	site.missedCap = 2
 	a := newDevice(t, site)
-	if _, err := a.svc.Setup(ctx, SetupInput{Consented: true}); err != nil {
-		t.Fatal(err)
-	}
+	a.makeKey(t)
 	a.seed(t, workID, []byte("그림"))
 	if _, err := a.svc.Push(ctx, workID); err != nil {
 		t.Fatal(err)
@@ -730,9 +735,7 @@ func TestBusySiteIsRetriedAndAStuckOneIsNot(t *testing.T) {
 	ctx := context.Background()
 	site := newFakeSite(t)
 	a := newDevice(t, site)
-	if _, err := a.svc.Setup(ctx, SetupInput{Consented: true}); err != nil {
-		t.Fatal(err)
-	}
+	a.makeKey(t)
 	a.seed(t, workID, []byte("그림"))
 	busy := 2
 	site.retryAfter = "3"
@@ -896,26 +899,59 @@ func TestSetupNeedsConsentAndShowsTheKeyOnce(t *testing.T) {
 	if _, _, requests := 0, 0, site.requests; requests != 0 {
 		t.Fatalf("%d requests before consent", requests)
 	}
-	first, err := a.svc.Setup(ctx, SetupInput{Consented: true})
+	key := a.makeKey(t)
+	if _, err := ParseRecoveryKey(key); err != nil {
+		t.Fatal(err)
+	}
+	again, err := a.svc.Setup(ctx, SetupInput{Consented: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.RecoveryKey == "" || !first.KeyStored {
-		t.Fatalf("first setup = %+v", first)
-	}
-	if _, err := ParseRecoveryKey(first.RecoveryKey); err != nil {
-		t.Fatal(err)
-	}
-	second, err := a.svc.Setup(ctx, SetupInput{Consented: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if second.RecoveryKey != "" || !second.KeyStored {
-		t.Fatalf("second setup = %+v", second)
+	if again.RecoveryKey != "" || !again.KeyStored {
+		t.Fatalf("setup after the key is stored = %+v", again)
 	}
 	stored, _, _ := a.settings.VaultKey()
-	if stored != first.RecoveryKey {
-		t.Fatal("the second setup changed the key")
+	if stored != key {
+		t.Fatal("the later setup changed the key")
+	}
+}
+
+// The text is shown once. A writer who leaves before saving it must not end up
+// sealing works under a key nobody kept, so it stays unstored until they hand it
+// back.
+func TestNewKeyIsNotStoredUntilTheWriterHandsItBack(t *testing.T) {
+	ctx := context.Background()
+	a := newDevice(t, newFakeSite(t))
+	abandoned, err := a.svc.Setup(ctx, SetupInput{Consented: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if abandoned.RecoveryKey == "" || abandoned.KeyStored {
+		t.Fatalf("setup = %+v", abandoned)
+	}
+	if ok, _ := a.settings.VaultKeyExists(); ok {
+		t.Fatal("the key was stored before the writer confirmed saving it")
+	}
+	a.seed(t, workID, []byte("그림"))
+	_, err = a.svc.Push(ctx, workID)
+	wantReason(t, err, rpc.ReasonVaultNoKey)
+
+	next, err := a.svc.Setup(ctx, SetupInput{Consented: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.RecoveryKey == abandoned.RecoveryKey {
+		t.Fatal("an abandoned key came back")
+	}
+	done, err := a.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: next.RecoveryKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !done.KeyStored || done.RecoveryKey != "" {
+		t.Fatalf("confirming = %+v", done)
+	}
+	if _, err := a.svc.Push(ctx, workID); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -1002,17 +1038,14 @@ func TestPullFromAnOlderSchemaDoesNotLookLikeALocalChange(t *testing.T) {
 	ctx := context.Background()
 	site := newFakeSite(t)
 	a, b := newDevice(t, site), newDevice(t, site)
-	created, err := a.svc.Setup(ctx, SetupInput{Consented: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	key := a.makeKey(t)
 	a.seed(t, workID, []byte("그림"))
 	exec(t, a.db, `ALTER TABLE projects DROP COLUMN synopsis`)
 	exec(t, a.db, `DELETE FROM schema_migrations WHERE version = (SELECT MAX(version) FROM schema_migrations)`)
 	if _, err := a.svc.Push(ctx, workID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: created.RecoveryKey}); err != nil {
+	if _, err := b.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: key}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.svc.Pull(ctx, PullInput{ItemID: mustItem(t, site)}); err != nil {

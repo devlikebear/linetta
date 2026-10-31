@@ -527,8 +527,9 @@ export const publishApi = {
 export const vaultApi = {
   status: () => rpcCall<VaultOverview>("vault.status"),
   workStatus: (projectId: string) => rpcCall<VaultWorkStatus>("vault.work_status", { project_id: projectId }),
-  /** Without recoveryKey this makes one, and its response is the only time the
-   *  key is ever shown. replace swaps a different key this device holds. */
+  /** Without recovery_key this makes one and returns it, the only time it is
+   *  ever shown; it is stored once the same call hands it back. replace swaps a
+   *  different key this device holds. */
   setup: (input: { consented: boolean; recovery_key?: string; replace?: boolean }) =>
     rpcCall<VaultSetupResult>("vault.setup", input),
   push: (projectId: string) => rpcCall<VaultPushResult>("vault.push", { project_id: projectId }),

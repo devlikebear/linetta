@@ -255,6 +255,65 @@
 .settings output.sd {
   display: block;
 }
+/* The recovery key is copied by hand as often as by button, so one click
+   selects all of it. */
+.settings .vault-key {
+  margin: 12px 0 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  user-select: all;
+  -webkit-user-select: all;
+}
+/* Losing this key loses the works, so its warning is not a muted footnote. */
+.settings .vault-warning {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.settings .vault-step .modal-check { margin: 12px 0; }
+.settings .vault-usage { margin: 12px 0; }
+.settings .vault-usage-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 4px;
+}
+.settings .vault-usage-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--line);
+}
+.settings .vault-usage-bar > div {
+  height: 100%;
+  background: var(--accent);
+}
+.settings .vault-items {
+  margin: 8px 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.settings .vault-items li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.settings .vault-items .sd { margin: 0; flex: 0 0 auto; }
+.settings .vault-item-title {
+  min-width: 0;
+  font-size: 14px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
 /* A sub-heading inside a section (백업에서 복원). Same caption voice as h3,
    one step quieter, with room above it since it follows a card. */
 .settings .settings-section h4 {

@@ -1948,7 +1948,7 @@ export interface VaultWorkStatus {
   restore_points: VaultRestorePoint[];
 }
 
-/** recovery_key is present only on the call that created it. */
+/** recovery_key is present only on the call that created it, which has not stored it. */
 export interface VaultSetupResult {
   key_stored: boolean;
   recovery_key?: string;
