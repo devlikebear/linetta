@@ -115,6 +115,10 @@ type NoticeLine =
   /** Above this line the conversation no longer goes to the model. Drawn from
    *  agent.history, so it moves when the conversation is next restored. */
   | { kind: "notice"; id: string; variant: "forgotten" }
+  /** This turn left more of the conversation out. Live lines carry no row id
+   *  to draw "forgotten" at, so this says so where the turn begins; once the
+   *  conversation is restored, "forgotten" takes over. */
+  | { kind: "notice"; id: string; variant: "historyCut" }
   | { kind: "notice"; id: string; variant: "error"; reason: string };
 
 /** What every agent.* payload carries. `seq` numbers a turn's events from 1 in
@@ -175,6 +179,8 @@ interface AgentErrorPayload extends AgentEventBase {
 }
 
 type AgentCancelledPayload = AgentEventBase;
+
+type AgentHistoryCutPayload = AgentEventBase;
 
 /** The composer's growth cap, in px. Must match `max-height` on
  *  `.cmp-input textarea` in App.css — the CSS enforces it for a box that has
@@ -987,6 +993,14 @@ export function AgentPanel({
     settleRejoinedRun(payload.run_id);
   }));
 
+  useEngineEvent<AgentHistoryCutPayload>("agent-history-cut", whileNotSending<AgentHistoryCutPayload>((payload) => {
+    if (!acceptRun(payload.run_id)) return;
+    setLines((prev) => [
+      ...prev,
+      { kind: "notice", id: `notice:${payload.run_id}:historyCut`, variant: "historyCut" },
+    ]);
+  }));
+
   // Undo is a per-line action, not a turn-level one: mark only the clicked
   // line pending, then resolve it to undone or to a translated failure.
   // Failure — most commonly `agent_undo_unavailable`, since the service
@@ -1478,6 +1492,8 @@ export function AgentPanel({
                     ? t("agentPanel.restore.failed")
                     : line.variant === "forgotten"
                     ? t("agentPanel.restore.forgotten")
+                    : line.variant === "historyCut"
+                    ? t("agentPanel.historyCut")
                     : line.variant === "cancelled"
                       ? t("agentPanel.cancelled")
                       : reasonMessage(line.reason, t);

@@ -137,6 +137,7 @@
 .agent-notice-interrupted,
 .agent-notice-failed,
 .agent-notice-forgotten,
+.agent-notice-historyCut,
 .agent-notice-restored { color: var(--muted); }
 .agent-notice-forgotten {
   margin: 8px 0;

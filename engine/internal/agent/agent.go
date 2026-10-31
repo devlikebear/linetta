@@ -178,13 +178,18 @@ func New(d Deps) *Service {
 }
 
 // replayHistory is priorMessages for one work, remembering where its window
-// began for the next turn. cut says earlier messages were left out.
-func (s *Service) replayHistory(projectID string, msgs []companion.HistoryMessage) (replay []llm.ChatMessage, cut bool) {
+// began for the next turn. cut says earlier messages were left out, and moved
+// that this turn left out more than the last one did. Nothing has moved on the
+// first turn after a restart: the window it would be measured against is gone,
+// and agent.history already drew the boundary when the panel opened.
+func (s *Service) replayHistory(projectID string, msgs []companion.HistoryMessage) (replay []llm.ChatMessage, cut, moved bool) {
 	s.historyMu.Lock()
 	defer s.historyMu.Unlock()
-	replay, start := priorMessages(msgs, s.historyStarts[projectID])
+	previous := s.historyStarts[projectID]
+	replay, start := priorMessages(msgs, previous)
 	s.historyStarts[projectID] = start
-	return replay, historyCut(msgs, start)
+	cut = historyCut(msgs, start)
+	return replay, cut, cut && previous != "" && start != previous
 }
 
 // ReplayStart is the id of the message the next turn's replay begins at when
