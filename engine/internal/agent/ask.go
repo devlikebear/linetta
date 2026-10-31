@@ -29,7 +29,7 @@ const askWriterTool = "linetta_ask_writer"
 // askedReply is what a self-executing provider reads back. The loop never
 // sends it to a model: it ends the turn on the spot.
 const askedReply = "The card is on the writer's screen, and their answers will arrive as their next message. " +
-	"End your turn now: do not call any more tools."
+	"End your turn now, without calling any more tools or saying anything else: the card speaks for itself."
 
 const (
 	maxAskQuestions  = 6

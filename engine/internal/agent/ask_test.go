@@ -204,11 +204,13 @@ func (f *askingClaudeCode) Chat(ctx context.Context, _ []llm.ChatMessage, opts l
 	if f.after, err = session.CallTool(ctx, &mcp.CallToolParams{Name: "echo", Arguments: map[string]any{"text": "too soon"}}); err != nil {
 		return llm.ChatResponse{}, err
 	}
-	return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant"}}, nil
+	opts.OnDelta("카드를 띄워 뒀습니다.")
+	return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "카드를 띄워 뒀습니다."}}, nil
 }
 
 // Claude Code cannot be stopped at the card the way the loop stops, so it is
-// refused anything further, and saying nothing after a card is not a failed turn.
+// refused anything further, its words after the card go nowhere, and that
+// leaving nothing to show is not a failed turn.
 func TestRunCLI_aCardStopsTheToolsAndNeedsNoFurtherReply(t *testing.T) {
 	rec := &recorder{}
 	cc := &askingClaudeCode{}
@@ -230,5 +232,17 @@ func TestRunCLI_aCardStopsTheToolsAndNeedsNoFurtherReply(t *testing.T) {
 	}
 	if got := finalToolPayload(t, rec, askWriterTool); got.Ask == nil {
 		t.Errorf("agent.tool carries no card: %+v", got)
+	}
+	if rec.has("agent.delta") {
+		t.Error("text after the card reached the panel")
+	}
+	msgs, err := svc.History(context.Background(), "p1", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range msgs {
+		if m.Role == "assistant" {
+			t.Errorf("text after the card reached the transcript: %q", m.Content)
+		}
 	}
 }
