@@ -1,5 +1,43 @@
 # Changelog
 
+## v1.17.0 - 2026-10-31
+
+- **A ledger that holds a long work together.** The work's Canon panel now
+  keeps promises, running gags, open questions, decisions, numbers, the
+  timeline, who knows what and planned cuts, each marked open, paid or dropped.
+  Paying one off asks for the line that does it. Each part can have its own
+  role, goal and tension. The agent sees what is still open while it writes,
+  and can read and edit the ledger with `linetta_list_ledger`,
+  `linetta_edit_ledger` and `linetta_set_part_arc`.
+- **Scene plans stay apart from summaries.** A scene now has a plan of its own
+  beside its summary, and the story brief shows it as the plan for the current
+  scene. Plans kept in the summaries of empty scenes move across when you
+  update.
+- **A second reader for each episode.** Turn on the independent episode review
+  in Settings and a separate read-only pass checks the last three scenes the
+  agent wrote. It is off by default. The agent panel also offers review of this
+  episode and a critique of the whole part as one-tap follow-ups.
+- **Style checks that know long-form habits.** Pick a scene as the reference
+  for a work's style. The style check now also finds "not this, but that"
+  parallels, sentences that explain instead of showing, sentences repeated
+  across episodes and episodes that all end the same way. You can list phrases
+  to avoid in Settings.
+- **Private vault, in invited beta.** Encrypt a work on this device, keep it on
+  Linetta Works and pick it up on another device. It is free for accounts the
+  operator admits, needs a recovery key that only you hold, and sends nothing
+  until you turn it on. Find it in Settings.
+- Fixed: the story brief no longer swells on long works. A character's recent
+  appearances stay short, the same episode summary is not repeated for each
+  character, summaries of nearby episodes and earlier parts stay in, and the
+  style notes come near the top. On one 8-episode work the brief went from
+  40,096 characters to 13,253.
+- Fixed: replacing text in the manuscript now works across registered names and
+  paragraph breaks, keeps a link when only the name changes, and no longer
+  trims spaces.
+- Fixed: agent story operations now keep the parent you ask for when creating or
+  moving a scene, keep summaries given at creation, and keep the title in step
+  with a rename.
+
 ## v1.16.1 - 2026-10-31
 
 - **The agent says when a conversation has outgrown it.** A long conversation
