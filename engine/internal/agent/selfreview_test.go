@@ -673,7 +673,7 @@ func TestSelfReview_isOfferedOnlyTheSkillTools(t *testing.T) {
 		{Function: llm.ToolFunctionSchema{Name: "linetta_read_skill"}},
 		{Function: llm.ToolFunctionSchema{Name: "linetta_delete_node"}},
 	}
-	got := onlySelfReviewTools(schemas)
+	got := onlyTools(schemas, selfReviewTools)
 	if len(got) != 2 {
 		t.Fatalf("the review was offered %d tools, want the two skill tools: %+v", len(got), got)
 	}
