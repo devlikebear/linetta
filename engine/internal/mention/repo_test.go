@@ -2,6 +2,7 @@ package mention
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -170,5 +171,90 @@ func TestMentionedNodeIDs_noMentions(t *testing.T) {
 	}
 	if len(ids) != 0 {
 		t.Fatalf("ids=%v want empty", ids)
+	}
+}
+
+// summarizedScene adds a leaf after afterID that mentions the entities (an
+// entity listed twice is mentioned twice) and has a summary, as CoMentionLeaves
+// requires.
+func summarizedScene(t *testing.T, f fixture, afterID string, at int64, entityIDs ...string) string {
+	t.Helper()
+	ctx := context.Background()
+	n, err := f.nr.CreateSibling(ctx, afterID, "leaf", "씬", "", at)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+	if err := f.nr.UpdateContent(ctx, n.ID, `{"type":"doc","content":[{"type":"paragraph"}]}`, at); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	got, err := f.nr.Get(ctx, n.ID)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if err := f.nr.SetSummary(ctx, n.ID, "요약", got.ContentVersion); err != nil {
+		t.Fatalf("SetSummary: %v", err)
+	}
+	mentionAll(t, f, n.ID, entityIDs...)
+	return n.ID
+}
+
+func mentionAll(t *testing.T, f fixture, nodeID string, entityIDs ...string) {
+	t.Helper()
+	found := make([]Found, 0, len(entityIDs))
+	for i, id := range entityIDs {
+		found = append(found, Found{EntityID: id, Position: i, Surface: "x"})
+	}
+	if err := f.mr.ResyncForNode(context.Background(), nodeID, found); err != nil {
+		t.Fatalf("ResyncForNode: %v", err)
+	}
+}
+
+func TestCoMentionLeaves_rareEntityOutranksLeads(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	lead1, _ := f.er.Create(ctx, 100, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "해진"})
+	lead2, _ := f.er.Create(ctx, 101, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "민호"})
+	prop, _ := f.er.Create(ctx, 102, entity.NewInput{ProjectID: f.pID, Kind: "item", Name: "은색 열쇠"})
+
+	mentionAll(t, f, f.nID, lead1.ID, lead2.ID, prop.ID)
+	rare := summarizedScene(t, f, f.nID, 200, lead1.ID, prop.ID)
+	// Both leads and edited later: shared count and recency both favor this one.
+	leads := summarizedScene(t, f, rare, 300, lead1.ID, lead2.ID)
+	summarizedScene(t, f, leads, 400, lead1.ID, lead2.ID)
+
+	got, err := f.mr.CoMentionLeaves(ctx, f.nID, 10)
+	if err != nil {
+		t.Fatalf("CoMentionLeaves: %v", err)
+	}
+	if len(got) != 3 || got[0].NodeID != rare {
+		t.Fatalf("results = %+v, want %s first", got, rare)
+	}
+}
+
+func TestCoMentionLeaves_repeatedMentionsCountOnce(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	e1, _ := f.er.Create(ctx, 100, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "해진"})
+	e2, _ := f.er.Create(ctx, 101, entity.NewInput{ProjectID: f.pID, Kind: "character", Name: "민호"})
+
+	mentionAll(t, f, f.nID, e1.ID, e1.ID, e2.ID)
+	once := summarizedScene(t, f, f.nID, 200, e1.ID, e2.ID)
+	repeated := summarizedScene(t, f, once, 100, e1.ID, e1.ID, e1.ID, e1.ID, e2.ID)
+
+	got, err := f.mr.CoMentionLeaves(ctx, f.nID, 10)
+	if err != nil {
+		t.Fatalf("CoMentionLeaves: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("results = %+v, want 2", got)
+	}
+	want := 2.0 / 3.0 // each entity appears in 3 scenes
+	for _, r := range got {
+		if r.K != 2 || math.Abs(r.Rarity-want) > 1e-9 {
+			t.Errorf("%+v: want K=2 Rarity=%v", r, want)
+		}
+	}
+	if got[0].NodeID != once || got[1].NodeID != repeated {
+		t.Errorf("order = %+v, want the tie broken by recency", got)
 	}
 }

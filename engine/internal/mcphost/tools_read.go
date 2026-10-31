@@ -320,7 +320,7 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "linetta_search_manuscript",
-		Description: "Full-text search across the work's manuscript. Returns matching scenes with snippets.",
+		Description: "Full-text search across the work's manuscript. A scene must contain every word. Returns snippets, best match first.",
 	}, record(d, "linetta_search_manuscript", d.searchManuscript))
 
 	mcp.AddTool(s, &mcp.Tool{
