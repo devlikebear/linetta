@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.17.1 - 2026-10-31
+
+- **The agent can accept and reject suggestions for you.** Tell it to accept a
+  batch or reject the rest, and it works through the suggestions inbox and
+  reports what was applied, linked and failed. It acts only when you tell it
+  to. The new tools are `linetta_list_proposals`, `linetta_accept_proposals`
+  and `linetta_reject_proposals`, in the Check & propose group.
+- Fixed: accepting a suggestion whose name is already in the work no longer
+  fails with a database error. A candidate with the same name and kind links to
+  the existing record, adds only what that record lacks, and takes its
+  relationships with it. The same name on a different kind of element is
+  refused until you rename it.
+- Fixed: a failed suggestion can now be rejected. It used to stay in the inbox
+  for good. Selecting a relationship also selects the failed character it needs,
+  so a retry no longer fails on the dependency.
+- Fixed: a relationship listed before its character no longer fails when both
+  are accepted together.
+- Fixed: "같은 대상일 수 있음" now also appears for a name that reached Story World
+  after the suggestion was made.
+
 ## v1.17.0 - 2026-10-31
 
 - **A ledger that holds a long work together.** The work's Canon panel now
