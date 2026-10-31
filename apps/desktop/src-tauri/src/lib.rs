@@ -886,6 +886,7 @@ mod security_boundary_tests {
         assert!(validate_external_url("http://auth.openai.com/oauth/authorize").is_err());
         assert!(validate_external_url("https://example.com/").is_err());
         assert!(validate_external_url("https://works.marvin-42.com/connect?pairing=abc").is_ok());
+        assert!(validate_external_url("https://works.marvin-42.com/me/vault").is_ok());
         assert!(validate_external_url("https://works.marvin-42.com/@devlikebear/k-office-god/3").is_ok());
         assert!(validate_external_url("https://evil.works.marvin-42.com/").is_err());
         assert!(validate_external_url("http://works.marvin-42.com/").is_err());

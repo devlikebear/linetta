@@ -20,6 +20,7 @@ import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
 import { ImageGenSection } from "../components/settings/ImageGenSection";
 import { PublishSection } from "../components/settings/PublishSection";
+import { VaultSection } from "../components/settings/VaultSection";
 import { RestoreSection } from "../components/settings/RestoreSection";
 import { SkillsSection } from "../components/settings/SkillsSection";
 import { APP_LANGUAGES, localeForLanguage, useI18n } from "../lib/i18n";
@@ -67,6 +68,7 @@ const SETTINGS_CATEGORIES = [
   "skills",
   "sync",
   "publish",
+  "vault",
   "backup",
 ] as const;
 type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
@@ -125,6 +127,7 @@ export function Settings() {
   const [agentAvailable, setAgentAvailable] = useState(false);
   // Hidden on builds that cannot publish to Linetta Works (iOS).
   const [publishAvailable, setPublishAvailable] = useState(false);
+  const [vaultAvailable, setVaultAvailable] = useState(false);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
   const [category, setCategoryState] = useState<SettingsCategory>(initialCategory);
   // Nav visibility only; BackgroundSection keeps its own probe and content.
@@ -162,6 +165,7 @@ export function Settings() {
         setMcpAvailable(diag.mcp_available ?? false);
         setAgentAvailable(diag.agent_available ?? false);
         setPublishAvailable(diag.publish_available ?? false);
+        setVaultAvailable(diag.vault_available ?? false);
         setCompanionHistoryExists(diag.companion_history_exists ?? true);
       })
       // Inside an effect: keeping `t` out of the deps avoids re-running the
@@ -339,6 +343,7 @@ export function Settings() {
         // Publishing sends text off the device, like sync does, so it sits
         // beside it rather than with the AI connections.
         ...(publishAvailable ? [{ id: "publish" as const, label: t("settings.nav.publish") }] : []),
+        ...(vaultAvailable ? [{ id: "vault" as const, label: t("settings.nav.vault") }] : []),
         { id: "backup", label: t("settings.nav.backupRestore") },
       ],
     },
@@ -602,6 +607,10 @@ export function Settings() {
             {category === "mcp" && mcpAvailable && <McpSection />}
 
             {category === "publish" && <PublishSection available={publishAvailable} />}
+
+            {category === "vault" && (
+              <VaultSection available={vaultAvailable} onOpenPublish={() => setCategory("publish")} />
+            )}
 
             {/* The tool budget (#99). Both switches are ON by default, so they
                 read `!== false`: a settings payload from an engine that

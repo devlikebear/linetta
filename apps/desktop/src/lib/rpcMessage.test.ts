@@ -219,3 +219,21 @@ describe("publish reasons", () => {
     }
   });
 });
+
+// The vault forwards the site's failures the same way, and some of what it
+// says here is the only thing that keeps a writer from losing a key.
+describe("vault reasons", () => {
+  it("maps every vault reason code in engine/internal/rpc/reason.go", async () => {
+    const reasonGo = await readAppFile("../../engine/internal/rpc/reason.go");
+    const codes = [...reasonGo.matchAll(/ReasonVault\w+\s*=\s*"([a-z_]+)"/g)].map((m) => m[1]);
+    expect(codes.length).toBeGreaterThan(20);
+    for (const reason of codes) {
+      const error = new RpcError("vault.push", "사이트 오류 문장", -32602, { reason });
+      for (const [name, t] of [["ko", ko], ["en", en], ["ja", ja]] as const) {
+        const shown = rpcErrorMessage(error, t);
+        expect(shown, `${reason} in ${name}`).not.toContain("사이트 오류 문장");
+        expect(shown, `${reason} in ${name}`).not.toContain(reason);
+      }
+    }
+  });
+});
