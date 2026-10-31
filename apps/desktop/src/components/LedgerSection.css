@@ -1,0 +1,15 @@
+.ledger-parts { display: grid; gap: 6px; margin-bottom: 12px; }
+.ledger-parts-title { margin: 0; font-size: 12px; color: var(--ink-soft); }
+.ledger-part { display: grid; grid-template-columns: minmax(64px, 1fr) minmax(48px, 1fr) minmax(0, 3fr) 56px; gap: 6px; align-items: center; }
+.ledger-part-label { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-part input, .ledger-add input, .ledger-add select { min-width: 0; width: 100%; font: inherit; font-size: 12px; }
+.ledger-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
+.ledger-list li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 6px; font-size: 13px; }
+.ledger-kind { font-size: 11px; color: var(--ink-soft); }
+.ledger-subject { font-weight: 600; }
+.ledger-body { flex-basis: 100%; white-space: pre-wrap; }
+.ledger-where { border: 0; background: none; padding: 0; font: inherit; font-size: 11px; color: var(--ink-soft); }
+button.ledger-where { cursor: pointer; text-decoration: underline; }
+.ledger-actions { margin-left: auto; display: flex; gap: 4px; }
+.ledger-add { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 6px; margin-top: 8px; }
+.ledger-section .style-hint { margin: 0 0 8px; font-size: 12px; color: var(--ink-soft); }

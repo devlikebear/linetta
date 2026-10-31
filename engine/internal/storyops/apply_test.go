@@ -417,3 +417,35 @@ func TestCreateThreadTakesTitleAsItsName(t *testing.T) {
 		t.Fatalf("name = %q", p.Ops[0].Name)
 	}
 }
+
+type recordedCuts struct{ cut []node.Node }
+
+func (r *recordedCuts) RecordCutPlans(_ context.Context, _ int64, cut []node.Node) ([]string, error) {
+	r.cut = cut
+	return []string{cut[0].Label}, nil
+}
+
+func TestDeletingAPlannedEpisodeReportsItsPlan(t *testing.T) {
+	svc, nodes, projectID, part1, _ := outlineFixture(t)
+	ctx := context.Background()
+	rec := &recordedCuts{}
+	svc.WithCutPlans(rec)
+	res := mustApply(t, svc, ctx, projectID, "", Proposal{Ops: []Op{
+		{Type: "create_scene", Ref: "s", Label: "20화", ParentNodeID: part1, Plan: "[계획] 스무 번째"},
+	}}, now())
+	scene := res.Created["node:s"]
+	n, _ := nodes.Get(ctx, scene)
+	if n.Plan != "[계획] 스무 번째" {
+		t.Fatalf("plan = %q", n.Plan)
+	}
+	del := mustApply(t, svc, ctx, projectID, "", Proposal{Ops: []Op{{Type: "delete_outline_node", NodeID: scene}}}, now())
+	if len(del.CutPlans) != 1 || del.CutPlans[0] != "20화" || len(rec.cut) != 1 {
+		t.Fatalf("cut plans = %v, recorded %d", del.CutPlans, len(rec.cut))
+	}
+	if err := svc.UndoApply(ctx, del.UndoBatchID, now()); err != nil {
+		t.Fatalf("undo: %v", err)
+	}
+	if n, _ := nodes.Get(ctx, scene); n.Plan != "[계획] 스무 번째" {
+		t.Fatalf("undo lost the plan: %q", n.Plan)
+	}
+}

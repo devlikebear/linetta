@@ -10,6 +10,10 @@ import (
 const (
 	RuleAvoidPhrase     = "avoid_phrase"
 	RuleSentenceTooLong = "sentence_too_long"
+	RuleParallel        = "parallel_contrast"
+	RuleExplainer       = "narrator_explains"
+	RuleRepeatedLine    = "repeated_line"
+	RuleEndingFormula   = "ending_formula"
 )
 
 // MaxViolations caps one report. A check that finds more says how many it
@@ -94,7 +98,15 @@ func Check(scenes []Scene, rules Rules) Report {
 					}
 				}
 			}
+			for _, s := range Sentences(text) {
+				if rule := sentencePattern(s); rule != "" {
+					add(Violation{NodeID: sc.NodeID, Label: sc.Label, Rule: rule, Paragraph: para, Excerpt: clip(s, excerptContext*3)})
+				}
+			}
 		}
+	}
+	for _, v := range acrossScenes(scenes) {
+		add(v)
 	}
 	return rep
 }

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
-import { projects as projectsApi, style as styleApi } from "../lib/rpc";
-import type { StyleApproveMode, StyleCheckResult, StyleDraftState, StyleViolation } from "../lib/types";
+import { nodes as nodesApi, projects as projectsApi, style as styleApi } from "../lib/rpc";
+import type { NodeRow, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleViolation } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import "./StyleSection.css";
@@ -42,6 +42,8 @@ export function StyleSection({ projectId, nodeId, onOpenNode, onBeforeCheck }: R
   const [notes, setNotes] = useState<string | null>(null);
   const [phrases, setPhrases] = useState<string | null>(null);
   const [maxSentence, setMaxSentence] = useState("");
+  const [anchor, setAnchor] = useState("");
+  const [scenes, setScenes] = useState<NodeRow[]>([]);
   const [draft, setDraft] = useState<StyleDraftState | null>(null);
   const [draftBody, setDraftBody] = useState("");
   const [draftRevision, setDraftRevision] = useState(0);
@@ -51,11 +53,13 @@ export function StyleSection({ projectId, nodeId, onOpenNode, onBeforeCheck }: R
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([projectsApi.get(projectId), styleApi.getRules(projectId)]).then(([project, rules]) => {
+    Promise.all([projectsApi.get(projectId), styleApi.getRules(projectId), nodesApi.listTree(projectId)]).then(([project, rules, tree]) => {
       if (cancelled) return;
+      setScenes(tree.filter((n) => n.kind === "leaf" && n.word_count > 0));
       setNotes(project.style_notes ?? "");
       setPhrases(rules.avoid_phrases.join("\n"));
       setMaxSentence(rules.max_sentence_chars > 0 ? String(rules.max_sentence_chars) : "");
+      setAnchor(rules.anchor_node_id ?? "");
     }).catch((e) => { if (!cancelled) setError(e); });
     return () => { cancelled = true; };
   }, [projectId]);
@@ -99,6 +103,7 @@ export function StyleSection({ projectId, nodeId, onOpenNode, onBeforeCheck }: R
       project_id: projectId,
       avoid_phrases: toPhrases(phrases ?? ""),
       max_sentence_chars: Number.isFinite(limit) ? Math.trunc(limit) : 0,
+      anchor_node_id: anchor,
     });
     setPhrases(saved.avoid_phrases.join("\n"));
     setMaxSentence(saved.max_sentence_chars > 0 ? String(saved.max_sentence_chars) : "");
@@ -196,6 +201,12 @@ export function StyleSection({ projectId, nodeId, onOpenNode, onBeforeCheck }: R
             onChange={(e) => setMaxSentence(e.target.value)}
           />
         </label>
+        <label>{t("style.anchor")}
+          <select value={anchor} disabled={working} onChange={(e) => setAnchor(e.target.value)}>
+            <option value="">{t("style.anchorNone")}</option>
+            {scenes.map((scene) => <option key={scene.id} value={scene.id}>{scene.label}</option>)}
+          </select>
+        </label>
         <div className="style-actions">
           <button type="button" className="btn accent sm" disabled={working} onClick={() => void saveRules()}>
             {busy === "rules" ? t("common.saving") : t("style.save")}
@@ -243,12 +254,27 @@ function StyleReport({ report, onOpenNode }: Readonly<{ report: StyleCheckResult
   );
 }
 
+function violationText(v: StyleViolation, t: ReturnType<typeof useI18n>["t"]): string {
+  switch (v.rule) {
+    case "sentence_too_long":
+      return t("style.ruleSentence", { length: v.length ?? 0, limit: v.limit ?? 0 });
+    case "parallel_contrast":
+      return t("style.ruleParallel");
+    case "narrator_explains":
+      return t("style.ruleExplainer");
+    case "repeated_line":
+      return t("style.ruleRepeated", { label: v.phrase ?? "" });
+    case "ending_formula":
+      return t("style.ruleEnding", { label: v.phrase ?? "" });
+    default:
+      return t("style.rulePhrase", { phrase: v.phrase ?? "" });
+  }
+}
+
 function ViolationRow({ v, onOpenNode }: Readonly<{ v: StyleViolation; onOpenNode?: (nodeId: string) => void }>) {
   const { t } = useI18n();
   const where = t("style.where", { label: v.label, paragraph: v.paragraph });
-  const what = v.rule === "sentence_too_long"
-    ? t("style.ruleSentence", { length: v.length ?? 0, limit: v.limit ?? 0 })
-    : t("style.rulePhrase", { phrase: v.phrase ?? "" });
+  const what = violationText(v, t);
   return (
     <>
       {onOpenNode

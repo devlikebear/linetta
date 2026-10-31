@@ -150,6 +150,14 @@ type Config struct {
 	// and the writer can switch it off in Settings → Skills. Off means no
 	// second provider call and no skill written without the writer asking.
 	AgentSelfReviewEnabled bool `json:"agent_self_review_enabled"`
+	// AgentEpisodeReviewEnabled governs the independent read of a finished
+	// episode: after a turn that wrote prose, a separate provider call reads the
+	// scene with no memory of writing it and records what it finds. Off by
+	// default, because unlike the self-improvement pass it sends the manuscript
+	// again and its cost grows with every episode.
+	AgentEpisodeReviewEnabled bool `json:"agent_episode_review_enabled"`
+	// StyleAvoidPhrases are checked in every work, on top of a work's own list.
+	StyleAvoidPhrases []string `json:"style_avoid_phrases,omitempty"`
 	// AgentMaxToolCalls is how many tool calls the built-in agent may execute
 	// in one turn before it is stopped and asked to say how far it got. A
 	// batch job — "summarise every scene" — costs a read and a write per
@@ -347,6 +355,8 @@ type Patch struct {
 	MCPConsentVersion         *int                     `json:"mcp_consent_version,omitempty"`
 	MCPConsentedAt            *int64                   `json:"mcp_consented_at,omitempty"`
 	AgentSelfReviewEnabled    *bool                    `json:"agent_self_review_enabled,omitempty"`
+	AgentEpisodeReviewEnabled *bool                    `json:"agent_episode_review_enabled,omitempty"`
+	StyleAvoidPhrases         *[]string                `json:"style_avoid_phrases,omitempty"`
 	AgentMaxToolCalls         *int                     `json:"agent_max_tool_calls,omitempty"`
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
@@ -639,6 +649,21 @@ func (s *Store) AgentSelfReviewEnabled() bool {
 	return s.cfg.AgentSelfReviewEnabled
 }
 
+// AgentEpisodeReviewEnabled reports whether a finished episode gets an
+// independent read. Read per turn, like AgentSelfReviewEnabled.
+func (s *Store) AgentEpisodeReviewEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.AgentEpisodeReviewEnabled
+}
+
+// StyleAvoidPhrases returns the phrases to keep out of every work.
+func (s *Store) StyleAvoidPhrases() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return slices.Clone(s.cfg.StyleAvoidPhrases)
+}
+
 // The built-in agent's per-turn tool-call cap. The floor keeps a turn long
 // enough to do a job at all; the ceiling keeps the cap a cap — every call's
 // result stays in the turn's context, so an unbounded turn ends at the
@@ -852,6 +877,12 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	}
 	if p.MCPConsentedAt != nil {
 		next.MCPConsentedAt = *p.MCPConsentedAt
+	}
+	if p.AgentEpisodeReviewEnabled != nil {
+		next.AgentEpisodeReviewEnabled = *p.AgentEpisodeReviewEnabled
+	}
+	if p.StyleAvoidPhrases != nil {
+		next.StyleAvoidPhrases = *p.StyleAvoidPhrases
 	}
 	if p.AgentSelfReviewEnabled != nil {
 		next.AgentSelfReviewEnabled = *p.AgentSelfReviewEnabled

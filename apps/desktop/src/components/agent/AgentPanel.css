@@ -121,6 +121,8 @@
 /* Starting chips sit right above the composer, only before the first turn.
  * .ai-chiprow / .chip are the shared chip-row rules from App.css. */
 .agent-starters { padding: 0 16px 10px; }
+.agent-proposals { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 16px 10px; font-size: 12px; color: var(--ink-soft); }
+.agent-proposals span { flex: 1 1 160px; }
 
 /* Terminal-event notices (#95 Task 7): agent.error, agent.cancelled, and the
  * restore effect's "a turn may still be running" guess. A line of its own in

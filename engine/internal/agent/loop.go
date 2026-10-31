@@ -231,6 +231,9 @@ func (s *Service) maxToolCalls() int {
 
 type loopState struct {
 	runID string
+	// written collects the scenes this turn wrote, for the review that may
+	// follow it. A pointer because the state is passed by value.
+	written *[]string
 	// projectID is the work this turn belongs to, trimmed. It is on every
 	// notification this file emits rather than only in the transcript,
 	// because a run id alone does not say whose conversation an event is —
@@ -356,6 +359,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 	// arguments or results, so a background call the writer did not ask for
 	// carries none of their manuscript.
 	usedTools := make([]string, 0, st.maxToolCalls)
+	st.written = &[]string{}
 	lastFailedTool := ""
 	repeats := 0
 
@@ -393,6 +397,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			if reason, message, stopped := silentStop(resp); stopped {
 				s.endWithReason(ctx, st, reason, message, companion.HistoryStatusDone)
 				s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+				s.maybeEpisodeReview(ctx, st)
 				return
 			}
 			s.notify("agent.done", donePayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID), Model: st.model, Usage: usage})
@@ -401,6 +406,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			// its own context, so this returns immediately and the writer's
 			// next message never waits on it.
 			s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+			s.maybeEpisodeReview(ctx, st)
 			return
 		}
 
@@ -423,6 +429,9 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 			result := s.runTool(ctx, st, call)
 			toolCalls++
 			usedTools = append(usedTools, call.Name)
+			if !result.IsError {
+				noteWrittenScene(st.written, call.Name, call.Arguments)
+			}
 			msgs = append(msgs, llm.ChatMessage{
 				Role:       "tool",
 				ToolCallID: call.ID,
@@ -497,6 +506,7 @@ func (s *Service) stopAtWall(ctx context.Context, st loopState, msgs []llm.ChatM
 	// The wall ends the turn "done" on purpose (see endAtWall): a turn that
 	// got this far did work, and work is exactly what the review is for.
 	s.maybeSelfReview(ctx, st, toolCalls, usedTools)
+	s.maybeEpisodeReview(ctx, st)
 }
 
 // wrapUp gives a turn at the wall one last round-trip, with tool calls

@@ -220,6 +220,8 @@ export interface NodeRow {
   status: NodeStatus;
   word_count: number;
   content_version?: number;
+  /** What the scene is meant to do; writing it does not overwrite this. */
+  plan?: string;
   created_at: number;
   updated_at: number;
 }
@@ -922,6 +924,10 @@ export interface Settings {
    *  because a settings payload from an older engine simply omits it; every
    *  reader must treat "missing" as the default, which is ON. */
   agent_self_review_enabled?: boolean;
+  /** Off unless the writer turns it on: it sends finished scenes to the model again. */
+  agent_episode_review_enabled?: boolean;
+  /** Phrases to keep out of every work. */
+  style_avoid_phrases?: string[];
   /** How many tool calls one turn of the built-in agent may execute before
    *  it is stopped and asked to say how far it got. Missing (an older
    *  engine) means the default, 48. */
@@ -988,6 +994,10 @@ export interface SettingsPatch {
   mcp_consent_version?: number;
   mcp_consented_at?: number;
   agent_self_review_enabled?: boolean;
+  /** Off unless the writer turns it on: it sends finished scenes to the model again. */
+  agent_episode_review_enabled?: boolean;
+  /** Phrases to keep out of every work. */
+  style_avoid_phrases?: string[];
   agent_max_tool_calls?: number;
   visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
@@ -1501,12 +1511,46 @@ export interface StyleRules {
   avoid_phrases: string[];
   /** In characters; 0 means no limit. */
   max_sentence_chars: number;
+  /** The scene the writer set as the prose to match, or "". */
+  anchor_node_id: string;
   updated_at: number;
+}
+export type LedgerKind = "promise" | "gag" | "question" | "decision" | "number" | "timeline" | "knowledge" | "cut_plan";
+export type LedgerStatus = "open" | "paid" | "dropped";
+export interface LedgerEntry {
+  id: string;
+  project_id: string;
+  kind: LedgerKind;
+  subject: string;
+  body: string;
+  status: LedgerStatus;
+  planted_node_id?: string;
+  planted_quote?: string;
+  due_node_id?: string;
+  paid_node_id?: string;
+  paid_quote?: string;
+  source: "writer" | "agent" | "external";
+  created_at: number;
+  updated_at: number;
+}
+export interface PartArc {
+  node_id: string;
+  label: string;
+  role: string;
+  goal: string;
+  /** 0 is unset; otherwise 1 to 10. */
+  tension: number;
+}
+export interface LedgerState {
+  entries: LedgerEntry[];
+  parts: PartArc[];
+  /** Scene and part labels, by node id. */
+  labels: Record<string, string>;
 }
 export interface StyleViolation {
   node_id: string;
   label: string;
-  rule: "avoid_phrase" | "sentence_too_long";
+  rule: "avoid_phrase" | "sentence_too_long" | "parallel_contrast" | "narrator_explains" | "repeated_line" | "ending_formula";
   /** 1-based, counting the scene's non-empty paragraphs. */
   paragraph: number;
   phrase?: string;

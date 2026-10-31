@@ -18,6 +18,8 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: (name: string, cb: (e: { paylo
   mocks.listeners.set(name, cb); return Promise.resolve(() => mocks.listeners.delete(name));
 } }));
 vi.mock("../lib/rpc", () => ({
+  nodes: { listTree: vi.fn().mockResolvedValue([]) },
+  ledger: { list: vi.fn().mockResolvedValue({ entries: [], parts: [], labels: {} }) },
   settings: { get: vi.fn().mockResolvedValue({ language: "en" }) },
   projects: { get: mocks.getProject, update: mocks.updateProject },
   style: {
@@ -66,7 +68,7 @@ describe("StyleSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save rules" }));
 
     await waitFor(() => expect(mocks.setRules).toHaveBeenCalledWith({
-      project_id: "p", avoid_phrases: ["suddenly"], max_sentence_chars: 0,
+      project_id: "p", avoid_phrases: ["suddenly"], max_sentence_chars: 0, anchor_node_id: "",
     }));
     await waitFor(() => expect(box).toHaveValue("suddenly"));
   });

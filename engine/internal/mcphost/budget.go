@@ -74,7 +74,7 @@ var (
 	// same list rather than inventing a second group, because the writer's
 	// question — "let the agent check things and record what it finds, or
 	// not" — does not change across phases.
-	ReviewToolNames = []string{"linetta_report_continuity", "linetta_propose_story_ops", "linetta_save_forecast"}
+	ReviewToolNames = []string{"linetta_report_continuity", "linetta_propose_story_ops", "linetta_save_forecast", "linetta_list_ledger", "linetta_edit_ledger", "linetta_set_part_arc"}
 )
 
 // VisualWriteToolNames lists the optional visual editing group.

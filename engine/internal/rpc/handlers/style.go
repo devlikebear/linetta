@@ -79,7 +79,7 @@ type styleCheckResult struct {
 // CheckStyle returns a handler for style.check. node_id narrows the check to
 // one scene, or to the scenes under one chapter; without it the whole work is
 // checked. The check reads the manuscript and writes nothing.
-func CheckStyle(repo *style.Repo, nodes *node.Repo) rpc.Handler {
+func CheckStyle(repo *style.Repo, nodes *node.Repo, globalPhrases func() []string) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {
 			ProjectID string `json:"project_id"`
@@ -99,7 +99,11 @@ func CheckStyle(repo *style.Repo, nodes *node.Repo) rpc.Handler {
 		if in.NodeID != "" && !containsNode(list, in.NodeID) {
 			return nil, rpc.NotFound(rpc.ReasonNodeNotFound, "node not found in this work")
 		}
-		return json.Marshal(styleCheckResult{Rules: rules, Report: style.Check(style.ScenesUnder(list, in.NodeID), rules)})
+		checked := rules
+		if globalPhrases != nil {
+			checked.AvoidPhrases = append(append([]string{}, rules.AvoidPhrases...), globalPhrases()...)
+		}
+		return json.Marshal(styleCheckResult{Rules: rules, Report: style.Check(style.ScenesUnder(list, in.NodeID), checked)})
 	}
 }
 

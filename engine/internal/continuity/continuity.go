@@ -39,14 +39,20 @@ const (
 	CategoryFact         = "fact"
 	CategoryPlot         = "plot"
 	CategoryDirection    = "direction"
-	CategoryOther        = "other"
+	// A reader's-eye reading adds these: not a clash with the record, but a
+	// place the story stops working on the page.
+	CategoryMotive      = "motive"
+	CategoryReadability = "readability"
+	CategoryPacing      = "pacing"
+	CategoryOther       = "other"
 )
 
 // ValidCategory reports whether v is one of the categories above.
 func ValidCategory(v string) bool {
 	switch v {
 	case CategoryCharacter, CategoryPlace, CategoryItem, CategoryRelationship,
-		CategoryTimeline, CategoryFact, CategoryPlot, CategoryDirection, CategoryOther:
+		CategoryTimeline, CategoryFact, CategoryPlot, CategoryDirection,
+		CategoryMotive, CategoryReadability, CategoryPacing, CategoryOther:
 		return true
 	default:
 		return false
@@ -158,7 +164,7 @@ type Ref struct {
 // ObservationInput is one finding exactly as a model reports it, before
 // Validate and Record give it an id, a check, and a status.
 type ObservationInput struct {
-	Category      string `json:"category" jsonschema:"one of: character, place, item, relationship, timeline, fact, plot, direction, other — direction means the writer's own scene intent or current focus"`
+	Category      string `json:"category" jsonschema:"one of: character, place, item, relationship, timeline, fact, plot, direction, motive, readability, pacing, other — direction means the writer's own scene intent or current focus"`
 	Kind          string `json:"kind" jsonschema:"one of: contradiction (disagrees with the work's own record — must cite a ref), gap (establishes something new; the writer decides whether to register it), question (an ambiguous passage)"`
 	Severity      string `json:"severity" jsonschema:"one of: high, medium, low"`
 	Summary       string `json:"summary" jsonschema:"what you found, in one or two sentences, at most 300 characters"`

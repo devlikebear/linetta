@@ -188,7 +188,14 @@ func (s *Service) selfReview(ctx context.Context, st loopState, used []string) {
 		{Role: "system", Content: selfReviewSystemPrompt},
 		{Role: "user", Content: selfReviewRequest(st, used, skills)},
 	}
-	tools := onlySelfReviewTools(st.schemas)
+	s.boundedPass(ctx, st, "self-review", msgs, selfReviewTools, selfReviewMaxToolCalls)
+}
+
+// boundedPass runs an unattended exchange after a turn: the given tools only, a
+// cap on tool calls and on round trips, and no output anywhere the writer's panel
+// can see it.
+func (s *Service) boundedPass(ctx context.Context, st loopState, name string, msgs []llm.ChatMessage, allowed map[string]bool, maxCalls int) {
+	tools := onlyTools(st.schemas, allowed)
 
 	calls, rounds := 0, 0
 	for {
@@ -202,8 +209,8 @@ func (s *Service) selfReview(ctx context.Context, st loopState, used []string) {
 		// timeout — several minutes of provider calls for a pass the writer
 		// never asked for. Same number, because four calls plus the round trip
 		// after them is four round trips plus one either way.
-		if rounds >= selfReviewMaxToolCalls+1 {
-			logf("self-review after turn %s: stopped after %d round trips", st.runID, rounds)
+		if rounds >= maxCalls+1 {
+			logf("%s after turn %s: stopped after %d round trips", name, st.runID, rounds)
 			return
 		}
 		rounds++
@@ -212,7 +219,7 @@ func (s *Service) selfReview(ctx context.Context, st loopState, used []string) {
 			// The writer asked for none of this and is not waiting on it, so a
 			// failed review is a log line, never an agent.error under a turn
 			// they have already read and moved on from.
-			logf("self-review after turn %s: %v", st.runID, err)
+			logf("%s after turn %s: %v", name, st.runID, err)
 			return
 		}
 		if len(resp.Message.ToolCalls) == 0 {
@@ -225,8 +232,8 @@ func (s *Service) selfReview(ctx context.Context, st loopState, used []string) {
 		// review that has spent its whole budget gets exactly ONE more
 		// round-trip — the one where it says what it did — and not a second
 		// helping of tool calls.
-		if calls >= selfReviewMaxToolCalls {
-			logf("self-review after turn %s: stopped at %d tool calls", st.runID, calls)
+		if calls >= maxCalls {
+			logf("%s after turn %s: stopped at %d tool calls", name, st.runID, calls)
 			return
 		}
 		msgs = append(msgs, resp.Message)
@@ -234,17 +241,17 @@ func (s *Service) selfReview(ctx context.Context, st loopState, used []string) {
 			if ctx.Err() != nil {
 				return
 			}
-			if calls >= selfReviewMaxToolCalls {
+			if calls >= maxCalls {
 				break
 			}
-			if !selfReviewTools[call.Name] {
+			if !allowed[call.Name] {
 				// The model was handed only the skill tools; a call for
 				// anything else is answered rather than executed, so a review
 				// can never reach the manuscript by naming a tool it was not
 				// offered.
 				msgs = append(msgs, llm.ChatMessage{
 					Role: "tool", ToolCallID: call.ID,
-					Content: fmt.Sprintf("%s is not available in this pass; only the skill tools are", call.Name),
+					Content: fmt.Sprintf("%s is not available in this pass", call.Name),
 				})
 				continue
 			}
@@ -279,14 +286,14 @@ func selfReviewRequest(st loopState, used []string, skills []agentskills.Skill) 
 	return b.String()
 }
 
-// onlySelfReviewTools narrows the turn's schemas to the skill tools. It reuses
-// the schemas the turn already fetched rather than listing the server again:
-// the tool set does not change mid-session, and a second ListTools would be a
+// onlyTools narrows the turn's schemas to the allowed tools. It reuses the
+// schemas the turn already fetched rather than listing the server again: the
+// tool set does not change mid-session, and a second ListTools would be a
 // round-trip to learn something already in hand.
-func onlySelfReviewTools(schemas []llm.ToolSchema) []llm.ToolSchema {
-	out := make([]llm.ToolSchema, 0, len(selfReviewTools))
+func onlyTools(schemas []llm.ToolSchema, allowed map[string]bool) []llm.ToolSchema {
+	out := make([]llm.ToolSchema, 0, len(allowed))
 	for _, sc := range schemas {
-		if selfReviewTools[sc.Function.Name] {
+		if allowed[sc.Function.Name] {
 			out = append(out, sc)
 		}
 	}

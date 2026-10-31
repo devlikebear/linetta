@@ -1,6 +1,7 @@
 import { ArtStyleSection } from "./ArtStyleSection";
 import { StyleSection } from "./StyleSection";
 import { ContinuitySection } from "./ContinuitySection";
+import { LedgerSection } from "./LedgerSection";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Library, Search, X } from "lucide-react";
 import { entities as entitiesApi, proposals as proposalsApi, relationships as relationshipsApi } from "../lib/rpc";
@@ -148,6 +149,7 @@ export function CanonPanel({
           onOpenNode={onOpenNode}
           onBeforeCheck={onBeforeStyleCheck}
         />
+        <LedgerSection key={`ledger-${projectId}`} projectId={projectId} onOpenNode={onOpenNode} />
         <ContinuitySection
           key={`continuity-${projectId}`}
           projectId={projectId}

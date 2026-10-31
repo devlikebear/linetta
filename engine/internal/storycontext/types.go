@@ -72,6 +72,8 @@ const (
 	// describes, for the same reason: a key with no switch behind it is a
 	// control that does not exist.
 	ContextKeyDirection ContextKey = "direction"
+	// ContextKeyLedger is the work's ledger and the current part's arc.
+	ContextKeyLedger ContextKey = "ledger"
 )
 
 // ContextSelection mirrors the AI panel checklist. Nil means "use the default",
@@ -93,6 +95,7 @@ type ContextSelection struct {
 	References    *bool `json:"references,omitempty"`
 	Skills        *bool `json:"skills,omitempty"`
 	Direction     *bool `json:"direction,omitempty"`
+	Ledger        *bool `json:"ledger,omitempty"`
 }
 
 // DefaultContextSelection returns the nil-pointer default: every section is on.
@@ -128,6 +131,8 @@ func (s ContextSelection) Enabled(key ContextKey) bool {
 		return enabledByDefault(s.Memories)
 	case ContextKeyReferences:
 		return enabledByDefault(s.References)
+	case ContextKeyLedger:
+		return enabledByDefault(s.Ledger)
 	case ContextKeySkills:
 		return enabledByDefault(s.Skills)
 	case ContextKeyDirection:
@@ -153,6 +158,34 @@ type ProjectMeta struct {
 	// EpisodeCharTarget is the length the writer set for an episode, or 0 when
 	// they left it at the default.
 	EpisodeCharTarget int `json:"episode_char_target,omitempty"`
+}
+
+// LedgerBrief is the work's ledger as one scene's brief sees it. Each line is
+// already rendered: the ledger package owns what its entries mean.
+type LedgerBrief struct {
+	Part *PartArcBrief `json:"part,omitempty"`
+	// Due is what the story owes about now.
+	Due []string `json:"due,omitempty"`
+	// Open is what else the story owes.
+	Open []string `json:"open,omitempty"`
+	// Settled is what has been decided or established, newest first.
+	Settled []string `json:"settled,omitempty"`
+	// Omitted counts entries that did not fit.
+	Omitted int `json:"omitted,omitempty"`
+}
+
+// Empty reports whether there is nothing to render.
+func (l LedgerBrief) Empty() bool {
+	return l.Part == nil && len(l.Due) == 0 && len(l.Open) == 0 && len(l.Settled) == 0 && l.Omitted == 0
+}
+
+// PartArcBrief is the current part's job in the whole work.
+type PartArcBrief struct {
+	Label      string `json:"label"`
+	Role       string `json:"role,omitempty"`
+	Goal       string `json:"goal,omitempty"`
+	Tension    int    `json:"tension,omitempty"`
+	ScenesLeft int    `json:"scenes_left"`
 }
 
 // DirectionBrief is the writer's own direction (story-assist Phase 1):
@@ -261,7 +294,11 @@ type Context struct {
 	SceneText  string `json:"scene_text"`
 	// ScenePlan is the summary of a scene with no body yet, which is where a
 	// planned episode's plan lives.
-	ScenePlan   string `json:"scene_plan,omitempty"`
+	ScenePlan string `json:"scene_plan,omitempty"`
+	// Ledger is what the work owes and has settled.
+	Ledger LedgerBrief `json:"ledger,omitempty"`
+	// StyleAnchor names the scene the writer set as the style to match.
+	StyleAnchor string `json:"style_anchor,omitempty"`
 	PrevSummary string `json:"prev_summary"`
 	// Direction is the writer's own instruction: the work's current focus and
 	// this scene's intent. Only the app writes it (no MCP tool does), and it

@@ -20,6 +20,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -80,6 +81,9 @@ type ToolDeps struct {
 	// (story-assist Phase 2). Nil in a build with no database open; the
 	// tool refuses rather than panicking.
 	Continuity *continuity.Repo
+	// Ledger stores the work's ledger and part arcs. Nil in a build without
+	// them, which makes the tools answer that they are unavailable.
+	Ledger *ledger.Repo
 	// Proposals holds story-structure change candidates waiting for the
 	// writer to accept them one by one (story-assist Phase 3). Nil in a
 	// build with no database open; the tool refuses rather than panicking.
