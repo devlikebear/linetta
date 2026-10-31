@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.16.1 - 2026-10-31
+
+- **The agent says when a conversation has outgrown it.** A long conversation
+  has always sent only its most recent part to the model. Now a line in the
+  panel marks where that part begins, or says so as soon as the turn starts
+  if the panel is open. The agent is told too, so it asks about what it can no
+  longer see rather than guessing.
+- Fixed: tool results no longer pile up without limit in a long turn. Older
+  ones are cleared from what the model sees, and the agent reads them again if
+  it still needs them. Your conversation and manuscript are not touched.
+- Fixed: searching the manuscript with a word of one or two characters, such
+  as most Korean names, now finds scenes with every word, whole phrase first,
+  then by how often the words appear. Those words used to be dropped from the
+  search, and the agent was handed each matching scene in full rather than a
+  short excerpt.
+- Fixed: related scenes in the story brief now come only from earlier in the
+  work, and a scene that shares a rarer character or item comes before one
+  that shares only the leads.
+
 ## v1.16.0 - 2026-10-30
 
 - **Put a cover up from the gallery.** Open a picture in the gallery and use
