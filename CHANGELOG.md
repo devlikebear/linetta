@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.18.0 - 2026-10-31
+
+- **The agent asks with a card.** When it needs several decisions from you, the
+  agent now shows one card with up to six questions instead of listing options
+  in its reply. Pick an option or type your own for each question, then send
+  all the answers at once. An open card survives an app restart. The tool is
+  `linetta_ask_writer`, for the built-in agent only.
+- **The agent can tidy the whole Story World.** Tell it to, and it can edit and
+  delete elements, relationships, fact cards and threads through
+  `linetta_apply_story_ops`, and remove aliases and attributes. Deletions can
+  be undone from the agent panel until you restart the app, for the last eight
+  changes.
+- **The agent can clear continuity checks.** `linetta_list_continuity` reads
+  the observations and `linetta_update_continuity` ignores, resolves, reopens
+  or deletes them, one at a time or for a whole check. Both are in the Review
+  group.
+- **Delete from the screen.** An element's sheet and each continuity
+  observation now have a delete button. These deletions cannot be undone.
+- **Private vault on the work screen.** In the invited beta, open the vault
+  from a work to upload it, get the latest version, settle a conflict or go
+  back to a restore point. The library and the work screen show when a newer
+  version is waiting; nothing downloads on its own. Settings can fetch a work
+  that is not on this device yet, and delete a work from the server without
+  touching the copy on this device.
+- Fixed: bold text that ends in punctuation before a Korean or Japanese
+  particle, such as `**이름(별칭)**이고`, now shows as bold instead of leaving
+  the asterisks visible.
+
 ## v1.17.1 - 2026-10-31
 
 - **The agent can accept and reject suggestions for you.** Tell it to accept a
