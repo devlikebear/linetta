@@ -76,7 +76,7 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
         {t("ledger.title")}
         {owedCount > 0 && <span className="style-badge">{t("ledger.owedBadge", { count: owedCount })}</span>}
       </summary>
-      <p className="sd">{t("ledger.description")}</p>
+      <p className="style-hint">{t("ledger.description")}</p>
       {error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}
 
       {(state?.parts.length ?? 0) > 0 && (
@@ -104,7 +104,7 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
       </div>
 
       {shown.length === 0 ? (
-        <p className="sd">{t("ledger.empty")}</p>
+        <p className="style-hint">{t("ledger.empty")}</p>
       ) : (
         <ul className="ledger-list">
           {shown.map((e) => (

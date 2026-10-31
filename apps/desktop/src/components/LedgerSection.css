@@ -12,3 +12,4 @@
 button.ledger-where { cursor: pointer; text-decoration: underline; }
 .ledger-actions { margin-left: auto; display: flex; gap: 4px; }
 .ledger-add { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 6px; margin-top: 8px; }
+.ledger-section .style-hint { margin: 0 0 8px; font-size: 12px; color: var(--ink-soft); }
