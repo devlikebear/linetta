@@ -115,7 +115,7 @@ describe("restored tool row parity with the engine's toolEvent", () => {
   it("finds the Go struct's tags (guards against the extraction silently breaking)", async () => {
     // Without this, a broken extraction makes every assertion below pass
     // vacuously — the exact failure mode this file exists to prevent.
-    expect(await toolEventTags()).toHaveLength(7);
+    expect(await toolEventTags()).toHaveLength(8);
   });
 
   it("reads a row written with the engine's own field names", async () => {
@@ -145,8 +145,9 @@ describe("restored tool row parity with the engine's toolEvent", () => {
     // notes on `Line` and on AgentToolPayload — so this asserts the direction
     // that matters: everything the panel DOES read must still exist in Go.
     // `request_id` (illustration Phase 4) is the request whose approval card
-    // a restored linetta_request_illustration line still shows.
-    for (const needed of ["name", "ok", "batch_id", "snapshot_id", "request_id"]) {
+    // a restored linetta_request_illustration line still shows, and `ask` the
+    // questions a restored linetta_ask_writer line still shows.
+    for (const needed of ["name", "ok", "batch_id", "snapshot_id", "request_id", "ask"]) {
       expect(tags, `the panel reads ${needed} off a restored tool row`).toContain(needed);
     }
   });

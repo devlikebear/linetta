@@ -819,6 +819,26 @@ export interface AgentImage {
   data_base64: string;
 }
 
+/** One choice on an agent's question card. */
+export interface AgentAskOption {
+  label: string;
+  description?: string;
+  recommended?: boolean;
+}
+
+export interface AgentAskQuestion {
+  header: string;
+  question: string;
+  multi_select?: boolean;
+  options: AgentAskOption[];
+}
+
+/** The card linetta_ask_writer left on its tool line. Mirrors agent.askCard
+ *  (ask.go). */
+export interface AgentAsk {
+  questions: AgentAskQuestion[];
+}
+
 /** agent.status — the turn running for a work, if any. What a panel that
  *  mounts mid-turn rejoins it from: `seq` is the last agent.* event the turn
  *  had emitted, `text` the reply streamed so far that is not yet a transcript

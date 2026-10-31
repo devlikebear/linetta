@@ -59,6 +59,7 @@ type cliTurn struct {
 	lastFail  string
 	repeats   int
 	wall      string // why the turn ran into a wall; "" while it has not
+	asked     bool   // a card is waiting for the writer
 }
 
 // delta streams reply text and keeps it until it becomes a transcript row.
@@ -92,6 +93,11 @@ func (t *cliTurn) call(name string, arguments json.RawMessage) *mcp.CallToolResu
 	defer t.mu.Unlock()
 	t.flush()
 
+	// The loop ends the turn at a card. Claude Code cannot be stopped there
+	// without losing the session, so it is told instead.
+	if t.asked {
+		return toolText(true, "not run: "+askedReply)
+	}
 	if t.wall == "" && t.toolCalls >= t.st.maxToolCalls {
 		t.wall = fmt.Sprintf("stopped after %d tool calls in one turn", t.toolCalls)
 	}
@@ -105,6 +111,7 @@ func (t *cliTurn) call(name string, arguments json.RawMessage) *mcp.CallToolResu
 	args := strings.TrimSpace(string(arguments))
 	result := t.s.runTool(t.ctx, t.st, llm.ToolCall{Name: name, Arguments: args})
 	t.toolCalls++
+	t.asked = result.Ask != nil
 
 	if !result.IsError {
 		t.lastFail, t.repeats = "", 0
@@ -249,7 +256,8 @@ func (s *Service) loopCLI(ctx context.Context, st loopState) {
 	}
 	turn.flush()
 	wall := turn.wall
-	replied := turn.streamed || strings.TrimSpace(resp.Message.Content) != ""
+	// A card is a reply: nothing need follow it.
+	replied := turn.asked || turn.streamed || strings.TrimSpace(resp.Message.Content) != ""
 	turn.mu.Unlock()
 
 	if err != nil {
