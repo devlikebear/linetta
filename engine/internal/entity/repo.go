@@ -127,6 +127,33 @@ UPDATE entities
 	return tx.Commit()
 }
 
+// Delete removes an entity. Its relationships, mentions, visual sheet,
+// reference images and publish choice go with it by foreign-key cascade. The
+// prose keeps the name: a mention node in a scene outlives its entity, and
+// mention.Repo.ResyncForNode drops the stale id.
+func (r *Repo) Delete(ctx context.Context, id string) error {
+	res, err := r.s.DB().ExecContext(ctx, `DELETE FROM entities WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// Removal captures what Delete would take, so the delete can be undone.
+func (r *Repo) Removal(ctx context.Context, id string) (store.RowSet, error) {
+	return r.s.Capture(ctx,
+		store.Slice{Table: "entities", Where: "id = ?", Args: []any{id}},
+		store.Slice{Table: "relationships", Where: "from_id = ? OR to_id = ?", Args: []any{id, id}},
+		store.Slice{Table: "mentions", Where: "entity_id = ?", Args: []any{id}},
+		store.Slice{Table: "entity_visuals", Where: "entity_id = ?", Args: []any{id}},
+		store.Slice{Table: "entity_reference_images", Where: "entity_id = ?", Args: []any{id}},
+		store.Slice{Table: "publish_entities", Where: "entity_id = ?", Args: []any{id}},
+	)
+}
+
 // Search returns entities whose name contains `query` (case-insensitive), shortest
 // name first; with an empty query it returns the project's most-recently-updated
 // entities. Limit is capped at 50.

@@ -178,13 +178,14 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	}
 	// #132 measured 7,120B after trimming (down from 8,282B). 7,400B leaves
 	// slack for incidental SDK schema-rendering drift without hiding a real
-	// description regrowth.
-	if sum > 7400 {
-		t.Errorf("linetta_apply_story_ops + linetta_edit_skill + linetta_read_skill = %dB, want <= 7400B "+
+	// description regrowth. The world's update and delete ops brought the
+	// three to 7,726B through the storyops.Op schema and the deleted output.
+	if sum > 7750 {
+		t.Errorf("linetta_apply_story_ops + linetta_edit_skill + linetta_read_skill = %dB, want <= 7750B "+
 			"(#132 trimmed them from 8282B to 7120B)", sum)
 	}
 
-	total, ledgerTools, inboxTools := 0, 0, 0
+	total, ledgerTools, inboxTools, continuityTools := 0, 0, 0, 0
 	for name, b := range sizes {
 		// Keep the original ceiling intact; #154's two new tools have their own allowance.
 		if name == "linetta_get_character_visuals" || name == "linetta_build_illustration_prompt" {
@@ -208,6 +209,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		// story-assist Phase 2's report tool, Phase 3's propose tool, and
 		// Phase 4's save-forecast tool carry their own allowances below.
 		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" || name == "linetta_save_forecast" {
+			continue
+		}
+		if name == "linetta_list_continuity" || name == "linetta_update_continuity" {
+			continuityTools += b
 			continue
 		}
 		if name == "linetta_list_proposals" || name == "linetta_accept_proposals" || name == "linetta_reject_proposals" {
@@ -249,9 +254,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// fields, shared with linetta_apply_story_ops), which is the cost of
 	// one schema describing every allowed op rather than eight narrower
 	// ones. An item's result gaining linked_existing and code brought it to
-	// 8,156B.
-	if propose := sizes["linetta_propose_story_ops"]; propose > 8200 {
-		t.Errorf("linetta_propose_story_ops costs %dB, want <= 8200B", propose)
+	// 8,156B, and the world's update and delete ops in that shared schema to
+	// 8,840B.
+	if propose := sizes["linetta_propose_story_ops"]; propose > 8900 {
+		t.Errorf("linetta_propose_story_ops costs %dB, want <= 8900B", propose)
 	}
 	// story-assist Phase 4's save-forecast tool measured 3,701B: branches[]
 	// nests beats[], decisions[], changes{} and risks[] — one schema
@@ -301,8 +307,14 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	if inboxTools > 3900 {
 		t.Errorf("the inbox tools cost %dB, want <= 3900B", inboxTools)
 	}
-	if total > 27650 {
-		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 27650B "+
+	// The continuity pair measured 3,274B: list 2,099B, update 1,175B.
+	if continuityTools > 3400 {
+		t.Errorf("the continuity pair costs %dB, want <= 3400B", continuityTools)
+	}
+	// The world's update and delete ops, with linetta_list_characters'
+	// aliases and include switches, measured 28,356B.
+	if total > 28400 {
+		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 28400B "+
 			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}
 }

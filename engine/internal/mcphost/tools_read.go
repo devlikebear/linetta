@@ -41,6 +41,7 @@ var ReadToolNames = []string{
 	"linetta_read_skill",
 	"linetta_list_ledger",
 	"linetta_list_proposals",
+	"linetta_list_continuity",
 	"linetta_publish_status",
 }
 
@@ -205,6 +206,10 @@ type searchManuscriptOutput struct {
 type listCharactersInput struct {
 	ProjectID string `json:"project_id" jsonschema:"id of the work"`
 	Kind      string `json:"kind,omitempty" jsonschema:"filter by character, place, item, or concept; omit for all"`
+	// The two lists an edit or a delete needs ids from, off by default so the
+	// everyday lookup stays small.
+	IncludeRelationships bool `json:"include_relationships,omitempty" jsonschema:"also return every relationship with its id"`
+	IncludeThreads       bool `json:"include_threads,omitempty" jsonschema:"also return every storyline with its beats and ids, closed ones too"`
 }
 
 func (in listCharactersInput) scope() (string, string) { return in.ProjectID, "" }
@@ -214,12 +219,41 @@ type entityRow struct {
 	Kind       string            `json:"kind"`
 	Name       string            `json:"name"`
 	Role       string            `json:"role,omitempty"`
+	Aliases    []string          `json:"aliases,omitempty"`
 	Summary    string            `json:"summary,omitempty"`
 	Attributes map[string]string `json:"attributes,omitempty"`
 }
 
+type relationshipRow struct {
+	RelationshipID string `json:"relationship_id"`
+	FromID         string `json:"from_id"`
+	ToID           string `json:"to_id"`
+	Label          string `json:"label"`
+	Notes          string `json:"notes,omitempty"`
+	Paired         bool   `json:"paired,omitempty"` // has an inverse row; deleting either removes both
+}
+
+type beatRow struct {
+	BeatID string `json:"beat_id"`
+	Label  string `json:"label"`
+	NodeID string `json:"node_id,omitempty"`
+}
+
+type threadRow struct {
+	ThreadID string    `json:"thread_id"`
+	Name     string    `json:"name"`
+	Summary  string    `json:"summary,omitempty"`
+	Closed   bool      `json:"closed,omitempty"`
+	Beats    []beatRow `json:"beats"`
+}
+
+// listCharactersOutput leaves the two optional lists untyped, which keeps
+// their row shapes out of the schema every tools/list sends for a lookup that
+// rarely asks for them.
 type listCharactersOutput struct {
-	Entities []entityRow `json:"entities"`
+	Entities      []entityRow `json:"entities"`
+	Relationships any         `json:"relationships,omitempty"`
+	Threads       any         `json:"threads,omitempty"`
 }
 
 // ---------- linetta_where_does_appear ----------
@@ -327,8 +361,8 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_list_characters",
-		Description: "List the work's story elements — characters by default, or places, items, and " +
-			"concepts via the kind filter — with their roles, summaries, and attributes.",
+		Description: "List the work's story elements — characters, places, items, and concepts, or one " +
+			"kind via the filter — with their roles, aliases, summaries, and attributes.",
 	}, record(d, "linetta_list_characters", d.listCharacters))
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -361,6 +395,7 @@ func (d ToolDeps) registerReadTools(s *mcp.Server, groups ToolGroups) {
 	if groups.Review {
 		d.registerLedgerReadTool(s)
 		d.registerProposalReadTool(s)
+		d.registerContinuityReadTool(s)
 	}
 	d.registerPublishReadTool(s)
 }
@@ -818,9 +853,47 @@ func (d ToolDeps) listCharacters(ctx context.Context, _ *mcp.CallToolRequest, in
 			Kind:       e.Kind,
 			Name:       e.Name,
 			Role:       e.Role,
+			Aliases:    e.Aliases,
 			Summary:    e.Summary,
 			Attributes: e.Attributes,
 		})
+	}
+	if in.IncludeRelationships && d.Relationships != nil {
+		rels, err := d.Relationships.ListByProject(ctx, p.ID)
+		if err != nil {
+			return toolErr("could not list relationships: %v", err), listCharactersOutput{}, nil
+		}
+		rows := make([]relationshipRow, 0, len(rels))
+		for _, r := range rels {
+			rows = append(rows, relationshipRow{
+				RelationshipID: r.ID, FromID: r.FromID, ToID: r.ToID,
+				Label: r.Label, Notes: r.Notes, Paired: r.PairID != nil,
+			})
+		}
+		out.Relationships = rows
+	}
+	if in.IncludeThreads && d.Threads != nil && d.Beats != nil {
+		threads, err := d.Threads.ListByProject(ctx, p.ID, true)
+		if err != nil {
+			return toolErr("could not list storylines: %v", err), listCharactersOutput{}, nil
+		}
+		rows := make([]threadRow, 0, len(threads))
+		for _, th := range threads {
+			beats, err := d.Beats.ListByThread(ctx, th.ID)
+			if err != nil {
+				return toolErr("could not list beats: %v", err), listCharactersOutput{}, nil
+			}
+			row := threadRow{ThreadID: th.ID, Name: th.Name, Summary: th.Summary, Closed: th.ClosedAt != nil, Beats: []beatRow{}}
+			for _, b := range beats {
+				nodeID := ""
+				if b.NodeID != nil {
+					nodeID = *b.NodeID
+				}
+				row.Beats = append(row.Beats, beatRow{BeatID: b.ID, Label: b.Label, NodeID: nodeID})
+			}
+			rows = append(rows, row)
+		}
+		out.Threads = rows
 	}
 	return nil, out, nil
 }

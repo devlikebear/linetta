@@ -2346,6 +2346,12 @@ export function Workspace() {
             onSaved={() => {
               if (load) refreshMentioned(load.node.id);
             }}
+            confirm={confirmDialog}
+            onDeleted={() => {
+              setEntitySheetId(null);
+              setCanonRefreshKey((k) => k + 1);
+              if (load) refreshMentioned(load.node.id);
+            }}
             onContextChange={(entityId) => {
               setContextualSeed({ entityId });
               setEntitySheetId(null);

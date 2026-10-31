@@ -36,6 +36,86 @@ type reportContinuityOutput struct {
 	Status   string `json:"status"`
 }
 
+// ---------- linetta_list_continuity ----------
+//
+// The ids linetta_update_continuity needs. Open observations by default: the
+// rest are settled, and a whole work's checks can run to hundreds of rows.
+
+const (
+	defaultContinuityListLimit = 50
+	maxContinuityListLimit     = 200
+)
+
+type listContinuityInput struct {
+	ProjectID string   `json:"project_id"`
+	NodeID    string   `json:"node_id,omitempty" jsonschema:"only this scene"`
+	Statuses  []string `json:"statuses,omitempty" jsonschema:"any of open, dismissed, resolved; default open"`
+	Limit     int      `json:"limit,omitempty" jsonschema:"at most 200; default 50"`
+	Offset    int      `json:"offset,omitempty"`
+}
+
+func (in listContinuityInput) scope() (string, string) { return in.ProjectID, in.NodeID }
+
+type continuityObservationOut struct {
+	ID            string           `json:"id"`
+	CheckID       string           `json:"check_id"`
+	NodeID        string           `json:"node_id"`
+	Scene         string           `json:"scene"`
+	Stale         bool             `json:"stale,omitempty" jsonschema:"the scene's text changed since this was recorded"`
+	Status        string           `json:"status"`
+	Category      string           `json:"category"`
+	Kind          string           `json:"kind"`
+	Severity      string           `json:"severity"`
+	Summary       string           `json:"summary"`
+	Suggestion    string           `json:"suggestion,omitempty"`
+	ParagraphFrom int              `json:"paragraph_from"`
+	ParagraphTo   int              `json:"paragraph_to"`
+	Quote         string           `json:"quote"`
+	Refs          []continuity.Ref `json:"refs,omitempty"`
+}
+
+type listContinuityOutput struct {
+	Observations []continuityObservationOut `json:"observations"`
+	Total        int                        `json:"total" jsonschema:"matching observations in all, including any past this page"`
+}
+
+// ---------- linetta_update_continuity ----------
+//
+// The writer can hand the decision over ("연속성 점검 정리해 줘"), the same way
+// they can with the inbox: this is the Repo the Story World buttons call, and
+// what keeps the decision theirs is the description's and the system prompt's
+// requirement of their word for it.
+
+const (
+	continuityActionDismiss = "dismiss"
+	continuityActionResolve = "resolve"
+	continuityActionReopen  = "reopen"
+	continuityActionDelete  = "delete"
+)
+
+type updateContinuityInput struct {
+	ProjectID      string   `json:"project_id"`
+	Action         string   `json:"action" jsonschema:"one of: dismiss, resolve, reopen, delete"`
+	ObservationIDs []string `json:"observation_ids,omitempty" jsonschema:"ids from linetta_list_continuity"`
+	CheckIDs       []string `json:"check_ids,omitempty" jsonschema:"whole checks: their open observations for dismiss and resolve, settled ones for reopen, all for delete"`
+}
+
+func (in updateContinuityInput) scope() (string, string) { return in.ProjectID, "" }
+
+type updateContinuityOutput struct {
+	Action  string `json:"action"`
+	Changed int    `json:"changed"`
+	Skipped int    `json:"skipped" jsonschema:"named items left as they were: unknown, replaced by a later check, or already there"`
+}
+
+func (d ToolDeps) registerContinuityReadTool(s *mcp.Server) {
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_list_continuity",
+		Description: "List the work's recorded continuity observations with their ids, newest check first. " +
+			"Each says what it found, where, and whether the scene has changed since.",
+	}, record(d, "linetta_list_continuity", d.listContinuity))
+}
+
 func (d ToolDeps) registerContinuityWriteTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_report_continuity",
@@ -45,6 +125,111 @@ func (d ToolDeps) registerContinuityWriteTools(s *mcp.Server) {
 			"at what it contradicts. Taste is not a finding. An empty list records a clean check. The " +
 			"writer reviews these; nothing in the manuscript changes.",
 	}, record(d, "linetta_report_continuity", d.reportContinuity))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_update_continuity",
+		Description: "Settle continuity observations in bulk: dismiss, resolve, reopen, or delete. Only when the " +
+			"writer has told you to in this conversation; if they hand you the cleanup, judge each one yourself. " +
+			"Delete cannot be undone; the others can be reversed with reopen. Nothing in the manuscript changes.",
+	}, record(d, "linetta_update_continuity", d.updateContinuity))
+}
+
+func (d ToolDeps) listContinuity(ctx context.Context, _ *mcp.CallToolRequest, in listContinuityInput) (*mcp.CallToolResult, listContinuityOutput, error) {
+	if d.Continuity == nil {
+		return toolErr("continuity checks are not available in this build"), listContinuityOutput{}, nil
+	}
+	p, errResult := d.requireProject(ctx, in.ProjectID)
+	if errResult != nil {
+		return errResult, listContinuityOutput{}, nil
+	}
+	nodeID := strings.TrimSpace(in.NodeID)
+	if nodeID != "" {
+		if _, errResult := d.requireNodeInProject(ctx, nodeID, p.ID); errResult != nil {
+			return errResult, listContinuityOutput{}, nil
+		}
+	}
+	statuses := in.Statuses
+	if len(statuses) == 0 {
+		statuses = []string{continuity.StatusOpen}
+	}
+	for _, st := range statuses {
+		if !continuity.ValidStatus(st) {
+			return toolErr("status %q is not one of open, dismissed, resolved", st), listContinuityOutput{}, nil
+		}
+	}
+	checks, err := d.Continuity.List(ctx, continuity.ListFilter{ProjectID: p.ID, NodeID: nodeID, Statuses: statuses})
+	if err != nil {
+		return nil, listContinuityOutput{}, err
+	}
+	nodes, err := d.Nodes.ListByProject(ctx, p.ID)
+	if err != nil {
+		return nil, listContinuityOutput{}, err
+	}
+	byID := make(map[string]node.Node, len(nodes))
+	for _, n := range nodes {
+		byID[n.ID] = n
+	}
+
+	limit := in.Limit
+	if limit <= 0 {
+		limit = defaultContinuityListLimit
+	}
+	limit = min(limit, maxContinuityListLimit)
+	offset := max(in.Offset, 0)
+	out := listContinuityOutput{Observations: []continuityObservationOut{}}
+	for _, c := range checks {
+		for _, o := range c.Observations {
+			out.Total++
+			if out.Total <= offset || len(out.Observations) >= limit {
+				continue
+			}
+			out.Observations = append(out.Observations, continuityObservationOut{
+				ID: o.ID, CheckID: o.CheckID, NodeID: o.NodeID,
+				Scene: node.BreadcrumbLabel(byID, byID[o.NodeID]), Stale: c.Stale, Status: o.Status,
+				Category: o.Category, Kind: o.Kind, Severity: o.Severity,
+				Summary: o.Summary, Suggestion: o.Suggestion,
+				ParagraphFrom: o.ParagraphFrom, ParagraphTo: o.ParagraphTo, Quote: o.Quote, Refs: o.Refs,
+			})
+		}
+	}
+	return nil, out, nil
+}
+
+func (d ToolDeps) updateContinuity(ctx context.Context, _ *mcp.CallToolRequest, in updateContinuityInput) (*mcp.CallToolResult, updateContinuityOutput, error) {
+	if d.Continuity == nil {
+		return toolErr("continuity checks are not available in this build"), updateContinuityOutput{}, nil
+	}
+	p, errResult := d.requireProject(ctx, in.ProjectID)
+	if errResult != nil {
+		return errResult, updateContinuityOutput{}, nil
+	}
+	if len(in.ObservationIDs) == 0 && len(in.CheckIDs) == 0 {
+		return toolErr("pass observation_ids or check_ids; linetta_list_continuity shows them"), updateContinuityOutput{}, nil
+	}
+	sel := continuity.Selection{ProjectID: p.ID, ObservationIDs: in.ObservationIDs, CheckIDs: in.CheckIDs}
+	var (
+		outcome continuity.Outcome
+		err     error
+	)
+	switch action := strings.TrimSpace(in.Action); action {
+	case continuityActionDismiss:
+		outcome, err = d.Continuity.SetStatusMany(ctx, d.now(), sel, continuity.StatusDismissed)
+	case continuityActionResolve:
+		outcome, err = d.Continuity.SetStatusMany(ctx, d.now(), sel, continuity.StatusResolved)
+	case continuityActionReopen:
+		outcome, err = d.Continuity.SetStatusMany(ctx, d.now(), sel, continuity.StatusOpen)
+	case continuityActionDelete:
+		outcome, err = d.Continuity.DeleteMany(ctx, sel)
+	default:
+		return toolErr("action must be one of dismiss, resolve, reopen, delete"), updateContinuityOutput{}, nil
+	}
+	if err != nil {
+		return nil, updateContinuityOutput{}, err
+	}
+	if outcome.Changed > 0 {
+		d.notifyChanged(p.ID, "linetta_update_continuity", nil, "")
+	}
+	return nil, updateContinuityOutput{Action: in.Action, Changed: outcome.Changed, Skipped: outcome.Skipped}, nil
 }
 
 func (d ToolDeps) reportContinuity(ctx context.Context, _ *mcp.CallToolRequest, in reportContinuityInput) (*mcp.CallToolResult, reportContinuityOutput, error) {

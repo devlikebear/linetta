@@ -132,6 +132,26 @@ func (r *Repo) Reopen(ctx context.Context, id string) error {
 	return nil
 }
 
+// Delete removes a storyline and, by foreign-key cascade, its beats.
+func (r *Repo) Delete(ctx context.Context, id string) error {
+	res, err := r.s.DB().ExecContext(ctx, `DELETE FROM threads WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// Removal captures what Delete would take: the storyline and its beats.
+func (r *Repo) Removal(ctx context.Context, id string) (store.RowSet, error) {
+	return r.s.Capture(ctx,
+		store.Slice{Table: "threads", Where: "id = ?", Args: []any{id}},
+		store.Slice{Table: "beats", Where: "thread_id = ?", Args: []any{id}},
+	)
+}
+
 const baseSelect = `
 SELECT id, project_id, name, color, summary, closed_at
 FROM threads`

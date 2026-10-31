@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
@@ -16,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/ptrutil"
 	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
+	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
@@ -101,6 +103,9 @@ type ApplyOpsResult struct {
 	Created      map[string]string   `json:"created,omitempty"`
 	ChangedNodes []AppliedNodeChange `json:"changed_nodes,omitempty"`
 	Failures     []ApplyOpsFailure   `json:"failures,omitempty"`
+	// Deleted lists the world records this batch removed and what went with
+	// them, so the agent can say so rather than the writer finding out later.
+	Deleted []DeletedRecord `json:"deleted,omitempty"`
 	// CutPlans names deleted episodes whose plans went to the ledger, so the
 	// agent reports them rather than the writer finding out later.
 	CutPlans []string `json:"cut_plans,omitempty"`
@@ -111,6 +116,18 @@ type ApplyOpsResult struct {
 	RolledBack bool `json:"rolled_back,omitempty"`
 	// UndoBatchID identifies the pre-change outline kept for a one-step undo.
 	UndoBatchID string `json:"undo_batch_id,omitempty"`
+}
+
+// DeletedRecord is one world record a batch removed.
+type DeletedRecord struct {
+	Kind  string `json:"kind"` // entity | relationship | fact | thread | beat
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	// Relationships and Mentions are what an entity took with it; Beats is
+	// what a storyline took with it.
+	Relationships int `json:"relationships,omitempty"`
+	Mentions      int `json:"mentions,omitempty"`
+	Beats         int `json:"beats,omitempty"`
 }
 
 type ApplyOpsFailure struct {
@@ -200,9 +217,10 @@ func (s *Service) ApplyOpsWithRefs(ctx context.Context, projectID, nodeID string
 	entityRefs := refs.Entities
 	nodeRefs := refs.Nodes
 	nodeInsertCursor := ""
+	removals := &removalLog{}
 
 	for i, op := range p.Ops {
-		if err := s.applyOneOp(ctx, projectID, nodeID, op, now, threadRefs, entityRefs, nodeRefs, result.Created, &result.ChangedNodes, &nodeInsertCursor); err != nil {
+		if err := s.applyOneOp(ctx, projectID, nodeID, op, now, threadRefs, entityRefs, nodeRefs, result.Created, &result.ChangedNodes, &nodeInsertCursor, removals); err != nil {
 			result.Failures = append(result.Failures, ApplyOpsFailure{Index: i, Op: op.Type, Error: err.Error()})
 			continue
 		}
@@ -214,6 +232,7 @@ func (s *Service) ApplyOpsWithRefs(ctx context.Context, projectID, nodeID string
 	if len(result.ChangedNodes) == 0 {
 		result.ChangedNodes = nil
 	}
+	restore := removals.restorer()
 	if structural && len(before) > 0 {
 		if result.IsError() {
 			// Half a restructured outline is worse than none, so put the tree back
@@ -223,13 +242,56 @@ func (s *Service) ApplyOpsWithRefs(ctx context.Context, projectID, nodeID string
 				result.Applied = 0
 				result.Created = nil
 				result.ChangedNodes = nil
+				if restore != nil {
+					if err := restore(ctx); err != nil {
+						result.Failures = append(result.Failures, ApplyOpsFailure{Index: -1, Error: err.Error()})
+					}
+					restore = nil
+					removals.deleted = nil
+				}
 			}
 		} else if result.Applied > 0 {
-			result.UndoBatchID = s.rememberUndoBatch(projectID, before)
+			result.UndoBatchID = s.rememberChange(undoBatch{projectID: projectID, nodes: before, restore: restore})
+			restore = nil
 			result.CutPlans = s.recordCutPlans(ctx, projectID, before, now)
 		}
 	}
+	// A plain world batch keeps what it applied when one op fails, so what it
+	// deleted stays one undo away either way.
+	if restore != nil {
+		result.UndoBatchID = s.RememberChange(projectID, restore)
+	}
+	result.Deleted = removals.deleted
 	return result, refs
+}
+
+// removalLog collects a batch's world deletes.
+type removalLog struct {
+	sets    []store.RowSet
+	deleted []DeletedRecord
+}
+
+func (l *removalLog) add(set store.RowSet, rec DeletedRecord) {
+	l.sets = append(l.sets, set)
+	l.deleted = append(l.deleted, rec)
+}
+
+// restorer undoes the batch's deletes, last first, so a relationship between
+// two records the batch deleted finds both of them back.
+func (l *removalLog) restorer() func(context.Context) error {
+	if len(l.sets) == 0 {
+		return nil
+	}
+	sets := slices.Clone(l.sets)
+	slices.Reverse(sets)
+	return func(ctx context.Context) error {
+		for _, set := range sets {
+			if err := set.Restore(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 }
 
 func (s *Service) applyOneOp(
@@ -244,6 +306,7 @@ func (s *Service) applyOneOp(
 	created map[string]string,
 	changedNodes *[]AppliedNodeChange,
 	nodeInsertCursor *string,
+	removals *removalLog,
 ) error {
 	switch op.Type {
 	case "set_outline":
@@ -366,7 +429,33 @@ func (s *Service) applyOneOp(
 		}
 		return s.beats.Update(ctx, in)
 	case "delete_beat":
-		return s.beats.Delete(ctx, op.BeatID)
+		return s.deleteBeat(ctx, projectID, op.BeatID, removals)
+	case "close_thread":
+		th, err := s.threadInProject(ctx, projectID, op.ThreadID, threadRefs)
+		if err != nil {
+			return err
+		}
+		return s.threads.Close(ctx, th.ID, now())
+	case "reopen_thread":
+		th, err := s.threadInProject(ctx, projectID, op.ThreadID, threadRefs)
+		if err != nil {
+			return err
+		}
+		return s.threads.Reopen(ctx, th.ID)
+	case "delete_thread":
+		th, err := s.threadInProject(ctx, projectID, op.ThreadID, threadRefs)
+		if err != nil {
+			return err
+		}
+		set, err := s.threads.Removal(ctx, th.ID)
+		if err != nil {
+			return err
+		}
+		if err := s.threads.Delete(ctx, th.ID); err != nil {
+			return err
+		}
+		removals.add(set, DeletedRecord{Kind: "thread", ID: th.ID, Label: th.Name, Beats: set.Count("beats")})
+		return nil
 	case "remember":
 		if s.memory == nil {
 			return fmt.Errorf("memory is not available")
@@ -395,6 +484,40 @@ func (s *Service) applyOneOp(
 		if op.Ref != "" {
 			created["fact:"+op.Ref] = card.ID
 		}
+		return nil
+	case "update_fact_card":
+		card, err := s.factInProject(ctx, projectID, op.FactID)
+		if err != nil {
+			return err
+		}
+		in := fact.UpdateInput{ID: card.ID}
+		if strings.TrimSpace(op.Claim) != "" {
+			in.Claim = ptrutil.To(op.Claim)
+		}
+		if strings.TrimSpace(op.Result) != "" {
+			in.Result = ptrutil.To(op.Result)
+		}
+		if strings.TrimSpace(op.Status) != "" {
+			in.Status = ptrutil.To(strings.TrimSpace(op.Status))
+		}
+		if strings.TrimSpace(op.Category) != "" {
+			in.Category = ptrutil.To(op.Category)
+		}
+		_, err = s.facts.Update(ctx, now(), in)
+		return err
+	case "delete_fact_card":
+		card, err := s.factInProject(ctx, projectID, op.FactID)
+		if err != nil {
+			return err
+		}
+		set, err := s.facts.Removal(ctx, card.ID)
+		if err != nil {
+			return err
+		}
+		if err := s.facts.Delete(ctx, card.ID); err != nil {
+			return err
+		}
+		removals.add(set, DeletedRecord{Kind: "fact", ID: card.ID, Label: card.Claim})
 		return nil
 	case "create_entity":
 		ent, err := s.entities.Create(ctx, now(), entity.NewInput{
@@ -451,11 +574,88 @@ func (s *Service) applyOneOp(
 			merged := mergeEntityAttributes(cur.Attributes, attrs)
 			in.Attributes = &merged
 		}
+		if attrs := cleanAliases(op.RemoveAttributes); len(attrs) > 0 {
+			kept := cur.Attributes
+			if in.Attributes != nil {
+				kept = *in.Attributes
+			}
+			trimmed := mergeEntityAttributes(kept, nil)
+			for _, key := range attrs {
+				delete(trimmed, key)
+			}
+			in.Attributes = &trimmed
+		}
 		if aliases := cleanAliases(op.Aliases); len(aliases) > 0 {
 			merged := mergeAliases(cur.Aliases, aliases)
 			in.Aliases = &merged
 		}
+		if remove := cleanAliases(op.RemoveAliases); len(remove) > 0 {
+			kept := cur.Aliases
+			if in.Aliases != nil {
+				kept = *in.Aliases
+			}
+			trimmed := slices.DeleteFunc(slices.Clone(kept), func(alias string) bool {
+				return slices.Contains(remove, alias)
+			})
+			in.Aliases = &trimmed
+		}
 		return s.entities.Update(ctx, now(), in)
+	case "delete_entity":
+		entityID, err := s.resolveEntityID(ctx, projectID, op.EntityID, "", entityRefs, "entity")
+		if err != nil {
+			return err
+		}
+		ent, err := s.entities.Get(ctx, entityID)
+		if err != nil {
+			return err
+		}
+		if ent.ProjectID != projectID {
+			return fmt.Errorf("entity %q is not in this work", entityID)
+		}
+		set, err := s.entities.Removal(ctx, entityID)
+		if err != nil {
+			return err
+		}
+		if err := s.entities.Delete(ctx, entityID); err != nil {
+			return err
+		}
+		for ref, id := range entityRefs {
+			if id == entityID {
+				delete(entityRefs, ref)
+			}
+		}
+		removals.add(set, DeletedRecord{
+			Kind: "entity", ID: entityID, Label: ent.Name,
+			Relationships: set.Count("relationships"), Mentions: set.Count("mentions"),
+		})
+		return nil
+	case "update_relationship":
+		rel, err := s.relationshipInProject(ctx, projectID, op.RelationshipID)
+		if err != nil {
+			return err
+		}
+		in := relationship.UpdateInput{ID: rel.ID, Label: rel.Label, Notes: rel.Notes}
+		if strings.TrimSpace(op.Label) != "" {
+			in.Label = op.Label
+		}
+		if strings.TrimSpace(op.Notes) != "" {
+			in.Notes = op.Notes
+		}
+		return s.relationships.Update(ctx, in)
+	case "delete_relationship":
+		rel, err := s.relationshipInProject(ctx, projectID, op.RelationshipID)
+		if err != nil {
+			return err
+		}
+		set, err := s.relationships.Removal(ctx, rel.ID)
+		if err != nil {
+			return err
+		}
+		if err := s.relationships.Delete(ctx, rel.ID); err != nil {
+			return err
+		}
+		removals.add(set, DeletedRecord{Kind: "relationship", ID: rel.ID, Label: rel.Label})
+		return nil
 	case "create_relationship":
 		fromID, err := s.resolveEntityID(ctx, projectID, op.From, op.FromRef, entityRefs, "from entity")
 		if err != nil {
@@ -766,6 +966,67 @@ func (s *Service) resolveEntityID(ctx context.Context, projectID, id, ref string
 		}
 	}
 	return "", fmt.Errorf("%s could not be resolved to an entity (id, name, or ref)", label)
+}
+
+// deleteBeat, and the *InProject lookups below it, hold a world op to the work
+// the batch names: an id alone could point anywhere in the library.
+func (s *Service) deleteBeat(ctx context.Context, projectID, beatID string, removals *removalLog) error {
+	b, err := s.beats.Get(ctx, beatID)
+	if err != nil {
+		return err
+	}
+	if _, err := s.threadInProject(ctx, projectID, b.ThreadID, nil); err != nil {
+		return err
+	}
+	set, err := s.beats.Removal(ctx, b.ID)
+	if err != nil {
+		return err
+	}
+	if err := s.beats.Delete(ctx, b.ID); err != nil {
+		return err
+	}
+	removals.add(set, DeletedRecord{Kind: "beat", ID: b.ID, Label: b.Label})
+	return nil
+}
+
+func (s *Service) threadInProject(ctx context.Context, projectID, idOrName string, refs map[string]string) (thread.Thread, error) {
+	id, err := s.resolveThreadID(ctx, projectID, idOrName, "", refs)
+	if err != nil {
+		return thread.Thread{}, err
+	}
+	th, err := s.threads.Get(ctx, id)
+	if err != nil {
+		return thread.Thread{}, err
+	}
+	if th.ProjectID != projectID {
+		return thread.Thread{}, fmt.Errorf("storyline %q is not in this work", id)
+	}
+	return th, nil
+}
+
+func (s *Service) factInProject(ctx context.Context, projectID, id string) (fact.Card, error) {
+	if s.facts == nil {
+		return fact.Card{}, fmt.Errorf("fact book is not available")
+	}
+	card, err := s.facts.Get(ctx, id)
+	if err != nil {
+		return fact.Card{}, err
+	}
+	if card.ProjectID != projectID {
+		return fact.Card{}, fmt.Errorf("fact card %q is not in this work", id)
+	}
+	return card, nil
+}
+
+func (s *Service) relationshipInProject(ctx context.Context, projectID, id string) (relationship.Relationship, error) {
+	rel, err := s.relationships.Get(ctx, id)
+	if err != nil {
+		return relationship.Relationship{}, err
+	}
+	if rel.ProjectID != projectID {
+		return relationship.Relationship{}, fmt.Errorf("relationship %q is not in this work", id)
+	}
+	return rel, nil
 }
 
 // resolveThreadID resolves an add_beat thread endpoint, tolerating a real thread

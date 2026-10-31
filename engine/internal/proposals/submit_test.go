@@ -147,6 +147,24 @@ func TestSubmit_rejectsDisallowedOp(t *testing.T) {
 	}
 }
 
+func TestSubmit_refusesARemovalTheCardCouldNotShow(t *testing.T) {
+	env := newTestEnv(t)
+	ent, err := env.entities.Create(context.Background(), now(), entity.NewInput{ProjectID: env.project.ID, Kind: "character", Name: "서린"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{
+		ProjectID: env.project.ID, Summary: "s",
+		Items: []ItemInput{{Op: storyops.Op{Type: "update_entity", EntityID: ent.ID, RemoveAliases: []string{"영감"}}}},
+	}, SourceAgent)
+	if err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+	if len(problems) != 1 || !strings.Contains(problems[0].Message, "linetta_apply_story_ops") {
+		t.Fatalf("problems = %+v", problems)
+	}
+}
+
 func TestSubmit_forecast_requiresForecastID(t *testing.T) {
 	env := newTestEnv(t)
 	_, problems, err := env.svc.Submit(context.Background(), now(), SubmitInput{

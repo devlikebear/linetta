@@ -242,6 +242,21 @@ type Report struct {
 	Status   string `json:"status"`
 }
 
+// Selection names observations for one bulk decision, within one work: the
+// named observations, plus those of the named checks a decision can apply to.
+type Selection struct {
+	ProjectID      string
+	ObservationIDs []string
+	CheckIDs       []string
+}
+
+// Outcome reports a bulk decision: what it changed, and how many named items
+// it left alone (unknown, replaced by a later check, or already there).
+type Outcome struct {
+	Changed int `json:"changed"`
+	Skipped int `json:"skipped"`
+}
+
 // ListFilter scopes Repo.List.
 type ListFilter struct {
 	ProjectID string

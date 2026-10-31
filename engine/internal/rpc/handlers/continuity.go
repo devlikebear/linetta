@@ -220,6 +220,27 @@ func SetContinuityStatus(repo *continuity.Repo, now Clock, notify func(method st
 	}
 }
 
+// DeleteContinuity returns a handler for continuity.delete, which fires
+// continuity.changed for the same reason SetContinuityStatus does.
+func DeleteContinuity(repo *continuity.Repo, notify func(method string, params any)) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ObservationID string `json:"observation_id"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ObservationID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
+		}
+		obs, err := repo.Delete(ctx, in.ObservationID)
+		if err != nil {
+			return nil, continuityError(err)
+		}
+		if notify != nil {
+			notify("continuity.changed", continuityChangedPayload{ProjectID: obs.ProjectID, NodeID: obs.NodeID})
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
 // ContinuityOpenCounts returns a handler for continuity.open_counts: how
 // many open observations each scene in the work carries, for
 // ContextPanel's badge.

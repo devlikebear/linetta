@@ -243,6 +243,153 @@ func (r *Repo) SetStatus(ctx context.Context, now int64, observationID, status s
 	return r.getObservation(ctx, observationID)
 }
 
+// SetStatusMany is SetStatus for a whole selection, in one transaction. A
+// check's observations are selected for the move that makes sense of them:
+// dismissed or resolved takes its open ones, leaving a judgement the writer
+// already made alone, and open takes the rest.
+func (r *Repo) SetStatusMany(ctx context.Context, now int64, sel Selection, status string) (Outcome, error) {
+	if status == StatusReplaced {
+		return Outcome{}, ErrCannotSetReplaced
+	}
+	if !ValidStatus(status) {
+		return Outcome{}, ErrInvalidStatus
+	}
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return Outcome{}, err
+	}
+	defer tx.Rollback()
+
+	checkFilter := `status = '` + StatusOpen + `'`
+	if status == StatusOpen {
+		checkFilter = `status IN ('` + StatusDismissed + `','` + StatusResolved + `')`
+	}
+	ids, err := selectObservations(ctx, tx, sel, checkFilter)
+	if err != nil {
+		return Outcome{}, err
+	}
+	var out Outcome
+	for _, id := range ids {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE continuity_observations SET status = ?, status_at = ?
+			  WHERE id = ? AND project_id = ? AND status NOT IN (?, ?)`,
+			status, now, id, sel.ProjectID, status, StatusReplaced)
+		if err != nil {
+			return Outcome{}, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return Outcome{}, err
+		}
+		out.Changed += int(n)
+	}
+	out.Skipped = len(ids) - out.Changed
+	if err := tx.Commit(); err != nil {
+		return Outcome{}, err
+	}
+	return out, nil
+}
+
+// DeleteMany removes a selection's observations outright, for readings the
+// writer wants gone rather than settled. A check left with no observations
+// goes too: it would otherwise read as a clean check of that scene, which is
+// not what it found.
+func (r *Repo) DeleteMany(ctx context.Context, sel Selection) (Outcome, error) {
+	tx, err := r.s.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return Outcome{}, err
+	}
+	defer tx.Rollback()
+
+	ids, err := selectObservations(ctx, tx, sel, `status != '`+StatusReplaced+`'`)
+	if err != nil {
+		return Outcome{}, err
+	}
+	var out Outcome
+	checks := map[string]bool{}
+	for _, id := range ids {
+		var checkID string
+		err := tx.QueryRowContext(ctx,
+			`DELETE FROM continuity_observations WHERE id = ? AND project_id = ? AND status != ? RETURNING check_id`,
+			id, sel.ProjectID, StatusReplaced).Scan(&checkID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return Outcome{}, err
+		}
+		out.Changed++
+		checks[checkID] = true
+	}
+	for checkID := range checks {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM continuity_checks WHERE id = ?
+			    AND NOT EXISTS (SELECT 1 FROM continuity_observations o WHERE o.check_id = ?)`,
+			checkID, checkID); err != nil {
+			return Outcome{}, err
+		}
+	}
+	out.Skipped = len(ids) - out.Changed
+	if err := tx.Commit(); err != nil {
+		return Outcome{}, err
+	}
+	return out, nil
+}
+
+// Delete removes one observation, the writer's single-item path to DeleteMany.
+func (r *Repo) Delete(ctx context.Context, observationID string) (Observation, error) {
+	cur, err := r.getObservation(ctx, observationID)
+	if err != nil {
+		return Observation{}, err
+	}
+	if cur.Status == StatusReplaced {
+		return Observation{}, ErrObservationReplaced
+	}
+	if _, err := r.DeleteMany(ctx, Selection{ProjectID: cur.ProjectID, ObservationIDs: []string{cur.ID}}); err != nil {
+		return Observation{}, err
+	}
+	return cur, nil
+}
+
+// selectObservations resolves a selection to ids, each once. checkFilter is
+// the SQL that picks a named check's observations.
+func selectObservations(ctx context.Context, tx *sql.Tx, sel Selection, checkFilter string) ([]string, error) {
+	seen := map[string]bool{}
+	ids := []string{}
+	add := func(id string) {
+		if id = strings.TrimSpace(id); id != "" && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	for _, id := range sel.ObservationIDs {
+		add(id)
+	}
+	for _, checkID := range sel.CheckIDs {
+		rows, err := tx.QueryContext(ctx,
+			`SELECT id FROM continuity_observations WHERE check_id = ? AND project_id = ? AND `+checkFilter,
+			strings.TrimSpace(checkID), sel.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			add(id)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	return ids, nil
+}
+
 // OpenCounts returns, for every scene with at least one open observation in
 // the work, how many it has — the badge ContextPanel shows for the scene
 // currently being written.

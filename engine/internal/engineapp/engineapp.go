@@ -388,6 +388,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			facts:         facts,
 			beats:         beats,
 			threads:       threads,
+			relationships: relationships,
 			continuity:    continuityRepo,
 			ledger:        ledgerRepo,
 			proposals:     proposalsSvc,
@@ -538,6 +539,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	// to notice (story-assist Phase 2).
 	s.Handle("continuity.set_status", handlers.SetContinuityStatus(continuityRepo, clock,
 		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
+	s.Handle("continuity.delete", handlers.DeleteContinuity(continuityRepo,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
 	s.Handle("continuity.open_counts", handlers.ContinuityOpenCounts(continuityRepo))
 	s.Handle("proposals.list", handlers.ListProposals(proposalsSvc, nodes))
 	s.Handle("proposals.accept", handlers.AcceptProposals(proposalsSvc, clock))
@@ -553,6 +556,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("forecast.delete", handlers.DeleteForecast(forecastSvc))
 	s.Handle("entities.create", handlers.CreateEntity(entities, clock))
 	s.Handle("entities.update", handlers.UpdateEntity(entities, clock))
+	s.Handle("entities.delete", handlers.DeleteEntity(entities))
 	s.Handle("entities.scenes", handlers.EntityScenes(mentions, nodes))
 	s.Handle("threads.create", handlers.CreateThread(threads))
 	s.Handle("threads.list", handlers.ListThreads(threads))

@@ -25,6 +25,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/proposals"
 	"github.com/devlikebear/linetta/engine/internal/publish"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
@@ -50,33 +51,34 @@ type mcpToolRepos struct {
 	visuals       *visual.Repo
 	illustrations *illustration.Repo
 	// requests are the pictures agents asked for (illustration Phase 4).
-	requests     *illustration.RequestService
-	style        *style.Repo
-	projects     *project.Repo
-	nodes        *node.Repo
-	entities     *entity.Repo
-	mentions     *mention.Repo
-	facts        *fact.Repo
-	beats        *beat.Repo
-	threads      *thread.Repo
-	continuity   *continuity.Repo
-	ledger       *ledger.Repo
-	proposals    *proposals.Service
-	forecasts    *forecast.Service
-	plot         *plot.Builder
-	manuscript   *manuscript.Searcher
-	context      *storycontext.ContextBuilder
-	snapshots    *snapshot.Repo
-	story        *storyops.Service
-	msEdit       *manuscriptedit.Service
-	memory       *agentmemory.Repo
-	skills       *agentskills.Store
-	skillHistory *agentskills.History
-	publish      *publish.Service
-	enqueue      func(nodeID string)
-	notify       func(method string, params any)
-	clock        func() int64
-	db           *sql.DB
+	requests      *illustration.RequestService
+	style         *style.Repo
+	projects      *project.Repo
+	nodes         *node.Repo
+	entities      *entity.Repo
+	mentions      *mention.Repo
+	facts         *fact.Repo
+	beats         *beat.Repo
+	relationships *relationship.Repo
+	threads       *thread.Repo
+	continuity    *continuity.Repo
+	ledger        *ledger.Repo
+	proposals     *proposals.Service
+	forecasts     *forecast.Service
+	plot          *plot.Builder
+	manuscript    *manuscript.Searcher
+	context       *storycontext.ContextBuilder
+	snapshots     *snapshot.Repo
+	story         *storyops.Service
+	msEdit        *manuscriptedit.Service
+	memory        *agentmemory.Repo
+	skills        *agentskills.Store
+	skillHistory  *agentskills.History
+	publish       *publish.Service
+	enqueue       func(nodeID string)
+	notify        func(method string, params any)
+	clock         func() int64
+	db            *sql.DB
 }
 
 // mcpController answers status queries with a disabled state and refuses

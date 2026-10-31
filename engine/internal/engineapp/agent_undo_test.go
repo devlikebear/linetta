@@ -280,3 +280,84 @@ func TestAgentUndoVisualStyle(t *testing.T) {
 		t.Fatal("undo did not refresh desktop")
 	}
 }
+
+// The whole path a writer's "중복 지워 줘" takes: the agent deletes a duplicate
+// with the same tool server the panel uses, the tool line carries an undo, and
+// that undo brings back the record and the relationship that went with it.
+func TestAgentDeletesAWorldRecordAndThePanelCanUndoIt(t *testing.T) {
+	app := openApp(t)
+	projectID, nodeID := seedProjectWithScene(t, app)
+	if _, rpcErr := call(t, app, "settings.set",
+		`{"provider":"anthropic","providers":{"anthropic":{"api_key":"sk-test","consented_at":1700000000000}}}`); rpcErr != nil {
+		t.Fatalf("settings.set: %+v", rpcErr)
+	}
+	createEntity := func(name string) string {
+		t.Helper()
+		raw, rpcErr := call(t, app, "entities.create", `{"project_id":"`+projectID+`","kind":"character","name":"`+name+`"}`)
+		if rpcErr != nil {
+			t.Fatalf("entities.create: %+v", rpcErr)
+		}
+		var e struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(raw, &e); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return e.ID
+	}
+	duplicate, keeper := createEntity("명패 장수 영감"), createEntity("조연")
+	if _, rpcErr := call(t, app, "relationships.create_one",
+		`{"project_id":"`+projectID+`","from_id":"`+duplicate+`","to_id":"`+keeper+`","label":"단골"}`); rpcErr != nil {
+		t.Fatalf("relationships.create_one: %+v", rpcErr)
+	}
+
+	app.SetProviderFactoryForTest(agenttest.NewScriptedClientFactory(
+		agenttest.ScriptedTurn{ToolName: "linetta_apply_story_ops",
+			ToolArgs: `{"project_id":"` + projectID + `","summary":"중복 삭제",` +
+				`"ops":[{"op":"delete_entity","entity_id":"` + duplicate + `"}]}`},
+		agenttest.ScriptedTurn{Text: "지웠습니다."},
+	))
+	runLog := app.CaptureNotificationsForTest()
+	if _, rpcErr := call(t, app, "agent.run",
+		`{"project_id":"`+projectID+`","node_id":"`+nodeID+`","prompt":"중복 지워 줘"}`); rpcErr != nil {
+		t.Fatalf("agent.run: %+v", rpcErr)
+	}
+	waitForNotification(t, runLog, "agent.done")
+
+	if _, rpcErr := call(t, app, "entities.get", `{"id":"`+duplicate+`"}`); rpcErr == nil {
+		t.Fatal("the duplicate survived the agent's delete")
+	}
+	var tool struct {
+		BatchID string `json:"batch_id"`
+	}
+	if err := json.Unmarshal(runLog.paramsFor("agent.tool"), &tool); err != nil {
+		t.Fatalf("decode agent.tool: %v", err)
+	}
+	if tool.BatchID == "" {
+		t.Fatal("agent.tool carried no batch_id; the panel would offer no undo")
+	}
+
+	undoLog := app.CaptureNotificationsForTest()
+	if _, rpcErr := call(t, app, "agent.undo", `{"batch_id":"`+tool.BatchID+`"}`); rpcErr != nil {
+		t.Fatalf("agent.undo: %+v", rpcErr)
+	}
+	waitForNotification(t, undoLog, "mcp.changed")
+	if _, rpcErr := call(t, app, "entities.get", `{"id":"`+duplicate+`"}`); rpcErr != nil {
+		t.Fatalf("undo did not bring the record back: %+v", rpcErr)
+	}
+	raw, rpcErr := call(t, app, "relationships.list", `{"project_id":"`+projectID+`"}`)
+	if rpcErr != nil {
+		t.Fatalf("relationships.list: %+v", rpcErr)
+	}
+	if !strings.Contains(string(raw), "단골") {
+		t.Fatalf("undo did not bring the relationship back: %s", raw)
+	}
+
+	// The writer's own delete, through the RPC the sheet calls.
+	if _, rpcErr := call(t, app, "entities.delete", `{"id":"`+duplicate+`"}`); rpcErr != nil {
+		t.Fatalf("entities.delete: %+v", rpcErr)
+	}
+	if _, rpcErr := call(t, app, "entities.delete", `{"id":"`+duplicate+`"}`); rpcErr == nil {
+		t.Fatal("deleting a deleted entity reported success")
+	}
+}

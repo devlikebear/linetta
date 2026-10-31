@@ -1,6 +1,7 @@
 import { ScenePlanField } from "./ScenePlanField";
 import { useEffect, useRef, useState } from "react";
 import type { NodeRow, Project, Entity, EntityKind } from "../lib/types";
+import { changesContinuity } from "../lib/agentTools";
 import { projects as projectsApi, continuity as continuityApi } from "../lib/rpc";
 import { PlotPanel } from "./PlotPanel";
 import { User, MapPin, Box, Lightbulb, Book, Search } from "../lib/icons";
@@ -114,7 +115,7 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
   }, [project.id]);
   useEngineEvent<McpChangedPayload>("mcp-changed", (event) => {
     if (event.project_id && event.project_id !== project.id) return;
-    if (event.tool !== "linetta_report_continuity") return;
+    if (!changesContinuity(event.tool)) return;
     continuityApi
       .openCounts(project.id)
       .then((res) => setContinuityCounts(res.counts))
