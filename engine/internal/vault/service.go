@@ -816,8 +816,9 @@ func (s *Service) finishPull(ctx context.Context, bundle *vaultbundle.Bundle, li
 		out.FilesRestored = false
 	}
 	// A bundle from an older schema re-exports with this one's columns, and that
-	// must not read as a change the writer made.
-	if isHead && out.FilesRestored {
+	// must not read as a change the writer made. Nor must files that did not
+	// land: as a local change they would refuse the pull that puts them back.
+	if isHead {
 		if current, err := s.export(ctx, projectID); err == nil {
 			link.LastHash = current.Manifest.ContentHash()
 			if err := putLink(ctx, s.db(), *link); err != nil {
