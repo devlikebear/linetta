@@ -468,19 +468,39 @@ func (s *Service) applyOneOp(
 		})
 		return err
 	case "create_scene":
-		afterNodeID, err := s.resolveSceneAnchor(ctx, projectID, currentNodeID, op.AfterNodeID, op.AfterNodeRef, nodeRefs, *nodeInsertCursor)
+		parentID, err := s.resolveOptionalNodeID(ctx, op.ParentNodeID, op.ParentNodeRef, "", nodeRefs)
 		if err != nil {
 			return err
 		}
-		n, err := s.nodes.CreateSibling(ctx, afterNodeID, node.KindLeaf, op.Label, op.Title, now())
-		if err != nil {
+		var n node.Node
+		if parentID != nil {
+			parent, err := s.nodes.Get(ctx, *parentID)
+			if err != nil {
+				return err
+			}
+			if parent.Kind != node.KindContainer {
+				return fmt.Errorf("create_scene: parent must be a container node")
+			}
+			if n, err = s.nodes.CreateChild(ctx, *parentID, node.KindLeaf, op.Label, op.Title, now()); err != nil {
+				return err
+			}
+		} else {
+			afterNodeID, err := s.resolveSceneAnchor(ctx, projectID, currentNodeID, op.AfterNodeID, op.AfterNodeRef, nodeRefs, *nodeInsertCursor)
+			if err != nil {
+				return err
+			}
+			if n, err = s.nodes.CreateSibling(ctx, afterNodeID, node.KindLeaf, op.Label, op.Title, now()); err != nil {
+				return err
+			}
+			*nodeInsertCursor = n.ID
+		}
+		if err := s.setCreatedSummary(ctx, n, op.Summary); err != nil {
 			return err
 		}
 		if op.Ref != "" {
 			nodeRefs[op.Ref] = n.ID
 			created["node:"+op.Ref] = n.ID
 		}
-		*nodeInsertCursor = n.ID
 		return nil
 	case "create_outline_node":
 		return s.applyCreateOutlineNode(ctx, projectID, currentNodeID, op, now, nodeRefs, created, nodeInsertCursor)
@@ -500,6 +520,10 @@ func (s *Service) applyOneOp(
 		title := cur.Title
 		if strings.TrimSpace(op.Title) != "" {
 			title = op.Title
+		} else if cur.Title == cur.Label {
+			// A title that only repeated the label would otherwise go on
+			// showing the old name.
+			title = label
 		}
 		return s.nodes.Rename(ctx, nodeID, label, title, now())
 	case "delete_outline_node":
@@ -512,6 +536,13 @@ func (s *Service) applyOneOp(
 		nodeID, err := s.resolveRequiredNodeID(ctx, op.NodeID, op.NodeRef, nodeRefs)
 		if err != nil {
 			return err
+		}
+		parentID, err := s.resolveOptionalNodeID(ctx, op.ParentNodeID, op.ParentNodeRef, "", nodeRefs)
+		if err != nil {
+			return err
+		}
+		if parentID != nil {
+			return s.nodes.MoveToParent(ctx, nodeID, *parentID, now())
 		}
 		if strings.ToLower(strings.TrimSpace(op.Direction)) == "up" {
 			return s.nodes.MoveUp(ctx, nodeID, now())
@@ -605,6 +636,9 @@ func (s *Service) applyCreateOutlineNode(
 			return err
 		}
 	}
+	if err := s.setCreatedSummary(ctx, n, op.Summary); err != nil {
+		return err
+	}
 	if op.Ref != "" {
 		nodeRefs[op.Ref] = n.ID
 		created["node:"+op.Ref] = n.ID
@@ -613,6 +647,17 @@ func (s *Service) applyCreateOutlineNode(
 		*nodeInsertCursor = n.ID
 	}
 	return nil
+}
+
+// setCreatedSummary keeps the summary given with a create op. create_outline_node
+// can land on a node that already exists, whose summary is not this op's to
+// replace.
+func (s *Service) setCreatedSummary(ctx context.Context, n node.Node, summary string) error {
+	summary = strings.TrimSpace(summary)
+	if summary == "" || strings.TrimSpace(n.Summary) != "" {
+		return nil
+	}
+	return s.nodes.SetWrittenSummary(ctx, n.ID, summary, n.ContentVersion)
 }
 
 func (s *Service) findMatchingOutlineNode(ctx context.Context, projectID string, parentID *string, kind, label string) (node.Node, bool, error) {

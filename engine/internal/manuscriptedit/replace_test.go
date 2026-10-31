@@ -294,3 +294,134 @@ func valueOrEmpty(v *string) string {
 	}
 	return *v
 }
+
+// apply runs one replace through the service and returns the resulting doc.
+func (f replaceFixture) apply(t *testing.T, doc, query, replacement string) string {
+	t.Helper()
+	if err := f.nodes.UpdateContent(f.ctx, f.first, doc, 1_100); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	plan, err := f.svc.PlanReplace(f.ctx, ReplacePlanRequest{ProjectID: f.pid, Query: query, Replacement: replacement, MatchCase: true})
+	if err != nil {
+		t.Fatalf("PlanReplace: %v", err)
+	}
+	if len(plan.Candidates) != 1 {
+		t.Fatalf("candidates = %d, want 1", len(plan.Candidates))
+	}
+	if _, err := f.svc.ApplyReplace(f.ctx, plan, []string{plan.Candidates[0].ID}, 2_000); err != nil {
+		t.Fatalf("ApplyReplace: %v", err)
+	}
+	got, err := f.nodes.Get(f.ctx, f.first)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	return *got.ContentDoc
+}
+
+const seojinDoc = `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"그때 "},{"type":"mention","attrs":{"id":"e1","label":"서진"}},{"type":"text","text":"의 후드티가 보였다."}]}]}`
+
+func TestReplaceCrossesALinkedNameAndKeepsTheLink(t *testing.T) {
+	for _, query := range []string{"서진의 후드티", "@서진의 후드티"} {
+		f := newReplaceFixture(t)
+		got := f.apply(t, seojinDoc, query, "서진의 낡은 후드티")
+		for _, want := range []string{`"text":"그때 "`, `"label":"서진"`, `"text":"의 낡은 후드티가 보였다."`} {
+			if !strings.Contains(got, want) {
+				t.Errorf("query %q: missing %s in %s", query, want, got)
+			}
+		}
+	}
+}
+
+func TestReplaceLeavesAQueryThatCutsALinkedNameAlone(t *testing.T) {
+	f := newReplaceFixture(t)
+	if err := f.nodes.UpdateContent(f.ctx, f.first, seojinDoc, 1_100); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := f.svc.PlanReplace(f.ctx, ReplacePlanRequest{ProjectID: f.pid, Query: "진의", Replacement: "수의", MatchCase: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Candidates) != 0 {
+		t.Fatalf("a match inside a linked name must not count: %+v", plan.Candidates)
+	}
+}
+
+func TestReplaceAcrossParagraphsMergesThem(t *testing.T) {
+	f := newReplaceFixture(t)
+	doc := `{"type":"doc","content":[` +
+		`{"type":"paragraph","content":[{"type":"text","text":"하나. 끊어 버릴 것만 같았다."}]},` +
+		`{"type":"paragraph","content":[{"type":"text","text":"\"근데 왜요?\" 둘."}]}]}`
+	got := f.apply(t, doc, "끊어 버릴 것만 같았다.\n\n\"근데", "끊어질 듯했다. \"근데")
+	if !strings.Contains(got, `하나. 끊어질 듯했다. \"근데 왜요?\" 둘.`) {
+		t.Fatalf("paragraphs not merged: %s", got)
+	}
+	if strings.Count(got, `"paragraph"`) != 1 {
+		t.Fatalf("want one paragraph: %s", got)
+	}
+}
+
+func TestReplaceNewlineStartsAParagraph(t *testing.T) {
+	f := newReplaceFixture(t)
+	got := f.apply(t, replaceDoc("앞. 가운데. 뒤."), "가운데.", "첫째.\n\n둘째.")
+	if strings.Count(got, `"paragraph"`) != 2 {
+		t.Fatalf("want two paragraphs: %s", got)
+	}
+	for _, want := range []string{`"text":"앞. 첫째."`, `"text":"둘째. 뒤."`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %s in %s", want, got)
+		}
+	}
+}
+
+func TestReplaceDoesNotReachAcrossAnIllustration(t *testing.T) {
+	f := newReplaceFixture(t)
+	doc := `{"type":"doc","content":[` +
+		`{"type":"paragraph","content":[{"type":"text","text":"앞"}]},` +
+		`{"type":"illustration","attrs":{"id":"i1"}},` +
+		`{"type":"paragraph","content":[{"type":"text","text":"뒤"}]}]}`
+	if err := f.nodes.UpdateContent(f.ctx, f.first, doc, 1_100); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := f.svc.PlanReplace(f.ctx, ReplacePlanRequest{ProjectID: f.pid, Query: "앞\n뒤", Replacement: "합침", MatchCase: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Candidates) != 0 {
+		t.Fatalf("a match must not swallow a picture: %+v", plan.Candidates)
+	}
+}
+
+func TestReplaceKeepsTrailingSpaceExact(t *testing.T) {
+	f := newReplaceFixture(t)
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"그런데도 "},{"type":"mention","attrs":{"id":"e1","label":"리뷰봇"}}]}]}`
+	got := f.apply(t, doc, "그런데도 ", "그럼에도 ")
+	if !strings.Contains(got, `"text":"그럼에도 "`) {
+		t.Fatalf("space doubled or lost: %s", got)
+	}
+}
+
+func TestReplaceKeepsFormattingOfTheTextItTakesOver(t *testing.T) {
+	f := newReplaceFixture(t)
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"평범 "},{"type":"text","text":"강조된 말","marks":[{"type":"bold"}]}]}]}`
+	got := f.apply(t, doc, "강조된", "굵은")
+	if !strings.Contains(got, `"marks":[{"type":"bold"}],"text":"굵은 말"`) && !strings.Contains(got, `"text":"굵은 말"`) {
+		t.Fatalf("formatting split the text: %s", got)
+	}
+	if strings.Count(got, `"marks"`) != 1 {
+		t.Fatalf("want one bold run: %s", got)
+	}
+}
+
+func TestReplaceIgnoresCaseWithoutChangingOffsets(t *testing.T) {
+	f := newReplaceFixture(t)
+	if err := f.nodes.UpdateContent(f.ctx, f.first, replaceDoc("ẞ Kelvin K 끝"), 1_100); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := f.svc.PlanReplace(f.ctx, ReplacePlanRequest{ProjectID: f.pid, Query: "kelvin", Replacement: "켈빈"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Candidates) != 1 || !strings.Contains(plan.Candidates[0].After, "ẞ 켈빈 K 끝") {
+		t.Fatalf("candidates = %+v", plan.Candidates)
+	}
+}

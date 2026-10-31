@@ -272,3 +272,148 @@ func TestApplyOpsWithRefsSeedResolvesRelationship(t *testing.T) {
 		t.Error("new ref e2 was not recorded in the returned Refs")
 	}
 }
+
+func mustApply(t *testing.T, svc *Service, ctx context.Context, projectID, nodeID string, p Proposal, clock func() int64) ApplyOpsResult {
+	t.Helper()
+	res := svc.ApplyOps(ctx, projectID, nodeID, p, clock)
+	if res.Applied != len(p.Ops) {
+		t.Fatalf("applied %d of %d: %+v", res.Applied, len(p.Ops), res)
+	}
+	return res
+}
+
+func outlineFixture(t *testing.T) (*Service, *node.Repo, string, string, string) {
+	t.Helper()
+	svc, nodes, _, projectID, first := newTestService(t)
+	res := mustApply(t, svc, context.Background(), projectID, first, Proposal{Ops: []Op{
+		{Type: "create_outline_node", Ref: "p1", Kind: "container", Label: "1부"},
+		{Type: "create_outline_node", Ref: "p2", Kind: "container", Label: "2부"},
+	}}, now())
+	return svc, nodes, projectID, res.Created["node:p1"], res.Created["node:p2"]
+}
+
+func TestCreateSceneLandsInTheNamedPart(t *testing.T) {
+	svc, nodes, projectID, _, part2 := outlineFixture(t)
+	ctx := context.Background()
+	res := mustApply(t, svc, ctx, projectID, "", Proposal{Ops: []Op{
+		{Type: "create_scene", Ref: "s", Label: "9화", ParentNodeID: part2},
+		{Type: "create_scene", Ref: "s2", Label: "10화", ParentNodeID: part2},
+	}}, now())
+	for _, ref := range []string{"node:s", "node:s2"} {
+		n, err := nodes.Get(ctx, res.Created[ref])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n.ParentID == nil || *n.ParentID != part2 {
+			t.Fatalf("%s parent = %v, want %s", ref, n.ParentID, part2)
+		}
+	}
+}
+
+func TestCreateSceneTakesAParentRefFromTheSameBatch(t *testing.T) {
+	svc, nodes, _, projectID, first := newTestService(t)
+	ctx := context.Background()
+	res := mustApply(t, svc, ctx, projectID, first, Proposal{Ops: []Op{
+		{Type: "create_outline_node", Ref: "p", Kind: "container", Label: "3부"},
+		{Type: "create_scene", Ref: "s", Label: "1화", ParentNodeRef: "p"},
+	}}, now())
+	n, _ := nodes.Get(ctx, res.Created["node:s"])
+	if n.ParentID == nil || *n.ParentID != res.Created["node:p"] {
+		t.Fatalf("parent = %v", n.ParentID)
+	}
+}
+
+func TestCreateSceneRefusesAParentThatIsAScene(t *testing.T) {
+	svc, _, _, projectID, first := newTestService(t)
+	res := svc.ApplyOps(context.Background(), projectID, first, Proposal{Ops: []Op{
+		{Type: "create_scene", Label: "x", ParentNodeID: first},
+	}}, now())
+	if res.Applied != 0 || len(res.Failures) != 1 || !strings.Contains(res.Failures[0].Error, "container") {
+		t.Fatalf("res = %+v", res)
+	}
+}
+
+func TestCreateKeepsThePlanGivenAsSummary(t *testing.T) {
+	svc, nodes, projectID, part1, _ := outlineFixture(t)
+	ctx := context.Background()
+	res := mustApply(t, svc, ctx, projectID, "", Proposal{Ops: []Op{
+		{Type: "create_scene", Ref: "s", Label: "1화", ParentNodeID: part1, Summary: "[계획] 첫 화"},
+		{Type: "create_outline_node", Ref: "o", Kind: "leaf", Label: "2화", ParentNodeID: part1, Summary: "[계획] 둘째 화"},
+	}}, now())
+	for ref, want := range map[string]string{"node:s": "[계획] 첫 화", "node:o": "[계획] 둘째 화"} {
+		n, _ := nodes.Get(ctx, res.Created[ref])
+		if n.Summary != want || !n.SummaryWritten {
+			t.Fatalf("%s summary = %q written=%v", ref, n.Summary, n.SummaryWritten)
+		}
+	}
+}
+
+func TestRenameLabelCarriesATitleThatRepeatedIt(t *testing.T) {
+	svc, nodes, projectID, part1, _ := outlineFixture(t)
+	ctx := context.Background()
+	if err := nodes.Rename(ctx, part1, "1부", "1부", 20_000); err != nil {
+		t.Fatal(err)
+	}
+	mustApply(t, svc, ctx, projectID, "", Proposal{Ops: []Op{{Type: "rename_outline_node", NodeID: part1, Label: "1부. 시작"}}}, now())
+	n, _ := nodes.Get(ctx, part1)
+	if n.Title != "1부. 시작" {
+		t.Fatalf("title = %q", n.Title)
+	}
+}
+
+func TestRenameLabelLeavesAnOwnTitleAlone(t *testing.T) {
+	svc, nodes, projectID, part1, _ := outlineFixture(t)
+	ctx := context.Background()
+	if err := nodes.Rename(ctx, part1, "1부", "가짜 명패", 20_000); err != nil {
+		t.Fatal(err)
+	}
+	mustApply(t, svc, ctx, projectID, "", Proposal{Ops: []Op{{Type: "rename_outline_node", NodeID: part1, Label: "제1부"}}}, now())
+	n, _ := nodes.Get(ctx, part1)
+	if n.Title != "가짜 명패" {
+		t.Fatalf("title = %q", n.Title)
+	}
+}
+
+func TestMoveIntoAnotherPartAndUndoIt(t *testing.T) {
+	svc, nodes, projectID, part1, part2 := outlineFixture(t)
+	ctx := context.Background()
+	res := mustApply(t, svc, ctx, projectID, "", Proposal{Ops: []Op{
+		{Type: "create_scene", Ref: "s", Label: "1화", ParentNodeID: part1},
+	}}, now())
+	scene := res.Created["node:s"]
+	moved := mustApply(t, svc, ctx, projectID, "", Proposal{Ops: []Op{
+		{Type: "move_outline_node", NodeID: scene, ParentNodeID: part2},
+	}}, now())
+	n, _ := nodes.Get(ctx, scene)
+	if n.ParentID == nil || *n.ParentID != part2 {
+		t.Fatalf("parent after move = %v", n.ParentID)
+	}
+	if err := svc.UndoApply(ctx, moved.UndoBatchID, now()); err != nil {
+		t.Fatalf("undo: %v", err)
+	}
+	n, _ = nodes.Get(ctx, scene)
+	if n.ParentID == nil || *n.ParentID != part1 {
+		t.Fatalf("parent after undo = %v", n.ParentID)
+	}
+}
+
+func TestMoveNeedsADirectionOrAParent(t *testing.T) {
+	for _, op := range []Op{
+		{Type: "move_outline_node", NodeID: "a"},
+		{Type: "move_outline_node", NodeID: "a", ParentNodeID: "b", Direction: "up"},
+	} {
+		if err := ValidateProposal(Proposal{Summary: "s", Ops: []Op{op}}); err == nil {
+			t.Fatalf("op %+v was accepted", op)
+		}
+	}
+}
+
+func TestCreateThreadTakesTitleAsItsName(t *testing.T) {
+	p := Proposal{Summary: "s", Ops: []Op{{Type: "create_thread", Title: "복선 줄기"}}}
+	if err := ValidateProposal(p); err != nil {
+		t.Fatalf("ValidateProposal: %v", err)
+	}
+	if p.Ops[0].Name != "복선 줄기" {
+		t.Fatalf("name = %q", p.Ops[0].Name)
+	}
+}

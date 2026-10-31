@@ -52,10 +52,11 @@ func (d ToolDeps) registerReviseTool(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_revise_scene",
 		Description: "Replace exact text across one or more scenes — a renamed character, a corrected " +
-			"term, a reworded line — without resending whole scene bodies. Every touched scene is " +
+			"term, a reworded line — without resending whole scene bodies. find may cross linked names " +
+			"and paragraph breaks. Every touched scene is " +
 			"snapshotted first and the result maps each changed scene to its snapshot_id, which " +
-			"linetta_undo_last_change can restore. Pass dry_run to see what would change before " +
-			"committing; omit node_ids only when you mean to sweep the entire work.",
+			"linetta_undo_last_change can restore. Pass dry_run to preview; omit node_ids only to " +
+			"sweep the entire work.",
 	}, record(d, "linetta_revise_scene", d.reviseScene))
 }
 
@@ -64,8 +65,8 @@ func (d ToolDeps) reviseScene(ctx context.Context, _ *mcp.CallToolRequest, in re
 	if errResult != nil {
 		return errResult, reviseSceneOutput{}, nil
 	}
-	find := strings.TrimSpace(in.Find)
-	if find == "" {
+	find := in.Find
+	if strings.TrimSpace(find) == "" {
 		return toolErr("find is required"), reviseSceneOutput{}, nil
 	}
 	if strings.TrimSpace(in.Replace) == "" {
