@@ -20,6 +20,7 @@ type VaultService interface {
 	Push(ctx context.Context, projectID string) (vault.PushResult, error)
 	Pull(ctx context.Context, in vault.PullInput) (vault.PullResult, error)
 	ResolveConflict(ctx context.Context, in vault.ResolveInput) (vault.ResolveResult, error)
+	DeleteItem(ctx context.Context, itemID string) error
 }
 
 func vaultResponse(out any, err error) (json.RawMessage, error) {
@@ -100,5 +101,21 @@ func VaultResolveConflict(svc VaultService) rpc.Handler {
 			return nil, invalidParams("choice must be keep_local, or take_remote with title_suffix")
 		}
 		return vaultResponse(svc.ResolveConflict(ctx, in))
+	}
+}
+
+// VaultDeleteItem returns a handler for vault.delete_item.
+func VaultDeleteItem(svc VaultService) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ItemID string `json:"item_id"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ItemID) == "" {
+			return nil, invalidParams("item_id required")
+		}
+		if err := svc.DeleteItem(ctx, in.ItemID); err != nil {
+			return nil, publishError(err)
+		}
+		return json.Marshal(map[string]bool{"ok": true})
 	}
 }

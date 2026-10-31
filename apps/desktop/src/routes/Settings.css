@@ -300,13 +300,23 @@
 }
 .settings .vault-items li {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
-  gap: 12px;
+  gap: 4px 12px;
   padding: 6px 0;
   border-top: 1px solid var(--line);
 }
 .settings .vault-items .sd { margin: 0; flex: 0 0 auto; }
+.settings .vault-item-actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.settings .vault-delete-confirm {
+  flex: 1 0 100%;
+  padding: 4px 0 8px;
+}
 .settings .vault-item-title {
   min-width: 0;
   font-size: 14px;

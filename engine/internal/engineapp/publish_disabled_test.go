@@ -30,7 +30,7 @@ func TestVaultIsUnavailableOnMobile(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), `"vault_available":false`) {
 		t.Fatalf("diagnostics.version: %s %v", raw, err)
 	}
-	for _, method := range []string{"vault.status", "vault.work_status", "vault.setup", "vault.push", "vault.pull", "vault.resolve_conflict"} {
+	for _, method := range []string{"vault.status", "vault.work_status", "vault.setup", "vault.push", "vault.pull", "vault.resolve_conflict", "vault.delete_item"} {
 		raw, err := app.Handle(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"`+method+`","params":{}}`))
 		if err != nil || !strings.Contains(string(raw), "not available in this build") {
 			t.Fatalf("%s: %s %v", method, raw, err)

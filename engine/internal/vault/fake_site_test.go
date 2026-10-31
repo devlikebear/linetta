@@ -31,6 +31,7 @@ type fakeSite struct {
 	// failPut and failGet answer with a status instead of serving, when set.
 	// failCommitAfterSaving commits and then loses the answer.
 	failPut, failGet      func(id string) int
+	failDelete            int
 	failCommitAfterSaving bool
 	retryAfter            string
 }
@@ -77,6 +78,8 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 		f.listItems(w)
 	case strings.HasPrefix(path, "/blobs/"):
 		f.blob(w, r, strings.TrimPrefix(path, "/blobs/"))
+	case strings.HasPrefix(path, "/items/") && r.Method == http.MethodDelete:
+		f.deleteItem(w, strings.TrimPrefix(path, "/items/"))
 	case strings.HasPrefix(path, "/items/") && strings.HasSuffix(path, "/revisions"):
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/items/"), "/revisions")
 		if r.Method == http.MethodPost {
@@ -94,6 +97,19 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 	default:
 		fail(w, 404, CodeNotFound)
 	}
+}
+
+func (f *fakeSite) deleteItem(w http.ResponseWriter, id string) {
+	if f.failDelete != 0 {
+		fail(w, f.failDelete, "storage_down")
+		return
+	}
+	if _, ok := f.items[id]; !ok {
+		fail(w, 404, CodeNotFound)
+		return
+	}
+	delete(f.items, id)
+	writeJSON(w, 200, map[string]bool{"deleted": true})
 }
 
 func (f *fakeSite) listItems(w http.ResponseWriter) {

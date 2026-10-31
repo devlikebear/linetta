@@ -24,6 +24,7 @@ func TestVaultMethodsAreRegisteredAndSendNothingUntilConnected(t *testing.T) {
 		"vault.push":             `{"project_id":"p"}`,
 		"vault.pull":             `{"project_id":"p"}`,
 		"vault.resolve_conflict": `{"project_id":"p","choice":"keep_local"}`,
+		"vault.delete_item":      `{"item_id":"item-id-of-sixteen"}`,
 	} {
 		_, rpcErr := call(t, app, method, params)
 		if rpcErr == nil {
