@@ -169,6 +169,28 @@ func TestConnect_switchingAccountsClearsTheOldState(t *testing.T) {
 	}
 }
 
+// Disconnecting ends this device's site session. The recovery key is the only
+// way back to what the vault holds, so it stays.
+func TestClearingTheConnectionKeepsTheVaultKey(t *testing.T) {
+	st := newTestSettings(t)
+	if err := st.SetVaultKey("ABCD-EFGH-JKMN"); err != nil {
+		t.Fatal(err)
+	}
+	creds := NewCredentials(st)
+	if err := creds.Save(settings.PublishAccount{Handle: "writer"}, "lwk_abc"); err != nil {
+		t.Fatal(err)
+	}
+	if err := creds.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	if st.PublishTokenExists() {
+		t.Fatal("Clear left the publish token")
+	}
+	if key, ok, err := st.VaultKey(); key != "ABCD-EFGH-JKMN" || !ok || err != nil {
+		t.Fatalf("VaultKey after Clear: %q, %v, %v", key, ok, err)
+	}
+}
+
 func TestConnect_disconnectAndRevoked(t *testing.T) {
 	site := newFakeSite(t)
 	st := newTestSettings(t)
