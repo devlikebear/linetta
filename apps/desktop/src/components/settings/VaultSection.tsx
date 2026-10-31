@@ -54,6 +54,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
   const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
   const [pulling, setPulling] = useState<VaultProgress | null>(null);
   const [pulled, setPulled] = useState<VaultPullResult | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   // A slow answer must not paint over the one that came after it.
   const loadRef = useRef(0);
 
@@ -134,6 +135,14 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
       } finally {
         setPulling(null);
       }
+      await load();
+    });
+
+  const deleteItem = (itemId: string) =>
+    guard(async () => {
+      await vaultApi.deleteItem(itemId);
+      setDeleting(null);
+      setPulled(null);
       await load();
     });
 
@@ -357,16 +366,54 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
                   {formatBytes(item.bytes)} · {formatDate(item.updated, language)}
                   {!item.on_this_device && ` · ${t("settings.vault.notOnDevice")}`}
                 </span>
-                {!item.on_this_device && item.title && (
+                <span className="vault-item-actions">
+                  {!item.on_this_device && item.title && (
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      disabled={busy}
+                      onClick={() => void pullItem(item.item_id)}
+                      data-testid={`vault-pull-${item.item_id}`}
+                    >
+                      {t("vault.pull")}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn ghost sm"
                     disabled={busy}
-                    onClick={() => void pullItem(item.item_id)}
-                    data-testid={`vault-pull-${item.item_id}`}
+                    onClick={() => setDeleting(item.item_id)}
+                    data-testid={`vault-delete-${item.item_id}`}
                   >
-                    {t("vault.pull")}
+                    {t("settings.vault.deleteItem")}
                   </button>
+                </span>
+                {deleting === item.item_id && (
+                  <div className="vault-delete-confirm" data-testid="vault-delete-confirm">
+                    <p className="sd vault-warning" role="alert">
+                      {t(item.on_this_device ? "settings.vault.deleteWarning" : "settings.vault.deleteWarningNotHere")}
+                    </p>
+                    <div className="field-actions">
+                      <button
+                        type="button"
+                        className="btn sm"
+                        disabled={busy}
+                        onClick={() => void deleteItem(item.item_id)}
+                        data-testid="vault-delete-yes"
+                      >
+                        {t("settings.vault.deleteConfirm")}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn ghost sm"
+                        disabled={busy}
+                        onClick={() => setDeleting(null)}
+                        data-testid="vault-delete-no"
+                      >
+                        {t("common.cancel")}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </li>
             ))}

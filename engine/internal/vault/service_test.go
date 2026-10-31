@@ -1184,3 +1184,136 @@ func TestSiteRefusalsBecomeReasons(t *testing.T) {
 		t.Fatal("a local failure was dressed up as a vault reason")
 	}
 }
+
+func TestDeletingAnItemLeavesTheWorkOnThisDevice(t *testing.T) {
+	ctx := context.Background()
+	site, a, _ := devices(t)
+	item := mustItem(t, site)
+	if _, err := a.svc.Status(ctx); err != nil {
+		t.Fatal(err)
+	}
+	incoming := filepath.Join(a.home, incomingDir, item)
+	if err := os.MkdirAll(incoming, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.svc.heads) == 0 {
+		t.Fatal("expected a cached head")
+	}
+
+	if err := a.svc.DeleteItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	overview, err := a.svc.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(overview.Items) != 0 {
+		t.Fatalf("items = %+v", overview.Items)
+	}
+	if !strings.Contains(a.text(t, workID), "숨겨진 첫 문장") {
+		t.Fatal("deleting from the server touched the manuscript")
+	}
+	if got := a.state(t, workID); got != StateNotUploaded {
+		t.Fatalf("state = %s", got)
+	}
+	if _, ok, _ := getLink(ctx, a.db, workID); ok {
+		t.Fatal("this device kept a link to a deleted item")
+	}
+	if _, cached := a.svc.heads[item]; cached {
+		t.Fatal("the head of a deleted item stayed cached")
+	}
+	if _, err := os.Stat(incoming); !os.IsNotExist(err) {
+		t.Fatal("downloaded blobs of a deleted item stayed on disk")
+	}
+	pushed, err := a.svc.Push(ctx, workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.HeadRevision != 1 || pushed.ItemID == item {
+		t.Fatalf("push after delete = %+v", pushed)
+	}
+}
+
+// A writer who lost the key is the one who most needs the space back.
+func TestDeletingAnItemTakesNoKey(t *testing.T) {
+	ctx := context.Background()
+	site, _, _ := devices(t)
+	keyless := newDevice(t, site)
+	if err := keyless.svc.DeleteItem(ctx, mustItem(t, site)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Another device getting there first, or a lost answer, is the outcome that was
+// asked for. The link it leaves here still has to go.
+func TestDeletingWhatIsAlreadyGoneForgetsIt(t *testing.T) {
+	ctx := context.Background()
+	site, a, b := devices(t)
+	item := mustItem(t, site)
+	if err := a.svc.DeleteItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.svc.DeleteItem(ctx, item); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := getLink(ctx, b.db, workID); ok {
+		t.Fatal("the link stayed")
+	}
+}
+
+func TestAnotherDeviceCarriesOnAfterADelete(t *testing.T) {
+	ctx := context.Background()
+	site, a, b := devices(t)
+	if err := a.svc.DeleteItem(ctx, mustItem(t, site)); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.state(t, workID); got != StateNotUploaded {
+		t.Fatalf("state = %s", got)
+	}
+	pushed, err := b.svc.Push(ctx, workID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pushed.HeadRevision != 1 {
+		t.Fatalf("push = %+v", pushed)
+	}
+}
+
+func TestFailedDeleteKeepsEverything(t *testing.T) {
+	ctx := context.Background()
+	site, a, _ := devices(t)
+	site.failDelete = http.StatusServiceUnavailable
+	err := a.svc.DeleteItem(ctx, mustItem(t, site))
+	wantReason(t, err, rpc.ReasonVaultUnavailable)
+	site.failDelete = 0
+	if got := a.state(t, workID); got != StateSynced {
+		t.Fatalf("state = %s", got)
+	}
+}
+
+func TestDeleteNeedsAConnectionAndAWellFormedID(t *testing.T) {
+	ctx := context.Background()
+	site, a, _ := devices(t)
+	before := site.requests
+	err := a.svc.DeleteItem(ctx, "../../items")
+	wantReason(t, err, rpc.ReasonVaultItemNotFound)
+	if site.requests != before {
+		t.Fatal("a malformed id reached the site")
+	}
+	item := mustItem(t, site)
+	if err := a.settings.DeletePublishToken(); err != nil {
+		t.Fatal(err)
+	}
+	err = a.svc.DeleteItem(ctx, item)
+	wantReason(t, err, rpc.ReasonVaultNotConnected)
+}
+
+// A delete under a running pull would pull the blobs out from under it.
+func TestDeleteWaitsForTheOperationInProgress(t *testing.T) {
+	ctx := context.Background()
+	site, a, _ := devices(t)
+	a.svc.busy.Store(true)
+	defer a.svc.busy.Store(false)
+	err := a.svc.DeleteItem(ctx, mustItem(t, site))
+	wantReason(t, err, rpc.ReasonVaultInProgress)
+}

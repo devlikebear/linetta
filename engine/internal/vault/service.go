@@ -873,6 +873,44 @@ func (s *Service) ResolveConflict(ctx context.Context, in ResolveInput) (Resolve
 	return ResolveResult{Pull: &out}, nil
 }
 
+// DeleteItem removes an item and its restore points from the server, for good.
+// The work on this device stays, and goes back to not uploaded. It takes no key:
+// a writer who lost theirs is the one who most needs the space back.
+func (s *Service) DeleteItem(ctx context.Context, itemID string) error {
+	end, err := s.begin()
+	if err != nil {
+		return err
+	}
+	defer end()
+	return classify(s.deleteItem(ctx, itemID))
+}
+
+func (s *Service) deleteItem(ctx context.Context, itemID string) error {
+	token, err := s.token()
+	if err != nil {
+		return err
+	}
+	if !itemIDPattern.MatchString(itemID) {
+		return reason(rpc.ReasonVaultItemNotFound, errors.New("vault: bad item id"))
+	}
+	// Already gone is what was asked for: another device got there first, or
+	// the answer to an earlier try was lost. This device still has to forget it.
+	var apiErr *APIError
+	if err := s.Client.DeleteItem(ctx, token, itemID); err != nil && !(errors.As(err, &apiErr) && apiErr.Code == CodeNotFound) {
+		return err
+	}
+	if err := deleteLinkByItem(ctx, s.db(), itemID); err != nil {
+		return err
+	}
+	s.headsMu.Lock()
+	delete(s.heads, itemID)
+	s.headsMu.Unlock()
+	if err := os.RemoveAll(filepath.Join(s.Home, incomingDir, itemID)); err != nil {
+		log.Printf("vault: remove downloaded blobs: %v", err)
+	}
+	return nil
+}
+
 // SetupInput makes or enters the recovery key. RecoveryKey empty means make one.
 // Replace swaps a different key already on this device for the one entered.
 type SetupInput struct {

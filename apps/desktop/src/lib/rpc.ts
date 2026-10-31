@@ -539,6 +539,8 @@ export const vaultApi = {
   /** title_suffix names the copy take_remote keeps, and is required for it. */
   resolveConflict: (input: { project_id: string; choice: "keep_local" | "take_remote"; title_suffix?: string }) =>
     rpcCall<VaultResolveResult>("vault.resolve_conflict", input),
+  /** Removes the item and all its restore points from the server, for good. */
+  deleteItem: (itemId: string) => rpcCall<{ ok: true }>("vault.delete_item", { item_id: itemId }),
 };
 
 /** The built-in agent's loop (#93). Its panel is #95; these wrappers are the

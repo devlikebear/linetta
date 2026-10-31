@@ -193,6 +193,14 @@ func (c *Client) Commit(ctx context.Context, token, itemID string, base int, man
 	return out.HeadRevision, err
 }
 
+// DeleteItem removes an item and every restore point it has.
+func (c *Client) DeleteItem(ctx context.Context, token, itemID string) error {
+	var out struct {
+		Deleted bool `json:"deleted"`
+	}
+	return c.json(ctx, http.MethodDelete, "/items/"+url.PathEscape(itemID), token, nil, &out)
+}
+
 // json is for the small calls, which are not retried: an offline status check
 // should say so at once, and a commit whose answer was lost looks like a
 // conflict the second time. The next push recognises its own contents at the

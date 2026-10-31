@@ -53,6 +53,11 @@ SELECT project_id, item_id, base_revision, last_hash, last_synced_at FROM vault_
 	return out, rows.Err()
 }
 
+func deleteLinkByItem(ctx context.Context, db execer, itemID string) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM vault_items WHERE item_id = ?`, itemID)
+	return err
+}
+
 func putLink(ctx context.Context, db execer, l Link) error {
 	_, err := db.ExecContext(ctx, `
 INSERT INTO vault_items (project_id, item_id, base_revision, last_hash, last_synced_at)

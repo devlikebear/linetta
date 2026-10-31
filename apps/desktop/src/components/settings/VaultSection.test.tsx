@@ -6,13 +6,14 @@ const rpc = vi.hoisted(() => ({
   status: vi.fn(),
   setup: vi.fn(),
   pull: vi.fn(),
+  deleteItem: vi.fn(),
   connectStatus: vi.fn(),
   openExternalUrl: vi.fn(),
   progress: { emit: (_: unknown) => {} },
 }));
 
 vi.mock("../../lib/rpc", () => ({
-  vaultApi: { status: rpc.status, setup: rpc.setup, pull: rpc.pull },
+  vaultApi: { status: rpc.status, setup: rpc.setup, pull: rpc.pull, deleteItem: rpc.deleteItem },
   publishApi: { connectStatus: rpc.connectStatus },
   openExternalUrl: rpc.openExternalUrl,
 }));
@@ -318,6 +319,65 @@ describe("VaultSection", () => {
     await userEvent.click(await screen.findByTestId("vault-pull-i1"));
     expect(await screen.findByTestId("vault-error")).toHaveTextContent("errors.vaultDamaged");
     expect(screen.getByTestId("vault-pull-i1")).toBeEnabled();
+  });
+
+  it("deletes a work from the server only after a warning and a second click", async () => {
+    rpc.status.mockResolvedValue(overview({ items: [ITEM] }));
+    rpc.deleteItem.mockResolvedValue({ ok: true });
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-delete-i1"));
+    expect(rpc.deleteItem).not.toHaveBeenCalled();
+    expect(screen.getByTestId("vault-delete-confirm")).toHaveTextContent("settings.vault.deleteWarning");
+
+    rpc.status.mockResolvedValue(overview());
+    await userEvent.click(screen.getByTestId("vault-delete-yes"));
+    expect(rpc.deleteItem).toHaveBeenCalledWith("i1");
+    await waitFor(() => expect(screen.queryByTestId("vault-items")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("vault-delete-confirm")).not.toBeInTheDocument();
+  });
+
+  it("warns harder when the server holds the only copy this device knows of", async () => {
+    rpc.status.mockResolvedValue(overview({ items: [{ ...ITEM, on_this_device: false }] }));
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-delete-i1"));
+    expect(screen.getByTestId("vault-delete-confirm")).toHaveTextContent("settings.vault.deleteWarningNotHere");
+  });
+
+  // Nothing else frees space for a writer whose key no longer opens a work.
+  it("can delete a work this key cannot open", async () => {
+    rpc.status.mockResolvedValue(overview({ items: [{ ...ITEM, title: "", on_this_device: false }] }));
+    renderSection();
+    expect(await screen.findByTestId("vault-delete-i1")).toBeEnabled();
+  });
+
+  it("cancelling deletes nothing", async () => {
+    rpc.status.mockResolvedValue(overview({ items: [ITEM] }));
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-delete-i1"));
+    await userEvent.click(screen.getByTestId("vault-delete-no"));
+    expect(screen.queryByTestId("vault-delete-confirm")).not.toBeInTheDocument();
+    expect(rpc.deleteItem).not.toHaveBeenCalled();
+  });
+
+  it("a failed delete says why and leaves the question open", async () => {
+    rpc.status.mockResolvedValue(overview({ items: [ITEM] }));
+    rpc.deleteItem.mockRejectedValue({ data: { reason: "vault_unreachable" } });
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-delete-i1"));
+    await userEvent.click(screen.getByTestId("vault-delete-yes"));
+    expect(await screen.findByTestId("vault-error")).toHaveTextContent("errors.vaultUnreachable");
+    expect(screen.getByTestId("vault-delete-confirm")).toBeInTheDocument();
+  });
+
+  it("does not ask again about a delete that went through when the refresh fails", async () => {
+    rpc.status.mockResolvedValue(overview({ items: [ITEM] }));
+    rpc.deleteItem.mockResolvedValue({ ok: true });
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-delete-i1"));
+    rpc.status.mockRejectedValue({ data: { reason: "vault_unreachable" } });
+    await userEvent.click(screen.getByTestId("vault-delete-yes"));
+    expect(await screen.findByTestId("vault-error")).toHaveTextContent("errors.vaultUnreachable");
+    expect(screen.queryByTestId("vault-delete-confirm")).not.toBeInTheDocument();
   });
 
   it("terms outdated: says uploads wait for a new agreement on the site", async () => {
