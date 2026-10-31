@@ -394,7 +394,7 @@ export const en: Translation = {
       {
         tag: 'Sheets and cover',
         title: 'Show the world, if you want',
-        body: 'Character and world sheets are private until you turn each one on, so you can check it for spoilers first. Pick a cover from your gallery. Notes are never sent.'
+        body: 'Character and world sheets are private until you turn each one on, so you can check it for spoilers first. Pick a cover from your gallery. Publishing never sends notes.'
       },
       {
         tag: 'Share',
@@ -404,7 +404,7 @@ export const en: Translation = {
       {
         tag: 'What goes',
         title: 'Public, and reviewed',
-        body: 'Published text, its illustrations and the sheets you chose are public, and the site sends them to the Anthropic API for content review. Unpublished episodes, notes, fact cards and agent memories are never sent.'
+        body: 'Published text, its illustrations and the sheets you chose are public, and the site sends them to the Anthropic API for content review. Publishing sends no unpublished episodes, notes, fact cards or agent memories.'
       }
     ]
   },
@@ -603,7 +603,7 @@ export const en: Translation = {
       },
       {
         q: 'Is my writing uploaded anywhere?',
-        a: 'Not by default, and never to a Linetta cloud — there is none. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch.'
+        a: 'Not by default, and Linetta needs no cloud. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, a work you upload to the private vault goes to the same operator’s server sealed so nobody there can read it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch.'
       },
       {
         q: 'What about iPad and Android?',
@@ -866,7 +866,7 @@ export const ko: Translation = {
       {
         tag: '시트와 표지',
         title: '세계관도, 원한다면',
-        body: '인물·세계관 시트는 하나씩 켜기 전까지 비공개이므로 스포일러를 먼저 확인할 수 있습니다. 표지는 갤러리에서 고릅니다. 메모는 전송되지 않습니다.'
+        body: '인물·세계관 시트는 하나씩 켜기 전까지 비공개이므로 스포일러를 먼저 확인할 수 있습니다. 표지는 갤러리에서 고릅니다. 메모는 게시로 보내지 않습니다.'
       },
       {
         tag: '공유',
@@ -876,7 +876,7 @@ export const ko: Translation = {
       {
         tag: '가는 것',
         title: '공개되고, 심사됩니다',
-        body: '게시한 본문과 삽화, 고른 시트는 공개되고, 사이트가 내용 심사를 위해 Anthropic API로 보냅니다. 게시하지 않은 회차, 메모, 팩트 카드, 에이전트 기억은 전송되지 않습니다.'
+        body: '게시한 본문과 삽화, 고른 시트는 공개되고, 사이트가 내용 심사를 위해 Anthropic API로 보냅니다. 게시하지 않은 회차, 메모, 팩트 카드, 에이전트 기억은 게시로 보내지 않습니다.'
       }
     ]
   },
@@ -1075,7 +1075,7 @@ export const ko: Translation = {
       },
       {
         q: '제 글이 어딘가로 업로드되나요?',
-        a: '기본값으로는 아니고, Linetta 클라우드는 애초에 없습니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보냅니다.'
+        a: '기본값으로는 아니고, Linetta는 클라우드가 없어도 씁니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가고, 비공개 보관함에 올린 작품은 같은 운영자의 서버로 가되 아무도 읽을 수 없게 암호화되어 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보냅니다.'
       },
       {
         q: 'iPad나 Android는요?',
@@ -1336,7 +1336,7 @@ export const ja: Translation = {
       {
         tag: 'シートと表紙',
         title: '世界観も、望むなら',
-        body: '人物・世界観のシートは一つずつオンにするまで非公開なので、先にネタバレを確かめられます。表紙はギャラリーから選びます。メモは送られません。'
+        body: '人物・世界観のシートは一つずつオンにするまで非公開なので、先にネタバレを確かめられます。表紙はギャラリーから選びます。メモは公開では送られません。'
       },
       {
         tag: '共有',
@@ -1346,7 +1346,7 @@ export const ja: Translation = {
       {
         tag: '送られるもの',
         title: '公開され、審査されます',
-        body: '公開した本文と挿絵、選んだシートは公開され、サイトが内容審査のため Anthropic API へ送ります。公開していない話、メモ、ファクトカード、エージェントの記憶は送られません。'
+        body: '公開した本文と挿絵、選んだシートは公開され、サイトが内容審査のため Anthropic API へ送ります。公開していない話、メモ、ファクトカード、エージェントの記憶は公開では送られません。'
       }
     ]
   },
@@ -1545,7 +1545,7 @@ export const ja: Translation = {
       },
       {
         q: '書いたものはどこかにアップロードされますか。',
-        a: '既定ではされず、Linetta のクラウドはそもそも存在しません。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出します。'
+        a: '既定ではされず、Linetta はクラウドがなくても使えます。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、非公開保管庫にアップロードした作品は同じ運営者のサーバーへ送られますが誰にも読めないよう暗号化されており、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出します。'
       },
       {
         q: 'iPad や Android はどうですか。',

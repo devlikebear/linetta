@@ -417,6 +417,45 @@ The shell only opens `https://works.marvin-42.com` in the browser
 (`EXTERNAL_URL_HOSTS`), so against a local server open the connect URL the
 Settings pane shows by hand.
 
+## Private vault
+
+The vault moves one work between a writer's devices through Linetta Works. The
+site stores ciphertext and cannot read it. It shares the publish connection and
+token and nothing else: it uses none of the public works or episodes routes, and
+no agent tool reaches it. The wire contract is the site's:
+`backend/pb_hooks/vault.pb.js` in the linetta-artworks repository.
+
+- `internal/vaultbundle` turns a work into a bundle and back with the same IDs.
+  `tables.go` classifies every table in the schema as included or `excluded`,
+  and a test fails on a new table that is neither, so **a migration that adds a
+  table has to decide**. Bundles carry the schema version, and an older app
+  refuses a newer bundle.
+- `internal/vault/crypto.go` is the sealed format: HKDF-SHA256 from the recovery
+  key, AES-256-GCM per blob, blob IDs as an HMAC of the plaintext.
+  **The format is permanent the day it ships.** `TestFixedVectors` pins it against
+  values computed outside the package; a new layout takes a new `FormatVersion`,
+  never an edit to this one.
+- `internal/vault/service.go` runs push, pull, conflict resolution and delete,
+  one at a time. `vault_items` (migration 0034) is this device's bookmark for each
+  work and travels in no bundle. A push compares revisions first, then commits and
+  uploads only what the server says is missing, so resuming needs no local state.
+  A pull validates everything before it touches the library, backs the library up,
+  and replaces the work in one transaction.
+- The recovery key lives in the secret store as `vault.key`, or in
+  `<home>/vault-key` (0600) only where there is no backend. A store that is locked
+  is an error, never "no key". `RecoveryKey` prints as a placeholder in every `fmt`
+  verb, and `vault.setup` is the one response that carries the text, only on the
+  call that makes a key. That key is not stored until the same call hands it back,
+  which is how the app knows the writer saved it.
+- `vault.*` RPCs are registered by `engineapp/vault_enabled.go`; the `mobile`
+  build registers refusing stubs (`vault_disabled.go`) and reports
+  `vault_available: false`. `vault.progress` reaches the renderer as
+  `vault-progress` (`ffi.rs`).
+- Tests run against the fake server in `internal/vault/fake_site_test.go`. Keep it
+  in step with the site's routes and error codes.
+
+`LINETTA_PUBLISH_BASE_URL` points the vault at a local server too.
+
 ## Plan documents
 
 `docs/plans/<feature>/` holds work orders for work that is still in progress:
