@@ -1,6 +1,7 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
+import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc } from "./types";
 import type {
   AcceptSuggestionsResult,
   ExtractionEstimate,
@@ -239,6 +240,7 @@ export const projects = {
 };
 
 export const nodes = {
+  setPlan: (id: string, plan: string) => rpcCall<{ ok: boolean }>("nodes.set_plan", { id, plan }),
   get: (id: string) => rpcCall<NodeRow>("nodes.get", { id }),
   updateContent: (id: string, doc: string, expectedContentVersion?: number) =>
     rpcCall<NodeRow>("nodes.update_content", {
@@ -704,6 +706,17 @@ export const direction = {
 };
 
 /** Continuity checks (story-assist Phase 2): engine-verified observations an agent recorded. */
+/** The work's ledger and part arcs (internal/ledger). */
+export const ledger = {
+  list: (projectId: string) => rpcCall<LedgerState>("ledger.list", { project_id: projectId }),
+  save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; subject?: string; body?: string; status?: LedgerStatus }) =>
+    rpcCall<LedgerEntry>("ledger.save", entry),
+  remove: (id: string) => rpcCall<{ ok: boolean }>("ledger.delete", { id }),
+  setArc: (arc: PartArc) => rpcCall<PartArc>("ledger.set_arc", {
+    node_id: arc.node_id, role: arc.role, goal: arc.goal, tension: arc.tension,
+  }),
+};
+
 export const continuity = {
   list: (projectId: string, nodeId?: string, statuses?: ContinuityStatus[]) =>
     rpcCall<{ checks: ContinuityCheck[] }>("continuity.list", {

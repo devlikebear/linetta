@@ -25,6 +25,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/illustration"
 	"github.com/devlikebear/linetta/engine/internal/importmd"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -143,6 +144,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	relationships := relationship.NewRepo(st)
 	facts := fact.NewRepo(st)
 	continuityRepo := continuity.NewRepo(st)
+	ledgerRepo := ledger.NewRepo(st, nodes)
 	manuscriptIndexer := manuscript.NewIndexer(st.DB())
 	manuscriptSearcher := manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer)
 	manuscriptEditor := manuscriptedit.NewService(nodes, snaps)
@@ -246,7 +248,8 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithFacts(facts).
 		WithSnapshots(snaps).
 		WithMemory(companionSvc).
-		WithIllustrations(illustrations)
+		WithIllustrations(illustrations).
+		WithCutPlans(ledgerRepo)
 
 	// The writer's own direction (story-assist Phase 1): the work's current
 	// focus and a scene's intent. Shared between the RPC handlers below
@@ -315,7 +318,9 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		// nothing anywhere goes red — which is what
 		// TestProductionStoryContextBuilderCarriesEverySource guards.
 		WithSkillSource(skillBriefSource{store: skillsStore}).
-		WithDirectionSource(directionBriefSource{repo: directionRepo, forecast: forecastSvc})
+		WithDirectionSource(directionBriefSource{repo: directionRepo, forecast: forecastSvc}).
+		WithLedgerSource(ledgerRepo).
+		WithStyleAnchorSource(styleAnchorSource{styles: styles, nodes: nodes})
 
 	// Linetta Works publishing (Phase 3). Registered here, before the MCP
 	// host, because the publish tools publish through the same service.
@@ -373,6 +378,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			beats:         beats,
 			threads:       threads,
 			continuity:    continuityRepo,
+			ledger:        ledgerRepo,
 			proposals:     proposalsSvc,
 			forecasts:     forecastSvc,
 			plot:          plotBuilder,
@@ -500,7 +506,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("visuals.set_art_style", handlers.SetArtStyle(visuals, clock))
 	s.Handle("style.get_rules", handlers.GetStyleRules(styles))
 	s.Handle("style.set_rules", handlers.SetStyleRules(styles, clock))
-	s.Handle("style.check", handlers.CheckStyle(styles, nodes))
+	s.Handle("style.check", handlers.CheckStyle(styles, nodes, settingsStore.StyleAvoidPhrases))
 	s.Handle("style.get_draft", handlers.GetStyleDraft(styles))
 	s.Handle("style.approve_draft", handlers.ApproveStyleDraft(styles, clock))
 	s.Handle("style.discard_draft", handlers.DiscardStyleDraft(styles))
@@ -508,6 +514,11 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("direction.set_focus", handlers.SetFocus(directionRepo, clock))
 	s.Handle("direction.get_scene_intent", handlers.GetSceneIntent(directionRepo))
 	s.Handle("direction.set_scene_intent", handlers.SetSceneIntent(directionRepo, clock))
+	s.Handle("ledger.list", handlers.ListLedger(ledgerRepo, nodes))
+	s.Handle("ledger.save", handlers.SaveLedgerEntry(ledgerRepo, clock))
+	s.Handle("ledger.delete", handlers.DeleteLedgerEntry(ledgerRepo))
+	s.Handle("ledger.set_arc", handlers.SetPartArc(ledgerRepo, clock))
+	s.Handle("nodes.set_plan", handlers.SetNodePlan(nodes))
 	s.Handle("continuity.list", handlers.ListContinuity(continuityRepo, nodes, entities, facts, beats))
 	// continuity.set_status fires continuity.changed, so a ContextPanel
 	// showing the open-observation badge for the scene the writer just

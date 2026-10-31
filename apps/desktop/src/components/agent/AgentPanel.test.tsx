@@ -6,6 +6,8 @@ import { readSource } from "../../test/readSource";
 import type { AgentHistoryRow, ProviderStatus } from "../../lib/types";
 
 const rpc = vi.hoisted(() => ({
+  proposalsList: vi.fn().mockResolvedValue({ proposals: [] }),
+  proposalsAccept: vi.fn().mockResolvedValue({ items: [] }),
   providersList: vi.fn(),
   agentUndo: vi.fn(),
   agentRun: vi.fn(),
@@ -33,6 +35,7 @@ vi.mock("../../lib/rpc", () => ({
   providers: { list: rpc.providersList },
   agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory },
   settings: { get: rpc.settingsGet },
+  proposals: { list: rpc.proposalsList, accept: rpc.proposalsAccept },
 }));
 
 // The approval card has its own tests (IllustrationRequestCard.test.tsx);
@@ -1112,6 +1115,18 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     await pressEnter();
 
     expect(screen.queryByTestId("agent-starters")).toBeNull();
+  });
+
+  it("says when suggestions are waiting and accepts them together", async () => {
+    rpc.proposalsList.mockResolvedValueOnce({ proposals: [{ items: [{ id: "i1" }, { id: "i2" }] }] });
+    await renderReady();
+
+    expect(screen.getByTestId("agent-proposals").textContent).toContain("count=2");
+    await act(async () => {
+      screen.getByTestId("agent-proposals-accept").click();
+    });
+    expect(rpc.proposalsAccept).toHaveBeenCalledWith(PROJECT_ID, ["i1", "i2"]);
+    expect(screen.queryByTestId("agent-proposals")).toBeNull();
   });
 
   it("keeps the review chips within reach after the first turn", async () => {

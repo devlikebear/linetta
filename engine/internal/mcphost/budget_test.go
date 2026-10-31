@@ -184,7 +184,7 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 			"(#132 trimmed them from 8282B to 7120B)", sum)
 	}
 
-	total := 0
+	total, ledgerTools := 0, 0
 	for name, b := range sizes {
 		// Keep the original ceiling intact; #154's two new tools have their own allowance.
 		if name == "linetta_get_character_visuals" || name == "linetta_build_illustration_prompt" {
@@ -208,6 +208,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		// story-assist Phase 2's report tool, Phase 3's propose tool, and
 		// Phase 4's save-forecast tool carry their own allowances below.
 		if name == "linetta_report_continuity" || name == "linetta_propose_story_ops" || name == "linetta_save_forecast" {
+			continue
+		}
+		if name == "linetta_list_ledger" || name == "linetta_edit_ledger" || name == "linetta_set_part_arc" {
+			ledgerTools += b
 			continue
 		}
 		total += b
@@ -281,9 +285,14 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// Phase 3 (3.A.2) added storyops.Op.Aliases, which linetta_apply_story_ops
 	// shares, measured at 27,446B — the ceiling moves up with it;
 	// linetta_report_continuity carries its own allowance above and is
-	// excluded from this total.
-	if total > 27500 {
-		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 27500B "+
+	// excluded from this total. The long-form work added the plan field that
+	// linetta_apply_story_ops and linetta_write_summary share, measured at
+	// 27,618B; the ledger tools carry their own allowance, 4,500B.
+	if ledgerTools > 4500 {
+		t.Errorf("the ledger tools cost %dB, want <= 4500B", ledgerTools)
+	}
+	if total > 27650 {
+		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 27650B "+
 			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}
 }

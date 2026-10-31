@@ -152,6 +152,9 @@ func (d ToolDeps) analyzeStyle(ctx context.Context, _ *mcp.CallToolRequest, in a
 		return nil, analyzeStyleOutput{}, err
 	}
 	scenes := style.ScenesUnder(nodes, in.NodeID)
+	if d.Settings != nil {
+		rules.AvoidPhrases = append(rules.AvoidPhrases, d.Settings.StyleAvoidPhrases()...)
+	}
 	rep := style.Check(scenes, rules)
 
 	limit := in.Limit

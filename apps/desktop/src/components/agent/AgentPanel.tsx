@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { Bot, ImagePlus, Quote, Send, Square, X } from "lucide-react";
 import { Link } from "react-router-dom";
-import { agent as agentApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
-import type { AgentHistoryRow, AgentRunStatus, ProviderStatus } from "../../lib/types";
+import { agent as agentApi, proposals as proposalsApi, providers as providersApi, settings as settingsApi } from "../../lib/rpc";
+import type { AgentHistoryRow, AgentRunStatus, ProposalsChangedPayload, ProviderStatus } from "../../lib/types";
 import { useI18n } from "../../lib/i18n";
 import { toolKind, toolLabelKey, toolVerbKey } from "../../lib/agentTools";
 import { reasonMessage, rpcErrorMessage } from "../../lib/rpcMessage";
@@ -423,6 +423,8 @@ interface Props {
    *  typing over it is never silently reverted on an unrelated re-render. */
   externalDraft?: string;
   externalDraftNonce?: number;
+  /** Opens the suggestions inbox, from the line that says some are waiting. */
+  onOpenProposals?: () => void;
   /** Called once the panel has applied externalDraft/externalDraftNonce to
    *  the composer. The caller's job is to clear whatever it fed in (set its
    *  own request state back to null) — this panel unmounts on close, so the
@@ -447,6 +449,7 @@ export function AgentPanel({
   externalDraftNonce,
   onExternalDraftApplied,
   onOpenImageSettings,
+  onOpenProposals,
 }: Props) {
   const { t } = useI18n();
   // "Ready" means the active row is both configured AND consented. A
@@ -865,6 +868,30 @@ export function AgentPanel({
         // The log as it stands is still a true account, just not a settled one.
       });
   }
+
+  // What the agent proposed waits in an inbox a writer may never open, and an
+  // unaccepted character is missing from every later brief. So the panel where
+  // the proposing happened says so, and lets the writer take the lot.
+  const [pendingProposals, setPendingProposals] = useState<string[]>([]);
+  const loadPendingProposals = useCallback(() => {
+    proposalsApi.list(projectId, ["pending"]).then((res) => {
+      setPendingProposals(res.proposals.flatMap((batch) => batch.items).map((item) => item.id));
+    }).catch(() => {
+      /* a nicety: without it the badge in Story World still counts them */
+    });
+  }, [projectId]);
+  useEffect(() => { loadPendingProposals(); }, [loadPendingProposals]);
+  useEngineEvent<ProposalsChangedPayload>("proposals-changed", (event) => {
+    if (event.project_id === projectId) loadPendingProposals();
+  });
+  const acceptPendingProposals = useCallback(async () => {
+    try {
+      await proposalsApi.accept(projectId, pendingProposals);
+    } catch (err) {
+      setSendError(rpcErrorMessage(err, t));
+    }
+    loadPendingProposals();
+  }, [loadPendingProposals, pendingProposals, projectId, t]);
 
   useEngineEvent<AgentDeltaPayload>("agent-delta", whileNotSending<AgentDeltaPayload>((payload) => {
     if (!acceptRun(payload.run_id)) return;
@@ -1578,6 +1605,17 @@ export function AgentPanel({
             {sendError}
           </p>
         ) : null}
+        {reviewToolsEnabled && pendingProposals.length > 0 && !busy ? (
+          <div className="agent-proposals" data-testid="agent-proposals" role="status">
+            <span>{t("agentPanel.proposals.waiting", { count: pendingProposals.length })}</span>
+            <button type="button" className="btn ghost sm" onClick={() => onOpenProposals?.()}>
+              {t("agentPanel.proposals.open")}
+            </button>
+            <button type="button" className="btn sm" data-testid="agent-proposals-accept" onClick={() => void acceptPendingProposals()}>
+              {t("agentPanel.proposals.acceptAll")}
+            </button>
+          </div>
+        ) : null}
         {attachment && !busy && !draft.trim() ? (
           // With a passage attached, the useful starts are about that
           // passage. Same contract as the chips below: they fill the
@@ -1657,6 +1695,22 @@ export function AgentPanel({
           // check, which is after the first turn, so they stay within reach
           // whenever the composer is free.
           <div className="ai-chiprow agent-starters" data-testid="agent-followups">
+            <button
+              type="button"
+              className="chip"
+              data-testid="agent-followup-reviewEpisode"
+              onClick={() => setDraft(t("agentPanel.starters.reviewEpisode.prompt"))}
+            >
+              {t("agentPanel.starters.reviewEpisode.label")}
+            </button>
+            <button
+              type="button"
+              className="chip"
+              data-testid="agent-followup-reviewPart"
+              onClick={() => setDraft(t("agentPanel.starters.reviewPart.prompt"))}
+            >
+              {t("agentPanel.starters.reviewPart.label")}
+            </button>
             <button
               type="button"
               className="chip"

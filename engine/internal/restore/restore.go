@@ -318,6 +318,7 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	}
 	if err := copyRows(ctx, sdb, tx, "project_style_rules", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
 		row["project_id"] = newProjectID
+		row["anchor_node_id"] = nodeMap[asString(row["anchor_node_id"])]
 		return row, true
 	}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy style rules: %w", err)
@@ -439,6 +440,35 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 			return row, true
 		}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy scene_intents: %w", err)
+	}
+
+	// story_ledger and part_arcs: the work's own account of itself, which no
+	// agent can draft again from the prose. A ledger entry survives losing a
+	// scene it points at; a part's arc means nothing without its part.
+	if err := copyRows(ctx, sdb, tx, "story_ledger", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		row["id"] = uuid.NewString()
+		row["project_id"] = newProjectID
+		for _, col := range []string{"planted_node_id", "due_node_id", "paid_node_id"} {
+			if n, ok := nodeMap[asString(row[col])]; ok {
+				row[col] = n
+			} else {
+				row[col] = nil
+			}
+		}
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy story_ledger: %w", err)
+	}
+	if err := copyRows(ctx, sdb, tx, "part_arcs", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		n, ok := nodeMap[asString(row["node_id"])]
+		if !ok {
+			return nil, false
+		}
+		row["node_id"] = n
+		row["project_id"] = newProjectID
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy part_arcs: %w", err)
 	}
 
 	if err := copyRows(ctx, sdb, tx, "node_snapshots",

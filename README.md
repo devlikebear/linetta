@@ -130,6 +130,39 @@ history keeps a note of how many there were, not the pictures. The Claude Code
 provider takes text only and says so. Ask the agent to keep an attached image
 as a character's reference and it saves it to that character's visual sheet.
 
+### The story ledger and parts
+
+A long work needs more kept than a brief can quote. Each scene has a **plan**,
+separate from its summary, so writing the scene does not erase what it was meant
+to do. Under Story World → Story ledger, a work keeps what it owes the reader
+(foreshadowing, running gags, open questions) and what is settled (decisions,
+numbers, the timeline, who knows what). Agents record entries as they write, with
+`linetta_edit_ledger`; a quote has to be in the scene it names, or the entry is
+refused. You can add, drop or delete any of it. Each part can have a role, a goal
+and a target tension, set there or with `linetta_set_part_arc`.
+
+The brief carries the current part's job, how many scenes are left in it, what is
+due now, what is still owed and what is settled. It never reads ahead: nothing
+planted after the open scene appears. If a change to the outline deletes a
+planned episode, its plan moves to the ledger's cut plans. The ledger and part
+arcs are in backups and travel with a restored work.
+
+### Reviewing finished episodes
+
+The agent reads an episode as a new reader before handing it over. "Review this
+episode" and "Critique this part" in the agent panel ask for it directly, and
+findings land in the continuity list, which also takes motive, readability and
+pacing. **Review finished episodes independently**, under Settings → Skills, adds
+a separate provider call after a turn that wrote prose: it reads the last few
+scenes with no memory of writing them, using read-only tools, and records what it
+finds. It sends the manuscript again, so it is metered by your provider and is
+off by default. It does not run with the Claude Code provider.
+
+The style check also reports paired contrast and narrator explanation in Korean
+prose, a sentence repeated across scenes, and consecutive scenes that end the same
+way. It only reports them. You can name one scene as the style to match, and keep
+a list of phrases to avoid in every work under Settings → Skills.
+
 ### Your direction
 
 A work has a **current focus** — what to concentrate on for the next few
@@ -225,7 +258,7 @@ without you asking for it.
 
 **You can switch the memory, skills, review, and visual editing tools off
 entirely.** Every tool's full description travels in every request, so
-Linetta's thirty-six tools are a standing cost on every turn — and the memory
+Linetta's thirty-nine tools are a standing cost on every turn — and the memory
 tool, the two skills tools, and the three check-and-propose tools together are
 a meaningful share of it. **Settings → Tool budget** says how many tools the
 agent currently gets and what each group costs, and turns each group off for

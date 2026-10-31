@@ -45,6 +45,8 @@ var WriteToolNames = []string{
 	"linetta_report_continuity",
 	"linetta_propose_story_ops",
 	"linetta_save_forecast",
+	"linetta_edit_ledger",
+	"linetta_set_part_arc",
 }
 
 // ---------- linetta_create_work ----------
@@ -116,6 +118,7 @@ type writeSummaryInput struct {
 	// ExpectedContentVersion is required for scenes only — containers and the
 	// synopsis have no version tracking their children's edits.
 	ExpectedContentVersion *int `json:"expected_content_version,omitempty" jsonschema:"for a scene, the content_version from linetta_read_scene"`
+	AsPlan                 bool `json:"as_plan,omitempty" jsonschema:"store as the scene's plan, which writing the scene never overwrites"`
 }
 
 func (in writeSummaryInput) scope() (string, string) { return in.ProjectID, in.NodeID }
@@ -178,6 +181,7 @@ func (d ToolDeps) registerWriteTools(s *mcp.Server, groups ToolGroups) {
 		d.registerContinuityWriteTools(s)
 		d.registerProposalWriteTools(s)
 		d.registerForecastWriteTools(s)
+		d.registerLedgerWriteTools(s)
 	}
 
 	d.registerReviseTool(s)
@@ -371,6 +375,17 @@ func (d ToolDeps) writeSummary(ctx context.Context, _ *mcp.CallToolRequest, in w
 	}
 	if nodeID != "" && projectID != "" {
 		return toolErr("pass either node_id or project_id, not both"), writeSummaryOutput{}, nil
+	}
+	if in.AsPlan {
+		n, errResult := d.requireNode(ctx, nodeID)
+		if errResult != nil {
+			return errResult, writeSummaryOutput{}, nil
+		}
+		if err := d.Nodes.SetPlan(ctx, n.ID, summary); err != nil {
+			return toolErr("could not write the plan: %v", err), writeSummaryOutput{}, nil
+		}
+		d.notifyChanged(n.ProjectID, "linetta_write_summary", []string{n.ID}, "")
+		return nil, writeSummaryOutput{Target: "plan", NodeID: n.ID, Summary: summary}, nil
 	}
 
 	if nodeID == "" {

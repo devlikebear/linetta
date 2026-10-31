@@ -214,6 +214,13 @@ func buildUser(c Context) string {
 		b.WriteString(c.StyleNotes)
 		b.WriteString("\n\n")
 	}
+	if anchor := strings.TrimSpace(c.StyleAnchor); anchor != "" {
+		b.WriteString(fmt.Sprintf(langPick(lang,
+			"## 문체 기준\n작가가 정한 기준 원고는 %s입니다. 새로 쓰거나 고치기 전에 읽고 나란히 맞추십시오.\n\n",
+			"## Style Anchor\nThe writer set %s as the style to match. Read it before you write or revise, and hold your prose against it.\n\n",
+			"## 文体の基準\n作家が基準に定めた原稿は %s です。書く前、直す前に読み、並べて合わせてください。\n\n"), anchor))
+	}
+	b.WriteString(renderLedger(c.Ledger, lang))
 
 	if len(c.Hierarchical.NearbyLeafSummaries) > 0 {
 		b.WriteString(langPick(lang, "## 직전·직후 씬 발췌\n", "## Adjacent Scene Excerpts\n", "## 前後シーンの抜粋\n"))
@@ -235,7 +242,8 @@ func buildUser(c Context) string {
 		b.WriteString(fmt.Sprintf(langPick(lang, "## 현재 씬: %s\n", "## Current Scene: %s\n", "## 現在のシーン: %s\n"), node.DisplayBreadcrumb(c.SceneLabel, lang)))
 		b.WriteString(c.SceneText)
 		b.WriteString("\n\n")
-	} else if plan := strings.TrimSpace(c.ScenePlan); plan != "" {
+	}
+	if plan := strings.TrimSpace(c.ScenePlan); plan != "" {
 		b.WriteString(fmt.Sprintf(langPick(lang, "## 현재 씬 계획: %s\n", "## Current Scene Plan: %s\n", "## 現在のシーンの計画: %s\n"), node.DisplayBreadcrumb(c.SceneLabel, lang)))
 		b.WriteString(plan)
 		b.WriteString("\n\n")
@@ -548,6 +556,49 @@ func renderDirection(d DirectionBrief, lang string) string {
 		b.WriteString(renderPlannedBranch(*d.PlannedBranch, lang))
 	}
 	b.WriteString("\n")
+	return b.String()
+}
+
+// renderLedger renders the current part's job and what the work owes and has
+// settled. The entries themselves are in the manuscript's terms, so only the
+// headings change with the app language.
+func renderLedger(l LedgerBrief, lang string) string {
+	if l.Empty() {
+		return ""
+	}
+	var b strings.Builder
+	if p := l.Part; p != nil {
+		fmt.Fprintf(&b, langPick(lang, "## 지금 쓰는 부: %s\n", "## Current Part: %s\n", "## いま書いている部: %s\n"), p.Label)
+		if p.Role != "" {
+			b.WriteString(langPick(lang, "역할: ", "Role: ", "役割: ") + p.Role + "\n")
+		}
+		if p.Goal != "" {
+			b.WriteString(langPick(lang, "이 부가 끝날 때까지: ", "By the end of this part: ", "この部の終わりまでに: ") + p.Goal + "\n")
+		}
+		if p.Tension > 0 {
+			fmt.Fprintf(&b, langPick(lang, "목표 긴장도: %d/10\n", "Target tension: %d/10\n", "目標の緊張度: %d/10\n"), p.Tension)
+		}
+		fmt.Fprintf(&b, langPick(lang, "이 부의 남은 화: %d\n\n", "Scenes left in this part: %d\n\n", "この部の残り話数: %d\n\n"), p.ScenesLeft)
+	}
+	section := func(heading string, lines []string) {
+		if len(lines) == 0 {
+			return
+		}
+		b.WriteString(heading + "\n")
+		for _, line := range lines {
+			b.WriteString("- " + line + "\n")
+		}
+		b.WriteString("\n")
+	}
+	section(langPick(lang, "## 지금 회수할 것", "## Due Now", "## いま回収するもの"), l.Due)
+	section(langPick(lang, "## 열려 있는 약속", "## Still Owed", "## 未回収の約束"), l.Open)
+	section(langPick(lang, "## 정해진 사실", "## Settled", "## 確定した事項"), l.Settled)
+	if l.Omitted > 0 {
+		fmt.Fprintf(&b, langPick(lang,
+			"원장 항목 %d건은 생략했습니다. linetta_list_ledger로 볼 수 있습니다.\n\n",
+			"%d ledger entries left out; linetta_list_ledger shows them.\n\n",
+			"台帳の %d 件を省きました。linetta_list_ledger で見られます。\n\n"), l.Omitted)
+	}
 	return b.String()
 }
 

@@ -1,3 +1,4 @@
+import { ScenePlanField } from "./ScenePlanField";
 import { useEffect, useRef, useState } from "react";
 import type { NodeRow, Project, Entity, EntityKind } from "../lib/types";
 import { projects as projectsApi, continuity as continuityApi } from "../lib/rpc";
@@ -229,6 +230,7 @@ export function ContextPanel({ project, node, charCount, todayChars = null, epis
           collapsed={directionCollapsed}
           onToggleCollapsed={toggleDirectionCollapsed}
         />
+        <ScenePlanField nodeId={node.id} plan={node.plan ?? ""} />
 
         {/* 이 씬 — stats */}
         <div className="sec">

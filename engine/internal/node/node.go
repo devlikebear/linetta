@@ -35,6 +35,7 @@ type Node struct {
 	ContentVersion    int     `json:"content_version"`
 	SummaryForVersion int     `json:"summary_for_version"`
 	SummaryWritten    bool    `json:"summary_written"` // written by an agent or an import, not derived; see SummaryUsable
+	Plan              string  `json:"plan"`            // what the scene is meant to do; survives the scene being written
 	CreatedAt         int64   `json:"created_at"`
 	UpdatedAt         int64   `json:"updated_at"`
 }
