@@ -276,11 +276,16 @@ func (c *agentController) History(ctx context.Context, projectID string, limit i
 	if err != nil {
 		return nil, err
 	}
+	replayStart, err := c.svc.ReplayStart(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]agentHistoryRow, 0, len(msgs))
 	for _, m := range msgs {
 		out = append(out, agentHistoryRow{
 			ID: m.ID, ProjectID: m.ProjectID, NodeID: m.NodeID, NodeLabel: m.NodeLabel,
 			RunID: m.RunID, Role: m.Role, Status: m.Status, Content: m.Content, CreatedAt: m.CreatedAt,
+			ReplayStart: m.ID == replayStart,
 		})
 	}
 	return json.Marshal(out)
@@ -302,6 +307,9 @@ type agentHistoryRow struct {
 	Status    string `json:"status"`
 	Content   string `json:"content"`
 	CreatedAt int64  `json:"created_at"`
+	// ReplayStart marks the first message the model still gets. Set only when
+	// earlier messages no longer go to it.
+	ReplayStart bool `json:"replay_start,omitempty"`
 }
 
 func (c *agentController) Clear(ctx context.Context, projectID string) error {

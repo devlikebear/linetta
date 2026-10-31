@@ -351,6 +351,7 @@ func (s *Service) loop(ctx context.Context, st loopState) {
 	repeats := 0
 
 	for {
+		clearOldToolResults(msgs)
 		resp, err := st.client.Chat(ctx, msgs, llm.ChatOptions{
 			Tools:   st.schemas,
 			OnDelta: func(text string) { s.streamDelta(st, text) },
@@ -507,6 +508,7 @@ func (s *Service) wrapUp(ctx context.Context, st loopState, msgs []llm.ChatMessa
 		})
 	}
 	msgs = append(msgs, llm.ChatMessage{Role: "user", Content: fmt.Sprintf(wrapUpPrompt, why)})
+	clearOldToolResults(msgs)
 
 	// The schemas stay on the request — providers reject a history holding
 	// tool calls when no tools are declared — and the choice is what forbids
@@ -575,7 +577,11 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 		}
 		filtered = append(filtered, m)
 	}
-	msgs = append(msgs, s.replayHistory(st.projectID, filtered)...)
+	replay, cut := s.replayHistory(st.projectID, filtered)
+	if cut {
+		msgs[0].Content += historyCutNotice
+	}
+	msgs = append(msgs, replay...)
 
 	scope := scopeLine(ctx, s.deps.Scope, st.req.ProjectID, st.req.NodeID)
 	msg := llm.ChatMessage{Role: "user", Content: scope + "\n\n" + st.req.Prompt}

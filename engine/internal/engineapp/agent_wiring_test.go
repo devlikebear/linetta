@@ -3,11 +3,17 @@
 package engineapp
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/agent"
+	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
+	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
 // The five agent.* registrations, the agent_available capability flag, and
@@ -256,5 +262,51 @@ func TestProductionAgentDepsCarryEveryCollaborator(t *testing.T) {
 	}
 	if src.store != app.mcpTools.Skills {
 		t.Error("the agent's skill source and the MCP tools hold different *agentskills.Store instances — there is one skills directory, so a skill written through linetta_edit_skill would not appear in the agent's own list")
+	}
+}
+
+// agent.history is how the panel learns where the replay begins: one row in a
+// cut conversation carries replay_start, and it is not the conversation's first.
+func TestAgentHistory_marksWhereTheReplayBegins(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(ctx, t.TempDir()+"/test.db")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if _, err := st.DB().ExecContext(ctx, `
+INSERT INTO projects (id, title, genres, length_target, default_pov, created_at, updated_at)
+VALUES ('p1', 'Test', '["SF"]', 'novel', 'first', 0, 0)`); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	repo := companion.NewHistoryRepo(st.DB())
+	for i := range 60 {
+		if err := repo.Append(ctx, companion.HistoryMessage{
+			ProjectID: "p1", RunID: fmt.Sprintf("r%d", i), Role: "user", Intent: "agent",
+			Content: strings.Repeat("가", 1000), Status: companion.HistoryStatusDone, CreatedAt: int64(i + 1),
+		}); err != nil {
+			t.Fatalf("Append: %v", err)
+		}
+	}
+
+	c := &agentController{svc: agent.New(agent.Deps{History: repo})}
+	raw, err := c.History(ctx, "p1", 100)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	var rows []struct {
+		ReplayStart bool `json:"replay_start"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		t.Fatalf("decode history: %v", err)
+	}
+	marked := []int{}
+	for i, r := range rows {
+		if r.ReplayStart {
+			marked = append(marked, i)
+		}
+	}
+	if len(marked) != 1 || marked[0] == 0 {
+		t.Fatalf("replay_start on rows %v of %d, want one row after the first", marked, len(rows))
 	}
 }

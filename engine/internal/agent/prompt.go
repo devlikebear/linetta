@@ -28,6 +28,13 @@ import (
 // summarize already count runes for the same reason.
 const historyBudget = 40000
 
+// historyCutNotice closes the system prompt once the replay no longer starts
+// at the beginning of the conversation. It carries no count, so it stays the
+// same from turn to turn and the prefix the provider cached survives it.
+const historyCutNotice = "\n\nThe start of this conversation is no longer in front of you. " +
+	"The writer can still see it in the panel, so if they refer to something you cannot see here, " +
+	"say so and ask rather than guess. The work's current state is always available through your tools."
+
 // ScopeLookup resolves the names in the scope line. An interface rather than
 // the repos themselves so this package stays out of project/node — and so the
 // prompt can be tested without a database.
@@ -428,16 +435,7 @@ const historyLoadRows = 2000
 // historyHeadroom for why. Otherwise it is refilled newest-first within
 // historyBudget. The id it began at is returned for the next turn.
 func priorMessages(msgs []companion.HistoryMessage, start string) ([]llm.ChatMessage, string) {
-	replayable := make([]companion.HistoryMessage, 0, len(msgs))
-	for _, m := range msgs {
-		if m.Role != "user" && m.Role != "assistant" {
-			continue
-		}
-		if strings.TrimSpace(m.Content) == "" {
-			continue
-		}
-		replayable = append(replayable, m)
-	}
+	replayable := replayableMessages(msgs)
 
 	from := windowFrom(replayable, start)
 	if from < 0 {
@@ -464,6 +462,29 @@ func priorMessages(msgs []companion.HistoryMessage, start string) ([]llm.ChatMes
 		return kept, ""
 	}
 	return kept, replayable[from].ID
+}
+
+// replayableMessages is the part of the transcript priorMessages can replay.
+func replayableMessages(msgs []companion.HistoryMessage) []companion.HistoryMessage {
+	out := make([]companion.HistoryMessage, 0, len(msgs))
+	for _, m := range msgs {
+		if m.Role != "user" && m.Role != "assistant" {
+			continue
+		}
+		if strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// historyCut reports whether a window that begins at start, as priorMessages
+// returned it, leaves earlier messages out. An empty start with messages to
+// replay means none of them fit.
+func historyCut(msgs []companion.HistoryMessage, start string) bool {
+	replayable := replayableMessages(msgs)
+	return len(replayable) > 0 && replayable[0].ID != start
 }
 
 // windowFrom is the index of the message with id start, when the window from

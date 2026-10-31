@@ -1354,6 +1354,28 @@ describe("AgentPanel history restore (#95 Task 7)", () => {
     expect(lines[0].textContent).not.toContain("engine json");
   });
 
+  it("marks where the conversation stops going to the agent", async () => {
+    await restoreWith(
+      historyRow({ role: "user", content: "오래된 말" }),
+      historyRow({ role: "assistant", content: "오래된 답" }),
+      historyRow({ role: "user", content: "최근 말", replay_start: true }),
+      historyRow({ role: "assistant", content: "최근 답" }),
+    );
+
+    const notice = await screen.findByText("agentPanel.restore.forgotten");
+    const log = screen.getByTestId("agent-log");
+    expect(log.textContent?.indexOf("오래된 답")).toBeLessThan(log.textContent!.indexOf("agentPanel.restore.forgotten"));
+    expect(log.textContent?.indexOf("agentPanel.restore.forgotten")).toBeLessThan(log.textContent!.indexOf("최근 말"));
+    expect(notice.classList.contains("agent-notice-forgotten")).toBe(true);
+  });
+
+  it("draws no such line while the whole conversation still goes to the agent", async () => {
+    await restoreWith(historyRow({ role: "user", content: "짧은 대화" }));
+
+    expect(await screen.findByText("짧은 대화")).toBeTruthy();
+    expect(screen.queryByText("agentPanel.restore.forgotten")).toBeNull();
+  });
+
   it("shows a restored tool call as failed when its ok flag is false", async () => {
     await restoreWith(
       historyRow({ role: "user", content: "확인용" }),

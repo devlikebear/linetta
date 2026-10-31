@@ -178,13 +178,30 @@ func New(d Deps) *Service {
 }
 
 // replayHistory is priorMessages for one work, remembering where its window
-// began for the next turn.
-func (s *Service) replayHistory(projectID string, msgs []companion.HistoryMessage) []llm.ChatMessage {
+// began for the next turn. cut says earlier messages were left out.
+func (s *Service) replayHistory(projectID string, msgs []companion.HistoryMessage) (replay []llm.ChatMessage, cut bool) {
 	s.historyMu.Lock()
 	defer s.historyMu.Unlock()
 	replay, start := priorMessages(msgs, s.historyStarts[projectID])
 	s.historyStarts[projectID] = start
-	return replay
+	return replay, historyCut(msgs, start)
+}
+
+// ReplayStart is the id of the message the next turn's replay begins at when
+// earlier messages fall outside it, and "" when the model still gets the whole
+// conversation. It only reads: opening the panel must not move the window.
+func (s *Service) ReplayStart(ctx context.Context, projectID string) (string, error) {
+	msgs, err := s.tr.load(ctx, projectID, historyLoadRows)
+	if err != nil {
+		return "", err
+	}
+	s.historyMu.Lock()
+	defer s.historyMu.Unlock()
+	_, start := priorMessages(msgs, s.historyStarts[projectID])
+	if !historyCut(msgs, start) {
+		return "", nil
+	}
+	return start, nil
 }
 
 // Close tears down the tool session. It cancels every turn still running,

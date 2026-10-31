@@ -136,7 +136,14 @@
 .agent-notice-cancelled,
 .agent-notice-interrupted,
 .agent-notice-failed,
+.agent-notice-forgotten,
 .agent-notice-restored { color: var(--muted); }
+.agent-notice-forgotten {
+  margin: 8px 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  text-align: center;
+}
 .agent-notice a { color: var(--accent-deep); }
 
 /* The working line: the last thing in the log for as long as a turn is

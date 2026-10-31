@@ -841,6 +841,9 @@ export interface AgentHistoryRow {
   status: string;
   content: string;
   created_at: number;
+  /** The first message the model still gets. Set only when earlier messages
+   *  no longer go to it. */
+  replay_start?: boolean;
 }
 
 export type ThemePreference = "system" | "light" | "dark";
