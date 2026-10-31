@@ -64,6 +64,8 @@ type ContextBuilder struct {
 	skillSource         SkillSource
 	referenceSource     ReferenceSource
 	directionSource     DirectionSource
+	ledgerSource        LedgerSource
+	styleAnchorSource   StyleAnchorSource
 	projects            *project.Repo
 	nodes               *node.Repo
 	mentions            *mention.Repo
@@ -226,6 +228,29 @@ func (b *ContextBuilder) WithReferenceSource(s ReferenceSource) *ContextBuilder 
 	return b
 }
 
+// LedgerSource supplies the work's ledger for the brief. Optional.
+type LedgerSource interface {
+	ContextLedger(ctx context.Context, projectID, nodeID string) (LedgerBrief, error)
+}
+
+// StyleAnchorSource names the scene the writer set as the style to match.
+// Optional.
+type StyleAnchorSource interface {
+	StyleAnchorLabel(ctx context.Context, projectID string) (string, error)
+}
+
+// WithLedgerSource wires the optional ledger section.
+func (b *ContextBuilder) WithLedgerSource(s LedgerSource) *ContextBuilder {
+	b.ledgerSource = s
+	return b
+}
+
+// WithStyleAnchorSource wires the optional style anchor line.
+func (b *ContextBuilder) WithStyleAnchorSource(s StyleAnchorSource) *ContextBuilder {
+	b.styleAnchorSource = s
+	return b
+}
+
 // WithDirectionSource wires the optional writer-direction section (the
 // work's current focus and this scene's intent).
 func (b *ContextBuilder) WithDirectionSource(s DirectionSource) *ContextBuilder {
@@ -343,11 +368,24 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			references = got
 		}
 	}
-	// An unwritten scene's summary is its plan; once the scene has a body the
-	// body says more, and the summary is only a shorter copy of it.
-	scenePlan := ""
-	if strings.TrimSpace(sceneText) == "" {
+	// The plan stays in view after the scene is written, so a revision can be
+	// held against what the scene was for. A scene with no plan of its own and
+	// no body may still say what it is for in its summary.
+	scenePlan := strings.TrimSpace(n.Plan)
+	if scenePlan == "" && strings.TrimSpace(sceneText) == "" {
 		scenePlan = strings.TrimSpace(n.Summary)
+	}
+	var ledgerBrief LedgerBrief
+	if b.ledgerSource != nil {
+		if got, err := b.ledgerSource.ContextLedger(ctx, n.ProjectID, nodeID); err == nil {
+			ledgerBrief = got
+		}
+	}
+	styleAnchor := ""
+	if b.styleAnchorSource != nil {
+		if got, err := b.styleAnchorSource.StyleAnchorLabel(ctx, n.ProjectID); err == nil {
+			styleAnchor = got
+		}
 	}
 	var direction DirectionBrief
 	if b.directionSource != nil {
@@ -379,6 +417,8 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		SceneLabel:  n.Label,
 		SceneText:   sceneText,
 		ScenePlan:   scenePlan,
+		Ledger:      ledgerBrief,
+		StyleAnchor: styleAnchor,
 		PrevSummary: prevSummary,
 		Project: ProjectMeta{
 			Genres:       proj.Genres,
@@ -549,6 +589,7 @@ func ApplyContextSelection(c Context) Context {
 	}
 	if !s.Enabled(ContextKeyStyleNotes) {
 		c.StyleNotes = ""
+		c.StyleAnchor = ""
 	}
 	if !s.Enabled(ContextKeyFacts) {
 		c.Facts = nil
@@ -570,6 +611,9 @@ func ApplyContextSelection(c Context) Context {
 	// comment in types.go.
 	if !s.Enabled(ContextKeyDirection) {
 		c.Direction = DirectionBrief{}
+	}
+	if !s.Enabled(ContextKeyLedger) {
+		c.Ledger = LedgerBrief{}
 	}
 	return c
 }
@@ -618,7 +662,7 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 				continue
 			}
 			lf := leaves[j]
-			body, stale := freshLeafSummary(lf)
+			body, stale := nearbyBody(lf)
 			if body == "" {
 				continue
 			}
@@ -822,6 +866,15 @@ func (b *ContextBuilder) loadRelatedScenes(ctx context.Context, cur node.Node, e
 		}
 	}
 	return out, nil
+}
+
+// nearbyBody is what the brief says of an adjacent scene: its plan until it has
+// been written, then its summary.
+func nearbyBody(n node.Node) (string, bool) {
+	if plan := strings.TrimSpace(n.Plan); plan != "" && strings.TrimSpace(docToPlainText(n.ContentDoc)) == "" {
+		return plan, false
+	}
+	return freshLeafSummary(n)
 }
 
 // freshLeafSummary returns the cached summary when it is worth reading — fresh,

@@ -30,6 +30,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 vi.mock("../../lib/rpc", () => ({
+  proposals: { list: vi.fn().mockResolvedValue({ proposals: [] }), accept: vi.fn() },
   providers: { list: rpc.providersList },
   agent: {
     run: rpc.agentRun,

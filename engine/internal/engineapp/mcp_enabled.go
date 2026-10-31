@@ -17,6 +17,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/illustration"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mcphost"
@@ -69,6 +70,7 @@ type mcpToolRepos struct {
 	beats      *beat.Repo
 	threads    *thread.Repo
 	continuity *continuity.Repo
+	ledger     *ledger.Repo
 	// proposals holds story-structure change candidates waiting for the
 	// writer to accept them one by one (story-assist Phase 3). Shared with
 	// the proposals.* RPC handlers — one Service, one undo-free apply path.
@@ -136,6 +138,7 @@ func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 		Beats:                deps.repos.beats,
 		Threads:              deps.repos.threads,
 		Continuity:           deps.repos.continuity,
+		Ledger:               deps.repos.ledger,
 		Proposals:            deps.repos.proposals,
 		Forecasts:            deps.repos.forecasts,
 		Plot:                 deps.repos.plot,

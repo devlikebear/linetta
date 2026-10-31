@@ -16,6 +16,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
 	"github.com/devlikebear/linetta/engine/internal/illustration"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
 	"github.com/devlikebear/linetta/engine/internal/mention"
@@ -59,6 +60,7 @@ type mcpToolRepos struct {
 	beats        *beat.Repo
 	threads      *thread.Repo
 	continuity   *continuity.Repo
+	ledger       *ledger.Repo
 	proposals    *proposals.Service
 	forecasts    *forecast.Service
 	plot         *plot.Builder

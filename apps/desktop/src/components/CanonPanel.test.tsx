@@ -29,6 +29,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/rpc", () => ({
+  nodes: { listTree: vi.fn().mockResolvedValue([]) },
+  ledger: { list: vi.fn().mockResolvedValue({ entries: [], parts: [], labels: {} }) },
   visuals: mocks.visuals,
   // I18nProvider reads the language through the same module.
   settings: { get: mocks.settingsGet },

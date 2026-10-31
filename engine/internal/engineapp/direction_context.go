@@ -5,7 +5,9 @@ import (
 
 	"github.com/devlikebear/linetta/engine/internal/direction"
 	"github.com/devlikebear/linetta/engine/internal/forecast"
+	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
+	"github.com/devlikebear/linetta/engine/internal/style"
 )
 
 // directionBriefSource adapts *direction.Repo and *forecast.Service to
@@ -110,4 +112,23 @@ func (s directionBriefSource) PlannedBranchFor(ctx context.Context, projectID st
 		Title: branch.Title, Premise: branch.Premise, Beats: beats,
 		Stale: len(staleReasons) > 0, StaleReasons: staleReasons,
 	}, true, nil
+}
+
+// styleAnchorSource resolves the writer's chosen style anchor to a scene label
+// for the brief. A scene deleted since it was chosen simply stops being named.
+type styleAnchorSource struct {
+	styles *style.Repo
+	nodes  *node.Repo
+}
+
+func (s styleAnchorSource) StyleAnchorLabel(ctx context.Context, projectID string) (string, error) {
+	rules, err := s.styles.GetRules(ctx, projectID)
+	if err != nil || rules.AnchorNodeID == "" {
+		return "", err
+	}
+	n, err := s.nodes.Get(ctx, rules.AnchorNodeID)
+	if err != nil {
+		return "", nil
+	}
+	return n.Label, nil
 }
