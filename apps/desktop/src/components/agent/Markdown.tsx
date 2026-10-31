@@ -1,4 +1,5 @@
 import ReactMarkdown from "react-markdown";
+import remarkCjkFriendly from "remark-cjk-friendly";
 import remarkGfm from "remark-gfm";
 
 /**
@@ -8,6 +9,10 @@ import remarkGfm from "remark-gfm";
  * default, so model output cannot inject markup. Links open in the
  * default browser rather than navigating the app away.
  *
+ * remark-cjk-friendly relaxes CommonMark's flanking rule, which otherwise
+ * leaves the ** literal in `**설화(할아버지)**이고`: Korean and Japanese
+ * attach particles straight after the closing delimiter.
+ *
  * Same shape as the 1.0 companion's `components/companion/Markdown.tsx`,
  * which was deleted with the rest of that panel but left `react-markdown`
  * and `remark-gfm` in package.json for this issue (#95).
@@ -16,7 +21,7 @@ export function Markdown({ text }: { text: string }) {
   return (
     <div className="agent-md">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkCjkFriendly]}
         components={{
           a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
         }}
