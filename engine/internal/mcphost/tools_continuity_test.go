@@ -13,12 +13,14 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/store"
 	"github.com/devlikebear/linetta/engine/internal/thread"
 )
 
 type continuityFixture struct {
 	d       ToolDeps
+	store   *store.Store
 	p       project.Project
 	node    string
 	entity  entity.Entity
@@ -52,7 +54,7 @@ func newContinuityFixture(t *testing.T) (context.Context, *continuityFixture) {
 		t.Fatalf("create entity: %v", err)
 	}
 
-	f := &continuityFixture{p: p, node: *p.LastOpenedNodeID, entity: e}
+	f := &continuityFixture{store: st, p: p, node: *p.LastOpenedNodeID, entity: e}
 	f.d = ToolDeps{
 		Projects:   projects,
 		Nodes:      nodes,
@@ -245,5 +247,125 @@ func TestReportContinuity_unavailableWithNilRepo(t *testing.T) {
 	}
 	if res == nil || !res.IsError {
 		t.Fatal("a nil Continuity repo must refuse rather than panic")
+	}
+}
+
+func TestUpdateContinuity_settlesInBulkAndNotifies(t *testing.T) {
+	ctx, f := newContinuityFixture(t)
+	version := f.setText(t, ctx, "하린은 오른손으로 검을 뽑았다.")
+	check, err := f.d.Continuity.Record(ctx, 1000, continuity.ReportInput{
+		ProjectID: f.p.ID, NodeID: f.node, SceneVersion: version,
+		Observations: []continuity.ObservationInput{cleanContinuityObservation(), cleanContinuityObservation()},
+	}, continuity.SourceAgent)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	_, listed, err := f.d.listContinuity(ctx, nil, listContinuityInput{ProjectID: f.p.ID, Limit: 1})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if listed.Total != 2 || len(listed.Observations) != 1 {
+		t.Fatalf("page = %d of %d, want 1 of 2", len(listed.Observations), listed.Total)
+	}
+	row := listed.Observations[0]
+	if row.CheckID != check.ID || row.Scene == "" || row.Quote == "" {
+		t.Fatalf("row = %+v", row)
+	}
+
+	_, out, err := f.d.updateContinuity(ctx, nil, updateContinuityInput{
+		ProjectID: f.p.ID, Action: "resolve", ObservationIDs: []string{row.ID},
+	})
+	if err != nil || out.Changed != 1 {
+		t.Fatalf("resolve = %+v (%v)", out, err)
+	}
+	if f.changed != 1 {
+		t.Fatalf("mcp.changed fired %d times, want 1", f.changed)
+	}
+
+	_, out, err = f.d.updateContinuity(ctx, nil, updateContinuityInput{
+		ProjectID: f.p.ID, Action: "delete", CheckIDs: []string{check.ID},
+	})
+	if err != nil || out.Changed != 2 {
+		t.Fatalf("delete = %+v (%v)", out, err)
+	}
+	_, listed, err = f.d.listContinuity(ctx, nil, listContinuityInput{
+		ProjectID: f.p.ID, Statuses: []string{"open", "dismissed", "resolved"},
+	})
+	if err != nil || listed.Total != 0 {
+		t.Fatalf("after delete = %+v (%v)", listed, err)
+	}
+}
+
+func TestUpdateContinuity_refusesWhatItCannotDo(t *testing.T) {
+	ctx, f := newContinuityFixture(t)
+	for _, in := range []updateContinuityInput{
+		{ProjectID: f.p.ID, Action: "resolve"},
+		{ProjectID: f.p.ID, Action: "forget", ObservationIDs: []string{"x"}},
+	} {
+		res, _, err := f.d.updateContinuity(ctx, nil, in)
+		if err != nil || res == nil || !res.IsError {
+			t.Errorf("%+v was not refused: %+v (%v)", in, res, err)
+		}
+	}
+	res, _, err := f.d.listContinuity(ctx, nil, listContinuityInput{ProjectID: f.p.ID, Statuses: []string{"maybe"}})
+	if err != nil || res == nil || !res.IsError {
+		t.Errorf("an unknown status was not refused: %+v (%v)", res, err)
+	}
+}
+
+func TestListCharacters_returnsTheIdsAWorldEditNeeds(t *testing.T) {
+	ctx, f := newContinuityFixture(t)
+	st := f.d.Entities
+	second, err := st.Create(ctx, 1, entity.NewInput{ProjectID: f.p.ID, Kind: "character", Name: "마충"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	aliases := []string{"서린이"}
+	if err := st.Update(ctx, 2, entity.UpdateInput{ID: second.ID, Aliases: &aliases}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	f.d.Relationships = relationship.NewRepo(f.store)
+	if _, err := f.d.Relationships.CreatePair(ctx, relationship.NewPairInput{
+		ProjectID: f.p.ID, FromID: f.entity.ID, ToID: second.ID, Label: "스승", InverseLabel: "제자",
+	}); err != nil {
+		t.Fatalf("pair: %v", err)
+	}
+	th, err := f.d.Threads.Create(ctx, thread.NewInput{ProjectID: f.p.ID, Name: "복수"})
+	if err != nil {
+		t.Fatalf("thread: %v", err)
+	}
+	if err := f.d.Threads.Close(ctx, th.ID, 5); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	_, plain, err := f.d.listCharacters(ctx, nil, listCharactersInput{ProjectID: f.p.ID})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if plain.Relationships != nil || plain.Threads != nil {
+		t.Fatalf("the plain lookup grew: %+v", plain)
+	}
+
+	_, full, err := f.d.listCharacters(ctx, nil, listCharactersInput{
+		ProjectID: f.p.ID, IncludeRelationships: true, IncludeThreads: true,
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	rels, _ := full.Relationships.([]relationshipRow)
+	if len(rels) != 2 || rels[0].RelationshipID == "" || !rels[0].Paired {
+		t.Fatalf("relationships = %+v", full.Relationships)
+	}
+	threads, _ := full.Threads.([]threadRow)
+	if len(threads) != 1 || threads[0].ThreadID != th.ID || !threads[0].Closed {
+		t.Fatalf("threads = %+v", full.Threads)
+	}
+	found := false
+	for _, e := range full.Entities {
+		found = found || (e.EntityID == second.ID && len(e.Aliases) == 1)
+	}
+	if !found {
+		t.Fatalf("aliases missing: %+v", full.Entities)
 	}
 }

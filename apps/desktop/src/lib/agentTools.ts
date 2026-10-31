@@ -40,6 +40,7 @@ export const READ_TOOL_NAMES = [
   "linetta_read_skill",
   "linetta_list_ledger",
   "linetta_list_proposals",
+  "linetta_list_continuity",
   "linetta_publish_status",
 ] as const;
 
@@ -64,6 +65,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_publish_episode",
   "linetta_publish_cover",
   "linetta_report_continuity",
+  "linetta_update_continuity",
   "linetta_propose_story_ops",
   "linetta_accept_proposals",
   "linetta_reject_proposals",
@@ -74,6 +76,11 @@ export const WRITE_TOOL_NAMES = [
 
 const READS: ReadonlySet<string> = new Set(READ_TOOL_NAMES);
 const WRITES: ReadonlySet<string> = new Set(WRITE_TOOL_NAMES);
+
+/** The tools that change what the continuity list shows. */
+export function changesContinuity(tool: string | undefined): boolean {
+  return tool === "linetta_report_continuity" || tool === "linetta_update_continuity";
+}
 
 /** read / write / neither. */
 export type ToolKind = "read" | "write" | "other";

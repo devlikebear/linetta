@@ -276,7 +276,7 @@ tool off, what is already recorded is still read back to the agent — it just
 cannot add to it, and you can still edit it yourself under Settings → Memory.
 With the skills tools off, the skill **list** goes too: a list with no
 `linetta_read_skill` to open a body is only names. With the review tools off,
-`linetta_report_continuity`, `linetta_propose_story_ops`, the inbox tools,
+the continuity tools, `linetta_propose_story_ops`, the inbox tools,
 `linetta_save_forecast` and their starter chips all go — what is already
 recorded stays exactly where it is. Nothing is deleted either way, and switching a group back on restores
 it exactly.
@@ -360,8 +360,12 @@ a finding is.
 World → Continuity checks: each finding's severity, category, summary, the
 exact quote and paragraph it is about, a reference chip you can click to
 open the entity, fact, or earlier scene it points at, and an optional
-suggestion. You open the scene, mark it dismissed or resolved, or leave it.
-If the scene's text has changed since the check, the group is flagged "본문이
+suggestion. You open the scene, mark it dismissed or resolved, delete it, or
+leave it. If the list has grown too long to go through one by one, tell the
+agent to clean it up: it reads the list with `linetta_list_continuity`, holds
+what it needs against the scene, and settles the observations in bulk with
+`linetta_update_continuity`. It does this only when you tell it to. Dismissing
+and resolving can be reopened; a deleted observation is gone. If the scene's text has changed since the check, the group is flagged "본문이
 바뀜 · 다시 점검" so you know the finding may be stale. A badge in the
 right-hand scene panel shows how many open observations the current scene
 carries, with a click to Story World's continuity section.
@@ -380,9 +384,25 @@ References inside an observation are remapped to the restored work's own
 ids; one that no longer resolves is dropped rather than left dangling. Turn
 the group off under **Settings → Tool budget → Check & propose**
 (`review_tools_enabled` in `settings.json`, on by default) to remove
-`linetta_report_continuity` and the starter chip for both the built-in agent
+the continuity tools and the starter chip for both the built-in agent
 and any MCP client; observations already recorded stay exactly where they
 are.
+
+### Changing Story World through the agent
+
+Story World is the agent's to change when you ask, through
+`linetta_apply_story_ops`: it can edit and delete characters, places, items,
+concepts, relationships, fact cards, storylines and beats, take an alias or an
+attribute off a record, and close or reopen a storyline. Tell it to remove the
+duplicates and it finds the ids with `linetta_list_characters`
+(`include_relationships`, `include_threads`) and does it, rather than asking you
+to.
+
+Deleting an element takes its relationships, designs and reference images with
+it. The prose keeps the name; only the link to the record goes. The agent says
+what was removed, and the tool line in its panel has an undo that brings all of
+it back, for as long as the change is among the last few. You can also delete an
+element yourself from its sheet, which asks first and has no undo.
 
 ### Suggestions inbox
 

@@ -178,6 +178,15 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
+// Removal captures what Delete would take: the row and its pair, if any.
+func (r *Repo) Removal(ctx context.Context, id string) (store.RowSet, error) {
+	return r.s.Capture(ctx, store.Slice{
+		Table: "relationships",
+		Where: "id = ? OR pair_id = (SELECT pair_id FROM relationships WHERE id = ?)",
+		Args:  []any{id, id},
+	})
+}
+
 const baseSelect = `
 SELECT id, project_id, from_id, to_id, label, notes, pair_id
 FROM relationships`

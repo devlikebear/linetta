@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (e: { payload: unknown }) => void>(),
   list: vi.fn(),
   setStatus: vi.fn(),
+  delete: vi.fn(),
 }));
 vi.mock("@tauri-apps/api/event", () => ({
   listen: (name: string, cb: (e: { payload: unknown }) => void) => {
@@ -19,7 +20,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("../lib/rpc", () => ({
   // I18nProvider reads the app language through the same module.
   settings: { get: vi.fn().mockResolvedValue({ language: "ko" }) },
-  continuity: { list: mocks.list, setStatus: mocks.setStatus },
+  continuity: { list: mocks.list, setStatus: mocks.setStatus, delete: mocks.delete },
 }));
 
 function check(overrides: Partial<ContinuityCheck> = {}): ContinuityCheck {
@@ -73,6 +74,7 @@ describe("ContinuitySection", () => {
     mocks.listeners.clear();
     mocks.list.mockReset().mockResolvedValue({ checks: [] });
     mocks.setStatus.mockReset();
+    mocks.delete.mockReset().mockResolvedValue({ ok: true });
   });
 
   it("lists a check's observations, ref chip included", async () => {
@@ -242,6 +244,38 @@ describe("ContinuitySection", () => {
 
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("하린이 왼손잡이라는 설정과 맞지 않는다")).toBeInTheDocument();
+  });
+
+  it("refetches when an agent settles observations", async () => {
+    mocks.list.mockResolvedValue({ checks: [check({ observations: [observation()] })] });
+    renderSection();
+    await screen.findByText("하린이 왼손잡이라는 설정과 맞지 않는다");
+
+    mocks.list.mockResolvedValue({ checks: [] });
+    act(() => {
+      mocks.listeners.get("mcp-changed")?.({ payload: { project_id: "p", tool: "linetta_update_continuity" } });
+    });
+
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByText("하린이 왼손잡이라는 설정과 맞지 않는다")).not.toBeInTheDocument(),
+    );
+  });
+
+  // The engine drops a check its last observation left, so the screen has to
+  // ask again: keeping the empty check would read as "문제 없음".
+  it("deletes an observation and refetches rather than showing an emptied check as clean", async () => {
+    mocks.list.mockResolvedValue({ checks: [check({ observations: [observation()] })] });
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("하린이 왼손잡이라는 설정과 맞지 않는다");
+
+    mocks.list.mockResolvedValue({ checks: [] });
+    await user.click(screen.getByRole("button", { name: "삭제" }));
+
+    await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith("obs-1"));
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/문제 없음/)).not.toBeInTheDocument();
   });
 
   it("ignores an mcp-changed event for a different work", async () => {

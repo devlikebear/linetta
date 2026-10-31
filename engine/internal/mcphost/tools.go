@@ -28,6 +28,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/plot"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/proposals"
+	"github.com/devlikebear/linetta/engine/internal/relationship"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/snapshot"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
@@ -70,13 +71,15 @@ type ToolDeps struct {
 	// ref belongs to this work means resolving its thread (story-assist
 	// Phase 2). Nil in a build with no database open; the tool refuses
 	// rather than panicking.
-	Beats      *beat.Repo
-	Threads    *thread.Repo
-	Plot       *plot.Builder
-	Manuscript *manuscript.Searcher
-	Context    *storycontext.ContextBuilder
-	Settings   *settings.Store
-	Activity   *ActivityRepo
+	Beats   *beat.Repo
+	Threads *thread.Repo
+	// Relationships backs linetta_list_characters' include_relationships.
+	Relationships *relationship.Repo
+	Plot          *plot.Builder
+	Manuscript    *manuscript.Searcher
+	Context       *storycontext.ContextBuilder
+	Settings      *settings.Store
+	Activity      *ActivityRepo
 	// Continuity stores each scene's continuity checks and observations
 	// (story-assist Phase 2). Nil in a build with no database open; the
 	// tool refuses rather than panicking.

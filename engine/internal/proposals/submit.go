@@ -270,6 +270,11 @@ func (s *Service) Submit(ctx context.Context, now int64, in SubmitInput, source 
 		switch op.Type {
 		case "update_entity":
 			resolveEntityRef(op.EntityID, "", "entity_id")
+			// The inbox's card has no words for a removal, so a writer could
+			// accept one without seeing it.
+			if len(op.RemoveAliases) > 0 || len(op.RemoveAttributes) > 0 {
+				add(i, "item %d: removals are not proposed; make them with linetta_apply_story_ops when the writer asks", num)
+			}
 		case "create_relationship":
 			resolveEntityRef(op.From, op.FromRef, "from/from_ref")
 			resolveEntityRef(op.To, op.ToRef, "to/to_ref")

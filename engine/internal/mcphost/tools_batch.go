@@ -28,6 +28,7 @@ func (in applyStoryOpsInput) scope() (string, string) { return in.ProjectID, in.
 type applyStoryOpsOutput struct {
 	Applied      int               `json:"applied"`
 	Created      map[string]string `json:"created,omitempty"`
+	Deleted      any               `json:"deleted,omitempty" jsonschema:"world records removed and what went with them; tell the writer"`
 	Failures     []opFailure       `json:"failures,omitempty"`
 	RolledBack   bool              `json:"rolled_back,omitempty"`
 	UndoBatchID  string            `json:"undo_batch_id,omitempty"`
@@ -74,10 +75,9 @@ type undoOutput struct {
 func (d ToolDeps) registerBatchTools(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name: "linetta_apply_story_ops",
-		Description: "Apply a batch of story-structure changes. Outline-structural batches are " +
-			"all-or-nothing and return undo_batch_id; entity/thread/beat/fact/memory changes are NOT " +
-			"batch-undoable — revert with follow-up ops. Scene prose is NOT written here; use " +
-			"linetta_write_scene, which checks the version first.",
+		Description: "Apply a batch of story and Story World changes. Outline batches are all-or-nothing; " +
+			"they and deletes return undo_batch_id. Other world changes are NOT undoable: revert with " +
+			"follow-up ops. Scene prose is NOT written here; use linetta_write_scene, which checks the version first.",
 	}, record(d, "linetta_apply_story_ops", d.applyStoryOps))
 
 	mcp.AddTool(s, &mcp.Tool{
@@ -133,6 +133,9 @@ func (d ToolDeps) applyStoryOps(ctx context.Context, _ *mcp.CallToolRequest, in 
 		RolledBack:  result.RolledBack,
 		UndoBatchID: result.UndoBatchID,
 	}
+	if len(result.Deleted) > 0 {
+		out.Deleted = result.Deleted
+	}
 	for _, ch := range result.ChangedNodes {
 		out.ChangedNodes = append(out.ChangedNodes, ch.NodeID)
 	}
@@ -164,6 +167,9 @@ func applyFailureText(r storyops.ApplyOpsResult) string {
 			continue
 		}
 		fmt.Fprintf(&b, "%s. ", f.Error)
+	}
+	if r.UndoBatchID != "" {
+		fmt.Fprintf(&b, "The other ops were applied; batch_id %s undoes what they deleted. ", r.UndoBatchID)
 	}
 	return strings.TrimSpace(b.String())
 }

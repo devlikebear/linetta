@@ -183,6 +183,14 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// Removal captures what Delete would take: the card and its sources.
+func (r *Repo) Removal(ctx context.Context, id string) (store.RowSet, error) {
+	return r.s.Capture(ctx,
+		store.Slice{Table: "fact_cards", Where: "id = ?", Args: []any{id}},
+		store.Slice{Table: "fact_sources", Where: "card_id = ?", Args: []any{id}},
+	)
+}
+
 func (r *Repo) listSources(ctx context.Context, cardID string) ([]Source, error) {
 	rows, err := r.s.DB().QueryContext(ctx, `
 SELECT id, card_id, url, title, snippet, accessed_at

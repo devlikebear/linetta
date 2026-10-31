@@ -75,7 +75,7 @@ var (
 	// question — "let the agent check things and record what it finds, or
 	// not" — does not change across phases. The three inbox tools belong with
 	// the tool that fills the inbox.
-	ReviewToolNames = []string{"linetta_report_continuity", "linetta_propose_story_ops", "linetta_list_proposals", "linetta_accept_proposals", "linetta_reject_proposals", "linetta_save_forecast", "linetta_list_ledger", "linetta_edit_ledger", "linetta_set_part_arc"}
+	ReviewToolNames = []string{"linetta_report_continuity", "linetta_list_continuity", "linetta_update_continuity", "linetta_propose_story_ops", "linetta_list_proposals", "linetta_accept_proposals", "linetta_reject_proposals", "linetta_save_forecast", "linetta_list_ledger", "linetta_edit_ledger", "linetta_set_part_arc"}
 )
 
 // VisualWriteToolNames lists the optional visual editing group.

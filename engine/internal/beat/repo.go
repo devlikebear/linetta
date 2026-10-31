@@ -175,6 +175,11 @@ func (r *Repo) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// Removal captures what Delete would take.
+func (r *Repo) Removal(ctx context.Context, id string) (store.RowSet, error) {
+	return r.s.Capture(ctx, store.Slice{Table: "beats", Where: "id = ?", Args: []any{id}})
+}
+
 const baseSelect = `
 SELECT id, thread_id, node_id, ordinal, label, description, intensity
 FROM beats`

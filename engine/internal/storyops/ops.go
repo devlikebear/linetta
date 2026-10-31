@@ -23,9 +23,12 @@ import (
 // and ValidOpTypes in step (a mcphost test enforces the pairing), or agents
 // are back to guessing names (#73).
 type Op struct {
-	Type string `json:"op" jsonschema:"one of: add_beat, create_entity, create_fact_card, create_outline_node, create_relationship, create_scene, create_thread, delete_beat, delete_outline_node, move_outline_node, remember, rename_outline_node, set_outline, set_scene_text, update_beat, update_entity, update_thread"`
+	Type string `json:"op" jsonschema:"one of: add_beat, close_thread, create_entity, create_fact_card, create_outline_node, create_relationship, create_scene, create_thread, delete_beat, delete_entity, delete_fact_card, delete_outline_node, delete_relationship, delete_thread, move_outline_node, remember, rename_outline_node, reopen_thread, set_outline, set_scene_text, update_beat, update_entity, update_fact_card, update_relationship, update_thread"`
 
 	// create_thread
+	// The world's delete ops (delete_entity, delete_fact_card,
+	// delete_relationship, delete_thread, delete_beat) can be undone with the
+	// batch's undo_batch_id; what a delete took is listed in the result.
 	Ref     string `json:"ref,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Color   string `json:"color,omitempty"`
@@ -60,6 +63,10 @@ type Op struct {
 	// existing list and never removes an alias (story-assist Phase 3, same
 	// rule context edit Phase 3 follows for its own alias field).
 	Aliases []string `json:"aliases,omitempty" jsonschema:"create_entity: sets aliases; update_entity: adds to existing aliases, never removing one"`
+	// RemoveAliases and RemoveAttributes are update_entity's only way to take
+	// something off a record, named one by one so an add can never do it.
+	RemoveAliases    []string `json:"remove_aliases,omitempty"`
+	RemoveAttributes []string `json:"remove_attributes,omitempty"`
 
 	// create_scene, create_outline_node. Summary (above) sets the new node's
 	// summary, which is where a planned episode keeps its plan.
@@ -71,15 +78,17 @@ type Op struct {
 	ParentNodeRef string `json:"parent_node_ref,omitempty"`
 	Direction     string `json:"direction,omitempty"`
 
-	// create_relationship
-	From         string `json:"from,omitempty"`
-	FromRef      string `json:"from_ref,omitempty"`
-	To           string `json:"to,omitempty"`
-	ToRef        string `json:"to_ref,omitempty"`
-	Notes        string `json:"notes,omitempty"`
-	InverseLabel string `json:"inverse_label,omitempty"`
+	// create_relationship / update_relationship / delete_relationship
+	RelationshipID string `json:"relationship_id,omitempty"`
+	From           string `json:"from,omitempty"`
+	FromRef        string `json:"from_ref,omitempty"`
+	To             string `json:"to,omitempty"`
+	ToRef          string `json:"to_ref,omitempty"`
+	Notes          string `json:"notes,omitempty"`
+	InverseLabel   string `json:"inverse_label,omitempty"`
 
-	// create_fact_card
+	// create_fact_card / update_fact_card / delete_fact_card
+	FactID  string             `json:"fact_id,omitempty"`
 	Claim   string             `json:"claim,omitempty"`
 	Result  string             `json:"result,omitempty"`
 	Status  string             `json:"status,omitempty"`
@@ -106,18 +115,21 @@ func ValidOpTypes() []string {
 
 // knownOps lists the accepted op types.
 var knownOps = map[string]bool{
-	"create_thread": true, "update_thread": true,
+	"create_thread": true, "update_thread": true, "close_thread": true, "reopen_thread": true, "delete_thread": true,
 	"add_beat": true, "update_beat": true, "delete_beat": true,
 	"set_outline":    true,
 	"set_scene_text": true,
 	"remember":       true,
-	"create_entity":  true, "update_entity": true, "create_relationship": true,
+	"create_entity":  true, "update_entity": true, "delete_entity": true,
+	"create_relationship": true, "update_relationship": true, "delete_relationship": true,
 	"create_scene":        true,
 	"create_outline_node": true,
 	"rename_outline_node": true,
 	"delete_outline_node": true,
 	"move_outline_node":   true,
 	"create_fact_card":    true,
+	"update_fact_card":    true,
+	"delete_fact_card":    true,
 }
 
 // normalizeEntityKind maps a raw create_entity kind to one of the canonical
@@ -176,6 +188,10 @@ func ValidateProposal(p Proposal) error {
 		case "update_thread":
 			if op.ThreadID == "" {
 				return fmt.Errorf("op[%d] update_thread: thread_id required", i)
+			}
+		case "close_thread", "reopen_thread", "delete_thread":
+			if op.ThreadID == "" {
+				return fmt.Errorf("op[%d] %s: thread_id required", i, op.Type)
 			}
 		case "add_beat":
 			hasID := op.ThreadID != ""
@@ -302,6 +318,21 @@ func ValidateProposal(p Proposal) error {
 				}
 				p.Ops[i].Kind = kind
 			}
+		case "delete_entity":
+			if op.EntityID == "" {
+				return fmt.Errorf("op[%d] delete_entity: entity_id required", i)
+			}
+		case "update_relationship":
+			if op.RelationshipID == "" {
+				return fmt.Errorf("op[%d] update_relationship: relationship_id required", i)
+			}
+			if strings.TrimSpace(op.Label) == "" && strings.TrimSpace(op.Notes) == "" {
+				return fmt.Errorf("op[%d] update_relationship: label or notes required", i)
+			}
+		case "delete_relationship":
+			if op.RelationshipID == "" {
+				return fmt.Errorf("op[%d] delete_relationship: relationship_id required", i)
+			}
 		case "create_relationship":
 			if strings.TrimSpace(op.Label) == "" {
 				return fmt.Errorf("op[%d] create_relationship: label required", i)
@@ -317,6 +348,17 @@ func ValidateProposal(p Proposal) error {
 			// Undeclared from_ref/to_ref are allowed: the model often places a
 			// real entity id (or name) in the ref field. Resolution and any
 			// clear error happen at apply time.
+		case "update_fact_card":
+			if op.FactID == "" {
+				return fmt.Errorf("op[%d] update_fact_card: fact_id required", i)
+			}
+			if status := strings.TrimSpace(op.Status); status != "" && !fact.ValidStatus(status) {
+				return fmt.Errorf("op[%d] update_fact_card: status must be verified|uncertain|intentional_fiction|stale", i)
+			}
+		case "delete_fact_card":
+			if op.FactID == "" {
+				return fmt.Errorf("op[%d] delete_fact_card: fact_id required", i)
+			}
 		case "create_fact_card":
 			if strings.TrimSpace(op.Claim) == "" {
 				return fmt.Errorf("op[%d] create_fact_card: claim required", i)

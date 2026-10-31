@@ -271,3 +271,141 @@ func TestRepo_deletedWithTheNode(t *testing.T) {
 		t.Errorf("continuity rows survived node deletion: checks=%d observations=%d", checkCount, obsCount)
 	}
 }
+
+func (f *fixture) observationIDs(t *testing.T) []string {
+	t.Helper()
+	checks, err := f.repo.List(context.Background(), ListFilter{ProjectID: f.p.ID})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	ids := []string{}
+	for _, c := range checks {
+		for _, o := range c.Observations {
+			ids = append(ids, o.ID)
+		}
+	}
+	return ids
+}
+
+func TestRepo_setStatusMany_selectsNamedAndWholeChecks(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	check, err := f.repo.Record(ctx, 2000, f.reportInput(cleanObservation(), cleanObservation(), cleanObservation()), SourceAgent)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	ids := f.observationIDs(t)
+	if _, err := f.repo.SetStatus(ctx, 2500, ids[0], StatusResolved); err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+
+	// A whole check takes its open observations and leaves the writer's own
+	// judgement where it was.
+	out, err := f.repo.SetStatusMany(ctx, 3000, Selection{ProjectID: f.p.ID, CheckIDs: []string{check.ID}}, StatusDismissed)
+	if err != nil {
+		t.Fatalf("SetStatusMany: %v", err)
+	}
+	if out.Changed != 2 || out.Skipped != 0 {
+		t.Fatalf("outcome = %+v, want 2 changed", out)
+	}
+	if counts, _ := f.repo.OpenCounts(ctx, f.p.ID); len(counts) != 0 {
+		t.Fatalf("open counts = %v", counts)
+	}
+	checks, err := f.repo.List(ctx, ListFilter{ProjectID: f.p.ID, Statuses: []string{StatusResolved}})
+	if err != nil || len(checks[0].Observations) != 1 || checks[0].Observations[0].ID != ids[0] {
+		t.Fatalf("resolved = %+v (%v)", checks, err)
+	}
+
+	// Named ids that do nothing are accounted for rather than failing the rest.
+	out, err = f.repo.SetStatusMany(ctx, 3100, Selection{
+		ProjectID: f.p.ID, ObservationIDs: []string{ids[1], ids[1], "no-such-id"},
+	}, StatusDismissed)
+	if err != nil {
+		t.Fatalf("SetStatusMany: %v", err)
+	}
+	if out.Changed != 0 || out.Skipped != 2 {
+		t.Fatalf("outcome = %+v, want 0 changed and 2 skipped", out)
+	}
+
+	out, err = f.repo.SetStatusMany(ctx, 3200, Selection{ProjectID: f.p.ID, CheckIDs: []string{check.ID}}, StatusOpen)
+	if err != nil || out.Changed != 3 {
+		t.Fatalf("reopen = %+v (%v), want 3", out, err)
+	}
+}
+
+func TestRepo_setStatusMany_leavesReplacedAndOtherWorksAlone(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	if _, err := f.repo.Record(ctx, 2000, f.reportInput(cleanObservation()), SourceAgent); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	replaced := f.observationIDs(t)[0]
+	if _, err := f.repo.Record(ctx, 3000, f.reportInput(cleanObservation()), SourceAgent); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	out, err := f.repo.SetStatusMany(ctx, 4000, Selection{ProjectID: f.p.ID, ObservationIDs: []string{replaced}}, StatusDismissed)
+	if err != nil || out.Changed != 0 || out.Skipped != 1 {
+		t.Fatalf("replaced = %+v (%v)", out, err)
+	}
+	if _, err := f.repo.SetStatusMany(ctx, 4000, Selection{ProjectID: f.p.ID}, StatusReplaced); err == nil {
+		t.Fatal("SetStatusMany accepted replaced")
+	}
+
+	ids := f.observationIDs(t)
+	for _, run := range []func() (Outcome, error){
+		func() (Outcome, error) {
+			return f.repo.SetStatusMany(ctx, 4000, Selection{ProjectID: "another-work", ObservationIDs: ids}, StatusDismissed)
+		},
+		func() (Outcome, error) {
+			return f.repo.DeleteMany(ctx, Selection{ProjectID: "another-work", ObservationIDs: ids})
+		},
+	} {
+		if out, err := run(); err != nil || out.Changed != 0 {
+			t.Fatalf("reached across works: %+v (%v)", out, err)
+		}
+	}
+}
+
+func TestRepo_deleteMany_takesAnEmptiedCheckSoItCannotReadAsClean(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	if _, err := f.repo.Record(ctx, 2000, f.reportInput(cleanObservation(), cleanObservation()), SourceAgent); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	ids := f.observationIDs(t)
+
+	out, err := f.repo.DeleteMany(ctx, Selection{ProjectID: f.p.ID, ObservationIDs: ids[:1]})
+	if err != nil || out.Changed != 1 {
+		t.Fatalf("DeleteMany = %+v (%v)", out, err)
+	}
+	checks, err := f.repo.List(ctx, ListFilter{ProjectID: f.p.ID})
+	if err != nil || len(checks) != 1 || len(checks[0].Observations) != 1 {
+		t.Fatalf("after one delete = %+v (%v)", checks, err)
+	}
+
+	out, err = f.repo.DeleteMany(ctx, Selection{ProjectID: f.p.ID, ObservationIDs: []string{ids[1], "no-such-id"}})
+	if err != nil || out.Changed != 1 || out.Skipped != 1 {
+		t.Fatalf("DeleteMany = %+v (%v)", out, err)
+	}
+	checks, err = f.repo.List(ctx, ListFilter{ProjectID: f.p.ID})
+	if err != nil || len(checks) != 0 {
+		t.Fatalf("emptied check survived: %+v (%v)", checks, err)
+	}
+}
+
+func TestRepo_deleteMany_keepsACleanCheck(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	clean, err := f.repo.Record(ctx, 2000, f.reportInput(), SourceAgent)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+	if _, err := f.repo.DeleteMany(ctx, Selection{ProjectID: f.p.ID, CheckIDs: []string{clean.ID}}); err != nil {
+		t.Fatalf("DeleteMany: %v", err)
+	}
+	checks, err := f.repo.List(ctx, ListFilter{ProjectID: f.p.ID})
+	if err != nil || len(checks) != 1 {
+		t.Fatalf("clean check = %+v (%v)", checks, err)
+	}
+}

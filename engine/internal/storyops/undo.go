@@ -71,7 +71,8 @@ func CountOutlineChanges(p Proposal) OutlineChangeCounts {
 	return c
 }
 
-// undoBatch is the outline as it stood before an applied change.
+// undoBatch is the outline as it stood before an applied change, what else
+// put the change right, or both.
 type undoBatch struct {
 	projectID string
 	nodes     []node.Node
@@ -86,21 +87,14 @@ type undoState struct {
 	order   []string
 }
 
-// rememberUndoBatch keeps the pre-change outline so the writer can put it back
-// with one action. Batches live in memory only: undo is for the change you just
-// watched land, not for history.
-func (s *Service) rememberUndoBatch(projectID string, before []node.Node) string {
-	if len(before) == 0 {
-		return ""
-	}
-	return s.rememberChange(undoBatch{projectID: projectID, nodes: before})
-}
-
 // RememberChange adds an undoable non-outline change to the same bounded window.
 func (s *Service) RememberChange(projectID string, restore func(context.Context) error) string {
 	return s.rememberChange(undoBatch{projectID: projectID, restore: restore})
 }
 
+// rememberChange keeps what puts a change back, so the writer can do it with
+// one action. Batches live in memory only: undo is for the change you just
+// watched land, not for history.
 func (s *Service) rememberChange(batch undoBatch) string {
 	id := uuid.NewString()
 	s.undo.mu.Lock()
@@ -126,17 +120,19 @@ func (s *Service) UndoApply(ctx context.Context, batchID string, now func() int6
 	if !ok {
 		return ErrUndoBatchNotFound
 	}
-	var err error
-	if batch.restore != nil {
-		err = batch.restore(ctx)
-	} else {
+	// The outline first: a restored mention needs its scene back.
+	if len(batch.nodes) > 0 {
 		if s.nodes == nil {
 			return ErrUndoBatchNotFound
 		}
-		err = s.nodes.RestoreOutline(ctx, batch.projectID, batch.nodes, now())
+		if err := s.nodes.RestoreOutline(ctx, batch.projectID, batch.nodes, now()); err != nil {
+			return err
+		}
 	}
-	if err != nil {
-		return err
+	if batch.restore != nil {
+		if err := batch.restore(ctx); err != nil {
+			return err
+		}
 	}
 	delete(s.undo.batches, id)
 	for i, existing := range s.undo.order {

@@ -106,6 +106,22 @@ func UpdateEntity(repo *entity.Repo, now Clock) rpc.Handler {
 	}
 }
 
+func DeleteEntity(repo *entity.Repo) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p idParam
+		if err := json.Unmarshal(params, &p); err != nil || p.ID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "id required"}
+		}
+		if err := repo.Delete(ctx, p.ID); err != nil {
+			if errors.Is(err, entity.ErrNotFound) {
+				return nil, rpc.NotFound(rpc.ReasonEntityNotFound, "entity not found")
+			}
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
 type entityScenesParams struct {
 	EntityID string `json:"entity_id"`
 }

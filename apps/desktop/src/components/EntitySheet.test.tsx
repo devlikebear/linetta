@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   entities: {
     get: vi.fn(),
     update: vi.fn(),
+    delete: vi.fn(),
     scenes: vi.fn(),
   },
   relationships: {
@@ -273,5 +274,49 @@ describe("EntitySheet", () => {
     await waitFor(() => expect(toggle).toBeChecked());
     expect(mocks.publishApi.sheetSet).toHaveBeenCalledWith("entity-1", true);
     expect(screen.getByTestId("sheet-publish")).toHaveTextContent("시트와 표지 올리기");
+  });
+
+  describe("delete", () => {
+    const renderSheet = (extra: Partial<ComponentProps<typeof EntitySheet>>) =>
+      render(
+        <I18nProvider>
+          <EntitySheet entityId="entity-1" onClose={vi.fn()} {...extra} />
+        </I18nProvider>,
+      );
+
+    beforeEach(() => {
+      mocks.entities.get.mockResolvedValue(baseEntity);
+      mocks.entities.delete.mockReset().mockResolvedValue({ ok: true });
+    });
+
+    it("deletes after the writer confirms and reports it", async () => {
+      const user = userEvent.setup();
+      const confirm = vi.fn().mockResolvedValue(true);
+      const onDeleted = vi.fn();
+      renderSheet({ confirm, onDeleted });
+
+      await user.click(await screen.findByRole("button", { name: "삭제" }));
+
+      await waitFor(() => expect(mocks.entities.delete).toHaveBeenCalledWith("entity-1"));
+      expect(confirm.mock.calls[0][0]).toContain("해진");
+      expect(onDeleted).toHaveBeenCalledWith("entity-1");
+    });
+
+    it("keeps the record when the writer declines", async () => {
+      const user = userEvent.setup();
+      const onDeleted = vi.fn();
+      renderSheet({ confirm: vi.fn().mockResolvedValue(false), onDeleted });
+
+      await user.click(await screen.findByRole("button", { name: "삭제" }));
+
+      await waitFor(() => expect(mocks.entities.delete).not.toHaveBeenCalled());
+      expect(onDeleted).not.toHaveBeenCalled();
+    });
+
+    it("offers no delete when the caller has nowhere to go after one", async () => {
+      renderSheet({});
+      await screen.findByRole("button", { name: "저장" });
+      expect(screen.queryByRole("button", { name: "삭제" })).toBeNull();
+    });
   });
 });

@@ -43,6 +43,7 @@ var WriteToolNames = []string{
 	"linetta_publish_episode",
 	"linetta_publish_cover",
 	"linetta_report_continuity",
+	"linetta_update_continuity",
 	"linetta_propose_story_ops",
 	"linetta_accept_proposals",
 	"linetta_reject_proposals",

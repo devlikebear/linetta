@@ -621,6 +621,7 @@ export const entities = {
   get: (id: string) => rpcCall<Entity>("entities.get", { id }),
   create: (input: NewEntityInput) => rpcCall<Entity>("entities.create", input),
   update: (input: UpdateEntityInput) => rpcCall<Entity>("entities.update", input),
+  delete: (id: string) => rpcCall<{ ok: true }>("entities.delete", { id }),
   scenes: (entityId: string) => rpcCall<SceneMention[]>("entities.scenes", { entity_id: entityId }),
 };
 
@@ -748,6 +749,8 @@ export const continuity = {
     }),
   setStatus: (observationId: string, status: ContinuityStatus) =>
     rpcCall<ContinuityObservation>("continuity.set_status", { observation_id: observationId, status }),
+  delete: (observationId: string) =>
+    rpcCall<{ ok: true }>("continuity.delete", { observation_id: observationId }),
   openCounts: (projectId: string) =>
     rpcCall<ContinuityOpenCounts>("continuity.open_counts", { project_id: projectId }),
 };

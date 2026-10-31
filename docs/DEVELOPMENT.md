@@ -138,7 +138,7 @@ Claude Code, Claude Desktop — can work on the manuscript. It is off until the
 writer consents and enables it under **Settings → Connect an external agent**,
 binds `127.0.0.1` only, and requires a locally generated bearer token.
 
-The default tool set has 43 tools (17 read, 26 write). Optional memory, skills,
+The default tool set has 45 tools (18 read, 27 write). Optional memory, skills,
 and visual-write groups can be switched off in Settings → Tool budget. Write tools appear
 only in `full` mode, so `read_only` omits them from `tools/list` entirely
 rather than refusing them at call time.
@@ -154,6 +154,8 @@ Read:
   returns `stats` — counted measurements of the scenes read (`style.Measure`)
 - `linetta_search_manuscript`, `linetta_where_does_appear`, `linetta_get_plot`
 - `linetta_read_skill`
+- `linetta_list_continuity`: recorded continuity observations and their ids,
+  for `linetta_update_continuity`; open ones by default
 - `linetta_list_proposals`: the suggestions inbox's undecided items and their
   ids, for `linetta_accept_proposals` and `linetta_reject_proposals`
 - `linetta_publish_status`: each episode's state on Linetta Works (see
@@ -193,9 +195,26 @@ Write (`full` mode only):
   three are refused until the writer has connected an account in the app —
   there is deliberately no tool for that, since pairing is approved in the
   writer's browser;
-- `linetta_report_continuity`, `linetta_propose_story_ops`,
-  `linetta_accept_proposals`, `linetta_reject_proposals`,
+- `linetta_report_continuity`, `linetta_update_continuity`,
+  `linetta_propose_story_ops`, `linetta_accept_proposals`, `linetta_reject_proposals`,
   `linetta_save_forecast`: the story-assist Review group — see below.
+
+### World deletes and undo
+
+`linetta_apply_story_ops` deletes entities, relationships, fact cards,
+storylines and beats, and each repo's `Removal` reads what its delete will take
+into a `store.RowSet` first, because a foreign-key cascade leaves nothing to
+undo from. The batch's `undo_batch_id` restores them last-first, after the
+outline when the batch also changed it, and a structural batch that rolls back
+restores them on the spot. The RowSets sit in the same bounded in-memory window
+as an outline undo. A dependent whose other parent has gone since stays gone; a
+refusal on the record itself, such as its name having been taken, fails the
+undo. An entity's name stays in the prose as a mention node with a dead id,
+which `mention.Repo.ResyncForNode` already drops. `entities.delete`, the sheet's
+button, has no undo: it asks first instead.
+
+`linetta_propose_story_ops` refuses `remove_aliases` and `remove_attributes`,
+because the inbox's card has no words for a removal.
 
 ### The Review group: check-and-record tools
 
@@ -208,6 +227,12 @@ These tools share one on-by-default switch, `review_tools_enabled` in
   direction — contradictions, gaps, questions. Written straight to
   `continuity_observations`: an observation already IS the review, so
   there is no separate approve step, only the writer's own dismiss/resolve.
+- `linetta_list_continuity` and `linetta_update_continuity` are that same
+  decision handed over, under the same rule as the inbox tools below: the
+  description and the system prompt require the writer's word for it. Update
+  dismisses, resolves, reopens or deletes by observation or by whole check. A
+  check left with no observations is deleted too, since it would otherwise
+  read as a clean check.
 - `linetta_propose_story_ops` (Phase 3) and `linetta_save_forecast`
   (Phase 4) are drafts instead: nothing they write ever reaches Story
   World, the outline or the manuscript on its own. A proposal sits in

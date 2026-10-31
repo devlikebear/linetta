@@ -15,6 +15,10 @@ interface Props {
   onSaved?: (entity: Entity) => void;
   onNavigate?: (nodeId: string) => void;
   onContextChange?: (entityId: string) => void;
+  /** Asks before a delete. Supplied together with onDeleted; without them the
+   *  sheet offers no delete. */
+  confirm?: (title: string) => Promise<boolean>;
+  onDeleted?: (entityId: string) => void;
 }
 
 const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
@@ -24,7 +28,7 @@ const KIND_META: Record<EntityKind, { color: string; Icon: typeof User }> = {
   concept: { color: "var(--t-plum)", Icon: Lightbulb },
 };
 
-export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextChange }: Props) {
+export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextChange, confirm, onDeleted }: Props) {
   const { language, t } = useI18n();
   const [entity, setEntity] = useState<Entity | null>(null);
   const [draft, setDraft] = useState<UpdateEntityInput | null>(null);
@@ -126,6 +130,20 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
     } catch (e) {
       setError(rpcErrorMessage(e, t));
     } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDelete = async () => {
+    if (!entity || !confirm || !onDeleted) return;
+    if (!(await confirm(t("entity.deleteConfirm", { name: entity.name })))) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await entities.delete(entity.id);
+      onDeleted(entity.id);
+    } catch (e) {
+      setError(rpcErrorMessage(e, t));
       setSaving(false);
     }
   };
@@ -378,6 +396,11 @@ export function EntitySheet({ entityId, onClose, onSaved, onNavigate, onContextC
           </div>
 
           <div className="panel-foot">
+            {confirm && onDeleted && (
+              <button type="button" className="btn ghost sm" onClick={() => void onDelete()} disabled={saving}>
+                {t("common.delete")}
+              </button>
+            )}
             <span className="spacer" />
             <button type="button" className="btn ghost sm" onClick={onClose} disabled={saving}>{t("common.cancel")}</button>
             <button type="button" className="btn accent sm" onClick={onSave} disabled={saving}>

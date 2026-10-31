@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
+import { changesContinuity } from "../lib/agentTools";
 import { continuity as continuityApi } from "../lib/rpc";
 import type { ContinuityCheck, ContinuityObservation, ContinuityRef, ContinuityStatus } from "../lib/types";
 import { useI18n } from "../lib/i18n";
@@ -15,7 +16,8 @@ import "./ContinuitySection.css";
  *  this list is never the model's unverified say-so.
  *
  *  Nothing here edits the manuscript. The writer reads, opens the scene, and
- *  marks each observation dismissed or resolved by hand.
+ *  marks each observation dismissed or resolved, or deletes it, by hand or by
+ *  asking the agent to settle the list (linetta_update_continuity).
  */
 
 interface Props {
@@ -126,7 +128,7 @@ export function ContinuitySection({
   // the same pattern StyleSection's draft follows (StyleSection.tsx).
   useEngineEvent<McpChangedPayload>("mcp-changed", (event) => {
     if (event.project_id && event.project_id !== projectId) return;
-    if (event.tool === "linetta_report_continuity") setRevision((n) => n + 1);
+    if (changesContinuity(event.tool)) setRevision((n) => n + 1);
   });
 
   useEffect(() => {
@@ -170,6 +172,21 @@ export function ContinuitySection({
     },
     [],
   );
+
+  // A refetch, not a local removal: the engine drops a check emptied this way,
+  // and a check kept here with no observations would read as a clean one.
+  const deleteObservation = useCallback(async (observationId: string) => {
+    setBusyId(observationId);
+    setError(null);
+    try {
+      await continuityApi.delete(observationId);
+      setRevision((n) => n + 1);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusyId(null);
+    }
+  }, []);
 
   return (
     <details
@@ -228,6 +245,7 @@ export function ContinuitySection({
           onOpenEntity={onOpenEntity}
           onOpenFact={onOpenFact}
           onSetStatus={setObservationStatus}
+          onDelete={deleteObservation}
         />
       ))}
     </details>
@@ -242,6 +260,7 @@ function SceneGroupRow({
   onOpenEntity,
   onOpenFact,
   onSetStatus,
+  onDelete,
 }: Readonly<{
   group: SceneGroup;
   status: SelectableStatus;
@@ -250,6 +269,7 @@ function SceneGroupRow({
   onOpenEntity?: (entityId: string) => void;
   onOpenFact?: (factId: string) => void;
   onSetStatus: (observationId: string, next: ContinuityStatus) => void | Promise<void>;
+  onDelete: (observationId: string) => void | Promise<void>;
 }>) {
   const { t } = useI18n();
   const shown = group.observations.filter((o) => o.status === status);
@@ -288,6 +308,7 @@ function SceneGroupRow({
               onOpenEntity={onOpenEntity}
               onOpenFact={onOpenFact}
               onSetStatus={onSetStatus}
+              onDelete={onDelete}
             />
           </li>
         ))}
@@ -303,6 +324,7 @@ function ObservationRow({
   onOpenEntity,
   onOpenFact,
   onSetStatus,
+  onDelete,
 }: Readonly<{
   o: ContinuityObservation;
   busy: boolean;
@@ -310,6 +332,7 @@ function ObservationRow({
   onOpenEntity?: (entityId: string) => void;
   onOpenFact?: (factId: string) => void;
   onSetStatus: (observationId: string, next: ContinuityStatus) => void | Promise<void>;
+  onDelete: (observationId: string) => void | Promise<void>;
 }>) {
   const { t } = useI18n();
   const paragraph =
@@ -356,6 +379,9 @@ function ObservationRow({
             {t("continuity.action.reopen")}
           </button>
         )}
+        <button type="button" className="btn ghost sm" disabled={busy} onClick={() => void onDelete(o.id)}>
+          {t("common.delete")}
+        </button>
       </div>
     </div>
   );
