@@ -1974,6 +1974,15 @@ export interface VaultPullResult {
   files_restored: boolean;
 }
 
+/** One step of a push or a pull, in blobs (the vault-progress event). */
+export interface VaultProgress {
+  project_id: string;
+  item_id: string;
+  phase: "upload" | "download" | "apply";
+  done: number;
+  total: number;
+}
+
 export interface VaultResolveResult {
   push?: VaultPushResult;
   pull?: VaultPullResult;

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot, Image as ImageIcon } from "lucide-react";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi, illustrations as illustrationsApi, illustrationRequests as illustrationRequestsApi } from "../lib/rpc";
+import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot, Cloud, Image as ImageIcon } from "lucide-react";
+import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi, vaultApi, illustrations as illustrationsApi, illustrationRequests as illustrationRequestsApi } from "../lib/rpc";
 import { saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
 import { sceneEditorExtensions } from "../components/editor/sceneExtensions";
@@ -31,6 +31,7 @@ import { InlineEditableText } from "../components/InlineEditableText";
 import { CommandPalette, type Command } from "../components/CommandPalette";
 import { ShortcutsModal } from "../components/ShortcutsModal";
 import { PublishDialog } from "../components/PublishDialog";
+import { VaultDialog } from "../components/VaultDialog";
 import { rememberSettingsCategory } from "./Settings";
 import { IllustrationDialog } from "../components/illustration/IllustrationDialog";
 import { IllustrationGallery, type RepresentativeTarget } from "../components/illustration/IllustrationGallery";
@@ -61,7 +62,8 @@ import { normalizePlatformProfile, transformPlatformText } from "../lib/platform
 import { SceneSaveQueue } from "../lib/sceneSaveQueue";
 import { useMcpChanges } from "../hooks/useMcpChanges";
 import { useEngineEvent } from "../hooks/useEngineEvent";
-import type { ProposalsChangedPayload } from "../lib/types";
+import type { ProposalsChangedPayload, VaultWorkState } from "../lib/types";
+import { vaultNeedsAttention } from "../lib/vault";
 import {
   buildTree,
   countEpisodeStatus,
@@ -248,6 +250,9 @@ export function Workspace() {
   const [publishAvailable, setPublishAvailable] = useState(false);
   const [publishStatus, setPublishStatus] = useState<PublishWorkStatus | null>(null);
   const [publishTarget, setPublishTarget] = useState<string | null>(null);
+  const [vaultAvailable, setVaultAvailable] = useState(false);
+  const [vaultState, setVaultState] = useState<VaultWorkState | null>(null);
+  const [vaultOpen, setVaultOpen] = useState(false);
   // A turn outlives the panel, so the toolbar says when one is running.
   const agentRunning = useAgentRunning(load?.project.id, agentAvailable);
   const [tourOpen, setTourOpen] = useState(false);
@@ -502,6 +507,7 @@ export function Workspace() {
         setGitSyncAvailable(d.git_sync_available ?? true);
         setAgentAvailable(d.agent_available ?? false);
         setPublishAvailable(d.publish_available ?? false);
+        setVaultAvailable(d.vault_available ?? false);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -520,6 +526,20 @@ export function Workspace() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [publishAvailable, publishProjectId]);
+
+  // Shows that a newer version waits on the server, and never takes it. A device
+  // with no vault set up rejects before anything reaches the site, and the
+  // button simply stays away.
+  useEffect(() => {
+    setVaultState(null);
+    if (!vaultAvailable || !publishProjectId) return undefined;
+    let cancelled = false;
+    vaultApi
+      .workStatus(publishProjectId)
+      .then((st) => { if (!cancelled) setVaultState(st.state); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [vaultAvailable, publishProjectId]);
 
   // An agent registering the work or publishing an episode changes what the
   // badges should say, so those two tools refetch the status the same way.
@@ -1039,6 +1059,12 @@ export function Workspace() {
   const openPublish = useCallback(async (nodeId: string) => {
     await flushPendingSave();
     setPublishTarget(nodeId);
+  }, [flushPendingSave]);
+  // What goes up is what is saved, and a pull must not race a save of the old
+  // text, so the buffer lands before the dialog opens.
+  const openVault = useCallback(async () => {
+    await flushPendingSave();
+    setVaultOpen(true);
   }, [flushPendingSave]);
   const closePublish = useCallback(() => {
     setPublishTarget(null);
@@ -1688,6 +1714,15 @@ export function Workspace() {
         run: () => { void openPublish(load.node.id); },
       });
     }
+    if (vaultAvailable) {
+      cmds.push({
+        id: "vault-work",
+        section: sectionExport,
+        label: t("workspace.command.vault"),
+        keywords: ["vault", "sync", "backup", "보관함", "동기화", "올리기", "받기", "保管庫"],
+        run: () => { void openVault(); },
+      });
+    }
     cmds.push({
       id: "go-settings",
       section: sectionProject,
@@ -1789,7 +1824,7 @@ export function Workspace() {
       run: () => setShortcutsOpen(true),
     });
     return cmds;
-  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable, flushPendingSave, publishAvailable, openPublish]);
+  }, [load, navigateToNode, navigate, promptDialog, enterZen, focus, railCollapsed, outlinePreset, handleCreateSceneFromOutline, handleCreateChapterFromOutline, requestInlineRenameNode, handleMoveSceneFromOutline, handleDeleteSceneFromOutline, copyNodeText, showToast, language, t, toggleFactBook, toggleContextualEdit, toggleCanon, gitSyncAvailable, toggleAgent, agentAvailable, flushPendingSave, publishAvailable, openPublish, vaultAvailable, openVault]);
 
   // Breadcrumb chain: ancestor container labels + the current scene label.
   const crumbChain = useMemo(() => {
@@ -1955,6 +1990,19 @@ export function Workspace() {
         </Link>
         <div className="ws-top-actions" data-tour="workspace-navigation">
           <McpToggle projectId={load.project.id} projectTitle={load.project.title} />
+          {vaultState && (
+            <button
+              type="button"
+              className="ws-tool icon-only ws-vault"
+              title={t(vaultNeedsAttention(vaultState) ? "workspace.vaultNewVersion" : "workspace.vault")}
+              aria-label={t(vaultNeedsAttention(vaultState) ? "workspace.vaultNewVersion" : "workspace.vault")}
+              onClick={() => void openVault()}
+              data-testid="workspace-vault"
+            >
+              <Cloud size={16} />
+              {vaultNeedsAttention(vaultState) && <span className="ws-vault-dot" data-testid="workspace-vault-dot" />}
+            </button>
+          )}
           <button
             type="button"
             className="ws-tool icon-only mobile-outline-toggle"
@@ -2504,6 +2552,22 @@ export function Workspace() {
             void flushPendingSave().then(() => navigate("/settings"));
           }}
           onChanged={setPublishStatus}
+        />
+      )}
+      {load && vaultOpen && (
+        <VaultDialog
+          projectId={load.project.id}
+          onClose={() => setVaultOpen(false)}
+          onOpenSettings={() => {
+            setVaultOpen(false);
+            rememberSettingsCategory("vault");
+            navigate("/settings");
+          }}
+          onStatus={setVaultState}
+          // A full load, not a state update: every panel holds its own copy of
+          // what the pull just replaced, and the open node may be gone. Nothing
+          // is flushed, because anything still pending is the old text.
+          onReopen={() => window.location.replace(`/workspace/${load.project.id}`)}
         />
       )}
       <OnboardingTour

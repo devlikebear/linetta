@@ -1065,6 +1065,7 @@ func TestFilesThatCannotLandDoNotFailThePull(t *testing.T) {
 	ctx := context.Background()
 	_, a, b := devices(t)
 	a.edit(t, workID, "새 문장")
+	writeFile(t, filepath.Join(vaultbundle.SkillDir(a.home, workID), "style.md"), "고친 스킬")
 	if _, err := a.svc.Push(ctx, workID); err != nil {
 		t.Fatal(err)
 	}
@@ -1082,6 +1083,25 @@ func TestFilesThatCannotLandDoNotFailThePull(t *testing.T) {
 	}
 	if !strings.Contains(b.text(t, workID), "새 문장") {
 		t.Fatal("the text did not land")
+	}
+
+	// With the disk fixed, the same pull has to be able to finish the job.
+	if got := b.state(t, workID); got != StateSynced {
+		t.Fatalf("state after missing files = %s", got)
+	}
+	if err := os.Chmod(parent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	again, err := b.svc.Pull(ctx, PullInput{ProjectID: workID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.FilesRestored {
+		t.Fatal("the second pull did not restore the files")
+	}
+	body, err := os.ReadFile(filepath.Join(vaultbundle.SkillDir(b.home, workID), "style.md"))
+	if err != nil || string(body) != "고친 스킬" {
+		t.Fatalf("skill file: %q, %v", body, err)
 	}
 }
 
