@@ -150,6 +150,9 @@ type ProjectMeta struct {
 	LengthTarget string   `json:"length_target"`
 	DefaultPOV   string   `json:"default_pov"`
 	Synopsis     string   `json:"synopsis"`
+	// EpisodeCharTarget is the length the writer set for an episode, or 0 when
+	// they left it at the default.
+	EpisodeCharTarget int `json:"episode_char_target,omitempty"`
 }
 
 // DirectionBrief is the writer's own direction (story-assist Phase 1):
@@ -252,10 +255,13 @@ type ContextPreview struct {
 // final prompt. Stored as ai_runs.context_json so the user can later see
 // exactly what was sent.
 type Context struct {
-	ProjectID   string `json:"project_id"`
-	NodeID      string `json:"node_id"`
-	SceneLabel  string `json:"scene_label"`
-	SceneText   string `json:"scene_text"`
+	ProjectID  string `json:"project_id"`
+	NodeID     string `json:"node_id"`
+	SceneLabel string `json:"scene_label"`
+	SceneText  string `json:"scene_text"`
+	// ScenePlan is the summary of a scene with no body yet, which is where a
+	// planned episode's plan lives.
+	ScenePlan   string `json:"scene_plan,omitempty"`
 	PrevSummary string `json:"prev_summary"`
 	// Direction is the writer's own instruction: the work's current focus and
 	// this scene's intent. Only the app writes it (no MCP tool does), and it
@@ -318,6 +324,9 @@ type SceneSummary struct {
 type HierarchicalContext struct {
 	NearbyLeafSummaries []SceneSummary `json:"nearby_leaf_summaries"`
 	ProjectSynopsis     string         `json:"project_synopsis"`
+	// PartSummaries holds the written summary of each top-level part, in
+	// order. ProjectSynopsis is a derived rollup and is not rendered.
+	PartSummaries []SceneSummary `json:"part_summaries,omitempty"`
 }
 
 // NoteBrief is a margin-note line sent to the LLM. Anchor stays in the JSON
@@ -335,7 +344,7 @@ type EntityBrief struct {
 	Role       string            `json:"role"`
 	Summary    string            `json:"summary"`
 	Attributes map[string]string `json:"attributes"`
-	Recent     []string          `json:"recent"` // Plan 16 layer 2 dossier — first lines of latest 5 leaf summaries
+	Recent     []string          `json:"recent"` // Plan 16 layer 2 dossier — first lines of the nearest earlier scenes, "[label] line"
 }
 
 // FactBrief is one Fact Book card slice for the brief: the claim, its

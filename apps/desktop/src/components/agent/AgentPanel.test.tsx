@@ -1114,6 +1114,22 @@ describe("AgentPanel composer, stop, starters, and usage (#95 Task 6)", () => {
     expect(screen.queryByTestId("agent-starters")).toBeNull();
   });
 
+  it("keeps the review chips within reach after the first turn", async () => {
+    rpc.agentRun.mockImplementation(() => Promise.resolve({ run_id: "r1" }));
+    await renderReady();
+    expect(screen.queryByTestId("agent-followups")).toBeNull();
+
+    await type("써줘");
+    await pressEnter();
+    await emit("agent-done", { run_id: "r1", usage: { input: 1, output: 1 } });
+
+    expect(screen.getByTestId("agent-followups")).toBeTruthy();
+    await act(async () => {
+      screen.getByTestId("agent-followup-checkContinuity").click();
+    });
+    expect(screen.queryByTestId("agent-followups")).toBeNull();
+  });
+
   it("shows the turn's token usage after agent.done, with no cost figure", async () => {
     await renderReady();
 

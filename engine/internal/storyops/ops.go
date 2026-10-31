@@ -60,7 +60,8 @@ type Op struct {
 	// rule context edit Phase 3 follows for its own alias field).
 	Aliases []string `json:"aliases,omitempty" jsonschema:"create_entity: sets aliases; update_entity: adds to existing aliases, never removing one"`
 
-	// create_scene
+	// create_scene, create_outline_node. Summary (above) sets the new node's
+	// summary, which is where a planned episode keeps its plan.
 	AfterNodeID   string `json:"after_node_id,omitempty"`
 	AfterNodeRef  string `json:"after_node_ref,omitempty"`
 	Title         string `json:"title,omitempty"`
@@ -163,7 +164,12 @@ func ValidateProposal(p Proposal) error {
 		}
 		switch op.Type {
 		case "create_thread":
+			// A storyline is a titled thing, so title is the natural guess for
+			// a field that is named name.
 			if strings.TrimSpace(op.Name) == "" {
+				p.Ops[i].Name = op.Title
+			}
+			if strings.TrimSpace(p.Ops[i].Name) == "" {
 				return fmt.Errorf("op[%d] create_thread: name required", i)
 			}
 		case "update_thread":
@@ -191,6 +197,12 @@ func ValidateProposal(p Proposal) error {
 			}
 			if op.AfterNodeID != "" && op.AfterNodeRef != "" {
 				return fmt.Errorf("op[%d] create_scene: after_node_id and after_node_ref are mutually exclusive", i)
+			}
+			if op.ParentNodeID != "" && op.ParentNodeRef != "" {
+				return fmt.Errorf("op[%d] create_scene: parent_node_id and parent_node_ref are mutually exclusive", i)
+			}
+			if (op.ParentNodeID != "" || op.ParentNodeRef != "") && (op.AfterNodeID != "" || op.AfterNodeRef != "") {
+				return fmt.Errorf("op[%d] create_scene: parent_node_* and after_node_* are mutually exclusive", i)
 			}
 		case "create_outline_node":
 			if strings.TrimSpace(op.Label) == "" {
@@ -236,9 +248,16 @@ func ValidateProposal(p Proposal) error {
 			if op.NodeID == "" && op.NodeRef == "" {
 				return fmt.Errorf("op[%d] move_outline_node: node_id or node_ref required", i)
 			}
+			if op.ParentNodeID != "" && op.ParentNodeRef != "" {
+				return fmt.Errorf("op[%d] move_outline_node: parent_node_id and parent_node_ref are mutually exclusive", i)
+			}
 			direction := strings.ToLower(strings.TrimSpace(op.Direction))
-			if direction != "up" && direction != "down" {
-				return fmt.Errorf("op[%d] move_outline_node: direction must be up|down", i)
+			hasParent := op.ParentNodeID != "" || op.ParentNodeRef != ""
+			if hasParent && direction != "" {
+				return fmt.Errorf("op[%d] move_outline_node: give direction or a parent, not both", i)
+			}
+			if !hasParent && direction != "up" && direction != "down" {
+				return fmt.Errorf("op[%d] move_outline_node: direction must be up|down, or give parent_node_id to move it under another part", i)
 			}
 			p.Ops[i].Direction = direction
 		case "update_beat":

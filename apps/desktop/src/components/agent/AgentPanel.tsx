@@ -1652,6 +1652,28 @@ export function AgentPanel({
               </button>
             ) : null}
           </div>
+        ) : lines.length > 0 && !busy && reviewToolsEnabled && draft.trim() === "" ? (
+          // The check-and-plan chips matter most once there is writing to
+          // check, which is after the first turn, so they stay within reach
+          // whenever the composer is free.
+          <div className="ai-chiprow agent-starters" data-testid="agent-followups">
+            <button
+              type="button"
+              className="chip"
+              data-testid="agent-followup-checkContinuity"
+              onClick={() => setDraft(t("agentPanel.starters.checkContinuity.prompt"))}
+            >
+              {t("agentPanel.starters.checkContinuity.label")}
+            </button>
+            <button
+              type="button"
+              className="chip"
+              data-testid="agent-followup-forecastNext"
+              onClick={() => setDraft(t("agentPanel.starters.forecastNext.prompt"))}
+            >
+              {t("agentPanel.starters.forecastNext.label")}
+            </button>
+          </div>
         ) : null}
         <div
           className="cmp-input-wrap"

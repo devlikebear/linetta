@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/devlikebear/linetta/engine/internal/beat"
 	"github.com/devlikebear/linetta/engine/internal/entity"
@@ -19,8 +20,30 @@ import (
 )
 
 const prevSummaryMaxRunes = 300
-const hierarchicalMaxChars = 2500
 const coreEntityContextLimit = 12
+
+// Budgets for the parts of the brief that grow with the work, in runes: a
+// Korean summary is three bytes a character, so a byte budget would give a
+// Korean work a third of what it means to.
+const (
+	// nearbyMaxRunes bounds the adjacent-scene section.
+	nearbyMaxRunes = 2500
+	// partSummariesMaxRunes bounds the section that holds every part's arc.
+	// The part being written keeps partSummaryCurrentMaxRunes of it; the rest
+	// is shared among the others, so a long series still shows its whole shape.
+	partSummariesMaxRunes      = 2500
+	partSummaryCurrentMaxRunes = 1200
+	partSummaryMinRunes        = 80
+	// upcomingPlanLimit is how many unwritten scenes past the next one the
+	// brief carries the plan of.
+	upcomingPlanLimit = 2
+	// An entity's dossier is a pointer back into the story, not a recap of it:
+	// a few short lines, with a cap over all entities together. Without these
+	// the dossier was four fifths of a ten-episode work's brief.
+	entityRecentLimit        = 3
+	entityRecentLineMaxRunes = 160
+	entityRecentMaxRunes     = 6000
+)
 
 // SummaryRefresher is what ContextBuilder calls when an ancestor container has
 // a stale summary. *summarizer.Summarizer satisfies this via its RefreshNow
@@ -256,17 +279,6 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		return Context{}, err
 	}
 	ents = mergeEntitiesByID(ents, coreEnts)
-	briefs := make([]EntityBrief, 0, len(ents))
-	for _, e := range ents {
-		recent, err := b.mentions.RecentSummariesForEntity(ctx, e.ID, nodeID, 5)
-		if err != nil {
-			return Context{}, err
-		}
-		briefs = append(briefs, EntityBrief{
-			Name: e.Name, Kind: e.Kind, Role: e.Role, Summary: e.Summary, Attributes: e.Attributes,
-			Recent: recent,
-		})
-	}
 
 	hierarchical, nearbyIDs, err := b.loadHierarchicalContext(ctx, n)
 	if err != nil {
@@ -274,6 +286,11 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	}
 
 	related, err := b.loadRelatedScenes(ctx, n, nearbyIDs)
+	if err != nil {
+		return Context{}, err
+	}
+
+	briefs, err := b.loadEntityBriefs(ctx, n, ents, hierarchical.NearbyLeafSummaries, related)
 	if err != nil {
 		return Context{}, err
 	}
@@ -326,6 +343,12 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			references = got
 		}
 	}
+	// An unwritten scene's summary is its plan; once the scene has a body the
+	// body says more, and the summary is only a shorter copy of it.
+	scenePlan := ""
+	if strings.TrimSpace(sceneText) == "" {
+		scenePlan = strings.TrimSpace(n.Summary)
+	}
 	var direction DirectionBrief
 	if b.directionSource != nil {
 		if focus, present, err := b.directionSource.FocusFor(ctx, n.ProjectID); err == nil && present {
@@ -355,12 +378,16 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		NodeID:      n.ID,
 		SceneLabel:  n.Label,
 		SceneText:   sceneText,
+		ScenePlan:   scenePlan,
 		PrevSummary: prevSummary,
 		Project: ProjectMeta{
 			Genres:       proj.Genres,
 			LengthTarget: proj.LengthTarget,
 			DefaultPOV:   proj.DefaultPOV,
 			Synopsis:     proj.Synopsis,
+			// Left at the default it says nothing the writer chose, and could
+			// only argue with a length they gave in conversation.
+			EpisodeCharTarget: chosenEpisodeCharTarget(proj.EpisodeCharTarget),
 		},
 		Outline:       proj.Outline,
 		Hierarchical:  hierarchical,
@@ -381,6 +408,82 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		UserPrompt:    prompt,
 		Options:       opts,
 	}, nil
+}
+
+func chosenEpisodeCharTarget(target int) int {
+	if target == project.DefaultEpisodeCharTarget {
+		return 0
+	}
+	return target
+}
+
+// loadEntityBriefs builds the entity section. An entity's Recent lines come
+// from the scenes before cur, nearest first, one line per scene, skipping the
+// scenes the brief already shows in full. A cur that is not a leaf has no story
+// position, so every scene counts as before it.
+func (b *ContextBuilder) loadEntityBriefs(ctx context.Context, cur node.Node, ents []entity.Entity, shown ...[]SceneSummary) ([]EntityBrief, error) {
+	all, err := b.nodes.ListByProject(ctx, cur.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	earlier := leavesBefore(leavesInOrder(childrenByParent(all)), cur.ID)
+	skip := map[string]bool{cur.ID: true}
+	for _, scenes := range shown {
+		for _, s := range scenes {
+			skip[s.NodeID] = true
+		}
+	}
+
+	briefs := make([]EntityBrief, 0, len(ents))
+	budget := entityRecentMaxRunes
+	// A scene's line appears once. The next entity it concerns gets the label
+	// alone: a cast of twelve shares most of its scenes, and repeating the
+	// summary under each of them is the bulk the dossier used to be.
+	told := map[string]bool{}
+	for _, e := range ents {
+		brief := EntityBrief{Name: e.Name, Kind: e.Kind, Role: e.Role, Summary: e.Summary, Attributes: e.Attributes}
+		ids, _, err := b.mentions.MentionedNodeIDs(ctx, e.ID)
+		if err != nil {
+			return nil, err
+		}
+		mentioned := make(map[string]bool, len(ids))
+		for _, id := range ids {
+			mentioned[id] = true
+		}
+		for i := len(earlier) - 1; i >= 0 && len(brief.Recent) < entityRecentLimit; i-- {
+			lf := earlier[i]
+			if !mentioned[lf.ID] || skip[lf.ID] {
+				continue
+			}
+			first := strings.TrimSpace(strings.SplitN(lf.Summary, "\n", 2)[0])
+			if first == "" {
+				continue
+			}
+			line := "[" + lf.Label + "]"
+			if !told[lf.ID] {
+				line += " " + trimRunes(first, entityRecentLineMaxRunes)
+				told[lf.ID] = true
+			}
+			budget -= utf8.RuneCountInString(line)
+			if budget < 0 {
+				break
+			}
+			brief.Recent = append(brief.Recent, line)
+		}
+		briefs = append(briefs, brief)
+	}
+	return briefs, nil
+}
+
+// leavesBefore returns the leaves ahead of curID in story order, or all of them
+// when curID is not among them.
+func leavesBefore(leaves []node.Node, curID string) []node.Node {
+	for i, l := range leaves {
+		if l.ID == curID {
+			return leaves[:i]
+		}
+	}
+	return leaves
 }
 
 func mergeEntitiesByID(primary, extra []entity.Entity) []entity.Entity {
@@ -413,6 +516,7 @@ func ApplyContextSelection(c Context) Context {
 	s := c.Options.Context
 	if !s.Enabled(ContextKeyCurrentScene) {
 		c.SceneText = ""
+		c.ScenePlan = ""
 	}
 	if !s.Enabled(ContextKeyOverview) {
 		c.Outline = ""
@@ -420,6 +524,7 @@ func ApplyContextSelection(c Context) Context {
 	if !s.Enabled(ContextKeySynopsis) {
 		c.Project.Synopsis = ""
 		c.Hierarchical.ProjectSynopsis = ""
+		c.Hierarchical.PartSummaries = nil
 	}
 	if !s.Enabled(ContextKeyNearbyScenes) {
 		c.Hierarchical.NearbyLeafSummaries = nil
@@ -497,9 +602,18 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 	out := HierarchicalContext{}
 	nearbyIDs := make([]string, 0, 2)
 
-	// Nearby: 1 prior + 1 next (in DFS-leaf order), all excluding cur.
+	// Nearby: 1 prior + 1 next (in DFS-leaf order), then the plans of the
+	// unwritten scenes after that, so an agent drafting from a plan need not
+	// open each empty scene to see where the story is going.
 	if curIdx >= 0 {
-		for _, j := range []int{curIdx - 1, curIdx + 1} {
+		neighbours := []int{curIdx - 1, curIdx + 1}
+		for j := curIdx + 2; j < len(leaves) && j <= curIdx+1+upcomingPlanLimit; j++ {
+			if strings.TrimSpace(docToPlainText(leaves[j].ContentDoc)) != "" {
+				break
+			}
+			neighbours = append(neighbours, j)
+		}
+		for _, j := range neighbours {
 			if j < 0 || j >= len(leaves) || j == curIdx {
 				continue
 			}
@@ -540,9 +654,78 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 		out.ProjectSynopsis = strings.TrimSpace(sb.String())
 	}
 
-	trimToBudget(&out, hierarchicalMaxChars)
+	trimToBudget(&out, nearbyMaxRunes)
+	kept := make(map[string]bool, len(out.NearbyLeafSummaries))
+	for _, s := range out.NearbyLeafSummaries {
+		kept[s.NodeID] = true
+	}
+	shown := nearbyIDs[:0]
+	for _, id := range nearbyIDs {
+		if kept[id] {
+			shown = append(shown, id)
+		}
+	}
 
-	return out, nearbyIDs, nil
+	out.PartSummaries = partSummaries(rootContainers, ancestorRoot(byID, cur), byID)
+
+	return out, shown, nil
+}
+
+// ancestorRoot returns the id of the outermost node above n, or n's own id.
+// The hop limit only guards against a cycle in the parent_id graph.
+func ancestorRoot(byID map[string]node.Node, n node.Node) string {
+	for hops := 0; n.ParentID != nil && hops < 64; hops++ {
+		parent, ok := byID[*n.ParentID]
+		if !ok {
+			break
+		}
+		n = parent
+	}
+	return n.ID
+}
+
+// partSummaries is the work's arc, part by part, for a work divided into
+// parts. Only summaries someone wrote count: a part's rollup is the openings
+// of its scenes strung together, which tells the reader nothing the nearby
+// scenes do not, and the brief has never presented derived text as the writer's
+// own account of the work.
+func partSummaries(roots []node.Node, currentRoot string, byID map[string]node.Node) []SceneSummary {
+	written := make([]node.Node, 0, len(roots))
+	for _, r := range roots {
+		if r.SummaryWritten && strings.TrimSpace(r.Summary) != "" {
+			written = append(written, r)
+		}
+	}
+	if len(written) == 0 {
+		return nil
+	}
+	remaining := partSummariesMaxRunes
+	currentRunes := 0
+	for _, r := range written {
+		if r.ID == currentRoot {
+			currentRunes = min(utf8.RuneCountInString(r.Summary), partSummaryCurrentMaxRunes)
+		}
+	}
+	remaining -= currentRunes
+	others := len(written)
+	if currentRunes > 0 {
+		others--
+	}
+	each := partSummaryMinRunes
+	if others > 0 {
+		each = max(remaining/others, partSummaryMinRunes)
+	}
+	out := make([]SceneSummary, 0, len(written))
+	for _, r := range written {
+		limit := each
+		if r.ID == currentRoot {
+			limit = partSummaryCurrentMaxRunes
+		}
+		out = append(out, SceneSummary{
+			NodeID: r.ID, Label: node.BreadcrumbLabel(byID, r), Body: trimRunes(strings.TrimSpace(r.Summary), limit), Stale: !r.SummaryFresh(),
+		})
+	}
+	return out
 }
 
 // DeriveProjectSynopsis builds the rollup synopsis from root containers. When
@@ -717,17 +900,21 @@ func (b *ContextBuilder) loadRelationships(ctx context.Context, projectID string
 }
 
 // trimToBudget drops trailing nearby entries until the estimated rendered size
-// is under maxChars.
-func trimToBudget(h *HierarchicalContext, maxChars int) {
+// is under maxRunes. The entries run outward from the scene, so the farthest go
+// first.
+func trimToBudget(h *HierarchicalContext, maxRunes int) {
 	estimate := func() int {
-		total := len(h.ProjectSynopsis)
+		total := 0
 		for _, s := range h.NearbyLeafSummaries {
-			total += len(s.Label) + len(s.Body) + 4
+			total += utf8.RuneCountInString(s.Label) + utf8.RuneCountInString(s.Body) + 4
 		}
 		return total
 	}
-	for estimate() > maxChars && len(h.NearbyLeafSummaries) > 0 {
+	for estimate() > maxRunes && len(h.NearbyLeafSummaries) > 1 {
 		h.NearbyLeafSummaries = h.NearbyLeafSummaries[:len(h.NearbyLeafSummaries)-1]
+	}
+	if len(h.NearbyLeafSummaries) == 1 {
+		h.NearbyLeafSummaries[0].Body = trimRunes(h.NearbyLeafSummaries[0].Body, maxRunes)
 	}
 }
 
@@ -913,6 +1100,9 @@ func PreviewFromContext(c Context, selection ContextSelection) ContextPreview {
 	add(ContextKeyOverview, "작품 개요", boolCount(overview != ""), overview, false)
 
 	synopsis := strings.TrimSpace(c.Project.Synopsis)
+	if parts := renderSceneSummariesPreview(c.Hierarchical.PartSummaries, c.Options.Language); parts != "" {
+		synopsis = strings.TrimSpace(synopsis + "\n\n" + parts)
+	}
 	add(ContextKeySynopsis, "작품 시놉시스", boolCount(synopsis != ""), synopsis, false)
 
 	add(ContextKeyNearbyScenes, "직전·직후 씬 발췌", len(c.Hierarchical.NearbyLeafSummaries), renderSceneSummariesPreview(c.Hierarchical.NearbyLeafSummaries, c.Options.Language), false)
