@@ -417,6 +417,13 @@ const MCPConfigFilename = ".mcp.json"
 // sync dir except files that must never reach the remote.
 var excludeFromStaging = []string{".", ":(exclude)" + MCPConfigFilename}
 
+func gitCommand(ctx context.Context, dir string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	hideConsole(cmd)
+	return cmd
+}
+
 // runGitProd is the production CmdRunner. It runs git from `dir`, captures
 // stderr into the returned error, and enforces a per-call timeout.
 func runGitProd(ctx context.Context, dir string, args ...string) (string, error) {
@@ -426,8 +433,7 @@ func runGitProd(ctx context.Context, dir string, args ...string) (string, error)
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, "git", args...)
-	cmd.Dir = dir
+	cmd := gitCommand(cctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
