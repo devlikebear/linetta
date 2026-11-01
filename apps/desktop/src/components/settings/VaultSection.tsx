@@ -454,6 +454,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
     <section className="settings-section" id="vault-settings" data-testid="vault-section">
       <h3>{t("settings.vault.title")}</h3>
       <p className="sd">{t("settings.vault.description")}</p>
+      <p className="sd" data-testid="sync-works-note">{t("settings.sync.worksNote")}</p>
       {renderBody()}
       {error ? (
         <>

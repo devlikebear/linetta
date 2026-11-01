@@ -1547,28 +1547,16 @@ details.sec[open] > summary { margin-bottom: 10px; }
 
 /* ---- Settings (light) ---- */
 .settings { height:100%; overflow-y:auto; }
-.settings-inner { width: min(640px, 90%); margin: 0 auto; padding: 40px 0 80px; }
-.settings h1 { font-family: var(--font-edit); font-weight: 400; font-size: 38px; margin: 0 0 28px; }
-.settings-section { margin-bottom: 32px; }
-.settings-section h3 { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted); margin: 0 0 14px; }
-.set-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
-.set-row .sk { font-size: 14px; color: var(--ink); }
-.set-row .sd { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.set-row .mono { font-size: 12px; color: var(--muted); }
+.settings-inner { width: min(760px, 92%); margin: 0 auto; padding: 32px 0 80px; }
+.settings h1 { font-family: var(--font-edit); font-weight: 400; font-size: 30px; margin: 0 0 16px; }
+.settings-section { margin-bottom: 16px; padding: 20px 22px; border: 1px solid var(--line-soft); border-radius: var(--r-md); background: var(--surface); scroll-margin-top: 60px; }
+.settings-section h3 { font-size: 15px; font-weight: 600; color: var(--ink); margin: 0 0 4px; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
 
 /* An external agent touched the scene under the writer's cursor. Sits above
    the prose because it is about the text they are looking at. */
 .mcp-conflict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 18px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; font-size: 13px; color: var(--muted); }
 .mcp-conflict > span { flex: 1 1 240px; line-height: 1.5; }
-
-/* The built-in companion, demoted. Folded away by default so the writing
-   settings read as the whole surface, and unfolded for people who used it. */
-.settings-legacy { margin-bottom: 32px; border-top: 1px solid var(--line-soft); padding-top: 18px; }
-.settings-legacy > summary { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--label-track); text-transform: var(--label-case); color: var(--muted); cursor: pointer; list-style: revert; }
-.settings-legacy > summary:hover { color: var(--ink); }
-.settings-legacy > .sd { margin: 12px 0; }
-.settings-legacy[open] > summary { margin-bottom: 4px; }
-.settings-legacy > .settings-section:first-of-type { margin-top: 24px; }
 
 /* ============================================================
    APP-SPECIFIC SCREENS — present in the real app but not in the
@@ -1754,8 +1742,12 @@ details.sec[open] > summary { margin-bottom: 10px; }
     padding: 28px 0 calc(56px + env(safe-area-inset-bottom));
   }
 
+  .settings-section {
+    padding: 16px;
+  }
+
   .settings h1 {
-    font-size: 34px;
+    font-size: 28px;
     letter-spacing: 0;
   }
 

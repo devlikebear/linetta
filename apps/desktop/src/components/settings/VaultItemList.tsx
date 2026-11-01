@@ -61,25 +61,29 @@ export function VaultItemList({ editable }: { editable: boolean }) {
   };
 
   return (
-    <div className="vault-categories" data-testid="vault-categories">
-      <h4>{t("settings.vault.whatTravels")}</h4>
+    <section className="settings-section" data-testid="vault-categories">
+      <h3>{t("settings.vault.whatTravels")}</h3>
       <p className="sd">{t("settings.vault.whatTravelsNote")}</p>
-      {categories.map((category) => (
-        <label className="set-toggle" key={category.id}>
-          <input
-            type="checkbox"
-            checked={category.enabled}
-            disabled={category.required || !editable || busy}
-            onChange={(e) => void toggle(category.id, e.target.checked)}
-            data-testid={`vault-category-${category.id || "required"}`}
-          />
-          {t(CATEGORY_KEYS[category.id] ?? "settings.vault.category.required")}
-          <span className="sd" data-testid={`vault-category-size-${category.id || "required"}`}>
-            {" "}· {formatVaultBytes(category.bytes)}
-          </span>
-        </label>
-      ))}
+      <ul className="vault-categories">
+        {categories.map((category) => (
+          <li key={category.id}>
+            <label className="set-toggle">
+              <input
+                type="checkbox"
+                checked={category.enabled}
+                disabled={category.required || !editable || busy}
+                onChange={(e) => void toggle(category.id, e.target.checked)}
+                data-testid={`vault-category-${category.id || "required"}`}
+              />
+              {t(CATEGORY_KEYS[category.id] ?? "settings.vault.category.required")}
+            </label>
+            <span className="sd" data-testid={`vault-category-size-${category.id || "required"}`}>
+              {formatVaultBytes(category.bytes)}
+            </span>
+          </li>
+        ))}
+      </ul>
       {error ? <p className="sd" role="alert" data-testid="vault-items-error">{rpcErrorMessage(error, t)}</p> : null}
-    </div>
+    </section>
   );
 }

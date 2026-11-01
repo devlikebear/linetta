@@ -57,7 +57,7 @@ export function ArchivedNotes({ workId }: { workId: string }) {
     <details className="modal-field" data-testid="memory-archive">
       <summary>{t("settings.memory.archive.title", { count: String(notes.length) })}</summary>
       <p className="sd">{t("settings.memory.archive.help")}</p>
-      <ul>
+      <ul className="vault-items">
         {notes.map((note) => (
           <li key={note.id} data-testid="memory-archive-line">
             <span>{note.body}</span>{" "}

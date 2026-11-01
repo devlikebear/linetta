@@ -10,7 +10,6 @@ import {
   opsStatus as opsStatusApi,
   diagnostics as diagnosticsApi,
   exportApi,
-  backgroundPrefsGet,
 } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { saveExportedMarkdown } from "../lib/exportSave";
@@ -57,24 +56,22 @@ const MAX_AGENT_MAX_TOOL_CALLS = 200;
 const MIN_AGENT_HISTORY_BUDGET = 20000;
 const MAX_AGENT_HISTORY_BUDGET = 200000;
 
-/** Sidebar categories (#82, 시안 A). One category renders at a time; the
- *  sidebar is the only scroll-free path to every setting. */
-const SETTINGS_CATEGORIES = [
-  "general",
-  "background",
-  "editor",
-  "writing",
-  "providers",
-  "images",
-  "mcp",
-  "tools",
-  "memory",
-  "skills",
-  "sync",
-  "publish",
-  "backup",
-] as const;
-type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
+/** Top tabs, one set of related panes each. Only the active tab is mounted. */
+const SETTINGS_TABS = ["general", "writing", "ai", "agent", "mcp", "sync", "publish", "backup"] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number];
+
+/** What a stored category means now. These are the sidebar's old names: a tab
+ *  open across the update still holds one. */
+const TAB_OF_STORED: Record<string, SettingsTab> = {
+  background: "general",
+  editor: "writing",
+  providers: "ai",
+  images: "ai",
+  tools: "agent",
+  memory: "agent",
+  skills: "agent",
+  vault: "sync",
+};
 
 const CATEGORY_STORAGE_KEY = "linetta.settings.category";
 
@@ -87,29 +84,51 @@ function formatToolBytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} kB`;
 }
 
-/** Open Settings on a given category next time it mounts — for a screen
- *  elsewhere that sends the writer to one pane ("connect in Settings →
- *  Publishing"). */
-export function rememberSettingsCategory(category: SettingsCategory): void {
+/** Open Settings on a given tab next time it mounts — for a screen elsewhere
+ *  that sends the writer to one place ("connect in Settings → Publishing").
+ *  Image generation also scrolls: it sits under the providers on its tab. */
+export function rememberSettingsCategory(category: SettingsTab | "images"): void {
   try {
     sessionStorage.setItem(CATEGORY_STORAGE_KEY, category);
   } catch {
-    /* storage unavailable — Settings opens on its first category */
+    /* storage unavailable — Settings opens on its first tab */
   }
 }
 
-function initialCategory(): SettingsCategory {
+function storedCategory(): string | null {
   try {
-    const stored = sessionStorage.getItem(CATEGORY_STORAGE_KEY);
-    // The vault pane moved into sync; a tab open across the update still says so.
-    if (stored === "vault") return "sync";
-    if (stored && (SETTINGS_CATEGORIES as readonly string[]).includes(stored)) {
-      return stored as SettingsCategory;
-    }
+    return sessionStorage.getItem(CATEGORY_STORAGE_KEY);
   } catch {
-    /* storage unavailable — start at the first category */
+    /* storage unavailable — start at the first tab */
+    return null;
+  }
+}
+
+function initialTab(): SettingsTab {
+  const stored = storedCategory();
+  if (stored && stored in TAB_OF_STORED) return TAB_OF_STORED[stored];
+  if (stored && (SETTINGS_TABS as readonly string[]).includes(stored)) {
+    return stored as SettingsTab;
   }
   return "general";
+}
+
+/** Bring a pane to the top. The panes above it are still loading and will push
+ *  it down, so this holds on for a moment rather than scrolling once. */
+function scrollToPane(id: string): () => void {
+  const pane = document.getElementById(id);
+  const scroller = pane?.closest(".settings-content");
+  if (!pane || !scroller) return () => {};
+  const scroll = () => pane.scrollIntoView?.({ block: "start" });
+  scroll();
+  if (typeof ResizeObserver === "undefined") return () => {};
+  const observer = new ResizeObserver(scroll);
+  observer.observe(scroller);
+  const timer = setTimeout(() => observer.disconnect(), 1000);
+  return () => {
+    clearTimeout(timer);
+    observer.disconnect();
+  };
 }
 
 export function Settings() {
@@ -134,9 +153,8 @@ export function Settings() {
   const [publishAvailable, setPublishAvailable] = useState(false);
   const [vaultAvailable, setVaultAvailable] = useState(false);
   const [current, setCurrent] = useState<SettingsRow | null>(null);
-  const [category, setCategoryState] = useState<SettingsCategory>(initialCategory);
-  // Nav visibility only; BackgroundSection keeps its own probe and content.
-  const [backgroundAvailable, setBackgroundAvailable] = useState(false);
+  const [tab, setTabState] = useState<SettingsTab>(initialTab);
+  const [openOnImages] = useState(() => storedCategory() === "images");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -291,8 +309,8 @@ export function Settings() {
 
 
 
-  const setCategory = (next: SettingsCategory) => {
-    setCategoryState(next);
+  const setTab = (next: SettingsTab) => {
+    setTabState(next);
     try {
       sessionStorage.setItem(CATEGORY_STORAGE_KEY, next);
     } catch {
@@ -300,78 +318,32 @@ export function Settings() {
     }
   };
 
+  const loaded = current !== null;
   useEffect(() => {
-    let cancelled = false;
-    backgroundPrefsGet()
-      .then(() => {
-        if (!cancelled) setBackgroundAvailable(true);
-      })
-      .catch(() => {
-        /* not a desktop shell — nav item stays hidden */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (loaded && openOnImages) return scrollToPane("image-settings");
+  }, [loaded, openOnImages]);
 
-  const navGroups: Array<{
-    label: string;
-    items: Array<{ id: SettingsCategory; label: string }>;
-  }> = [
-    {
-      label: t("settings.nav.groupApp"),
-      items: [
-        { id: "general", label: t("settings.nav.general") },
-        ...(backgroundAvailable
-          ? [{ id: "background" as const, label: t("settings.background.title") }]
-          : []),
-      ],
-    },
-    {
-      label: t("settings.nav.groupWriting"),
-      items: [
-        { id: "editor", label: t("settings.editor.title") },
-        { id: "writing", label: t("settings.writing.title") },
-      ],
-    },
-    ...(mcpAvailable || agentAvailable
-      ? [
-          {
-            // Providers above MCP: connecting a provider is what a writer
-            // does first, and MCP is only for people using outside tools.
-            label: t("settings.nav.groupConnect"),
-            items: [
-              ...(agentAvailable ? [{ id: "providers" as const, label: t("settings.nav.providers") }] : []),
-              // Drawing borrows the agent providers' credentials, so it sits
-              // right under them and rides the same condition.
-              ...(agentAvailable ? [{ id: "images" as const, label: t("settings.nav.images") }] : []),
-              ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.nav.mcp") }] : []),
-              // The tool budget (#99) governs what the built-in agent AND an
-              // external client are offered, so it sits between the two panes
-              // it applies to rather than inside either — and above memory and
-              // skills, which are the two groups it can take away.
-              { id: "tools" as const, label: t("settings.nav.tools") },
-              // A memory is only meaningful when some agent can read it, so it
-              // rides the same condition as the group it lives in.
-              { id: "memory" as const, label: t("settings.nav.memory") },
-              // Skills ride the same condition for the same reason: a skill
-              // that nothing can load into a prompt is a document with no
-              // reader.
-              { id: "skills" as const, label: t("settings.nav.skills") },
-            ],
-          },
-        ]
-      : []),
-    {
-      label: t("settings.nav.groupData"),
-      items: [
-        { id: "sync", label: t("settings.nav.sync") },
-        // Publishing sends text off the device, like sync does, so it sits
-        // beside it rather than with the AI connections.
-        ...(publishAvailable ? [{ id: "publish" as const, label: t("settings.nav.publish") }] : []),
-        { id: "backup", label: t("settings.nav.backupRestore") },
-      ],
-    },
+  // On a narrow window the strip scrolls; the open tab stays in it.
+  useEffect(() => {
+    if (loaded) document.querySelector(".settings-tab.on")?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [loaded, tab]);
+
+  // Hidden on builds that have no agent and no external client: nothing there
+  // could read a memory or load a skill.
+  const agentPanes = mcpAvailable || agentAvailable;
+  const tabs: Array<{ id: SettingsTab; label: string }> = [
+    { id: "general", label: t("settings.tab.general") },
+    { id: "writing", label: t("settings.tab.writing") },
+    // Connecting a provider is what a writer does first; MCP is only for
+    // people using outside tools.
+    ...(agentAvailable ? [{ id: "ai" as const, label: t("settings.tab.ai") }] : []),
+    ...(agentPanes ? [{ id: "agent" as const, label: t("settings.tab.agent") }] : []),
+    ...(mcpAvailable ? [{ id: "mcp" as const, label: t("settings.tab.mcp") }] : []),
+    { id: "sync", label: t("settings.tab.sync") },
+    // Publishing sends text off the device, like sync does, so it sits
+    // beside it rather than with the AI connections.
+    ...(publishAvailable ? [{ id: "publish" as const, label: t("settings.tab.publish") }] : []),
+    { id: "backup", label: t("settings.tab.backup") },
   ];
 
   /* The tool budget, but only when it is a real measurement (#99).
@@ -409,33 +381,33 @@ export function Settings() {
         {!current ? (
           <p className="hint">{t("common.loading")}</p>
         ) : (
-          <div className="settings-layout">
-            <nav className="settings-nav" aria-label={t("settings.title")}>
-              {navGroups.map((group) => (
-                <div key={group.label} className="settings-nav-group">
-                  <p className="settings-nav-label">{group.label}</p>
-                  {group.items.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`settings-nav-item${category === item.id ? " on" : ""}`}
-                      aria-current={category === item.id ? "page" : undefined}
-                      onClick={() => setCategory(item.id)}
-                      data-testid={`settings-nav-${item.id}`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              ))}
-            </nav>
+          <>
+            <div className="settings-tabbar">
+              <nav className="settings-tabs" aria-label={t("settings.title")}>
+                {tabs.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`settings-tab${tab === item.id ? " on" : ""}`}
+                    aria-current={tab === item.id ? "page" : undefined}
+                    onClick={() => setTab(item.id)}
+                    data-testid={`settings-tab-${item.id}`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+              {savedAt && <span className="settings-saved">{t("settings.saved")}</span>}
+            </div>
             <div className="settings-content">
-            {category === "general" && (
+            {tab === "general" && (
             <section className="settings-section">
               <h3>{t("settings.language.title")}</h3>
-              <p className="sd">{t("settings.language.description")}</p>
-              <div className="modal-field">
-                <label htmlFor="app-language">{t("settings.language.label")}</label>
+              <div className="set-row">
+                <span className="sk-wrap">
+                  <label className="sk" htmlFor="app-language">{t("settings.language.label")}</label>
+                  <span className="sd">{t("settings.language.description")}</span>
+                </span>
                 <select
                   id="app-language"
                   value={current.language ?? language}
@@ -452,7 +424,119 @@ export function Settings() {
             </section>
             )}
 
-            {category === "writing" && (
+            {tab === "writing" && (
+            <section className="settings-section">
+              <h3>{t("settings.editor.title")}</h3>
+              <div className="set-row">
+                <span className="sk">{t("settings.editor.theme")}</span>
+                <div className="settings-segmented" role="group" aria-label={t("settings.editor.theme")}>
+                  {([
+                    ["system", t("settings.editor.themeSystem")],
+                    ["light", t("settings.editor.themeLight")],
+                    ["dark", t("settings.editor.themeDark")],
+                  ] as Array<[ThemePreference, string]>).map(([theme, label]) => (
+                    <button
+                      key={theme}
+                      type="button"
+                      className={current.theme === theme ? "is-selected" : ""}
+                      onClick={() => !saving && apply({ theme })}
+                      disabled={saving}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="set-row is-stacked">
+                <span className="sk">{t("settings.editor.palette")}</span>
+                <div className="settings-palette" role="radiogroup" aria-label={t("settings.editor.palette")}>
+                  {([
+                    ["hanji", t("settings.editor.paletteHanji"), t("settings.editor.paletteHanjiDesc")],
+                    ["paper", t("settings.editor.palettePaper"), t("settings.editor.palettePaperDesc")],
+                    ["bone", t("settings.editor.paletteBone"), t("settings.editor.paletteBoneDesc")],
+                    ["press", t("settings.editor.palettePress"), t("settings.editor.palettePressDesc")],
+                  ] as Array<[PalettePreference, string, string]>).map(([palette, label, description]) => (
+                    <button
+                      key={palette}
+                      type="button"
+                      role="radio"
+                      aria-checked={current.palette === palette}
+                      data-palette={palette}
+                      className={`palette-card${current.palette === palette ? " is-selected" : ""}`}
+                      onClick={() => !saving && apply({ palette })}
+                      disabled={saving}
+                    >
+                      <span className="palette-chips" aria-hidden="true">
+                        <span className="palette-chip paper" />
+                        <span className="palette-chip ink" />
+                        <span className="palette-chip accent" />
+                      </span>
+                      <span className="palette-name">{label}</span>
+                      <span className="palette-desc">{description}</span>
+                    </button>
+                  ))}
+                </div>
+                <span className="sd">{t("settings.editor.paletteHint")}</span>
+              </div>
+              <div className="set-row">
+                <label className="sk" htmlFor="editor-font-size">{t("settings.editor.fontSize")}</label>
+                <input
+                  id="editor-font-size"
+                  type="number"
+                  min={15}
+                  max={22}
+                  step={1}
+                  value={editorFontSizeDraft}
+                  onChange={(e) => {
+                    const raw = e.currentTarget.value;
+                    setEditorFontSizeDraft(raw);
+                    const value = Number(raw);
+                    if (Number.isFinite(value) && value >= 15 && value <= 22) {
+                      apply({ editor_font_size: value });
+                    }
+                  }}
+                  disabled={saving}
+                />
+              </div>
+              <div className="set-row">
+                <label className="sk" htmlFor="editor-line-height">{t("settings.editor.lineHeight")}</label>
+                <input
+                  id="editor-line-height"
+                  type="number"
+                  min={1.6}
+                  max={2.2}
+                  step={0.1}
+                  value={editorLineHeightDraft}
+                  onChange={(e) => {
+                    const raw = e.currentTarget.value;
+                    setEditorLineHeightDraft(raw);
+                    const value = Number(raw);
+                    if (Number.isFinite(value) && value >= 1.6 && value <= 2.2) {
+                      apply({ editor_line_height: value });
+                    }
+                  }}
+                  disabled={saving}
+                />
+              </div>
+              <div className="set-row">
+                <label className="sk" htmlFor="copy-profile">{t("settings.editor.copyProfile")}</label>
+                <select
+                  id="copy-profile"
+                  value={current.copy_profile ?? "plain"}
+                  onChange={(e) => apply({ copy_profile: e.target.value as PlatformProfileId })}
+                  disabled={saving}
+                >
+                  {(["plain", "munpia", "series", "joara"] as PlatformProfileId[]).map((profile) => (
+                    <option key={profile} value={profile}>
+                      {t(`platformProfile.${profile}`)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </section>
+            )}
+
+            {tab === "writing" && (
             <section className="settings-section">
               <h3>{t("settings.writing.title")}</h3>
               <button
@@ -482,121 +566,7 @@ export function Settings() {
             </section>
             )}
 
-            {category === "editor" && (
-            <section className="settings-section">
-              <h3>{t("settings.editor.title")}</h3>
-              <div className="modal-field">
-                <label>{t("settings.editor.theme")}</label>
-                <div className="settings-segmented" role="group" aria-label={t("settings.editor.theme")}>
-                  {([
-                    ["system", t("settings.editor.themeSystem")],
-                    ["light", t("settings.editor.themeLight")],
-                    ["dark", t("settings.editor.themeDark")],
-                  ] as Array<[ThemePreference, string]>).map(([theme, label]) => (
-                    <button
-                      key={theme}
-                      type="button"
-                      className={current.theme === theme ? "is-selected" : ""}
-                      onClick={() => !saving && apply({ theme })}
-                      disabled={saving}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="modal-field">
-                <label>{t("settings.editor.palette")}</label>
-                <div className="settings-palette" role="radiogroup" aria-label={t("settings.editor.palette")}>
-                  {([
-                    ["hanji", t("settings.editor.paletteHanji"), t("settings.editor.paletteHanjiDesc")],
-                    ["paper", t("settings.editor.palettePaper"), t("settings.editor.palettePaperDesc")],
-                    ["bone", t("settings.editor.paletteBone"), t("settings.editor.paletteBoneDesc")],
-                    ["press", t("settings.editor.palettePress"), t("settings.editor.palettePressDesc")],
-                  ] as Array<[PalettePreference, string, string]>).map(([palette, label, description]) => (
-                    <button
-                      key={palette}
-                      type="button"
-                      role="radio"
-                      aria-checked={current.palette === palette}
-                      data-palette={palette}
-                      className={`palette-card${current.palette === palette ? " is-selected" : ""}`}
-                      onClick={() => !saving && apply({ palette })}
-                      disabled={saving}
-                    >
-                      <span className="palette-chips" aria-hidden="true">
-                        <span className="palette-chip paper" />
-                        <span className="palette-chip ink" />
-                        <span className="palette-chip accent" />
-                      </span>
-                      <span className="palette-name">{label}</span>
-                      <span className="palette-desc">{description}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="palette-hint">{t("settings.editor.paletteHint")}</p>
-              </div>
-              <div className="settings-number-grid">
-                <div className="modal-field">
-                  <label htmlFor="editor-font-size">{t("settings.editor.fontSize")}</label>
-                  <input
-                    id="editor-font-size"
-                    type="number"
-                    min={15}
-                    max={22}
-                    step={1}
-                    value={editorFontSizeDraft}
-                    onChange={(e) => {
-                      const raw = e.currentTarget.value;
-                      setEditorFontSizeDraft(raw);
-                      const value = Number(raw);
-                      if (Number.isFinite(value) && value >= 15 && value <= 22) {
-                        apply({ editor_font_size: value });
-                      }
-                    }}
-                    disabled={saving}
-                  />
-                </div>
-                <div className="modal-field">
-                  <label htmlFor="editor-line-height">{t("settings.editor.lineHeight")}</label>
-                  <input
-                    id="editor-line-height"
-                    type="number"
-                    min={1.6}
-                    max={2.2}
-                    step={0.1}
-                    value={editorLineHeightDraft}
-                    onChange={(e) => {
-                      const raw = e.currentTarget.value;
-                      setEditorLineHeightDraft(raw);
-                      const value = Number(raw);
-                      if (Number.isFinite(value) && value >= 1.6 && value <= 2.2) {
-                        apply({ editor_line_height: value });
-                      }
-                    }}
-                    disabled={saving}
-                  />
-                </div>
-              </div>
-              <div className="modal-field">
-                <label htmlFor="copy-profile">{t("settings.editor.copyProfile")}</label>
-                <select
-                  id="copy-profile"
-                  value={current.copy_profile ?? "plain"}
-                  onChange={(e) => apply({ copy_profile: e.target.value as PlatformProfileId })}
-                  disabled={saving}
-                >
-                  {(["plain", "munpia", "series", "joara"] as PlatformProfileId[]).map((profile) => (
-                    <option key={profile} value={profile}>
-                      {t(`platformProfile.${profile}`)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </section>
-            )}
-
-            {category === "general" && (
+            {tab === "general" && (
             <section className="settings-section">
               <h3>{t("settings.onboarding.title")}</h3>
               <button
@@ -623,15 +593,17 @@ export function Settings() {
             </section>
             )}
 
-            {category === "providers" && agentAvailable && <ProviderSection />}
+            {tab === "general" && <BackgroundSection />}
 
-            {category === "images" && agentAvailable && (
-              <ImageGenSection onOpenProviders={() => setCategory("providers")} />
+            {tab === "ai" && agentAvailable && <ProviderSection />}
+
+            {tab === "ai" && agentAvailable && (
+              <ImageGenSection onOpenProviders={() => scrollToPane("provider-settings")} />
             )}
 
-            {category === "mcp" && mcpAvailable && <McpSection />}
+            {tab === "mcp" && mcpAvailable && <McpSection />}
 
-            {category === "publish" && <PublishSection available={publishAvailable} />}
+            {tab === "publish" && <PublishSection available={publishAvailable} />}
 
             {/* The tool budget (#99). Both switches are ON by default, so they
                 read `!== false`: a settings payload from an engine that
@@ -643,7 +615,7 @@ export function Settings() {
                 they are absent, which is what a build that cannot measure them
                 returns. A count invented here would be the drift this feature
                 exists to avoid. */}
-            {category === "tools" && (mcpAvailable || agentAvailable) && (
+            {tab === "agent" && agentPanes && (
             <section className="settings-section">
               <h3>{t("settings.tools.title")}</h3>
               <p className="sd">{t("settings.tools.description")}</p>
@@ -739,8 +711,17 @@ export function Settings() {
                   its own loop and never reads it. Saved on blur or Enter, not
                   per keystroke — "120" passes through "12" on the way. */}
               {agentAvailable && (
-                <div className="modal-field">
-                  <label htmlFor="agent-max-tool-calls">{t("settings.tools.maxCalls.title")}</label>
+                <div className="set-row">
+                  <span className="sk-wrap">
+                    <label className="sk" htmlFor="agent-max-tool-calls">{t("settings.tools.maxCalls.title")}</label>
+                    <span className="sd">
+                      {t("settings.tools.maxCalls.description", {
+                        min: String(MIN_AGENT_MAX_TOOL_CALLS),
+                        max: String(MAX_AGENT_MAX_TOOL_CALLS),
+                        default: String(DEFAULT_AGENT_MAX_TOOL_CALLS),
+                      })}
+                    </span>
+                  </span>
                   <input
                     id="agent-max-tool-calls"
                     data-testid="agent-max-tool-calls"
@@ -756,18 +737,19 @@ export function Settings() {
                     }}
                     disabled={saving}
                   />
-                  <p className="sd">
-                    {t("settings.tools.maxCalls.description", {
-                      min: String(MIN_AGENT_MAX_TOOL_CALLS),
-                      max: String(MAX_AGENT_MAX_TOOL_CALLS),
-                      default: String(DEFAULT_AGENT_MAX_TOOL_CALLS),
-                    })}
-                  </p>
                 </div>
               )}
               {agentAvailable && (
-                <div className="modal-field">
-                  <label htmlFor="agent-history-budget">{t("settings.tools.historyBudget.title")}</label>
+                <div className="set-row">
+                  <span className="sk-wrap">
+                    <label className="sk" htmlFor="agent-history-budget">{t("settings.tools.historyBudget.title")}</label>
+                    <span className="sd">
+                      {t("settings.tools.historyBudget.description", {
+                        min: String(MIN_AGENT_HISTORY_BUDGET),
+                        max: String(MAX_AGENT_HISTORY_BUDGET),
+                      })}
+                    </span>
+                  </span>
                   <input
                     id="agent-history-budget"
                     data-testid="agent-history-budget"
@@ -784,20 +766,14 @@ export function Settings() {
                     }}
                     disabled={saving}
                   />
-                  <p className="sd">
-                    {t("settings.tools.historyBudget.description", {
-                      min: String(MIN_AGENT_HISTORY_BUDGET),
-                      max: String(MAX_AGENT_HISTORY_BUDGET),
-                    })}
-                  </p>
                 </div>
               )}
             </section>
             )}
 
-            {category === "memory" && (mcpAvailable || agentAvailable) && <MemorySection />}
+            {tab === "agent" && agentPanes && <MemorySection />}
 
-            {category === "skills" && (mcpAvailable || agentAvailable) && (
+            {tab === "agent" && agentPanes && (
             <>
             {/* With the skills tools switched off (#99) this whole pane is
                 still fully usable and none of it reaches the agent: the list
@@ -853,7 +829,7 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.agent_episode_review_enabled === true ? " on" : ""}`} />
               </button>
-              <label className="set-row">
+              <label className="set-row is-stacked">
                 <span className="sk-wrap">
                   <span className="sk">{t("settings.style.globalPhrases")}</span>
                   <span className="sd">{t("settings.style.globalPhrasesDescription")}</span>
@@ -875,24 +851,21 @@ export function Settings() {
             </>
             )}
 
-            {category === "background" && <BackgroundSection />}
-
-            {category === "sync" && vaultAvailable && (
+            {tab === "sync" && vaultAvailable && (
               <>
                 <SyncOverview />
-                <p className="sd" data-testid="sync-works-note">{t("settings.sync.worksNote")}</p>
-                <VaultSection available={vaultAvailable} onOpenPublish={() => setCategory("publish")} />
+                <VaultSection available={vaultAvailable} onOpenPublish={() => setTab("publish")} />
               </>
             )}
 
-            {category === "sync" && !gitSyncAvailable && (
+            {tab === "sync" && !gitSyncAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
               <p className="sd">{t("settings.git.unavailableNote")}</p>
             </section>
             )}
 
-            {category === "sync" && gitSyncAvailable && (
+            {tab === "sync" && gitSyncAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
               <p className="sd">{t("settings.sync.exportOnly")}</p>
@@ -991,7 +964,7 @@ export function Settings() {
             </section>
             )}
 
-            {category === "sync" && (
+            {tab === "sync" && (
             <section className="settings-section">
               <h3>{t("settings.folder.title")}</h3>
               <p className="sd">{t("settings.sync.exportOnly")}</p>
@@ -1071,12 +1044,12 @@ export function Settings() {
             </section>
             )}
 
-            {category === "backup" && (
+            {tab === "backup" && (
             <section className="settings-section">
               <h3>{t("settings.backup.title")}</h3>
               <p className="sd">{t("settings.backup.description")}</p>
-              <div className="set-row">
-                <span className="sk-wrap"><span className="sk">{t("settings.backup.folder")}</span></span>
+              <div className="set-row is-stacked">
+                <span className="sk">{t("settings.backup.folder")}</span>
                 <span className="mono">{current.backup_dir}</span>
               </div>
               <OpsStatusCard
@@ -1133,10 +1106,8 @@ export function Settings() {
               </section>
             )}
 
-
-            {savedAt && <p className="settings-saved">{t("settings.saved")}</p>}
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
