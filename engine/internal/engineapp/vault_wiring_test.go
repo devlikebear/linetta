@@ -36,6 +36,33 @@ func TestVaultMethodsAreRegisteredAndSendNothingUntilConnected(t *testing.T) {
 	}
 }
 
+func TestVaultItemsWorkWithoutAConnection(t *testing.T) {
+	app := openApp(t)
+	result, rpcErr := call(t, app, "vault.items_get", "")
+	if rpcErr != nil {
+		t.Fatalf("vault.items_get: %+v", rpcErr)
+	}
+	if !strings.Contains(string(result), `"required":true`) || !strings.Contains(string(result), `"id":"images"`) {
+		t.Fatalf("vault.items_get = %s", result)
+	}
+	result, rpcErr = call(t, app, "vault.items_set", `{"omit":["images"]}`)
+	if rpcErr != nil {
+		t.Fatalf("vault.items_set: %+v", rpcErr)
+	}
+	if !strings.Contains(string(result), `"id":"images","bytes":0,"enabled":false`) {
+		t.Fatalf("vault.items_set = %s", result)
+	}
+}
+
+func TestVaultItemsRefuseWhatCannotBeOff(t *testing.T) {
+	app := openApp(t)
+	for _, params := range []string{`{}`, `{"omit":["manuscript"]}`, `{"omit":[""]}`} {
+		if _, rpcErr := call(t, app, "vault.items_set", params); rpcErr == nil {
+			t.Errorf("%s was accepted", params)
+		}
+	}
+}
+
 func TestVaultAvailableReachesDiagnostics(t *testing.T) {
 	result, rpcErr := call(t, openApp(t), "diagnostics.get", "")
 	if rpcErr != nil {

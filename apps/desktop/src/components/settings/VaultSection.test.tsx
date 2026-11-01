@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const rpc = vi.hoisted(() => ({
   status: vi.fn(),
+  items: vi.fn(),
+  setItems: vi.fn(),
   setup: vi.fn(),
   pull: vi.fn(),
   deleteItem: vi.fn(),
@@ -13,7 +15,7 @@ const rpc = vi.hoisted(() => ({
 }));
 
 vi.mock("../../lib/rpc", () => ({
-  vaultApi: { status: rpc.status, setup: rpc.setup, pull: rpc.pull, deleteItem: rpc.deleteItem },
+  vaultApi: { status: rpc.status, setup: rpc.setup, pull: rpc.pull, deleteItem: rpc.deleteItem, items: rpc.items, setItems: rpc.setItems },
   publishApi: { connectStatus: rpc.connectStatus },
   openExternalUrl: rpc.openExternalUrl,
 }));
@@ -58,6 +60,15 @@ const ITEM = {
   on_this_device: true,
 };
 
+const CATEGORIES = [
+  { id: "", bytes: 3 << 20, enabled: true, required: true },
+  { id: "images", bytes: 9 << 20, enabled: true, required: false },
+  { id: "history", bytes: 2 << 20, enabled: false, required: false },
+  { id: "work_agent", bytes: 1 << 10, enabled: true, required: false },
+  { id: "global_skills", bytes: 2 << 10, enabled: true, required: false },
+  { id: "writer_profile", bytes: 1 << 10, enabled: true, required: false },
+];
+
 function overview(over: Record<string, unknown> = {}, account: Record<string, unknown> = {}) {
   return {
     connected: true,
@@ -82,6 +93,52 @@ describe("VaultSection", () => {
     rpc.connectStatus.mockResolvedValue({ state: "connected", site_url: SITE });
     rpc.openExternalUrl.mockResolvedValue(undefined);
     rpc.setup.mockResolvedValue({ key_stored: true });
+    rpc.items.mockResolvedValue({ categories: CATEGORIES });
+    rpc.setItems.mockImplementation(async (omit: string[]) => ({
+      categories: CATEGORIES.map((c) => ({ ...c, enabled: c.required || !omit.includes(c.id) })),
+    }));
+  });
+
+  it("lists what travels with its size, and the required line cannot be turned off", async () => {
+    renderSection();
+    expect(await screen.findByTestId("vault-category-required")).toBeDisabled();
+    expect(screen.getByTestId("vault-category-size-images")).toHaveTextContent("9.0 MiB");
+    expect(screen.getByTestId("vault-category-images")).toBeChecked();
+    expect(screen.getByTestId("vault-category-history")).not.toBeChecked();
+    expect(screen.getByText("settings.vault.whatTravelsNote")).toBeInTheDocument();
+  });
+
+  it("turning a line off sends every line that is off", async () => {
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-category-images"));
+    expect(rpc.setItems).toHaveBeenCalledWith(["images", "history"]);
+    await waitFor(() => expect(screen.getByTestId("vault-category-images")).not.toBeChecked());
+  });
+
+  it("turning a line on sends the rest", async () => {
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-category-history"));
+    expect(rpc.setItems).toHaveBeenCalledWith([]);
+  });
+
+  it("the selection stays read only while uploads are off", async () => {
+    rpc.status.mockResolvedValue(overview({}, { mode: "terms_outdated" }));
+    renderSection();
+    expect(await screen.findByTestId("vault-category-images")).toBeDisabled();
+  });
+
+  it("shows a failed selection and keeps the boxes as they were", async () => {
+    rpc.setItems.mockRejectedValue(new Error("boom"));
+    renderSection();
+    await userEvent.click(await screen.findByTestId("vault-category-images"));
+    expect(await screen.findByTestId("vault-items-error")).toBeInTheDocument();
+    expect(screen.getByTestId("vault-category-images")).toBeChecked();
+  });
+
+  it("says when another device's profile was refused", async () => {
+    rpc.status.mockResolvedValue(overview({ library_warning: "profile_refused" }));
+    renderSection();
+    expect(await screen.findByTestId("vault-library-warning")).toHaveTextContent("settings.vault.profileRefused");
   });
 
   it("renders nothing on a build without the vault, and asks nothing", () => {

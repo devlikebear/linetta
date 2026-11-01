@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useEngineEvent } from "../../hooks/useEngineEvent";
+import { VaultItemList } from "./VaultItemList";
 import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
 import { openExternalUrl, publishApi, vaultApi } from "../../lib/rpc";
@@ -338,6 +339,9 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
             {t("settings.vault.readOnly", { date: formatDate(account.retrieve_until, language) })}
           </p>
         )}
+        {overview.library_warning === "profile_refused" && (
+          <p className="sd" role="alert" data-testid="vault-library-warning">{t("settings.vault.profileRefused")}</p>
+        )}
         <div className="vault-usage">
           <p className="sd vault-usage-label">
             <span>{t("settings.vault.usage")}</span>
@@ -354,6 +358,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
             <div style={{ width: `${percent}%` }} />
           </div>
         </div>
+        <VaultItemList editable={account.mode === "full"} />
         <h4>{t("settings.vault.items")}</h4>
         {overview.items.length === 0 ? (
           <p className="sd">{t("settings.vault.empty")}</p>

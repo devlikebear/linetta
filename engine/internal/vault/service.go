@@ -100,6 +100,9 @@ type Service struct {
 
 	headsMu sync.Mutex
 	heads   map[string]headDigest
+
+	warningMu      sync.Mutex
+	libraryWarning string
 }
 
 // NewService returns a service over deps.
@@ -166,8 +169,8 @@ func (s *Service) open() (session, error) {
 	return session{token: token, keys: keys}, nil
 }
 
-func (s *Service) report(p Progress) {
-	if s.Notify != nil {
+func (s *Service) report(link Link, p Progress) {
+	if s.Notify != nil && !link.quiet {
 		s.Notify(p)
 	}
 }
@@ -193,7 +196,11 @@ func (s *Service) export(ctx context.Context, projectID string) (*vaultbundle.Bu
 	} else if !ok {
 		return nil, reason(rpc.ReasonVaultWorkNotFound, fmt.Errorf("vault: project %s not found", projectID))
 	}
-	return vaultbundle.Export(ctx, s.db(), s.Home, projectID, s.now())
+	selection, err := getSelection(ctx, s.db())
+	if err != nil {
+		return nil, err
+	}
+	return vaultbundle.Export(ctx, s.db(), s.Home, projectID, s.now(), selection.Omit)
 }
 
 // head reads an item's head manifest, once per revision.
@@ -255,6 +262,9 @@ func (s *Service) resolve(ctx context.Context, sess session, projectID string) (
 		return link, RemoteItem{}, false, nil
 	}
 	for _, item := range items {
+		if item.ItemID == sess.keys.LibraryItemID() {
+			continue
+		}
 		digest, err := s.head(ctx, sess, item)
 		if errors.Is(err, ErrWrongKey) || errors.Is(err, ErrCorrupt) || errors.Is(err, ErrNewerFormat) {
 			continue // an item this device cannot read does not stand in the way
@@ -373,6 +383,9 @@ func (s *Service) Push(ctx context.Context, projectID string) (PushResult, error
 	if err != nil {
 		return PushResult{}, err
 	}
+	// First, so the selection is the one every device agreed on. This is also
+	// what creates the library item, on the first upload that has one to make.
+	s.bestEffortLibrary(ctx, func() error { return s.syncLibrary(ctx, sess) })
 	out, err := s.push(ctx, sess, projectID, false)
 	return out, classify(err)
 }
@@ -449,7 +462,7 @@ func (s *Service) send(ctx context.Context, sess session, link Link, out *outgoi
 	for round := 0; round < maxCommitRounds; round++ {
 		revision, err := s.Client.Commit(ctx, sess.token, link.ItemID, link.BaseRevision, out.manifestID, out.blobIDs)
 		if err == nil {
-			s.report(Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: total, Total: total})
+			s.report(link, Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: total, Total: total})
 			return revision, nil
 		}
 		var apiErr *APIError
@@ -472,7 +485,7 @@ func (s *Service) send(ctx context.Context, sess session, link Link, out *outgoi
 				return 0, err
 			}
 			sent++
-			s.report(Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: min(sent, total), Total: total})
+			s.report(link, Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: min(sent, total), Total: total})
 		}
 	}
 	return 0, errors.New("vault: the site kept asking for blobs it was sent")
@@ -512,6 +525,7 @@ func (s *Service) Pull(ctx context.Context, in PullInput) (PullResult, error) {
 	if err != nil {
 		return PullResult{}, err
 	}
+	s.bestEffortLibrary(ctx, func() error { return s.pullLibrary(ctx, sess) })
 	out, err := s.pull(ctx, sess, in, pullOptions{})
 	return out, classify(err)
 }
@@ -636,7 +650,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 		}
 	}
 
-	s.report(Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 0, Total: 1})
+	s.report(link, Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 0, Total: 1})
 	// The base is the head even when an older revision was asked for, and the
 	// hash is the head's: the restored text then shows as a local change the
 	// writer can push, and the head stays a restore point.
@@ -654,7 +668,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 	}
 	s.finishPull(ctx, bundle, &link, chosen.Revision == head.Revision, &out)
 	_ = os.RemoveAll(cache)
-	s.report(Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 1, Total: 1})
+	s.report(link, Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 1, Total: 1})
 	return out, nil
 }
 
@@ -734,7 +748,7 @@ func (s *Service) fetch(ctx context.Context, sess session, revision Revision, li
 			}
 			data = append(data, plain...)
 			done++
-			s.report(Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseDownload, Done: done, Total: total})
+			s.report(link, Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseDownload, Done: done, Total: total})
 		}
 		bundle.Parts[part.Name] = data
 	}
@@ -976,6 +990,9 @@ func (s *Service) setup(ctx context.Context, in SetupInput) (SetupResult, error)
 	s.headsMu.Lock()
 	s.heads = map[string]headDigest{}
 	s.headsMu.Unlock()
+	// Before any work: a new device needs the writer's skills, profile and
+	// selection first, and the works that follow are exported under that choice.
+	s.bestEffortLibrary(ctx, func() error { return s.pullLibrary(ctx, session{token: token, keys: keys}) })
 	return SetupResult{KeyStored: true}, nil
 }
 
@@ -1020,6 +1037,9 @@ type Overview struct {
 	KeyMismatch bool       `json:"key_mismatch"`
 	Account     *Account   `json:"account"`
 	Items       []ItemView `json:"items"`
+	// LibraryWarning is a LibraryWarning* value, when the last library sync left
+	// something the writer should know about.
+	LibraryWarning string `json:"library_warning,omitempty"`
 }
 
 // ItemView is one item. Title and ProjectID are empty until the device has a key
@@ -1045,7 +1065,7 @@ func (s *Service) Status(ctx context.Context) (Overview, error) {
 }
 
 func (s *Service) status(ctx context.Context) (Overview, error) {
-	out := Overview{Items: []ItemView{}}
+	out := Overview{Items: []ItemView{}, LibraryWarning: s.warning()}
 	token, err := s.token()
 	if err != nil {
 		return out, nil
@@ -1081,6 +1101,9 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 		}
 	}
 	for _, item := range items {
+		if sess.keys != nil && item.ItemID == sess.keys.LibraryItemID() {
+			continue
+		}
 		view := ItemView{ItemID: item.ItemID, HeadRevision: item.HeadRevision, Updated: item.Updated, Bytes: item.Bytes}
 		if link, ok := linked[item.ItemID]; ok {
 			view.ProjectID, view.BaseRevision = link.ProjectID, link.BaseRevision

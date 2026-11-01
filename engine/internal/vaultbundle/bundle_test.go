@@ -114,7 +114,7 @@ func addDeviceRows(t *testing.T, db *sql.DB, id string) {
 
 func export(t *testing.T, db *sql.DB, home, id string) *Bundle {
 	t.Helper()
-	bundle, err := Export(context.Background(), db, home, id, fixedNow)
+	bundle, err := Export(context.Background(), db, home, id, fixedNow, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -455,7 +455,7 @@ func TestApplyOverAnEditedWorkRestoresItAndKeepsDeviceRows(t *testing.T) {
 		fmt.Sprintf(`DELETE FROM notes WHERE id = '%s-o1'`, id),
 		fmt.Sprintf(`UPDATE projects SET title = '바뀐 제목', last_opened_node_id = '%[1]s-n1' WHERE id = '%[1]s'`, id),
 	)
-	otherBefore := dump(t, db, Table{"nodes", byProject}, "other")
+	otherBefore := dump(t, db, Table{Name: "nodes", Scope: byProject}, "other")
 
 	if err := apply(t, db, bundle); err != nil {
 		t.Fatal(err)
@@ -470,7 +470,7 @@ func TestApplyOverAnEditedWorkRestoresItAndKeepsDeviceRows(t *testing.T) {
 			t.Errorf("%s:\n got %v\nwant %v", table.Name, got, want[table.Name])
 		}
 	}
-	if !reflect.DeepEqual(dump(t, db, Table{"nodes", byProject}, "other"), otherBefore) {
+	if !reflect.DeepEqual(dump(t, db, Table{Name: "nodes", Scope: byProject}, "other"), otherBefore) {
 		t.Error("another work changed")
 	}
 
