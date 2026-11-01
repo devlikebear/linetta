@@ -449,7 +449,7 @@ func TestAWorkFromANewerAppDoesNotStopTheOthers(t *testing.T) {
 	}
 	site.mu.Lock()
 	site.blobs[id] = sealed
-	item := site.items[linkOf(t, a, workID).ItemID]
+	item := site.items[linkOf(t, a, TargetWorks, workID).ItemID]
 	item.head++
 	item.revisions = append(item.revisions, Revision{Revision: item.head, ManifestBlob: id, Bytes: 1})
 	site.mu.Unlock()

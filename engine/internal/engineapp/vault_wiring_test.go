@@ -107,6 +107,58 @@ func TestSyncSetAutoTurnsOnAndSaysWhyItStopped(t *testing.T) {
 	}
 }
 
+func TestSyncTargetsListWhatThisBuildHas(t *testing.T) {
+	app := openApp(t)
+	result, rpcErr := call(t, app, "sync.targets", "")
+	if rpcErr != nil {
+		t.Fatalf("sync.targets: %+v", rpcErr)
+	}
+	for _, want := range []string{`"primary":"works"`, `"id":"works"`, `"id":"git"`, `"id":"folder"`, `"key_stored":false`} {
+		if !strings.Contains(string(result), want) {
+			t.Errorf("sync.targets = %s, want %s", result, want)
+		}
+	}
+	for _, params := range []string{`{}`, `{"primary":"nowhere"}`, `{"primary":"works","mirrors":["nowhere"]}`} {
+		if _, rpcErr := call(t, app, "sync.set_targets", params); rpcErr == nil {
+			t.Errorf("%s was accepted", params)
+		}
+	}
+	if _, rpcErr := call(t, app, "sync.restore", `{"target":"nowhere"}`); rpcErr == nil {
+		t.Error("restoring from nothing was accepted")
+	}
+}
+
+func TestChangingATargetNeedsItToWork(t *testing.T) {
+	app := openApp(t)
+	// No folder is set and no key exists, so nothing may switch.
+	if _, rpcErr := call(t, app, "sync.set_targets", `{"primary":"folder","mirrors":[]}`); rpcErr == nil {
+		t.Fatal("a target that cannot take the library was accepted")
+	}
+	result, rpcErr := call(t, app, "sync.targets", "")
+	if rpcErr != nil {
+		t.Fatalf("sync.targets: %+v", rpcErr)
+	}
+	if !strings.Contains(string(result), `"primary":"works"`) {
+		t.Fatalf("sync.targets = %s", result)
+	}
+	// A mirror changes nothing about the primary, and needs no first upload.
+	result, rpcErr = call(t, app, "sync.set_targets", `{"primary":"works","mirrors":["folder","folder","works"]}`)
+	if rpcErr != nil {
+		t.Fatalf("sync.set_targets: %+v", rpcErr)
+	}
+	if !strings.Contains(string(result), `"mirrors":["folder"]`) {
+		t.Fatalf("sync.set_targets = %s", result)
+	}
+}
+
+func TestVaultStatusNamesATarget(t *testing.T) {
+	app := openApp(t)
+	result, rpcErr := call(t, app, "vault.status", `{"target":"works"}`)
+	if rpcErr != nil || !strings.Contains(string(result), `"connected":false`) {
+		t.Fatalf("vault.status = %s, %+v", result, rpcErr)
+	}
+}
+
 func TestVaultAvailableReachesDiagnostics(t *testing.T) {
 	result, rpcErr := call(t, openApp(t), "diagnostics.get", "")
 	if rpcErr != nil {

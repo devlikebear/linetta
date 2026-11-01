@@ -24,13 +24,18 @@ fn is_image_dir(name: &str) -> bool {
     name.ends_with(".images") && Path::new(name).file_name().and_then(|n| n.to_str()) == Some(name)
 }
 
-/// The only staged names accepted: a plain file name, or `<work>.images/<file>`
-/// for a picture. Anything else (`..`, an absolute path, deeper nesting) is
-/// refused before it can reach outside the target folder.
+/// The sealed copy's folder, the one place the staged list goes deeper than a
+/// work's pictures.
+const SEALED_DIR: &str = ".linetta";
+
+/// The only staged names accepted: a plain file name, `<work>.images/<file>` for
+/// a picture, or a plain path under `.linetta/`. Anything else (`..`, an absolute
+/// path, deeper nesting) is refused before it can reach outside the target folder.
 fn valid_staged_name(f: &str) -> bool {
     let plain = |s: &str| Path::new(s).file_name().and_then(|n| n.to_str()) == Some(s);
     match f.split_once('/') {
         None => plain(f),
+        Some((SEALED_DIR, rest)) => !rest.is_empty() && rest.split('/').all(plain),
         Some((dir, name)) => is_image_dir(dir) && plain(name),
     }
 }
@@ -52,10 +57,11 @@ fn copy_files(staging: &Path, target: &Path, files: &[String]) -> Result<usize, 
         }
         let src = staging.join(f);
         let dst = target.join(f);
-        if let Some((dir, _)) = f.split_once('/') {
-            std::fs::create_dir_all(target.join(dir)).map_err(|e| CopyError {
+        if f.contains('/') {
+            let dir = dst.parent().unwrap_or(target);
+            std::fs::create_dir_all(dir).map_err(|e| CopyError {
                 copied: n,
-                message: format!("create {dir}: {e}"),
+                message: format!("create {}: {e}", dir.display()),
             })?;
             let same = match (std::fs::metadata(&src), std::fs::metadata(&dst)) {
                 (Ok(a), Ok(b)) => b.is_file() && a.len() == b.len(),
@@ -331,7 +337,30 @@ pub(crate) async fn run_folder_sync_mas(
 
 #[cfg(test)]
 mod tests {
-    use super::{copy_files, prune_image_dirs, sync_file};
+    use super::{copy_files, prune_image_dirs, sync_file, valid_staged_name};
+
+    #[test]
+    fn accepts_the_sealed_copy_and_nothing_around_it() {
+        assert!(valid_staged_name(".linetta/format.json"));
+        assert!(valid_staged_name(".linetta/blobs/ab/abcd"));
+        assert!(valid_staged_name(".linetta/items/item/00000001-a-b.json"));
+        assert!(!valid_staged_name(".linetta/"));
+        assert!(!valid_staged_name(".linetta/../escape"));
+        assert!(!valid_staged_name(".linetta//format.json"));
+        assert!(!valid_staged_name("other/format.json"));
+    }
+
+    #[test]
+    fn copies_the_sealed_copy_into_nested_folders() {
+        let staging = tempdir();
+        let target = tempdir();
+        let file = staging.join(".linetta/blobs/ab");
+        std::fs::create_dir_all(&file).unwrap();
+        std::fs::write(file.join("abcd"), b"sealed").unwrap();
+        let copied = copy_files(&staging, &target, &[".linetta/blobs/ab/abcd".to_string()]).unwrap();
+        assert_eq!(copied, 1);
+        assert_eq!(std::fs::read(target.join(".linetta/blobs/ab/abcd")).unwrap(), b"sealed");
+    }
 
     // `File::open` hands back a read-only handle, and on Windows sync_all maps
     // to FlushFileBuffers, which needs write access. Every atomic write in this

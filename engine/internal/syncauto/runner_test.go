@@ -56,7 +56,7 @@ func (c *clock) add(d time.Duration) {
 
 func newRunner(v *fakeVault, c *clock) *Runner {
 	return &Runner{
-		Vault:   v,
+		Targets: func() []Target { return []Target{{ID: vault.TargetWorks, Vault: v, Primary: true}} },
 		Enabled: func() bool { return true },
 		Now:     c.Now,
 		Random:  func() time.Duration { return 0 },
@@ -338,5 +338,151 @@ func TestRecordKeepsEveryRealRun(t *testing.T) {
 	_, _ = r.Tick(context.Background())
 	if len(oks) != 2 || !oks[0] || oks[1] {
 		t.Fatalf("recorded %v", oks)
+	}
+}
+
+type countingExport struct{ runs int }
+
+func (c *countingExport) run(context.Context) error {
+	c.runs++
+	return nil
+}
+
+func TestMirrorsGoWhenAWorkIsLeftNotOnEveryTick(t *testing.T) {
+	c := newClock()
+	primary, mirror := &fakeVault{}, &fakeVault{}
+	r := newRunner(primary, c)
+	r.Targets = func() []Target {
+		return []Target{{ID: vault.TargetWorks, Vault: primary, Primary: true}, {ID: vault.TargetFolder, Vault: mirror}}
+	}
+	_, _ = r.Tick(context.Background())
+	if mirror.count() != 0 {
+		t.Fatal("a mirror ran on a plain tick")
+	}
+	r.Close("p")
+	_, _ = r.Tick(context.Background())
+	if mirror.count() != 1 || !mirror.calls[0].Mirror {
+		t.Fatalf("calls = %+v", mirror.calls)
+	}
+	_, _ = r.Tick(context.Background())
+	if mirror.count() != 1 {
+		t.Fatal("the mirror ran again with nothing left")
+	}
+}
+
+func TestMirrorsGoOnTheWayOut(t *testing.T) {
+	primary, mirror := &fakeVault{}, &fakeVault{}
+	r := newRunner(primary, newClock())
+	r.Targets = func() []Target {
+		return []Target{{ID: vault.TargetWorks, Vault: primary, Primary: true}, {ID: vault.TargetFolder, Vault: mirror}}
+	}
+	r.init()
+	r.Touch("p")
+	r.flush()
+	if mirror.count() != 1 {
+		t.Fatalf("mirror calls = %d", mirror.count())
+	}
+}
+
+func TestGitMirrorRunsDaily(t *testing.T) {
+	c := newClock()
+	primary, git := &fakeVault{}, &fakeVault{}
+	r := newRunner(primary, c)
+	r.Targets = func() []Target {
+		return []Target{{ID: vault.TargetWorks, Vault: primary, Primary: true}, {ID: vault.TargetGit, Vault: git}}
+	}
+	_, _ = r.Tick(context.Background())
+	c.add(23 * time.Hour)
+	r.Close("p")
+	_, _ = r.Tick(context.Background())
+	if git.count() != 1 {
+		t.Fatalf("git ran %d times within a day", git.count())
+	}
+	c.add(time.Hour)
+	_, _ = r.Tick(context.Background())
+	if git.count() != 2 {
+		t.Fatalf("git ran %d times", git.count())
+	}
+}
+
+func TestGitPrimaryRunsEveryThirtyMinutesAndOnLeaving(t *testing.T) {
+	c := newClock()
+	git := &fakeVault{}
+	r := newRunner(git, c)
+	r.Targets = func() []Target { return []Target{{ID: vault.TargetGit, Vault: git, Primary: true}} }
+	_, _ = r.Tick(context.Background())
+	c.add(10 * time.Minute)
+	_, _ = r.Tick(context.Background())
+	if git.count() != 1 {
+		t.Fatalf("git ran %d times in ten minutes", git.count())
+	}
+	c.add(20 * time.Minute)
+	_, _ = r.Tick(context.Background())
+	if git.count() != 2 {
+		t.Fatalf("git ran %d times", git.count())
+	}
+	r.Close("p")
+	_, _ = r.Tick(context.Background())
+	if git.count() != 3 {
+		t.Fatal("leaving a work did not run git")
+	}
+}
+
+func TestOpeningAWorkDoesNotWaitForGit(t *testing.T) {
+	git := &fakeVault{}
+	r := newRunner(git, newClock())
+	r.Targets = func() []Target { return []Target{{ID: vault.TargetGit, Vault: git, Primary: true}} }
+	if _, err := r.Open(context.Background(), "p"); err != nil {
+		t.Fatal(err)
+	}
+	if git.count() != 0 {
+		t.Fatal("opening a work ran a git round")
+	}
+}
+
+func TestAFailingMirrorSaysSoAndStopsNothing(t *testing.T) {
+	primary := &fakeVault{}
+	mirror := &fakeVault{err: reasonErr(rpc.ReasonSyncTargetMissing)}
+	r := newRunner(primary, newClock())
+	r.Targets = func() []Target {
+		return []Target{{ID: vault.TargetWorks, Vault: primary, Primary: true}, {ID: vault.TargetFolder, Vault: mirror}}
+	}
+	r.Close("p")
+	status, err := r.Tick(context.Background())
+	if err != nil || status.State != StateIdle {
+		t.Fatalf("status %+v, %v", status, err)
+	}
+	if got := r.Mirrors()[vault.TargetFolder].Reason; got != rpc.ReasonSyncTargetMissing {
+		t.Fatalf("reason = %q", got)
+	}
+}
+
+func TestExportsKeepTheirDailyRunEvenWithSyncOff(t *testing.T) {
+	c := newClock()
+	r := newRunner(&fakeVault{}, c)
+	r.Enabled = func() bool { return false }
+	export := &countingExport{}
+	r.Exports = func() []Export { return []Export{{ID: vault.TargetGit, Run: export.run}} }
+	_, _ = r.Tick(context.Background())
+	_, _ = r.Tick(context.Background())
+	if export.runs != 1 {
+		t.Fatalf("ran %d times", export.runs)
+	}
+	c.add(ExportEvery)
+	_, _ = r.Tick(context.Background())
+	if export.runs != 2 {
+		t.Fatalf("ran %d times", export.runs)
+	}
+}
+
+func TestAnExportThatIsATargetDoesNotRunTwice(t *testing.T) {
+	git := &fakeVault{}
+	r := newRunner(git, newClock())
+	r.Targets = func() []Target { return []Target{{ID: vault.TargetGit, Vault: git, Primary: true}} }
+	export := &countingExport{}
+	r.Exports = func() []Export { return []Export{{ID: vault.TargetGit, Run: export.run}} }
+	_, _ = r.Tick(context.Background())
+	if export.runs != 0 {
+		t.Fatal("the git target exported on its own too")
 	}
 }

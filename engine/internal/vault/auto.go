@@ -32,6 +32,11 @@ type SyncPolicy struct {
 	Settled func(projectID string) bool
 	// Only limits the run to one work, skipping the library and other works.
 	Only string
+	// Mirror runs one way: this device's versions go up on top of whatever is
+	// there, and nothing comes back. Only one target is two-way.
+	Mirror bool
+	// PullOnly runs the other way, to restore a library from a target.
+	PullOnly bool
 }
 
 func (p SyncPolicy) open(id string) bool { return p.Open != nil && p.Open(id) }
@@ -68,6 +73,7 @@ var workProblems = map[string]bool{
 	rpc.ReasonVaultWorkNotFound: true,
 	rpc.ReasonVaultItemNotFound: true,
 	rpc.ReasonVaultConflict:     true,
+	rpc.ReasonVaultPending:      true,
 }
 
 func reasonCode(err error) string {
@@ -92,13 +98,37 @@ func (s *Service) SyncAll(ctx context.Context, policy SyncPolicy) (SyncReport, e
 	if err != nil {
 		return SyncReport{}, err
 	}
-	out, err := s.syncAll(ctx, sess, policy)
+	out, err := s.roundTrip(ctx, sess, policy)
 	return out, classify(err)
+}
+
+// roundTrip runs syncAll inside a store's round. Git refusing the push means
+// another device got in between: the run goes once more on top of it.
+func (s *Service) roundTrip(ctx context.Context, sess session, policy SyncPolicy) (SyncReport, error) {
+	round, ok := sess.store.(Round)
+	if !ok {
+		return s.syncAll(ctx, sess, policy)
+	}
+	var out SyncReport
+	for range 2 {
+		if err := round.Begin(ctx); err != nil {
+			return SyncReport{}, err
+		}
+		var err error
+		if out, err = s.syncAll(ctx, sess, policy); err != nil {
+			return out, err
+		}
+		err = round.Finish(ctx)
+		if !errors.Is(err, ErrRoundAgain) {
+			return out, err
+		}
+	}
+	return out, reason(rpc.ReasonSyncTargetFailed, ErrRoundAgain)
 }
 
 func (s *Service) syncAll(ctx context.Context, sess session, policy SyncPolicy) (SyncReport, error) {
 	out := SyncReport{Works: []WorkSync{}, Pushed: []string{}, Pulled: []string{}, Archived: []string{}}
-	account, err := s.Client.Account(ctx, sess.token)
+	account, err := sess.store.Account(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -110,14 +140,16 @@ func (s *Service) syncAll(ctx context.Context, sess session, policy SyncPolicy) 
 		return out, reason(rpc.ReasonVaultNotEnabled, fmt.Errorf("vault: account is %s", account.Mode))
 	}
 	if policy.Only == "" {
-		if err := s.syncLibrary(ctx, sess); err != nil {
+		if err := s.libraryRound(ctx, sess, policy); err != nil {
 			if !errors.Is(err, ErrNewerFormat) && !errors.Is(err, vaultbundle.ErrNewerFormat) && !errors.Is(err, ErrCorrupt) && !errors.Is(err, vaultbundle.ErrCorrupt) {
 				return out, err
 			}
 			log.Printf("vault: library: %v", err)
 		}
-		if err := s.flushDeletions(ctx, sess); err != nil {
-			return out, err
+		if !policy.PullOnly {
+			if err := s.flushDeletions(ctx, sess); err != nil {
+				return out, err
+			}
 		}
 	}
 	remote, err := s.scanRemote(ctx, sess)
@@ -143,7 +175,7 @@ func (s *Service) syncAll(ctx context.Context, sess session, policy SyncPolicy) 
 		}
 		out.Works = append(out.Works, line)
 	}
-	if policy.Only != "" {
+	if policy.Only != "" || policy.Mirror {
 		return out, nil
 	}
 	for _, entry := range remote.unclaimed() {
@@ -224,11 +256,11 @@ func (r *remoteScan) unclaimed() []*remoteEntry {
 }
 
 func (s *Service) scanRemote(ctx context.Context, sess session) (*remoteScan, error) {
-	items, err := s.Client.Items(ctx, sess.token)
+	items, err := sess.store.Items(ctx)
 	if err != nil {
 		return nil, err
 	}
-	links, err := listLinks(ctx, s.db())
+	links, err := listLinks(ctx, s.db(), s.targetID())
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +270,7 @@ func (s *Service) scanRemote(ctx context.Context, sess session) (*remoteScan, er
 		scan.links[link.ProjectID] = link
 		linkedItems[link.ItemID] = link
 	}
-	rows, err := s.db().QueryContext(ctx, `SELECT project_id FROM sync_removed`)
+	rows, err := s.db().QueryContext(ctx, `SELECT project_id FROM sync_removed WHERE target = ?`, s.targetID())
 	if err != nil {
 		return nil, err
 	}
@@ -269,13 +301,13 @@ func (s *Service) scanRemote(ctx context.Context, sess session) (*remoteScan, er
 		entry := &remoteEntry{item: item}
 		scan.byItem[item.ItemID] = entry
 		link, linked := linkedItems[item.ItemID]
-		if linked && link.BaseRevision == item.HeadRevision {
+		if linked && link.BaseRevision == item.HeadRevision && !headMoved(&link, item) {
 			scan.byProject[link.ProjectID] = entry
 			continue
 		}
 		digest, err := s.head(ctx, sess, item)
 		switch {
-		case errors.Is(err, ErrCorrupt), errors.Is(err, ErrNewerFormat):
+		case errors.Is(err, ErrCorrupt), errors.Is(err, ErrNewerFormat), isCode(err, CodeBlobPending):
 			entry.problem = err
 		case err != nil:
 			return nil, err
@@ -290,6 +322,44 @@ func (s *Service) scanRemote(ctx context.Context, sess session) (*remoteScan, er
 	return scan, nil
 }
 
+// libraryRound moves the library the way the run is going.
+func (s *Service) libraryRound(ctx context.Context, sess session, policy SyncPolicy) error {
+	switch {
+	case policy.Mirror:
+		return s.mirrorLibrary(ctx, sess)
+	case policy.PullOnly:
+		return s.pullLibrary(ctx, sess)
+	}
+	return s.syncLibrary(ctx, sess)
+}
+
+// mirrorWork sends a work up unless the mirror already has this very text. What
+// it replaces stays behind as a restore point, and a work taken off the mirror by
+// hand stays off.
+func (s *Service) mirrorWork(ctx context.Context, sess session, policy SyncPolicy, remote *remoteScan, work localWork, line *WorkSync, out *SyncReport) error {
+	line.State = StateSynced
+	if remote.removed[work.id] || policy.busy(work.id) || !policy.settled(work.id) {
+		return nil
+	}
+	bundle, err := s.export(ctx, work.id)
+	if err != nil {
+		return err
+	}
+	link, linked := remote.links[work.id]
+	_, found := remote.byProject[work.id]
+	if linked && found && link.LastHash == bundle.Manifest.ContentHash() {
+		return nil
+	}
+	pushed, err := s.push(ctx, sess, work.id, true)
+	if err != nil {
+		return err
+	}
+	if !pushed.Unchanged {
+		out.Pushed = append(out.Pushed, work.id)
+	}
+	return nil
+}
+
 func (s *Service) syncWork(ctx context.Context, sess session, policy SyncPolicy, remote *remoteScan, work localWork, line *WorkSync, out *SyncReport) error {
 	link, linked := remote.links[work.id]
 	entry, found := remote.byProject[work.id]
@@ -297,13 +367,16 @@ func (s *Service) syncWork(ctx context.Context, sess session, policy SyncPolicy,
 		entry.claimed = true
 		line.ItemID = entry.item.ItemID
 	}
+	if policy.Mirror {
+		return s.mirrorWork(ctx, sess, policy, remote, work, line, out)
+	}
 	if !found {
 		line.State = StateNotUploaded
 		if linked || remote.removed[work.id] {
 			line.State = StateRemoved
 			return nil
 		}
-		if policy.busy(work.id) || !policy.settled(work.id) {
+		if policy.PullOnly || policy.busy(work.id) || !policy.settled(work.id) {
 			return nil
 		}
 		return s.autoPush(ctx, sess, work.id, line, out)
@@ -333,7 +406,7 @@ func (s *Service) syncWork(ctx context.Context, sess session, policy SyncPolicy,
 	}
 	switch state {
 	case StateLocalChanges:
-		if policy.settled(work.id) {
+		if policy.settled(work.id) && !policy.PullOnly {
 			return s.autoPush(ctx, sess, work.id, line, out)
 		}
 	case StateRemoteChanges:
@@ -391,7 +464,7 @@ func (s *Service) takeDeletion(ctx context.Context, policy SyncPolicy, work loca
 		return err
 	}
 	link := Link{ProjectID: work.id, ItemID: entry.item.ItemID, BaseRevision: entry.item.HeadRevision, LastHash: bundle.Manifest.ContentHash(), LastSyncedAt: s.Now()}
-	if err := putLink(ctx, s.db(), link); err != nil {
+	if err := putLink(ctx, s.db(), s.targetID(), link); err != nil {
 		return err
 	}
 	if archived > 0 {
@@ -400,21 +473,19 @@ func (s *Service) takeDeletion(ctx context.Context, policy SyncPolicy, work loca
 	return nil
 }
 
-// QueueDeletion remembers that a work on the server is about to be deleted here.
-// Call it before the project row goes, which takes its link along. A work with
-// no link never left this device and has nothing to tell anyone.
+// QueueDeletion remembers that a work kept elsewhere is about to be deleted here,
+// for every target that holds it. Call it before the project row goes, which
+// takes the links along. A work with no link never left this device and has
+// nothing to tell anyone.
 func (s *Service) QueueDeletion(ctx context.Context, projectID string) error {
-	link, linked, err := getLink(ctx, s.db(), projectID)
-	if err != nil || !linked {
-		return err
-	}
 	title, _, err := s.title(ctx, projectID)
 	if err != nil {
 		return err
 	}
 	_, err = s.db().ExecContext(ctx, `
-INSERT INTO vault_deletions (item_id, project_id, title, queued_at) VALUES (?, ?, ?, ?)
-ON CONFLICT(item_id) DO NOTHING`, link.ItemID, projectID, title, s.Now())
+INSERT INTO vault_deletions (target, item_id, project_id, title, queued_at)
+SELECT target, item_id, project_id, ?, ? FROM vault_items WHERE project_id = ?
+ON CONFLICT(target, item_id) DO NOTHING`, title, s.Now(), projectID)
 	return err
 }
 
@@ -423,7 +494,7 @@ type pendingDeletion struct {
 }
 
 func (s *Service) pendingDeletions(ctx context.Context) ([]pendingDeletion, error) {
-	rows, err := s.db().QueryContext(ctx, `SELECT item_id, project_id, title FROM vault_deletions ORDER BY queued_at`)
+	rows, err := s.db().QueryContext(ctx, `SELECT item_id, project_id, title FROM vault_deletions WHERE target = ? ORDER BY queued_at`, s.targetID())
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +517,7 @@ func (s *Service) flushDeletions(ctx context.Context, sess session) error {
 	if err != nil || len(pending) == 0 {
 		return err
 	}
-	items, err := s.Client.Items(ctx, sess.token)
+	items, err := sess.store.Items(ctx)
 	if err != nil {
 		return err
 	}
@@ -471,7 +542,7 @@ func (s *Service) flushDeletions(ctx context.Context, sess session) error {
 				return err
 			}
 		}
-		if _, err := s.db().ExecContext(ctx, `DELETE FROM vault_deletions WHERE item_id = ?`, p.itemID); err != nil {
+		if _, err := s.db().ExecContext(ctx, `DELETE FROM vault_deletions WHERE target = ? AND item_id = ?`, s.targetID(), p.itemID); err != nil {
 			return err
 		}
 	}
@@ -495,15 +566,15 @@ func (s *Service) snapshotBeforePull(ctx context.Context, projectID string, auto
 	return s.snapshot(ctx, projectID)
 }
 
-// RemovedWork records that the writer took a work off the server.
-func recordRemoved(ctx context.Context, db execer, projectID string, now int64) error {
+// recordRemoved notes that the writer took a work off the target.
+func recordRemoved(ctx context.Context, db execer, target, projectID string, now int64) error {
 	_, err := db.ExecContext(ctx, `
-INSERT INTO sync_removed (project_id, removed_at) SELECT id, ? FROM projects WHERE id = ?
-ON CONFLICT(project_id) DO UPDATE SET removed_at = excluded.removed_at`, now, projectID)
+INSERT INTO sync_removed (project_id, target, removed_at) SELECT id, ?, ? FROM projects WHERE id = ?
+ON CONFLICT(project_id, target) DO UPDATE SET removed_at = excluded.removed_at`, target, now, projectID)
 	return err
 }
 
-func clearRemoved(ctx context.Context, db execer, projectID string) error {
-	_, err := db.ExecContext(ctx, `DELETE FROM sync_removed WHERE project_id = ?`, projectID)
+func clearRemoved(ctx context.Context, db execer, target, projectID string) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM sync_removed WHERE project_id = ? AND target = ?`, projectID, target)
 	return err
 }

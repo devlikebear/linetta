@@ -77,6 +77,8 @@ func reasonForAPIError(e *APIError) string {
 		return rpc.ReasonVaultRateLimited
 	case CodeNotFound:
 		return rpc.ReasonVaultItemNotFound
+	case CodeBlobPending:
+		return rpc.ReasonVaultPending
 	}
 	switch {
 	case e.Status == http.StatusUnauthorized:

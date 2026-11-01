@@ -28,7 +28,7 @@ const (
 	// checks whether the writer fixed what stopped it.
 	MaxBackoff = 30 * time.Minute
 	// flushTimeout bounds the last upload as the engine shuts down.
-	flushTimeout = 10 * time.Second
+	flushTimeout = 15 * time.Second
 	// openTimeout bounds how long opening a work waits for a newer version.
 	openTimeout = 8 * time.Second
 )
@@ -55,12 +55,38 @@ var stopReasons = map[string]bool{
 	rpc.ReasonVaultKeyUnavailable: true,
 	rpc.ReasonVaultNotConnected:   true,
 	rpc.ReasonVaultUnauthorized:   true,
+	rpc.ReasonSyncTargetMissing:   true,
+	rpc.ReasonSyncTargetFailed:    true,
 }
 
 // Vault is the part of the vault service the runner uses.
 type Vault interface {
 	SyncAll(ctx context.Context, policy vault.SyncPolicy) (vault.SyncReport, error)
 }
+
+// Target is one place the library is kept, as settings have it now.
+type Target struct {
+	ID    string
+	Vault Vault
+	// Primary is the one two-way target. The others are mirrors.
+	Primary bool
+}
+
+// Export is a Markdown export that is not part of a target: a folder or a
+// repository the writer set up without choosing it for sync. It keeps its daily
+// run whether or not automatic sync is on.
+type Export struct {
+	ID  string
+	Run func(ctx context.Context) error
+}
+
+// How often Git runs. Its history is never rewritten and sealed blobs do not
+// compress, so it runs far less than the other two.
+const (
+	GitPrimaryEvery = 30 * time.Minute
+	GitMirrorEvery  = 24 * time.Hour
+	ExportEvery     = 24 * time.Hour
+)
 
 // Status is what the sync screen shows. LastSuccessAt is unix millis, 0 for never.
 type Status struct {
@@ -76,7 +102,10 @@ type Status struct {
 
 // Runner decides when to sync. Fields are set before Start.
 type Runner struct {
-	Vault   Vault
+	// Targets lists where the library is kept, as of now.
+	Targets func() []Target
+	// Exports lists the daily Markdown exports. Run skips one that is a target.
+	Exports func() []Export
 	Enabled func() bool
 	// Busy says an agent is writing to the work.
 	Busy func(projectID string) bool
@@ -100,6 +129,19 @@ type Runner struct {
 	failures int
 	wake     context.CancelFunc
 	woken    bool
+	// lastRun says when a target or export last ran, for the ones with a period.
+	lastRun map[string]time.Time
+	// closed says a work was left, which is when the mirrors take it.
+	closed bool
+	// mirrors is how each mirror's last run went.
+	mirrors map[string]MirrorStatus
+}
+
+// MirrorStatus is how a mirror's last run went. Reason is a code, empty when it
+// went well.
+type MirrorStatus struct {
+	LastSuccessAt int64  `json:"last_success_at"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 func (r *Runner) init() {
@@ -109,6 +151,8 @@ func (r *Runner) init() {
 	r.active = map[string]bool{}
 	r.edited = map[string]time.Time{}
 	r.flushing = map[string]bool{}
+	r.lastRun = map[string]time.Time{}
+	r.mirrors = map[string]MirrorStatus{}
 	r.status = Status{State: StateOff, Works: []vault.WorkSync{}, Archived: []string{}}
 	if r.LastSuccess != nil {
 		r.status.LastSuccessAt = r.LastSuccess()
@@ -207,10 +251,10 @@ func (r *Runner) Touch(projectID string) {
 // opens the latest text, and reports whether one came in. Failing leaves the work
 // as it is here: being offline must not stop anyone opening their own book.
 func (r *Runner) Open(ctx context.Context, projectID string) (pulled bool, err error) {
-	if r.enabled() {
+	if primary, ok := r.primary(); ok && r.enabled() && primary.ID != targetGit {
 		ctx, cancel := context.WithTimeout(ctx, openTimeout)
 		defer cancel()
-		report, syncErr := r.Vault.SyncAll(ctx, r.policy(projectID))
+		report, syncErr := primary.Vault.SyncAll(ctx, r.policy(projectID))
 		pulled, err = len(report.Pulled) > 0, syncErr
 		if errors.Is(syncErr, context.DeadlineExceeded) {
 			err = nil
@@ -230,6 +274,7 @@ func (r *Runner) Close(projectID string) {
 	r.init()
 	delete(r.active, projectID)
 	r.flushing[projectID] = true
+	r.closed = true
 	r.mu.Unlock()
 	r.RunNow()
 }
@@ -292,20 +337,138 @@ func (r *Runner) setState(state string) {
 	r.publish()
 }
 
-// Tick runs once. It sends nothing while automatic sync is off.
+func (r *Runner) primary() (Target, bool) {
+	if r.Targets == nil {
+		return Target{}, false
+	}
+	for _, target := range r.Targets() {
+		if target.Primary {
+			return target, true
+		}
+	}
+	return Target{}, false
+}
+
+// targetGit is vault.TargetGit, which has its own schedule.
+const targetGit = vault.TargetGit
+
+// due says a period has passed since id last ran.
+func (r *Runner) due(id string, every time.Duration) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	last, ran := r.lastRun[id]
+	return !ran || r.Now().Sub(last) >= every
+}
+
+func (r *Runner) ran(id string) {
+	r.mu.Lock()
+	r.lastRun[id] = r.Now()
+	r.mu.Unlock()
+}
+
+// runExports keeps each folder or repository that is not a target on its daily
+// Markdown export, as it always was.
+func (r *Runner) runExports(ctx context.Context) {
+	if r.Exports == nil {
+		return
+	}
+	taken := map[string]bool{}
+	if r.enabled() && r.Targets != nil {
+		for _, target := range r.Targets() {
+			taken[target.ID] = true
+		}
+	}
+	for _, export := range r.Exports() {
+		if taken[export.ID] || !r.due("export:"+export.ID, ExportEvery) {
+			continue
+		}
+		r.ran("export:" + export.ID)
+		if err := export.Run(ctx); err != nil {
+			log.Printf("sync: export %s: %v", export.ID, err)
+		}
+	}
+}
+
+// Tick runs once. It sends nothing to a target while automatic sync is off.
 func (r *Runner) Tick(ctx context.Context) (Status, error) {
 	r.mu.Lock()
 	r.init()
 	r.mu.Unlock()
+	r.runExports(ctx)
 	if !r.enabled() {
 		return r.Status(), nil
 	}
-	started := r.Now()
-	r.setState(StateRunning)
-	report, err := r.Vault.SyncAll(ctx, r.policy(""))
-	r.finish(started, report, err)
-	r.publish()
+	primary, ok := r.primary()
+	if !ok {
+		return r.Status(), nil
+	}
+	var err error
+	r.mu.Lock()
+	flushing := len(r.flushing) > 0
+	r.mu.Unlock()
+	if primary.ID != targetGit || flushing || r.due(primary.ID, GitPrimaryEvery) {
+		started := r.Now()
+		r.setState(StateRunning)
+		r.ran(primary.ID)
+		var report vault.SyncReport
+		report, err = primary.Vault.SyncAll(ctx, r.policy(""))
+		r.finish(started, report, err)
+		r.publish()
+	}
+	r.runMirrors(ctx, false)
 	return r.Status(), err
+}
+
+// runMirrors sends what changed to the mirrors. A mirror of Linetta Works or a
+// folder goes when a work is left and on the way out, and a Git mirror once a
+// day. One that fails says so and takes nothing else down with it.
+func (r *Runner) runMirrors(ctx context.Context, last bool) {
+	if r.Targets == nil {
+		return
+	}
+	r.mu.Lock()
+	closed := r.closed
+	r.closed = false
+	r.mu.Unlock()
+	for _, target := range r.Targets() {
+		if target.Primary {
+			continue
+		}
+		due := closed || last
+		if target.ID == targetGit {
+			due = r.due(target.ID, GitMirrorEvery)
+		}
+		if !due {
+			continue
+		}
+		r.ran(target.ID)
+		policy := r.policy("")
+		policy.Mirror = true
+		_, err := target.Vault.SyncAll(ctx, policy)
+		r.mu.Lock()
+		state := r.mirrors[target.ID]
+		state.Reason = reasonOf(err)
+		if err == nil {
+			state.LastSuccessAt = r.Now().UnixMilli()
+		} else if state.Reason == "" {
+			state.Reason = rpc.ReasonSyncTargetFailed
+			log.Printf("sync: mirror %s: %v", target.ID, err)
+		}
+		r.mirrors[target.ID] = state
+		r.mu.Unlock()
+	}
+}
+
+// Mirrors is how each mirror's last run went.
+func (r *Runner) Mirrors() map[string]MirrorStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.init()
+	out := make(map[string]MirrorStatus, len(r.mirrors))
+	for id, state := range r.mirrors {
+		out[id] = state
+	}
+	return out
 }
 
 func (r *Runner) finish(started time.Time, report vault.SyncReport, err error) {
@@ -378,7 +541,10 @@ func (r *Runner) flush() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), flushTimeout)
 	defer cancel()
-	if _, err := r.Vault.SyncAll(ctx, r.policy("")); err != nil {
-		log.Printf("sync: last upload: %v", err)
+	if primary, ok := r.primary(); ok {
+		if _, err := primary.Vault.SyncAll(ctx, r.policy("")); err != nil {
+			log.Printf("sync: last upload: %v", err)
+		}
 	}
+	r.runMirrors(ctx, true)
 }

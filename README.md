@@ -767,6 +767,26 @@ site deletes nothing on the server and keeps your recovery key.
 Data on Linetta Works can be lost, and the site makes no promise to keep or restore
 it. Keep your own backups.
 
+### GitHub and folders
+
+GitHub and a folder can hold the same thing Linetta Works does, with no account
+or approval. Under **Settings → Sync**, pick one target as primary. It syncs both
+ways. Any others are mirrors: this device uploads to them, and **Restore from
+here** brings a library back from them. A recovery key is one per library,
+whichever targets you use.
+
+Each target keeps a sealed copy in `.linetta/` beside the Markdown export, and
+that copy holds the same items as Linetta Works, archived works included. Nothing
+in it is readable without your recovery key, even in a public repository. The
+Markdown next to it is plain text, and stays readable if you lose the key.
+
+Sign-in for GitHub is whatever your system `git` already uses. Linetta pulls
+before it pushes, so two devices can share one repository. A folder synced by
+Dropbox or similar works the same way. Git history is never removed and sealed
+files do not compress, so a repository keeps growing: as a primary, GitHub syncs
+every 30 minutes, and as a mirror, once a day. The Mac App Store build cannot read
+your folder back, so there a folder can only be a mirror.
+
 ## Data and safety
 
 Linetta stores writing data on your device:

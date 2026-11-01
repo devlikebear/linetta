@@ -1994,6 +1994,24 @@ export interface SyncStatus {
   archived: string[];
 }
 
+/** One place the library can be kept. */
+export interface SyncTargetView {
+  id: string;
+  configured: boolean;
+  /** False where this build can only write to it: a folder under MAS. */
+  can_primary: boolean;
+  bytes: number;
+  last_success_at: number;
+  reason?: string;
+}
+
+export interface SyncTargets {
+  primary: string;
+  mirrors: string[];
+  key_stored: boolean;
+  targets: SyncTargetView[];
+}
+
 export interface SyncPreview {
   works: number;
   bytes: number;

@@ -14,7 +14,7 @@ import type {
   SuggestionItemStatus,
 } from "./types";
 import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, IllustrationRepresentatives, IllustrationRequest, IllustrationRequestEdits, IllustrationRequestStatus, ImageProviderStatus } from "./types";
-import type { SyncPreview, SyncStatus, VaultItems, VaultOverview, VaultPullResult, VaultPushResult, VaultResolveResult, VaultSetupResult, VaultWorkStatus } from "./types";
+import type { SyncPreview, SyncStatus, SyncTargets, VaultItems, VaultOverview, VaultPullResult, VaultPushResult, VaultResolveResult, VaultSetupResult, VaultWorkStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -534,16 +534,17 @@ export const publishApi = {
 /** The private vault (Phase 11). A push or pull reports through the
  *  vault.progress notification and can run for minutes. */
 export const vaultApi = {
-  status: () => rpcCall<VaultOverview>("vault.status"),
+  /** The primary sync target's overview, or one target's when named. */
+  status: (target?: string) => rpcCall<VaultOverview>("vault.status", target ? { target } : undefined),
   workStatus: (projectId: string) => rpcCall<VaultWorkStatus>("vault.work_status", { project_id: projectId }),
   /** Without recovery_key this makes one and returns it, the only time it is
    *  ever shown; it is stored once the same call hands it back. replace swaps a
    *  different key this device holds. */
-  setup: (input: { consented: boolean; recovery_key?: string; replace?: boolean }) =>
+  setup: (input: { consented: boolean; recovery_key?: string; replace?: boolean; target?: string }) =>
     rpcCall<VaultSetupResult>("vault.setup", input),
   push: (projectId: string) => rpcCall<VaultPushResult>("vault.push", { project_id: projectId }),
   /** item_id reaches a work not yet on this device; revision 0 is the head. */
-  pull: (input: { project_id?: string; item_id?: string; revision?: number }) =>
+  pull: (input: { project_id?: string; item_id?: string; revision?: number; target?: string }) =>
     rpcCall<VaultPullResult>("vault.pull", input),
   /** title_suffix names the copy take_remote keeps, and is required for it. */
   resolveConflict: (input: { project_id: string; choice: "keep_local" | "take_remote"; title_suffix?: string }) =>
@@ -569,6 +570,11 @@ export const syncApi = {
   /** Opening takes a newer version first; closing sends the work. */
   setActive: (projectId: string, active: boolean) =>
     rpcCall<{ pulled: boolean; problem?: string }>("sync.set_active", { project_id: projectId, active }),
+  targets: () => rpcCall<SyncTargets>("sync.targets"),
+  /** A new two-way target takes the whole library first, so this can take a while. */
+  setTargets: (primary: string, mirrors: string[]) => rpcCall<SyncTargets>("sync.set_targets", { primary, mirrors }),
+  /** Takes everything a target holds that this library does not have. */
+  restore: (target: string) => rpcCall<unknown>("sync.restore", { target }),
 };
 
 /** The built-in agent's loop (#93). Its panel is #95; these wrappers are the

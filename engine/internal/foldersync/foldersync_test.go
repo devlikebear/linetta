@@ -177,3 +177,37 @@ func TestStageWritesToContainer(t *testing.T) {
 		t.Fatalf("staged files missing manifest: %v", res.Files)
 	}
 }
+
+func TestStageCarriesTheSealedCopyWhenThereIsOne(t *testing.T) {
+	s, st, home := newFixture(t)
+	target := t.TempDir()
+	enabled := true
+	if _, err := st.Set(context.Background(), settings.Patch{FolderSyncDir: &target, FolderSyncEnabled: &enabled}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	blob := filepath.Join(home, MirrorDirName, sealedDirName, "blobs", "ab", "abcd")
+	if err := os.MkdirAll(filepath.Dir(blob), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(blob, []byte("sealed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := s.Stage(context.Background())
+	if err != nil {
+		t.Fatalf("Stage: %v", err)
+	}
+
+	want := ".linetta/blobs/ab/abcd"
+	found := false
+	for _, name := range res.Files {
+		found = found || name == want
+	}
+	if !found {
+		t.Fatalf("files = %v", res.Files)
+	}
+	data, err := os.ReadFile(filepath.Join(res.StagingDir, filepath.FromSlash(want)))
+	if err != nil || string(data) != "sealed" {
+		t.Fatalf("staged = %q, %v", data, err)
+	}
+}

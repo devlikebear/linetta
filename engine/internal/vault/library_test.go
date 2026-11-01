@@ -97,7 +97,7 @@ func TestOmittedImagesDoNotLeaveAndAreNotRemoved(t *testing.T) {
 
 	// What went up has no picture part.
 	site.mu.Lock()
-	item := site.items[linkOf(t, a, workID).ItemID]
+	item := site.items[linkOf(t, a, TargetWorks, workID).ItemID]
 	head := item.revisions[len(item.revisions)-1]
 	site.mu.Unlock()
 	keys := keysOf(t, a)
@@ -394,9 +394,9 @@ func vectorKeysFor(t *testing.T) RecoveryKey {
 	return key
 }
 
-func linkOf(t *testing.T, d *device, id string) Link {
+func linkOf(t *testing.T, d *device, target, id string) Link {
 	t.Helper()
-	link, ok, err := getLink(context.Background(), d.db, id)
+	link, ok, err := getLink(context.Background(), d.db, target, id)
 	if err != nil || !ok {
 		t.Fatalf("link: %v %v", ok, err)
 	}
