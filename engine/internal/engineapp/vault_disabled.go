@@ -1,4 +1,4 @@
-//go:build mobile
+//go:build mobile || mas
 
 package engineapp
 
@@ -15,8 +15,9 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
-// The vault is not on iOS this phase. As with publishing, the methods refuse
-// rather than vanish.
+// The vault is off on iOS and in the Mac App Store build. The store build's
+// export declaration in Info.plist depends on it staying off there. As with
+// publishing, the methods refuse rather than vanish.
 const vaultAvailable = false
 
 type vaultDeps struct {

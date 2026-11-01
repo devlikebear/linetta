@@ -1,4 +1,4 @@
-//go:build mobile
+//go:build mobile || mas
 
 package engineapp
 
@@ -14,9 +14,10 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
-// Publishing is out of scope on iOS for now: the screens hide it on
-// publish_available = false, and the methods refuse rather than vanish, the
-// way git sync does on the builds without it.
+// Publishing is out on iOS and in the Mac App Store build, which sends nothing
+// to a server the developer runs. The screens hide it on publish_available =
+// false, and the methods refuse rather than vanish, the way git sync does on
+// the builds without it.
 const publishAvailable = false
 
 type publishDeps struct {

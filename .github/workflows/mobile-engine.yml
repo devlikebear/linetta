@@ -51,6 +51,9 @@ jobs:
       - name: Test mobile build tag
         run: cd engine && go test -tags mobile ./...
 
+      - name: Test Mac App Store build tag
+        run: cd engine && go test -tags mas ./...
+
       - name: Verify host c-archive
         run: |
           set -euo pipefail
