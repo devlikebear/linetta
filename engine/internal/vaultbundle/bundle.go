@@ -389,7 +389,27 @@ func Apply(ctx context.Context, tx *sql.Tx, bundle *Bundle) error {
 			}
 		}
 	}
-	return nil
+	return placeOpenedNode(ctx, tx, projectID)
+}
+
+// placeOpenedNode points the work at its first scene when this device has no
+// opened node for it, or the bundle removed that node. last_opened_node_id stays
+// on its device, and the app and the agent's tools start from it.
+func placeOpenedNode(ctx context.Context, tx *sql.Tx, projectID string) error {
+	_, err := tx.ExecContext(ctx, `
+		WITH RECURSIVE walk(id, kind, path) AS (
+			SELECT id, kind, printf('%010d', ordinal) FROM nodes
+			 WHERE project_id = ?1 AND parent_id IS NULL
+			UNION ALL
+			SELECT n.id, n.kind, w.path || '/' || printf('%010d', n.ordinal)
+			  FROM nodes n JOIN walk w ON n.parent_id = w.id
+		)
+		UPDATE projects
+		   SET last_opened_node_id = (SELECT id FROM walk WHERE kind = 'leaf' ORDER BY path, id LIMIT 1)
+		 WHERE id = ?1
+		   AND (last_opened_node_id IS NULL OR NOT EXISTS (
+		         SELECT 1 FROM nodes WHERE id = projects.last_opened_node_id AND project_id = ?1))`, projectID)
+	return err
 }
 
 func applyEntities(ctx context.Context, tx *sql.Tx, reader *rowReader, projectID string) error {
