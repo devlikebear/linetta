@@ -190,6 +190,12 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "style.get_draft",
     "style.get_rules",
     "style.set_rules",
+    "sync.preview",
+    "sync.run_now",
+    "sync.set_active",
+    "sync.set_auto",
+    "sync.status",
+    "sync.touch",
     "threads.close",
     "threads.create",
     "threads.get",
@@ -944,6 +950,12 @@ mod security_boundary_tests {
             "vault.setup",
             "vault.status",
             "vault.work_status",
+            "sync.preview",
+            "sync.run_now",
+            "sync.set_active",
+            "sync.set_auto",
+            "sync.status",
+            "sync.touch",
         ] {
             assert!(is_renderer_engine_method(method), "{method}");
         }

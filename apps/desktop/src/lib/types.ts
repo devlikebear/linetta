@@ -1946,6 +1946,8 @@ export interface VaultItemView {
   updated: string;
   bytes: number;
   on_this_device: boolean;
+  /** Another device deleted the work; only its restore points are left. */
+  deleted?: boolean;
 }
 
 export interface VaultOverview {
@@ -1956,6 +1958,31 @@ export interface VaultOverview {
   items: VaultItemView[];
   /** Something the last library sync left the writer to know about. */
   library_warning?: "profile_refused";
+}
+
+export interface SyncWork {
+  project_id: string;
+  item_id?: string;
+  title: string;
+  state: VaultWorkState | "deleted" | "removed";
+  /** A reason code when this one work could not be moved. */
+  problem?: string;
+}
+
+export interface SyncStatus {
+  enabled: boolean;
+  state: "off" | "idle" | "running" | "waiting" | "stopped";
+  /** A reason code when stopped or waiting. */
+  reason?: string;
+  last_success_at: number;
+  works: SyncWork[];
+  /** Works moved to the archive because another device deleted them. */
+  archived: string[];
+}
+
+export interface SyncPreview {
+  works: number;
+  bytes: number;
 }
 
 /** One line of what travels. The required line has an empty id. */

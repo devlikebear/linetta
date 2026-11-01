@@ -229,6 +229,7 @@ fn notification_event(method: &str) -> Option<&'static str> {
         "agent.history_cut" => Some("agent-history-cut"),
         // How far an upload or a download of a work has got.
         "vault.progress" => Some("vault-progress"),
+        "sync.status" => Some("sync-status"),
         // Memory changed under the app: an agent recorded something, or
         // another window saved. Settings holds an unsent textarea draft, so
         // without this the next blur silently overwrites it.
@@ -449,6 +450,7 @@ mod tests {
     fn vault_progress_is_forwarded_to_the_renderer() {
         // Missing here, a long upload would show no movement at all.
         assert_eq!(notification_event("vault.progress"), Some("vault-progress"));
+        assert_eq!(notification_event("sync.status"), Some("sync-status"));
     }
 
     #[test]

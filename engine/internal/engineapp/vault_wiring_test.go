@@ -63,6 +63,50 @@ func TestVaultItemsRefuseWhatCannotBeOff(t *testing.T) {
 	}
 }
 
+func TestSyncMethodsAreRegisteredAndOffByDefault(t *testing.T) {
+	app := openApp(t)
+	result, rpcErr := call(t, app, "sync.status", "")
+	if rpcErr != nil {
+		t.Fatalf("sync.status: %+v", rpcErr)
+	}
+	if !strings.Contains(string(result), `"enabled":false`) || !strings.Contains(string(result), `"state":"off"`) {
+		t.Fatalf("sync.status = %s", result)
+	}
+	for method, params := range map[string]string{
+		"sync.preview":    "",
+		"sync.run_now":    "",
+		"sync.touch":      `{"project_id":"p"}`,
+		"sync.set_active": `{"project_id":"p","active":true}`,
+	} {
+		if _, rpcErr := call(t, app, method, params); rpcErr != nil {
+			t.Errorf("%s: %+v", method, rpcErr)
+		}
+	}
+	for method, params := range map[string]string{
+		"sync.touch":      `{}`,
+		"sync.set_active": `{"project_id":"p"}`,
+		"sync.set_auto":   `{}`,
+	} {
+		if _, rpcErr := call(t, app, method, params); rpcErr == nil {
+			t.Errorf("%s with %s was accepted", method, params)
+		}
+	}
+}
+
+func TestSyncSetAutoTurnsOnAndSaysWhyItStopped(t *testing.T) {
+	app := openApp(t)
+	result, rpcErr := call(t, app, "sync.set_auto", `{"enabled":true}`)
+	if rpcErr != nil {
+		t.Fatalf("sync.set_auto: %+v", rpcErr)
+	}
+	if !strings.Contains(string(result), `"enabled":true`) {
+		t.Fatalf("sync.set_auto = %s", result)
+	}
+	if _, rpcErr := call(t, app, "sync.set_auto", `{"enabled":false}`); rpcErr != nil {
+		t.Fatalf("sync.set_auto: %+v", rpcErr)
+	}
+}
+
 func TestVaultAvailableReachesDiagnostics(t *testing.T) {
 	result, rpcErr := call(t, openApp(t), "diagnostics.get", "")
 	if rpcErr != nil {

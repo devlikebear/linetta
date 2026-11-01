@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/opsstatus"
 	"github.com/devlikebear/linetta/engine/internal/publish"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
+	"github.com/devlikebear/linetta/engine/internal/rpc/handlers"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
@@ -25,9 +27,16 @@ type vaultDeps struct {
 	indexer       *manuscript.Indexer
 	clock         func() int64
 	publish       *publish.Service
+	ops           *opsstatus.Repo
+	agentBusy     func(projectID string) bool
 }
 
-func setupVault(deps vaultDeps) {
+type vaultSetup struct {
+	queueDeletion handlers.ProjectDataCleaner
+	stop          func() error
+}
+
+func setupVault(_ context.Context, deps vaultDeps) vaultSetup {
 	unavailable := func(context.Context, json.RawMessage) (json.RawMessage, error) {
 		return nil, &rpc.MethodError{
 			Code:    rpc.CodeMethodNotFound,
@@ -38,7 +47,9 @@ func setupVault(deps vaultDeps) {
 		"vault.status", "vault.work_status", "vault.setup",
 		"vault.push", "vault.pull", "vault.resolve_conflict", "vault.delete_item",
 		"vault.items_get", "vault.items_set",
+		"sync.status", "sync.preview", "sync.run_now", "sync.set_auto", "sync.touch", "sync.set_active",
 	} {
 		deps.server.Handle(method, unavailable)
 	}
+	return vaultSetup{stop: func() error { return nil }}
 }

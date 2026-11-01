@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Search, Command as CommandIcon, Maximize2, ArrowLeft, BookOpen, Library, Replace, Menu, Keyboard, Bot, Cloud, Image as ImageIcon } from "lucide-react";
-import { nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi, vaultApi, illustrations as illustrationsApi, illustrationRequests as illustrationRequestsApi } from "../lib/rpc";
-import { saveErrorMessage } from "../lib/rpcMessage";
+import { syncApi, nodes, projects, snapshots, entities as entitiesApi, mentions as mentionsApi, threads as threadsApi, beats as beatsApi, settings as settingsApi, exportApi, notes as notesApi, gitSync, stats as statsApi, diagnostics as diagnosticsApi, publishApi, vaultApi, illustrations as illustrationsApi, illustrationRequests as illustrationRequestsApi } from "../lib/rpc";
+import { reasonMessage, saveErrorMessage } from "../lib/rpcMessage";
 import { McpToggle } from "../components/McpToggle";
 import { sceneEditorExtensions } from "../components/editor/sceneExtensions";
 import { NotePopover } from "../components/NotePopover";
@@ -64,6 +64,8 @@ import { useMcpChanges } from "../hooks/useMcpChanges";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { ProposalsChangedPayload, VaultWorkState } from "../lib/types";
 import { vaultNeedsAttention } from "../lib/vault";
+import { WorkSyncBanner } from "../components/WorkSyncBanner";
+import { useSyncStatus } from "../hooks/useSyncStatus";
 import {
   buildTree,
   countEpisodeStatus,
@@ -253,6 +255,7 @@ export function Workspace() {
   const [vaultAvailable, setVaultAvailable] = useState(false);
   const [vaultState, setVaultState] = useState<VaultWorkState | null>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [syncStatus] = useSyncStatus(vaultAvailable);
   // A turn outlives the panel, so the toolbar says when one is running.
   const agentRunning = useAgentRunning(load?.project.id, agentAvailable);
   const [tourOpen, setTourOpen] = useState(false);
@@ -919,6 +922,10 @@ export function Workspace() {
     let cancelled = false;
     (async () => {
       try {
+        // Before anything is read: the engine takes a newer version here, and
+        // what it failed at is not a reason to keep the writer from their book.
+        const opened = await syncApi.setActive(projectId, true).catch(() => null);
+        if (opened?.problem && !cancelled) showToast(reasonMessage(opened.problem, t));
         const p = await projects.get(projectId);
         const state = location.state as { jumpToNodeId?: string; fillStoryWorldPrompt?: string } | null;
         const jumpTo = state?.jumpToNodeId;
@@ -935,7 +942,7 @@ export function Workspace() {
       }
     })();
     return () => { cancelled = true; };
-  }, [fetchTree, location.pathname, location.state, navigate, projectId]);
+  }, [fetchTree, location.pathname, location.state, navigate, projectId, showToast, t]);
 
   const activeMentionNodeId = load?.node.id;
   // Refresh mentioned entities when the active node changes.
@@ -1030,6 +1037,7 @@ export function Workspace() {
       if (isActive()) setSaveStatus({ kind: "saving" });
       try {
         await sceneSaveQueue.save(nodeId, JSON.stringify(doc));
+        if (projectId) void syncApi.touch(projectId).catch(() => {});
         if (isActive()) {
           setSaveStatus({ kind: "saved", at: Date.now() });
           if (rev === editRevisionRef.current) setEditorDirty(false);
@@ -1043,7 +1051,7 @@ export function Workspace() {
         }
       }
     },
-    [refreshMentioned, sceneSaveQueue, t],
+    [projectId, refreshMentioned, sceneSaveQueue, t],
   );
   const debouncedSave = useKeyedDebouncedCallback(saveNow, SAVE_DEBOUNCE_MS);
   // Flushes any pending debounced save and waits for every in-flight/queued
@@ -1054,6 +1062,26 @@ export function Workspace() {
     debouncedSave.flush();
     await sceneSaveQueue.idle();
   }, [debouncedSave, sceneSaveQueue]);
+  // Leaving a work hands it to automatic sync, once what was typed has landed.
+  // Going to the background sends it too; coming back looks for what arrived.
+  const flushRef = useRef(flushPendingSave);
+  flushRef.current = flushPendingSave;
+  useEffect(() => {
+    if (!projectId) return undefined;
+    const hide = () => {
+      void flushRef.current().finally(() => syncApi.runNow(projectId).catch(() => {}));
+    };
+    const show = () => {
+      void syncApi.runNow().catch(() => {});
+    };
+    window.addEventListener("blur", hide);
+    window.addEventListener("focus", show);
+    return () => {
+      window.removeEventListener("blur", hide);
+      window.removeEventListener("focus", show);
+      void flushRef.current().finally(() => syncApi.setActive(projectId, false).catch(() => {}));
+    };
+  }, [projectId]);
   // The dialog publishes what is saved, so the last keystrokes are saved
   // first — otherwise the site would get the text from a second ago.
   const openPublish = useCallback(async (nodeId: string) => {
@@ -2558,6 +2586,15 @@ export function Workspace() {
             void flushPendingSave().then(() => navigate("/settings"));
           }}
           onChanged={setPublishStatus}
+        />
+      )}
+      {load && (
+        <WorkSyncBanner
+          projectId={load.project.id}
+          work={syncStatus?.works.find((work) => work.project_id === load.project.id)}
+          flush={flushPendingSave}
+          onReopen={() => window.location.replace(`/workspace/${load.project.id}`)}
+          onOpenDialog={() => void openVault()}
         />
       )}
       {load && vaultOpen && (

@@ -292,6 +292,11 @@ func (c *agentController) History(ctx context.Context, projectID string, limit i
 	return json.Marshal(out)
 }
 
+// Running says a turn is writing to the work right now.
+func (c *agentController) Running(projectID string) bool {
+	return c.svc.Status(projectID).Running
+}
+
 func (c *agentController) Status(_ context.Context, projectID string) (json.RawMessage, error) {
 	return json.Marshal(c.svc.Status(projectID))
 }

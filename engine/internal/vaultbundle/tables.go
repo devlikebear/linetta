@@ -104,6 +104,8 @@ var excluded = map[string]string{
 	"vault_items":               "this device's bookmark into the vault itself",
 	"vault_library":             "this device's bookmark into the library item",
 	"sync_selection":            "travels in the library item, not in a work",
+	"vault_deletions":           "this device's queue of markers to send",
+	"sync_removed":              "this device's record of works taken off the server",
 	"publish_works":             "reconciled with the site after a pull",
 	"publish_episodes":          "reconciled with the site after a pull",
 	"publish_entities":          "reconciled with the site after a pull",

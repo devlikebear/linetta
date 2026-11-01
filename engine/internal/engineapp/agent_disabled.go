@@ -54,6 +54,9 @@ func (c *agentController) Run(context.Context, string, string, string, string, [
 	return "", errAgentUnavailable
 }
 func (c *agentController) Cancel(context.Context, string) error { return nil }
+
+// Running is always false: this build has no turns.
+func (c *agentController) Running(string) bool { return false }
 func (c *agentController) History(context.Context, string, int) (json.RawMessage, error) {
 	return json.RawMessage(`[]`), nil
 }

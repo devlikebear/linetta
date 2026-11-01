@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useEngineEvent } from "../../hooks/useEngineEvent";
+import { SyncAutoPanel } from "./SyncAutoPanel";
 import { VaultItemList } from "./VaultItemList";
 import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
@@ -358,7 +359,10 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
             <div style={{ width: `${percent}%` }} />
           </div>
         </div>
+        <SyncAutoPanel editable={account.mode === "full"} />
         <VaultItemList editable={account.mode === "full"} />
+        <details className="vault-advanced" data-testid="vault-advanced">
+        <summary>{t("settings.vault.advanced")}</summary>
         <h4>{t("settings.vault.items")}</h4>
         {overview.items.length === 0 ? (
           <p className="sd">{t("settings.vault.empty")}</p>
@@ -370,9 +374,10 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
                 <span className="sd">
                   {formatBytes(item.bytes)} · {formatDate(item.updated, language)}
                   {!item.on_this_device && ` · ${t("settings.vault.notOnDevice")}`}
+                  {item.deleted && ` · ${t("settings.vault.deletedElsewhere")}`}
                 </span>
                 <span className="vault-item-actions">
-                  {!item.on_this_device && item.title && (
+                  {!item.on_this_device && item.title && !item.deleted && (
                     <button
                       type="button"
                       className="btn ghost sm"
@@ -438,6 +443,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
             {!pulled.files_restored && ` ${t("vault.filesNotRestored")}`}
           </p>
         )}
+        </details>
         <p className="sd">{t("settings.vault.closeNote")}</p>
         <div className="field-actions">
           {siteButton}
