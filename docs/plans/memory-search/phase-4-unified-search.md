@@ -11,9 +11,9 @@ _상태: 작업 그룹 B 완료. 작업 그룹 A는 불필요, 작업 그룹 C�
 
 ## 전제 조건
 
-- [ ] Phase 1 완료 및 승인
-- [ ] `main`에서 `feat/app-search-fts` 브랜치 생성
-- [ ] 로드맵의 측정 쿼리 결과 확인. 작업 그룹 C의 진행 여부를 정한다.
+- [x] Phase 1 완료. 작가가 Phase 4까지의 진행을 지시했다
+- [x] `feat/app-search-fts` 브랜치 생성. Phase 3 위에 쌓았다
+- [x] 로드맵의 측정 쿼리 확인: Phase 1 배포 전이라 데이터가 없어 작업 그룹 C를 건너뛴다
 
 ## 포함 기능
 
@@ -54,7 +54,7 @@ _Phase 1 측정에서 에이전트가 검색을 실제로 쓰고, 원고 밖 자
 
 _2026-11-01: Phase 1이 아직 배포되지 않아 측정 데이터가 없으므로 건너뛴다. 도구 크기 상한도 이미 거의 찼다._
 
-- [ ] **T4.C.1** — `linetta_search_work`
+- **T4.C.1** — `linetta_search_work` (건너뜀. 구현하지 않았고, 배포 후 측정으로 다시 정한다)
   - 파일: `engine/internal/mcphost/tools_read.go`, `tools_read_test.go`
   - 내용:
     - 입력: `project_id`, `query`, `sources`(선택: `entities`, `ledger`, `facts`, `continuity`, `plans`), `limit`
