@@ -76,7 +76,7 @@ describe("LibraryAll", () => {
     const user = userEvent.setup();
     renderLibraryAll();
 
-    await user.click(await screen.findByRole("button", { name: "보관됨" }));
+    await user.click(await screen.findByRole("button", { name: "아카이브됨" }));
     await user.click(await screen.findByLabelText("보관작 작품 옵션"));
     await user.click(screen.getByRole("menuitem", { name: "복원" }));
 
@@ -89,6 +89,6 @@ describe("LibraryAll", () => {
 
     expect(await screen.findByRole("button", { name: "보관작 중편 20자" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "진행작 단편 10자" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "보관됨" })).toHaveClass("accent");
+    expect(screen.getByRole("button", { name: "아카이브됨" })).toHaveClass("accent");
   });
 });

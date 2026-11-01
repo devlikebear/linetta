@@ -44,7 +44,7 @@ const PROGRESS_KEYS: Record<VaultProgress["phase"], MessageKey> = {
 export interface VaultDialogProps {
   projectId: string;
   onClose: () => void;
-  /** Takes the writer to Settings → Private Vault. */
+  /** Takes the writer to Settings → Sync. */
   onOpenSettings: () => void;
   /** Called with the fresh state whenever it is known. */
   onStatus?: (state: VaultWorkState) => void;
