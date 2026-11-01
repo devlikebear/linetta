@@ -107,7 +107,7 @@ GitHub 동기화는 `설정 → GitHub 동기화`에서 사용자가 git 폴더�
 - 개발자는 이 데이터를 수신·중계·저장하지 않습니다. 삽화를 게시한 경우는 3.5항을 따릅니다.
 
 #### 3.7 Linetta Works 동기화
-Linetta Works 동기화는 운영자가 허가한 Linetta Works 계정만 쓸 수 있습니다. 사용자가 사이트에서 동의하고 요청해 허가받은 뒤, `설정 → 동기화 → Linetta Works`에서 전송 안내에 동의하고 복구 키를 만들거나 입력하기 전까지 앱은 작품을 보내지 않습니다. 설정한 뒤에도 스스로 올리거나 받지 않습니다. 사용자가 작품의 동기화 창에서 "올리기"나 "받기"를 누를 때만 작품을 주고받습니다. 서재나 작품을 열 때는 새 버전이 있는지 서버에 묻기만 합니다.
+Linetta Works 동기화는 운영자가 허가한 Linetta Works 계정만 쓸 수 있습니다. 사용자가 사이트에서 동의하고 요청해 허가받은 뒤, `설정 → 동기화 → Linetta Works`에서 전송 안내에 동의하고 복구 키를 만들거나 입력하기 전까지 앱은 작품을 보내지 않습니다. 설정한 뒤에도 자동 동기화를 켜기 전에는 스스로 올리거나 받지 않고, 사용자가 작품의 동기화 창에서 "올리기"나 "받기"를 누를 때만 작품을 주고받습니다. 서재나 작품을 열 때는 새 버전이 있는지만 서버에 묻습니다. 자동 동기화는 기본으로 꺼져 있습니다. 대상 작품 수와 크기를 확인하고 켜면, 고친 작품은 편집이 멈춘 뒤 자동으로 올라가고 다른 기기의 변경은 자동으로 들어오며, 앱이 백그라운드에 있는 동안에도 몇 분마다 서버에 새 버전을 묻습니다. 이 기기의 작품을 지우면 지웠다는 표시를 보내고, 다른 기기는 그 작품을 아카이브로 옮깁니다. `설정 → 동기화 → Linetta Works`에서 언제든 끌 수 있습니다.
 
 - **어디로 가나.** 개발자가 운영하는 Linetta Works 서버를 거쳐 저장소(Cloudflare R2)에 저장됩니다. 공개되지 않고, 수위 검사를 위해 Anthropic으로 보내지 않습니다.
 - **무엇이 가나.** 올린 작품의 제목과 원고, 아웃라인, 세계관과 스토리 데이터, 버전 스냅샷, 그림, 작품별 스킬과 메모리, 그리고 전역 스킬과 작가 프로필이 이 기기에서 암호화되어 갑니다. `설정 → 동기화 → Linetta Works`의 옮길 항목에서 삽화, 버전 이력, 작품 스킬과 메모리, 전역 스킬, 작가 프로필을 끌 수 있고, 이 선택은 계정의 모든 기기에 적용됩니다. 서버에는 암호문과 그 크기, 시각, 임의로 만든 항목·조각 식별값만 남습니다. 개발자는 내용과 제목을 읽을 수 없습니다. 활동 기록, 에이전트 대화, 프로바이더 설정과 API 키는 가지 않습니다.
@@ -233,7 +233,7 @@ Illustration generation is off until you choose ChatGPT or Gemini under `Setting
 - The developer does not receive, relay, or store this data. Section 3.5 applies to an illustration you publish.
 
 #### 3.7 Linetta Works Sync
-Linetta Works sync is available only to Linetta Works accounts the operator has approved. The App sends no work until you have agreed and asked on the site, been approved, agreed to what is sent under `Settings → Sync → Linetta Works`, and made or entered a recovery key. After that it still uploads and downloads nothing by itself: works move only when you press Upload or Download in a work's sync window. Opening the library or a work only asks the server whether a newer version exists.
+Linetta Works sync is available only to Linetta Works accounts the operator has approved. The App sends no work until you have agreed and asked on the site, been approved, agreed to what is sent under `Settings → Sync → Linetta Works`, and made or entered a recovery key. After that it uploads and downloads nothing by itself until you turn on automatic sync: works move only when you press Upload or Download in a work's sync window, and opening the library or a work only asks the server whether a newer version exists. Automatic sync is off by default. Once you have seen how many works and how much data it covers and turned it on, works you change go up after you stop editing, changes from your other devices come in, and the App asks the server for new versions every few minutes, including while it runs in the background. Deleting a work here sends a marker saying so, and your other devices move that work to the archive. You can turn it off at any time under `Settings → Sync → Linetta Works`.
 
 - **Where it goes.** Through the Linetta Works server the developer operates, into its storage (Cloudflare R2). It is not public and is not sent to Anthropic for content review.
 - **What goes.** The title and manuscript of a work you upload, its outline, story data, version snapshots, pictures, and per-work skills and memory, along with your global skills and writer profile, sealed on this device. Under `Settings → Sync → Linetta Works` you can turn off pictures, version history, per-work skills and memory, global skills, and the writer profile, and the choice applies to every device on the account. The server keeps only ciphertext, its size and times, and randomly generated item and blob identifiers. The developer cannot read the content or the title. Activity logs, agent conversations, and provider settings and API keys are not sent.
@@ -358,7 +358,7 @@ GitHub 同期は、`設定 → GitHub 同期` でユーザーが git フォル�
 - 開発者はこのデータを受信・中継・保存しません。公開した挿絵には第3.5項が適用されます。
 
 #### 3.7 Linetta Works 同期
-Linetta Works 同期は、運営者が許可した Linetta Works アカウントだけが使えます。ユーザーがサイトで同意して申請し、許可を受けた後、`設定 → 同期 → Linetta Works` で送信内容に同意し、復旧キーを作成または入力するまで、本アプリは作品を送信しません。設定した後も自動ではアップロードもダウンロードもしません。作品の同期ウィンドウでユーザーが「アップロード」または「ダウンロード」を押したときにのみ作品をやり取りします。ライブラリや作品を開くときは、新しいバージョンがあるかをサーバーに問い合わせるだけです。
+Linetta Works 同期は、運営者が許可した Linetta Works アカウントだけが使えます。ユーザーがサイトで同意して申請し、許可を受けた後、`設定 → 同期 → Linetta Works` で送信内容に同意し、復旧キーを作成または入力するまで、本アプリは作品を送信しません。設定した後も、自動同期をオンにするまでは自動でアップロードもダウンロードもせず、作品の同期ウィンドウでユーザーが「アップロード」または「ダウンロード」を押したときにのみ作品をやり取りします。ライブラリや作品を開くときは、新しいバージョンがあるかをサーバーに確認するだけです。自動同期は既定でオフです。対象の作品数とサイズを確認してオンにすると、変更した作品は編集が止まった後に自動でアップロードされ、別の端末の変更が自動で届き、バックグラウンドで動作している間も数分ごとに新しいバージョンをサーバーに確認します。この端末で作品を削除すると削除の印を送信し、別の端末はその作品をアーカイブに移します。`設定 → 同期 → Linetta Works` でいつでもオフにできます。
 
 - **送信先。** 開発者が運営する Linetta Works のサーバーを経由して、そのストレージ（Cloudflare R2）に保存されます。公開されず、内容審査のために Anthropic へ送信されることもありません。
 - **送信されるもの。** アップロードした作品のタイトルと原稿、アウトライン、世界観とストーリーのデータ、バージョンスナップショット、画像、作品ごとのスキルとメモリ、そして全体のスキルと作家プロフィールが、この端末で暗号化されて送信されます。`設定 → 同期 → Linetta Works` の同期する項目で、挿絵、バージョン履歴、作品のスキルとメモリ、全体のスキル、作家プロフィールをオフにでき、この選択はアカウントのすべての端末に適用されます。サーバーに残るのは暗号文とそのサイズ、時刻、ランダムに生成した項目・断片の識別子だけです。開発者は内容もタイトルも読めません。活動ログ、エージェントの会話、プロバイダー設定と API キーは送信されません。

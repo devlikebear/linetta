@@ -721,13 +721,28 @@ recovery key, or enter the one you saved on your first device.
 you upload. The operator cannot recover it. Linetta keeps a new key only after
 you confirm you saved it somewhere off this device.
 
-**Upload and download.** Open a work and use the sync button in the top bar or
-**Open Linetta Works sync** in the command palette. Nothing moves by itself: Linetta
-shows that a newer version is waiting, and you decide. A work that is not on
-this device yet is downloaded from **Settings → Sync**.
+**Automatic sync.** Under **Settings → Sync → Linetta Works**, turn on automatic
+sync. It shows how many works and how much data will go, and sends nothing until
+you agree. After that, a work you change goes up three minutes after you stop
+editing, or when you close it, and changes from your other devices come in
+within a few minutes, even with the window closed if the app stays in the
+background. A work that is open waits for you: a line at the bottom of the
+screen offers the new version with one press. Works an agent is writing to are
+left alone until it finishes. If sync has to stop, for example because the
+agreement changed or the space ran out, the library and the sync screen say why.
+It is on or off for each device.
 
-**When two devices disagree.** If a work changed in both places, choose which to
-carry on from. Either way both manuscripts survive: uploading this device's
+**Upload and download by hand.** With automatic sync off, nothing moves by
+itself. Open a work and use the sync button in the top bar or **Open Linetta
+Works sync** in the command palette. Works not on this device yet are under
+**Advanced** in **Settings → Sync**.
+
+**Deleting a work.** Deleting a synced work tells your other devices, which move
+it to the archive and keep the manuscript, so a slip on one device cannot take a
+book off all of them. Delete it on each device yourself if you want it gone.
+
+**When two devices disagree.** If a work changed in both places, automatic sync
+leaves it alone until you choose which to carry on from. Either way both manuscripts survive: uploading this device's
 version leaves the other as a restore point, and downloading the Linetta Works
 version first copies this device's version into a new work. Downloading backs up
 your library first.
@@ -744,7 +759,7 @@ to every device, and what you turn off is not removed from any of them. Agent
 conversations, activity logs, and provider settings and API keys stay here. The full list is in the
 [privacy policy](docs/privacy-policy.md), section 3.7.
 
-**Delete.** **Settings → Sync → Linetta Works → Delete from server** removes one work
+**Delete from the server.** **Settings → Sync → Linetta Works → Advanced → Delete from server** removes one work
 and its restore points for good, and leaves the manuscript on this device.
 Closing sync on the site deletes everything there. Disconnecting from the
 site deletes nothing on the server and keeps your recovery key.
