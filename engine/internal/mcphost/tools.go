@@ -14,6 +14,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
@@ -99,6 +100,11 @@ type ToolDeps struct {
 	// Memory is the two curated documents every agent reads. Nil in a build
 	// with no database open; the tool refuses rather than panicking.
 	Memory *agentmemory.Repo
+
+	// History is the built-in agent's conversation. It is on the deps every
+	// server shares, and only ToolGroups.History registers the tools that read
+	// it. Nil in a build with no database open; the tools refuse.
+	History *companion.HistoryRepo
 
 	// Skills are the SKILL.md documents an agent writes for itself and the
 	// writer can read, edit and revert. Skills is the filesystem store under
@@ -201,6 +207,9 @@ func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchI
 // Neither needs an engine restart.
 func (d ToolDeps) Register(s *mcp.Server, mode string, groups ToolGroups) {
 	d.registerReadTools(s, groups)
+	if groups.History {
+		d.registerHistoryTools(s)
+	}
 	if mode == settings.MCPModeFull {
 		d.registerWriteTools(s, groups)
 	}

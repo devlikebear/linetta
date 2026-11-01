@@ -877,10 +877,34 @@ func TestRun_tellsTheModelOnlyWhenTheConversationWasCut(t *testing.T) {
 			}
 			waitFor(t, "agent.done", func() bool { return rec.has("agent.done") })
 
-			if got := strings.Contains(c.messages()[0].Content, historyCutNotice); got != tc.want {
+			if got := strings.Contains(c.messages()[0].Content, "no longer in front of you"); got != tc.want {
 				t.Errorf("notice in system prompt = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The note sits in the prefix the provider caches, so a turn whose window did
+// not move has to reproduce it to the byte.
+func TestHistoryCutNote_namesTheBoundaryAndStaysStable(t *testing.T) {
+	first := historyCutNote("m-1")
+	if first != historyCutNote("m-1") {
+		t.Error("the note changed with the window standing still")
+	}
+	if first == historyCutNote("m-2") {
+		t.Error("a moved window must name its new boundary")
+	}
+	if !strings.Contains(first, `before_message_id "m-1"`) || !strings.Contains(first, "linetta_read_history") {
+		t.Errorf("note = %q", first)
+	}
+	if strings.Contains(historyCutNote(""), "before_message_id") {
+		t.Error("with no message in the window there is no boundary to name")
+	}
+}
+
+func TestHostGroups_alwaysCarryTheHistoryTools(t *testing.T) {
+	if !(toolGroups{}).hostGroups().History {
+		t.Error("the agent's server must have the conversation tools whatever the switches say")
 	}
 }
 

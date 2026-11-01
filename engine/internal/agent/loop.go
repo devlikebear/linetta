@@ -610,9 +610,9 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 		}
 		filtered = append(filtered, m)
 	}
-	replay, cut, moved := s.replayHistory(st.projectID, filtered)
+	replay, start, cut, moved := s.replayHistory(st.projectID, filtered)
 	if cut {
-		msgs[0].Content += historyCutNotice
+		msgs[0].Content += historyCutNote(start)
 	}
 	if moved {
 		s.notify("agent.history_cut", historyCutPayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID)})

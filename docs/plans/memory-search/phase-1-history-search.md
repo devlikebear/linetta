@@ -3,6 +3,7 @@
 _작성일: 2026-11-01_
 _속한 로드맵: [`roadmap.md`](./roadmap.md)_
 _예상 소요: 1.5일_
+_상태: 구현 완료. 실제 모델로 묻는 수동 확인만 남음_
 
 ## 페이즈 목표
 
@@ -30,7 +31,7 @@ _예상 소요: 1.5일_
 
 ### 작업 그룹 A: 색인
 
-- [ ] **T1.A.1** — 대화 FTS 마이그레이션
+- [x] **T1.A.1** — 대화 FTS 마이그레이션
   - 파일: `engine/internal/store/migrations/0036_companion_messages_fts.sql`
   - 내용:
     - `companion_messages_fts USING fts5(content, message_id UNINDEXED, project_id UNINDEXED, tokenize='trigram')`
@@ -44,20 +45,20 @@ _예상 소요: 1.5일_
   - 참조: `engine/internal/store/migrations/0015_manuscript_fts.sql`
   - 검증: `CGO_ENABLED=0 go test ./internal/store/...`
 
-- [ ] **T1.A.2** — vault 분류 추가
+- [x] **T1.A.2** — vault 분류 추가
   - 파일: `engine/internal/vaultbundle/tables.go`
   - 내용: `excluded`에 `companion_messages_fts`와 `_config`, `_content`, `_data`, `_docsize`, `_idx`를 사유 `"search index, rebuilt from companion_messages"`로 추가
   - 검증: `TestEveryTableIsClassified` 통과
 
 ### 작업 그룹 B: 조회
 
-- [ ] **T1.B.1** — 공용 쿼리 패키지 분리
+- [x] **T1.B.1** — 공용 쿼리 패키지 분리
   - 파일: `engine/internal/ftsquery/ftsquery.go` (신규), `engine/internal/manuscript/searcher.go`
   - 내용: `searchTerms`, `buildTrigramMatch`, `escapeLike`를 `ftsquery.Terms`, `ftsquery.TrigramMatch`, `ftsquery.EscapeLike`로 옮긴다. 동작은 바꾸지 않는다.
   - 이유: `companion`이 `manuscript`를 가져오면 책임이 섞인다. Phase 4도 쓴다.
   - 검증: 기존 `manuscript_test.go` 그대로 통과
 
-- [ ] **T1.B.2** — 저장소 검색과 창 읽기
+- [x] **T1.B.2** — 저장소 검색과 창 읽기
   - 파일: `engine/internal/companion/history_search.go` (신규), `history_search_test.go`
   - 내용:
     ```go
@@ -81,7 +82,7 @@ _예상 소요: 1.5일_
   - 테스트: 조사 붙은 이름, 2글자 이름, 다른 작품 격리, 1.0 행 제외, 도구 행 제외, `BeforeID` 경계, 같은 시각의 순서
   - 검증: `CGO_ENABLED=0 go test ./internal/companion/...`
 
-- [ ] **T1.B.3** — 삭제 경로 테스트
+- [x] **T1.B.3** — 삭제 경로 테스트
   - 파일: `engine/internal/companion/history_search_test.go`
   - 내용: `Clear` 뒤 색인 0행, 작품 삭제(ON DELETE CASCADE) 뒤 색인 0행, 1.0 행을 남기는 `Clear`가 색인에 영향 없음
   - 주의: 외래 키 연쇄 삭제에서 트리거가 실제로 도는지 이 테스트로 확인한다. 안 돌면 작품 삭제 경로에서 명시적으로 지운다.
@@ -89,8 +90,8 @@ _예상 소요: 1.5일_
 
 ### 작업 그룹 C: 도구
 
-- [ ] **T1.C.1** — 내장 에이전트 전용 그룹
-  - 파일: `engine/internal/mcphost/budget.go`, `engine/internal/mcphost/tools.go`, 내장 에이전트의 `RegisterTools` 연결부 (`engine/internal/engineapp/agent_enabled.go`)
+- [x] **T1.C.1** — 내장 에이전트 전용 그룹
+  - 파일: `engine/internal/mcphost/budget.go`, `engine/internal/mcphost/tools.go`, `engine/internal/agent/tools.go`의 `hostGroups`
   - 내용:
     - `ToolGroups`에 `History bool`을 더한다. `AllToolGroups`와 `ToolGroupsFrom`은 켜지 않는다.
     - 내장 에이전트가 도구를 등록할 때만 `groups.History = true`로 넘긴다.
@@ -98,7 +99,7 @@ _예상 소요: 1.5일_
   - 테스트: 외부 서버 `tools/list`에 없음, 에이전트 서버에는 있음
   - 검증: `CGO_ENABLED=0 go test ./internal/mcphost/... ./internal/agent/...`
 
-- [ ] **T1.C.2** — 도구 두 개
+- [x] **T1.C.2** — 도구 두 개
   - 파일: `engine/internal/mcphost/tools_history.go` (신규), `tools_history_test.go`
   - 내용:
     - `linetta_search_history`: `project_id`, `query`, `before_message_id`(선택), `limit`(기본 8, 최대 10)
@@ -109,14 +110,14 @@ _예상 소요: 1.5일_
   - 참조: `linetta_search_manuscript` (`tools_read.go`), `record` 래퍼
   - 검증: 위 명령 통과
 
-- [ ] **T1.C.3** — 패널 표시
+- [x] **T1.C.3** — 패널 표시
   - 파일: `apps/desktop/src/lib/agentTools.ts`, `apps/desktop/src/lib/i18n.tsx`
-  - 내용: 두 도구의 표시 이름을 한국어, 영어로 추가
+  - 내용: 두 도구의 표시 이름을 한국어, 영어, 일본어로 추가
   - 검증: `make test-desktop`
 
 ### 작업 그룹 D: 잘림 안내
 
-- [ ] **T1.D.1** — 안내 교체
+- [x] **T1.D.1** — 안내 교체
   - 파일: `engine/internal/agent/prompt.go`, `engine/internal/agent/loop.go`, `prompt_test.go`
   - 내용:
     - `historyCutNotice` 상수를 `historyCutNote(start string) string`으로 바꾼다.
@@ -132,19 +133,19 @@ _예상 소요: 1.5일_
 ## ✅ Phase 1 Checkpoint
 
 **구현 확인:**
-- [ ] 모든 작업 체크박스 완료
-- [ ] 잘린 턴의 시스템 프롬프트에 경계 ID가 들어간다
-- [ ] 외부 MCP 서버에 두 도구가 없다
+- [x] 모든 작업 체크박스 완료
+- [x] 잘린 턴의 시스템 프롬프트에 경계 ID가 들어간다
+- [x] 외부 MCP 서버에 두 도구가 없다
 
 **자동 검증:**
-- [ ] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
-- [ ] `make test-mobile-engine` 통과
-- [ ] `make test-desktop` 통과
+- [x] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
+- [x] `make test-mobile-engine` 통과
+- [x] `make test-desktop` 통과
 
 **수동 확인:**
-- [ ] 설치된 앱 DB의 복사본을 `LINETTA_HOME=<scratch>`로 띄워 마이그레이션 시간과 색인 행 수 확인. `library.db`, `-wal`, `-shm`을 함께 복사한다. 원본은 열지 않는다.
+- [x] 설치된 앱 DB의 복사본을 `LINETTA_HOME=<scratch>`로 띄워 마이그레이션 시간과 색인 행 수 확인. `library.db`, `-wal`, `-shm`을 함께 복사한다. 원본은 열지 않는다.
 - [ ] 긴 작품에서 "곰배를 어떤 역할로 정했지?"를 물어 에이전트가 검색 도구를 쓰고 답하는지 확인
-- [ ] 같은 복사본에서 대화 지우기 뒤 색인이 비는지 확인
+- [x] 같은 복사본에서 대화 지우기 뒤 색인이 비는지 확인
 
 **완료 처리:**
 1. 완료 작업, 자동 검증 결과, 남은 수동 확인을 보고한다.
@@ -152,6 +153,10 @@ _예상 소요: 1.5일_
 3. 실패하면 항목을 보고하고 원인 분석, 수정, 재검증 순으로 진행한다.
 
 ---
+
+## 확인 기록
+
+2026-11-01 DB 복사본: 마이그레이션 0.2초, 색인 416행. 긴 작품에서 `곰배 조연`, 2글자 `표두`, `은자 두냥`, `3천자`가 모두 찾아졌고 쿼리는 2ms 이하였다. 대화 지우기는 50ms, 색인 잔여 0행이다.
 
 ## 메모 / 주의
 

@@ -221,7 +221,7 @@ func TestUnclassifiedTableFails(t *testing.T) {
 func TestEveryBlobColumnBecomesAPart(t *testing.T) {
 	db := openLibrary(t)
 	rows, err := db.Query(`SELECT m.name, p.name FROM sqlite_master m, pragma_table_info(m.name) p
-		WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND m.name NOT LIKE 'manuscript_fts%' AND upper(p.type) = 'BLOB'`)
+		WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND m.name NOT LIKE '%\_fts%' ESCAPE '\' AND upper(p.type) = 'BLOB'`)
 	if err != nil {
 		t.Fatal(err)
 	}

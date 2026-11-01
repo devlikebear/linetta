@@ -7,6 +7,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/devlikebear/linetta/engine/internal/ftsquery"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -131,32 +132,32 @@ func TestIndexerRebuildAllRestoresLeavesAndRemovesOrphans(t *testing.T) {
 }
 
 func TestBuildTrigramMatch(t *testing.T) {
-	got, ok := buildTrigramMatch(searchTerms("진홍빛 눈동자"))
+	got, ok := ftsquery.TrigramMatch(ftsquery.Terms("진홍빛 눈동자"))
 	if !ok {
-		t.Fatal("buildTrigramMatch returned false for long Korean terms")
+		t.Fatal("TrigramMatch returned false for long Korean terms")
 	}
 	if got != `"진홍빛" AND "눈동자"` {
 		t.Fatalf("query = %q", got)
 	}
 
-	got, ok = buildTrigramMatch(searchTerms(`진홍빛 OR "눈동자"`))
+	got, ok = ftsquery.TrigramMatch(ftsquery.Terms(`진홍빛 OR "눈동자"`))
 	if !ok {
-		t.Fatal("buildTrigramMatch returned false for quoted/operator input")
+		t.Fatal("TrigramMatch returned false for quoted/operator input")
 	}
 	if strings.Contains(got, " OR ") || strings.Contains(got, `"눈동자""`) {
 		t.Fatalf("query did not neutralize operators/quotes: %q", got)
 	}
 
-	if _, ok := buildTrigramMatch(searchTerms("수아 민")); ok {
+	if _, ok := ftsquery.TrigramMatch(ftsquery.Terms("수아 민")); ok {
 		t.Fatal("short-only terms should use LIKE fallback")
 	}
-	if _, ok := buildTrigramMatch(searchTerms("진홍빛 민호")); ok {
+	if _, ok := ftsquery.TrigramMatch(ftsquery.Terms("진홍빛 민호")); ok {
 		t.Fatal("a short term must not be dropped from a mixed query")
 	}
 }
 
 func TestSearchTermsKeepsPunctuationOnlyQuery(t *testing.T) {
-	if got := searchTerms(`"()"`); len(got) != 1 || got[0] != `"()"` {
+	if got := ftsquery.Terms(`"()"`); len(got) != 1 || got[0] != `"()"` {
 		t.Fatalf("terms = %q, want the raw query", got)
 	}
 }
@@ -253,7 +254,7 @@ func TestSearcherShortTermSnippetIsWindowed(t *testing.T) {
 }
 
 func TestLikeSnippetKeepsShortTextWhole(t *testing.T) {
-	if got := likeSnippet("Sua met 수아", []string{"SUA"}); got != "Sua met 수아" {
+	if got := ftsquery.LikeSnippet("Sua met 수아", []string{"SUA"}, likeSnippetRadius); got != "Sua met 수아" {
 		t.Fatalf("snippet = %q", got)
 	}
 }

@@ -400,6 +400,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 			story:         mcpStory,
 			msEdit:        manuscriptEditor,
 			memory:        memRepo,
+			history:       companionHistory,
 			// The skills the agent writes for itself live as SKILL.md files
 			// under the same home the rest of Linetta's own material does,
 			// with their versions in the database beside the manuscript's.

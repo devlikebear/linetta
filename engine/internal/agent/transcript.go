@@ -20,7 +20,7 @@ import (
 // compacted summary row. "agent" is none of those, and it matches the name
 // mcphost already uses for the same actor in the activity log
 // (mcphost.SourceAgent).
-const transcriptIntent = "agent"
+const transcriptIntent = companion.HistoryAgentIntent
 
 // transcript stores the panel's conversation. It reuses companion_messages
 // rather than adding a table: the columns already match, and the 1.0 archive

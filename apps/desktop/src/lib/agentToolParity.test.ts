@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { parseToolEvent } from "../components/agent/AgentPanel";
 import { readAppFile } from "../test/readSource";
-import { READ_TOOL_NAMES, WRITE_TOOL_NAMES, toolKind, toolLabelKey } from "./agentTools";
+import { HISTORY_TOOL_NAMES, READ_TOOL_NAMES, WRITE_TOOL_NAMES, toolKind, toolLabelKey } from "./agentTools";
 import { messageCatalogs } from "./i18n";
 import type { AppLanguage } from "./types";
 
@@ -30,6 +30,7 @@ async function goToolNames(file: string, varName: string): Promise<string[]> {
 
 const goReadNames = () => goToolNames("tools_read.go", "ReadToolNames");
 const goWriteNames = () => goToolNames("tools_write.go", "WriteToolNames");
+const goHistoryNames = () => goToolNames("tools_history.go", "HistoryToolNames");
 
 describe("agent tool catalogue parity with the engine", () => {
   it("finds both Go lists (guards against the extraction silently breaking)", async () => {
@@ -50,6 +51,10 @@ describe("agent tool catalogue parity with the engine", () => {
     expect([...WRITE_TOOL_NAMES].sort()).toEqual((await goWriteNames()).sort());
   });
 
+  it("lists exactly the engine's history tools", async () => {
+    expect([...HISTORY_TOOL_NAMES].sort()).toEqual((await goHistoryNames()).sort());
+  });
+
   it("never classifies an engine write tool as a read", async () => {
     for (const name of await goWriteNames()) {
       expect(toolKind(name), `${name} must not read as a read tool`).toBe("write");
@@ -57,7 +62,7 @@ describe("agent tool catalogue parity with the engine", () => {
   });
 
   it("has a short label for every engine tool, in every language", async () => {
-    const names = [...(await goReadNames()), ...(await goWriteNames())];
+    const names = [...(await goReadNames()), ...(await goHistoryNames()), ...(await goWriteNames())];
     expect(names.length).toBeGreaterThan(10);
     for (const name of names) {
       const key = toolLabelKey(name);
@@ -72,7 +77,7 @@ describe("agent tool catalogue parity with the engine", () => {
   });
 
   it("carries no label for a tool the engine does not have", async () => {
-    const names = new Set([...(await goReadNames()), ...(await goWriteNames())]);
+    const names = new Set([...(await goReadNames()), ...(await goHistoryNames()), ...(await goWriteNames())]);
     const stale = Object.keys(messageCatalogs.ko)
       .filter((key) => key.startsWith("agentPanel.toolName."))
       .map((key) => key.slice("agentPanel.toolName.".length))
