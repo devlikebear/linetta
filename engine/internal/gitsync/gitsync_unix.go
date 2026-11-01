@@ -4,6 +4,6 @@ package gitsync
 
 import "os/exec"
 
-// hideConsole has no Unix counterpart: a child process only gets a terminal
+// unattended has no Unix counterpart: a child process only gets a terminal
 // window if something asks for one.
-func hideConsole(*exec.Cmd) {}
+func unattended(*exec.Cmd) {}
