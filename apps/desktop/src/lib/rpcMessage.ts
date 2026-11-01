@@ -163,6 +163,9 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
   vault_timeout: "errors.vaultTimeout",
   vault_unavailable: "errors.vaultUnavailable",
   vault_rejected: "errors.vaultRejected",
+  vault_pending: "errors.vaultPending",
+  sync_target_missing: "errors.syncTargetMissing",
+  sync_target_failed: "errors.syncTargetFailed",
 };
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc

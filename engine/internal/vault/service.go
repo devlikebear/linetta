@@ -538,6 +538,8 @@ func (s *Service) send(ctx context.Context, sess session, link Link, out *outgoi
 // PullInput names what to pull: a work this device has, or an item it has never
 // held. Revision 0 is the head.
 type PullInput struct {
+	// Target picks the target to pull from. Empty is the primary one.
+	Target    string `json:"target"`
 	ProjectID string `json:"project_id"`
 	ItemID    string `json:"item_id"`
 	Revision  int    `json:"revision"`
@@ -994,6 +996,8 @@ func (s *Service) deleteItem(ctx context.Context, itemID string) error {
 // SetupInput makes or enters the recovery key. RecoveryKey empty means make one.
 // Replace swaps a different key already on this device for the one entered.
 type SetupInput struct {
+	// Target says which target to check the key against. Empty is Linetta Works.
+	Target      string `json:"target"`
 	Consented   bool   `json:"consented"`
 	RecoveryKey string `json:"recovery_key"`
 	Replace     bool   `json:"replace"`
@@ -1028,6 +1032,13 @@ func (s *Service) setup(ctx context.Context, in SetupInput) (SetupResult, error)
 	remote, err := s.remote()
 	if err != nil {
 		return SetupResult{}, err
+	}
+	// A repository has to be up to date first: what it already holds decides
+	// whether a new key is safe to make.
+	if round, ok := remote.(Round); ok {
+		if err := round.Begin(ctx); err != nil {
+			return SetupResult{}, err
+		}
 	}
 	items, err := remote.Items(ctx)
 	if err != nil {

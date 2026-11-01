@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useEngineEvent } from "../../hooks/useEngineEvent";
-import { SyncAutoPanel } from "./SyncAutoPanel";
-import { VaultItemList } from "./VaultItemList";
 import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
 import { openExternalUrl, publishApi, vaultApi } from "../../lib/rpc";
@@ -65,7 +63,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
     setLoading(true);
     setError(null);
     try {
-      const [next, connection] = await Promise.all([vaultApi.status(), publishApi.connectStatus()]);
+      const [next, connection] = await Promise.all([vaultApi.status("works"), publishApi.connectStatus()]);
       if (gen !== loadRef.current) return;
       setOverview(next);
       setSite(connection.site_url ?? "");
@@ -133,7 +131,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
       setPulled(null);
       setPulling(null);
       try {
-        setPulled(await vaultApi.pull({ item_id: itemId }));
+        setPulled(await vaultApi.pull({ item_id: itemId, target: "works" }));
       } finally {
         setPulling(null);
       }
@@ -359,8 +357,6 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
             <div style={{ width: `${percent}%` }} />
           </div>
         </div>
-        <SyncAutoPanel editable={account.mode === "full"} />
-        <VaultItemList editable={account.mode === "full"} />
         <details className="vault-advanced" data-testid="vault-advanced">
         <summary>{t("settings.vault.advanced")}</summary>
         <h4>{t("settings.vault.items")}</h4>

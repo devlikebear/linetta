@@ -199,21 +199,18 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		images:        exportImages{illustrations},
 		ops:           ops,
 	}
-	gitSyncer := setupGitSync(syncDeps)
-	folderSyncer := setupFolderSync(syncDeps)
-	syncers := []dailySyncer{gitSyncer, folderSyncer}
+	gitSyncer, gitHooks := setupGitSync(syncDeps)
+	folderSyncer, folderHooks := setupFolderSync(syncDeps)
 	retentionFn := func(ctx context.Context) error {
 		if err := snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli()); err != nil {
 			return err
 		}
-		for _, sy := range syncers {
-			res, err := sy.RunOnce(ctx)
-			if err != nil {
+		if syncRunnerTakesExports {
+			return nil
+		}
+		for _, sy := range []dailySyncer{gitSyncer, folderSyncer} {
+			if err := runExport(ctx, sy); err != nil {
 				fmt.Fprintf(os.Stderr, "daily sync: %v\n", err)
-				continue
-			}
-			if res.Error != "" {
-				fmt.Fprintf(os.Stderr, "daily sync: %s\n", res.Error)
 			}
 		}
 		return nil
@@ -454,6 +451,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		publish:       publishSvc,
 		ops:           ops,
 		agentBusy:     agentCtrl.Running,
+		gitSyncer:     gitSyncer,
+		folderSyncer:  folderSyncer,
+		gitHooks:      gitHooks,
+		folderHooks:   folderHooks,
 	})
 	a.closers = append(a.closers, vaultHooks.stop)
 

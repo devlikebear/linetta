@@ -22,6 +22,56 @@ type SyncControl interface {
 	Touch(projectID string)
 	SetAuto(ctx context.Context, enabled bool) (any, error)
 	SetActive(ctx context.Context, projectID string, active bool) (pulled bool, err error)
+	Targets(ctx context.Context) (any, error)
+	SetTargets(ctx context.Context, primary string, mirrors []string) (any, error)
+	Restore(ctx context.Context, target string) (any, error)
+}
+
+// ErrBadTarget is a target this build does not have or cannot use that way.
+var ErrBadTarget = errors.New("sync: not a target this build can use")
+
+func targetResponse(out any, err error) (json.RawMessage, error) {
+	if errors.Is(err, ErrBadTarget) {
+		return nil, invalidParams(err.Error())
+	}
+	return vaultResponse(out, err)
+}
+
+// SyncTargets returns a handler for sync.targets: the two-way target, the
+// mirrors, and how each stands.
+func SyncTargets(control SyncControl) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		return targetResponse(control.Targets(ctx))
+	}
+}
+
+// SyncSetTargets returns a handler for sync.set_targets. A new two-way target
+// takes the whole library before it replaces the old one, so this can take as
+// long as a first upload.
+func SyncSetTargets(control SyncControl) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			Primary string   `json:"primary"`
+			Mirrors []string `json:"mirrors"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || in.Primary == "" {
+			return nil, invalidParams("primary required")
+		}
+		return targetResponse(control.SetTargets(ctx, in.Primary, in.Mirrors))
+	}
+}
+
+// SyncRestore returns a handler for sync.restore.
+func SyncRestore(control SyncControl) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			Target string `json:"target"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || in.Target == "" {
+			return nil, invalidParams("target required")
+		}
+		return targetResponse(control.Restore(ctx, in.Target))
+	}
 }
 
 // SyncStatus returns a handler for sync.status.

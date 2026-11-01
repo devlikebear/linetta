@@ -29,7 +29,14 @@ type vaultDeps struct {
 	publish       *publish.Service
 	ops           *opsstatus.Repo
 	agentBusy     func(projectID string) bool
+	gitSyncer     dailySyncer
+	folderSyncer  dailySyncer
+	gitHooks      targetHooks
+	folderHooks   targetHooks
 }
+
+// There is no runner here, so the daily exports stay with the backup loop.
+const syncRunnerTakesExports = false
 
 type vaultSetup struct {
 	queueDeletion handlers.ProjectDataCleaner
@@ -48,6 +55,7 @@ func setupVault(_ context.Context, deps vaultDeps) vaultSetup {
 		"vault.push", "vault.pull", "vault.resolve_conflict", "vault.delete_item",
 		"vault.items_get", "vault.items_set",
 		"sync.status", "sync.preview", "sync.run_now", "sync.set_auto", "sync.touch", "sync.set_active",
+		"sync.targets", "sync.set_targets", "sync.restore",
 	} {
 		deps.server.Handle(method, unavailable)
 	}

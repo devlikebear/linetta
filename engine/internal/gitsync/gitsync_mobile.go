@@ -20,3 +20,9 @@ func (s *Syncer) Init(context.Context) (InitResult, error) {
 func (s *Syncer) RunOnce(context.Context) (ResultSummary, error) {
 	return ResultSummary{Error: errUnsupported.Error()}, errUnsupported
 }
+
+func (s *Syncer) Prepare(context.Context) error { return errUnsupported }
+
+func (s *Syncer) Publish(context.Context) (ResultSummary, bool, error) {
+	return ResultSummary{Error: errUnsupported.Error()}, false, errUnsupported
+}

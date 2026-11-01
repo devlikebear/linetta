@@ -15,7 +15,8 @@ import (
 
 // VaultService is internal/vault's service.
 type VaultService interface {
-	Status(ctx context.Context) (vault.Overview, error)
+	// StatusOf reads a target, or the primary one when target is empty.
+	StatusOf(ctx context.Context, target string) (vault.Overview, error)
 	WorkStatus(ctx context.Context, projectID string) (vault.WorkStatus, error)
 	Setup(ctx context.Context, in vault.SetupInput) (vault.SetupResult, error)
 	Push(ctx context.Context, projectID string) (vault.PushResult, error)
@@ -35,8 +36,16 @@ func vaultResponse(out any, err error) (json.RawMessage, error) {
 
 // VaultStatus returns a handler for vault.status.
 func VaultStatus(svc VaultService) rpc.Handler {
-	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
-		return vaultResponse(svc.Status(ctx))
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			Target string `json:"target"`
+		}
+		if len(params) > 0 {
+			if err := json.Unmarshal(params, &in); err != nil {
+				return nil, invalidParams("invalid params")
+			}
+		}
+		return vaultResponse(svc.StatusOf(ctx, in.Target))
 	}
 }
 

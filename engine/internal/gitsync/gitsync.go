@@ -110,7 +110,7 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 	}
 	for range 2 {
 		if perr := s.Prepare(ctx); perr != nil {
-			if errors.Is(perr, errNotSetUp) {
+			if errors.Is(perr, ErrNotSetUp) {
 				break
 			}
 			return ResultSummary{Error: perr.Error()}, nil
@@ -125,9 +125,9 @@ func (s *Syncer) RunOnce(ctx context.Context) (summary ResultSummary, err error)
 	return summary, err
 }
 
-// errNotSetUp means there is no repository to exchange with. Publish then reports
-// that as it always has.
-var errNotSetUp = errors.New("gitsync: no repository")
+// ErrNotSetUp means there is no repository to exchange with. Publish reports that
+// the way it always has.
+var ErrNotSetUp = errors.New("gitsync: no repository")
 
 func (s *Syncer) now() func() time.Time {
 	if s.Now != nil {
@@ -143,7 +143,7 @@ func (s *Syncer) runner() CmdRunner {
 	return runGitProd
 }
 
-// repoDir is the repository, or errNotSetUp.
+// repoDir is the repository, or ErrNotSetUp.
 func (s *Syncer) repoDir(ctx context.Context) (string, error) {
 	cfg, err := s.Settings.Get(ctx)
 	if err != nil {
@@ -151,10 +151,10 @@ func (s *Syncer) repoDir(ctx context.Context) (string, error) {
 	}
 	dir := strings.TrimSpace(cfg.GitSyncDir)
 	if dir == "" {
-		return "", errNotSetUp
+		return "", ErrNotSetUp
 	}
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
-		return "", errNotSetUp
+		return "", ErrNotSetUp
 	}
 	return dir, nil
 }

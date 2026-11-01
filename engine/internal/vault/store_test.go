@@ -6,13 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/devlikebear/linetta/engine/internal/entity"
+	"github.com/devlikebear/linetta/engine/internal/gitsync"
 	"github.com/devlikebear/linetta/engine/internal/manuscript"
+	"github.com/devlikebear/linetta/engine/internal/node"
+	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -405,5 +410,283 @@ func TestRevisionFileHoldsWhatTheLayoutSays(t *testing.T) {
 		if _, ok := fields[field]; !ok {
 			t.Errorf("no %s in %s", field, raw)
 		}
+	}
+}
+
+func mirrorDevice(t *testing.T) (*device, string, *fakeSite) {
+	t.Helper()
+	folder := t.TempDir()
+	site := newFakeSite(t)
+	a := newDevice(t, site)
+	a.makeKey(t)
+	a.seed(t, workID, []byte("그림"))
+	a.syncAll(t, SyncPolicy{})
+	return a, folder, site
+}
+
+func (d *device) targetService(t *testing.T, target string, open func() (Store, error)) *Service {
+	t.Helper()
+	return NewService(Deps{
+		Target: target, OpenStore: open, Settings: d.settings, Store: d.st, Home: d.home,
+		Index: manuscript.NewIndexer(d.db), Now: d.svc.Now,
+	})
+}
+
+func TestMirrorOnlySendsAndNeverTouchesTheOtherTarget(t *testing.T) {
+	ctx := context.Background()
+	a, folder, _ := mirrorDevice(t)
+	mirror := a.targetService(t, TargetFolder, func() (Store, error) { return newDirStore(t, folder, "aaaa"), nil })
+	policy := SyncPolicy{Mirror: true}
+
+	report, err := mirror.SyncAll(ctx, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(report.Pushed, []string{workID}) {
+		t.Fatalf("report = %+v", report)
+	}
+	worksLink := linkOf(t, a, TargetWorks, workID)
+	folderLink := linkOf(t, a, TargetFolder, workID)
+	if worksLink.ItemID == folderLink.ItemID {
+		t.Fatal("the two targets share an item")
+	}
+
+	// Unchanged: nothing goes.
+	if report, err = mirror.SyncAll(ctx, policy); err != nil || len(report.Pushed) != 0 {
+		t.Fatalf("report = %+v, %v", report, err)
+	}
+
+	// Changed: it goes to the mirror without moving the other target's bookmark.
+	a.edit(t, workID, "미러로 가는 문장")
+	if report, err = mirror.SyncAll(ctx, policy); err != nil || !slices.Equal(report.Pushed, []string{workID}) {
+		t.Fatalf("report = %+v, %v", report, err)
+	}
+	if linkOf(t, a, TargetWorks, workID).BaseRevision != worksLink.BaseRevision {
+		t.Fatal("a mirror moved the primary's bookmark")
+	}
+	if got := a.state(t, workID); got != StateLocalChanges {
+		t.Fatalf("the primary reads %s", got)
+	}
+}
+
+func TestMirrorRunsOverAnotherDevicesRevisionWithoutAConflict(t *testing.T) {
+	ctx := context.Background()
+	folder, a, b := folderPair(t)
+	a.edit(t, workID, "여기서 고침")
+	a.syncAll(t, SyncPolicy{})
+	b.edit(t, workID, "저기서 고침")
+	report, err := b.svc.SyncAll(ctx, SyncPolicy{Mirror: true})
+	if err != nil || !slices.Equal(report.Pushed, []string{workID}) {
+		t.Fatalf("report = %+v, %v", report, err)
+	}
+	revisions, err := newDirStore(t, folder, "x").readRevisions(linkOf(t, a, TargetFolder, workID).ItemID)
+	if err != nil || len(revisions) != 3 {
+		t.Fatalf("the replaced version did not stay: %d, %v", len(revisions), err)
+	}
+}
+
+func TestRestoreFromAMirrorOntoANewLibrary(t *testing.T) {
+	ctx := context.Background()
+	a, folder, _ := mirrorDevice(t)
+	a.skill(t, "style", "스킬 글")
+	a.profile(t, "프로필 글", 100)
+	mirror := a.targetService(t, TargetFolder, func() (Store, error) { return newDirStore(t, folder, "aaaa"), nil })
+	if _, err := mirror.SyncAll(ctx, SyncPolicy{Mirror: true}); err != nil {
+		t.Fatal(err)
+	}
+	key, ok, err := a.settings.VaultKey()
+	if err != nil || !ok {
+		t.Fatalf("key: %v %v", ok, err)
+	}
+
+	b := folderDevice(t, folder, "bbbb")
+	if _, err := b.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: key}); err != nil {
+		t.Fatal(err)
+	}
+	report, err := b.svc.SyncAll(ctx, SyncPolicy{PullOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(report.Pulled, []string{workID}) || !strings.Contains(b.text(t, workID), "숨겨진 첫 문장") {
+		t.Fatalf("report = %+v", report)
+	}
+	if !strings.Contains(b.readSkill(t, "style"), "스킬 글") || b.profileBody(t) != "프로필 글" {
+		t.Fatal("the library did not come back")
+	}
+	if len(report.Pushed) != 0 {
+		t.Fatalf("a restore sent something: %+v", report)
+	}
+}
+
+func TestQueuedDeletionReachesEveryTarget(t *testing.T) {
+	ctx := context.Background()
+	a, folder, _ := mirrorDevice(t)
+	mirror := a.targetService(t, TargetFolder, func() (Store, error) { return newDirStore(t, folder, "aaaa"), nil })
+	if _, err := mirror.SyncAll(ctx, SyncPolicy{Mirror: true}); err != nil {
+		t.Fatal(err)
+	}
+	a.deleteWork(t, workID)
+	if got := a.count(t, `SELECT COUNT(*) FROM vault_deletions`); got != 2 {
+		t.Fatalf("queued %d", got)
+	}
+	a.syncAll(t, SyncPolicy{})
+	if got := a.count(t, `SELECT COUNT(*) FROM vault_deletions WHERE target = 'folder'`); got != 1 {
+		t.Fatalf("the folder's marker went with the other target's: %d", got)
+	}
+	if _, err := mirror.SyncAll(ctx, SyncPolicy{Mirror: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.count(t, `SELECT COUNT(*) FROM vault_deletions`); got != 0 {
+		t.Fatalf("still queued: %d", got)
+	}
+}
+
+func TestExistingLinksBecomeWorksLinks(t *testing.T) {
+	_, a, _ := devices(t)
+	if got := a.count(t, `SELECT COUNT(*) FROM vault_items WHERE target = 'works'`); got != 1 {
+		t.Fatalf("works links = %d", got)
+	}
+}
+
+// gitDevice is one library syncing through a real clone of a bare remote.
+func gitDevice(t *testing.T, remote, name string) *device {
+	t.Helper()
+	ctx := context.Background()
+	home := t.TempDir()
+	st, err := store.Open(ctx, filepath.Join(home, "library.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	cfg, err := settings.NewForHomeWithSecretStore(home, settings.NewMemorySecretStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), name)
+	runGit(t, filepath.Dir(dir), "clone", "--quiet", remote, dir)
+	for _, pair := range [][2]string{{"user.name", name}, {"user.email", name + "@test.invalid"}, {"commit.gpgsign", "false"}} {
+		runGit(t, dir, "config", pair[0], pair[1])
+	}
+	runGit(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
+	if _, err := cfg.Set(ctx, settings.Patch{GitSyncDir: &dir}); err != nil {
+		t.Fatal(err)
+	}
+	syncer := gitsync.New(cfg, project.NewRepo(st), node.NewRepo(st), entity.NewRepo(st))
+	clock := int64(1_700_000_000_000)
+	svc := NewService(Deps{
+		Target: TargetGit,
+		OpenStore: func() (Store, error) {
+			return NewDirStore(DirConfig{
+				Folder: dir, Device: name, Now: time.Now,
+				Before: syncer.Prepare,
+				After: func(ctx context.Context) error {
+					_, refused, err := syncer.Publish(ctx)
+					if refused {
+						return ErrRoundAgain
+					}
+					return err
+				},
+			}), nil
+		},
+		Settings: cfg, Store: st, Home: home,
+		Index: manuscript.NewIndexer(st.DB()),
+		Now: func() int64 {
+			clock += 1000
+			return clock
+		},
+	})
+	return &device{svc: svc, st: st, db: st.DB(), home: home, settings: cfg}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := osexec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+func TestGitCarriesAWorkBetweenDevices(t *testing.T) {
+	if gitsync.New(nil, nil, nil, nil).Run == nil {
+		t.Skip("this build has no git")
+	}
+	ctx := context.Background()
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	runGit(t, filepath.Dir(remote), "init", "--quiet", "--bare", "--initial-branch=main", remote)
+	seed := t.TempDir()
+	runGit(t, seed, "clone", "--quiet", remote, "c")
+	writeFile(t, filepath.Join(seed, "c", "README.txt"), "시작")
+	runGit(t, filepath.Join(seed, "c"), "add", "-A")
+	runGit(t, filepath.Join(seed, "c"), "-c", "user.name=s", "-c", "user.email=s@test.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "first")
+	runGit(t, filepath.Join(seed, "c"), "push", "--quiet", "origin", "HEAD:main")
+
+	a, b := gitDevice(t, remote, "aaaa"), gitDevice(t, remote, "bbbb")
+	key := a.makeKey(t)
+	a.seed(t, workID, []byte("그림"))
+	a.skill(t, "style", "스킬 글")
+	a.syncAll(t, SyncPolicy{})
+
+	if _, err := b.svc.Setup(ctx, SetupInput{Consented: true, RecoveryKey: key}); err != nil {
+		t.Fatal(err)
+	}
+	report := b.syncAll(t, SyncPolicy{})
+	if !slices.Equal(report.Pulled, []string{workID}) || !strings.Contains(b.text(t, workID), "숨겨진 첫 문장") {
+		t.Fatalf("report = %+v", report)
+	}
+	if !strings.Contains(b.readSkill(t, "style"), "스킬 글") {
+		t.Fatal("the library did not arrive")
+	}
+
+	b.edit(t, workID, "깃을 건너온 문장")
+	b.syncAll(t, SyncPolicy{})
+	report = a.syncAll(t, SyncPolicy{})
+	if !slices.Equal(report.Pulled, []string{workID}) || !strings.Contains(a.text(t, workID), "깃을 건너온 문장") {
+		t.Fatalf("report = %+v", report)
+	}
+
+	// Nothing readable reached the remote's sealed copy, and Markdown still did.
+	check := filepath.Join(t.TempDir(), "check")
+	runGit(t, filepath.Dir(check), "clone", "--quiet", remote, check)
+	sealed := 0
+	err := filepath.WalkDir(filepath.Join(check, dirRoot), func(file string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		sealed++
+		data, err := os.ReadFile(file)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(data), "깃을 건너온") || strings.Contains(string(data), "비밀 작품") {
+			t.Errorf("%s is readable", file)
+		}
+		return nil
+	})
+	if err != nil || sealed == 0 {
+		t.Fatalf("sealed files %d, %v", sealed, err)
+	}
+	markdown, err := filepath.Glob(filepath.Join(check, "*.md"))
+	if err != nil || len(markdown) == 0 {
+		t.Fatalf("no Markdown: %v", err)
+	}
+}
+
+func TestSetupChecksTheKeyAgainstAFreshRepository(t *testing.T) {
+	ctx := context.Background()
+	folder, a, _ := folderPair(t)
+	_ = a
+	began := false
+	c := folderDevice(t, folder, "cccc")
+	c.svc.OpenStore = func() (Store, error) {
+		return dirStore{folder: folder, device: "cccc", now: time.Now, before: func(context.Context) error {
+			began = true
+			return nil
+		}}, nil
+	}
+	_, err := c.svc.Setup(ctx, SetupInput{Consented: true})
+	wantReason(t, err, rpc.ReasonVaultKeyRequired)
+	if !began {
+		t.Fatal("the key was decided before the target was brought up to date")
 	}
 }

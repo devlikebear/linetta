@@ -32,6 +32,11 @@ type SyncPolicy struct {
 	Settled func(projectID string) bool
 	// Only limits the run to one work, skipping the library and other works.
 	Only string
+	// Mirror runs one way: this device's versions go up on top of whatever is
+	// there, and nothing comes back. Only one target is two-way.
+	Mirror bool
+	// PullOnly runs the other way, to restore a library from a target.
+	PullOnly bool
 }
 
 func (p SyncPolicy) open(id string) bool { return p.Open != nil && p.Open(id) }
@@ -135,14 +140,16 @@ func (s *Service) syncAll(ctx context.Context, sess session, policy SyncPolicy) 
 		return out, reason(rpc.ReasonVaultNotEnabled, fmt.Errorf("vault: account is %s", account.Mode))
 	}
 	if policy.Only == "" {
-		if err := s.syncLibrary(ctx, sess); err != nil {
+		if err := s.libraryRound(ctx, sess, policy); err != nil {
 			if !errors.Is(err, ErrNewerFormat) && !errors.Is(err, vaultbundle.ErrNewerFormat) && !errors.Is(err, ErrCorrupt) && !errors.Is(err, vaultbundle.ErrCorrupt) {
 				return out, err
 			}
 			log.Printf("vault: library: %v", err)
 		}
-		if err := s.flushDeletions(ctx, sess); err != nil {
-			return out, err
+		if !policy.PullOnly {
+			if err := s.flushDeletions(ctx, sess); err != nil {
+				return out, err
+			}
 		}
 	}
 	remote, err := s.scanRemote(ctx, sess)
@@ -168,7 +175,7 @@ func (s *Service) syncAll(ctx context.Context, sess session, policy SyncPolicy) 
 		}
 		out.Works = append(out.Works, line)
 	}
-	if policy.Only != "" {
+	if policy.Only != "" || policy.Mirror {
 		return out, nil
 	}
 	for _, entry := range remote.unclaimed() {
@@ -315,6 +322,44 @@ func (s *Service) scanRemote(ctx context.Context, sess session) (*remoteScan, er
 	return scan, nil
 }
 
+// libraryRound moves the library the way the run is going.
+func (s *Service) libraryRound(ctx context.Context, sess session, policy SyncPolicy) error {
+	switch {
+	case policy.Mirror:
+		return s.mirrorLibrary(ctx, sess)
+	case policy.PullOnly:
+		return s.pullLibrary(ctx, sess)
+	}
+	return s.syncLibrary(ctx, sess)
+}
+
+// mirrorWork sends a work up unless the mirror already has this very text. What
+// it replaces stays behind as a restore point, and a work taken off the mirror by
+// hand stays off.
+func (s *Service) mirrorWork(ctx context.Context, sess session, policy SyncPolicy, remote *remoteScan, work localWork, line *WorkSync, out *SyncReport) error {
+	line.State = StateSynced
+	if remote.removed[work.id] || policy.busy(work.id) || !policy.settled(work.id) {
+		return nil
+	}
+	bundle, err := s.export(ctx, work.id)
+	if err != nil {
+		return err
+	}
+	link, linked := remote.links[work.id]
+	_, found := remote.byProject[work.id]
+	if linked && found && link.LastHash == bundle.Manifest.ContentHash() {
+		return nil
+	}
+	pushed, err := s.push(ctx, sess, work.id, true)
+	if err != nil {
+		return err
+	}
+	if !pushed.Unchanged {
+		out.Pushed = append(out.Pushed, work.id)
+	}
+	return nil
+}
+
 func (s *Service) syncWork(ctx context.Context, sess session, policy SyncPolicy, remote *remoteScan, work localWork, line *WorkSync, out *SyncReport) error {
 	link, linked := remote.links[work.id]
 	entry, found := remote.byProject[work.id]
@@ -322,13 +367,16 @@ func (s *Service) syncWork(ctx context.Context, sess session, policy SyncPolicy,
 		entry.claimed = true
 		line.ItemID = entry.item.ItemID
 	}
+	if policy.Mirror {
+		return s.mirrorWork(ctx, sess, policy, remote, work, line, out)
+	}
 	if !found {
 		line.State = StateNotUploaded
 		if linked || remote.removed[work.id] {
 			line.State = StateRemoved
 			return nil
 		}
-		if policy.busy(work.id) || !policy.settled(work.id) {
+		if policy.PullOnly || policy.busy(work.id) || !policy.settled(work.id) {
 			return nil
 		}
 		return s.autoPush(ctx, sess, work.id, line, out)
@@ -358,7 +406,7 @@ func (s *Service) syncWork(ctx context.Context, sess session, policy SyncPolicy,
 	}
 	switch state {
 	case StateLocalChanges:
-		if policy.settled(work.id) {
+		if policy.settled(work.id) && !policy.PullOnly {
 			return s.autoPush(ctx, sess, work.id, line, out)
 		}
 	case StateRemoteChanges:

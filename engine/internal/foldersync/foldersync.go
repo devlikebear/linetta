@@ -5,7 +5,9 @@ package foldersync
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,6 +52,13 @@ type ReportInput struct {
 	FilesCopied int    `json:"files_copied"`
 	Error       string `json:"error"`
 }
+
+// MirrorDirName is the folder under the Linetta home that holds the sealed copy
+// on a build that cannot write to the writer's folder itself (MAS).
+const MirrorDirName = "folder-mirror"
+
+// sealedDirName is the sealed copy's folder, as vault's folder store lays it out.
+const sealedDirName = ".linetta"
 
 // Syncer exports projects as markdown into a target folder. Mirrors gitsync.Syncer.
 type Syncer struct {
@@ -188,6 +197,15 @@ func (s *Syncer) Stage(ctx context.Context) (StageResult, error) {
 	if err != nil {
 		return StageResult{}, err
 	}
+	sealed, err := sealedFiles(filepath.Join(home, MirrorDirName, sealedDirName))
+	if err != nil {
+		return StageResult{}, err
+	}
+	if len(sealed) > 0 {
+		if err := os.CopyFS(filepath.Join(staging, sealedDirName), os.DirFS(filepath.Join(home, MirrorDirName, sealedDirName))); err != nil {
+			return StageResult{}, err
+		}
+	}
 	entries, err := os.ReadDir(staging)
 	if err != nil {
 		return StageResult{}, err
@@ -198,6 +216,10 @@ func (s *Syncer) Stage(ctx context.Context) (StageResult, error) {
 	for _, e := range entries {
 		if !e.IsDir() {
 			files = append(files, e.Name())
+			continue
+		}
+		if e.Name() == sealedDirName {
+			files = append(files, sealed...)
 			continue
 		}
 		pictures, err := os.ReadDir(filepath.Join(staging, e.Name()))
@@ -211,6 +233,29 @@ func (s *Syncer) Stage(ctx context.Context) (StageResult, error) {
 		}
 	}
 	return StageResult{StagingDir: staging, Files: files, ImageDirs: imageDirs}, nil
+}
+
+// sealedFiles lists the sealed copy's files as "<.linetta>/<path>", the one
+// nesting besides a picture folder that the copy accepts.
+func sealedFiles(root string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(root, func(file string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.Type().IsRegular() {
+			rel, err := filepath.Rel(root, file)
+			if err != nil {
+				return err
+			}
+			files = append(files, sealedDirName+"/"+filepath.ToSlash(rel))
+		}
+		return nil
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return files, err
 }
 
 // Report records ops status after Tauri completes the MAS copy.

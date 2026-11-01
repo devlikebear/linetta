@@ -292,6 +292,41 @@ func (s *Service) syncLibrary(ctx context.Context, sess session) error {
 	return errors.New("vault: the library item kept moving")
 }
 
+// mirrorLibrary puts this device's library on a mirror, on top of what is there.
+func (s *Service) mirrorLibrary(ctx context.Context, sess session) error {
+	item, found, err := s.libraryItem(ctx, sess)
+	if err != nil {
+		return err
+	}
+	state, err := getLibraryState(ctx, s.db(), s.targetID())
+	if err != nil {
+		return err
+	}
+	selection, err := getSelection(ctx, s.db())
+	if err != nil {
+		return err
+	}
+	local, err := vaultbundle.ExportLibrary(ctx, s.db(), s.Home, selection, s.now())
+	if err != nil {
+		return err
+	}
+	hash := local.ContentHash()
+	if (found && hash == state.LastHash) || (!found && local.Empty()) {
+		return nil
+	}
+	out, err := sealLibrary(sess.keys, local)
+	if err != nil {
+		return err
+	}
+	revision, err := s.send(ctx, sess, libraryLink(sess, item.HeadRevision), out)
+	if err != nil {
+		return err
+	}
+	state.BaseRevision, state.LastHash, state.LastSyncedAt, state.Mark = revision, hash, s.Now(), out.manifestID
+	state.BaseParts = local.PartHashes()
+	return putLibraryState(ctx, s.db(), s.targetID(), state)
+}
+
 // bestEffortLibrary runs library housekeeping around a work. The work is what
 // the writer asked for, and it reports its own problems; a library that could
 // not be reached waits for the next time.
@@ -333,6 +368,19 @@ func (s *Service) SyncLibrary(ctx context.Context) error {
 		return err
 	}
 	return classify(s.syncLibrary(ctx, sess))
+}
+
+// TargetBytes is what the target holds, or 0 when it cannot be read just now.
+func (s *Service) TargetBytes(ctx context.Context) int64 {
+	remote, err := s.remote()
+	if err != nil {
+		return 0
+	}
+	account, err := remote.Account(ctx)
+	if err != nil {
+		return 0
+	}
+	return account.Usage.Bytes
 }
 
 // ItemCategory is one line of the settings pane. Required is the line that
