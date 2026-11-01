@@ -170,7 +170,7 @@ const REASON_MESSAGE_KEYS: Record<string, MessageKey> = {
 
 // Matched on shape rather than `instanceof RpcError`: tests mock ../lib/rpc
 // wholesale, which leaves the class undefined and would throw here.
-function reasonOf(error: unknown): string | null {
+export function reasonOf(error: unknown): string | null {
   if (!error || typeof error !== "object") return null;
   const data = (error as { data?: unknown }).data;
   if (!data || typeof data !== "object") return null;

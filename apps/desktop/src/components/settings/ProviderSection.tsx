@@ -7,7 +7,7 @@ import {
   providers as providersApi,
   settings as settingsApi,
 } from "../../lib/rpc";
-import { rpcErrorMessage } from "../../lib/rpcMessage";
+import { reasonOf, rpcErrorMessage } from "../../lib/rpcMessage";
 import { nameKeyFor, offeredProviders, takesApiKey } from "../../lib/providers";
 import type { CodexStatus, ProviderID, ProviderStatus } from "../../lib/types";
 
@@ -978,7 +978,11 @@ export function ProviderSection() {
         ) : null}
         {shownTest?.error ? (
           <span className="provider-test-error" role="alert" data-testid="provider-test-error">
-            {rpcErrorMessage(shownTest.error, t)}
+            {/* The shared sentence says to re-enter an API key, and this
+                provider has no key field: its login lives in the terminal. */}
+            {active === "claude-code" && reasonOf(shownTest.error) === "provider_auth_failed"
+              ? t("settings.providers.cli.signedOut")
+              : rpcErrorMessage(shownTest.error, t)}
           </span>
         ) : null}
       </div>
