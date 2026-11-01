@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.19.0 - 2026-11-01
+
+- **The agent can look back.** When a long conversation no longer fits in what
+  the agent reads, it can now search the part that was cut and read it around a
+  match, instead of guessing or asking you again. The tools are
+  `linetta_search_history` and `linetta_read_history`, for the built-in agent
+  only; MCP clients cannot see them.
+- **Work notes can shed finished decisions.** When its working notes fill up,
+  the agent can move a line to an archive instead of deleting it. The agent can
+  find archived lines by searching, and you can read, restore or delete them
+  under Archived notes in the Memory settings. Older saved experiences move to
+  this archive once, when the app starts.
+- **Longer conversations on Claude Code.** The agent now keeps about 100,000
+  characters of conversation on the Claude Code provider, up from 40,000. Other
+  providers stay at 40,000. Conversation memory in Settings overrides this for
+  any provider, from 20,000 to 200,000; leave it blank for automatic.
+- **App search reads your prose.** Search across the app now looks through the
+  text of your scenes rather than the file format around them, so a word no
+  longer matches something that only appears in the formatting. Scenes brought
+  back by restoring an outline can be found again.
+- **Private Vault is now Linetta Works.** It has moved to the top of the Sync
+  settings, above GitHub and folder sync. Nothing about how it works changes.
+- Fixed: a name followed by a Korean or Japanese particle, such as `곰배는`, is
+  now found when the name is a mention in your text, and search previews no
+  longer break around it.
+
 ## v1.18.0 - 2026-10-31
 
 - **The agent asks with a card.** When it needs several decisions from you, the
