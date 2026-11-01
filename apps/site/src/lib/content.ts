@@ -603,7 +603,7 @@ export const en: Translation = {
       },
       {
         q: 'Is my writing uploaded anywhere?',
-        a: 'Not by default, and Linetta needs no cloud. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, a work you upload to the private vault goes to the same operator’s server sealed so nobody there can read it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch.'
+        a: 'Not by default, and Linetta needs no cloud. It leaves this device only once you turn something on: the built-in agent sends what it works on to the provider you connected, an MCP client you run reads it, the image provider you chose receives a prompt and any reference images when you press Generate, an episode you publish goes to Linetta Works for anyone to read, a work you upload through Linetta Works sync goes to the same operator’s server sealed so nobody there can read it, and GitHub Sync or Folder Sync, once configured, export your whole library on a daily tick and at every launch.'
       },
       {
         q: 'What about iPad and Android?',
@@ -746,7 +746,7 @@ export const ko: Translation = {
         alt: 'Linetta 서재 화면. 작품 카드 하나와 새 작품·마크다운 가져오기·검색 버튼, 그리고 핵심 데이터가 로컬에 남는다는 표시.',
         points: [
           '새 작품, 마크다운 가져오기, 전체 검색',
-          '진행 중과 보관함',
+          '진행 중과 아카이브',
           '핵심 데이터는 로컬에 — 서재는 내 디스크의 파일입니다'
         ]
       }
@@ -1075,7 +1075,7 @@ export const ko: Translation = {
       },
       {
         q: '제 글이 어딘가로 업로드되나요?',
-        a: '기본값으로는 아니고, Linetta는 클라우드가 없어도 씁니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가고, 비공개 보관함에 올린 작품은 같은 운영자의 서버로 가되 아무도 읽을 수 없게 암호화되어 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보냅니다.'
+        a: '기본값으로는 아니고, Linetta는 클라우드가 없어도 씁니다. 무언가를 켰을 때만 이 기기를 벗어납니다 — 내장 에이전트는 작업 중인 내용을 연결한 프로바이더로 보내고, 직접 실행한 MCP 클라이언트는 그것을 읽으며, 고른 이미지 프로바이더는 생성을 누를 때 프롬프트와 참조 이미지를 받고, 게시한 회차는 누구나 읽도록 Linetta Works로 가고, Linetta Works 동기화로 올린 작품은 같은 운영자의 서버로 가되 아무도 읽을 수 없게 암호화되어 가며, GitHub 동기화나 폴더 동기화를 설정하면 하루 한 번과 실행할 때마다 전체 서재를 내보냅니다.'
       },
       {
         q: 'iPad나 Android는요?',
@@ -1216,7 +1216,7 @@ export const ja: Translation = {
         alt: 'Linetta のライブラリ画面。作品カードが一つ、新規作成・Markdown 取り込み・検索のボタン、そして中核データがローカルに残る旨の表示。',
         points: [
           '新規作成、Markdown 取り込み、全体検索',
-          '進行中と保管',
+          '進行中とアーカイブ',
           '中核データはローカルに — ライブラリは自分のディスクのファイルです'
         ]
       }
@@ -1545,7 +1545,7 @@ export const ja: Translation = {
       },
       {
         q: '書いたものはどこかにアップロードされますか。',
-        a: '既定ではされず、Linetta はクラウドがなくても使えます。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、非公開保管庫にアップロードした作品は同じ運営者のサーバーへ送られますが誰にも読めないよう暗号化されており、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出します。'
+        a: '既定ではされず、Linetta はクラウドがなくても使えます。何かをオンにしたときだけこの端末を離れます — 内蔵エージェントは作業中の内容をつないだプロバイダーへ送り、自分で動かす MCP クライアントはそれを読み、選んだ画像プロバイダーは生成を押したときにプロンプトと参照画像を受け取り、公開した話は誰でも読めるよう Linetta Works へ送られ、Linetta Works 同期でアップロードした作品は同じ運営者のサーバーへ送られますが誰にも読めないよう暗号化されており、GitHub 同期やフォルダ同期を設定すると毎日一回と起動のたびに書庫全体を書き出します。'
       },
       {
         q: 'iPad や Android はどうですか。',
