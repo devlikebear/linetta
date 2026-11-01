@@ -68,7 +68,6 @@ const SETTINGS_CATEGORIES = [
   "skills",
   "sync",
   "publish",
-  "vault",
   "backup",
 ] as const;
 type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
@@ -98,6 +97,8 @@ export function rememberSettingsCategory(category: SettingsCategory): void {
 function initialCategory(): SettingsCategory {
   try {
     const stored = sessionStorage.getItem(CATEGORY_STORAGE_KEY);
+    // The vault pane moved into sync; a tab open across the update still says so.
+    if (stored === "vault") return "sync";
     if (stored && (SETTINGS_CATEGORIES as readonly string[]).includes(stored)) {
       return stored as SettingsCategory;
     }
@@ -343,7 +344,6 @@ export function Settings() {
         // Publishing sends text off the device, like sync does, so it sits
         // beside it rather than with the AI connections.
         ...(publishAvailable ? [{ id: "publish" as const, label: t("settings.nav.publish") }] : []),
-        ...(vaultAvailable ? [{ id: "vault" as const, label: t("settings.nav.vault") }] : []),
         { id: "backup", label: t("settings.nav.backupRestore") },
       ],
     },
@@ -608,10 +608,6 @@ export function Settings() {
 
             {category === "publish" && <PublishSection available={publishAvailable} />}
 
-            {category === "vault" && (
-              <VaultSection available={vaultAvailable} onOpenPublish={() => setCategory("publish")} />
-            )}
-
             {/* The tool budget (#99). Both switches are ON by default, so they
                 read `!== false`: a settings payload from an engine that
                 predates the keys has no opinion, and truthiness would read
@@ -829,6 +825,13 @@ export function Settings() {
 
             {category === "background" && <BackgroundSection />}
 
+            {category === "sync" && vaultAvailable && (
+              <>
+                <p className="sd" data-testid="sync-works-note">{t("settings.sync.worksNote")}</p>
+                <VaultSection available={vaultAvailable} onOpenPublish={() => setCategory("publish")} />
+              </>
+            )}
+
             {category === "sync" && !gitSyncAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
@@ -839,6 +842,7 @@ export function Settings() {
             {category === "sync" && gitSyncAvailable && (
             <section className="settings-section">
               <h3>{t("settings.git.title")}</h3>
+              <p className="sd">{t("settings.sync.exportOnly")}</p>
               <p className="sd">{t("settings.git.description")}</p>
               <div className="modal-field">
                 <label htmlFor="git-dir">{t("settings.git.folder")}</label>
@@ -937,6 +941,7 @@ export function Settings() {
             {category === "sync" && (
             <section className="settings-section">
               <h3>{t("settings.folder.title")}</h3>
+              <p className="sd">{t("settings.sync.exportOnly")}</p>
               <p className="sd">{t("settings.folder.description")}</p>
               <div className="modal-field">
                 <label htmlFor="folder-dir">{t("settings.folder.folder")}</label>

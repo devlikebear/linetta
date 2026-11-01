@@ -28,7 +28,7 @@ Linetta is made for novelists and web-fiction writers who want their manuscript,
 - **See your story.** Optionally draw illustrations with ChatGPT or Gemini from your scenes and character sheets. Earlier pictures go along so faces stay the same, and nothing is drawn until you press Generate.
 - **Keep your work local.** Projects live in a local SQLite database with version snapshots and daily backups. No Linetta account or mandatory cloud is required.
 - **Publish when you choose.** Optionally connect an account on [Linetta Works](https://works.marvin-42.com) and put an episode up for readers straight from the app. Only the episodes you publish — and the Story World sheets and cover you choose to make public — leave your device. Share a published episode to X, Threads, Naver Blog, KakaoTalk, or Instagram from the publish dialog.
-- **Carry a work between devices.** If the site's operator has approved your account, the private vault keeps a work sealed under a recovery key only you hold, so you can pick it up on another computer. It is a free beta and never your only copy.
+- **Carry a work between devices.** If the site's operator has approved your account, Linetta Works sync keeps a work sealed under a recovery key only you hold, so you can pick it up on another computer. It is a free beta and never your only copy.
 - **Move your manuscript freely.** Import and export Markdown, and optionally sync exported work through Git.
 
 ## See Linetta in action
@@ -706,14 +706,14 @@ on this device. To remove the device from your device list on the site,
 disconnect it from your profile there. Episodes you published stay up until
 you make them private or delete them.
 
-## Private vault
+## Linetta Works sync
 
-The private vault carries a work between your devices through Linetta Works
+Linetta Works sync carries a work between your devices through Linetta Works
 without the site being able to read it. It is a free beta for accounts the
 operator has approved, and the desktop app is the only place to use it.
 
 **Turn it on.** Connect your account under **Settings → Publishing**, then open
-**Settings → Private Vault**. It takes you to the site to read the agreement
+**Settings → Sync**. It takes you to the site to read the agreement
 and send a request. Once approved, come back, agree to what is sent, and make a
 recovery key, or enter the one you saved on your first device.
 
@@ -721,14 +721,14 @@ recovery key, or enter the one you saved on your first device.
 you upload. The operator cannot recover it. Linetta keeps a new key only after
 you confirm you saved it somewhere off this device.
 
-**Upload and download.** Open a work and use the vault button in the top bar or
-**Open Private Vault** in the command palette. Nothing moves by itself: Linetta
+**Upload and download.** Open a work and use the sync button in the top bar or
+**Open Linetta Works sync** in the command palette. Nothing moves by itself: Linetta
 shows that a newer version is waiting, and you decide. A work that is not on
-this device yet is downloaded from **Settings → Private Vault**.
+this device yet is downloaded from **Settings → Sync**.
 
 **When two devices disagree.** If a work changed in both places, choose which to
 carry on from. Either way both manuscripts survive: uploading this device's
-version leaves the other as a restore point, and downloading the vault's
+version leaves the other as a restore point, and downloading the Linetta Works
 version first copies this device's version into a new work. Downloading backs up
 your library first.
 
@@ -740,12 +740,12 @@ can read the content or the title. Activity logs, your global writer profile and
 skills, and provider settings and API keys stay here. The full list is in the
 [privacy policy](docs/privacy-policy.md), section 3.7.
 
-**Delete.** **Settings → Private Vault → Delete from server** removes one work
+**Delete.** **Settings → Sync → Linetta Works → Delete from server** removes one work
 and its restore points for good, and leaves the manuscript on this device.
-Closing the vault on the site deletes everything there. Disconnecting from the
+Closing sync on the site deletes everything there. Disconnecting from the
 site deletes nothing on the server and keeps your recovery key.
 
-Data in the vault can be lost, and the site makes no promise to keep or restore
+Data on Linetta Works can be lost, and the site makes no promise to keep or restore
 it. Keep your own backups.
 
 ## Data and safety
@@ -761,7 +761,7 @@ Windows  %APPDATA%\com.devlikebear.linetta
 Important data includes:
 
 - `library.db`: projects, scenes, story data, version snapshots, the writer profile and work notes an agent reads, the version history of every skill, and the retired built-in companion's transcripts;
-- `backups/YYYY-MM-DD/`: daily backups of `library.db`, kept for 14 days — the database only, nothing else on this list — plus the copy of the library made before each private vault download (`library-pre-vault-*`);
+- `backups/YYYY-MM-DD/`: daily backups of `library.db`, kept for 14 days — the database only, nothing else on this list — plus the copy of the library made before each Linetta Works sync download (`library-pre-vault-*`);
 - `skills/`: the `SKILL.md` documents an agent writes and reads, one folder per skill;
 - `<project id>/memory/experiences.jsonl`: facts an agent has been told to remember;
 - `companion/`: where facts remembered before 1.0 were left. Linetta moves them
@@ -773,8 +773,8 @@ Important data includes:
   move and what to do about each case;
 - `settings.json`: app preferences, and the Linetta Works account this device is connected to (pen name and site address — not the token);
 - `publish-token`: on Linux only, the Linetta Works publish token, readable only by your user (elsewhere it is in the OS secure store);
-- `vault-key`: on Linux only, the private vault recovery key, readable only by your user (elsewhere it is in the OS secure store);
-- `vault-incoming/`: sealed pieces of a private vault download in progress, removed when it finishes.
+- `vault-key`: on Linux only, the Linetta Works sync recovery key, readable only by your user (elsewhere it is in the OS secure store);
+- `vault-incoming/`: sealed pieces of a Linetta Works sync download in progress, removed when it finishes.
 
 Manual and agent-write snapshots are retained indefinitely. Autosave snapshots are thinned over time, from every save during the first day to daily snapshots after 30 days.
 
@@ -797,7 +797,7 @@ Yes. Linetta supports Markdown import and export so your writing is not locked i
 
 ### Is my work uploaded to a Linetta cloud?
 
-Not unless you choose to. Linetta needs no cloud, and nothing is uploaded by default. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure. There are two exceptions, both your choice: when you publish an episode to Linetta Works, that episode goes to the site so readers can read it — as do any Story World sheets and cover you choose to make public — and when you upload a work to the [private vault](#private-vault), it goes to the same operator's server sealed, so that nobody there can read it.
+Not unless you choose to. Linetta needs no cloud, and nothing is uploaded by default. The MCP endpoint is local to your machine, and Git sync talks only to the remote you configure. There are two exceptions, both your choice: when you publish an episode to Linetta Works, that episode goes to the site so readers can read it — as do any Story World sheets and cover you choose to make public — and when you upload a work through [Linetta Works sync](#linetta-works-sync), it goes to the same operator's server sealed, so that nobody there can read it.
 
 ## For contributors
 
