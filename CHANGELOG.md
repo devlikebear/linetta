@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.20.3 - 2026-11-01
+
+- Fixed: on Windows, Git Sync opened a terminal window for every git command.
+  It now runs without one.
+- Changed: on Windows, Git Sync can no longer answer an SSH prompt, so it fails
+  with the reason instead of waiting. If it reports
+  `Host key verification failed.` or `Permission denied (publickey)`, run `ssh`
+  once in a terminal to accept the host key, or add your key to ssh-agent. The
+  `ssh_askpass` line above that reason can be ignored.
+
 ## v1.20.2 - 2026-11-01
 
 - Changed: the Mac App Store build no longer includes Linetta Works. Publishing,
