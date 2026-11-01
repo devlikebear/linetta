@@ -64,12 +64,13 @@ type historyAnchor struct {
 	rowID     int64
 }
 
-func (r *HistoryRepo) anchor(ctx context.Context, projectID, messageID string) (historyAnchor, error) {
+// anchor finds a message that also satisfies predicate.
+func (r *HistoryRepo) anchor(ctx context.Context, projectID, messageID, predicate string) (historyAnchor, error) {
 	var a historyAnchor
 	err := r.db.QueryRowContext(ctx, `
 SELECT m.created_at, CASE m.role WHEN 'user' THEN 0 ELSE 1 END, m.rowid
   FROM companion_messages m
- WHERE m.id = ? AND m.project_id = ? AND `+searchableHistory,
+ WHERE m.id = ? AND m.project_id = ? AND `+predicate,
 		strings.TrimSpace(messageID), projectID).Scan(&a.createdAt, &a.roleRank, &a.rowID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrHistoryMessageNotFound
@@ -98,7 +99,9 @@ func (r *HistoryRepo) Search(ctx context.Context, q HistorySearchQuery) ([]Histo
 	filter := ` AND ` + searchableHistory + ` AND (? = '' OR COALESCE(m.run_id, '') <> ?)`
 	args := []any{q.ExcludeRun, q.ExcludeRun}
 	if strings.TrimSpace(q.BeforeID) != "" {
-		a, err := r.anchor(ctx, q.ProjectID, q.BeforeID)
+		// Any row of the conversation can be a boundary, not only a searchable
+		// one: a replay can begin at the tool row holding an ask card.
+		a, err := r.anchor(ctx, q.ProjectID, q.BeforeID, `m.intent = '`+HistoryAgentIntent+`'`)
 		if err != nil {
 			return nil, err
 		}
@@ -176,7 +179,7 @@ func (r *HistoryRepo) Window(ctx context.Context, projectID, messageID string, b
 	if r == nil {
 		return nil, ErrHistoryMessageNotFound
 	}
-	a, err := r.anchor(ctx, projectID, messageID)
+	a, err := r.anchor(ctx, projectID, messageID, searchableHistory)
 	if err != nil {
 		return nil, err
 	}
