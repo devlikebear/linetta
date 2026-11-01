@@ -14,6 +14,9 @@ const rpc = vi.hoisted(() => ({
   progress: { emit: (_: unknown) => {} },
 }));
 
+vi.mock("./SyncAutoPanel", () => ({
+  SyncAutoPanel: ({ editable }: { editable: boolean }) => <div data-testid="sync-auto-stub">{String(editable)}</div>,
+}));
 vi.mock("../../lib/rpc", () => ({
   vaultApi: { status: rpc.status, setup: rpc.setup, pull: rpc.pull, deleteItem: rpc.deleteItem, items: rpc.items, setItems: rpc.setItems },
   publishApi: { connectStatus: rpc.connectStatus },

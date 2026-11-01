@@ -13,7 +13,7 @@ import type {
   SuggestionItemStatus,
 } from "./types";
 import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, IllustrationRepresentatives, IllustrationRequest, IllustrationRequestEdits, IllustrationRequestStatus, ImageProviderStatus } from "./types";
-import type { VaultItems, VaultOverview, VaultPullResult, VaultPushResult, VaultResolveResult, VaultSetupResult, VaultWorkStatus } from "./types";
+import type { SyncPreview, SyncStatus, VaultItems, VaultOverview, VaultPullResult, VaultPushResult, VaultResolveResult, VaultSetupResult, VaultWorkStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -545,6 +545,21 @@ export const vaultApi = {
   items: () => rpcCall<VaultItems>("vault.items_get"),
   /** Leaves these categories out on every device, from the next upload on. */
   setItems: (omit: string[]) => rpcCall<VaultItems>("vault.items_set", { omit }),
+};
+
+/** Automatic sync on this device. A desktop build answers these; others refuse
+ *  them, and every caller treats that as sync not being there. */
+export const syncApi = {
+  status: () => rpcCall<SyncStatus>("sync.status"),
+  /** What turning it on would send. Reads this device alone. */
+  preview: () => rpcCall<SyncPreview>("sync.preview"),
+  setAuto: (enabled: boolean) => rpcCall<SyncStatus>("sync.set_auto", { enabled }),
+  /** With a work, sends it without waiting for the edits to settle. */
+  runNow: (projectId?: string) => rpcCall<SyncStatus>("sync.run_now", projectId ? { project_id: projectId } : {}),
+  touch: (projectId: string) => rpcCall<{ ok: true }>("sync.touch", { project_id: projectId }),
+  /** Opening takes a newer version first; closing sends the work. */
+  setActive: (projectId: string, active: boolean) =>
+    rpcCall<{ pulled: boolean; problem?: string }>("sync.set_active", { project_id: projectId, active }),
 };
 
 /** The built-in agent's loop (#93). Its panel is #95; these wrappers are the

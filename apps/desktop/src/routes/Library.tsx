@@ -26,6 +26,7 @@ import { NewProjectModal } from "../components/NewProjectModal";
 import { ImportPreviewModal } from "../components/ImportPreviewModal";
 import { ImportFillDialog } from "../components/ImportFillDialog";
 import { SearchModal } from "../components/SearchModal";
+import { SyncStatusNotice } from "../components/SyncStatusNotice";
 import { VaultNotice } from "../components/VaultNotice";
 import { pickAndReadMarkdown } from "../lib/importLoad";
 import { exportDestinationMessage, saveExportedMarkdown } from "../lib/exportSave";
@@ -482,6 +483,7 @@ export function Library() {
         </div>
 
         <VaultNotice available={diagnostics?.vault_available ?? false} />
+        {diagnostics?.vault_available && <SyncStatusNotice available />}
         {loading ? (
           <p className="hint">{t("common.loading")}</p>
         ) : error ? (
