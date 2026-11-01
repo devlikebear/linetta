@@ -332,6 +332,29 @@ type ItemCategory struct {
 	Required bool   `json:"required"`
 }
 
+// SyncPreview is what turning automatic sync on would send, as far as this device
+// can tell: the screen asks the writer about it before anything leaves.
+type SyncPreview struct {
+	Works int   `json:"works"`
+	Bytes int64 `json:"bytes"`
+}
+
+// Preview adds up the selected categories. It sends nothing.
+func (s *Service) Preview(ctx context.Context) (SyncPreview, error) {
+	view, err := s.Items(ctx)
+	if err != nil {
+		return SyncPreview{}, err
+	}
+	var out SyncPreview
+	for _, category := range view.Categories {
+		if category.Enabled {
+			out.Bytes += category.Bytes
+		}
+	}
+	err = s.db().QueryRowContext(ctx, `SELECT COUNT(*) FROM projects`).Scan(&out.Works)
+	return out, err
+}
+
 // ItemsView is what can be carried and what is.
 type ItemsView struct {
 	Categories []ItemCategory `json:"categories"`
