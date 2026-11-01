@@ -734,10 +734,14 @@ your library first.
 
 **What is sent, and where.** A work's title, manuscript, outline, story data,
 version snapshots, pictures, and its own skills and memory are sealed on this
-device and stored through the Linetta Works server in Cloudflare R2. The server
-keeps ciphertext, its size and times, and random identifiers, and nobody there
-can read the content or the title. Activity logs, your global writer profile and
-skills, and provider settings and API keys stay here. The full list is in the
+device and stored through the Linetta Works server in Cloudflare R2, along with
+your global skills and writer profile, which arrive on a new device before any
+work does. The server keeps ciphertext, its size and times, and random
+identifiers, and nobody there can read the content or the title. Under **What
+travels** you can turn off pictures, version history, a work's skills and
+memory, global skills, and the writer profile. The choice follows your account
+to every device, and what you turn off is not removed from any of them. Agent
+conversations, activity logs, and provider settings and API keys stay here. The full list is in the
 [privacy policy](docs/privacy-policy.md), section 3.7.
 
 **Delete.** **Settings → Sync → Linetta Works → Delete from server** removes one work

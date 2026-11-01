@@ -2,15 +2,44 @@ package vaultbundle
 
 import (
 	"fmt"
+	"slices"
 	"sort"
+	"strings"
 )
 
 // Table says how one table travels with a work. Scope selects the work's rows
 // with one bound parameter, the project id, and is the same clause for reading
-// them out and clearing them before a pull.
+// them out and clearing them before a pull. Category is the choice the writer
+// can leave it out under; empty means it always travels.
 type Table struct {
-	Name  string
-	Scope string
+	Name     string
+	Scope    string
+	Category string
+}
+
+// The categories a writer can turn off. They are stored in the library item and
+// in every manifest, so an id here is permanent.
+const (
+	CategoryImages    = "images"
+	CategoryHistory   = "history"
+	CategoryWorkAgent = "work_agent"
+	// The two below live outside any work, in the library item.
+	CategoryGlobalSkills  = "global_skills"
+	CategoryWriterProfile = "writer_profile"
+)
+
+// Categories lists every category in the order a screen shows them.
+func Categories() []string {
+	return []string{CategoryImages, CategoryHistory, CategoryWorkAgent, CategoryGlobalSkills, CategoryWriterProfile}
+}
+
+// ValidCategory says whether id names a category.
+func ValidCategory(id string) bool {
+	return slices.Contains(Categories(), id)
+}
+
+func isWorkCategory(id string) bool {
+	return id == CategoryImages || id == CategoryHistory || id == CategoryWorkAgent
 }
 
 const (
@@ -25,41 +54,41 @@ const (
 // on this device point at them, and a delete would cascade into publish_works
 // and publish_entities or null the node_id of ai_runs and companion_messages.
 var parents = []Table{
-	{"projects", "id = ?"},
-	{"entities", byProject},
-	{"nodes", byProject},
+	{"projects", "id = ?", ""},
+	{"entities", byProject, ""},
+	{"nodes", byProject, ""},
 }
 
 // Dependents are replaced wholesale, in this order so that every foreign key
 // target is already there. A pull clears them in the reverse order.
 var dependents = []Table{
-	{"entity_visuals", byEntity},
-	{"entity_reference_images", byEntity},
-	{"project_art_style", byProject},
-	{"project_style_rules", byProject},
-	{"project_style_drafts", byProject},
-	{"project_focus", byProject},
-	{"illustrations", byProject},
-	{"node_representative_illustrations", byProject},
-	{"illustration_requests", byProject},
-	{"mentions", byNode},
-	{"relationships", byProject},
-	{"threads", byProject},
-	{"beats", byThread},
-	{"notes", byNode},
-	{"scene_intents", byProject},
-	{"node_snapshots", byNode},
-	{"fact_cards", byProject},
-	{"fact_sources", byFactCard},
-	{"writing_stats", byProject},
-	{"agent_memory", "scope = 'work_notes' AND project_id = ?"},
-	{"continuity_checks", byProject},
-	{"continuity_observations", byProject},
-	{"forecasts", byProject},
-	{"story_proposals", byProject},
-	{"story_proposal_items", byProject},
-	{"story_ledger", byProject},
-	{"part_arcs", byProject},
+	{"entity_visuals", byEntity, ""},
+	{"entity_reference_images", byEntity, CategoryImages},
+	{"project_art_style", byProject, ""},
+	{"project_style_rules", byProject, ""},
+	{"project_style_drafts", byProject, ""},
+	{"project_focus", byProject, ""},
+	{"illustrations", byProject, CategoryImages},
+	{"node_representative_illustrations", byProject, CategoryImages},
+	{"illustration_requests", byProject, CategoryImages},
+	{"mentions", byNode, ""},
+	{"relationships", byProject, ""},
+	{"threads", byProject, ""},
+	{"beats", byThread, ""},
+	{"notes", byNode, ""},
+	{"scene_intents", byProject, ""},
+	{"node_snapshots", byNode, CategoryHistory},
+	{"fact_cards", byProject, ""},
+	{"fact_sources", byFactCard, ""},
+	{"writing_stats", byProject, ""},
+	{"agent_memory", "scope = 'work_notes' AND project_id = ?", CategoryWorkAgent},
+	{"continuity_checks", byProject, ""},
+	{"continuity_observations", byProject, ""},
+	{"forecasts", byProject, ""},
+	{"story_proposals", byProject, ""},
+	{"story_proposal_items", byProject, ""},
+	{"story_ledger", byProject, ""},
+	{"part_arcs", byProject, ""},
 }
 
 // excluded names every table that stays behind, and why. A table in neither
@@ -73,6 +102,8 @@ var excluded = map[string]string{
 	"mcp_activity":              "device history of tool calls",
 	"skill_snapshots":           "device history of skill edits",
 	"vault_items":               "this device's bookmark into the vault itself",
+	"vault_library":             "this device's bookmark into the library item",
+	"sync_selection":            "travels in the library item, not in a work",
 	"publish_works":             "reconciled with the site after a pull",
 	"publish_episodes":          "reconciled with the site after a pull",
 	"publish_entities":          "reconciled with the site after a pull",
@@ -99,6 +130,23 @@ var imageColumns = map[string]string{
 // in the manifest, outside what the content hash covers.
 var deviceColumns = map[string]map[string]bool{
 	"projects": {"last_opened_node_id": true, "updated_at": true},
+}
+
+// PartCategory is the category a bundle part belongs to, empty when it always
+// travels.
+func PartCategory(name string) string {
+	switch {
+	case strings.HasPrefix(name, imagePrefix):
+		return CategoryImages
+	case strings.HasPrefix(name, skillPrefix), strings.HasPrefix(name, memoryPrefix):
+		return CategoryWorkAgent
+	}
+	for _, table := range allTables() {
+		if name == tablePrefix+table.Name {
+			return table.Category
+		}
+	}
+	return ""
 }
 
 func allTables() []Table {

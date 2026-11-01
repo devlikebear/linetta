@@ -456,3 +456,12 @@ func TestKeysDoNotPrint(t *testing.T) {
 		t.Fatalf("JSON carries key material: %s", out)
 	}
 }
+
+// TestLibraryItemIDIsPinned holds the id to a value computed outside this
+// package with plain HKDF-SHA256: it names the item on the server, and a
+// different answer strands the library behind a second item.
+func TestLibraryItemIDIsPinned(t *testing.T) {
+	if got := vectorKeys(t).LibraryItemID(); got != "8a1478bf86fe0e48b372b1c007688efb" {
+		t.Fatalf("LibraryItemID = %s", got)
+	}
+}

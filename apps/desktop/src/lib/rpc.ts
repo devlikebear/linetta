@@ -13,7 +13,7 @@ import type {
   SuggestionItemStatus,
 } from "./types";
 import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, IllustrationRepresentatives, IllustrationRequest, IllustrationRequestEdits, IllustrationRequestStatus, ImageProviderStatus } from "./types";
-import type { VaultOverview, VaultPullResult, VaultPushResult, VaultResolveResult, VaultSetupResult, VaultWorkStatus } from "./types";
+import type { VaultItems, VaultOverview, VaultPullResult, VaultPushResult, VaultResolveResult, VaultSetupResult, VaultWorkStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -541,6 +541,10 @@ export const vaultApi = {
     rpcCall<VaultResolveResult>("vault.resolve_conflict", input),
   /** Removes the item and all its restore points from the server, for good. */
   deleteItem: (itemId: string) => rpcCall<{ ok: true }>("vault.delete_item", { item_id: itemId }),
+  /** What can be carried, how large each category is here, and which are on. */
+  items: () => rpcCall<VaultItems>("vault.items_get"),
+  /** Leaves these categories out on every device, from the next upload on. */
+  setItems: (omit: string[]) => rpcCall<VaultItems>("vault.items_set", { omit }),
 };
 
 /** The built-in agent's loop (#93). Its panel is #95; these wrappers are the

@@ -197,6 +197,8 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "threads.reopen",
     "threads.update",
     "vault.delete_item",
+    "vault.items_get",
+    "vault.items_set",
     "vault.pull",
     "vault.push",
     "vault.resolve_conflict",
@@ -934,6 +936,8 @@ mod security_boundary_tests {
         assert!(is_renderer_engine_method("export.companion_history"));
         for method in [
             "vault.delete_item",
+            "vault.items_get",
+            "vault.items_set",
             "vault.pull",
             "vault.push",
             "vault.resolve_conflict",

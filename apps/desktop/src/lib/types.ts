@@ -1954,6 +1954,20 @@ export interface VaultOverview {
   key_mismatch: boolean;
   account: VaultAccount | null;
   items: VaultItemView[];
+  /** Something the last library sync left the writer to know about. */
+  library_warning?: "profile_refused";
+}
+
+/** One line of what travels. The required line has an empty id. */
+export interface VaultItemCategory {
+  id: string;
+  bytes: number;
+  enabled: boolean;
+  required: boolean;
+}
+
+export interface VaultItems {
+  categories: VaultItemCategory[];
 }
 
 export interface VaultRestorePoint {

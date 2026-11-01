@@ -13,6 +13,8 @@ type Link struct {
 	BaseRevision int
 	LastHash     string
 	LastSyncedAt int64
+	// quiet keeps a transfer off the progress bar. It is not stored.
+	quiet bool
 }
 
 type execer interface {

@@ -53,4 +53,6 @@ func setupVault(deps vaultDeps) {
 	s.Handle("vault.pull", handlers.VaultPull(svc))
 	s.Handle("vault.resolve_conflict", handlers.VaultResolveConflict(svc))
 	s.Handle("vault.delete_item", handlers.VaultDeleteItem(svc))
+	s.Handle("vault.items_get", handlers.VaultItemsGet(svc))
+	s.Handle("vault.items_set", handlers.VaultItemsSet(svc))
 }
