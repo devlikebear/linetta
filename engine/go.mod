@@ -5,7 +5,7 @@ go 1.26.10
 toolchain go1.27.3
 
 require (
-	github.com/devlikebear/tars v0.65.1-0.20261024014548-378e7479d33c
+	github.com/devlikebear/tars v0.67.1-0.20261101061631-554b3afcec14
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	golang.org/x/sys v0.45.0
