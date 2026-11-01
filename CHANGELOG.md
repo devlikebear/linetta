@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.20.1 - 2026-11-01
+
+- Fixed: a work pulled from another device would not open and showed
+  `project has no opened node`. Works already pulled are repaired when the app
+  starts, and open at their first scene. Nothing was lost.
+- Fixed: updating on Windows could stop with "Error opening file for writing"
+  while an MCP client kept `linetta-mcp.exe` running. The installer now closes
+  it first, so MCP clients need to reconnect after the update.
+
 ## v1.20.0 - 2026-11-01
 
 - **Automatic sync.** Turn it on once and your works move between devices by
