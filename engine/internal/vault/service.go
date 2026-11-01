@@ -117,6 +117,7 @@ type headDigest struct {
 	title     string
 	projectID string
 	hash      string
+	deleted   bool
 }
 
 type session struct {
@@ -237,7 +238,7 @@ func (s *Service) readHead(ctx context.Context, sess session, itemID string) (he
 	if err != nil {
 		return headDigest{}, err
 	}
-	return headDigest{revision: revisions[0].Revision, title: m.Title, projectID: m.Bundle.ProjectID, hash: m.Bundle.ContentHash()}, nil
+	return headDigest{revision: revisions[0].Revision, title: m.Title, projectID: m.Bundle.ProjectID, hash: m.Bundle.ContentHash(), deleted: m.Deleted}, nil
 }
 
 // resolve finds the link and the server's item for a work. A work with no link
@@ -329,32 +330,39 @@ func (s *Service) workStatus(ctx context.Context, projectID string) (WorkStatus,
 		out.RestorePoints = append(out.RestorePoints, RestorePoint{Revision: r.Revision, Created: r.Created, Bytes: r.Bytes})
 	}
 	hash := bundle.Manifest.ContentHash()
+	if out.State, err = s.compare(ctx, sess, &link, item, hash); err != nil {
+		return WorkStatus{}, err
+	}
+	out.BaseRevision, out.LastSyncedAt = link.BaseRevision, link.LastSyncedAt
+	return out, nil
+}
+
+// compare places a work against its item. When both sides moved and arrived at
+// the same text it records that, so link comes back in step.
+func (s *Service) compare(ctx context.Context, sess session, link *Link, item RemoteItem, hash string) (string, error) {
 	localChanged := hash != link.LastHash
 	switch {
 	case item.HeadRevision == link.BaseRevision && !localChanged:
-		out.State = StateSynced
+		return StateSynced, nil
 	case item.HeadRevision == link.BaseRevision:
-		out.State = StateLocalChanges
+		return StateLocalChanges, nil
 	case item.HeadRevision > link.BaseRevision && !localChanged:
-		out.State = StateRemoteChanges
-	default:
-		// Both moved, or the server went backwards. Two devices can still have
-		// arrived at the same text.
-		same, err := s.matchesHead(ctx, sess, item, hash)
-		if err != nil {
-			return WorkStatus{}, err
-		}
-		if !same {
-			out.State = StateConflict
-			return out, nil
-		}
-		link.BaseRevision, link.LastHash, link.LastSyncedAt = item.HeadRevision, hash, s.Now()
-		if err := putLink(ctx, s.db(), link); err != nil {
-			return WorkStatus{}, err
-		}
-		out.State, out.BaseRevision, out.LastSyncedAt = StateSynced, link.BaseRevision, link.LastSyncedAt
+		return StateRemoteChanges, nil
 	}
-	return out, nil
+	// Both moved, or the server went backwards. Two devices can still have
+	// arrived at the same text.
+	same, err := s.matchesHead(ctx, sess, item, hash)
+	if err != nil {
+		return "", err
+	}
+	if !same {
+		return StateConflict, nil
+	}
+	link.BaseRevision, link.LastHash, link.LastSyncedAt = item.HeadRevision, hash, s.Now()
+	if err := putLink(ctx, s.db(), *link); err != nil {
+		return "", err
+	}
+	return StateSynced, nil
 }
 
 func (s *Service) matchesHead(ctx context.Context, sess session, item RemoteItem, hash string) (bool, error) {
@@ -436,6 +444,9 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 	}
 	revision, err := s.send(ctx, sess, link, out)
 	if err != nil {
+		return PushResult{}, err
+	}
+	if err := clearRemoved(ctx, s.db(), projectID); err != nil {
 		return PushResult{}, err
 	}
 	return s.recordPushed(ctx, link, hash, revision, false)
@@ -533,6 +544,8 @@ func (s *Service) Pull(ctx context.Context, in PullInput) (PullResult, error) {
 type pullOptions struct {
 	// force is the writer having already chosen the server's version.
 	force bool
+	// auto is automatic sync: nobody asked, and it runs far more often.
+	auto bool
 	// keepCopy clones this device's version as a new work first, under this
 	// title suffix.
 	keepCopy string
@@ -640,7 +653,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 
 	out := PullResult{ProjectID: projectID, ItemID: link.ItemID, Revision: chosen.Revision, HeadRevision: head.Revision}
 	if exists {
-		if out.SnapshotPath, err = s.snapshot(ctx, projectID); err != nil {
+		if out.SnapshotPath, err = s.snapshotBeforePull(ctx, projectID, opts.auto); err != nil {
 			return PullResult{}, err
 		}
 	}
@@ -727,6 +740,9 @@ func (s *Service) fetch(ctx context.Context, sess session, revision Revision, li
 	if err != nil {
 		_ = os.Remove(filepath.Join(cache, revision.ManifestBlob))
 		return nil, err
+	}
+	if m.Deleted {
+		return nil, reason(rpc.ReasonVaultItemNotFound, fmt.Errorf("vault: item %s was deleted on another device", link.ItemID))
 	}
 	total := 0
 	for _, part := range m.Bundle.Parts {
@@ -899,6 +915,23 @@ func (s *Service) DeleteItem(ctx context.Context, itemID string) error {
 	return classify(s.deleteItem(ctx, itemID))
 }
 
+// forgetItem drops the link, and notes the writer's choice for automatic sync:
+// a work taken off the server here is not to be uploaded straight back.
+func (s *Service) forgetItem(ctx context.Context, itemID string) error {
+	links, err := listLinks(ctx, s.db())
+	if err != nil {
+		return err
+	}
+	for _, link := range links {
+		if link.ItemID == itemID {
+			if err := recordRemoved(ctx, s.db(), link.ProjectID, s.Now()); err != nil {
+				return err
+			}
+		}
+	}
+	return deleteLinkByItem(ctx, s.db(), itemID)
+}
+
 func (s *Service) deleteItem(ctx context.Context, itemID string) error {
 	token, err := s.token()
 	if err != nil {
@@ -913,7 +946,7 @@ func (s *Service) deleteItem(ctx context.Context, itemID string) error {
 	if err := s.Client.DeleteItem(ctx, token, itemID); err != nil && !(errors.As(err, &apiErr) && apiErr.Code == CodeNotFound) {
 		return err
 	}
-	if err := deleteLinkByItem(ctx, s.db(), itemID); err != nil {
+	if err := s.forgetItem(ctx, itemID); err != nil {
 		return err
 	}
 	s.headsMu.Lock()
@@ -1055,6 +1088,9 @@ type ItemView struct {
 	// OnThisDevice says the work is in this library. An item that is not can
 	// only be pulled.
 	OnThisDevice bool `json:"on_this_device"`
+	// Deleted says another device deleted the work. Only its restore points are
+	// left to pull.
+	Deleted bool `json:"deleted"`
 }
 
 // Status reads the account. It says nothing to the site before this device is
@@ -1118,7 +1154,7 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 			case err != nil:
 				return out, err
 			default:
-				view.ProjectID, view.Title = digest.projectID, digest.title
+				view.ProjectID, view.Title, view.Deleted = digest.projectID, digest.title, digest.deleted
 			}
 		}
 		if view.ProjectID != "" {

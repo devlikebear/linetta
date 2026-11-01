@@ -79,6 +79,13 @@ func RunBeforeVaultPull(ctx context.Context, db *sql.DB, home string, now time.T
 	return createPublishedBackup(ctx, db, dir, filename)
 }
 
+// TookVaultPullToday says today's dated directory already holds a snapshot from
+// before a vault pull.
+func TookVaultPullToday(home string, now time.Time) (bool, error) {
+	matches, err := filepath.Glob(filepath.Join(home, "backups", now.Format("2006-01-02"), "library-pre-vault-*.db"))
+	return len(matches) > 0, err
+}
+
 // RunManualRecovery creates a complete, versioned SQLite library snapshot.
 // Unlike the project Markdown export, this archive preserves every table and
 // can be restored by the startup recovery screen.

@@ -22,7 +22,10 @@ type revisionManifest struct {
 	Title  string `json:"title"`
 	// Library is the library item's own record, when Kind says it is one.
 	Library *vaultbundle.LibraryMeta `json:"library,omitempty"`
-	Bundle  vaultbundle.Manifest     `json:"bundle"`
+	// Deleted marks the item's work as deleted on another device. The revision
+	// holds no parts; the ones under it stay as restore points.
+	Deleted bool                 `json:"deleted,omitempty"`
+	Bundle  vaultbundle.Manifest `json:"bundle"`
 	// Blobs maps each part to its blobs in order. A part of no bytes has none.
 	Blobs map[string][]string `json:"blobs"`
 }
