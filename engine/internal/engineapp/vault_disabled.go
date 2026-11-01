@@ -37,6 +37,7 @@ func setupVault(deps vaultDeps) {
 	for _, method := range []string{
 		"vault.status", "vault.work_status", "vault.setup",
 		"vault.push", "vault.pull", "vault.resolve_conflict", "vault.delete_item",
+		"vault.items_get", "vault.items_set",
 	} {
 		deps.server.Handle(method, unavailable)
 	}

@@ -1,4 +1,5 @@
 import { localeForLanguage } from "./i18n";
+import { vaultApi } from "./rpc";
 import type { AppLanguage, VaultItemView, VaultOverview, VaultWorkState } from "./types";
 
 export function formatVaultBytes(bytes: number): string {
@@ -11,6 +12,23 @@ export function formatVaultDate(value: string, language: AppLanguage): string {
   const date = new Date(value.replace(" ", "T"));
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString(localeForLanguage(language));
+}
+
+let imagesOmitted: Promise<boolean> | null = null;
+
+/** Whether the writer left pictures out of what travels. Asked only for a
+ *  picture that failed to load, and remembered: the answer takes adding up the
+ *  library. A build with no vault has left nothing out. */
+export function vaultImagesOmitted(): Promise<boolean> {
+  imagesOmitted ??= vaultApi
+    .items()
+    .then(({ categories }) => categories.some((c) => c.id === "images" && !c.enabled))
+    .catch(() => false);
+  return imagesOmitted;
+}
+
+export function forgetImagesOmitted(): void {
+  imagesOmitted = null;
 }
 
 /** Whether this device can act on a work at all: anything less goes through the

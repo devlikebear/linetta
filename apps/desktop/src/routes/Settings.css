@@ -859,3 +859,4 @@
     grid-template-columns: 1fr;
   }
 }
+.settings .vault-categories .set-toggle { display: block; }
