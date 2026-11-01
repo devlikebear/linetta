@@ -16,6 +16,7 @@ const (
 	JobGitSync    = "git_sync"
 	JobFolderSync = "folder_sync"
 	JobSummarizer = "summarizer"
+	JobAutoSync   = "auto_sync"
 )
 
 // Status mirrors one ops_status row.

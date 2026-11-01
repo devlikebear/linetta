@@ -721,32 +721,71 @@ recovery key, or enter the one you saved on your first device.
 you upload. The operator cannot recover it. Linetta keeps a new key only after
 you confirm you saved it somewhere off this device.
 
-**Upload and download.** Open a work and use the sync button in the top bar or
-**Open Linetta Works sync** in the command palette. Nothing moves by itself: Linetta
-shows that a newer version is waiting, and you decide. A work that is not on
-this device yet is downloaded from **Settings → Sync**.
+**Automatic sync.** Under **Settings → Sync → Linetta Works**, turn on automatic
+sync. It shows how many works and how much data will go, and sends nothing until
+you agree. After that, a work you change goes up three minutes after you stop
+editing, or when you close it, and changes from your other devices come in
+within a few minutes, even with the window closed if the app stays in the
+background. A work that is open waits for you: a line at the bottom of the
+screen offers the new version with one press. Works an agent is writing to are
+left alone until it finishes. If sync has to stop, for example because the
+agreement changed or the space ran out, the library and the sync screen say why.
+It is on or off for each device.
 
-**When two devices disagree.** If a work changed in both places, choose which to
-carry on from. Either way both manuscripts survive: uploading this device's
+**Upload and download by hand.** With automatic sync off, nothing moves by
+itself. Open a work and use the sync button in the top bar or **Open Linetta
+Works sync** in the command palette. Works not on this device yet are under
+**Advanced** in **Settings → Sync**.
+
+**Deleting a work.** Deleting a synced work tells your other devices, which move
+it to the archive and keep the manuscript, so a slip on one device cannot take a
+book off all of them. Delete it on each device yourself if you want it gone.
+
+**When two devices disagree.** If a work changed in both places, automatic sync
+leaves it alone until you choose which to carry on from. Either way both manuscripts survive: uploading this device's
 version leaves the other as a restore point, and downloading the Linetta Works
 version first copies this device's version into a new work. Downloading backs up
 your library first.
 
 **What is sent, and where.** A work's title, manuscript, outline, story data,
 version snapshots, pictures, and its own skills and memory are sealed on this
-device and stored through the Linetta Works server in Cloudflare R2. The server
-keeps ciphertext, its size and times, and random identifiers, and nobody there
-can read the content or the title. Activity logs, your global writer profile and
-skills, and provider settings and API keys stay here. The full list is in the
+device and stored through the Linetta Works server in Cloudflare R2, along with
+your global skills and writer profile, which arrive on a new device before any
+work does. The server keeps ciphertext, its size and times, and random
+identifiers, and nobody there can read the content or the title. Under **What
+travels** you can turn off pictures, version history, a work's skills and
+memory, global skills, and the writer profile. The choice follows your account
+to every device, and what you turn off is not removed from any of them. Agent
+conversations, activity logs, and provider settings and API keys stay here. The full list is in the
 [privacy policy](docs/privacy-policy.md), section 3.7.
 
-**Delete.** **Settings → Sync → Linetta Works → Delete from server** removes one work
+**Delete from the server.** **Settings → Sync → Linetta Works → Advanced → Delete from server** removes one work
 and its restore points for good, and leaves the manuscript on this device.
 Closing sync on the site deletes everything there. Disconnecting from the
 site deletes nothing on the server and keeps your recovery key.
 
 Data on Linetta Works can be lost, and the site makes no promise to keep or restore
 it. Keep your own backups.
+
+### GitHub and folders
+
+GitHub and a folder can hold the same thing Linetta Works does, with no account
+or approval. Under **Settings → Sync**, pick one target as primary. It syncs both
+ways. Any others are mirrors: this device uploads to them, and **Restore from
+here** brings a library back from them. A recovery key is one per library,
+whichever targets you use.
+
+Each target keeps a sealed copy in `.linetta/` beside the Markdown export, and
+that copy holds the same items as Linetta Works, archived works included. Nothing
+in it is readable without your recovery key, even in a public repository. The
+Markdown next to it is plain text, and stays readable if you lose the key.
+
+Sign-in for GitHub is whatever your system `git` already uses. Linetta pulls
+before it pushes, so two devices can share one repository. A folder synced by
+Dropbox or similar works the same way. Git history is never removed and sealed
+files do not compress, so a repository keeps growing: as a primary, GitHub syncs
+every 30 minutes, and as a mirror, once a day. The Mac App Store build cannot read
+your folder back, so there a folder can only be a mirror.
 
 ## Data and safety
 

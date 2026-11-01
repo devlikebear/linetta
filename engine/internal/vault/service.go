@@ -68,7 +68,12 @@ type Settings interface {
 
 // Deps is what the service runs on.
 type Deps struct {
-	Client   *Client
+	// Client reaches Linetta Works. Unused when OpenStore is set.
+	Client *Client
+	// OpenStore opens another target. Nil means Linetta Works.
+	OpenStore func() (Store, error)
+	// Target names where the links of this service point. Empty is Linetta Works.
+	Target   string
 	Settings Settings
 	Store    *store.Store
 	Home     string
@@ -100,6 +105,9 @@ type Service struct {
 
 	headsMu sync.Mutex
 	heads   map[string]headDigest
+
+	warningMu      sync.Mutex
+	libraryWarning string
 }
 
 // NewService returns a service over deps.
@@ -114,14 +122,24 @@ type headDigest struct {
 	title     string
 	projectID string
 	hash      string
+	deleted   bool
+	// mark is the head's manifest, which is what names it where numbers repeat.
+	mark string
 }
 
 type session struct {
-	token string
+	store Store
 	keys  *Keys
 }
 
 func (s *Service) db() *sql.DB { return s.Store.DB() }
+
+func (s *Service) targetID() string {
+	if s.Target != "" {
+		return s.Target
+	}
+	return TargetWorks
+}
 
 func (s *Service) now() time.Time { return time.UnixMilli(s.Now()) }
 
@@ -132,11 +150,16 @@ func (s *Service) begin() (func(), error) {
 	return func() { s.busy.Store(false) }, nil
 }
 
-func (s *Service) token() (string, error) {
-	if token := s.Settings.PublishToken(); token != "" {
-		return token, nil
+// remote opens the target. Asked each time, because a site can be disconnected
+// and a folder unplugged between one run and the next.
+func (s *Service) remote() (Store, error) {
+	if s.OpenStore != nil {
+		return s.OpenStore()
 	}
-	return "", reason(rpc.ReasonVaultNotConnected, errors.New("vault: this device is not connected to Linetta Works"))
+	if token := s.Settings.PublishToken(); token != "" {
+		return worksStore{client: s.Client, token: token}, nil
+	}
+	return nil, reason(rpc.ReasonVaultNotConnected, errors.New("vault: this device is not connected to Linetta Works"))
 }
 
 func (s *Service) keys() (*Keys, error) {
@@ -155,7 +178,7 @@ func (s *Service) keys() (*Keys, error) {
 }
 
 func (s *Service) open() (session, error) {
-	token, err := s.token()
+	remote, err := s.remote()
 	if err != nil {
 		return session{}, err
 	}
@@ -163,11 +186,11 @@ func (s *Service) open() (session, error) {
 	if err != nil {
 		return session{}, err
 	}
-	return session{token: token, keys: keys}, nil
+	return session{store: remote, keys: keys}, nil
 }
 
-func (s *Service) report(p Progress) {
-	if s.Notify != nil {
+func (s *Service) report(link Link, p Progress) {
+	if s.Notify != nil && !link.quiet {
 		s.Notify(p)
 	}
 }
@@ -193,7 +216,11 @@ func (s *Service) export(ctx context.Context, projectID string) (*vaultbundle.Bu
 	} else if !ok {
 		return nil, reason(rpc.ReasonVaultWorkNotFound, fmt.Errorf("vault: project %s not found", projectID))
 	}
-	return vaultbundle.Export(ctx, s.db(), s.Home, projectID, s.now())
+	selection, err := getSelection(ctx, s.db())
+	if err != nil {
+		return nil, err
+	}
+	return vaultbundle.Export(ctx, s.db(), s.Home, projectID, s.now(), selection.Omit)
 }
 
 // head reads an item's head manifest, once per revision.
@@ -201,7 +228,7 @@ func (s *Service) head(ctx context.Context, sess session, item RemoteItem) (head
 	s.headsMu.Lock()
 	cached, ok := s.heads[item.ItemID]
 	s.headsMu.Unlock()
-	if ok && cached.revision == item.HeadRevision {
+	if ok && cached.revision == item.HeadRevision && (item.Mark == "" || item.Mark == cached.mark) {
 		return cached, nil
 	}
 	digest, err := s.readHead(ctx, sess, item.ItemID)
@@ -215,14 +242,14 @@ func (s *Service) head(ctx context.Context, sess session, item RemoteItem) (head
 }
 
 func (s *Service) readHead(ctx context.Context, sess session, itemID string) (headDigest, error) {
-	revisions, err := s.Client.Revisions(ctx, sess.token, itemID)
+	revisions, err := sess.store.Revisions(ctx, itemID)
 	if err != nil {
 		return headDigest{}, err
 	}
 	if len(revisions) == 0 {
 		return headDigest{}, reason(rpc.ReasonVaultItemNotFound, fmt.Errorf("vault: item %s has no revisions", itemID))
 	}
-	sealed, err := s.Client.GetBlob(ctx, sess.token, revisions[0].ManifestBlob)
+	sealed, err := sess.store.GetBlob(ctx, revisions[0].ManifestBlob)
 	if err != nil {
 		return headDigest{}, err
 	}
@@ -230,7 +257,7 @@ func (s *Service) readHead(ctx context.Context, sess session, itemID string) (he
 	if err != nil {
 		return headDigest{}, err
 	}
-	return headDigest{revision: revisions[0].Revision, title: m.Title, projectID: m.Bundle.ProjectID, hash: m.Bundle.ContentHash()}, nil
+	return headDigest{revision: revisions[0].Revision, title: m.Title, projectID: m.Bundle.ProjectID, hash: m.Bundle.ContentHash(), deleted: m.Deleted, mark: revisions[0].ManifestBlob}, nil
 }
 
 // resolve finds the link and the server's item for a work. A work with no link
@@ -238,11 +265,11 @@ func (s *Service) readHead(ctx context.Context, sess session, itemID string) (he
 // through the manifests keeps it from being uploaded as a second item, and the
 // base of 0 then reads as a conflict unless the contents match.
 func (s *Service) resolve(ctx context.Context, sess session, projectID string) (Link, RemoteItem, bool, error) {
-	items, err := s.Client.Items(ctx, sess.token)
+	items, err := sess.store.Items(ctx)
 	if err != nil {
 		return Link{}, RemoteItem{}, false, err
 	}
-	link, linked, err := getLink(ctx, s.db(), projectID)
+	link, linked, err := getLink(ctx, s.db(), s.targetID(), projectID)
 	if err != nil {
 		return Link{}, RemoteItem{}, false, err
 	}
@@ -255,6 +282,9 @@ func (s *Service) resolve(ctx context.Context, sess session, projectID string) (
 		return link, RemoteItem{}, false, nil
 	}
 	for _, item := range items {
+		if item.ItemID == sess.keys.LibraryItemID() {
+			continue
+		}
 		digest, err := s.head(ctx, sess, item)
 		if errors.Is(err, ErrWrongKey) || errors.Is(err, ErrCorrupt) || errors.Is(err, ErrNewerFormat) {
 			continue // an item this device cannot read does not stand in the way
@@ -311,7 +341,7 @@ func (s *Service) workStatus(ctx context.Context, projectID string) (WorkStatus,
 		return out, nil
 	}
 	out.ItemID, out.BaseRevision, out.HeadRevision = link.ItemID, link.BaseRevision, item.HeadRevision
-	revisions, err := s.Client.Revisions(ctx, sess.token, item.ItemID)
+	revisions, err := sess.store.Revisions(ctx, item.ItemID)
 	if err != nil {
 		return WorkStatus{}, err
 	}
@@ -319,32 +349,50 @@ func (s *Service) workStatus(ctx context.Context, projectID string) (WorkStatus,
 		out.RestorePoints = append(out.RestorePoints, RestorePoint{Revision: r.Revision, Created: r.Created, Bytes: r.Bytes})
 	}
 	hash := bundle.Manifest.ContentHash()
-	localChanged := hash != link.LastHash
-	switch {
-	case item.HeadRevision == link.BaseRevision && !localChanged:
-		out.State = StateSynced
-	case item.HeadRevision == link.BaseRevision:
-		out.State = StateLocalChanges
-	case item.HeadRevision > link.BaseRevision && !localChanged:
-		out.State = StateRemoteChanges
-	default:
-		// Both moved, or the server went backwards. Two devices can still have
-		// arrived at the same text.
-		same, err := s.matchesHead(ctx, sess, item, hash)
-		if err != nil {
-			return WorkStatus{}, err
-		}
-		if !same {
-			out.State = StateConflict
-			return out, nil
-		}
-		link.BaseRevision, link.LastHash, link.LastSyncedAt = item.HeadRevision, hash, s.Now()
-		if err := putLink(ctx, s.db(), link); err != nil {
-			return WorkStatus{}, err
-		}
-		out.State, out.BaseRevision, out.LastSyncedAt = StateSynced, link.BaseRevision, link.LastSyncedAt
+	if out.State, err = s.compare(ctx, sess, &link, item, hash); err != nil {
+		return WorkStatus{}, err
 	}
+	out.BaseRevision, out.LastSyncedAt = link.BaseRevision, link.LastSyncedAt
 	return out, nil
+}
+
+// compare places a work against its item. When both sides moved and arrived at
+// the same text it records that, so link comes back in step.
+func (s *Service) compare(ctx context.Context, sess session, link *Link, item RemoteItem, hash string) (string, error) {
+	localChanged := hash != link.LastHash
+	sameHead := item.HeadRevision == link.BaseRevision && !headMoved(link, item)
+	switch {
+	case sameHead && !localChanged:
+		return StateSynced, nil
+	case sameHead:
+		return StateLocalChanges, nil
+	case item.HeadRevision > link.BaseRevision && !localChanged:
+		return StateRemoteChanges, nil
+	}
+	// Both moved, or the server went backwards. Two devices can still have
+	// arrived at the same text.
+	same, err := s.matchesHead(ctx, sess, item, hash)
+	if err != nil {
+		return "", err
+	}
+	if !same {
+		return StateConflict, nil
+	}
+	link.BaseRevision, link.LastHash, link.LastSyncedAt = item.HeadRevision, hash, s.Now()
+	if item.Mark != "" {
+		link.Mark = item.Mark
+	}
+	if err := putLink(ctx, s.db(), s.targetID(), *link); err != nil {
+		return "", err
+	}
+	return StateSynced, nil
+}
+
+// headMoved is the same revision number holding a different revision, which only
+// a store without a server can produce. This device lost that race: what it
+// sent is not the head, so it is one side of a conflict.
+func headMoved(link *Link, item RemoteItem) bool {
+	return item.Mark != "" && link.Mark != "" && item.Mark != link.Mark
 }
 
 func (s *Service) matchesHead(ctx context.Context, sess session, item RemoteItem, hash string) (bool, error) {
@@ -373,6 +421,9 @@ func (s *Service) Push(ctx context.Context, projectID string) (PushResult, error
 	if err != nil {
 		return PushResult{}, err
 	}
+	// First, so the selection is the one every device agreed on. This is also
+	// what creates the library item, on the first upload that has one to make.
+	s.bestEffortLibrary(ctx, func() error { return s.syncLibrary(ctx, sess) })
 	out, err := s.push(ctx, sess, projectID, false)
 	return out, classify(err)
 }
@@ -391,7 +442,8 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 	if err != nil {
 		return PushResult{}, err
 	}
-	upToDate := found && item.HeadRevision == link.BaseRevision && hash == link.LastHash
+	moved := found && headMoved(&link, item)
+	upToDate := found && item.HeadRevision == link.BaseRevision && hash == link.LastHash && !moved
 	if !found {
 		// Never uploaded, or the item is gone from the server. Either way the
 		// next revision is the first.
@@ -400,7 +452,7 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 	if overwrite {
 		link.BaseRevision = item.HeadRevision
 	}
-	if item.HeadRevision != link.BaseRevision {
+	if item.HeadRevision != link.BaseRevision || (moved && !overwrite) {
 		same, err := s.matchesHead(ctx, sess, item, hash)
 		if err != nil {
 			return PushResult{}, err
@@ -408,6 +460,7 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 		if !same {
 			return PushResult{}, errConflict(item.HeadRevision)
 		}
+		link.Mark = item.Mark
 		return s.recordPushed(ctx, link, hash, item.HeadRevision, true)
 	}
 	if upToDate {
@@ -425,12 +478,16 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 	if err != nil {
 		return PushResult{}, err
 	}
+	if err := clearRemoved(ctx, s.db(), s.targetID(), projectID); err != nil {
+		return PushResult{}, err
+	}
+	link.Mark = out.manifestID
 	return s.recordPushed(ctx, link, hash, revision, false)
 }
 
 func (s *Service) recordPushed(ctx context.Context, link Link, hash string, revision int, unchanged bool) (PushResult, error) {
 	link.BaseRevision, link.LastHash, link.LastSyncedAt = revision, hash, s.Now()
-	if err := putLink(ctx, s.db(), link); err != nil {
+	if err := putLink(ctx, s.db(), s.targetID(), link); err != nil {
 		return PushResult{}, err
 	}
 	return PushResult{ItemID: link.ItemID, HeadRevision: revision, Unchanged: unchanged}, nil
@@ -447,9 +504,9 @@ func (s *Service) send(ctx context.Context, sess session, link Link, out *outgoi
 	total := len(out.blobIDs) + 1
 	sent := 0
 	for round := 0; round < maxCommitRounds; round++ {
-		revision, err := s.Client.Commit(ctx, sess.token, link.ItemID, link.BaseRevision, out.manifestID, out.blobIDs)
+		revision, err := sess.store.Commit(ctx, link.ItemID, link.BaseRevision, out.manifestID, out.blobIDs)
 		if err == nil {
-			s.report(Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: total, Total: total})
+			s.report(link, Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: total, Total: total})
 			return revision, nil
 		}
 		var apiErr *APIError
@@ -468,11 +525,11 @@ func (s *Service) send(ctx context.Context, sess session, link Link, out *outgoi
 					return 0, err
 				}
 			}
-			if err := s.Client.PutBlob(ctx, sess.token, id, sealed); err != nil {
+			if err := sess.store.PutBlob(ctx, id, sealed); err != nil {
 				return 0, err
 			}
 			sent++
-			s.report(Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: min(sent, total), Total: total})
+			s.report(link, Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: min(sent, total), Total: total})
 		}
 	}
 	return 0, errors.New("vault: the site kept asking for blobs it was sent")
@@ -481,6 +538,8 @@ func (s *Service) send(ctx context.Context, sess session, link Link, out *outgoi
 // PullInput names what to pull: a work this device has, or an item it has never
 // held. Revision 0 is the head.
 type PullInput struct {
+	// Target picks the target to pull from. Empty is the primary one.
+	Target    string `json:"target"`
 	ProjectID string `json:"project_id"`
 	ItemID    string `json:"item_id"`
 	Revision  int    `json:"revision"`
@@ -512,6 +571,7 @@ func (s *Service) Pull(ctx context.Context, in PullInput) (PullResult, error) {
 	if err != nil {
 		return PullResult{}, err
 	}
+	s.bestEffortLibrary(ctx, func() error { return s.pullLibrary(ctx, sess) })
 	out, err := s.pull(ctx, sess, in, pullOptions{})
 	return out, classify(err)
 }
@@ -519,6 +579,8 @@ func (s *Service) Pull(ctx context.Context, in PullInput) (PullResult, error) {
 type pullOptions struct {
 	// force is the writer having already chosen the server's version.
 	force bool
+	// auto is automatic sync: nobody asked, and it runs far more often.
+	auto bool
 	// keepCopy clones this device's version as a new work first, under this
 	// title suffix.
 	keepCopy string
@@ -533,10 +595,10 @@ func (s *Service) target(ctx context.Context, sess session, in PullInput) (Link,
 		if !found {
 			return Link{}, false, reason(rpc.ReasonVaultItemNotFound, fmt.Errorf("vault: work %s is not in the vault", in.ProjectID))
 		}
-		_, linked, err := getLink(ctx, s.db(), in.ProjectID)
+		_, linked, err := getLink(ctx, s.db(), s.targetID(), in.ProjectID)
 		return link, linked, err
 	}
-	links, err := listLinks(ctx, s.db())
+	links, err := listLinks(ctx, s.db(), s.targetID())
 	if err != nil {
 		return Link{}, false, err
 	}
@@ -556,7 +618,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 	if err != nil {
 		return PullResult{}, err
 	}
-	revisions, err := s.Client.Revisions(ctx, sess.token, link.ItemID)
+	revisions, err := sess.store.Revisions(ctx, link.ItemID)
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -597,7 +659,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 	link.ProjectID = projectID
 	// A work on this device under an item this library did not know about.
 	if !linked {
-		existing, ok, err := getLink(ctx, s.db(), projectID)
+		existing, ok, err := getLink(ctx, s.db(), s.targetID(), projectID)
 		if err != nil {
 			return PullResult{}, err
 		}
@@ -626,7 +688,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 
 	out := PullResult{ProjectID: projectID, ItemID: link.ItemID, Revision: chosen.Revision, HeadRevision: head.Revision}
 	if exists {
-		if out.SnapshotPath, err = s.snapshot(ctx, projectID); err != nil {
+		if out.SnapshotPath, err = s.snapshotBeforePull(ctx, projectID, opts.auto); err != nil {
 			return PullResult{}, err
 		}
 	}
@@ -636,11 +698,11 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 		}
 	}
 
-	s.report(Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 0, Total: 1})
+	s.report(link, Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 0, Total: 1})
 	// The base is the head even when an older revision was asked for, and the
 	// hash is the head's: the restored text then shows as a local change the
 	// writer can push, and the head stays a restore point.
-	link.BaseRevision, link.LastSyncedAt = head.Revision, s.Now()
+	link.BaseRevision, link.LastSyncedAt, link.Mark = head.Revision, s.Now(), head.ManifestBlob
 	link.LastHash = bundle.Manifest.ContentHash()
 	if chosen.Revision != head.Revision {
 		digest, err := s.head(ctx, sess, RemoteItem{ItemID: link.ItemID, HeadRevision: head.Revision})
@@ -654,7 +716,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 	}
 	s.finishPull(ctx, bundle, &link, chosen.Revision == head.Revision, &out)
 	_ = os.RemoveAll(cache)
-	s.report(Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 1, Total: 1})
+	s.report(link, Progress{ProjectID: projectID, ItemID: link.ItemID, Phase: PhaseApply, Done: 1, Total: 1})
 	return out, nil
 }
 
@@ -691,7 +753,7 @@ func (s *Service) sealedBlob(ctx context.Context, sess session, cache, id string
 	if sealed, err := os.ReadFile(path); err == nil {
 		return sealed, nil
 	}
-	sealed, err := s.Client.GetBlob(ctx, sess.token, id)
+	sealed, err := sess.store.GetBlob(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -714,6 +776,9 @@ func (s *Service) fetch(ctx context.Context, sess session, revision Revision, li
 		_ = os.Remove(filepath.Join(cache, revision.ManifestBlob))
 		return nil, err
 	}
+	if m.Deleted {
+		return nil, reason(rpc.ReasonVaultItemNotFound, fmt.Errorf("vault: item %s was deleted on another device", link.ItemID))
+	}
 	total := 0
 	for _, part := range m.Bundle.Parts {
 		total += len(m.Blobs[part.Name])
@@ -734,7 +799,7 @@ func (s *Service) fetch(ctx context.Context, sess session, revision Revision, li
 			}
 			data = append(data, plain...)
 			done++
-			s.report(Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseDownload, Done: done, Total: total})
+			s.report(link, Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseDownload, Done: done, Total: total})
 		}
 		bundle.Parts[part.Name] = data
 	}
@@ -797,7 +862,7 @@ func (s *Service) applyBundle(ctx context.Context, bundle *vaultbundle.Bundle, l
 	if err := vaultbundle.Apply(ctx, tx, bundle); err != nil {
 		return err
 	}
-	if err := putLink(ctx, tx, link); err != nil {
+	if err := putLink(ctx, tx, s.targetID(), link); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -821,7 +886,7 @@ func (s *Service) finishPull(ctx context.Context, bundle *vaultbundle.Bundle, li
 	if isHead {
 		if current, err := s.export(ctx, projectID); err == nil {
 			link.LastHash = current.Manifest.ContentHash()
-			if err := putLink(ctx, s.db(), *link); err != nil {
+			if err := putLink(ctx, s.db(), s.targetID(), *link); err != nil {
 				log.Printf("vault: record pulled hash: %v", err)
 			}
 		}
@@ -885,8 +950,25 @@ func (s *Service) DeleteItem(ctx context.Context, itemID string) error {
 	return classify(s.deleteItem(ctx, itemID))
 }
 
+// forgetItem drops the link, and notes the writer's choice for automatic sync:
+// a work taken off the server here is not to be uploaded straight back.
+func (s *Service) forgetItem(ctx context.Context, itemID string) error {
+	links, err := listLinks(ctx, s.db(), s.targetID())
+	if err != nil {
+		return err
+	}
+	for _, link := range links {
+		if link.ItemID == itemID {
+			if err := recordRemoved(ctx, s.db(), s.targetID(), link.ProjectID, s.Now()); err != nil {
+				return err
+			}
+		}
+	}
+	return deleteLinkByItem(ctx, s.db(), s.targetID(), itemID)
+}
+
 func (s *Service) deleteItem(ctx context.Context, itemID string) error {
-	token, err := s.token()
+	remote, err := s.remote()
 	if err != nil {
 		return err
 	}
@@ -896,10 +978,10 @@ func (s *Service) deleteItem(ctx context.Context, itemID string) error {
 	// Already gone is what was asked for: another device got there first, or
 	// the answer to an earlier try was lost. This device still has to forget it.
 	var apiErr *APIError
-	if err := s.Client.DeleteItem(ctx, token, itemID); err != nil && !(errors.As(err, &apiErr) && apiErr.Code == CodeNotFound) {
+	if err := remote.DeleteItem(ctx, itemID); err != nil && !(errors.As(err, &apiErr) && apiErr.Code == CodeNotFound) {
 		return err
 	}
-	if err := deleteLinkByItem(ctx, s.db(), itemID); err != nil {
+	if err := s.forgetItem(ctx, itemID); err != nil {
 		return err
 	}
 	s.headsMu.Lock()
@@ -914,6 +996,8 @@ func (s *Service) deleteItem(ctx context.Context, itemID string) error {
 // SetupInput makes or enters the recovery key. RecoveryKey empty means make one.
 // Replace swaps a different key already on this device for the one entered.
 type SetupInput struct {
+	// Target says which target to check the key against. Empty is Linetta Works.
+	Target      string `json:"target"`
 	Consented   bool   `json:"consented"`
 	RecoveryKey string `json:"recovery_key"`
 	Replace     bool   `json:"replace"`
@@ -945,11 +1029,18 @@ func (s *Service) setup(ctx context.Context, in SetupInput) (SetupResult, error)
 	if !in.Consented {
 		return SetupResult{}, reason(rpc.ReasonVaultConsentRequired, errors.New("vault: the writer has not agreed to send sealed copies to the site"))
 	}
-	token, err := s.token()
+	remote, err := s.remote()
 	if err != nil {
 		return SetupResult{}, err
 	}
-	items, err := s.Client.Items(ctx, token)
+	// A repository has to be up to date first: what it already holds decides
+	// whether a new key is safe to make.
+	if round, ok := remote.(Round); ok {
+		if err := round.Begin(ctx); err != nil {
+			return SetupResult{}, err
+		}
+	}
+	items, err := remote.Items(ctx)
 	if err != nil {
 		return SetupResult{}, err
 	}
@@ -966,7 +1057,7 @@ func (s *Service) setup(ctx context.Context, in SetupInput) (SetupResult, error)
 	}
 	// Checked against the server, so a wrong key never replaces a right one.
 	if len(items) > 0 {
-		if _, err := s.readHead(ctx, session{token: token, keys: keys}, items[0].ItemID); err != nil {
+		if _, err := s.readHead(ctx, session{store: remote, keys: keys}, items[0].ItemID); err != nil {
 			return SetupResult{}, err
 		}
 	}
@@ -976,6 +1067,9 @@ func (s *Service) setup(ctx context.Context, in SetupInput) (SetupResult, error)
 	s.headsMu.Lock()
 	s.heads = map[string]headDigest{}
 	s.headsMu.Unlock()
+	// Before any work: a new device needs the writer's skills, profile and
+	// selection first, and the works that follow are exported under that choice.
+	s.bestEffortLibrary(ctx, func() error { return s.pullLibrary(ctx, session{store: remote, keys: keys}) })
 	return SetupResult{KeyStored: true}, nil
 }
 
@@ -1020,6 +1114,9 @@ type Overview struct {
 	KeyMismatch bool       `json:"key_mismatch"`
 	Account     *Account   `json:"account"`
 	Items       []ItemView `json:"items"`
+	// LibraryWarning is a LibraryWarning* value, when the last library sync left
+	// something the writer should know about.
+	LibraryWarning string `json:"library_warning,omitempty"`
 }
 
 // ItemView is one item. Title and ProjectID are empty until the device has a key
@@ -1035,6 +1132,9 @@ type ItemView struct {
 	// OnThisDevice says the work is in this library. An item that is not can
 	// only be pulled.
 	OnThisDevice bool `json:"on_this_device"`
+	// Deleted says another device deleted the work. Only its restore points are
+	// left to pull.
+	Deleted bool `json:"deleted"`
 }
 
 // Status reads the account. It says nothing to the site before this device is
@@ -1045,8 +1145,8 @@ func (s *Service) Status(ctx context.Context) (Overview, error) {
 }
 
 func (s *Service) status(ctx context.Context) (Overview, error) {
-	out := Overview{Items: []ItemView{}}
-	token, err := s.token()
+	out := Overview{Items: []ItemView{}, LibraryWarning: s.warning()}
+	remote, err := s.remote()
 	if err != nil {
 		return out, nil
 	}
@@ -1054,7 +1154,7 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 	if out.KeyStored, err = s.Settings.VaultKeyExists(); err != nil {
 		return out, reason(rpc.ReasonVaultKeyUnavailable, err)
 	}
-	account, err := s.Client.Account(ctx, token)
+	account, err := remote.Account(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -1062,11 +1162,11 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 	if account.Mode == ModeNone {
 		return out, nil
 	}
-	items, err := s.Client.Items(ctx, token)
+	items, err := remote.Items(ctx)
 	if err != nil {
 		return out, err
 	}
-	links, err := listLinks(ctx, s.db())
+	links, err := listLinks(ctx, s.db(), s.targetID())
 	if err != nil {
 		return out, err
 	}
@@ -1081,6 +1181,9 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 		}
 	}
 	for _, item := range items {
+		if sess.keys != nil && item.ItemID == sess.keys.LibraryItemID() {
+			continue
+		}
 		view := ItemView{ItemID: item.ItemID, HeadRevision: item.HeadRevision, Updated: item.Updated, Bytes: item.Bytes}
 		if link, ok := linked[item.ItemID]; ok {
 			view.ProjectID, view.BaseRevision = link.ProjectID, link.BaseRevision
@@ -1095,7 +1198,7 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 			case err != nil:
 				return out, err
 			default:
-				view.ProjectID, view.Title = digest.projectID, digest.title
+				view.ProjectID, view.Title, view.Deleted = digest.projectID, digest.title, digest.deleted
 			}
 		}
 		if view.ProjectID != "" {

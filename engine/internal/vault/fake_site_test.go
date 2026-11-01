@@ -32,6 +32,7 @@ type fakeSite struct {
 	// failCommitAfterSaving commits and then loses the answer.
 	failPut, failGet      func(id string) int
 	failDelete            int
+	failGetAll            bool
 	failCommitAfterSaving bool
 	retryAfter            string
 }
@@ -64,6 +65,10 @@ func (f *fakeSite) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.requests++
+	if f.failGetAll {
+		fail(w, 503, CodeUnavailable)
+		return
+	}
 	if r.Header.Get("Authorization") != "Bearer "+testToken {
 		fail(w, 401, CodeUnauthorized)
 		return

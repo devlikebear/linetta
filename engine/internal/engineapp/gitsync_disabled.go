@@ -11,7 +11,7 @@ import (
 
 const gitSyncAvailable = false
 
-func setupGitSync(deps syncDeps) dailySyncer {
+func setupGitSync(deps syncDeps) (dailySyncer, targetHooks) {
 	unavailable := func(context.Context, json.RawMessage) (json.RawMessage, error) {
 		return nil, &rpc.MethodError{
 			Code:    rpc.CodeMethodNotFound,
@@ -20,5 +20,5 @@ func setupGitSync(deps syncDeps) dailySyncer {
 	}
 	deps.server.Handle("git_sync.run", unavailable)
 	deps.server.Handle("git_sync.init", unavailable)
-	return noopSyncer{}
+	return noopSyncer{}, targetHooks{}
 }

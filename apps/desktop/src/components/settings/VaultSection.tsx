@@ -63,7 +63,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
     setLoading(true);
     setError(null);
     try {
-      const [next, connection] = await Promise.all([vaultApi.status(), publishApi.connectStatus()]);
+      const [next, connection] = await Promise.all([vaultApi.status("works"), publishApi.connectStatus()]);
       if (gen !== loadRef.current) return;
       setOverview(next);
       setSite(connection.site_url ?? "");
@@ -131,7 +131,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
       setPulled(null);
       setPulling(null);
       try {
-        setPulled(await vaultApi.pull({ item_id: itemId }));
+        setPulled(await vaultApi.pull({ item_id: itemId, target: "works" }));
       } finally {
         setPulling(null);
       }
@@ -338,6 +338,9 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
             {t("settings.vault.readOnly", { date: formatDate(account.retrieve_until, language) })}
           </p>
         )}
+        {overview.library_warning === "profile_refused" && (
+          <p className="sd" role="alert" data-testid="vault-library-warning">{t("settings.vault.profileRefused")}</p>
+        )}
         <div className="vault-usage">
           <p className="sd vault-usage-label">
             <span>{t("settings.vault.usage")}</span>
@@ -354,6 +357,8 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
             <div style={{ width: `${percent}%` }} />
           </div>
         </div>
+        <details className="vault-advanced" data-testid="vault-advanced">
+        <summary>{t("settings.vault.advanced")}</summary>
         <h4>{t("settings.vault.items")}</h4>
         {overview.items.length === 0 ? (
           <p className="sd">{t("settings.vault.empty")}</p>
@@ -365,9 +370,10 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
                 <span className="sd">
                   {formatBytes(item.bytes)} · {formatDate(item.updated, language)}
                   {!item.on_this_device && ` · ${t("settings.vault.notOnDevice")}`}
+                  {item.deleted && ` · ${t("settings.vault.deletedElsewhere")}`}
                 </span>
                 <span className="vault-item-actions">
-                  {!item.on_this_device && item.title && (
+                  {!item.on_this_device && item.title && !item.deleted && (
                     <button
                       type="button"
                       className="btn ghost sm"
@@ -433,6 +439,7 @@ export function VaultSection({ available, onOpenPublish }: VaultSectionProps) {
             {!pulled.files_restored && ` ${t("vault.filesNotRestored")}`}
           </p>
         )}
+        </details>
         <p className="sd">{t("settings.vault.closeNote")}</p>
         <div className="field-actions">
           {siteButton}

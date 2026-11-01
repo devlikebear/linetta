@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -14,13 +15,16 @@ import (
 
 // VaultService is internal/vault's service.
 type VaultService interface {
-	Status(ctx context.Context) (vault.Overview, error)
+	// StatusOf reads a target, or the primary one when target is empty.
+	StatusOf(ctx context.Context, target string) (vault.Overview, error)
 	WorkStatus(ctx context.Context, projectID string) (vault.WorkStatus, error)
 	Setup(ctx context.Context, in vault.SetupInput) (vault.SetupResult, error)
 	Push(ctx context.Context, projectID string) (vault.PushResult, error)
 	Pull(ctx context.Context, in vault.PullInput) (vault.PullResult, error)
 	ResolveConflict(ctx context.Context, in vault.ResolveInput) (vault.ResolveResult, error)
 	DeleteItem(ctx context.Context, itemID string) error
+	Items(ctx context.Context) (vault.ItemsView, error)
+	SetItems(ctx context.Context, omit []string) (vault.ItemsView, error)
 }
 
 func vaultResponse(out any, err error) (json.RawMessage, error) {
@@ -32,8 +36,16 @@ func vaultResponse(out any, err error) (json.RawMessage, error) {
 
 // VaultStatus returns a handler for vault.status.
 func VaultStatus(svc VaultService) rpc.Handler {
-	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
-		return vaultResponse(svc.Status(ctx))
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			Target string `json:"target"`
+		}
+		if len(params) > 0 {
+			if err := json.Unmarshal(params, &in); err != nil {
+				return nil, invalidParams("invalid params")
+			}
+		}
+		return vaultResponse(svc.StatusOf(ctx, in.Target))
 	}
 }
 
@@ -101,6 +113,32 @@ func VaultResolveConflict(svc VaultService) rpc.Handler {
 			return nil, invalidParams("choice must be keep_local, or take_remote with title_suffix")
 		}
 		return vaultResponse(svc.ResolveConflict(ctx, in))
+	}
+}
+
+// VaultItemsGet returns a handler for vault.items_get: what can be carried, how
+// large each category is here, and which are on.
+func VaultItemsGet(svc VaultService) rpc.Handler {
+	return func(ctx context.Context, _ json.RawMessage) (json.RawMessage, error) {
+		return vaultResponse(svc.Items(ctx))
+	}
+}
+
+// VaultItemsSet returns a handler for vault.items_set. omit lists the categories
+// to leave out; what must always travel has no category to name.
+func VaultItemsSet(svc VaultService) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			Omit []string `json:"omit"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || in.Omit == nil {
+			return nil, invalidParams("omit required")
+		}
+		out, err := svc.SetItems(ctx, in.Omit)
+		if errors.Is(err, vault.ErrBadCategory) {
+			return nil, invalidParams(err.Error())
+		}
+		return vaultResponse(out, err)
 	}
 }
 

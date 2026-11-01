@@ -1960,6 +1960,8 @@ export interface VaultItemView {
   updated: string;
   bytes: number;
   on_this_device: boolean;
+  /** Another device deleted the work; only its restore points are left. */
+  deleted?: boolean;
 }
 
 export interface VaultOverview {
@@ -1968,6 +1970,63 @@ export interface VaultOverview {
   key_mismatch: boolean;
   account: VaultAccount | null;
   items: VaultItemView[];
+  /** Something the last library sync left the writer to know about. */
+  library_warning?: "profile_refused";
+}
+
+export interface SyncWork {
+  project_id: string;
+  item_id?: string;
+  title: string;
+  state: VaultWorkState | "deleted" | "removed";
+  /** A reason code when this one work could not be moved. */
+  problem?: string;
+}
+
+export interface SyncStatus {
+  enabled: boolean;
+  state: "off" | "idle" | "running" | "waiting" | "stopped";
+  /** A reason code when stopped or waiting. */
+  reason?: string;
+  last_success_at: number;
+  works: SyncWork[];
+  /** Works moved to the archive because another device deleted them. */
+  archived: string[];
+}
+
+/** One place the library can be kept. */
+export interface SyncTargetView {
+  id: string;
+  configured: boolean;
+  /** False where this build can only write to it: a folder under MAS. */
+  can_primary: boolean;
+  bytes: number;
+  last_success_at: number;
+  reason?: string;
+}
+
+export interface SyncTargets {
+  primary: string;
+  mirrors: string[];
+  key_stored: boolean;
+  targets: SyncTargetView[];
+}
+
+export interface SyncPreview {
+  works: number;
+  bytes: number;
+}
+
+/** One line of what travels. The required line has an empty id. */
+export interface VaultItemCategory {
+  id: string;
+  bytes: number;
+  enabled: boolean;
+  required: boolean;
+}
+
+export interface VaultItems {
+  categories: VaultItemCategory[];
 }
 
 export interface VaultRestorePoint {

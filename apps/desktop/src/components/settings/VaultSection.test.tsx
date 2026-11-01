@@ -84,6 +84,12 @@ describe("VaultSection", () => {
     rpc.setup.mockResolvedValue({ key_stored: true });
   });
 
+  it("says when another device's profile was refused", async () => {
+    rpc.status.mockResolvedValue(overview({ library_warning: "profile_refused" }));
+    renderSection();
+    expect(await screen.findByTestId("vault-library-warning")).toHaveTextContent("settings.vault.profileRefused");
+  });
+
   it("renders nothing on a build without the vault, and asks nothing", () => {
     const { container } = render(<VaultSection available={false} onOpenPublish={() => {}} />);
     expect(container).toBeEmptyDOMElement();
@@ -282,7 +288,7 @@ describe("VaultSection", () => {
     rpc.pull.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     renderSection();
     await userEvent.click(await screen.findByTestId("vault-pull-i1"));
-    expect(rpc.pull).toHaveBeenCalledWith({ item_id: "i1" });
+    expect(rpc.pull).toHaveBeenCalledWith({ item_id: "i1", target: "works" });
 
     act(() => rpc.progress.emit({ project_id: "", item_id: "i1", phase: "download", done: 2, total: 8 }));
     expect(await screen.findByTestId("vault-pull-progress")).toHaveTextContent("vault.progress.download:2,8");

@@ -59,6 +59,9 @@ vi.mock("../lib/rpc", () => ({
 // and duplicating its rpc/codex mock surface here would only make this file
 // fragile to changes that have nothing to do with the wiring. A stub that
 // renders its own name makes a category/component swap fail immediately.
+vi.mock("../components/settings/SyncOverview", () => ({
+  SyncOverview: () => <div data-testid="sync-overview-stub">sync-overview</div>,
+}));
 vi.mock("../components/settings/VaultSection", () => ({
   VaultSection: () => <div data-testid="vault-section-stub">vault-section</div>,
 }));
@@ -474,8 +477,8 @@ describe("Settings", () => {
     const folder = screen.getByRole("heading", { name: "폴더 동기화" });
     expect(works.compareDocumentPosition(git) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(git.compareDocumentPosition(folder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByTestId("sync-works-note")).toHaveTextContent("기기 사이를 오갑니다");
-    expect(screen.getAllByText(/내보내기만 합니다/)).toHaveLength(2);
+    expect(screen.getByTestId("sync-works-note")).toHaveTextContent("운영자의 허가가 필요합니다");
+    expect(screen.getAllByText(/읽기 위한 Markdown을 내보냅니다/)).toHaveLength(2);
   });
 
   it("keeps GitHub and folder when this build has no Linetta Works", async () => {

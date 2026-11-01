@@ -1,6 +1,6 @@
 # Linetta 개인정보 처리방침 / Privacy Policy
 
-_최종 업데이트 / Last updated / 最終更新: 2026-10-31_
+_최종 업데이트 / Last updated / 最終更新: 2026-11-01_
 
 ---
 
@@ -75,17 +75,19 @@ Linetta의 내장 에이전트는 사용자가 프로바이더를 직접 연결�
 GitHub 동기화는 `설정 → GitHub 동기화`에서 사용자가 git 폴더를 지정하기 전까지 꺼져 있습니다. 지정하고 나면 스스로 동작해, 현재 열려 있는 작품만이 아니라 보관하지 않은 **모든** 작품을 마크다운 파일로 그 폴더에 내보내 커밋하고 푸시합니다. 실행 시점은 앱을 켤 때마다, 그리고 앱을 켜 둔 채로 하루가 지날 때마다이며, 첫 내보내기 전에 기다리는 시간은 없습니다. macOS App Store 빌드에는 이 기능이 없고, 그 밖의 모든 데스크톱 빌드에 포함됩니다.
 
 - **어디로 가나.** 그 git 저장소에 설정된 원격으로만 가고, 그 밖의 어디로도 가지 않습니다. 즉 사용자의 git 호스트에 있는 사용자의 저장소이며, 그 호스트의 개인정보 처리방침과 약관을 따릅니다. 선택한 저장소가 비공개인지 확인하시기 바랍니다. 원격이 없는 저장소라면 로컬에 커밋만 되고 아무 데도 푸시되지 않습니다.
-- **무엇이 가나.** 서재에 있는 작품 중 보관하지 않은 모든 작품이 원고·아웃라인·설정 자료를 포함해 마크다운으로 내보내집니다.
+- **무엇이 가나.** 서재에 있는 작품 중 아카이브하지 않은 모든 작품이 원고·아웃라인·설정 자료를 포함해 마크다운으로 내보내집니다.
 - **인증**은 SSH 키나 자격 증명 도우미 같은 기존 시스템 git 설정을 그대로 사용합니다. Linetta는 git 자격 증명을 묻지도, 저장하지도 않습니다.
 - Linetta가 안내하는 설정이 그 파일을 거기에 두기 때문에, 그 폴더 맨 위에 있는 `.mcp.json`이라는 이름의 파일 하나는 의도적으로 스테이징에서 제외합니다. 제외 대상은 그 파일 하나뿐이어서, `claude_desktop_config.json`이나 하위 폴더의 `.mcp.json` 같은 다른 MCP 클라이언트 설정 파일은 여느 파일과 똑같이 스테이징됩니다. 스테이징하지 않는 것이 원격에 올라가지 않는다는 뜻도 아니어서, 사용자가 이미 커밋해 둔 파일은 다른 것들과 함께 푸시됩니다. Linetta가 제시하는 설정 스니펫에는 토큰이 담기지 않으므로, 이는 직접 작성한 설정 파일에 해당하는 이야기입니다.
+- **동기화 대상으로 고르면.** `설정 → 동기화`에서 이곳을 기본 동기화나 미러로 고르면, 3.7항과 같은 항목이 이 기기에서 암호화되어 이 폴더의 `.linetta/`에도 저장됩니다. 아카이브한 작품도 포함되며, 제목과 원고는 암호문 안에 있고 복구 키는 여기에 저장되지 않습니다. Markdown 내보내기는 평문 그대로 함께 남습니다. Linetta Works 계정이나 허가는 필요 없습니다.
 - 개발자는 이 데이터를 수신·중계·저장하지 않습니다.
 
 #### 3.4 폴더 동기화
 폴더 동기화는 `설정 → 폴더 동기화`에서 사용자가 켜고 대상 폴더를 지정하기 전까지 꺼져 있습니다. 지정하고 나면 스스로 동작해, 앱을 켤 때마다 그리고 앱을 켜 둔 채로 하루가 지날 때마다 보관하지 않은 모든 작품을 마크다운 파일로 내보내 그 폴더에 복사합니다. 그 폴더는 클라우드 드라이브 폴더인 경우가 많고 앱이 보여주는 예시부터 Dropbox 폴더이며, 그렇다면 서재 전체가 그 서비스로 업로드됩니다. macOS App Store 빌드를 포함한 모든 빌드에 이 기능이 있습니다.
 
 - **어디로 가나.** 사용자가 지정한 폴더로만 가고, 그 밖의 어디로도 가지 않습니다. Linetta는 파일을 쓸 뿐 업로드하지 않습니다. 그 폴더가 클라우드 저장소 서비스의 것이라면 그다음은 그 서비스가 자기 서버로 복사하며, 그 회사의 개인정보 처리방침과 약관을 따릅니다. 평범한 로컬 폴더라면 아무것도 기기를 떠나지 않습니다.
-- **무엇이 가나.** 서재에 있는 작품 중 보관하지 않은 모든 작품이 원고·아웃라인·설정 자료를 포함해 마크다운으로 내보내집니다. GitHub 동기화가 쓰는 것과 같은 내용입니다.
+- **무엇이 가나.** 서재에 있는 작품 중 아카이브하지 않은 모든 작품이 원고·아웃라인·설정 자료를 포함해 마크다운으로 내보내집니다. GitHub 동기화가 쓰는 것과 같은 내용입니다.
 - **자격 증명은 필요 없습니다.** Linetta가 요구하는 것은 폴더뿐입니다. 거기 놓인 것을 누가 읽을 수 있는지는 사용자가 고른 폴더와, 그 폴더를 동기화하는 서비스가 있다면 그 서비스가 정합니다.
+- **동기화 대상으로 고르면.** `설정 → 동기화`에서 이곳을 기본 동기화나 미러로 고르면, 3.7항과 같은 항목이 이 기기에서 암호화되어 이 폴더의 `.linetta/`에도 저장됩니다. 아카이브한 작품도 포함되며, 제목과 원고는 암호문 안에 있고 복구 키는 여기에 저장되지 않습니다. Markdown 내보내기는 평문 그대로 함께 남습니다. Linetta Works 계정이나 허가는 필요 없습니다.
 - 개발자는 이 데이터를 수신·중계·저장하지 않습니다.
 
 #### 3.5 Linetta Works 게시
@@ -107,10 +109,10 @@ GitHub 동기화는 `설정 → GitHub 동기화`에서 사용자가 git 폴더�
 - 개발자는 이 데이터를 수신·중계·저장하지 않습니다. 삽화를 게시한 경우는 3.5항을 따릅니다.
 
 #### 3.7 Linetta Works 동기화
-Linetta Works 동기화는 운영자가 허가한 Linetta Works 계정만 쓸 수 있습니다. 사용자가 사이트에서 동의하고 요청해 허가받은 뒤, `설정 → 동기화 → Linetta Works`에서 전송 안내에 동의하고 복구 키를 만들거나 입력하기 전까지 앱은 작품을 보내지 않습니다. 설정한 뒤에도 스스로 올리거나 받지 않습니다. 사용자가 작품의 동기화 창에서 "올리기"나 "받기"를 누를 때만 작품을 주고받습니다. 서재나 작품을 열 때는 새 버전이 있는지 서버에 묻기만 합니다.
+Linetta Works 동기화는 운영자가 허가한 Linetta Works 계정만 쓸 수 있습니다. 사용자가 사이트에서 동의하고 요청해 허가받은 뒤, `설정 → 동기화 → Linetta Works`에서 전송 안내에 동의하고 복구 키를 만들거나 입력하기 전까지 앱은 작품을 보내지 않습니다. 설정한 뒤에도 자동 동기화를 켜기 전에는 스스로 올리거나 받지 않고, 사용자가 작품의 동기화 창에서 "올리기"나 "받기"를 누를 때만 작품을 주고받습니다. 서재나 작품을 열 때는 새 버전이 있는지만 서버에 묻습니다. 자동 동기화는 기본으로 꺼져 있습니다. 대상 작품 수와 크기를 확인하고 켜면, 고친 작품은 편집이 멈춘 뒤 자동으로 올라가고 다른 기기의 변경은 자동으로 들어오며, 앱이 백그라운드에 있는 동안에도 몇 분마다 서버에 새 버전을 묻습니다. 이 기기의 작품을 지우면 지웠다는 표시를 보내고, 다른 기기는 그 작품을 아카이브로 옮깁니다. `설정 → 동기화 → Linetta Works`에서 언제든 끌 수 있습니다.
 
 - **어디로 가나.** 개발자가 운영하는 Linetta Works 서버를 거쳐 저장소(Cloudflare R2)에 저장됩니다. 공개되지 않고, 수위 검사를 위해 Anthropic으로 보내지 않습니다.
-- **무엇이 가나.** 올린 작품의 제목과 원고, 아웃라인, 세계관과 스토리 데이터, 버전 스냅샷, 그림, 작품별 스킬과 메모리가 이 기기에서 암호화되어 갑니다. 서버에는 암호문과 그 크기, 시각, 임의로 만든 항목·조각 식별값만 남습니다. 개발자는 내용과 제목을 읽을 수 없습니다. 활동 기록, 전역 작가 프로필과 전역 스킬, 프로바이더 설정과 API 키는 가지 않습니다.
+- **무엇이 가나.** 올린 작품의 제목과 원고, 아웃라인, 세계관과 스토리 데이터, 버전 스냅샷, 그림, 작품별 스킬과 메모리, 그리고 전역 스킬과 작가 프로필이 이 기기에서 암호화되어 갑니다. `설정 → 동기화 → Linetta Works`의 옮길 항목에서 삽화, 버전 이력, 작품 스킬과 메모리, 전역 스킬, 작가 프로필을 끌 수 있고, 이 선택은 계정의 모든 기기에 적용됩니다. 서버에는 암호문과 그 크기, 시각, 임의로 만든 항목·조각 식별값만 남습니다. 개발자는 내용과 제목을 읽을 수 없습니다. 활동 기록, 에이전트 대화, 프로바이더 설정과 API 키는 가지 않습니다.
 - **복구 키.** 암호화에 쓰는 복구 키는 사이트로 보내지 않습니다. 운영체제의 보안 저장소에 저장하고, 보안 저장소가 없는 Linux에서는 `<앱 데이터>/vault-key` 파일에 소유자만 읽을 수 있는 권한(0600)으로 저장합니다. 보안 저장소가 잠겨 있으면 파일로 넘어가지 않습니다. 사이트 연결을 해제해도 지우지 않습니다. 복구 키를 잃으면 개발자도 작품을 되살릴 수 없으므로, 사용자가 이 기기 밖에 직접 보관해야 합니다.
 - **받을 때.** 받기 전에 라이브러리 백업을 `backups/<날짜>/`에 만듭니다. 내려받는 동안 암호문을 `<앱 데이터>/vault-incoming/`에 두었다가 끝나면 지웁니다.
 - **해제와 삭제.** `설정 → 동기화 → Linetta Works`에서 작품을 하나씩 서버에서 지울 수 있고, 사이트의 동기화 화면에서 해지하면 서버의 동기화 데이터가 모두 지워집니다. 사이트 연결을 해제하는 것만으로는 서버의 데이터가 지워지지 않습니다. 서버에 얼마나 남는지와 동의 기록은 Linetta Works의 개인정보처리방침을 따릅니다.
@@ -204,6 +206,7 @@ GitHub Sync is off until you choose a git folder for it under `Settings → GitH
 - **What goes.** Every work in your library that you have not archived, exported as Markdown, including the manuscript, the outline, and your story notes.
 - **Authentication** uses your existing system git setup, such as SSH keys or a credential helper. Linetta neither asks for nor stores a git credential.
 - A file named exactly `.mcp.json` at the top of that folder is deliberately left unstaged, because the setup Linetta recommends puts one there. The exclusion is only that file: any other MCP client config, such as `claude_desktop_config.json` or an `.mcp.json` inside a subfolder, is staged like anything else. Leaving a file unstaged is also not the same as keeping it off the remote — a file you have already committed yourself is pushed with everything else. The snippet Linetta gives you carries no token, so this matters for a config you wrote by hand.
+- **If you choose it as a sync target.** Under `Settings → Sync`, choosing this as the primary target or a mirror also stores the same items as Section 3.7 in `.linetta/` in this folder, sealed on this device. Archived works are included, titles and manuscripts are inside the ciphertext, and the recovery key is not stored here. The Markdown export stays beside it in plain text. No Linetta Works account or approval is needed.
 - The developer does not receive, relay, or store this data.
 
 #### 3.4 Folder Sync
@@ -212,6 +215,7 @@ Folder Sync is off until you turn it on and choose a destination folder under `S
 - **Where it goes.** Into the folder you chose, and nowhere else. Linetta writes the files; it does not upload them. If that folder belongs to a cloud storage service, that service then copies them to its own servers, under its privacy policy and terms. If it is an ordinary local folder, nothing leaves this device.
 - **What goes.** Every work in your library that you have not archived, exported as Markdown, including the manuscript, the outline, and your story notes. It is the same export GitHub Sync writes.
 - **No credential is involved.** Linetta asks for nothing but the folder. Who can read what lands there is decided by the folder you picked and by the service, if any, that syncs it.
+- **If you choose it as a sync target.** Under `Settings → Sync`, choosing this as the primary target or a mirror also stores the same items as Section 3.7 in `.linetta/` in this folder, sealed on this device. Archived works are included, titles and manuscripts are inside the ciphertext, and the recovery key is not stored here. The Markdown export stays beside it in plain text. No Linetta Works account or approval is needed.
 - The developer does not receive, relay, or store this data.
 
 #### 3.5 Publishing to Linetta Works
@@ -233,10 +237,10 @@ Illustration generation is off until you choose ChatGPT or Gemini under `Setting
 - The developer does not receive, relay, or store this data. Section 3.5 applies to an illustration you publish.
 
 #### 3.7 Linetta Works Sync
-Linetta Works sync is available only to Linetta Works accounts the operator has approved. The App sends no work until you have agreed and asked on the site, been approved, agreed to what is sent under `Settings → Sync → Linetta Works`, and made or entered a recovery key. After that it still uploads and downloads nothing by itself: works move only when you press Upload or Download in a work's sync window. Opening the library or a work only asks the server whether a newer version exists.
+Linetta Works sync is available only to Linetta Works accounts the operator has approved. The App sends no work until you have agreed and asked on the site, been approved, agreed to what is sent under `Settings → Sync → Linetta Works`, and made or entered a recovery key. After that it uploads and downloads nothing by itself until you turn on automatic sync: works move only when you press Upload or Download in a work's sync window, and opening the library or a work only asks the server whether a newer version exists. Automatic sync is off by default. Once you have seen how many works and how much data it covers and turned it on, works you change go up after you stop editing, changes from your other devices come in, and the App asks the server for new versions every few minutes, including while it runs in the background. Deleting a work here sends a marker saying so, and your other devices move that work to the archive. You can turn it off at any time under `Settings → Sync → Linetta Works`.
 
 - **Where it goes.** Through the Linetta Works server the developer operates, into its storage (Cloudflare R2). It is not public and is not sent to Anthropic for content review.
-- **What goes.** The title and manuscript of a work you upload, its outline, story data, version snapshots, pictures, and per-work skills and memory, sealed on this device. The server keeps only ciphertext, its size and times, and randomly generated item and blob identifiers. The developer cannot read the content or the title. Activity logs, your global writer profile and global skills, and provider settings and API keys are not sent.
+- **What goes.** The title and manuscript of a work you upload, its outline, story data, version snapshots, pictures, and per-work skills and memory, along with your global skills and writer profile, sealed on this device. Under `Settings → Sync → Linetta Works` you can turn off pictures, version history, per-work skills and memory, global skills, and the writer profile, and the choice applies to every device on the account. The server keeps only ciphertext, its size and times, and randomly generated item and blob identifiers. The developer cannot read the content or the title. Activity logs, agent conversations, and provider settings and API keys are not sent.
 - **Recovery key.** The recovery key behind the encryption is never sent to the site. It is kept in your operating system's secure storage; Linux has none, so there it is kept in `<app data>/vault-key`, readable only by its owner (0600). A locked secure store does not fall back to a file. Disconnecting from the site does not remove it. If you lose the recovery key, not even the developer can recover your works, so keep your own copy off this device.
 - **When downloading.** The App backs up your library to `backups/<date>/` first. Ciphertext sits in `<app data>/vault-incoming/` during a download and is removed when it finishes.
 - **Removal and deletion.** Under `Settings → Sync → Linetta Works` you can delete works from the server one at a time, and closing sync on the site's sync page deletes all your sync data there. Disconnecting from the site does not delete anything on the server. How long the server keeps data, and consent records, are covered by the Linetta Works privacy policy.
@@ -329,6 +333,7 @@ GitHub 同期は、`設定 → GitHub 同期` でユーザーが git フォル�
 - **何が送られるか。** ライブラリにある作品のうちアーカイブしていないすべての作品が、原稿・アウトライン・設定資料を含めて Markdown として書き出されます。
 - **認証**は、SSH キーや資格情報ヘルパーなど既存のシステムの git 設定をそのまま使用します。Linetta は git の認証情報を要求も保存もしません。
 - Linetta が案内する設定がそのファイルをそこに置くため、そのフォルダの直下にある `.mcp.json` という名前のファイル一つは意図的にステージングから除外します。除外するのはそのファイルだけで、`claude_desktop_config.json` やサブフォルダの `.mcp.json` など他の MCP クライアント設定ファイルは、他のファイルと同じようにステージングされます。ステージングしないことは、リモートに送られないことと同じでもなく、ユーザーがすでにコミットしたファイルは他のものと一緒にプッシュされます。Linetta が提示する設定スニペットにトークンは含まれないため、これは自分で書いた設定ファイルに当てはまる話です。
+- **同期先に選んだ場合。** `設定 → 同期` でここを基本の同期先またはミラーに選ぶと、3.7 項と同じ項目がこの端末で暗号化され、このフォルダの `.linetta/` にも保存されます。アーカイブした作品も含まれ、タイトルと原稿は暗号文の中にあり、復旧キーはここに保存されません。Markdown の書き出しは平文のまま隣に残ります。Linetta Works のアカウントや許可は必要ありません。
 - 開発者はこのデータを受信・中継・保存しません。
 
 #### 3.4 フォルダ同期
@@ -337,6 +342,7 @@ GitHub 同期は、`設定 → GitHub 同期` でユーザーが git フォル�
 - **どこへ送られるか。** ユーザーが指定したフォルダにのみ送られ、それ以外のどこにも送られません。Linetta はファイルを書き出すだけで、アップロードはしません。そのフォルダがクラウドストレージサービスのものであれば、その後はそのサービスが自社のサーバーへコピーし、その企業のプライバシーポリシーおよび利用規約に従います。通常のローカルフォルダであれば、何も端末を離れません。
 - **何が送られるか。** ライブラリにある作品のうちアーカイブしていないすべての作品が、原稿・アウトライン・設定資料を含めて Markdown として書き出されます。GitHub 同期が書き出すものと同じ内容です。
 - **認証情報は不要です。** Linetta が求めるのはフォルダだけです。そこに置かれたものを誰が読めるかは、ユーザーが選んだフォルダと、それを同期するサービスがあればそのサービスによって決まります。
+- **同期先に選んだ場合。** `設定 → 同期` でここを基本の同期先またはミラーに選ぶと、3.7 項と同じ項目がこの端末で暗号化され、このフォルダの `.linetta/` にも保存されます。アーカイブした作品も含まれ、タイトルと原稿は暗号文の中にあり、復旧キーはここに保存されません。Markdown の書き出しは平文のまま隣に残ります。Linetta Works のアカウントや許可は必要ありません。
 - 開発者はこのデータを受信・中継・保存しません。
 
 #### 3.5 Linetta Works への公開
@@ -358,10 +364,10 @@ GitHub 同期は、`設定 → GitHub 同期` でユーザーが git フォル�
 - 開発者はこのデータを受信・中継・保存しません。公開した挿絵には第3.5項が適用されます。
 
 #### 3.7 Linetta Works 同期
-Linetta Works 同期は、運営者が許可した Linetta Works アカウントだけが使えます。ユーザーがサイトで同意して申請し、許可を受けた後、`設定 → 同期 → Linetta Works` で送信内容に同意し、復旧キーを作成または入力するまで、本アプリは作品を送信しません。設定した後も自動ではアップロードもダウンロードもしません。作品の同期ウィンドウでユーザーが「アップロード」または「ダウンロード」を押したときにのみ作品をやり取りします。ライブラリや作品を開くときは、新しいバージョンがあるかをサーバーに問い合わせるだけです。
+Linetta Works 同期は、運営者が許可した Linetta Works アカウントだけが使えます。ユーザーがサイトで同意して申請し、許可を受けた後、`設定 → 同期 → Linetta Works` で送信内容に同意し、復旧キーを作成または入力するまで、本アプリは作品を送信しません。設定した後も、自動同期をオンにするまでは自動でアップロードもダウンロードもせず、作品の同期ウィンドウでユーザーが「アップロード」または「ダウンロード」を押したときにのみ作品をやり取りします。ライブラリや作品を開くときは、新しいバージョンがあるかをサーバーに確認するだけです。自動同期は既定でオフです。対象の作品数とサイズを確認してオンにすると、変更した作品は編集が止まった後に自動でアップロードされ、別の端末の変更が自動で届き、バックグラウンドで動作している間も数分ごとに新しいバージョンをサーバーに確認します。この端末で作品を削除すると削除の印を送信し、別の端末はその作品をアーカイブに移します。`設定 → 同期 → Linetta Works` でいつでもオフにできます。
 
 - **送信先。** 開発者が運営する Linetta Works のサーバーを経由して、そのストレージ（Cloudflare R2）に保存されます。公開されず、内容審査のために Anthropic へ送信されることもありません。
-- **送信されるもの。** アップロードした作品のタイトルと原稿、アウトライン、世界観とストーリーのデータ、バージョンスナップショット、画像、作品ごとのスキルとメモリが、この端末で暗号化されて送信されます。サーバーに残るのは暗号文とそのサイズ、時刻、ランダムに生成した項目・断片の識別子だけです。開発者は内容もタイトルも読めません。活動ログ、全体の作家プロフィールと全体のスキル、プロバイダー設定と API キーは送信されません。
+- **送信されるもの。** アップロードした作品のタイトルと原稿、アウトライン、世界観とストーリーのデータ、バージョンスナップショット、画像、作品ごとのスキルとメモリ、そして全体のスキルと作家プロフィールが、この端末で暗号化されて送信されます。`設定 → 同期 → Linetta Works` の同期する項目で、挿絵、バージョン履歴、作品のスキルとメモリ、全体のスキル、作家プロフィールをオフにでき、この選択はアカウントのすべての端末に適用されます。サーバーに残るのは暗号文とそのサイズ、時刻、ランダムに生成した項目・断片の識別子だけです。開発者は内容もタイトルも読めません。活動ログ、エージェントの会話、プロバイダー設定と API キーは送信されません。
 - **復旧キー。** 暗号化に使う復旧キーはサイトへ送信しません。OS の安全な保管場所に保存し、それがない Linux では `<アプリデータ>/vault-key` ファイルに所有者だけが読める権限（0600）で保存します。安全な保管場所がロックされていてもファイルには切り替えません。サイトとの接続を解除しても削除しません。復旧キーを紛失すると開発者でも作品を復元できないため、ユーザー自身がこの端末の外に保管してください。
 - **ダウンロード時。** ダウンロードの前にライブラリのバックアップを `backups/<日付>/` に作成します。ダウンロード中は暗号文を `<アプリデータ>/vault-incoming/` に置き、完了すると削除します。
 - **解除と削除。** `設定 → 同期 → Linetta Works` で作品を一つずつサーバーから削除でき、サイトの同期画面で解約するとサーバーの同期データがすべて削除されます。サイトとの接続を解除するだけではサーバーのデータは削除されません。サーバーでの保管期間と同意記録については Linetta Works のプライバシーポリシーに従います。

@@ -44,6 +44,9 @@ const (
 	CodeTooLarge           = "too_large"
 	CodeNotFound           = "not_found"
 	CodeRateLimited        = "rate_limited"
+	// CodeBlobPending is a revision whose blobs have not reached this device yet:
+	// a folder synced by another app can deliver them in any order.
+	CodeBlobPending = "blob_pending"
 )
 
 // Modes of an account (GET status).
@@ -102,6 +105,9 @@ type RemoteItem struct {
 	HeadRevision int    `json:"head_revision"`
 	Updated      string `json:"updated"`
 	Bytes        int64  `json:"bytes"`
+	// Mark names the head where a number alone cannot (see headMoved). Empty on
+	// Linetta Works, whose numbers are unique.
+	Mark string `json:"-"`
 }
 
 // Revision is one restore point.

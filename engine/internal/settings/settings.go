@@ -106,34 +106,41 @@ type Config struct {
 	Language string `json:"language"`
 	// The built-in agent's provider (#90). Provider is the active id; Providers
 	// holds each id's model, base URL and consent. Keys live in the SecretStore.
-	Provider                    string                    `json:"provider"`
-	Providers                   map[string]ProviderConfig `json:"providers,omitempty"`
-	TypewriterDefault           bool                      `json:"typewriter_default"`
-	FocusDefault                bool                      `json:"focus_default"`
-	Theme                       string                    `json:"theme"`
-	Palette                     string                    `json:"palette"`
-	EditorFontSize              int                       `json:"editor_font_size"`
-	EditorLineHeight            float64                   `json:"editor_line_height"`
-	CopyProfile                 string                    `json:"copy_profile"`
-	BackupDir                   string                    `json:"backup_dir,omitempty"`
-	GitSyncDir                  string                    `json:"git_sync_dir"`
-	GitSyncCommitTemplate       string                    `json:"git_sync_commit_template"`
-	FolderSyncDir               string                    `json:"folder_sync_dir"`
-	FolderSyncEnabled           bool                      `json:"folder_sync_enabled"`
-	SafetyChecklistDismissed    bool                      `json:"safety_checklist_dismissed"`
-	OnboardingTourEnabled       bool                      `json:"onboarding_tour_enabled"`
-	OnboardingTourSeenVersion   string                    `json:"onboarding_tour_seen_version"`
-	AIDataSharingConsentVersion int                       `json:"ai_data_sharing_consent_version"`
-	AIDataSharingConsentedAt    int64                     `json:"ai_data_sharing_consented_at"`
-	WebSearchProvider           string                    `json:"web_search_provider"`
-	WebSearchAPIKey             string                    `json:"web_search_api_key,omitempty"`     // write-only in settings.set; redacted from settings.get and disk
-	WebSearchAPIKeySet          bool                      `json:"web_search_api_key_set,omitempty"` // read-only presence flag for settings.get
-	MCPMode                     string                    `json:"mcp_mode"`                         // off | read_only | full; off means no listener binds
-	MCPPort                     int                       `json:"mcp_port"`                         // fixed so saved client configs survive restarts
-	MCPProjectID                string                    `json:"mcp_project_id"`                   // empty means every work is reachable
-	MCPConsentVersion           int                       `json:"mcp_consent_version"`
-	MCPConsentedAt              int64                     `json:"mcp_consented_at"`
-	MCPTokenSet                 bool                      `json:"mcp_token_set,omitempty"` // read-only presence flag for settings.get
+	Provider              string                    `json:"provider"`
+	Providers             map[string]ProviderConfig `json:"providers,omitempty"`
+	TypewriterDefault     bool                      `json:"typewriter_default"`
+	FocusDefault          bool                      `json:"focus_default"`
+	Theme                 string                    `json:"theme"`
+	Palette               string                    `json:"palette"`
+	EditorFontSize        int                       `json:"editor_font_size"`
+	EditorLineHeight      float64                   `json:"editor_line_height"`
+	CopyProfile           string                    `json:"copy_profile"`
+	BackupDir             string                    `json:"backup_dir,omitempty"`
+	GitSyncDir            string                    `json:"git_sync_dir"`
+	GitSyncCommitTemplate string                    `json:"git_sync_commit_template"`
+	FolderSyncDir         string                    `json:"folder_sync_dir"`
+	FolderSyncEnabled     bool                      `json:"folder_sync_enabled"`
+	// SyncAutoEnabled turns on automatic sync on this device. It stays out of the
+	// library item: each device agrees to send on its own.
+	SyncAutoEnabled bool `json:"sync_auto_enabled"`
+	// SyncPrimaryTarget is the one two-way target, one of works, git or folder.
+	// Empty is works. SyncMirrors only ever receive.
+	SyncPrimaryTarget           string   `json:"sync_primary_target"`
+	SyncMirrors                 []string `json:"sync_mirrors"`
+	SafetyChecklistDismissed    bool     `json:"safety_checklist_dismissed"`
+	OnboardingTourEnabled       bool     `json:"onboarding_tour_enabled"`
+	OnboardingTourSeenVersion   string   `json:"onboarding_tour_seen_version"`
+	AIDataSharingConsentVersion int      `json:"ai_data_sharing_consent_version"`
+	AIDataSharingConsentedAt    int64    `json:"ai_data_sharing_consented_at"`
+	WebSearchProvider           string   `json:"web_search_provider"`
+	WebSearchAPIKey             string   `json:"web_search_api_key,omitempty"`     // write-only in settings.set; redacted from settings.get and disk
+	WebSearchAPIKeySet          bool     `json:"web_search_api_key_set,omitempty"` // read-only presence flag for settings.get
+	MCPMode                     string   `json:"mcp_mode"`                         // off | read_only | full; off means no listener binds
+	MCPPort                     int      `json:"mcp_port"`                         // fixed so saved client configs survive restarts
+	MCPProjectID                string   `json:"mcp_project_id"`                   // empty means every work is reachable
+	MCPConsentVersion           int      `json:"mcp_consent_version"`
+	MCPConsentedAt              int64    `json:"mcp_consented_at"`
+	MCPTokenSet                 bool     `json:"mcp_token_set,omitempty"` // read-only presence flag for settings.get
 	// PublishAccount is the Linetta Works account this device is connected
 	// to, nil when it is not. Written only by the publish connect flow (see
 	// publish.go); settings.set has no patch field for it.
@@ -350,6 +357,9 @@ type Patch struct {
 	GitSyncCommitTemplate     *string                  `json:"git_sync_commit_template,omitempty"`
 	FolderSyncDir             *string                  `json:"folder_sync_dir,omitempty"`
 	FolderSyncEnabled         *bool                    `json:"folder_sync_enabled,omitempty"`
+	SyncAutoEnabled           *bool                    `json:"sync_auto_enabled,omitempty"`
+	SyncPrimaryTarget         *string                  `json:"sync_primary_target,omitempty"`
+	SyncMirrors               *[]string                `json:"sync_mirrors,omitempty"`
 	SafetyChecklistDismissed  *bool                    `json:"safety_checklist_dismissed,omitempty"`
 	OnboardingTourEnabled     *bool                    `json:"onboarding_tour_enabled,omitempty"`
 	OnboardingTourSeenVersion *string                  `json:"onboarding_tour_seen_version,omitempty"`
@@ -510,6 +520,9 @@ func (s *Store) load() error {
 	s.cfg.GitSyncCommitTemplate = disk.GitSyncCommitTemplate
 	s.cfg.FolderSyncDir = disk.FolderSyncDir
 	s.cfg.FolderSyncEnabled = disk.FolderSyncEnabled
+	s.cfg.SyncAutoEnabled = disk.SyncAutoEnabled
+	s.cfg.SyncPrimaryTarget = disk.SyncPrimaryTarget
+	s.cfg.SyncMirrors = disk.SyncMirrors
 	s.cfg.SafetyChecklistDismissed = disk.SafetyChecklistDismissed
 	if _, ok := raw["onboarding_tour_enabled"]; ok {
 		s.cfg.OnboardingTourEnabled = disk.OnboardingTourEnabled
@@ -651,6 +664,24 @@ func (s *Store) Language() string {
 // self-improvement pass after a working turn. Read per turn like Language,
 // not captured at start-up: switching it off in Settings has to take effect
 // on the writer's very next message, not after a restart.
+// SyncTargets reports the two-way target and the mirrors.
+func (s *Store) SyncTargets() (primary string, mirrors []string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	primary = s.cfg.SyncPrimaryTarget
+	if primary == "" {
+		primary = "works"
+	}
+	return primary, slices.Clone(s.cfg.SyncMirrors)
+}
+
+// SyncAutoEnabled reports whether automatic sync is on for this device.
+func (s *Store) SyncAutoEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.SyncAutoEnabled
+}
+
 func (s *Store) AgentSelfReviewEnabled() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -876,6 +907,15 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if p.FolderSyncEnabled != nil {
 		next.FolderSyncEnabled = *p.FolderSyncEnabled
 	}
+	if p.SyncAutoEnabled != nil {
+		next.SyncAutoEnabled = *p.SyncAutoEnabled
+	}
+	if p.SyncPrimaryTarget != nil {
+		next.SyncPrimaryTarget = *p.SyncPrimaryTarget
+	}
+	if p.SyncMirrors != nil {
+		next.SyncMirrors = *p.SyncMirrors
+	}
 	if p.SafetyChecklistDismissed != nil {
 		next.SafetyChecklistDismissed = *p.SafetyChecklistDismissed
 	}
@@ -1063,6 +1103,9 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		GitSyncCommitTemplate:       next.GitSyncCommitTemplate,
 		FolderSyncDir:               next.FolderSyncDir,
 		FolderSyncEnabled:           next.FolderSyncEnabled,
+		SyncAutoEnabled:             next.SyncAutoEnabled,
+		SyncPrimaryTarget:           next.SyncPrimaryTarget,
+		SyncMirrors:                 next.SyncMirrors,
 		SafetyChecklistDismissed:    next.SafetyChecklistDismissed,
 		OnboardingTourEnabled:       next.OnboardingTourEnabled,
 		OnboardingTourSeenVersion:   next.OnboardingTourSeenVersion,

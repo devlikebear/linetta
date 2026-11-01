@@ -199,21 +199,18 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		images:        exportImages{illustrations},
 		ops:           ops,
 	}
-	gitSyncer := setupGitSync(syncDeps)
-	folderSyncer := setupFolderSync(syncDeps)
-	syncers := []dailySyncer{gitSyncer, folderSyncer}
+	gitSyncer, gitHooks := setupGitSync(syncDeps)
+	folderSyncer, folderHooks := setupFolderSync(syncDeps)
 	retentionFn := func(ctx context.Context) error {
 		if err := snapshot.Thin(ctx, st.DB(), time.Now().UnixMilli()); err != nil {
 			return err
 		}
-		for _, sy := range syncers {
-			res, err := sy.RunOnce(ctx)
-			if err != nil {
+		if syncRunnerTakesExports {
+			return nil
+		}
+		for _, sy := range []dailySyncer{gitSyncer, folderSyncer} {
+			if err := runExport(ctx, sy); err != nil {
 				fmt.Fprintf(os.Stderr, "daily sync: %v\n", err)
-				continue
-			}
-			if res.Error != "" {
-				fmt.Fprintf(os.Stderr, "daily sync: %s\n", res.Error)
 			}
 		}
 		return nil
@@ -340,17 +337,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	})
 	a.closers = append(a.closers, stopPublish)
 
-	// The private vault (Phase 11) shares the publish connection.
-	setupVault(vaultDeps{
-		server:        s,
-		settingsStore: settingsStore,
-		store:         st,
-		home:          home,
-		indexer:       manuscriptIndexer,
-		clock:         clock,
-		publish:       publishSvc,
-	})
-
 	// The built-in agent's provider layer (#90). Resolves the writer's
 	// provider settings into a client on demand; nothing here dials until an
 	// agent run or a connection test asks it to. Codex's auth.json lives under
@@ -456,6 +442,26 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	a.agentCtrl = agentCtrl
 	a.mcpTools = mcpTools
 
+	// The private vault (Phase 11) shares the publish connection. It comes after
+	// the agent, because automatic sync keeps its hands off a work a turn is
+	// writing to.
+	vaultHooks := setupVault(ctx, vaultDeps{
+		server:        s,
+		settingsStore: settingsStore,
+		store:         st,
+		home:          home,
+		indexer:       manuscriptIndexer,
+		clock:         clock,
+		publish:       publishSvc,
+		ops:           ops,
+		agentBusy:     agentCtrl.Running,
+		gitSyncer:     gitSyncer,
+		folderSyncer:  folderSyncer,
+		gitHooks:      gitHooks,
+		folderHooks:   folderHooks,
+	})
+	a.closers = append(a.closers, vaultHooks.stop)
+
 	caps := handlers.Capabilities{
 		GitSyncAvailable: gitSyncAvailable,
 		MCPAvailable:     mcpAvailable,
@@ -485,7 +491,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("projects.get", handlers.GetProject(projects))
 	s.Handle("projects.archive", handlers.ArchiveProject(projects, clock))
 	s.Handle("projects.restore", handlers.RestoreProject(projects, clock))
-	s.Handle("projects.delete", handlers.DeleteProject(projects, companionSvc.DeleteProjectData))
+	s.Handle("projects.delete", handlers.DeleteProject(projects, companionSvc.DeleteProjectData, vaultHooks.queueDeletion))
 	s.Handle("projects.update", handlers.UpdateProject(projects, clock))
 	s.Handle("projects.clear_synopsis", handlers.ClearProjectSynopsis(projects, clock))
 	s.Handle("nodes.get", handlers.GetNode(nodes))

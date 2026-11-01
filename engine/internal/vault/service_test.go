@@ -134,7 +134,7 @@ func (d *device) text(t *testing.T, id string) string {
 
 func (d *device) hash(t *testing.T, id string) string {
 	t.Helper()
-	bundle, err := vaultbundle.Export(context.Background(), d.db, d.home, id, time.UnixMilli(1))
+	bundle, err := vaultbundle.Export(context.Background(), d.db, d.home, id, time.UnixMilli(1), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +364,7 @@ func TestInterruptedPushResumes(t *testing.T) {
 	if len(site.items) != 0 {
 		t.Fatal("a partial push made a revision")
 	}
-	if _, linked, _ := getLink(ctx, a.db, workID); linked {
+	if _, linked, _ := getLink(ctx, a.db, TargetWorks, workID); linked {
 		t.Fatal("a partial push recorded a link")
 	}
 	site.failPut = nil
@@ -653,7 +653,7 @@ func TestFailedApplyRollsBack(t *testing.T) {
 	}
 	exec(t, b.db, `INSERT INTO projects (id, title, genres, length_target, default_pov, created_at, updated_at) VALUES ('other', '다른 작품', '[]', 'long', '3rd', 1, 1)`)
 	exec(t, b.db, `INSERT INTO nodes (id, project_id, ordinal, kind, label, created_at, updated_at) VALUES ('taken', 'other', 0, 'leaf', '남의 회차', 1, 1)`)
-	before, _, _ := getLink(ctx, b.db, workID)
+	before, _, _ := getLink(ctx, b.db, TargetWorks, workID)
 	text := b.text(t, workID)
 
 	_, err := b.svc.Pull(ctx, PullInput{ProjectID: workID})
@@ -661,7 +661,7 @@ func TestFailedApplyRollsBack(t *testing.T) {
 	if b.text(t, workID) != text {
 		t.Fatal("a failed apply changed the manuscript")
 	}
-	after, _, _ := getLink(ctx, b.db, workID)
+	after, _, _ := getLink(ctx, b.db, TargetWorks, workID)
 	if after != before {
 		t.Fatalf("link moved: %+v", after)
 	}
@@ -845,8 +845,8 @@ func TestItemHoldingAnotherWorkIsRefused(t *testing.T) {
 	if _, err := a.svc.Push(ctx, "Q"); err != nil {
 		t.Fatal(err)
 	}
-	link, _, _ := getLink(ctx, b.db, workID)
-	other, _, _ := getLink(ctx, a.db, "Q")
+	link, _, _ := getLink(ctx, b.db, TargetWorks, workID)
+	other, _, _ := getLink(ctx, a.db, TargetWorks, "Q")
 	site.items[link.ItemID] = site.items[other.ItemID]
 	text := b.text(t, workID)
 	_, err := b.svc.Pull(ctx, PullInput{ProjectID: workID})
@@ -1158,7 +1158,7 @@ func TestRefusalsAreNotRetried(t *testing.T) {
 
 func TestManifestFromANewerAppIsRefused(t *testing.T) {
 	keys := newKeys(t)
-	id, sealed, err := keys.Seal([]byte(`{"format":2}`))
+	id, sealed, err := keys.Seal([]byte(`{"format":99}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1216,7 +1216,7 @@ func TestDeletingAnItemLeavesTheWorkOnThisDevice(t *testing.T) {
 	if got := a.state(t, workID); got != StateNotUploaded {
 		t.Fatalf("state = %s", got)
 	}
-	if _, ok, _ := getLink(ctx, a.db, workID); ok {
+	if _, ok, _ := getLink(ctx, a.db, TargetWorks, workID); ok {
 		t.Fatal("this device kept a link to a deleted item")
 	}
 	if _, cached := a.svc.heads[item]; cached {
@@ -1256,7 +1256,7 @@ func TestDeletingWhatIsAlreadyGoneForgetsIt(t *testing.T) {
 	if err := b.svc.DeleteItem(ctx, item); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, _ := getLink(ctx, b.db, workID); ok {
+	if _, ok, _ := getLink(ctx, b.db, TargetWorks, workID); ok {
 		t.Fatal("the link stayed")
 	}
 }

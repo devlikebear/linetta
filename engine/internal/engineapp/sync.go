@@ -2,6 +2,7 @@ package engineapp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
@@ -21,6 +22,13 @@ type dailySyncer interface {
 	RunOnce(ctx context.Context) (syncResult, error)
 }
 
+// targetHooks is what a folder or repository does around a sync run. A nil hook
+// has nothing to do.
+type targetHooks struct {
+	before func(ctx context.Context) error
+	after  func(ctx context.Context) error
+}
+
 type syncDeps struct {
 	server        *rpc.Server
 	settingsStore *settings.Store
@@ -31,6 +39,17 @@ type syncDeps struct {
 	extras        export.Extras
 	images        export.IllustrationSource
 	ops           *opsstatus.Repo
+}
+
+func runExport(ctx context.Context, syncer dailySyncer) error {
+	res, err := syncer.RunOnce(ctx)
+	if err != nil {
+		return err
+	}
+	if res.Error != "" {
+		return errors.New(res.Error)
+	}
+	return nil
 }
 
 type noopSyncer struct{}

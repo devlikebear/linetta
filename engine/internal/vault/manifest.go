@@ -9,16 +9,23 @@ import (
 )
 
 // manifestFormat is the layout of a revision's manifest blob. Like the sealed
-// format it is permanent once shipped, and a change takes a new number.
-const manifestFormat = 1
+// format it is permanent once shipped, and a change takes a new number. Format
+// 2 added Kind and Library, so a work's manifest of format 1 reads as a work.
+const manifestFormat = 2
 
 // revisionManifest is the sealed first blob of a revision: everything the server
 // must not see about it. Title is here so a device that has never held the work
 // can name it before downloading the rest.
 type revisionManifest struct {
-	Format int                  `json:"format"`
-	Title  string               `json:"title"`
-	Bundle vaultbundle.Manifest `json:"bundle"`
+	Format int    `json:"format"`
+	Kind   string `json:"kind,omitempty"`
+	Title  string `json:"title"`
+	// Library is the library item's own record, when Kind says it is one.
+	Library *vaultbundle.LibraryMeta `json:"library,omitempty"`
+	// Deleted marks the item's work as deleted on another device. The revision
+	// holds no parts; the ones under it stay as restore points.
+	Deleted bool                 `json:"deleted,omitempty"`
+	Bundle  vaultbundle.Manifest `json:"bundle"`
 	// Blobs maps each part to its blobs in order. A part of no bytes has none.
 	Blobs map[string][]string `json:"blobs"`
 }
@@ -49,10 +56,14 @@ type outgoing struct {
 
 // prepare splits a bundle into blobs and seals its manifest.
 func prepare(keys *Keys, title string, bundle *vaultbundle.Bundle) (*outgoing, error) {
+	return seal(keys, revisionManifest{Title: title, Bundle: bundle.Manifest}, bundle.Parts)
+}
+
+func seal(keys *Keys, manifest revisionManifest, parts map[string][]byte) (*outgoing, error) {
 	out := &outgoing{plain: map[string][]byte{}}
-	manifest := revisionManifest{Format: manifestFormat, Title: title, Bundle: bundle.Manifest, Blobs: map[string][]string{}}
-	for _, part := range bundle.Manifest.Parts {
-		for _, chunk := range split(bundle.Parts[part.Name]) {
+	manifest.Format, manifest.Blobs = manifestFormat, map[string][]string{}
+	for _, part := range manifest.Bundle.Parts {
+		for _, chunk := range split(parts[part.Name]) {
 			id := keys.BlobID(chunk)
 			manifest.Blobs[part.Name] = append(manifest.Blobs[part.Name], id)
 			if _, seen := out.plain[id]; !seen {

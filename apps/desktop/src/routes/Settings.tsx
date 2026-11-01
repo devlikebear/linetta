@@ -20,6 +20,7 @@ import { MemorySection } from "../components/settings/MemorySection";
 import { ProviderSection } from "../components/settings/ProviderSection";
 import { ImageGenSection } from "../components/settings/ImageGenSection";
 import { PublishSection } from "../components/settings/PublishSection";
+import { SyncOverview } from "../components/settings/SyncOverview";
 import { VaultSection } from "../components/settings/VaultSection";
 import { RestoreSection } from "../components/settings/RestoreSection";
 import { SkillsSection } from "../components/settings/SkillsSection";
@@ -878,6 +879,7 @@ export function Settings() {
 
             {category === "sync" && vaultAvailable && (
               <>
+                <SyncOverview />
                 <p className="sd" data-testid="sync-works-note">{t("settings.sync.worksNote")}</p>
                 <VaultSection available={vaultAvailable} onOpenPublish={() => setCategory("publish")} />
               </>

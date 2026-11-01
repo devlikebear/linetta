@@ -14,7 +14,7 @@ import type {
   SuggestionItemStatus,
 } from "./types";
 import type { IllustrationComposition, IllustrationFormat, IllustrationGenerateInput, IllustrationMeta, IllustrationRepresentatives, IllustrationRequest, IllustrationRequestEdits, IllustrationRequestStatus, ImageProviderStatus } from "./types";
-import type { VaultOverview, VaultPullResult, VaultPushResult, VaultResolveResult, VaultSetupResult, VaultWorkStatus } from "./types";
+import type { SyncPreview, SyncStatus, SyncTargets, VaultItems, VaultOverview, VaultPullResult, VaultPushResult, VaultResolveResult, VaultSetupResult, VaultWorkStatus } from "./types";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentHistoryRow,
@@ -534,22 +534,47 @@ export const publishApi = {
 /** The private vault (Phase 11). A push or pull reports through the
  *  vault.progress notification and can run for minutes. */
 export const vaultApi = {
-  status: () => rpcCall<VaultOverview>("vault.status"),
+  /** The primary sync target's overview, or one target's when named. */
+  status: (target?: string) => rpcCall<VaultOverview>("vault.status", target ? { target } : undefined),
   workStatus: (projectId: string) => rpcCall<VaultWorkStatus>("vault.work_status", { project_id: projectId }),
   /** Without recovery_key this makes one and returns it, the only time it is
    *  ever shown; it is stored once the same call hands it back. replace swaps a
    *  different key this device holds. */
-  setup: (input: { consented: boolean; recovery_key?: string; replace?: boolean }) =>
+  setup: (input: { consented: boolean; recovery_key?: string; replace?: boolean; target?: string }) =>
     rpcCall<VaultSetupResult>("vault.setup", input),
   push: (projectId: string) => rpcCall<VaultPushResult>("vault.push", { project_id: projectId }),
   /** item_id reaches a work not yet on this device; revision 0 is the head. */
-  pull: (input: { project_id?: string; item_id?: string; revision?: number }) =>
+  pull: (input: { project_id?: string; item_id?: string; revision?: number; target?: string }) =>
     rpcCall<VaultPullResult>("vault.pull", input),
   /** title_suffix names the copy take_remote keeps, and is required for it. */
   resolveConflict: (input: { project_id: string; choice: "keep_local" | "take_remote"; title_suffix?: string }) =>
     rpcCall<VaultResolveResult>("vault.resolve_conflict", input),
   /** Removes the item and all its restore points from the server, for good. */
   deleteItem: (itemId: string) => rpcCall<{ ok: true }>("vault.delete_item", { item_id: itemId }),
+  /** What can be carried, how large each category is here, and which are on. */
+  items: () => rpcCall<VaultItems>("vault.items_get"),
+  /** Leaves these categories out on every device, from the next upload on. */
+  setItems: (omit: string[]) => rpcCall<VaultItems>("vault.items_set", { omit }),
+};
+
+/** Automatic sync on this device. A desktop build answers these; others refuse
+ *  them, and every caller treats that as sync not being there. */
+export const syncApi = {
+  status: () => rpcCall<SyncStatus>("sync.status"),
+  /** What turning it on would send. Reads this device alone. */
+  preview: () => rpcCall<SyncPreview>("sync.preview"),
+  setAuto: (enabled: boolean) => rpcCall<SyncStatus>("sync.set_auto", { enabled }),
+  /** With a work, sends it without waiting for the edits to settle. */
+  runNow: (projectId?: string) => rpcCall<SyncStatus>("sync.run_now", projectId ? { project_id: projectId } : {}),
+  touch: (projectId: string) => rpcCall<{ ok: true }>("sync.touch", { project_id: projectId }),
+  /** Opening takes a newer version first; closing sends the work. */
+  setActive: (projectId: string, active: boolean) =>
+    rpcCall<{ pulled: boolean; problem?: string }>("sync.set_active", { project_id: projectId, active }),
+  targets: () => rpcCall<SyncTargets>("sync.targets"),
+  /** A new two-way target takes the whole library first, so this can take a while. */
+  setTargets: (primary: string, mirrors: string[]) => rpcCall<SyncTargets>("sync.set_targets", { primary, mirrors }),
+  /** Takes everything a target holds that this library does not have. */
+  restore: (target: string) => rpcCall<unknown>("sync.restore", { target }),
 };
 
 /** The built-in agent's loop (#93). Its panel is #95; these wrappers are the

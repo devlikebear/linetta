@@ -859,3 +859,6 @@
     grid-template-columns: 1fr;
   }
 }
+.settings .vault-categories .set-toggle { display: block; }
+.settings .vault-advanced { margin-top: 12px; }
+.settings .vault-advanced > summary { cursor: pointer; }
