@@ -1,4 +1,4 @@
--- 0036_vault_library.sql — what travels outside any work.
+-- 0038_vault_library.sql — what travels outside any work.
 --
 -- sync_selection is the writer's choice of what to carry, the same on every
 -- device: it is sealed into the library item, and this row is the copy every

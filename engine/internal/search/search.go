@@ -3,9 +3,11 @@ package search
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strings"
 
+	"github.com/devlikebear/linetta/engine/internal/ftsquery"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
@@ -30,9 +32,10 @@ type Repo struct {
 
 func NewRepo(s *store.Store) *Repo { return &Repo{s: s} }
 
-// Query searches visible projects by project title, node label/title, and leaf
-// Tiptap content. It deliberately stays SQLite-only; FTS can be added later if
-// the corpus outgrows LIKE scans.
+// Query searches visible projects: names first (a label, then a title, then a
+// work's title), then the prose. The prose comes from manuscript_fts rather
+// than the stored document, because the document is JSON and its key names
+// are not the writer's words: "paragraph" would match every scene there is.
 func (r *Repo) Query(ctx context.Context, q string, limit int) ([]Result, error) {
 	query := strings.TrimSpace(q)
 	if query == "" {
@@ -41,15 +44,41 @@ func (r *Repo) Query(ctx context.Context, q string, limit int) ([]Result, error)
 	if limit <= 0 || limit > 100 {
 		limit = DefaultLimit
 	}
+	out, err := r.byName(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) >= limit {
+		return out, nil
+	}
+	seen := make(map[string]bool, len(out))
+	for _, result := range out {
+		seen[result.NodeID] = true
+	}
+	// Enough to still fill the page when every name match is also a prose match.
+	prose, err := r.byProse(ctx, query, limit+len(out))
+	if err != nil {
+		return nil, err
+	}
+	for _, result := range prose {
+		if len(out) == limit {
+			break
+		}
+		if !seen[result.NodeID] {
+			out = append(out, result)
+		}
+	}
+	return out, nil
+}
 
-	pattern := "%" + escapeLike(strings.ToLower(query)) + "%"
+func (r *Repo) byName(ctx context.Context, query string, limit int) ([]Result, error) {
+	pattern := "%" + ftsquery.EscapeLike(strings.ToLower(query)) + "%"
 	rows, err := r.s.DB().QueryContext(ctx, `
 SELECT p.id, p.title, n.id, n.label, n.title, n.kind, COALESCE(n.content_doc, ''), n.updated_at,
        CASE
          WHEN lower(n.label) LIKE ? ESCAPE '\' THEN 0
          WHEN lower(n.title) LIKE ? ESCAPE '\' THEN 1
-         WHEN lower(p.title) LIKE ? ESCAPE '\' THEN 2
-         ELSE 3
+         ELSE 2
        END AS rank
   FROM nodes n
   JOIN projects p ON p.id = n.project_id
@@ -58,12 +87,11 @@ SELECT p.id, p.title, n.id, n.label, n.title, n.kind, COALESCE(n.content_doc, ''
         lower(p.title) LIKE ? ESCAPE '\'
      OR lower(n.label) LIKE ? ESCAPE '\'
      OR lower(n.title) LIKE ? ESCAPE '\'
-     OR lower(COALESCE(n.content_doc, '')) LIKE ? ESCAPE '\'
    )
  ORDER BY rank ASC, n.updated_at DESC, n.ordinal ASC
  LIMIT ?`,
+		pattern, pattern,
 		pattern, pattern, pattern,
-		pattern, pattern, pattern, pattern,
 		limit)
 	if err != nil {
 		return nil, err
@@ -78,40 +106,74 @@ SELECT p.id, p.title, n.id, n.label, n.title, n.kind, COALESCE(n.content_doc, ''
 			rank       int
 		)
 		if err := rows.Scan(
-			&result.ProjectID,
-			&result.ProjectTitle,
-			&result.NodeID,
-			&result.NodeLabel,
-			&result.NodeTitle,
-			&result.NodeKind,
-			&contentDoc,
-			&result.UpdatedAt,
-			&rank,
+			&result.ProjectID, &result.ProjectTitle, &result.NodeID, &result.NodeLabel,
+			&result.NodeTitle, &result.NodeKind, &contentDoc, &result.UpdatedAt, &rank,
 		); err != nil {
 			return nil, err
 		}
-		result.Preview = preview(result, contentDoc, query)
+		result.Preview = preview(result, docToPlainText(contentDoc), []string{query})
 		out = append(out, result)
 	}
 	return out, rows.Err()
 }
 
-func escapeLike(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		switch r {
-		case '\\', '%', '_':
-			b.WriteRune('\\')
+// byProse finds the scenes holding every word of query. A word too short for
+// the trigram index goes through LIKE over the same plain text, the way
+// linetta_search_manuscript does it.
+func (r *Repo) byProse(ctx context.Context, query string, limit int) ([]Result, error) {
+	const columns = `
+SELECT p.id, p.title, n.id, n.label, n.title, n.kind, f.plain, n.updated_at
+  FROM manuscript_fts f
+  JOIN nodes n ON n.id = f.node_id
+  JOIN projects p ON p.id = n.project_id
+ WHERE p.archived_at IS NULL AND `
+	terms := ftsquery.Terms(query)
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if match, ok := ftsquery.TrigramMatch(terms); ok {
+		rows, err = r.s.DB().QueryContext(ctx, columns+`f.manuscript_fts MATCH ?
+ ORDER BY bm25(manuscript_fts)
+ LIMIT ?`, match, limit)
+	} else {
+		likes := make([]string, 0, len(terms))
+		args := make([]any, 0, len(terms)+1)
+		for _, term := range terms {
+			likes = append(likes, `f.plain LIKE ? ESCAPE '\'`)
+			args = append(args, "%"+ftsquery.EscapeLike(term)+"%")
 		}
-		b.WriteRune(r)
+		rows, err = r.s.DB().QueryContext(ctx, columns+strings.Join(likes, " AND ")+`
+ ORDER BY n.updated_at DESC, n.ordinal ASC
+ LIMIT ?`, append(args, limit)...)
 	}
-	return b.String()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	needles := append([]string{query}, terms...)
+	out := []Result{}
+	for rows.Next() {
+		var (
+			result Result
+			plain  string
+		)
+		if err := rows.Scan(
+			&result.ProjectID, &result.ProjectTitle, &result.NodeID, &result.NodeLabel,
+			&result.NodeTitle, &result.NodeKind, &plain, &result.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		result.Preview = preview(result, strings.Join(strings.Fields(plain), " "), needles)
+		out = append(out, result)
+	}
+	return out, rows.Err()
 }
 
-func preview(result Result, contentDoc string, query string) string {
-	plain := docToPlainText(contentDoc)
+func preview(result Result, plain string, needles []string) string {
 	if plain != "" {
-		return excerpt(plain, query, 140)
+		return excerpt(plain, needles, 140)
 	}
 	for _, candidate := range []string{result.NodeTitle, result.NodeLabel, result.ProjectTitle} {
 		if strings.TrimSpace(candidate) != "" {
@@ -155,22 +217,30 @@ func collectText(v any, b *strings.Builder) {
 	}
 }
 
-func excerpt(text string, query string, limit int) string {
+// excerpt cuts text to the first needle found, in order, or to its start when
+// none is there: a scene found through two separate words may hold neither
+// the phrase nor, under case folding, either spelling.
+func excerpt(text string, needles []string, limit int) string {
 	runes := []rune(text)
 	if len(runes) <= limit {
 		return strings.TrimSpace(text)
 	}
 
-	idx := indexFoldRunes(text, query)
+	idx, width := -1, 0
+	for _, needle := range needles {
+		if idx = indexFoldRunes(text, needle); idx >= 0 {
+			width = len([]rune(needle))
+			break
+		}
+	}
 	if idx < 0 {
 		return strings.TrimSpace(string(runes[:limit])) + "..."
 	}
-	queryLen := len([]rune(query))
 	start := idx - 40
 	if start < 0 {
 		start = 0
 	}
-	end := idx + queryLen + 80
+	end := idx + width + 80
 	if end > len(runes) {
 		end = len(runes)
 	}

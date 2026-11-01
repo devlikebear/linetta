@@ -29,17 +29,10 @@ func (f fakeCurated) CuratedMemory(_ context.Context, _ string) (string, string)
 	return f.profile, f.notes
 }
 
-// fakeRecall stands in for the experiences.jsonl recall log — a different
-// thing from fakeCurated's two budgeted documents (see storycontext.Context's
-// comment on Memories vs WriterProfile/WorkNotes).
-type fakeRecall struct{ items []string }
-
-func (f fakeRecall) ContextMemories(_ string) []string { return f.items }
-
 // newStoryContextDeps wires the real ContextBuilder over a temp store, the way
 // engineapp does, and hands back the scene the brief will be built for.
 // recall may be nil to leave the experiences.jsonl section unwired.
-func newStoryContextDeps(t *testing.T, curated storycontext.CuratedMemorySource, recall storycontext.MemorySource) (context.Context, ToolDeps, string) {
+func newStoryContextDeps(t *testing.T, curated storycontext.CuratedMemorySource) (context.Context, ToolDeps, string) {
 	t.Helper()
 	ctx := context.Background()
 	st, err := store.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
@@ -68,9 +61,6 @@ func newStoryContextDeps(t *testing.T, curated storycontext.CuratedMemorySource,
 		note.NewRepo(st), relationship.NewRepo(st))
 	if curated != nil {
 		builder = builder.WithCuratedMemorySource(curated)
-	}
-	if recall != nil {
-		builder = builder.WithMemorySource(recall)
 	}
 	return ctx, ToolDeps{
 		Visuals:  visual.NewRepo(st),
@@ -109,7 +99,7 @@ func languageSettings(t *testing.T, lang string) *settings.Store {
 // had the app set to — and the English and Japanese memory frames could never
 // render at all.
 func TestGetStoryContextRendersInTheAppLanguage(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes"}, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes"})
 	d.Settings = languageSettings(t, "en")
 
 	res, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
@@ -134,7 +124,7 @@ func TestGetStoryContextRendersInTheAppLanguage(t *testing.T) {
 
 // The Korean default has to survive the wiring: an unset language is still ko.
 func TestGetStoryContextStillDefaultsToKorean(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "줄표 쓰지 않기"}, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "줄표 쓰지 않기"})
 	d.Settings = languageSettings(t, "ko")
 
 	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
@@ -148,7 +138,7 @@ func TestGetStoryContextStillDefaultsToKorean(t *testing.T) {
 
 // Nil Settings is a build with no store open. The tool must still answer.
 func TestGetStoryContextToleratesNilSettings(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 
 	res, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
 	if err != nil || (res != nil && res.IsError) {
@@ -169,7 +159,6 @@ func TestSectionReportCountsTheCuratedMemories(t *testing.T) {
 		want bool
 	}{
 		{"nothing", storycontext.Context{}, false},
-		{"recall only", storycontext.Context{Memories: []string{"오래된 기억"}}, true},
 		{"profile only", storycontext.Context{WriterProfile: "줄표 쓰지 않기"}, true},
 		{"notes only", storycontext.Context{WorkNotes: "민준은 존댓말"}, true},
 		{"blank profile", storycontext.Context{WriterProfile: "   \n"}, false},
@@ -195,7 +184,6 @@ func TestSectionReportHonoursTheMemoriesToggle(t *testing.T) {
 	c := storycontext.Context{
 		WriterProfile: "줄표 쓰지 않기",
 		WorkNotes:     "민준은 존댓말",
-		Memories:      []string{"오래된 기억"},
 		Options:       storycontext.Options{Context: storycontext.ContextSelection{Memories: &off}},
 	}
 	included, empty := sectionReport(c)
@@ -208,12 +196,9 @@ func TestSectionReportHonoursTheMemoriesToggle(t *testing.T) {
 // carries both curated documents verbatim, budget-annotated, in its own
 // system prompt (agent.systemPrompt / memoryBlock). Getting them a second
 // time from this tool would cost context and teach it nothing — so its brief
-// must omit them. The recall log (c.Memories) is a different thing, not in
-// the system prompt, and must survive.
-func TestGetStoryContextForTheAgentOmitsTheCuratedMemoryButKeepsRecall(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t,
-		fakeCurated{profile: "no em dashes", notes: "Junho uses formal speech from ep. 3"},
-		fakeRecall{items: []string{"the writer prefers short chapters"}})
+// must omit them.
+func TestGetStoryContextForTheAgentOmitsTheCuratedMemory(t *testing.T) {
+	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes", notes: "Junho uses formal speech from ep. 3"})
 	d.Source = SourceAgent
 	d.Settings = languageSettings(t, "en")
 
@@ -226,9 +211,6 @@ func TestGetStoryContextForTheAgentOmitsTheCuratedMemoryButKeepsRecall(t *testin
 			t.Errorf("agent's brief still carries the curated memory %q, already in its system prompt; got:\n%s", gone, out.Brief)
 		}
 	}
-	if !strings.Contains(out.Brief, "the writer prefers short chapters") {
-		t.Errorf("agent's brief dropped the recall log entry, which is not in the system prompt; got:\n%s", out.Brief)
-	}
 }
 
 // An external client (a writer's own Claude Code, say) never receives
@@ -236,9 +218,7 @@ func TestGetStoryContextForTheAgentOmitsTheCuratedMemoryButKeepsRecall(t *testin
 // curated writer profile and work notes. The suppression above must not
 // reach it.
 func TestGetStoryContextForAnExternalClientCarriesEverything(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t,
-		fakeCurated{profile: "no em dashes", notes: "Junho uses formal speech from ep. 3"},
-		fakeRecall{items: []string{"the writer prefers short chapters"}})
+	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes", notes: "Junho uses formal speech from ep. 3"})
 	d.Settings = languageSettings(t, "en")
 	// d.Source is left at newStoryContextDeps' default, SourceExternal.
 
@@ -247,7 +227,7 @@ func TestGetStoryContextForAnExternalClientCarriesEverything(t *testing.T) {
 		t.Fatalf("getStoryContext: %v", err)
 	}
 	for _, want := range []string{
-		"no em dashes", "Junho uses formal speech from ep. 3", "the writer prefers short chapters",
+		"no em dashes", "Junho uses formal speech from ep. 3",
 	} {
 		if !strings.Contains(out.Brief, want) {
 			t.Errorf("external client's brief is missing %q; got:\n%s", want, out.Brief)
@@ -287,7 +267,7 @@ func (f fakeDirection) PlannedBranchFor(context.Context, string) (storycontext.D
 // tool's path regardless of which write-tool groups are enabled — including
 // the read_only mode where none are.
 func TestGetStoryContextCarriesTheWritersDirectionEvenInReadOnlyMode(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Context = d.Context.WithDirectionSource(fakeDirection{
 		focus: "둘의 오해를 아직 풀지 않는다", focusPresent: true,
 		goal: "거리를 좁힌다", keep: []string{"침묵"}, avoid: []string{"고백"}, intentPresent: true,
@@ -308,7 +288,7 @@ func TestGetStoryContextCarriesTheWritersDirectionEvenInReadOnlyMode(t *testing.
 }
 
 func TestGetStoryContextIncludeDirectionFalseOmitsIt(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Context = d.Context.WithDirectionSource(fakeDirection{focus: "초점", focusPresent: true})
 
 	off := false
@@ -325,14 +305,13 @@ func TestGetStoryContextIncludeDirectionFalseOmitsIt(t *testing.T) {
 }
 
 // sectionReport must describe the brief the caller actually receives, not the
-// context that was built before suppression. For the agent, with no recall
-// log wired, suppressing the curated documents must flip "memories" from
-// included to empty; for an external client (or the agent with a non-empty
-// recall log) it must stay included. Task 5 already had a round over the
+// context that was built before suppression. For the agent, suppressing the
+// curated documents must flip "memories" from included to empty; for an
+// external client it must stay included. Task 5 already had a round over the
 // report staying truthful — this is that same guarantee, extended to the new
 // suppression.
 func TestSectionReportMatchesTheBriefForBothSources(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes"}, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes"})
 	d.Settings = languageSettings(t, "en")
 
 	d.Source = SourceAgent
@@ -344,7 +323,7 @@ func TestSectionReportMatchesTheBriefForBothSources(t *testing.T) {
 		t.Fatalf("test setup: agent brief unexpectedly carries the curated memory")
 	}
 	if slices.Contains(agentOut.IncludedSections, "memories") {
-		t.Errorf("agent's report claims memories, but the brief carries neither the curated block nor any recall: included=%v", agentOut.IncludedSections)
+		t.Errorf("agent's report claims memories, but the brief does not carry the curated block: included=%v", agentOut.IncludedSections)
 	}
 	if !slices.Contains(agentOut.EmptySections, "memories") {
 		t.Errorf("agent's report should list memories as empty: empty=%v", agentOut.EmptySections)
@@ -374,7 +353,7 @@ func TestSectionReportMatchesTheBriefForBothSources(t *testing.T) {
  * ------------------------------------------------------------------------ */
 
 func TestReadScene_numberedPrefixesEachParagraph(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	doc := `{"type":"doc","content":[
 		{"type":"paragraph","content":[{"type":"text","text":"첫 문단."}]},
 		{"type":"paragraph","content":[{"type":"text","text":"둘째 문단."}]}
@@ -397,7 +376,7 @@ func TestReadScene_numberedPrefixesEachParagraph(t *testing.T) {
 // linetta_analyze_style (and so linetta_report_continuity's validation)
 // would assign the same scene — see style.Paragraphs' doc comment.
 func TestReadScene_numberedMatchesStyleParagraphs(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	doc := `{"type":"doc","content":[
 		{"type":"paragraph","content":[{"type":"text","text":"하나."}]},
 		{"type":"paragraph"},
@@ -418,7 +397,7 @@ func TestReadScene_numberedMatchesStyleParagraphs(t *testing.T) {
 }
 
 func TestReadScene_numberedWithMarkdownIsRefused(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	res, _, err := d.readScene(ctx, nil, readSceneInput{NodeID: nodeID, Numbered: true, Format: sceneFormatMarkdown})
 	if err != nil {
 		t.Fatalf("readScene: %v", err)
@@ -429,7 +408,7 @@ func TestReadScene_numberedWithMarkdownIsRefused(t *testing.T) {
 }
 
 func TestReadScene_withoutNumberedIsUnchanged(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"평범한 문단."}]}]}`
 	if err := d.Nodes.UpdateContent(ctx, nodeID, doc, 10); err != nil {
 		t.Fatalf("UpdateContent: %v", err)

@@ -773,6 +773,43 @@ func TestRepo_RestoreOutline_restoresSnapshotAndRemovesRepairCreatedNodes(t *tes
 	}
 }
 
+func TestRepo_RestoreOutline_keepsTheProseIndexInStep(t *testing.T) {
+	s, p := newStoreAndProject(t)
+	r := NewRepo(s)
+	ctx := context.Background()
+
+	scene, err := r.CreateSibling(ctx, *p.LastOpenedNodeID, KindLeaf, "씬 2", "", 2000)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+	if err := r.UpdateContent(ctx, scene.ID, `{"type":"doc"}`, 2500); err != nil {
+		t.Fatalf("UpdateContent: %v", err)
+	}
+	snapshot, err := r.ListByProject(ctx, p.ID)
+	if err != nil {
+		t.Fatalf("ListByProject: %v", err)
+	}
+	if err := r.Delete(ctx, scene.ID, 3000); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	later, err := r.CreateSibling(ctx, *p.LastOpenedNodeID, KindLeaf, "씬 3", "", 4000)
+	if err != nil {
+		t.Fatalf("CreateSibling: %v", err)
+	}
+
+	hook := &fakeManuscriptIndexer{}
+	r.SetManuscriptIndexer(hook)
+	if err := r.RestoreOutline(ctx, p.ID, snapshot, 5000); err != nil {
+		t.Fatalf("RestoreOutline: %v", err)
+	}
+	if len(hook.upserts) != 1 || hook.upserts[0].nodeID != scene.ID {
+		t.Errorf("the restored scene was not indexed: %+v", hook.upserts)
+	}
+	if len(hook.deletes) != 1 || hook.deletes[0] != later.ID {
+		t.Errorf("the removed scene stayed in the index: %v", hook.deletes)
+	}
+}
+
 func TestRepo_RestoreOutline_rejectsInvalidSnapshotShape(t *testing.T) {
 	s, p := newStoreAndProject(t)
 	r := NewRepo(s)

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
@@ -33,7 +34,9 @@ func newSearchRepo(t *testing.T) (*search.Repo, string) {
 		t.Fatalf("create project: %v", err)
 	}
 	nodeID := *p.LastOpenedNodeID
-	if err := node.NewRepo(s).UpdateContent(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"숨은 열쇠를 발견했다."}]}]}`, 1_100); err != nil {
+	nodes := node.NewRepo(s)
+	nodes.SetManuscriptIndexer(manuscript.NewIndexer(s.DB()))
+	if err := nodes.UpdateContent(ctx, nodeID, `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"숨은 열쇠를 발견했다."}]}]}`, 1_100); err != nil {
 		t.Fatalf("update content: %v", err)
 	}
 	return search.NewRepo(s), nodeID

@@ -91,6 +91,13 @@ type Deps struct {
 	// (settings.agent_max_tool_calls). Read once at the top of each turn. A
 	// nil func, or an answer below one, means maxIterations.
 	MaxToolCalls func() int
+	// ActiveProvider names the provider the next turn would use, which is how
+	// opening the panel finds a turn's replay budget without building a client.
+	ActiveProvider func() string
+	// HistoryBudget reports the writer's replay budget in runes
+	// (settings.agent_history_budget). Zero, or a nil func, leaves the choice
+	// to resolveHistoryBudget. Read once at the top of each turn.
+	HistoryBudget func() int
 	// MemoryToolsEnabled and SkillToolsEnabled report the writer's two
 	// tool-budget switches (#99, settings.memory_tools_enabled /
 	// skill_tools_enabled, both default on). Deps.Register already leaves the
@@ -182,31 +189,48 @@ func New(d Deps) *Service {
 }
 
 // replayHistory is priorMessages for one work, remembering where its window
-// began for the next turn. cut says earlier messages were left out, and moved
-// that this turn left out more than the last one did. Nothing has moved on the
+// began for the next turn. start is the message it begins at, cut says earlier
+// messages were left out, and moved that this turn left out more than the last
+// one did. Nothing has moved on the
 // first turn after a restart: the window it would be measured against is gone,
 // and agent.history already drew the boundary when the panel opened.
-func (s *Service) replayHistory(projectID string, msgs []companion.HistoryMessage) (replay []llm.ChatMessage, cut, moved bool) {
+func (s *Service) replayHistory(projectID string, msgs []companion.HistoryMessage, budget int) (replay []llm.ChatMessage, start string, cut, moved bool) {
 	s.historyMu.Lock()
 	defer s.historyMu.Unlock()
 	previous := s.historyStarts[projectID]
-	replay, start := priorMessages(msgs, previous)
+	replay, start = priorMessages(msgs, previous, budget)
 	s.historyStarts[projectID] = start
 	cut = historyCut(msgs, start)
-	return replay, cut, cut && previous != "" && start != previous
+	return replay, start, cut, cut && previous != "" && start != previous
+}
+
+// replayBudget is how many runes of conversation a turn on providerID replays.
+func (s *Service) replayBudget(providerID string) int {
+	configured := 0
+	if s.deps.HistoryBudget != nil {
+		configured = s.deps.HistoryBudget()
+	}
+	return resolveHistoryBudget(providerID, configured)
 }
 
 // ReplayStart is the id of the message the next turn's replay begins at when
 // earlier messages fall outside it, and "" when the model still gets the whole
 // conversation. It only reads: opening the panel must not move the window.
 func (s *Service) ReplayStart(ctx context.Context, projectID string) (string, error) {
-	msgs, err := s.tr.load(ctx, projectID, historyLoadRows)
+	// The provider the next turn would use, so the panel's boundary is the one
+	// that turn will draw.
+	providerID := ""
+	if s.deps.ActiveProvider != nil {
+		providerID = s.deps.ActiveProvider()
+	}
+	budget := s.replayBudget(providerID)
+	msgs, err := s.tr.load(ctx, projectID, loadRowsFor(budget))
 	if err != nil {
 		return "", err
 	}
 	s.historyMu.Lock()
 	defer s.historyMu.Unlock()
-	_, start := priorMessages(msgs, s.historyStarts[projectID])
+	_, start := priorMessages(msgs, s.historyStarts[projectID], budget)
 	if !historyCut(msgs, start) {
 		return "", nil
 	}

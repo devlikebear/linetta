@@ -103,6 +103,9 @@ func TestMergeProjectFromBackup(t *testing.T) {
 	if _, err := memory.Save(ctx, agentmemory.ScopeWorkNotes, p.ID, "민준은 3화부터 존댓말", now); err != nil {
 		t.Fatalf("work notes: %v", err)
 	}
+	if err := memory.Remember(ctx, p.ID, "곰배는 흑풍채 두목", now); err != nil {
+		t.Fatalf("archive: %v", err)
+	}
 	if _, err := memory.Save(ctx, agentmemory.ScopeWriterProfile, "", "짧은 문장을 선호", now); err != nil {
 		t.Fatalf("writer profile: %v", err)
 	}
@@ -231,6 +234,16 @@ func TestMergeProjectFromBackup(t *testing.T) {
 	origNotes, err := memory.Load(ctx, agentmemory.ScopeWorkNotes, p.ID)
 	if err != nil || origNotes.Body != "민준은 3화부터 존댓말" {
 		t.Fatalf("original work notes disturbed: %+v err=%v", origNotes, err)
+	}
+
+	// An archived line comes along and is searchable there: the insert trigger
+	// has to have filled the merged work's index.
+	archived, err := memory.SearchArchived(ctx, merged.ProjectID, "흑풍채", 0)
+	if err != nil || len(archived) != 1 {
+		t.Fatalf("merged archive = %+v err=%v", archived, err)
+	}
+	if orig, err := memory.SearchArchived(ctx, p.ID, "흑풍채", 0); err != nil || len(orig) != 1 || orig[0].ID == archived[0].ID {
+		t.Fatalf("original archive = %+v err=%v", orig, err)
 	}
 
 	var profileCount int

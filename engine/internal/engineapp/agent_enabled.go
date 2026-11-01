@@ -230,6 +230,8 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		SelfReviewEnabled:    deps.settings.AgentSelfReviewEnabled,
 		EpisodeReviewEnabled: deps.settings.AgentEpisodeReviewEnabled,
 		MaxToolCalls:         deps.settings.AgentMaxToolCalls,
+		HistoryBudget:        deps.settings.AgentHistoryBudget,
+		ActiveProvider:       deps.settings.ActiveProvider,
 		// The tool budget (#99), and the ONLY place it is read on the agent's
 		// path. Run calls these once per turn and passes the one answer to
 		// both halves: to the prompt, and to Register above as its groups

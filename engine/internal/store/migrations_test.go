@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"database/sql"
+	"io/fs"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -255,5 +257,30 @@ func TestMigrationPending_detectsMissingEmbeddedVersion(t *testing.T) {
 	pending, gotLatest, err := migrationPending(ctx, db)
 	if err != nil || !pending || gotLatest != latest {
 		t.Fatalf("missing migration = pending %v latest %d err %v", pending, gotLatest, err)
+	}
+}
+
+// Two files with one number stop the app at startup: the second runs, then fails
+// on schema_migrations' key, or on a later launch trips the checksum check. Git
+// merges such a pair without a word, so branches that each took the next free
+// number have to be caught here.
+func TestMigrationVersionsAreUnique(t *testing.T) {
+	entries, err := fs.ReadDir(MigrationsFS, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[int]string{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		version, err := parseVersion(entry.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if other, taken := seen[version]; taken {
+			t.Errorf("%s and %s share version %d", other, entry.Name(), version)
+		}
+		seen[version] = entry.Name()
 	}
 }

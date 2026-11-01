@@ -315,3 +315,34 @@ func TestEditMemoryDoesNotLoseAConcurrentEdit(t *testing.T) {
 			"Load/Apply/Save drops whichever edit lands second-to-last", got.Body, len(lines), n)
 	}
 }
+
+func TestEditMemoryArchivesAWorkNoteAndKeepsItFindable(t *testing.T) {
+	ctx, d, projectID := newMemoryDeps(t)
+	if _, _, err := d.editMemory(ctx, nil, editMemoryInput{Scope: "work_notes", Action: "add", Text: "곰배는 조연", ProjectID: projectID}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	res, out, err := d.editMemory(ctx, nil, editMemoryInput{
+		Scope: "work_notes", Action: "archive", Find: "곰배", SourceMessageID: "msg-1", ProjectID: projectID,
+	})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("archive: err=%v res=%+v", err, res)
+	}
+	if out.Body != "" || out.CharsUsed != 0 {
+		t.Errorf("out = %+v", out)
+	}
+	hits, err := d.Memory.SearchArchived(ctx, projectID, "곰배", 0)
+	if err != nil || len(hits) != 1 || hits[0].SourceMessageID != "msg-1" {
+		t.Errorf("hits = %+v, err = %v", hits, err)
+	}
+}
+
+func TestEditMemoryRefusesToArchiveTheWriterProfile(t *testing.T) {
+	ctx, d, _ := newMemoryDeps(t)
+	if _, _, err := d.editMemory(ctx, nil, editMemoryInput{Scope: "writer_profile", Action: "add", Text: "줄표 쓰지 않기"}); err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	res, _, err := d.editMemory(ctx, nil, editMemoryInput{Scope: "writer_profile", Action: "archive", Find: "줄표"})
+	if err != nil || res == nil || !res.IsError {
+		t.Fatalf("archive: err=%v res=%+v", err, res)
+	}
+}

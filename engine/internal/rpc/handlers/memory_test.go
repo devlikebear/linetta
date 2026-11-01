@@ -230,3 +230,59 @@ func quote(s string) string {
 	}
 	return string(b)
 }
+
+func (m *memStub) ListArchived(context.Context, string, int) ([]agentmemory.Archived, error) {
+	return []agentmemory.Archived{{ID: "a1", Body: "곰배는 조연"}}, nil
+}
+
+func (m *memStub) DeleteArchived(_ context.Context, _, id string) error {
+	if id != "a1" {
+		return agentmemory.ErrNoArchivedLine
+	}
+	return nil
+}
+
+func (m *memStub) RestoreArchived(_ context.Context, projectID, id string, _ int64) (agentmemory.Document, error) {
+	if id != "a1" {
+		return agentmemory.Document{}, agentmemory.ErrNoArchivedLine
+	}
+	return agentmemory.Document{Scope: agentmemory.ScopeWorkNotes, ProjectID: projectID, Body: "곰배는 조연"}, nil
+}
+
+func TestListMemoryArchiveAnswersEmptyWithNoWorkPicked(t *testing.T) {
+	out, err := ListMemoryArchive(&memStub{})(context.Background(), json.RawMessage(`{"project_id":""}`))
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if string(out) != "[]" {
+		t.Errorf("out = %s", out)
+	}
+	out, err = ListMemoryArchive(&memStub{})(context.Background(), json.RawMessage(`{"project_id":"p1"}`))
+	if err != nil || !strings.Contains(string(out), "곰배") {
+		t.Errorf("out = %s, err = %v", out, err)
+	}
+}
+
+func TestRestoreMemoryArchiveTellsOpenPanesTheNotesMoved(t *testing.T) {
+	var method string
+	h := RestoreMemoryArchive(&memStub{}, func() int64 { return 1 }, func(m string, _ any) { method = m })
+	if _, err := h(context.Background(), json.RawMessage(`{"project_id":"p1","id":"a1"}`)); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if method != "memory.changed" {
+		t.Errorf("notified %q", method)
+	}
+	method = ""
+	if _, err := h(context.Background(), json.RawMessage(`{"project_id":"p1","id":"nope"}`)); err == nil {
+		t.Fatal("an unknown id must be refused")
+	}
+	if method != "" {
+		t.Error("a refused restore must not announce a change")
+	}
+}
+
+func TestDeleteMemoryArchiveRefusesAnUnknownLine(t *testing.T) {
+	if _, err := DeleteMemoryArchive(&memStub{})(context.Background(), json.RawMessage(`{"project_id":"p1","id":"nope"}`)); err == nil {
+		t.Fatal("expected a refusal")
+	}
+}

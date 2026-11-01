@@ -171,6 +171,10 @@ type Config struct {
 	// scene, so the right number depends on how long the writer's work is;
 	// the wall itself stays, because it is what stops a runaway turn.
 	AgentMaxToolCalls int `json:"agent_max_tool_calls"`
+	// AgentHistoryBudget is how many runes of earlier conversation each turn
+	// resends, or 0 to let the engine choose for the provider. More means the
+	// agent loses less, and on a metered provider costs more on every message.
+	AgentHistoryBudget int `json:"agent_history_budget"`
 	// MemoryToolsEnabled and SkillToolsEnabled are the writer's tool budget
 	// (#99). Every tool's whole JSON schema travels in every request, so the
 	// nineteen tools Linetta serves are a standing cost on every turn — the
@@ -368,6 +372,7 @@ type Patch struct {
 	AgentEpisodeReviewEnabled *bool                    `json:"agent_episode_review_enabled,omitempty"`
 	StyleAvoidPhrases         *[]string                `json:"style_avoid_phrases,omitempty"`
 	AgentMaxToolCalls         *int                     `json:"agent_max_tool_calls,omitempty"`
+	AgentHistoryBudget        *int                     `json:"agent_history_budget,omitempty"`
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
 	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
@@ -554,6 +559,9 @@ func (s *Store) load() error {
 	if validAgentMaxToolCalls(disk.AgentMaxToolCalls) {
 		s.cfg.AgentMaxToolCalls = disk.AgentMaxToolCalls
 	}
+	if validAgentHistoryBudget(disk.AgentHistoryBudget) {
+		s.cfg.AgentHistoryBudget = disk.AgentHistoryBudget
+	}
 	// The two tool-budget switches (#99), presence-guarded for the same
 	// reason: both default to true, so a plain assignment would read the
 	// writer's deliberate `false` and a settings.json from a build that
@@ -707,6 +715,26 @@ const (
 
 func validAgentMaxToolCalls(n int) bool {
 	return n >= MinAgentMaxToolCalls && n <= MaxAgentMaxToolCalls
+}
+
+// The writer's range for AgentHistoryBudget, in runes. Below the floor the
+// agent forgets a working session; above the ceiling the replay alone fills a
+// 200k window. Zero is not in the range: it means automatic.
+const (
+	MinAgentHistoryBudget = 20000
+	MaxAgentHistoryBudget = 200000
+)
+
+func validAgentHistoryBudget(n int) bool {
+	return n == 0 || (n >= MinAgentHistoryBudget && n <= MaxAgentHistoryBudget)
+}
+
+// AgentHistoryBudget reports the writer's replay budget, 0 for automatic. Read
+// per turn, like AgentMaxToolCalls.
+func (s *Store) AgentHistoryBudget() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.AgentHistoryBudget
 }
 
 // AgentMaxToolCalls reports how many tool calls one turn of the built-in
@@ -934,6 +962,13 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 		}
 		next.AgentMaxToolCalls = *p.AgentMaxToolCalls
 	}
+	if p.AgentHistoryBudget != nil {
+		if !validAgentHistoryBudget(*p.AgentHistoryBudget) {
+			return Config{}, fmt.Errorf("settings: agent_history_budget %d out of range (0 or %d-%d)",
+				*p.AgentHistoryBudget, MinAgentHistoryBudget, MaxAgentHistoryBudget)
+		}
+		next.AgentHistoryBudget = *p.AgentHistoryBudget
+	}
 	if p.VisualWriteToolsDisabled != nil {
 		next.VisualWriteToolsDisabled = *p.VisualWriteToolsDisabled
 	}
@@ -1087,6 +1122,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		// next restart and no further.
 		AgentSelfReviewEnabled:   next.AgentSelfReviewEnabled,
 		AgentMaxToolCalls:        next.AgentMaxToolCalls,
+		AgentHistoryBudget:       next.AgentHistoryBudget,
 		VisualWriteToolsDisabled: next.VisualWriteToolsDisabled,
 		MemoryToolsEnabled:       next.MemoryToolsEnabled,
 		SkillToolsEnabled:        next.SkillToolsEnabled,

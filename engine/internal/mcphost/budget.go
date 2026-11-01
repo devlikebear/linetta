@@ -34,6 +34,11 @@ type ToolGroups struct {
 	// record a judgement, the writer decides" tools, as opposed to the
 	// manuscript tools every mode keeps unconditionally.
 	Review bool
+	// History is linetta_search_history and linetta_read_history. No switch
+	// sets it and ToolGroupsFrom leaves it off: the conversation holds what
+	// the writer pasted and said in passing, so only the built-in agent, whose
+	// conversation it is, gets these tools. An external client never does.
+	History bool
 }
 
 // AllToolGroups is the default — every group on, which is the tool set a
