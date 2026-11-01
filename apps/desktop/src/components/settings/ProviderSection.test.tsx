@@ -1881,4 +1881,33 @@ describe("ProviderSection — Claude Code CLI", () => {
       await screen.findByText("settings.providers.consent:provider=settings.providers.consent.claudeCode"),
     ).toBeTruthy();
   });
+
+  describe("a failed connection test", () => {
+    const failTestWith = async (reason: string) => {
+      rpc.providersList.mockImplementation(() =>
+        Promise.resolve([
+          ...base(""),
+          cliRow(true, { cli_path: "/usr/local/bin/claude", consented: true }),
+        ]),
+      );
+      rpc.providersTest.mockImplementationOnce(() =>
+        Promise.reject(Object.assign(new Error("x"), { data: { reason } })),
+      );
+      render(<ProviderSection />);
+      await userEvent.click(await screen.findByTestId("provider-test"));
+      return screen.findByTestId("provider-test-error");
+    };
+
+    it("sends a signed-out writer to the terminal, not to an API key field", async () => {
+      expect(await failTestWith("provider_auth_failed")).toHaveTextContent(
+        "settings.providers.cli.signedOut",
+      );
+    });
+
+    it("keeps the shared sentence for every other failure", async () => {
+      expect(await failTestWith("provider_unreachable")).toHaveTextContent(
+        "errors.providerUnreachable",
+      );
+    });
+  });
 });

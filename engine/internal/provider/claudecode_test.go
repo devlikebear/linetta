@@ -235,13 +235,17 @@ func TestClaudeCode_modelsMergeTheCLICacheAndTheLiveAnthropicList(t *testing.T) 
 
 func TestClassify_readsTheCLIsOwnWords(t *testing.T) {
 	cases := map[string]string{
-		"claude-code-cli executable not found in PATH or ~/.local/bin":                       rpc.ReasonProviderNotConfigured,
-		"claude-code-cli request: Invalid API key · Please run /login":                       rpc.ReasonProviderAuthFailed,
-		"claude-code-cli request: OAuth token has expired":                                   rpc.ReasonProviderAuthFailed,
-		"claude-code-cli request: Claude AI usage limit reached|1760000000":                  rpc.ReasonProviderRateLimited,
-		"claude-code-cli request: Credit balance is too low":                                 rpc.ReasonProviderRateLimited,
-		"claude-code-cli request: cli timed out: no output for 15m0s":                        rpc.ReasonProviderTimeout,
-		"claude-code-cli request: cli failed: exit status 1: something we have not seen yet": rpc.ReasonProviderUnreachable,
+		"claude-code-cli executable not found in PATH or ~/.local/bin":                                      rpc.ReasonProviderNotConfigured,
+		"claude-code-cli request: Invalid API key · Please run /login":                                      rpc.ReasonProviderAuthFailed,
+		"claude-code-cli request: OAuth token has expired":                                                  rpc.ReasonProviderAuthFailed,
+		"claude-code-cli request: Failed to authenticate: OAuth session expired and could not be refreshed": rpc.ReasonProviderAuthFailed,
+		"claude-code-cli request: Claude AI usage limit reached|1760000000":                                 rpc.ReasonProviderRateLimited,
+		"claude-code-cli request: Credit balance is too low":                                                rpc.ReasonProviderRateLimited,
+		"claude-code-cli request: cli timed out: no output for 15m0s":                                       rpc.ReasonProviderTimeout,
+		"claude-code-cli request: cli failed: exit status 1: something we have not seen yet":                rpc.ReasonProviderUnreachable,
+		// Another process holding the refresh lock passes on its own; signing in
+		// again would not be the fix.
+		"claude-code-cli request: OAuth access token could not be refreshed: another Claude Code process is holding the refresh lock": rpc.ReasonProviderUnreachable,
 	}
 	for msg, want := range cases {
 		var re *rpc.ReasonError
