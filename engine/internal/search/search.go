@@ -4,10 +4,10 @@ package search
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/ftsquery"
+	"github.com/devlikebear/linetta/engine/internal/manuscript"
 	"github.com/devlikebear/linetta/engine/internal/store"
 )
 
@@ -111,7 +111,7 @@ SELECT p.id, p.title, n.id, n.label, n.title, n.kind, COALESCE(n.content_doc, ''
 		); err != nil {
 			return nil, err
 		}
-		result.Preview = preview(result, docToPlainText(contentDoc), []string{query})
+		result.Preview = preview(result, manuscript.DocToPlainText(contentDoc), []string{query})
 		out = append(out, result)
 	}
 	return out, rows.Err()
@@ -184,37 +184,6 @@ func preview(result Result, plain string, needles []string) string {
 	// engine does not know the reader's language, so it says nothing rather
 	// than a Korean placeholder (#45); the result still carries its own title.
 	return ""
-}
-
-func docToPlainText(raw string) string {
-	var decoded any
-	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
-		return ""
-	}
-	var b strings.Builder
-	collectText(decoded, &b)
-	return strings.Join(strings.Fields(b.String()), " ")
-}
-
-func collectText(v any, b *strings.Builder) {
-	switch x := v.(type) {
-	case map[string]any:
-		if text, ok := x["text"].(string); ok {
-			if b.Len() > 0 {
-				b.WriteRune(' ')
-			}
-			b.WriteString(text)
-		}
-		if content, ok := x["content"].([]any); ok {
-			for _, child := range content {
-				collectText(child, b)
-			}
-		}
-	case []any:
-		for _, child := range x {
-			collectText(child, b)
-		}
-	}
 }
 
 // excerpt cuts text to the first needle found, in order, or to its start when
