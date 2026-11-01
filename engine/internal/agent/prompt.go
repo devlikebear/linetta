@@ -144,7 +144,7 @@ How you work:
 		b.WriteString("\n- You cannot draw. To get a picture drawn, call linetta_request_illustration; it only leaves a request on a card in the app. It also sends up to two earlier gallery pictures (prior_illustration_ids; picked automatically when omitted), so faces stay the same even without reference images. Tell the writer to approve it there, and never say a picture was drawn until linetta_list_illustrations shows it done. To put a gallery picture in a scene, write its [[illustration:id|caption]] line with linetta_write_scene; to make one stand for a scene or episode, call linetta_set_representative_illustration.")
 	}
 	if groups.memory {
-		b.WriteString("\n- Record something durable with linetta_edit_memory: how this writer works goes in writer_profile, what you learn about this work goes in work_notes. Both are read back to you at the start of every session, so replace a line that changed rather than adding a second one.\n")
+		b.WriteString("\n- Record something durable with linetta_edit_memory: how this writer works goes in writer_profile, what you learn about this work goes in work_notes. Both are read back to you at the start of every session, so replace a line that changed rather than adding a second one. When work_notes fills up, archive a line the manuscript or ledger already settles: it leaves your prompt and linetta_search_history still finds it. Remove only what is wrong.\n")
 	} else {
 		// The bullet list above is written with a leading newline on its
 		// first appended bullet rather than a trailing one on the format

@@ -5,6 +5,7 @@ import { useI18n } from "../../lib/i18n";
 import type { MessageKey } from "../../lib/i18n";
 import { memory, projects as projectsApi } from "../../lib/rpc";
 import { rpcErrorMessage } from "../../lib/rpcMessage";
+import { ArchivedNotes } from "./ArchivedNotes";
 import type { MemoryChangedPayload, MemoryDocument, MemoryState, Project } from "../../lib/types";
 
 /** The two curated memories, as a writer reads and edits them.
@@ -338,6 +339,8 @@ export function MemorySection() {
         "settings.memory.workNotes",
         "settings.memory.workNotes.help",
       )}
+
+      {workId ? <ArchivedNotes workId={workId} /> : null}
 
       {error != null && (
         <p className="sd" role="alert" data-testid="memory-error">

@@ -38,7 +38,7 @@ func briefSkills() []storycontext.SkillBrief {
 // undiscoverable and the client would have to guess the tool is there and call
 // it blind — the same silent omission ElementsNotInBrief was added for (#72).
 func TestGetStoryContextTellsAnExternalClientItsSkillsExist(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 
@@ -68,7 +68,7 @@ func TestGetStoryContextTellsAnExternalClientItsSkillsExist(t *testing.T) {
 // section unmentioned: "skills" in empty_sections is how a client learns the
 // list is empty and not merely unbuilt.
 func TestSectionReportListsSkillsEmptyWhenThereAreNone(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Settings = languageSettings(t, "en")
 
 	_, out, err := d.getStoryContext(ctx, nil, getStoryContextInput{NodeID: nodeID}, AllToolGroups())
@@ -88,7 +88,7 @@ func TestSectionReportListsSkillsEmptyWhenThereAreNone(t *testing.T) {
 // the report, or the key is advertising a control that does not exist — the
 // thing sectionReport's own comment warns against.
 func TestIncludeSkillsFalseRemovesTheBlockAndTheReportSaysSo(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 
@@ -113,7 +113,7 @@ func TestIncludeSkillsFalseRemovesTheBlockAndTheReportSaysSo(t *testing.T) {
 // is what justifies a separate ContextKeySkills instead of riding
 // ContextKeyMemories the way the curated documents do.
 func TestTheTwoTogglesDoNotReachEachOther(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes"}, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "no em dashes"})
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 
@@ -146,7 +146,7 @@ func TestTheTwoTogglesDoNotReachEachOther(t *testing.T) {
 // suppression: a report claiming "skills" over a brief that carries none is
 // the same defect #97 shipped a fix round for.
 func TestGetStoryContextForTheAgentOmitsTheSkillsAndTheReportAgrees(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 	d.Source = SourceAgent
@@ -179,7 +179,7 @@ func TestGetStoryContextForTheAgentOmitsTheSkillsAndTheReportAgrees(t *testing.T
 // same server just refused to register — the exact failure this feature is
 // supposed to prevent, one level out from the system prompt.
 func TestGetStoryContextDropsTheSkillsBlockWhenTheSkillToolsAreOff(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "PROFILE-BODY: no em dashes"}, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, fakeCurated{profile: "PROFILE-BODY: no em dashes"})
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 	setToolGroups(t, d.Settings, ToolGroups{Memory: true, Skills: false})
@@ -214,7 +214,7 @@ func TestGetStoryContextDropsTheSkillsBlockWhenTheSkillToolsAreOff(t *testing.T)
 // cannot put the block back. A client must not be able to ask its way past a
 // decision the writer made.
 func TestIncludeSkillsTrueCannotOverrideTheWritersSwitch(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 	setToolGroups(t, d.Settings, ToolGroups{Memory: true, Skills: false})
@@ -232,7 +232,7 @@ func TestIncludeSkillsTrueCannotOverrideTheWritersSwitch(t *testing.T) {
 // And with the group ON, nothing about the client's flag changes: the two
 // controls compose, they do not replace each other.
 func TestTheWritersSwitchLeavesIncludeSkillsAloneWhenTheGroupIsOn(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 	setToolGroups(t, d.Settings, AllToolGroups())
@@ -268,7 +268,7 @@ func TestTheWritersSwitchLeavesIncludeSkillsAloneWhenTheGroupIsOn(t *testing.T) 
 // exactly that disagreement and asks the server itself, over the wire, for
 // both answers.
 func TestTheBriefNamesNoToolTheSameServerDidNotRegister(t *testing.T) {
-	ctx, d, nodeID := newStoryContextDeps(t, nil, nil)
+	ctx, d, nodeID := newStoryContextDeps(t, nil)
 	d.Context = d.Context.WithSkillSource(fakeBriefSkills{items: briefSkills()})
 	d.Settings = languageSettings(t, "en")
 

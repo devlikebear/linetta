@@ -122,13 +122,12 @@ func TestSkillsAreIndependentlyToggleable(t *testing.T) {
 		ProjectID:     "p1",
 		Skills:        twoSkills(),
 		WriterProfile: "줄표 쓰지 않기",
-		Memories:      []string{"오래된 기억"},
 		Options:       Options{Context: ContextSelection{Skills: &off}},
 	})
 	if len(skillsOff.Skills) != 0 {
 		t.Errorf("skills survived their own toggle: %+v", skillsOff.Skills)
 	}
-	if skillsOff.WriterProfile == "" || len(skillsOff.Memories) == 0 {
+	if skillsOff.WriterProfile == "" {
 		t.Error("turning skills off also took the memories, which have their own key")
 	}
 
@@ -136,7 +135,6 @@ func TestSkillsAreIndependentlyToggleable(t *testing.T) {
 		ProjectID:     "p1",
 		Skills:        twoSkills(),
 		WriterProfile: "줄표 쓰지 않기",
-		Memories:      []string{"오래된 기억"},
 		Options:       Options{Context: ContextSelection{Memories: &off}},
 	})
 	if len(memoriesOff.Skills) != 2 {

@@ -35,6 +35,10 @@ vi.mock("../../lib/i18n", () => ({
   }),
 }));
 
+// It listens for memory-changed too, and the bus above keeps one listener per
+// event. Its own behaviour is ArchivedNotes.test.tsx's to pin.
+vi.mock("./ArchivedNotes", () => ({ ArchivedNotes: () => null }));
+
 import { MemorySection } from "./MemorySection";
 
 // The engine's budgets, in runes (agentmemory/agentmemory.go:25-27). The pane

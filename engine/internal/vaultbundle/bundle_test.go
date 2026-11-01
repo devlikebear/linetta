@@ -87,6 +87,7 @@ func seedWork(t *testing.T, db *sql.DB, id string) {
 		`INSERT INTO fact_sources (id, card_id, url, accessed_at) VALUES ('P-u1', 'P-c1', 'https://example.test', 1)`,
 		`INSERT INTO writing_stats (project_id, day, chars_added) VALUES ('P', '2026-10-31', 10)`,
 		`INSERT INTO agent_memory (scope, project_id, body, updated_at) VALUES ('work_notes', 'P', '작업 노트', 1)`,
+		`INSERT INTO agent_memory_archive (id, project_id, body, source_message_id, archived_at) VALUES ('P-a1', 'P', '보관한 줄', 'msg', 1)`,
 		`INSERT INTO continuity_checks (id, project_id, node_id, content_version, source, checked_at) VALUES ('P-k1', 'P', 'P-n2', 3, 'agent', 1)`,
 		`INSERT INTO continuity_observations (id, check_id, project_id, node_id, category, kind, severity, summary, paragraph_from, paragraph_to, quote, status_at, created_at)
 		 VALUES ('P-v1', 'P-k1', 'P', 'P-n2', 'fact', 'gap', 'low', '요약', 0, 1, '인용', 1, 1)`,

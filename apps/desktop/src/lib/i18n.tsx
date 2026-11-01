@@ -1532,6 +1532,10 @@ const messages = {
     "settings.memory.changedElsewhere":
       "에이전트가 이 기억을 방금 수정했습니다. 작성 중인 내용을 저장하면 그 수정을 덮어씁니다.",
     "settings.memory.empty": "아직 기록된 것이 없습니다.",
+    "settings.memory.archive.title": "보관한 메모 {count}개",
+    "settings.memory.archive.help": "프롬프트에는 실리지 않고, 에이전트가 필요할 때 검색해서 찾습니다.",
+    "settings.memory.archive.restore": "노트로 되돌리기",
+    "settings.memory.archive.delete": "지우기",
     // 스킬(#98). 기억이 "무엇이 사실인가"라면 스킬은 "어떻게 하는가"다 —
     // 둘을 헷갈리면 작가는 설정을 스킬에 적고 왜 반영되지 않는지 묻게 되므로,
     // 설명은 그 경계를 먼저 긋는다. 작성자 배지는 장식이 아니라 승인 절차를
@@ -3181,6 +3185,10 @@ const messages = {
     "settings.memory.changedElsewhere":
       "The agent just changed this memory. Saving what you are writing will overwrite that change.",
     "settings.memory.empty": "Nothing recorded yet.",
+    "settings.memory.archive.title": "Archived notes ({count})",
+    "settings.memory.archive.help": "These stay out of the prompt. The agent finds them by searching when it needs them.",
+    "settings.memory.archive.restore": "Move back to notes",
+    "settings.memory.archive.delete": "Delete",
     "settings.skills.title": "Skills",
     "settings.skills.description":
       "Notes on techniques the agent has worked out. They hold methods, not facts — facts live in the fact book and in memory.",
@@ -4792,6 +4800,10 @@ const messages = {
     "settings.memory.changedElsewhere":
       "エージェントがこの記憶をたった今変更しました。編集中の内容を保存すると、その変更を上書きします。",
     "settings.memory.empty": "まだ何も記録されていません。",
+    "settings.memory.archive.title": "保管したメモ {count}件",
+    "settings.memory.archive.help": "プロンプトには含まれず、エージェントが必要なときに検索して見つけます。",
+    "settings.memory.archive.restore": "ノートに戻す",
+    "settings.memory.archive.delete": "削除",
     "settings.skills.title": "スキル",
     "settings.skills.description":
       "エージェントが身につけた手法を書き留める文書です。事実ではなく方法を書きます — 事実はファクトブックと記憶にあります。",

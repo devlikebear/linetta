@@ -672,11 +672,10 @@ func TestTurningMemoriesOffAlsoTurnsOffTheCuratedOnes(t *testing.T) {
 		ProjectID:     "p1",
 		WriterProfile: "줄표 쓰지 않기",
 		WorkNotes:     "민준은 존댓말",
-		Memories:      []string{"오래된 기억"},
 		Options:       Options{Context: ContextSelection{Memories: &off}},
 	}
 	system, user := Render(c)
-	for _, gone := range []string{"줄표 쓰지 않기", "민준은 존댓말", "오래된 기억"} {
+	for _, gone := range []string{"줄표 쓰지 않기", "민준은 존댓말"} {
 		if strings.Contains(system, gone) || strings.Contains(user, gone) {
 			t.Errorf("%q survived the memories toggle being off", gone)
 		}

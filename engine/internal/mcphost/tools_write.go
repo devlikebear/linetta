@@ -446,11 +446,12 @@ type memoryChangedPayload struct {
 }
 
 type editMemoryInput struct {
-	Scope     string `json:"scope" jsonschema:"which memory: writer_profile (global - how this writer works, across every work) or work_notes (what you have learned about one work)"`
-	Action    string `json:"action" jsonschema:"add, replace or remove"`
-	Text      string `json:"text,omitempty" jsonschema:"the memory to record, one line; required for add and replace"`
-	Find      string `json:"find,omitempty" jsonschema:"a short piece of the existing line you mean, unique among the lines; required for replace and remove"`
-	ProjectID string `json:"project_id,omitempty" jsonschema:"the work whose notes to edit; required when scope is work_notes, and not accepted for writer_profile"`
+	Scope           string `json:"scope" jsonschema:"which memory: writer_profile (global - how this writer works, across every work) or work_notes (what you have learned about one work)"`
+	Action          string `json:"action" jsonschema:"add, replace, remove or archive"`
+	Text            string `json:"text,omitempty" jsonschema:"the memory to record, one line; required for add and replace"`
+	Find            string `json:"find,omitempty" jsonschema:"a short piece of the existing line you mean, unique among the lines; required except for add"`
+	SourceMessageID string `json:"source_message_id,omitempty"`
+	ProjectID       string `json:"project_id,omitempty" jsonschema:"the work whose notes to edit; required when scope is work_notes, and not accepted for writer_profile"`
 }
 
 // scope names the work the caller asked for (work notes only; the profile is
@@ -516,7 +517,15 @@ func (d ToolDeps) editMemory(ctx context.Context, _ *mcp.CallToolRequest, in edi
 	// writers by design (the panel's agent and a connected external client),
 	// and a read-modify-write split across three calls loses whichever edit
 	// lands second-to-last while telling its caller it succeeded.
-	saved, err := d.Memory.Edit(ctx, scope, projectID, in.Action, in.Find, in.Text, d.now())
+	var saved agentmemory.Document
+	if in.Action == agentmemory.ActionArchive {
+		if scope != agentmemory.ScopeWorkNotes {
+			return toolErr("only work_notes can be archived; replace or remove a line of the writer profile"), editMemoryOutput{}, nil
+		}
+		saved, err = d.Memory.Archive(ctx, projectID, in.Find, in.SourceMessageID, d.now())
+	} else {
+		saved, err = d.Memory.Edit(ctx, scope, projectID, in.Action, in.Find, in.Text, d.now())
+	}
 	if err != nil {
 		return toolErr("%v", err), editMemoryOutput{}, nil
 	}

@@ -1,4 +1,5 @@
 import type { CharacterVisualSheet, ReferenceImageMeta, ArtStyle, StyleApproveMode, StyleCheckResult, StyleDraftState, StyleRules } from "./types";
+import type { ArchivedNote } from "./types";
 import type { FocusState, SceneIntent, SceneIntentState } from "./types";
 import type { ContinuityCheck, ContinuityObservation, ContinuityOpenCounts, ContinuityStatus } from "./types";
 import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc } from "./types";
@@ -308,6 +309,14 @@ export const memory = {
   get: (projectId: string) => rpcCall<MemoryState>("memory.get", { project_id: projectId }),
   set: (scope: MemoryDocument["scope"], projectId: string, body: string) =>
     rpcCall<MemoryDocument>("memory.set", { scope, project_id: projectId, body }),
+  archive: {
+    list: (projectId: string) =>
+      rpcCall<ArchivedNote[]>("memory.archive.list", { project_id: projectId }),
+    restore: (projectId: string, id: string) =>
+      rpcCall<MemoryDocument>("memory.archive.restore", { project_id: projectId, id }),
+    remove: (projectId: string, id: string) =>
+      rpcCall<{ ok: boolean }>("memory.archive.delete", { project_id: projectId, id }),
+  },
 };
 
 /** The skills surface (#98). `list` returns BOTH scopes plus the diagnostics:
