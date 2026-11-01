@@ -127,6 +127,24 @@ func TestSearchLooksOnlyBeforeTheBoundaryAndSkipsTheRunningTurn(t *testing.T) {
 	}
 }
 
+// The replay's first message can be the tool row of an ask card, and that id is
+// what the cut note hands the model as its boundary.
+func TestSearchTakesAToolRowAsItsBoundary(t *testing.T) {
+	ctx, st, _, p := seedWork(t)
+	repo := NewHistoryRepo(st.DB())
+	addHistory(t, repo, HistoryMessage{ID: "old", ProjectID: p.ID, Role: "user", Content: "무형검 처음", CreatedAt: 1})
+	addHistory(t, repo, HistoryMessage{ID: "card", ProjectID: p.ID, Role: "tool", Content: `{"name":"linetta_ask_writer"}`, CreatedAt: 2})
+	addHistory(t, repo, HistoryMessage{ID: "new", ProjectID: p.ID, Role: "user", Content: "무형검 나중", CreatedAt: 3})
+
+	hits, err := repo.Search(ctx, HistorySearchQuery{ProjectID: p.ID, Query: "무형검", BeforeID: "card"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if !sameIDs(hitIDs(hits), "old") {
+		t.Errorf("hits = %v", hitIDs(hits))
+	}
+}
+
 func TestSearchCapsItsLimit(t *testing.T) {
 	ctx, st, _, p := seedWork(t)
 	repo := NewHistoryRepo(st.DB())
