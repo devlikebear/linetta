@@ -690,3 +690,36 @@ func TestSetupChecksTheKeyAgainstAFreshRepository(t *testing.T) {
 		t.Fatal("the key was decided before the target was brought up to date")
 	}
 }
+
+// A repository with core.autocrlf on rewrites what it takes for text, and a short
+// sealed blob can look like text. One changed byte and the blob no longer opens.
+func TestGitLeavesSealedFilesByteForByte(t *testing.T) {
+	ctx := context.Background()
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	runGit(t, filepath.Dir(remote), "init", "--quiet", "--bare", "--initial-branch=main", remote)
+	dir := filepath.Join(t.TempDir(), "a")
+	runGit(t, filepath.Dir(dir), "clone", "--quiet", remote, dir)
+	runGit(t, dir, "config", "core.autocrlf", "true")
+	s := newDirStore(t, dir, "aaaa")
+	if err := s.prepare(); err != nil {
+		t.Fatal(err)
+	}
+	id := blobName(3)
+	sealed := []byte("line one\r\nline two\r\n")
+	if err := s.PutBlob(ctx, id, sealed); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "-c", "user.name=a", "-c", "user.email=a@test.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "blob")
+	runGit(t, dir, "push", "--quiet", "origin", "HEAD:main")
+
+	other := filepath.Join(t.TempDir(), "b")
+	runGit(t, filepath.Dir(other), "-c", "core.autocrlf=true", "clone", "--quiet", "--branch", "main", remote, other)
+	got, err := newDirStore(t, other, "bbbb").GetBlob(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(sealed) {
+		t.Fatalf("the blob changed on its way through git: %q", got)
+	}
+}

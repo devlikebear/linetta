@@ -57,6 +57,7 @@ func newClone(t *testing.T, remote, name string) *clone {
 	git(t, dir, "config", "user.name", name)
 	git(t, dir, "config", "user.email", name+"@test.invalid")
 	git(t, dir, "config", "commit.gpgsign", "false")
+	git(t, dir, "config", "core.autocrlf", "false")
 	git(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
 	if _, err := cfg.Set(ctx, settings.Patch{GitSyncDir: &dir}); err != nil {
 		t.Fatal(err)

@@ -36,6 +36,7 @@ import (
 const (
 	dirRoot        = ".linetta"
 	dirFormatFile  = "format.json"
+	dirAttributes  = ".gitattributes"
 	dirBlobs       = "blobs"
 	dirItems       = "items"
 	dirFormat      = 1
@@ -107,9 +108,15 @@ func (d dirStore) prepare() error {
 		if err := os.MkdirAll(d.root(), 0o700); err != nil {
 			return err
 		}
+		if err := d.keepBytes(); err != nil {
+			return err
+		}
 		return atomicfile.Write(file, []byte(`{"format":1}`), 0o600)
 	}
 	if err != nil {
+		return err
+	}
+	if err := d.keepBytes(); err != nil {
 		return err
 	}
 	var format struct {
@@ -122,6 +129,17 @@ func (d dirStore) prepare() error {
 		return ErrNewerFormat
 	}
 	return nil
+}
+
+// keepBytes tells Git to leave these files alone. A repository with
+// core.autocrlf on rewrites line endings in anything that looks like text, and a
+// short sealed blob can: one changed byte and it no longer opens.
+func (d dirStore) keepBytes() error {
+	file := filepath.Join(d.root(), dirAttributes)
+	if _, err := os.Stat(file); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return atomicfile.Write(file, []byte("* -text\n"), 0o600)
 }
 
 func (d dirStore) blobPath(id string) (string, error) {
