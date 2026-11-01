@@ -31,6 +31,9 @@ const (
 	// gitNetworkTimeout is for the steps that move a repository: a first push
 	// carries every sealed blob of the library.
 	gitNetworkTimeout = 10 * time.Minute
+	// gitWaitDelay bounds waiting on git's output once git has exited or been
+	// killed. A child it left behind can hold the pipes open for as long as it runs.
+	gitWaitDelay = 5 * time.Second
 	// maxRebaseSteps bounds resolving Markdown one commit at a time.
 	maxRebaseSteps = 100
 )
@@ -417,6 +420,14 @@ const MCPConfigFilename = ".mcp.json"
 // sync dir except files that must never reach the remote.
 var excludeFromStaging = []string{".", ":(exclude)" + MCPConfigFilename}
 
+func gitCommand(ctx context.Context, dir string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = dir
+	cmd.WaitDelay = gitWaitDelay
+	unattended(cmd)
+	return cmd
+}
+
 // runGitProd is the production CmdRunner. It runs git from `dir`, captures
 // stderr into the returned error, and enforces a per-call timeout.
 func runGitProd(ctx context.Context, dir string, args ...string) (string, error) {
@@ -426,12 +437,11 @@ func runGitProd(ctx context.Context, dir string, args ...string) (string, error)
 	}
 	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, "git", args...)
-	cmd.Dir = dir
+	cmd := gitCommand(cctx, dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Run(); err != nil && !errors.Is(err, exec.ErrWaitDelay) {
 		if errors.Is(cctx.Err(), context.DeadlineExceeded) {
 			return "", fmt.Errorf("timeout after %s: %s", timeout, strings.TrimSpace(stderr.String()))
 		}
