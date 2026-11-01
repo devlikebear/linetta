@@ -30,7 +30,7 @@ func (i *Indexer) Upsert(ctx context.Context, projectID, nodeID, contentDoc stri
 	}
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO manuscript_fts (plain, node_id, project_id)
-VALUES (?, ?, ?)`, docToPlainText(contentDoc), nodeID, projectID); err != nil {
+VALUES (?, ?, ?)`, DocToPlainText(contentDoc), nodeID, projectID); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -88,7 +88,7 @@ VALUES (?, ?, ?)`)
 	}
 	defer stmt.Close()
 	for _, item := range entries {
-		if _, err := stmt.ExecContext(ctx, docToPlainText(item.doc), item.nodeID, item.projectID); err != nil {
+		if _, err := stmt.ExecContext(ctx, DocToPlainText(item.doc), item.nodeID, item.projectID); err != nil {
 			return err
 		}
 	}
@@ -151,7 +151,7 @@ VALUES (?, ?, ?)`)
 	}
 	defer stmt.Close()
 	for _, e := range entries {
-		if _, err := stmt.ExecContext(ctx, docToPlainText(e.doc), e.nodeID, projectID); err != nil {
+		if _, err := stmt.ExecContext(ctx, DocToPlainText(e.doc), e.nodeID, projectID); err != nil {
 			return err
 		}
 	}

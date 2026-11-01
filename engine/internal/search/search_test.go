@@ -154,6 +154,48 @@ func TestQueryFindsShortWordsAndWordsInAnyOrder(t *testing.T) {
 	}
 }
 
+const mentionDoc = `{"type":"doc","content":[{"type":"paragraph","content":[` +
+	`{"type":"mention","attrs":{"id":"c1","label":"서린"}},{"type":"text","text":"이 곰배를 만났다."}]}]}`
+
+func TestQueryFindsAParticleOnAMention(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	if err := f.nodes.UpdateContent(ctx, f.nodeID, mentionDoc, 1_200); err != nil {
+		t.Fatalf("update content: %v", err)
+	}
+	results, err := NewRepo(f.store).Query(ctx, "서린이", 10)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(results) != 1 || results[0].NodeID != f.nodeID {
+		t.Fatalf("results = %#v", results)
+	}
+	if results[0].Preview != "서린이 곰배를 만났다." {
+		t.Errorf("preview = %q", results[0].Preview)
+	}
+}
+
+func TestNameMatchPreviewKeepsTheMention(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t)
+	if err := f.nodes.Rename(ctx, f.nodeID, "씬 1", "정박지", 1_100); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if err := f.nodes.UpdateContent(ctx, f.nodeID, mentionDoc, 1_200); err != nil {
+		t.Fatalf("update content: %v", err)
+	}
+	results, err := NewRepo(f.store).Query(ctx, "정박지", 10)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %#v", results)
+	}
+	if results[0].Preview != "서린이 곰배를 만났다." {
+		t.Errorf("preview = %q", results[0].Preview)
+	}
+}
+
 func TestQueryPutsANameMatchFirstAndListsASceneOnce(t *testing.T) {
 	ctx := context.Background()
 	f := newFixture(t)

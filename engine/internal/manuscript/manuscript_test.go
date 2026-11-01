@@ -131,6 +131,31 @@ func TestIndexerRebuildAllRestoresLeavesAndRemovesOrphans(t *testing.T) {
 	}
 }
 
+func TestSearcherFindsAParticleOnAMention(t *testing.T) {
+	st, p, nr := manuscriptFixture(t)
+	ctx := context.Background()
+	indexer := NewIndexer(st.DB())
+	searcher := NewSearcher(st.DB(), nr, indexer)
+
+	sceneID := *p.LastOpenedNodeID
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[` +
+		`{"type":"mention","attrs":{"id":"c1","label":"서린"}},{"type":"text","text":"이 문을 열었다."}]}]}`
+	if err := indexer.Upsert(ctx, p.ID, sceneID, doc); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	hits, err := searcher.Query(ctx, p.ID, "서린이", 5)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(hits) != 1 || hits[0].NodeID != sceneID {
+		t.Fatalf("hits = %+v, want scene %s", hits, sceneID)
+	}
+	if !strings.Contains(hits[0].Snippet, "서린이") {
+		t.Fatalf("snippet = %q", hits[0].Snippet)
+	}
+}
+
 func TestBuildTrigramMatch(t *testing.T) {
 	got, ok := ftsquery.TrigramMatch(ftsquery.Terms("진홍빛 눈동자"))
 	if !ok {
