@@ -12,10 +12,11 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/provider"
 	"github.com/devlikebear/tars/pkg/llm"
 )
 
-// historyBudget is how much of the earlier conversation is replayed, in
+// historyBudget is how much of the earlier conversation is replayed by default, in
 // CHARACTERS (runes), filled newest-first — and then allowed to grow by
 // historyHeadroom before it is filled again. No summarisation: a compaction
 // pass that quietly rewrites what the writer said is worse than an honest
@@ -422,39 +423,62 @@ func labelOr(look ScopeLookup, ctx context.Context, id string) string {
 	return look.NodeLabel(ctx, id)
 }
 
-// historyHeadroom is how far past historyBudget the replayed history may grow
-// before it is cut back, in runes.
+// selfExecutingHistoryBudget is the replay on a subscription CLI, which is
+// not billed per token and keeps its own context. It stays well inside a 200k
+// window: 130,000 runes of Korean measured about 139,000 input tokens through
+// the CLI, and the turn's tool results still have to fit after it. Other
+// providers stay on historyBudget, because a longer replay is a larger bill on
+// every message and nothing here knows how much context their model has.
+const selfExecutingHistoryBudget = 100000
+
+// resolveHistoryBudget is the replay budget for a provider. configured is the
+// writer's setting, where zero means this choice is the engine's.
+func resolveHistoryBudget(providerID string, configured int) int {
+	switch {
+	case configured > 0:
+		return configured
+	case provider.IsSelfExecuting(providerID):
+		return selfExecutingHistoryBudget
+	}
+	return historyBudget
+}
+
+// historyHeadroom is how far past budget the replayed history may grow before
+// it is cut back, in runes.
 //
 // The replay is the front of every request after the system prompt, and the
 // provider caches a request by its prefix. A window that kept exactly the
-// newest historyBudget runes would drop its oldest message on every turn of a
-// long conversation, so no turn would ever reuse the one before it. Instead the
+// newest budget runes would drop its oldest message on every turn of a long
+// conversation, so no turn would ever reuse the one before it. Instead the
 // window keeps its first message while it grows, and only once it passes
-// historyBudget+historyHeadroom is it refilled to historyBudget from the newest
-// end — one cache miss for every historyHeadroom runes of conversation, rather
-// than one per turn.
-const historyHeadroom = 10000
+// budget plus this is it refilled to budget from the newest end — one cache
+// miss for every headroom's worth of conversation, rather than one per turn.
+func historyHeadroom(budget int) int { return budget / 4 }
 
-// historyLoadRows is how many transcript rows a turn reads to build the
+// historyLoadRows is the fewest transcript rows a turn reads to build the
 // replay. Tool rows count against it and are then thrown away, and a heavy
-// turn writes one per call, so it is set far above what historyBudget needs:
-// when the row limit rather than the budget decides where the window starts,
-// the oldest row slides out every turn and the window's first message with it.
+// turn writes one per call, so it is set far above what a budget needs: when
+// the row limit rather than the budget decides where the window starts, the
+// oldest row slides out every turn and the window's first message with it.
 const historyLoadRows = 2000
+
+// loadRowsFor scales that margin with the budget. A long work has run at about
+// eight rows per 1,000 runes of conversation, and this allows forty.
+func loadRowsFor(budget int) int { return max(historyLoadRows, budget/25) }
 
 // priorMessages replays earlier turns, then restores chronological order. Tool
 // rows are skipped: they are the bulkiest thing in the transcript, and the
 // model already stated their outcome in the reply that followed them.
 //
 // start is the id of the message the previous turn's window began at, or "".
-// While that message is still loaded and the window from it fits within
-// historyBudget+historyHeadroom, the window begins there again — see
-// historyHeadroom for why. Otherwise it is refilled newest-first within
-// historyBudget. The id it began at is returned for the next turn.
-func priorMessages(msgs []companion.HistoryMessage, start string) ([]llm.ChatMessage, string) {
+// While that message is still loaded and the window from it fits within budget
+// plus its headroom, the window begins there again — see historyHeadroom for
+// why. Otherwise it is refilled newest-first within budget. The id it began at
+// is returned for the next turn.
+func priorMessages(msgs []companion.HistoryMessage, start string, budget int) ([]llm.ChatMessage, string) {
 	replayable := replayableMessages(msgs)
 
-	from := windowFrom(replayable, start)
+	from := windowFrom(replayable, start, budget)
 	if from < 0 {
 		// Newest first, stopping at the first message that does not fit
 		// rather than hunting for a smaller older one: what is kept is always
@@ -463,7 +487,7 @@ func priorMessages(msgs []companion.HistoryMessage, start string) ([]llm.ChatMes
 		used := 0
 		for from > 0 {
 			cost := utf8.RuneCountInString(replayable[from-1].Content)
-			if used+cost > historyBudget {
+			if used+cost > budget {
 				break
 			}
 			used += cost
@@ -508,8 +532,8 @@ func historyCut(msgs []companion.HistoryMessage, start string) bool {
 }
 
 // windowFrom is the index of the message with id start, when the window from
-// it still fits within historyBudget+historyHeadroom, or -1.
-func windowFrom(replayable []companion.HistoryMessage, start string) int {
+// it still fits within budget plus its headroom, or -1.
+func windowFrom(replayable []companion.HistoryMessage, start string, budget int) int {
 	if start == "" {
 		return -1
 	}
@@ -521,7 +545,7 @@ func windowFrom(replayable []companion.HistoryMessage, start string) int {
 		for _, rest := range replayable[i:] {
 			used += utf8.RuneCountInString(rest.Content)
 		}
-		if used > historyBudget+historyHeadroom {
+		if used > budget+historyHeadroom(budget) {
 			return -1
 		}
 		return i

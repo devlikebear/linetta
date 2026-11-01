@@ -52,6 +52,9 @@ const JOB_SUMMARIZER = "summarizer";
 const DEFAULT_AGENT_MAX_TOOL_CALLS = 48;
 const MIN_AGENT_MAX_TOOL_CALLS = 8;
 const MAX_AGENT_MAX_TOOL_CALLS = 200;
+// settings.MinAgentHistoryBudget and MaxAgentHistoryBudget. Blank is automatic.
+const MIN_AGENT_HISTORY_BUDGET = 20000;
+const MAX_AGENT_HISTORY_BUDGET = 200000;
 
 /** Sidebar categories (#82, 시안 A). One category renders at a time; the
  *  sidebar is the only scroll-free path to every setting. */
@@ -146,6 +149,7 @@ export function Settings() {
   const [gitTmplDraft, setGitTmplDraft] = useState("");
   const [editorFontSizeDraft, setEditorFontSizeDraft] = useState("20");
   const [maxToolCallsDraft, setMaxToolCallsDraft] = useState(String(DEFAULT_AGENT_MAX_TOOL_CALLS));
+  const [historyBudgetDraft, setHistoryBudgetDraft] = useState("");
   const [editorLineHeightDraft, setEditorLineHeightDraft] = useState("1.92");
 
   useEffect(() => {
@@ -160,6 +164,7 @@ export function Settings() {
         setGitTmplDraft(s.git_sync_commit_template);
         setEditorFontSizeDraft(String(s.editor_font_size ?? 20));
         setMaxToolCallsDraft(String(s.agent_max_tool_calls ?? DEFAULT_AGENT_MAX_TOOL_CALLS));
+        setHistoryBudgetDraft(s.agent_history_budget ? String(s.agent_history_budget) : "");
         setEditorLineHeightDraft(String(s.editor_line_height ?? 1.92));
         setOpsRows(rows);
         setGitSyncAvailable(diag.git_sync_available ?? true);
@@ -225,6 +230,7 @@ export function Settings() {
       setLanguage(next.language);
       setEditorFontSizeDraft(String(next.editor_font_size ?? 20));
       setMaxToolCallsDraft(String(next.agent_max_tool_calls ?? DEFAULT_AGENT_MAX_TOOL_CALLS));
+      setHistoryBudgetDraft(next.agent_history_budget ? String(next.agent_history_budget) : "");
       setEditorLineHeightDraft(String(next.editor_line_height ?? 1.92));
       dispatchAppEvent("linetta:settings-updated", next);
       setSavedAt(Date.now());
@@ -248,6 +254,24 @@ export function Settings() {
     const value = Math.min(MAX_AGENT_MAX_TOOL_CALLS, Math.max(MIN_AGENT_MAX_TOOL_CALLS, parsed));
     setMaxToolCallsDraft(String(value));
     if (value !== saved) void apply({ agent_max_tool_calls: value });
+  };
+
+  // Blank means automatic, which is why this cannot share the cap's rule of
+  // putting a blank draft back: clearing the box is how the writer asks for it.
+  const commitHistoryBudget = () => {
+    if (!current) return;
+    const saved = current.agent_history_budget ?? 0;
+    const parsed = Math.round(Number(historyBudgetDraft));
+    if (historyBudgetDraft.trim() !== "" && !Number.isFinite(parsed)) {
+      setHistoryBudgetDraft(saved ? String(saved) : "");
+      return;
+    }
+    const value =
+      historyBudgetDraft.trim() === "" || parsed === 0
+        ? 0
+        : Math.min(MAX_AGENT_HISTORY_BUDGET, Math.max(MIN_AGENT_HISTORY_BUDGET, parsed));
+    setHistoryBudgetDraft(value ? String(value) : "");
+    if (value !== saved) void apply({ agent_history_budget: value });
   };
 
 
@@ -736,6 +760,33 @@ export function Settings() {
                       min: String(MIN_AGENT_MAX_TOOL_CALLS),
                       max: String(MAX_AGENT_MAX_TOOL_CALLS),
                       default: String(DEFAULT_AGENT_MAX_TOOL_CALLS),
+                    })}
+                  </p>
+                </div>
+              )}
+              {agentAvailable && (
+                <div className="modal-field">
+                  <label htmlFor="agent-history-budget">{t("settings.tools.historyBudget.title")}</label>
+                  <input
+                    id="agent-history-budget"
+                    data-testid="agent-history-budget"
+                    type="number"
+                    min={MIN_AGENT_HISTORY_BUDGET}
+                    max={MAX_AGENT_HISTORY_BUDGET}
+                    step={1000}
+                    placeholder={t("settings.tools.historyBudget.auto")}
+                    value={historyBudgetDraft}
+                    onChange={(e) => setHistoryBudgetDraft(e.currentTarget.value)}
+                    onBlur={commitHistoryBudget}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    disabled={saving}
+                  />
+                  <p className="sd">
+                    {t("settings.tools.historyBudget.description", {
+                      min: String(MIN_AGENT_HISTORY_BUDGET),
+                      max: String(MAX_AGENT_HISTORY_BUDGET),
                     })}
                   </p>
                 </div>

@@ -696,6 +696,33 @@ describe("Settings", () => {
     );
   });
 
+  it("treats a blank history budget as automatic and pulls a number into range", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    mocks.settingsGet.mockResolvedValue({ ...baseSettings });
+    mocks.settingsSet.mockImplementation((patch: Record<string, unknown>) =>
+      Promise.resolve({ ...baseSettings, ...patch }),
+    );
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-tools"));
+    const input = (await screen.findByTestId("agent-history-budget")) as HTMLInputElement;
+    expect(input.value).toBe("");
+
+    await user.type(input, "5000{Enter}");
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenLastCalledWith({ agent_history_budget: 20000 }),
+    );
+
+    const again = (await screen.findByTestId("agent-history-budget")) as HTMLInputElement;
+    await waitFor(() => expect(again).not.toBeDisabled());
+    await user.clear(again);
+    await user.tab();
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenLastCalledWith({ agent_history_budget: 0 }),
+    );
+  });
+
   // Both switches are ON unless the writer says otherwise, so the first click
   // sends false — and a payload from an engine that predates the keys must
   // still read as on, or upgrading would silently take the tools away.
