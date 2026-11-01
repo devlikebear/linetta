@@ -11,9 +11,9 @@ _상태: 구현 완료_
 
 ## 전제 조건
 
-- [ ] Phase 1 완료 및 승인
-- [ ] `main`에서 `feat/agent-note-archive` 브랜치 생성
-- [ ] 다음 마이그레이션 번호 확인. Phase 1 뒤 기준 `0037`이다.
+- [x] Phase 1 완료. 작가가 Phase 4까지의 진행을 지시했다
+- [x] `feat/agent-note-archive` 브랜치 생성. Phase 1 위에 쌓았다
+- [x] 다음 마이그레이션 번호 확인: `0037`
 
 ## 포함 기능
 

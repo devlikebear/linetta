@@ -11,8 +11,8 @@ _상태: 구현 완료_
 
 ## 전제 조건
 
-- [ ] Phase 1 완료 및 승인
-- [ ] `main`에서 `feat/agent-history-budget` 브랜치 생성
+- [x] Phase 1 완료. 작가가 Phase 4까지의 진행을 지시했다
+- [x] `feat/agent-history-budget` 브랜치 생성. Phase 2 위에 쌓았다
 
 ## 포함 기능
 
