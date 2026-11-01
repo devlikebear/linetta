@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.20.2 - 2026-11-01
+
+- Changed: the Mac App Store build no longer includes Linetta Works. Publishing,
+  Linetta Works sync, automatic sync and the encrypted folder mirror are gone
+  from it, so it sends nothing to a server the developer runs. Folder Sync stays
+  as a Markdown export. Other builds are unchanged.
+- Fixed: the iPhone and iPad app showed Tauri's default icon instead of
+  Linetta's.
+
 ## v1.20.1 - 2026-11-01
 
 - Fixed: a work pulled from another device would not open and showed
