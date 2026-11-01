@@ -1384,6 +1384,15 @@ export interface MemoryState {
   work_notes: MemoryDocument;
 }
 
+/** One line moved out of a work's notes, from memory.archive.list. */
+export interface ArchivedNote {
+  id: string;
+  project_id: string;
+  body: string;
+  source_message_id?: string;
+  archived_at: number;
+}
+
 /** memory-changed's payload. "agent" and "external" come from mcphost's
  *  linetta_edit_memory tool (mcphost/tools_write.go); "writer" is a save made
  *  by the person at the keyboard, from memory.set. */

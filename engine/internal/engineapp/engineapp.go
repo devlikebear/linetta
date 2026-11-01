@@ -237,6 +237,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 		WithHistory(companionHistory).
 		WithReferences(companion.NewReferenceRepo(st.DB())).
 		WithCuratedMemory(memRepo)
+	// Best-effort like the migration above: a log left behind is still on disk.
+	for _, line := range companionSvc.ImportExperiences(ctx) {
+		fmt.Fprintf(os.Stderr, "companion memory import: %s\n", line)
+	}
 
 	// The MCP host serves story tools to external agents. It binds only when
 	// the writer has turned MCP on and accepted its consent.
@@ -309,7 +313,6 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	mcpContextBuilder := storycontext.NewContextBuilder(projects, nodes, mentions, threads, beats, notes, relationships).
 		WithSummaryRefresher(summ).
 		WithFactSource(companionSvc).
-		WithMemorySource(companionSvc).
 		WithCuratedMemorySource(companionSvc).
 		WithReferenceSource(companionSvc).
 		// The brief is the only channel an external MCP client has, so this
@@ -593,6 +596,10 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	s.Handle("settings.set", handlers.SetSettings(settingsStore))
 	s.Handle("memory.get", handlers.GetMemory(memRepo))
 	s.Handle("memory.set", handlers.SetMemory(memRepo, clock,
+		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
+	s.Handle("memory.archive.list", handlers.ListMemoryArchive(memRepo))
+	s.Handle("memory.archive.delete", handlers.DeleteMemoryArchive(memRepo))
+	s.Handle("memory.archive.restore", handlers.RestoreMemoryArchive(memRepo, clock,
 		func(method string, params any) { _ = s.Notifier().Notify(method, params) }))
 	// The skills surface (#98). skills.write, skills.delete and
 	// skills.restore all emit skills.changed with source "writer", so a

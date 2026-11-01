@@ -15,6 +15,9 @@ import (
 type MemoryStore interface {
 	Load(ctx context.Context, scope agentmemory.Scope, projectID string) (agentmemory.Document, error)
 	Save(ctx context.Context, scope agentmemory.Scope, projectID, body string, now int64) (agentmemory.Document, error)
+	ListArchived(ctx context.Context, projectID string, limit int) ([]agentmemory.Archived, error)
+	DeleteArchived(ctx context.Context, projectID, id string) error
+	RestoreArchived(ctx context.Context, projectID, id string, now int64) (agentmemory.Document, error)
 }
 
 // memoryChangedPayload mirrors mcphost's memoryChangedPayload
@@ -115,5 +118,73 @@ func SetMemory(store MemoryStore, clock func() int64, notify func(method string,
 			})
 		}
 		return json.Marshal(saved)
+	}
+}
+
+type archiveListParams struct {
+	ProjectID string `json:"project_id"`
+}
+
+type archiveItemParams struct {
+	ProjectID string `json:"project_id"`
+	ID        string `json:"id"`
+}
+
+// ListMemoryArchive returns a handler for memory.archive.list. No work picked
+// is the pane's ordinary first state, as in GetMemory, so it answers empty.
+func ListMemoryArchive(store MemoryStore) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p archiveListParams
+		if len(params) > 0 {
+			if err := json.Unmarshal(params, &p); err != nil {
+				return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+			}
+		}
+		projectID := strings.TrimSpace(p.ProjectID)
+		if projectID == "" {
+			return json.Marshal([]agentmemory.Archived{})
+		}
+		list, err := store.ListArchived(ctx, projectID, 0)
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		return json.Marshal(list)
+	}
+}
+
+// DeleteMemoryArchive returns a handler for memory.archive.delete.
+func DeleteMemoryArchive(store MemoryStore) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p archiveItemParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		if err := store.DeleteArchived(ctx, p.ProjectID, p.ID); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		return json.Marshal(map[string]bool{"ok": true})
+	}
+}
+
+// RestoreMemoryArchive returns a handler for memory.archive.restore. It emits
+// memory.changed like memory.set does: the notes moved under an open pane. A
+// full document is InvalidParams for memory.set's reason: the message names
+// what the writer can do about it.
+func RestoreMemoryArchive(store MemoryStore, clock func() int64, notify func(method string, params any)) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p archiveItemParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		doc, err := store.RestoreArchived(ctx, p.ProjectID, p.ID, clock())
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: err.Error()}
+		}
+		if notify != nil {
+			notify("memory.changed", memoryChangedPayload{
+				Scope: string(agentmemory.ScopeWorkNotes), ProjectID: strings.TrimSpace(p.ProjectID), Source: "writer",
+			})
+		}
+		return json.Marshal(doc)
 	}
 }

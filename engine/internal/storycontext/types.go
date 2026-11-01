@@ -314,11 +314,8 @@ type Context struct {
 	Plot          plot.Spine          `json:"plot"`
 	Notes         []NoteBrief         `json:"notes"`
 	Facts         []FactBrief         `json:"facts,omitempty"`
-	Memories      []string            `json:"memories,omitempty"`
-	// WriterProfile and WorkNotes are the curated, budgeted memories. Separate
-	// from Memories (the experiences.jsonl recall) because they are a different
-	// thing: a short document the writer and the agent both maintain, rather
-	// than a substring search over an unbounded log.
+	// WriterProfile and WorkNotes are the curated, budgeted memories: short
+	// documents the writer and the agent both maintain.
 	WriterProfile string `json:"writer_profile,omitempty"`
 	WorkNotes     string `json:"work_notes,omitempty"`
 	// Skills is the name-and-description list of the SKILL.md documents this

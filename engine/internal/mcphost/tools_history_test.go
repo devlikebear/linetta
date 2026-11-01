@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/project"
 	"github.com/devlikebear/linetta/engine/internal/settings"
@@ -34,6 +35,7 @@ func newHistoryDeps(t *testing.T) (context.Context, ToolDeps, string) {
 	}
 	d := ToolDeps{
 		History:  companion.NewHistoryRepo(st.DB()),
+		Memory:   agentmemory.NewRepo(st.DB()),
 		Projects: projects,
 		Activity: NewActivityRepo(st.DB()),
 		Source:   SourceAgent,
@@ -146,5 +148,30 @@ func TestHistoryToolsRefuseInABuildWithNoDatabase(t *testing.T) {
 	}
 	if res, _, _ := d.readHistory(ctx, nil, readHistoryInput{ProjectID: projectID, MessageID: "x"}); res == nil || !res.IsError {
 		t.Errorf("readHistory res = %+v", res)
+	}
+}
+
+func TestSearchHistoryPutsArchivedNotesFirstAndNamesTheirSource(t *testing.T) {
+	ctx, d, projectID := newHistoryDeps(t)
+	appendHistory(t, d, projectID, "m1", "r1", "user", "곰배는 조연으로 하자", 1)
+	if _, err := d.Memory.Save(ctx, agentmemory.ScopeWorkNotes, projectID, "곰배는 흑풍채 두목", 2); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if _, err := d.Memory.Archive(ctx, projectID, "곰배", "m1", 3); err != nil {
+		t.Fatalf("Archive: %v", err)
+	}
+	res, out, err := d.searchHistory(ctx, nil, searchHistoryInput{ProjectID: projectID, Query: "곰배"})
+	if err != nil || (res != nil && res.IsError) {
+		t.Fatalf("searchHistory: err=%v res=%+v", err, res)
+	}
+	if len(out.Hits) != 2 {
+		t.Fatalf("hits = %+v", out.Hits)
+	}
+	first, second := out.Hits[0], out.Hits[1]
+	if first.Source != historySourceNoteArchive || first.MessageID != "m1" || first.Snippet != "곰배는 흑풍채 두목" {
+		t.Errorf("first = %+v", first)
+	}
+	if second.Source != historySourceConversation || second.Role != "user" {
+		t.Errorf("second = %+v", second)
 	}
 }

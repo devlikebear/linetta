@@ -3,6 +3,7 @@
 _작성일: 2026-11-01_
 _속한 로드맵: [`roadmap.md`](./roadmap.md)_
 _예상 소요: 1.5일_
+_상태: 구현 완료. 실제 모델로 정리를 맡기는 수동 확인만 남음_
 
 ## 페이즈 목표
 
@@ -32,7 +33,7 @@ _예상 소요: 1.5일_
 
 ### 작업 그룹 A: 저장
 
-- [ ] **T2.A.1** — 보관 테이블 마이그레이션
+- [x] **T2.A.1** — 보관 테이블 마이그레이션
   - 파일: `engine/internal/store/migrations/0037_agent_memory_archive.sql`
   - 내용:
     - `agent_memory_archive(id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, body TEXT NOT NULL, source_message_id TEXT, archived_at INTEGER NOT NULL)`
@@ -40,7 +41,7 @@ _예상 소요: 1.5일_
     - `agent_memory_archive_fts`는 Phase 1과 같은 방식의 trigram 색인과 삽입, 삭제 트리거
   - 검증: `CGO_ENABLED=0 go test ./internal/store/...`
 
-- [ ] **T2.A.2** — 보관 동작
+- [x] **T2.A.2** — 보관 동작
   - 파일: `engine/internal/agentmemory/edit.go`, `agentmemory.go`, `archive.go` (신규)
   - 내용:
     - `ActionArchive = "archive"`를 더한다. `find`로 한 줄을 고르는 규칙은 `remove`와 같다.
@@ -52,7 +53,7 @@ _예상 소요: 1.5일_
   - 테스트: 예산 감소, 원자성, 없는 줄, 모호한 줄, `writer_profile` 거절, 복원 시 예산 초과
   - 검증: `CGO_ENABLED=0 go test ./internal/agentmemory/...`
 
-- [ ] **T2.A.3** — vault와 복원
+- [x] **T2.A.3** — vault와 복원
   - 파일: `engine/internal/vaultbundle/tables.go`, `engine/internal/restore/restore.go`, 각 테스트
   - 내용:
     - `agent_memory_archive`를 `dependents`에 `byProject`로 넣는다. 작업 노트와 함께 이동해야 한다.
@@ -63,12 +64,12 @@ _예상 소요: 1.5일_
 
 ### 작업 그룹 B: 도구와 프롬프트
 
-- [ ] **T2.B.1** — `linetta_edit_memory` 확장
+- [x] **T2.B.1** — `linetta_edit_memory` 확장
   - 파일: `engine/internal/mcphost/tools_write.go`, `tools_memory_test.go`
-  - 내용: 동작 목록에 `archive`, 입력에 선택 필드 `source_message_id`를 더한다. 출력은 기존처럼 결과 본문을 돌려준다.
+  - 내용: 동작 목록에 `archive`, 입력에 선택 필드 `source_message_id`를 더한다. 출력은 기존처럼 결과 본문을 돌려준다. `archive`는 `Repo.Edit`이 아니라 `Repo.Archive`로 간다.
   - 검증: `CGO_ENABLED=0 go test ./internal/mcphost/...`
 
-- [ ] **T2.B.2** — 검색 결과 병합
+- [x] **T2.B.2** — 검색 결과 병합
   - 파일: `engine/internal/mcphost/tools_history.go`, `engine/internal/agentmemory/archive.go`
   - 내용:
     - `Repo.SearchArchived`를 더하고 `ftsquery`를 쓴다.
@@ -76,42 +77,43 @@ _예상 소요: 1.5일_
     - 보관 메모에 `source_message_id`가 있으면 그대로 돌려줘 `linetta_read_history`로 이어지게 한다.
   - 검증: 위 명령 통과
 
-- [ ] **T2.B.3** — 프롬프트 안내
+- [x] **T2.B.3** — 프롬프트 안내
   - 파일: `engine/internal/agent/prompt.go`, `prompt_test.go`
   - 내용: 작업 노트 안내에 "원고나 원장에 이미 반영된 끝난 결정은 archive, 틀린 내용은 remove"를 더한다. 메모리 도구 그룹이 꺼지면 안내도 뺀다.
   - 검증: `CGO_ENABLED=0 go test ./internal/agent/...`
 
 ### 작업 그룹 C: 설정 화면
 
-- [ ] **T2.C.1** — RPC
+- [x] **T2.C.1** — RPC
   - 파일: `engine/internal/rpc/handlers/memory.go`, `engine/internal/engineapp/engineapp.go`, `apps/desktop/src/lib/rpc.ts`, `types.ts`
   - 내용: `memory.archive.list`, `memory.archive.delete`, `memory.archive.restore`
   - 검증: `CGO_ENABLED=0 go test ./internal/rpc/...`
 
-- [ ] **T2.C.2** — 보관 메모 목록
-  - 파일: `apps/desktop/src/components/settings/MemorySection.tsx`, `MemorySection.test.tsx`, `apps/desktop/src/lib/i18n.tsx`
+- [x] **T2.C.2** — 보관 메모 목록
+  - 파일: `apps/desktop/src/components/settings/ArchivedNotes.tsx`(신규), `MemorySection.tsx`, `apps/desktop/src/lib/i18n.tsx`
   - 내용: 작품 노트 아래에 접힌 목록을 둔다. 줄마다 되돌리기와 지우기를 둔다. 예산 초과로 되돌리기가 실패하면 이유를 보여 준다.
   - 검증: `make test-desktop`
 
 ### 작업 그룹 D: 키워드 기억 정리
 
-- [ ] **T2.D.1** — `remember`를 보관으로 전환
+- [x] **T2.D.1** — `remember`를 보관으로 전환
   - 파일: `engine/internal/storyops/apply.go`, `engine/internal/engineapp/engineapp.go`, `engine/internal/companion/memory.go`
   - 내용:
     - `storyops`의 메모리 인터페이스(`Remember(projectID, text, category string) error`) 구현을 보관 저장소로 연결한다. `category`는 쓰지 않는다.
     - `Screen`을 통과한 내용만 저장한다.
   - 검증: `CGO_ENABLED=0 go test ./internal/storyops/...`
 
-- [ ] **T2.D.2** — 기존 기록 가져오기
+- [x] **T2.D.2** — 기존 기록 가져오기
   - 파일: `engine/internal/companion/legacymemory.go`, `legacymemory_test.go`
   - 내용:
     - 시작할 때 작품별 `experiences.jsonl`을 읽어 보관 메모로 가져온다.
     - ID는 작품 ID와 본문의 해시로 만들어 여러 번 돌아도 중복되지 않게 한다.
     - 파일은 지우지 않는다. 내보내기가 `MemoryRoot`를 가리킨다.
+    - 가져온 뒤 `experiences.imported` 표시 파일을 남긴다. ID 중복 방지만으로는 작가가 지운 줄이 다음 실행에서 되살아난다.
     - 없는 작품의 기록은 건너뛰고 로그만 남긴다.
   - 검증: `CGO_ENABLED=0 go test ./internal/companion/...`
 
-- [ ] **T2.D.3** — 최신 5개 주입 제거
+- [x] **T2.D.3** — 최신 5개 주입 제거
   - 파일: `engine/internal/companion/context_sources.go`, `engine/internal/storycontext/builder.go`, `render.go`, `engine/internal/mcphost/tools_read.go`
   - 내용:
     - `ContextMemories`와 `Context.Memories` 경로를 제거한다. 관련도 없이 최신 5개를 넣던 경로다.
@@ -124,18 +126,18 @@ _예상 소요: 1.5일_
 ## ✅ Phase 2 Checkpoint
 
 **구현 확인:**
-- [ ] 모든 작업 체크박스 완료
-- [ ] 보관 후 노트 사용량이 줄고, 검색에서 해당 줄이 나온다
-- [ ] 설정에서 보관 메모를 보고 지울 수 있다
+- [x] 모든 작업 체크박스 완료
+- [x] 보관 후 노트 사용량이 줄고, 검색에서 해당 줄이 나온다
+- [x] 설정에서 보관 메모를 보고 지울 수 있다
 
 **자동 검증:**
-- [ ] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
-- [ ] `make test-mobile-engine` 통과
-- [ ] `make test-desktop` 통과
+- [x] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
+- [x] `make test-mobile-engine` 통과
+- [x] `make test-desktop` 통과
 
 **수동 확인:**
 - [ ] 2158자 노트를 쓰는 작품 복사본에서 에이전트에게 끝난 결정의 정리를 맡겨 결과 확인
-- [ ] 백업, 복원 뒤 보관 메모와 검색이 유지되는지 확인
+- [x] 백업, 복원 뒤 보관 메모와 검색이 유지되는지 확인
 
 **완료 처리:**
 1. 완료 작업, 자동 검증 결과, 남은 수동 확인을 보고한다.
@@ -143,6 +145,10 @@ _예상 소요: 1.5일_
 3. 실패하면 항목을 보고하고 원인 분석, 수정, 재검증 순으로 진행한다.
 
 ---
+
+## 확인 기록
+
+2026-11-01 DB 복사본: 2158자 노트에서 한 줄을 보관해 1731자로 줄었고, `생선왕`으로 찾아졌다. `VACUUM INTO` 백업을 다시 열어도 보관 검색과 대화 색인(416행)이 유지됐다.
 
 ## 메모 / 주의
 

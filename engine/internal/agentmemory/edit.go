@@ -168,6 +168,6 @@ func budgeted(scope Scope, before, after string) (string, error) {
 	if used <= scope.Budget() || used < utf8.RuneCountInString(before) {
 		return after, nil
 	}
-	return "", fmt.Errorf("%w: this would be %d characters and %s holds %d — replace or remove a line first",
+	return "", fmt.Errorf("%w: this would be %d characters and %s holds %d — replace, remove or archive a line first",
 		ErrOverBudget, used, scope, scope.Budget())
 }
