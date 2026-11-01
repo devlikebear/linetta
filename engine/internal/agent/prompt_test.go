@@ -13,6 +13,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/companion"
+	"github.com/devlikebear/linetta/engine/internal/settings"
 	"github.com/devlikebear/linetta/engine/internal/storycontext"
 	"github.com/devlikebear/tars/pkg/llm"
 )
@@ -147,7 +148,7 @@ func TestPriorMessages_dropsToolRowsAndKeepsOrder(t *testing.T) {
 		{Role: "user", Content: "first"},
 		{Role: "tool", Content: `{"name":"linetta_write_scene"}`},
 		{Role: "assistant", Content: "second"},
-	}, "")
+	}, "", historyBudget)
 	if len(got) != 2 {
 		t.Fatalf("got %d messages, want 2: %+v", len(got), got)
 	}
@@ -164,7 +165,7 @@ func TestPriorMessages_keepsTheNewestWithinBudget(t *testing.T) {
 		{Role: "user", Content: "oldest"},
 		{Role: "assistant", Content: big},
 		{Role: "user", Content: "newest"},
-	}, "")
+	}, "", historyBudget)
 	joined := ""
 	for _, m := range got {
 		joined += m.Content
@@ -190,7 +191,7 @@ func TestPriorMessages_budgetsInCharactersNotBytes(t *testing.T) {
 	got, _ := priorMessages([]companion.HistoryMessage{
 		{Role: "user", Content: big},
 		{Role: "assistant", Content: "네"},
-	}, "")
+	}, "", historyBudget)
 	joined := ""
 	for _, m := range got {
 		joined += m.Content
@@ -224,7 +225,7 @@ func conversation(n, size int) []companion.HistoryMessage {
 // a long conversation must keep the same first message from turn to turn.
 func TestPriorMessages_keepsItsStartWhileTheConversationGrows(t *testing.T) {
 	history := conversation(50, 1000) // ~50,000 runes: already past the budget
-	first, start := priorMessages(history, "")
+	first, start := priorMessages(history, "", historyBudget)
 	if start == "" {
 		t.Fatal("no start was returned for a non-empty window")
 	}
@@ -234,7 +235,7 @@ func TestPriorMessages_keepsItsStartWhileTheConversationGrows(t *testing.T) {
 	for i := range grown[50:] {
 		grown[50+i].ID = fmt.Sprintf("n%d", i)
 	}
-	next, nextStart := priorMessages(grown, start)
+	next, nextStart := priorMessages(grown, start, historyBudget)
 	if nextStart != start {
 		t.Fatalf("the window moved from %s to %s inside the headroom", start, nextStart)
 	}
@@ -253,7 +254,7 @@ func TestPriorMessages_keepsItsStartWhileTheConversationGrows(t *testing.T) {
 func TestPriorMessages_refillsOncePastTheHeadroom(t *testing.T) {
 	history := conversation(80, 1000)
 	start := history[0].ID // a window from here is ~80,000 runes
-	got, nextStart := priorMessages(history, start)
+	got, nextStart := priorMessages(history, start, historyBudget)
 	if nextStart == start {
 		t.Fatal("a window past budget+headroom kept its start")
 	}
@@ -273,7 +274,7 @@ func TestPriorMessages_refillsOncePastTheHeadroom(t *testing.T) {
 // aged out — refills rather than keeping nothing.
 func TestPriorMessages_unknownStartRefills(t *testing.T) {
 	history := conversation(4, 10)
-	got, start := priorMessages(history, "gone")
+	got, start := priorMessages(history, "gone", historyBudget)
 	if len(got) != 4 || start != history[0].ID {
 		t.Fatalf("got %d messages starting at %q, want all 4 from %q", len(got), start, history[0].ID)
 	}
@@ -283,7 +284,7 @@ func TestPriorMessages_mapsRolesForTheModel(t *testing.T) {
 	got, _ := priorMessages([]companion.HistoryMessage{
 		{Role: "user", Content: "q"},
 		{Role: "assistant", Content: "a"},
-	}, "")
+	}, "", historyBudget)
 	if got[0].Role != "user" || got[1].Role != "assistant" {
 		t.Errorf("roles = %q,%q", got[0].Role, got[1].Role)
 	}
@@ -835,15 +836,15 @@ func TestSystemPrompt_explainsTheSelectionBlock(t *testing.T) {
 
 func TestHistoryCut(t *testing.T) {
 	whole := conversation(4, 10)
-	if _, start := priorMessages(whole, ""); historyCut(whole, start) {
+	if _, start := priorMessages(whole, "", historyBudget); historyCut(whole, start) {
 		t.Error("a conversation that fits was reported as cut")
 	}
 	long := conversation(60, 1000)
-	if _, start := priorMessages(long, ""); !historyCut(long, start) {
+	if _, start := priorMessages(long, "", historyBudget); !historyCut(long, start) {
 		t.Error("a conversation past the budget was not reported as cut")
 	}
 	oversized := conversation(1, historyBudget+1)
-	if _, start := priorMessages(oversized, ""); !historyCut(oversized, start) {
+	if _, start := priorMessages(oversized, "", historyBudget); !historyCut(oversized, start) {
 		t.Error("a message too large to replay was not reported as cut")
 	}
 	if historyCut(nil, "") {
@@ -983,5 +984,52 @@ func TestRun_announcesNoCutOnTheFirstTurnAfterARestart(t *testing.T) {
 
 	if rec.has("agent.history_cut") {
 		t.Fatal("the first turn after a restart announced a cut")
+	}
+}
+
+func TestResolveHistoryBudget(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		provider   string
+		configured int
+		want       int
+	}{
+		{"metered provider keeps the default", settings.ProviderAnthropic, 0, historyBudget},
+		{"unknown provider keeps the default", "", 0, historyBudget},
+		{"the subscription CLI replays more", settings.ProviderClaudeCode, 0, selfExecutingHistoryBudget},
+		{"the writer's number wins", settings.ProviderClaudeCode, 30000, 30000},
+		{"on any provider", settings.ProviderAnthropic, 150000, 150000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveHistoryBudget(tc.provider, tc.configured); got != tc.want {
+				t.Errorf("got %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestPriorMessages_followsTheBudgetItIsGiven(t *testing.T) {
+	long := []companion.HistoryMessage{
+		{ID: "a", Role: "user", Content: strings.Repeat("가", 60000)},
+		{ID: "b", Role: "assistant", Content: strings.Repeat("나", 30000)},
+	}
+	if got, start := priorMessages(long, "", 100000); len(got) != 2 || start != "a" {
+		t.Errorf("100k kept %d from %q", len(got), start)
+	}
+	if got, start := priorMessages(long, "", historyBudget); len(got) != 1 || start != "b" {
+		t.Errorf("40k kept %d from %q", len(got), start)
+	}
+	// Shrinking the budget under a standing window refills it.
+	if got, start := priorMessages(long, "a", historyBudget); len(got) != 1 || start != "b" {
+		t.Errorf("a smaller budget kept %d from %q", len(got), start)
+	}
+}
+
+func TestLoadRowsFor_neverFallsBelowTheFloor(t *testing.T) {
+	if got := loadRowsFor(historyBudget); got != historyLoadRows {
+		t.Errorf("default budget reads %d rows", got)
+	}
+	if got := loadRowsFor(200000); got != 8000 {
+		t.Errorf("200k reads %d rows", got)
 	}
 }

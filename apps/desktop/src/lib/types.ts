@@ -952,6 +952,10 @@ export interface Settings {
    *  it is stopped and asked to say how far it got. Missing (an older
    *  engine) means the default, 48. */
   agent_max_tool_calls?: number;
+  /** How many characters of earlier conversation each turn resends. 0 lets
+   *  the engine choose for the provider; missing (an older engine) means the
+   *  same. */
+  agent_history_budget?: number;
   /** The writer's tool budget (#99): whether the memory tool and the two
    *  skills tools are offered to any agent at all. Both optional and both
    *  default ON, so — like agent_self_review_enabled above — every reader
@@ -1019,6 +1023,7 @@ export interface SettingsPatch {
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
   agent_max_tool_calls?: number;
+  agent_history_budget?: number;
   visual_write_tools_disabled?: boolean;
   memory_tools_enabled?: boolean;
   skill_tools_enabled?: boolean;

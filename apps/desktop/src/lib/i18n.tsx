@@ -1283,6 +1283,10 @@ const messages = {
       "툴 설명은 요청마다 통째로 들어갑니다. 쓰지 않는 툴 묶음을 끄면 매 턴 그만큼을 아낍니다. 툴을 끄면 그 툴을 쓰라고 시키는 안내문도 함께 빠집니다.",
     "settings.tools.current": "지금 에이전트가 받는 툴: {tools}개 · 요청마다 약 {size}",
     "settings.tools.groupCost": "툴 {tools}개 · 약 {size}",
+    "settings.tools.historyBudget.title": "대화 기억 길이",
+    "settings.tools.historyBudget.auto": "자동",
+    "settings.tools.historyBudget.description":
+      "매 턴 다시 보내는 이전 대화의 글자 수입니다. 비워 두면 공급자에 맞게 정합니다. 직접 정하려면 {min}~{max} 사이로 입력하세요. 늘리면 잘리는 대화가 줄지만, 사용량 과금 공급자에서는 메시지마다 비용이 커집니다.",
     "settings.tools.maxCalls.title": "한 턴 도구 호출 한도",
     "settings.tools.maxCalls.description":
       "내장 에이전트가 한 번의 대화에서 도구를 이 횟수만큼 쓰면 멈추고 어디까지 했는지 알려 줍니다. 씬이 많은 작품을 한 번에 맡기려면 올리세요. 높일수록 한 턴의 비용도 커집니다. ({min}~{max}, 기본 {default})",
@@ -2936,6 +2940,10 @@ const messages = {
       "Every tool's full description travels in every request. Switching off a group you do not use gives that back on every turn. Turning a group off also removes the instructions that tell the agent to use it.",
     "settings.tools.current": "The agent currently gets {tools} tools — about {size} in every request",
     "settings.tools.groupCost": "{tools} tools · about {size}",
+    "settings.tools.historyBudget.title": "Conversation memory",
+    "settings.tools.historyBudget.auto": "Automatic",
+    "settings.tools.historyBudget.description":
+      "How many characters of earlier conversation each turn sends again. Leave blank to choose by provider, or enter {min} to {max}. More means less is cut off, and on a metered provider every message costs more.",
     "settings.tools.maxCalls.title": "Tool calls per turn",
     "settings.tools.maxCalls.description":
       "The built-in agent stops after this many tool calls in one turn and says how far it got. Raise it to hand over a long work in one go; a higher limit also means a turn can cost more. ({min}–{max}, default {default})",
@@ -4552,6 +4560,10 @@ const messages = {
       "ツールの説明はリクエストごとに丸ごと送られます。使わないツール群を切れば、毎ターンその分が戻ります。切ったツールを使うよう促す案内文も一緒に外れます。",
     "settings.tools.current": "いまエージェントが受け取るツール: {tools}個 · リクエストごとに約 {size}",
     "settings.tools.groupCost": "ツール {tools}個 · 約 {size}",
+    "settings.tools.historyBudget.title": "会話の記憶の長さ",
+    "settings.tools.historyBudget.auto": "自動",
+    "settings.tools.historyBudget.description":
+      "ターンごとに送り直す以前の会話の文字数です。空欄ならプロバイダーに合わせて決めます。指定する場合は {min}〜{max} の範囲で入力してください。増やすと切り捨てが減りますが、従量課金のプロバイダーではメッセージごとの費用が増えます。",
     "settings.tools.maxCalls.title": "1ターンのツール呼び出し上限",
     "settings.tools.maxCalls.description":
       "内蔵エージェントは1回のやり取りでこの回数だけツールを使うと停止し、どこまで進んだかを伝えます。シーンの多い作品を一度に任せるなら上げてください。上げるほど1ターンの費用も大きくなります。({min}〜{max}、既定 {default})",

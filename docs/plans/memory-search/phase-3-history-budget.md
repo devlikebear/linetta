@@ -3,6 +3,7 @@
 _작성일: 2026-11-01_
 _속한 로드맵: [`roadmap.md`](./roadmap.md)_
 _예상 소요: 0.5일_
+_상태: 구현 완료_
 
 ## 페이즈 목표
 
@@ -29,7 +30,7 @@ _예상 소요: 0.5일_
 
 ### 작업 그룹 A: 스파이크
 
-- [ ] **T3.A.1** — claude-code 입력 한계 확인
+- [x] **T3.A.1** — claude-code 입력 한계 확인
   - 파일: 코드 변경 없음. 결과는 이 문서의 스파이크 기록에 적는다.
   - 내용:
     - 대화가 CLI에 어떻게 전달되는지 tars `pkg/llm`의 Claude Code 클라이언트에서 확인한다. 인자로 넘기면 macOS 인자 길이 제한이 걸릴 수 있다.
@@ -40,7 +41,7 @@ _예상 소요: 0.5일_
 
 ### 작업 그룹 B: 엔진
 
-- [ ] **T3.B.1** — 한도를 매개변수로
+- [x] **T3.B.1** — 한도를 매개변수로
   - 파일: `engine/internal/agent/prompt.go`, `agent.go`, `loop.go`, `prompt_test.go`
   - 내용:
     - `priorMessages(msgs, start, budget)`, `windowFrom(replayable, start, budget)`로 바꾼다.
@@ -51,26 +52,26 @@ _예상 소요: 0.5일_
   - 테스트: 기존 창 유지 테스트를 값별로 실행, 한도가 줄면 창이 다시 채워짐
   - 검증: `CGO_ENABLED=0 go test ./internal/agent/...`
 
-- [ ] **T3.B.2** — 불러오는 행 수 조정
+- [x] **T3.B.2** — 불러오는 행 수 조정
   - 파일: `engine/internal/agent/prompt.go`, `loop.go`, `agent.go`
   - 내용:
     - `historyLoadRows`는 2000이고 도구 행도 이 수에 포함된다. 실측 비율로는 12만 자에 약 1000행이 쓰이지만, 도구를 많이 쓰는 작품은 더 든다.
-    - 고정값을 올리지 말고 `load`가 도구 행 중 `ask` 없는 행을 SQL에서 뺄 수 있는지 먼저 본다. 안 되면 6000으로 올린다.
+    - `historyRowFilter`는 `Clear`와 공유하므로 조건을 더하지 않는다. `loadRowsFor(budget)`로 한도에 비례해 늘린다(최소 2000, 한도의 1/25).
   - 주의: 행 제한이 한도보다 먼저 걸리면 창의 첫 메시지가 매 턴 밀려 캐시가 깨진다.
   - 검증: 행 제한 경계 테스트 추가, `CGO_ENABLED=0 go test ./internal/agent/...`
 
-- [ ] **T3.B.3** — 설정값
+- [x] **T3.B.3** — 설정값
   - 파일: `engine/internal/settings/settings.go`, `engine/internal/engineapp/agent_enabled.go`, 설정 테스트
   - 내용:
     - `AgentHistoryBudget int`(`agent_history_budget`), 0은 자동, 수동 범위는 2만~20만
-    - 자동 규칙: `claude-code`는 스파이크 결과 값(목표 12만), 그 외는 4만
+    - 자동 규칙: `claude-code`는 스파이크 결과 값(10만), 그 외는 4만
     - `openai-codex`는 모델별 컨텍스트 크기를 확인하지 못해 4만으로 둔다.
   - 참조: `AgentMaxToolCalls`, `validAgentMaxToolCalls`
   - 검증: `CGO_ENABLED=0 go test ./internal/settings/... ./internal/engineapp/...`
 
 ### 작업 그룹 C: 화면
 
-- [ ] **T3.C.1** — 설정 항목
+- [x] **T3.C.1** — 설정 항목
   - 파일: `apps/desktop/src/routes/Settings.tsx`, `apps/desktop/src/lib/i18n.tsx`, `types.ts`
   - 내용: 에이전트 도구 호출 수 설정 근처에 "자동 / 직접 입력"을 둔다. 값을 키우면 응답마다 보내는 양이 늘어 API 비용이 커질 수 있다고 안내한다.
   - 검증: `make test-desktop`
@@ -80,17 +81,17 @@ _예상 소요: 0.5일_
 ## ✅ Phase 3 Checkpoint
 
 **구현 확인:**
-- [ ] 모든 작업 체크박스 완료
-- [ ] claude-code 공급자에서 자동 한도가 적용된다
-- [ ] 그 외 공급자의 동작이 바뀌지 않는다
+- [x] 모든 작업 체크박스 완료
+- [x] claude-code 공급자에서 자동 한도가 적용된다
+- [x] 그 외 공급자의 동작이 바뀌지 않는다
 
 **자동 검증:**
-- [ ] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
-- [ ] `make test-mobile-engine` 통과
-- [ ] `make test-desktop` 통과
+- [x] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
+- [x] `make test-mobile-engine` 통과
+- [x] `make test-desktop` 통과
 
 **수동 확인:**
-- [ ] DB 복사본에 같은 시뮬레이션을 돌려 잘린 턴 수를 비교한다. 기준선은 196턴 중 78턴이다.
+- [x] DB 복사본에 같은 시뮬레이션을 돌려 잘린 턴 수를 비교한다. 기준선은 196턴 중 78턴이다.
 - [ ] 긴 작품 복사본에서 실제 한 턴을 돌려 응답을 확인한다.
 
 **완료 처리:**
@@ -102,7 +103,13 @@ _예상 소요: 0.5일_
 
 ## 스파이크 기록
 
-_T3.A.1 결과를 여기에 적는다._
+2026-11-01, Claude Code 2.1.280.
+
+- 리네타는 권한 핸들러를 쓰므로 대화는 인자가 아니라 stream-json stdin으로 간다(`provider/claudecode.go`, tars `runControlOnce`). macOS, Linux, Windows의 인자 길이 제한에 걸리지 않는다. `--system-prompt`만 인자로 간다.
+- 한글 129,652자(356,522바이트)를 같은 stdin 경로로 보냈다. 7.8초에 응답했고 마지막 줄을 읽었으며 CLI 압축은 없었다. 시험은 `haiku` 모델로 했다.
+- 입력은 약 13.9만 토큰이었다. 한글 1자당 약 1토큰이다.
+- 12만 자는 200k 창의 대부분을 쓰고 턴의 도구 결과가 들어갈 자리가 좁아서, 기본값을 10만 자로 낮췄다. 여유분을 더하면 12.5만 자까지 창이 유지된다.
+- DB 복사본 시뮬레이션: 잘린 턴이 196턴 중 78턴에서 0턴으로 줄었다.
 
 ## 메모 / 주의
 
