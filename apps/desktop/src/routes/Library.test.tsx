@@ -279,7 +279,7 @@ describe("Library", () => {
     });
     renderLibrary();
 
-    const archiveLink = await screen.findByRole("link", { name: "보관함" });
+    const archiveLink = await screen.findByRole("link", { name: "아카이브" });
 
     expect(archiveLink).toHaveAttribute("href", "/library/all?tab=archived");
     expect(screen.getByRole("link", { name: "전체 라이브러리 →" })).toBeInTheDocument();

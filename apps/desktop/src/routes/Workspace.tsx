@@ -1719,7 +1719,7 @@ export function Workspace() {
         id: "vault-work",
         section: sectionExport,
         label: t("workspace.command.vault"),
-        keywords: ["vault", "sync", "backup", "보관함", "동기화", "올리기", "받기", "保管庫"],
+        keywords: ["vault", "sync", "backup", "Linetta Works", "동기화", "올리기", "받기", "同期"],
         run: () => { void openVault(); },
       });
     }
@@ -2566,7 +2566,7 @@ export function Workspace() {
           onClose={() => setVaultOpen(false)}
           onOpenSettings={() => {
             setVaultOpen(false);
-            rememberSettingsCategory("vault");
+            rememberSettingsCategory("sync");
             navigate("/settings");
           }}
           onStatus={setVaultState}
