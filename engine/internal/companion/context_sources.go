@@ -25,7 +25,6 @@ const referenceContextLimit = 40
 
 var (
 	_ storycontext.FactSource          = (*Service)(nil)
-	_ storycontext.MemorySource        = (*Service)(nil)
 	_ storycontext.CuratedMemorySource = (*Service)(nil)
 	_ storycontext.ReferenceSource     = (*Service)(nil)
 )
@@ -65,11 +64,6 @@ func (s *Service) ContextFacts(ctx context.Context, projectID, nodeID string) ([
 		out = append(out, brief)
 	}
 	return out, nil
-}
-
-// ContextMemories returns recent remembered facts for the brief.
-func (s *Service) ContextMemories(projectID string) []string {
-	return s.Recall(projectID, "", recallLimit)
 }
 
 // CuratedMemory reads the two budgeted documents. Best-effort like the other

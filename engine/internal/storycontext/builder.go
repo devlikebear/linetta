@@ -59,7 +59,6 @@ func (noopRefresher) RefreshNow(context.Context, string) {}
 // ContextBuilder gathers the Context payload from the repos.
 type ContextBuilder struct {
 	factSource          FactSource
-	memorySource        MemorySource
 	curatedMemorySource CuratedMemorySource
 	skillSource         SkillSource
 	referenceSource     ReferenceSource
@@ -111,11 +110,6 @@ func (b *ContextBuilder) WithSummaryRefresher(r SummaryRefresher) *ContextBuilde
 // brief carries them too (pivot #47, Task 1.3).
 type FactSource interface {
 	ContextFacts(ctx context.Context, projectID, nodeID string) ([]FactBrief, error)
-}
-
-// MemorySource supplies remembered writer/world facts for the brief. Optional.
-type MemorySource interface {
-	ContextMemories(projectID string) []string
 }
 
 // CuratedMemorySource supplies the two budgeted memory documents. Unlike
@@ -200,12 +194,6 @@ type DirectionSource interface {
 // WithFactSource wires the optional Fact Book section.
 func (b *ContextBuilder) WithFactSource(s FactSource) *ContextBuilder {
 	b.factSource = s
-	return b
-}
-
-// WithMemorySource wires the optional memories section.
-func (b *ContextBuilder) WithMemorySource(s MemorySource) *ContextBuilder {
-	b.memorySource = s
 	return b
 }
 
@@ -350,10 +338,6 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 			facts = got
 		}
 	}
-	var memories []string
-	if b.memorySource != nil {
-		memories = b.memorySource.ContextMemories(n.ProjectID)
-	}
 	var writerProfile, workNotes string
 	if b.curatedMemorySource != nil {
 		writerProfile, workNotes = b.curatedMemorySource.CuratedMemory(ctx, n.ProjectID)
@@ -437,7 +421,6 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 		Plot:          spine,
 		Notes:         noteBriefs,
 		Facts:         facts,
-		Memories:      memories,
 		WriterProfile: writerProfile,
 		WorkNotes:     workNotes,
 		Skills:        skills,
@@ -595,7 +578,6 @@ func ApplyContextSelection(c Context) Context {
 		c.Facts = nil
 	}
 	if !s.Enabled(ContextKeyMemories) {
-		c.Memories = nil
 		c.WriterProfile = ""
 		c.WorkNotes = ""
 	}

@@ -1022,7 +1022,22 @@ UPDATE projects
  WHERE id = ?`, projectID, now, projectID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// Scenes this brought back or took away change what prose search can find,
+	// and neither went through the paths that keep the index.
+	for _, n := range snapshot {
+		if !currentIDs[n.ID] && n.Kind == KindLeaf && n.ContentDoc != nil {
+			r.indexUpsertBestEffort(ctx, projectID, n.ID, *n.ContentDoc)
+		}
+	}
+	for id := range currentIDs {
+		if _, ok := byID[id]; !ok {
+			r.indexDeleteBestEffort(ctx, id)
+		}
+	}
+	return nil
 }
 
 func (r *Repo) swap(ctx context.Context, id, direction string, now int64) error {

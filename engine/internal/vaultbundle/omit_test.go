@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 )
 
 func exportOmit(t *testing.T, db *sql.DB, home, id string, omit []string) *Bundle {
@@ -36,7 +38,7 @@ func TestOmittedCategoryLeavesTheBundle(t *testing.T) {
 	}{
 		{CategoryImages, []string{"tables/illustrations", "tables/node_representative_illustrations", "tables/illustration_requests", "tables/entity_reference_images", "images/"}},
 		{CategoryHistory, []string{"tables/node_snapshots"}},
-		{CategoryWorkAgent, []string{"tables/agent_memory", "files/skills/", "files/memory/"}},
+		{CategoryWorkAgent, []string{"tables/agent_memory", "tables/agent_memory_archive", "files/skills/", "files/memory/"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.category, func(t *testing.T) {
@@ -251,6 +253,7 @@ func TestTablesAreClassifiedByCategory(t *testing.T) {
 		"entity_reference_images":           CategoryImages,
 		"node_snapshots":                    CategoryHistory,
 		"agent_memory":                      CategoryWorkAgent,
+		"agent_memory_archive":              CategoryWorkAgent,
 	}
 	for _, table := range allTables() {
 		if table.Category != wanted[table.Name] {
@@ -261,13 +264,14 @@ func TestTablesAreClassifiedByCategory(t *testing.T) {
 
 func TestPartCategory(t *testing.T) {
 	for name, want := range map[string]string{
-		"tables/nodes":          "",
-		"tables/illustrations":  CategoryImages,
-		"images/abc":            CategoryImages,
-		"tables/node_snapshots": CategoryHistory,
-		"tables/agent_memory":   CategoryWorkAgent,
-		"files/skills/a/b.md":   CategoryWorkAgent,
-		"files/memory/m.md":     CategoryWorkAgent,
+		"tables/nodes":                "",
+		"tables/illustrations":        CategoryImages,
+		"images/abc":                  CategoryImages,
+		"tables/node_snapshots":       CategoryHistory,
+		"tables/agent_memory":         CategoryWorkAgent,
+		"tables/agent_memory_archive": CategoryWorkAgent,
+		"files/skills/a/b.md":         CategoryWorkAgent,
+		"files/memory/m.md":           CategoryWorkAgent,
 	} {
 		if got := PartCategory(name); got != want {
 			t.Errorf("PartCategory(%q) = %q, want %q", name, got, want)
@@ -284,4 +288,64 @@ func tableNamed(t *testing.T, name string) Table {
 	}
 	t.Fatalf("no table %s", name)
 	return Table{}
+}
+
+func archiveHits(t *testing.T, db *sql.DB, query string) []string {
+	t.Helper()
+	hits, err := agentmemory.NewRepo(db).SearchArchived(context.Background(), workID, query, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bodies []string
+	for _, hit := range hits {
+		bodies = append(bodies, hit.Body)
+	}
+	return bodies
+}
+
+// The index is not in the bundle. Triggers keep it, so a pull has to leave it
+// answering for exactly the rows that landed.
+func TestArchivedNotesTravelAndStaySearchable(t *testing.T) {
+	src := openLibrary(t)
+	seedWork(t, src, workID)
+	execAll(t, src, `INSERT INTO agent_memory_archive (id, project_id, body, source_message_id, archived_at)
+		VALUES ('new-line', '`+workID+`', '끝난 결정은 등대지기 쪽으로', '', 2)`)
+	bundle := exportOmit(t, src, t.TempDir(), workID, nil)
+
+	dst := openLibrary(t)
+	seedWork(t, dst, workID)
+	execAll(t, dst, `INSERT INTO agent_memory_archive (id, project_id, body, source_message_id, archived_at)
+		VALUES ('stale-line', '`+workID+`', '여기만 있던 옛 줄 항해사', '', 3)`)
+	if err := apply(t, dst, bundle); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := archiveHits(t, dst, "등대지기"); len(got) != 1 {
+		t.Errorf("the arrived line is not found: %v", got)
+	}
+	if got := archiveHits(t, dst, "항해사"); len(got) != 0 {
+		t.Errorf("the index still answers for a line the pull replaced: %v", got)
+	}
+}
+
+func TestOmittingWorkAgentLeavesArchivedNotesAndTheirIndex(t *testing.T) {
+	src := openLibrary(t)
+	seedWork(t, src, workID)
+	execAll(t, src, `DELETE FROM agent_memory_archive`, `UPDATE projects SET title = '고친 제목' WHERE id = '`+workID+`'`)
+	bundle := exportOmit(t, src, t.TempDir(), workID, []string{CategoryWorkAgent})
+	if _, ok := bundle.Parts["tables/agent_memory_archive"]; ok {
+		t.Fatal("the archive went up with work_agent off")
+	}
+
+	dst := openLibrary(t)
+	seedWork(t, dst, workID)
+	execAll(t, dst, `INSERT INTO agent_memory_archive (id, project_id, body, source_message_id, archived_at)
+		VALUES ('kept-line', '`+workID+`', '이 기기에 남을 등대지기 줄', '', 2)`)
+	if err := apply(t, dst, bundle); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := archiveHits(t, dst, "등대지기"); len(got) != 1 {
+		t.Errorf("a bundle without the category touched the index: %v", got)
+	}
 }

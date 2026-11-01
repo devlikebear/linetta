@@ -11,6 +11,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
@@ -72,13 +73,15 @@ type mcpToolRepos struct {
 	story         *storyops.Service
 	msEdit        *manuscriptedit.Service
 	memory        *agentmemory.Repo
-	skills        *agentskills.Store
-	skillHistory  *agentskills.History
-	publish       *publish.Service
-	enqueue       func(nodeID string)
-	notify        func(method string, params any)
-	clock         func() int64
-	db            *sql.DB
+	// history backs the agent-only conversation tools.
+	history      *companion.HistoryRepo
+	skills       *agentskills.Store
+	skillHistory *agentskills.History
+	publish      *publish.Service
+	enqueue      func(nodeID string)
+	notify       func(method string, params any)
+	clock        func() int64
+	db           *sql.DB
 }
 
 // mcpController answers status queries with a disabled state and refuses

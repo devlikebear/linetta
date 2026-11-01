@@ -638,11 +638,9 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	// its own system prompt (agent.systemPrompt / memoryBlock), budget
 	// line and all. Repeating them in the brief costs context and teaches
 	// the model nothing it doesn't already have, so suppress them for that
-	// caller only. c.Memories (the experiences.jsonl recall) is left alone:
-	// it is an unbounded searchable log, not a budgeted document, and it is
-	// not in the system prompt — an external client is unaffected either
-	// way, since ToolDeps.Source is a field the server sets, never
-	// something read off the wire. This runs before Render and
+	// caller only. An external client is unaffected, since ToolDeps.Source
+	// is a field the server sets, never something read off the wire. This
+	// runs before Render and
 	// sectionReport so both describe the brief the caller actually gets.
 	// The skills list is in exactly the same position, for exactly the same
 	// reason as the two curated documents above: agent.systemPrompt's
@@ -690,18 +688,12 @@ func sectionReport(c storycontext.Context) (included, empty []string) {
 		{"plot", spineHasBeats(c.Plot)},
 		{"notes", len(c.Notes) > 0},
 		{"facts", len(c.Facts) > 0},
-		// One "memories" entry covers all three things the brief renders under
-		// that name: the experiences.jsonl recall and the two curated
-		// documents. They fold together rather than getting their own entries
-		// because they share the single ContextKeyMemories toggle — there is
-		// no switch a client could throw for the curated pair alone, so
-		// reporting them separately would advertise a control that does not
-		// exist. Counting only c.Memories was worse than either: a brief that
-		// visibly carried a writer profile still reported "memories" empty,
-		// and a client that trusts the report skipped a section right in
-		// front of it.
-		{"memories", len(c.Memories) > 0 ||
-			strings.TrimSpace(c.WriterProfile) != "" ||
+		// One "memories" entry covers both curated documents. They fold
+		// together rather than getting their own entries because they share
+		// the single ContextKeyMemories toggle — there is no switch a client
+		// could throw for one alone, so reporting them separately would
+		// advertise a control that does not exist.
+		{"memories", strings.TrimSpace(c.WriterProfile) != "" ||
 			strings.TrimSpace(c.WorkNotes) != ""},
 		// "skills" gets its own entry rather than folding into "memories"
 		// the way the curated documents do, because unlike them it HAS its

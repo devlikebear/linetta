@@ -535,6 +535,16 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return MergeResult{}, fmt.Errorf("copy agent_memory: %w", err)
 	}
 
+	// Archived lines are the rest of those notes. A fresh id for the reason
+	// fact cards get one: the same backup can be merged in more than once.
+	if err := copyRows(ctx, sdb, tx, "agent_memory_archive", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
+		row["id"] = uuid.NewString()
+		row["project_id"] = newProjectID
+		return row, true
+	}); err != nil {
+		return MergeResult{}, fmt.Errorf("copy agent_memory_archive: %w", err)
+	}
+
 	// continuity_checks and continuity_observations (story-assist Phase 2).
 	// A check or observation has nothing to mean without its scene, so both
 	// are dropped — not nulled — when their node did not come along, the

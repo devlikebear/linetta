@@ -44,6 +44,13 @@ export const READ_TOOL_NAMES = [
   "linetta_publish_status",
 ] as const;
 
+/** Reads only the built-in agent gets: engine/internal/mcphost/tools_history.go
+ *  HistoryToolNames. Kept apart from READ_TOOL_NAMES because the Go lists are. */
+export const HISTORY_TOOL_NAMES = [
+  "linetta_search_history",
+  "linetta_read_history",
+] as const;
+
 export const WRITE_TOOL_NAMES = [
   "linetta_set_character_visuals",
   "linetta_set_art_style",
@@ -74,7 +81,7 @@ export const WRITE_TOOL_NAMES = [
   "linetta_set_part_arc",
 ] as const;
 
-const READS: ReadonlySet<string> = new Set(READ_TOOL_NAMES);
+const READS: ReadonlySet<string> = new Set([...READ_TOOL_NAMES, ...HISTORY_TOOL_NAMES]);
 const WRITES: ReadonlySet<string> = new Set(WRITE_TOOL_NAMES);
 
 /** The tools that change what the continuity list shows. */

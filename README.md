@@ -779,10 +779,10 @@ Windows  %APPDATA%\com.devlikebear.linetta
 
 Important data includes:
 
-- `library.db`: projects, scenes, story data, version snapshots, the writer profile and work notes an agent reads, the version history of every skill, and the retired built-in companion's transcripts;
+- `library.db`: projects, scenes, story data, version snapshots, the writer profile, work notes and archived notes an agent reads, the version history of every skill, and the retired built-in companion's transcripts;
 - `backups/YYYY-MM-DD/`: daily backups of `library.db`, kept for 14 days — the database only, nothing else on this list — plus the copy of the library made before each Linetta Works sync download (`library-pre-vault-*`);
 - `skills/`: the `SKILL.md` documents an agent writes and reads, one folder per skill;
-- `<project id>/memory/experiences.jsonl`: facts an agent has been told to remember;
+- `<project id>/memory/experiences.jsonl`: facts remembered by older versions. Linetta copies them into the work's archived notes in `library.db` once, then leaves the file alone;
 - `companion/`: where facts remembered before 1.0 were left. Linetta moves them
   up beside the others at startup, then removes this folder if nothing is left
   in it — so anything at all it did not move, down to a hidden `.DS_Store`,

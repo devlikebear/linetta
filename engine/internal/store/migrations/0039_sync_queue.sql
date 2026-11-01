@@ -1,4 +1,4 @@
--- 0037_sync_queue.sql — what automatic sync has to remember between runs.
+-- 0039_sync_queue.sql — what automatic sync has to remember between runs.
 --
 -- vault_deletions holds works deleted here while they were on Linetta Works. The
 -- link goes with the project, so the item id moves here first, and the next run

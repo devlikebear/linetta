@@ -178,17 +178,18 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 		// not req.ProjectID's raw form. Every agent.* notification carries it
 		// (#95 Task 7 review round 3), so a padded id can never make the
 		// panel's own equality check disagree with the engine's.
-		projectID:    projectID,
-		req:          req,
-		client:       client,
-		provider:     resolved.ID,
-		model:        resolved.Model,
-		session:      tools,
-		schemas:      schemas,
-		groups:       groups,
-		language:     s.language(),
-		maxToolCalls: s.maxToolCalls(),
-		brief:        newBriefGate(schemas),
+		projectID:     projectID,
+		req:           req,
+		client:        client,
+		provider:      resolved.ID,
+		model:         resolved.Model,
+		session:       tools,
+		schemas:       schemas,
+		groups:        groups,
+		language:      s.language(),
+		maxToolCalls:  s.maxToolCalls(),
+		historyBudget: s.replayBudget(resolved.ID),
+		brief:         newBriefGate(schemas),
 	}
 
 	handedOff = true
@@ -257,6 +258,9 @@ type loopState struct {
 	// the two can be guaranteed to describe the same tools.
 	groups   toolGroups
 	language string
+	// historyBudget is how many runes of conversation this turn replays, read
+	// once in Run for maxToolCalls' reason.
+	historyBudget int
 	// maxToolCalls is this turn's tool-call cap, read once in Run so a
 	// settings change mid-turn cannot move a wall the turn is already
 	// counting towards.
@@ -593,7 +597,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 	}
 	msgs := []llm.ChatMessage{{Role: "system", Content: systemPrompt(st.language, profile, notes, skills, groups)}}
 
-	prior, err := s.tr.load(ctx, st.req.ProjectID, historyLoadRows)
+	prior, err := s.tr.load(ctx, st.req.ProjectID, loadRowsFor(st.historyBudget))
 	if err != nil {
 		logf("history: %v", err)
 	}
@@ -610,9 +614,9 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 		}
 		filtered = append(filtered, m)
 	}
-	replay, cut, moved := s.replayHistory(st.projectID, filtered)
+	replay, start, cut, moved := s.replayHistory(st.projectID, filtered, st.historyBudget)
 	if cut {
-		msgs[0].Content += historyCutNotice
+		msgs[0].Content += historyCutNote(start)
 	}
 	if moved {
 		s.notify("agent.history_cut", historyCutPayload{RunID: st.runID, ProjectID: st.projectID, Seq: s.runs.next(st.runID)})
