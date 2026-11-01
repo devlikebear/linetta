@@ -2,8 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Linetta only uses standard HTTPS/TLS (LLM API calls) and the macOS
-	     Keychain, both exempt from U.S. export encryption regulations. -->
+	<!-- Only the store builds read this key. They use standard HTTPS/TLS and
+	     the macOS Keychain, both exempt from U.S. export encryption
+	     regulations. Linetta Works encryption is compiled out of them
+	     (engineapp/vault_disabled.go); turning it on there makes this false. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>

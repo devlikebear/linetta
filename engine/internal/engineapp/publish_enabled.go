@@ -1,4 +1,4 @@
-//go:build !mobile
+//go:build !mobile && !mas
 
 package engineapp
 
@@ -14,9 +14,8 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/settings"
 )
 
-// Publishing to Linetta Works is on in every desktop build, the Mac App Store
-// one included: both entitlement files already carry network.client, and
-// the feature only talks to the site once the writer connects.
+// Publishing to Linetta Works is on in the desktop builds outside the Mac App
+// Store. The feature only talks to the site once the writer connects.
 const publishAvailable = true
 
 type publishDeps struct {
