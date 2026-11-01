@@ -12,6 +12,10 @@
 // for a change to this layout, and code that reads an older one is never
 // removed. A manifest also records the schema it was written under, and a
 // library older than that refuses it instead of losing columns it cannot hold.
+//
+// A writer can leave categories out (see tables.go). A bundle says which in its
+// manifest, and applying it leaves those tables and files as they are: what a
+// bundle does not hold, it has no opinion about.
 package vaultbundle
 
 import (
@@ -27,6 +31,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,7 +39,8 @@ import (
 )
 
 // FormatVersion is the layout this package writes and the newest it reads.
-const FormatVersion = 1
+// Format 1 has no Omitted list, which reads as nothing left out.
+const FormatVersion = 2
 
 const (
 	tablePrefix  = "tables/"
@@ -71,6 +77,12 @@ type Manifest struct {
 	ProjectUpdatedAt int64          `json:"project_updated_at"`
 	Tables           map[string]int `json:"tables"`
 	Parts            []PartInfo     `json:"parts"`
+	// Omitted names the categories this bundle does not hold.
+	Omitted []string `json:"omitted,omitempty"`
+}
+
+func (m Manifest) omits(category string) bool {
+	return category != "" && slices.Contains(m.Omitted, category)
 }
 
 // ContentHash identifies the work's contents. It leaves out when the bundle was
@@ -122,9 +134,22 @@ func SchemaVersion(ctx context.Context, q interface {
 	return int(version.Int64), nil
 }
 
+// omittedWorkCategories keeps what a work's manifest records to the categories a
+// work has, in one order, so the library's own choices never touch a work.
+func omittedWorkCategories(omit []string) []string {
+	var out []string
+	for _, category := range omit {
+		if isWorkCategory(category) && !slices.Contains(out, category) {
+			out = append(out, category)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // Export reads one work into a bundle, from a single consistent view of the
-// library. home is the Linetta data directory.
-func Export(ctx context.Context, db *sql.DB, home, projectID string, now time.Time) (*Bundle, error) {
+// library, without the categories in omit. home is the Linetta data directory.
+func Export(ctx context.Context, db *sql.DB, home, projectID string, now time.Time, omit []string) (*Bundle, error) {
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -151,21 +176,27 @@ func Export(ctx context.Context, db *sql.DB, home, projectID string, now time.Ti
 			CreatedAt:        now.UnixMilli(),
 			ProjectUpdatedAt: updatedAt,
 			Tables:           map[string]int{},
+			Omitted:          omittedWorkCategories(omit),
 		},
 		Parts: map[string][]byte{},
 	}
 	for _, table := range allTables() {
+		if bundle.Manifest.omits(table.Category) {
+			continue
+		}
 		count, err := exportTable(ctx, tx, bundle, table, projectID)
 		if err != nil {
 			return nil, fmt.Errorf("export %s: %w", table.Name, err)
 		}
 		bundle.Manifest.Tables[table.Name] = count
 	}
-	if err := exportDir(bundle, SkillDir(home, projectID), skillPrefix); err != nil {
-		return nil, err
-	}
-	if err := exportDir(bundle, MemoryDir(home, projectID), memoryPrefix); err != nil {
-		return nil, err
+	if !bundle.Manifest.omits(CategoryWorkAgent) {
+		if err := exportDir(bundle, SkillDir(home, projectID), skillPrefix); err != nil {
+			return nil, err
+		}
+		if err := exportDir(bundle, MemoryDir(home, projectID), memoryPrefix); err != nil {
+			return nil, err
+		}
 	}
 	bundle.seal()
 	return bundle, nil
@@ -306,8 +337,10 @@ func checkPartName(name string) error {
 
 // Apply replaces the work in the library with the bundle, inside the caller's
 // transaction, keeping every id. Validate first. Rows of other works and
-// tables that stay on this device are left alone; rebuilding the search index
-// and reconciling publish state are the caller's job.
+// tables that stay on this device are left alone, and so are the categories the
+// bundle left out, whose rows go only with a parent the bundle removes.
+// Rebuilding the search index and reconciling publish state are the caller's
+// job.
 func Apply(ctx context.Context, tx *sql.Tx, bundle *Bundle) error {
 	projectID := bundle.Manifest.ProjectID
 	library, err := SchemaVersion(ctx, tx)
@@ -316,6 +349,9 @@ func Apply(ctx context.Context, tx *sql.Tx, bundle *Bundle) error {
 	}
 	for i := len(dependents) - 1; i >= 0; i-- {
 		table := dependents[i]
+		if bundle.Manifest.omits(table.Category) {
+			continue
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table.Name+` WHERE `+table.Scope, projectID); err != nil {
 			return fmt.Errorf("clear %s: %w", table.Name, err)
 		}
@@ -340,6 +376,9 @@ func Apply(ctx context.Context, tx *sql.Tx, bundle *Bundle) error {
 		return err
 	}
 	for _, table := range dependents {
+		if bundle.Manifest.omits(table.Category) {
+			continue
+		}
 		rows, err := reader.rows(table.Name)
 		if err != nil {
 			return err
@@ -613,6 +652,9 @@ func (r *rowReader) upsert(table string, row map[string]any) error {
 // after Apply commits: the database is what the writer's text lives in, and a
 // file that failed to land leaves a complete work.
 func ApplyFiles(home string, bundle *Bundle) error {
+	if bundle.Manifest.omits(CategoryWorkAgent) {
+		return nil
+	}
 	projectID := bundle.Manifest.ProjectID
 	if err := replaceDir(bundle, SkillDir(home, projectID), skillPrefix); err != nil {
 		return err

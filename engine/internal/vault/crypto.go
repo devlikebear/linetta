@@ -72,6 +72,7 @@ var (
 
 const (
 	recoveryKeySize      = 32
+	libraryIDSize        = 16
 	recoveryChecksumSize = 3
 	recoveryTextSize     = 56
 	recoveryGroupSize    = 4
@@ -147,9 +148,10 @@ func (RecoveryKey) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, redact
 
 // Keys are the working keys derived from a RecoveryKey.
 type Keys struct {
-	aead  cipher.AEAD
-	idKey []byte
-	check []byte
+	aead      cipher.AEAD
+	idKey     []byte
+	check     []byte
+	libraryID string
 }
 
 // Format keeps the working keys out of every fmt verb too.
@@ -174,6 +176,10 @@ func (k RecoveryKey) Derive() (*Keys, error) {
 	if err != nil {
 		return nil, err
 	}
+	libraryID, err := derive("library-item", libraryIDSize)
+	if err != nil {
+		return nil, err
+	}
 	block, err := aes.NewCipher(encKey)
 	if err != nil {
 		return nil, err
@@ -182,8 +188,13 @@ func (k RecoveryKey) Derive() (*Keys, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Keys{aead: aead, idKey: idKey, check: check}, nil
+	return &Keys{aead: aead, idKey: idKey, check: check, libraryID: hex.EncodeToString(libraryID)}, nil
 }
+
+// LibraryItemID is the item that holds what lives outside any work. Devices find
+// it without asking each other because the recovery key decides it; to the
+// server it looks like any other item.
+func (k *Keys) LibraryItemID() string { return k.libraryID }
 
 // BlobID names a plaintext for this writer: 64 lowercase hex characters, the
 // form the site requires. It is keyed, so the server cannot test a guess at the

@@ -134,7 +134,7 @@ func (d *device) text(t *testing.T, id string) string {
 
 func (d *device) hash(t *testing.T, id string) string {
 	t.Helper()
-	bundle, err := vaultbundle.Export(context.Background(), d.db, d.home, id, time.UnixMilli(1))
+	bundle, err := vaultbundle.Export(context.Background(), d.db, d.home, id, time.UnixMilli(1), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1158,7 +1158,7 @@ func TestRefusalsAreNotRetried(t *testing.T) {
 
 func TestManifestFromANewerAppIsRefused(t *testing.T) {
 	keys := newKeys(t)
-	id, sealed, err := keys.Seal([]byte(`{"format":2}`))
+	id, sealed, err := keys.Seal([]byte(`{"format":99}`))
 	if err != nil {
 		t.Fatal(err)
 	}
