@@ -125,6 +125,9 @@ jobs:
         working-directory: apps/desktop
         run: pnpm tauri ios init --ci --skip-targets-install
 
+      - name: Use the Linetta app icon
+        run: bash scripts/sync-ios-app-icon.sh
+
       - name: Build iOS app
         shell: bash
         working-directory: apps/desktop

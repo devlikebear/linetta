@@ -98,6 +98,7 @@ build-mobile-engine-android: ## Build embedded Go engine shared libraries for An
 
 mobile-ios-init: ## Generate the ignored Tauri iOS project
 	cd apps/desktop && pnpm tauri ios init --ci --skip-targets-install
+	bash scripts/sync-ios-app-icon.sh
 
 mobile-android-init: ## Generate the ignored Tauri Android project
 	cd apps/desktop && pnpm tauri android init --ci --skip-targets-install
