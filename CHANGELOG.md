@@ -8,6 +8,11 @@
 - Fixed: updating on Windows could stop with "Error opening file for writing"
   while an MCP client kept `linetta-mcp.exe` running. The installer now closes
   it first, so MCP clients need to reconnect after the update.
+- Fixed: on Windows, the Claude Code provider opened a terminal window every
+  time the agent called it. It now runs without one.
+- Fixed: when the Claude Code login had expired, the connection test said to
+  check your internet connection. It now says to run `claude auth login` in a
+  terminal.
 
 ## v1.20.0 - 2026-11-01
 
