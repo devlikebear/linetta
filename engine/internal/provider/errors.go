@@ -46,6 +46,7 @@ func Classify(id string, err error) error {
 			reason = rpc.ReasonProviderNotConfigured
 		case strings.Contains(msg, "/login"),
 			strings.Contains(msg, "not logged in"),
+			strings.Contains(msg, "failed to authenticate"),
 			strings.Contains(msg, "oauth token"),
 			strings.Contains(msg, "api key is required"),
 			strings.Contains(msg, "invalid api key"),
