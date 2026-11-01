@@ -2,6 +2,8 @@
 
 ## v1.20.3 - 2026-11-01
 
+- Changed: Settings is now eight tabs across the top instead of a sidebar with
+  thirteen entries, with one set of text sizes and controls throughout.
 - Fixed: on Windows, Git Sync opened a terminal window for every git command.
   It now runs without one.
 - Changed: on Windows, Git Sync can no longer answer an SSH prompt, so it fails
