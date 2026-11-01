@@ -123,6 +123,8 @@ type headDigest struct {
 	projectID string
 	hash      string
 	deleted   bool
+	// mark is the head's manifest, which is what names it where numbers repeat.
+	mark string
 }
 
 type session struct {
@@ -131,6 +133,13 @@ type session struct {
 }
 
 func (s *Service) db() *sql.DB { return s.Store.DB() }
+
+func (s *Service) targetID() string {
+	if s.Target != "" {
+		return s.Target
+	}
+	return TargetWorks
+}
 
 func (s *Service) now() time.Time { return time.UnixMilli(s.Now()) }
 
@@ -219,7 +228,7 @@ func (s *Service) head(ctx context.Context, sess session, item RemoteItem) (head
 	s.headsMu.Lock()
 	cached, ok := s.heads[item.ItemID]
 	s.headsMu.Unlock()
-	if ok && cached.revision == item.HeadRevision {
+	if ok && cached.revision == item.HeadRevision && (item.Mark == "" || item.Mark == cached.mark) {
 		return cached, nil
 	}
 	digest, err := s.readHead(ctx, sess, item.ItemID)
@@ -248,7 +257,7 @@ func (s *Service) readHead(ctx context.Context, sess session, itemID string) (he
 	if err != nil {
 		return headDigest{}, err
 	}
-	return headDigest{revision: revisions[0].Revision, title: m.Title, projectID: m.Bundle.ProjectID, hash: m.Bundle.ContentHash(), deleted: m.Deleted}, nil
+	return headDigest{revision: revisions[0].Revision, title: m.Title, projectID: m.Bundle.ProjectID, hash: m.Bundle.ContentHash(), deleted: m.Deleted, mark: revisions[0].ManifestBlob}, nil
 }
 
 // resolve finds the link and the server's item for a work. A work with no link
@@ -260,7 +269,7 @@ func (s *Service) resolve(ctx context.Context, sess session, projectID string) (
 	if err != nil {
 		return Link{}, RemoteItem{}, false, err
 	}
-	link, linked, err := getLink(ctx, s.db(), projectID)
+	link, linked, err := getLink(ctx, s.db(), s.targetID(), projectID)
 	if err != nil {
 		return Link{}, RemoteItem{}, false, err
 	}
@@ -351,10 +360,11 @@ func (s *Service) workStatus(ctx context.Context, projectID string) (WorkStatus,
 // the same text it records that, so link comes back in step.
 func (s *Service) compare(ctx context.Context, sess session, link *Link, item RemoteItem, hash string) (string, error) {
 	localChanged := hash != link.LastHash
+	sameHead := item.HeadRevision == link.BaseRevision && !headMoved(link, item)
 	switch {
-	case item.HeadRevision == link.BaseRevision && !localChanged:
+	case sameHead && !localChanged:
 		return StateSynced, nil
-	case item.HeadRevision == link.BaseRevision:
+	case sameHead:
 		return StateLocalChanges, nil
 	case item.HeadRevision > link.BaseRevision && !localChanged:
 		return StateRemoteChanges, nil
@@ -369,10 +379,20 @@ func (s *Service) compare(ctx context.Context, sess session, link *Link, item Re
 		return StateConflict, nil
 	}
 	link.BaseRevision, link.LastHash, link.LastSyncedAt = item.HeadRevision, hash, s.Now()
-	if err := putLink(ctx, s.db(), *link); err != nil {
+	if item.Mark != "" {
+		link.Mark = item.Mark
+	}
+	if err := putLink(ctx, s.db(), s.targetID(), *link); err != nil {
 		return "", err
 	}
 	return StateSynced, nil
+}
+
+// headMoved is the same revision number holding a different revision, which only
+// a store without a server can produce. This device lost that race: what it
+// sent is not the head, so it is one side of a conflict.
+func headMoved(link *Link, item RemoteItem) bool {
+	return item.Mark != "" && link.Mark != "" && item.Mark != link.Mark
 }
 
 func (s *Service) matchesHead(ctx context.Context, sess session, item RemoteItem, hash string) (bool, error) {
@@ -422,7 +442,8 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 	if err != nil {
 		return PushResult{}, err
 	}
-	upToDate := found && item.HeadRevision == link.BaseRevision && hash == link.LastHash
+	moved := found && headMoved(&link, item)
+	upToDate := found && item.HeadRevision == link.BaseRevision && hash == link.LastHash && !moved
 	if !found {
 		// Never uploaded, or the item is gone from the server. Either way the
 		// next revision is the first.
@@ -431,7 +452,7 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 	if overwrite {
 		link.BaseRevision = item.HeadRevision
 	}
-	if item.HeadRevision != link.BaseRevision {
+	if item.HeadRevision != link.BaseRevision || (moved && !overwrite) {
 		same, err := s.matchesHead(ctx, sess, item, hash)
 		if err != nil {
 			return PushResult{}, err
@@ -439,6 +460,7 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 		if !same {
 			return PushResult{}, errConflict(item.HeadRevision)
 		}
+		link.Mark = item.Mark
 		return s.recordPushed(ctx, link, hash, item.HeadRevision, true)
 	}
 	if upToDate {
@@ -456,15 +478,16 @@ func (s *Service) push(ctx context.Context, sess session, projectID string, over
 	if err != nil {
 		return PushResult{}, err
 	}
-	if err := clearRemoved(ctx, s.db(), projectID); err != nil {
+	if err := clearRemoved(ctx, s.db(), s.targetID(), projectID); err != nil {
 		return PushResult{}, err
 	}
+	link.Mark = out.manifestID
 	return s.recordPushed(ctx, link, hash, revision, false)
 }
 
 func (s *Service) recordPushed(ctx context.Context, link Link, hash string, revision int, unchanged bool) (PushResult, error) {
 	link.BaseRevision, link.LastHash, link.LastSyncedAt = revision, hash, s.Now()
-	if err := putLink(ctx, s.db(), link); err != nil {
+	if err := putLink(ctx, s.db(), s.targetID(), link); err != nil {
 		return PushResult{}, err
 	}
 	return PushResult{ItemID: link.ItemID, HeadRevision: revision, Unchanged: unchanged}, nil
@@ -570,10 +593,10 @@ func (s *Service) target(ctx context.Context, sess session, in PullInput) (Link,
 		if !found {
 			return Link{}, false, reason(rpc.ReasonVaultItemNotFound, fmt.Errorf("vault: work %s is not in the vault", in.ProjectID))
 		}
-		_, linked, err := getLink(ctx, s.db(), in.ProjectID)
+		_, linked, err := getLink(ctx, s.db(), s.targetID(), in.ProjectID)
 		return link, linked, err
 	}
-	links, err := listLinks(ctx, s.db())
+	links, err := listLinks(ctx, s.db(), s.targetID())
 	if err != nil {
 		return Link{}, false, err
 	}
@@ -634,7 +657,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 	link.ProjectID = projectID
 	// A work on this device under an item this library did not know about.
 	if !linked {
-		existing, ok, err := getLink(ctx, s.db(), projectID)
+		existing, ok, err := getLink(ctx, s.db(), s.targetID(), projectID)
 		if err != nil {
 			return PullResult{}, err
 		}
@@ -677,7 +700,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 	// The base is the head even when an older revision was asked for, and the
 	// hash is the head's: the restored text then shows as a local change the
 	// writer can push, and the head stays a restore point.
-	link.BaseRevision, link.LastSyncedAt = head.Revision, s.Now()
+	link.BaseRevision, link.LastSyncedAt, link.Mark = head.Revision, s.Now(), head.ManifestBlob
 	link.LastHash = bundle.Manifest.ContentHash()
 	if chosen.Revision != head.Revision {
 		digest, err := s.head(ctx, sess, RemoteItem{ItemID: link.ItemID, HeadRevision: head.Revision})
@@ -837,7 +860,7 @@ func (s *Service) applyBundle(ctx context.Context, bundle *vaultbundle.Bundle, l
 	if err := vaultbundle.Apply(ctx, tx, bundle); err != nil {
 		return err
 	}
-	if err := putLink(ctx, tx, link); err != nil {
+	if err := putLink(ctx, tx, s.targetID(), link); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -861,7 +884,7 @@ func (s *Service) finishPull(ctx context.Context, bundle *vaultbundle.Bundle, li
 	if isHead {
 		if current, err := s.export(ctx, projectID); err == nil {
 			link.LastHash = current.Manifest.ContentHash()
-			if err := putLink(ctx, s.db(), *link); err != nil {
+			if err := putLink(ctx, s.db(), s.targetID(), *link); err != nil {
 				log.Printf("vault: record pulled hash: %v", err)
 			}
 		}
@@ -928,18 +951,18 @@ func (s *Service) DeleteItem(ctx context.Context, itemID string) error {
 // forgetItem drops the link, and notes the writer's choice for automatic sync:
 // a work taken off the server here is not to be uploaded straight back.
 func (s *Service) forgetItem(ctx context.Context, itemID string) error {
-	links, err := listLinks(ctx, s.db())
+	links, err := listLinks(ctx, s.db(), s.targetID())
 	if err != nil {
 		return err
 	}
 	for _, link := range links {
 		if link.ItemID == itemID {
-			if err := recordRemoved(ctx, s.db(), link.ProjectID, s.Now()); err != nil {
+			if err := recordRemoved(ctx, s.db(), s.targetID(), link.ProjectID, s.Now()); err != nil {
 				return err
 			}
 		}
 	}
-	return deleteLinkByItem(ctx, s.db(), itemID)
+	return deleteLinkByItem(ctx, s.db(), s.targetID(), itemID)
 }
 
 func (s *Service) deleteItem(ctx context.Context, itemID string) error {
@@ -1132,7 +1155,7 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return out, err
 	}
-	links, err := listLinks(ctx, s.db())
+	links, err := listLinks(ctx, s.db(), s.targetID())
 	if err != nil {
 		return out, err
 	}

@@ -234,6 +234,13 @@ const (
 	ReasonVaultTimeout         = "vault_timeout"
 	ReasonVaultUnavailable     = "vault_unavailable"
 	ReasonVaultRejected        = "vault_rejected"
+	// A synced folder delivered a revision ahead of its blobs. It sorts itself
+	// out on a later run.
+	ReasonVaultPending = "vault_pending"
+	// The chosen folder or repository is not set up or not there.
+	ReasonSyncTargetMissing = "sync_target_missing"
+	// Git refused a step, or a conflict needs the writer's hands.
+	ReasonSyncTargetFailed = "sync_target_failed"
 )
 
 // NotFound builds the error for a record the caller asked for and the engine

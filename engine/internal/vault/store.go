@@ -1,6 +1,12 @@
 package vault
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+// ErrRoundAgain is a store saying the target moved under a run.
+var ErrRoundAgain = errors.New("vault: the target moved during the run")
 
 // Store is where sealed revisions live. Everything above it, the bundle, the
 // sealing, the conflict rules, is the same for every target. A store reports a

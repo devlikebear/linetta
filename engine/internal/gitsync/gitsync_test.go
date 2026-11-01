@@ -188,7 +188,7 @@ func TestRunOnce_writesFilesAndCommitsAndPushes(t *testing.T) {
 	}
 	// Verify git calls in order.
 	gotNames := runner.cmdNames()
-	wantNames := []string{"add", "status", "commit", "push"}
+	wantNames := []string{"add", "status", "commit", "pull", "add", "status", "commit", "push"}
 	if len(gotNames) != len(wantNames) {
 		t.Fatalf("git call count = %v, want %v", gotNames, wantNames)
 	}
@@ -221,7 +221,8 @@ func TestRunOnce_stopsBeforeGitWhenProjectWriteFails(t *testing.T) {
 	if res.Error == "" || res.FilesWritten != 0 {
 		t.Fatalf("write failure reported as success: %+v", res)
 	}
-	if calls := runner.cmdNames(); len(calls) != 0 {
+	// Prepare has run by then; nothing from the failed export may go up.
+	if calls := strings.Join(runner.cmdNames(), " "); calls != "add status pull" {
 		t.Fatalf("git ran after partial export failure: %v", calls)
 	}
 }

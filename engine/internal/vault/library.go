@@ -17,8 +17,13 @@ import (
 // A revision's manifest says what kind of item it belongs to. "" is a work.
 const kindLibrary = "library"
 
-// targetWorks is the library bookmark for Linetta Works.
-const targetWorks = "works"
+// The places a library can be kept. These are stored in vault_items and in
+// settings, so they are permanent.
+const (
+	TargetWorks  = "works"
+	TargetGit    = "git"
+	TargetFolder = "folder"
+)
 
 // maxLibraryRounds bounds syncing against another device doing the same thing.
 const maxLibraryRounds = 3
@@ -31,15 +36,16 @@ type libraryState struct {
 	LastHash     string
 	BaseParts    map[string]string
 	LastSyncedAt int64
+	Mark         string
 }
 
 func getLibraryState(ctx context.Context, q queryer, target string) (libraryState, error) {
 	state := libraryState{BaseParts: map[string]string{}}
 	var parts string
 	err := q.QueryRowContext(ctx, `
-SELECT base_revision, last_hash, base_parts, last_synced_at
+SELECT base_revision, last_hash, base_parts, last_synced_at, head_mark
 FROM vault_library WHERE target = ?`, target).
-		Scan(&state.BaseRevision, &state.LastHash, &parts, &state.LastSyncedAt)
+		Scan(&state.BaseRevision, &state.LastHash, &parts, &state.LastSyncedAt, &state.Mark)
 	if errors.Is(err, sql.ErrNoRows) {
 		return state, nil
 	}
@@ -55,12 +61,13 @@ func putLibraryState(ctx context.Context, db execer, target string, state librar
 		return err
 	}
 	_, err = db.ExecContext(ctx, `
-INSERT INTO vault_library (target, base_revision, last_hash, base_parts, last_synced_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO vault_library (target, base_revision, last_hash, base_parts, last_synced_at, head_mark)
+VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(target) DO UPDATE SET
   base_revision = excluded.base_revision, last_hash = excluded.last_hash,
-  base_parts = excluded.base_parts, last_synced_at = excluded.last_synced_at`,
-		target, state.BaseRevision, state.LastHash, string(parts), state.LastSyncedAt)
+  base_parts = excluded.base_parts, last_synced_at = excluded.last_synced_at,
+  head_mark = excluded.head_mark`,
+		target, state.BaseRevision, state.LastHash, string(parts), state.LastSyncedAt, state.Mark)
 	return err
 }
 
@@ -165,7 +172,8 @@ func (s *Service) takeLibrary(ctx context.Context, sess session, item RemoteItem
 	state.LastHash = remote.ContentHash()
 	state.BaseParts = remote.PartHashes()
 	state.LastSyncedAt = s.Now()
-	return putLibraryState(ctx, s.db(), targetWorks, *state)
+	state.Mark = revisions[0].ManifestBlob
+	return putLibraryState(ctx, s.db(), s.targetID(), *state)
 }
 
 // adoptSelection takes another device's selection. Works it left unchanged here
@@ -174,7 +182,7 @@ func (s *Service) takeLibrary(ctx context.Context, sess session, item RemoteItem
 // conflict with its upload.
 func (s *Service) adoptSelection(ctx context.Context, old, next vaultbundle.LibrarySettings) error {
 	if !vaultbundle.SameWorkCategories(old.Omit, next.Omit) {
-		links, err := listLinks(ctx, s.db())
+		links, err := listLinks(ctx, s.db(), s.targetID())
 		if err != nil {
 			return err
 		}
@@ -191,7 +199,7 @@ func (s *Service) adoptSelection(ctx context.Context, old, next vaultbundle.Libr
 				return err
 			}
 			link.LastHash = after.Manifest.ContentHash()
-			if err := putLink(ctx, s.db(), link); err != nil {
+			if err := putLink(ctx, s.db(), s.targetID(), link); err != nil {
 				return err
 			}
 		}
@@ -213,17 +221,21 @@ func (s *Service) libraryItem(ctx context.Context, sess session) (RemoteItem, bo
 	return RemoteItem{}, false, nil
 }
 
+func libraryMoved(item RemoteItem, state libraryState) bool {
+	return item.HeadRevision != state.BaseRevision || (item.Mark != "" && state.Mark != "" && item.Mark != state.Mark)
+}
+
 // pullLibrary brings this device up to the library item, if it has moved.
 func (s *Service) pullLibrary(ctx context.Context, sess session) error {
 	item, found, err := s.libraryItem(ctx, sess)
 	if err != nil || !found {
 		return err
 	}
-	state, err := getLibraryState(ctx, s.db(), targetWorks)
+	state, err := getLibraryState(ctx, s.db(), s.targetID())
 	if err != nil {
 		return err
 	}
-	if item.HeadRevision == state.BaseRevision {
+	if !libraryMoved(item, state) {
 		return nil
 	}
 	return s.takeLibrary(ctx, sess, item, &state)
@@ -238,11 +250,11 @@ func (s *Service) syncLibrary(ctx context.Context, sess session) error {
 		if err != nil {
 			return err
 		}
-		state, err := getLibraryState(ctx, s.db(), targetWorks)
+		state, err := getLibraryState(ctx, s.db(), s.targetID())
 		if err != nil {
 			return err
 		}
-		if found && item.HeadRevision != state.BaseRevision {
+		if found && libraryMoved(item, state) {
 			if err := s.takeLibrary(ctx, sess, item, &state); err != nil {
 				return err
 			}
@@ -273,9 +285,9 @@ func (s *Service) syncLibrary(ctx context.Context, sess session) error {
 		if err != nil {
 			return err
 		}
-		state.BaseRevision, state.LastHash, state.LastSyncedAt = revision, hash, s.Now()
+		state.BaseRevision, state.LastHash, state.LastSyncedAt, state.Mark = revision, hash, s.Now(), out.manifestID
 		state.BaseParts = local.PartHashes()
-		return putLibraryState(ctx, s.db(), targetWorks, state)
+		return putLibraryState(ctx, s.db(), s.targetID(), state)
 	}
 	return errors.New("vault: the library item kept moving")
 }
