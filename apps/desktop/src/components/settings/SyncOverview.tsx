@@ -111,6 +111,7 @@ export function SyncOverview() {
   };
 
   return (
+    <>
     <section className="settings-section" data-testid="sync-overview">
       <h3>{t("settings.sync.targetsTitle")}</h3>
       <p className="sd">{t("settings.sync.targetsNote")}</p>
@@ -170,43 +171,45 @@ export function SyncOverview() {
           )}
         </div>
       )}
-      <ul className="vault-items" data-testid="sync-targets">
+      <ul className="sync-targets" data-testid="sync-targets">
         {view.targets.map((target) => {
           const primary = view.primary === target.id;
           const usable = target.configured && (target.id === "works" || view.key_stored);
           return (
             <li key={target.id}>
-              <span className="vault-item-title">{t(TARGET_KEYS[target.id] ?? "settings.sync.target.works")}</span>
-              <span className="sd" data-testid={`sync-target-line-${target.id}`}>{line(target)}</span>
-              <span className="vault-item-actions">
-                <label className="set-toggle">
-                  <input
-                    type="radio"
-                    name="sync-primary"
-                    checked={primary}
-                    disabled={busy || !usable || !target.can_primary}
-                    onChange={() => choosePrimary(target.id)}
-                    data-testid={`sync-primary-${target.id}`}
-                  />
-                  {t("settings.sync.primary")}
-                </label>
-                <label className="set-toggle">
-                  <input
-                    type="checkbox"
-                    checked={primary || view.mirrors.includes(target.id)}
-                    disabled={busy || primary || !usable}
-                    onChange={(e) => toggleMirror(target.id, e.target.checked)}
-                    data-testid={`sync-mirror-${target.id}`}
-                  />
-                  {t("settings.sync.mirror")}
-                </label>
+              <span className="sk-wrap">
+                <span className="sk">{t(TARGET_KEYS[target.id] ?? "settings.sync.target.works")}</span>
+                <span className="sd" data-testid={`sync-target-line-${target.id}`}>{line(target)}</span>
+                {!target.can_primary && <span className="sd" data-testid={`sync-mirror-only-${target.id}`}>{t("settings.sync.mirrorOnly")}</span>}
+              </span>
+              <label className="set-toggle">
+                <input
+                  type="radio"
+                  name="sync-primary"
+                  checked={primary}
+                  disabled={busy || !usable || !target.can_primary}
+                  onChange={() => choosePrimary(target.id)}
+                  data-testid={`sync-primary-${target.id}`}
+                />
+                {t("settings.sync.primary")}
+              </label>
+              <label className="set-toggle">
+                <input
+                  type="checkbox"
+                  checked={primary || view.mirrors.includes(target.id)}
+                  disabled={busy || primary || !usable}
+                  onChange={(e) => toggleMirror(target.id, e.target.checked)}
+                  data-testid={`sync-mirror-${target.id}`}
+                />
+                {t("settings.sync.mirror")}
+              </label>
+              <span className="sync-target-action">
                 {usable && !primary && (
                   <button type="button" className="btn ghost sm" disabled={busy} onClick={() => void restore(target.id)} data-testid={`sync-restore-${target.id}`}>
                     {t("settings.sync.restore")}
                   </button>
                 )}
               </span>
-              {!target.can_primary && <span className="sd" data-testid={`sync-mirror-only-${target.id}`}>{t("settings.sync.mirrorOnly")}</span>}
             </li>
           );
         })}
@@ -227,8 +230,9 @@ export function SyncOverview() {
       {busy && <p className="sd" role="status" data-testid="sync-targets-busy">{t("settings.sync.running")}</p>}
       {restored && <p className="sd" role="status" data-testid="sync-restored">{t("settings.sync.restored")}</p>}
       {error ? <p className="sd" role="alert" data-testid="sync-targets-error">{rpcErrorMessage(error, t)}</p> : null}
-      <SyncAutoPanel editable />
-      <VaultItemList editable />
     </section>
+    <SyncAutoPanel editable />
+    <VaultItemList editable />
+    </>
   );
 }

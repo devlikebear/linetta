@@ -1,23 +1,207 @@
-/* Settings reuses the global design system (App.css):
-   .settings, .lib-top, .lib-brandmark, .settings-inner, .settings-section,
-   .set-row(.sk/.sd/.mono), .switch(.on), .modal-field, .btn, .mono.
-   Only the toggle-row button reset, field rows and ops-status cards are local. */
+/* Settings reuses the global design system (App.css): .settings, .lib-top,
+   .settings-section, .set-row, .switch, .modal-field, .btn, .mono.
 
-/* The memory boxes are the one place in Settings a writer types prose rather
-   than a path or a number, so they get line spacing that reads and may be
-   grown. Everything else about them comes from .modal-field textarea. */
-.settings #memory-settings textarea {
+   One type scale for the whole screen. Every pane inherits it from
+   .settings-content, so a <summary>, <ul> or <b> no pane styled reads at the
+   size around it rather than at the browser's 16px. New rules take a size from
+   these and nothing else. */
+.settings {
+  --set-text: 13.5px;
+  --set-text-sm: 12.5px;
+  --set-text-xs: 11.5px;
+  --set-control-h: 34px;
+  /* Tabs differ in length; the page must not shift when the bar comes and goes. */
+  scrollbar-gutter: stable;
+}
+.settings .lib-top .btn {
+  text-decoration: none;
+}
+.settings-content {
+  font-size: var(--set-text);
+  line-height: 1.6;
+  color: var(--ink);
+}
+.settings .settings-section h4 {
+  margin: 20px 0 6px;
+  font-size: var(--set-text);
+  font-weight: 600;
+  color: var(--ink);
+}
+.settings .sk {
+  font-size: var(--set-text);
+  font-weight: 500;
+  color: var(--ink);
+}
+.settings p.sk {
+  margin: 0 0 8px;
+}
+.settings .set-row .mono {
+  font-size: var(--set-text-xs);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* Top tabs. They stay in reach as a long tab scrolls, and the strip scrolls
+   sideways on a narrow window rather than wrapping. */
+.settings .settings-tabbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--paper);
+}
+.settings .settings-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.settings .settings-tabs::-webkit-scrollbar {
+  display: none;
+}
+.settings .settings-tab {
+  flex: none;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--set-text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.settings .settings-tab:hover {
+  color: var(--ink);
+}
+.settings .settings-tab.on {
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.settings .settings-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Every text box, number box and dropdown on the screen. .modal-field's are
+   set for a dialog (serif, roomier); these sit in rows beside sans labels. */
+.settings input:not([type="checkbox"], [type="radio"]),
+.settings textarea,
+.settings select {
+  width: 100%;
+  min-height: var(--set-control-h);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: var(--set-text);
+  line-height: 1.4;
+  outline: none;
+}
+.settings input:not([type="checkbox"], [type="radio"]):focus,
+.settings textarea:focus,
+.settings select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint2);
+}
+.settings textarea {
   line-height: 1.6;
   resize: vertical;
 }
+.settings select {
+  max-width: 320px;
+  padding-right: 28px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m1 1 4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+.settings input[type="number"] {
+  max-width: 140px;
+}
+.settings .set-row > select {
+  flex: none;
+  width: 200px;
+}
+.settings .set-row > input[type="number"] {
+  flex: none;
+  width: 110px;
+}
+.settings input[type="checkbox"],
+.settings input[type="radio"] {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.settings input:disabled {
+  cursor: default;
+}
+.settings .modal-field > label:not(.modal-check) {
+  margin-bottom: 6px;
+  font-family: var(--font-ui);
+  font-size: var(--set-text-sm);
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--ink-soft);
+}
+.settings .modal-field.modal-check {
+  margin: 12px 0;
+  font-size: var(--set-text-sm);
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+.settings .modal-field.modal-check > input[type="checkbox"] {
+  margin-top: 2px;
+}
+.settings .btn.sm {
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: var(--set-text-sm);
+}
+.settings .settings-section > .btn {
+  margin-top: 10px;
+}
 
-/* The character count is an <output> so a screen reader hears it change (see
-   MemorySection.tsx). <output> is inline by default, which would let the
-   count sit on the help line's baseline instead of under it; it is one of
-   several stacked notes below the box, so it lays out like the <p>s it sits
-   with. */
-.settings #memory-settings output {
-  display: block;
+/* Folded detail. Without this a <summary> is the largest text in its pane. */
+.settings details {
+  margin: 12px 0;
+}
+.settings details > summary {
+  font-size: var(--set-text-sm);
+  font-weight: 500;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.settings details > summary:hover {
+  color: var(--ink);
+}
+.settings details[open] > summary {
+  margin-bottom: 8px;
+}
+.settings pre {
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-family: var(--font-mono);
+  font-size: var(--set-text-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Toggle rows are buttons that must look like plain .set-rows. */
@@ -30,14 +214,22 @@
   cursor: pointer;
   text-align: left;
 }
-.settings .set-row-btn:last-of-type {
+.settings .set-row:last-child {
   border-bottom: 0;
+  padding-bottom: 2px;
+}
+.settings .set-row.is-stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
 }
 .settings .set-row-btn:disabled {
   cursor: default;
   opacity: 0.7;
 }
-.settings .set-row .sk-wrap {
+.settings .sk-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -76,7 +268,7 @@
 }
 .settings .ops-status-head h4 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--set-text);
   font-weight: 600;
   color: var(--ink);
 }
@@ -84,14 +276,14 @@
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: var(--set-text-sm);
   padding: 4px 10px;
   border-radius: var(--r-sm);
   cursor: pointer;
 }
 .settings .ops-status-line {
   margin: 6px 0 0;
-  font-size: 13px;
+  font-size: var(--set-text);
   color: var(--ink-soft);
 }
 .settings .ops-status.is-error .ops-status-line {
@@ -99,23 +291,29 @@
 }
 .settings .ops-status .hint {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--set-text-sm);
   color: var(--muted);
 }
 
 .settings .error {
   color: var(--warn);
-  font-size: 13px;
+  font-size: var(--set-text);
   margin: 0 0 16px;
 }
 .settings .hint {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--set-text);
+}
+.settings .settings-error {
+  margin: 8px 0 0;
+  color: var(--warn);
+  font-size: var(--set-text);
 }
 .settings .settings-saved {
+  flex: none;
   color: var(--ok);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--set-text-sm);
 }
 
 .settings .settings-segmented {
@@ -128,13 +326,13 @@
   background: var(--surface);
 }
 .settings .settings-segmented button {
-  min-width: 72px;
-  min-height: 30px;
+  min-width: 64px;
+  min-height: 28px;
   border: 0;
   border-radius: var(--r-sm);
   background: transparent;
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: var(--set-text-sm);
 }
 .settings .settings-segmented button.is-selected {
   background: var(--ink);
@@ -183,14 +381,8 @@
 .settings .palette-chip.paper  { flex: 3; background: var(--sw-surface); }
 .settings .palette-chip.ink    { flex: 2; background: var(--sw-ink); }
 .settings .palette-chip.accent { flex: 2; background: var(--sw-accent); }
-.settings .palette-name { font-size: 13px; color: var(--sw-ink); }
-.settings .palette-desc { font-size: 11.5px; color: var(--sw-muted); line-height: 1.45; }
-.settings .palette-hint {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.55;
-}
+.settings .palette-name { font-size: var(--set-text); color: var(--sw-ink); }
+.settings .palette-desc { font-size: var(--set-text-xs); color: var(--sw-muted); line-height: 1.45; }
 
 :root[data-theme="dark"] .settings .palette-card {
   --sw-paper:   var(--d-paper);
@@ -211,44 +403,24 @@
   }
 }
 
-.settings .settings-number-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-.settings .settings-number-grid input {
-  width: 100%;
-}
-
-/* Descriptive lines (.sd) anywhere in Settings.
-   App.css styles .sd only inside a .set-row, and the rule here used to reach
-   only a section's direct children. Every pane written since then puts its
-   help, counter and error lines inside a .modal-field, a details block or a
-   status card — and those fell through to the page's serif body size, so a
-   "0 / 1400자" counter or a refresh error read as large as a heading while
-   the same sentence one pane over was small and muted. One rule for all of
-   them; the direct-child form below only keeps its paragraph spacing. */
+/* Descriptive lines (.sd) anywhere in Settings. One rule for all of them; a
+   line right under a section heading keeps a little more room below it. */
 .settings .sd {
-  font-size: 12px;
+  font-size: var(--set-text-sm);
   color: var(--muted);
-  line-height: 1.55;
+  line-height: 1.6;
   margin: 6px 0 0;
 }
 .settings .settings-section > .sd {
-  margin: 6px 0 12px;
+  margin: 4px 0 8px;
 }
-/* The two places App.css already spaced .sd on its own terms keep them: a
-   .set-row's second line sits tight under its label, and the folded legacy
-   block's note keeps its breathing room. */
-.settings .set-row .sd {
-  margin-top: 2px;
-}
-.settings .settings-legacy > .sd {
-  margin: 12px 0;
+.settings .set-row .sd,
+.settings .sk-wrap .sd {
+  margin-top: 0;
 }
 .settings .sd code {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--set-text-xs);
 }
 /* <output> is inline by default; as a line under a field it needs to be a
    line. */
@@ -261,9 +433,9 @@
   margin: 12px 0 8px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: var(--set-text);
   line-height: 1.7;
   color: var(--ink);
   overflow-wrap: anywhere;
@@ -272,7 +444,7 @@
 }
 /* Losing this key loses the works, so its warning is not a muted footnote. */
 .settings .vault-warning {
-  font-size: 13.5px;
+  font-size: var(--set-text);
   color: var(--ink);
 }
 .settings .vault-step .modal-check { margin: 12px 0; }
@@ -302,10 +474,13 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 4px 12px;
-  padding: 6px 0;
-  border-top: 1px solid var(--line);
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.settings .vault-items li:first-child {
+  border-top: 0;
 }
 .settings .vault-items .sd { margin: 0; flex: 0 0 auto; }
 .settings .vault-item-actions {
@@ -319,40 +494,111 @@
 }
 .settings .vault-item-title {
   min-width: 0;
-  font-size: 14px;
+  font-size: var(--set-text);
   color: var(--ink);
   overflow-wrap: anywhere;
 }
 
-/* A sub-heading inside a section (백업에서 복원). Same caption voice as h3,
-   one step quieter, with room above it since it follows a card. */
-.settings .settings-section h4 {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: var(--label-track);
-  text-transform: var(--label-case);
-  color: var(--muted);
-  margin: 22px 0 12px;
-}
 .settings .settings-section h4 + .restore-block > .sd:first-child {
   margin-top: 0;
 }
-/* A checkbox with its sentence (폴더 동기화 사용). The same shape as
-   .modal-field.modal-check, which is what the provider consent uses. */
+/* A checkbox or radio with its words. */
 .settings .set-toggle {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin: 12px 0 4px;
-  font-size: 13.5px;
-  line-height: 1.55;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--set-text);
+  line-height: 1.4;
   color: var(--ink);
   cursor: pointer;
 }
-.settings .set-toggle > input[type="checkbox"] {
-  flex: 0 0 auto;
-  margin: 3px 0 0;
+.settings .settings-section > .set-toggle {
+  display: flex;
+  margin: 12px 0 4px;
 }
+
+/* Sync targets: name and status, then the same columns on every row, so the
+   radios line up whether or not a row has a restore button. */
+.settings .sync-targets,
+.settings .vault-categories {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.settings .sync-targets li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 108px;
+  align-items: center;
+  gap: 4px 16px;
+  min-height: 52px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.settings .sync-target-action {
+  justify-self: end;
+}
+.settings .vault-categories li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.settings .vault-categories li:first-child {
+  border-top: 0;
+}
+.settings .vault-categories .sd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--set-text-xs);
+}
+
+/* MCP clients as rows, and the activity log as a log. */
+.settings .mcp-client {
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.settings .mcp-client:first-of-type {
+  border-top: 0;
+}
+.settings .mcp-client-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+.settings .mcp-client-head .sd {
+  margin: 0;
+}
+.settings .mcp-activity {
+  list-style: none;
+  max-height: 260px;
+  margin: 8px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: var(--set-text-xs);
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+.settings .mcp-activity b {
+  font-weight: 400;
+}
+.settings .mcp-activity .is-ok {
+  color: var(--ok);
+}
+.settings .mcp-activity .is-failed {
+  color: var(--warn);
+}
+.settings .publish-confirm-code {
+  margin: 10px 0;
+  font-family: var(--font-mono);
+  font-size: 20px;
+  letter-spacing: 0.12em;
+}
+
 /* Buttons that sit under a field or beside one another in a pane. */
 .settings .modal-field > .btn,
 .settings .modal-field > .btn + .btn {
@@ -363,7 +609,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
+  margin: 10px 0;
+}
+.settings .settings-section > .field-actions:last-child {
+  margin-bottom: 0;
 }
 
 .settings .settings-section-head,
@@ -385,7 +634,7 @@
   color: var(--ink-soft);
   border-radius: var(--r-sm);
   padding: 3px 8px;
-  font-size: 11px;
+  font-size: var(--set-text-xs);
   font-weight: 600;
 }
 .settings .setup-current {
@@ -399,7 +648,7 @@
   border-radius: var(--r-sm);
   background: var(--paper);
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: var(--set-text);
 }
 .settings .setup-current strong {
   color: var(--ink);
@@ -411,7 +660,7 @@
   border-left: 3px solid var(--t-sienna);
   background: color-mix(in oklch, var(--t-sienna) 8%, var(--paper));
   color: var(--ink-soft);
-  font-size: 12px;
+  font-size: var(--set-text-sm);
   line-height: 1.55;
 }
 .settings .setup-choice-list {
@@ -447,12 +696,12 @@
   gap: 4px;
 }
 .settings .setup-choice-title {
-  font-size: 13px;
+  font-size: var(--set-text);
   font-weight: 700;
   color: var(--ink);
 }
 .settings .setup-choice-summary {
-  font-size: 12px;
+  font-size: var(--set-text-sm);
   color: var(--muted);
   line-height: 1.45;
 }
@@ -466,14 +715,14 @@
 .settings .setup-guide-head p {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--set-text-sm);
   line-height: 1.55;
 }
 .settings .setup-steps {
   margin: 14px 0 0;
   padding-left: 22px;
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: var(--set-text);
   line-height: 1.65;
 }
 .settings .setup-steps li + li {
@@ -495,11 +744,7 @@
   color: var(--ink-soft);
   background: var(--surface);
   text-decoration: none;
-  font-size: 12px;
-}
-.settings .set-row-btn.is-legacy .sk,
-.settings .set-row-btn.is-legacy .sd {
-  color: var(--muted);
+  font-size: var(--set-text-sm);
 }
 .settings .provider-test {
   display: flex;
@@ -510,13 +755,13 @@
 .settings .provider-test .sd {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--set-text-sm);
   line-height: 1.5;
 }
 .settings .provider-test-ok,
 .settings .provider-test-error {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--set-text-sm);
   line-height: 1.5;
 }
 .settings .provider-test-ok {
@@ -575,96 +820,19 @@
   gap: 10px;
 }
 .settings .restore-work-title {
-  font-size: 13px;
-}
-
-/* ---- Sidebar layout (#82, 시안 A) ------------------------------------
-   One category renders at a time; the nav is the scroll-free path to all
-   of them. Below 720px the sidebar becomes a horizontal pill strip. */
-.settings .settings-inner {
-  width: min(900px, 94%);
-}
-.settings .settings-layout {
-  display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
-  gap: 36px;
-  align-items: start;
-}
-.settings .settings-nav {
-  position: sticky;
-  top: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.settings .settings-nav-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: var(--label-track);
-  text-transform: var(--label-case);
-  color: var(--muted);
-  margin: 14px 10px 4px;
-}
-.settings .settings-nav-group:first-child .settings-nav-label {
-  margin-top: 0;
-}
-.settings .settings-nav-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  font-size: 13.5px;
-  color: var(--ink-soft);
-  background: transparent;
-  border: 0;
-  border-radius: 7px;
-  padding: 6px 10px;
-  margin-bottom: 2px;
-  cursor: pointer;
-}
-.settings .settings-nav-item:hover {
-  background: var(--surface);
-  color: var(--ink);
-}
-.settings .settings-nav-item.on {
-  background: var(--surface-2);
-  color: var(--ink);
-  font-weight: 600;
-}
-.settings .settings-nav-item:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.settings .settings-content {
-  min-width: 0;
+  font-size: var(--set-text);
 }
 
 @media (max-width: 720px) {
-  .settings .settings-layout {
-    grid-template-columns: 1fr;
-    gap: 16px;
+  .settings .sync-targets li {
+    grid-template-columns: minmax(0, 1fr) auto auto;
   }
-  .settings .settings-nav {
-    position: static;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 8px;
-    padding-bottom: 6px;
+  .settings .sync-target-action {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
-  .settings .settings-nav-group {
-    display: flex;
-    gap: 4px;
-    flex: none;
-  }
-  .settings .settings-nav-label {
+  .settings .sync-target-action:empty {
     display: none;
-  }
-  .settings .settings-nav-item {
-    white-space: nowrap;
-    border: 1px solid var(--line-soft);
-    border-radius: 999px;
-    padding: 5px 12px;
-    margin-bottom: 0;
   }
 }
 
@@ -686,12 +854,12 @@
   gap: 8px;
   padding: 8px 10px;
   border: 1px solid var(--danger);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: var(--danger-wash);
 }
 .settings .skills-diagnostic-why {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--set-text-xs);
   color: var(--muted);
   word-break: break-word;
 }
@@ -710,7 +878,7 @@
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
 }
 .settings .skills-row-main {
   flex: 1 1 220px;
@@ -727,7 +895,7 @@
 }
 .settings .skills-row-name {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--set-text);
   color: var(--ink);
 }
 .settings .skills-badges {
@@ -736,7 +904,7 @@
   flex: none;
 }
 .settings .skills-badge {
-  font-size: 10.5px;
+  font-size: var(--set-text-xs);
   letter-spacing: var(--label-track);
   color: var(--muted);
   border: 1px solid var(--line-soft);
@@ -799,14 +967,14 @@
   margin-top: 8px;
   padding: 8px 10px;
   border: 1px solid var(--danger);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: var(--danger-wash);
 }
 .settings .skills-history {
   margin-top: 12px;
   padding: 10px;
   border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   display: grid;
   grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
   gap: 10px;
@@ -826,7 +994,7 @@
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   padding: 5px 7px;
   cursor: pointer;
   color: inherit;
@@ -837,7 +1005,7 @@
 }
 .settings .skills-version-time {
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--set-text-xs);
 }
 .settings .skills-version-preview {
   margin: 0;
@@ -845,8 +1013,8 @@
   max-height: 260px;
   overflow: auto;
   background: var(--surface);
-  border-radius: 7px;
-  font-size: 12px;
+  border-radius: var(--r-sm);
+  font-size: var(--set-text-sm);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -859,6 +1027,4 @@
     grid-template-columns: 1fr;
   }
 }
-.settings .vault-categories .set-toggle { display: block; }
 .settings .vault-advanced { margin-top: 12px; }
-.settings .vault-advanced > summary { cursor: pointer; }

@@ -71,8 +71,8 @@ export function SyncAutoPanel({ editable }: { editable: boolean }) {
   const works = status.works.filter((work) => work.state !== "synced" || work.problem);
 
   return (
-    <div className="sync-auto" data-testid="sync-auto">
-      <h4>{t("settings.sync.autoTitle")}</h4>
+    <section className="settings-section" data-testid="sync-auto">
+      <h3>{t("settings.sync.autoTitle")}</h3>
       <p className="sd">{t("settings.sync.autoNote")}</p>
       {enabled ? (
         <>
@@ -131,6 +131,6 @@ export function SyncAutoPanel({ editable }: { editable: boolean }) {
         </div>
       )}
       {error ? <p className="sd" role="alert" data-testid="sync-error">{rpcErrorMessage(error, t)}</p> : null}
-    </div>
+    </section>
   );
 }

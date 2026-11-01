@@ -221,7 +221,8 @@ export function McpSection({ bridgePath }: McpSectionProps) {
   );
 
   return (
-    <section className="settings-section" id="mcp-settings" data-testid="mcp-section">
+    <div id="mcp-settings" data-testid="mcp-section">
+    <section className="settings-section">
       <h3>{t("settings.mcp.title")}</h3>
       <p className="sd">{t("settings.mcp.description")}</p>
 
@@ -284,15 +285,17 @@ export function McpSection({ bridgePath }: McpSectionProps) {
       </details>
 
       {!running && (
-        <button
-          type="button"
-          className="btn ghost sm"
-          disabled={busy || !saved.consented}
-          onClick={() => void enable()}
-          data-testid="mcp-enable"
-        >
-          {t("settings.mcp.enable")}
-        </button>
+        <div className="field-actions">
+          <button
+            type="button"
+            className="btn ghost sm"
+            disabled={busy || !saved.consented}
+            onClick={() => void enable()}
+            data-testid="mcp-enable"
+          >
+            {t("settings.mcp.enable")}
+          </button>
+        </div>
       )}
       {running && (
         <>
@@ -315,10 +318,11 @@ export function McpSection({ bridgePath }: McpSectionProps) {
           {rpcErrorMessage(error, t)}
         </p>
       )}
+    </section>
 
       {running && (
-        <div data-testid="mcp-clients">
-          <h4>{t("settings.mcp.clients.title")}</h4>
+        <section className="settings-section" data-testid="mcp-clients">
+          <h3>{t("settings.mcp.clients.title")}</h3>
           {resolvedBridge === null ? (
             <p className="sd" data-testid="mcp-clients-no-bridge">
               {t("settings.mcp.clients.needBridge")}
@@ -327,9 +331,9 @@ export function McpSection({ bridgePath }: McpSectionProps) {
             clients.map((c) => {
               const result = clientResults[c.id];
               return (
-                <div className="modal-field" key={c.id} data-testid={`mcp-client-${c.id}`}>
-                  <div>
-                    <b>{CLIENT_NAMES[c.id] ?? c.id}</b>{" "}
+                <div className="mcp-client" key={c.id} data-testid={`mcp-client-${c.id}`}>
+                  <div className="mcp-client-head">
+                    <span className="sk">{CLIENT_NAMES[c.id] ?? c.id}</span>
                     {!c.installed ? (
                       <span className="sd">{t("settings.mcp.clients.notInstalled")}</span>
                     ) : c.connected ? (
@@ -370,23 +374,25 @@ export function McpSection({ bridgePath }: McpSectionProps) {
                           : t("settings.mcp.clients.willWrite")}
                       </p>
                       <pre>{clientPreview(c)}</pre>
-                      <button
-                        type="button"
-                        className="btn ghost sm"
-                        disabled={busyClient != null}
-                        onClick={() => void connectClient(c.id)}
-                        data-testid={`mcp-client-${c.id}-apply`}
-                      >
-                        {t("settings.mcp.clients.apply")}
-                      </button>{" "}
-                      <button
-                        type="button"
-                        className="btn ghost sm"
-                        disabled={busyClient != null}
-                        onClick={() => setConfirmClient(null)}
-                      >
-                        {t("settings.mcp.clients.cancel")}
-                      </button>
+                      <div className="field-actions">
+                        <button
+                          type="button"
+                          className="btn ghost sm"
+                          disabled={busyClient != null}
+                          onClick={() => void connectClient(c.id)}
+                          data-testid={`mcp-client-${c.id}-apply`}
+                        >
+                          {t("settings.mcp.clients.apply")}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn ghost sm"
+                          disabled={busyClient != null}
+                          onClick={() => setConfirmClient(null)}
+                        >
+                          {t("settings.mcp.clients.cancel")}
+                        </button>
+                      </div>
                     </div>
                   )}
                   {result && (
@@ -404,38 +410,35 @@ export function McpSection({ bridgePath }: McpSectionProps) {
               );
             })
           )}
-        </div>
-      )}
-
-      {running && (
-        <details data-testid="mcp-snippets">
-          <summary>{t("settings.mcp.manual")}</summary>
-          {addCommand ? (
-            <>
-              <p className="sd">{t("settings.mcp.snippets.claudeCode")}</p>
-              <pre data-testid="mcp-snippet-command">{addCommand}</pre>
-            </>
-          ) : (
-            <p className="sd" data-testid="mcp-token-hidden">
-              {t("settings.mcp.snippets.tokenHidden")}
-            </p>
-          )}
-          {resolvedBridge === null && (
-            <p className="sd" data-testid="mcp-bridge-missing">
-              {t("settings.mcp.snippets.bridgeMissing")}
-            </p>
-          )}
-          <p className="sd">{t("settings.mcp.snippets.projectConfig")}</p>
-          <pre data-testid="mcp-snippet-project">{projectConfig}</pre>
-          <p className="sd">{t("settings.mcp.snippets.desktop")}</p>
-          <pre data-testid="mcp-snippet-desktop">{desktopConfig}</pre>
-        </details>
+          <details data-testid="mcp-snippets">
+            <summary>{t("settings.mcp.manual")}</summary>
+            {addCommand ? (
+              <>
+                <p className="sd">{t("settings.mcp.snippets.claudeCode")}</p>
+                <pre data-testid="mcp-snippet-command">{addCommand}</pre>
+              </>
+            ) : (
+              <p className="sd" data-testid="mcp-token-hidden">
+                {t("settings.mcp.snippets.tokenHidden")}
+              </p>
+            )}
+            {resolvedBridge === null && (
+              <p className="sd" data-testid="mcp-bridge-missing">
+                {t("settings.mcp.snippets.bridgeMissing")}
+              </p>
+            )}
+            <p className="sd">{t("settings.mcp.snippets.projectConfig")}</p>
+            <pre data-testid="mcp-snippet-project">{projectConfig}</pre>
+            <p className="sd">{t("settings.mcp.snippets.desktop")}</p>
+            <pre data-testid="mcp-snippet-desktop">{desktopConfig}</pre>
+          </details>
+        </section>
       )}
 
       {running && activity.length > 0 && (
-        <div data-testid="mcp-activity">
-          <h4>{t("settings.mcp.activity.title")}</h4>
-          <ul>
+        <section className="settings-section" data-testid="mcp-activity">
+          <h3>{t("settings.mcp.activity.title")}</h3>
+          <ul className="mcp-activity">
             {activity.map((entry) => (
               <li key={entry.id} data-testid={`mcp-activity-${entry.id}`}>
                 <span data-testid={`mcp-activity-source-${entry.id}`}>
@@ -443,13 +446,13 @@ export function McpSection({ bridgePath }: McpSectionProps) {
                     ? t("settings.mcp.activity.sourceAgent")
                     : t("settings.mcp.activity.sourceExternal")}
                 </span>{" "}
-                {entry.ok ? "✓" : "✕"} {entry.tool}
+                <b className={entry.ok ? "is-ok" : "is-failed"}>{entry.ok ? "✓" : "✕"}</b> {entry.tool}
                 {entry.detail ? ` — ${entry.detail}` : ""}
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
-    </section>
+    </div>
   );
 }

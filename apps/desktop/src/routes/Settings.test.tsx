@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../lib/i18n";
-import { Settings } from "./Settings";
+import { Settings, rememberSettingsCategory } from "./Settings";
 
 const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
@@ -67,6 +67,12 @@ vi.mock("../components/settings/VaultSection", () => ({
 }));
 vi.mock("../components/settings/ProviderSection", () => ({
   ProviderSection: () => <div data-testid="provider-section-stub">provider-section</div>,
+}));
+vi.mock("../components/settings/PublishSection", () => ({
+  PublishSection: () => <div data-testid="publish-section-stub">publish-section</div>,
+}));
+vi.mock("../components/settings/ImageGenSection", () => ({
+  ImageGenSection: () => <div id="image-settings" data-testid="image-section-stub">image-section</div>,
 }));
 vi.mock("../components/settings/McpSection", () => ({
   McpSection: () => <div data-testid="mcp-section-stub">mcp-section</div>,
@@ -218,14 +224,14 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-backup"));
+    await user.click(await screen.findByTestId("settings-tab-backup"));
     expect(await screen.findByText("최근 백업 상태")).toBeInTheDocument();
     expect(screen.getByText(/백업 성공/)).toBeInTheDocument();
     // The degraded summarizer banner is global: visible from any category.
     expect(screen.getByText("요약기 상태")).toBeInTheDocument();
     expect(screen.getByText(/provider unavailable/)).toBeInTheDocument();
 
-    await user.click(screen.getByTestId("settings-nav-sync"));
+    await user.click(screen.getByTestId("settings-tab-sync"));
     expect(await screen.findByText(/git push: fatal: no upstream/)).toBeInTheDocument();
   });
 
@@ -263,7 +269,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-editor"));
+    await user.click(await screen.findByTestId("settings-tab-writing"));
     expect(await screen.findByRole("heading", { name: "에디터" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "다크" }));
@@ -295,7 +301,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-editor"));
+    await user.click(await screen.findByTestId("settings-tab-writing"));
     const group = await screen.findByRole("radiogroup", { name: "색 팔레트" });
     const hanji = within(group).getByRole("radio", { name: /한지/ });
     const press = within(group).getByRole("radio", { name: /프레스/ });
@@ -339,13 +345,13 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-sync"));
+    await user.click(await screen.findByTestId("settings-tab-sync"));
     expect(await screen.findByText(/If the selected folder is not a git repository yet/)).toBeInTheDocument();
     expect(screen.getByText(/1 file/)).toBeInTheDocument();
     expect(screen.getByText(/Committed/)).toBeInTheDocument();
     expect(screen.getByText(/Pushed/)).toBeInTheDocument();
 
-    await user.click(screen.getByTestId("settings-nav-backup"));
+    await user.click(screen.getByTestId("settings-tab-backup"));
     expect(await screen.findByText(/New backup created/)).toBeInTheDocument();
   });
 
@@ -362,7 +368,7 @@ describe("Settings", () => {
       </MemoryRouter>,
     );
 
-    await user.click(await screen.findByTestId("settings-nav-sync"));
+    await user.click(await screen.findByTestId("settings-tab-sync"));
     // Title is shown in the disabled state section
     expect(await screen.findByText("GitHub 동기화")).toBeInTheDocument();
     // The full form (folder input) must NOT appear
@@ -374,7 +380,7 @@ describe("Settings", () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics());
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-sync"));
+    await user.click(await screen.findByTestId("settings-tab-sync"));
     expect(await screen.findByText("GitHub 동기화")).toBeInTheDocument();
     expect(screen.getByLabelText("git 폴더")).toBeInTheDocument();
   });
@@ -384,7 +390,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-backup"));
+    await user.click(await screen.findByTestId("settings-tab-backup"));
     await screen.findByText("최근 백업 상태");
     expect(screen.queryByTestId("legacy-ai-export")).toBeNull();
   });
@@ -393,7 +399,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-backup"));
+    await user.click(await screen.findByTestId("settings-tab-backup"));
     await user.click(await screen.findByTestId("legacy-ai-export"));
     await waitFor(() => expect(mocks.exportCompanionHistory).toHaveBeenCalledTimes(1));
   });
@@ -402,7 +408,7 @@ describe("Settings", () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ companion_history_exists: true, agent_available: true }));
     renderSettings();
 
-    expect(await screen.findByTestId("settings-nav-providers")).toBeInTheDocument();
+    expect(await screen.findByTestId("settings-tab-ai")).toBeInTheDocument();
   });
 
   it("hides it on a build without the agent", async () => {
@@ -413,8 +419,8 @@ describe("Settings", () => {
     // Wait for the settings shell to finish loading before asserting an
     // absence, or the assertion would trivially pass before diagnostics ever
     // resolved.
-    await screen.findByTestId("settings-nav-general");
-    expect(screen.queryByTestId("settings-nav-providers")).not.toBeInTheDocument();
+    await screen.findByTestId("settings-tab-general");
+    expect(screen.queryByTestId("settings-tab-ai")).not.toBeInTheDocument();
   });
 
   it("renders ProviderSection (not McpSection) under the providers nav item", async () => {
@@ -422,7 +428,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-providers"));
+    await user.click(await screen.findByTestId("settings-tab-ai"));
 
     expect(await screen.findByTestId("provider-section-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("mcp-section-stub")).not.toBeInTheDocument();
@@ -433,7 +439,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-mcp"));
+    await user.click(await screen.findByTestId("settings-tab-mcp"));
 
     expect(await screen.findByTestId("mcp-section-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("provider-section-stub")).not.toBeInTheDocument();
@@ -446,7 +452,7 @@ describe("Settings", () => {
 
     // The built-in agent alone is enough: a memory is worth editing as soon as
     // anything reads it, and MCP is not what makes that true.
-    await user.click(await screen.findByTestId("settings-nav-memory"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
 
     expect(await screen.findByTestId("memory-section-stub")).toBeInTheDocument();
   });
@@ -459,8 +465,8 @@ describe("Settings", () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: false, mcp_available: false }));
     renderSettings();
 
-    await screen.findByTestId("settings-nav-general");
-    expect(screen.queryByTestId("settings-nav-memory")).not.toBeInTheDocument();
+    await screen.findByTestId("settings-tab-general");
+    expect(screen.queryByTestId("settings-tab-agent")).not.toBeInTheDocument();
     expect(screen.queryByTestId("memory-section-stub")).not.toBeInTheDocument();
   });
 
@@ -469,15 +475,14 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-sync"));
+    await user.click(await screen.findByTestId("settings-tab-sync"));
 
-    expect(screen.queryByTestId("settings-nav-vault")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("settings-tab-vault")).not.toBeInTheDocument();
     const works = await screen.findByTestId("vault-section-stub");
     const git = screen.getByRole("heading", { name: "GitHub 동기화" });
     const folder = screen.getByRole("heading", { name: "폴더 동기화" });
     expect(works.compareDocumentPosition(git) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(git.compareDocumentPosition(folder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByTestId("sync-works-note")).toHaveTextContent("운영자의 허가가 필요합니다");
     expect(screen.getAllByText(/읽기 위한 Markdown을 내보냅니다/)).toHaveLength(2);
   });
 
@@ -486,11 +491,10 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-sync"));
+    await user.click(await screen.findByTestId("settings-tab-sync"));
 
     expect(await screen.findByRole("heading", { name: "폴더 동기화" })).toBeInTheDocument();
     expect(screen.queryByTestId("vault-section-stub")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("sync-works-note")).not.toBeInTheDocument();
   });
 
   it("opens sync when the stored category is the old vault pane", async () => {
@@ -508,7 +512,7 @@ describe("Settings", () => {
 
     // Same gate as memory, and for the same reason: a skill is worth editing
     // as soon as anything can load it into a prompt.
-    await user.click(await screen.findByTestId("settings-nav-skills"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
 
     expect(await screen.findByTestId("skills-section-stub")).toBeInTheDocument();
   });
@@ -522,7 +526,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-skills"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     const toggle = await screen.findByRole("button", { name: /작업이 끝나면 배운 것을 정리/ });
     expect(toggle.querySelector(".switch")).toHaveClass("on");
 
@@ -538,7 +542,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-skills"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     const toggle = await screen.findByRole("button", { name: /작업이 끝나면 배운 것을 정리/ });
     expect(toggle.querySelector(".switch")).not.toHaveClass("on");
 
@@ -556,8 +560,8 @@ describe("Settings", () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: false, mcp_available: false }));
     renderSettings();
 
-    await screen.findByTestId("settings-nav-general");
-    expect(screen.queryByTestId("settings-nav-skills")).not.toBeInTheDocument();
+    await screen.findByTestId("settings-tab-general");
+    expect(screen.queryByTestId("settings-tab-agent")).not.toBeInTheDocument();
     expect(screen.queryByTestId("skills-section-stub")).not.toBeInTheDocument();
   });
 
@@ -573,7 +577,7 @@ describe("Settings", () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: false, mcp_available: true }));
     renderSettings();
 
-    await screen.findByTestId("settings-nav-general");
+    await screen.findByTestId("settings-tab-general");
     expect(screen.queryByTestId("provider-section-stub")).not.toBeInTheDocument();
   });
 
@@ -581,12 +585,83 @@ describe("Settings", () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: true }));
     renderSettings();
 
-    const providersItem = await screen.findByTestId("settings-nav-providers");
-    const mcpItem = await screen.findByTestId("settings-nav-mcp");
+    const providersItem = await screen.findByTestId("settings-tab-ai");
+    const mcpItem = await screen.findByTestId("settings-tab-mcp");
 
     expect(
       providersItem.compareDocumentPosition(mcpItem) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  /* -------------------------------------------------------------------------
+   * Tabs: several panes on one page, grouped by kind.
+   * ---------------------------------------------------------------------- */
+
+  it("puts the provider and image panes on one tab", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-tab-ai"));
+
+    expect(await screen.findByTestId("provider-section-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("image-section-stub")).toBeInTheDocument();
+  });
+
+  it("puts the tool budget, memory and skills on one tab", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-tab-agent"));
+
+    expect(await screen.findByLabelText("한 턴 도구 호출 한도")).toBeInTheDocument();
+    expect(screen.getByTestId("memory-section-stub")).toBeInTheDocument();
+    expect(screen.getByTestId("skills-section-stub")).toBeInTheDocument();
+  });
+
+  it("marks only the open tab as current", async () => {
+    const user = userEvent.setup();
+    renderSettings();
+
+    const general = await screen.findByTestId("settings-tab-general");
+    expect(general).toHaveAttribute("aria-current", "page");
+
+    await user.click(screen.getByTestId("settings-tab-backup"));
+
+    expect(general).not.toHaveAttribute("aria-current");
+    expect(screen.getByTestId("settings-tab-backup")).toHaveAttribute("aria-current", "page");
+  });
+
+  it.each([
+    ["providers", "ai"],
+    ["images", "ai"],
+    ["editor", "writing"],
+    ["memory", "agent"],
+    ["vault", "sync"],
+    ["background", "general"],
+    ["publish", "publish"],
+  ])("opens a stored %s on the %s tab", async (stored, tab) => {
+    window.sessionStorage.setItem("linetta.settings.category", stored);
+    mocks.diagnosticsGet.mockResolvedValue(
+      diagnostics({ agent_available: true, publish_available: true, vault_available: true }),
+    );
+    renderSettings();
+
+    expect(await screen.findByTestId(`settings-tab-${tab}`)).toHaveAttribute("aria-current", "page");
+  });
+
+  it("scrolls to image generation when sent there", async () => {
+    rememberSettingsCategory("images");
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true }));
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderSettings();
+
+    await screen.findByTestId("image-section-stub");
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+    expect(scrollIntoView.mock.contexts).toContain(document.getElementById("image-settings"));
   });
 
   /* -------------------------------------------------------------------------
@@ -611,7 +686,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-tools"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     expect(await screen.findByTestId("tool-budget-current")).toHaveTextContent("19");
     expect(screen.getByTestId("tool-budget-current")).toHaveTextContent("27.0 kB");
     // Each group's own price, so the writer knows what they would be buying
@@ -657,7 +732,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-tools"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     expect(screen.getByTestId("tool-budget-review")).toHaveTextContent("1.3 kB");
 
     mocks.settingsSet.mockResolvedValue({ ...baseSettings, review_tools_enabled: false });
@@ -676,7 +751,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-tools"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     const input = (await screen.findByTestId("agent-max-tool-calls")) as HTMLInputElement;
     // A payload from an engine that predates the key shows the default.
     expect(input.value).toBe("48");
@@ -708,7 +783,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-tools"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     const input = (await screen.findByTestId("agent-history-budget")) as HTMLInputElement;
     expect(input.value).toBe("");
 
@@ -734,7 +809,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-tools"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     const memory = await screen.findByRole("button", { name: /기억 툴/ });
     const skills = screen.getByRole("button", { name: /스킬 툴/ });
     expect(memory.querySelector(".switch")).toHaveClass("on");
@@ -756,7 +831,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-tools"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     const memory = await screen.findByRole("button", { name: /기억 툴/ });
     expect(memory.querySelector(".switch")).not.toHaveClass("on");
 
@@ -775,7 +850,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-tools"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     expect(await screen.findByRole("button", { name: /기억 툴/ })).toBeInTheDocument();
     expect(screen.queryByTestId("tool-budget-current")).not.toBeInTheDocument();
     expect(screen.queryByTestId("tool-budget-memory")).not.toBeInTheDocument();
@@ -802,7 +877,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-tools"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     // The switches are still there — an unmeasurable budget does not take the
     // writer's control away.
     expect(await screen.findByRole("button", { name: /기억 툴/ })).toBeInTheDocument();
@@ -821,7 +896,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-skills"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     const notice = await screen.findByTestId("skills-tools-off");
     // It names where to switch them back on, or the writer is told about a
     // control they now have to hunt for.
@@ -833,7 +908,7 @@ describe("Settings", () => {
     const user = userEvent.setup();
     renderSettings();
 
-    await user.click(await screen.findByTestId("settings-nav-skills"));
+    await user.click(await screen.findByTestId("settings-tab-agent"));
     expect(await screen.findByText(/스스로 익히기/)).toBeInTheDocument();
     expect(screen.queryByTestId("skills-tools-off")).not.toBeInTheDocument();
   });

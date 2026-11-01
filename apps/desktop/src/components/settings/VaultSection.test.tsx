@@ -90,6 +90,12 @@ describe("VaultSection", () => {
     expect(await screen.findByTestId("vault-library-warning")).toHaveTextContent("settings.vault.profileRefused");
   });
 
+  it("says who may use Linetta Works inside its own section", async () => {
+    renderSection();
+    const section = await screen.findByTestId("vault-section");
+    expect(section).toContainElement(screen.getByTestId("sync-works-note"));
+  });
+
   it("renders nothing on a build without the vault, and asks nothing", () => {
     const { container } = render(<VaultSection available={false} onOpenPublish={() => {}} />);
     expect(container).toBeEmptyDOMElement();
