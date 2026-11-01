@@ -12,6 +12,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/agentmemory"
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
 	"github.com/devlikebear/linetta/engine/internal/beat"
+	"github.com/devlikebear/linetta/engine/internal/companion"
 	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
@@ -93,6 +94,8 @@ type mcpToolRepos struct {
 	// settings pane edits: one row per document, one writer per row at a
 	// time, so an agent's edit and a writer's textarea cannot fork.
 	memory *agentmemory.Repo
+	// history backs the agent-only conversation tools.
+	history *companion.HistoryRepo
 	// skills are the SKILL.md documents linetta_edit_skill writes and
 	// linetta_read_skill opens: a filesystem store under the Linetta home,
 	// plus the version history every write lands a row in so the writer can
@@ -150,6 +153,7 @@ func setupMCP(deps mcpDeps) (*mcpController, agentToolDeps, func() error) {
 		Settings:             deps.settingsStore,
 		Activity:             activity,
 		Memory:               deps.repos.memory,
+		History:              deps.repos.history,
 
 		Skills:       deps.repos.skills,
 		SkillHistory: deps.repos.skillHistory,
