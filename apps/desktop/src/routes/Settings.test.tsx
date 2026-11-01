@@ -59,6 +59,9 @@ vi.mock("../lib/rpc", () => ({
 // and duplicating its rpc/codex mock surface here would only make this file
 // fragile to changes that have nothing to do with the wiring. A stub that
 // renders its own name makes a category/component swap fail immediately.
+vi.mock("../components/settings/VaultSection", () => ({
+  VaultSection: () => <div data-testid="vault-section-stub">vault-section</div>,
+}));
 vi.mock("../components/settings/ProviderSection", () => ({
   ProviderSection: () => <div data-testid="provider-section-stub">provider-section</div>,
 }));
@@ -456,6 +459,43 @@ describe("Settings", () => {
     await screen.findByTestId("settings-nav-general");
     expect(screen.queryByTestId("settings-nav-memory")).not.toBeInTheDocument();
     expect(screen.queryByTestId("memory-section-stub")).not.toBeInTheDocument();
+  });
+
+  it("shows Linetta Works first inside sync, with no vault pane of its own", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ vault_available: true }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-sync"));
+
+    expect(screen.queryByTestId("settings-nav-vault")).not.toBeInTheDocument();
+    const works = await screen.findByTestId("vault-section-stub");
+    const git = screen.getByRole("heading", { name: "GitHub 동기화" });
+    const folder = screen.getByRole("heading", { name: "폴더 동기화" });
+    expect(works.compareDocumentPosition(git) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(git.compareDocumentPosition(folder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("sync-works-note")).toHaveTextContent("기기 사이를 오갑니다");
+    expect(screen.getAllByText(/내보내기만 합니다/)).toHaveLength(2);
+  });
+
+  it("keeps GitHub and folder when this build has no Linetta Works", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ vault_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-nav-sync"));
+
+    expect(await screen.findByRole("heading", { name: "폴더 동기화" })).toBeInTheDocument();
+    expect(screen.queryByTestId("vault-section-stub")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sync-works-note")).not.toBeInTheDocument();
+  });
+
+  it("opens sync when the stored category is the old vault pane", async () => {
+    window.sessionStorage.setItem("linetta.settings.category", "vault");
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ vault_available: true }));
+    renderSettings();
+
+    expect(await screen.findByTestId("vault-section-stub")).toBeInTheDocument();
   });
 
   it("renders SkillsSection under the skills nav item", async () => {

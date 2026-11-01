@@ -8,7 +8,7 @@ import { rpcErrorMessage } from "../../lib/rpcMessage";
 import { formatVaultBytes as formatBytes, formatVaultDate as formatDate } from "../../lib/vault";
 import type { VaultAccount, VaultOverview, VaultProgress, VaultPullResult } from "../../lib/types";
 
-/** Settings → Private Vault: everything a device needs before a work can be
+/** Settings → Sync → Linetta Works: everything a device needs before a work can be
  *  uploaded. Which step shows comes from the site and the secret store alone,
  *  so a store that is locked or a site that is down leaves an error and a retry
  *  here, never the "make a key" step: a second key over the first would strand
