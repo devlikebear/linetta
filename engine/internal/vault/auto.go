@@ -98,7 +98,7 @@ func (s *Service) SyncAll(ctx context.Context, policy SyncPolicy) (SyncReport, e
 
 func (s *Service) syncAll(ctx context.Context, sess session, policy SyncPolicy) (SyncReport, error) {
 	out := SyncReport{Works: []WorkSync{}, Pushed: []string{}, Pulled: []string{}, Archived: []string{}}
-	account, err := s.Client.Account(ctx, sess.token)
+	account, err := sess.store.Account(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -224,7 +224,7 @@ func (r *remoteScan) unclaimed() []*remoteEntry {
 }
 
 func (s *Service) scanRemote(ctx context.Context, sess session) (*remoteScan, error) {
-	items, err := s.Client.Items(ctx, sess.token)
+	items, err := sess.store.Items(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +446,7 @@ func (s *Service) flushDeletions(ctx context.Context, sess session) error {
 	if err != nil || len(pending) == 0 {
 		return err
 	}
-	items, err := s.Client.Items(ctx, sess.token)
+	items, err := sess.store.Items(ctx)
 	if err != nil {
 		return err
 	}

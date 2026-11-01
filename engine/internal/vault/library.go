@@ -136,7 +136,7 @@ func (s *Service) fetchLibrary(ctx context.Context, sess session, revision Revis
 // takeLibrary merges the item's head into this library, then adopts its
 // selection if it is the newer of the two.
 func (s *Service) takeLibrary(ctx context.Context, sess session, item RemoteItem, state *libraryState) error {
-	revisions, err := s.Client.Revisions(ctx, sess.token, item.ItemID)
+	revisions, err := sess.store.Revisions(ctx, item.ItemID)
 	if err != nil {
 		return err
 	}
@@ -200,7 +200,7 @@ func (s *Service) adoptSelection(ctx context.Context, old, next vaultbundle.Libr
 }
 
 func (s *Service) libraryItem(ctx context.Context, sess session) (RemoteItem, bool, error) {
-	items, err := s.Client.Items(ctx, sess.token)
+	items, err := sess.store.Items(ctx)
 	if err != nil {
 		return RemoteItem{}, false, err
 	}

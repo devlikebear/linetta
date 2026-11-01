@@ -68,7 +68,12 @@ type Settings interface {
 
 // Deps is what the service runs on.
 type Deps struct {
-	Client   *Client
+	// Client reaches Linetta Works. Unused when OpenStore is set.
+	Client *Client
+	// OpenStore opens another target. Nil means Linetta Works.
+	OpenStore func() (Store, error)
+	// Target names where the links of this service point. Empty is Linetta Works.
+	Target   string
 	Settings Settings
 	Store    *store.Store
 	Home     string
@@ -121,7 +126,7 @@ type headDigest struct {
 }
 
 type session struct {
-	token string
+	store Store
 	keys  *Keys
 }
 
@@ -136,11 +141,16 @@ func (s *Service) begin() (func(), error) {
 	return func() { s.busy.Store(false) }, nil
 }
 
-func (s *Service) token() (string, error) {
-	if token := s.Settings.PublishToken(); token != "" {
-		return token, nil
+// remote opens the target. Asked each time, because a site can be disconnected
+// and a folder unplugged between one run and the next.
+func (s *Service) remote() (Store, error) {
+	if s.OpenStore != nil {
+		return s.OpenStore()
 	}
-	return "", reason(rpc.ReasonVaultNotConnected, errors.New("vault: this device is not connected to Linetta Works"))
+	if token := s.Settings.PublishToken(); token != "" {
+		return worksStore{client: s.Client, token: token}, nil
+	}
+	return nil, reason(rpc.ReasonVaultNotConnected, errors.New("vault: this device is not connected to Linetta Works"))
 }
 
 func (s *Service) keys() (*Keys, error) {
@@ -159,7 +169,7 @@ func (s *Service) keys() (*Keys, error) {
 }
 
 func (s *Service) open() (session, error) {
-	token, err := s.token()
+	remote, err := s.remote()
 	if err != nil {
 		return session{}, err
 	}
@@ -167,7 +177,7 @@ func (s *Service) open() (session, error) {
 	if err != nil {
 		return session{}, err
 	}
-	return session{token: token, keys: keys}, nil
+	return session{store: remote, keys: keys}, nil
 }
 
 func (s *Service) report(link Link, p Progress) {
@@ -223,14 +233,14 @@ func (s *Service) head(ctx context.Context, sess session, item RemoteItem) (head
 }
 
 func (s *Service) readHead(ctx context.Context, sess session, itemID string) (headDigest, error) {
-	revisions, err := s.Client.Revisions(ctx, sess.token, itemID)
+	revisions, err := sess.store.Revisions(ctx, itemID)
 	if err != nil {
 		return headDigest{}, err
 	}
 	if len(revisions) == 0 {
 		return headDigest{}, reason(rpc.ReasonVaultItemNotFound, fmt.Errorf("vault: item %s has no revisions", itemID))
 	}
-	sealed, err := s.Client.GetBlob(ctx, sess.token, revisions[0].ManifestBlob)
+	sealed, err := sess.store.GetBlob(ctx, revisions[0].ManifestBlob)
 	if err != nil {
 		return headDigest{}, err
 	}
@@ -246,7 +256,7 @@ func (s *Service) readHead(ctx context.Context, sess session, itemID string) (he
 // through the manifests keeps it from being uploaded as a second item, and the
 // base of 0 then reads as a conflict unless the contents match.
 func (s *Service) resolve(ctx context.Context, sess session, projectID string) (Link, RemoteItem, bool, error) {
-	items, err := s.Client.Items(ctx, sess.token)
+	items, err := sess.store.Items(ctx)
 	if err != nil {
 		return Link{}, RemoteItem{}, false, err
 	}
@@ -322,7 +332,7 @@ func (s *Service) workStatus(ctx context.Context, projectID string) (WorkStatus,
 		return out, nil
 	}
 	out.ItemID, out.BaseRevision, out.HeadRevision = link.ItemID, link.BaseRevision, item.HeadRevision
-	revisions, err := s.Client.Revisions(ctx, sess.token, item.ItemID)
+	revisions, err := sess.store.Revisions(ctx, item.ItemID)
 	if err != nil {
 		return WorkStatus{}, err
 	}
@@ -471,7 +481,7 @@ func (s *Service) send(ctx context.Context, sess session, link Link, out *outgoi
 	total := len(out.blobIDs) + 1
 	sent := 0
 	for round := 0; round < maxCommitRounds; round++ {
-		revision, err := s.Client.Commit(ctx, sess.token, link.ItemID, link.BaseRevision, out.manifestID, out.blobIDs)
+		revision, err := sess.store.Commit(ctx, link.ItemID, link.BaseRevision, out.manifestID, out.blobIDs)
 		if err == nil {
 			s.report(link, Progress{ProjectID: link.ProjectID, ItemID: link.ItemID, Phase: PhaseUpload, Done: total, Total: total})
 			return revision, nil
@@ -492,7 +502,7 @@ func (s *Service) send(ctx context.Context, sess session, link Link, out *outgoi
 					return 0, err
 				}
 			}
-			if err := s.Client.PutBlob(ctx, sess.token, id, sealed); err != nil {
+			if err := sess.store.PutBlob(ctx, id, sealed); err != nil {
 				return 0, err
 			}
 			sent++
@@ -583,7 +593,7 @@ func (s *Service) pull(ctx context.Context, sess session, in PullInput, opts pul
 	if err != nil {
 		return PullResult{}, err
 	}
-	revisions, err := s.Client.Revisions(ctx, sess.token, link.ItemID)
+	revisions, err := sess.store.Revisions(ctx, link.ItemID)
 	if err != nil {
 		return PullResult{}, err
 	}
@@ -718,7 +728,7 @@ func (s *Service) sealedBlob(ctx context.Context, sess session, cache, id string
 	if sealed, err := os.ReadFile(path); err == nil {
 		return sealed, nil
 	}
-	sealed, err := s.Client.GetBlob(ctx, sess.token, id)
+	sealed, err := sess.store.GetBlob(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -933,7 +943,7 @@ func (s *Service) forgetItem(ctx context.Context, itemID string) error {
 }
 
 func (s *Service) deleteItem(ctx context.Context, itemID string) error {
-	token, err := s.token()
+	remote, err := s.remote()
 	if err != nil {
 		return err
 	}
@@ -943,7 +953,7 @@ func (s *Service) deleteItem(ctx context.Context, itemID string) error {
 	// Already gone is what was asked for: another device got there first, or
 	// the answer to an earlier try was lost. This device still has to forget it.
 	var apiErr *APIError
-	if err := s.Client.DeleteItem(ctx, token, itemID); err != nil && !(errors.As(err, &apiErr) && apiErr.Code == CodeNotFound) {
+	if err := remote.DeleteItem(ctx, itemID); err != nil && !(errors.As(err, &apiErr) && apiErr.Code == CodeNotFound) {
 		return err
 	}
 	if err := s.forgetItem(ctx, itemID); err != nil {
@@ -992,11 +1002,11 @@ func (s *Service) setup(ctx context.Context, in SetupInput) (SetupResult, error)
 	if !in.Consented {
 		return SetupResult{}, reason(rpc.ReasonVaultConsentRequired, errors.New("vault: the writer has not agreed to send sealed copies to the site"))
 	}
-	token, err := s.token()
+	remote, err := s.remote()
 	if err != nil {
 		return SetupResult{}, err
 	}
-	items, err := s.Client.Items(ctx, token)
+	items, err := remote.Items(ctx)
 	if err != nil {
 		return SetupResult{}, err
 	}
@@ -1013,7 +1023,7 @@ func (s *Service) setup(ctx context.Context, in SetupInput) (SetupResult, error)
 	}
 	// Checked against the server, so a wrong key never replaces a right one.
 	if len(items) > 0 {
-		if _, err := s.readHead(ctx, session{token: token, keys: keys}, items[0].ItemID); err != nil {
+		if _, err := s.readHead(ctx, session{store: remote, keys: keys}, items[0].ItemID); err != nil {
 			return SetupResult{}, err
 		}
 	}
@@ -1025,7 +1035,7 @@ func (s *Service) setup(ctx context.Context, in SetupInput) (SetupResult, error)
 	s.headsMu.Unlock()
 	// Before any work: a new device needs the writer's skills, profile and
 	// selection first, and the works that follow are exported under that choice.
-	s.bestEffortLibrary(ctx, func() error { return s.pullLibrary(ctx, session{token: token, keys: keys}) })
+	s.bestEffortLibrary(ctx, func() error { return s.pullLibrary(ctx, session{store: remote, keys: keys}) })
 	return SetupResult{KeyStored: true}, nil
 }
 
@@ -1102,7 +1112,7 @@ func (s *Service) Status(ctx context.Context) (Overview, error) {
 
 func (s *Service) status(ctx context.Context) (Overview, error) {
 	out := Overview{Items: []ItemView{}, LibraryWarning: s.warning()}
-	token, err := s.token()
+	remote, err := s.remote()
 	if err != nil {
 		return out, nil
 	}
@@ -1110,7 +1120,7 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 	if out.KeyStored, err = s.Settings.VaultKeyExists(); err != nil {
 		return out, reason(rpc.ReasonVaultKeyUnavailable, err)
 	}
-	account, err := s.Client.Account(ctx, token)
+	account, err := remote.Account(ctx)
 	if err != nil {
 		return out, err
 	}
@@ -1118,7 +1128,7 @@ func (s *Service) status(ctx context.Context) (Overview, error) {
 	if account.Mode == ModeNone {
 		return out, nil
 	}
-	items, err := s.Client.Items(ctx, token)
+	items, err := remote.Items(ctx)
 	if err != nil {
 		return out, err
 	}
