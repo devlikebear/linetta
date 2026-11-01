@@ -96,3 +96,53 @@ func TestSyncTargetsMigrationKeepsEveryBookmark(t *testing.T) {
 		t.Fatalf("links left after the work went: %d, %v", left, err)
 	}
 }
+
+func TestOpenedNodeMigrationRepairsPulledWorks(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		t.Fatal(err)
+	}
+	applyThrough(t, db, 40)
+	for _, statement := range []string{
+		`INSERT INTO projects (id, title, genres, length_target, default_pov, created_at, updated_at, last_opened_node_id) VALUES
+			('pulled', 't', '[]', 'long', '3rd', 1, 2, NULL),
+			('dangling', 't', '[]', 'long', '3rd', 1, 2, 'gone'),
+			('kept', 't', '[]', 'long', '3rd', 1, 2, 'k2'),
+			('empty', 't', '[]', 'long', '3rd', 1, 2, NULL)`,
+		`INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, created_at, updated_at) VALUES
+			('p2', 'pulled', NULL, 1, 'container', '2', 1, 1),
+			('p2a', 'pulled', 'p2', 0, 'leaf', 'b', 1, 1),
+			('p1', 'pulled', NULL, 0, 'container', '1', 1, 1),
+			('p1a', 'pulled', 'p1', 0, 'leaf', 'a', 1, 1),
+			('d1', 'dangling', NULL, 0, 'leaf', 'a', 1, 1),
+			('k1', 'kept', NULL, 0, 'leaf', 'a', 1, 1),
+			('k2', 'kept', NULL, 1, 'leaf', 'b', 1, 1)`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatalf("%s: %v", statement, err)
+		}
+	}
+
+	if err := ApplyMigrations(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+
+	for project, want := range map[string]sql.NullString{
+		"pulled":   {String: "p1a", Valid: true},
+		"dangling": {String: "d1", Valid: true},
+		"kept":     {String: "k2", Valid: true},
+		"empty":    {},
+	} {
+		var got sql.NullString
+		var updated int64
+		err := db.QueryRow(`SELECT last_opened_node_id, updated_at FROM projects WHERE id = ?`, project).Scan(&got, &updated)
+		if err != nil || got != want || updated != 2 {
+			t.Errorf("%s: opened = %v, updated = %d, %v", project, got, updated, err)
+		}
+	}
+}

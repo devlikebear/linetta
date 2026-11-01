@@ -265,6 +265,73 @@ func TestRoundTripKeepsEveryRow(t *testing.T) {
 	}
 }
 
+// seedOutline adds a work whose rows are out of outline order and whose first
+// root has no scene, so the first leaf is not simply the first row.
+func seedOutline(t *testing.T, db *sql.DB, id string) {
+	t.Helper()
+	execAll(t, db,
+		fmt.Sprintf(`INSERT INTO projects (id, title, genres, length_target, default_pov, created_at, updated_at) VALUES ('%s', '작품', '[]', 'long', '3rd', 1, 2)`, id),
+		fmt.Sprintf(`INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, created_at, updated_at) VALUES
+			('%[1]s-later', '%[1]s', NULL, 1, 'container', '2화', 1, 1),
+			('%[1]s-later-1', '%[1]s', '%[1]s-later', 0, 'leaf', '씬', 1, 1),
+			('%[1]s-empty', '%[1]s', NULL, 0, 'container', '비어 있는 화', 1, 1),
+			('%[1]s-first', '%[1]s', NULL, 0, 'container', '1화', 1, 1),
+			('%[1]s-first-2', '%[1]s', '%[1]s-first', 1, 'leaf', '씬 2', 1, 1),
+			('%[1]s-first-1', '%[1]s', '%[1]s-first', 0, 'leaf', '씬 1', 1, 1)`, id),
+	)
+}
+
+func openedNode(t *testing.T, db *sql.DB, id string) sql.NullString {
+	t.Helper()
+	var place sql.NullString
+	if err := db.QueryRow(`SELECT last_opened_node_id FROM projects WHERE id = ?`, id).Scan(&place); err != nil {
+		t.Fatal(err)
+	}
+	return place
+}
+
+// The opened node stays on its device, and the app and the agent start from it,
+// so a work that arrives on a new device has to get one there.
+func TestApplyToANewDeviceOpensTheFirstLeaf(t *testing.T) {
+	source, target := openLibrary(t), openLibrary(t)
+	seedOutline(t, source, workID)
+	if err := apply(t, target, export(t, source, t.TempDir(), workID)); err != nil {
+		t.Fatal(err)
+	}
+	if got := openedNode(t, target, workID); got.String != workID+"-first-1" {
+		t.Fatalf("opened node = %v", got)
+	}
+}
+
+func TestApplyMovesOffAnOpenedNodeTheBundleRemoved(t *testing.T) {
+	source, target := openLibrary(t), openLibrary(t)
+	seedOutline(t, source, workID)
+	seedOutline(t, target, workID)
+	execAll(t, target,
+		fmt.Sprintf(`INSERT INTO nodes (id, project_id, parent_id, ordinal, kind, label, created_at, updated_at) VALUES ('%[1]s-gone', '%[1]s', NULL, 9, 'leaf', '지워질 씬', 1, 1)`, workID),
+		fmt.Sprintf(`UPDATE projects SET last_opened_node_id = '%[1]s-gone' WHERE id = '%[1]s'`, workID),
+	)
+	if err := apply(t, target, export(t, source, t.TempDir(), workID)); err != nil {
+		t.Fatal(err)
+	}
+	if got := openedNode(t, target, workID); got.String != workID+"-first-1" {
+		t.Fatalf("opened node = %v", got)
+	}
+}
+
+func TestApplyKeepsAnOpenedNodeThatIsStillThere(t *testing.T) {
+	source, target := openLibrary(t), openLibrary(t)
+	seedOutline(t, source, workID)
+	seedOutline(t, target, workID)
+	execAll(t, target, fmt.Sprintf(`UPDATE projects SET last_opened_node_id = '%[1]s-later-1' WHERE id = '%[1]s'`, workID))
+	if err := apply(t, target, export(t, source, t.TempDir(), workID)); err != nil {
+		t.Fatal(err)
+	}
+	if got := openedNode(t, target, workID); got.String != workID+"-later-1" {
+		t.Fatalf("opened node = %v", got)
+	}
+}
+
 func withoutColumn(rows []string, column string) []string {
 	out := make([]string, len(rows))
 	for i, row := range rows {
