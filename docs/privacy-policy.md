@@ -1,6 +1,6 @@
 # Linetta 개인정보 처리방침 / Privacy Policy
 
-_최종 업데이트 / Last updated / 最終更新: 2026-10-31_
+_최종 업데이트 / Last updated / 最終更新: 2026-11-01_
 
 ---
 
