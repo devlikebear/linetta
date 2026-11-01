@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.20.0 - 2026-11-01
+
+- **Automatic sync.** Turn it on once and your works move between devices by
+  themselves: changes go up a few minutes after you stop editing, and changes
+  from another device come in while the app is open. It is off until you turn
+  it on, and it shows how many works and how much data will move first. It only
+  brings in a work you have not changed. If two devices edit the same work, a
+  conflict screen keeps both manuscripts and lets you choose. If sync stops, the
+  Sync settings and your gallery say why.
+- **Choose what syncs.** Images, version history, work skills and memory, global
+  skills and your writer profile can each be turned off, with their current size
+  shown. The choice follows your account to every device. Anything you turn off
+  stops uploading and is left alone on your other devices.
+- **Global skills and your writer profile move too.** They travel with your
+  library, so a new device gets them from your connection and recovery key.
+  Agent conversations, usage history, provider settings and API keys stay on
+  each device.
+- **One sync, three destinations.** GitHub and folder sync now carry the same
+  items as Linetta Works, encrypted under `.linetta/`, and your readable Markdown
+  export continues beside it. Pick one primary destination; the others are
+  upload-only mirrors you can restore from. On Mac App Store builds, folders can
+  only be mirrors.
+- **Deleting a synced work is gentle on other devices.** The work moves to the
+  Archive there instead of disappearing, and the manuscript stays.
+- Linetta Works sync requires agreeing to the updated terms on the site before
+  uploading again. Downloading keeps working in the meantime.
+- Update every device before uploading from this version: v1.18 and earlier
+  cannot read what it uploads.
+
 ## v1.19.0 - 2026-11-01
 
 - **The agent can look back.** When a long conversation no longer fits in what
