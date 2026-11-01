@@ -1,4 +1,4 @@
--- 0038_sync_targets.sql — a work can be linked to more than one place.
+-- 0040_sync_targets.sql — a work can be linked to more than one place.
 --
 -- GitHub and a folder keep the same revisions Linetta Works does, so each target
 -- gets its own bookmark for a work: its own item, base revision and hash.

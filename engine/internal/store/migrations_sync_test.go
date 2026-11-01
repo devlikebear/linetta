@@ -51,7 +51,7 @@ func TestSyncTargetsMigrationKeepsEveryBookmark(t *testing.T) {
 	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
 		t.Fatal(err)
 	}
-	applyThrough(t, db, 37)
+	applyThrough(t, db, 39)
 	for _, statement := range []string{
 		`INSERT INTO projects (id, title, genres, length_target, default_pov, created_at, updated_at) VALUES ('p', 't', '[]', 'long', '3rd', 1, 2)`,
 		`INSERT INTO vault_items (project_id, item_id, base_revision, last_hash, last_synced_at) VALUES ('p', 'item-1', 7, 'hash', 99)`,
