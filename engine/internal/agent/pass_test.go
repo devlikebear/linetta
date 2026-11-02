@@ -27,6 +27,9 @@ type passClaudeCode struct {
 	offered [][]string
 	refused []bool
 	extra   int
+	// finished counts the passes that ran to their end, which is what a test has
+	// to wait for: closing the service cancels one still running.
+	finished int
 }
 
 func (f *passClaudeCode) Ask(context.Context, string) (string, error) { return "", nil }
@@ -78,7 +81,16 @@ func (f *passClaudeCode) Chat(ctx context.Context, msgs []llm.ChatMessage, opts 
 			return llm.ChatResponse{}, err
 		}
 	}
+	f.mu.Lock()
+	f.finished++
+	f.mu.Unlock()
 	return llm.ChatResponse{Message: llm.ChatMessage{Role: "assistant", Content: "끝"}}, nil
+}
+
+func (f *passClaudeCode) passes() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.finished
 }
 
 func (f *passClaudeCode) chats() int {
@@ -138,7 +150,7 @@ func TestPassesRunOnClaudeCodeSettlingBeforeTheReview(t *testing.T) {
 	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "써 줘"}); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "both passes", func() bool { return c.chats() == 3 })
+	waitFor(t, "both passes", func() bool { return c.passes() == 2 })
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +201,7 @@ func TestAPassStopsAtItsToolBudget(t *testing.T) {
 	if _, err := svc.Run(context.Background(), RunRequest{ProjectID: "p1", Prompt: "써 줘"}); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "the review", func() bool { return c.chats() == 2 })
+	waitFor(t, "the review", func() bool { return c.passes() == 1 })
 	if err := svc.Close(); err != nil {
 		t.Fatal(err)
 	}
