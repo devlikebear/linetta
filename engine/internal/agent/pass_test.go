@@ -28,15 +28,12 @@ type passClaudeCode struct {
 	offered [][]string
 	refused []bool
 	extra   int
-<<<<<<< HEAD
 	// ledgerTurn makes the first Chat record a decision instead of writing.
 	ledgerTurn   bool
 	lastMessages []llm.ChatMessage
-=======
 	// finished counts the passes that ran to their end, which is what a test has
 	// to wait for: closing the service cancels one still running.
 	finished int
->>>>>>> feat/longform-temporal-facts
 }
 
 func (f *passClaudeCode) Ask(context.Context, string) (string, error) { return "", nil }
