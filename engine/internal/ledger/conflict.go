@@ -53,7 +53,7 @@ func (r *Repo) Conflicts(ctx context.Context, e Entry) ([]Conflict, *Previous, e
 			(prior == nil || t.plantedAt(other) >= t.plantedAt(*prior)) {
 			prior = &entries[i]
 		}
-		if t.holdsAt(other, cur) && !sameValue(other, e) {
+		if disagrees(other, e) && t.holdsAt(other, cur) {
 			conflicts = append(conflicts, Conflict{EntryID: other.ID, Body: other.Body,
 				Reason: fmt.Sprintf("%s의 %s가 다르게 기록되어 있습니다", e.Subject, e.Attribute)})
 		}
@@ -67,6 +67,16 @@ func (r *Repo) Conflicts(ctx context.Context, e Entry) ([]Conflict, *Previous, e
 		}
 	}
 	return conflicts, previous, nil
+}
+
+// disagrees reports whether two facts about one thing cannot both stand. A date
+// is meant to move, and is judged by its order below. What a character says or a
+// rumour carries may be false without the story being wrong.
+func disagrees(a, b Entry) bool {
+	if a.Attribute == AttributeDate || a.Strength == StrengthSoft || b.Strength == StrengthSoft {
+		return false
+	}
+	return !sameValue(a, b)
 }
 
 func sameValue(a, b Entry) bool {

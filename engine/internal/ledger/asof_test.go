@@ -361,3 +361,26 @@ func TestSampleScenesMarkWhatOpensEachContainer(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestARumourOrAMovingDateIsNoConflict(t *testing.T) {
+	f := setup(t, 3)
+	f.fact(t, 0, "주인공", "직업", "포졸")
+	lie, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindNumber, Subject: "주인공", Attribute: "직업", Body: "약장수", Strength: StrengthSoft, PlantedNodeID: f.scenes[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := f.repo.Conflicts(f.ctx, lie); err != nil || len(got) != 0 {
+		t.Fatalf("a lie is the character's, not the story's: %+v, %v", got, err)
+	}
+	one, two := 1.0, 2.0
+	if _, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindTimeline, Subject: "작품", Attribute: AttributeDate, Body: "1", ValueNum: &one, PlantedNodeID: f.scenes[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	later, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindTimeline, Subject: "작품", Attribute: AttributeDate, Body: "2", ValueNum: &two, PlantedNodeID: f.scenes[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := f.repo.Conflicts(f.ctx, later); err != nil || len(got) != 0 {
+		t.Fatalf("a day passing is no conflict: %+v, %v", got, err)
+	}
+}
