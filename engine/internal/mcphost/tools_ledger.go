@@ -16,12 +16,16 @@ type listLedgerInput struct {
 	ProjectID string   `json:"project_id"`
 	Kinds     []string `json:"kinds,omitempty"`
 	Status    string   `json:"status,omitempty"`
+	Query     string   `json:"query,omitempty" jsonschema:"only entries whose subject or body contains this"`
+	Cursor    string   `json:"cursor,omitempty" jsonschema:"next_cursor from the previous page"`
 }
 
 func (in listLedgerInput) scope() (string, string) { return in.ProjectID, "" }
 
 type listLedgerOutput struct {
-	Entries []ledger.Entry `json:"entries"`
+	Entries    []ledger.Entry `json:"entries"`
+	Total      int            `json:"total"`
+	NextCursor string         `json:"next_cursor,omitempty"`
 }
 
 type editLedgerInput struct {
@@ -58,7 +62,7 @@ func (in setPartArcInput) scope() (string, string) { return "", in.NodeID }
 func (d ToolDeps) registerLedgerReadTool(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "linetta_list_ledger",
-		Description: "List the work's ledger: what the story owes the reader and what is settled.",
+		Description: "List the work's ledger, newest first: what the story owes the reader and what is settled. Follow next_cursor for the rest.",
 	}, record(d, "linetta_list_ledger", d.listLedger))
 }
 
@@ -87,7 +91,18 @@ func (d ToolDeps) listLedger(ctx context.Context, _ *mcp.CallToolRequest, in lis
 	if err != nil {
 		return toolErr("could not read the ledger: %v", err), listLedgerOutput{}, nil
 	}
-	return nil, listLedgerOutput{Entries: entries}, nil
+	// Newest first: the end of the list is what a page cuts, and the latest
+	// decisions are the ones a turn is likeliest to need.
+	rows := make([]ledger.Entry, 0, len(entries))
+	query := strings.TrimSpace(in.Query)
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if query == "" || strings.Contains(e.Subject, query) || strings.Contains(e.Body, query) {
+			rows = append(rows, e)
+		}
+	}
+	page, next, total := pageRows(rows, in.Cursor, pageMaxRunes)
+	return nil, listLedgerOutput{Entries: page, Total: total, NextCursor: next}, nil
 }
 
 func (d ToolDeps) editLedger(ctx context.Context, _ *mcp.CallToolRequest, in editLedgerInput) (*mcp.CallToolResult, editLedgerOutput, error) {

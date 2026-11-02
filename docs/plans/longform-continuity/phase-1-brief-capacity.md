@@ -5,7 +5,7 @@ _위에서부터 순차 실행하고 Checkpoint에서 작가 확인을 받는다
 _작성일: 2026-11-02_
 _속한 로드맵: [`roadmap.md`](./roadmap.md)_
 _예상 소요: 1.5일_
-_상태: 계획_
+_상태: 구현 완료. 실제 모델 턴 확인은 Phase 3 스파이크에서 함께 한다_
 
 ## 페이즈 목표
 
@@ -13,9 +13,9 @@ _상태: 계획_
 
 ## 전제 조건
 
-- [ ] 작가 승인
-- [ ] `main`에서 `fix/longform-brief-capacity` 브랜치 생성
-- [ ] 구현 직전에 설치 앱의 `library.db*`와 `skills/`를 임시 폴더로 복사한다. `settings.json`은 복사하지 않는다
+- [x] 작가 승인
+- [x] `main`에서 `fix/longform-brief-capacity` 브랜치 생성
+- [x] 구현 직전에 설치 앱의 `library.db*`와 `skills/`를 임시 폴더로 복사한다. `settings.json`은 복사하지 않는다
 
 ## 포함 기능
 
@@ -35,7 +35,7 @@ _상태: 계획_
 
 ### 작업 그룹 A: 실패하는 테스트부터
 
-- [ ] **T1.A.1** — 실제 크기 fixture
+- [x] **T1.A.1** — 실제 크기 fixture
   - 파일: `engine/internal/storycontext/longform_test.go`
   - 내용:
     - `seedRealisticWork(t)`를 더한다. 세계관 요소 56개(요약 약 230자, 속성 약 130자), 회차 본문 약 3,900자, 자료 12장, 작가 메모 약 1,200자로 맞춘다.
@@ -44,7 +44,7 @@ _상태: 계획_
   - 참조: 기존 `seedLongWork`, `TestLongWorkBriefFitsAToolResultAndLeadsWithTheStyle`
   - 검증: 수정 전 상태에서 상한 테스트가 실패하는 것을 확인하고 PR 본문에 적는다
 
-- [ ] **T1.A.2** — 도구 결과 기준 상한 테스트
+- [x] **T1.A.2** — 도구 결과 기준 상한 테스트
   - 파일: `engine/internal/mcphost/tools_read_test.go`
   - 내용:
     - `SourceAgent`로 `linetta_get_story_context`를 부른 결과 텍스트의 룬 수를 잰다. JSON 이스케이프까지 포함해야 한다.
@@ -55,7 +55,7 @@ _상태: 계획_
 
 ### 작업 그룹 B: 브리프 재배분
 
-- [ ] **T1.B.1** — 내장 에이전트 브리프에서 현재 씬 본문 제외
+- [x] **T1.B.1** — 내장 에이전트 브리프에서 현재 씬 본문 제외
   - 파일: `engine/internal/mcphost/tools_read.go` (`getStoryContext`)
   - 내용:
     - 기존 `if d.Source == SourceAgent` 블록에서 `c.SceneText`도 비운다. 같은 이유의 기존 주석에 한 줄을 더한다. 에이전트는 수정 전에 `linetta_read_scene`으로 본문과 버전을 읽는다.
@@ -64,7 +64,7 @@ _상태: 계획_
   - 테스트: 내장 에이전트에는 본문이 없고 외부에는 있다
   - 검증: `CGO_ENABLED=0 go test ./internal/mcphost/...`
 
-- [ ] **T1.B.2** — 세계관 카드 총량 예산
+- [x] **T1.B.2** — 세계관 카드 총량 예산
   - 파일: `engine/internal/storycontext/builder.go` (`loadEntityBriefs`), `longform_test.go`
   - 내용:
     - `entityBriefMaxRunes = 7000`을 더한다. 이번 회차에 언급된 요소, 핵심 요소 순서로 채운다.
@@ -74,7 +74,7 @@ _상태: 계획_
   - 테스트: 언급된 요소는 예산을 넘어도 핵심 요소보다 먼저 남는다
   - 검증: `CGO_ENABLED=0 go test ./internal/storycontext/...`
 
-- [ ] **T1.B.3** — 자료집 예산
+- [x] **T1.B.3** — 자료집 예산
   - 파일: `engine/internal/storycontext/builder.go`
   - 내용:
     - `factBriefMaxRunes = 1500`을 더한다. 회차에 붙은 카드를 먼저 넣고, 작품 설정 카드(`intentional_fiction`), 나머지 순서로 채운다.
@@ -83,7 +83,7 @@ _상태: 계획_
   - 테스트: 예산 안에 들고 회차 카드가 먼저 남는다
   - 검증: `CGO_ENABLED=0 go test ./internal/storycontext/...`
 
-- [ ] **T1.B.4** — 초과 안전장치
+- [x] **T1.B.4** — 초과 안전장치
   - 파일: `engine/internal/storycontext/render.go`, `engine/internal/mcphost/tools_read.go`
   - 내용:
     - 작가 메모가 길거나 작품이 커서 그래도 넘치면 자료집, 관계, 세계관 뒤쪽 순서로 덜어 낸다.
@@ -94,7 +94,7 @@ _상태: 계획_
 
 ### 작업 그룹 C: 원장 예산 분리
 
-- [ ] **T1.C.1** — 복선과 사실의 예산을 나눈다
+- [x] **T1.C.1** — 복선과 사실의 예산을 나눈다
   - 파일: `engine/internal/ledger/brief.go`, `ledger_test.go`
   - 내용:
     - `briefMaxRunes`를 `briefOwedRunes = 2000`, `briefSettledRunes = 1600`으로 나눈다. 한쪽이 남으면 다른 쪽이 쓴다.
@@ -102,7 +102,7 @@ _상태: 계획_
     - 새 테스트 `TestBriefKeepsSettledWhenOwedOverflows`: 복선이 예산을 넘쳐도 `Settled`가 비지 않는다.
   - 검증: `CGO_ENABLED=0 go test ./internal/ledger/...`
 
-- [ ] **T1.C.2** — 정해진 사실을 관련도로 고른다
+- [x] **T1.C.2** — 정해진 사실을 관련도로 고른다
   - 파일: `engine/internal/ledger/brief.go`
   - 내용:
     - 지금은 최신순이다. 현재 씬의 계획과 요약, 직전 회차 요약에 `Subject`가 나오는 항목을 앞에 두고, 같은 그룹 안에서는 최신순으로 둔다.
@@ -114,7 +114,7 @@ _상태: 계획_
 
 ### 작업 그룹 D: 목록 도구 페이지
 
-- [ ] **T1.D.1** — 공용 페이지 도우미
+- [x] **T1.D.1** — 공용 페이지 도우미
   - 파일: `engine/internal/mcphost/paging.go` (신규), `paging_test.go`
   - 내용:
     - `pageRows[T](rows []T, cursor string, maxRunes int) (page []T, next string, total int)`를 만든다. 행을 JSON으로 쟀을 때 `maxRunes` 안에서 끊는다.
@@ -122,7 +122,7 @@ _상태: 계획_
     - 전체가 한 페이지에 들면 `next`는 비고 결과는 지금과 같다.
   - 검증: `CGO_ENABLED=0 go test ./internal/mcphost/...`
 
-- [ ] **T1.D.2** — 원장 목록
+- [x] **T1.D.2** — 원장 목록
   - 파일: `engine/internal/mcphost/tools_ledger.go`
   - 내용:
     - `listLedgerInput`에 `cursor`, `query`를 더한다. `query`는 주어와 본문의 부분 문자열이다.
@@ -130,7 +130,7 @@ _상태: 계획_
     - `ledger.Repo.List`의 오래된 순은 화면이 쓰므로 바꾸지 않는다.
   - 검증: 57건 규모 테스트에서 페이지를 따라가면 모든 항목이 정확히 한 번 나온다
 
-- [ ] **T1.D.3** — 세계관 목록과 개요
+- [x] **T1.D.3** — 세계관 목록과 개요
   - 파일: `engine/internal/mcphost/tools_read.go`
   - 내용:
     - `linetta_list_characters`에 `cursor`, `query`를 더한다.
@@ -138,7 +138,7 @@ _상태: 계획_
     - 도구 설명은 짧게 유지한다. `budget_test.go`의 상한이 움직이면 측정값과 이유를 주석에 남긴다.
   - 검증: 합성 300행 개요를 페이지로 끝까지 읽는다
 
-- [ ] **T1.D.4** — 프롬프트 한 줄
+- [x] **T1.D.4** — 프롬프트 한 줄
   - 파일: `engine/internal/agent/prompt.go`
   - 내용: 목록 결과에 `next_cursor`가 있으면 필요한 만큼 이어 읽으라고 원장 지침에 한 문장만 더한다.
   - 검증: `CGO_ENABLED=0 go test ./internal/agent/...`
@@ -148,23 +148,37 @@ _상태: 계획_
 ## ✅ Phase 1 Checkpoint
 
 **구현 확인:**
-- [ ] 모든 작업 체크박스 완료
-- [ ] 회수 우선 순서와 문체 우선 배치가 유지됨
-- [ ] 외부 클라이언트의 브리프 본문이 그대로임
+- [x] 모든 작업 체크박스 완료
+- [x] 회수 우선 순서와 문체 우선 배치가 유지됨
+- [x] 외부 클라이언트의 브리프 본문이 그대로임
 
 **자동 검증:**
-- [ ] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
-- [ ] `go test -tags mobile ./internal/ledger/... ./internal/storycontext/...` 통과
-- [ ] `scripts/validate-story-core-deps.sh` 통과
+- [x] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
+- [x] `go test -tags mobile ./internal/ledger/... ./internal/storycontext/...` 통과
+- [x] `scripts/validate-story-core-deps.sh` 통과
 
 **수동 확인:**
-- [ ] 임시 `go test -overlay`로 실제 DB 복사본의 1~25화 브리프를 뽑아, 모든 회차의 도구 결과가 23,000자 이내이고 `Settled`가 1건 이상임을 확인한다
-- [ ] 같은 복사본에서 원장과 세계관 목록을 페이지로 끝까지 읽어 빠지는 항목이 없음을 확인한다
+- [x] 임시 `go test -overlay`로 실제 DB 복사본의 1~25화 브리프를 뽑아, 모든 회차의 도구 결과가 23,000자 이내이고 `Settled`가 1건 이상임을 확인한다
+- [x] 같은 복사본에서 원장과 세계관 목록을 페이지로 끝까지 읽어 빠지는 항목이 없음을 확인한다
 - [ ] 실제 내장 에이전트 턴에서 회차 수정을 한 번 돌려 `linetta_read_scene` 호출 뒤 저장되는 것을 확인한다
 
 **완료 처리:** 결과와 측정표를 작가에게 보고하고, 승인 뒤 Phase 2로 간다. 실패하면 항목을 보고하고 원인을 함께 파악한 뒤 수정하고 다시 잰다.
 
 ---
+
+## 측정 기록
+
+2026-11-02, 실제 DB 복사본의 25개 회차.
+
+| 항목 | 이전 | 이후 |
+|---|---|---|
+| 도구 결과 최대 크기 | 쓴 회차 약 30,000자 이상 | 22,574자 |
+| 상한 초과 회차 | 쓴 회차 전부 | 0 |
+| `Settled`가 빈 회차 | 전부 | 0 (회차당 3~6건) |
+| 원장 목록 | 45,500자, 잘림 | 3페이지, 57건 전부 |
+| 세계관 목록 | 30,000자, 잘림 | 2페이지, 56개 전부 |
+
+처음 한도 23,000자에서는 `elements_not_in_brief`와 섹션 보고까지 합쳐 2개 회차가 넘었다. 전체 결과 기준으로 재서 `agentBriefMaxRunes`를 20,500자로 낮췄다. 9개 회차에서 자료집이 `omitted_sections`로 빠진다.
 
 ## 메모 / 주의
 

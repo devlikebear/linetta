@@ -6,12 +6,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/agentskills"
+	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/export"
 	"github.com/devlikebear/linetta/engine/internal/fact"
 	"github.com/devlikebear/linetta/engine/internal/illustref"
@@ -72,6 +74,7 @@ type listWorksOutput struct {
 
 type getOutlineInput struct {
 	ProjectID string `json:"project_id" jsonschema:"id of the work, from linetta_list_works"`
+	Cursor    string `json:"cursor,omitempty" jsonschema:"next_cursor from the previous page"`
 }
 
 func (in getOutlineInput) scope() (string, string) { return in.ProjectID, "" }
@@ -89,9 +92,11 @@ type outlineRow struct {
 }
 
 type getOutlineOutput struct {
-	ProjectID string       `json:"project_id"`
-	Title     string       `json:"title"`
-	Outline   []outlineRow `json:"outline"`
+	ProjectID  string       `json:"project_id"`
+	Title      string       `json:"title"`
+	Outline    []outlineRow `json:"outline"`
+	Total      int          `json:"total"`
+	NextCursor string       `json:"next_cursor,omitempty"`
 }
 
 // ---------- linetta_get_story_context ----------
@@ -124,6 +129,9 @@ type getStoryContextOutput struct {
 	Brief            string   `json:"brief"`
 	IncludedSections []string `json:"included_sections"`
 	EmptySections    []string `json:"empty_sections"`
+	// OmittedSections names what the agent's brief left out to fit a tool
+	// result, so nothing falls off the end unannounced.
+	OmittedSections []string `json:"omitted_sections,omitempty"`
 	// ElementsNotInBrief kills the silent omission (#72): the brief carries
 	// only elements mentioned in this scene or holding a core role, and an
 	// agent must know the rest EXIST rather than conclude the work has no
@@ -139,6 +147,11 @@ type unlistedElement struct {
 
 // maxUnlistedElements keeps the omission report a signal, not a second brief.
 const maxUnlistedElements = 20
+
+// agentBriefMaxRunes keeps the built-in agent's whole tool result inside its
+// 24,000-rune cap: the section reports and the 20 names of elements_not_in_brief
+// come to about 2,500 runes on top of the brief.
+const agentBriefMaxRunes = 20500
 
 // ---------- linetta_read_scene ----------
 
@@ -208,8 +221,10 @@ type listCharactersInput struct {
 	Kind      string `json:"kind,omitempty" jsonschema:"filter by character, place, item, or concept; omit for all"`
 	// The two lists an edit or a delete needs ids from, off by default so the
 	// everyday lookup stays small.
-	IncludeRelationships bool `json:"include_relationships,omitempty" jsonschema:"also return every relationship with its id"`
-	IncludeThreads       bool `json:"include_threads,omitempty" jsonschema:"also return every storyline with its beats and ids, closed ones too"`
+	IncludeRelationships bool   `json:"include_relationships,omitempty" jsonschema:"also return every relationship with its id"`
+	Query                string `json:"query,omitempty" jsonschema:"only elements whose name, alias or summary contains this"`
+	Cursor               string `json:"cursor,omitempty" jsonschema:"next_cursor from the previous page"`
+	IncludeThreads       bool   `json:"include_threads,omitempty" jsonschema:"also return every storyline with its beats and ids, closed ones too"`
 }
 
 func (in listCharactersInput) scope() (string, string) { return in.ProjectID, "" }
@@ -252,6 +267,8 @@ type threadRow struct {
 // rarely asks for them.
 type listCharactersOutput struct {
 	Entities      []entityRow `json:"entities"`
+	Total         int         `json:"total"`
+	NextCursor    string      `json:"next_cursor,omitempty"`
 	Relationships any         `json:"relationships,omitempty"`
 	Threads       any         `json:"threads,omitempty"`
 }
@@ -527,8 +544,15 @@ func (d ToolDeps) getOutline(ctx context.Context, _ *mcp.CallToolRequest, in get
 	if err != nil {
 		return toolErr("could not read the outline: %v", err), getOutlineOutput{}, nil
 	}
-	out := getOutlineOutput{ProjectID: p.ID, Title: p.Title, Outline: outlineRows(all)}
-	return nil, out, nil
+	page, next, total := pageRows(outlineRows(all), in.Cursor, pageMaxRunes)
+	return nil, getOutlineOutput{ProjectID: p.ID, Title: p.Title, Outline: page, Total: total, NextCursor: next}, nil
+}
+
+func entityMatches(e entity.Entity, query string) bool {
+	if strings.Contains(e.Name, query) || strings.Contains(e.Summary, query) {
+		return true
+	}
+	return slices.ContainsFunc(e.Aliases, func(a string) bool { return strings.Contains(a, query) })
 }
 
 // outlineRows flattens the tree in document order with a depth column, which
@@ -650,14 +674,22 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 	// above refuses. An external client is again unaffected — this brief is
 	// the ONLY channel that tells it skills exist, which is why the
 	// suppression is keyed on Source and nothing else.
+	// The scene's own text is in the same position: the agent reads it with
+	// linetta_read_scene before it can write, and carrying it twice is what
+	// pushed a written scene's brief past the tool result cap.
 	if d.Source == SourceAgent {
 		c.WriterProfile = ""
 		c.WorkNotes = ""
 		c.Skills = nil
+		c.SceneText = ""
 	}
 	// Only the user half of the render is the brief; the system half carries
 	// tone and instruction scaffolding meant for Linetta's own runner.
 	_, brief := storycontext.Render(c)
+	var omitted []string
+	if d.Source == SourceAgent {
+		brief, omitted = storycontext.FitBrief(c, agentBriefMaxRunes)
+	}
 	included, empty := sectionReport(c)
 	return nil, getStoryContextOutput{
 		ProjectID:          n.ProjectID,
@@ -666,6 +698,7 @@ func (d ToolDeps) getStoryContext(ctx context.Context, _ *mcp.CallToolRequest, i
 		Brief:              brief,
 		IncludedSections:   included,
 		EmptySections:      empty,
+		OmittedSections:    omitted,
 		ElementsNotInBrief: d.unlistedElements(ctx, n.ProjectID, c),
 	}, nil
 }
@@ -835,12 +868,16 @@ func (d ToolDeps) listCharacters(ctx context.Context, _ *mcp.CallToolRequest, in
 		return toolErr("could not list story elements: %v", err), listCharactersOutput{}, nil
 	}
 	kind := entityKindFilter(in.Kind)
-	out := listCharactersOutput{Entities: []entityRow{}}
+	query := strings.TrimSpace(in.Query)
+	rows := []entityRow{}
 	for _, e := range all {
 		if kind != "" && !strings.EqualFold(e.Kind, kind) {
 			continue
 		}
-		out.Entities = append(out.Entities, entityRow{
+		if query != "" && !entityMatches(e, query) {
+			continue
+		}
+		rows = append(rows, entityRow{
 			EntityID:   e.ID,
 			Kind:       e.Kind,
 			Name:       e.Name,
@@ -849,6 +886,13 @@ func (d ToolDeps) listCharacters(ctx context.Context, _ *mcp.CallToolRequest, in
 			Summary:    e.Summary,
 			Attributes: e.Attributes,
 		})
+	}
+	out := listCharactersOutput{}
+	out.Entities, out.NextCursor, out.Total = pageRows(rows, in.Cursor, pageMaxRunes)
+	// The relationship and storyline lists are one answer each, not paged with
+	// the elements, so they come with the first page only.
+	if in.Cursor != "" {
+		return nil, out, nil
 	}
 	if in.IncludeRelationships && d.Relationships != nil {
 		rels, err := d.Relationships.ListByProject(ctx, p.ID)

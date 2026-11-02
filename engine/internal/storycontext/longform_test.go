@@ -3,6 +3,7 @@ package storycontext
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -291,5 +292,192 @@ func TestDossierTellsEachSceneOnceAcrossTheCast(t *testing.T) {
 	}
 	if got := c.Entities[1].Recent; len(got) == 0 || strings.Contains(got[0], "요약.") {
 		t.Errorf("a later entity should get the label alone: %q", got)
+	}
+}
+
+// realisticWork seeds a work at the size the 2026-11 measurements found: the
+// fixture above kept its cards short, which is how a brief that overran the
+// tool cap in real use still passed. Every string here is made up.
+type fakeLedger struct{ brief LedgerBrief }
+
+func (f fakeLedger) ContextLedger(context.Context, string, string) (LedgerBrief, error) {
+	return f.brief, nil
+}
+
+type fakeFacts struct{ cards []FactBrief }
+
+func (f fakeFacts) ContextFacts(context.Context, string, string) ([]FactBrief, error) {
+	return f.cards, nil
+}
+
+func seedRealisticWork(t *testing.T) (longWork, *ContextBuilder) {
+	t.Helper()
+	ctx := context.Background()
+	f := newCtxFixture(t)
+	p := f.project(t, project.NewInput{Title: "장편", LengthTarget: "series", DefaultPOV: "first"})
+	style := "문체 기준: 입말 호흡. " + strings.Repeat("문장 호흡과 대사 규칙을 적은 작가 메모. ", 60)
+	p, err := f.projects.Update(ctx, 1000, project.UpdateInput{ID: p.ID, StyleNotes: &style})
+	if err != nil {
+		t.Fatal(err)
+	}
+	er := entity.NewRepo(f.store)
+	mentions := ""
+	for i := range 56 {
+		e, err := er.Create(ctx, 1000, entity.NewInput{ProjectID: p.ID, Kind: "character", Name: fmt.Sprintf("인물%d", i), Role: "조연"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		summary := strings.Repeat("이 요소의 배경과 사정을 적은 설명. ", 12)
+		attrs := map[string]string{"외모": strings.Repeat("긴 묘사 ", 15), "말투": strings.Repeat("긴 묘사 ", 15)}
+		if err := er.Update(ctx, 1000, entity.UpdateInput{ID: e.ID, Summary: &summary, Attributes: &attrs}); err != nil {
+			t.Fatal(err)
+		}
+		if i < 16 {
+			mentions += `,{"type":"mention","attrs":{"id":"` + e.ID + `","label":"` + e.Name + `"}}`
+		}
+	}
+	first, err := f.nodes.Get(ctx, *p.LastOpenedNodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.nodes.Delete(ctx, first.ID, 1001); err != nil {
+		t.Fatal(err)
+	}
+	w := longWork{f: f, p: p}
+	part, err := f.nodes.CreateRoot(ctx, p.ID, node.KindContainer, "1부", "", 1010)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.nodes.SetWrittenSummary(ctx, part.ID, strings.Repeat("부의 흐름을 적은 문장. ", 70), part.ContentVersion); err != nil {
+		t.Fatal(err)
+	}
+	w.parts = append(w.parts, part)
+	body := strings.Repeat("주인공은 패를 품에 넣고 객잔 문을 나섰다. ", 170)
+	for i := range 25 {
+		label := fmt.Sprintf("%d화", i+1)
+		n, err := f.nodes.CreateChild(ctx, part.ID, node.KindLeaf, label, "", int64(2000+i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if i < 16 {
+			doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"` + body + `"}` + mentions + `]}]}`
+			if err := f.nodes.UpdateContent(ctx, n.ID, doc, int64(3000+i)); err != nil {
+				t.Fatal(err)
+			}
+			got, err := f.nodes.Get(ctx, n.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := f.nodes.SetWrittenSummary(ctx, n.ID, label+" 요약. "+strings.Repeat("이 화에서 벌어진 일. ", 70), got.ContentVersion); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, err := f.nodes.Get(ctx, n.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.scenes = append(w.scenes, got)
+	}
+	owed := make([]string, 0, 9)
+	for i := range 9 {
+		owed = append(owed, fmt.Sprintf("[복선] 약속 %d: %s", i, strings.Repeat("회수해야 할 내용 ", 22)))
+	}
+	cards := make([]FactBrief, 0, 12)
+	for i := range 12 {
+		cards = append(cards, FactBrief{ID: fmt.Sprintf("fact-%d", i), Status: "uncertain", Claim: strings.Repeat("일반 지식을 적은 카드 ", 30)})
+	}
+	b := f.builder().
+		WithLedgerSource(fakeLedger{brief: LedgerBrief{Due: owed[:5], Open: owed[5:], Omitted: 36}}).
+		WithFactSource(fakeFacts{cards: cards})
+	return w, b
+}
+
+func briefOf(t *testing.T, b *ContextBuilder, nodeID string) Context {
+	t.Helper()
+	c, err := b.BuildFull(context.Background(), nodeID, "", "", Options{Language: "ko"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// The world section and the fact dossier were what ran off the end of a real
+// brief. Both are bounded now, whichever scene the brief is for.
+func TestRealisticWorkKeepsWorldAndFactsInBudget(t *testing.T) {
+	w, b := seedRealisticWork(t)
+	for _, i := range []int{9, 15, 16, 24} {
+		c := briefOf(t, b, w.scenes[i].ID)
+		world := 0
+		for _, e := range c.Entities {
+			world += entityCardRunes(e)
+			for _, line := range e.Recent {
+				world += utf8.RuneCountInString(line) + 5
+			}
+		}
+		if world > entityBriefMaxRunes {
+			t.Errorf("scene %d: world section is %d runes", i, world)
+		}
+		facts := 0
+		for _, f := range c.Facts {
+			facts += factCardRunes(f)
+		}
+		if facts > factBriefMaxRunes {
+			t.Errorf("scene %d: fact dossier is %d runes", i, facts)
+		}
+		if c.FactsOmitted == 0 {
+			t.Errorf("scene %d: a shortened dossier must say so", i)
+		}
+	}
+}
+
+func TestSceneMentionsKeepTheirCardsAheadOfTheCore(t *testing.T) {
+	w, b := seedRealisticWork(t)
+	c := briefOf(t, b, w.scenes[15].ID)
+	if len(c.Entities) == 0 || c.Entities[0].Name != "인물0" {
+		t.Fatalf("the scene's own cast must come first: %+v", c.Entities)
+	}
+	for _, e := range c.Entities {
+		if e.Summary == "" {
+			t.Fatalf("a card lost its summary: %+v", e)
+		}
+	}
+}
+
+func TestSceneFactsComeBeforeTheWorksGeneralCards(t *testing.T) {
+	cards := []FactBrief{
+		{ID: "general", Status: "uncertain", Claim: strings.Repeat("일반 ", 400)},
+		{ID: "work", Status: "intentional_fiction", Claim: strings.Repeat("설정 ", 200)},
+		{ID: "scene", Status: "uncertain", Claim: strings.Repeat("회차 ", 200), Scene: true},
+	}
+	got, omitted := budgetFacts(cards)
+	if len(got) != 2 || got[0].ID != "scene" || got[1].ID != "work" || omitted != 1 {
+		t.Fatalf("got %+v, omitted %d", got, omitted)
+	}
+}
+
+func TestFitBriefDropsTheBackOfTheBriefAndSaysWhat(t *testing.T) {
+	w, b := seedRealisticWork(t)
+	c := briefOf(t, b, w.scenes[15].ID)
+	brief, omitted := FitBrief(c, 12000)
+	if n := EscapedRunes(brief); n > 12000 {
+		t.Fatalf("brief is %d runes", n)
+	}
+	if !slices.Contains(omitted, "facts") || !slices.Contains(omitted, "entities") {
+		t.Fatalf("omitted = %v", omitted)
+	}
+	for _, keep := range []string{"문체 기준", "## 지금 회수할 것"} {
+		if !strings.Contains(brief, keep) {
+			t.Errorf("fitting dropped %q", keep)
+		}
+	}
+}
+
+func TestFitBriefLeavesABriefThatFitsAlone(t *testing.T) {
+	w, b := seedRealisticWork(t)
+	c := briefOf(t, b, w.scenes[15].ID)
+	_, want := Render(c)
+	got, omitted := FitBrief(c, 1_000_000)
+	if got != want || len(omitted) != 0 {
+		t.Fatalf("omitted %v", omitted)
 	}
 }

@@ -312,8 +312,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 		t.Errorf("the continuity pair costs %dB, want <= 3400B", continuityTools)
 	}
 	// The world's update and delete ops, with linetta_list_characters'
-	// aliases and include switches, measured 28,356B.
-	if total > 28400 {
+	// aliases and include switches, measured 28,356B. Long-form paging added
+	// cursors and totals to linetta_get_outline and linetta_list_characters and
+	// omitted_sections to the brief, measured 28,855B.
+	if total > 28900 {
 		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 28400B "+
 			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}

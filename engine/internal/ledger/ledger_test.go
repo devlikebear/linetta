@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/project"
@@ -154,6 +155,75 @@ func TestBriefStaysInBudgetAndSaysWhatItLeftOut(t *testing.T) {
 	}
 	if got.Omitted == 0 || len(got.Settled) == 0 {
 		t.Fatalf("omitted %d settled %d", got.Omitted, len(got.Settled))
+	}
+}
+
+// One budget let the owed entries, which come first, use all of it. In a real
+// work no settled entry reached a brief from the eighth episode on.
+func TestBriefKeepsSettledWhenOwedOverflows(t *testing.T) {
+	f := setup(t, 4)
+	for i := range 20 {
+		if _, err := f.repo.Add(f.ctx, int64(i), Entry{ProjectID: f.pid, Kind: KindPromise, Body: strings.Repeat("약속 ", 60), PlantedNodeID: f.scenes[0].ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range 3 {
+		if _, err := f.repo.Add(f.ctx, int64(100+i), Entry{ProjectID: f.pid, Kind: KindDecision, Body: "정한 사실", PlantedNodeID: f.scenes[0].ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := f.repo.ContextLedger(f.ctx, f.pid, f.scenes[3].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Settled) != 3 {
+		t.Fatalf("settled = %q", got.Settled)
+	}
+	if len(got.Open) == 0 || got.Omitted == 0 {
+		t.Fatalf("open %d omitted %d", len(got.Open), got.Omitted)
+	}
+}
+
+func TestSpareBudgetFlowsToTheOtherSide(t *testing.T) {
+	f := setup(t, 4)
+	if _, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindPromise, Body: "짧은 약속", PlantedNodeID: f.scenes[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 40 {
+		if _, err := f.repo.Add(f.ctx, int64(10+i), Entry{ProjectID: f.pid, Kind: KindNumber, Body: strings.Repeat("수치 ", 40), PlantedNodeID: f.scenes[0].ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := f.repo.ContextLedger(f.ctx, f.pid, f.scenes[3].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shown := 0
+	for _, line := range got.Settled {
+		shown += utf8.RuneCountInString(line)
+	}
+	if shown <= briefSettledRunes {
+		t.Fatalf("settled used %d runes; what the owed side left should have gone to it", shown)
+	}
+}
+
+func TestSettledEntriesTheSceneTalksAboutComeFirst(t *testing.T) {
+	f := setup(t, 4)
+	plan := "주인공이 낡은 패를 들고 산문에 오른다"
+	if err := f.nodes.SetPlan(f.ctx, f.scenes[3].ID, plan); err != nil {
+		t.Fatal(err)
+	}
+	for i, subject := range []string{"낡은 패의 생김새", "무관한 사실"} {
+		if _, err := f.repo.Add(f.ctx, int64(10+i), Entry{ProjectID: f.pid, Kind: KindDecision, Subject: subject, Body: "내용", PlantedNodeID: f.scenes[0].ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := f.repo.ContextLedger(f.ctx, f.pid, f.scenes[3].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Settled) != 2 || !strings.Contains(got.Settled[0], "낡은 패") {
+		t.Fatalf("settled = %q", got.Settled)
 	}
 }
 

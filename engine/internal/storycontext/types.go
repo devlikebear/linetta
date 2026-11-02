@@ -168,7 +168,8 @@ type LedgerBrief struct {
 	Due []string `json:"due,omitempty"`
 	// Open is what else the story owes.
 	Open []string `json:"open,omitempty"`
-	// Settled is what has been decided or established, newest first.
+	// Settled is what has been decided or established: what this scene talks
+	// about first, then newest first.
 	Settled []string `json:"settled,omitempty"`
 	// Omitted counts entries that did not fit.
 	Omitted int `json:"omitted,omitempty"`
@@ -314,6 +315,8 @@ type Context struct {
 	Plot          plot.Spine          `json:"plot"`
 	Notes         []NoteBrief         `json:"notes"`
 	Facts         []FactBrief         `json:"facts,omitempty"`
+	// FactsOmitted counts the cards the dossier's budget left out.
+	FactsOmitted int `json:"facts_omitted,omitempty"`
 	// WriterProfile and WorkNotes are the curated, budgeted memories: short
 	// documents the writer and the agent both maintain.
 	WriterProfile string `json:"writer_profile,omitempty"`
@@ -390,6 +393,8 @@ type FactBrief struct {
 	Category string            `json:"category,omitempty"`
 	Result   string            `json:"result,omitempty"`
 	Sources  []FactSourceBrief `json:"sources,omitempty"`
+	// Scene is set on a card attached to the brief's own scene.
+	Scene bool `json:"scene,omitempty"`
 }
 
 // FactSourceBrief is one source line under a fact card.

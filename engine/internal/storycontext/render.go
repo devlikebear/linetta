@@ -72,6 +72,71 @@ func Render(c Context) (system, user string) {
 	return buildSystem(c), buildUser(c)
 }
 
+// EscapedRunes is how long s runs once it is a JSON string, which is what a tool
+// result is measured in: a Korean brief is mostly newlines and quotes away from
+// its own rune count, and Go's encoder spells < > & as six characters.
+func EscapedRunes(s string) int {
+	n := 0
+	for _, r := range s {
+		switch r {
+		case '\n', '\t', '\r', '"', '\\':
+			n += 2
+		case '<', '>', '&':
+			n += 6
+		default:
+			n++
+		}
+	}
+	return n
+}
+
+// FitBrief renders c within maxRunes of JSON text, and names what it had to
+// leave out. It takes from the back: what the brief has in reference before what
+// the writer told the agent. Style notes, direction, the ledger and the scene's
+// plan are never touched; a brief still over the limit without everything else
+// is returned as it stands.
+func FitBrief(c Context, maxRunes int) (string, []string) {
+	fits := func() (string, bool) {
+		_, user := Render(c)
+		return user, EscapedRunes(user) <= maxRunes
+	}
+	brief, ok := fits()
+	if ok {
+		return brief, nil
+	}
+	omitted := []string{}
+	steps := []struct {
+		name string
+		drop func()
+	}{
+		{"facts", func() { c.Facts, c.FactsOmitted = nil, 0 }},
+		{"relationships", func() { c.Relationships = nil }},
+		{"related_scenes", func() { c.RelatedScenes = nil }},
+		{"plot", func() { c.Plot = plot.Spine{} }},
+	}
+	for _, step := range steps {
+		step.drop()
+		omitted = append(omitted, step.name)
+		if brief, ok = fits(); ok {
+			return brief, omitted
+		}
+	}
+	omitted = append(omitted, "entities")
+	entities := slices.Clone(c.Entities)
+	for i := range entities {
+		entities[i].Recent = nil
+	}
+	c.Entities = entities
+	for len(c.Entities) > 0 {
+		if brief, ok = fits(); ok {
+			return brief, omitted
+		}
+		c.Entities = c.Entities[:len(c.Entities)-1]
+	}
+	brief, _ = fits()
+	return brief, omitted
+}
+
 func buildSystem(c Context) string {
 	lang := c.Options.Language
 	if langIsJapanese(lang) {
@@ -454,6 +519,12 @@ func buildUser(c Context) string {
 				}
 				b.WriteString(fmt.Sprintf("  · %s — %s\n", title, src.URL))
 			}
+		}
+		if c.FactsOmitted > 0 {
+			fmt.Fprintf(&b, langPick(lang,
+				"자료 %d장은 생략했습니다. linetta_get_fact_cards로 볼 수 있습니다.\n",
+				"%d fact cards left out; linetta_get_fact_cards shows them.\n",
+				"資料 %d 枚を省きました。linetta_get_fact_cards で見られます。\n"), c.FactsOmitted)
 		}
 		b.WriteString("\n")
 	}
