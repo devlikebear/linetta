@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/devlikebear/linetta/engine/internal/manuscriptedit"
+	"github.com/devlikebear/linetta/engine/internal/node"
 )
 
 // ---------- linetta_revise_scene ----------
@@ -46,6 +47,8 @@ type reviseSceneOutput struct {
 	// linetta_undo_last_change restores one scene from one of these.
 	SnapshotIDs map[string]string `json:"snapshot_ids,omitempty"`
 	Failures    []string          `json:"failures,omitempty"`
+	// Notice says what the write means beyond the scene, when it means something.
+	Notice string `json:"notice,omitempty"`
 }
 
 func (d ToolDeps) registerReviseTool(s *mcp.Server) {
@@ -133,6 +136,12 @@ func (d ToolDeps) reviseScene(ctx context.Context, _ *mcp.CallToolRequest, in re
 	}
 	if result.Applied > 0 {
 		d.notifyChanged(p.ID, "linetta_revise_scene", result.ChangedNodeIDs, "")
+		for _, nodeID := range result.ChangedNodeIDs {
+			if n, err := d.Nodes.Get(ctx, nodeID); err == nil && n.Status == node.StatusPublished {
+				out.Notice = publishedNotice(n.Status)
+				break
+			}
+		}
 	}
 	if result.Applied == 0 && len(result.Failures) > 0 {
 		return toolErr("nothing was revised: %s", strings.Join(out.Failures, "; ")), out, nil

@@ -9,6 +9,7 @@ const rpc = vi.hoisted(() => ({
   publishEpisode: vi.fn(),
   setEpisodeVisibility: vi.fn(),
   openExternalUrl: vi.fn(),
+  continuityList: vi.fn(),
 }));
 
 vi.mock("../lib/rpc", () => ({
@@ -19,6 +20,7 @@ vi.mock("../lib/rpc", () => ({
     publishEpisode: rpc.publishEpisode,
     setEpisodeVisibility: rpc.setEpisodeVisibility,
   },
+  continuity: { list: rpc.continuityList },
   openExternalUrl: rpc.openExternalUrl,
 }));
 
@@ -82,6 +84,7 @@ describe("PublishDialog", () => {
     vi.clearAllMocks();
     rpc.connectStatus.mockResolvedValue(CONNECTED);
     rpc.workStatus.mockResolvedValue(status());
+    rpc.continuityList.mockResolvedValue({ checks: [] });
     rpc.openExternalUrl.mockResolvedValue(undefined);
   });
 

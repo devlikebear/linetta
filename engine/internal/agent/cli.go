@@ -123,6 +123,7 @@ func (t *cliTurn) call(name string, arguments json.RawMessage) *mcp.CallToolResu
 	if !result.IsError {
 		t.lastFail, t.repeats = "", 0
 		noteWrittenScene(t.st.written, name, args)
+		noteChangedFact(t.st.changed, name, args, result.Text)
 	} else {
 		if name == t.lastFail {
 			t.repeats++
@@ -239,6 +240,7 @@ func randomToken() (string, error) {
 // tools reachable over the bridge for as long as it runs.
 func (s *Service) loopCLI(ctx context.Context, st loopState) {
 	st.written = &[]string{}
+	st.changed = &[]string{}
 	msgs := s.openingMessages(ctx, st)
 	turn := &cliTurn{s: s, st: st, ctx: ctx}
 

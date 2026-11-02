@@ -947,6 +947,7 @@ export interface Settings {
   /** Off unless the writer turns it on: it sends finished scenes to the model again. */
   agent_episode_review_enabled?: boolean;
   agent_settlement_enabled?: boolean;
+  agent_impact_review_enabled?: boolean;
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
   /** How many tool calls one turn of the built-in agent may execute before
@@ -1022,6 +1023,7 @@ export interface SettingsPatch {
   /** Off unless the writer turns it on: it sends finished scenes to the model again. */
   agent_episode_review_enabled?: boolean;
   agent_settlement_enabled?: boolean;
+  agent_impact_review_enabled?: boolean;
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
   agent_max_tool_calls?: number;
@@ -1574,6 +1576,8 @@ export interface LedgerEntry {
   superseded_by?: string;
   strength?: "hard" | "soft";
   value_num?: number;
+  /** How far a promise runs; the brief drops one past its reach unless it is due. */
+  reach?: "arc" | "volume" | "work";
   created_at: number;
   updated_at: number;
 }

@@ -315,3 +315,38 @@ VALUES ('p1', 'Test', '["SF"]', 'novel', 'first', 0, 0)`); err != nil {
 		t.Fatalf("replay_start on rows %v of %d, want one row after the first", marked, len(rows))
 	}
 }
+
+// The RPCs a long work's tidying goes through, on a real app: a copy to try a
+// change on, links for scenes written before their names existed, and a sample
+// check that says there is nothing to compare rather than starting one.
+func TestLongWorkMaintenanceRPCs(t *testing.T) {
+	app := openApp(t)
+	out, rpcErr := call(t, app, "projects.create", `{"title":"작품","genres":[],"length_target":"novel","default_pov":"first"}`)
+	if rpcErr != nil {
+		t.Fatalf("projects.create: %+v", rpcErr)
+	}
+	var p struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(out, &p); err != nil {
+		t.Fatal(err)
+	}
+	out, rpcErr = call(t, app, "mentions.relink_work", `{"project_id":"`+p.ID+`"}`)
+	if rpcErr != nil || !strings.Contains(string(out), `"scenes":0`) {
+		t.Fatalf("relink: %s, %+v", out, rpcErr)
+	}
+	out, rpcErr = call(t, app, "continuity.sample_check", `{"project_id":"`+p.ID+`"}`)
+	if rpcErr != nil || !strings.Contains(string(out), `"pairs":0`) {
+		t.Fatalf("sample: %s, %+v", out, rpcErr)
+	}
+	out, rpcErr = call(t, app, "projects.duplicate", `{"project_id":"`+p.ID+`","title_suffix":" (복제본)"}`)
+	if rpcErr != nil {
+		t.Fatalf("duplicate: %+v", rpcErr)
+	}
+	var merged struct {
+		ProjectID string `json:"project_id"`
+	}
+	if err := json.Unmarshal(out, &merged); err != nil || merged.ProjectID == "" || merged.ProjectID == p.ID {
+		t.Fatalf("duplicate = %s, %v", out, err)
+	}
+}

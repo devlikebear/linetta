@@ -219,7 +219,7 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 			inboxTools += b
 			continue
 		}
-		if name == "linetta_list_ledger" || name == "linetta_edit_ledger" || name == "linetta_set_part_arc" {
+		if name == "linetta_list_ledger" || name == "linetta_edit_ledger" || name == "linetta_set_part_arc" || name == "linetta_find_impact" {
 			ledgerTools += b
 			continue
 		}
@@ -299,9 +299,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// excluded from this total. The long-form work added the plan field that
 	// linetta_apply_story_ops and linetta_write_summary share, measured at
 	// 27,618B; the ledger tools carry their own allowance, 4,500B. Facts with a
-	// span and paged listing took them to 5,552B.
-	if ledgerTools > 5600 {
-		t.Errorf("the ledger tools cost %dB, want <= 5600B", ledgerTools)
+	// span and paged listing took them to 5,552B. Reach and linetta_find_impact
+	// took them to 6,526B.
+	if ledgerTools > 6600 {
+		t.Errorf("the ledger tools cost %dB, want <= 6600B", ledgerTools)
 	}
 	// The three inbox tools measured 3,790B: list 1,621B, accept 1,331B,
 	// reject 838B.
@@ -315,8 +316,9 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// The world's update and delete ops, with linetta_list_characters'
 	// aliases and include switches, measured 28,356B. Long-form paging added
 	// cursors and totals to linetta_get_outline and linetta_list_characters and
-	// omitted_sections to the brief, measured 28,855B.
-	if total > 28900 {
+	// omitted_sections to the brief, measured 28,855B. The published notice on
+	// linetta_write_scene and linetta_revise_scene took it to 28,909B.
+	if total > 28950 {
 		t.Errorf("the original tool budget (excluding linetta_report_continuity) is %dB, want <= 28400B "+
 			"(#132 trimmed it from 27687B to 26525B; story-assist raised it to 27100B, 27400B, then 27500B)", total)
 	}

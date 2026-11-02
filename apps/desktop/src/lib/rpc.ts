@@ -231,6 +231,9 @@ export async function rpcCall<T>(method: string, params?: unknown): Promise<T> {
 
 
 export const projects = {
+  /** A copy under a new id for trying a big change on. Publishing stays with the original. */
+  duplicate: (id: string, titleSuffix: string) =>
+    rpcCall<{ project_id: string }>("projects.duplicate", { project_id: id, title_suffix: titleSuffix }),
   create: (input: NewProjectInput) => rpcCall<Project>("projects.create", input),
   list: (params: ListProjectsParams = {}) => rpcCall<Project[]>("projects.list", params),
   get: (id: string) => rpcCall<Project>("projects.get", { id }),
@@ -663,6 +666,9 @@ export const entities = {
 };
 
 export const mentions = {
+  /** Links scenes written before their names were registered. */
+  relinkWork: (projectId: string) =>
+    rpcCall<{ scenes: number; links: number }>("mentions.relink_work", { project_id: projectId }),
   listForNode: (nodeId: string) =>
     rpcCall<Entity[]>("mentions.list_for_node", { node_id: nodeId }),
 };
@@ -769,7 +775,7 @@ export const direction = {
 /** The work's ledger and part arcs (internal/ledger). */
 export const ledger = {
   list: (projectId: string) => rpcCall<LedgerState>("ledger.list", { project_id: projectId }),
-  save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; subject?: string; body?: string; status?: LedgerStatus }) =>
+  save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; reach?: LedgerEntry["reach"]; subject?: string; body?: string; status?: LedgerStatus }) =>
     rpcCall<LedgerEntry>("ledger.save", entry),
   remove: (id: string) => rpcCall<{ ok: boolean }>("ledger.delete", { id }),
   setPinned: (id: string, pinned: boolean) =>
@@ -780,6 +786,9 @@ export const ledger = {
 };
 
 export const continuity = {
+  /** Compares scenes with no conversation behind them. Findings arrive in the list. */
+  sampleCheck: (projectId: string, nodeId?: string) =>
+    rpcCall<{ pairs: number }>("continuity.sample_check", { project_id: projectId, node_id: nodeId }),
   list: (projectId: string, nodeId?: string, statuses?: ContinuityStatus[]) =>
     rpcCall<{ checks: ContinuityCheck[] }>("continuity.list", {
       project_id: projectId,

@@ -24,6 +24,10 @@ func NewRepo(s *store.Store, nodes *node.Repo) *Repo { return &Repo{s: s, nodes:
 // SubjectResolver turns a name into the one the work knows it by.
 type SubjectResolver interface {
 	CanonicalName(ctx context.Context, projectID, name string) string
+	// Names lists every name a subject goes by, its own included.
+	Names(ctx context.Context, projectID, name string) []string
+	// AllNames lists each element's names, one group an element.
+	AllNames(ctx context.Context, projectID string) [][]string
 }
 
 // WithSubjects returns the repo with subjects folded onto the work's names, so
@@ -45,14 +49,14 @@ func (r *Repo) canonical(ctx context.Context, e Entry) string {
 const entryColumns = `id, project_id, kind, subject, body, status,
        COALESCE(planted_node_id, ''), planted_quote, COALESCE(due_node_id, ''),
        COALESCE(paid_node_id, ''), paid_quote, source, pinned, attribute,
-       COALESCE(valid_to_node_id, ''), superseded_by, strength, value_num, created_at, updated_at`
+       COALESCE(valid_to_node_id, ''), superseded_by, strength, value_num, reach, created_at, updated_at`
 
 func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 	var e Entry
 	err := row.Scan(&e.ID, &e.ProjectID, &e.Kind, &e.Subject, &e.Body, &e.Status,
 		&e.PlantedNodeID, &e.PlantedQuote, &e.DueNodeID, &e.PaidNodeID, &e.PaidQuote,
 		&e.Source, &e.Pinned, &e.Attribute, &e.ValidToNodeID, &e.SupersededBy, &e.Strength, &e.ValueNum,
-		&e.CreatedAt, &e.UpdatedAt)
+		&e.Reach, &e.CreatedAt, &e.UpdatedAt)
 	return e, err
 }
 
@@ -70,6 +74,9 @@ func (r *Repo) Add(ctx context.Context, now int64, e Entry) (Entry, error) {
 	if e.Strength == "" {
 		e.Strength = StrengthHard
 	}
+	if e.Reach == "" {
+		e.Reach = ReachArc
+	}
 	if !ValidKind(e.Kind) {
 		return Entry{}, ErrInvalidKind
 	}
@@ -83,11 +90,11 @@ func (r *Repo) Add(ctx context.Context, now int64, e Entry) (Entry, error) {
 	if _, err := r.s.DB().ExecContext(ctx, `
 INSERT INTO story_ledger (id, project_id, kind, subject, body, status, planted_node_id, planted_quote,
                           due_node_id, paid_node_id, paid_quote, source, attribute, valid_to_node_id,
-                          strength, value_num, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                          strength, value_num, reach, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		e.ID, e.ProjectID, e.Kind, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
 		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Source, e.Attribute,
-		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, now, now); err != nil {
+		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, e.Reach, now, now); err != nil {
 		return Entry{}, err
 	}
 	return e, nil
@@ -116,6 +123,7 @@ func (r *Repo) Update(ctx context.Context, now int64, id string, p Patch) (Entry
 		{&e.PlantedNodeID, p.PlantedNodeID}, {&e.PlantedQuote, p.PlantedQuote},
 		{&e.DueNodeID, p.DueNodeID}, {&e.PaidNodeID, p.PaidNodeID}, {&e.PaidQuote, p.PaidQuote},
 		{&e.Attribute, p.Attribute}, {&e.ValidToNodeID, p.ValidToNodeID}, {&e.Strength, p.Strength},
+		{&e.Reach, p.Reach},
 	} {
 		if f.from != nil {
 			*f.to = strings.TrimSpace(*f.from)
@@ -133,10 +141,10 @@ func (r *Repo) Update(ctx context.Context, now int64, id string, p Patch) (Entry
 UPDATE story_ledger
    SET subject = ?, body = ?, status = ?, planted_node_id = ?, planted_quote = ?,
        due_node_id = ?, paid_node_id = ?, paid_quote = ?, attribute = ?, valid_to_node_id = ?,
-       strength = ?, value_num = ?, updated_at = ?
+       strength = ?, value_num = ?, reach = ?, updated_at = ?
  WHERE id = ?`, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
 		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, e.Attribute,
-		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, now, id); err != nil {
+		nullable(e.ValidToNodeID), e.Strength, e.ValueNum, e.Reach, now, id); err != nil {
 		return Entry{}, err
 	}
 	return e, nil
@@ -240,6 +248,9 @@ func (r *Repo) validate(ctx context.Context, e Entry) error {
 	}
 	if e.Strength != StrengthHard && e.Strength != StrengthSoft {
 		return ErrInvalidStrength
+	}
+	if e.Reach != ReachArc && e.Reach != ReachVolume && e.Reach != ReachWork {
+		return ErrInvalidReach
 	}
 	hasFactFields := e.Attribute != "" || e.ValidToNodeID != "" || e.ValueNum != nil
 	if hasFactFields && (Tracked(e.Kind) || e.Kind == KindCutPlan) {

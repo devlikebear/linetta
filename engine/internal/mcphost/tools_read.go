@@ -42,6 +42,7 @@ var ReadToolNames = []string{
 	"linetta_analyze_style",
 	"linetta_read_skill",
 	"linetta_list_ledger",
+	"linetta_find_impact",
 	"linetta_list_proposals",
 	"linetta_list_continuity",
 	"linetta_publish_status",

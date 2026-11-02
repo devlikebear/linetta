@@ -90,6 +90,9 @@ type Deps struct {
 	// SettlementEnabled reports whether a turn that wrote a scene is followed by
 	// a pass that records what the scene changed. Nil means off.
 	SettlementEnabled func() bool
+	// ImpactReviewEnabled reports whether a turn that changed a decision or a
+	// fact is followed by a look for prose it no longer agrees with. Nil means off.
+	ImpactReviewEnabled func() bool
 	// MaxToolCalls reports how many tool calls one turn may execute
 	// (settings.agent_max_tool_calls). Read once at the top of each turn. A
 	// nil func, or an answer below one, means maxIterations.

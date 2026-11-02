@@ -46,6 +46,7 @@ type editLedgerInput struct {
 	ValueNum      *float64 `json:"value_num,omitempty" jsonschema:"the number a fact holds, such as money or a day count"`
 	ValidToNodeID *string  `json:"valid_to_node_id,omitempty" jsonschema:"scene it stops being true at"`
 	Supersedes    string   `json:"supersedes,omitempty" jsonschema:"id of the fact this one replaces"`
+	Reach         *string  `json:"reach,omitempty" jsonschema:"how far a promise runs: arc (default), volume or work"`
 }
 
 func (in editLedgerInput) scope() (string, string) { return in.ProjectID, "" }
@@ -69,7 +70,23 @@ type setPartArcInput struct {
 
 func (in setPartArcInput) scope() (string, string) { return "", in.NodeID }
 
+type findImpactInput struct {
+	EntryID string `json:"entry_id" jsonschema:"the ledger entry that changed"`
+}
+
+func (in findImpactInput) scope() (string, string) { return "", "" }
+
+type findImpactOutput struct {
+	Scenes  []ledger.Candidate `json:"scenes"`
+	Omitted int                `json:"omitted,omitempty"`
+}
+
 func (d ToolDeps) registerLedgerReadTool(s *mcp.Server) {
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "linetta_find_impact",
+		Description: "List the written scenes a ledger entry may touch, in story order, with why each is " +
+			"listed: to read after a decision or fact changes. It ranks by text; reading decides.",
+	}, record(d, "linetta_find_impact", d.findImpact))
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "linetta_list_ledger",
 		Description: "List the work's ledger, newest first: what the story owes the reader and what is settled. Follow next_cursor for the rest.",
@@ -116,6 +133,17 @@ func (d ToolDeps) listLedger(ctx context.Context, _ *mcp.CallToolRequest, in lis
 	return nil, listLedgerOutput{Entries: page, Total: total, NextCursor: next}, nil
 }
 
+func (d ToolDeps) findImpact(ctx context.Context, _ *mcp.CallToolRequest, in findImpactInput) (*mcp.CallToolResult, findImpactOutput, error) {
+	if d.Ledger == nil {
+		return toolErr("the ledger is not available in this build"), findImpactOutput{}, nil
+	}
+	scenes, omitted, err := d.Ledger.Impact(ctx, strings.TrimSpace(in.EntryID))
+	if err != nil {
+		return ledgerToolErr(err), findImpactOutput{}, nil
+	}
+	return nil, findImpactOutput{Scenes: scenes, Omitted: omitted}, nil
+}
+
 func (d ToolDeps) editLedger(ctx context.Context, _ *mcp.CallToolRequest, in editLedgerInput) (*mcp.CallToolResult, editLedgerOutput, error) {
 	if d.Ledger == nil {
 		return toolErr("the ledger is not available in this build"), editLedgerOutput{}, nil
@@ -153,6 +181,7 @@ func (d ToolDeps) editLedger(ctx context.Context, _ *mcp.CallToolRequest, in edi
 			PlantedNodeID: in.PlantedNodeID, PlantedQuote: in.PlantedQuote, DueNodeID: in.DueNodeID,
 			PaidNodeID: in.PaidNodeID, PaidQuote: in.PaidQuote,
 			Attribute: in.Attribute, Strength: in.Strength, ValueNum: in.ValueNum, ValidToNodeID: in.ValidToNodeID,
+			Reach: in.Reach,
 		})
 		if err != nil {
 			return ledgerToolErr(err), editLedgerOutput{}, nil
@@ -173,6 +202,7 @@ func (d ToolDeps) editLedger(ctx context.Context, _ *mcp.CallToolRequest, in edi
 			PlantedNodeID: deref(in.PlantedNodeID), PlantedQuote: deref(in.PlantedQuote), DueNodeID: deref(in.DueNodeID),
 			PaidNodeID: deref(in.PaidNodeID), PaidQuote: deref(in.PaidQuote), Source: d.ledgerSource(),
 			Attribute: deref(in.Attribute), Strength: deref(in.Strength), ValueNum: in.ValueNum, ValidToNodeID: deref(in.ValidToNodeID),
+			Reach: deref(in.Reach),
 		})
 		if err != nil {
 			return ledgerToolErr(err), editLedgerOutput{}, nil

@@ -523,6 +523,7 @@ export function AgentPanel({
   const [canceling, setCanceling] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [confirmFresh, setConfirmFresh] = useState(false);
+  const [showLongform, setShowLongform] = useState(false);
   // Pictures waiting to go with the next message, picked, pasted or dropped.
   const [images, setImages] = useState<ReadImage[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -1496,6 +1497,17 @@ export function AgentPanel({
           <button
             type="button"
             className="btn ghost sm"
+            data-testid="agent-longform"
+            aria-expanded={showLongform}
+            onClick={() => setShowLongform((v) => !v)}
+          >
+            {t("agentPanel.longform")}
+          </button>
+        )}
+        {ready && lines.length > 0 && (
+          <button
+            type="button"
+            className="btn ghost sm"
             data-testid="agent-start-fresh"
             disabled={busy}
             onClick={() => setConfirmFresh(true)}
@@ -1505,6 +1517,25 @@ export function AgentPanel({
         )}
         <button type="button" className="panel-close" onClick={onClose} aria-label={t("common.close")}><X size={16} /></button>
       </div>
+      {showLongform && (
+        <div className="ai-chiprow agent-longform" data-testid="agent-longform-chips">
+          {(["closeArc", "rebuild", "impact"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              className="chip"
+              data-testid={`agent-longform-${key}`}
+              onClick={() => {
+                setShowLongform(false);
+                setDraft(t(`agentPanel.longform.${key}.prompt`));
+                composerRef.current?.focus();
+              }}
+            >
+              {t(`agentPanel.longform.${key}.label`)}
+            </button>
+          ))}
+        </div>
+      )}
       {confirmFresh && (
         <div className="agent-fresh" data-testid="agent-start-fresh-confirm" role="alertdialog" aria-label={t("agentPanel.startFresh")}>
           <p>{t("agentPanel.startFresh.confirm")}</p>

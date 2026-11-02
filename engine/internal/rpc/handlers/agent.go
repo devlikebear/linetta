@@ -27,6 +27,9 @@ type AgentController interface {
 	// StartFresh begins the agent's conversation anew from here. Nothing is
 	// deleted: the panel and the history search keep what came before.
 	StartFresh(ctx context.Context, projectID string) error
+	// StartSampleCheck compares scenes in the background, with no conversation.
+	// What it finds lands in the continuity record.
+	StartSampleCheck(ctx context.Context, projectID, request string, maxCalls int) error
 	// Undo reverts a structural batch (batchID) or restores a scene's
 	// pre-write snapshot (snapshotID). Exactly one is non-empty; AgentUndo
 	// validates that before calling this (#112).

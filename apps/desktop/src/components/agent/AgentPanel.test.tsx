@@ -2719,6 +2719,15 @@ describe("AgentPanel starting the conversation over", () => {
     expect(screen.queryByTestId("agent-start-fresh-confirm")).toBeNull();
   });
 
+  it("fills the composer from the long-form tools and sends nothing itself", async () => {
+    await restoreWith(historyRow({ role: "user", content: "안녕" }));
+    fireEvent.click(await screen.findByTestId("agent-longform"));
+    fireEvent.click(screen.getByTestId("agent-longform-closeArc"));
+    expect(rpc.agentRun).not.toHaveBeenCalled();
+    expect((screen.getByLabelText("agentPanel.composer.label") as HTMLTextAreaElement).value)
+      .toBe("agentPanel.longform.closeArc.prompt");
+  });
+
   it("can fill the composer to move decisions to the ledger first", async () => {
     await restoreWith(historyRow({ role: "user", content: "안녕" }));
     fireEvent.click(await screen.findByTestId("agent-start-fresh"));

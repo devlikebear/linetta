@@ -230,6 +230,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		SelfReviewEnabled:    deps.settings.AgentSelfReviewEnabled,
 		EpisodeReviewEnabled: deps.settings.AgentEpisodeReviewEnabled,
 		SettlementEnabled:    deps.settings.AgentSettlementEnabled,
+		ImpactReviewEnabled:  deps.settings.AgentImpactReviewEnabled,
 		MaxToolCalls:         deps.settings.AgentMaxToolCalls,
 		HistoryBudget:        deps.settings.AgentHistoryBudget,
 		ActiveProvider:       deps.settings.ActiveProvider,
@@ -323,6 +324,10 @@ type agentHistoryRow struct {
 
 func (c *agentController) StartFresh(ctx context.Context, projectID string) error {
 	return c.svc.StartFresh(ctx, projectID)
+}
+
+func (c *agentController) StartSampleCheck(ctx context.Context, projectID, request string, maxCalls int) error {
+	return c.svc.StartSampleCheck(ctx, projectID, request, maxCalls)
 }
 
 func (c *agentController) Clear(ctx context.Context, projectID string) error {

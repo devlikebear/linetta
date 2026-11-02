@@ -23,6 +23,13 @@ import (
 const prevSummaryMaxRunes = 300
 const coreEntityContextLimit = 12
 
+// coreEntityCandidates is how many core elements are weighed for the limit above,
+// and recentCoreScenes how far back counts as recent.
+const (
+	coreEntityCandidates = 50
+	recentCoreScenes     = 30
+)
+
 // Budgets for the parts of the brief that grow with the work, in runes: a
 // Korean summary is three bytes a character, so a byte budget would give a
 // Korean work a third of what it means to.
@@ -34,7 +41,9 @@ const (
 	// is shared among the others, so a long series still shows its whole shape.
 	partSummariesMaxRunes      = 2500
 	partSummaryCurrentMaxRunes = 1200
-	partSummaryMinRunes        = 80
+	// arcSummaryMaxRunes bounds the arc being written, on top of its part.
+	arcSummaryMaxRunes  = 500
+	partSummaryMinRunes = 80
 	// upcomingPlanLimit is how many unwritten scenes past the next one the
 	// brief carries the plan of.
 	upcomingPlanLimit = 2
@@ -294,7 +303,11 @@ func (b *ContextBuilder) BuildFull(ctx context.Context, nodeID, prompt, selectio
 	if err != nil {
 		return Context{}, err
 	}
-	coreEnts, err := b.mentions.ListCoreEntitiesForProject(ctx, n.ProjectID, coreEntityContextLimit)
+	coreEnts, err := b.mentions.ListCoreEntitiesForProject(ctx, n.ProjectID, coreEntityCandidates)
+	if err != nil {
+		return Context{}, err
+	}
+	coreEnts, err = b.recentCore(ctx, n, coreEnts)
 	if err != nil {
 		return Context{}, err
 	}
@@ -573,6 +586,39 @@ func budgetFacts(cards []FactBrief) ([]FactBrief, int) {
 	return out, omitted
 }
 
+// recentCore keeps the core elements the story is using now. In a long work the
+// cast turns over, and an order by when a card was last edited says nothing
+// about who is on stage: the elements seen in the last scenes come first.
+func (b *ContextBuilder) recentCore(ctx context.Context, cur node.Node, core []entity.Entity) ([]entity.Entity, error) {
+	if len(core) <= coreEntityContextLimit {
+		return core, nil
+	}
+	all, err := b.nodes.ListByProject(ctx, cur.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	earlier := leavesBefore(leavesInOrder(childrenByParent(all)), cur.ID)
+	recent := make(map[string]bool, recentCoreScenes)
+	for _, lf := range earlier[max(0, len(earlier)-recentCoreScenes):] {
+		recent[lf.ID] = true
+	}
+	seen := make(map[string]int, len(core))
+	for _, e := range core {
+		ids, _, err := b.mentions.MentionedNodeIDs(ctx, e.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			if recent[id] {
+				seen[e.ID]++
+			}
+		}
+	}
+	ordered := slices.Clone(core)
+	slices.SortStableFunc(ordered, func(x, y entity.Entity) int { return seen[y.ID] - seen[x.ID] })
+	return ordered[:coreEntityContextLimit], nil
+}
+
 // leavesBefore returns the leaves ahead of curID in story order, or all of them
 // when curID is not among them.
 func leavesBefore(leaves []node.Node, curID string) []node.Node {
@@ -768,6 +814,7 @@ func (b *ContextBuilder) loadHierarchicalContext(ctx context.Context, cur node.N
 	}
 
 	out.PartSummaries = partSummaries(rootContainers, ancestorRoot(byID, cur), byID)
+	out.PartSummaries = withArcSummary(out.PartSummaries, cur, byID)
 
 	return out, shown, nil
 }
@@ -827,6 +874,30 @@ func partSummaries(roots []node.Node, currentRoot string, byID map[string]node.N
 		})
 	}
 	return out
+}
+
+// withArcSummary adds the arc being written after the part it belongs to, in a
+// work split finer than its parts. A part's summary says where the volume is
+// going; the scene at hand is more often about the arc inside it.
+func withArcSummary(parts []SceneSummary, cur node.Node, byID map[string]node.Node) []SceneSummary {
+	if cur.ParentID == nil {
+		return parts
+	}
+	arc, ok := byID[*cur.ParentID]
+	if !ok || arc.ParentID == nil || !arc.SummaryWritten || strings.TrimSpace(arc.Summary) == "" {
+		return parts
+	}
+	root := ancestorRoot(byID, cur)
+	line := SceneSummary{
+		NodeID: arc.ID, Label: node.BreadcrumbLabel(byID, arc),
+		Body: trimRunes(strings.TrimSpace(arc.Summary), arcSummaryMaxRunes), Stale: !arc.SummaryFresh(),
+	}
+	for i, p := range parts {
+		if p.NodeID == root {
+			return slices.Insert(parts, i+1, line)
+		}
+	}
+	return append(parts, line)
 }
 
 // DeriveProjectSynopsis builds the rollup synopsis from root containers. When

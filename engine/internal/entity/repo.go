@@ -90,6 +90,35 @@ func (r *Repo) CanonicalName(ctx context.Context, projectID, name string) string
 	return name
 }
 
+// Names lists what a subject goes by: an element's name and aliases when name is
+// one of them, otherwise name alone.
+func (r *Repo) Names(ctx context.Context, projectID, name string) []string {
+	name = strings.TrimSpace(name)
+	all, err := r.ListByProject(ctx, projectID)
+	if err != nil {
+		return []string{name}
+	}
+	for _, e := range all {
+		if e.Name == name || slices.Contains(e.Aliases, name) {
+			return append([]string{e.Name}, e.Aliases...)
+		}
+	}
+	return []string{name}
+}
+
+// AllNames lists each element's name and aliases, one group an element.
+func (r *Repo) AllNames(ctx context.Context, projectID string) [][]string {
+	all, err := r.ListByProject(ctx, projectID)
+	if err != nil {
+		return nil
+	}
+	out := make([][]string, 0, len(all))
+	for _, e := range all {
+		out = append(out, append([]string{e.Name}, e.Aliases...))
+	}
+	return out
+}
+
 // Update applies a partial input. Non-nil pointers overwrite fields, including
 // clearing optional strings with an explicit empty value.
 func (r *Repo) Update(ctx context.Context, now int64, in UpdateInput) error {

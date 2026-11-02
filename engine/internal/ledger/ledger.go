@@ -45,6 +45,7 @@ var (
 	ErrPaidNeedsNode   = errors.New("ledger: mark an entry paid with the scene that pays it")
 	ErrNotAPart        = errors.New("ledger: an arc belongs to a part, not a scene")
 	ErrTension         = errors.New("ledger: tension must be 0 to 10")
+	ErrInvalidReach    = errors.New("ledger: reach must be arc, volume or work")
 	ErrFactOnly        = errors.New("ledger: only a decision, number, timeline or knowledge entry can carry an attribute, a span or a value")
 	ErrFactNoSubject   = errors.New("ledger: a fact with an attribute needs a subject")
 	ErrInvalidStrength = errors.New("ledger: strength must be hard or soft")
@@ -95,10 +96,20 @@ type Entry struct {
 	// what a character said or a rumour carried.
 	Strength string `json:"strength,omitempty"`
 	// ValueNum is the number a fact holds, when it holds one.
-	ValueNum  *float64 `json:"value_num,omitempty"`
-	CreatedAt int64    `json:"created_at"`
-	UpdatedAt int64    `json:"updated_at"`
+	ValueNum *float64 `json:"value_num,omitempty"`
+	// Reach is how far a promise runs: ReachArc, ReachVolume or ReachWork. The
+	// brief stops showing one past its reach unless it has come due.
+	Reach     string `json:"reach,omitempty"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }
+
+// Reaches. An arc is the default: most of what a story owes, it pays soon.
+const (
+	ReachArc    = "arc"
+	ReachVolume = "volume"
+	ReachWork   = "work"
+)
 
 // Strengths. Hard is the default.
 const (
@@ -127,6 +138,7 @@ type Patch struct {
 	Attribute     *string `json:"attribute,omitempty"`
 	ValidToNodeID *string `json:"valid_to_node_id,omitempty"`
 	Strength      *string `json:"strength,omitempty"`
+	Reach         *string `json:"reach,omitempty"`
 	// ValueNum nil leaves the number as it is. There is no clearing one: a fact
 	// whose value stops being a number is a new fact.
 	ValueNum *float64 `json:"value_num,omitempty"`

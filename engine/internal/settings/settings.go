@@ -167,6 +167,10 @@ type Config struct {
 	// changed in the ledger. Off by default for the same reason as the review:
 	// it sends the scene to the provider again.
 	AgentSettlementEnabled bool `json:"agent_settlement_enabled"`
+	// AgentImpactReviewEnabled governs the look for prose a changed decision or
+	// fact no longer agrees with. Off by default: it reads scenes the writer did
+	// not ask about.
+	AgentImpactReviewEnabled bool `json:"agent_impact_review_enabled"`
 	// StyleAvoidPhrases are checked in every work, on top of a work's own list.
 	StyleAvoidPhrases []string `json:"style_avoid_phrases,omitempty"`
 	// AgentMaxToolCalls is how many tool calls the built-in agent may execute
@@ -375,6 +379,7 @@ type Patch struct {
 	AgentSelfReviewEnabled    *bool                    `json:"agent_self_review_enabled,omitempty"`
 	AgentEpisodeReviewEnabled *bool                    `json:"agent_episode_review_enabled,omitempty"`
 	AgentSettlementEnabled    *bool                    `json:"agent_settlement_enabled,omitempty"`
+	AgentImpactReviewEnabled  *bool                    `json:"agent_impact_review_enabled,omitempty"`
 	StyleAvoidPhrases         *[]string                `json:"style_avoid_phrases,omitempty"`
 	AgentMaxToolCalls         *int                     `json:"agent_max_tool_calls,omitempty"`
 	AgentHistoryBudget        *int                     `json:"agent_history_budget,omitempty"`
@@ -693,6 +698,14 @@ func (s *Store) AgentSelfReviewEnabled() bool {
 	return s.cfg.AgentSelfReviewEnabled
 }
 
+// AgentImpactReviewEnabled reports whether a changed fact is followed by a look
+// for prose it no longer agrees with.
+func (s *Store) AgentImpactReviewEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.AgentImpactReviewEnabled
+}
+
 // AgentSettlementEnabled reports whether a finished episode's changes are
 // recorded in the ledger by a pass of their own.
 func (s *Store) AgentSettlementEnabled() bool {
@@ -964,6 +977,9 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	}
 	if p.AgentSettlementEnabled != nil {
 		next.AgentSettlementEnabled = *p.AgentSettlementEnabled
+	}
+	if p.AgentImpactReviewEnabled != nil {
+		next.AgentImpactReviewEnabled = *p.AgentImpactReviewEnabled
 	}
 	if p.StyleAvoidPhrases != nil {
 		next.StyleAvoidPhrases = *p.StyleAvoidPhrases

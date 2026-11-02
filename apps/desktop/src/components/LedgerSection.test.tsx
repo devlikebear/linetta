@@ -9,12 +9,16 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   setArc: vi.fn(),
   setPinned: vi.fn(),
+  relinkWork: vi.fn(),
+  duplicate: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: () => Promise.resolve(() => undefined) }));
 vi.mock("../lib/rpc", () => ({
   settings: { get: vi.fn().mockResolvedValue({ language: "en" }) },
   ledger: { list: mocks.list, save: mocks.save, remove: mocks.remove, setArc: mocks.setArc, setPinned: mocks.setPinned },
+  mentions: { relinkWork: mocks.relinkWork },
+  projects: { duplicate: mocks.duplicate },
 }));
 
 const entry = (over = {}) => ({
@@ -60,6 +64,23 @@ describe("LedgerSection", () => {
     expect(screen.getByText("unconfirmed")).toBeTruthy();
     expect(screen.getByText("replaced")).toBeTruthy();
     expect(screen.getByText("until 3화")).toBeTruthy();
+  });
+
+  it("sets how far a promise reaches", async () => {
+    await renderSection();
+    const reach = (await screen.findAllByLabelText("Reach"))[0];
+    fireEvent.change(reach, { target: { value: "work" } });
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith({ id: "l1", reach: "work" }));
+  });
+
+  it("rebuilds the links and duplicates the work on request", async () => {
+    mocks.relinkWork.mockResolvedValue({ scenes: 2, links: 5 });
+    mocks.duplicate.mockResolvedValue({ project_id: "copy" });
+    await renderSection();
+    fireEvent.click(await screen.findByRole("button", { name: "Rebuild the appearance index" }));
+    expect((await screen.findByRole("status")).textContent).toContain("5");
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate this work" }));
+    await waitFor(() => expect(mocks.duplicate).toHaveBeenCalledWith("p", " (copy)"));
   });
 
   it("offers no pin on what the story still owes", async () => {

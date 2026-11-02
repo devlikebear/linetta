@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Copy, ExternalLink } from "lucide-react";
 
 import { useI18n } from "../lib/i18n";
-import { openExternalUrl, publishApi } from "../lib/rpc";
+import { continuity as continuityApi, openExternalUrl, publishApi } from "../lib/rpc";
 import { rpcErrorMessage } from "../lib/rpcMessage";
 import { PUBLISH_STATE_KEYS, findPublishEpisode } from "../lib/publish";
 import { SHARE_TARGETS, shareAction, type ShareTarget } from "../lib/share";
@@ -58,10 +58,15 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
   const [serial, setSerial] = useState<PublishSerialStatus>("ongoing");
   const [slug, setSlug] = useState("");
   const [workSaved, setWorkSaved] = useState(false);
+  const [openHigh, setOpenHigh] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    // A warning, never a gate: an unreadable list is no reason to hold a post.
+    continuityApi.list(projectId, nodeId, ["open"])
+      .then(({ checks }) => setOpenHigh(checks.flatMap((c) => c.observations).filter((o) => o.severity === "high" && o.status === "open").length))
+      .catch(() => setOpenHigh(0));
     try {
       const conn = await publishApi.connectStatus();
       setConnection(conn);
@@ -80,7 +85,7 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, nodeId]);
 
   useEffect(() => {
     if (!open) return;
@@ -249,6 +254,12 @@ export function PublishDialog({ open, projectId, nodeId, onClose, onOpenSettings
                 ? t("publish.revoked")
                 : t("publish.notConnected")}
             </p>
+            {openHigh > 0 && (
+              <p className="sd" role="status" data-testid="publish-open-high">
+                {t("publish.openHigh", { count: String(openHigh) })}
+              </p>
+            )}
+
             <div className="modal-actions">
               <button type="button" className="btn ghost" onClick={onClose}>{t("common.close")}</button>
               <button type="button" className="btn accent" onClick={onOpenSettings} data-testid="publish-open-settings">

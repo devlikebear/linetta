@@ -643,8 +643,11 @@ func renderLedger(l LedgerBrief, lang string) string {
 	}
 	section(langPick(lang, "## 작품 규칙", "## Rules of This Work", "## 作品の規則"), l.Pinned)
 	section(langPick(lang, "## 현재 상태", "## Current State", "## 現在の状態"), l.State)
-	if p := l.Part; p != nil {
-		fmt.Fprintf(&b, langPick(lang, "## 지금 쓰는 부: %s\n", "## Current Part: %s\n", "## いま書いている部: %s\n"), p.Label)
+	part := func(p *PartArcBrief, heading string) {
+		if p == nil {
+			return
+		}
+		fmt.Fprintf(&b, heading, p.Label)
 		if p.Role != "" {
 			b.WriteString(langPick(lang, "역할: ", "Role: ", "役割: ") + p.Role + "\n")
 		}
@@ -656,6 +659,8 @@ func renderLedger(l LedgerBrief, lang string) string {
 		}
 		fmt.Fprintf(&b, langPick(lang, "이 부의 남은 화: %d\n\n", "Scenes left in this part: %d\n\n", "この部の残り話数: %d\n\n"), p.ScenesLeft)
 	}
+	part(l.Part, langPick(lang, "## 지금 쓰는 부: %s\n", "## Current Part: %s\n", "## いま書いている部: %s\n"))
+	part(l.Arc, langPick(lang, "## 지금 쓰는 아크: %s\n", "## Current Arc: %s\n", "## いま書いているアーク: %s\n"))
 	section(langPick(lang, "## 지금 회수할 것", "## Due Now", "## いま回収するもの"), l.Due)
 	section(langPick(lang, "## 열려 있는 약속", "## Still Owed", "## 未回収の約束"), l.Open)
 	section(langPick(lang, "## 정해진 사실", "## Settled", "## 確定した事項"), l.Settled)

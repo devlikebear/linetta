@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/devlikebear/linetta/engine/internal/backup"
@@ -90,6 +92,39 @@ func RestoreProjectFromBackup(st *store.Store, home string, indexer *manuscript.
 		if indexer != nil {
 			// Search index rebuild is best-effort; the searcher also lazily
 			// rebuilds an empty project index on first query.
+			_ = indexer.Rebuild(ctx, result.ProjectID)
+		}
+		return json.Marshal(result)
+	}
+}
+
+// DuplicateProject returns a handler for projects.duplicate: the work copied
+// under a new id, through the same path a restore takes, for trying a big change
+// on. What it was published as stays with the original, so a copy cannot
+// overwrite an episode readers have.
+func DuplicateProject(st *store.Store, home string, indexer *manuscript.Indexer, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p struct {
+			ProjectID   string `json:"project_id"`
+			TitleSuffix string `json:"title_suffix"`
+		}
+		if err := json.Unmarshal(params, &p); err != nil || p.ProjectID == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: "project_id required"}
+		}
+		dir, err := os.MkdirTemp(home, "duplicate-*")
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		defer os.RemoveAll(dir)
+		snapshot := filepath.Join(dir, "snapshot.db")
+		if _, err := st.DB().ExecContext(ctx, "VACUUM INTO ?", snapshot); err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		result, err := restore.MergeProject(ctx, st, snapshot, dir, p.ProjectID, p.TitleSuffix, time.UnixMilli(now()))
+		if err != nil {
+			return nil, &rpc.MethodError{Code: rpc.CodeInternalError, Message: err.Error()}
+		}
+		if indexer != nil {
 			_ = indexer.Rebuild(ctx, result.ProjectID)
 		}
 		return json.Marshal(result)

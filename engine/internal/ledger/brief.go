@@ -46,6 +46,7 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 		cur = len(t.leaves)
 	}
 	root := t.root(nodeID)
+	arc := t.arcOf(nodeID)
 
 	arcs, err := r.ListArcs(ctx, projectID)
 	if err != nil {
@@ -55,6 +56,12 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 		out.Part = &storycontext.PartArcBrief{
 			Label: t.byID[root].Label, Role: a.Role, Goal: a.Goal, Tension: a.Tension,
 			ScenesLeft: t.scenesLeft(root, cur),
+		}
+	}
+	if a, ok := arcs[arc]; ok && arc != root {
+		out.Arc = &storycontext.PartArcBrief{
+			Label: t.byID[arc].Label, Role: a.Role, Goal: a.Goal, Tension: a.Tension,
+			ScenesLeft: t.scenesLeft(arc, cur),
 		}
 	}
 
@@ -81,7 +88,11 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 				out.Omitted++
 			}
 		case Tracked(e.Kind):
-			owed = append(owed, e)
+			if t.due(e, cur, root) || t.inReach(e, root, arc) {
+				owed = append(owed, e)
+			} else {
+				out.Omitted++
+			}
 		default:
 			settled = append(settled, e)
 		}
@@ -132,6 +143,31 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 		}
 	}
 	return out, nil
+}
+
+// arcOf is the container nearest a scene: its arc in a work split into volumes
+// and arcs, its part in one that is not.
+func (t tree) arcOf(id string) string {
+	n, ok := t.byID[id]
+	if !ok || n.ParentID == nil {
+		return id
+	}
+	return *n.ParentID
+}
+
+// inReach says whether a promise is still in play where the story is now. One
+// planted nowhere has no place to fall out of sight from.
+func (t tree) inReach(e Entry, root, arc string) bool {
+	if e.Reach == ReachWork || e.PlantedNodeID == "" {
+		return true
+	}
+	if _, ok := t.byID[e.PlantedNodeID]; !ok {
+		return true
+	}
+	if e.Reach == ReachVolume {
+		return t.root(e.PlantedNodeID) == root
+	}
+	return t.arcOf(e.PlantedNodeID) == arc
 }
 
 // bySceneRelevance orders settled entries for a scene: those whose subject the

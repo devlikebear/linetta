@@ -3,12 +3,19 @@ package ledger
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/devlikebear/linetta/engine/internal/node"
 )
 
 type fakeNames map[string]string
+
+func (f fakeNames) Names(_ context.Context, _, name string) []string { return []string{name} }
+
+func (f fakeNames) AllNames(context.Context, string) [][]string { return nil }
 
 func (f fakeNames) CanonicalName(_ context.Context, _, name string) string {
 	if canonical, ok := f[name]; ok {
@@ -213,3 +220,144 @@ func TestBriefShowsTheStateOfItsSceneAndMarksWhatIsUnconfirmed(t *testing.T) {
 	}
 }
 
+func nested(t *testing.T, f fixture, arcs ...int) ([]node.Node, []node.Node) {
+	t.Helper()
+	var containers, scenes []node.Node
+	for i, count := range arcs {
+		arc, err := f.nodes.CreateChild(f.ctx, f.part.ID, node.KindContainer, fmt.Sprintf("아크%d", i+1), "", int64(500+i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		containers = append(containers, arc)
+		for j := range count {
+			n, err := f.nodes.CreateChild(f.ctx, arc.ID, node.KindLeaf, fmt.Sprintf("%d-%d화", i+1, j+1), "", int64(600+i*10+j))
+			if err != nil {
+				t.Fatal(err)
+			}
+			scenes = append(scenes, n)
+		}
+	}
+	return containers, scenes
+}
+
+func TestAPromiseLeavesTheBriefWhenItsArcEnds(t *testing.T) {
+	f := setup(t, 0)
+	_, scenes := nested(t, f, 2, 2)
+	add := func(reach, body string, due string) {
+		t.Helper()
+		if _, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindPromise, Body: body, Reach: reach, PlantedNodeID: scenes[0].ID, DueNodeID: due}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(ReachArc, "아크 약속", "")
+	add(ReachVolume, "권 약속", "")
+	add(ReachWork, "작품 약속", "")
+	add(ReachArc, "기한 된 약속", scenes[3].ID)
+
+	inArc, err := f.repo.ContextLedger(f.ctx, f.pid, scenes[1].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(append(inArc.Due, inArc.Open...), "|"); !strings.Contains(got, "아크 약속") {
+		t.Fatalf("got %q", got)
+	}
+	next, err := f.repo.ContextLedger(f.ctx, f.pid, scenes[3].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(append(next.Due, next.Open...), "|")
+	for _, want := range []string{"권 약속", "작품 약속", "기한 된 약속"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %q", want, got)
+		}
+	}
+	if strings.Contains(got, "|아크 약속") || strings.HasPrefix(got, "아크 약속") {
+		t.Errorf("a closed arc's promise is still in the brief: %q", got)
+	}
+	if next.Omitted == 0 {
+		t.Error("what fell out of reach must still be counted")
+	}
+}
+
+func TestABriefNamesTheArcItIsIn(t *testing.T) {
+	f := setup(t, 0)
+	arcs, scenes := nested(t, f, 3)
+	if _, err := f.repo.SetArc(f.ctx, 1, Arc{NodeID: arcs[0].ID, Goal: "소문을 잡는다"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.repo.ContextLedger(f.ctx, f.pid, scenes[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Arc == nil || got.Arc.Goal != "소문을 잡는다" || got.Arc.ScenesLeft != 2 {
+		t.Fatalf("arc = %+v", got.Arc)
+	}
+}
+
+func writeText(t *testing.T, f fixture, n node.Node, text string) {
+	t.Helper()
+	doc := fmt.Sprintf(`{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":%q}]}]}`, text)
+	if err := f.nodes.UpdateContent(f.ctx, n.ID, doc, 9000); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The first scene of a real work had no mention links at all, and ranking by
+// links buried it. The prose is what is compared.
+func TestImpactFindsAnUnlinkedSceneFromItsWords(t *testing.T) {
+	f := setup(t, 5)
+	writeText(t, f, f.scenes[0], "검은 옻칠 위에 금박을 입힌 나무패였다.")
+	writeText(t, f, f.scenes[1], "주인공은 국수를 먹었다.")
+	writeText(t, f, f.scenes[3], "주인공은 나무패의 금박이 벗겨지는 것을 보았다.")
+	e, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindDecision, Subject: "나무패", Body: "나무패 전체에 금박을 입혔다", PlantedNodeID: f.scenes[3].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, omitted, err := f.repo.Impact(f.ctx, e.ID)
+	if err != nil || omitted != 0 {
+		t.Fatalf("omitted %d, err %v", omitted, err)
+	}
+	ids := make([]string, 0, len(got))
+	for _, c := range got {
+		ids = append(ids, c.NodeID)
+	}
+	if !slices.Contains(ids, f.scenes[0].ID) || !slices.Contains(ids, f.scenes[3].ID) {
+		t.Fatalf("got %+v", got)
+	}
+	if slices.Contains(ids, f.scenes[1].ID) {
+		t.Fatalf("a scene with nothing to do with it: %+v", got)
+	}
+	if got[0].NodeID != f.scenes[0].ID {
+		t.Fatalf("candidates come in story order: %+v", got)
+	}
+}
+
+func TestImpactStopsAtItsLimitAndSaysSo(t *testing.T) {
+	f := setup(t, 20)
+	for _, n := range f.scenes {
+		writeText(t, f, n, "주인공은 나무패를 보았다.")
+	}
+	e, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindDecision, Subject: "주인공", Body: "나무패를 잃는다"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, omitted, err := f.repo.Impact(f.ctx, e.ID)
+	if err != nil || len(got) != impactMaxScenes || omitted != 8 {
+		t.Fatalf("got %d, omitted %d, err %v", len(got), omitted, err)
+	}
+}
+
+func TestSampleScenesMarkWhatOpensEachContainer(t *testing.T) {
+	f := setup(t, 0)
+	_, scenes := nested(t, f, 2, 2)
+	for _, n := range scenes {
+		writeText(t, f, n, "글")
+	}
+	got, err := f.repo.SampleScenes(f.ctx, f.pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 || !got[0].Anchor || got[1].Anchor || !got[2].Anchor || got[3].Anchor {
+		t.Fatalf("got %+v", got)
+	}
+}

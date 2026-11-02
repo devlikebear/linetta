@@ -10,6 +10,7 @@ import (
 	"github.com/devlikebear/linetta/engine/internal/continuity"
 	"github.com/devlikebear/linetta/engine/internal/entity"
 	"github.com/devlikebear/linetta/engine/internal/fact"
+	"github.com/devlikebear/linetta/engine/internal/ledger"
 	"github.com/devlikebear/linetta/engine/internal/node"
 	"github.com/devlikebear/linetta/engine/internal/rpc"
 )
@@ -259,5 +260,77 @@ func ContinuityOpenCounts(repo *continuity.Repo) rpc.Handler {
 		return json.Marshal(struct {
 			Counts map[string]int `json:"counts"`
 		}{counts})
+	}
+}
+
+// sampleTargets is how many of the latest scenes a check covers when it names
+// none: enough to keep up, not the book.
+const sampleTargets = 3
+
+// SampleCheck returns a handler for continuity.sample_check. It picks the scenes
+// to compare here, so the choice is the same however the check is started, and
+// hands them to the agent to read with no conversation behind it.
+func SampleCheck(repo *continuity.Repo, entries *ledger.Repo, ctrl AgentController, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ProjectID string `json:"project_id"`
+			NodeID    string `json:"node_id,omitempty"`
+			// Force compares pairs again that were compared at these versions.
+			Force bool `json:"force,omitempty"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ProjectID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
+		}
+		written, err := entries.SampleScenes(ctx, in.ProjectID)
+		if err != nil {
+			return nil, ledgerError(err)
+		}
+		scenes := make([]continuity.SampleScene, 0, len(written))
+		for _, w := range written {
+			scenes = append(scenes, continuity.SampleScene{NodeID: w.NodeID, Label: w.Label, Version: w.Version, Anchor: w.Anchor})
+		}
+		targets := []string{in.NodeID}
+		if in.NodeID == "" {
+			targets = nil
+			for _, s := range scenes[max(0, len(scenes)-sampleTargets):] {
+				targets = append(targets, s.NodeID)
+			}
+		}
+		seen := func(p continuity.SamplePair) bool {
+			if in.Force {
+				return false
+			}
+			done, err := repo.PairSeen(ctx, p)
+			return err == nil && done
+		}
+		var pairs []continuity.SamplePair
+		for _, target := range targets {
+			exclude := map[string]bool{}
+			for _, p := range continuity.SamplePairs(scenes, target, "", nil) {
+				exclude[p.Earlier.NodeID] = true
+			}
+			candidate, err := entries.Neighbour(ctx, in.ProjectID, target, exclude)
+			if err != nil {
+				return nil, ledgerError(err)
+			}
+			pairs = append(pairs, continuity.SamplePairs(scenes, target, candidate, seen)...)
+		}
+		out := struct {
+			Pairs int `json:"pairs"`
+		}{len(pairs)}
+		if len(pairs) == 0 {
+			return json.Marshal(out)
+		}
+		rules, err := entries.PinnedBodies(ctx, in.ProjectID)
+		if err != nil {
+			return nil, ledgerError(err)
+		}
+		if err := ctrl.StartSampleCheck(ctx, in.ProjectID, continuity.SampleRequest(in.ProjectID, rules, pairs), continuity.SampleCalls(pairs)); err != nil {
+			return nil, rpc.MethodErrorFrom(err)
+		}
+		if err := repo.RecordPairs(ctx, now(), in.ProjectID, pairs); err != nil {
+			return nil, err
+		}
+		return json.Marshal(out)
 	}
 }

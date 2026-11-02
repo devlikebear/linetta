@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEngineEvent } from "../hooks/useEngineEvent";
 import type { McpChangedPayload } from "../hooks/useMcpChanges";
-import { ledger as ledgerApi } from "../lib/rpc";
+import { ledger as ledgerApi, mentions as mentionsApi, projects as projectsApi } from "../lib/rpc";
 import type { LedgerEntry, LedgerKind, LedgerState, LedgerStatus, PartArc } from "../lib/types";
 import { useI18n } from "../lib/i18n";
 import { rpcErrorMessage } from "../lib/rpcMessage";
@@ -39,6 +39,7 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
   const [kind, setKind] = useState<LedgerKind>("promise");
   const [body, setBody] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -83,6 +84,14 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
   });
   const setStatus = (e: LedgerEntry, status: LedgerStatus) =>
     run(() => ledgerApi.save({ id: e.id, status }));
+  const relink = () => run(async () => {
+    const done = await mentionsApi.relinkWork(projectId);
+    setNotice(t("ledger.relinkDone", { scenes: String(done.scenes), links: String(done.links) }));
+  });
+  const duplicate = () => run(async () => {
+    await projectsApi.duplicate(projectId, t("ledger.duplicateSuffix"));
+    setNotice(t("ledger.duplicateDone"));
+  });
 
   return (
     <details className="sec es-field ledger-section">
@@ -144,6 +153,15 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
                 <span className="ledger-where">{t("ledger.validUntil", { label: state?.labels[e.valid_to_node_id] ?? "" })}</span>
               )}
               <span className="ledger-actions">
+                {tabOf(e) === "owed" && (
+                  <select
+                    aria-label={t("ledger.reach.label")}
+                    value={e.reach ?? "arc"}
+                    onChange={(ev) => void run(() => ledgerApi.save({ id: e.id, reach: ev.target.value as LedgerEntry["reach"] }))}
+                  >
+                    {(["arc", "volume", "work"] as const).map((r) => <option key={r} value={r}>{t(`ledger.reach.${r}`)}</option>)}
+                  </select>
+                )}
                 {tabOf(e) === "settled" && (
                   <button
                     type="button"
@@ -186,6 +204,11 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
         <button type="button" className="btn accent sm" disabled={body.trim() === ""} onClick={() => void add()}>
           {t("ledger.add")}
         </button>
+      </div>
+      <div className="ledger-tools">
+        <button type="button" className="btn ghost sm" onClick={() => void relink()}>{t("ledger.relink")}</button>
+        <button type="button" className="btn ghost sm" onClick={() => void duplicate()}>{t("ledger.duplicate")}</button>
+        {notice && <span className="style-hint" role="status">{notice}</span>}
       </div>
     </details>
   );

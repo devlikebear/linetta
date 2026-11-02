@@ -73,3 +73,42 @@ func (s *Service) cliPass(ctx context.Context, st loopState, name string, msgs [
 		logf("%s after turn %s: %v", name, st.runID, err)
 	}
 }
+
+// StartSampleCheck compares scenes in the background, with no conversation and
+// no brief: what the writer asked for is a reader who has seen only these
+// scenes. It is a pass with no turn before it, so it sets up what a turn would.
+func (s *Service) StartSampleCheck(ctx context.Context, projectID, request string, maxCalls int) error {
+	projectID = strings.TrimSpace(projectID)
+	if s.runs.status(projectID).Running {
+		return ErrTurnRunning
+	}
+	client, resolved, err := s.deps.Providers.Client(ctx, "")
+	if err != nil {
+		return err
+	}
+	groups := resolveToolGroups(s.deps.MemoryToolsEnabled, s.deps.SkillToolsEnabled, s.deps.ReviewToolsEnabled)
+	tools, err := s.session(ctx, groups)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := tools.release(); err != nil {
+			logf("agent: releasing the tool session: %v", err)
+		}
+	}()
+	schemas, err := tools.schemas(ctx)
+	if err != nil {
+		return err
+	}
+	st := loopState{
+		runID: newRunID(), projectID: projectID, req: RunRequest{ProjectID: projectID},
+		provider: resolved.ID, client: client, model: resolved.Model, session: tools, schemas: schemas, groups: groups,
+	}
+	s.startPasses(ctx, st, []func(context.Context){func(ctx context.Context) {
+		s.runPass(ctx, st, "sample check", []llm.ChatMessage{
+			{Role: "system", Content: sampleSystemPrompt},
+			{Role: "user", Content: request},
+		}, sampleTools, maxCalls)
+	}})
+	return nil
+}

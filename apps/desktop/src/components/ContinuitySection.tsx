@@ -100,6 +100,7 @@ export function ContinuitySection({
   const [status, setStatus] = useState<SelectableStatus>("open");
   const [checks, setChecks] = useState<ContinuityCheck[] | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [sampleStatus, setSampleStatus] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const [open, setOpen] = useState(false);
@@ -188,6 +189,16 @@ export function ContinuitySection({
     }
   }, []);
 
+  const sampleCheck = async () => {
+    setError(null);
+    try {
+      const { pairs } = await continuityApi.sampleCheck(projectId, scope === "scene" ? nodeId : undefined);
+      setSampleStatus(pairs > 0 ? t("continuity.sampleStarted", { pairs: String(pairs) }) : t("continuity.sampleNothing"));
+    } catch (err) {
+      setError(err);
+    }
+  };
+
   return (
     <details
       className="sec es-field continuity-section"
@@ -196,6 +207,10 @@ export function ContinuitySection({
     >
       <summary>{t("continuity.title")}</summary>
       {error != null && <p role="alert">{rpcErrorMessage(error, t)}</p>}
+      <div className="continuity-sample">
+        <button type="button" className="btn ghost sm" onClick={() => void sampleCheck()}>{t("continuity.sampleCheck")}</button>
+        <span className="style-hint">{sampleStatus ?? t("continuity.sampleCheckHint")}</span>
+      </div>
 
       <div className="continuity-controls">
         {nodeId && (

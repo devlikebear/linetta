@@ -5,7 +5,7 @@ _위에서부터 순차 실행하고 Checkpoint에서 작가 확인을 받는다
 _작성일: 2026-11-02_
 _속한 로드맵: [`roadmap.md`](./roadmap.md)_
 _예상 소요: 3.5일_
-_상태: 계획_
+_상태: 구현 완료. 실제 모델 호출과 화면 수동 확인은 남아 있다_
 
 ## 페이즈 목표
 
@@ -15,9 +15,9 @@ _상태: 계획_
 
 ## 전제 조건
 
-- [ ] Phase 3 완료 및 작가 승인
-- [ ] `main`에서 `feat/longform-arc-closing` 브랜치 생성
-- [ ] Phase 3의 정산 표본 결과 확인
+- [x] Phase 3 완료 및 작가 승인
+- [x] `main`에서 `feat/longform-arc-closing` 브랜치 생성
+- [x] Phase 3의 정산 표본 결과 확인
 
 ## 포함 기능
 
@@ -40,7 +40,7 @@ _상태: 계획_
 
 ### 작업 그룹 A: 권·아크 계층
 
-- [ ] **T4.A.1** — 현재 아크 찾기
+- [x] **T4.A.1** — 현재 아크 찾기
   - 파일: `engine/internal/ledger/brief.go`, `ledger_test.go`
   - 내용:
     - `tree`에 `arcOf(nodeID)`를 더한다. 가장 가까운 컨테이너가 아크다. 컨테이너가 한 겹인 작품은 지금처럼 부가 곧 아크다.
@@ -48,7 +48,7 @@ _상태: 계획_
     - 브리프의 부 섹션에 현재 권과 현재 아크를 함께 보인다. 남은 화수는 아크 기준이다.
   - 검증: 한 겹과 두 겹 구조 테스트
 
-- [ ] **T4.A.2** — 부별 흐름 예산
+- [x] **T4.A.2** — 부별 흐름 예산
   - 파일: `engine/internal/storycontext/builder.go`, `longform_test.go`
   - 내용:
     - `partSummaries`가 현재 권, 현재 아크를 우선하고, 다른 권은 짧게 줄이게 한다.
@@ -63,14 +63,14 @@ _상태: 계획_
 
 ### 작업 그룹 B: 복선 범위
 
-- [ ] **T4.B.1** — 범위 열
+- [x] **T4.B.1** — 범위 열
   - 파일: `engine/internal/store/migrations/00NN_ledger_scope.sql`, `engine/internal/ledger/ledger.go`, `repo.go`, `engine/internal/mcphost/tools_ledger.go`, 화면
   - 내용:
     - `story_ledger`에 `reach TEXT NOT NULL DEFAULT 'arc'`를 더한다. 값은 `arc`, `volume`, `work`다.
     - 기존 복선은 마이그레이션에서 `work`로 둔다. 지금 브리프에서 사라지면 안 되기 때문이다.
   - 검증: 마이그레이션 테스트, `CGO_ENABLED=0 go test ./internal/ledger/...`
 
-- [ ] **T4.B.2** — 브리프 범위 축소
+- [x] **T4.B.2** — 브리프 범위 축소
   - 파일: `engine/internal/ledger/brief.go`
   - 내용:
     - 열린 복선을 현재 아크에서 심은 `arc`, 현재 권의 `volume`, `work`로 제한한다.
@@ -78,7 +78,7 @@ _상태: 계획_
   - 테스트: 앞 아크의 닫힌 범위 복선이 안 보인다, 기한이 된 복선은 보인다
   - 검증: `CGO_ENABLED=0 go test ./internal/ledger/...`
 
-- [ ] **T4.B.3** — 핵심 요소 최근성
+- [x] **T4.B.3** — 핵심 요소 최근성
   - 파일: `engine/internal/entity/repo.go`, `engine/internal/mention/repo.go`, `engine/internal/storycontext/builder.go`
   - 내용:
     - `ListCoreByProject`를 호출하는 브리프 경로에서, 최근 30개 회차의 언급을 더 무겁게 본다. 작가가 지정한 역할은 유지한다.
@@ -88,14 +88,14 @@ _상태: 계획_
 
 ### 작업 그룹 C: 영향 검사와 표본 대조
 
-- [ ] **T4.C.0** — 언급 색인 빈틈 확인
+- [x] **T4.C.0** — 언급 색인 빈틈 확인
   - 파일: `engine/internal/mention/`, 원고 저장 경로
   - 내용:
     - 실측 작품의 1화는 언급이 0건이고 다른 회차는 34~60건이다. 작가가 붙여 넣은 회차가 왜 색인되지 않았는지 찾는다.
     - 원인을 고치고, 작가가 요청할 때 작품 전체를 다시 색인하는 경로를 둔다. `where_does_appear`도 이 빈틈의 영향을 받는다.
   - 검증: 언급 링크가 없는 본문에서 재색인 뒤 등장 회차가 나오는 테스트
 
-- [ ] **T4.C.1** — 영향 후보
+- [x] **T4.C.1** — 영향 후보
   - 파일: `engine/internal/ledger/impact.go` (신규), `impact_test.go`
   - 내용:
     - `Impact(ctx, entryID) ([]Candidate, error)`를 만든다. 입력은 바뀐 사실이다.
@@ -107,7 +107,7 @@ _상태: 계획_
   - 참조: `engine/internal/manuscript/searcher.go`
   - 검증: `CGO_ENABLED=0 go test ./internal/ledger/...`
 
-- [ ] **T4.C.2** — 영향 패스
+- [x] **T4.C.2** — 영향 패스
   - 파일: `engine/internal/agent/impactreview.go` (신규), 테스트, `loop.go`
   - 내용:
     - 턴에서 `supersedes`나 결정 추가가 있었으면 그 항목들을 모은다. `noteWrittenScene`과 같은 방식이다.
@@ -119,12 +119,12 @@ _상태: 계획_
   - 테스트: 스위치, 허용 도구, 인용 불일치 거절
   - 검증: `CGO_ENABLED=0 go test ./internal/agent/... ./internal/continuity/...`
 
-- [ ] **T4.C.3** — 수동 칩
+- [x] **T4.C.3** — 수동 칩
   - 파일: `apps/desktop/src/components/ContinuitySection.tsx`, `CanonPanel.tsx`, `apps/desktop/src/lib/i18n.tsx`
   - 내용: 원장 항목에 "이 결정의 영향 찾기"를 둔다. 누르면 입력창에 문장이 채워지고 작가가 전송한다.
   - 검증: vitest
 
-- [ ] **T4.C.4** — 표본 대조 일정
+- [x] **T4.C.4** — 표본 대조 일정
   - 파일: `engine/internal/continuity/sampling.go` (신규), `sampling_test.go`
   - 내용:
     - `SamplePairs(ctx, nodeID, seed) ([]Pair, error)`를 만든다. 코드로만 고른다.
@@ -134,7 +134,7 @@ _상태: 계획_
   - 테스트: 회차당 짝 수가 상수이고, 같은 시드가 같은 결과를 내고, 건너뛰기가 동작한다
   - 검증: `CGO_ENABLED=0 go test ./internal/continuity/...`
 
-- [ ] **T4.C.5** — 표본 대조 패스
+- [x] **T4.C.5** — 표본 대조 패스
   - 파일: `engine/internal/agent/samplecheck.go` (신규), 테스트, `apps/desktop/src/components/ContinuitySection.tsx`, `apps/desktop/src/lib/i18n.tsx`
   - 내용:
     - `boundedPass`로 돌린다. 대화 기록을 싣지 않고 브리프 도구도 주지 않는다. 입력은 고른 두세 회차와 고정 작품 규칙뿐이다.
@@ -148,7 +148,7 @@ _상태: 계획_
 
 ### 작업 그룹 D: 결산과 재구축
 
-- [ ] **T4.D.1** — 아크 결산 칩
+- [x] **T4.D.1** — 아크 결산 칩
   - 파일: `apps/desktop/src/components/agent/AgentPanel.tsx`, `apps/desktop/src/lib/i18n.tsx`, 내장 절차 위치
   - 내용:
     - 문장을 채우는 칩으로 만든다. 새 도구를 만들지 않는다.
@@ -157,7 +157,7 @@ _상태: 계획_
     - 절차가 길어지면 시스템 프롬프트에 넣지 말고 스킬로 분리한다.
   - 검증: 복사본 작품의 1부로 한 번 돌려 본다
 
-- [ ] **T4.D.2** — 정본 재구축 칩
+- [x] **T4.D.2** — 정본 재구축 칩
   - 파일: 위와 같음
   - 내용:
     - 현재 원고와 고정 규칙을 기준으로 시놉시스, 부 요약, 회차 계획, 원장을 대조하고 낡은 항목을 대체하는 절차다.
@@ -166,7 +166,7 @@ _상태: 계획_
     - 지금처럼 요약이 회차 수보다 뒤처진 경우를 첫 시나리오로 쓴다.
   - 검증: 복사본에서 실행 뒤 낡은 항목 수를 전후로 잰다
 
-- [ ] **T4.D.3** — 작품 복제
+- [x] **T4.D.3** — 작품 복제
   - 파일: `engine/internal/restore/restore.go`, `engine/internal/vault/service.go`, `engine/internal/rpc/handlers/projects.go`, `apps/desktop/src-tauri/src/lib.rs`, 화면
   - 내용:
     - `keepCopy`가 쓰는 스냅샷·`MergeProject` 경로를 공용 함수로 뽑아 `projects.duplicate` RPC를 만든다.
@@ -177,14 +177,14 @@ _상태: 계획_
 
 ### 작업 그룹 E: 게시 회차 경고
 
-- [ ] **T4.E.1** — 수정 경고
+- [x] **T4.E.1** — 수정 경고
   - 파일: `engine/internal/mcphost/tools_write.go`, `tools_revise.go`
   - 내용:
     - `StatusPublished` 회차를 쓰면 저장하되 결과에 `notice`를 더한다. 게시본이 달라졌다는 사실과 다시 게시가 필요하다는 점을 쓴다.
     - 차단하지 않는다.
   - 검증: `CGO_ENABLED=0 go test ./internal/mcphost/...`
 
-- [ ] **T4.E.2** — 게시 전 열린 지적 안내
+- [x] **T4.E.2** — 게시 전 열린 지적 안내
   - 파일: 게시 화면 구성요소, `apps/desktop/src/lib/i18n.tsx`
   - 내용: 게시할 회차에 `high` 관찰이 열려 있으면 게시 전에 수를 보여 준다. 게시는 막지 않는다.
   - 검증: vitest
@@ -194,14 +194,14 @@ _상태: 계획_
 ## ✅ Phase 4 Checkpoint
 
 **구현 확인:**
-- [ ] 모든 작업 체크박스 완료
-- [ ] 패스가 원고와 게시 상태를 바꾸지 않음
-- [ ] 한 겹 구조의 기존 작품에서 브리프가 달라지지 않음. 기존 복선은 `work`로 남음
+- [x] 모든 작업 체크박스 완료
+- [x] 패스가 원고와 게시 상태를 바꾸지 않음
+- [x] 한 겹 구조의 기존 작품에서 브리프가 달라지지 않음. 기존 복선은 `work`로 남음
 
 **자동 검증:**
-- [ ] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
-- [ ] `go test -tags mobile ./...` 통과
-- [ ] vitest, `tsc --noEmit`, 프런트 빌드 통과
+- [x] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
+- [x] `go test -tags mobile ./...` 통과
+- [x] vitest, `tsc --noEmit`, 프런트 빌드 통과
 
 **수동 확인:**
 - [ ] 합성 작품에서 "진실을 아는 시점"을 18화에서 27화로 옮기고, 19~26화의 영향 회차가 후보로 나오는지 본다 (#137)
@@ -214,6 +214,19 @@ _상태: 계획_
 **완료 처리:** 결과와 측정표를 작가에게 보고하고 #137에 진행 상황을 남긴다. 승인 뒤 Phase 5로 간다.
 
 ---
+
+## 구현 기록
+
+2026-11-02.
+
+- 1화에 언급이 없던 원인을 찾았다. 첫 글을 쓸 때 등록 요소가 없었고, 부분 수정은 링크를 만들지 않는다. `mentions.relink_work`를 더했고 복사본에서 7개 회차에 21건을 연결했다.
+- 영향 후보는 `manuscript_fts` 대신 회차 본문을 직접 비교한다. 후보 계산이 작품당 한 번이고, 어절 쌍을 비교해야 "쥐어 본 적" 같은 표현을 찾을 수 있어서다.
+- 복사본에서 시험 결정 "칼을 쥐어 본 적 없는 자만"을 넣으면 후보 순위 10화 20점, 11화 12점, 1화 10점이다. 언급 기준에서 묻혔던 1화가 상위로 올라왔다.
+- 관찰의 출처는 `continuity_checks.source`를 새 값으로 넓히지 않고 메모 머리말(`영향 검사:`, `표본 대조:`)로 구분한다. 출처 값의 검증과 화면이 두 값을 전제하기 때문이다.
+- 표본 대조는 턴과 무관한 패스다. `StartSampleCheck`가 턴 없이 공급자와 도구 세션을 세운다.
+- 복제는 `projects.duplicate`로 `MergeProject`를 재사용한다. 게시 정보는 복사되지 않는다.
+- 결정 하나의 영향 찾기 칩은 원장 항목이 아니라 패널의 장편 정리 칩에 두었다. 입력창에 닿는 곳이 패널뿐이다.
+- 개요 화면의 중첩 컨테이너 생성과 이동은 직접 눌러 보지 못했다. 엔진과 브리프는 테스트로 확인했다.
 
 ## 메모 / 주의
 

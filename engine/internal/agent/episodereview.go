@@ -69,58 +69,105 @@ func noteWrittenScene(written *[]string, name, args string) {
 	}
 }
 
-// maybeEpisodeReview follows a turn that wrote prose with what the writer has
-// switched on: a settlement of what the scenes changed, then an independent read
-// of them. Like the self-improvement pass it never blocks the turn. Each runs
-// only if this turn holds the tool it records with.
+// noteChangedFact remembers an entry a tool call changed in a way the prose may
+// not agree with: a decision, or a fact replacing another.
+func noteChangedFact(changed *[]string, name, args, result string) {
+	if changed == nil || name != "linetta_edit_ledger" {
+		return
+	}
+	var in struct {
+		Supersedes string `json:"supersedes"`
+	}
+	var out struct {
+		Entry struct {
+			ID   string `json:"id"`
+			Kind string `json:"kind"`
+		} `json:"entry"`
+	}
+	if json.Unmarshal([]byte(args), &in) != nil || json.Unmarshal([]byte(result), &out) != nil || out.Entry.ID == "" {
+		return
+	}
+	if (in.Supersedes != "" || out.Entry.Kind == "decision") && !slices.Contains(*changed, out.Entry.ID) {
+		*changed = append(*changed, out.Entry.ID)
+	}
+}
+
+// maybeEpisodeReview follows a turn with what the writer has switched on: a
+// settlement of what its scenes changed, an independent read of them, and a look
+// for prose a changed fact no longer agrees with. Like the self-improvement pass
+// it never blocks the turn. Each runs only if this turn holds the tool it records
+// with.
 func (s *Service) maybeEpisodeReview(ctx context.Context, st loopState) {
-	if st.written == nil || len(*st.written) == 0 {
-		return
+	var scenes, entries []string
+	if st.written != nil {
+		scenes = *st.written
 	}
-	settle := s.deps.SettlementEnabled != nil && s.deps.SettlementEnabled() && offers(st.schemas, "linetta_edit_ledger")
-	review := s.deps.EpisodeReviewEnabled != nil && s.deps.EpisodeReviewEnabled() && offers(st.schemas, "linetta_report_continuity")
-	if !settle && !review {
-		return
+	if st.changed != nil {
+		entries = *st.changed
 	}
-	scenes := *st.written
+	enabled := func(f func() bool) bool { return f != nil && f() }
+	var passes []func(context.Context)
 	if len(scenes) > episodeReviewMaxScenes {
 		scenes = scenes[len(scenes)-episodeReviewMaxScenes:]
 	}
-	s.startEpisodeReview(ctx, st, slices.Clone(scenes), settle, review)
+	scenes = slices.Clone(scenes)
+	// Settlement first, so the review reads a ledger that has this scene in it.
+	if len(scenes) > 0 && enabled(s.deps.SettlementEnabled) && offers(st.schemas, "linetta_edit_ledger") {
+		passes = append(passes, func(ctx context.Context) {
+			s.runPass(ctx, st, "settlement", []llm.ChatMessage{
+				{Role: "system", Content: settlementSystemPrompt},
+				{Role: "user", Content: settlementRequest(st.req.ProjectID, scenes)},
+			}, settlementTools, settlementCallsPerScene*len(scenes))
+		})
+	}
+	if len(scenes) > 0 && enabled(s.deps.EpisodeReviewEnabled) && offers(st.schemas, "linetta_report_continuity") {
+		passes = append(passes, func(ctx context.Context) {
+			s.runPass(ctx, st, "episode review", []llm.ChatMessage{
+				{Role: "system", Content: episodeReviewSystemPrompt},
+				{Role: "user", Content: episodeReviewRequest(st.req.ProjectID, scenes)},
+			}, episodeReviewTools, episodeReviewCallsPerScene*len(scenes))
+		})
+	}
+	if len(entries) > 0 && enabled(s.deps.ImpactReviewEnabled) && offers(st.schemas, "linetta_find_impact") {
+		if len(entries) > impactMaxEntries {
+			entries = entries[len(entries)-impactMaxEntries:]
+		}
+		entries = slices.Clone(entries)
+		passes = append(passes, func(ctx context.Context) {
+			s.runPass(ctx, st, "impact review", []llm.ChatMessage{
+				{Role: "system", Content: impactSystemPrompt},
+				{Role: "user", Content: impactRequest(st.req.ProjectID, entries)},
+			}, impactTools, impactCallsPerEntry*len(entries))
+		})
+	}
+	if len(passes) > 0 {
+		s.startPasses(ctx, st, passes)
+	}
 }
 
-func (s *Service) startEpisodeReview(ctx context.Context, st loopState, scenes []string, settle, review bool) {
-	reviewCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), episodeReviewTimeout)
-	reviewID := newRunID()
-	s.runs.track(reviewID, cancel)
+// startPasses runs passes in order in the background, holding the session.
+func (s *Service) startPasses(ctx context.Context, st loopState, passes []func(context.Context)) {
+	passCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), episodeReviewTimeout)
+	id := newRunID()
+	s.runs.track(id, cancel)
 	if err := s.enter(); err != nil {
-		s.runs.untrack(reviewID)
+		s.runs.untrack(id)
 		cancel()
 		return
 	}
 	st.session.acquire()
 	go func() {
 		defer cancel()
-		defer s.runs.untrack(reviewID)
+		defer s.runs.untrack(id)
 		defer s.leave()
 		defer releaseSession(st.session)
 		defer func() {
 			if r := recover(); r != nil {
-				logf("panic in episode review after turn %s: %v\n%s", st.runID, r, debug.Stack())
+				logf("panic in a pass after turn %s: %v\n%s", st.runID, r, debug.Stack())
 			}
 		}()
-		// Settlement first, so the review reads a ledger that has this scene in it.
-		if settle {
-			s.runPass(reviewCtx, st, "settlement", []llm.ChatMessage{
-				{Role: "system", Content: settlementSystemPrompt},
-				{Role: "user", Content: settlementRequest(st.req.ProjectID, scenes)},
-			}, settlementTools, settlementCallsPerScene*len(scenes))
-		}
-		if review {
-			s.runPass(reviewCtx, st, "episode review", []llm.ChatMessage{
-				{Role: "system", Content: episodeReviewSystemPrompt},
-				{Role: "user", Content: episodeReviewRequest(st.req.ProjectID, scenes)},
-			}, episodeReviewTools, episodeReviewCallsPerScene*len(scenes))
+		for _, pass := range passes {
+			pass(passCtx)
 		}
 	}()
 }
