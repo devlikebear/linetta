@@ -445,10 +445,13 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 	// story_ledger and part_arcs: the work's own account of itself, which no
 	// agent can draft again from the prose. A ledger entry survives losing a
 	// scene it points at; a part's arc means nothing without its part.
+	entryIDs := map[string]string{}
 	if err := copyRows(ctx, sdb, tx, "story_ledger", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
-		row["id"] = uuid.NewString()
+		fresh := uuid.NewString()
+		entryIDs[asString(row["id"])] = fresh
+		row["id"] = fresh
 		row["project_id"] = newProjectID
-		for _, col := range []string{"planted_node_id", "due_node_id", "paid_node_id"} {
+		for _, col := range []string{"planted_node_id", "due_node_id", "paid_node_id", "valid_to_node_id"} {
 			if n, ok := nodeMap[asString(row[col])]; ok {
 				row[col] = n
 			} else {
@@ -458,6 +461,14 @@ func MergeProject(ctx context.Context, live *store.Store, backupPath, tempDir, p
 		return row, true
 	}); err != nil {
 		return MergeResult{}, fmt.Errorf("copy story_ledger: %w", err)
+	}
+	// superseded_by points at another entry, which got a new id in the copy too.
+	for from, to := range entryIDs {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE story_ledger SET superseded_by = ? WHERE project_id = ? AND superseded_by = ?`,
+			to, newProjectID, from); err != nil {
+			return MergeResult{}, fmt.Errorf("remap superseded_by: %w", err)
+		}
 	}
 	if err := copyRows(ctx, sdb, tx, "part_arcs", "project_id = ?", []any{projectID}, func(row map[string]any) (map[string]any, bool) {
 		n, ok := nodeMap[asString(row["node_id"])]

@@ -48,6 +48,20 @@ describe("LedgerSection", () => {
     expect(mocks.save).not.toHaveBeenCalled();
   });
 
+  it("shows a fact's attribute, span and standing", async () => {
+    mocks.list.mockResolvedValue({
+      entries: [entry({ id: "l4", kind: "number", attribute: "위치", strength: "soft", valid_to_node_id: "n1", superseded_by: "l9" })],
+      parts: [],
+      labels: { n1: "3화" },
+    });
+    await renderSection();
+    fireEvent.click(await screen.findByRole("tab", { name: "Settled" }));
+    expect(await screen.findByText("위치")).toBeTruthy();
+    expect(screen.getByText("unconfirmed")).toBeTruthy();
+    expect(screen.getByText("replaced")).toBeTruthy();
+    expect(screen.getByText("until 3화")).toBeTruthy();
+  });
+
   it("offers no pin on what the story still owes", async () => {
     await renderSection();
     await screen.findByText("금박 밑의 비밀");

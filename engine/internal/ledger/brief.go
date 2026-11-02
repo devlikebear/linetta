@@ -22,6 +22,9 @@ const (
 	// briefPinnedRunes bounds what the writer pinned, apart from the rest: these
 	// are the entries that must not lose out to anything else in the ledger.
 	briefPinnedRunes = 3000
+	// briefStateRunes bounds the current state, briefStateValueRunes one value.
+	briefStateRunes      = 2500
+	briefStateValueRunes = 80
 	// dueHorizon is how many scenes ahead counts as coming due.
 	dueHorizon = 3
 	// neglectedAfter is how many scenes an open promise may sit before the
@@ -59,13 +62,16 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 	if err != nil {
 		return out, err
 	}
+	out.State, out.Omitted = t.stateLines(entries, nodeID, cur)
 	var owed, settled []Entry
 	pinnedRoom := briefPinnedRunes
 	for _, e := range entries {
-		if e.Kind == KindCutPlan || t.after(e.PlantedNodeID, cur) {
+		if e.Kind == KindCutPlan || t.after(e.PlantedNodeID, cur) || e.SupersededBy != "" {
 			continue
 		}
 		switch {
+		case e.Attribute != "" && !e.Pinned:
+			// A fact reaches the brief as the current state, or not at all.
 		case e.Pinned:
 			line := t.line(e, cur)
 			if cost := utf8.RuneCountInString(line); cost <= pinnedRoom {

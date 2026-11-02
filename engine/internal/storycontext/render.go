@@ -642,6 +642,7 @@ func renderLedger(l LedgerBrief, lang string) string {
 		b.WriteString("\n")
 	}
 	section(langPick(lang, "## 작품 규칙", "## Rules of This Work", "## 作品の規則"), l.Pinned)
+	section(langPick(lang, "## 현재 상태", "## Current State", "## 現在の状態"), l.State)
 	if p := l.Part; p != nil {
 		fmt.Fprintf(&b, langPick(lang, "## 지금 쓰는 부: %s\n", "## Current Part: %s\n", "## いま書いている部: %s\n"), p.Label)
 		if p.Role != "" {

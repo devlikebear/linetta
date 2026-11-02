@@ -298,9 +298,10 @@ func TestThreeTrimmedToolsStayUnderTheirSharedCeiling(t *testing.T) {
 	// linetta_report_continuity carries its own allowance above and is
 	// excluded from this total. The long-form work added the plan field that
 	// linetta_apply_story_ops and linetta_write_summary share, measured at
-	// 27,618B; the ledger tools carry their own allowance, 4,500B.
-	if ledgerTools > 4500 {
-		t.Errorf("the ledger tools cost %dB, want <= 4500B", ledgerTools)
+	// 27,618B; the ledger tools carry their own allowance, 4,500B. Facts with a
+	// span and paged listing took them to 5,552B.
+	if ledgerTools > 5600 {
+		t.Errorf("the ledger tools cost %dB, want <= 5600B", ledgerTools)
 	}
 	// The three inbox tools measured 3,790B: list 1,621B, accept 1,331B,
 	// reject 838B.

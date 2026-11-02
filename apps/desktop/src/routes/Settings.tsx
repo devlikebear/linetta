@@ -829,6 +829,21 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.agent_episode_review_enabled === true ? " on" : ""}`} />
               </button>
+              <button
+                type="button"
+                className="set-row set-row-btn"
+                onClick={() =>
+                  !saving &&
+                  apply({ agent_settlement_enabled: current.agent_settlement_enabled !== true })
+                }
+                disabled={saving}
+              >
+                <span className="sk-wrap">
+                  <span className="sk">{t("settings.skills.settlement.enabled")}</span>
+                  <span className="sd">{t("settings.skills.settlement.description")}</span>
+                </span>
+                <span className={`switch${current.agent_settlement_enabled === true ? " on" : ""}`} />
+              </button>
               <label className="set-row is-stacked">
                 <span className="sk-wrap">
                   <span className="sk">{t("settings.style.globalPhrases")}</span>

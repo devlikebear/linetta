@@ -229,6 +229,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		// Settings has to take effect on the writer's very next message.
 		SelfReviewEnabled:    deps.settings.AgentSelfReviewEnabled,
 		EpisodeReviewEnabled: deps.settings.AgentEpisodeReviewEnabled,
+		SettlementEnabled:    deps.settings.AgentSettlementEnabled,
 		MaxToolCalls:         deps.settings.AgentMaxToolCalls,
 		HistoryBudget:        deps.settings.AgentHistoryBudget,
 		ActiveProvider:       deps.settings.ActiveProvider,

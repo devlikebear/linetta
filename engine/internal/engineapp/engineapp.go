@@ -144,7 +144,7 @@ func (a *App) register(ctx context.Context, home string, st *store.Store, secret
 	relationships := relationship.NewRepo(st)
 	facts := fact.NewRepo(st)
 	continuityRepo := continuity.NewRepo(st)
-	ledgerRepo := ledger.NewRepo(st, nodes)
+	ledgerRepo := ledger.NewRepo(st, nodes).WithSubjects(entity.NewRepo(st))
 	manuscriptIndexer := manuscript.NewIndexer(st.DB())
 	manuscriptSearcher := manuscript.NewSearcher(st.DB(), nodes, manuscriptIndexer)
 	manuscriptEditor := manuscriptedit.NewService(nodes, snaps)

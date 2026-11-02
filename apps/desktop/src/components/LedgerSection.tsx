@@ -128,6 +128,9 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
             <li key={e.id} className={e.pinned ? "is-pinned" : undefined}>
               <span className="ledger-kind">{t(`ledger.kind.${e.kind}`)}</span>
               {e.subject && <span className="ledger-subject">{e.subject}</span>}
+              {e.attribute && <span className="ledger-kind">{e.attribute}</span>}
+              {e.strength === "soft" && <span className="ledger-kind">{t("ledger.softTag")}</span>}
+              {e.superseded_by && <span className="ledger-kind">{t("ledger.supersededTag")}</span>}
               <span className="ledger-body">{e.body}</span>
               {e.planted_node_id && (
                 <button type="button" className="ledger-where" onClick={() => onOpenNode?.(e.planted_node_id ?? "")}>
@@ -136,6 +139,9 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
               )}
               {e.due_node_id && (
                 <span className="ledger-where">{t("ledger.due", { label: state?.labels[e.due_node_id] ?? "" })}</span>
+              )}
+              {e.valid_to_node_id && (
+                <span className="ledger-where">{t("ledger.validUntil", { label: state?.labels[e.valid_to_node_id] ?? "" })}</span>
               )}
               <span className="ledger-actions">
                 {tabOf(e) === "settled" && (

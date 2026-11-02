@@ -5,7 +5,7 @@ _위에서부터 순차 실행하고 Checkpoint에서 작가 확인을 받는다
 _작성일: 2026-11-02_
 _속한 로드맵: [`roadmap.md`](./roadmap.md)_
 _예상 소요: 3일_
-_상태: 계획_
+_상태: 구현 완료. 실제 모델 호출 확인은 작가 동의를 기다린다_
 
 ## 페이즈 목표
 
@@ -13,9 +13,9 @@ _상태: 계획_
 
 ## 전제 조건
 
-- [ ] Phase 1 완료 및 작가 승인. Phase 2와 같은 파일을 고치므로 Phase 2 뒤에 시작한다
-- [ ] `main`에서 `feat/longform-temporal-facts` 브랜치 생성
-- [ ] 마이그레이션 다음 번호 확인
+- [x] Phase 1 완료 및 작가 승인. Phase 2와 같은 파일을 고치므로 Phase 2 뒤에 시작한다
+- [x] `main`에서 `feat/longform-temporal-facts` 브랜치 생성
+- [x] 마이그레이션 다음 번호 확인
 
 ## 포함 기능
 
@@ -48,7 +48,7 @@ _상태: 계획_
 
 ### 작업 그룹 B: 원장 사실 확장
 
-- [ ] **T3.B.1** — 마이그레이션
+- [x] **T3.B.1** — 마이그레이션
   - 파일: `engine/internal/store/migrations/00NN_ledger_facts.sql`
   - 내용:
     - `story_ledger`에 `attribute TEXT NOT NULL DEFAULT ''`, `valid_to_node_id TEXT REFERENCES nodes(id) ON DELETE SET NULL`, `superseded_by TEXT NOT NULL DEFAULT ''`, `strength TEXT NOT NULL DEFAULT 'hard'`, `value_num REAL`을 더한다.
@@ -57,7 +57,7 @@ _상태: 계획_
     - `strength`는 서술자가 단정한 `hard`, 대사나 소문으로 나온 `soft`다.
   - 검증: `CGO_ENABLED=0 go test ./internal/store/...`
 
-- [ ] **T3.B.2** — 저장소와 주어 정규화
+- [x] **T3.B.2** — 저장소와 주어 정규화
   - 파일: `engine/internal/ledger/ledger.go`, `repo.go`, 테스트
   - 내용:
     - `Entry`와 `Patch`에 새 열을 맞춘다. 사실 종류(`decision`, `number`, `timeline`, `knowledge`)에만 허용한다.
@@ -65,7 +65,7 @@ _상태: 계획_
     - 속성은 자유 문자열이지만 도구 설명에 기본어를 준다: 위치, 소지금, 경지, 부상, 소속, 호칭, 작중 날짜, 앎.
   - 검증: 별칭으로 저장해도 같은 주어가 되는 테스트
 
-- [ ] **T3.B.3** — 도구 입력
+- [x] **T3.B.3** — 도구 입력
   - 파일: `engine/internal/mcphost/tools_ledger.go`, `budget_test.go`
   - 내용:
     - `editLedgerInput`에 `attribute`, `strength`, `value_num`, `supersedes`를 더한다.
@@ -76,7 +76,7 @@ _상태: 계획_
 
 ### 작업 그룹 C: 시점 조회와 충돌
 
-- [ ] **T3.C.1** — `AsOf`
+- [x] **T3.C.1** — `AsOf`
   - 파일: `engine/internal/ledger/asof.go` (신규), `asof_test.go`
   - 내용:
     - `AsOf(ctx, projectID, nodeID) ([]Entry, error)`를 만든다. 회차 순서는 `newTree`를 쓴다.
@@ -85,7 +85,7 @@ _상태: 계획_
   - 테스트: 앞 회차 시점과 뒤 회차 시점의 값이 다르다, 미래 사실이 안 보인다, 대체된 값이 안 보인다
   - 검증: `CGO_ENABLED=0 go test ./internal/ledger/...`
 
-- [ ] **T3.C.2** — 현재 상태 섹션
+- [x] **T3.C.2** — 현재 상태 섹션
   - 파일: `engine/internal/ledger/brief.go`, `engine/internal/storycontext/types.go`, `render.go`, 테스트
   - 내용:
     - `LedgerBrief`에 `State []string`을 더한다. 주어별로 묶어 한 줄씩 낸다. 예: `주어: 위치=…, 소지금=…`.
@@ -95,7 +95,7 @@ _상태: 계획_
     - Phase 1의 상한 테스트가 계속 통과하도록 세계관 예산을 다시 잰다.
   - 검증: `CGO_ENABLED=0 go test ./internal/ledger/... ./internal/storycontext/... ./internal/mcphost/...`
 
-- [ ] **T3.C.3** — 충돌 감지
+- [x] **T3.C.3** — 충돌 감지
   - 파일: `engine/internal/ledger/conflict.go` (신규), `repo.go`, `tools_ledger.go`, 테스트
   - 내용:
     - 사실을 추가하면 같은 주어·속성의 유효한 행을 찾아 값이 다르면 `conflicts`로 돌려준다. 저장은 막지 않는다.
@@ -106,7 +106,7 @@ _상태: 계획_
 
 ### 작업 그룹 D: 정산 패스
 
-- [ ] **T3.D.1** — 패스
+- [x] **T3.D.1** — 패스
   - 파일: `engine/internal/agent/settlement.go` (신규), `settlement_test.go`, `loop.go`, `agent.go`
   - 내용:
     - `episodereview.go` 구조를 따른다. `noteWrittenScene`이 모은 회차를 쓰고, `boundedPass`로 돌린다.
@@ -118,7 +118,7 @@ _상태: 계획_
   - 테스트: 스위치가 꺼지면 안 돌고, 허용 도구 밖은 호출할 수 없다
   - 검증: `CGO_ENABLED=0 go test ./internal/agent/...`
 
-- [ ] **T3.D.2** — 설정
+- [x] **T3.D.2** — 설정
   - 파일: `engine/internal/settings/settings.go`, `engine/internal/engineapp/`, `apps/desktop/src/routes/Settings.tsx`, `apps/desktop/src/lib/i18n.tsx`
   - 내용:
     - `agent_settlement_enabled`를 더한다. 기본은 꺼짐이다.
@@ -126,7 +126,7 @@ _상태: 계획_
   - 참조: `AgentEpisodeReviewEnabled`의 전체 경로
   - 검증: `CGO_ENABLED=0 go test ./internal/settings/...`, vitest
 
-- [ ] **T3.D.3** — 프롬프트와 패널
+- [x] **T3.D.3** — 프롬프트와 패널
   - 파일: `engine/internal/agent/prompt.go`, `apps/desktop/src/components/CanonPanel.tsx`, `apps/desktop/src/lib/i18n.tsx`
   - 내용:
     - 원장 지침에 속성, 대체, 충돌 처리를 한 문장으로 더한다. 프롬프트가 늘어나는 양을 적는다.
@@ -138,19 +138,19 @@ _상태: 계획_
 ## ✅ Phase 3 Checkpoint
 
 **구현 확인:**
-- [ ] 모든 작업 체크박스 완료
-- [ ] 스위치가 꺼진 작가에게는 턴 뒤에 추가 호출이 없음
-- [ ] 정산 패스가 원고를 바꿀 수 없음
+- [x] 모든 작업 체크박스 완료
+- [x] 스위치가 꺼진 작가에게는 턴 뒤에 추가 호출이 없음
+- [x] 정산 패스가 원고를 바꿀 수 없음
 
 **자동 검증:**
-- [ ] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
-- [ ] `go test -tags mobile ./...` 통과
-- [ ] vitest, `tsc --noEmit`, 프런트 빌드 통과
-- [ ] 새 열이 vault 왕복과 작품 복원 뒤 남는 테스트 통과
+- [x] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
+- [x] `go test -tags mobile ./...` 통과
+- [x] vitest, `tsc --noEmit`, 프런트 빌드 통과
+- [x] 새 열이 vault 왕복과 작품 복원 뒤 남는 테스트 통과
 
 **수동 확인:**
-- [ ] 복사본에서 회차를 앞뒤로 옮겨 가며 `## 현재 상태`의 값이 달라지는지 확인한다
-- [ ] 위치나 날짜가 어긋나는 사실을 넣어 `conflicts`가 오는지 확인한다
+- [x] 복사본에서 회차를 앞뒤로 옮겨 가며 `## 현재 상태`의 값이 달라지는지 확인한다
+- [x] 위치나 날짜가 어긋나는 사실을 넣어 `conflicts`가 오는지 확인한다
 - [ ] 정산을 켜고 회차를 하나 써서, 기록된 사실의 인용이 본문과 맞는지 표본으로 확인한다
 - [ ] 패스가 끝나는 시간과 호출 수가 작가의 다음 턴을 막지 않는지 확인한다
 
@@ -160,11 +160,17 @@ _상태: 계획_
 
 ## 스파이크 기록
 
-_T3.A.1을 마치면 여기에 적는다._
+2026-11-02. 실제 모델 호출은 하지 못했다.
+
+- 임시 폴더에서 실호출을 준비했지만, AI 데이터 공유 동의를 코드가 대신 넣는 단계에서 막혔다. 동의는 작가 본인이 앱에서 해야 하므로 우회하지 않았다. 호출 수, 소요 시간, 관찰 품질은 **미측정**이다.
+- 대신 코드를 읽다가 더 큰 문제를 찾았다. `agent_episode_review_enabled`를 켜도 Claude Code 공급자에서는 아무 일도 일어나지 않았다. `boundedPass`는 모델이 돌려주는 도구 호출을 실행하는데, Claude Code는 자기 루프를 돌려 호출을 돌려주지 않는다. `loopCLI`는 패스를 부르지도 않았다. #272의 독립 검수는 이 공급자에서 한 번도 돈 적이 없다.
+- `runPass`를 더해 공급자별로 나눴다. Claude Code에는 허용 도구만 든 전용 브리지(`cliPass`)를 연다. 가짜 CLI로 순서, 허용 도구, 호출 예산, 꺼짐 동작을 테스트했다. 실제 CLI로 도는지는 위와 같은 이유로 미확인이다.
+- 제한 시간은 정산과 검수가 함께 쓰도록 10분으로 늘렸다. 호출 예산은 정산이 회차당 14회, 검수가 6회다. 실측 뒤 조정한다.
 
 ## 메모 / 주의
 
 - 정산이 사실을 너무 많이 만들면 원장이 다시 선형으로 늘어난다. 변하는 값과 이후 회차가 기대는 사실만 남기라고 프롬프트에 쓴다. 표본에서 화당 건수를 잰다.
+- 앱의 원장 추가 RPC는 주어와 본문만 저장하고 있었다. 복사본 검증에서 드러나 속성, 시작 회차, 유효 범위, 값을 저장하게 고쳤다.
 - 주어와 속성이 어긋나면 충돌이 안 잡힌다. 탐지 누락은 Phase 5에서 재고, 속성 기본어를 넓히는 쪽을 먼저 본다.
 - `value_num` 계산은 차이만 보여 준다. 돈의 증감 사유까지 코드가 판단하지는 않는다.
 

@@ -111,6 +111,18 @@ func SaveLedgerEntry(repo *ledger.Repo, now Clock) rpc.Handler {
 		if in.Body != nil {
 			e.Body = *in.Body
 		}
+		for _, f := range []struct {
+			to   *string
+			from *string
+		}{
+			{&e.Attribute, in.Attribute}, {&e.Strength, in.Strength},
+			{&e.PlantedNodeID, in.PlantedNodeID}, {&e.ValidToNodeID, in.ValidToNodeID},
+		} {
+			if f.from != nil {
+				*f.to = *f.from
+			}
+		}
+		e.ValueNum = in.ValueNum
 		saved, err := repo.Add(ctx, now(), e)
 		if err != nil {
 			return nil, ledgerError(err)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/devlikebear/linetta/engine/internal/store"
@@ -66,6 +67,27 @@ func (r *Repo) FindByName(ctx context.Context, projectID, name string) (Entity, 
 		return Entity{}, false, err
 	}
 	return e, true, nil
+}
+
+// CanonicalName is the name the work knows name by: itself when it is an
+// element's name, that element's name when it is an alias, and name unchanged
+// otherwise. A read that fails leaves name as it is; the caller is folding
+// spellings together, and nothing here is worth refusing a write over.
+func (r *Repo) CanonicalName(ctx context.Context, projectID, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return name
+	}
+	all, err := r.ListByProject(ctx, projectID)
+	if err != nil {
+		return name
+	}
+	for _, e := range all {
+		if e.Name == name || slices.Contains(e.Aliases, name) {
+			return e.Name
+		}
+	}
+	return name
 }
 
 // Update applies a partial input. Non-nil pointers overwrite fields, including

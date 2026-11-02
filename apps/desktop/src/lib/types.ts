@@ -946,6 +946,7 @@ export interface Settings {
   agent_self_review_enabled?: boolean;
   /** Off unless the writer turns it on: it sends finished scenes to the model again. */
   agent_episode_review_enabled?: boolean;
+  agent_settlement_enabled?: boolean;
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
   /** How many tool calls one turn of the built-in agent may execute before
@@ -1020,6 +1021,7 @@ export interface SettingsPatch {
   agent_self_review_enabled?: boolean;
   /** Off unless the writer turns it on: it sends finished scenes to the model again. */
   agent_episode_review_enabled?: boolean;
+  agent_settlement_enabled?: boolean;
   /** Phrases to keep out of every work. */
   style_avoid_phrases?: string[];
   agent_max_tool_calls?: number;
@@ -1566,6 +1568,12 @@ export interface LedgerEntry {
   source: "writer" | "agent" | "external";
   /** Held fixed by the writer: reaches every brief and no agent can change it. */
   pinned?: boolean;
+  /** What about the subject a fact fixes. A fact holds from planted_node_id. */
+  attribute?: string;
+  valid_to_node_id?: string;
+  superseded_by?: string;
+  strength?: "hard" | "soft";
+  value_num?: number;
   created_at: number;
   updated_at: number;
 }

@@ -119,3 +119,59 @@ func TestListLedgerFiltersByQuery(t *testing.T) {
 		t.Fatalf("entries = %+v", out.Entries)
 	}
 }
+
+func TestEditLedgerReportsAConflictAndSavesAnyway(t *testing.T) {
+	ctx, d, pid := ledgerDeps(t)
+	subject, attribute, first, second := "주인공", "소지금", "은 넉 냥", "은 열 냥"
+	if _, _, err := d.editLedger(ctx, nil, editLedgerInput{ProjectID: pid, Kind: ledger.KindNumber, Subject: &subject, Attribute: &attribute, Body: &first}); err != nil {
+		t.Fatal(err)
+	}
+	res, out, err := d.editLedger(ctx, nil, editLedgerInput{ProjectID: pid, Kind: ledger.KindNumber, Subject: &subject, Attribute: &attribute, Body: &second})
+	if err != nil || res != nil {
+		t.Fatalf("res %+v, err %v", res, err)
+	}
+	if out.Entry == nil || len(out.Conflicts) != 1 || out.Conflicts[0].Body != first {
+		t.Fatalf("out = %+v", out)
+	}
+}
+
+func TestEditLedgerSupersedesAFact(t *testing.T) {
+	ctx, d, pid := ledgerDeps(t)
+	subject, attribute, first, second := "주인공", "소속", "없음", "표국"
+	_, out, err := d.editLedger(ctx, nil, editLedgerInput{ProjectID: pid, Kind: ledger.KindNumber, Subject: &subject, Attribute: &attribute, Body: &first})
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := out.Entry.ID
+	_, out, err = d.editLedger(ctx, nil, editLedgerInput{ProjectID: pid, Kind: ledger.KindNumber, Subject: &subject, Attribute: &attribute, Body: &second, Supersedes: old})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Conflicts) != 0 {
+		t.Fatalf("a replaced fact is no conflict: %+v", out.Conflicts)
+	}
+	got, err := d.Ledger.Get(ctx, old)
+	if err != nil || got.SupersededBy != out.Entry.ID {
+		t.Fatalf("got %+v, err %v", got, err)
+	}
+}
+
+func TestSupersedingAPinnedFactIsRefusedBeforeAnythingIsSaved(t *testing.T) {
+	ctx, d, pid := ledgerDeps(t)
+	e, err := d.Ledger.Add(ctx, 1, ledger.Entry{ProjectID: pid, Kind: ledger.KindDecision, Body: "규칙"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Ledger.SetPinned(ctx, 2, e.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	body := "바꾼 규칙"
+	res, _, err := d.editLedger(ctx, nil, editLedgerInput{ProjectID: pid, Kind: ledger.KindDecision, Body: &body, Supersedes: e.ID})
+	if err != nil || res == nil || !res.IsError {
+		t.Fatalf("res %+v, err %v", res, err)
+	}
+	all, _ := d.Ledger.List(ctx, ledger.Filter{ProjectID: pid})
+	if len(all) != 1 {
+		t.Fatalf("entries = %d", len(all))
+	}
+}

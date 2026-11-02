@@ -87,6 +87,9 @@ type Deps struct {
 	// by an independent read of it. Nil means off: this pass sends the
 	// manuscript again, so it runs only when the writer asked for it.
 	EpisodeReviewEnabled func() bool
+	// SettlementEnabled reports whether a turn that wrote a scene is followed by
+	// a pass that records what the scene changed. Nil means off.
+	SettlementEnabled func() bool
 	// MaxToolCalls reports how many tool calls one turn may execute
 	// (settings.agent_max_tool_calls). Read once at the top of each turn. A
 	// nil func, or an answer below one, means maxIterations.
