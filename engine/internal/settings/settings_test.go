@@ -970,3 +970,36 @@ func TestSet_storingOneProvidersKeyKeepsTheOthersPlaintextResidue(t *testing.T) 
 		t.Errorf("legacy_plaintext_providers = %v, want anthropic gone", got.LegacyPlaintextProviders)
 	}
 }
+
+func TestWebSearchBaseURLRoundTripsAndValidates(t *testing.T) {
+	t.Setenv("LINETTA_HOME", t.TempDir())
+	s, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	if s.WebSearchEnabled() {
+		t.Fatal("web search must start off")
+	}
+	bad := "ftp://example.com"
+	if _, err := s.Set(context.Background(), Patch{WebSearchBaseURL: &bad}); err == nil {
+		t.Fatal("non-http address accepted")
+	}
+	base := " http://127.0.0.1:29483 "
+	if _, err := s.Set(context.Background(), Patch{WebSearchBaseURL: &base}); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	reloaded, err := NewWithSecretStore(NewMemorySecretStore())
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := reloaded.WebSearchBaseURL(); got != "http://127.0.0.1:29483" {
+		t.Fatalf("reloaded address = %q", got)
+	}
+	clear := ""
+	if _, err := s.Set(context.Background(), Patch{WebSearchBaseURL: &clear}); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if s.WebSearchEnabled() {
+		t.Fatal("clearing the address must turn web search off")
+	}
+}

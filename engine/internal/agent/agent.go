@@ -127,6 +127,9 @@ type Deps struct {
 	// Read the same way and for the same reason as MemoryToolsEnabled and
 	// SkillToolsEnabled above — a nil func means enabled.
 	ReviewToolsEnabled func() bool
+	// WebSearchEnabled reports whether the writer gave Settings a RustXNG
+	// address. Read like the switches above, but a nil func means off.
+	WebSearchEnabled func() bool
 	// Undo reverts what the agent last did. Exactly one of batchID, snapshotID
 	// is expected to be non-empty — the caller (agent.undo's RPC handler)
 	// validates that before this is reached. A batch id must be bound to the

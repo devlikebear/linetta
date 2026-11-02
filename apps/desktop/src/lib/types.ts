@@ -933,6 +933,7 @@ export interface Settings {
   web_search_provider: WebSearchProvider;
   web_search_api_key: string;
   web_search_api_key_set?: boolean;
+  web_search_base_url?: string;
   mcp_mode?: string;
   mcp_port?: number;
   mcp_project_id?: string;
@@ -1012,6 +1013,7 @@ export interface SettingsPatch {
   ai_data_sharing_consented_at?: number;
   web_search_provider?: WebSearchProvider;
   web_search_api_key?: string;
+  web_search_base_url?: string;
   mcp_mode?: string;
   mcp_port?: number;
   mcp_project_id?: string;

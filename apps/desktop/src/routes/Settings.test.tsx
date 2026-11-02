@@ -742,6 +742,26 @@ describe("Settings", () => {
     );
   });
 
+  it("saves the RustXNG address on blur and leaves it alone when unchanged", async () => {
+    mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
+    const user = userEvent.setup();
+    renderSettings();
+
+    await user.click(await screen.findByTestId("settings-tab-agent"));
+    const input = screen.getByTestId("web-search-base-url");
+    await user.click(input);
+    await user.tab();
+    expect(mocks.settingsSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ web_search_base_url: expect.anything() }),
+    );
+
+    mocks.settingsSet.mockResolvedValue({ ...baseSettings, web_search_base_url: "http://127.0.0.1:29483" });
+    await user.type(input, " http://127.0.0.1:29483 {Enter}");
+    await waitFor(() =>
+      expect(mocks.settingsSet).toHaveBeenCalledWith({ web_search_base_url: "http://127.0.0.1:29483" }),
+    );
+  });
+
   it("saves the per-turn tool-call limit on blur and pulls an out-of-range value to the bound", async () => {
     mocks.diagnosticsGet.mockResolvedValue(diagnostics({ agent_available: true, mcp_available: false }));
     mocks.settingsGet.mockResolvedValue({ ...baseSettings });

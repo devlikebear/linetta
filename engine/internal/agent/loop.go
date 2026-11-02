@@ -103,6 +103,9 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (string, error) {
 	if s.deps.VisualWriteToolsDisabled != nil {
 		groups.disableVisualWrites = s.deps.VisualWriteToolsDisabled()
 	}
+	if s.deps.WebSearchEnabled != nil {
+		groups.webSearch = s.deps.WebSearchEnabled()
+	}
 	tools, err := s.session(ctx, groups)
 	if err != nil {
 		return "", err

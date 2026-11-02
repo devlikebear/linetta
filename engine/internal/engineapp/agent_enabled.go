@@ -245,6 +245,7 @@ func setupAgent(deps agentDeps) (*agentController, func() error) {
 		MemoryToolsEnabled:       deps.settings.MemoryToolsEnabled,
 		SkillToolsEnabled:        deps.settings.SkillToolsEnabled,
 		ReviewToolsEnabled:       deps.settings.ReviewToolsEnabled,
+		WebSearchEnabled:         deps.settings.WebSearchEnabled,
 		Undo: func(ctx context.Context, batchID, snapshotID string) (string, string, error) {
 			if batchID != "" {
 				return "", "", deps.story.UndoApply(ctx, batchID, deps.clock)

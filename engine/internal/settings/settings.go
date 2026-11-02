@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/devlikebear/linetta/engine/internal/paths"
+	"github.com/devlikebear/linetta/engine/internal/websearch"
 )
 
 // Provider ids the built-in agent can use (#90). Each maps to a tars pkg/llm
@@ -135,6 +136,7 @@ type Config struct {
 	WebSearchProvider           string   `json:"web_search_provider"`
 	WebSearchAPIKey             string   `json:"web_search_api_key,omitempty"`     // write-only in settings.set; redacted from settings.get and disk
 	WebSearchAPIKeySet          bool     `json:"web_search_api_key_set,omitempty"` // read-only presence flag for settings.get
+	WebSearchBaseURL            string   `json:"web_search_base_url,omitempty"`    // the writer's RustXNG server; empty turns web search off
 	MCPMode                     string   `json:"mcp_mode"`                         // off | read_only | full; off means no listener binds
 	MCPPort                     int      `json:"mcp_port"`                         // fixed so saved client configs survive restarts
 	MCPProjectID                string   `json:"mcp_project_id"`                   // empty means every work is reachable
@@ -376,6 +378,7 @@ type Patch struct {
 	VisualWriteToolsDisabled  *bool                    `json:"visual_write_tools_disabled,omitempty"`
 	MemoryToolsEnabled        *bool                    `json:"memory_tools_enabled,omitempty"`
 	SkillToolsEnabled         *bool                    `json:"skill_tools_enabled,omitempty"`
+	WebSearchBaseURL          *string                  `json:"web_search_base_url,omitempty"`
 	ReviewToolsEnabled        *bool                    `json:"review_tools_enabled,omitempty"`
 	// ImageProvider "" turns illustration drawing off.
 	ImageProvider  *string                       `json:"image_provider,omitempty"`
@@ -533,6 +536,7 @@ func (s *Store) load() error {
 	if disk.WebSearchProvider != "" {
 		s.cfg.WebSearchProvider = disk.WebSearchProvider
 	}
+	s.cfg.WebSearchBaseURL = disk.WebSearchBaseURL
 	// MCP settings written by a newer build must survive a reload. Blank or
 	// out-of-range values (including a file written by a build that predates
 	// these keys) keep the defaults, and normalizeMCPPreferences below is the
@@ -766,6 +770,17 @@ func (s *Store) SkillToolsEnabled() bool {
 	return s.cfg.SkillToolsEnabled
 }
 
+// WebSearchBaseURL returns the writer's RustXNG address, or "" when web search
+// is off.
+func (s *Store) WebSearchBaseURL() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg.WebSearchBaseURL
+}
+
+// WebSearchEnabled reports whether the built-in agent gets linetta_web_search.
+func (s *Store) WebSearchEnabled() bool { return s.WebSearchBaseURL() != "" }
+
 // ReviewToolsEnabled reports whether the Review tool group (story-assist
 // Phase 2's linetta_report_continuity, and later phases' additions to it) is
 // offered. Read per server build, like MemoryToolsEnabled.
@@ -984,6 +999,15 @@ func (s *Store) Set(ctx context.Context, p Patch) (Config, error) {
 	if next.WebSearchProvider == "" {
 		next.WebSearchProvider = "brave"
 	}
+	if p.WebSearchBaseURL != nil {
+		base := strings.TrimSpace(*p.WebSearchBaseURL)
+		if base != "" {
+			if err := websearch.ValidateBaseURL(base); err != nil {
+				return Config{}, fmt.Errorf("settings: web_search_base_url: %w", err)
+			}
+		}
+		next.WebSearchBaseURL = base
+	}
 	if next.Language == "" {
 		next.Language = "ko"
 	}
@@ -1112,6 +1136,7 @@ func (s *Store) persistWith(next Config, legacy legacyPlaintextKeys) error {
 		AIDataSharingConsentVersion: next.AIDataSharingConsentVersion,
 		AIDataSharingConsentedAt:    next.AIDataSharingConsentedAt,
 		WebSearchProvider:           next.WebSearchProvider,
+		WebSearchBaseURL:            next.WebSearchBaseURL,
 		MCPMode:                     next.MCPMode,
 		MCPPort:                     next.MCPPort,
 		MCPProjectID:                next.MCPProjectID,

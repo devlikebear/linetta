@@ -78,6 +78,9 @@ type toolGroups struct {
 	// review is story-assist's "check and record a judgement" group
 	// (linetta_report_continuity in Phase 2; more from later phases).
 	review bool
+	// webSearch is linetta_web_search. Unlike the switches above it starts
+	// off: it has an address to fill in, not a toggle to flip.
+	webSearch bool
 }
 
 func allToolGroups() toolGroups { return toolGroups{memory: true, skills: true, review: true} }

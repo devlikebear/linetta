@@ -707,6 +707,32 @@ export function Settings() {
                 </span>
                 <span className={`switch${current.review_tools_enabled !== false ? " on" : ""}`} />
               </button>
+              {/* Same blur-or-Enter save as the fields below; the key resets the
+                  input when a refused address leaves the stored one in place. */}
+              {agentAvailable && (
+                <div className="set-row">
+                  <span className="sk-wrap">
+                    <label className="sk" htmlFor="web-search-base-url">{t("settings.tools.webSearch.title")}</label>
+                    <span className="sd">{t("settings.tools.webSearch.description")}</span>
+                  </span>
+                  <input
+                    key={current.web_search_base_url ?? ""}
+                    id="web-search-base-url"
+                    data-testid="web-search-base-url"
+                    type="url"
+                    placeholder="http://127.0.0.1:29483"
+                    defaultValue={current.web_search_base_url ?? ""}
+                    onBlur={(e) => {
+                      const next = e.currentTarget.value.trim();
+                      if (next !== (current.web_search_base_url ?? "")) void apply({ web_search_base_url: next });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    disabled={saving}
+                  />
+                </div>
+              )}
               {/* The built-in agent's cap only: an external MCP client runs
                   its own loop and never reads it. Saved on blur or Enter, not
                   per keystroke — "120" passes through "12" on the way. */}

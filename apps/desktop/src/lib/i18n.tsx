@@ -697,6 +697,7 @@ const messages = {
     "agentPanel.toolName.linetta_reject_proposals": "제안 거절",
     "agentPanel.toolName.linetta_save_forecast": "갈래 예측 저장",
     "agentPanel.toolName.linetta_list_ledger": "원장 읽기",
+    "agentPanel.toolName.linetta_web_search": "웹 검색",
     "agentPanel.toolName.linetta_edit_ledger": "원장 기록",
     "agentPanel.toolName.linetta_set_part_arc": "부 구조 설정",
     "agentPanel.composer.label": "에이전트에게 보낼 메시지",
@@ -1350,6 +1351,9 @@ const messages = {
     "settings.tools.skills.title": "스킬 툴",
     "settings.tools.skills.description":
       "에이전트가 스킬 본문을 읽고 새로 적습니다. 끄면 스킬 목록도 함께 빠집니다 — 본문을 열 방법이 없는 목록은 이름만 늘어놓는 셈이기 때문입니다. 스킬 문서 자체는 지워지지 않고, 다시 켜면 그대로 돌아옵니다.",
+    "settings.tools.webSearch.title": "웹 검색 (RustXNG)",
+    "settings.tools.webSearch.description":
+      "직접 띄운 RustXNG 서버 주소를 넣으면 내장 에이전트가 사실 확인에 웹 검색을 씁니다. 검색어는 외부 검색 엔진으로 전송됩니다. 비워 두면 꺼집니다.",
     "settings.tools.review.title": "점검·제안",
     "settings.tools.review.description":
       "에이전트가 씬의 연속성을 점검하고 결과를 기록합니다. 끄면 linetta_report_continuity와 관찰을 읽고 정리하는 도구, 연속성 점검 시작 칩이 함께 빠집니다. 이미 기록된 관찰은 Story World에서 계속 볼 수 있습니다.",
@@ -2406,6 +2410,7 @@ const messages = {
     "agentPanel.toolName.linetta_reject_proposals": "Reject suggestions",
     "agentPanel.toolName.linetta_save_forecast": "Save forecast branches",
     "agentPanel.toolName.linetta_list_ledger": "Read ledger",
+    "agentPanel.toolName.linetta_web_search": "Search the web",
     "agentPanel.toolName.linetta_edit_ledger": "Update ledger",
     "agentPanel.toolName.linetta_set_part_arc": "Set part arc",
     "agentPanel.composer.label": "Message to the agent",
@@ -3060,6 +3065,9 @@ const messages = {
     "settings.tools.skills.title": "Skills tools",
     "settings.tools.skills.description":
       "Lets the agent read a skill in full and write new ones. Switched off, the skill list goes with them — a list with no way to open a body is just names. Your skill documents are not deleted, and switching it back on brings them back.",
+    "settings.tools.webSearch.title": "Web search (RustXNG)",
+    "settings.tools.webSearch.description":
+      "Enter the address of a RustXNG server you run, and the built-in agent can search the web to check facts. Search terms go to outside search engines. Leave empty to turn it off.",
     "settings.tools.review.title": "Check & propose",
     "settings.tools.review.description":
       "Lets the agent check a scene's continuity and record what it finds. Switched off, linetta_report_continuity, the tools that read and settle observations, and the continuity starter chip go with it. Observations already recorded stay visible in Story World.",
@@ -4080,6 +4088,7 @@ const messages = {
     "agentPanel.toolName.linetta_reject_proposals": "提案を却下",
     "agentPanel.toolName.linetta_save_forecast": "分岐予測を保存",
     "agentPanel.toolName.linetta_list_ledger": "台帳を読む",
+    "agentPanel.toolName.linetta_web_search": "ウェブ検索",
     "agentPanel.toolName.linetta_edit_ledger": "台帳を記録",
     "agentPanel.toolName.linetta_set_part_arc": "部の構成を設定",
     "agentPanel.composer.label": "エージェントへのメッセージ",
@@ -4733,6 +4742,9 @@ const messages = {
     "settings.tools.skills.title": "スキルツール",
     "settings.tools.skills.description":
       "エージェントがスキル本文を読み、新しく書きます。切るとスキル一覧も一緒に外れます — 本文を開く手段のない一覧は名前が並ぶだけだからです。スキル文書自体は消えず、また入れれば戻ります。",
+    "settings.tools.webSearch.title": "ウェブ検索 (RustXNG)",
+    "settings.tools.webSearch.description":
+      "ご自身で起動した RustXNG サーバーのアドレスを入力すると、内蔵エージェントが事実確認にウェブ検索を使います。検索語は外部の検索エンジンに送信されます。空欄にするとオフになります。",
     "settings.tools.review.title": "点検・提案",
     "settings.tools.review.description":
       "エージェントがシーンの連続性を点検し、見つけたことを記録します。切るとlinetta_report_continuityと観察を読んで整理するツール、連続性チェックの開始チップも一緒に外れます。すでに記録された観察はStory Worldで引き続き見られます。",

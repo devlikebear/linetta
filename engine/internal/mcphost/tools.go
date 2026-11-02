@@ -207,6 +207,9 @@ func (d ToolDeps) notifyChanged(projectID, tool string, nodeIDs []string, batchI
 // Neither needs an engine restart.
 func (d ToolDeps) Register(s *mcp.Server, mode string, groups ToolGroups) {
 	d.registerReadTools(s, groups)
+	if groups.WebSearch {
+		d.registerWebSearchTool(s)
+	}
 	if groups.History {
 		d.registerHistoryTools(s)
 	}
