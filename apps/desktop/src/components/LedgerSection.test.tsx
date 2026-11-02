@@ -8,12 +8,13 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   remove: vi.fn(),
   setArc: vi.fn(),
+  setPinned: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: () => Promise.resolve(() => undefined) }));
 vi.mock("../lib/rpc", () => ({
   settings: { get: vi.fn().mockResolvedValue({ language: "en" }) },
-  ledger: { list: mocks.list, save: mocks.save, remove: mocks.remove, setArc: mocks.setArc },
+  ledger: { list: mocks.list, save: mocks.save, remove: mocks.remove, setArc: mocks.setArc, setPinned: mocks.setPinned },
 }));
 
 const entry = (over = {}) => ({
@@ -36,6 +37,37 @@ describe("LedgerSection", () => {
     });
     mocks.save.mockResolvedValue({});
     mocks.setArc.mockResolvedValue({});
+    mocks.setPinned.mockResolvedValue({});
+  });
+
+  it("pins a settled entry through its own RPC", async () => {
+    await renderSection();
+    fireEvent.click(await screen.findByRole("tab", { name: "Settled" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Pin" }));
+    await waitFor(() => expect(mocks.setPinned).toHaveBeenCalledWith("l2", true));
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("offers no pin on what the story still owes", async () => {
+    await renderSection();
+    await screen.findByText("금박 밑의 비밀");
+    expect(screen.queryByRole("button", { name: "Pin" })).toBeNull();
+  });
+
+  it("puts pinned entries first and warns when they outgrow the brief", async () => {
+    mocks.list.mockResolvedValue({
+      entries: [
+        entry({ id: "l2", kind: "decision", body: "둘째" }),
+        entry({ id: "l3", kind: "decision", body: "가".repeat(3100), pinned: true }),
+      ],
+      parts: [],
+      labels: {},
+    });
+    await renderSection();
+    fireEvent.click(await screen.findByRole("tab", { name: "Settled" }));
+    const items = await screen.findAllByRole("listitem");
+    expect(items[0].className).toContain("is-pinned");
+    expect(screen.getByRole("status").textContent).toMatch(/brief/i);
   });
 
   it("shows what is owed first and keeps settled matters and cut plans on their own tabs", async () => {

@@ -24,6 +24,9 @@ type AgentController interface {
 	// mounts mid-turn needs to pick it back up.
 	Status(ctx context.Context, projectID string) (json.RawMessage, error)
 	Clear(ctx context.Context, projectID string) error
+	// StartFresh begins the agent's conversation anew from here. Nothing is
+	// deleted: the panel and the history search keep what came before.
+	StartFresh(ctx context.Context, projectID string) error
 	// Undo reverts a structural batch (batchID) or restores a scene's
 	// pre-write snapshot (snapshotID). Exactly one is non-empty; AgentUndo
 	// validates that before calling this (#112).
@@ -150,6 +153,20 @@ func AgentClear(ctrl AgentController) rpc.Handler {
 			_ = json.Unmarshal(params, &p)
 		}
 		if err := ctrl.Clear(ctx, p.ProjectID); err != nil {
+			return nil, rpc.MethodErrorFrom(err)
+		}
+		return json.RawMessage(`{"ok":true}`), nil
+	}
+}
+
+// AgentStartFresh returns a handler for agent.start_fresh.
+func AgentStartFresh(ctrl AgentController) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var p agentClearParams
+		if len(params) > 0 {
+			_ = json.Unmarshal(params, &p)
+		}
+		if err := ctrl.StartFresh(ctx, p.ProjectID); err != nil {
 			return nil, rpc.MethodErrorFrom(err)
 		}
 		return json.RawMessage(`{"ok":true}`), nil

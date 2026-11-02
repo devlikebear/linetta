@@ -614,7 +614,7 @@ func (s *Service) openingMessages(ctx context.Context, st loopState) []llm.ChatM
 		}
 		filtered = append(filtered, m)
 	}
-	replay, start, cut, moved := s.replayHistory(st.projectID, filtered, st.historyBudget)
+	replay, start, cut, moved := s.replayHistory(ctx, st.projectID, filtered, st.historyBudget)
 	if cut {
 		msgs[0].Content += historyCutNote(start)
 	}

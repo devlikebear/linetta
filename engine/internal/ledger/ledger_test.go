@@ -227,6 +227,80 @@ func TestSettledEntriesTheSceneTalksAboutComeFirst(t *testing.T) {
 	}
 }
 
+func TestPinnedEntriesReachTheBriefAheadOfEverything(t *testing.T) {
+	f := setup(t, 4)
+	for i := range 30 {
+		if _, err := f.repo.Add(f.ctx, int64(i), Entry{ProjectID: f.pid, Kind: KindNumber, Body: strings.Repeat("수치 ", 40), PlantedNodeID: f.scenes[0].ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rule, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindDecision, Body: "표기 규칙", PlantedNodeID: f.scenes[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.SetPinned(f.ctx, 2, rule.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.repo.ContextLedger(f.ctx, f.pid, f.scenes[3].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Pinned) != 1 || !strings.Contains(got.Pinned[0], "표기 규칙") {
+		t.Fatalf("pinned = %q", got.Pinned)
+	}
+	if strings.Contains(strings.Join(got.Settled, "\n"), "표기 규칙") {
+		t.Error("a pinned entry must not appear twice")
+	}
+}
+
+func TestAPinnedEntryStillDoesNotReadAhead(t *testing.T) {
+	f := setup(t, 4)
+	later, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindDecision, Body: "나중 규칙", PlantedNodeID: f.scenes[3].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.SetPinned(f.ctx, 2, later.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.repo.ContextLedger(f.ctx, f.pid, f.scenes[1].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Pinned) != 0 {
+		t.Fatalf("read ahead: %q", got.Pinned)
+	}
+}
+
+func TestOnlyWhatIsSettledCanBePinned(t *testing.T) {
+	f := setup(t, 2)
+	promise, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindPromise, Body: "약속", PlantedNodeID: f.scenes[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.SetPinned(f.ctx, 2, promise.ID, true); !errors.Is(err, ErrNotPinnable) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestPinSurvivesAnEditAndCanBeLifted(t *testing.T) {
+	f := setup(t, 2)
+	e, err := f.repo.Add(f.ctx, 1, Entry{ProjectID: f.pid, Kind: KindDecision, Body: "규칙", PlantedNodeID: f.scenes[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.repo.SetPinned(f.ctx, 2, e.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	body := "고친 규칙"
+	got, err := f.repo.Update(f.ctx, 3, e.ID, Patch{Body: &body})
+	if err != nil || !got.Pinned {
+		t.Fatalf("got %+v, err %v", got, err)
+	}
+	if got, err = f.repo.SetPinned(f.ctx, 4, e.ID, false); err != nil || got.Pinned {
+		t.Fatalf("got %+v, err %v", got, err)
+	}
+}
+
 func TestPartArcInTheBrief(t *testing.T) {
 	f := setup(t, 5)
 	if _, err := f.repo.SetArc(f.ctx, 1, Arc{NodeID: f.part.ID, Role: "승", Goal: "기연을 얻는다", Tension: 6}); err != nil {

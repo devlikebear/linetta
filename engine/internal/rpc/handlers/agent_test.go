@@ -21,6 +21,9 @@ type fakeAgent struct {
 	cancelErr error
 	cancelled string
 
+	freshErr     error
+	freshProject string
+
 	historyErr        error
 	sawHistoryProject string
 	sawLimit          int
@@ -50,6 +53,11 @@ func (f *fakeAgent) History(_ context.Context, projectID string, limit int) (jso
 }
 func (f *fakeAgent) Status(_ context.Context, projectID string) (json.RawMessage, error) {
 	return json.RawMessage(`{"running":true,"run_id":"run-1","seq":3,"project":"` + projectID + `"}`), nil
+}
+
+func (f *fakeAgent) StartFresh(_ context.Context, projectID string) error {
+	f.freshProject = projectID
+	return f.freshErr
 }
 
 func (f *fakeAgent) Clear(_ context.Context, projectID string) error {

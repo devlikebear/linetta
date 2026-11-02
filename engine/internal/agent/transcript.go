@@ -115,11 +115,44 @@ func (t *transcript) load(ctx context.Context, projectID string, limit int) ([]c
 //     export.companion_history — still registered, still offered in settings
 //     as "기록 보존" — is the affordance that exists to rescue it.
 func (t *transcript) clear(ctx context.Context, projectID string) error {
+	if err := t.repo.ClearMark(ctx, projectID); err != nil {
+		return err
+	}
 	return t.repo.Clear(ctx, companion.HistoryQuery{
 		ProjectID: projectID,
 		Scope:     companion.HistoryViewProject,
 		Intent:    transcriptIntent,
 	})
+}
+
+// startFresh marks the conversation's last message, so the next turn replays
+// nothing before it. An empty conversation has nothing to start over from.
+func (t *transcript) startFresh(ctx context.Context, projectID string) error {
+	msgs, err := t.load(ctx, projectID, 1)
+	if err != nil || len(msgs) == 0 {
+		return err
+	}
+	return t.repo.SetMark(ctx, projectID, msgs[len(msgs)-1].ID, t.now())
+}
+
+// afterMark drops what the writer started over from. msgs is the newest rows,
+// oldest first, so a mark that is not among them is older than all of them, or
+// its message is gone; either way there is nothing to drop.
+func (t *transcript) afterMark(ctx context.Context, projectID string, msgs []companion.HistoryMessage) []companion.HistoryMessage {
+	mark, err := t.repo.Mark(ctx, projectID)
+	if err != nil {
+		logf("history mark: %v", err)
+		return msgs
+	}
+	if mark == "" {
+		return msgs
+	}
+	for i, m := range msgs {
+		if m.ID == mark {
+			return msgs[i+1:]
+		}
+	}
+	return msgs
 }
 
 // markRun stamps every row of a run with how the turn ended, so the panel can

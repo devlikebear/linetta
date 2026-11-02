@@ -206,6 +206,42 @@ func (r *HistoryRepo) Clear(ctx context.Context, q HistoryQuery) error {
 	return err
 }
 
+// SetMark records the message a work's conversation starts over after. One mark
+// to a work: a later one replaces it.
+func (r *HistoryRepo) SetMark(ctx context.Context, projectID, messageID string, now int64) error {
+	if r == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, `
+INSERT INTO agent_history_marks (project_id, start_message_id, set_at) VALUES (?, ?, ?)
+ON CONFLICT(project_id) DO UPDATE SET start_message_id = excluded.start_message_id, set_at = excluded.set_at`,
+		projectID, messageID, now)
+	return err
+}
+
+// Mark returns the message a work's conversation starts over after, or "".
+func (r *HistoryRepo) Mark(ctx context.Context, projectID string) (string, error) {
+	if r == nil {
+		return "", nil
+	}
+	var id string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT start_message_id FROM agent_history_marks WHERE project_id = ?`, projectID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
+// ClearMark removes a work's mark.
+func (r *HistoryRepo) ClearMark(ctx context.Context, projectID string) error {
+	if r == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx, `DELETE FROM agent_history_marks WHERE project_id = ?`, projectID)
+	return err
+}
+
 func (r *HistoryRepo) MarkRunStatus(ctx context.Context, runID, status string) error {
 	if r == nil || strings.TrimSpace(runID) == "" {
 		return nil

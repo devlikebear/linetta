@@ -119,6 +119,12 @@ func (d ToolDeps) editLedger(ctx context.Context, _ *mcp.CallToolRequest, in edi
 		if err != nil || cur.ProjectID != p.ID {
 			return toolErr("no ledger entry %q in this work; call linetta_list_ledger", id), editLedgerOutput{}, nil
 		}
+		// Write-side only: a pin is the writer's, and the agent reads what it
+		// holds in every brief. Asking is the way to change one.
+		if cur.Pinned {
+			return toolErr("%q is pinned by the writer, so it cannot be changed or deleted here. "+
+				"Ask the writer to unpin it in the ledger, or to change it themselves.", id), editLedgerOutput{}, nil
+		}
 	}
 	var out editLedgerOutput
 	switch {

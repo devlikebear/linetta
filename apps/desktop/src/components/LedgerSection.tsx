@@ -23,6 +23,9 @@ type Tab = "owed" | "settled" | "closed" | "cut";
 const OWED: LedgerKind[] = ["promise", "gag", "question"];
 const ADDABLE: LedgerKind[] = ["promise", "gag", "question", "decision", "number", "timeline", "knowledge"];
 
+/** Matches the engine's briefPinnedRunes. Past it a pin may not reach the brief. */
+const PINNED_BUDGET_RUNES = 3000;
+
 function tabOf(e: LedgerEntry): Tab {
   if (e.kind === "cut_plan") return "cut";
   if (e.status !== "open") return "closed";
@@ -60,7 +63,18 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
     }
   };
 
-  const shown = useMemo(() => (state?.entries ?? []).filter((e) => tabOf(e) === tab), [state, tab]);
+  const shown = useMemo(
+    () => (state?.entries ?? [])
+      .filter((e) => tabOf(e) === tab)
+      .sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false)),
+    [state, tab],
+  );
+  const pinnedOverBudget = useMemo(() => {
+    const used = (state?.entries ?? [])
+      .filter((e) => e.pinned)
+      .reduce((sum, e) => sum + [...e.subject].length + [...e.body].length, 0);
+    return used > PINNED_BUDGET_RUNES;
+  }, [state]);
   const owedCount = useMemo(() => (state?.entries ?? []).filter((e) => tabOf(e) === "owed").length, [state]);
 
   const add = () => run(async () => {
@@ -103,12 +117,15 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
         ))}
       </div>
 
+      {tab === "settled" && <p className="style-hint">{t("ledger.pinHint")}</p>}
+      {tab === "settled" && pinnedOverBudget && <p role="status">{t("ledger.pinnedOverBudget")}</p>}
+
       {shown.length === 0 ? (
         <p className="style-hint">{t("ledger.empty")}</p>
       ) : (
         <ul className="ledger-list">
           {shown.map((e) => (
-            <li key={e.id}>
+            <li key={e.id} className={e.pinned ? "is-pinned" : undefined}>
               <span className="ledger-kind">{t(`ledger.kind.${e.kind}`)}</span>
               {e.subject && <span className="ledger-subject">{e.subject}</span>}
               <span className="ledger-body">{e.body}</span>
@@ -121,6 +138,16 @@ export function LedgerSection({ projectId, onOpenNode }: Readonly<Props>) {
                 <span className="ledger-where">{t("ledger.due", { label: state?.labels[e.due_node_id] ?? "" })}</span>
               )}
               <span className="ledger-actions">
+                {tabOf(e) === "settled" && (
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    aria-pressed={e.pinned ?? false}
+                    onClick={() => void run(() => ledgerApi.setPinned(e.id, !e.pinned))}
+                  >
+                    {t(e.pinned ? "ledger.unpin" : "ledger.pin")}
+                  </button>
+                )}
                 {e.status === "open" && e.kind !== "cut_plan" && (
                   <button type="button" className="btn ghost sm" onClick={() => void setStatus(e, "dropped")}>
                     {t("ledger.drop")}

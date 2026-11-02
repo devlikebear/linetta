@@ -1564,6 +1564,8 @@ export interface LedgerEntry {
   paid_node_id?: string;
   paid_quote?: string;
   source: "writer" | "agent" | "external";
+  /** Held fixed by the writer: reaches every brief and no agent can change it. */
+  pinned?: boolean;
   created_at: number;
   updated_at: number;
 }

@@ -67,6 +67,25 @@ func ListLedger(repo *ledger.Repo, nodes *node.Repo) rpc.Handler {
 
 // SaveLedgerEntry returns a handler for ledger.save, which adds an entry when
 // no id is given.
+// SetLedgerPinned returns a handler for ledger.set_pinned. Pinning is the
+// writer's alone, so this RPC is the only way to it: no MCP tool sets it.
+func SetLedgerPinned(repo *ledger.Repo, now Clock) rpc.Handler {
+	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
+		var in struct {
+			ID     string `json:"id"`
+			Pinned bool   `json:"pinned"`
+		}
+		if err := json.Unmarshal(params, &in); err != nil || strings.TrimSpace(in.ID) == "" {
+			return nil, &rpc.MethodError{Code: rpc.CodeInvalidParams, Message: errIDRequired}
+		}
+		e, err := repo.SetPinned(ctx, now(), in.ID, in.Pinned)
+		if err != nil {
+			return nil, ledgerError(err)
+		}
+		return json.Marshal(e)
+	}
+}
+
 func SaveLedgerEntry(repo *ledger.Repo, now Clock) rpc.Handler {
 	return func(ctx context.Context, params json.RawMessage) (json.RawMessage, error) {
 		var in struct {

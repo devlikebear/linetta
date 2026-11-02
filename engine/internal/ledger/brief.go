@@ -19,6 +19,9 @@ const (
 	// from the eighth episode on. What one side leaves, the other may use.
 	briefOwedRunes    = 2000
 	briefSettledRunes = 1600
+	// briefPinnedRunes bounds what the writer pinned, apart from the rest: these
+	// are the entries that must not lose out to anything else in the ledger.
+	briefPinnedRunes = 3000
 	// dueHorizon is how many scenes ahead counts as coming due.
 	dueHorizon = 3
 	// neglectedAfter is how many scenes an open promise may sit before the
@@ -57,13 +60,23 @@ func (r *Repo) ContextLedger(ctx context.Context, projectID, nodeID string) (sto
 		return out, err
 	}
 	var owed, settled []Entry
+	pinnedRoom := briefPinnedRunes
 	for _, e := range entries {
 		if e.Kind == KindCutPlan || t.after(e.PlantedNodeID, cur) {
 			continue
 		}
-		if Tracked(e.Kind) {
+		switch {
+		case e.Pinned:
+			line := t.line(e, cur)
+			if cost := utf8.RuneCountInString(line); cost <= pinnedRoom {
+				pinnedRoom -= cost
+				out.Pinned = append(out.Pinned, line)
+			} else {
+				out.Omitted++
+			}
+		case Tracked(e.Kind):
 			owed = append(owed, e)
-		} else {
+		default:
 			settled = append(settled, e)
 		}
 	}

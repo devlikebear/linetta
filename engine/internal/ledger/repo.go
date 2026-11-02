@@ -22,13 +22,13 @@ func NewRepo(s *store.Store, nodes *node.Repo) *Repo { return &Repo{s: s, nodes:
 
 const entryColumns = `id, project_id, kind, subject, body, status,
        COALESCE(planted_node_id, ''), planted_quote, COALESCE(due_node_id, ''),
-       COALESCE(paid_node_id, ''), paid_quote, source, created_at, updated_at`
+       COALESCE(paid_node_id, ''), paid_quote, source, pinned, created_at, updated_at`
 
 func scanEntry(row interface{ Scan(...any) error }) (Entry, error) {
 	var e Entry
 	err := row.Scan(&e.ID, &e.ProjectID, &e.Kind, &e.Subject, &e.Body, &e.Status,
 		&e.PlantedNodeID, &e.PlantedQuote, &e.DueNodeID, &e.PaidNodeID, &e.PaidQuote,
-		&e.Source, &e.CreatedAt, &e.UpdatedAt)
+		&e.Source, &e.Pinned, &e.CreatedAt, &e.UpdatedAt)
 	return e, err
 }
 
@@ -99,6 +99,25 @@ UPDATE story_ledger
        due_node_id = ?, paid_node_id = ?, paid_quote = ?, updated_at = ?
  WHERE id = ?`, e.Subject, e.Body, e.Status, nullable(e.PlantedNodeID), e.PlantedQuote,
 		nullable(e.DueNodeID), nullable(e.PaidNodeID), e.PaidQuote, now, id); err != nil {
+		return Entry{}, err
+	}
+	return e, nil
+}
+
+// SetPinned holds an entry fixed or lets it go. Only the writer's RPC calls it.
+// What the story still owes cannot be pinned: a pin says this stays true, and a
+// promise is there to be paid.
+func (r *Repo) SetPinned(ctx context.Context, now int64, id string, pinned bool) (Entry, error) {
+	e, err := r.Get(ctx, id)
+	if err != nil {
+		return Entry{}, err
+	}
+	if pinned && (Tracked(e.Kind) || e.Kind == KindCutPlan || e.Status != StatusOpen) {
+		return Entry{}, ErrNotPinnable
+	}
+	e.Pinned, e.UpdatedAt = pinned, now
+	if _, err := r.s.DB().ExecContext(ctx,
+		`UPDATE story_ledger SET pinned = ?, updated_at = ? WHERE id = ?`, pinned, now, id); err != nil {
 		return Entry{}, err
 	}
 	return e, nil

@@ -23,6 +23,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "agent.clear",
     "agent.history",
     "agent.run",
+    "agent.start_fresh",
     "agent.status",
     "agent.undo",
     "backup.create_recovery",
@@ -94,6 +95,7 @@ const RENDERER_ENGINE_METHODS: &[&str] = &[
     "ledger.list",
     "ledger.save",
     "ledger.set_arc",
+    "ledger.set_pinned",
     "manuscript.replace_apply",
     "manuscript.replace_preview",
     "manuscript.search",
@@ -999,6 +1001,7 @@ mod security_boundary_tests {
             "agent.history",
             "agent.status",
             "agent.clear",
+            "agent.start_fresh",
             "agent.undo",
         ] {
             assert!(

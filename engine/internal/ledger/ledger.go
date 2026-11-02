@@ -45,6 +45,7 @@ var (
 	ErrPaidNeedsNode = errors.New("ledger: mark an entry paid with the scene that pays it")
 	ErrNotAPart      = errors.New("ledger: an arc belongs to a part, not a scene")
 	ErrTension       = errors.New("ledger: tension must be 0 to 10")
+	ErrNotPinnable   = errors.New("ledger: only an open decision, number, timeline or knowledge entry can be pinned")
 )
 
 // ValidKind reports whether v is one of the kinds above.
@@ -76,8 +77,11 @@ type Entry struct {
 	PaidNodeID    string `json:"paid_node_id,omitempty"`
 	PaidQuote     string `json:"paid_quote,omitempty"`
 	Source        string `json:"source"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
+	// Pinned is set by the writer alone: a pinned entry reaches every brief and
+	// no agent can change it. It is not in Patch for that reason.
+	Pinned    bool  `json:"pinned,omitempty"`
+	CreatedAt int64 `json:"created_at"`
+	UpdatedAt int64 `json:"updated_at"`
 }
 
 // Patch is a partial update. Nil leaves a field as it is; an empty string clears

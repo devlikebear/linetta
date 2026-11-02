@@ -320,6 +320,10 @@ type agentHistoryRow struct {
 	ReplayStart bool `json:"replay_start,omitempty"`
 }
 
+func (c *agentController) StartFresh(ctx context.Context, projectID string) error {
+	return c.svc.StartFresh(ctx, projectID)
+}
+
 func (c *agentController) Clear(ctx context.Context, projectID string) error {
 	return c.svc.Clear(ctx, projectID)
 }

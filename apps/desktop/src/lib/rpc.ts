@@ -596,6 +596,9 @@ export const agent = {
     rpcCall<AgentHistoryRow[]>("agent.history", { project_id: projectId, limit }),
   status: (projectId: string) => rpcCall<AgentRunStatus>("agent.status", { project_id: projectId }),
   clear: (projectId: string) => rpcCall<{ ok: true }>("agent.clear", { project_id: projectId }),
+  /** Starts the conversation over from here. Nothing is deleted. */
+  startFresh: (projectId: string) =>
+    rpcCall<{ ok: true }>("agent.start_fresh", { project_id: projectId }),
   // Exactly one of batchId/snapshotId is expected — an outline batch from
   // linetta_apply_story_ops, or a scene write/revise's pre-write snapshot
   // (#112). rpcCall drops the other since it stringifies as undefined.
@@ -769,6 +772,8 @@ export const ledger = {
   save: (entry: { id?: string; project_id?: string; kind?: LedgerKind; subject?: string; body?: string; status?: LedgerStatus }) =>
     rpcCall<LedgerEntry>("ledger.save", entry),
   remove: (id: string) => rpcCall<{ ok: boolean }>("ledger.delete", { id }),
+  setPinned: (id: string, pinned: boolean) =>
+    rpcCall<LedgerEntry>("ledger.set_pinned", { id, pinned }),
   setArc: (arc: PartArc) => rpcCall<PartArc>("ledger.set_arc", {
     node_id: arc.node_id, role: arc.role, goal: arc.goal, tension: arc.tension,
   }),

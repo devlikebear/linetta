@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readSource } from "../../test/readSource";
@@ -13,6 +13,7 @@ const rpc = vi.hoisted(() => ({
   agentRun: vi.fn(),
   agentCancel: vi.fn(),
   agentHistory: vi.fn(),
+  agentStartFresh: vi.fn().mockResolvedValue({ ok: true }),
   settingsGet: vi.fn(),
 }));
 
@@ -33,7 +34,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 vi.mock("../../lib/rpc", () => ({
   providers: { list: rpc.providersList },
-  agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory },
+  agent: { undo: rpc.agentUndo, run: rpc.agentRun, cancel: rpc.agentCancel, history: rpc.agentHistory, startFresh: rpc.agentStartFresh },
   settings: { get: rpc.settingsGet },
   proposals: { list: rpc.proposalsList, accept: rpc.proposalsAccept },
 }));
@@ -2695,5 +2696,35 @@ describe("AgentPanel — the agent's question card", () => {
     renderPanel();
     expect(await screen.findByTestId("agent-ask-closed")).toBeInTheDocument();
     expect(screen.queryByTestId("agent-ask")).toBeNull();
+  });
+});
+
+describe("AgentPanel starting the conversation over", () => {
+  beforeEach(() => {
+    rpc.agentStartFresh.mockClear();
+  });
+
+  it("offers it only once there is a conversation", async () => {
+    await restoreWith();
+    expect(screen.queryByTestId("agent-start-fresh")).toBeNull();
+  });
+
+  it("asks first, then marks the conversation and says so in the log", async () => {
+    await restoreWith(historyRow({ role: "user", content: "안녕" }));
+    fireEvent.click(await screen.findByTestId("agent-start-fresh"));
+    expect(rpc.agentStartFresh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("agent-start-fresh-go"));
+    await waitFor(() => expect(rpc.agentStartFresh).toHaveBeenCalledWith(PROJECT_ID));
+    expect(await screen.findByText("agentPanel.historyCut")).toBeTruthy();
+    expect(screen.queryByTestId("agent-start-fresh-confirm")).toBeNull();
+  });
+
+  it("can fill the composer to move decisions to the ledger first", async () => {
+    await restoreWith(historyRow({ role: "user", content: "안녕" }));
+    fireEvent.click(await screen.findByTestId("agent-start-fresh"));
+    fireEvent.click(screen.getByTestId("agent-start-fresh-tidy"));
+    expect(rpc.agentStartFresh).not.toHaveBeenCalled();
+    expect((screen.getByLabelText("agentPanel.composer.label") as HTMLTextAreaElement).value)
+      .toBe("agentPanel.startFresh.tidyPrompt");
   });
 });

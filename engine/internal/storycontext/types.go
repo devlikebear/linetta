@@ -164,6 +164,8 @@ type ProjectMeta struct {
 // already rendered: the ledger package owns what its entries mean.
 type LedgerBrief struct {
 	Part *PartArcBrief `json:"part,omitempty"`
+	// Pinned is what the writer holds fixed for the whole work.
+	Pinned []string `json:"pinned,omitempty"`
 	// Due is what the story owes about now.
 	Due []string `json:"due,omitempty"`
 	// Open is what else the story owes.
@@ -177,7 +179,7 @@ type LedgerBrief struct {
 
 // Empty reports whether there is nothing to render.
 func (l LedgerBrief) Empty() bool {
-	return l.Part == nil && len(l.Due) == 0 && len(l.Open) == 0 && len(l.Settled) == 0 && l.Omitted == 0
+	return l.Part == nil && len(l.Pinned) == 0 && len(l.Due) == 0 && len(l.Open) == 0 && len(l.Settled) == 0 && l.Omitted == 0
 }
 
 // PartArcBrief is the current part's job in the whole work.

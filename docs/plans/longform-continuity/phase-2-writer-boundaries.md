@@ -5,7 +5,7 @@ _위에서부터 순차 실행하고 Checkpoint에서 작가 확인을 받는다
 _작성일: 2026-11-02_
 _속한 로드맵: [`roadmap.md`](./roadmap.md)_
 _예상 소요: 1일_
-_상태: 계획_
+_상태: 구현 완료. 화면 수동 확인은 남아 있다_
 
 ## 페이즈 목표
 
@@ -13,9 +13,9 @@ _상태: 계획_
 
 ## 전제 조건
 
-- [ ] Phase 1 완료 및 작가 승인
-- [ ] `main`에서 `feat/longform-writer-boundaries` 브랜치 생성
-- [ ] 마이그레이션 번호 확인. 작성 시점의 다음 번호는 `0042`다
+- [x] Phase 1 완료 및 작가 승인
+- [x] `main`에서 `feat/longform-writer-boundaries` 브랜치 생성
+- [x] 마이그레이션 번호 확인. 작성 시점의 다음 번호는 `0042`다
 
 ## 포함 기능
 
@@ -36,7 +36,7 @@ _상태: 계획_
 
 ### 작업 그룹 A: 원장 고정
 
-- [ ] **T2.A.1** — 마이그레이션
+- [x] **T2.A.1** — 마이그레이션
   - 파일: `engine/internal/store/migrations/0042_writer_boundaries.sql`
   - 내용:
     - `ALTER TABLE story_ledger ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`
@@ -44,7 +44,7 @@ _상태: 계획_
   - 참조: `0035_story_spine.sql`, `0037_agent_memory_archive.sql`
   - 검증: `CGO_ENABLED=0 go test ./internal/store/...`
 
-- [ ] **T2.A.2** — 저장소
+- [x] **T2.A.2** — 저장소
   - 파일: `engine/internal/ledger/ledger.go`, `repo.go`, `ledger_test.go`
   - 내용:
     - `Entry`에 `Pinned bool`을 더하고 `entryColumns`, 스캔, 저장을 맞춘다.
@@ -52,7 +52,7 @@ _상태: 계획_
     - `kind`가 정해진 사실일 때만 고정할 수 있게 한다. 복선은 고정하지 않는다.
   - 검증: `CGO_ENABLED=0 go test ./internal/ledger/...`
 
-- [ ] **T2.A.3** — 에이전트는 고정 항목을 못 바꾼다
+- [x] **T2.A.3** — 에이전트는 고정 항목을 못 바꾼다
   - 파일: `engine/internal/mcphost/tools_ledger.go`, 관련 테스트
   - 내용:
     - `editLedger`에서 고정 항목의 수정과 삭제를 `toolErr`로 거절한다. 문구는 작가에게 고정 해제를 부탁하라고 안내한다.
@@ -60,7 +60,7 @@ _상태: 계획_
   - 참조: 로드맵의 "작가 소유" 결정, story-assist의 초안 승인 원칙
   - 검증: 내장 에이전트 경로와 외부 경로 모두 거절됨을 테스트로 확인
 
-- [ ] **T2.A.4** — RPC와 화면
+- [x] **T2.A.4** — RPC와 화면
   - 파일: `engine/internal/rpc/handlers/ledger.go`, 등록 위치, `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src/lib/rpc.ts`, `apps/desktop/src/components/CanonPanel.tsx`, `apps/desktop/src/lib/i18n.tsx`
   - 내용:
     - `ledger.set_pinned` RPC를 더하고 허용 목록과 `lib/rpcAllowlist.test.ts`를 맞춘다.
@@ -68,7 +68,7 @@ _상태: 계획_
     - 고정 분량이 예산을 넘으면 패널에 안내한다. 세 언어를 모두 쓴다.
   - 검증: vitest, `tsc --noEmit`
 
-- [ ] **T2.A.5** — 브리프 섹션
+- [x] **T2.A.5** — 브리프 섹션
   - 파일: `engine/internal/ledger/brief.go`, `engine/internal/storycontext/types.go`, `render.go`
   - 내용:
     - `LedgerBrief`에 `Pinned []string`을 더한다. `briefPinnedRunes = 3000`이고 다른 원장 예산과 따로 센다.
@@ -80,7 +80,7 @@ _상태: 계획_
 
 ### 작업 그룹 B: 대화 경계
 
-- [ ] **T2.B.1** — 저장과 재생
+- [x] **T2.B.1** — 저장과 재생
   - 파일: `engine/internal/companion/history.go`, `engine/internal/agent/agent.go`, `prompt.go`, 관련 테스트
   - 내용:
     - `HistoryRepo`에 `Mark(ctx, projectID)`, `MarkOf(ctx, projectID)`를 더한다.
@@ -93,12 +93,12 @@ _상태: 계획_
   - 테스트: 표시 뒤 재생에 앞 메시지가 없다, 재시작 뒤 유지, 표시 없을 때 지금과 같음, 대화 지우기 뒤 표시 제거
   - 검증: `CGO_ENABLED=0 go test ./internal/agent/... ./internal/companion/...`
 
-- [ ] **T2.B.2** — 검색은 그대로
+- [x] **T2.B.2** — 검색은 그대로
   - 파일: `engine/internal/mcphost` 대화 검색 테스트
   - 내용: 경계 이전 메시지가 `linetta_search_history`로 찾아지는 테스트를 더한다. 색인과 원본은 건드리지 않는다.
   - 검증: `CGO_ENABLED=0 go test ./internal/mcphost/...`
 
-- [ ] **T2.B.3** — RPC와 패널
+- [x] **T2.B.3** — RPC와 패널
   - 파일: `engine/internal/rpc/handlers/agent.go`, `apps/desktop/src-tauri/src/lib.rs`, `apps/desktop/src/lib/rpc.ts`, `apps/desktop/src/components/agent/AgentPanel.tsx`, `apps/desktop/src/lib/i18n.tsx`
   - 내용:
     - `agent.start_fresh` RPC를 더한다. 진행 중인 턴이 있으면 거절한다.
@@ -106,7 +106,7 @@ _상태: 계획_
     - 확인 문구에 지워지지 않는다는 점과, 대화에서만 정한 내용은 먼저 원장에 옮기라는 점을 쓴다.
   - 검증: vitest, `tsc --noEmit`
 
-- [ ] **T2.B.4** — 경계 전 정리 칩
+- [x] **T2.B.4** — 경계 전 정리 칩
   - 파일: `apps/desktop/src/components/agent/AgentPanel.tsx`, `apps/desktop/src/lib/i18n.tsx`
   - 내용:
     - 확인 창에 칩 하나를 둔다. 누르면 "이번 대화에서 정했지만 원장에 없는 결정을 찾아 옮겨 줘" 문장이 입력창에 채워진다. 작가가 전송한다.
@@ -118,14 +118,14 @@ _상태: 계획_
 ## ✅ Phase 2 Checkpoint
 
 **구현 확인:**
-- [ ] 모든 작업 체크박스 완료
-- [ ] 대화 한도 기본값과 `agent.clear` 동작이 그대로임
+- [x] 모든 작업 체크박스 완료
+- [x] 대화 한도 기본값과 `agent.clear` 동작이 그대로임
 
 **자동 검증:**
-- [ ] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
-- [ ] `go test -tags mobile ./...` 통과
-- [ ] vitest, `tsc --noEmit`, 프런트 빌드 통과
-- [ ] 원장 `pinned`가 vault 왕복과 `restore.MergeProject` 뒤 남는 테스트 통과
+- [x] `CGO_ENABLED=0 go test ./...` 통과 (`engine/`)
+- [x] `go test -tags mobile ./...` 통과
+- [x] vitest, `tsc --noEmit`, 프런트 빌드 통과
+- [x] 원장 `pinned`가 vault 왕복과 `restore.MergeProject` 뒤 남는 테스트 통과
 
 **수동 확인:**
 - [ ] 복사본 앱에서 표기 규칙 항목을 고정하고, 먼 회차의 브리프에 `## 작품 규칙`으로 들어오는지 확인한다
@@ -136,6 +136,10 @@ _상태: 계획_
 **완료 처리:** 결과를 작가에게 보고하고, 승인 뒤 Phase 3으로 간다.
 
 ---
+
+## 검증 기록
+
+2026-11-02. 단위 테스트로 고정 항목 거절, 경계 재시작 유지, 경계 이전 검색을 확인했다. 실제 DB 복사본에서 `ledger.set_pinned`로 표기 규칙을 고정하고 17화 브리프에 `## 작품 규칙`이 들어오는 것을 확인했다. 앱 화면을 직접 눌러 보는 수동 확인은 하지 못했다.
 
 ## 메모 / 주의
 
