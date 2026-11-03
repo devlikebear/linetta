@@ -52,6 +52,12 @@ Product overview and downloads: [linetta.marvin-42.com](https://linetta.marvin-4
 
 Linetta is free on the [Mac App Store](https://apps.apple.com/app/id6781664781).
 
+The Mac App Store build leaves out Linetta Works: it has no publishing, no
+Linetta Works sync, no automatic sync and no sealed folder mirror, so it sends
+nothing to a server the developer runs. Folder Sync there is a plain Markdown
+export. To publish or sync through Linetta Works on a Mac, use the Homebrew
+build.
+
 ### Homebrew on Apple Silicon
 
 The direct macOS build is signed with an Apple Developer ID and notarized by Apple.
@@ -635,7 +641,7 @@ locally, and stops the moment you turn it off.
 [Linetta Works](https://works.marvin-42.com) is a reading site for fiction
 written in Linetta. Publishing to it is optional: nothing is sent to the site
 until you connect an account, and after that only the episodes you choose to
-publish.
+publish. Publishing is not in the Mac App Store build.
 
 **Connect.** Open **Settings → Publishing**, read what publishing sends, tick
 the box, and press **Connect in browser**. The site opens in your browser with
@@ -710,7 +716,8 @@ you make them private or delete them.
 
 Linetta Works sync carries a work between your devices through Linetta Works
 without the site being able to read it. It is a free beta for accounts the
-operator has approved, and the desktop app is the only place to use it.
+operator has approved, and the desktop app is the only place to use it. The Mac
+App Store build does not include it.
 
 **Turn it on.** Connect your account under **Settings → Publishing**, then open
 **Settings → Sync**. It takes you to the site to read the agreement
@@ -784,8 +791,8 @@ Sign-in for GitHub is whatever your system `git` already uses. Linetta pulls
 before it pushes, so two devices can share one repository. A folder synced by
 Dropbox or similar works the same way. Git history is never removed and sealed
 files do not compress, so a repository keeps growing: as a primary, GitHub syncs
-every 30 minutes, and as a mirror, once a day. The Mac App Store build cannot read
-your folder back, so there a folder can only be a mirror.
+every 30 minutes, and as a mirror, once a day. The Mac App Store build keeps only
+the Markdown export in a folder, with no sealed copy beside it.
 
 ## Data and safety
 
